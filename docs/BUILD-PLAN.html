@@ -265,18 +265,18 @@ pre i{color:var(--faint);font-style:normal}
   <h2>Where it stands, measured</h2>
   <div class="metrics">
     <div class="metric">
-      <div class="lbl">Cold start</div>
-      <div class="now">13.2s</div>
+      <div class="lbl">Launch, offline</div>
+      <div class="now">13.0s</div>
       <div class="arrow">→</div>
-      <div class="target">&lt;1.5s</div>
-      <div class="note">Headless Chromium, local disk. An iPad will be slower. Repeats every launch.</div>
+      <div class="target">1.0s <span style="font-size:11px;color:var(--signal)">shipped</span></div>
+      <div class="note">The stall was the Google Fonts request failing, not the payload — 12.8s of a 13.0s launch. Fonts are now embedded.</div>
     </div>
     <div class="metric">
       <div class="lbl">Payload</div>
       <div class="now">27.1 MB</div>
       <div class="arrow">→</div>
       <div class="target">~180 KB shell</div>
-      <div class="note">24.1 MB of it is base64 figures on one line of HTML. Figures become cached files.</div>
+      <div class="note">24.1 MB of base64 figures. Parses in 0.7s, so this is about memory and storage, not start time.</div>
     </div>
     <div class="metric">
       <div class="lbl">JS heap</div>
@@ -314,56 +314,62 @@ pre i{color:var(--faint);font-style:normal}
   <div class="tablewrap">
     <table>
       <thead>
-        <tr><th>Defect</th><th>Evidence</th><th>Severity</th><th>Stage</th></tr>
+        <tr><th>Defect</th><th>Evidence</th><th>Severity</th><th>Status</th></tr>
       </thead>
       <tbody>
         <tr>
-          <td class="what">13.2s cold start</td>
-          <td class="where">25 MB single HTML line</td>
+          <td class="what">Launch stalls 13s when fonts can't load</td>
+          <td class="where">12.8s of a 13.0s launch</td>
           <td><span class="chip hi">High</span></td>
-          <td class="where">1</td>
+          <td><span class="chip ok">Fixed · 0</span></td>
         </tr>
         <tr>
           <td class="what">Google Fonts network dependency</td>
           <td class="where">ERR_CONNECTION_RESET offline</td>
           <td><span class="chip hi">High</span></td>
-          <td class="where">0</td>
+          <td><span class="chip ok">Fixed · 0</span></td>
         </tr>
         <tr>
           <td class="what">ResizeObserver leak in ink layer</td>
           <td class="where">19 → 59 across 40 renders</td>
           <td><span class="chip md">Medium</span></td>
-          <td class="where">0</td>
+          <td><span class="chip ok">Fixed · 0</span></td>
         </tr>
         <tr>
           <td class="what">All four rating buttons say "tomorrow"</td>
           <td class="where">SM-2 first rep, ivl=1 for 3/4/5</td>
           <td><span class="chip hi">High</span></td>
-          <td class="where">2</td>
+          <td class="where">Stage 2</td>
         </tr>
         <tr>
           <td class="what">Quiz answers overwrite review schedule</td>
           <td class="where"><code>selectOpt</code> → <code>sm2FromCorrect</code></td>
           <td><span class="chip hi">High</span></td>
-          <td class="where">0 → 2</td>
+          <td><span class="chip ok">Fixed · 0</span></td>
         </tr>
         <tr>
           <td class="what">Ink stored as raw floats, unbounded</td>
           <td class="where">18 chars per coordinate</td>
           <td><span class="chip md">Medium</span></td>
-          <td class="where">0 → 1</td>
+          <td><span class="chip ok">Fixed · 0</span></td>
+        </tr>
+        <tr>
+          <td class="what">No review history to fit a scheduler to</td>
+          <td class="where">unreconstructable once lost</td>
+          <td><span class="chip hi">High</span></td>
+          <td><span class="chip ok">Fixed · 0</span></td>
         </tr>
         <tr>
           <td class="what">Tutor is blind to the figures</td>
           <td class="where">305 of 639 items have one</td>
           <td><span class="chip md">Medium</span></td>
-          <td class="where">3</td>
+          <td class="where">Stage 3</td>
         </tr>
         <tr>
           <td class="what">Nav says 638 Q, meta says 639</td>
           <td class="where">quarantined <code>COR_85</code></td>
           <td><span class="chip lo">Cosmetic</span></td>
-          <td class="where">0</td>
+          <td><span class="chip ok">Fixed · 0</span></td>
         </tr>
         <tr>
           <td class="what">XSS through notes, chat, search</td>
@@ -380,22 +386,23 @@ pre i{color:var(--faint);font-style:normal}
   <h2>The five stages</h2>
   <div class="spine">
 
-    <article class="stage" data-n="0">
+    <article class="stage done" data-n="✓">
       <div class="stage-meta">
-        <span>A weekend</span><span class="sep">·</span>
-        <span class="ships">Ships: the same file, sound</span>
+        <span class="ships">Shipped</span><span class="sep">·</span>
+        <span>21 edits · <code>scripts/stage0-patch.js</code></span>
       </div>
       <h3>Stabilize what you're already studying on</h3>
-      <p>Nothing structural. This is the pass that stops the current file degrading while the rest gets built, so you never have a week without a working tool.</p>
+      <p>Nothing structural — the output is still one file you drop in Files and open in Safari. Applied as a re-runnable patch script, so the next ACCSAP export takes the same fixes in one command.</p>
       <ul>
-        <li>Drop the Google Fonts link and inline the three faces as base64, or fall back to the system stack — either way, <strong>no network on launch</strong>.</li>
-        <li>Disconnect the <code>ResizeObserver</code> when an ink host detaches, and reuse hosts across renders.</li>
-        <li>Round stroke coordinates to 3 decimals and simplify with Ramer–Douglas–Peucker on <code>pointerup</code> — roughly a tenfold cut in what ink costs you.</li>
-        <li><strong>Stop practice answers from rewriting due dates.</strong> A chapter drill should record that it happened, not reschedule every card it touches.</li>
-        <li>Call <code>navigator.storage.persist()</code> so iOS stops treating your progress as disposable cache.</li>
-        <li>Reconcile the 638/639 count, and surface the export backup prompt on a cadence rather than only after a write has already failed.</li>
+        <li><strong>Three typefaces embedded as base64</strong> (+250 KB), Google Fonts links removed. Launch with no network went from <strong>13.0s to 1.0s</strong> — the stall was the font request timing out, and it hit hardest in exactly the places you study: offline, or behind a hospital portal.</li>
+        <li><strong>ResizeObserver leak closed.</strong> 41 created, 41 disconnected across 41 renders; previously they accumulated one per render forever.</li>
+        <li><strong>Ink rounded to 4 decimals and simplified</strong> with Ramer–Douglas–Peucker. Measured <strong>12.4× smaller</strong> on a 200-point stroke, sub-pixel accurate.</li>
+        <li><strong>Practice no longer reschedules.</strong> A chapter drill records an attempt and feeds the mastery rings; only the review queue moves a due date.</li>
+        <li><strong>The review log now exists</strong> — every answer and rating, with the card's state <em>before</em> it was rescheduled. Pulled forward from Stage 2 because it can't be backfilled.</li>
+        <li><code>navigator.storage.persist()</code> requested at boot; the Progress screen now shows persistence state, log size and backup age, with a nudge every 150 answers.</li>
+        <li>Question count reconciled to 638, and the previously dead <code>logRated()</code> counter wired up.</li>
       </ul>
-      <div class="donewhen"><b>Done when</b>The file opens with Wi-Fi off, a two-hour annotated session doesn't approach the storage ceiling, and a chapter drill leaves your review queue untouched.</div>
+      <div class="donewhen"><b>Verified</b>21/21 edits applied and asserted, 24 behavioural checks passing, zero console errors, zero network requests on launch. Search, Rhythm Lab, notes, figures and ink all re-tested after patching.</div>
     </article>
 
     <article class="stage" data-n="1">
@@ -553,9 +560,9 @@ pre i{color:var(--faint);font-style:normal}
 </section>
 
 <div class="closer">
-  <h3>The first move</h3>
-  <p>Stage 0 is a weekend and touches nothing structural — you keep studying on the same file, minus the leak, the network dependency, the storage risk, and the schedule corruption. Stage 1 then buys back twelve seconds of every launch.</p>
-  <p>If you want to compress the arc: the review log from Stage 2 is worth adding during Stage 0, because it costs an afternoon now and is unreconstructable later.</p>
+  <h3>What Stage 0 changed about the rest of the plan</h3>
+  <p>The 13-second launch turned out to be the font request failing, not the 25 MB payload — which parses in 0.7s. That doesn't cancel Stage 1, but it does re-rank it: the case for splitting the file is now the <strong>82 MB heap, the 5 MB storage ceiling and genuine offline support</strong>, not start-up time. Worth doing, no longer urgent.</p>
+  <p>That promotes <strong>Stage 2</strong> to the front of the queue. The rating buttons still all say "tomorrow" on a new card, which undercuts the app's central claim every time you review — and the log now accumulating in the background is what a better scheduler will be fitted to.</p>
 </div>
 
 </div>
