@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apex · anatomy preview</title>
+<style>
+:root{
+  --bg:#0B111A; --panel:#131C28; --line:#22303F; --ink:#E8EEF5; --muted:#8DA0B4;
+  --accent:#2DD4BF; --amber:#F0A742; --violet:#B48CF7;
+}
+@media (prefers-color-scheme: light){
+  :root{ --bg:#EEF2F7; --panel:#FFFFFF; --line:#D8E0EA; --ink:#111C29; --muted:#5A6B7E;
+         --accent:#0E9384; }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);min-height:100vh;
+  font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:20px 16px 60px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+#apexAv{width:52px;height:52px;flex:none}
+.hgroup h1{font-size:20px;font-weight:650;letter-spacing:-.02em}
+.hgroup p{font-size:13px;color:var(--muted)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted)}
+
+.stage{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  overflow:hidden;aspect-ratio:1/1;max-height:60vh}
+#heart{width:100%;height:100%;display:block;cursor:grab}
+#heart:active{cursor:grabbing}
+.readout{position:absolute;left:14px;bottom:12px;pointer-events:none}
+.readout .big{font-size:26px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.readout .sub{font-size:12px;color:var(--muted)}
+.phase{position:absolute;right:14px;bottom:12px;text-align:right;pointer-events:none;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}
+.phase b{color:var(--accent);font-weight:600}
+.loading{position:absolute;inset:0;display:grid;place-items:center;background:var(--panel);
+  font-size:13px;color:var(--muted);transition:opacity .4s}
+
+.row{display:flex;gap:7px;flex-wrap:wrap}
+button{font:inherit;font-size:13px;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer;
+  transition:background .15s,border-color .15s,color .15s}
+button:hover{border-color:var(--accent)}
+button.on{background:var(--accent);border-color:var(--accent);color:#04211E;font-weight:600}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.note{font-size:12.5px;color:var(--muted);max-width:62ch}
+.valves{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.valve{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+.valve .n{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.valve .bar{height:5px;background:var(--line);border-radius:3px;margin-top:6px;overflow:hidden}
+.valve .bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .08s linear}
+.states{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.state-chip{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);
+  border-radius:999px;padding:5px 13px 5px 6px;cursor:pointer}
+.state-chip canvas{width:26px;height:26px}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <canvas id="apexAv" aria-hidden="true"></canvas>
+    <div class="hgroup">
+      <h1 id="apexName">Apex</h1>
+      <p id="apexRole">Cardiology tutor · mechanism first, then the evidence</p>
+    </div>
+  </header>
+
+  <div class="stage">
+    <canvas id="heart"></canvas>
+    <div class="loading" id="loading">building anatomy…</div>
+    <div class="readout">
+      <div class="big" id="bpm">—</div>
+      <div class="sub" id="rhythmName">&nbsp;</div>
+    </div>
+    <div class="phase" id="phase">&nbsp;</div>
+  </div>
+
+  <div>
+    <div class="mono" style="margin-bottom:7px">View</div>
+    <div class="row" id="modes"></div>
+  </div>
+
+  <div>
+    <div class="mono" style="margin-bottom:7px">Rhythm — the muscle follows the same clock as the trace</div>
+    <div class="row" id="rhythms"></div>
+  </div>
+
+  <div class="valves" id="valveBars"></div>
+
+  <p class="note" id="note"></p>
+
+  <div>
+    <div class="mono" style="margin-bottom:7px">Apex, by state</div>
+    <div class="states" id="states"></div>
+  </div>
+
+</div>
+
+<script src="../src/core/heart3d.js"></script>
+<script src="../src/ui/apex.js"></script>
+<script>
+(function(){
+'use strict';
+const dark = !window.matchMedia || !window.matchMedia('(prefers-color-scheme: light)').matches;
+
+/* ── Apex avatar in the header, plus one per state below ── */
+const av = Apex.avatar(document.getElementById('apexAv'));
+document.getElementById('apexName').textContent = Apex.IDENTITY.name;
+document.getElementById('apexRole').textContent =
+  Apex.IDENTITY.role + ' · ' + Apex.IDENTITY.tagline.toLowerCase().replace(/\.$/,'');
+
+const stateWrap = document.getElementById('states');
+Object.keys(Apex.STATES).forEach(name=>{
+  const b=document.createElement('button');
+  b.className='state-chip';
+  const c=document.createElement('canvas');
+  b.appendChild(c);
+  b.appendChild(document.createTextNode(name));
+  b.onclick=()=>{ av.setState(name);
+    if(name==='speaking'){ let n=0; const iv=setInterval(()=>{ av.pulse(); if(++n>40)clearInterval(iv); },60); } };
+  stateWrap.appendChild(b);
+  const a=Apex.avatar(c); a.setState(name);
+  if(name==='speaking') setInterval(()=>a.pulse(), 90);
+});
+
+/* ── the heart ── */
+const canvas=document.getElementById('heart');
+const bpmEl=document.getElementById('bpm'), nameEl=document.getElementById('rhythmName');
+const phaseEl=document.getElementById('phase'), noteEl=document.getElementById('note');
+
+const VALVE_NAMES=['Mitral','Tricuspid','Aortic','Pulmonic'];
+const vb=document.getElementById('valveBars');
+const bars=VALVE_NAMES.map(n=>{
+  const d=document.createElement('div'); d.className='valve';
+  d.innerHTML='<div class="n">'+n+'</div><div class="bar"><i></i></div>';
+  vb.appendChild(d); return d.querySelector('i');
+});
+
+let heart=null;
+let lastPaint=0;
+function onCycle(c){
+  const now=performance.now();
+  if(now-lastPaint<80) return;              // the readout does not need 60fps
+  lastPaint=now;
+  for(let i=0;i<4;i++) bars[i].style.width=Math.round(c.valves[i]*100)+'%';
+  const filling = c.valves[0]>0.5, ejecting = c.valves[2]>0.5;
+  phaseEl.innerHTML = ejecting ? '<b>ejection</b> · semilunar valves open'
+    : filling ? (c.a>0.25 ? '<b>atrial kick</b> · topping the ventricle up' : '<b>filling</b> · AV valves open')
+    : '<b>isovolumetric</b> · everything shut';
+}
+
+const MODES=[['whole','Whole heart'],['cutaway','Cutaway'],['conduction','Conduction'],['coronary','Coronaries']];
+const NOTES={
+  whole:'Rotate it by dragging. The apex stays put while the base descends toward it, the walls thicken, and the left ventricle twists — which is how a ventricle actually empties.',
+  cutaway:'The near half is clipped away. Watch the valves: the atrioventricular valves shut the instant the ventricle starts to squeeze, the semilunars open only after isovolumetric contraction, and between the two there is a moment where all four are closed.',
+  conduction:'The depolarisation wave, running sinus node → atrioventricular node → His → bundle branches → Purkinje. Septum and apex before base, which is why the QRS looks the way it does.',
+  coronary:'Left anterior descending in the anterior interventricular groove, circumflex round the left atrioventricular groove, right coronary round the right. The territories follow from the geography.',
+};
+const RHYTHMS=[['sinus','Sinus 68'],['brady','Bradycardia'],['tachy','Tachycardia'],
+  ['afib','Atrial fibrillation'],['flutter','Flutter'],['chb','Complete heart block'],
+  ['vt','VT'],['vfib','VF'],['asystole','Asystole']];
+const RHYTHM_NOTE={
+  afib:'No atrial kick — the atria only quiver, and the ventricle fills irregularly. That is the whole haemodynamic story of AF in one picture.',
+  chb:'Atria and ventricles on separate clocks. Watch them drift out of step: the atria at about 78, the escape ventricle at 38.',
+  vfib:'No organised contraction at all. Nothing is ejected.',
+  asystole:'Nothing.',
+  vt:'Fast and wide, with barely time to fill — which is why the blood pressure goes.',
+};
+
+function chip(row, list, active, fn){
+  const el=document.getElementById(row);
+  el.innerHTML='';
+  list.forEach(([k,label])=>{
+    const b=document.createElement('button');
+    b.textContent=label; b.className=(k===active?'on':'');
+    b.onclick=()=>fn(k);
+    el.appendChild(b);
+  });
+}
+
+let curMode='whole', curRhythm='sinus';
+function setMode(m){ curMode=m; heart.setMode(m); paintChrome(); }
+function setRhythm(r){ curRhythm=r; heart.setRhythm(r); paintChrome(); }
+function paintChrome(){
+  chip('modes',MODES,curMode,setMode);
+  chip('rhythms',RHYTHMS,curRhythm,setRhythm);
+  const hr=Heart3D.RHYTHM_HR[curRhythm];
+  bpmEl.textContent = hr ? hr + ' bpm' : '—';
+  nameEl.textContent = (RHYTHMS.find(r=>r[0]===curRhythm)||[,''])[1];
+  noteEl.textContent = RHYTHM_NOTE[curRhythm] || NOTES[curMode];
+}
+
+requestAnimationFrame(()=>{
+  heart = Heart3D.create(canvas, { rhythm:'sinus', mode:'whole', dark:dark, onCycle:onCycle });
+  const load=document.getElementById('loading');
+  if(!heart){ load.textContent='WebGL2 is not available in this browser.'; return; }
+  load.style.opacity='0';
+  setTimeout(()=>load.remove(),420);
+  paintChrome();
+  window.__heart=heart; window.__apex=av;
+});
+})();
+</script>
+</body>
+</html>
