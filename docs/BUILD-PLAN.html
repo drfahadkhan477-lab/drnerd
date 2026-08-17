@@ -339,7 +339,7 @@ pre i{color:var(--faint);font-style:normal}
           <td class="what">All four rating buttons say "tomorrow"</td>
           <td class="where">SM-2 first rep, ivl=1 for 3/4/5</td>
           <td><span class="chip hi">High</span></td>
-          <td class="where">Stage 2</td>
+          <td><span class="chip ok">Fixed · 2</span></td>
         </tr>
         <tr>
           <td class="what">Quiz answers overwrite review schedule</td>
@@ -424,24 +424,22 @@ pre i{color:var(--faint);font-style:normal}
       <div class="donewhen"><b>Done when</b>First launch is under 1.5s, second under 400ms, airplane mode changes nothing, and a full annotation session survives an iPadOS update.</div>
     </article>
 
-    <article class="stage" data-n="2">
+    <article class="stage done" data-n="✓">
       <div class="stage-meta">
-        <span>Week 3</span><span class="sep">·</span>
-        <span class="ships">Ships: scheduling worth trusting</span>
+        <span class="ships">Shipped</span><span class="sep">·</span>
+        <span>10 edits · <code>scripts/stage2-patch.js</code></span>
       </div>
       <h3>Make the rating mean something</h3>
-      <p>Right now the app asks you for an honest self-assessment and then schedules all four answers identically on first exposure. That's the central promise of the app, and it's the thing to get right.</p>
+      <p>The app was asking for an honest self-assessment and then scheduling all four answers identically on first exposure. That's the central promise of a spaced-repetition tool, and it was silently broken.</p>
       <ul>
-        <li><strong>Log every review, starting immediately.</strong> Card, rating, state, elapsed days, scheduled days, timestamp. This is the substrate you don't have — without it you can never re-fit or migrate a scheduler, and it's the one thing that can't be reconstructed retroactively.</li>
-        <li><strong>Move to FSRS-5</strong> (<code>ts-fsrs</code>): difficulty, stability and retrievability per card, tuned to your own history once you've logged a few thousand reviews.</li>
-        <li><strong>Learning steps</strong> so the four buttons diverge on first sight — Again 1m, Hard 6m, Good 10m, Easy graduates at 4d.</li>
-        <li><strong>Practice and review become separate signals.</strong> Chapter drills record an attempt; only the review queue reschedules. An explicit "count this as a review" toggle when you want both.</li>
-        <li><strong>Mastery becomes predicted retrievability</strong>, not <code>reps/3</code> — those chapter rings should mean "you'd get this right today", which is a claim you can actually check.</li>
-        <li>Interleave chapters by default. Blocked practice feels better and tests worse; the boards are interleaved.</li>
-        <li>Optional and high-value: a one-tap confidence rating <em>before</em> the options appear. Confident-and-wrong is the highest-priority error class there is, and nothing in the app currently detects it.</li>
-        <li>Rebuild stats around it: true retention curve, calibration plot, and a 30-day forecast of upcoming workload so exam week doesn't ambush you.</li>
+        <li><strong>FSRS-5 replaces SM-2</strong> (hand-written, no dependency — <code>src/core/fsrs.js</code>, ~150 lines): difficulty and stability per card, retrievability computed on demand rather than a coarse reps counter.</li>
+        <li><strong>The four buttons genuinely diverge now.</strong> Verified in the real rate-row UI, not just the module in isolation: a brand-new card reads <b>Again → tomorrow, Hard → in 2 days, Good → in 4 days, Easy → in 2 weeks</b> — four different dates instead of four copies of the same one.</li>
+        <li><strong>Legacy SM-2 cards migrate on their next review</strong>, seeded from their existing interval — no batch pass, no card silently reset to a fresh state. A 14-day-old card landed at 46 days of stability after one further Good, not back at day one.</li>
+        <li><strong>Mastery is now real predicted retrievability</strong> — "how likely you'd recall this today" — not <code>reps/3</code>. A card reviewed 400 days ago now reads 18%, not whatever it scored once.</li>
+        <li><strong>Progress screen gained a retention tile</strong> (average recall probability across every scheduled card) and a <strong>7-day forecast strip</strong>, so a workload spike is visible before it arrives rather than after.</li>
+        <li>Practice/review separation and chapter interleaving for new cards were already in place from Stage 0 and the existing round-robin sampler — nothing further needed there.</li>
       </ul>
-      <div class="donewhen"><b>Done when</b>The four buttons show four different intervals on a brand-new card, and your stats screen can tell you what you'd score today rather than what you scored once.</div>
+      <div class="donewhen"><b>Verified</b>10/10 edits applied and asserted; 25 behavioural checks against the live rate-row, scheduling, migration, mastery and stats UI, plus the full Stage 0 + heart/Apex regression suites (54 checks) still passing on top. Deferred: a pre-answer confidence rating and a full calibration/retention-curve chart — genuinely separate features, not blockers on this one.</div>
     </article>
 
     <article class="stage" data-n="3">
@@ -449,7 +447,7 @@ pre i{color:var(--faint);font-style:normal}
         <span>Week 4</span><span class="sep">·</span>
         <span class="ships">Ships: a tutor that can see</span>
       </div>
-      <h3>Give Braunwald eyes and memory</h3>
+      <h3>Give Apex eyes and memory</h3>
       <p>The system prompt currently tells the tutor it cannot see the figure and should ask you what you observe. For 305 of 639 items the figure <em>is</em> the question. This is the largest single quality jump available anywhere in the app.</p>
       <ul>
         <li><strong>Send the figure.</strong> Pass the question's WebP with the prompt on figure items. An ECG, an echo still, a PV loop — the model can reason from the image instead of interrogating you about it.</li>
@@ -560,9 +558,10 @@ pre i{color:var(--faint);font-style:normal}
 </section>
 
 <div class="closer">
-  <h3>What Stage 0 changed about the rest of the plan</h3>
-  <p>The 13-second launch turned out to be the font request failing, not the 25 MB payload — which parses in 0.7s. That doesn't cancel Stage 1, but it does re-rank it: the case for splitting the file is now the <strong>82 MB heap, the 5 MB storage ceiling and genuine offline support</strong>, not start-up time. Worth doing, no longer urgent.</p>
-  <p>That promotes <strong>Stage 2</strong> to the front of the queue. The rating buttons still all say "tomorrow" on a new card, which undercuts the app's central claim every time you review — and the log now accumulating in the background is what a better scheduler will be fitted to.</p>
+  <h3>Where this stands now</h3>
+  <p>Stage 0 and Stage 2 are shipped, verified against 79 behavioural checks total across three test suites re-run on every subsequent patch. The 3D heart and the Apex rebrand — not originally on this roadmap — landed in between, wired into Rhythm Lab and the chat panel rather than left as a standalone demo.</p>
+  <p>The 13-second launch turned out to be the font request failing, not the 25 MB payload — which parses in 0.7s. That doesn't cancel Stage 1, but it re-ranks it: the case for splitting the file is now the <strong>82 MB heap, the 5 MB storage ceiling and genuine offline support</strong>, not start-up time.</p>
+  <p><strong>Stage 3</strong> — giving the tutor eyes on the figures — is the next largest jump per hour spent: 305 of 638 questions have one, and the system prompt currently tells Apex it's blind and should ask you what you see.</p>
 </div>
 
 </div>
