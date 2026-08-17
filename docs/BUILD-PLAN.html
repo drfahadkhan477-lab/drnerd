@@ -361,9 +361,9 @@ pre i{color:var(--faint);font-style:normal}
         </tr>
         <tr>
           <td class="what">Tutor is blind to the figures</td>
-          <td class="where">305 of 639 items have one</td>
+          <td class="where">305 of 638 items have one</td>
           <td><span class="chip md">Medium</span></td>
-          <td class="where">Stage 3</td>
+          <td><span class="chip ok">Fixed · 3</span></td>
         </tr>
         <tr>
           <td class="what">Nav says 638 Q, meta says 639</td>
@@ -442,22 +442,21 @@ pre i{color:var(--faint);font-style:normal}
       <div class="donewhen"><b>Verified</b>10/10 edits applied and asserted; 25 behavioural checks against the live rate-row, scheduling, migration, mastery and stats UI, plus the full Stage 0 + heart/Apex regression suites (54 checks) still passing on top. Deferred: a pre-answer confidence rating and a full calibration/retention-curve chart — genuinely separate features, not blockers on this one.</div>
     </article>
 
-    <article class="stage" data-n="3">
+    <article class="stage done" data-n="✓">
       <div class="stage-meta">
-        <span>Week 4</span><span class="sep">·</span>
-        <span class="ships">Ships: a tutor that can see</span>
+        <span class="ships">Shipped — vision and profile</span><span class="sep">·</span>
+        <span>9 edits · <code>scripts/stage3-patch.js</code></span>
       </div>
       <h3>Give Apex eyes and memory</h3>
-      <p>The system prompt currently tells the tutor it cannot see the figure and should ask you what you observe. For 305 of 639 items the figure <em>is</em> the question. This is the largest single quality jump available anywhere in the app.</p>
+      <p>The system prompt used to tell the tutor it could not see the figure and should ask you to describe it — inverting the teaching relationship on exactly the items where help is worth most. 305 of the 638 questions carry a figure.</p>
       <ul>
-        <li><strong>Send the figure.</strong> Pass the question's WebP with the prompt on figure items. An ECG, an echo still, a PV loop — the model can reason from the image instead of interrogating you about it.</li>
-        <li><strong>Move the key behind a Cloudflare Worker.</strong> One key, held server-side, with a daily spend cap and a shared secret. No plaintext key in localStorage on four devices, and no re-pasting when you pick up the iPad.</li>
-        <li><strong>A learning profile in the system prompt:</strong> rolling summary of weak chapters, the last twenty misses, and the notes you've written. The tutor should open a session already knowing where you're soft.</li>
-        <li>Thread memory across questions, so a concept taught in Valvular is available when the same principle resurfaces in Congenital.</li>
-        <li>Keep BM25 — it's genuinely good — and add an embedding index built once at import, scored hybrid. Concept recall where the words don't match.</li>
-        <li>Keep the "say you're unsure rather than invent a trial" instruction. It's the most important line in that prompt. Consider a citation-check pass over trial names before display.</li>
+        <li><strong>The figure now goes with the question.</strong> Base64 WebP image blocks, verified against a real intercepted request: correct <code>media_type</code>, raw base64 with no data-URL prefix, images ordered before the question text, and each panel labelled "Figure 1 / Figure 2" so you and Apex can refer to the same one.</li>
+        <li><strong>Anthropic only, and it says so.</strong> The Groq models this app offers are text-only, so on Groq the original "describe it to me" prompt is preserved verbatim and the header reads <em>"1 figure, not visible to this model"</em>. Dropping the image silently and letting the model bluff about a tracing would be worse than not offering the feature.</li>
+        <li><strong>Images never touch localStorage.</strong> They are injected at send time only — a saved thread full of base64 WebP would undo the storage discipline Stage 0 spent real work on.</li>
+        <li><strong>A learning profile rides on every turn</strong> — chapter accuracy, recent misses, FSRS retention and due load. Apex opens a conversation already knowing where you're soft, instead of only finding out if it thinks to call a tool. A fresh install correctly produces no profile at all rather than a wall of zeroes.</li>
+        <li><strong>Figure-reading discipline in the prompt:</strong> say what you actually see before reasoning from it, admit an unclear image, and treat the ACC commentary as ground truth wherever it and the image disagree — the vision docs are explicit that Claude is not built to read complex diagnostic scans.</li>
       </ul>
-      <div class="donewhen"><b>Done when</b>You can open a rhythm-strip question, ask "what's the mechanism here", and get an answer that starts from what's actually on the tracing.</div>
+      <div class="donewhen"><b>Verified</b>9/9 edits asserted; 33 behavioural checks including the wire format of a real intercepted request, multi-figure labelling, tool-loop idempotence (images don't stack across iterations), malformed-URL fallback, and the no-persistence guarantee. All three prior suites still green — 112 checks total.<br><br><b>Deferred, deliberately</b> — the Cloudflare Worker key proxy (needs infrastructure you own, and your key works fine today), cross-question thread memory, and the hybrid embedding index. None of them block reading a tracing.</div>
     </article>
 
     <article class="stage" data-n="4">
@@ -561,7 +560,7 @@ pre i{color:var(--faint);font-style:normal}
   <h3>Where this stands now</h3>
   <p>Stage 0 and Stage 2 are shipped, verified against 79 behavioural checks total across three test suites re-run on every subsequent patch. The 3D heart and the Apex rebrand — not originally on this roadmap — landed in between, wired into Rhythm Lab and the chat panel rather than left as a standalone demo.</p>
   <p>The 13-second launch turned out to be the font request failing, not the 25 MB payload — which parses in 0.7s. That doesn't cancel Stage 1, but it re-ranks it: the case for splitting the file is now the <strong>82 MB heap, the 5 MB storage ceiling and genuine offline support</strong>, not start-up time.</p>
-  <p><strong>Stage 3</strong> — giving the tutor eyes on the figures — is the next largest jump per hour spent: 305 of 638 questions have one, and the system prompt currently tells Apex it's blind and should ask you what you see.</p>
+  <p><strong>Stage 3</strong> is shipped for the part that mattered: Apex can now read the figure it is being asked about. What remains on the roadmap is <strong>Stage 1</strong> (the PWA split, for memory and offline rather than start-up time) and <strong>Stage 4</strong> (cross-device sync) — plus the deferred Stage 3 pieces, none of which block reading a tracing.</p>
 </div>
 
 </div>
