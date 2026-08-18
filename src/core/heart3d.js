@@ -845,6 +845,7 @@ uniform int  uKind;          // 0 muscle, 1 coronary, 2 conduction, 3 valve
 uniform float uClipX;
 uniform float uV;
 uniform float uDark;         // 1 when the page is in dark mode
+uniform float uStyle;        // 0 anatomic, 1 engraved ink
 
 // A sin-based hash loses precision once coordinates get large, and degrades
 // into per-pixel white noise — which, fed into the normal, flattens all the
@@ -865,6 +866,21 @@ float noise(vec3 p){
 }
 
 vec3 toLinear(vec3 c){ return pow(c, vec3(2.2)); }
+
+// ── engraving ────────────────────────────────────────────────────────────────
+// One layer of parallel hatching, in SCREEN space, so the strokes stay a
+// constant weight however close you zoom — which is what makes a drawing read
+// as drawn rather than as a texture wrapped round a model. Each layer only
+// applies where the surface is darker than its threshold, and fades in over a
+// short band so the tones step the way an engraver adds a second and third
+// pass rather than banding hard.
+float hatchLayer(vec2 sc, float ang, float freq, float thresh, float tone){
+  float w = clamp((thresh - tone) * 3.4, 0.0, 1.0);
+  if (w <= 0.001) return 1.0;
+  float v = sc.x * cos(ang) + sc.y * sin(ang);
+  float t = abs(fract(v * freq) - 0.5) * 2.0;      // triangle wave across the stroke
+  return mix(1.0, smoothstep(0.0, 0.40, t), w);    // 0 on the stroke, 1 on the paper
+}
 
 void main(){
   // cutaway: slice the near half away so the chambers are open to view
@@ -953,6 +969,50 @@ void main(){
   if (uMode == 3 && uKind != 1) col = mix(col, vec3(0.045,0.030,0.034), 0.62);
   if (uMode == 3 && uKind == 1) col *= 2.1;
 
+  // ── engraved style ──
+  // Tone stops being colour and becomes stroke density: the same lighting that
+  // drove the shading above now decides how many passes of hatching a patch
+  // gets. The silhouette is inked separately, because an outline is what makes
+  // a technical drawing legible where a purely tonal render goes mushy.
+  if (uStyle > 0.5) {
+    vec3 ink   = toLinear(mix(vec3(0.129,0.176,0.294), vec3(0.792,0.847,0.949), uDark));
+    vec3 paper = toLinear(mix(vec3(0.976,0.965,0.941), vec3(0.055,0.090,0.145), uDark));
+
+    if (uKind == 2) {
+      // the conduction system is the subject of this drawing, not scenery
+      col = toLinear(vec3(0.847, 0.706, 0.286)) * 1.35;
+    } else {
+      // Deliberately bright: an engraving is mostly untouched paper, and the
+      // drawing is what the engraver chose to darken. Tone that sits too low
+      // fires every layer everywhere and you get a halftone screen instead.
+      float lum = clamp(d1 * 1.20 + d2 * 0.42 + 0.30, 0.0, 1.0) * mix(0.78, 1.0, aoStrong);
+      // Cut surfaces are the subject in cutaway and conduction, so they get a
+      // lighter hand than the outside — occlusion that reads as depth in the
+      // colour render just fills the chamber with ink here.
+      if (back) lum = mix(lum, 1.0, 0.22);
+      if (uKind == 3) lum = mix(max(lum, 0.55), 1.0, 0.35);   // leaflets stay pale and outlined
+      if (uKind == 1) lum *= 0.40;                    // coronaries read as drawn vessels
+
+      vec2 sc = gl_FragCoord.xy;
+      float h = 1.0;
+      h *= hatchLayer(sc,  0.62, 0.085, 0.86, lum);
+      h *= hatchLayer(sc, -0.72, 0.085, 0.56, lum);
+      h *= hatchLayer(sc,  1.90, 0.095, 0.33, lum);
+      h *= hatchLayer(sc,  0.10, 0.115, 0.16, lum);
+
+      // A contour, not a shaded rim: tight band right at the silhouette, which
+      // is what stops the form going mushy where two surfaces overlap.
+      float edge = pow(1.0 - max(dot(N, V), 0.0), 2.6);
+      h *= 1.0 - smoothstep(0.30, 0.66, edge);
+
+      col = mix(paper, ink, clamp(1.0 - h, 0.0, 1.0));
+      if (uMode == 2 && uAct >= 0.0) {
+        float dd = abs(vExtra.y - uAct);
+        col = mix(col, toLinear(vec3(0.847,0.706,0.286))*1.3, clamp(exp(-dd*dd/1100.0),0.0,1.0)*0.55);
+      }
+    }
+  }
+
   col *= mix(1.0, 0.88, uDark);
   col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));       // back to sRGB
   outColor = vec4(col, 1.0);
@@ -1002,7 +1062,7 @@ function create(canvas, opts) {
 
   const prog = program(gl, VERT, FRAG);
   const U = n => gl.getUniformLocation(prog, n);
-  const UNIFORMS = ['proj','view','eye','a','v','quiver','time','act','mode','kind','clipX','dark',
+  const UNIFORMS = ['proj','view','eye','a','v','quiver','time','act','mode','kind','clipX','dark','style',
                     'lvApex','lvAxis','rvApex','rvAxis','laC','raC'];
   const u = {};
   for (const n of UNIFORMS) u[n] = U('u' + n[0].toUpperCase() + n.slice(1));
@@ -1145,6 +1205,7 @@ void main(){
     autoRotate: opts.autoRotate !== false,
     dark: opts.dark ? 1 : 0,
     clip: opts.clip !== undefined ? opts.clip : 0.4,
+    style: opts.style === 'ink' ? 1 : 0,
     t: 0, raf: null, last: null, dead: false, cyc: {},
     onCycle: opts.onCycle || null,
   };
@@ -1189,6 +1250,7 @@ void main(){
       gl.uniform1f(loc.quiver, c.quiver); gl.uniform1f(loc.time, S.t);
       gl.uniform1f(loc.act, c.act); gl.uniform1i(loc.mode, mode);
       gl.uniform1f(loc.clipX, S.clip); gl.uniform1f(loc.dark, S.dark);
+      gl.uniform1f(loc.style, S.style);
       gl.uniform3fv(loc.lvApex, new Float32Array(A.lv.apex));
       gl.uniform3fv(loc.lvAxis, new Float32Array(lvAxis));
       gl.uniform3fv(loc.rvApex, new Float32Array(A.rv.apex));
@@ -1226,7 +1288,9 @@ void main(){
     // blood flow — the simulation keeps running even when hidden, so nothing
     // jumps when you switch back into a mode where the chambers are exposed
     stepBloodParticles(bloodState, dt, c);
-    if (mode === 1 || mode === 2) {
+    /* Glowing additive particles are a colour-render idea; in the engraved
+       style they read as smudges on the paper, so the drawing leaves them out. */
+    if ((mode === 1 || mode === 2) && S.style === 0) {
       updateBloodBuffer(S.clip, true);   // both cutaway and conduction clip on the same uClipX plane
       gl.useProgram(bloodProg);
       gl.uniformMatrix4fv(bU.proj, false, proj);
@@ -1282,6 +1346,7 @@ void main(){
     setMode(m) { S.mode = m; if (reduced) draw(0); return api; },
     setDark(on) { S.dark = on ? 1 : 0; if (reduced) draw(0); return api; },
     setClip(z) { S.clip = z; if (reduced) draw(0); return api; },
+    setStyle(s) { S.style = s === 'ink' ? 1 : 0; if (reduced) draw(0); return api; },
     setAutoRotate(on) { S.autoRotate = !!on; return api; },
     resetView() { S.yaw = 0.42; S.pitch = 0.12; S.dist = 27; return api; },
     phase() { return cycle(S.t, S.rhythm, S.cyc); },
