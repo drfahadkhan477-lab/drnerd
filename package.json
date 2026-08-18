@@ -1,0 +1,23 @@
+{
+  "name": "systole",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Systole — a single-file cardiology board-review app built by patching a personal ACCSAP 12 export. The question bank itself is licensed content and is never committed.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "verify": "node scripts/verify.js",
+    "test": "node scripts/verify.js",
+    "steps": "node scripts/build.js --list",
+    "suites": "node scripts/verify.js --list",
+    "pwa": "node scripts/build-pwa.js build/systole.html",
+    "serve": "node scripts/serve.js 8080 dist"
+  },
+  "comments": {
+    "dependencies": "The build has none on purpose — it is Node's standard library and seventeen patch scripts. Playwright is needed only to run the test suites and is expected globally (npm i -g playwright && npx playwright install chromium), so a plain build never has to install a browser.",
+    "usage": "npm run build -- path/to/ACCSAP_export.html   then   npm test"
+  }
+}

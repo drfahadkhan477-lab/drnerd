@@ -26,3 +26,7 @@ content/
 
 # Stage 1 build output — contains a copy of the licensed content.
 dist/
+
+# Local build output — contains a copy of the licensed content.
+build/
+source/

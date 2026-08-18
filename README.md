@@ -1,4 +1,37 @@
-# iOS Learning Platform
+# drnerd
+
+This repository holds two unrelated projects.
+
+## Systole — cardiology board review
+
+A single-file study app for the ABIM cardiovascular boards, built by patching a
+personal ACCSAP 12 export. A procedural WebGL heart that beats on a real cardiac
+clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
+(Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5
+spaced repetition, and Apex — an AI tutor that can be grounded in your own
+reference notes.
+
+```bash
+node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
+node scripts/verify.js                              # 354 checks, 15 suites
+```
+
+**The question bank is licensed content and is not in this repository.** It
+stays on your own devices; `source/`, `build/`, `content/` and `dist/` are all
+gitignored.
+
+- **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
+- **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why
+- **[docs/REFERENCE-GUIDE.md](docs/REFERENCE-GUIDE.md)** — writing reference notes for Apex
+
+Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.
+
+---
+
+## iOS Learning Platform
+
+An early Swift scaffold — `Course.swift`, `Auth/`, `Models/`, `Services/`,
+`Podfile` — unrelated to Systole. Its original documentation follows.
 
 Welcome to the iOS Learning Platform documentation! This platform aims to provide a comprehensive learning environment for iOS development enthusiasts.
 
