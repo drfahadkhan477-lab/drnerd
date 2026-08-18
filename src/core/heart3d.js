@@ -1439,7 +1439,13 @@ void main(){
 
   function fit() {
     const r = canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    /* The heart is the one 3D surface here, so its device pixels cost fragment
+       shading, not just fill. A pointer:fine device (a desktop with a real GPU
+       and mains power) gets 2.5 for a crisper silhouette; a touch device stays
+       at 2, which is already retina, rather than tripling the shading budget on
+       a phone. */
+    const finePtr = window.matchMedia && window.matchMedia('(pointer:fine)').matches;
+    const dpr = Math.min(window.devicePixelRatio || 1, finePtr ? 2.5 : 2);
     if (!r.width || !r.height) return false;
     const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }

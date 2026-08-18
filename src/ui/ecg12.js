@@ -62,7 +62,9 @@ function mount(canvas, opts) {
   function fit() {
     const r = canvas.getBoundingClientRect();
     if (!r.width || !r.height) return false;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    /* 3× on a 12-lead: the grid and the traces are hairlines, and a printed
+       ECG is read by measuring on those lines, so crispness is legibility. */
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
