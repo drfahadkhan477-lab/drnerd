@@ -700,13 +700,19 @@ const RHYTHM_HR = { sinus: 68, brady: 44, tachy: 130, afib: 110, flutter: 150, v
 
 function cycle(tms, kind, state) {
   const st = state || {};
-  const out = { a: 0, v: 0, valves: [0, 0, 0, 0], act: -1, beat: 0, quiver: 0 };
-  if (kind === 'asystole') { out.valves = [0.35, 0.35, 0, 0]; return out; }
+  /* cyc is this instant as a fraction of one cardiac cycle, in the SAME
+     convention physio.js uses — zero at atrial systole, 0.10 at mitral closure.
+     It exists so the Wiggers diagram and the pressure-volume loop can be driven
+     by this heart's own clock instead of running a second one beside it and
+     slowly drifting out of agreement with the muscle the reader is watching. */
+  const out = { a: 0, v: 0, valves: [0, 0, 0, 0], act: -1, beat: 0, quiver: 0, cyc: 0 };
+  if (kind === 'asystole') { out.valves = [0.35, 0.35, 0, 0]; out.cyc = -1; return out; }
   if (kind === 'vfib') {
     out.quiver = 1;
     out.v = 0.14 + 0.10 * Math.sin(tms / 41) + 0.06 * Math.sin(tms / 17);
     out.a = 0.08 + 0.05 * Math.sin(tms / 23);
     out.valves = [0.25, 0.25, 0.06, 0.06];
+    out.cyc = -1;                      // no organised cycle to point at
     return out;
   }
   const hr = RHYTHM_HR[kind] || 68;
@@ -762,6 +768,12 @@ function cycle(tms, kind, state) {
   st.sv = ease(st.sv === undefined ? 0 : st.sv, semi, 0.40);
   out.valves = [st.mv, st.mv, st.sv, st.sv];
   if (kind === 'asystole') out.valves = [0.4, 0.4, 0, 0];
+
+  /* Aligned on the start of ventricular contraction rather than on the P wave:
+     that instant is mitral closure in both models, so the two cannot disagree
+     about where systole begins even though one counts from the sinus node and
+     the other from atrial systole. */
+  out.cyc = (((vPhase - PR) / vRR + 0.10) % 1 + 1) % 1;
 
   /* depolarisation wave position, in ms since the sinus node fired */
   const actWindow = 320;

@@ -71,33 +71,22 @@ const ROOT = path.join(__dirname, '..');
 const rhythmsExtra = fs.readFileSync(path.join(ROOT, 'src', 'core', 'rhythms-extra.js'), 'utf8');
 const heroRhythm = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'heroRhythm.js'), 'utf8');
 const pencilFx = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'pencil.js'), 'utf8');
-const heart3d = fs.readFileSync(path.join(ROOT, 'src', 'core', 'heart3d.js'), 'utf8');
 
 /* ────────────────────────────────────────────────────────────────────────────
- * 0. heart3d.js already embedded by the Apex patch predates two things this
- *    pass needs: the `target` option (to frame the mini hero heart without
- *    clipping it) and the blood-flow particle system (see the module's own
- *    header comment on that). The particle system alone is ~150 new lines
- *    threaded through several existing sections — surgically patching the
- *    already-embedded copy for that would mean a long chain of small,
- *    fragile find/replace calls against a huge blob. A single swap of the
- *    whole embedded module for the current src/core/heart3d.js is safer:
- *    one large but exact match, asserted unique like every other edit here.
+ * 0. The heart is NOT re-embedded here, and that is deliberate.
  *
- *    _heart3d-embed-anchor-v16.js is a frozen copy of exactly what the Apex
- *    patch embedded into stage3 output (src/core/heart3d.js as it stood at
- *    that commit, plus the one-line wrapper comment the Apex patch put
- *    before it) — the `find` half of this edit. It's checked in rather than
- *    regenerated, because regenerating it requires the stage3 output file
- *    this script doesn't otherwise depend on; if a future change to
- *    heart3d.js needs re-embedding again, take a fresh anchor snapshot from
- *    whatever this patch step just replaced before editing the source further.
+ *    This step used to swap the whole embedded heart3d module for the current
+ *    one, matched against _heart3d-embed-anchor-v16.js — a frozen copy of what
+ *    the Apex patch had already put there. It was redundant even then, because
+ *    the Apex patch embeds the live src/core/heart3d.js; and it became a hard
+ *    build failure the moment the geometry was rebuilt, since the snapshot no
+ *    longer matched the file it was a snapshot of.
+ *
+ *    Two copies of one module, one of which silently rots, is worse than none.
+ *    src/core/heart3d.js is the source of truth, and the Apex patch is the only
+ *    place it enters the page.
  * ──────────────────────────────────────────────────────────────────────────── */
-const heart3dAnchor = fs.readFileSync(path.join(__dirname, '_heart3d-embed-anchor-v16.js'), 'utf8');
-const heart3dWrapperComment = heart3dAnchor.slice(0, heart3dAnchor.indexOf('\n') + 1);
-patch('heart3d: replace the whole embedded module (adds the target option and the blood-flow particle system)',
-heart3dAnchor,
-heart3dWrapperComment + heart3d);
+
 
 /* ────────────────────────────────────────────────────────────────────────────
  * 1. Embed the new modules. This has to land BEFORE the ECG-engine section
