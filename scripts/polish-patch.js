@@ -528,6 +528,15 @@ patch('rail: any tool action counts as activity — re-arm the countdown',
  *    registry merge above; this is purely so 27 chips wrap tidily instead of
  *    fighting the fixed two-per-row assumption the original 12 were sized for.
  * ──────────────────────────────────────────────────────────────────────────── */
+/* The stage is a square (aspect-ratio 1/1) capped by max-height, so on any
+   viewport wider than it is tall the square is narrower than the panel — and
+   a block element defaults to the left edge of it. On an iPad in portrait the
+   panel is narrow enough that this never showed; on a laptop the heart sat in
+   the left third of a wide white card. */
+patch('css: centre the square heart stage in its panel',
+`.lab-heart-stage{position:relative;aspect-ratio:1/1;max-height:46vh}`,
+`.lab-heart-stage{position:relative;aspect-ratio:1/1;max-height:46vh;margin-inline:auto}`);
+
 patch('css: let the (now much longer) rhythm chip list breathe',
 `.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}`,
 `.chips{display:flex;flex-wrap:wrap;gap:6px 8px;padding:0 14px 10px}`);

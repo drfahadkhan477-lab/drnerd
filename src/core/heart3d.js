@@ -110,29 +110,95 @@ function smax(a, b, k) { return -smin(-a, -b, k); }
 
 /* ── the anatomy ──────────────────────────────────────────────────────────────
    Coordinates: +X patient's left, +Y superior, +Z anterior. Units are roughly
-   centimetres, heart ≈ 13 cm base to apex. Wall thicknesses are a little
-   generous versus life — this is a teaching model that has to read clearly at
-   thumbnail size, not a segmentation.                                        */
+   centimetres, and the model is built to the textbook figures — 12 cm base to
+   apex, 8–9 cm across, 6 cm front to back. Those three numbers matter more
+   than any single curve: get the proportions wrong and no amount of shading
+   rescues it, because the silhouette is what the eye reads first.
+
+   The shape of a ventricle is the thing most easily got wrong. It is not a
+   cone. A cone gives you straight sides and a point on the end; a real
+   ventricle is convex, widest across its upper third, and finishes in a blunt
+   rounded apex you could rest a fingertip on. So each ventricle here is an
+   oriented ellipsoid — the wide convex body — intersected with a round cone
+   that pulls the lower half in and caps it bluntly, then cut off flat at the
+   atrioventricular plane. The ellipsoid alone is too fat at the tip. The cone
+   alone is an ice-cream cone. The intersection is a ventricle.
+
+   The right ventricle is not a smaller copy of the left. It sits anterior and
+   to the right, wraps around the left in cross-section, stops well short of
+   the tip — the apex belongs to the LV alone — and its bulge is what gives
+   the heart its asymmetric anterior face. Where the two meet, the union uses a
+   deliberately small blend radius so the interventricular grooves stay visible
+   as creases; that is where the LAD and the PDA run.
+
+   The atria are posterior and superior, smaller than instinct suggests, and
+   they sit ON the atrioventricular plane rather than balancing on top of the
+   ventricles. The auricles are forward-projecting flaps that lap the roots of
+   the great vessels. Both details matter: atria modelled as spheres perched on
+   a cone is precisely how a heart ends up looking like an ice cream.
+
+   Wall thicknesses are a little generous versus life. This is a teaching model
+   that has to read at thumbnail size, not a segmentation.                    */
+
+/* An orthonormal frame around an axis, chosen so that u comes out transverse
+   and v front-to-back — the two directions the radii below are quoted in. */
+function axisFrame(axis) {
+  const a = norm(axis);
+  const ref = Math.abs(a[2]) > 0.9 ? v3(0, 1, 0) : v3(0, 0, 1);
+  const u = norm(cross(ref, a));
+  return { a, u, v: cross(a, u) };
+}
+function sdEllipsoidFrame(px, py, pz, c, F, ra, ru, rv) {
+  const dx = px - c[0], dy = py - c[1], dz = pz - c[2];
+  const a = (dx * F.a[0] + dy * F.a[1] + dz * F.a[2]) / ra;
+  const u = (dx * F.u[0] + dy * F.u[1] + dz * F.u[2]) / ru;
+  const v = (dx * F.v[0] + dy * F.v[1] + dz * F.v[2]) / rv;
+  const k = Math.hypot(a, u, v);
+  return (k - 1) * Math.min(ra, ru, rv);
+}
+/* positive above the plane, negative on the ventricular side of it */
+function sdAbove(px, py, pz, p0, n) {
+  return (px - p0[0]) * n[0] + (py - p0[1]) * n[1] + (pz - p0[2]) * n[2];
+}
+
+function ventricle(base, apex, bulgeT) {
+  const axis = norm(sub(apex, base)), L = len(sub(apex, base));
+  return { base, apex, axis, L, F: axisFrame(axis), bulge: mid(base, apex, bulgeT) };
+}
+const LV = ventricle(v3(0.10, 2.60, -0.55), v3(2.85, -5.10, 1.25), 0.40);
+const RV = ventricle(v3(-2.20, 2.35, 0.75), v3(1.35, -3.60, 1.95), 0.40);
+
+/* the atrioventricular plane: the annulus the whole base is slung from, and
+   the surface the ventricles are cut off at so the atria have a floor */
+const AV_P = v3(-0.35, 2.95, 0.15);
+const AV_N = norm(v3(-0.28, 0.93, -0.24));
+
 const A = {
-  lv: { base: v3(0.3, 2.8, -0.4), apex: v3(2.9, -5.0, 1.2), cav: [2.05, 0.50], myo: [3.05, 1.05] },
-  rv: { base: v3(-2.2, 2.5, 0.9), apex: v3(1.5, -3.8, 1.9), cav: [2.20, 0.55], myo: [2.78, 0.95] },
-  la: { c: v3(0.2, 4.6, -2.0), r: v3(2.00, 1.70, 1.80), w: 0.30 },
-  ra: { c: v3(-2.8, 3.8, -0.3), r: v3(1.90, 1.90, 1.75), w: 0.30 },
+  lv: { base: LV.base, apex: LV.apex },
+  rv: { base: RV.base, apex: RV.apex },
+  la: { c: v3(0.30, 4.25, -2.50), r: v3(2.05, 1.62, 1.88), w: 0.26 },
+  ra: { c: v3(-2.60, 3.65, -0.55), r: v3(1.90, 1.92, 1.78), w: 0.26 },
 };
-/* great vessels as chains of capsules */
-const AORTA = [[v3(0.2, 3.4, -0.3), v3(0.1, 5.6, -0.5), 1.15],
-               [v3(0.1, 5.6, -0.5), v3(-0.9, 7.2, -1.2), 1.05],
-               [v3(-0.9, 7.2, -1.2), v3(-1.1, 5.4, -2.5), 0.95],
-               [v3(-1.1, 5.4, -2.5), v3(-0.9, 2.4, -2.9), 0.85]];
-const PA    = [[v3(-0.9, 4.4, 1.4), v3(-0.5, 6.0, 0.5), 1.00],
-               [v3(-0.5, 6.0, 0.5), v3(1.7, 6.5, -0.5), 0.72],
-               [v3(-0.5, 6.0, 0.5), v3(-2.4, 6.2, -0.7), 0.72]];
-const CAVA  = [[v3(-3.0, 8.0, -1.0), v3(-2.9, 4.6, -0.6), 0.78],   // SVC
-               [v3(-2.5, 1.0, -1.5), v3(-2.8, 3.2, -0.8), 0.82]];  // IVC
-const PVEIN = [[v3(1.9, 5.6, -3.6), v3(1.1, 5.0, -2.4), 0.45],
-               [v3(-1.4, 5.6, -3.6), v3(-0.6, 5.0, -2.5), 0.45],
-               [v3(2.0, 3.8, -3.4), v3(1.2, 4.1, -2.5), 0.42],
-               [v3(-1.5, 3.8, -3.3), v3(-0.6, 4.1, -2.5), 0.42]];
+/* the auricles — ear-shaped, lying forward over the great-vessel roots */
+const LAA = [v3(1.85, 3.75, -0.85), v3(2.90, 3.05, 0.45), 0.44];
+const RAA = [v3(-3.15, 4.05, 0.35), v3(-1.75, 3.95, 1.30), 0.50];
+
+/* great vessels as chains of capsules. The pulmonary trunk leaves the RV
+   anterior and to the left of the aorta and crosses in front of it — which is
+   why, from the front, you see pulmonary artery over aortic root. */
+const AORTA = [[v3(0.15, 3.05, -0.60), v3(0.05, 5.15, -0.80), 1.10],
+               [v3(0.05, 5.15, -0.80), v3(-0.95, 6.55, -1.45), 0.98],
+               [v3(-0.95, 6.55, -1.45), v3(-1.20, 5.05, -2.55), 0.88],
+               [v3(-1.20, 5.05, -2.55), v3(-1.00, 2.40, -2.95), 0.80]];
+const PA    = [[v3(-0.85, 3.45, 1.40), v3(-0.40, 5.55, 0.45), 0.98],
+               [v3(-0.40, 5.55, 0.45), v3(1.25, 5.85, -1.05), 0.66],
+               [v3(-0.40, 5.55, 0.45), v3(-2.05, 5.70, -1.20), 0.66]];
+const CAVA  = [[v3(-2.85, 7.20, -1.05), v3(-2.78, 4.70, -0.75), 0.78],   // SVC
+               [v3(-2.45, 0.90, -1.55), v3(-2.75, 3.10, -0.95), 0.82]];  // IVC
+const PVEIN = [[v3(1.85, 5.15, -3.70), v3(1.20, 4.70, -2.90), 0.37],
+               [v3(-1.15, 5.15, -3.70), v3(-0.50, 4.65, -2.95), 0.37],
+               [v3(1.90, 3.60, -3.65), v3(1.25, 3.85, -2.95), 0.34],
+               [v3(-1.25, 3.60, -3.60), v3(-0.55, 3.85, -2.95), 0.34]];
 
 function chainDist(px, py, pz, chain, grow) {
   let d = 1e9;
@@ -140,13 +206,34 @@ function chainDist(px, py, pz, chain, grow) {
   return d;
 }
 
+/* ellipsoid body ∩ tapering cone — see the note at the top of this section */
+function chamberSD(x, y, z, C, rAx, rU, rV, r1, r2, k) {
+  return smax(sdEllipsoidFrame(x, y, z, C.bulge, C.F, rAx, rU, rV),
+              sdRoundCone(x, y, z, C.base, C.apex, r1, r2), k);
+}
+
+/* epicardial (outer) surface of each ventricle */
+function sdEpiLV(x, y, z) { return chamberSD(x, y, z, LV, LV.L * 0.72, 2.95, 2.60, 4.60, 1.10, 0.75); }
+function sdEpiRV(x, y, z) { return chamberSD(x, y, z, RV, RV.L * 0.70, 2.85, 2.45, 4.20, 0.90, 0.70); }
+function sdVentricles(x, y, z) {
+  const both = smin(sdEpiLV(x, y, z), sdEpiRV(x, y, z), 0.55);   // small k: the IV grooves
+  return smax(both, sdAbove(x, y, z, AV_P, AV_N), 0.60);
+}
+
 /* cavity of each chamber — used for weights, for the cutaway interior, and to
-   hollow the muscle out */
-function sdCavLV(x, y, z) { return sdRoundCone(x, y, z, A.lv.base, A.lv.apex, A.lv.cav[0], A.lv.cav[1]); }
+   hollow the muscle out. Cut a little ABOVE the annulus so the inflow stays
+   open into the atrium rather than being pinched off at the valve. */
+function sdCavLV(x, y, z) {
+  return smax(chamberSD(x, y, z, LV, LV.L * 0.66, 1.90, 1.70, 3.10, 0.34, 0.50),
+              sdAbove(x, y, z, AV_P, AV_N) - 0.45, 0.45);
+}
 function sdCavRV(x, y, z) {
-  const rv = sdRoundCone(x, y, z, A.rv.base, A.rv.apex, A.rv.cav[0], A.rv.cav[1]);
-  const lvWall = sdRoundCone(x, y, z, A.lv.base, A.lv.apex, A.lv.myo[0], A.lv.myo[1]);
-  return smax(rv, -lvWall, 0.35);            // the septum belongs to the LV
+  const raw = smax(chamberSD(x, y, z, RV, RV.L * 0.64, 2.30, 2.00, 3.00, 0.34, 0.50),
+                   sdAbove(x, y, z, AV_P, AV_N) - 0.45, 0.45);
+  /* the septum belongs to the left ventricle, so the right cavity is whatever
+     is left once the LV wall is taken out of it — which is also exactly what
+     makes it the crescent it is in cross-section */
+  return smax(raw, -sdEpiLV(x, y, z), 0.35);
 }
 function sdCavLA(x, y, z) { return sdEllipsoid(x, y, z, A.la.c[0], A.la.c[1], A.la.c[2], A.la.r[0], A.la.r[1], A.la.r[2]); }
 function sdCavRA(x, y, z) { return sdEllipsoid(x, y, z, A.ra.c[0], A.ra.c[1], A.ra.c[2], A.ra.r[0], A.ra.r[1], A.ra.r[2]); }
@@ -159,23 +246,21 @@ function sdCavities(x, y, z) {
   d = smin(d, chainDist(x, y, z, PA, 0), 0.5);
   return d;
 }
-/* outer surface: muscle plus vessels, fused */
+/* outer surface: muscle plus atria, auricles and vessels, fused */
 function sdOuter(x, y, z) {
-  const lv = sdRoundCone(x, y, z, A.lv.base, A.lv.apex, A.lv.myo[0], A.lv.myo[1]);
-  const rv = sdRoundCone(x, y, z, A.rv.base, A.rv.apex, A.rv.myo[0], A.rv.myo[1]);
-  let d = smin(lv, rv, 0.75);
+  let d = sdVentricles(x, y, z);
+  /* a small blend radius here too, so the atrioventricular groove — the crown
+     the coronaries run in — stays a visible waist instead of melting shut */
   d = smin(d, sdEllipsoid(x, y, z, A.la.c[0], A.la.c[1], A.la.c[2],
-        A.la.r[0] + A.la.w, A.la.r[1] + A.la.w, A.la.r[2] + A.la.w), 0.8);
+        A.la.r[0] + A.la.w, A.la.r[1] + A.la.w, A.la.r[2] + A.la.w), 0.42);
   d = smin(d, sdEllipsoid(x, y, z, A.ra.c[0], A.ra.c[1], A.ra.c[2],
-        A.ra.r[0] + A.ra.w, A.ra.r[1] + A.ra.w, A.ra.r[2] + A.ra.w), 0.8);
-  /* left atrial appendage — small, hooked, and the reason half of cardiology
-     cares about the left atrium at all */
-  d = smin(d, sdCapsule(x, y, z, v3(1.9, 4.6, -0.9), v3(2.7, 3.6, -0.2), 0.52), 0.45);
-  d = smin(d, sdCapsule(x, y, z, v3(-3.6, 4.6, 0.6), v3(-4.1, 3.6, 0.9), 0.55), 0.45);  // RAA
-  d = smin(d, chainDist(x, y, z, AORTA, 0.20), 0.55);
-  d = smin(d, chainDist(x, y, z, PA, 0.18), 0.55);
-  d = smin(d, chainDist(x, y, z, CAVA, 0.16), 0.45);
-  d = smin(d, chainDist(x, y, z, PVEIN, 0.14), 0.40);
+        A.ra.r[0] + A.ra.w, A.ra.r[1] + A.ra.w, A.ra.r[2] + A.ra.w), 0.42);
+  d = smin(d, sdCapsule(x, y, z, LAA[0], LAA[1], LAA[2]), 0.34);
+  d = smin(d, sdCapsule(x, y, z, RAA[0], RAA[1], RAA[2]), 0.34);
+  d = smin(d, chainDist(x, y, z, AORTA, 0.20), 0.50);
+  d = smin(d, chainDist(x, y, z, PA, 0.18), 0.50);
+  d = smin(d, chainDist(x, y, z, CAVA, 0.16), 0.42);
+  d = smin(d, chainDist(x, y, z, PVEIN, 0.14), 0.38);
   return d;
 }
 
@@ -183,15 +268,14 @@ function sdOuter(x, y, z) {
 const REGION = { MYO: 0, ATRIUM: 1, AORTA: 2, PA: 3, VEIN: 4, APPENDAGE: 5 };
 function regionDistances(x, y, z) {
   return [
-    Math.min(sdRoundCone(x, y, z, A.lv.base, A.lv.apex, A.lv.myo[0], A.lv.myo[1]),
-             sdRoundCone(x, y, z, A.rv.base, A.rv.apex, A.rv.myo[0], A.rv.myo[1])),
+    Math.min(sdEpiLV(x, y, z), sdEpiRV(x, y, z)),
     Math.min(sdEllipsoid(x, y, z, A.la.c[0], A.la.c[1], A.la.c[2], A.la.r[0] + A.la.w, A.la.r[1] + A.la.w, A.la.r[2] + A.la.w),
              sdEllipsoid(x, y, z, A.ra.c[0], A.ra.c[1], A.ra.c[2], A.ra.r[0] + A.ra.w, A.ra.r[1] + A.ra.w, A.ra.r[2] + A.ra.w)),
     chainDist(x, y, z, AORTA, 0.20),
     chainDist(x, y, z, PA, 0.14),
     Math.min(chainDist(x, y, z, CAVA, 0.16), chainDist(x, y, z, PVEIN, 0.14)),
-    Math.min(sdCapsule(x, y, z, v3(1.9, 4.6, -0.9), v3(2.7, 3.6, -0.2), 0.52),
-             sdCapsule(x, y, z, v3(-3.6, 4.6, 0.6), v3(-4.1, 3.6, 0.9), 0.55)),
+    Math.min(sdCapsule(x, y, z, LAA[0], LAA[1], LAA[2]),
+             sdCapsule(x, y, z, RAA[0], RAA[1], RAA[2])),
   ];
 }
 function regionAt(x, y, z) {
@@ -214,12 +298,11 @@ function chamberWeights(x, y, z) {
    is genuinely the sequence: septum first, apex before base, endo before epi */
 function activationAt(x, y, z) {
   const dLA = len(sub([x, y, z], A.la.c)), dRA = len(sub([x, y, z], A.ra.c));
-  if (Math.min(dLA, dRA) < 2.6) return 6 + Math.min(dLA, dRA) * 14;      // atria: 6-45ms
-  const apex = A.lv.apex, base = A.lv.base;
-  const axis = norm(sub(base, apex));
-  const rel = sub([x, y, z], apex);
+  if (Math.min(dLA, dRA) < 2.4) return 6 + Math.min(dLA, dRA) * 14;      // atria: 6-40ms
+  const axis = norm(sub(LV.base, LV.apex));
+  const rel = sub([x, y, z], LV.apex);
   const along = rel[0] * axis[0] + rel[1] * axis[1] + rel[2] * axis[2];
-  const frac = Math.max(0, Math.min(1, along / 8.4));
+  const frac = Math.max(0, Math.min(1, along / LV.L));
   return 150 + frac * 55 + Math.abs(x - 1.0) * 3;                        // apex→base
 }
 
@@ -309,11 +392,11 @@ const COLORS = {
   [REGION.MYO]:       [0.557, 0.141, 0.125],
   [REGION.ATRIUM]:    [0.576, 0.255, 0.227],
   [REGION.AORTA]:     [0.788, 0.725, 0.659],
-  [REGION.PA]:        [0.557, 0.608, 0.710],
-  [REGION.VEIN]:      [0.435, 0.486, 0.600],
+  [REGION.PA]:        [0.659, 0.627, 0.663],
+  [REGION.VEIN]:      [0.494, 0.478, 0.545],
   [REGION.APPENDAGE]: [0.604, 0.290, 0.251],
 };
-const FAT = [0.851, 0.753, 0.478];
+const FAT = [0.918, 0.812, 0.487];   // epicardial fat — genuinely this yellow in the grooves
 
 /* Ambient occlusion straight off the distance field: march a little way along
    the normal and see how much muscle is still in the way. This is most of what
@@ -364,7 +447,7 @@ function attributesFor(positions, normals, field) {
     const ivGroove = (1 - Math.min(1, Math.abs(w[0] - w[1]) * 2.6)) * Math.min(1, ventric * 1.4);
     const avGroove = Math.min(1, 4.2 * ventric * atrial);
     const groove = Math.max(ivGroove, avGroove) * (region === REGION.MYO || region === REGION.ATRIUM ? 1 : 0);
-    const f = groove * 0.42;
+    const f = groove * 0.60;
     color[i * 3]     = c[0] * (1 - f) + FAT[0] * f;
     color[i * 3 + 1] = c[1] * (1 - f) + FAT[1] * f;
     color[i * 3 + 2] = c[2] * (1 - f) + FAT[2] * f;
@@ -381,10 +464,10 @@ function attributesFor(positions, normals, field) {
    about its hinge, so "open" and "shut" are one number per valve and the
    geometry is built once.                                                    */
 const VALVES = [
-  { id: 0, name: 'mitral',    c: v3(0.75, 2.55, -0.75), n: norm(sub(A.lv.apex, A.lv.base)), r: 1.55, leaflets: 2, open: 1.15 },
-  { id: 1, name: 'tricuspid', c: v3(-1.85, 2.35, 0.35), n: norm(sub(A.rv.apex, A.rv.base)), r: 1.65, leaflets: 3, open: 1.15 },
-  { id: 2, name: 'aortic',    c: v3(0.2, 3.45, -0.35),  n: v3(-0.05, 1, -0.1),              r: 1.05, leaflets: 3, open: -1.05 },
-  { id: 3, name: 'pulmonic',  c: v3(-0.95, 3.85, 1.4),  n: v3(0.2, 1, -0.4),                r: 0.95, leaflets: 3, open: -1.05 },
+  { id: 0, name: 'mitral',    c: v3(0.55, 2.45, -1.15), n: norm(sub(A.lv.apex, A.lv.base)), r: 1.50, leaflets: 2, open: 1.15 },
+  { id: 1, name: 'tricuspid', c: v3(-1.70, 2.25, 0.30), n: norm(sub(A.rv.apex, A.rv.base)), r: 1.60, leaflets: 3, open: 1.15 },
+  { id: 2, name: 'aortic',    c: v3(0.15, 3.10, -0.60), n: v3(-0.05, 1, -0.1),              r: 1.02, leaflets: 3, open: -1.05 },
+  { id: 3, name: 'pulmonic',  c: v3(-0.85, 3.50, 1.40), n: v3(0.2, 1, -0.4),                r: 0.92, leaflets: 3, open: -1.05 },
 ];
 function basisFor(n) {
   const nn = norm(n);
@@ -453,22 +536,22 @@ function buildValves() {
    keeps the two circuits visually separate instead of both collapsing onto
    one thin line down the middle where the chambers happen to be closest. */
 const BLOOD_RIGHT = [
-  v3(-2.9, 6.4, -0.9),                               // venous return (SVC/IVC confluence)
+  v3(-2.85, 6.20, -0.90),                             // venous return (SVC/IVC confluence)
   A.ra.c,                                             // right atrium
   VALVES[1].c,                                        // tricuspid
-  v3(-2.05, 0.4, 1.55),                               // RV free wall, well clear of the septum
-  v3(1.25, -3.55, 1.8),                               // near the RV apex
+  v3(-1.60, 0.35, 1.70),                              // RV free wall, well clear of the septum
+  v3(1.10, -3.05, 1.85),                              // near the RV apex
   VALVES[3].c,                                        // pulmonic
-  v3(-0.5, 6.0, 0.5),                                 // main pulmonary artery
+  v3(-0.35, 5.85, 0.55),                              // main pulmonary artery
 ];
 const BLOOD_LEFT = [
-  v3(1.5, 5.3, -3.0),                                 // pulmonary venous return
+  v3(1.45, 5.15, -3.35),                              // pulmonary venous return
   A.la.c,                                             // left atrium
   VALVES[0].c,                                        // mitral
-  v3(2.65, 0.0, -1.05),                                // LV free wall, well clear of the septum
-  v3(2.65, -4.6, 1.05),                               // near the LV apex
+  v3(2.30, -0.30, -0.85),                             // LV free wall, well clear of the septum
+  v3(2.75, -4.55, 1.15),                              // near the LV apex
   VALVES[2].c,                                        // aortic
-  v3(0.1, 5.6, -0.5),                                 // aorta
+  v3(0.00, 5.40, -0.75),                              // aorta
 ];
 /* which segment index (0-based, out of waypoints.length-1) a u falls in, and
    the local t within that segment — plain piecewise-linear, not arc-length
@@ -552,6 +635,7 @@ function bezier(p0, p1, p2, p3, n) {
   return out;
 }
 const CORONARY_RGB = [0.408, 0.153, 0.129];
+const VENOUS_RGB   = [0.180, 0.243, 0.408];   // cardiac veins and the coronary sinus
 const CONDUCTION_RGB = [0.961, 0.843, 0.431];
 function emptyTube() { return { positions: [], normals: [], weights: [], color: [], extra: [], indices: [] }; }
 /* Hand-placed control points never land exactly on a surface defined by a
@@ -578,23 +662,32 @@ function projectToSurface(points, lift) {
 
 function buildCoronaries() {
   const out = emptyTube();
-  /* LAD — down the anterior interventricular groove, where the RV meets the LV */
-  tubeAlong(bezier(v3(0.1, 3.2, 0.9), v3(0.6, 1.4, 2.3), v3(1.6, -1.0, 2.6), v3(2.7, -4.2, 1.7), 22), 0.135, out, CORONARY_RGB, true);
-  /* LCx — around the left atrioventricular groove */
-  tubeAlong(bezier(v3(0.2, 3.2, 0.7), v3(1.9, 3.0, 0.4), v3(3.0, 1.8, -0.9), v3(2.4, 0.2, -2.1), 18), 0.115, out, CORONARY_RGB, true);
-  /* RCA — right AV groove, round to the inferior wall */
-  tubeAlong(bezier(v3(-0.9, 3.2, 0.9), v3(-2.6, 2.6, 1.4), v3(-3.4, 0.6, 0.2), v3(-1.6, -1.8, -1.6), 20), 0.125, out, CORONARY_RGB, true);
+  /* LAD — down the anterior interventricular groove, the crease the LV/RV
+     union leaves on the front, finishing just short of and around the apex */
+  tubeAlong(bezier(v3(-0.30, 2.85, 1.55), v3(0.35, 0.80, 2.55), v3(1.35, -1.60, 2.55), v3(2.70, -4.60, 1.55), 24), 0.135, out, CORONARY_RGB, true);
+  /* first diagonal, off the LAD onto the LV free wall — the branch that makes
+     the anterior surface read as supplied rather than merely striped */
+  tubeAlong(bezier(v3(0.35, 0.80, 2.45), v3(1.35, 0.30, 2.20), v3(2.20, -0.70, 1.40), v3(2.85, -1.90, 0.30), 14), 0.085, out, CORONARY_RGB, true);
+  /* LCx — around the left atrioventricular groove, onto the obtuse margin */
+  tubeAlong(bezier(v3(0.05, 2.95, 1.15), v3(1.85, 2.35, 0.55), v3(3.05, 1.20, -1.10), v3(2.55, -0.40, -2.35), 20), 0.115, out, CORONARY_RGB, true);
+  /* RCA — right AV groove, down the acute margin and round to the inferior wall */
+  tubeAlong(bezier(v3(-1.15, 3.10, 1.25), v3(-2.85, 2.30, 1.35), v3(-3.35, 0.30, 0.10), v3(-1.70, -2.10, -1.55), 22), 0.125, out, CORONARY_RGB, true);
+  /* Great cardiac vein, alongside the LAD, and the coronary sinus it becomes
+     in the posterior AV groove — the veins are half the picture in the grooves
+     and the sinus is the landmark every posterior view is oriented by. */
+  tubeAlong(bezier(v3(0.10, 2.70, 1.70), v3(0.70, 0.90, 2.45), v3(1.55, -1.30, 2.45), v3(2.55, -3.90, 1.65), 20), 0.100, out, VENOUS_RGB, true);
+  tubeAlong(bezier(v3(2.35, 1.35, -2.05), v3(1.20, 2.15, -2.70), v3(-0.70, 2.35, -2.35), v3(-2.05, 2.30, -1.15), 18), 0.150, out, VENOUS_RGB, true);
   return out;
 }
 function buildConduction() {
   const out = emptyTube();
-  const SA = v3(-3.2, 4.9, 0.3), AV = v3(-1.0, 2.6, -0.5), HIS = v3(-0.3, 1.9, 0.1);
-  tubeAlong(bezier(SA, v3(-2.6, 4.2, 0.1), v3(-1.6, 3.2, -0.3), AV, 10), 0.10, out, CONDUCTION_RGB);
-  tubeAlong([AV, HIS, v3(0.1, 1.2, 0.4)], 0.10, out, CONDUCTION_RGB);
+  const SA = v3(-3.05, 4.75, 0.30), AV = v3(-0.95, 2.35, -0.55), HIS = v3(-0.30, 1.65, 0.05);
+  tubeAlong(bezier(SA, v3(-2.50, 4.00, 0.10), v3(-1.55, 3.00, -0.35), AV, 10), 0.10, out, CONDUCTION_RGB);
+  tubeAlong([AV, HIS, v3(0.05, 0.95, 0.35)], 0.10, out, CONDUCTION_RGB);
   /* left and right bundle branches fanning into Purkinje */
-  tubeAlong(bezier(v3(0.1, 1.2, 0.4), v3(0.9, 0.2, 0.2), v3(1.8, -1.6, 0.6), v3(2.6, -3.9, 1.1), 12), 0.075, out, CONDUCTION_RGB);
-  tubeAlong(bezier(v3(0.1, 1.2, 0.4), v3(-0.2, 0.0, 1.2), v3(0.6, -1.8, 1.8), v3(1.5, -3.4, 1.8), 12), 0.075, out, CONDUCTION_RGB);
-  tubeAlong(bezier(v3(0.1, 1.2, 0.4), v3(1.2, 0.4, -0.6), v3(2.2, -1.2, -0.8), v3(2.6, -3.2, -0.2), 12), 0.065, out, CONDUCTION_RGB);
+  tubeAlong(bezier(v3(0.05, 0.95, 0.35), v3(0.90, -0.10, 0.15), v3(1.80, -2.00, 0.55), v3(2.65, -4.35, 1.05), 12), 0.075, out, CONDUCTION_RGB);
+  tubeAlong(bezier(v3(0.05, 0.95, 0.35), v3(-0.25, -0.25, 1.15), v3(0.55, -2.10, 1.75), v3(1.35, -3.15, 1.80), 12), 0.075, out, CONDUCTION_RGB);
+  tubeAlong(bezier(v3(0.05, 0.95, 0.35), v3(1.20, 0.15, -0.65), v3(2.25, -1.55, -0.85), v3(2.70, -3.55, -0.25), 12), 0.065, out, CONDUCTION_RGB);
   return out;
 }
 
@@ -792,6 +885,11 @@ void main(){
   if (uKind == 0) {
     float fib = noise(vWorld*2.8)*0.6 + noise(vWorld*7.0)*0.26;
     base *= 0.86 + fib*0.30;
+    // Slow, large-scale variation in how perfused the muscle looks. Uniform
+    // red over a whole organ is the single biggest tell that a surface is
+    // shaded plastic — real myocardium is never one colour twice over.
+    float perfuse = noise(vWorld*0.80);
+    base *= mix(vec3(0.93, 0.89, 0.91), vec3(1.10, 1.03, 0.98), perfuse);
     N = normalize(N + vec3(noise(vWorld*9.0)-0.5, noise(vWorld*9.0+7.0)-0.5,
                            noise(vWorld*9.0+3.0)-0.5) * 0.09);
   }
@@ -817,19 +915,29 @@ void main(){
   vec3 sss = toLinear(vec3(0.86, 0.16, 0.11)) * pow(wrap, 2.4) * (uKind == 0 ? 0.34 : 0.12);
 
   vec3 H = normalize(L1 + V);
+  float ndh = max(dot(N, H), 0.0);
   float rough = uKind == 0 ? 22.0 : 46.0;
-  float spec = pow(max(dot(N, H), 0.0), rough) * (uKind == 0 ? 0.55 : 0.70);
+  // Two lobes. The epicardium is a wet membrane stretched over muscle: one
+  // narrow highlight on its own reads as polished plastic, and it is the
+  // broad second lobe that makes a surface look damp rather than shined.
+  float spec = pow(ndh, rough) * (uKind == 0 ? 0.55 : 0.70)
+             + pow(ndh, 4.5)   * (uKind == 0 ? 0.17 : 0.10);
   float fres = pow(1.0 - max(dot(N, V), 0.0), 3.2);
-  float aoStrong = pow(ao, 1.8);
+  // A floor under the occlusion term. Without one, a deep pocket — the inflow
+  // behind a valve especially — integrates to zero and reads as a hole punched
+  // through the muscle rather than tissue in shadow. In a cutaway that is worse
+  // than merely dark, because a hole is the one thing a cutaway is meant to
+  // show deliberately.
+  float aoStrong = max(pow(ao, 1.8), 0.12);
 
   // an interior surface gets a soft omnidirectional fill so cavities read
-  float fill = back ? 0.42 : 0.035;
+  float fill = back ? 0.50 : 0.045;
   vec3 col = base * (fill + d1*(back ? 0.55 : 1.02)) * aoStrong
            + base * d2 * (back ? 0.34 : 0.22) * ao
            + sss * ao;
   col += vec3(1.0, 0.94, 0.90) * spec * ao;
-  col += toLinear(vec3(1.0,0.52,0.44)) * d3 * 0.34 * ao;      // rim
-  col += toLinear(vec3(0.95,0.42,0.38)) * fres * 0.22 * ao;
+  col += toLinear(vec3(1.0,0.52,0.44)) * d3 * 0.26 * ao;      // rim
+  col += toLinear(vec3(0.95,0.42,0.38)) * fres * 0.14 * ao;
 
   // squeezing muscle catches a little more light
   col *= 1.0 + uV * 0.12 * (vW.x + vW.y);
@@ -875,7 +983,9 @@ function create(canvas, opts) {
   if (!gl) return null;
 
   const RES = opts.resolution || [72, 92, 58];
-  const LO = [-6.4, -6.6, -4.6], HI = [5.4, 9.6, 3.8];
+  /* Tight enough that the grid is not spent on empty space, loose enough that
+     nothing touches a face — surface nets leaves an open edge where it does. */
+  const LO = [-5.4, -6.9, -5.3], HI = [5.1, 9.7, 4.5];
 
   const t0 = performance.now();
   const outer = surfaceNets(sdOuter, LO, HI, RES);
