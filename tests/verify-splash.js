@@ -45,8 +45,15 @@ const head = t => console.log('\n── ' + t + ' ──');
      splashAt > -1 && bigScriptAt > -1 && splashAt < bigScriptAt,
      `splash@${splashAt} payload@${bigScriptAt} (${inlineAt > -1 ? 'inline' : 'fetched'})`);
   ok('splash never intercepts input', /#splash\{[^}]*pointer-events:none/.test(raw));
+  /* The pre-paint boot script reads the saved theme and stamps the mode and
+     palette attributes before the splash paints. It used to be a bare
+     light/dark toggle; since the theme system it maps a preset id to a
+     [mode, palette] pair — but the claim is unchanged: storage is consulted,
+     and the attributes are set, ahead of the splash. */
   ok('theme is adopted from storage before the splash paints',
-     raw.indexOf("accsap12.v2") < splashAt && /_t&&_t!=='auto'/.test(raw));
+     raw.indexOf("accsap12.v2") < splashAt &&
+     /setAttribute\('data-theme'/.test(raw.slice(0, splashAt)) &&
+     /setAttribute\('data-palette'/.test(raw.slice(0, splashAt)));
   ok('the loading screen does not depend on Heart3D',
      !/id="splash"[\s\S]{0,900}Heart3D/.test(raw));
 
