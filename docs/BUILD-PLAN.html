@@ -482,6 +482,24 @@ pre i{color:var(--faint);font-style:normal}
       <div class="donewhen"><b>Verified</b>20/20 edits applied and asserted; 45 behavioural checks for this pass — Pencil width/size/tilt against the real paint path, the auto-minimize handoff, the rhythm playlist, the hero heart surviving the same view-transition race the lab heart was fixed for, and the blood-flow particles rendering in the live Rhythm Lab (not just the standalone demo). All four prior suites (112 checks) still green on top — 153 total.</div>
     </article>
 
+    <article class="stage done" data-n="✓">
+      <div class="stage-meta">
+        <span class="ships">Shipped — the cardiac cycle, a name, themes, the home, the splash, crispness</span><span class="sep">·</span>
+        <span>7 patches · <code>physio · name · theme · home · splash-heart · crisp</code> (+ leads/scan earlier)</span>
+      </div>
+      <h3>Make it a sophisticated, professional project — and give it a name</h3>
+      <p>A directed set of requests, applied as one arc because they share the app's identity and its instrument surfaces. Everything below is a patch against the single-file build, verified against a rendered artifact and covered by its own suite.</p>
+      <ul>
+        <li><strong>The cardiac cycle, in Rhythm Lab, computed rather than drawn.</strong> Five interrogable views — Wiggers diagram, the pressure–volume loop, valve and coronary flow, the right heart, and the Frank–Starling and Guyton curves — generated from <code>src/core/physio.js</code>. Valves are measured pressure crossings, not labelled constants; volume is exactly flat when both valves are shut; the PV loop is <em>solved</em> from two elastances, so raising afterload lowers ejection fraction with contractility untouched. It runs on the heart model's own clock — <code>Heart3D.cycle()</code> now reports its cycle position — so the beating muscle, the sweeping ECG and the pressure crossing are one event.</li>
+        <li><strong>The app is named Systole.</strong> Only the shell is renamed; the questions genuinely are the ACC's ACCSAP 12 bank, so every statement of their provenance keeps that name. The tutor stays Apex.</li>
+        <li><strong>A theme system:</strong> eight curated presets (Auto · Daylight · Slate · Parchment · Midnight · Nocturne · Cath Lab · Monitor) behind a picker. A theme is a mode (the existing data-theme axis, unchanged) paired with a palette (a new data-palette axis) that overrides only the core tokens — so a palette is a small block, not a second stylesheet, and the semantic colours are left unthemed so green never stops meaning "right answer".</li>
+        <li><strong>The home screen reworked:</strong> a larger ECG welcome bar, a live two-layer progress bar (coverage and FSRS mastery, the same measure the rings show), and three layouts — Signal, Focus, Grid — that are one markup and a data attribute.</li>
+        <li><strong>A crystal heart on the startup screen,</strong> beating over the ECG sweep — inline SVG and CSS, so it paints on the first frame instead of waiting for the very mesh it would be standing in for.</li>
+        <li><strong>A crispness pass:</strong> the 2D line-art canvases back themselves at 3×, and the 3D heart at a device-aware 2.5×/2×, so hairlines stay sharp on high-DPI displays without tripling a phone's shading budget.</li>
+      </ul>
+      <div class="donewhen"><b>Verified</b>five new suites — physio (42), theme (27), home (15), splash-heart (12), crisp (8) = 104 new checks, each asserting the claim and not merely that something rendered, plus the physiology verified numerically in Node before any pixel. All prior suites still green on the final build. <b>354 checks across 15 suites.</b><br><br>Also removed the dead <code>polish-patch</code> step that re-embedded a frozen snapshot of the heart module on top of the live one; the source file is now the single source of truth.</div>
+    </article>
+
     <article class="stage" data-n="4">
       <div class="stage-meta">
         <span>Week 5–6</span><span class="sep">·</span>
@@ -581,7 +599,7 @@ pre i{color:var(--faint);font-style:normal}
 
 <div class="closer">
   <h3>Where this stands now</h3>
-  <p>Stage 0 and Stage 2 are shipped, verified against 79 behavioural checks total across three test suites re-run on every subsequent patch. The 3D heart and the Apex rebrand — not originally on this roadmap — landed in between, wired into Rhythm Lab and the chat panel rather than left as a standalone demo.</p>
+  <p>Stages 0–3 and Stage 1 are shipped, along with a long arc of directed feature work beyond the original roadmap: the engraved and crystal drawing styles, a real 12-lead derived from one dipole, a photoreal scanned heart baked into the app's own anatomy, a computed cardiac cycle, the rename to Systole, an eight-theme system, a reworked home screen, an animated crystal splash, and a high-DPI crispness pass. All of it is verified against <strong>354 behavioural checks across 15 suites</strong>, re-run on the build as it grows.</p>
   <p>The 13-second launch turned out to be the font request failing, not the 25 MB payload — which parses in 0.7s. That doesn't cancel Stage 1, but it re-ranks it: the case for splitting the file is now the <strong>82 MB heap, the 5 MB storage ceiling and genuine offline support</strong>, not start-up time.</p>
   <p><strong>Stage 3</strong> is shipped for the part that mattered: Apex can now read the figure it is being asked about. The Pencil/hero-heart/rhythm-library polish pass landed after it — genuinely a real anatomical heart with live blood flow now, not a cartoon, and a Pencil that tilts, sizes and auto-minimizes like the app it's borrowed the feel from. Then a startup pass: the cold-open blank screen was measured at 5.5 seconds on a throttled CPU, and a loading screen that paints in ~100 ms now covers it.</p>
   <p><strong>Stage 1 is shipped.</strong> The shell went from 26.2 MB to 566 KB and the heap from 78.6 MB to 4.8 MB — the memory target was ~25 MB, so it landed five times better than planned, because nothing is resident until you open the question. It works offline once installed. Two pieces are deliberately deferred: the ES-module reorganisation and the IndexedDB move, neither of which produced any of the measured wins.</p>
