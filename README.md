@@ -13,7 +13,7 @@ reference notes.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 354 checks, 15 suites
+node scripts/verify.js                              # 366 checks, 16 suites
 ```
 
 **The question bank is licensed content and is not in this repository.** It

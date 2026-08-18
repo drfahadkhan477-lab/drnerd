@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js                                 # → 354 checks
+node scripts/verify.js                                 # → 366 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -40,7 +40,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Nineteen patch scripts run in order against the export. Each applies a list of
+Twenty patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -71,6 +71,7 @@ The cost is that order matters, and the dependencies are real:
 | 17 | `crisp` | device-pixel ceilings |
 | 18 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
 | 19 | `type`  | the modular type scale, snapped over everything above |
+| 20 | `review`| fixes from the full code review — last, so it sees everything |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -126,10 +127,24 @@ node -e "global.window=global; require('./src/core/physio.js');
 
 ### The PWA suite
 
-`verify-pwa` tests the Stage 1 split build over HTTP, so it needs a server:
+`verify-pwa` tests the Stage 1 split build over HTTP, so it needs building,
+serving and tearing down. One flag does all three:
 
 ```bash
-node scripts/build-pwa.js build/systole.html    # → dist/
+node scripts/verify.js --pwa
+```
+
+**Run it.** It is the only suite that sees the split build, and this is not
+theoretical: it asserts the shell stays under 800 KB and that the app boots with
+the network cut off. Both of those had silently broken — the shell had grown to
+1.7 MB with an inlined heart scan, and the service worker was failing to install
+because it precached an icon the build never generated. The checks existed the
+whole time; nothing ran them.
+
+The steps by hand, if you need them:
+
+```bash
+node scripts/build-pwa.js build/systole.html    # → dist/, icons included
 node scripts/serve.js 8080 dist &
 node tests/verify-pwa.js http://localhost:8080
 ```

@@ -6,7 +6,7 @@
  *
  *   --only <a,b>   run just these suites (names as in tests/verify-<name>.js)
  *   --skip <a,b>   run everything except these
- *   --bail         stop at the first failing suite
+ *   --bail         stop at the first failing suite\n *   --pwa          also build, serve and test the Stage 1 split build
  *   --list         print the suites and what each covers, then exit
  *
  * WHY THIS EXISTS. There are sixteen suites and roughly 366 checks, and they
@@ -20,9 +20,14 @@
  * and for CPU time, and the failures that produced would be about the harness
  * rather than the app, which is the least useful kind of red.
  *
- * verify-pwa is not in this list: it tests the Stage 1 split build over HTTP,
- * which needs scripts/build-pwa.js and scripts/serve.js rather than the single
- * file. It is run separately, and --list says so.
+ * verify-pwa needs more than a file path — it tests the Stage 1 split build over
+ * HTTP, so it has to be built, served and torn down. `--pwa` does all three.
+ *
+ * It is worth the trouble, and this review proved why: the split shell had
+ * silently grown from 566 KB to 1.7 MB because a megabyte of base64 heart scan
+ * was being inlined into it. verify-pwa asserts the shell stays under 800 KB
+ * and would have caught it the day it happened — but nothing ran it, so nobody
+ * knew. A check that exists and is never run is not a check.
  */
 'use strict';
 const fs = require('fs');
@@ -60,9 +65,8 @@ const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 if (flag('--list')) {
   console.log('\nSuites, and what each defends:\n');
   for (const [name, claim] of SUITES) console.log(`  ${name.padEnd(14)} ${claim}`);
-  console.log(`\n  pwa            the Stage 1 split build over HTTP — run separately:`);
-  console.log(`                 node scripts/build-pwa.js <build.html> && node scripts/serve.js 8080 dist`);
-  console.log(`                 node tests/verify-pwa.js http://localhost:8080\n`);
+  console.log(`\n  pwa            the Stage 1 split build over HTTP — needs a server, so:`);
+  console.log(`                 node scripts/verify.js --pwa\n`);
   process.exit(0);
 }
 
@@ -137,3 +141,40 @@ if (bad.length) {
   process.exit(1);
 }
 console.log(`  all green\n`);
+
+/* ── the split build ──────────────────────────────────────────────────────────
+   Built, served on a free port, tested, torn down. Kept out of the loop above
+   because it is the only suite that needs a running server, and mixing a
+   server's lifetime into a loop over file-path suites is how a stray node
+   process outlives its run. */
+if (flag('--pwa')) {
+  const { spawn } = require('child_process');
+  const PORT = 8137;
+  console.log('── the Stage 1 split build, over HTTP ──\n');
+  const b = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'build-pwa.js'), TARGET], { encoding: 'utf8' });
+  if (b.status !== 0) { console.error(b.stdout + b.stderr); process.exit(1); }
+  console.log((b.stdout.match(/shell total.*/) || ['  (built)'])[0].trim());
+
+  const srv = spawn(process.execPath, [path.join(ROOT, 'scripts', 'serve.js'), String(PORT), path.join(ROOT, 'dist')],
+                    { stdio: 'ignore', detached: false });
+  const done = () => { try { srv.kill(); } catch (_) {} };
+  process.on('exit', done); process.on('SIGINT', () => { done(); process.exit(130); });
+
+  /* Give the listener a moment, then run. */
+  const wait = spawnSync(process.execPath, ['-e',
+    `const t=Date.now();(function p(){require('http').get('http://localhost:${PORT}/',r=>{r.destroy();process.exit(0)})
+     .on('error',()=>{if(Date.now()-t>15000)process.exit(1);setTimeout(p,200)})})()`], { encoding: 'utf8' });
+  if (wait.status !== 0) { console.error('  the static server never came up'); done(); process.exit(1); }
+
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
+                      { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath } });
+  const out = (r.stdout || '') + (r.stderr || '');
+  const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
+  for (const ln of out.split('\n')) if (/^\s*(PASS|FAIL)\s/.test(ln)) console.log(ln);
+  done();
+  if (!m || +m[2] > 0 || r.status !== 0) {
+    console.log(`\n  pwa FAILED\n`);
+    process.exit(1);
+  }
+  console.log(`\n  pwa: ${m[1]} checks, all green\n`);
+}

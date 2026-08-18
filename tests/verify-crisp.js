@@ -71,13 +71,16 @@ const ratioOf = (page, sel) => page.evaluate(s => {
   const physio = await ratioOf(page, '#physioCanvas');
   ok('the cardiac-cycle diagram backs itself at ~3×', physio >= 2.8, `${physio ? physio.toFixed(2) : physio}×`);
 
+  /* Require the canvas to BE there. `x == null || x >= 2.8` passed whether the
+     element was crisp or simply gone, so a regression that stopped mounting it
+     would have looked green. */
   const twelve = await ratioOf(page, '#twelveCanvas');
-  ok('the 12-lead backs itself at ~3× — its grid is measured on', twelve == null || twelve >= 2.8,
-     twelve == null ? '(not mounted for this rhythm)' : `${twelve.toFixed(2)}×`);
+  ok('the 12-lead is mounted and backs itself at ~3× — its grid is measured on',
+     twelve != null && twelve >= 2.8, twelve == null ? 'NOT MOUNTED' : `${twelve.toFixed(2)}×`);
 
   const labMon = await ratioOf(page, '#labCanvas');
-  ok('the Rhythm Lab monitor strip backs itself at ~3×', labMon == null || labMon >= 2.8,
-     labMon == null ? '(absent)' : `${labMon.toFixed(2)}×`);
+  ok('the Rhythm Lab monitor strip is mounted and backs itself at ~3×',
+     labMon != null && labMon >= 2.8, labMon == null ? 'NOT MOUNTED' : `${labMon.toFixed(2)}×`);
 
   head('the 3D heart, capped for its cost');
   await page.evaluate(() => { setHeartModel && setHeartModel('procedural'); });

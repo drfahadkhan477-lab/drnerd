@@ -113,7 +113,11 @@ const RV_PEAK = 25, RV_PRE_A = 2.2, RV_EDP = 4.0, RV_CLOSE = 18;
 const RV_MO = 5.0, RV_NADIR = 1.2, RV_FILL_END = 1.8;
 const PA_DIA = 9.5, PA_REBOUND = 15, PA_K = 3.2;
 
-const wrap = t => ((t % 1) + 1) % 1;
+/* A cycle position, always in [0,1). Non-finite input folds to 0 rather than
+   propagating: this is fed by a live clock from the heart renderer, and a
+   single undefined there would otherwise turn every trace into NaN and blank
+   the whole diagram silently. */
+const wrap = t => Number.isFinite(t) ? ((t % 1) + 1) % 1 : 0;
 const smooth = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
 const span = (t, a, b) => (t - a) / (b - a);
 const lerpS = (t, a, b, p, q) => p + (q - p) * smooth(span(t, a, b));

@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying nineteen patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying twenty patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -52,10 +52,11 @@ const ROOT = path.join(__dirname, '..');
      crisp         the device-pixel ceilings
      scale         the spacing scale and the bar reveals
      type          the modular type scale, snapped over everything above
+     review        fixes from the full code review, last
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'ink', 'braunwald',
-  'art', 'leads', 'scan', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type',
+  'art', 'leads', 'scan', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'review',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
