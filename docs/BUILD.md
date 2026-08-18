@@ -40,7 +40,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Eighteen patch scripts run in order against the export. Each applies a list of
+Nineteen patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -70,6 +70,7 @@ The cost is that order matters, and the dependencies are real:
 | 16 | `splash-heart` | the crystal heart, into `splash`'s markup |
 | 17 | `crisp` | device-pixel ceilings |
 | 18 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
+| 19 | `type`  | the modular type scale, snapped over everything above |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -105,7 +106,7 @@ node scripts/verify.js --skip scan --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Fifteen suites, ~354 checks. They run one at a time deliberately: most drive a
+Sixteen suites, ~366 checks. They run one at a time deliberately: most drive a
 real WebGL context and several measure timing, so running them concurrently
 would produce failures about the harness rather than the app.
 

@@ -9,7 +9,7 @@
  *   --bail         stop at the first failing suite
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are fifteen suites and roughly 350 checks, and they
+ * WHY THIS EXISTS. There are sixteen suites and roughly 366 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -49,6 +49,7 @@ const SUITES = [
   ['home',         'the welcome bar, the progress bar, three layouts'],
   ['splash-heart', 'the crystal heart paints before the app parses'],
   ['crisp',        'every canvas backs itself at high device-pixel density'],
+  ['type',         'one modular type scale and one spacing scale, still held'],
 ];
 
 const argv = process.argv.slice(2);
