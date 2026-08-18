@@ -1,3 +1,4 @@
+/* ═══════════ Heart3D + Apex — embedded, see src/core/heart3d.js and src/ui/apex.js ═══════════ */
 /* ═══════════════════════════════════════════════════════════════════════════
    heart3d.js — an anatomical heart that beats, on a real cardiac cycle.
 
@@ -436,79 +437,6 @@ function buildValves() {
   return { positions: new Float32Array(pos), normals: new Float32Array(nrm),
            hingeP: new Float32Array(hingeP), hingeA: new Float32Array(hingeA),
            vid: new Float32Array(vid), weights: new Float32Array(wts), indices: idx };
-}
-
-/* ── blood flow: particles tracing the two circuits ──────────────────────────
-   Only meaningful where the chambers are actually exposed — cutaway and
-   conduction mode both clip the near wall away, whole/coronary do not, so
-   particles only draw in the first two. Each circuit is a short polyline
-   through the real anatomy landmarks already defined above; a particle's
-   position is u∈[0,1] along it, advanced each frame and gated to a crawl
-   whenever the valve guarding its current segment is shut — the same
-   valve-timing the leaflets themselves animate on, so a particle visibly
-   queues at a closed mitral valve exactly when the leaflet is drawn closed.
-   Each path bows out through its ventricle's own free wall rather than
-   cutting straight to the apex — the free walls sit well apart from each
-   other (the septum is what's between them), so bowing outward is what
-   keeps the two circuits visually separate instead of both collapsing onto
-   one thin line down the middle where the chambers happen to be closest. */
-const BLOOD_RIGHT = [
-  v3(-2.9, 6.4, -0.9),                               // venous return (SVC/IVC confluence)
-  A.ra.c,                                             // right atrium
-  VALVES[1].c,                                        // tricuspid
-  v3(-2.05, 0.4, 1.55),                               // RV free wall, well clear of the septum
-  v3(1.25, -3.55, 1.8),                               // near the RV apex
-  VALVES[3].c,                                        // pulmonic
-  v3(-0.5, 6.0, 0.5),                                 // main pulmonary artery
-];
-const BLOOD_LEFT = [
-  v3(1.5, 5.3, -3.0),                                 // pulmonary venous return
-  A.la.c,                                             // left atrium
-  VALVES[0].c,                                        // mitral
-  v3(2.65, 0.0, -1.05),                                // LV free wall, well clear of the septum
-  v3(2.65, -4.6, 1.05),                               // near the LV apex
-  VALVES[2].c,                                        // aortic
-  v3(0.1, 5.6, -0.5),                                 // aorta
-];
-/* which segment index (0-based, out of waypoints.length-1) a u falls in, and
-   the local t within that segment — plain piecewise-linear, not arc-length
-   corrected; the segments are short enough that the unevenness doesn't read. */
-function polylinePoint(waypoints, u) {
-  const n = waypoints.length - 1;
-  const f = Math.max(0, Math.min(0.999999, u)) * n;
-  const seg = Math.floor(f), t = f - seg;
-  const a = waypoints[Math.min(seg, n - 1)], b = waypoints[Math.min(seg + 1, n)];
-  return { pos: mid(a, b, t), seg: Math.min(seg, n - 1) };
-}
-/* Both paths are 7 points / 6 segments: the AV valve sits at waypoint index
-   2 (u=2/6), the semilunar at index 5 (u=5/6). Below the AV valve's u,
-   advancing is gated by it; between the two valves the particle is just
-   swirling through the ventricle body, nothing to gate; approaching the
-   semilunar, that valve gates it. Loop-back past u=1 is always free — venous
-   return, nothing to gate it in this schematic. */
-function bloodGate(u, valves, isLeft) {
-  if (u < 2 / 6) return isLeft ? valves[0] : valves[1];     // mitral : tricuspid
-  if (u < 5 / 6) return 1;                                   // free-swimming in the ventricle
-  return isLeft ? valves[2] : valves[3];                     // aortic : pulmonic
-}
-const BLOOD_N_PER_CIRCUIT = 70;
-function makeBloodParticles() {
-  const out = [];
-  for (let side = 0; side < 2; side++) {
-    for (let i = 0; i < BLOOD_N_PER_CIRCUIT; i++) {
-      out.push({ side, u: i / BLOOD_N_PER_CIRCUIT, speed: 0.16 + (i % 7) * 0.01 });
-    }
-  }
-  return out;
-}
-function stepBloodParticles(particles, dtMs, cyc) {
-  const dt = dtMs / 1000;
-  for (const p of particles) {
-    const gateOpen = bloodGate(p.u, cyc.valves, p.side === 1);
-    const crawl = 0.06;                                     // still edges forward when "shut" — never fully static
-    p.u += dt * p.speed * (crawl + (1 - crawl) * gateOpen);
-    if (p.u >= 1) p.u -= 1;
-  }
 }
 
 /* ── tubes: coronaries and the conduction system ──────────────────────────── */
@@ -960,70 +888,6 @@ function create(canvas, opts) {
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(valves.indices), gl.STATIC_DRAW);
   gl.bindVertexArray(null);
 
-  /* ── blood flow particles: a tiny dedicated point-sprite program, drawn
-     additively over everything else, only where cutaway/conduction mode has
-     actually opened the chambers up ── */
-  const BLOOD_VERT = `#version 300 es
-precision highp float;
-layout(location=0) in vec3 aPos;
-layout(location=1) in vec3 aColor;
-layout(location=2) in float aSize;
-uniform mat4 uBProj, uBView;
-out vec3 vColor;
-void main(){
-  vColor = aColor;
-  gl_Position = uBProj * uBView * vec4(aPos, 1.0);
-  gl_PointSize = clamp(520.0 * aSize / gl_Position.w, 3.0, 24.0);
-}`;
-  const BLOOD_FRAG = `#version 300 es
-precision highp float;
-in vec3 vColor;
-out vec4 outColor;
-void main(){
-  vec2 d = gl_PointCoord - vec2(0.5);
-  float r = length(d) * 2.0;
-  if (r > 1.0) discard;
-  // a small hot core (reads as a highlight, not just a flat blob) plus a
-  // wider soft glow — tuned so the colour still reads as red/blue instead
-  // of bleaching toward white once it's additively blended over lit muscle
-  float core = smoothstep(0.55, 0.0, r);
-  float glow = pow(1.0 - r, 1.8);
-  vec3 col = vColor * (0.55 + glow * 1.3) + vec3(1.0) * core * 0.5;
-  outColor = vec4(col, glow);
-}`;
-  const bloodProg = program(gl, BLOOD_VERT, BLOOD_FRAG);
-  const bU = { proj: gl.getUniformLocation(bloodProg, 'uBProj'), view: gl.getUniformLocation(bloodProg, 'uBView') };
-  const bloodState = makeBloodParticles();
-  const BLOOD_STRIDE = 7;   // x,y,z, r,g,b, size
-  const bloodBuf = new Float32Array(bloodState.length * BLOOD_STRIDE);
-  const bloodVao = gl.createVertexArray();
-  gl.bindVertexArray(bloodVao);
-  const bloodVbo = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, bloodVbo);
-  gl.bufferData(gl.ARRAY_BUFFER, bloodBuf.byteLength, gl.DYNAMIC_DRAW);
-  const stride = BLOOD_STRIDE * 4;
-  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, stride, 0);
-  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, stride, 12);
-  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, stride, 24);
-  gl.bindVertexArray(null);
-  const BLOOD_LEFT_RGB = [1.0, 0.20, 0.16], BLOOD_RIGHT_RGB = [0.20, 0.45, 1.0];
-  function updateBloodBuffer(clipZ, hideBehindClip) {
-    for (let i = 0; i < bloodState.length; i++) {
-      const p = bloodState[i];
-      const wp = polylinePoint(p.side === 0 ? BLOOD_RIGHT : BLOOD_LEFT, p.u);
-      const rgb = p.side === 0 ? BLOOD_RIGHT_RGB : BLOOD_LEFT_RGB;
-      const hidden = hideBehindClip && wp.pos[2] > clipZ;
-      const o = i * BLOOD_STRIDE;
-      bloodBuf[o] = hidden ? 0 : wp.pos[0];
-      bloodBuf[o + 1] = hidden ? 0 : wp.pos[1];
-      bloodBuf[o + 2] = hidden ? -9999 : wp.pos[2];   // pushed behind the camera — frustum-culled, never rasterized
-      bloodBuf[o + 3] = rgb[0]; bloodBuf[o + 4] = rgb[1]; bloodBuf[o + 5] = rgb[2];
-      bloodBuf[o + 6] = 0.7 + (i % 5) * 0.09;
-    }
-    gl.bindBuffer(gl.ARRAY_BUFFER, bloodVbo);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, bloodBuf);
-  }
-
   /* ── state ── */
   const S = {
     rhythm: opts.rhythm || 'sinus',
@@ -1031,7 +895,6 @@ void main(){
     yaw: opts.yaw !== undefined ? opts.yaw : 0.42,
     pitch: opts.pitch !== undefined ? opts.pitch : 0.12,
     dist: opts.distance || 27,
-    target: opts.target || [0.3, 0.6, 0],
     autoRotate: opts.autoRotate !== false,
     dark: opts.dark ? 1 : 0,
     clip: opts.clip !== undefined ? opts.clip : 0.4,
@@ -1059,11 +922,11 @@ void main(){
     const c = cycle(S.t, S.rhythm, S.cyc);
     if (S.onCycle) S.onCycle(c);
 
-    const eye = [S.target[0] + Math.sin(S.yaw) * Math.cos(S.pitch) * S.dist,
-                 S.target[1] + Math.sin(S.pitch) * S.dist + 1.2,
-                 S.target[2] + Math.cos(S.yaw) * Math.cos(S.pitch) * S.dist];
+    const eye = [Math.sin(S.yaw) * Math.cos(S.pitch) * S.dist,
+                 Math.sin(S.pitch) * S.dist + 1.2,
+                 Math.cos(S.yaw) * Math.cos(S.pitch) * S.dist];
     const proj = mat4Perspective(0.62, canvas.width / canvas.height, 0.5, 120);
-    const view = mat4LookAt(eye, S.target, [0, 1, 0]);
+    const view = mat4LookAt(eye, [0.3, 0.6, 0], [0, 1, 0]);
 
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -1111,22 +974,6 @@ void main(){
         VALVES[2].open * c.valves[2], VALVES[3].open * c.valves[3]);
       gl.bindVertexArray(valveVao);
       gl.drawElements(gl.TRIANGLES, valves.indices.length, gl.UNSIGNED_SHORT, 0);
-    }
-
-    // blood flow — the simulation keeps running even when hidden, so nothing
-    // jumps when you switch back into a mode where the chambers are exposed
-    stepBloodParticles(bloodState, dt, c);
-    if (mode === 1 || mode === 2) {
-      updateBloodBuffer(S.clip, true);   // both cutaway and conduction clip on the same uClipX plane
-      gl.useProgram(bloodProg);
-      gl.uniformMatrix4fv(bU.proj, false, proj);
-      gl.uniformMatrix4fv(bU.view, false, view);
-      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-      gl.depthMask(false);
-      gl.bindVertexArray(bloodVao);
-      gl.drawArrays(gl.POINTS, 0, bloodState.length);
-      gl.depthMask(true);
-      gl.disable(gl.BLEND);
     }
     gl.bindVertexArray(null);
   }
