@@ -1,0 +1,48 @@
+{
+ "credit": {
+  "title": "Realistic Human Heart",
+  "author": "neshallads (https://sketchfab.com/neshallads)",
+  "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+  "source": "https://sketchfab.com/3d-models/realistic-human-heart-3f8072336ce94d18b3d0d055a1ece089"
+ },
+ "vertexCount": 12013,
+ "indexCount": 67686,
+ "indexBits": 16,
+ "layout": {
+  "pos": {
+   "byteOffset": 0,
+   "byteLength": 144156
+  },
+  "nrm": {
+   "byteOffset": 144156,
+   "byteLength": 48052
+  },
+  "uv": {
+   "byteOffset": 192208,
+   "byteLength": 48052
+  },
+  "w": {
+   "byteOffset": 240260,
+   "byteLength": 48052
+  },
+  "act": {
+   "byteOffset": 288312,
+   "byteLength": 24026
+  },
+  "idx": {
+   "byteOffset": 312338,
+   "byteLength": 135372
+  }
+ },
+ "fit": {
+  "scale": 7.0553,
+  "yaw": 0,
+  "offX": 0.35,
+  "offZ": -0.3
+ },
+ "textures": {
+  "base": "base.webp",
+  "normal": "normal.webp",
+  "mr": "mr.webp"
+ }
+}

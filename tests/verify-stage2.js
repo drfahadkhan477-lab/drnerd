@@ -12,7 +12,9 @@ const { chromium } = require('playwright');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-stage2.js <patched.html>'); process.exit(1); }
-const URL = 'file://' + path.resolve(target);
+/* Accepts a path (single-file build) or an http URL (the Stage 1 PWA
+   build, which has to be served because it fetches its content). */
+const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -29,8 +31,16 @@ const head = t => console.log('\n── ' + t + ' ──');
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
+  /* The Stage 1 build injects app.js only after its content fetch resolves,
+     so 'load' no longer implies the app has booted. Wait for it explicitly —
+     a no-op on the single-file build, where this is already true. */
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
   await page.evaluate(() => localStorage.clear());
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
+  /* The Stage 1 build injects app.js only after its content fetch resolves,
+     so 'load' no longer implies the app has booted. Wait for it explicitly —
+     a no-op on the single-file build, where this is already true. */
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
   await page.waitForTimeout(1200);
 
   head('the actual bug: four buttons on a brand-new card, in the real rate-row UI');

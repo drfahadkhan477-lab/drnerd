@@ -20,7 +20,9 @@ if (!target) {
   console.error('usage: node tests/verify-stage0.js <patched.html>');
   process.exit(1);
 }
-const URL = 'file://' + path.resolve(target);
+/* Accepts a path (single-file build) or an http URL (the Stage 1 PWA
+   build, which has to be served because it fetches its content). */
+const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -36,15 +38,18 @@ const head = t => console.log('\n── ' + t + ' ──');
   const errors = [], external = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('request', r => {
-    const u = r.url();
-    if (!u.startsWith('file://') && !u.startsWith('data:')) external.push(u);
-  });
+  /* The guarantee is that the app has no THIRD-PARTY network dependency — no
+     Google Fonts, no CDN — so a hospital portal or a plane cannot stall it.
+     For the single-file build that means nothing but file:// and data: may
+     resolve. For the Stage 1 build the app legitimately fetches its own
+     content, so the same guarantee is "nothing off-origin". */
+  const ownOrigin = /^https?:\/\//.test(target) ? new global.URL(target).origin : null;
+  const isOwn = u => u.startsWith('file://') || u.startsWith('data:') ||
+                     (ownOrigin && u.startsWith(ownOrigin));
+  page.on('request', r => { if (!isOwn(r.url())) external.push(r.url()); });
 
-  // Hard offline: nothing but the file itself and its data: URIs may resolve.
   await page.route('**', route => {
-    const u = route.request().url();
-    (u.startsWith('file://') || u.startsWith('data:')) ? route.continue() : route.abort();
+    isOwn(route.request().url()) ? route.continue() : route.abort();
   });
 
   // Instrument observers before any page script runs.
@@ -60,11 +65,15 @@ const head = t => console.log('\n── ' + t + ' ──');
   head('launch, with the network cut off');
   const t0 = Date.now();
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
+  /* The Stage 1 build injects app.js only after its content fetch resolves,
+     so 'load' no longer implies the app has booted. Wait for it explicitly —
+     a no-op on the single-file build, where this is already true. */
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
   await page.waitForFunction(() => document.querySelector('.hero-h1'), { timeout: 60000 });
   const launchMs = Date.now() - t0;
   await page.waitForTimeout(1200);
   ok('boots with no JS errors', errors.length === 0, errors.slice(0, 2).join(' | '));
-  ok('makes zero network requests', external.length === 0, external.slice(0, 2).join(' | '));
+  ok('makes zero third-party network requests', external.length === 0, external.slice(0, 2).join(' | '));
   ok('launches without stalling', launchMs < 5000, (launchMs / 1000).toFixed(1) + 's');
 
   head('embedded typefaces');
@@ -122,6 +131,10 @@ const head = t => console.log('\n── ' + t + ' ──');
   head('practice records, review schedules');
   await page.evaluate(() => localStorage.clear());
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
+  /* The Stage 1 build injects app.js only after its content fetch resolves,
+     so 'load' no longer implies the app has booted. Wait for it explicitly —
+     a no-op on the single-file build, where this is already true. */
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
   await page.waitForTimeout(1200);
   const practice = await page.evaluate(() => {
     startQuiz('Pericardial Disease');

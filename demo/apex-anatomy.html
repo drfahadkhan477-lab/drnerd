@@ -213,29 +213,95 @@ function smax(a, b, k) { return -smin(-a, -b, k); }
 
 /* ── the anatomy ──────────────────────────────────────────────────────────────
    Coordinates: +X patient's left, +Y superior, +Z anterior. Units are roughly
-   centimetres, heart ≈ 13 cm base to apex. Wall thicknesses are a little
-   generous versus life — this is a teaching model that has to read clearly at
-   thumbnail size, not a segmentation.                                        */
+   centimetres, and the model is built to the textbook figures — 12 cm base to
+   apex, 8–9 cm across, 6 cm front to back. Those three numbers matter more
+   than any single curve: get the proportions wrong and no amount of shading
+   rescues it, because the silhouette is what the eye reads first.
+
+   The shape of a ventricle is the thing most easily got wrong. It is not a
+   cone. A cone gives you straight sides and a point on the end; a real
+   ventricle is convex, widest across its upper third, and finishes in a blunt
+   rounded apex you could rest a fingertip on. So each ventricle here is an
+   oriented ellipsoid — the wide convex body — intersected with a round cone
+   that pulls the lower half in and caps it bluntly, then cut off flat at the
+   atrioventricular plane. The ellipsoid alone is too fat at the tip. The cone
+   alone is an ice-cream cone. The intersection is a ventricle.
+
+   The right ventricle is not a smaller copy of the left. It sits anterior and
+   to the right, wraps around the left in cross-section, stops well short of
+   the tip — the apex belongs to the LV alone — and its bulge is what gives
+   the heart its asymmetric anterior face. Where the two meet, the union uses a
+   deliberately small blend radius so the interventricular grooves stay visible
+   as creases; that is where the LAD and the PDA run.
+
+   The atria are posterior and superior, smaller than instinct suggests, and
+   they sit ON the atrioventricular plane rather than balancing on top of the
+   ventricles. The auricles are forward-projecting flaps that lap the roots of
+   the great vessels. Both details matter: atria modelled as spheres perched on
+   a cone is precisely how a heart ends up looking like an ice cream.
+
+   Wall thicknesses are a little generous versus life. This is a teaching model
+   that has to read at thumbnail size, not a segmentation.                    */
+
+/* An orthonormal frame around an axis, chosen so that u comes out transverse
+   and v front-to-back — the two directions the radii below are quoted in. */
+function axisFrame(axis) {
+  const a = norm(axis);
+  const ref = Math.abs(a[2]) > 0.9 ? v3(0, 1, 0) : v3(0, 0, 1);
+  const u = norm(cross(ref, a));
+  return { a, u, v: cross(a, u) };
+}
+function sdEllipsoidFrame(px, py, pz, c, F, ra, ru, rv) {
+  const dx = px - c[0], dy = py - c[1], dz = pz - c[2];
+  const a = (dx * F.a[0] + dy * F.a[1] + dz * F.a[2]) / ra;
+  const u = (dx * F.u[0] + dy * F.u[1] + dz * F.u[2]) / ru;
+  const v = (dx * F.v[0] + dy * F.v[1] + dz * F.v[2]) / rv;
+  const k = Math.hypot(a, u, v);
+  return (k - 1) * Math.min(ra, ru, rv);
+}
+/* positive above the plane, negative on the ventricular side of it */
+function sdAbove(px, py, pz, p0, n) {
+  return (px - p0[0]) * n[0] + (py - p0[1]) * n[1] + (pz - p0[2]) * n[2];
+}
+
+function ventricle(base, apex, bulgeT) {
+  const axis = norm(sub(apex, base)), L = len(sub(apex, base));
+  return { base, apex, axis, L, F: axisFrame(axis), bulge: mid(base, apex, bulgeT) };
+}
+const LV = ventricle(v3(0.10, 2.60, -0.55), v3(2.85, -5.10, 1.25), 0.40);
+const RV = ventricle(v3(-2.20, 2.35, 0.75), v3(1.35, -3.60, 1.95), 0.40);
+
+/* the atrioventricular plane: the annulus the whole base is slung from, and
+   the surface the ventricles are cut off at so the atria have a floor */
+const AV_P = v3(-0.35, 2.95, 0.15);
+const AV_N = norm(v3(-0.28, 0.93, -0.24));
+
 const A = {
-  lv: { base: v3(0.3, 2.8, -0.4), apex: v3(2.9, -5.0, 1.2), cav: [2.05, 0.50], myo: [3.05, 1.05] },
-  rv: { base: v3(-2.2, 2.5, 0.9), apex: v3(1.5, -3.8, 1.9), cav: [2.20, 0.55], myo: [2.78, 0.95] },
-  la: { c: v3(0.2, 4.6, -2.0), r: v3(2.00, 1.70, 1.80), w: 0.30 },
-  ra: { c: v3(-2.8, 3.8, -0.3), r: v3(1.90, 1.90, 1.75), w: 0.30 },
+  lv: { base: LV.base, apex: LV.apex },
+  rv: { base: RV.base, apex: RV.apex },
+  la: { c: v3(0.30, 4.25, -2.50), r: v3(2.05, 1.62, 1.88), w: 0.26 },
+  ra: { c: v3(-2.60, 3.65, -0.55), r: v3(1.90, 1.92, 1.78), w: 0.26 },
 };
-/* great vessels as chains of capsules */
-const AORTA = [[v3(0.2, 3.4, -0.3), v3(0.1, 5.6, -0.5), 1.15],
-               [v3(0.1, 5.6, -0.5), v3(-0.9, 7.2, -1.2), 1.05],
-               [v3(-0.9, 7.2, -1.2), v3(-1.1, 5.4, -2.5), 0.95],
-               [v3(-1.1, 5.4, -2.5), v3(-0.9, 2.4, -2.9), 0.85]];
-const PA    = [[v3(-0.9, 4.4, 1.4), v3(-0.5, 6.0, 0.5), 1.00],
-               [v3(-0.5, 6.0, 0.5), v3(1.7, 6.5, -0.5), 0.72],
-               [v3(-0.5, 6.0, 0.5), v3(-2.4, 6.2, -0.7), 0.72]];
-const CAVA  = [[v3(-3.0, 8.0, -1.0), v3(-2.9, 4.6, -0.6), 0.78],   // SVC
-               [v3(-2.5, 1.0, -1.5), v3(-2.8, 3.2, -0.8), 0.82]];  // IVC
-const PVEIN = [[v3(1.9, 5.6, -3.6), v3(1.1, 5.0, -2.4), 0.45],
-               [v3(-1.4, 5.6, -3.6), v3(-0.6, 5.0, -2.5), 0.45],
-               [v3(2.0, 3.8, -3.4), v3(1.2, 4.1, -2.5), 0.42],
-               [v3(-1.5, 3.8, -3.3), v3(-0.6, 4.1, -2.5), 0.42]];
+/* the auricles — ear-shaped, lying forward over the great-vessel roots */
+const LAA = [v3(1.85, 3.75, -0.85), v3(2.90, 3.05, 0.45), 0.44];
+const RAA = [v3(-3.15, 4.05, 0.35), v3(-1.75, 3.95, 1.30), 0.50];
+
+/* great vessels as chains of capsules. The pulmonary trunk leaves the RV
+   anterior and to the left of the aorta and crosses in front of it — which is
+   why, from the front, you see pulmonary artery over aortic root. */
+const AORTA = [[v3(0.15, 3.05, -0.60), v3(0.05, 5.15, -0.80), 1.10],
+               [v3(0.05, 5.15, -0.80), v3(-0.95, 6.55, -1.45), 0.98],
+               [v3(-0.95, 6.55, -1.45), v3(-1.20, 5.05, -2.55), 0.88],
+               [v3(-1.20, 5.05, -2.55), v3(-1.00, 2.40, -2.95), 0.80]];
+const PA    = [[v3(-0.85, 3.45, 1.40), v3(-0.40, 5.55, 0.45), 0.98],
+               [v3(-0.40, 5.55, 0.45), v3(1.25, 5.85, -1.05), 0.66],
+               [v3(-0.40, 5.55, 0.45), v3(-2.05, 5.70, -1.20), 0.66]];
+const CAVA  = [[v3(-2.85, 7.20, -1.05), v3(-2.78, 4.70, -0.75), 0.78],   // SVC
+               [v3(-2.45, 0.90, -1.55), v3(-2.75, 3.10, -0.95), 0.82]];  // IVC
+const PVEIN = [[v3(1.85, 5.15, -3.70), v3(1.20, 4.70, -2.90), 0.37],
+               [v3(-1.15, 5.15, -3.70), v3(-0.50, 4.65, -2.95), 0.37],
+               [v3(1.90, 3.60, -3.65), v3(1.25, 3.85, -2.95), 0.34],
+               [v3(-1.25, 3.60, -3.60), v3(-0.55, 3.85, -2.95), 0.34]];
 
 function chainDist(px, py, pz, chain, grow) {
   let d = 1e9;
@@ -243,13 +309,34 @@ function chainDist(px, py, pz, chain, grow) {
   return d;
 }
 
+/* ellipsoid body ∩ tapering cone — see the note at the top of this section */
+function chamberSD(x, y, z, C, rAx, rU, rV, r1, r2, k) {
+  return smax(sdEllipsoidFrame(x, y, z, C.bulge, C.F, rAx, rU, rV),
+              sdRoundCone(x, y, z, C.base, C.apex, r1, r2), k);
+}
+
+/* epicardial (outer) surface of each ventricle */
+function sdEpiLV(x, y, z) { return chamberSD(x, y, z, LV, LV.L * 0.72, 2.95, 2.60, 4.60, 1.10, 0.75); }
+function sdEpiRV(x, y, z) { return chamberSD(x, y, z, RV, RV.L * 0.70, 2.85, 2.45, 4.20, 0.90, 0.70); }
+function sdVentricles(x, y, z) {
+  const both = smin(sdEpiLV(x, y, z), sdEpiRV(x, y, z), 0.55);   // small k: the IV grooves
+  return smax(both, sdAbove(x, y, z, AV_P, AV_N), 0.60);
+}
+
 /* cavity of each chamber — used for weights, for the cutaway interior, and to
-   hollow the muscle out */
-function sdCavLV(x, y, z) { return sdRoundCone(x, y, z, A.lv.base, A.lv.apex, A.lv.cav[0], A.lv.cav[1]); }
+   hollow the muscle out. Cut a little ABOVE the annulus so the inflow stays
+   open into the atrium rather than being pinched off at the valve. */
+function sdCavLV(x, y, z) {
+  return smax(chamberSD(x, y, z, LV, LV.L * 0.66, 1.90, 1.70, 3.10, 0.34, 0.50),
+              sdAbove(x, y, z, AV_P, AV_N) - 0.45, 0.45);
+}
 function sdCavRV(x, y, z) {
-  const rv = sdRoundCone(x, y, z, A.rv.base, A.rv.apex, A.rv.cav[0], A.rv.cav[1]);
-  const lvWall = sdRoundCone(x, y, z, A.lv.base, A.lv.apex, A.lv.myo[0], A.lv.myo[1]);
-  return smax(rv, -lvWall, 0.35);            // the septum belongs to the LV
+  const raw = smax(chamberSD(x, y, z, RV, RV.L * 0.64, 2.30, 2.00, 3.00, 0.34, 0.50),
+                   sdAbove(x, y, z, AV_P, AV_N) - 0.45, 0.45);
+  /* the septum belongs to the left ventricle, so the right cavity is whatever
+     is left once the LV wall is taken out of it — which is also exactly what
+     makes it the crescent it is in cross-section */
+  return smax(raw, -sdEpiLV(x, y, z), 0.35);
 }
 function sdCavLA(x, y, z) { return sdEllipsoid(x, y, z, A.la.c[0], A.la.c[1], A.la.c[2], A.la.r[0], A.la.r[1], A.la.r[2]); }
 function sdCavRA(x, y, z) { return sdEllipsoid(x, y, z, A.ra.c[0], A.ra.c[1], A.ra.c[2], A.ra.r[0], A.ra.r[1], A.ra.r[2]); }
@@ -262,23 +349,21 @@ function sdCavities(x, y, z) {
   d = smin(d, chainDist(x, y, z, PA, 0), 0.5);
   return d;
 }
-/* outer surface: muscle plus vessels, fused */
+/* outer surface: muscle plus atria, auricles and vessels, fused */
 function sdOuter(x, y, z) {
-  const lv = sdRoundCone(x, y, z, A.lv.base, A.lv.apex, A.lv.myo[0], A.lv.myo[1]);
-  const rv = sdRoundCone(x, y, z, A.rv.base, A.rv.apex, A.rv.myo[0], A.rv.myo[1]);
-  let d = smin(lv, rv, 0.75);
+  let d = sdVentricles(x, y, z);
+  /* a small blend radius here too, so the atrioventricular groove — the crown
+     the coronaries run in — stays a visible waist instead of melting shut */
   d = smin(d, sdEllipsoid(x, y, z, A.la.c[0], A.la.c[1], A.la.c[2],
-        A.la.r[0] + A.la.w, A.la.r[1] + A.la.w, A.la.r[2] + A.la.w), 0.8);
+        A.la.r[0] + A.la.w, A.la.r[1] + A.la.w, A.la.r[2] + A.la.w), 0.42);
   d = smin(d, sdEllipsoid(x, y, z, A.ra.c[0], A.ra.c[1], A.ra.c[2],
-        A.ra.r[0] + A.ra.w, A.ra.r[1] + A.ra.w, A.ra.r[2] + A.ra.w), 0.8);
-  /* left atrial appendage — small, hooked, and the reason half of cardiology
-     cares about the left atrium at all */
-  d = smin(d, sdCapsule(x, y, z, v3(1.9, 4.6, -0.9), v3(2.7, 3.6, -0.2), 0.52), 0.45);
-  d = smin(d, sdCapsule(x, y, z, v3(-3.6, 4.6, 0.6), v3(-4.1, 3.6, 0.9), 0.55), 0.45);  // RAA
-  d = smin(d, chainDist(x, y, z, AORTA, 0.20), 0.55);
-  d = smin(d, chainDist(x, y, z, PA, 0.18), 0.55);
-  d = smin(d, chainDist(x, y, z, CAVA, 0.16), 0.45);
-  d = smin(d, chainDist(x, y, z, PVEIN, 0.14), 0.40);
+        A.ra.r[0] + A.ra.w, A.ra.r[1] + A.ra.w, A.ra.r[2] + A.ra.w), 0.42);
+  d = smin(d, sdCapsule(x, y, z, LAA[0], LAA[1], LAA[2]), 0.34);
+  d = smin(d, sdCapsule(x, y, z, RAA[0], RAA[1], RAA[2]), 0.34);
+  d = smin(d, chainDist(x, y, z, AORTA, 0.20), 0.50);
+  d = smin(d, chainDist(x, y, z, PA, 0.18), 0.50);
+  d = smin(d, chainDist(x, y, z, CAVA, 0.16), 0.42);
+  d = smin(d, chainDist(x, y, z, PVEIN, 0.14), 0.38);
   return d;
 }
 
@@ -286,15 +371,14 @@ function sdOuter(x, y, z) {
 const REGION = { MYO: 0, ATRIUM: 1, AORTA: 2, PA: 3, VEIN: 4, APPENDAGE: 5 };
 function regionDistances(x, y, z) {
   return [
-    Math.min(sdRoundCone(x, y, z, A.lv.base, A.lv.apex, A.lv.myo[0], A.lv.myo[1]),
-             sdRoundCone(x, y, z, A.rv.base, A.rv.apex, A.rv.myo[0], A.rv.myo[1])),
+    Math.min(sdEpiLV(x, y, z), sdEpiRV(x, y, z)),
     Math.min(sdEllipsoid(x, y, z, A.la.c[0], A.la.c[1], A.la.c[2], A.la.r[0] + A.la.w, A.la.r[1] + A.la.w, A.la.r[2] + A.la.w),
              sdEllipsoid(x, y, z, A.ra.c[0], A.ra.c[1], A.ra.c[2], A.ra.r[0] + A.ra.w, A.ra.r[1] + A.ra.w, A.ra.r[2] + A.ra.w)),
     chainDist(x, y, z, AORTA, 0.20),
     chainDist(x, y, z, PA, 0.14),
     Math.min(chainDist(x, y, z, CAVA, 0.16), chainDist(x, y, z, PVEIN, 0.14)),
-    Math.min(sdCapsule(x, y, z, v3(1.9, 4.6, -0.9), v3(2.7, 3.6, -0.2), 0.52),
-             sdCapsule(x, y, z, v3(-3.6, 4.6, 0.6), v3(-4.1, 3.6, 0.9), 0.55)),
+    Math.min(sdCapsule(x, y, z, LAA[0], LAA[1], LAA[2]),
+             sdCapsule(x, y, z, RAA[0], RAA[1], RAA[2])),
   ];
 }
 function regionAt(x, y, z) {
@@ -317,12 +401,11 @@ function chamberWeights(x, y, z) {
    is genuinely the sequence: septum first, apex before base, endo before epi */
 function activationAt(x, y, z) {
   const dLA = len(sub([x, y, z], A.la.c)), dRA = len(sub([x, y, z], A.ra.c));
-  if (Math.min(dLA, dRA) < 2.6) return 6 + Math.min(dLA, dRA) * 14;      // atria: 6-45ms
-  const apex = A.lv.apex, base = A.lv.base;
-  const axis = norm(sub(base, apex));
-  const rel = sub([x, y, z], apex);
+  if (Math.min(dLA, dRA) < 2.4) return 6 + Math.min(dLA, dRA) * 14;      // atria: 6-40ms
+  const axis = norm(sub(LV.base, LV.apex));
+  const rel = sub([x, y, z], LV.apex);
   const along = rel[0] * axis[0] + rel[1] * axis[1] + rel[2] * axis[2];
-  const frac = Math.max(0, Math.min(1, along / 8.4));
+  const frac = Math.max(0, Math.min(1, along / LV.L));
   return 150 + frac * 55 + Math.abs(x - 1.0) * 3;                        // apex→base
 }
 
@@ -412,11 +495,11 @@ const COLORS = {
   [REGION.MYO]:       [0.557, 0.141, 0.125],
   [REGION.ATRIUM]:    [0.576, 0.255, 0.227],
   [REGION.AORTA]:     [0.788, 0.725, 0.659],
-  [REGION.PA]:        [0.557, 0.608, 0.710],
-  [REGION.VEIN]:      [0.435, 0.486, 0.600],
+  [REGION.PA]:        [0.659, 0.627, 0.663],
+  [REGION.VEIN]:      [0.494, 0.478, 0.545],
   [REGION.APPENDAGE]: [0.604, 0.290, 0.251],
 };
-const FAT = [0.851, 0.753, 0.478];
+const FAT = [0.918, 0.812, 0.487];   // epicardial fat — genuinely this yellow in the grooves
 
 /* Ambient occlusion straight off the distance field: march a little way along
    the normal and see how much muscle is still in the way. This is most of what
@@ -467,7 +550,7 @@ function attributesFor(positions, normals, field) {
     const ivGroove = (1 - Math.min(1, Math.abs(w[0] - w[1]) * 2.6)) * Math.min(1, ventric * 1.4);
     const avGroove = Math.min(1, 4.2 * ventric * atrial);
     const groove = Math.max(ivGroove, avGroove) * (region === REGION.MYO || region === REGION.ATRIUM ? 1 : 0);
-    const f = groove * 0.42;
+    const f = groove * 0.60;
     color[i * 3]     = c[0] * (1 - f) + FAT[0] * f;
     color[i * 3 + 1] = c[1] * (1 - f) + FAT[1] * f;
     color[i * 3 + 2] = c[2] * (1 - f) + FAT[2] * f;
@@ -484,10 +567,10 @@ function attributesFor(positions, normals, field) {
    about its hinge, so "open" and "shut" are one number per valve and the
    geometry is built once.                                                    */
 const VALVES = [
-  { id: 0, name: 'mitral',    c: v3(0.75, 2.55, -0.75), n: norm(sub(A.lv.apex, A.lv.base)), r: 1.55, leaflets: 2, open: 1.15 },
-  { id: 1, name: 'tricuspid', c: v3(-1.85, 2.35, 0.35), n: norm(sub(A.rv.apex, A.rv.base)), r: 1.65, leaflets: 3, open: 1.15 },
-  { id: 2, name: 'aortic',    c: v3(0.2, 3.45, -0.35),  n: v3(-0.05, 1, -0.1),              r: 1.05, leaflets: 3, open: -1.05 },
-  { id: 3, name: 'pulmonic',  c: v3(-0.95, 3.85, 1.4),  n: v3(0.2, 1, -0.4),                r: 0.95, leaflets: 3, open: -1.05 },
+  { id: 0, name: 'mitral',    c: v3(0.55, 2.45, -1.15), n: norm(sub(A.lv.apex, A.lv.base)), r: 1.50, leaflets: 2, open: 1.15 },
+  { id: 1, name: 'tricuspid', c: v3(-1.70, 2.25, 0.30), n: norm(sub(A.rv.apex, A.rv.base)), r: 1.60, leaflets: 3, open: 1.15 },
+  { id: 2, name: 'aortic',    c: v3(0.15, 3.10, -0.60), n: v3(-0.05, 1, -0.1),              r: 1.02, leaflets: 3, open: -1.05 },
+  { id: 3, name: 'pulmonic',  c: v3(-0.85, 3.50, 1.40), n: v3(0.2, 1, -0.4),                r: 0.92, leaflets: 3, open: -1.05 },
 ];
 function basisFor(n) {
   const nn = norm(n);
@@ -541,6 +624,79 @@ function buildValves() {
            vid: new Float32Array(vid), weights: new Float32Array(wts), indices: idx };
 }
 
+/* ── blood flow: particles tracing the two circuits ──────────────────────────
+   Only meaningful where the chambers are actually exposed — cutaway and
+   conduction mode both clip the near wall away, whole/coronary do not, so
+   particles only draw in the first two. Each circuit is a short polyline
+   through the real anatomy landmarks already defined above; a particle's
+   position is u∈[0,1] along it, advanced each frame and gated to a crawl
+   whenever the valve guarding its current segment is shut — the same
+   valve-timing the leaflets themselves animate on, so a particle visibly
+   queues at a closed mitral valve exactly when the leaflet is drawn closed.
+   Each path bows out through its ventricle's own free wall rather than
+   cutting straight to the apex — the free walls sit well apart from each
+   other (the septum is what's between them), so bowing outward is what
+   keeps the two circuits visually separate instead of both collapsing onto
+   one thin line down the middle where the chambers happen to be closest. */
+const BLOOD_RIGHT = [
+  v3(-2.85, 6.20, -0.90),                             // venous return (SVC/IVC confluence)
+  A.ra.c,                                             // right atrium
+  VALVES[1].c,                                        // tricuspid
+  v3(-1.60, 0.35, 1.70),                              // RV free wall, well clear of the septum
+  v3(1.10, -3.05, 1.85),                              // near the RV apex
+  VALVES[3].c,                                        // pulmonic
+  v3(-0.35, 5.85, 0.55),                              // main pulmonary artery
+];
+const BLOOD_LEFT = [
+  v3(1.45, 5.15, -3.35),                              // pulmonary venous return
+  A.la.c,                                             // left atrium
+  VALVES[0].c,                                        // mitral
+  v3(2.30, -0.30, -0.85),                             // LV free wall, well clear of the septum
+  v3(2.75, -4.55, 1.15),                              // near the LV apex
+  VALVES[2].c,                                        // aortic
+  v3(0.00, 5.40, -0.75),                              // aorta
+];
+/* which segment index (0-based, out of waypoints.length-1) a u falls in, and
+   the local t within that segment — plain piecewise-linear, not arc-length
+   corrected; the segments are short enough that the unevenness doesn't read. */
+function polylinePoint(waypoints, u) {
+  const n = waypoints.length - 1;
+  const f = Math.max(0, Math.min(0.999999, u)) * n;
+  const seg = Math.floor(f), t = f - seg;
+  const a = waypoints[Math.min(seg, n - 1)], b = waypoints[Math.min(seg + 1, n)];
+  return { pos: mid(a, b, t), seg: Math.min(seg, n - 1) };
+}
+/* Both paths are 7 points / 6 segments: the AV valve sits at waypoint index
+   2 (u=2/6), the semilunar at index 5 (u=5/6). Below the AV valve's u,
+   advancing is gated by it; between the two valves the particle is just
+   swirling through the ventricle body, nothing to gate; approaching the
+   semilunar, that valve gates it. Loop-back past u=1 is always free — venous
+   return, nothing to gate it in this schematic. */
+function bloodGate(u, valves, isLeft) {
+  if (u < 2 / 6) return isLeft ? valves[0] : valves[1];     // mitral : tricuspid
+  if (u < 5 / 6) return 1;                                   // free-swimming in the ventricle
+  return isLeft ? valves[2] : valves[3];                     // aortic : pulmonic
+}
+const BLOOD_N_PER_CIRCUIT = 70;
+function makeBloodParticles() {
+  const out = [];
+  for (let side = 0; side < 2; side++) {
+    for (let i = 0; i < BLOOD_N_PER_CIRCUIT; i++) {
+      out.push({ side, u: i / BLOOD_N_PER_CIRCUIT, speed: 0.16 + (i % 7) * 0.01 });
+    }
+  }
+  return out;
+}
+function stepBloodParticles(particles, dtMs, cyc) {
+  const dt = dtMs / 1000;
+  for (const p of particles) {
+    const gateOpen = bloodGate(p.u, cyc.valves, p.side === 1);
+    const crawl = 0.06;                                     // still edges forward when "shut" — never fully static
+    p.u += dt * p.speed * (crawl + (1 - crawl) * gateOpen);
+    if (p.u >= 1) p.u -= 1;
+  }
+}
+
 /* ── tubes: coronaries and the conduction system ──────────────────────────── */
 function tubeAlong(points, radius, out, rgb, onSurface) {
   if (onSurface) points = projectToSurface(points, radius * 0.55);
@@ -582,6 +738,7 @@ function bezier(p0, p1, p2, p3, n) {
   return out;
 }
 const CORONARY_RGB = [0.408, 0.153, 0.129];
+const VENOUS_RGB   = [0.180, 0.243, 0.408];   // cardiac veins and the coronary sinus
 const CONDUCTION_RGB = [0.961, 0.843, 0.431];
 function emptyTube() { return { positions: [], normals: [], weights: [], color: [], extra: [], indices: [] }; }
 /* Hand-placed control points never land exactly on a surface defined by a
@@ -608,23 +765,32 @@ function projectToSurface(points, lift) {
 
 function buildCoronaries() {
   const out = emptyTube();
-  /* LAD — down the anterior interventricular groove, where the RV meets the LV */
-  tubeAlong(bezier(v3(0.1, 3.2, 0.9), v3(0.6, 1.4, 2.3), v3(1.6, -1.0, 2.6), v3(2.7, -4.2, 1.7), 22), 0.135, out, CORONARY_RGB, true);
-  /* LCx — around the left atrioventricular groove */
-  tubeAlong(bezier(v3(0.2, 3.2, 0.7), v3(1.9, 3.0, 0.4), v3(3.0, 1.8, -0.9), v3(2.4, 0.2, -2.1), 18), 0.115, out, CORONARY_RGB, true);
-  /* RCA — right AV groove, round to the inferior wall */
-  tubeAlong(bezier(v3(-0.9, 3.2, 0.9), v3(-2.6, 2.6, 1.4), v3(-3.4, 0.6, 0.2), v3(-1.6, -1.8, -1.6), 20), 0.125, out, CORONARY_RGB, true);
+  /* LAD — down the anterior interventricular groove, the crease the LV/RV
+     union leaves on the front, finishing just short of and around the apex */
+  tubeAlong(bezier(v3(-0.30, 2.85, 1.55), v3(0.35, 0.80, 2.55), v3(1.35, -1.60, 2.55), v3(2.70, -4.60, 1.55), 24), 0.135, out, CORONARY_RGB, true);
+  /* first diagonal, off the LAD onto the LV free wall — the branch that makes
+     the anterior surface read as supplied rather than merely striped */
+  tubeAlong(bezier(v3(0.35, 0.80, 2.45), v3(1.35, 0.30, 2.20), v3(2.20, -0.70, 1.40), v3(2.85, -1.90, 0.30), 14), 0.085, out, CORONARY_RGB, true);
+  /* LCx — around the left atrioventricular groove, onto the obtuse margin */
+  tubeAlong(bezier(v3(0.05, 2.95, 1.15), v3(1.85, 2.35, 0.55), v3(3.05, 1.20, -1.10), v3(2.55, -0.40, -2.35), 20), 0.115, out, CORONARY_RGB, true);
+  /* RCA — right AV groove, down the acute margin and round to the inferior wall */
+  tubeAlong(bezier(v3(-1.15, 3.10, 1.25), v3(-2.85, 2.30, 1.35), v3(-3.35, 0.30, 0.10), v3(-1.70, -2.10, -1.55), 22), 0.125, out, CORONARY_RGB, true);
+  /* Great cardiac vein, alongside the LAD, and the coronary sinus it becomes
+     in the posterior AV groove — the veins are half the picture in the grooves
+     and the sinus is the landmark every posterior view is oriented by. */
+  tubeAlong(bezier(v3(0.10, 2.70, 1.70), v3(0.70, 0.90, 2.45), v3(1.55, -1.30, 2.45), v3(2.55, -3.90, 1.65), 20), 0.100, out, VENOUS_RGB, true);
+  tubeAlong(bezier(v3(2.35, 1.35, -2.05), v3(1.20, 2.15, -2.70), v3(-0.70, 2.35, -2.35), v3(-2.05, 2.30, -1.15), 18), 0.150, out, VENOUS_RGB, true);
   return out;
 }
 function buildConduction() {
   const out = emptyTube();
-  const SA = v3(-3.2, 4.9, 0.3), AV = v3(-1.0, 2.6, -0.5), HIS = v3(-0.3, 1.9, 0.1);
-  tubeAlong(bezier(SA, v3(-2.6, 4.2, 0.1), v3(-1.6, 3.2, -0.3), AV, 10), 0.10, out, CONDUCTION_RGB);
-  tubeAlong([AV, HIS, v3(0.1, 1.2, 0.4)], 0.10, out, CONDUCTION_RGB);
+  const SA = v3(-3.05, 4.75, 0.30), AV = v3(-0.95, 2.35, -0.55), HIS = v3(-0.30, 1.65, 0.05);
+  tubeAlong(bezier(SA, v3(-2.50, 4.00, 0.10), v3(-1.55, 3.00, -0.35), AV, 10), 0.10, out, CONDUCTION_RGB);
+  tubeAlong([AV, HIS, v3(0.05, 0.95, 0.35)], 0.10, out, CONDUCTION_RGB);
   /* left and right bundle branches fanning into Purkinje */
-  tubeAlong(bezier(v3(0.1, 1.2, 0.4), v3(0.9, 0.2, 0.2), v3(1.8, -1.6, 0.6), v3(2.6, -3.9, 1.1), 12), 0.075, out, CONDUCTION_RGB);
-  tubeAlong(bezier(v3(0.1, 1.2, 0.4), v3(-0.2, 0.0, 1.2), v3(0.6, -1.8, 1.8), v3(1.5, -3.4, 1.8), 12), 0.075, out, CONDUCTION_RGB);
-  tubeAlong(bezier(v3(0.1, 1.2, 0.4), v3(1.2, 0.4, -0.6), v3(2.2, -1.2, -0.8), v3(2.6, -3.2, -0.2), 12), 0.065, out, CONDUCTION_RGB);
+  tubeAlong(bezier(v3(0.05, 0.95, 0.35), v3(0.90, -0.10, 0.15), v3(1.80, -2.00, 0.55), v3(2.65, -4.35, 1.05), 12), 0.075, out, CONDUCTION_RGB);
+  tubeAlong(bezier(v3(0.05, 0.95, 0.35), v3(-0.25, -0.25, 1.15), v3(0.55, -2.10, 1.75), v3(1.35, -3.15, 1.80), 12), 0.075, out, CONDUCTION_RGB);
+  tubeAlong(bezier(v3(0.05, 0.95, 0.35), v3(1.20, 0.15, -0.65), v3(2.25, -1.55, -0.85), v3(2.70, -3.55, -0.25), 12), 0.065, out, CONDUCTION_RGB);
   return out;
 }
 
@@ -708,29 +874,10 @@ function cycle(tms, kind, state) {
 }
 
 /* ── shaders ──────────────────────────────────────────────────────────────── */
-const VERT = `#version 300 es
-precision highp float;
-layout(location=0) in vec3 aPos;
-layout(location=1) in vec3 aNrm;
-layout(location=2) in vec4 aW;        // LV RV LA RA
-layout(location=3) in vec3 aColor;    // tissue colour, interpolated smoothly
-layout(location=4) in vec3 aExtra;    // ao, activation ms, groove
-
-uniform mat4 uProj, uView;
-uniform float uA, uV;                 // atrial / ventricular contraction 0-1
-uniform float uQuiver, uTime;
-uniform vec3 uLvApex, uLvAxis, uRvApex, uRvAxis, uLaC, uRaC;
-
-out vec3 vN, vWorld, vColor, vExtra;
-out vec4 vW;
-
-vec3 rotAxis(vec3 p, vec3 axis, float ang){
-  float c = cos(ang), s = sin(ang);
-  return p*c + cross(axis,p)*s + axis*dot(axis,p)*(1.0-c);
-}
-
-void main(){
-  vec3 p = aPos;
+/* The beat deformation, shared verbatim by the procedural mesh and the scanned
+   one. Duplicating it would mean a future fix landing in one and not the other,
+   and the two would quietly stop beating alike. */
+const BEAT_GLSL = `  vec3 p = aPos;
   vec3 n = aNrm;
 
   // ── ventricles: the apex stays, the base descends toward it, walls thicken,
@@ -765,8 +912,134 @@ void main(){
     p += n * q * 0.10 * uQuiver;
   }
 
-  vN = n; vWorld = p; vColor = aColor; vExtra = aExtra; vW = aW;
+`;
+
+const VERT = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec4 aW;        // LV RV LA RA
+layout(location=3) in vec3 aColor;    // tissue colour, interpolated smoothly
+layout(location=4) in vec3 aExtra;    // ao, activation ms, groove
+
+uniform mat4 uProj, uView;
+uniform float uA, uV;                 // atrial / ventricular contraction 0-1
+uniform float uQuiver, uTime;
+uniform vec3 uLvApex, uLvAxis, uRvApex, uRvAxis, uLaC, uRaC;
+
+out vec3 vN, vWorld, vColor, vExtra;
+out vec4 vW;
+
+vec3 rotAxis(vec3 p, vec3 axis, float ang){
+  float c = cos(ang), s = sin(ang);
+  return p*c + cross(axis,p)*s + axis*dot(axis,p)*(1.0-c);
+}
+
+void main(){
+${BEAT_GLSL}  vN = n; vWorld = p; vColor = aColor; vExtra = aExtra; vW = aW;
   gl_Position = uProj * uView * vec4(p, 1.0);
+}`;
+
+/* ── the scanned mesh ────────────────────────────────────────────────────────
+   Same beat, different skin. The vertex stage is BEAT_GLSL verbatim, so a scan
+   contracts on exactly the cardiac clock the procedural heart does — atria
+   kicking first, base descending toward a stationary apex, LV twisting —
+   because its per-vertex chamber weights were baked from the same signed
+   distance fields (see scripts/prep-glb.js). */
+const SCAN_VERT = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec4 aW;
+layout(location=3) in vec2 aUv;
+layout(location=4) in float aAct;
+
+uniform mat4 uProj, uView;
+uniform float uA, uV, uQuiver, uTime;
+uniform vec3 uLvApex, uLvAxis, uRvApex, uRvAxis, uLaC, uRaC;
+
+out vec3 vN, vWorld;
+out vec2 vUv;
+out vec4 vW;
+out float vAct;
+
+vec3 rotAxis(vec3 p, vec3 axis, float ang){
+  float c = cos(ang), s = sin(ang);
+  return p*c + cross(axis,p)*s + axis*dot(axis,p)*(1.0-c);
+}
+
+void main(){
+${BEAT_GLSL}  vN = n; vWorld = p; vUv = aUv; vW = aW; vAct = aAct;
+  gl_Position = uProj * uView * vec4(p, 1.0);
+}`;
+
+const SCAN_FRAG = `#version 300 es
+precision highp float;
+in vec3 vN, vWorld;
+in vec2 vUv;
+in vec4 vW;
+in float vAct;
+out vec4 outColor;
+
+uniform sampler2D uBase, uNrm, uMr;
+uniform vec3 uEye;
+uniform float uDark, uV, uAct, uClipX;
+uniform int uMode;
+
+/* No tangents were baked, so the frame is rebuilt per pixel from screen-space
+   derivatives — the standard cotangent trick. Costs a few instructions and
+   saves 16 bytes a vertex plus a whole attribute. */
+mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv){
+  vec3 dp1 = dFdx(p), dp2 = dFdy(p);
+  vec2 duv1 = dFdx(uv), duv2 = dFdy(uv);
+  vec3 dp2perp = cross(dp2, N), dp1perp = cross(N, dp1);
+  vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+  float invmax = inversesqrt(max(dot(T,T), dot(B,B)));
+  return mat3(T * invmax, B * invmax, N);
+}
+vec3 toLinear(vec3 c){ return pow(c, vec3(2.2)); }
+
+void main(){
+  if ((uMode == 1 || uMode == 2) && vWorld.z > uClipX) discard;
+
+  vec3 N = normalize(vN);
+  vec3 V = normalize(uEye - vWorld);
+  if (dot(N, V) < 0.0) N = -N;
+
+  vec3 nTex = texture(uNrm, vUv).rgb * 2.0 - 1.0;
+  N = normalize(cotangentFrame(N, -V, vUv) * nTex);
+
+  vec3 base = toLinear(texture(uBase, vUv).rgb);
+  vec2 mr = texture(uMr, vUv).gb;          // glTF packs roughness in G, metal in B
+  float rough = clamp(mr.x, 0.12, 1.0);
+
+  vec3 L1 = normalize(vec3(-0.62, 0.66, 0.42));
+  vec3 L2 = normalize(vec3(0.55, -0.30, 0.30));
+  vec3 L3 = normalize(vec3(0.35, 0.25, -0.90));
+  float d1 = max(dot(N, L1), 0.0), d2 = max(dot(N, L2), 0.0), d3 = max(dot(N, L3), 0.0);
+
+  float wrap = max((dot(N, L1) + 0.55) / 1.55, 0.0);
+  vec3 sss = toLinear(vec3(0.86, 0.16, 0.11)) * pow(wrap, 2.4) * 0.30;
+
+  vec3 H = normalize(L1 + V);
+  float shin = mix(90.0, 10.0, rough);
+  float spec = pow(max(dot(N, H), 0.0), shin) * (0.55 + (1.0 - rough) * 0.5)
+             + pow(max(dot(N, H), 0.0), 4.5) * 0.14;
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+
+  vec3 col = base * (0.10 + d1 * 1.02) + base * d2 * 0.24 + sss;
+  col += vec3(1.0, 0.95, 0.92) * spec;
+  col += toLinear(vec3(1.0, 0.55, 0.48)) * d3 * 0.26;
+  col += toLinear(vec3(0.95, 0.48, 0.44)) * fres * 0.16;
+  col *= 1.0 + uV * 0.10 * (vW.x + vW.y);
+
+  if (uMode == 2 && uAct >= 0.0) {
+    float d = abs(vAct - uAct);
+    col = mix(col, toLinear(vec3(0.35,0.92,1.0)) * 1.4, clamp(exp(-d*d/1100.0), 0.0, 1.0) * 0.75);
+  }
+  col *= mix(1.0, 0.88, uDark);
+  outColor = vec4(pow(clamp(col, 0.0, 1.0), vec3(0.4545)), 1.0);
 }`;
 
 const FRAG = `#version 300 es
@@ -782,6 +1055,7 @@ uniform int  uKind;          // 0 muscle, 1 coronary, 2 conduction, 3 valve
 uniform float uClipX;
 uniform float uV;
 uniform float uDark;         // 1 when the page is in dark mode
+uniform float uStyle;        // 0 anatomic, 1 engraved ink, 2 crystal
 
 // A sin-based hash loses precision once coordinates get large, and degrades
 // into per-pixel white noise — which, fed into the normal, flattens all the
@@ -803,6 +1077,21 @@ float noise(vec3 p){
 
 vec3 toLinear(vec3 c){ return pow(c, vec3(2.2)); }
 
+// ── engraving ────────────────────────────────────────────────────────────────
+// One layer of parallel hatching, in SCREEN space, so the strokes stay a
+// constant weight however close you zoom — which is what makes a drawing read
+// as drawn rather than as a texture wrapped round a model. Each layer only
+// applies where the surface is darker than its threshold, and fades in over a
+// short band so the tones step the way an engraver adds a second and third
+// pass rather than banding hard.
+float hatchLayer(vec2 sc, float ang, float freq, float thresh, float tone){
+  float w = clamp((thresh - tone) * 3.4, 0.0, 1.0);
+  if (w <= 0.001) return 1.0;
+  float v = sc.x * cos(ang) + sc.y * sin(ang);
+  float t = abs(fract(v * freq) - 0.5) * 2.0;      // triangle wave across the stroke
+  return mix(1.0, smoothstep(0.0, 0.40, t), w);    // 0 on the stroke, 1 on the paper
+}
+
 void main(){
   // cutaway: slice the near half away so the chambers are open to view
   if ((uMode == 1 || uMode == 2) && vWorld.z > uClipX) discard;
@@ -822,6 +1111,11 @@ void main(){
   if (uKind == 0) {
     float fib = noise(vWorld*2.8)*0.6 + noise(vWorld*7.0)*0.26;
     base *= 0.86 + fib*0.30;
+    // Slow, large-scale variation in how perfused the muscle looks. Uniform
+    // red over a whole organ is the single biggest tell that a surface is
+    // shaded plastic — real myocardium is never one colour twice over.
+    float perfuse = noise(vWorld*0.80);
+    base *= mix(vec3(0.93, 0.89, 0.91), vec3(1.10, 1.03, 0.98), perfuse);
     N = normalize(N + vec3(noise(vWorld*9.0)-0.5, noise(vWorld*9.0+7.0)-0.5,
                            noise(vWorld*9.0+3.0)-0.5) * 0.09);
   }
@@ -847,19 +1141,29 @@ void main(){
   vec3 sss = toLinear(vec3(0.86, 0.16, 0.11)) * pow(wrap, 2.4) * (uKind == 0 ? 0.34 : 0.12);
 
   vec3 H = normalize(L1 + V);
+  float ndh = max(dot(N, H), 0.0);
   float rough = uKind == 0 ? 22.0 : 46.0;
-  float spec = pow(max(dot(N, H), 0.0), rough) * (uKind == 0 ? 0.55 : 0.70);
+  // Two lobes. The epicardium is a wet membrane stretched over muscle: one
+  // narrow highlight on its own reads as polished plastic, and it is the
+  // broad second lobe that makes a surface look damp rather than shined.
+  float spec = pow(ndh, rough) * (uKind == 0 ? 0.55 : 0.70)
+             + pow(ndh, 4.5)   * (uKind == 0 ? 0.17 : 0.10);
   float fres = pow(1.0 - max(dot(N, V), 0.0), 3.2);
-  float aoStrong = pow(ao, 1.8);
+  // A floor under the occlusion term. Without one, a deep pocket — the inflow
+  // behind a valve especially — integrates to zero and reads as a hole punched
+  // through the muscle rather than tissue in shadow. In a cutaway that is worse
+  // than merely dark, because a hole is the one thing a cutaway is meant to
+  // show deliberately.
+  float aoStrong = max(pow(ao, 1.8), 0.12);
 
   // an interior surface gets a soft omnidirectional fill so cavities read
-  float fill = back ? 0.42 : 0.035;
+  float fill = back ? 0.50 : 0.045;
   vec3 col = base * (fill + d1*(back ? 0.55 : 1.02)) * aoStrong
            + base * d2 * (back ? 0.34 : 0.22) * ao
            + sss * ao;
   col += vec3(1.0, 0.94, 0.90) * spec * ao;
-  col += toLinear(vec3(1.0,0.52,0.44)) * d3 * 0.34 * ao;      // rim
-  col += toLinear(vec3(0.95,0.42,0.38)) * fres * 0.22 * ao;
+  col += toLinear(vec3(1.0,0.52,0.44)) * d3 * 0.26 * ao;      // rim
+  col += toLinear(vec3(0.95,0.42,0.38)) * fres * 0.14 * ao;
 
   // squeezing muscle catches a little more light
   col *= 1.0 + uV * 0.12 * (vW.x + vW.y);
@@ -875,9 +1179,82 @@ void main(){
   if (uMode == 3 && uKind != 1) col = mix(col, vec3(0.045,0.030,0.034), 0.62);
   if (uMode == 3 && uKind == 1) col *= 2.1;
 
+  // ── engraved style ──
+  // Tone stops being colour and becomes stroke density: the same lighting that
+  // drove the shading above now decides how many passes of hatching a patch
+  // gets. The silhouette is inked separately, because an outline is what makes
+  // a technical drawing legible where a purely tonal render goes mushy.
+  if (uStyle > 0.5 && uStyle < 1.5) {
+    vec3 ink   = toLinear(mix(vec3(0.129,0.176,0.294), vec3(0.792,0.847,0.949), uDark));
+    vec3 paper = toLinear(mix(vec3(0.976,0.965,0.941), vec3(0.055,0.090,0.145), uDark));
+
+    if (uKind == 2) {
+      // the conduction system is the subject of this drawing, not scenery
+      col = toLinear(vec3(0.847, 0.706, 0.286)) * 1.35;
+    } else {
+      // Deliberately bright: an engraving is mostly untouched paper, and the
+      // drawing is what the engraver chose to darken. Tone that sits too low
+      // fires every layer everywhere and you get a halftone screen instead.
+      float lum = clamp(d1 * 1.20 + d2 * 0.42 + 0.30, 0.0, 1.0) * mix(0.78, 1.0, aoStrong);
+      // Cut surfaces are the subject in cutaway and conduction, so they get a
+      // lighter hand than the outside — occlusion that reads as depth in the
+      // colour render just fills the chamber with ink here.
+      if (back) lum = mix(lum, 1.0, 0.22);
+      if (uKind == 3) lum = mix(max(lum, 0.55), 1.0, 0.35);   // leaflets stay pale and outlined
+      if (uKind == 1) lum *= 0.40;                    // coronaries read as drawn vessels
+
+      vec2 sc = gl_FragCoord.xy;
+      float h = 1.0;
+      h *= hatchLayer(sc,  0.62, 0.085, 0.86, lum);
+      h *= hatchLayer(sc, -0.72, 0.085, 0.56, lum);
+      h *= hatchLayer(sc,  1.90, 0.095, 0.33, lum);
+      h *= hatchLayer(sc,  0.10, 0.115, 0.16, lum);
+
+      // A contour, not a shaded rim: tight band right at the silhouette, which
+      // is what stops the form going mushy where two surfaces overlap.
+      float edge = pow(1.0 - max(dot(N, V), 0.0), 2.6);
+      h *= 1.0 - smoothstep(0.30, 0.66, edge);
+
+      col = mix(paper, ink, clamp(1.0 - h, 0.0, 1.0));
+      if (uMode == 2 && uAct >= 0.0) {
+        float dd = abs(vExtra.y - uAct);
+        col = mix(col, toLinear(vec3(0.847,0.706,0.286))*1.3, clamp(exp(-dd*dd/1100.0),0.0,1.0)*0.55);
+      }
+    }
+  }
+
+  // ── crystal ──
+  // Glass is mostly its edges. A transparent shell lit conventionally reads as
+  // a faint smudge; what makes it look like cast glass is that alpha AND
+  // brightness both track the Fresnel term, so the silhouette and the steeply
+  // turned surfaces go bright and nearly opaque while the parts facing you all
+  // but vanish. The vessels stay solid — that is what gives the eye something
+  // to look THROUGH the glass at.
+  float alpha = 1.0;
+  if (uStyle > 1.5) {
+    float fr = pow(1.0 - max(dot(N, V), 0.0), 2.1);
+    if (uKind == 1) {
+      col = toLinear(vec3(0.72, 0.13, 0.13)) * (0.55 + d1 * 0.95)
+          + vec3(1.0, 0.9, 0.9) * pow(max(dot(N, H), 0.0), 40.0) * 0.5;
+    } else if (uKind == 2) {
+      col = toLinear(vec3(0.90, 0.74, 0.30)) * 1.5;
+    } else {
+      vec3 glass = toLinear(mix(vec3(0.95, 0.88, 0.88), vec3(0.62, 0.70, 0.82), uDark));
+      float tight = pow(max(dot(N, H), 0.0), 110.0) * 1.7;
+      float broad = pow(max(dot(N, H), 0.0), 12.0) * 0.28;
+      col = glass * (0.20 + d1 * 0.42 + d2 * 0.14)
+          + vec3(1.0) * (tight + broad)
+          + toLinear(vec3(1.0, 0.74, 0.74)) * fr * 0.80;
+      if (uKind == 3) col += toLinear(vec3(0.96, 0.93, 0.90)) * 0.22;
+      /* A floor of 0.06 keeps the far wall faintly present rather than absent,
+         which is what stops the whole thing reading as an empty outline. */
+      alpha = clamp(0.06 + fr * 0.86 + tight * 0.7, 0.0, 1.0);
+    }
+  }
+
   col *= mix(1.0, 0.88, uDark);
   col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));       // back to sRGB
-  outColor = vec4(col, 1.0);
+  outColor = vec4(col, alpha);
 }`.replace('CONDUCTION_TINT', 'vec3(0.96,0.84,0.43)');
 
 /* ── renderer ─────────────────────────────────────────────────────────────── */
@@ -905,7 +1282,9 @@ function create(canvas, opts) {
   if (!gl) return null;
 
   const RES = opts.resolution || [72, 92, 58];
-  const LO = [-6.4, -6.6, -4.6], HI = [5.4, 9.6, 3.8];
+  /* Tight enough that the grid is not spent on empty space, loose enough that
+     nothing touches a face — surface nets leaves an open edge where it does. */
+  const LO = [-5.4, -6.9, -5.3], HI = [5.1, 9.7, 4.5];
 
   const t0 = performance.now();
   const outer = surfaceNets(sdOuter, LO, HI, RES);
@@ -922,7 +1301,7 @@ function create(canvas, opts) {
 
   const prog = program(gl, VERT, FRAG);
   const U = n => gl.getUniformLocation(prog, n);
-  const UNIFORMS = ['proj','view','eye','a','v','quiver','time','act','mode','kind','clipX','dark',
+  const UNIFORMS = ['proj','view','eye','a','v','quiver','time','act','mode','kind','clipX','dark','style',
                     'lvApex','lvAxis','rvApex','rvAxis','laC','raC'];
   const u = {};
   for (const n of UNIFORMS) u[n] = U('u' + n[0].toUpperCase() + n.slice(1));
@@ -962,6 +1341,82 @@ function create(canvas, opts) {
     .replace('  vec3 n = aNrm;',
              '  vec3 n = rotAxis(aNrm, aHingeA, ang);');
   const progValve = program(gl, VALVE_VERT, FRAG);
+
+  /* ── scanned model ────────────────────────────────────────────────────────
+     Loaded on demand: the geometry is one interleaved-by-section binary and
+     three WebP maps, produced by scripts/prep-glb.js. Everything here is built
+     lazily so a build that never shows a scan pays nothing for the option. */
+  let scan = null, scanProg = null, uScan = null;
+  function texFrom(img, srgb) {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, srgb ? gl.SRGB8_ALPHA8 : gl.RGBA8,
+                  gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  async function loadScan(src) {
+    const man = typeof src.manifest === 'string' ? JSON.parse(src.manifest) : src.manifest;
+    const bin = await (await fetch(src.bin)).arrayBuffer();
+    const L = man.layout;
+    const pos = new Float32Array(bin, L.pos.byteOffset, L.pos.byteLength / 4);
+    const nrm = new Int8Array(bin, L.nrm.byteOffset, L.nrm.byteLength);
+    const uv  = new Uint16Array(bin, L.uv.byteOffset, L.uv.byteLength / 2);
+    const w   = new Uint8Array(bin, L.w.byteOffset, L.w.byteLength);
+    const act = new Uint16Array(bin, L.act.byteOffset, L.act.byteLength / 2);
+    const idx = man.indexBits === 16
+      ? new Uint16Array(bin, L.idx.byteOffset, L.idx.byteLength / 2)
+      : new Uint32Array(bin, L.idx.byteOffset, L.idx.byteLength / 4);
+
+    const imgs = await Promise.all(['base', 'normal', 'mr'].map(async k => {
+      const blob = await (await fetch(src[k])).blob();
+      /* No flip. glTF puts UV (0,0) at the image's top-left, and an unflipped
+         upload puts the top row at t=0 — they already agree. Flipping mirrors
+         the atlas vertically, which sends the mesh to sample the unused padding
+         regions and covers it in coloured shards. */
+      return createImageBitmap(blob);
+    }));
+
+    scanProg = program(gl, SCAN_VERT, SCAN_FRAG);
+    uScan = {};
+    for (const n of ['proj','view','eye','a','v','quiver','time','act','mode','clipX','dark',
+                     'lvApex','lvAxis','rvApex','rvAxis','laC','raC','base','nrm','mr'])
+      uScan[n] = gl.getUniformLocation(scanProg, 'u' + n[0].toUpperCase() + n.slice(1));
+
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const put = (data, loc, size, type, norm, stride) => {
+      const b = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, type, norm, stride || 0, 0);
+    };
+    put(pos, 0, 3, gl.FLOAT, false);
+    /* Normals are stored 4 bytes per vertex for alignment but only 3 are read,
+       so the stride must be stated. With stride 0 the GPU packs them at 3 and
+       every vertex after the first reads a window shifted by one byte — which
+       looks exactly like a finely crumpled surface, not like broken data. */
+    put(nrm, 1, 3, gl.BYTE, true, 4);
+    put(w,   2, 4, gl.UNSIGNED_BYTE, true);   // chamber weights, 0..1
+    put(uv,  3, 2, gl.UNSIGNED_SHORT, true);
+    put(act, 4, 1, gl.UNSIGNED_SHORT, false); // activation, milliseconds
+    const ib = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+
+    scan = { vao, count: idx.length,
+             type: man.indexBits === 16 ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT,
+             tex: { base: texFrom(imgs[0], true), nrm: texFrom(imgs[1], false), mr: texFrom(imgs[2], false) },
+             credit: man.credit };
+    if (reduced) draw(16);
+    return scan.credit;
+  }
   const uv = {};
   for (const n of UNIFORMS) uv[n] = gl.getUniformLocation(progValve, 'u' + n[0].toUpperCase() + n.slice(1));
   uv.valve = gl.getUniformLocation(progValve, 'uValve');
@@ -990,16 +1445,84 @@ function create(canvas, opts) {
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(valves.indices), gl.STATIC_DRAW);
   gl.bindVertexArray(null);
 
+  /* ── blood flow particles: a tiny dedicated point-sprite program, drawn
+     additively over everything else, only where cutaway/conduction mode has
+     actually opened the chambers up ── */
+  const BLOOD_VERT = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aColor;
+layout(location=2) in float aSize;
+uniform mat4 uBProj, uBView;
+out vec3 vColor;
+void main(){
+  vColor = aColor;
+  gl_Position = uBProj * uBView * vec4(aPos, 1.0);
+  gl_PointSize = clamp(520.0 * aSize / gl_Position.w, 3.0, 24.0);
+}`;
+  const BLOOD_FRAG = `#version 300 es
+precision highp float;
+in vec3 vColor;
+out vec4 outColor;
+void main(){
+  vec2 d = gl_PointCoord - vec2(0.5);
+  float r = length(d) * 2.0;
+  if (r > 1.0) discard;
+  // a small hot core (reads as a highlight, not just a flat blob) plus a
+  // wider soft glow — tuned so the colour still reads as red/blue instead
+  // of bleaching toward white once it's additively blended over lit muscle
+  float core = smoothstep(0.55, 0.0, r);
+  float glow = pow(1.0 - r, 1.8);
+  vec3 col = vColor * (0.55 + glow * 1.3) + vec3(1.0) * core * 0.5;
+  outColor = vec4(col, glow);
+}`;
+  const bloodProg = program(gl, BLOOD_VERT, BLOOD_FRAG);
+  const bU = { proj: gl.getUniformLocation(bloodProg, 'uBProj'), view: gl.getUniformLocation(bloodProg, 'uBView') };
+  const bloodState = makeBloodParticles();
+  const BLOOD_STRIDE = 7;   // x,y,z, r,g,b, size
+  const bloodBuf = new Float32Array(bloodState.length * BLOOD_STRIDE);
+  const bloodVao = gl.createVertexArray();
+  gl.bindVertexArray(bloodVao);
+  const bloodVbo = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, bloodVbo);
+  gl.bufferData(gl.ARRAY_BUFFER, bloodBuf.byteLength, gl.DYNAMIC_DRAW);
+  const stride = BLOOD_STRIDE * 4;
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, stride, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, stride, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, stride, 24);
+  gl.bindVertexArray(null);
+  const BLOOD_LEFT_RGB = [1.0, 0.20, 0.16], BLOOD_RIGHT_RGB = [0.20, 0.45, 1.0];
+  function updateBloodBuffer(clipZ, hideBehindClip) {
+    for (let i = 0; i < bloodState.length; i++) {
+      const p = bloodState[i];
+      const wp = polylinePoint(p.side === 0 ? BLOOD_RIGHT : BLOOD_LEFT, p.u);
+      const rgb = p.side === 0 ? BLOOD_RIGHT_RGB : BLOOD_LEFT_RGB;
+      const hidden = hideBehindClip && wp.pos[2] > clipZ;
+      const o = i * BLOOD_STRIDE;
+      bloodBuf[o] = hidden ? 0 : wp.pos[0];
+      bloodBuf[o + 1] = hidden ? 0 : wp.pos[1];
+      bloodBuf[o + 2] = hidden ? -9999 : wp.pos[2];   // pushed behind the camera — frustum-culled, never rasterized
+      bloodBuf[o + 3] = rgb[0]; bloodBuf[o + 4] = rgb[1]; bloodBuf[o + 5] = rgb[2];
+      bloodBuf[o + 6] = 0.7 + (i % 5) * 0.09;
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, bloodVbo);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, bloodBuf);
+  }
+
   /* ── state ── */
+  const STYLES = { anatomic: 0, ink: 1, crystal: 2 };
   const S = {
     rhythm: opts.rhythm || 'sinus',
     mode: opts.mode || 'whole',
     yaw: opts.yaw !== undefined ? opts.yaw : 0.42,
     pitch: opts.pitch !== undefined ? opts.pitch : 0.12,
     dist: opts.distance || 27,
+    target: opts.target || [0.3, 0.6, 0],
     autoRotate: opts.autoRotate !== false,
     dark: opts.dark ? 1 : 0,
     clip: opts.clip !== undefined ? opts.clip : 0.4,
+    style: STYLES[opts.style] || 0,
+    model: opts.model === 'scan' ? 'scan' : 'procedural',
     t: 0, raf: null, last: null, dead: false, cyc: {},
     onCycle: opts.onCycle || null,
   };
@@ -1024,11 +1547,11 @@ function create(canvas, opts) {
     const c = cycle(S.t, S.rhythm, S.cyc);
     if (S.onCycle) S.onCycle(c);
 
-    const eye = [Math.sin(S.yaw) * Math.cos(S.pitch) * S.dist,
-                 Math.sin(S.pitch) * S.dist + 1.2,
-                 Math.cos(S.yaw) * Math.cos(S.pitch) * S.dist];
+    const eye = [S.target[0] + Math.sin(S.yaw) * Math.cos(S.pitch) * S.dist,
+                 S.target[1] + Math.sin(S.pitch) * S.dist + 1.2,
+                 S.target[2] + Math.cos(S.yaw) * Math.cos(S.pitch) * S.dist];
     const proj = mat4Perspective(0.62, canvas.width / canvas.height, 0.5, 120);
-    const view = mat4LookAt(eye, [0.3, 0.6, 0], [0, 1, 0]);
+    const view = mat4LookAt(eye, S.target, [0, 1, 0]);
 
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -1044,6 +1567,7 @@ function create(canvas, opts) {
       gl.uniform1f(loc.quiver, c.quiver); gl.uniform1f(loc.time, S.t);
       gl.uniform1f(loc.act, c.act); gl.uniform1i(loc.mode, mode);
       gl.uniform1f(loc.clipX, S.clip); gl.uniform1f(loc.dark, S.dark);
+      gl.uniform1f(loc.style, S.style);
       gl.uniform3fv(loc.lvApex, new Float32Array(A.lv.apex));
       gl.uniform3fv(loc.lvAxis, new Float32Array(lvAxis));
       gl.uniform3fv(loc.rvApex, new Float32Array(A.rv.apex));
@@ -1054,18 +1578,77 @@ function create(canvas, opts) {
     gl.useProgram(prog);
     common(u);
 
+    /* A loaded scan replaces the procedural surfaces entirely — the valves,
+       coronaries and conduction still draw over it, because the scan is a
+       single skin with none of those as separate geometry. */
+    if (S.model === 'scan' && scan) {
+      gl.useProgram(scanProg);
+      gl.uniformMatrix4fv(uScan.proj, false, proj);
+      gl.uniformMatrix4fv(uScan.view, false, view);
+      gl.uniform3fv(uScan.eye, new Float32Array(eye));
+      gl.uniform1f(uScan.a, c.a); gl.uniform1f(uScan.v, c.v);
+      gl.uniform1f(uScan.quiver, c.quiver); gl.uniform1f(uScan.time, S.t);
+      gl.uniform1f(uScan.act, c.act); gl.uniform1i(uScan.mode, mode);
+      gl.uniform1f(uScan.clipX, S.clip); gl.uniform1f(uScan.dark, S.dark);
+      gl.uniform3fv(uScan.lvApex, new Float32Array(A.lv.apex));
+      gl.uniform3fv(uScan.lvAxis, new Float32Array(lvAxis));
+      gl.uniform3fv(uScan.rvApex, new Float32Array(A.rv.apex));
+      gl.uniform3fv(uScan.rvAxis, new Float32Array(rvAxis));
+      gl.uniform3fv(uScan.laC, new Float32Array(A.la.c));
+      gl.uniform3fv(uScan.raC, new Float32Array(A.ra.c));
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scan.tex.base); gl.uniform1i(uScan.base, 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, scan.tex.nrm);  gl.uniform1i(uScan.nrm, 1);
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, scan.tex.mr);   gl.uniform1i(uScan.mr, 2);
+      gl.bindVertexArray(scan.vao);
+      gl.drawElements(gl.TRIANGLES, scan.count, scan.type, 0);
+      gl.useProgram(prog);
+      common(u);
+    }
+
     const drawMesh = (m, kind) => {
       gl.uniform1i(u.kind, kind);
       gl.bindVertexArray(m.vao);
       gl.drawElements(gl.TRIANGLES, m.count, m.type, 0);
     };
-    drawMesh(mOuter, 0);
-    if (mode === 1) drawMesh(mCav, 0);
-    drawMesh(mCoron, 1);
-    if (mode === 2) drawMesh(mCond, 2);
+    const showProcedural = !(S.model === 'scan' && scan);
+    if (!showProcedural) {
+      /* The scan carries its own coronaries and great vessels, sculpted and
+         textured — drawing the procedural ones over it lays a second, differently
+         shaped arterial tree across the surface. Only the conduction system is
+         added, because no scan of the outside can show it. */
+      if (mode === 2) drawMesh(mCond, 2);
+    } else if (S.style === 2) {
+      /* Glass, so draw order stops being arbitrary. Solids first with depth
+         writes ON so they occlude properly and the shell cannot paint over a
+         vessel standing proud of it. Then the shells with depth writes OFF —
+         writing depth from a transparent surface is exactly what makes the far
+         wall disappear behind the near one. Two passes per shell (cull front,
+         then cull back) puts each shell's inside behind its own outside, which
+         is the whole trick for a closed transparent mesh. */
+      gl.depthMask(true);
+      drawMesh(mCoron, 1);
+      if (mode === 2) drawMesh(mCond, 2);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.enable(gl.CULL_FACE);
+      gl.cullFace(gl.FRONT); drawMesh(mCav, 0);
+      gl.cullFace(gl.BACK);  drawMesh(mCav, 0);
+      gl.cullFace(gl.FRONT); drawMesh(mOuter, 0);
+      gl.cullFace(gl.BACK);  drawMesh(mOuter, 0);
+      gl.disable(gl.CULL_FACE);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+    } else {
+      drawMesh(mOuter, 0);
+      if (mode === 1) drawMesh(mCav, 0);
+      drawMesh(mCoron, 1);
+      if (mode === 2) drawMesh(mCond, 2);
+    }
 
-    // valves — visible in cutaway and conduction, buried in muscle otherwise
-    if (mode === 1 || mode === 2) {
+    // valves — visible in cutaway and conduction, buried in muscle otherwise.
+    // In crystal they show through the shell, which is half the point of it.
+    if (mode === 1 || mode === 2 || S.style === 2) {
       gl.useProgram(progValve);
       common(uv);
       gl.uniform1i(uv.kind, 3);
@@ -1076,6 +1659,24 @@ function create(canvas, opts) {
         VALVES[2].open * c.valves[2], VALVES[3].open * c.valves[3]);
       gl.bindVertexArray(valveVao);
       gl.drawElements(gl.TRIANGLES, valves.indices.length, gl.UNSIGNED_SHORT, 0);
+    }
+
+    // blood flow — the simulation keeps running even when hidden, so nothing
+    // jumps when you switch back into a mode where the chambers are exposed
+    stepBloodParticles(bloodState, dt, c);
+    /* Glowing additive particles are a colour-render idea; in the engraved
+       style they read as smudges on the paper, so the drawing leaves them out. */
+    if ((mode === 1 || mode === 2) && S.style === 0) {
+      updateBloodBuffer(S.clip, true);   // both cutaway and conduction clip on the same uClipX plane
+      gl.useProgram(bloodProg);
+      gl.uniformMatrix4fv(bU.proj, false, proj);
+      gl.uniformMatrix4fv(bU.view, false, view);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+      gl.depthMask(false);
+      gl.bindVertexArray(bloodVao);
+      gl.drawArrays(gl.POINTS, 0, bloodState.length);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
     }
     gl.bindVertexArray(null);
   }
@@ -1121,6 +1722,14 @@ function create(canvas, opts) {
     setMode(m) { S.mode = m; if (reduced) draw(0); return api; },
     setDark(on) { S.dark = on ? 1 : 0; if (reduced) draw(0); return api; },
     setClip(z) { S.clip = z; if (reduced) draw(0); return api; },
+    setStyle(s) { S.style = STYLES[s] || 0; if (reduced) draw(0); return api; },
+    setModel(m) { S.model = m === 'scan' ? 'scan' : 'procedural'; if (reduced) draw(0); return api; },
+    model() { return S.model; },
+    hasScan() { return !!scan; },
+    scanCredit() { return scan ? scan.credit : null; },
+    /* Resolves with the model's credit line, which the caller is expected to
+       display — these assets are CC-BY and attribution is the licence term. */
+    loadScan(src) { return loadScan(src); },
     setAutoRotate(on) { S.autoRotate = !!on; return api; },
     resetView() { S.yaw = 0.42; S.pitch = 0.12; S.dist = 27; return api; },
     phase() { return cycle(S.t, S.rhythm, S.cyc); },
@@ -1138,7 +1747,12 @@ function create(canvas, opts) {
   return api;
 }
 
-root.Heart3D = { create, cycle, RHYTHM_HR, VALVES, anatomy: A };
+/* chamberWeights and activationAt are exported so that OTHER geometry can be
+   made to beat on this same anatomy: a scanned mesh baked into this coordinate
+   frame takes its per-vertex weights from the very same fields the procedural
+   heart uses, and the existing vertex shader then animates it unchanged. */
+root.Heart3D = { create, cycle, RHYTHM_HR, VALVES, anatomy: A,
+                 chamberWeights, activationAt, sdOuter };
 
 })(typeof window !== 'undefined' ? window : this);
 
