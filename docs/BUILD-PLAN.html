@@ -1,0 +1,584 @@
+<title>ACCSAP 12 Build Plan</title>
+<style>
+:root{
+  --ground:#F6F7F9;
+  --surface:#FFFFFF;
+  --surface-2:#EFF2F6;
+  --ink:#16202E;
+  --ink-2:#33404F;
+  --muted:#5A6675;
+  --faint:#8B97A5;
+  --line:#DFE4EA;
+  --line-2:#EBEEF2;
+  --accent:#C2405A;
+  --accent-soft:#FBEEF1;
+  --signal:#0F7B6C;
+  --signal-soft:#E8F4F1;
+  --warn:#B06A17;
+  --warn-soft:#FBF2E6;
+  --shadow:0 1px 2px rgba(22,32,46,.05),0 8px 24px rgba(22,32,46,.06);
+
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E141B;
+    --surface:#151D26;
+    --surface-2:#1B242F;
+    --ink:#E7ECF2;
+    --ink-2:#C3CDD8;
+    --muted:#93A1B0;
+    --faint:#6B7887;
+    --line:#26313D;
+    --line-2:#1E2833;
+    --accent:#E9718A;
+    --accent-soft:#2A1620;
+    --signal:#3FBFA8;
+    --signal-soft:#0F2621;
+    --warn:#D9954A;
+    --warn-soft:#2A2012;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E141B;
+  --surface:#151D26;
+  --surface-2:#1B242F;
+  --ink:#E7ECF2;
+  --ink-2:#C3CDD8;
+  --muted:#93A1B0;
+  --faint:#6B7887;
+  --line:#26313D;
+  --line-2:#1E2833;
+  --accent:#E9718A;
+  --accent-soft:#2A1620;
+  --signal:#3FBFA8;
+  --signal-soft:#0F2621;
+  --warn:#D9954A;
+  --warn-soft:#2A2012;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:17px;
+  line-height:1.65;
+  margin:0;
+  padding:0 20px 96px;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:820px;margin:0 auto}
+p{margin:0 0 1em;max-width:66ch;color:var(--ink-2)}
+strong{color:var(--ink);font-weight:650}
+a{color:var(--accent);text-underline-offset:3px}
+code{
+  font-family:var(--mono);font-size:.86em;
+  background:var(--surface-2);border:1px solid var(--line-2);
+  padding:.1em .38em;border-radius:5px;color:var(--ink);
+}
+
+/* ── masthead ───────────────────────────────────────────── */
+.masthead{padding:64px 0 34px;border-bottom:1px solid var(--line)}
+.eyebrow{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 18px;
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+}
+.eyebrow .sep{width:22px;height:1px;background:var(--line);display:inline-block}
+.eyebrow .plain{color:var(--faint)}
+h1{
+  font-size:clamp(38px,7vw,58px);line-height:1.03;letter-spacing:-.033em;
+  font-weight:760;margin:0 0 20px;text-wrap:balance;
+}
+.standfirst{font-size:20px;line-height:1.55;color:var(--muted);max-width:60ch;margin:0}
+.facts{
+  display:flex;flex-wrap:wrap;gap:8px 26px;margin-top:30px;
+  font-family:var(--mono);font-size:12px;color:var(--faint);
+}
+.facts b{color:var(--ink-2);font-weight:500}
+
+/* ── section frame ──────────────────────────────────────── */
+section{padding-top:56px}
+h2{
+  font-size:13px;font-family:var(--mono);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;margin:0 0 22px;
+  padding-bottom:12px;border-bottom:1px solid var(--line-2);
+}
+h3{font-size:22px;letter-spacing:-.017em;font-weight:660;margin:0 0 10px;line-height:1.28;text-wrap:balance}
+
+/* ── metrics ────────────────────────────────────────────── */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px}
+.metric{
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:16px 16px 14px;box-shadow:var(--shadow);
+}
+.metric .lbl{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:10px;
+}
+.metric .now{
+  font-size:26px;font-weight:700;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;color:var(--accent);line-height:1.1;
+}
+.metric .arrow{
+  font-family:var(--mono);font-size:12px;color:var(--faint);margin:6px 0 2px;
+}
+.metric .target{
+  font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--signal);
+}
+.metric .note{font-size:12.5px;color:var(--muted);margin-top:9px;line-height:1.45}
+
+/* ── defect table ───────────────────────────────────────── */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;min-width:600px;font-size:14.5px}
+th{
+  text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint);font-weight:600;
+  padding:13px 16px;border-bottom:1px solid var(--line);background:var(--surface-2);
+}
+td{padding:13px 16px;border-bottom:1px solid var(--line-2);color:var(--ink-2);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.what{color:var(--ink);font-weight:560}
+td.where{font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
+.chip{
+  display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;padding:3px 8px;border-radius:5px;font-weight:600;white-space:nowrap;
+}
+.chip.hi{background:var(--accent-soft);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent)}
+.chip.md{background:var(--warn-soft);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 28%,transparent)}
+.chip.lo{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.chip.ok{background:var(--signal-soft);color:var(--signal);border:1px solid color-mix(in srgb,var(--signal) 28%,transparent)}
+
+/* ── the spine ──────────────────────────────────────────── */
+.spine{position:relative;padding-left:56px}
+.spine::before{
+  content:"";position:absolute;left:17px;top:8px;bottom:34px;
+  width:1px;background:var(--line);
+}
+.stage{position:relative;padding-bottom:44px}
+.stage::before{
+  content:attr(data-n);
+  position:absolute;left:-56px;top:-2px;
+  width:35px;height:35px;border-radius:50%;
+  background:var(--surface);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);
+  box-shadow:var(--shadow);
+}
+.stage.done::before{color:var(--signal);border-color:color-mix(in srgb,var(--signal) 34%,var(--line))}
+.stage-meta{
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+}
+.stage-meta .ships{color:var(--signal)}
+ul{margin:0 0 14px;padding-left:0;list-style:none;max-width:66ch}
+li{
+  position:relative;padding-left:20px;margin-bottom:9px;color:var(--ink-2);
+  font-size:16px;line-height:1.55;
+}
+li::before{
+  content:"";position:absolute;left:2px;top:.62em;
+  width:5px;height:5px;border-radius:50%;background:var(--line);
+}
+li strong{color:var(--ink)}
+.donewhen{
+  margin-top:16px;padding:12px 15px;border-radius:9px;
+  background:var(--signal-soft);border:1px solid color-mix(in srgb,var(--signal) 22%,transparent);
+  font-size:14.5px;color:var(--ink-2);max-width:66ch;
+}
+.donewhen b{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--signal);display:block;margin-bottom:4px;font-weight:600;
+}
+
+/* ── callout ────────────────────────────────────────────── */
+.callout{
+  border-left:2px solid var(--accent);background:var(--surface);
+  padding:16px 20px;border-radius:0 10px 10px 0;margin:0 0 22px;
+  box-shadow:var(--shadow);
+}
+.callout p:last-child{margin-bottom:0}
+.callout .tag{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;display:block;margin-bottom:6px;
+}
+
+/* ── code block ─────────────────────────────────────────── */
+pre{
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:18px 20px;overflow-x:auto;margin:0 0 20px;box-shadow:var(--shadow);
+  font-family:var(--mono);font-size:13px;line-height:1.72;color:var(--ink-2);
+}
+pre b{color:var(--ink);font-weight:600}
+pre i{color:var(--faint);font-style:normal}
+
+/* ── keep grid ──────────────────────────────────────────── */
+.keep{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:12px}
+.keepcard{
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:15px 17px;box-shadow:var(--shadow);
+}
+.keepcard h4{
+  margin:0 0 6px;font-size:15.5px;font-weight:640;letter-spacing:-.01em;color:var(--ink);
+}
+.keepcard p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
+
+/* ── closing ────────────────────────────────────────────── */
+.closer{
+  margin-top:56px;padding:26px 28px;border-radius:12px;
+  background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);
+}
+.closer h3{margin-bottom:12px}
+.closer p:last-child{margin-bottom:0}
+
+@media (max-width:640px){
+  body{font-size:16px;padding:0 16px 72px}
+  .masthead{padding-top:44px}
+  .spine{padding-left:0}
+  .spine::before{display:none}
+  .stage::before{position:static;margin-bottom:12px;display:inline-flex}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">
+    <span>Build plan</span><span class="sep"></span>
+    <span class="plain">ACCSAP 12 · personal board review</span>
+  </div>
+  <h1>From one big file to a real app</h1>
+  <p class="standfirst">The artifact works and the content is clean. What it isn't yet is fast, durable, or synced. Five stages, each shipping something usable on its own, without ever taking your study tool offline.</p>
+  <div class="facts">
+    <span><b>639</b> items · <b>408</b> figures · <b>11</b> chapters</span>
+    <span>Target: <b>installable PWA</b></span>
+    <span>Scope: <b>personal, all your devices</b></span>
+  </div>
+</header>
+
+<section>
+  <h2>Where it stands, measured</h2>
+  <div class="metrics">
+    <div class="metric">
+      <div class="lbl">Launch, offline</div>
+      <div class="now">13.0s</div>
+      <div class="arrow">→</div>
+      <div class="target">1.0s <span style="font-size:11px;color:var(--signal)">shipped</span></div>
+      <div class="note">The stall was the Google Fonts request failing, not the payload — 12.8s of a 13.0s launch. Fonts are now embedded.</div>
+    </div>
+    <div class="metric">
+      <div class="lbl">Payload</div>
+      <div class="now">27.1 MB</div>
+      <div class="arrow">→</div>
+      <div class="target">~180 KB shell</div>
+      <div class="note">24.1 MB of base64 figures. Parses in 0.7s, so this is about memory and storage, not start time.</div>
+    </div>
+    <div class="metric">
+      <div class="lbl">JS heap</div>
+      <div class="now">82 MB</div>
+      <div class="arrow">→</div>
+      <div class="target">~25 MB</div>
+      <div class="note">Every figure held as a string whether or not you ever open that question.</div>
+    </div>
+    <div class="metric">
+      <div class="lbl">Storage ceiling</div>
+      <div class="now">5 MB</div>
+      <div class="arrow">→</div>
+      <div class="target">GB-scale</div>
+      <div class="note">Ink, notes, chats and progress share one localStorage quota today.</div>
+    </div>
+    <div class="metric">
+      <div class="lbl">Offline</div>
+      <div class="now">Partial</div>
+      <div class="arrow">→</div>
+      <div class="target">Complete</div>
+      <div class="note">Fonts still come from Google. No service worker despite the iOS meta tags.</div>
+    </div>
+    <div class="metric">
+      <div class="lbl">Data integrity</div>
+      <div class="now">Clean</div>
+      <div class="arrow">→</div>
+      <div class="target">CI-enforced</div>
+      <div class="note">All answer keys in range, figure counts exact, no duplicate stems. Keep it that way.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Confirmed defects, and where each gets fixed</h2>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Defect</th><th>Evidence</th><th>Severity</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="what">Launch stalls 13s when fonts can't load</td>
+          <td class="where">12.8s of a 13.0s launch</td>
+          <td><span class="chip hi">High</span></td>
+          <td><span class="chip ok">Fixed · 0</span></td>
+        </tr>
+        <tr>
+          <td class="what">Google Fonts network dependency</td>
+          <td class="where">ERR_CONNECTION_RESET offline</td>
+          <td><span class="chip hi">High</span></td>
+          <td><span class="chip ok">Fixed · 0</span></td>
+        </tr>
+        <tr>
+          <td class="what">ResizeObserver leak in ink layer</td>
+          <td class="where">19 → 59 across 40 renders</td>
+          <td><span class="chip md">Medium</span></td>
+          <td><span class="chip ok">Fixed · 0</span></td>
+        </tr>
+        <tr>
+          <td class="what">All four rating buttons say "tomorrow"</td>
+          <td class="where">SM-2 first rep, ivl=1 for 3/4/5</td>
+          <td><span class="chip hi">High</span></td>
+          <td><span class="chip ok">Fixed · 2</span></td>
+        </tr>
+        <tr>
+          <td class="what">Quiz answers overwrite review schedule</td>
+          <td class="where"><code>selectOpt</code> → <code>sm2FromCorrect</code></td>
+          <td><span class="chip hi">High</span></td>
+          <td><span class="chip ok">Fixed · 0</span></td>
+        </tr>
+        <tr>
+          <td class="what">Ink stored as raw floats, unbounded</td>
+          <td class="where">18 chars per coordinate</td>
+          <td><span class="chip md">Medium</span></td>
+          <td><span class="chip ok">Fixed · 0</span></td>
+        </tr>
+        <tr>
+          <td class="what">No review history to fit a scheduler to</td>
+          <td class="where">unreconstructable once lost</td>
+          <td><span class="chip hi">High</span></td>
+          <td><span class="chip ok">Fixed · 0</span></td>
+        </tr>
+        <tr>
+          <td class="what">Tutor is blind to the figures</td>
+          <td class="where">305 of 638 items have one</td>
+          <td><span class="chip md">Medium</span></td>
+          <td><span class="chip ok">Fixed · 3</span></td>
+        </tr>
+        <tr>
+          <td class="what">Nav says 638 Q, meta says 639</td>
+          <td class="where">quarantined <code>COR_85</code></td>
+          <td><span class="chip lo">Cosmetic</span></td>
+          <td><span class="chip ok">Fixed · 0</span></td>
+        </tr>
+        <tr>
+          <td class="what">XSS through notes, chat, search</td>
+          <td class="where">probed, no execution</td>
+          <td><span class="chip ok">Clear</span></td>
+          <td class="where">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>The five stages</h2>
+  <div class="spine">
+
+    <article class="stage done" data-n="✓">
+      <div class="stage-meta">
+        <span class="ships">Shipped</span><span class="sep">·</span>
+        <span>21 edits · <code>scripts/stage0-patch.js</code></span>
+      </div>
+      <h3>Stabilize what you're already studying on</h3>
+      <p>Nothing structural — the output is still one file you drop in Files and open in Safari. Applied as a re-runnable patch script, so the next ACCSAP export takes the same fixes in one command.</p>
+      <ul>
+        <li><strong>Three typefaces embedded as base64</strong> (+250 KB), Google Fonts links removed. Launch with no network went from <strong>13.0s to 1.0s</strong> — the stall was the font request timing out, and it hit hardest in exactly the places you study: offline, or behind a hospital portal.</li>
+        <li><strong>ResizeObserver leak closed.</strong> 41 created, 41 disconnected across 41 renders; previously they accumulated one per render forever.</li>
+        <li><strong>Ink rounded to 4 decimals and simplified</strong> with Ramer–Douglas–Peucker. Measured <strong>12.4× smaller</strong> on a 200-point stroke, sub-pixel accurate.</li>
+        <li><strong>Practice no longer reschedules.</strong> A chapter drill records an attempt and feeds the mastery rings; only the review queue moves a due date.</li>
+        <li><strong>The review log now exists</strong> — every answer and rating, with the card's state <em>before</em> it was rescheduled. Pulled forward from Stage 2 because it can't be backfilled.</li>
+        <li><code>navigator.storage.persist()</code> requested at boot; the Progress screen now shows persistence state, log size and backup age, with a nudge every 150 answers.</li>
+        <li>Question count reconciled to 638, and the previously dead <code>logRated()</code> counter wired up.</li>
+      </ul>
+      <div class="donewhen"><b>Verified</b>21/21 edits applied and asserted, 24 behavioural checks passing, zero console errors, zero network requests on launch. Search, Rhythm Lab, notes, figures and ink all re-tested after patching.</div>
+    </article>
+
+    <article class="stage" data-n="1">
+      <div class="stage-meta">
+        <span>Week 1–2</span><span class="sep">·</span>
+        <span class="ships">Ships: installable on every device you own</span>
+      </div>
+      <h3>Make it a real PWA</h3>
+      <p>The single biggest quality gap is that the browser rebuilds 25 MB of base64 on every launch. Splitting content from code fixes the start time, the memory ceiling, and the storage ceiling in one move.</p>
+      <ul>
+        <li><strong>Vite + ES modules.</strong> Split the 2,400-line script along the seams you already wrote: icons, ecg, ink, search, srs, tutor, ui. No rewrite — the existing code moves mostly intact.</li>
+        <li><strong>Extract the 408 figures to real files</strong> (<code>/figures/COR_41_1.webp</code>), referenced by URL. The service worker caches them, prefetching the next question's while you read the current one.</li>
+        <li><strong>Questions to <code>content/questions.json</code></strong> — 1.6 MB raw, roughly 380 KB gzipped, loaded async and seeded into IndexedDB on first run.</li>
+        <li><strong>IndexedDB via Dexie</strong> for ink, notes, chats and review logs. localStorage keeps only preferences. Your existing export JSON becomes the migration path in.</li>
+        <li><strong>Service worker</strong> (Workbox): precache the shell and question bank, runtime-cache figures. Real offline, including on a plane.</li>
+        <li>Manifest, maskable icons, iOS splash screens, <code>display: standalone</code> — so Add to Home Screen produces an app, not a bookmark.</li>
+        <li>Keep a <code>build:standalone</code> script that reassembles the single-file version. It's a genuinely good escape hatch and costs almost nothing to preserve.</li>
+      </ul>
+      <div class="donewhen"><b>Done when</b>First launch is under 1.5s, second under 400ms, airplane mode changes nothing, and a full annotation session survives an iPadOS update.</div>
+    </article>
+
+    <article class="stage done" data-n="✓">
+      <div class="stage-meta">
+        <span class="ships">Shipped</span><span class="sep">·</span>
+        <span>10 edits · <code>scripts/stage2-patch.js</code></span>
+      </div>
+      <h3>Make the rating mean something</h3>
+      <p>The app was asking for an honest self-assessment and then scheduling all four answers identically on first exposure. That's the central promise of a spaced-repetition tool, and it was silently broken.</p>
+      <ul>
+        <li><strong>FSRS-5 replaces SM-2</strong> (hand-written, no dependency — <code>src/core/fsrs.js</code>, ~150 lines): difficulty and stability per card, retrievability computed on demand rather than a coarse reps counter.</li>
+        <li><strong>The four buttons genuinely diverge now.</strong> Verified in the real rate-row UI, not just the module in isolation: a brand-new card reads <b>Again → tomorrow, Hard → in 2 days, Good → in 4 days, Easy → in 2 weeks</b> — four different dates instead of four copies of the same one.</li>
+        <li><strong>Legacy SM-2 cards migrate on their next review</strong>, seeded from their existing interval — no batch pass, no card silently reset to a fresh state. A 14-day-old card landed at 46 days of stability after one further Good, not back at day one.</li>
+        <li><strong>Mastery is now real predicted retrievability</strong> — "how likely you'd recall this today" — not <code>reps/3</code>. A card reviewed 400 days ago now reads 18%, not whatever it scored once.</li>
+        <li><strong>Progress screen gained a retention tile</strong> (average recall probability across every scheduled card) and a <strong>7-day forecast strip</strong>, so a workload spike is visible before it arrives rather than after.</li>
+        <li>Practice/review separation and chapter interleaving for new cards were already in place from Stage 0 and the existing round-robin sampler — nothing further needed there.</li>
+      </ul>
+      <div class="donewhen"><b>Verified</b>10/10 edits applied and asserted; 25 behavioural checks against the live rate-row, scheduling, migration, mastery and stats UI, plus the full Stage 0 + heart/Apex regression suites (54 checks) still passing on top. Deferred: a pre-answer confidence rating and a full calibration/retention-curve chart — genuinely separate features, not blockers on this one.</div>
+    </article>
+
+    <article class="stage done" data-n="✓">
+      <div class="stage-meta">
+        <span class="ships">Shipped — vision and profile</span><span class="sep">·</span>
+        <span>9 edits · <code>scripts/stage3-patch.js</code></span>
+      </div>
+      <h3>Give Apex eyes and memory</h3>
+      <p>The system prompt used to tell the tutor it could not see the figure and should ask you to describe it — inverting the teaching relationship on exactly the items where help is worth most. 305 of the 638 questions carry a figure.</p>
+      <ul>
+        <li><strong>The figure now goes with the question.</strong> Base64 WebP image blocks, verified against a real intercepted request: correct <code>media_type</code>, raw base64 with no data-URL prefix, images ordered before the question text, and each panel labelled "Figure 1 / Figure 2" so you and Apex can refer to the same one.</li>
+        <li><strong>Anthropic only, and it says so.</strong> The Groq models this app offers are text-only, so on Groq the original "describe it to me" prompt is preserved verbatim and the header reads <em>"1 figure, not visible to this model"</em>. Dropping the image silently and letting the model bluff about a tracing would be worse than not offering the feature.</li>
+        <li><strong>Images never touch localStorage.</strong> They are injected at send time only — a saved thread full of base64 WebP would undo the storage discipline Stage 0 spent real work on.</li>
+        <li><strong>A learning profile rides on every turn</strong> — chapter accuracy, recent misses, FSRS retention and due load. Apex opens a conversation already knowing where you're soft, instead of only finding out if it thinks to call a tool. A fresh install correctly produces no profile at all rather than a wall of zeroes.</li>
+        <li><strong>Figure-reading discipline in the prompt:</strong> say what you actually see before reasoning from it, admit an unclear image, and treat the ACC commentary as ground truth wherever it and the image disagree — the vision docs are explicit that Claude is not built to read complex diagnostic scans.</li>
+      </ul>
+      <div class="donewhen"><b>Verified</b>9/9 edits asserted; 33 behavioural checks including the wire format of a real intercepted request, multi-figure labelling, tool-loop idempotence (images don't stack across iterations), malformed-URL fallback, and the no-persistence guarantee. All three prior suites still green — 112 checks total.<br><br><b>Deferred, deliberately</b> — the Cloudflare Worker key proxy (needs infrastructure you own, and your key works fine today), cross-question thread memory, and the hybrid embedding index. None of them block reading a tracing.</div>
+    </article>
+
+    <article class="stage done" data-n="✓">
+      <div class="stage-meta">
+        <span class="ships">Shipped — Pencil, hero heart, rhythm library</span><span class="sep">·</span>
+        <span>20 edits · <code>scripts/polish-patch.js</code></span>
+      </div>
+      <h3>Make the Pencil and the heart feel like the app they're borrowed from</h3>
+      <p>Not a numbered roadmap stage — a directed set of UX requests, applied together because they share code: the rhythm registry the hero, Rhythm Lab and the ECG engine all read from, and the ink pipeline the Pencil work extends.</p>
+      <ul>
+        <li><strong>Pencil width now responds to tilt as well as pressure</strong> — lay it flatter and the stroke broadens, the way graphite on its side does. Three named sizes (S/M/L) persist per stroke; an old stroke with no size renders exactly as before, since Medium reproduces the original fixed width byte-for-byte.</li>
+        <li><strong>Auto-minimize, opt-in.</strong> Once on, the rail collapses a couple of seconds after the Pencil lifts, and the next Pencil touch on a figure or the stem re-expands the rail <em>and</em> starts the stroke in one motion — the part that actually matches Markup, not two separate taps.</li>
+        <li><strong>The hero heart is real anatomy now.</strong> The flat SVG valentine is replaced by a small instance of the same Heart3D renderer Rhythm Lab uses — coarser mesh, no interaction, falling back to the old SVG if WebGL2 is unavailable, exactly like Rhythm Lab already does.</li>
+        <li><strong>heart3d.js gained a blood-flow particle system</strong> — two gated streams tracing the pulmonary and systemic circuits through the real anatomy landmarks, visible in cutaway and conduction mode, queuing visibly at a closed valve in sync with the leaflet's own animation. Studied technique from a user-provided reference project without copying its code or assets; this is an independent implementation against the existing procedural WebGL anatomy. Because the addition touches several existing sections of the module, it's re-embedded whole this pass rather than patched piecemeal.</li>
+        <li><strong>The hero's ECG strip rotates</strong> through a curated, non-repeating playlist of arrhythmias roughly every 11s — deliberately excluding vfib/asystole from ambient home-screen rotation, since those stay teaching content you go looking for, not wallpaper.</li>
+        <li><strong>15 more arrhythmias</strong> (AV blocks, common ectopy, WPW, bundle branch blocks, hyperkalemia, long QT, pericarditis) — merged into the same registry Rhythm Lab, the hero and the answer-feedback blip all read from, taking the library from 12 to 27.</li>
+      </ul>
+      <div class="donewhen"><b>Verified</b>20/20 edits applied and asserted; 45 behavioural checks for this pass — Pencil width/size/tilt against the real paint path, the auto-minimize handoff, the rhythm playlist, the hero heart surviving the same view-transition race the lab heart was fixed for, and the blood-flow particles rendering in the live Rhythm Lab (not just the standalone demo). All four prior suites (112 checks) still green on top — 153 total.</div>
+    </article>
+
+    <article class="stage" data-n="4">
+      <div class="stage-meta">
+        <span>Week 5–6</span><span class="sep">·</span>
+        <span class="ships">Ships: iPad, phone and laptop as one</span>
+      </div>
+      <h3>One account, your devices, your data</h3>
+      <p>Sync carries <em>your</em> data — reviews, notes, ink, chats. The question bank and figures stay local on each device, seeded from your own copy. Nothing about the ACC content goes to a server.</p>
+      <ul>
+        <li><strong>Supabase</strong>: magic-link auth, Postgres for cards and review logs, row-level security. Chosen over the Firebase skeleton in the repo because the review log is fundamentally relational and you'll want SQL over it.</li>
+        <li><strong>Append-only review log = conflict-free sync.</strong> Two devices can't disagree about events that already happened. Cards and notes take last-write-wins per field on <code>updated_at</code>; ink syncs per stroke.</li>
+        <li>Offline-first throughout: the local IndexedDB stays the source of truth, sync is a background reconciliation. Losing signal mid-session must never cost you a card.</li>
+        <li>Later, if you want colleagues in: group streaks and per-chapter accuracy comparison, keyed by question ID. Structure without content — anyone joining brings their own bank.</li>
+      </ul>
+      <div class="donewhen"><b>Done when</b>You answer on the iPad on the ward, open your laptop at home, and the queue is exactly where you left it.</div>
+    </article>
+
+    <article class="stage" data-n="5">
+      <div class="stage-meta">
+        <span>Ongoing</span><span class="sep">·</span>
+        <span class="ships">Ships: confidence to keep changing it</span>
+      </div>
+      <h3>Keep it honest</h3>
+      <ul>
+        <li><strong>Playwright suite</strong> — boot, answer, rate a review, search, offline load, figure zoom. The smoke tests written during this review are the seed; they already caught the leak and the rating bug.</li>
+        <li><strong>Content validator in CI</strong>: answer-key bounds, figure-count match, duplicate stems, option percentages. The same checks run in this review, on every import.</li>
+        <li>Lighthouse budget in CI: installable, performance above 90, no regressions on cold start.</li>
+        <li>Accessibility pass: visible focus states, labelled progress rings and charts, and the reduced-motion path you already partly honour extended to the ECG canvases.</li>
+      </ul>
+    </article>
+
+  </div>
+</section>
+
+<section>
+  <h2>Repo shape</h2>
+  <pre><b>drnerd/</b>
+├── <b>src/</b>
+│   ├── main.js              <i>boot, router, state</i>
+│   ├── <b>core/</b>          <i>ecg.js · ink.js · search.js · srs.js · storage.js</i>
+│   ├── <b>screens/</b>       <i>home · quiz · results · stats · lab · refs · search</i>
+│   ├── <b>tutor/</b>         <i>agent loop, tools, prompt, providers</i>
+│   └── <b>styles/</b>        <i>tokens.css + per-screen</i>
+├── <b>content/</b>
+│   ├── questions.json       <i>1.6 MB, gitignored — your licensed copy</i>
+│   └── <b>figures/</b>       <i>408 webp, gitignored</i>
+├── <b>public/</b>            <i>manifest.webmanifest · icons · sw.js</i>
+├── <b>scripts/</b>
+│   ├── extract-content.js   <i>artifact → questions.json + figures/</i>
+│   ├── validate-content.js  <i>the integrity checks, CI-run</i>
+│   └── build-standalone.js  <i>back to one file, when you want it</i>
+└── <b>tests/</b>             <i>Playwright specs</i></pre>
+  <div class="callout">
+    <span class="tag">Note on the current repo</span>
+    <p><code>drnerd</code> today holds a generic "iOS Learning Platform" skeleton — five Swift files, 216 lines, unrelated to any of this. Since you've chosen the PWA path, the cleanest move is to repurpose the repo rather than work around it, keeping the Firebase scaffold in history in case Stage 4 ever goes native.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What survives untouched</h2>
+  <div class="keep">
+    <div class="keepcard">
+      <h4>The BM25 index</h4>
+      <p>The <code>KEEP</code> regex protecting <code>-osis</code> terms from over-stemming, and the boost that stops your own short notes being buried under 1,500-character commentaries.</p>
+    </div>
+    <div class="keepcard">
+      <h4>The query weighting</h4>
+      <p>Repeating your words four times against a clipped stem, so retrieval follows what you asked rather than the question you happen to be sitting on.</p>
+    </div>
+    <div class="keepcard">
+      <h4>The teaching prompt</h4>
+      <p>Mechanism first, work the distractors, and admit uncertainty rather than invent a trial citation. Right pedagogy, right safety posture.</p>
+    </div>
+    <div class="keepcard">
+      <h4>The ECG engine</h4>
+      <p>Gaussian PQRST synthesis with rhythm-specific models, deterministic irregularity for AF, reduced-motion aware. Original, offline, and genuinely nice.</p>
+    </div>
+    <div class="keepcard">
+      <h4>Palm rejection</h4>
+      <p>The four-second pen-priority window. Small detail, and the difference between usable and infuriating with a Pencil.</p>
+    </div>
+    <div class="keepcard">
+      <h4>The network error copy</h4>
+      <p>Captive portals, Files-app preview mode, VPN blocks. Written by someone who has debugged an iPad on a hospital network.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Risks worth naming now</h2>
+  <ul>
+    <li><strong>iOS evicts storage for sites you don't install.</strong> Seven days of non-use can clear everything. <code>persist()</code> plus Add to Home Screen is the mitigation, and it's why Stage 1 matters more than it looks.</li>
+    <li><strong>Keep the original export.</strong> Everything downstream is derived from it. Back it up somewhere that isn't a browser.</li>
+    <li><strong>Cache Storage is not localStorage.</strong> Figures move to a quota measured in gigabytes rather than 5 MB — but iOS still reclaims it under pressure, so the service worker needs a re-fetch path, not an assumption.</li>
+    <li><strong>FSRS needs history.</strong> Its parameters are fitted, so the review log has to start before the scheduler does. That's the one item in Stage 2 that can't wait for Stage 2.</li>
+  </ul>
+</section>
+
+<div class="closer">
+  <h3>Where this stands now</h3>
+  <p>Stage 0 and Stage 2 are shipped, verified against 79 behavioural checks total across three test suites re-run on every subsequent patch. The 3D heart and the Apex rebrand — not originally on this roadmap — landed in between, wired into Rhythm Lab and the chat panel rather than left as a standalone demo.</p>
+  <p>The 13-second launch turned out to be the font request failing, not the 25 MB payload — which parses in 0.7s. That doesn't cancel Stage 1, but it re-ranks it: the case for splitting the file is now the <strong>82 MB heap, the 5 MB storage ceiling and genuine offline support</strong>, not start-up time.</p>
+  <p><strong>Stage 3</strong> is shipped for the part that mattered: Apex can now read the figure it is being asked about. The Pencil/hero-heart/rhythm-library polish pass landed after it — genuinely a real anatomical heart with live blood flow now, not a cartoon, and a Pencil that tilts, sizes and auto-minimizes like the app it's borrowed the feel from. What remains on the roadmap is <strong>Stage 1</strong> (the PWA split, for memory and offline rather than start-up time) and <strong>Stage 4</strong> (cross-device sync) — plus the deferred Stage 3 pieces, none of which block reading a tracing.</p>
+</div>
+
+</div>

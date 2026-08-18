@@ -18,3 +18,8 @@ GoogleService-Info.plist
 .AppleDouble
 .LSOverride
 Icon?
+# Licensed question-bank content — never commit these.
+# Your ACCSAP export and anything derived from it stays on your own devices.
+content/
+*ACCSAP*.html
+*.accsap.json
