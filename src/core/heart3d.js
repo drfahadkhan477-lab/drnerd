@@ -771,29 +771,10 @@ function cycle(tms, kind, state) {
 }
 
 /* ── shaders ──────────────────────────────────────────────────────────────── */
-const VERT = `#version 300 es
-precision highp float;
-layout(location=0) in vec3 aPos;
-layout(location=1) in vec3 aNrm;
-layout(location=2) in vec4 aW;        // LV RV LA RA
-layout(location=3) in vec3 aColor;    // tissue colour, interpolated smoothly
-layout(location=4) in vec3 aExtra;    // ao, activation ms, groove
-
-uniform mat4 uProj, uView;
-uniform float uA, uV;                 // atrial / ventricular contraction 0-1
-uniform float uQuiver, uTime;
-uniform vec3 uLvApex, uLvAxis, uRvApex, uRvAxis, uLaC, uRaC;
-
-out vec3 vN, vWorld, vColor, vExtra;
-out vec4 vW;
-
-vec3 rotAxis(vec3 p, vec3 axis, float ang){
-  float c = cos(ang), s = sin(ang);
-  return p*c + cross(axis,p)*s + axis*dot(axis,p)*(1.0-c);
-}
-
-void main(){
-  vec3 p = aPos;
+/* The beat deformation, shared verbatim by the procedural mesh and the scanned
+   one. Duplicating it would mean a future fix landing in one and not the other,
+   and the two would quietly stop beating alike. */
+const BEAT_GLSL = `  vec3 p = aPos;
   vec3 n = aNrm;
 
   // ── ventricles: the apex stays, the base descends toward it, walls thicken,
@@ -828,8 +809,134 @@ void main(){
     p += n * q * 0.10 * uQuiver;
   }
 
-  vN = n; vWorld = p; vColor = aColor; vExtra = aExtra; vW = aW;
+`;
+
+const VERT = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec4 aW;        // LV RV LA RA
+layout(location=3) in vec3 aColor;    // tissue colour, interpolated smoothly
+layout(location=4) in vec3 aExtra;    // ao, activation ms, groove
+
+uniform mat4 uProj, uView;
+uniform float uA, uV;                 // atrial / ventricular contraction 0-1
+uniform float uQuiver, uTime;
+uniform vec3 uLvApex, uLvAxis, uRvApex, uRvAxis, uLaC, uRaC;
+
+out vec3 vN, vWorld, vColor, vExtra;
+out vec4 vW;
+
+vec3 rotAxis(vec3 p, vec3 axis, float ang){
+  float c = cos(ang), s = sin(ang);
+  return p*c + cross(axis,p)*s + axis*dot(axis,p)*(1.0-c);
+}
+
+void main(){
+${BEAT_GLSL}  vN = n; vWorld = p; vColor = aColor; vExtra = aExtra; vW = aW;
   gl_Position = uProj * uView * vec4(p, 1.0);
+}`;
+
+/* ── the scanned mesh ────────────────────────────────────────────────────────
+   Same beat, different skin. The vertex stage is BEAT_GLSL verbatim, so a scan
+   contracts on exactly the cardiac clock the procedural heart does — atria
+   kicking first, base descending toward a stationary apex, LV twisting —
+   because its per-vertex chamber weights were baked from the same signed
+   distance fields (see scripts/prep-glb.js). */
+const SCAN_VERT = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec4 aW;
+layout(location=3) in vec2 aUv;
+layout(location=4) in float aAct;
+
+uniform mat4 uProj, uView;
+uniform float uA, uV, uQuiver, uTime;
+uniform vec3 uLvApex, uLvAxis, uRvApex, uRvAxis, uLaC, uRaC;
+
+out vec3 vN, vWorld;
+out vec2 vUv;
+out vec4 vW;
+out float vAct;
+
+vec3 rotAxis(vec3 p, vec3 axis, float ang){
+  float c = cos(ang), s = sin(ang);
+  return p*c + cross(axis,p)*s + axis*dot(axis,p)*(1.0-c);
+}
+
+void main(){
+${BEAT_GLSL}  vN = n; vWorld = p; vUv = aUv; vW = aW; vAct = aAct;
+  gl_Position = uProj * uView * vec4(p, 1.0);
+}`;
+
+const SCAN_FRAG = `#version 300 es
+precision highp float;
+in vec3 vN, vWorld;
+in vec2 vUv;
+in vec4 vW;
+in float vAct;
+out vec4 outColor;
+
+uniform sampler2D uBase, uNrm, uMr;
+uniform vec3 uEye;
+uniform float uDark, uV, uAct, uClipX;
+uniform int uMode;
+
+/* No tangents were baked, so the frame is rebuilt per pixel from screen-space
+   derivatives — the standard cotangent trick. Costs a few instructions and
+   saves 16 bytes a vertex plus a whole attribute. */
+mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv){
+  vec3 dp1 = dFdx(p), dp2 = dFdy(p);
+  vec2 duv1 = dFdx(uv), duv2 = dFdy(uv);
+  vec3 dp2perp = cross(dp2, N), dp1perp = cross(N, dp1);
+  vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+  float invmax = inversesqrt(max(dot(T,T), dot(B,B)));
+  return mat3(T * invmax, B * invmax, N);
+}
+vec3 toLinear(vec3 c){ return pow(c, vec3(2.2)); }
+
+void main(){
+  if ((uMode == 1 || uMode == 2) && vWorld.z > uClipX) discard;
+
+  vec3 N = normalize(vN);
+  vec3 V = normalize(uEye - vWorld);
+  if (dot(N, V) < 0.0) N = -N;
+
+  vec3 nTex = texture(uNrm, vUv).rgb * 2.0 - 1.0;
+  N = normalize(cotangentFrame(N, -V, vUv) * nTex);
+
+  vec3 base = toLinear(texture(uBase, vUv).rgb);
+  vec2 mr = texture(uMr, vUv).gb;          // glTF packs roughness in G, metal in B
+  float rough = clamp(mr.x, 0.12, 1.0);
+
+  vec3 L1 = normalize(vec3(-0.62, 0.66, 0.42));
+  vec3 L2 = normalize(vec3(0.55, -0.30, 0.30));
+  vec3 L3 = normalize(vec3(0.35, 0.25, -0.90));
+  float d1 = max(dot(N, L1), 0.0), d2 = max(dot(N, L2), 0.0), d3 = max(dot(N, L3), 0.0);
+
+  float wrap = max((dot(N, L1) + 0.55) / 1.55, 0.0);
+  vec3 sss = toLinear(vec3(0.86, 0.16, 0.11)) * pow(wrap, 2.4) * 0.30;
+
+  vec3 H = normalize(L1 + V);
+  float shin = mix(90.0, 10.0, rough);
+  float spec = pow(max(dot(N, H), 0.0), shin) * (0.55 + (1.0 - rough) * 0.5)
+             + pow(max(dot(N, H), 0.0), 4.5) * 0.14;
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+
+  vec3 col = base * (0.10 + d1 * 1.02) + base * d2 * 0.24 + sss;
+  col += vec3(1.0, 0.95, 0.92) * spec;
+  col += toLinear(vec3(1.0, 0.55, 0.48)) * d3 * 0.26;
+  col += toLinear(vec3(0.95, 0.48, 0.44)) * fres * 0.16;
+  col *= 1.0 + uV * 0.10 * (vW.x + vW.y);
+
+  if (uMode == 2 && uAct >= 0.0) {
+    float d = abs(vAct - uAct);
+    col = mix(col, toLinear(vec3(0.35,0.92,1.0)) * 1.4, clamp(exp(-d*d/1100.0), 0.0, 1.0) * 0.75);
+  }
+  col *= mix(1.0, 0.88, uDark);
+  outColor = vec4(pow(clamp(col, 0.0, 1.0), vec3(0.4545)), 1.0);
 }`;
 
 const FRAG = `#version 300 es
@@ -845,7 +952,7 @@ uniform int  uKind;          // 0 muscle, 1 coronary, 2 conduction, 3 valve
 uniform float uClipX;
 uniform float uV;
 uniform float uDark;         // 1 when the page is in dark mode
-uniform float uStyle;        // 0 anatomic, 1 engraved ink
+uniform float uStyle;        // 0 anatomic, 1 engraved ink, 2 crystal
 
 // A sin-based hash loses precision once coordinates get large, and degrades
 // into per-pixel white noise — which, fed into the normal, flattens all the
@@ -974,7 +1081,7 @@ void main(){
   // drove the shading above now decides how many passes of hatching a patch
   // gets. The silhouette is inked separately, because an outline is what makes
   // a technical drawing legible where a purely tonal render goes mushy.
-  if (uStyle > 0.5) {
+  if (uStyle > 0.5 && uStyle < 1.5) {
     vec3 ink   = toLinear(mix(vec3(0.129,0.176,0.294), vec3(0.792,0.847,0.949), uDark));
     vec3 paper = toLinear(mix(vec3(0.976,0.965,0.941), vec3(0.055,0.090,0.145), uDark));
 
@@ -1013,9 +1120,38 @@ void main(){
     }
   }
 
+  // ── crystal ──
+  // Glass is mostly its edges. A transparent shell lit conventionally reads as
+  // a faint smudge; what makes it look like cast glass is that alpha AND
+  // brightness both track the Fresnel term, so the silhouette and the steeply
+  // turned surfaces go bright and nearly opaque while the parts facing you all
+  // but vanish. The vessels stay solid — that is what gives the eye something
+  // to look THROUGH the glass at.
+  float alpha = 1.0;
+  if (uStyle > 1.5) {
+    float fr = pow(1.0 - max(dot(N, V), 0.0), 2.1);
+    if (uKind == 1) {
+      col = toLinear(vec3(0.72, 0.13, 0.13)) * (0.55 + d1 * 0.95)
+          + vec3(1.0, 0.9, 0.9) * pow(max(dot(N, H), 0.0), 40.0) * 0.5;
+    } else if (uKind == 2) {
+      col = toLinear(vec3(0.90, 0.74, 0.30)) * 1.5;
+    } else {
+      vec3 glass = toLinear(mix(vec3(0.95, 0.88, 0.88), vec3(0.62, 0.70, 0.82), uDark));
+      float tight = pow(max(dot(N, H), 0.0), 110.0) * 1.7;
+      float broad = pow(max(dot(N, H), 0.0), 12.0) * 0.28;
+      col = glass * (0.20 + d1 * 0.42 + d2 * 0.14)
+          + vec3(1.0) * (tight + broad)
+          + toLinear(vec3(1.0, 0.74, 0.74)) * fr * 0.80;
+      if (uKind == 3) col += toLinear(vec3(0.96, 0.93, 0.90)) * 0.22;
+      /* A floor of 0.06 keeps the far wall faintly present rather than absent,
+         which is what stops the whole thing reading as an empty outline. */
+      alpha = clamp(0.06 + fr * 0.86 + tight * 0.7, 0.0, 1.0);
+    }
+  }
+
   col *= mix(1.0, 0.88, uDark);
   col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));       // back to sRGB
-  outColor = vec4(col, 1.0);
+  outColor = vec4(col, alpha);
 }`.replace('CONDUCTION_TINT', 'vec3(0.96,0.84,0.43)');
 
 /* ── renderer ─────────────────────────────────────────────────────────────── */
@@ -1102,6 +1238,82 @@ function create(canvas, opts) {
     .replace('  vec3 n = aNrm;',
              '  vec3 n = rotAxis(aNrm, aHingeA, ang);');
   const progValve = program(gl, VALVE_VERT, FRAG);
+
+  /* ── scanned model ────────────────────────────────────────────────────────
+     Loaded on demand: the geometry is one interleaved-by-section binary and
+     three WebP maps, produced by scripts/prep-glb.js. Everything here is built
+     lazily so a build that never shows a scan pays nothing for the option. */
+  let scan = null, scanProg = null, uScan = null;
+  function texFrom(img, srgb) {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, srgb ? gl.SRGB8_ALPHA8 : gl.RGBA8,
+                  gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  async function loadScan(src) {
+    const man = typeof src.manifest === 'string' ? JSON.parse(src.manifest) : src.manifest;
+    const bin = await (await fetch(src.bin)).arrayBuffer();
+    const L = man.layout;
+    const pos = new Float32Array(bin, L.pos.byteOffset, L.pos.byteLength / 4);
+    const nrm = new Int8Array(bin, L.nrm.byteOffset, L.nrm.byteLength);
+    const uv  = new Uint16Array(bin, L.uv.byteOffset, L.uv.byteLength / 2);
+    const w   = new Uint8Array(bin, L.w.byteOffset, L.w.byteLength);
+    const act = new Uint16Array(bin, L.act.byteOffset, L.act.byteLength / 2);
+    const idx = man.indexBits === 16
+      ? new Uint16Array(bin, L.idx.byteOffset, L.idx.byteLength / 2)
+      : new Uint32Array(bin, L.idx.byteOffset, L.idx.byteLength / 4);
+
+    const imgs = await Promise.all(['base', 'normal', 'mr'].map(async k => {
+      const blob = await (await fetch(src[k])).blob();
+      /* No flip. glTF puts UV (0,0) at the image's top-left, and an unflipped
+         upload puts the top row at t=0 — they already agree. Flipping mirrors
+         the atlas vertically, which sends the mesh to sample the unused padding
+         regions and covers it in coloured shards. */
+      return createImageBitmap(blob);
+    }));
+
+    scanProg = program(gl, SCAN_VERT, SCAN_FRAG);
+    uScan = {};
+    for (const n of ['proj','view','eye','a','v','quiver','time','act','mode','clipX','dark',
+                     'lvApex','lvAxis','rvApex','rvAxis','laC','raC','base','nrm','mr'])
+      uScan[n] = gl.getUniformLocation(scanProg, 'u' + n[0].toUpperCase() + n.slice(1));
+
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const put = (data, loc, size, type, norm, stride) => {
+      const b = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, type, norm, stride || 0, 0);
+    };
+    put(pos, 0, 3, gl.FLOAT, false);
+    /* Normals are stored 4 bytes per vertex for alignment but only 3 are read,
+       so the stride must be stated. With stride 0 the GPU packs them at 3 and
+       every vertex after the first reads a window shifted by one byte — which
+       looks exactly like a finely crumpled surface, not like broken data. */
+    put(nrm, 1, 3, gl.BYTE, true, 4);
+    put(w,   2, 4, gl.UNSIGNED_BYTE, true);   // chamber weights, 0..1
+    put(uv,  3, 2, gl.UNSIGNED_SHORT, true);
+    put(act, 4, 1, gl.UNSIGNED_SHORT, false); // activation, milliseconds
+    const ib = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+
+    scan = { vao, count: idx.length,
+             type: man.indexBits === 16 ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT,
+             tex: { base: texFrom(imgs[0], true), nrm: texFrom(imgs[1], false), mr: texFrom(imgs[2], false) },
+             credit: man.credit };
+    if (reduced) draw(16);
+    return scan.credit;
+  }
   const uv = {};
   for (const n of UNIFORMS) uv[n] = gl.getUniformLocation(progValve, 'u' + n[0].toUpperCase() + n.slice(1));
   uv.valve = gl.getUniformLocation(progValve, 'uValve');
@@ -1195,6 +1407,7 @@ void main(){
   }
 
   /* ── state ── */
+  const STYLES = { anatomic: 0, ink: 1, crystal: 2 };
   const S = {
     rhythm: opts.rhythm || 'sinus',
     mode: opts.mode || 'whole',
@@ -1205,7 +1418,8 @@ void main(){
     autoRotate: opts.autoRotate !== false,
     dark: opts.dark ? 1 : 0,
     clip: opts.clip !== undefined ? opts.clip : 0.4,
-    style: opts.style === 'ink' ? 1 : 0,
+    style: STYLES[opts.style] || 0,
+    model: opts.model === 'scan' ? 'scan' : 'procedural',
     t: 0, raf: null, last: null, dead: false, cyc: {},
     onCycle: opts.onCycle || null,
   };
@@ -1261,18 +1475,77 @@ void main(){
     gl.useProgram(prog);
     common(u);
 
+    /* A loaded scan replaces the procedural surfaces entirely — the valves,
+       coronaries and conduction still draw over it, because the scan is a
+       single skin with none of those as separate geometry. */
+    if (S.model === 'scan' && scan) {
+      gl.useProgram(scanProg);
+      gl.uniformMatrix4fv(uScan.proj, false, proj);
+      gl.uniformMatrix4fv(uScan.view, false, view);
+      gl.uniform3fv(uScan.eye, new Float32Array(eye));
+      gl.uniform1f(uScan.a, c.a); gl.uniform1f(uScan.v, c.v);
+      gl.uniform1f(uScan.quiver, c.quiver); gl.uniform1f(uScan.time, S.t);
+      gl.uniform1f(uScan.act, c.act); gl.uniform1i(uScan.mode, mode);
+      gl.uniform1f(uScan.clipX, S.clip); gl.uniform1f(uScan.dark, S.dark);
+      gl.uniform3fv(uScan.lvApex, new Float32Array(A.lv.apex));
+      gl.uniform3fv(uScan.lvAxis, new Float32Array(lvAxis));
+      gl.uniform3fv(uScan.rvApex, new Float32Array(A.rv.apex));
+      gl.uniform3fv(uScan.rvAxis, new Float32Array(rvAxis));
+      gl.uniform3fv(uScan.laC, new Float32Array(A.la.c));
+      gl.uniform3fv(uScan.raC, new Float32Array(A.ra.c));
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scan.tex.base); gl.uniform1i(uScan.base, 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, scan.tex.nrm);  gl.uniform1i(uScan.nrm, 1);
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, scan.tex.mr);   gl.uniform1i(uScan.mr, 2);
+      gl.bindVertexArray(scan.vao);
+      gl.drawElements(gl.TRIANGLES, scan.count, scan.type, 0);
+      gl.useProgram(prog);
+      common(u);
+    }
+
     const drawMesh = (m, kind) => {
       gl.uniform1i(u.kind, kind);
       gl.bindVertexArray(m.vao);
       gl.drawElements(gl.TRIANGLES, m.count, m.type, 0);
     };
-    drawMesh(mOuter, 0);
-    if (mode === 1) drawMesh(mCav, 0);
-    drawMesh(mCoron, 1);
-    if (mode === 2) drawMesh(mCond, 2);
+    const showProcedural = !(S.model === 'scan' && scan);
+    if (!showProcedural) {
+      /* The scan carries its own coronaries and great vessels, sculpted and
+         textured — drawing the procedural ones over it lays a second, differently
+         shaped arterial tree across the surface. Only the conduction system is
+         added, because no scan of the outside can show it. */
+      if (mode === 2) drawMesh(mCond, 2);
+    } else if (S.style === 2) {
+      /* Glass, so draw order stops being arbitrary. Solids first with depth
+         writes ON so they occlude properly and the shell cannot paint over a
+         vessel standing proud of it. Then the shells with depth writes OFF —
+         writing depth from a transparent surface is exactly what makes the far
+         wall disappear behind the near one. Two passes per shell (cull front,
+         then cull back) puts each shell's inside behind its own outside, which
+         is the whole trick for a closed transparent mesh. */
+      gl.depthMask(true);
+      drawMesh(mCoron, 1);
+      if (mode === 2) drawMesh(mCond, 2);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.enable(gl.CULL_FACE);
+      gl.cullFace(gl.FRONT); drawMesh(mCav, 0);
+      gl.cullFace(gl.BACK);  drawMesh(mCav, 0);
+      gl.cullFace(gl.FRONT); drawMesh(mOuter, 0);
+      gl.cullFace(gl.BACK);  drawMesh(mOuter, 0);
+      gl.disable(gl.CULL_FACE);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+    } else {
+      drawMesh(mOuter, 0);
+      if (mode === 1) drawMesh(mCav, 0);
+      drawMesh(mCoron, 1);
+      if (mode === 2) drawMesh(mCond, 2);
+    }
 
-    // valves — visible in cutaway and conduction, buried in muscle otherwise
-    if (mode === 1 || mode === 2) {
+    // valves — visible in cutaway and conduction, buried in muscle otherwise.
+    // In crystal they show through the shell, which is half the point of it.
+    if (mode === 1 || mode === 2 || S.style === 2) {
       gl.useProgram(progValve);
       common(uv);
       gl.uniform1i(uv.kind, 3);
@@ -1346,7 +1619,14 @@ void main(){
     setMode(m) { S.mode = m; if (reduced) draw(0); return api; },
     setDark(on) { S.dark = on ? 1 : 0; if (reduced) draw(0); return api; },
     setClip(z) { S.clip = z; if (reduced) draw(0); return api; },
-    setStyle(s) { S.style = s === 'ink' ? 1 : 0; if (reduced) draw(0); return api; },
+    setStyle(s) { S.style = STYLES[s] || 0; if (reduced) draw(0); return api; },
+    setModel(m) { S.model = m === 'scan' ? 'scan' : 'procedural'; if (reduced) draw(0); return api; },
+    model() { return S.model; },
+    hasScan() { return !!scan; },
+    scanCredit() { return scan ? scan.credit : null; },
+    /* Resolves with the model's credit line, which the caller is expected to
+       display — these assets are CC-BY and attribution is the licence term. */
+    loadScan(src) { return loadScan(src); },
     setAutoRotate(on) { S.autoRotate = !!on; return api; },
     resetView() { S.yaw = 0.42; S.pitch = 0.12; S.dist = 27; return api; },
     phase() { return cycle(S.t, S.rhythm, S.cyc); },
@@ -1364,6 +1644,11 @@ void main(){
   return api;
 }
 
-root.Heart3D = { create, cycle, RHYTHM_HR, VALVES, anatomy: A };
+/* chamberWeights and activationAt are exported so that OTHER geometry can be
+   made to beat on this same anatomy: a scanned mesh baked into this coordinate
+   frame takes its per-vertex weights from the very same fields the procedural
+   heart uses, and the existing vertex shader then animates it unchanged. */
+root.Heart3D = { create, cycle, RHYTHM_HR, VALVES, anatomy: A,
+                 chamberWeights, activationAt, sdOuter };
 
 })(typeof window !== 'undefined' ? window : this);
