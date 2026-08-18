@@ -23,3 +23,6 @@ Icon?
 content/
 *ACCSAP*.html
 *.accsap.json
+
+# Stage 1 build output — contains a copy of the licensed content.
+dist/

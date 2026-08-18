@@ -11,7 +11,9 @@ const { chromium } = require('playwright');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-polish.js <patched.html>'); process.exit(1); }
-const URL = 'file://' + path.resolve(target);
+/* Accepts a path (single-file build) or an http URL (the Stage 1 PWA
+   build, which has to be served because it fetches its content). */
+const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -28,6 +30,10 @@ const head = t => console.log('\n── ' + t + ' ──');
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
+  /* The Stage 1 build injects app.js only after its content fetch resolves,
+     so 'load' no longer implies the app has booted. Wait for it explicitly —
+     a no-op on the single-file build, where this is already true. */
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
   await page.waitForTimeout(1000);
 
   head('rhythm library: the new arrhythmias are real, everywhere the old 12 were');
@@ -284,7 +290,10 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('lab heart canvas is present', bloodFlow.hasCanvas);
   ok('switched to cutaway mode, where blood particles draw', bloodFlow.mode === 'cutaway');
   ok('Heart3D module (carrying the particle system) is loaded', bloodFlow.heart3dExposesTarget);
-  await page.screenshot({ path: path.join(path.dirname(target), 'lab-heart-cutaway-check.png') });
+  /* os.tmpdir(), not dirname(target): the target may be an http URL, and
+     path.dirname() on one yields a nonsense relative directory that then gets
+     created in the repo. */
+  await page.screenshot({ path: path.join(require('os').tmpdir(), 'lab-heart-cutaway-check.png') });
   ok('no errors after mounting the heart and switching to cutaway (particles rendering)', errors.length === 0, JSON.stringify(errors));
 
   head('regression: everything prior still functions');

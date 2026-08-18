@@ -17,7 +17,9 @@ const { chromium } = require('playwright');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-splash.js <patched.html>'); process.exit(1); }
-const URL = 'file://' + path.resolve(target);
+/* Accepts a path (single-file build) or an http URL (the Stage 1 PWA
+   build, which has to be served because it fetches its content). */
+const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -28,12 +30,20 @@ const head = t => console.log('\n── ' + t + ' ──');
 
 (async () => {
   head('document order: the splash must not be waiting on the script it hides');
-  const raw = fs.readFileSync(target, 'utf8');
+  /* Read the document as it is actually served, so this works against both the
+     single-file build on disk and the Stage 1 shell over http. */
+  const raw = /^https?:\/\//.test(target)
+    ? await (await fetch(target)).text()
+    : fs.readFileSync(target, 'utf8');
   const splashAt = raw.indexOf('<div id="splash"');
-  const bigScriptAt = raw.indexOf('const ALL_Q=');
+  /* Whichever way the content arrives — inline in the single file, or fetched
+     by the Stage 1 loader — the splash has to come first. */
+  const inlineAt = raw.indexOf('const ALL_Q=');
+  const loaderAt = raw.indexOf("fetch('content/questions.json'");
+  const bigScriptAt = inlineAt > -1 ? inlineAt : loaderAt;
   ok('splash markup appears before the question bank / main script',
      splashAt > -1 && bigScriptAt > -1 && splashAt < bigScriptAt,
-     `splash@${splashAt} script@${bigScriptAt}`);
+     `splash@${splashAt} payload@${bigScriptAt} (${inlineAt > -1 ? 'inline' : 'fetched'})`);
   ok('splash never intercepts input', /#splash\{[^}]*pointer-events:none/.test(raw));
   ok('theme is adopted from storage before the splash paints',
      raw.indexOf("accsap12.v2") < splashAt && /_t&&_t!=='auto'/.test(raw));
@@ -47,20 +57,33 @@ const head = t => console.log('\n── ' + t + ' ──');
     const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-    /* Do not wait for load: the whole point is to look at the screen while
-       the script is still parsing. domcontentloaded would also be too late. */
+    /* Record when each first appears rather than trying to catch the gap by
+       polling. Racing it was fine against the 26 MB single file, where the gap
+       is seconds wide; against the Stage 1 shell the app can render before the
+       first poll comes back, and "I could not observe the gap" is not the same
+       finding as "the splash was late". Ordering is the actual claim. */
+    /* rAF rather than a MutationObserver: an init script runs before
+       document.documentElement exists, so observing it throws and takes the
+       rest of the init script with it. */
+    await page.addInitScript(() => {
+      window.__t = {};
+      (function tick() {
+        if (!window.__t.splash && document.getElementById('splash')) window.__t.splash = performance.now();
+        if (!window.__t.app && document.querySelector('.hero-h1')) window.__t.app = performance.now();
+        if (!window.__t.app) requestAnimationFrame(tick);
+      })();
+    });
     page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
     await page.waitForSelector('#splash', { timeout: 30000 });
-    const during = await page.evaluate(() => {
-      const sp = document.getElementById('splash');
-      return {
-        splashVisible: !!sp && getComputedStyle(sp).visibility !== 'hidden' && !sp.classList.contains('gone'),
-        appRendered: !!document.querySelector('.hero-h1'),
-        traceAnimated: !!document.querySelector('.sp-trace'),
-      };
-    });
-    ok('splash is up while the app has not rendered yet',
-       during.splashVisible && !during.appRendered, JSON.stringify(during));
+    await page.waitForFunction(() => window.__t && window.__t.app, { timeout: 120000 });
+    const during = await page.evaluate(() => ({
+      splashAt: Math.round(window.__t.splash),
+      appAt: Math.round(window.__t.app),
+      traceAnimated: !!document.querySelector('.sp-trace'),
+    }));
+    ok('the splash is on screen before the app renders',
+       during.splashAt !== undefined && during.splashAt <= during.appAt,
+       `splash@${during.splashAt}ms  app@${during.appAt}ms  (covered ${during.appAt - during.splashAt}ms)`);
     ok('the rhythm strip is present on it', during.traceAnimated);
 
     await page.waitForFunction(() => !!document.querySelector('.hero-h1'), { timeout: 120000 });
@@ -78,6 +101,10 @@ const head = t => console.log('\n── ' + t + ' ──');
   {
     const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
     await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
+  /* The Stage 1 build injects app.js only after its content fetch resolves,
+     so 'load' no longer implies the app has booted. Wait for it explicitly —
+     a no-op on the single-file build, where this is already true. */
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
     await page.evaluate(() => { S.theme = 'dark'; applyTheme(); save(); });
     await page.reload({ waitUntil: 'commit' });
     await page.waitForSelector('#splash', { timeout: 30000 });
@@ -97,6 +124,10 @@ const head = t => console.log('\n── ' + t + ' ──');
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
     await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
+  /* The Stage 1 build injects app.js only after its content fetch resolves,
+     so 'load' no longer implies the app has booted. Wait for it explicitly —
+     a no-op on the single-file build, where this is already true. */
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
     await page.waitForTimeout(2200);
     const hero = await page.evaluate(() => {
       const el = document.querySelector('.hero-live');
