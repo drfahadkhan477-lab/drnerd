@@ -405,23 +405,28 @@ pre i{color:var(--faint);font-style:normal}
       <div class="donewhen"><b>Verified</b>21/21 edits applied and asserted, 24 behavioural checks passing, zero console errors, zero network requests on launch. Search, Rhythm Lab, notes, figures and ink all re-tested after patching.</div>
     </article>
 
-    <article class="stage" data-n="1">
+    <article class="stage done" data-n="✓">
       <div class="stage-meta">
-        <span>Week 1–2</span><span class="sep">·</span>
-        <span class="ships">Ships: installable on every device you own</span>
+        <span class="ships">Shipped — content split out</span><span class="sep">·</span>
+        <span><code>extract-content.js</code> · <code>build-pwa.js</code></span>
       </div>
       <h3>Make it a real PWA</h3>
-      <p>The single biggest quality gap is that the browser rebuilds 25 MB of base64 on every launch. Splitting content from code fixes the start time, the memory ceiling, and the storage ceiling in one move.</p>
+      <p>The browser was rebuilding 25 MB of base64 on every launch whether or not you opened the question it belonged to. That was the memory ceiling, the storage ceiling and the reason there was no real offline story. Splitting content from code fixed all three at once — measured, not estimated:</p>
+      <div class="metrics" style="margin:0 0 18px">
+        <div class="metric"><div class="lbl">Shell</div><div class="now">26.2 MB</div><div class="arrow">→</div><div class="target">566 KB</div><div class="note">index.html plus app.js. The content is no longer in the document.</div></div>
+        <div class="metric"><div class="lbl">JS heap</div><div class="now">78.6 MB</div><div class="arrow">→</div><div class="target">4.8 MB</div><div class="note">Target was ~25 MB. Nothing is resident until you open the question.</div></div>
+        <div class="metric"><div class="lbl">To interactive, 4× throttle</div><div class="now">5.34s</div><div class="arrow">→</div><div class="target">1.59s</div><div class="note">And the splash now covers the remainder instead of a blank screen.</div></div>
+      </div>
       <ul>
-        <li><strong>Vite + ES modules.</strong> Split the 2,400-line script along the seams you already wrote: icons, ecg, ink, search, srs, tutor, ui. No rewrite — the existing code moves mostly intact.</li>
-        <li><strong>Extract the 408 figures to real files</strong> (<code>/figures/COR_41_1.webp</code>), referenced by URL. The service worker caches them, prefetching the next question's while you read the current one.</li>
-        <li><strong>Questions to <code>content/questions.json</code></strong> — 1.6 MB raw, roughly 380 KB gzipped, loaded async and seeded into IndexedDB on first run.</li>
-        <li><strong>IndexedDB via Dexie</strong> for ink, notes, chats and review logs. localStorage keeps only preferences. Your existing export JSON becomes the migration path in.</li>
-        <li><strong>Service worker</strong> (Workbox): precache the shell and question bank, runtime-cache figures. Real offline, including on a plane.</li>
-        <li>Manifest, maskable icons, iOS splash screens, <code>display: standalone</code> — so Add to Home Screen produces an app, not a bookmark.</li>
-        <li>Keep a <code>build:standalone</code> script that reassembles the single-file version. It's a genuinely good escape hatch and costs almost nothing to preserve.</li>
+        <li><strong>408 figures extracted to real files</strong>, referenced by URL and cached by the service worker. base64 costs 4 bytes per 3, so 24.05 MB inline became 18.03 MB on disk — 6 MB of that was encoding overhead alone. Every figure is decoded, written, read back and byte-compared, because an extraction that silently drops one wouldn't surface until revision week.</li>
+        <li><strong>The home screen now fetches zero figures</strong>, and opening a question fetches only its own. That is the memory number above, in one sentence.</li>
+        <li><strong>Questions to <code>content/questions.json</code></strong> — 1.66 MB, loaded before the app code runs.</li>
+        <li><strong>Service worker</strong>, hand-written rather than Workbox: precache the shell, runtime-cache figures. Precaching 18 MB on install would stall a first launch for questions you may never open, and every miss falls through to the network because iOS evicts caches under pressure.</li>
+        <li><strong>Manifest, maskable icons, <code>display: standalone</code></strong> — Add to Home Screen produces an app. Icons are drawn as SVG and rasterised through the headless browser the tests already use, rather than adding an image library for three PNGs.</li>
+        <li><strong>The app code stayed a classic script, deliberately.</strong> The obvious move is <code>type="module"</code> with a top-level await, but module scope is not global scope: every top-level binding would stop being reachable by name, which is how all six test suites drive the app. So the loader fetches the content, puts it on <code>window</code>, and only then injects <code>app.js</code>.</li>
+        <li><strong>The single-file build is untouched</strong> and still the artifact for the Files-app workflow. A <code>fetch()</code> cannot cross <code>file://</code>, so the PWA has to be served — that is inherent to splitting content out, not a choice made here.</li>
       </ul>
-      <div class="donewhen"><b>Done when</b>First launch is under 1.5s, second under 400ms, airplane mode changes nothing, and a full annotation session survives an iPadOS update.</div>
+      <div class="donewhen"><b>Verified</b>190 checks. All six earlier suites now run against <em>both</em> builds — 171 passing on each — plus 19 new Stage 1 checks covering shell size, content integrity, on-demand figure loading, the vision path still receiving real base64, service-worker activation, and booting with the network cut off.<br><br><b>Deferred, deliberately</b> — the Vite/ES-module reorganisation and the IndexedDB move. The app code is ~240 KB and splitting it buys maintainability, not speed; every measured win above came from moving the <em>content</em>. Doing the rewrite in the same change would have risked all of it for none of the benefit.</div>
     </article>
 
     <article class="stage done" data-n="✓">
@@ -578,7 +583,9 @@ pre i{color:var(--faint);font-style:normal}
   <h3>Where this stands now</h3>
   <p>Stage 0 and Stage 2 are shipped, verified against 79 behavioural checks total across three test suites re-run on every subsequent patch. The 3D heart and the Apex rebrand — not originally on this roadmap — landed in between, wired into Rhythm Lab and the chat panel rather than left as a standalone demo.</p>
   <p>The 13-second launch turned out to be the font request failing, not the 25 MB payload — which parses in 0.7s. That doesn't cancel Stage 1, but it re-ranks it: the case for splitting the file is now the <strong>82 MB heap, the 5 MB storage ceiling and genuine offline support</strong>, not start-up time.</p>
-  <p><strong>Stage 3</strong> is shipped for the part that mattered: Apex can now read the figure it is being asked about. The Pencil/hero-heart/rhythm-library polish pass landed after it — genuinely a real anatomical heart with live blood flow now, not a cartoon, and a Pencil that tilts, sizes and auto-minimizes like the app it's borrowed the feel from. What remains on the roadmap is <strong>Stage 1</strong> (the PWA split, for memory and offline rather than start-up time) and <strong>Stage 4</strong> (cross-device sync) — plus the deferred Stage 3 pieces, none of which block reading a tracing.</p>
+  <p><strong>Stage 3</strong> is shipped for the part that mattered: Apex can now read the figure it is being asked about. The Pencil/hero-heart/rhythm-library polish pass landed after it — genuinely a real anatomical heart with live blood flow now, not a cartoon, and a Pencil that tilts, sizes and auto-minimizes like the app it's borrowed the feel from. Then a startup pass: the cold-open blank screen was measured at 5.5 seconds on a throttled CPU, and a loading screen that paints in ~100 ms now covers it.</p>
+  <p><strong>Stage 1 is shipped.</strong> The shell went from 26.2 MB to 566 KB and the heap from 78.6 MB to 4.8 MB — the memory target was ~25 MB, so it landed five times better than planned, because nothing is resident until you open the question. It works offline once installed. Two pieces are deliberately deferred: the ES-module reorganisation and the IndexedDB move, neither of which produced any of the measured wins.</p>
+  <p>What remains is <strong>Stage 4</strong> (cross-device sync), the deferred Stage 1 and Stage 3 pieces, and <strong>Stage 5</strong>'s CI. The open question is not technical: the PWA has to be served from somewhere, and the content is licensed, so it cannot go on a public host. That choice is yours to make before Stage 4 means anything.</p>
 </div>
 
 </div>
