@@ -40,7 +40,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Seventeen patch scripts run in order against the export. Each applies a list of
+Eighteen patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -68,7 +68,8 @@ The cost is that order matters, and the dependencies are real:
 | 14 | `theme` | palettes — must follow `name`, it restyles the hero wordmark |
 | 15 | `home` | welcome bar, progress bar, layouts |
 | 16 | `splash-heart` | the crystal heart, into `splash`'s markup |
-| 17 | `crisp` | device-pixel ceilings, applied last over everything |
+| 17 | `crisp` | device-pixel ceilings |
+| 18 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
