@@ -192,9 +192,9 @@ fs.writeFileSync(path.join(DIST, 'app.js'), appCode);
 fs.cpSync(CONTENT, path.join(DIST, 'content'), { recursive: true });
 
 const manifest = {
-  name: 'ACCSAP 12 — Cardiology Board Review',
-  short_name: 'ACCSAP 12',
-  description: 'Cardiology board review: question bank, spaced repetition, rhythm lab and the Apex tutor.',
+  name: 'Systole — Cardiology Board Review',
+  short_name: 'Systole',
+  description: 'Cardiology board review on the ACCSAP 12 bank: spaced repetition, a WebGL rhythm lab, and Apex, a grounded AI tutor.',
   start_url: '.',
   scope: '.',
   display: 'standalone',
