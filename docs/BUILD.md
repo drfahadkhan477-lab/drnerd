@@ -91,9 +91,9 @@ It needs those earlier steps to still be on disk, and a normal build cleans them
 up. So the iterating loop is:
 
 ```bash
-node scripts/build.js --keep              # once, keeps all 17 intermediates
+node scripts/build.js --keep              # once, keeps all 20 intermediates
 # ...edit scripts/theme-patch.js...
-node scripts/build.js --keep --from theme # only steps 14-17 rerun
+node scripts/build.js --keep --from theme # only steps 14-20 rerun
 ```
 
 ---
@@ -101,7 +101,7 @@ node scripts/build.js --keep --from theme # only steps 14-17 rerun
 ## Verifying
 
 ```bash
-node scripts/verify.js                       # everything, ~8 min
+node scripts/verify.js                       # everything, ~4 min
 node scripts/verify.js --only physio,theme   # just these
 node scripts/verify.js --skip scan --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
@@ -156,8 +156,8 @@ node tests/verify-pwa.js http://localhost:8080
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 17 *-patch · prep-glb · build-pwa · serve · shots
-tests/        16 Playwright suites
+scripts/      build · verify · 20 *-patch · prep-glb · build-pwa · serve · shots
+tests/        17 Playwright suites (16 single-file + pwa)
 assets/       heart-scan (CC-BY-4.0, credited at runtime)
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE
 ```

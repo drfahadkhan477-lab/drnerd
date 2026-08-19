@@ -6,7 +6,8 @@
  *
  *   --only <a,b>   run just these suites (names as in tests/verify-<name>.js)
  *   --skip <a,b>   run everything except these
- *   --bail         stop at the first failing suite\n *   --pwa          also build, serve and test the Stage 1 split build
+ *   --bail         stop at the first failing suite
+ *   --pwa          also build, serve and test the Stage 1 split build
  *   --list         print the suites and what each covers, then exit
  *
  * WHY THIS EXISTS. There are sixteen suites and roughly 366 checks, and they
@@ -126,7 +127,7 @@ for (const [name, claim] of chosen) {
   else console.log(`${okRun ? '✓' : '✗'} ${String(passed).padStart(3)} passed${failed ? `, ${failed} FAILED` : ''}   ${secs}s`);
 
   if (!okRun) {
-    /* Print only the failing lines: the full transcript of fifteen suites is
+    /* Print only the failing lines: the full transcript of sixteen suites is
        thousands of lines, and the failures are what you came for. */
     for (const ln of out.split('\n')) if (/^\s*FAIL\s/.test(ln) || /^\s*(Error|TypeError|ReferenceError)/.test(ln)) console.log(`      ${ln.trim()}`);
     if (flag('--bail')) { console.log('\n  --bail: stopping here.\n'); break; }
