@@ -10,7 +10,7 @@
  *   --pwa          also build, serve and test the Stage 1 split build
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are sixteen suites and roughly 366 checks, and they
+ * WHY THIS EXISTS. There are seventeen suites and roughly 399 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -56,6 +56,7 @@ const SUITES = [
   ['splash-heart', 'the crystal heart paints before the app parses'],
   ['crisp',        'every canvas backs itself at high device-pixel density'],
   ['type',         'one modular type scale and one spacing scale, still held'],
+  ['references',   'the worked reference notes obey the guide, and are retrievable'],
 ];
 
 const argv = process.argv.slice(2);
@@ -127,7 +128,7 @@ for (const [name, claim] of chosen) {
   else console.log(`${okRun ? '✓' : '✗'} ${String(passed).padStart(3)} passed${failed ? `, ${failed} FAILED` : ''}   ${secs}s`);
 
   if (!okRun) {
-    /* Print only the failing lines: the full transcript of sixteen suites is
+    /* Print only the failing lines: the full transcript of seventeen suites is
        thousands of lines, and the failures are what you came for. */
     for (const ln of out.split('\n')) if (/^\s*FAIL\s/.test(ln) || /^\s*(Error|TypeError|ReferenceError)/.test(ln)) console.log(`      ${ln.trim()}`);
     if (flag('--bail')) { console.log('\n  --bail: stopping here.\n'); break; }
