@@ -13,7 +13,7 @@ reference notes.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 366 checks, 16 suites
+node scripts/verify.js                              # 399 checks, 17 suites
 ```
 
 **The question bank is licensed content and is not in this repository.** It
@@ -22,7 +22,7 @@ gitignored.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why
-- **[docs/REFERENCE-GUIDE.md](docs/REFERENCE-GUIDE.md)** — writing reference notes for Apex
+- **[docs/REFERENCE-GUIDE.md](docs/REFERENCE-GUIDE.md)** — writing reference notes for Apex, with [three worked examples](docs/reference-examples/)
 
 Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.
 

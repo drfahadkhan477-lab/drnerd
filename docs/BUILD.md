@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js                                 # → 366 checks
+node scripts/verify.js                                 # → 399 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -107,7 +107,7 @@ node scripts/verify.js --skip scan --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Sixteen suites, ~366 checks. They run one at a time deliberately: most drive a
+Seventeen suites, ~399 checks. They run one at a time deliberately: most drive a
 real WebGL context and several measure timing, so running them concurrently
 would produce failures about the harness rather than the app.
 
@@ -157,9 +157,9 @@ node tests/verify-pwa.js http://localhost:8080
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
 scripts/      build · verify · 20 *-patch · prep-glb · build-pwa · serve · shots
-tests/        17 Playwright suites (16 single-file + pwa)
+tests/        18 Playwright suites (17 single-file + pwa)
 assets/       heart-scan (CC-BY-4.0, credited at runtime)
-docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE
+docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
 `src/` is the source of truth. The patch scripts embed those modules into the
