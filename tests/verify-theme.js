@@ -194,6 +194,74 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('a cold load restores the saved palette from localStorage, attributes and all',
      early.theme === 'dark' && early.palette === 'cathlab' && early.savedFromStorage === 'cathlab', JSON.stringify(early));
 
+  head('no painted surface is blind to the palette');
+  /* The theme checks above assert that the surfaces we tokenised read their
+     tokens. They cannot catch a surface nobody thought to tokenise, and three
+     had been missed for exactly that reason — the shuffle-all card, the review
+     card's glow and Apex's launcher kept the export's literal hexes, so a slab
+     of default blue sat in the middle of Parchment, Cath Lab and Monitor.
+
+     So instead of naming surfaces, render under two palettes chosen to share
+     nothing — warm paper against monitor green — and diff the computed
+     background of every element large enough to be seen. Anything identical
+     under both either reads no token at all, or is a semantic that is meant to
+     stay put. There are no unthemed semantics on the home screen, so the
+     expected count here is zero, and a new hardcoded colour anywhere on it will
+     fail this check on the day it is added. */
+  const paint = async id => {
+    await page.evaluate(t => setTheme(t), id);
+    await page.waitForTimeout(500);
+    return page.evaluate(() => {
+      const out = {};
+      for (const el of document.querySelectorAll('*')) {
+        const cs = getComputedStyle(el);
+        const bg = cs.backgroundImage !== 'none' ? cs.backgroundImage : cs.backgroundColor;
+        if (!bg || bg === 'rgba(0, 0, 0, 0)') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width * r.height < 3000) continue;
+        const key = el.tagName.toLowerCase() + '.' + (el.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.');
+        if (!(key in out)) out[key] = bg;
+      }
+      return out;
+    });
+  };
+  const warm = await paint('parchment'), green = await paint('monitor');
+  const painted = Object.keys(warm).length;
+  const blind = Object.keys(warm).filter(k => k in green && warm[k] === green[k]);
+  ok('the sweep found surfaces to compare at all', painted >= 8, `${painted} painted surfaces`);
+  ok('every one of them moves when the palette does', blind.length === 0,
+     blind.length ? blind.join(', ') : `${painted}/${painted} follow the palette`);
+
+  /* Borders carry the same risk and hid one more: the review card's edge was a
+     fixed teal, so it stayed teal on an amber page. The rule here has to be
+     narrower than the one above, because a hairline of pure white or black at
+     low alpha is *meant* to be palette-independent — it is a highlight, not a
+     colour. So only borders carrying hue are required to move. */
+  const edges = async id => {
+    await page.evaluate(t => setTheme(t), id);
+    await page.waitForTimeout(500);
+    return page.evaluate(() => {
+      const out = {};
+      for (const el of document.querySelectorAll('*')) {
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        if (r.width * r.height < 3000) continue;
+        if (parseFloat(cs.borderTopWidth) < 0.5) continue;
+        const c = cs.borderTopColor;
+        if (!c || c === 'rgba(0, 0, 0, 0)') continue;
+        const [x, y, z] = c.match(/[\d.]+/g).map(Number);
+        if (x === y && y === z) continue;                    /* neutral hairline */
+        const key = el.tagName.toLowerCase() + '.' + (el.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.');
+        if (!(key in out)) out[key] = c;
+      }
+      return out;
+    });
+  };
+  const warmE = await edges('parchment'), greenE = await edges('monitor');
+  const stuck = Object.keys(warmE).filter(k => k in greenE && warmE[k] === greenE[k]);
+  ok('and every coloured border moves with it too', stuck.length === 0,
+     stuck.length ? stuck.join(', ') : `${Object.keys(warmE).length} coloured borders, all themed`);
+
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();
