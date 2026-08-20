@@ -30,3 +30,6 @@ dist/
 # Local build output — contains a copy of the licensed content.
 build/
 source/
+
+# Built study sheets — one command to regenerate, so not committed.
+study/**/hypertension.html
