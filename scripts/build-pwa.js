@@ -183,6 +183,57 @@ step('link the manifest and the iOS icon', () => {
 </head>`);
 });
 
+/* ── 3.5. the splash heart's own two assets, pulled the same way ─────────── */
+/* The single-file build inlines the Lottie player (168 KB) and the animation
+   JSON (23 KB) directly into the splash markup, because paint-before-parse is
+   the whole reason the splash exists and nothing should make it wait. That is
+   fine at 27 MB; it is not fine against an 800 KB shell budget. So here they
+   come back out, the same move extract-content.js makes for the question bank
+   — except this pair lives in index.html itself (the splash predates the
+   <script>ALL_Q=… split entirely), so it is extracted from `html`, not
+   `appCode`. */
+const splashAssets = [];
+step('pull the Lottie player out of the splash', () => {
+  const re = /<script id="spHeartLib" data-splash-heart="lib">([\s\S]*?)<\/script>/;
+  const m = re.exec(html);
+  if (!m) throw new Error('spHeartLib script block not found');
+  splashAssets.push(['lottie.min.js', m[1]]);
+  html = html.replace(m[0], '');
+});
+step('pull the animation data out of the splash', () => {
+  const re = /<script id="spHeartData" data-splash-heart="data" type="application\/json">([\s\S]*?)<\/script>/;
+  const m = re.exec(html);
+  if (!m) throw new Error('spHeartData script block not found');
+  JSON.parse(m[1]);   // fail loudly here, not silently at runtime
+  splashAssets.push(['heart.json', m[1]]);
+  html = html.replace(m[0], '');
+});
+step('swap the inline mount script for a fetch-and-mount loader', () => {
+  const re = /<script data-splash-heart="mount">[\s\S]*?<\/script>/;
+  if (!re.test(html)) throw new Error('splash-heart mount script not found');
+  const LOADER = `<script>
+(function(){
+  var el = document.getElementById('spHeartMount');
+  if(!el) return;
+  Promise.all([
+    fetch('content/splash-heart/lottie.min.js').then(function(r){ return r.text(); }),
+    fetch('content/splash-heart/heart.json').then(function(r){ return r.json(); }),
+  ]).then(function(res){
+    /* the player is plain code, not a module -- eval it into scope so the
+       global 'lottie' it defines is the same one the inline version got */
+    (0, eval)(res[0]);
+    if(typeof lottie === 'undefined') return;
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var anim = lottie.loadAnimation({
+      container: el, renderer: 'svg', loop: true, autoplay: !reduce, animationData: res[1],
+    });
+    if(reduce) anim.goToAndStop(0, true);
+  }).catch(function(){ /* the splash's static parts already carried the load */ });
+})();
+</script>`;
+  html = html.replace(re, LOADER);
+});
+
 /* ── 4. write it all out ─────────────────────────────────────────────────── */
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'icons'), { recursive: true });
@@ -190,6 +241,10 @@ fs.writeFileSync(path.join(DIST, 'index.html'), html);
 fs.writeFileSync(path.join(DIST, 'app.js'), appCode);
 
 fs.cpSync(CONTENT, path.join(DIST, 'content'), { recursive: true });
+
+const splashDir = path.join(DIST, 'content', 'splash-heart');
+fs.mkdirSync(splashDir, { recursive: true });
+for (const [name, body] of splashAssets) fs.writeFileSync(path.join(splashDir, name), body);
 
 const manifest = {
   name: 'Systole — Cardiology Board Review',
@@ -284,6 +339,7 @@ console.log(`  index.html           ${kb(fs.statSync(path.join(DIST, 'index.html
 console.log(`  app.js               ${kb(fs.statSync(path.join(DIST, 'app.js')).size)}`);
 console.log(`  shell total          ${kb(shellBytes)}   (was ${mb(fs.statSync(SRC).size)} in one file)`);
 console.log(`  content/             ${mb(contentManifest.figureBytes)} of figures + questions.json`);
+console.log(`  content/splash-heart ${splashAssets.map(([n,b])=>`${n} ${(b.length/1024).toFixed(0)}KB`).join(', ')}`);
 console.log(`\n  written to           ${DIST}`);
 /* Icons are drawn by a headless browser, which lives in the global node_modules
    here. Resolving that ourselves means `node scripts/build-pwa.js` produces a
