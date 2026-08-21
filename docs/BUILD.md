@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js                                 # → 399 checks
+node scripts/verify.js --pwa                           # → 398 + 18 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -31,11 +31,6 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 - **Node 18+** — no dependencies for the build itself.
 - **Playwright + Chromium** — for the test suites only:
   `npm i -g playwright && npx playwright install chromium`
-- **`assets/heart-scan/`** — committed, so nothing to do. To rebuild it from a
-  different scan: `node scripts/prep-glb.js <model.glb>`. It refuses any model
-  without a licence in `asset.extras`, and the credit it extracts is rendered
-  at runtime because CC-BY requires it.
-
 ---
 
 ## How the build works
@@ -54,23 +49,23 @@ The cost is that order matters, and the dependencies are real:
 | # | Step | Depends on |
 |---|------|-----------|
 | 1 | `stage0` | stabilises the raw export — everything assumes it |
-| 2 | `apex` | embeds `heart3d.js` and `apex.js`; the only place the heart enters |
-| 3–4 | `stage2`, `stage3` | FSRS-5 scheduling, then Apex's vision and memory |
-| 5 | `polish` | the rhythm registry the hero and Rhythm Lab both read |
-| 6 | `splash` | the pre-paint loading screen |
-| 7 | `ink` | the engraved drawing style |
+| 2 | `keys` | six answer keys the export gets wrong, fixed before anything reads them |
+| 3 | `apex` | embeds `heart3d.js` and `apex.js`; the only place the heart enters |
+| 4–5 | `stage2`, `stage3` | FSRS-5 scheduling, then Apex's vision and memory |
+| 6 | `polish` | the rhythm registry the hero and Rhythm Lab both read |
+| 7 | `splash` | the pre-paint loading screen |
 | 8 | `braunwald` | the grounded reference library |
 | 9 | `art` | the design pass the later panels sit inside |
 | 10 | `leads` | the 12-lead — needs `art`'s panel styles |
-| 11 | `scan` | the photoreal heart — needs `assets/heart-scan` |
-| 12 | `physio` | the cardiac cycle — anchors on the 12-lead's embed comment |
-| 13 | `name` | Systole |
-| 14 | `theme` | palettes — must follow `name`, it restyles the hero wordmark |
-| 15 | `home` | welcome bar, progress bar, layouts |
-| 16 | `splash-heart` | the crystal heart, into `splash`'s markup |
-| 17 | `crisp` | device-pixel ceilings |
-| 18 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
-| 19 | `type`  | the modular type scale, snapped over everything above |
+| 11 | `physio` | the cardiac cycle — anchors on the 12-lead's embed comment |
+| 12 | `name` | Systole |
+| 13 | `theme` | palettes — must follow `name`, it restyles the hero wordmark |
+| 14 | `home` | welcome bar, progress bar, layouts |
+| 15 | `splash-heart` | the mechanistic heart, into `splash`'s markup |
+| 16 | `crisp` | device-pixel ceilings |
+| 17 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
+| 18 | `type`  | the modular type scale, snapped over everything above |
+| 19 | `lab` | removes the Rhythm Lab's 3D heart — late, so what it deletes is final |
 | 20 | `review`| fixes from the full code review — last, so it sees everything |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
@@ -103,19 +98,22 @@ node scripts/build.js --keep --from theme # only steps 14-20 rerun
 ```bash
 node scripts/verify.js                       # everything, ~4 min
 node scripts/verify.js --only physio,theme   # just these
-node scripts/verify.js --skip scan --bail    # stop at the first failure
+node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Seventeen suites, ~399 checks. They run one at a time deliberately: most drive a
-real WebGL context and several measure timing, so running them concurrently
-would produce failures about the harness rather than the app.
+Sixteen suites, ~398 checks, plus 18 more on the split build. They run one at a
+time deliberately: several drive a real WebGL context and several measure
+timing, so running them concurrently would produce failures about the harness
+rather than the app.
 
 Every suite asserts the *claim*, not that something rendered. `verify-physio`
 checks that valve events are measured pressure crossings and that raising
 afterload lowers ejection fraction; `verify-leads` checks that aVR is inverted
-and the R wave progresses; `verify-scan` checks that the mesh actually deforms
-across the cardiac cycle and that the CC-BY credit is on screen.
+and the R wave progresses; `verify-keys` re-runs the comparison that found six
+mis-keyed questions, so a future export cannot introduce a seventh silently;
+`verify-splash-heart` measures that the splash heart's conduction nodes light
+in the order the heart depolarises rather than blinking together.
 
 Some modules can be checked without a browser at all, which is much faster
 while iterating on the physiology or the ECG maths:
@@ -156,9 +154,8 @@ node tests/verify-pwa.js http://localhost:8080
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 20 *-patch · prep-glb · build-pwa · serve · shots
-tests/        18 Playwright suites (17 single-file + pwa)
-assets/       heart-scan (CC-BY-4.0, credited at runtime)
+scripts/      build · verify · 20 *-patch · build-pwa · serve · shots
+tests/        17 Playwright suites (16 single-file + pwa)
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

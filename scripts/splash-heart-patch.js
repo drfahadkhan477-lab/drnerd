@@ -1,31 +1,58 @@
 #!/usr/bin/env node
 /*
- * A crystal heart on the startup screen, beating over the ECG sweep.
+ * A Lottie heart on the startup screen.
  *
  *   node scripts/splash-heart-patch.js <home-output.html> <output.html>
  *
- * The splash already draws a sweeping rhythm strip. This adds the heart above
- * it — a faceted crystal one, with a specular glint, a glow disc behind it, and
- * a beat.
+ * WHAT CHANGED, AND WHY. This used to be a heart drawn by hand in SVG paths
+ * and animated with CSS keyframes — an "instrument, not an organ" reading of
+ * the reference the app's owner supplied. It read as a heart, but it read as
+ * a FLAT one: CSS keyframes interpolate linearly between the frames you write,
+ * and a hand-authored gradient is one fixed light source with no depth. A
+ * real illustrator's tool — proper gradient meshes, bezier-eased keyframes on
+ * every property, a trim-path primitive built for exactly "light travelling
+ * along a curve" — gets closer to what the reference actually looked like,
+ * and Lottie is that tool's native export format. This heart is authored the
+ * same way: as data (Python generates the keyframed vector geometry — see
+ * scripts/gen-splash-heart.py, kept outside the repo, and assets/splash-heart/
+ * carries its output), not hand-drawn, but the RESULT is a real Lottie file
+ * rather than a bespoke animation format, so it opens in Lottie tooling, can
+ * be swapped for an After-Effects export later, and is portable if this app
+ * ever wants the same heart somewhere else.
  *
- * IT IS SVG AND CSS, ON PURPOSE. The obvious thing would be to show the app's
- * real WebGL heart here. It is exactly the wrong thing: meshing that heart is
- * part of what the splash is covering for, so putting it ON the splash would
- * mean waiting for the load in order to show the loading screen. So the splash
- * heart is drawn with gradients and clipped polygons — it costs nothing, paints
- * on the first frame, and asks nothing of the megabytes still parsing below it.
- * The real heart takes over the moment the app is ready.
+ * TWO DELIVERY PATHS, BECAUSE THE BUDGETS ARE DIFFERENT. The Lottie player is
+ * 168 KB and the animation JSON is 23 KB — irrelevant next to a single-file
+ * build that is tens of megabytes already, but real money against the split
+ * PWA shell, which verify-pwa holds under 800 KB and which had 720 KB used
+ * before this patch. So:
  *
- * It reads on every theme because it carries its own translucent crystal
- * palette and sits on its own glow, rather than borrowing the page's colours —
- * so it looks like cut glass on Parchment's cream and on Nocturne's near-black
- * alike.
+ *   - the single-file build gets both inlined and mounted synchronously,
+ *     because "paints before the megabytes below it parse" is still the
+ *     whole point of a splash and nothing here should compromise that;
+ *   - build-pwa.js pulls the same two blobs back OUT into content/splash-heart/
+ *     and replaces the inline scripts with a fetch-and-mount loader, so the
+ *     shell stays the size it earned. The splash's static parts (background,
+ *     wordmark, ECG sweep) still show instantly either way; only the animated
+ *     heart itself arrives a beat later on the split build.
+ *
+ * WHAT WAS KEPT FROM THE OLD VERSION. The composition — a lit instrument
+ * plate behind an anatomical anterior-view heart, HUD leader lines, a
+ * coronary tree with travelling light — and the principle that it carries its
+ * own ground so it reads the same on Parchment's cream as on Nocturne's
+ * near-black. Only the authoring technique and the file format changed.
  */
 'use strict';
 const fs = require('fs');
+const path = require('path');
 
 const SRC = process.argv[2], OUT = process.argv[3];
 if (!SRC || !OUT) { console.error('usage: node scripts/splash-heart-patch.js <home-output.html> <output.html>'); process.exit(1); }
+
+const ROOT = path.join(__dirname, '..');
+const ASSETS = path.join(ROOT, 'assets', 'splash-heart');
+const LOTTIE_JS = fs.readFileSync(path.join(ASSETS, 'lottie.min.js'), 'utf8');
+const HEART_JSON = fs.readFileSync(path.join(ASSETS, 'heart.json'), 'utf8');
+JSON.parse(HEART_JSON);   // fail loudly here, not three build steps later
 
 let html = fs.readFileSync(SRC, 'utf8');
 const applied = [];
@@ -36,89 +63,43 @@ function patch(label, find, replace) {
   applied.push(label);
 }
 
-/* The crystal heart, as inline SVG. viewBox 0 0 120 120; a heart clip, eight
-   facets radiating from the centre for the cut-gem look, a bright rim, and a
-   specular highlight on the upper-left lobe. */
-const CRYSTAL = `<svg class="sp-heart" viewBox="0 0 120 120" aria-hidden="true">
-      <defs>
-        <radialGradient id="spGlowG" cx="50%" cy="46%" r="52%">
-          <stop offset="0%" stop-color="#5EEAD4" stop-opacity=".55"/>
-          <stop offset="45%" stop-color="#38BDF8" stop-opacity=".22"/>
-          <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
-        </radialGradient>
-        <linearGradient id="spBaseG" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#A7F3EB" stop-opacity=".5"/>
-          <stop offset="100%" stop-color="#0EA5B8" stop-opacity=".5"/>
-        </linearGradient>
-        <clipPath id="spHeartClip">
-          <path d="M60,106 C26,80 12,58 12,40 C12,22 28,13 43,19 C52,23 58,30 60,38
-                   C62,30 68,23 77,19 C92,13 108,22 108,40 C108,58 94,80 60,106 Z"/>
-        </clipPath>
-        <filter id="spBlur" x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="3.2"/>
-        </filter>
-      </defs>
-      <circle class="sp-heart-glow" cx="60" cy="55" r="56" fill="url(#spGlowG)"/>
-      <g clip-path="url(#spHeartClip)">
-        <rect x="0" y="0" width="120" height="120" fill="url(#spBaseG)"/>
-        <polygon points="60,54 12,42 30,18"  fill="#38BDF8" fill-opacity=".34"/>
-        <polygon points="60,54 30,18 60,33"  fill="#2DD4BF" fill-opacity=".50"/>
-        <polygon points="60,54 60,33 90,18"  fill="#5EEAD4" fill-opacity=".40"/>
-        <polygon points="60,54 90,18 108,42" fill="#38BDF8" fill-opacity=".30"/>
-        <polygon points="60,54 108,42 90,72" fill="#2DD4BF" fill-opacity=".44"/>
-        <polygon points="60,54 90,72 60,106" fill="#0E7C86" fill-opacity=".50"/>
-        <polygon points="60,54 60,106 30,72" fill="#12909B" fill-opacity=".46"/>
-        <polygon points="60,54 30,72 12,42"  fill="#2DD4BF" fill-opacity=".38"/>
-        <ellipse class="sp-heart-glint" cx="41" cy="34" rx="9" ry="14" transform="rotate(-32 41 34)"
-          fill="#FFFFFF" fill-opacity=".6" filter="url(#spBlur)"/>
-      </g>
-      <path class="sp-heart-rim" d="M60,106 C26,80 12,58 12,40 C12,22 28,13 43,19 C52,23 58,30 60,38
-              C62,30 68,23 77,19 C92,13 108,22 108,40 C108,58 94,80 60,106 Z"/>
-    </svg>`;
-
-patch('splash: the crystal heart above the strip',
+/* The mount point, above the ECG sweep exactly where the hand-drawn heart
+   used to sit. Marked with data-splash-heart so build-pwa.js can find the two
+   script blocks that follow it without depending on this comment surviving. */
+patch('splash: the Lottie mount point above the strip',
 `  <div class="sp-in">
     <svg class="sp-strip"`,
 `  <div class="sp-in">
-    ${CRYSTAL}
+    <div class="sp-heart-mount" id="spHeartMount" aria-hidden="true"></div>
+    <script id="spHeartLib" data-splash-heart="lib">${LOTTIE_JS}</script>
+    <script id="spHeartData" data-splash-heart="data" type="application/json">${HEART_JSON}</script>
+    <script data-splash-heart="mount">
+      (function(){
+        var el = document.getElementById('spHeartMount');
+        if(!el || typeof lottie === 'undefined') return;
+        var data = JSON.parse(document.getElementById('spHeartData').textContent);
+        var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var anim = lottie.loadAnimation({
+          container: el, renderer: 'svg', loop: true, autoplay: !reduce, animationData: data,
+        });
+        if(reduce) anim.goToAndStop(0, true);
+      })();
+    </script>
     <svg class="sp-strip"`);
 
-patch('splash: the crystal heart styles',
+patch('splash: its container sizing',
 `.sp-in{display:flex;flex-direction:column;align-items:center;padding:24px}`,
 `.sp-in{display:flex;flex-direction:column;align-items:center;padding:24px}
-.sp-heart{width:min(150px,34vw);height:auto;overflow:visible;margin-bottom:14px;
-  transform-box:fill-box;transform-origin:center;
-  animation:spBeat .92s ease-in-out infinite, spRise .8s both ease-out}
-.sp-heart-rim{fill:none;stroke:#7FF0DE;stroke-width:1.5;stroke-linejoin:round;
-  filter:drop-shadow(0 0 5px rgba(94,234,212,.7))}
-.sp-heart-glow{transform-box:fill-box;transform-origin:center;
-  animation:spHeartGlow .92s ease-in-out infinite}
-@keyframes spBeat{
-  0%,100%{transform:scale(1)}
-  9%{transform:scale(1.07)}
-  20%{transform:scale(.99)}
-  32%{transform:scale(1.025)}
-  48%{transform:scale(1)}
-}
-@keyframes spHeartGlow{
-  0%,100%{opacity:.5}
-  9%{opacity:1}
-  40%{opacity:.62}
-}`);
-
-patch('splash: the heart holds still when motion is reduced',
-`@media(prefers-reduced-motion:reduce){
-  .sp-trace{animation:none;stroke-dashoffset:0;opacity:1}
-  .sp-word,.sp-sub{animation:none}
-}`,
-`@media(prefers-reduced-motion:reduce){
-  .sp-trace{animation:none;stroke-dashoffset:0;opacity:1}
-  .sp-word,.sp-sub{animation:none}
-  .sp-heart{animation:none}
-  .sp-heart-glow{animation:none;opacity:.7}
-}`);
+.sp-heart-mount{width:min(310px,66vw);height:min(310px,66vw);margin-bottom:16px;
+  animation:spRise 1s both cubic-bezier(.2,.7,.3,1)}
+.sp-heart-mount svg{display:block;width:100%;height:100%;overflow:visible;
+  filter:drop-shadow(0 18px 46px rgba(3,12,24,.5))}
+@keyframes spRise{from{opacity:0;transform:translateY(16px) scale(.94)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.sp-heart-mount{animation:none}}`);
 
 fs.writeFileSync(OUT, html);
-console.log(`Crystal splash heart applied — ${applied.length} edits`);
+console.log(`Lottie splash heart applied — ${applied.length} edits`);
 applied.forEach(a => console.log('  ✓ ' + a));
+console.log(`  lottie.min.js  ${(LOTTIE_JS.length / 1024).toFixed(1)} KB`);
+console.log(`  heart.json     ${(HEART_JSON.length / 1024).toFixed(1)} KB`);
 console.log(`written: ${OUT}`);

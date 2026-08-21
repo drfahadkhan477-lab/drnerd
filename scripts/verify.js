@@ -10,7 +10,7 @@
  *   --pwa          also build, serve and test the Stage 1 split build
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are seventeen suites and roughly 399 checks, and they
+ * WHY THIS EXISTS. There are eighteen suites and roughly 418 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -41,16 +41,15 @@ const ROOT = path.join(__dirname, '..');
    the features were built, so a regression reads as a story. */
 const SUITES = [
   ['stage0',       'the single-file build is stable and works offline'],
+  ['keys',         'the answer keys agree with the commentary that explains them'],
   ['apex',         'the tutor, its tools, and the 3D heart it sits beside'],
   ['stage2',       'FSRS-5 scheduling replaces SM-2'],
   ['stage3',       'Apex can read figures and remembers who it teaches'],
   ['polish',       'Pencil feel, the hero heart, the rhythm library'],
   ['splash',       'the pre-paint loading screen, on a throttled CPU'],
-  ['ink',          'the engraved drawing style'],
   ['braunwald',    'grounded mode answers only from your references'],
   ['leads',        'the 12-lead morphology falls out of one dipole'],
-  ['scan',         'the photoreal heart beats on the same cardiac clock'],
-  ['physio',       'the cardiac cycle is computed, not drawn'],
+  ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
   ['theme',        'eight palettes, two axes, unthemed semantics'],
   ['home',         'the welcome bar, the progress bar, three layouts'],
   ['splash-heart', 'the crystal heart paints before the app parses'],

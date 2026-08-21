@@ -91,6 +91,64 @@ patch('css: and their later override',
 `.ch-fill{transition:width .9s var(--glide)}`,
 ``);
 
+/* ── copy that no longer describes the code ───────────────────────────────── */
+/* The export's home screen has always said the review queue runs on SM-2. It
+   has not since stage2 replaced the scheduler with FSRS-5 — the label was
+   simply never updated, so the app has been telling its user the wrong thing
+   about its own mechanism. A caption that names an algorithm has to name the
+   one that runs. */
+patch('copy: the review queue is scheduled by FSRS-5, not SM-2',
+`'Active recall on an SM-2 schedule'`,
+`'Active recall, scheduled by FSRS-5'`);
+
+/* The same stale name, in the place it does the most damage: this is the
+   description Apex reads to decide when to open the queue and what to tell the
+   fellow about it. A tool description is a prompt, so a wrong one is not a
+   typo — it teaches the tutor to explain the app's own scheduler wrongly. */
+patch('copy: Apex is told what actually schedules the queue',
+`questions due today by SM-2 scheduling, topped up with never-seen questions`,
+`questions due today by FSRS-5 scheduling, topped up with never-seen questions`);
+
+/* ── surfaces the theme pass missed ───────────────────────────────────────────
+   Every palette redefines --navy*, --teal* and --aura-*, and the theme suite
+   checks that the hero and the aurora read them. Three painted surfaces never
+   did: they kept the literal hexes from the original export, so on Parchment,
+   Cath Lab and Monitor a slab of the default blue sits in an otherwise warm or
+   green page. Found by rendering under two very different palettes and diffing
+   the computed background of every surface larger than 3000px² — 13 painted
+   surfaces, 3 of them identical across both, which is exactly the signature of
+   a colour that reads no token at all. */
+patch('theme: the shuffle-all card follows the palette',
+`.all-card{background:linear-gradient(135deg,#12243F,#173A5E)`,
+`.all-card{background:linear-gradient(135deg,var(--hero-a),var(--hero-b))`);
+
+/* The review card's glow was pinned to the default teal, so under Cath Lab it
+   was the one teal thing on an amber page. --aura-1 is the token every palette
+   already defines for exactly this: a wash of its own accent. */
+patch('theme: the review-card glow follows the palette',
+`background:radial-gradient(40% 60% at 20% 50%,rgba(45,212,191,.22),transparent 70%)}`,
+`background:radial-gradient(40% 60% at 20% 50%,var(--aura-1),transparent 70%)}`);
+
+/* Same class of miss, on a border rather than a background: the review card's
+   edge was a fixed teal, which is why it stayed teal on an amber Cath Lab page.
+   --hero-edge is each palette's own accent-tinted hairline. */
+patch('theme: the review-card edge follows the palette',
+`.review-card{border-color:rgba(45,212,191,.32)}`,
+`.review-card{border-color:var(--hero-edge)}`);
+
+/* Apex's brand gradient, in all three places it is painted — the launcher, the
+   avatar and the empty-state mark. Same literal each time, so replaced by count
+   rather than one at a time; anything other than three means the markup moved
+   and this edit should be looked at again rather than applied. */
+{
+  const FAB = 'linear-gradient(135deg,#1E3A8A,#0891B2)';
+  const want = 3;
+  const n = html.split(FAB).length - 1;
+  if (n !== want) throw new Error(`[theme: Apex gradient] expected ${want} matches, found ${n}`);
+  html = html.split(FAB).join('linear-gradient(135deg,var(--navy3),var(--teal))');
+  applied.push(`theme: Apex's gradient follows the palette (${want} sites)`);
+}
+
 /* ── accessibility ────────────────────────────────────────────────────────── */
 patch('a11y: the home ECG strip is decorative',
 `<canvas id="heroECG" class="hero-ecg"></canvas>`,

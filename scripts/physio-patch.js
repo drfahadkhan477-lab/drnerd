@@ -68,10 +68,7 @@ const PHYSIO_VIEWS=[['wiggers','Wiggers'],['pv','PV loop'],['flow','Flow'],
 let physio=null;
 let physioView=(()=>{try{const v=localStorage.getItem('accsap12.physioview');
   return PHYSIO_VIEWS.some(x=>x[0]===v)?v:'wiggers';}catch(_){return 'wiggers';}})();
-let physioIv='base';
-/* The heart writes its cycle position here every frame and the diagram reads
-   it. One value, one direction, no synchronising. */
-let physioClock=-1;
+let physioIv='base', physioCanvasEl=null;
 
 function buildPhysio(){
   const v=PHYSIO_VIEWS.find(x=>x[0]===physioView)||PHYSIO_VIEWS[0];
@@ -107,16 +104,27 @@ function physioNoteHtml(){
 }
 function mountPhysio(){
   const cv=document.getElementById('physioCanvas');
-  if(!cv||typeof Wiggers==='undefined'){ physio=null; return; }
+  if(!cv||typeof Wiggers==='undefined'){
+    if(physio&&physio.destroy) physio.destroy();
+    physio=null; physioCanvasEl=null; return;
+  }
+  /* A screen change can render twice — the second render replaces the canvas
+     node under the first one's deferred callback. Guarding on existence alone
+     leaves the old instance animating a node that has left the document, and
+     requestAnimationFrame will happily keep calling it forever. Guarding on
+     identity is what makes that race harmless. */
+  if(physio&&physioCanvasEl===cv) return;
+  if(physio&&physio.destroy) physio.destroy();
   const dark=document.documentElement.getAttribute('data-theme')==='dark'
     || (!document.documentElement.hasAttribute('data-theme')
         && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   physio=Wiggers.mount(cv,{view:physioView,dark,hr:RHYTHMS[labKind].hr||68,
-    /* The heart's clock, not ours. Returns -1 in fibrillation and asystole,
-       where there is no organised cycle to point at — the diagram then holds
-       its last position rather than inventing one. */
-    timeSource:()=>physioClock});
+    /* Its own clock. wiggers.js integrates one when no timeSource is given,
+       and onFrame is how the caption below learns what time it is — sixty
+       times a second, from the thing that owns the time. */
+    onFrame:()=>{ if(typeof paintPhysioNote==='function') paintPhysioNote(); }});
   if(!physio) return;
+  physioCanvasEl=cv;
   physio.setIntervention(physioIv);
   document.querySelectorAll('[data-physio-view]').forEach(b=>b.onclick=()=>{
     physioView=b.dataset.physioView;
@@ -170,13 +178,6 @@ patch('lab: mount it alongside the rest',
 `  if(typeof mountTwelve==='function') mountTwelve();
   mountLabHeart();
   if(typeof mountPhysio==='function') mountPhysio();`);
-
-patch('lab: the heart drives the diagram',
-`  labHeart=Heart3D.create(cv,{rhythm:labKind,mode:labHeartMode,style:labHeartStyle,dark,
-    onCycle:paintLabHeartReadout});`,
-`  labHeart=Heart3D.create(cv,{rhythm:labKind,mode:labHeartMode,style:labHeartStyle,dark,
-    onCycle:c=>{ physioClock=c.cyc; paintLabHeartReadout(c);
-                 if(typeof paintPhysioNote==='function') paintPhysioNote(); }});`);
 
 patch('lab: the diagram follows the rate too',
 `  labKind=k; if(labHeart) labHeart.setRhythm(k); render();`,

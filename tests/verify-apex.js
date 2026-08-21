@@ -65,59 +65,73 @@ const head = t => console.log('\n── ' + t + ' ──');
   const textbookIntact = await page.evaluate(() => SYSTEM.includes("Braunwald's Heart Disease"));
   ok('legitimate textbook citation left untouched', textbookIntact);
 
-  head('rhythm lab: the 3D heart mounts, ticks, and tears down cleanly');
-  const webgl2 = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
-  ok('WebGL2 available in this run', webgl2);
+  head('rhythm lab: the cardiac cycle mounts, ticks, and tears down cleanly');
+  /* This section used to be about the 3D heart, which the lab no longer has.
+     The claims that mattered were never really about the heart — they were
+     about a live renderer surviving the app's render model — so they transfer
+     to the diagram, which is now the thing holding an animation loop. */
 
   // goLab() already calls render() internally; the extra render() here is
   // deliberate — it races a second, immediate render against the first
   // render's deferred startViewTransition callback, which is exactly the
-  // sequence that orphaned the heart instance on a detached canvas before
-  // mountLabHeart() checked node identity instead of just truthiness.
+  // sequence that orphans a renderer on a detached canvas unless mount checks
+  // node identity rather than just truthiness.
   await page.evaluate(() => { goLab(); render(); });
   await page.waitForTimeout(1200);
   const mounted = await page.evaluate(() => ({
-    hasCanvas: !!document.getElementById('labHeartCanvas'),
-    live: !!labHeart,
-    tris: labHeart ? labHeart.stats.triangles : 0,
-    readout: (document.getElementById('labHeartReadout') || {}).textContent || '',
+    hasCanvas: !!document.getElementById('physioCanvas'),
+    live: !!physio,
+    noHeart: !document.getElementById('labHeartCanvas'),
+    t: physio ? physio.time() : null,
   }));
-  ok('heart canvas is in the lab markup', mounted.hasCanvas);
-  ok('a live Heart3D instance is mounted', mounted.live);
-  ok('mesh actually built triangles', mounted.tris > 10000, mounted.tris + ' triangles');
+  ok('the cycle canvas is in the lab markup', mounted.hasCanvas);
+  ok('a live diagram is mounted', mounted.live);
+  ok('and the 3D heart is not in the lab at all', mounted.noHeart);
 
-  // The app defers screen-change renders to document.startViewTransition, and
-  // its callback can land up to ~1.3s late after a burst of navigation (this
-  // predates the heart — it's the existing render() model). Poll rather than
-  // check a single point in time, the way a user waiting on-screen would.
-  let readout2 = '';
+  /* It has to keep its own time now that nothing else drives it. */
+  await page.waitForTimeout(700);
+  const advanced = await page.evaluate(t0 => ({ t1: physio.time(), moved: physio.time() !== t0 }), mounted.t);
+  ok('the diagram runs its own clock', advanced.moved, `${mounted.t?.toFixed(3)} → ${advanced.t1.toFixed(3)}`);
+
+  let phase = '';
   for (let i = 0; i < 30; i++) {
-    readout2 = await page.evaluate(() => document.getElementById('labHeartReadout')?.textContent || '');
-    if (/ejection|filling|isovolumetric|kick/.test(readout2)) break;
+    phase = await page.evaluate(() => document.getElementById('physioPhase')?.textContent.trim() || '');
+    if (/ejection|filling|isovolumetric|atrial|diastasis/i.test(phase)) break;
     await page.waitForTimeout(100);
   }
-  ok('phase readout is updating', /ejection|filling|isovolumetric|kick/.test(readout2), readout2);
+  ok('the phase pill is updating', /ejection|filling|isovolumetric|atrial|diastasis/i.test(phase), phase);
 
-  const modeSwitch = await page.evaluate(() => {
-    document.querySelector('[data-heart-mode="cutaway"]').click();
-    return labHeartMode;
+  const viewSwitch = await page.evaluate(async () => {
+    document.querySelector('[data-physio-view="pv"]').click();
+    await new Promise(r => setTimeout(r, 400));
+    return { view: physioView, live: !!physio && physio.view() === 'pv' };
   });
-  ok('mode buttons switch the view', modeSwitch === 'cutaway');
+  ok('view buttons switch the diagram', viewSwitch.view === 'pv' && viewSwitch.live);
+  await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
+  await page.waitForTimeout(400);
 
+  /* Sinus tachycardia is 130 bpm against sinus's 68, so if setLab reaches the
+     diagram the cycle gets shorter — which is the only thing worth asserting
+     here, and it is a number rather than a repainted label. */
   const rhythmSync = await page.evaluate(() => {
-    setLab('afib'); render();
-    return { labKind, heartRhythm: labHeart ? labHeart.phase() !== undefined : false };
+    setLab('tachy'); render();
+    return { labKind };
   });
-  ok('picking a rhythm reaches the 3D heart too', rhythmSync.labKind === 'afib' && rhythmSync.heartRhythm);
+  await page.waitForTimeout(700);
+  const rate = await page.evaluate(() => ({ hr: RHYTHMS[labKind].hr, live: !!physio }));
+  ok('picking a rhythm reaches the diagram rate too',
+     rhythmSync.labKind === 'tachy' && rate.hr === 130 && rate.live, `${rate.hr} bpm`);
+  await page.evaluate(() => { setLab('sinus'); render(); });
+  await page.waitForTimeout(400);
 
   await page.evaluate(() => { goHome(); render(); });
-  await page.waitForTimeout(300);
-  const torndown = await page.evaluate(() => ({ labHeart: labHeart, canvasGone: !document.getElementById('labHeartCanvas') }));
-  ok('heart instance destroyed when leaving the lab', torndown.labHeart === null);
+  await page.waitForTimeout(400);
+  const torndown = await page.evaluate(() => ({ physio, canvasGone: !document.getElementById('physioCanvas') }));
+  ok('the diagram is torn down when leaving the lab', torndown.physio === null);
   ok('canvas removed from the DOM', torndown.canvasGone);
 
-  // remount, then navigate through several other screens — the instance must
-  // not leak or keep animating against a detached canvas
+  // remount, then navigate through several other screens — the loop must not
+  // leak or keep animating against a detached canvas
   await page.evaluate(() => { goLab(); render(); });
   await page.waitForTimeout(400);
   const cyclesOk = await page.evaluate(async () => {
@@ -125,10 +139,10 @@ const head = t => console.log('\n── ' + t + ' ──');
     openSearch(); runSearch('amyloid'); render();
     goStats(); render();
     goLab(); render();
-    await new Promise(r => setTimeout(r, 300));
-    const alive = !!labHeart;
+    await new Promise(r => setTimeout(r, 400));
+    const alive = !!physio;
     goHome(); render();
-    return { alive, dead: labHeart === null };
+    return { alive, dead: physio === null };
   });
   ok('survives rapid screen changes without erroring', errors.length === 0, errors.slice(0, 2).join(' | '));
   ok('remounts on return to the lab, tears down on leaving again', cyclesOk.alive && cyclesOk.dead);

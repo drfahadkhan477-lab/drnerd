@@ -162,23 +162,39 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('it opens on the Wiggers view', mounted.view === 'wiggers');
   ok('all five views have a chip', mounted.chipCount === 5, String(mounted.chipCount));
 
-  head('driven by the heart\'s own clock, not a second one');
-  const clockLinked = await page.evaluate(async () => {
-    /* physioClock is written by Heart3D's onCycle callback every frame. If the
-       diagram is reading it, the diagram's own reported time should track it —
-       not merely resemble it, but move in the same direction at the same rate. */
-    await new Promise(r => setTimeout(r, 400));
-    const a = { clock: physioClock, diagram: physio.time() };
-    await new Promise(r => setTimeout(r, 500));
-    const b = { clock: physioClock, diagram: physio.time() };
-    return { a, b, hasSource: physio.hasTimeSource() };
+  head('it keeps its own clock, at the rate the rhythm sets');
+  /* The diagram used to read its time from the 3D heart beside it. That heart
+     is gone, so the claim is no longer "these two agree" but "this one runs" —
+     and runs at the rate the physiology says, which is the stronger claim of
+     the two because it can be checked against a number rather than against
+     another animation. */
+  const ownClock = await page.evaluate(async () => {
+    const t0 = physio.time();
+    await new Promise(r => setTimeout(r, 600));
+    const t1 = physio.time();
+    /* Cycle fraction wraps, so measure forward distance around the circle. */
+    const advanced = ((t1 - t0) % 1 + 1) % 1;
+    return { t0, t1, advanced, hr: RHYTHMS[labKind].hr };
   });
-  ok('the diagram declares it has a live time source', clockLinked.hasSource);
-  ok('the diagram\'s cursor is within a hair of the heart\'s reported cycle position',
-     Math.abs(clockLinked.a.diagram - clockLinked.a.clock) < 0.02, JSON.stringify(clockLinked.a));
-  ok('and stays in lock-step half a second later', Math.abs(clockLinked.b.diagram - clockLinked.b.clock) < 0.02, JSON.stringify(clockLinked.b));
-  ok('time actually advanced between the two samples — this is a running clock, not a frozen readout',
-     clockLinked.a.clock !== clockLinked.b.clock);
+  ok('the cursor advances on its own', ownClock.advanced > 0.001,
+     `${ownClock.t0.toFixed(3)} → ${ownClock.t1.toFixed(3)}`);
+  /* 600ms at 68 bpm is 0.68 of a cycle. Generous bounds: this is asserting the
+     clock runs at roughly the right speed, not benchmarking the frame timer. */
+  const expected = 0.6 * (ownClock.hr / 60);
+  ok('and at roughly the rate the rhythm implies, not some free-running speed',
+     Math.abs(ownClock.advanced - expected) < 0.25 || Math.abs(ownClock.advanced - expected + 1) < 0.25,
+     `advanced ${ownClock.advanced.toFixed(2)} of a cycle, expected ~${expected.toFixed(2)} at ${ownClock.hr} bpm`);
+
+  const paused = await page.evaluate(async () => {
+    /* Scrubbing must stop the clock, or you could never read the dicrotic
+       notch — the cursor would walk out from under your finger. */
+    physio.setScrub(true); physio.setTime(0.42);
+    await new Promise(r => setTimeout(r, 400));
+    const held = physio.time();
+    physio.setScrub(false);
+    return held;
+  });
+  ok('and holds still while the diagram is being scrubbed', Math.abs(paused - 0.42) < 0.01, paused.toFixed(3));
 
   head('switching rhythm changes the diagram\'s rate');
   const rateFollows = await page.evaluate(() => {

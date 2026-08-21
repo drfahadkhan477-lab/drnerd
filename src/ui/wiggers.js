@@ -58,6 +58,11 @@ function mount(canvas, opts) {
        the beating heart beside it rather than a second animation that agrees
        with it only until one of them drops a frame. */
     src: opts.timeSource || null,
+    /* Called once a frame with the cycle fraction just drawn. The phase caption
+       used to be repainted by whatever else was animating alongside the
+       diagram; now that the diagram is the only thing on the panel, it has to
+       announce its own time. */
+    onFrame: typeof opts.onFrame === 'function' ? opts.onFrame : null,
     zones: [],            // hit regions, in CSS px
     hoverT: null,
   };
@@ -685,6 +690,7 @@ function mount(canvas, opts) {
       S.t = Ph.wrap(S.t + dt / secs());
     }
     draw();
+    if (S.onFrame) S.onFrame(S.t);
   }
 
   const api = {
@@ -718,6 +724,17 @@ function mount(canvas, opts) {
     hasTimeSource: () => !!S.src,
     start() { if (!S.raf) { S.last = 0; S.raf = root.requestAnimationFrame(tick); } return api; },
     stop() { if (S.raf) { root.cancelAnimationFrame(S.raf); S.raf = 0; } return api; },
+    /* Stop, and let go of everything that would keep the canvas alive. The
+       diagram is now the only animation on the panel, so a loop left running
+       against a detached canvas is a whole frame budget spent drawing into
+       nothing — and it never stops on its own, because requestAnimationFrame
+       does not care whether its target is still in the document. */
+    destroy() {
+      if (S.raf) { root.cancelAnimationFrame(S.raf); S.raf = 0; }
+      S.onFrame = null; S.src = null;
+      canvas.onpointerdown = canvas.onpointermove = canvas.onpointerup = canvas.onpointercancel = null;
+      return null;
+    },
     VIEWS,
   };
   draw();

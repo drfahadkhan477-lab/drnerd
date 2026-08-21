@@ -95,7 +95,6 @@ patch('css: structural surfaces on the scale',
 .physio-chips{padding:var(--s3) var(--s4) 0;gap:var(--s2)}
 .lead-card{padding:var(--s3) var(--s4) var(--s4)}
 .twelve-hint{padding:var(--s2) var(--s4) 0}
-.scan-credit{padding:0 var(--s4) var(--s3)}
 .home-progress{margin:calc(var(--s1) * -1) var(--s0) var(--s5)}
 .section-label{margin:var(--s6) 0 var(--s3)}
 
@@ -108,8 +107,11 @@ patch('css: the hero on the scale too',
   padding:var(--s6) var(--s6) 74px;isolation:isolate;`);
 
 /* ── the bars ─────────────────────────────────────────────────────────────── */
+/* Anchored on the 12-lead's own CSS rather than on a chip belonging to the
+   Rhythm Lab heart: that heart has been removed, and an anchor that depends on
+   a feature existing is an anchor that breaks when the feature goes. */
 patch('css: bars reveal without running layout',
-`.model-chip{font-variant-numeric:tabular-nums}`,
+`.lead-empty{font-size:13px;color:var(--dim)}`,
 `/* Two different techniques, because the two bars are not the same problem.
 
    The chapter bar is 4px tall inside a track that already clips, so its own
@@ -121,6 +123,7 @@ patch('css: bars reveal without running layout',
    reveals with clip-path instead — which still never touches layout, keeps the
    element at full size so the radius stays circular, and rounds the revealed
    edge with inset()'s own 'round'. Same rule, honoured properly. */
+.lead-empty{font-size:13px;color:var(--dim)}
 .chp-fill{width:100%;border-radius:0;transform-origin:left center;
   transition:transform .9s var(--glide)}
 .dist-bar{width:100%;min-width:0;
@@ -128,8 +131,7 @@ patch('css: bars reveal without running layout',
 @media(prefers-reduced-motion:reduce){
   .chp-fill{transition:none}
   .dist-bar{transition:none}
-}
-.model-chip{font-variant-numeric:tabular-nums}`);
+}`);
 
 patch('js: the distribution bar is revealed, not widened',
 `<div class="dist-bar-wrap"><div class="dist-bar" style="width:\${o.p}%"></div>`,
