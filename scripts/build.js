@@ -35,15 +35,14 @@ const ROOT = path.join(__dirname, '..');
    Order matters, and the dependencies are real rather than stylistic:
 
      stage0        stabilises the raw export — everything else assumes it
+     keys          six answer keys the export gets wrong; before anything reads them
      apex          embeds heart3d.js and apex.js (the ONLY place heart3d enters)
      stage2/3      FSRS scheduling, then Apex's vision and memory
      polish        the rhythm registry the hero and the lab both read
      splash        the pre-paint loading screen
-     ink           the engraved drawing style
      braunwald     the grounded reference library
      art           the design pass the later panels sit inside
      leads         the 12-lead — needs art's panel styles
-     scan          the photoreal heart — needs assets/heart-scan (prep-glb.js)
      physio        the cardiac cycle — anchors on the 12-lead's embed comment
      name          Systole
      theme         palettes — must follow name (it restyles the hero wordmark)
@@ -52,11 +51,13 @@ const ROOT = path.join(__dirname, '..');
      crisp         the device-pixel ceilings
      scale         the spacing scale and the bar reveals
      type          the modular type scale, snapped over everything above
+     lab           removes the lab's 3D heart — late, so every earlier step's
+                   version of the code it deletes is the final one
      review        fixes from the full code review, last
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
-  'stage0', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'ink', 'braunwald',
-  'art', 'leads', 'scan', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'review',
+  'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
+  'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
@@ -113,13 +114,6 @@ if (!SRC || !fs.existsSync(SRC)) {
     '    mkdir -p source && cp ~/Downloads/ACCSAP*.html source/',
     '',
   ].join('\n'));
-  process.exit(1);
-}
-
-/* scan-patch needs the prepared scan; say so before spending two minutes to
-   fail at step eleven. */
-if (!fs.existsSync(path.join(ROOT, 'assets', 'heart-scan', 'heart-scan.json'))) {
-  console.error('assets/heart-scan is missing — run: node scripts/prep-glb.js <model.glb>');
   process.exit(1);
 }
 

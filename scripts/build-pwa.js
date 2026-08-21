@@ -183,35 +183,6 @@ step('link the manifest and the iOS icon', () => {
 </head>`);
 });
 
-/* ── 3b. lift the heart scan out of the shell ────────────────────────────────
- * The single-file build has to inline the scan as data: URLs — there is nowhere
- * else for it to live. Here there is, and leaving it inlined costs more than it
- * looks: 1,051 KB of base64, roughly three quarters of the shell, parsed on
- * every cold launch for a photoreal heart that most sessions never open.
- *
- * The loader already fetches these, and a relative URL is a URL, so the assets
- * become ordinary files and the constant becomes four paths — no loader change.
- *
- * The manifest stays inline. It is 0.7 KB, and the loader distinguishes a
- * manifest OBJECT from a manifest STRING by parsing the string as JSON; handing
- * it a URL there would make it try to JSON.parse a path.
- */
-const scanFiles = [];
-appCode = appCode.replace(/const HEART_SCAN=(\{[\s\S]*?\});/, (whole, json) => {
-  let o;
-  try { o = JSON.parse(json); } catch (_) { return whole; }   // shape changed: leave it alone
-  const EXT = { bin: ['heart-scan.bin', 'application/octet-stream'], base: ['base.webp', 'image/webp'],
-                normal: ['normal.webp', 'image/webp'], mr: ['mr.webp', 'image/webp'] };
-  const out = { manifest: o.manifest };
-  for (const [key, [name]] of Object.entries(EXT)) {
-    const m = /^data:[^;]+;base64,(.*)$/s.exec(o[key] || '');
-    if (!m) { out[key] = o[key]; continue; }                  // already a URL, or missing
-    scanFiles.push([name, Buffer.from(m[1], 'base64')]);
-    out[key] = `content/heart-scan/${name}`;
-  }
-  return `const HEART_SCAN=${JSON.stringify(out)};`;
-});
-
 /* ── 4. write it all out ─────────────────────────────────────────────────── */
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'icons'), { recursive: true });
@@ -219,12 +190,6 @@ fs.writeFileSync(path.join(DIST, 'index.html'), html);
 fs.writeFileSync(path.join(DIST, 'app.js'), appCode);
 
 fs.cpSync(CONTENT, path.join(DIST, 'content'), { recursive: true });
-
-if (scanFiles.length) {
-  const dir = path.join(DIST, 'content', 'heart-scan');
-  fs.mkdirSync(dir, { recursive: true });
-  for (const [name, buf] of scanFiles) fs.writeFileSync(path.join(dir, name), buf);
-}
 
 const manifest = {
   name: 'Systole — Cardiology Board Review',

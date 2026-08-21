@@ -273,28 +273,32 @@ const head = t => console.log('\n── ' + t + ' ──');
   });
   ok('with auto-minimize OFF, a Pencil touch does not force-expand the rail', autoOffNoExpand === true);
 
-  head('lab heart: blood-flow particles (heart3d.js re-embed)');
-  const bloodFlow = await page.evaluate(() => {
-    goLab(); render();
-    return new Promise(res => setTimeout(() => {
-      const cv = document.getElementById('labHeartCanvas');
-      const modeBtn = document.querySelector('[data-heart-mode="cutaway"]');
-      if (modeBtn) modeBtn.click();
-      setTimeout(() => res({
-        hasCanvas: !!cv,
-        mode: labHeartMode,
-        heart3dExposesTarget: typeof Heart3D !== 'undefined',
-      }), 300);
-    }, 300));
+  head('the heart module is embedded whole, and the hero mounts it');
+  /* This used to open the lab, switch the heart to cutaway and check that the
+     blood particles drew. The lab has no heart any more — it has the cardiac
+     cycle instead — so the claim moves to where the heart still lives. What
+     polish-patch is actually responsible for is re-embedding heart3d.js in one
+     piece; the hero mounting an instance from it is the evidence that the
+     module arrived intact, and it does not need a lab screen to show it. */
+  const heartModule = await page.evaluate(() => {
+    goHome(); render();
+    return new Promise(res => setTimeout(() => res({
+      moduleLoaded: typeof Heart3D !== 'undefined' && typeof Heart3D.create === 'function',
+      cycleFn: typeof Heart3D !== 'undefined' && typeof Heart3D.cycle === 'function',
+      heroCanvas: !!document.getElementById('heroECG'),
+      heroLive: typeof heroHeart3d !== 'undefined' && !!heroHeart3d,
+      tris: (typeof heroHeart3d !== 'undefined' && heroHeart3d && heroHeart3d.stats)
+              ? heroHeart3d.stats.triangles : 0,
+      noLabHeart: !document.getElementById('labHeartCanvas'),
+    }), 900));
   });
-  ok('lab heart canvas is present', bloodFlow.hasCanvas);
-  ok('switched to cutaway mode, where blood particles draw', bloodFlow.mode === 'cutaway');
-  ok('Heart3D module (carrying the particle system) is loaded', bloodFlow.heart3dExposesTarget);
-  /* os.tmpdir(), not dirname(target): the target may be an http URL, and
-     path.dirname() on one yields a nonsense relative directory that then gets
-     created in the repo. */
-  await page.screenshot({ path: path.join(require('os').tmpdir(), 'lab-heart-cutaway-check.png') });
-  ok('no errors after mounting the heart and switching to cutaway (particles rendering)', errors.length === 0, JSON.stringify(errors));
+  ok('Heart3D module is loaded and exposes create()', heartModule.moduleLoaded);
+  ok('and the cardiac clock the rest of the app reads', heartModule.cycleFn);
+  ok('the hero mounts a live instance', heartModule.heroLive);
+  ok('whose mesh actually built triangles — the module came through whole',
+     heartModule.tris > 5000, `${heartModule.tris} triangles`);
+  ok('and no heart is left in the Rhythm Lab', heartModule.noLabHeart);
+  ok('no errors from mounting it', errors.length === 0, JSON.stringify(errors.slice(0, 2)));
 
   head('regression: everything prior still functions');
   const reg = await page.evaluate(() => {
@@ -304,11 +308,11 @@ const head = t => console.log('\n── ' + t + ' ──');
     const q = S.questions[0];
     selectOpt(q.ci);
     goLab(); render();
-    return { home, answered: S.answered, labMounted: typeof labHeart !== 'undefined' };
+    return { home, answered: S.answered, labMounted: typeof physio !== 'undefined' };
   });
   ok('home renders', reg.home);
   ok('quiz still answers', reg.answered);
-  ok('lab heart untouched by this pass', reg.labMounted);
+  ok('the lab still mounts its diagram', reg.labMounted);
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 4).join(' | '));
 
   await browser.close();

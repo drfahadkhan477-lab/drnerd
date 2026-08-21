@@ -82,13 +82,16 @@ const ratioOf = (page, sel) => page.evaluate(s => {
   ok('the Rhythm Lab monitor strip is mounted and backs itself at ~3×',
      labMon != null && labMon >= 2.8, labMon == null ? 'NOT MOUNTED' : `${labMon.toFixed(2)}×`);
 
-  head('the 3D heart, capped for its cost');
-  await page.evaluate(() => { setHeartModel && setHeartModel('procedural'); });
-  await page.waitForFunction(() => { const c = document.getElementById('labHeartCanvas'); return c && c.width > 0; }, { timeout: 60000 });
-  const heart = await ratioOf(page, '#labHeartCanvas');
-  ok('the heart backs itself above the old 2× cap on a fine-pointer display', heart >= 2.4, `${heart ? heart.toFixed(2) : heart}×`);
-  ok('but stays capped below the 3× the flat 2D canvases use, to protect its shading budget',
-     heart <= 2.7, `${heart ? heart.toFixed(2) : heart}×`);
+  /* The cardiac cycle is a flat 2D canvas like the others, and it is now the
+     largest one on the screen — a diagram of pressure traces read for meaning
+     rather than glanced at, so it gets the full ratio rather than the reduced
+     one the 3D heart used to need for its shading budget. */
+  const cycle = await ratioOf(page, '#physioCanvas');
+  ok('the cardiac cycle is mounted and backs itself at ~3×',
+     cycle != null && cycle >= 2.8, cycle == null ? 'NOT MOUNTED' : `${cycle.toFixed(2)}×`);
+
+  const heartGone = await page.evaluate(() => !document.getElementById('labHeartCanvas'));
+  ok('and there is no 3D heart canvas in the lab to cap', heartGone);
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 

@@ -176,11 +176,11 @@ const head = t => console.log('\n── ' + t + ' ──');
     selectOpt(q.ci);
     const practiceOk = S.answered && !S.srs[q.id];   // practice still never touches SRS
     goLab(); render();
-    return { home, practiceOk, labMounted: typeof labHeart !== 'undefined' };
+    return { home, practiceOk, labMounted: typeof physio !== 'undefined' };
   });
   ok('home renders', reg.home);
   ok('practice quizzes still never write an SRS card', reg.practiceOk);
-  ok('lab/heart integration untouched', reg.labMounted);
+  ok('the lab still mounts what it renders', reg.labMounted);
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();
