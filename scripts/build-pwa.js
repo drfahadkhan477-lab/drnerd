@@ -234,6 +234,33 @@ step('swap the inline mount script for a fetch-and-mount loader', () => {
   html = html.replace(re, LOADER);
 });
 
+/* ── 3.6 the reference seed ───────────────────────────────────────────────
+   refs-patch bakes the Braunwald corpus in as a seed so the app opens with
+   the library already populated. That is ~295 KB, which is nothing against a
+   27 MB single file and fatal against an 800 KB shell. Out it comes, and a
+   loader appended to app.js applies it once the code that owns REF exists.
+   `let` at script top level lives in the global lexical scope, so the loader
+   can see REF and refSeedApply directly without either being on window. */
+let refSeed = null;
+step('pull the reference seed out of the app code', () => {
+  const re = /\/\*REF_SEED_START\*\/([\s\S]*?)\/\*REF_SEED_END\*\//;
+  const m = re.exec(appCode);
+  if (!m) throw new Error('REF_SEED markers not found — did refs-patch run?');
+  JSON.parse(m[1]);   // fail loudly here, not silently at runtime
+  refSeed = m[1];
+  appCode = appCode.replace(re, '[]');
+  appCode += `
+/* ── reference seed, fetched (see build-pwa.js) ───────────────────────────── */
+(function(){
+  if(typeof REF === 'undefined' || typeof refSeedApply !== 'function') return;
+  fetch('content/refs-seed.json').then(function(r){ return r.json(); }).then(function(seed){
+    REF = refSeedApply(REF, seed);
+    if(typeof invalidateIndex === 'function') invalidateIndex();
+  }).catch(function(){ /* an unseeded library still works, and still imports */ });
+})();
+`;
+});
+
 /* ── 4. write it all out ─────────────────────────────────────────────────── */
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'icons'), { recursive: true });
@@ -245,6 +272,8 @@ fs.cpSync(CONTENT, path.join(DIST, 'content'), { recursive: true });
 const splashDir = path.join(DIST, 'content', 'splash-heart');
 fs.mkdirSync(splashDir, { recursive: true });
 for (const [name, body] of splashAssets) fs.writeFileSync(path.join(splashDir, name), body);
+
+if (refSeed) fs.writeFileSync(path.join(DIST, 'content', 'refs-seed.json'), refSeed);
 
 const manifest = {
   name: 'Systole — Cardiology Board Review',

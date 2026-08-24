@@ -58,6 +58,7 @@ const ROOT = path.join(__dirname, '..');
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
+  'refs',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
