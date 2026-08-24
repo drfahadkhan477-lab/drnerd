@@ -98,6 +98,11 @@ const RETRIEVAL = [
 
   const payload = files.map(f => ({ name: f, raw: fs.readFileSync(path.join(DIR, f), 'utf8') }));
   const imported = await page.evaluate(fs_ => {
+    /* The build ships a seeded library now (refs-patch). Start from empty:
+       the count below is a claim about what THIS corpus produced, and the
+       retrieval check further down wants your notes ranked against each
+       other rather than against whatever else happened to be on the shelf. */
+    REF.length = 0; invalidateIndex();
     const out = [];
     for (const f of fs_) {
       const notes = parseImportText(f.raw, f.name);
