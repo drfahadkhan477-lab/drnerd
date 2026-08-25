@@ -114,6 +114,41 @@ a textbook's.
 
 ---
 
+## Citing a figure
+
+A note can put a real figure at the point in the prose that figure illustrates:
+
+```markdown
+![Braunwald Fig. 56.5 — the two-by-two bedside profile: congestion at rest
+against perfusion at rest](refimg://hf/049_FIG.56.5_p058.jpg)
+```
+
+`refimg://<unit>/<file>` resolves against `content/refs-images/`, and the build
+step `scripts/ref-images-patch.js` does two things with it. In the Notes panel
+the citation renders as the figure with your caption beneath it. And in
+**grounded mode**, when Apex cites that note, the figure is attached to the
+request as an actual image — so it describes what is in the diagram rather than
+paraphrasing your alt text. Four figures per turn, at most.
+
+Grounded mode only, and deliberately: open mode surfaces a note on thin keyword
+overlap, which is fine for an optional citation and wrong for putting a diagram
+in front of you on an unrelated question.
+
+Write the caption as if the reader cannot see the image, because sometimes it
+cannot — a text-only provider gets the caption and nothing else.
+
+To produce the files, point the atlas tool at a page-image dump of a unit:
+
+```
+python3 tools/visual-atlas.py <pages-dir> <text.md> <out-dir> --name Braunwald_HF
+```
+
+It finds each `FIG.`/`TABLE` caption, crops the artwork that belongs to it, and
+writes a manifest with the legend as printed. Pick the ones worth citing into
+`content/refs-images/<unit>/` — a few per note, not everything.
+
+---
+
 ## Suggested corpus shape
 
 One file per Braunwald chapter you're revising, sections following how you'd
