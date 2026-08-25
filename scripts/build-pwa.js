@@ -84,11 +84,15 @@ step('strip the inline figure blob', () => {
    API does not — it wants base64. So the AI path resolves them at send time.
    Only there: fetching and encoding 18 MB up front is exactly what we are
    getting away from, and an API call is rare next to a render. */
-const AI_CALL = `messages:Vision.withFigures(wire, q, (typeof IMGS!=='undefined'?IMGS[q&&q.id]:null), AI.provider)})`;
+const AI_CALL = `      messages:Vision.withImages(
+        Vision.withFigures(wire, q, (typeof IMGS!=='undefined'?IMGS[q&&q.id]:null), AI.provider),
+        refImagesForHits(lastHits), AI.provider)})`;
 step('AI path resolves figure URLs to base64 at send time', () => {
   if (appCode.split(AI_CALL).length - 1 !== 1) throw new Error('vision call site not found exactly once');
   appCode = appCode.replace(AI_CALL,
-    `messages:Vision.withFigures(wire, q, await figuresAsDataUrls(q), AI.provider)})`);
+    `      messages:Vision.withImages(
+        Vision.withFigures(wire, q, await figuresAsDataUrls(q), AI.provider),
+        refImagesForHits(lastHits), AI.provider)})`);
 });
 
 step('add the figure resolver', () => {
@@ -261,6 +265,30 @@ step('pull the reference seed out of the app code', () => {
 `;
 });
 
+/* ── 3.7 the reference figures ────────────────────────────────────────────
+   ref-images-patch embeds every figure a reference note cites — a few
+   megabytes raw, base64'd, which is nothing against 27 MB and fatal against
+   800 KB. Same move as the reference seed: pull it out, fetch it, apply it
+   once the binding it fills exists. */
+let refImgs = null;
+step('pull the reference figures out of the app code', () => {
+  const re = /\/\*REF_IMGS_START\*\/([\s\S]*?)\/\*REF_IMGS_END\*\//;
+  const m = re.exec(appCode);
+  if (!m) return;   // no note cites a figure — nothing to pull out
+  JSON.parse(m[1]);   // fail loudly here, not silently at runtime
+  refImgs = m[1];
+  appCode = appCode.replace(re, '{}');
+  appCode += `
+/* ── reference figures, fetched (see build-pwa.js) ────────────────────────── */
+(function(){
+  if(typeof REF_IMGS === 'undefined') return;
+  fetch('content/refs-images.json').then(function(r){ return r.json(); }).then(function(imgs){
+    REF_IMGS = imgs;
+  }).catch(function(){ /* notes still render — just without their figures */ });
+})();
+`;
+});
+
 /* ── 4. write it all out ─────────────────────────────────────────────────── */
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'icons'), { recursive: true });
@@ -274,6 +302,7 @@ fs.mkdirSync(splashDir, { recursive: true });
 for (const [name, body] of splashAssets) fs.writeFileSync(path.join(splashDir, name), body);
 
 if (refSeed) fs.writeFileSync(path.join(DIST, 'content', 'refs-seed.json'), refSeed);
+if (refImgs) fs.writeFileSync(path.join(DIST, 'content', 'refs-images.json'), refImgs);
 
 const manifest = {
   name: 'Systole — Cardiology Board Review',

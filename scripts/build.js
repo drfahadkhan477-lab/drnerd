@@ -54,11 +54,14 @@ const ROOT = path.join(__dirname, '..');
      lab           removes the lab's 3D heart — late, so every earlier step's
                    version of the code it deletes is the final one
      review        fixes from the full code review, last
+     refs          ships content/refs/*.md already loaded as a note seed
+     read          notes and Apex replies render as prose, not their own source
+     ref-images    figures the notes cite render for real, and reach Apex's eyes
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
-  'refs', 'read',
+  'refs', 'read', 'ref-images',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
