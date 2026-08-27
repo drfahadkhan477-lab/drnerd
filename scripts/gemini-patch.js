@@ -114,14 +114,37 @@ patch('gemini: model list — Flash sees figures, on the free tier',
           ['gemini-2.5-pro','Gemini 2.5 Pro — free, deepest reasoning (50/day)']]
 };`);
 
-patch('gemini: key prefix and endpoint',
+/* Google migrated Gemini API keys from the old "Standard" shape (AIzaSy...)
+   to a new "Auth" shape (AQ.Ab...) in 2026 — AI Studio issues AQ. keys by
+   default now, and an unrestricted AIza key already stopped working in June.
+   A restricted AIza key still works, and both shapes authenticate the same
+   way (the x-goog-api-key header), so the client-side sanity check has to
+   accept either — one entry per provider was never going to survive a vendor
+   changing its own key format, so KEY_PREFIX now holds an array where a
+   single string was enough before. */
+patch('gemini: key prefix (both key generations Google has issued) and endpoint',
 `const KEY_PREFIX={anthropic:'sk-ant-',groq:'gsk_'};
 const ENDPOINT={anthropic:'https://api.anthropic.com/v1/messages',
                 groq:'https://api.groq.com/openai/v1/chat/completions'};`,
-`const KEY_PREFIX={anthropic:'sk-ant-',groq:'gsk_',gemini:'AIza'};
+`const KEY_PREFIX={anthropic:'sk-ant-',groq:'gsk_',gemini:['AQ.','AIza']};
 const ENDPOINT={anthropic:'https://api.anthropic.com/v1/messages',
                 groq:'https://api.groq.com/openai/v1/chat/completions',
                 gemini:'https://generativelanguage.googleapis.com/v1beta/models'};`);
+
+patch('gemini: the key-field placeholder shows whichever prefix is first, not the whole array',
+`<input id="aiKey" type="password" placeholder="\${KEY_PREFIX[p]}..." autocomplete="off"`,
+`<input id="aiKey" type="password" placeholder="\${(Array.isArray(KEY_PREFIX[p])?KEY_PREFIX[p][0]:KEY_PREFIX[p])}..." autocomplete="off"`);
+
+patch('gemini: a key is accepted if it matches ANY of a provider\'s prefixes, not exactly one',
+`    if(!k.startsWith(KEY_PREFIX[p])){
+      keyMsg(\`A \${name} key starts with <b>\${KEY_PREFIX[p]}</b>. That looks like a different kind of key.\`,'warn');
+      return;
+    }`,
+`    const validPrefixes=[].concat(KEY_PREFIX[p]);
+    if(!validPrefixes.some(pfx=>k.startsWith(pfx))){
+      keyMsg(\`A \${name} key starts with <b>\${validPrefixes.join('</b> or <b>')}</b>. That looks like a different kind of key.\`,'warn');
+      return;
+    }`);
 
 /* ── 3. Gemini can see a figure ── */
 patch('gemini: added to the providers that can actually see a figure',

@@ -77,7 +77,9 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   }));
   ok('gemini is in PROVIDERS', config.listed);
   ok('gemini has at least one model, and 2.5 Flash is offered', config.models.includes('gemini-2.5-flash'), config.models.join(', '));
-  ok('key prefix is the real Google AI Studio shape', config.keyPrefix === 'AIza');
+  ok('key prefix accepts both key generations Google has issued',
+     Array.isArray(config.keyPrefix) && config.keyPrefix.includes('AQ.') && config.keyPrefix.includes('AIza'),
+     JSON.stringify(config.keyPrefix));
   ok('Vision.providerSeesFigures says gemini can see a figure', config.sees === true);
   ok('endpoint points at the Generative Language API', /generativelanguage\.googleapis\.com/.test(config.endpoint || ''));
 
@@ -106,6 +108,21 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('the key rides in a header, not the URL', !!validateReq && !validateReq.url.includes('AIzaFAKE'),
      validateReq && validateReq.url);
   ok('the key header is x-goog-api-key', !!validateReq && validateReq.headers['x-goog-api-key'] === 'AIzaFAKE-TEST-KEY');
+  captured.length = 0;
+
+  head('setup screen accepts the new AQ. key shape, not just the old AIza one');
+  const aqAttempt = await page.evaluate(async () => {
+    AI.gemini = { key: '', model: 'gemini-2.5-flash' };
+    AI.provider = 'gemini';
+    aiSettings();
+    document.querySelector('[data-prov="gemini"]').click();
+    const inp = document.getElementById('aiKey');
+    inp.value = 'AQ.Ab8-FAKE-TEST-KEY-NOT-REAL-0000000000000000000000';
+    document.getElementById('aiSave').click();
+    await new Promise(r => setTimeout(r, 300));
+    return document.getElementById('keyMsg').textContent;
+  });
+  ok('a real AQ. key is not rejected as "a different kind of key"', !/different kind of key/i.test(aqAttempt), aqAttempt);
   captured.length = 0;
 
   /* Drive one full exchange: fires a question with no figure of its own, but
