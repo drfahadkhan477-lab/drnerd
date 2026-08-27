@@ -93,7 +93,21 @@ patch('gemini: listed as a provider, free tier, no card',
   ['anthropic','Claude','paid — your account',"Create a key at console.claude.com → Settings → API keys."]
 ];`);
 
-patch('gemini: model list — Flash sees figures, on the free tier',
+/* THE GEMINI MODEL LIST IS DISCOVERED, NOT HARDCODED.
+ *
+ * The first version of this shipped three model ids written into the source,
+ * and every one of them 404'd for a real key — because Google has shipped
+ * several model generations since, retires old ids on a published schedule,
+ * and an "auth" key is bound to a specific Cloud project whose enabled model
+ * set is its own. A list baked into a build is wrong the moment any of those
+ * three things moves, and the app cannot tell the difference between "your
+ * key is broken" and "the name I was taught is retired" — it just says the
+ * model is unavailable and offers a menu of names that are equally dead.
+ *
+ * So the list below is only what the dropdown shows BEFORE a key exists.
+ * Connect asks Google what this key can actually reach (ListModels, which is
+ * exactly what Google's own 404 tells you to call) and replaces it. */
+patch('gemini: a placeholder model list, replaced by whatever the key can actually reach',
 `const MODELS={
   anthropic:[['claude-sonnet-5','Sonnet 5 — balanced (recommended)'],
              ['claude-opus-5','Opus 5 — deepest reasoning'],
@@ -109,10 +123,16 @@ patch('gemini: model list — Flash sees figures, on the free tier',
   groq:[['openai/gpt-oss-120b','GPT-OSS 120B — best quality (recommended)'],
         ['openai/gpt-oss-20b','GPT-OSS 20B — fastest'],
         ['qwen/qwen3.6-27b','Qwen 3.6 27B — alternate reasoning style']],
-  gemini:[['gemini-2.5-flash','Gemini 2.5 Flash — free, sees figures (recommended)'],
-          ['gemini-2.5-flash-lite','Gemini 2.5 Flash-Lite — free, fastest'],
-          ['gemini-2.5-pro','Gemini 2.5 Pro — free, deepest reasoning (50/day)']]
-};`);
+  /* Placeholder only — Connect replaces this with the live list. */
+  gemini:[['gemini-2.5-flash','Gemini 2.5 Flash']]
+};
+/* The live list, once discovered, outlives the tab: a fellow who has already
+   connected should never be shown a menu of names their key cannot use. */
+const GEM_MODELS_KEY='accsap12.gemini.models';
+try{
+  const cached=JSON.parse(localStorage.getItem(GEM_MODELS_KEY)||'null');
+  if(Array.isArray(cached)&&cached.length) MODELS.gemini=cached;
+}catch(_){}`);
 
 /* Google migrated Gemini API keys from the old "Standard" shape (AIzaSy...)
    to a new "Auth" shape (AQ.Ab...) in 2026 — AI Studio issues AQ. keys by
@@ -180,7 +200,92 @@ patch('gemini: key validation — one throwaway generateContent call',
   return fetch(ENDPOINT.groq,{method:'POST',
     headers:{'content-type':'application/json',authorization:'Bearer '+k},
     body:JSON.stringify({model,max_tokens:1,messages:[{role:'user',content:'hi'}]})});
+}
+/* Ask Google what this key can actually reach.
+ *
+ * ListModels is both halves of Connect at once: a key that can list models is
+ * a key that works, and the list it returns is the only trustworthy source of
+ * model ids — the ones a build was written with go stale as Google ships and
+ * retires generations, and an auth key bound to a Cloud project sees only
+ * what that project has enabled.
+ *
+ * Filtered to models that support BOTH generateContent and
+ * streamGenerateContent, because those are the two methods this app actually
+ * calls — that one line also drops every embedding, imaging and TTS model
+ * without needing a list of names to exclude. */
+async function geminiModels(key){
+  const out=[]; let pageToken='';
+  for(let page=0; page<5; page++){
+    let r;
+    try{
+      r=await fetch(\`\${ENDPOINT.gemini}?pageSize=200\${pageToken?'&pageToken='+encodeURIComponent(pageToken):''}\`,
+        {headers:{'x-goog-api-key':key}});
+    }catch(err){ return {error:networkErrorMsg(err,'Gemini'), models:[]}; }
+    if(!r.ok) return {error:await apiError(r,'gemini'), models:[]};
+    let j={}; try{ j=await r.json(); }catch(_){}
+    for(const m of (j.models||[])){
+      const methods=m.supportedGenerationMethods||[];
+      if(!methods.includes('generateContent')||!methods.includes('streamGenerateContent')) continue;
+      const id=String(m.name||'').replace(/^models\\//,'');
+      if(id) out.push([id, m.displayName||id]);
+    }
+    pageToken=j.nextPageToken||'';
+    if(!pageToken) break;
+  }
+  return {models:out};
+}
+/* Prefer a plain Flash: fastest, and the one the free tier is most generous
+   with. The exclusions are the variants that are Flash in name but not a
+   general chat model. */
+function geminiDefaultModel(models){
+  const plain=models.find(m=>/flash/i.test(m[0])&&!/lite|image|tts|audio|native|preview|thinking|robotics/i.test(m[0]));
+  const anyFlash=models.find(m=>/flash/i.test(m[0]));
+  return (plain||anyFlash||models[0])[0];
 }`);
+
+/* Connect, for Gemini, is a discovery step rather than a yes/no check: it
+   asks which models the key can reach, keeps them, and picks one that exists.
+   That is what turns "that model is not available, pick another" — with a
+   menu where every entry is equally unavailable — into a working connection. */
+patch('gemini: Connect discovers the live model list instead of validating a guessed name',
+`    btn.disabled=true; btn.textContent='Checking…'; keyMsg(\`Verifying with \${name}…\`,'');
+    const model=document.getElementById('aiModel').value;
+    try{
+      const r=await validateKey(p,k,model);
+      if(!r.ok){ keyMsg(await apiError(r,p),'bad'); btn.disabled=false; btn.textContent='Connect'; return; }
+      AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
+      keyMsg(icon('check','icon-sm')+' Connected','good');
+      setTimeout(()=>buildAI(),450);
+    }catch(err){`,
+`    btn.disabled=true; btn.textContent='Checking…'; keyMsg(\`Verifying with \${name}…\`,'');
+    let model=document.getElementById('aiModel').value;
+    try{
+      if(p==='gemini'){
+        keyMsg('Asking Google which models this key can use…','');
+        const found=await geminiModels(k);
+        if(found.error){ keyMsg(found.error,'bad'); btn.disabled=false; btn.textContent='Connect'; return; }
+        if(!found.models.length){
+          keyMsg('That key reached Google, but its project has no chat-capable Gemini model enabled. '
+                +'In Google AI Studio, create a key in a different project — or enable the Generative Language API on this one.','bad');
+          btn.disabled=false; btn.textContent='Connect'; return;
+        }
+        MODELS.gemini=found.models;
+        try{ localStorage.setItem(GEM_MODELS_KEY,JSON.stringify(found.models)); }catch(_){}
+        const asked=model, have=found.models.some(m=>m[0]===asked);
+        if(!have) model=geminiDefaultModel(found.models);
+        AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
+        const label=(found.models.find(m=>m[0]===model)||[model,model])[1];
+        keyMsg(icon('check','icon-sm')+' Connected — '+e(label)
+              +(have?'':' <span class="err-raw">(the model you picked is not on this key)</span>'),'good');
+        setTimeout(()=>buildAI(),700);
+        return;
+      }
+      const r=await validateKey(p,k,model);
+      if(!r.ok){ keyMsg(await apiError(r,p),'bad'); btn.disabled=false; btn.textContent='Connect'; return; }
+      AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
+      keyMsg(icon('check','icon-sm')+' Connected','good');
+      setTimeout(()=>buildAI(),450);
+    }catch(err){`);
 
 /* ── 5. the three-way dispatch, and the fourth field a tool result now
    carries — Gemini matches a functionResponse to its call by name, not id,
@@ -334,6 +439,10 @@ patch('gemini: named in the error line, and its own key-rejection / quota shapes
   if(r.status===429&&provider==='gemini'&&/quota/i.test(d)) return "Gemini's free daily quota is used up for today — try again tomorrow, or switch provider in settings.";
   if(r.status===429) return 'Rate limited — wait a few seconds and try again.';
   if(r.status===400&&/credit|balance/i.test(d)) return \`Your \${name} account is out of credit.\`;
+  /* Pointing at the model menu is useless when every name in it is stale —
+     which is the normal case once Google retires a generation. Pressing
+     Connect is what rebuilds the menu from the live list. */
+  if(r.status===404&&provider==='gemini') return 'Google does not offer that model to your key. Open settings and press <b>Connect</b> again — the app will ask Google for the current list and pick one that works.';
   if(r.status===404) return \`That model is not available on \${name} right now — pick a different one in settings.\`;
   if(r.status>=500) return \`\${name} had a server error. Try again shortly.\`;
   return \`API error \${r.status}. \${d}\`;

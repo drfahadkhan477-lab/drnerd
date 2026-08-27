@@ -43,17 +43,42 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
      browser-level resource-load failures regardless of how gracefully the
      app's own code handles them — that is Chromium's console, not a bug. */
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())
-      && !/Failed to load resource.*(403|429)/.test(m.text())) errors.push(m.text()); });
+      && !/Failed to load resource.*(403|404|429)/.test(m.text())) errors.push(m.text()); });
+
+  /* A realistic ListModels page: two usable chat models, plus the three kinds
+     of thing the filter has to reject — an embedding model, an image model,
+     and a model that can generateContent but cannot stream, which this app
+     needs because it streams every reply. */
+  const MODEL_LIST = {
+    models: [
+      { name: 'models/gemini-9.9-flash', displayName: 'Gemini 9.9 Flash',
+        supportedGenerationMethods: ['generateContent', 'streamGenerateContent', 'countTokens'] },
+      { name: 'models/gemini-9.9-pro', displayName: 'Gemini 9.9 Pro',
+        supportedGenerationMethods: ['generateContent', 'streamGenerateContent'] },
+      { name: 'models/text-embedding-9', displayName: 'Text Embedding 9',
+        supportedGenerationMethods: ['embedContent'] },
+      { name: 'models/imagen-9', displayName: 'Imagen 9',
+        supportedGenerationMethods: ['predict'] },
+      { name: 'models/gemini-9.9-batch', displayName: 'Gemini 9.9 Batch',
+        supportedGenerationMethods: ['generateContent'] },
+    ],
+  };
 
   const captured = [];
   let turn = 0;
+  let listBody = MODEL_LIST;            // swapped per-test to fake a starved key
   await page.route('**/generativelanguage.googleapis.com/**', route => {
     const url = route.request().url();
     let body = null;
-    try { body = JSON.parse(route.request().postData() || '{}'); } catch (_) { /* validateKey posts JSON too */ }
-    captured.push({ url, headers: route.request().headers(), body });
+    try { body = JSON.parse(route.request().postData() || '{}'); } catch (_) { /* GETs have none */ }
+    captured.push({ url, method: route.request().method(), headers: route.request().headers(), body });
+    /* ListModels is the collection itself — no ":method" suffix on the path. */
+    if (/\/v1beta\/models(\?|$)/.test(url)) {
+      route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(listBody) });
+      return;
+    }
     if (/:generateContent(\?|$)/.test(url) && !/streamGenerateContent/.test(url)) {
-      // validateKey's throwaway call — any 200 with a candidate is "valid"
       route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'hi' }] } }] }) });
       return;
@@ -76,7 +101,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
     endpoint: ENDPOINT.gemini,
   }));
   ok('gemini is in PROVIDERS', config.listed);
-  ok('gemini has at least one model, and 2.5 Flash is offered', config.models.includes('gemini-2.5-flash'), config.models.join(', '));
+  ok('the model menu has a placeholder before any key exists', config.models.length > 0, config.models.join(', '));
   ok('key prefix accepts both key generations Google has issued',
      Array.isArray(config.keyPrefix) && config.keyPrefix.includes('AQ.') && config.keyPrefix.includes('AIza'),
      JSON.stringify(config.keyPrefix));
@@ -110,19 +135,76 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('the key header is x-goog-api-key', !!validateReq && validateReq.headers['x-goog-api-key'] === 'AIzaFAKE-TEST-KEY');
   captured.length = 0;
 
-  head('setup screen accepts the new AQ. key shape, not just the old AIza one');
-  const aqAttempt = await page.evaluate(async () => {
-    AI.gemini = { key: '', model: 'gemini-2.5-flash' };
-    AI.provider = 'gemini';
-    aiSettings();
-    document.querySelector('[data-prov="gemini"]').click();
-    const inp = document.getElementById('aiKey');
-    inp.value = 'AQ.Ab8-FAKE-TEST-KEY-NOT-REAL-0000000000000000000000';
-    document.getElementById('aiSave').click();
-    await new Promise(r => setTimeout(r, 300));
-    return document.getElementById('keyMsg').textContent;
-  });
-  ok('a real AQ. key is not rejected as "a different kind of key"', !/different kind of key/i.test(aqAttempt), aqAttempt);
+  /* Connect a key through the real setup screen. This is the whole fix: the
+     model ids are not written into the build any more, they are whatever this
+     key can actually reach. */
+  const connect = async (key, picked) => {
+    captured.length = 0;
+    return page.evaluate(async ({ key, picked }) => {
+      try { localStorage.removeItem('accsap12.gemini.models'); } catch (_) {}
+      AI.gemini = { key: '', model: picked };
+      AI.provider = 'gemini';
+      aiSettings();
+      document.querySelector('[data-prov="gemini"]').click();
+      document.getElementById('aiKey').value = key;
+      if (picked) {
+        const sel = document.getElementById('aiModel');
+        if ([...sel.options].some(o => o.value === picked)) sel.value = picked;
+      }
+      document.getElementById('aiSave').click();
+      /* Read the message BEFORE the success path's deferred buildAI() fires and
+         replaces the whole panel, then wait past that timer so the next connect
+         starts from a settled DOM rather than racing a pending re-render. */
+      await new Promise(r => setTimeout(r, 450));
+      const el = document.getElementById('keyMsg');
+      const msg = el ? el.textContent : '';
+      await new Promise(r => setTimeout(r, 500));
+      let cached = null;
+      try { cached = JSON.parse(localStorage.getItem('accsap12.gemini.models') || 'null'); } catch (_) {}
+      return { msg, models: (MODELS.gemini || []).map(m => m[0]),
+               chosen: AI.gemini.model, cached };
+    }, { key, picked });
+  };
+
+  head('setup accepts the new AQ. key shape, not just the old AIza one');
+  const aq = await connect('AQ.Ab8-FAKE-TEST-KEY-NOT-REAL-0000000000000000000000', 'gemini-2.5-flash');
+  ok('a real AQ. key is not rejected as "a different kind of key"', !/different kind of key/i.test(aq.msg), aq.msg);
+
+  head('Connect asks Google which models the key can reach');
+  const listReq = captured.find(c => /\/v1beta\/models(\?|$)/.test(c.url));
+  ok('a ListModels request was made', !!listReq, listReq && listReq.url);
+  ok('it is a GET on the collection, not a generate call', !!listReq && listReq.method === 'GET');
+  ok('it authenticates with the same x-goog-api-key header',
+     !!listReq && /^AQ\./.test(listReq.headers['x-goog-api-key'] || ''));
+  ok('no throwaway generateContent call is made — ListModels already proves the key',
+     !captured.some(c => /:generateContent(\?|$)/.test(c.url) && !/streamGenerateContent/.test(c.url)));
+
+  head('the discovered list replaces the built-in placeholder');
+  ok('both streamable chat models were kept',
+     aq.models.includes('gemini-9.9-flash') && aq.models.includes('gemini-9.9-pro'), aq.models.join(', '));
+  ok('the embedding model was dropped', !aq.models.includes('text-embedding-9'));
+  ok('the image model was dropped', !aq.models.includes('imagen-9'));
+  ok('a generateContent-only model was dropped, because every reply streams',
+     !aq.models.includes('gemini-9.9-batch'));
+  ok('the stale placeholder id is gone', !aq.models.includes('gemini-2.5-flash'), aq.models.join(', '));
+  ok('a model the key does not have is not silently kept as the choice',
+     aq.chosen !== 'gemini-2.5-flash', aq.chosen);
+  ok('it fell back to a plain Flash rather than the first thing in the list',
+     aq.chosen === 'gemini-9.9-flash', aq.chosen);
+  ok('the fellow is told their pick was not available',
+     /not on this key/i.test(aq.msg), aq.msg);
+  ok('the list is cached so the menu is right on the next load',
+     Array.isArray(aq.cached) && aq.cached.some(m => m[0] === 'gemini-9.9-flash'));
+
+  head('a key whose project has no chat model says so, instead of failing later');
+  listBody = { models: [{ name: 'models/text-embedding-9', displayName: 'Embedding',
+                          supportedGenerationMethods: ['embedContent'] }] };
+  const starved = await connect('AQ.Ab8-STARVED-KEY-0000000000000000000000000000', 'gemini-9.9-flash');
+  ok('it does not report a false success', !/Connected/i.test(starved.msg), starved.msg);
+  ok('the message names the real problem and the real fix',
+     /no chat-capable/i.test(starved.msg) && /project/i.test(starved.msg), starved.msg);
+  listBody = MODEL_LIST;
+  await connect('AQ.Ab8-FAKE-TEST-KEY-NOT-REAL-0000000000000000000000', 'gemini-9.9-flash');
   captured.length = 0;
 
   /* Drive one full exchange: fires a question with no figure of its own, but
@@ -220,6 +302,19 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
     return apiError(r, 'gemini');
   });
   ok('a quota 429 says "tomorrow", not "wait a few seconds"', /tomorrow/i.test(quotaMsg), quotaMsg);
+
+  await page.route('**/generativelanguage.googleapis.com/**', route => {
+    route.fulfill({ status: 404, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ error: { message: 'models/gemini-1.0-pro is not found for API version v1beta' } }) });
+  }, { times: 1 });
+  const goneMsg = await page.evaluate(async () => {
+    const r = await fetch(`${ENDPOINT.gemini}/gemini-1.0-pro:generateContent`, {
+      method: 'POST', headers: { 'x-goog-api-key': 'x' }, body: '{}' });
+    return apiError(r, 'gemini');
+  });
+  /* The old text sent you to a menu in which every name was equally dead. */
+  ok('a retired model points at Connect, not at the model menu',
+     /Connect/.test(goneMsg) && !/pick a different one in settings/i.test(goneMsg), goneMsg);
 
   head('regression');
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
