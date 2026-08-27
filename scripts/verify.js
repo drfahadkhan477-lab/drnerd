@@ -56,6 +56,7 @@ const SUITES = [
   ['crisp',        'every canvas backs itself at high device-pixel density'],
   ['type',         'one modular type scale and one spacing scale, still held'],
   ['references',   'the worked reference notes obey the guide, and are retrievable'],
+  ['gemini',       'a free provider with real vision, wired to its own wire shape'],
 ];
 
 const argv = process.argv.slice(2);

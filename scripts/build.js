@@ -57,11 +57,12 @@ const ROOT = path.join(__dirname, '..');
      refs          ships content/refs/*.md already loaded as a note seed
      read          notes and Apex replies render as prose, not their own source
      ref-images    figures the notes cite render for real, and reach Apex's eyes
+     gemini        a free provider that still sees a figure, alongside Groq and Claude
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
-  'refs', 'read', 'ref-images',
+  'refs', 'read', 'ref-images', 'gemini',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
