@@ -45,22 +45,29 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())
       && !/Failed to load resource.*(403|404|429)/.test(m.text())) errors.push(m.text()); });
 
-  /* A realistic ListModels page: two usable chat models, plus the three kinds
-     of thing the filter has to reject — an embedding model, an image model,
-     and a model that can generateContent but cannot stream, which this app
-     needs because it streams every reply. */
+  /* A ListModels page shaped the way Google really sends one. The method list
+     carries generateContent and countTokens and NOT streamGenerateContent —
+     streaming is a variant of generateContent, not an advertised method. An
+     earlier fixture invented that entry, the filter was written to require it,
+     and the pair agreed with each other while rejecting every real model. A
+     fixture that encodes the assumption under test proves nothing, so this one
+     is deliberately faithful to the wire.
+
+     Alongside the two usable models, the three kinds of thing that must still
+     be rejected: an embedding model, an image model, and a TTS variant that
+     does report generateContent but cannot hold a conversation. */
   const MODEL_LIST = {
     models: [
       { name: 'models/gemini-9.9-flash', displayName: 'Gemini 9.9 Flash',
-        supportedGenerationMethods: ['generateContent', 'streamGenerateContent', 'countTokens'] },
+        supportedGenerationMethods: ['generateContent', 'countTokens'] },
       { name: 'models/gemini-9.9-pro', displayName: 'Gemini 9.9 Pro',
-        supportedGenerationMethods: ['generateContent', 'streamGenerateContent'] },
+        supportedGenerationMethods: ['generateContent', 'countTokens'] },
       { name: 'models/text-embedding-9', displayName: 'Text Embedding 9',
         supportedGenerationMethods: ['embedContent'] },
       { name: 'models/imagen-9', displayName: 'Imagen 9',
         supportedGenerationMethods: ['predict'] },
-      { name: 'models/gemini-9.9-batch', displayName: 'Gemini 9.9 Batch',
-        supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-9.9-flash-tts', displayName: 'Gemini 9.9 Flash TTS',
+        supportedGenerationMethods: ['generateContent', 'countTokens'] },
     ],
   };
 
@@ -180,12 +187,14 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
      !captured.some(c => /:generateContent(\?|$)/.test(c.url) && !/streamGenerateContent/.test(c.url)));
 
   head('the discovered list replaces the built-in placeholder');
-  ok('both streamable chat models were kept',
+  /* The regression this suite exists for: a model that reports generateContent
+     and countTokens — which is all Google ever reports — must be KEPT. */
+  ok('a model that advertises generateContent alone is kept, because that is all Google advertises',
      aq.models.includes('gemini-9.9-flash') && aq.models.includes('gemini-9.9-pro'), aq.models.join(', '));
   ok('the embedding model was dropped', !aq.models.includes('text-embedding-9'));
   ok('the image model was dropped', !aq.models.includes('imagen-9'));
-  ok('a generateContent-only model was dropped, because every reply streams',
-     !aq.models.includes('gemini-9.9-batch'));
+  ok('a TTS variant is dropped even though it reports generateContent',
+     !aq.models.includes('gemini-9.9-flash-tts'));
   ok('the stale placeholder id is gone', !aq.models.includes('gemini-2.5-flash'), aq.models.join(', '));
   ok('a model the key does not have is not silently kept as the choice',
      aq.chosen !== 'gemini-2.5-flash', aq.chosen);
@@ -196,13 +205,18 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('the list is cached so the menu is right on the next load',
      Array.isArray(aq.cached) && aq.cached.some(m => m[0] === 'gemini-9.9-flash'));
 
-  head('a key whose project has no chat model says so, instead of failing later');
+  head('a key with nothing usable shows its evidence, rather than blaming the project');
   listBody = { models: [{ name: 'models/text-embedding-9', displayName: 'Embedding',
                           supportedGenerationMethods: ['embedContent'] }] };
   const starved = await connect('AQ.Ab8-STARVED-KEY-0000000000000000000000000000', 'gemini-9.9-flash');
   ok('it does not report a false success', !/Connected/i.test(starved.msg), starved.msg);
-  ok('the message names the real problem and the real fix',
-     /no chat-capable/i.test(starved.msg) && /project/i.test(starved.msg), starved.msg);
+  /* The first version asserted the project was misconfigured and sent people
+     to a Cloud console billing prompt — while the real fault was this filter.
+     Now it prints what Google returned, so the evidence is on screen. */
+  ok('it names what Google actually returned', /text-embedding-9/.test(starved.msg), starved.msg);
+  ok('it points at AI Studio, not at a billing account',
+     /AI Studio/i.test(starved.msg) && !/billing account they/i.test(starved.msg), starved.msg);
+  ok('it no longer blames the project outright', !/no chat-capable Gemini model enabled/i.test(starved.msg));
   listBody = MODEL_LIST;
   await connect('AQ.Ab8-FAKE-TEST-KEY-NOT-REAL-0000000000000000000000', 'gemini-9.9-flash');
   captured.length = 0;

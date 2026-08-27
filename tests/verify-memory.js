@@ -70,7 +70,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
     if (/\/v1beta\/models(\?|$)/.test(url)) {
       route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ models: [{ name: 'models/gemini-9.9-flash', displayName: 'G',
-          supportedGenerationMethods: ['generateContent', 'streamGenerateContent'] }] }) });
+          supportedGenerationMethods: ['generateContent', 'countTokens'] }] }) });
       return;
     }
     if (/:streamGenerateContent/.test(url)) {

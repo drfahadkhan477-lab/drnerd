@@ -209,30 +209,48 @@ patch('gemini: key validation — one throwaway generateContent call',
  * retires generations, and an auth key bound to a Cloud project sees only
  * what that project has enabled.
  *
- * Filtered to models that support BOTH generateContent and
- * streamGenerateContent, because those are the two methods this app actually
- * calls — that one line also drops every embedding, imaging and TTS model
- * without needing a list of names to exclude. */
+ * FILTERED ON generateContent ALONE, and that is a correction. The first
+ * version also required streamGenerateContent, on the reasoning that the app
+ * streams every reply so it should ask for both. Google does not advertise it:
+ * supportedGenerationMethods lists generateContent and countTokens, and
+ * streaming is a variant of the former rather than an entry of its own. So the
+ * stricter filter rejected every model Google returned, and the app told the
+ * fellow their project had no chat model — a wrong diagnosis that sent them to
+ * the Cloud console and a billing prompt they never needed.
+ *
+ * The name exclusions do the work that second method was supposed to: an
+ * embedding model has no generateContent at all, but image, audio and TTS
+ * variants sometimes do, and none of them can hold a conversation.
+ *
+ * The raw id list comes back alongside, so the caller can say what Google
+ * actually returned when nothing survives the filter. A dead end that cannot
+ * describe itself is what made this bug take two rounds to find. */
+const GEM_NOT_CHAT=/embedding|embed-|aqa|imagen|veo|image-generation|-image|-tts|tts-|audio-native|robotics|learnlm-.*-audio/i;
 async function geminiModels(key){
-  const out=[]; let pageToken='';
+  const out=[], raw=[]; let pageToken='';
   for(let page=0; page<5; page++){
     let r;
     try{
       r=await fetch(\`\${ENDPOINT.gemini}?pageSize=200\${pageToken?'&pageToken='+encodeURIComponent(pageToken):''}\`,
         {headers:{'x-goog-api-key':key}});
-    }catch(err){ return {error:networkErrorMsg(err,'Gemini'), models:[]}; }
-    if(!r.ok) return {error:await apiError(r,'gemini'), models:[]};
+    }catch(err){ return {error:networkErrorMsg(err,'Gemini'), models:[], raw:[]}; }
+    if(!r.ok) return {error:await apiError(r,'gemini'), models:[], raw:[]};
     let j={}; try{ j=await r.json(); }catch(_){}
     for(const m of (j.models||[])){
-      const methods=m.supportedGenerationMethods||[];
-      if(!methods.includes('generateContent')||!methods.includes('streamGenerateContent')) continue;
       const id=String(m.name||'').replace(/^models\\//,'');
-      if(id) out.push([id, m.displayName||id]);
+      if(!id) continue;
+      raw.push(id);
+      const methods=m.supportedGenerationMethods;
+      /* A model that does not report its methods is not therefore useless —
+         judge it by name rather than dropping it silently. */
+      if(Array.isArray(methods)&&methods.length&&!methods.includes('generateContent')) continue;
+      if(GEM_NOT_CHAT.test(id)) continue;
+      out.push([id, m.displayName||id]);
     }
     pageToken=j.nextPageToken||'';
     if(!pageToken) break;
   }
-  return {models:out};
+  return {models:out, raw};
 }
 /* Prefer a plain Flash: fastest, and the one the free tier is most generous
    with. The exclusions are the variants that are Flash in name but not a
@@ -265,8 +283,15 @@ patch('gemini: Connect discovers the live model list instead of validating a gue
         const found=await geminiModels(k);
         if(found.error){ keyMsg(found.error,'bad'); btn.disabled=false; btn.textContent='Connect'; return; }
         if(!found.models.length){
-          keyMsg('That key reached Google, but its project has no chat-capable Gemini model enabled. '
-                +'In Google AI Studio, create a key in a different project — or enable the Generative Language API on this one.','bad');
+          /* Say what Google actually returned. The first version of this
+             asserted the project had no chat model and sent the fellow to the
+             Cloud console, where enabling the API asks for a billing account
+             they do not need — when the real fault was this app's own filter.
+             A dead end that cannot show its evidence costs a day. */
+          const saw=(found.raw||[]).slice(0,8).join(', ');
+          keyMsg('That key reached Google, but nothing it returned can hold a conversation.'
+                +(saw?\` Google listed: <span class="err-raw">\${e(saw)}\${found.raw.length>8?' …':''}</span>.\`:' Google listed no models at all.')
+                +' A key made with <b>Get API key</b> in Google AI Studio gets the free tier without any billing account — try creating a fresh one there.','bad');
           btn.disabled=false; btn.textContent='Connect'; return;
         }
         MODELS.gemini=found.models;
