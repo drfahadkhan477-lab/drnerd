@@ -9,11 +9,13 @@ personal ACCSAP 12 export. A procedural WebGL heart that beats on a real cardiac
 clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
 (Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5
 spaced repetition, and Apex — an AI tutor that can be grounded in your own
-reference notes.
+reference notes, reads the figures they cite, and remembers you between
+sessions.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 399 checks, 17 suites
+node scripts/verify.js                              # 488 checks, 18 suites
+node scripts/verify.js --pwa                        # + the split build, over HTTP
 ```
 
 **The question bank is licensed content and is not in this repository.** It

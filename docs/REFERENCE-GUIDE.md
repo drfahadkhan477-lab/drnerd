@@ -202,6 +202,41 @@ Turn it off and Apex goes back to using everything it knows.
 
 ---
 
+## What Apex remembers about you
+
+Your notes are what Apex teaches *from*. Separately, it keeps a short list of
+things about *you* — and unlike a chat thread, that list survives closing the
+app:
+
+```
+About them:            Sitting the boards in October 2026.
+Where they go wrong:   Reads constrictive pericarditis as restrictive.
+How they want it:      Mechanism before the trial.
+From past sessions:    (written automatically at the end of a sitting)
+```
+
+Three ways things get there. You can say so — *"remember that I sit boards in
+October"*. Apex can decide something is worth keeping and save it mid-lesson,
+without stopping to ask. And at the end of a study session it writes up to three
+lines about what it noticed, in one small background call.
+
+Nothing interrupts you, which is only fair if you can see what was kept —
+**Memory** on the home screen, or from the tutor settings, lists everything with
+a Delete on each. Deleting takes effect on the next question.
+
+It is deliberately small: 80 entries, and when that fills, the automatic session
+summaries are dropped oldest-first. What you told it, and the gaps it spotted in
+you, are kept — an exam date should never be evicted to make room for "answered
+12 questions on Tuesday".
+
+If something in there has gone stale, tell Apex and it will drop it — every line
+carries an id it can act on. Or delete it yourself in the panel; a wrong memory
+is worse than a missing one.
+
+Memory travels with your **Export**, so a restore does not wipe what Apex knew.
+
+---
+
 ## Two honest cautions
 
 **Grounded mode is only as good as the corpus.** If a note is wrong, Apex will
