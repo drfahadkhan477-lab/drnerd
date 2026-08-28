@@ -210,6 +210,88 @@ const head = t => console.log('\n── ' + t + ' ──');
   });
   ok('repeated buildAI() calls do not error or accumulate', noLeakAcrossRerenders && errors.length === 0);
 
+  head('the tutor sits beside the question, or under it, never over it');
+  /* Below 1024px Apex was a bottom sheet, and on an iPad in portrait — 834
+     points wide — that sheet covers the stem you are asking about. Which split
+     is right depends on the SHAPE of the screen, not its size: side by side
+     wants width, stacked wants height, and a 1210×834 iPad and a 834×1194 iPad
+     are the same iPad. */
+  {
+    const shape = async () => page.evaluate(() => {
+      const app = document.getElementById('app'), ai = document.getElementById('ai');
+      const a = app.getBoundingClientRect(), i = ai.getBoundingClientRect();
+      if (i.width < 20 || i.height < 20) return 'closed';
+      if (i.x >= a.x + a.width - 2 && i.height > 200) return 'side';
+      if (Math.abs(i.x - a.x) < 40 && i.y >= a.y + a.height - 2 && i.height > 150) return 'stacked';
+      return 'sheet';
+    });
+    /* #ai transitions flex-basis over 280ms, so a measurement taken straight
+       after a resize catches it mid-animation and reads as neither layout.
+       Sleeping longer only moves the flake around — the first three runs of
+       this check disagreed with each other. So it waits for the geometry to
+       STOP CHANGING: poll until #ai's box is identical across three animation
+       frames, then read the shape. Deterministic instead of hopeful. */
+    const open = async (w, h) => {
+      await page.setViewportSize({ width: w, height: h });
+      await page.evaluate(() => {
+        const sh = document.getElementById('shell');
+        if (!sh.classList.contains('ai-open')) toggleAI();
+        buildAI();
+        /* Reset the settling counters. Left over from the previous size they
+           can satisfy "stable for three frames" using the OLD layout's rect and
+           return before the resize has landed — which is why this check read
+           `sheet` in portrait on roughly one run in three. */
+        window.__stable = 0; window.__lastRect = null;
+      });
+      await page.waitForFunction(() => {
+        const ai = document.getElementById('ai');
+        const r = ai.getBoundingClientRect();
+        const key = [r.x, r.y, r.width, r.height].map(n => Math.round(n)).join(',');
+        window.__stable = (window.__lastRect === key) ? (window.__stable || 0) + 1 : 0;
+        window.__lastRect = key;
+        return window.__stable >= 3;
+      }, { timeout: 8000, polling: 'raf' });
+      return shape();
+    };
+
+    const sLand = await open(1210, 834);
+    ok('an iPad in landscape puts it beside the question', sLand === 'side', sLand);
+    const sPort = await open(834, 1194);
+    ok('the same iPad in portrait puts it underneath', sPort === 'stacked', sPort);
+    /* 1024 is the old breakpoint's edge and a real iPad Pro width — it must go
+       by orientation like everything else, not by having cleared a number. */
+    const sPro = await open(1024, 1366);
+    ok('and a 1024pt portrait iPad is stacked too, not split by width', sPro === 'stacked', sPro);
+    /* A smaller tablet in landscape has the width for two columns even though
+       the old breakpoint gave it a sheet. */
+    const sSmall = await open(900, 700);
+    ok('a landscape tablet under the old breakpoint gets two columns too', sSmall === 'side', sSmall);
+    /* And a phone gets neither, because at that size the sheet is right. */
+    const sPhone = await open(430, 932);
+    ok('a phone keeps the bottom sheet, which is correct at that size', sPhone === 'sheet', sPhone);
+
+    /* In a stacked split the document stops scrolling and #app scrolls instead,
+       which silently breaks every window.scrollTo(0,0) in the app — you arrive
+       at the top of a screen and find yourself halfway down it. */
+    await page.setViewportSize({ width: 834, height: 1194 });
+    await page.waitForTimeout(300);
+    const top = await page.evaluate(async () => {
+      const app = document.getElementById('app');
+      goStudy();
+      await new Promise(r => setTimeout(r, 500));
+      app.scrollTop = 600;
+      const moved = app.scrollTop;
+      goHome();
+      await new Promise(r => setTimeout(r, 600));
+      return { moved, after: app.scrollTop, hasHelper: typeof toTop === 'function' };
+    });
+    ok('and navigating still arrives at the top of the new screen',
+       top.hasHelper && top.moved > 0 && top.after === 0,
+       `scrolled to ${top.moved}, landed at ${top.after}`);
+    await page.setViewportSize({ width: 430, height: 900 });
+    await page.waitForTimeout(250);
+  }
+
   head('regression: everything Stage 0 touches still functions');
   const reg = await page.evaluate(() => {
     goHome(); render();

@@ -81,12 +81,15 @@ const ROOT = path.join(__dirname, '..');
                    so rather than redefining the heart rate
      hosted        Gemini moves behind the Cloudflare Worker; Groq and Anthropic
                    stay bring-your-own-key — last, it rewrites gemini's own work
+     split         Apex sits beside the question in landscape and under it in
+                   portrait, instead of covering it
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
+  'split',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

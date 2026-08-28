@@ -20,7 +20,7 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 656 checks, 22 suites
+node scripts/verify.js                              # 662 checks, 22 suites
 node scripts/verify.js --pwa                        # + 45 more on the split build
 ```
 

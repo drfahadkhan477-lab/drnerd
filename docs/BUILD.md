@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 656 + 45 checks
+node scripts/verify.js --pwa                           # → 662 + 45 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -35,7 +35,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Thirty-six patch scripts run in order against the export. Each applies a list of
+Thirty-seven patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -83,6 +83,7 @@ The cost is that order matters, and the dependencies are real:
 | 34 | `figview` | a figure opens full size and closes four ways |
 | 35 | `slowcycle` | the cardiac cycle runs at a fraction of real time, with a speed control that does not pretend to be a heart rate |
 | 36 | `hosted` | Gemini moves behind the Cloudflare Worker, Groq and Anthropic stay bring-your-own-key — last, it rewrites what `gemini` built |
+| 37 | `split` | Apex sits beside the question in landscape and under it in portrait, never over it — last, it re-lays out screens every earlier step built |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -118,7 +119,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Twenty-two suites, 656 checks, plus 45 more on the split build. They run one at a
+Twenty-two suites, 662 checks, plus 45 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
