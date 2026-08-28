@@ -352,7 +352,22 @@ patch('gemini: its own shape for the tool exchange — a model turn of parts, th
   } else if(AI.provider==='gemini'){
     /* Gemini correlates a functionResponse to its call by name and by
        position, not by an id — there is nothing here to carry one. */
-    wire.push({role:'model',parts:turn.raw});
+    /* A floor under the signature rule. Gemini 3 validates that the FIRST
+       functionCall part of a step carries its signature; if one never arrived
+       — an older model on the same key, a part reassembled oddly, a thread
+       resumed from somewhere this app did not see — the request 400s and the
+       conversation dies mid-tool-call. Google publishes an explicit opt-out
+       token for calls it did not generate. It costs some model performance and
+       is documented as a last resort, which is exactly what this is: a wrong
+       signature is refused, a missing one is fatal, and a slightly worse
+       answer beats a dead thread. */
+    const parts=turn.raw.slice();
+    const firstCall=parts.findIndex(p=>p.functionCall);
+    if(firstCall>=0&&!parts[firstCall].thoughtSignature){
+      parts[firstCall]=Object.assign({},parts[firstCall],
+        {thoughtSignature:'skip_thought_signature_validator'});
+    }
+    wire.push({role:'model',parts});
     wire.push({role:'user',parts:results.map(r=>({functionResponse:{name:r.name,response:{content:r.content}}}))});
   } else {`);
 
@@ -423,14 +438,29 @@ async function oneTurnGemini(q,wire,extra){
       if(j.error) throw new Error(j.error.message||'stream error');
       const cand=j.candidates&&j.candidates[0]; if(!cand)continue;
       for(const part of (cand.content&&cand.content.parts)||[]){
+        /* THE SIGNATURE TRAVELS WITH THE PART, AND HAS TO GO BACK WITH IT.
+           Gemini 3 signs the parts of a turn that involved thinking, and
+           validates on the next request that the signature came back exactly
+           as issued. Dropping it does not degrade the answer, it fails the
+           call: "Function call is missing a thought_signature in functionCall
+           parts", HTTP 400, and the conversation dies at the point Apex tried
+           to use a tool. Every part is therefore pushed with whatever
+           signature arrived beside it. */
         if(part.text){
           if(!text) apexSetState('speaking');
-          text+=part.text; raw.push({text:part.text});
+          text+=part.text;
+          raw.push(part.thoughtSignature?{text:part.text,thoughtSignature:part.thoughtSignature}
+                                        :{text:part.text});
           apexPulse();
           if(live){ live.innerHTML=md(text)+toolStrip(); if(body)body.scrollTop=body.scrollHeight; }
         } else if(part.functionCall){
           apexSetState('tool');
-          raw.push({functionCall:part.functionCall});
+          raw.push(part.thoughtSignature?{functionCall:part.functionCall,thoughtSignature:part.thoughtSignature}
+                                        :{functionCall:part.functionCall});
+        } else if(part.thoughtSignature&&raw.length){
+          /* A signature can arrive in a chunk of its own, with neither text nor
+             a call attached. It belongs to the part before it. */
+          raw[raw.length-1].thoughtSignature=part.thoughtSignature;
         }
       }
     }

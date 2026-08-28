@@ -86,6 +86,21 @@ patch('chrome: name the safe areas so they can be reasoned about and tested',
 }
 @media(min-width:768px){:root{--measure:900px;--navh:62px}}
 @media(min-width:1024px){:root{--measure:960px}}
+/* AND env() CANNOT TELL US ABOUT AN IPAD. iPadOS reports
+   safe-area-inset-top: 0 even for an installed web app, because on a device
+   with no notch there is no geometrically unsafe area — yet the status bar is
+   still DRAWN OVER the page, so the clock lands on the wordmark. The inset is
+   honest and useless.
+
+   Being installed is the fact that matters, and it is knowable: Home Screen
+   apps get .installed on <html>. Then reserve the 24pt the status bar
+   occupies, keeping whatever env() reports when that is larger — an iPhone
+   notch is 47-59pt and must win. Gated on height because iPhone landscape
+   hides the status bar entirely, and reserving room for a bar that is not
+   there is the same bug in the other direction. */
+@media (min-height:600px){
+  html.installed{--sat:max(env(safe-area-inset-top,0px),24px)}
+}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlig`);
 
 /* ── 3. how the bar sits now ─────────────────────────────────────────────── */
@@ -148,6 +163,22 @@ patch('chrome: one vocabulary for the edges',
 `/* Safe area insets for iPad notch/home bar. The bar handles its own — see
    #navbar and .nav above, which use the named --sa* variables. */
 @supports(padding:max(0px)){`);
+
+/* Set before anything paints, so the bar is the right height on the first
+   frame rather than jumping once the app script runs. */
+patch('chrome: know whether we are running from the Home Screen',
+`</head>`,
+`<script>
+/* Home Screen apps only. navigator.standalone is the iOS spelling and
+   display-mode:standalone is everyone else's; either one means the browser
+   chrome is gone and the status bar is ours to work around. */
+(function(){try{
+  var s=window.navigator.standalone===true||
+        (window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches);
+  if(s)document.documentElement.classList.add('installed');
+}catch(e){}})();
+</script>
+</head>`);
 
 fs.writeFileSync(OUT, html);
 console.log(`Full screen, like an app — ${applied.length} edits applied`);

@@ -181,6 +181,75 @@ const sse = text => [
   ok('nor are its "drawing on" pills', leak.strayPills === 0, leak.strayPills + ' stray pill(s)');
   ok('while the thread\'s own figure still shows', leak.ownFigs === 1, leak.ownFigs + ' figure(s)');
 
+  head('a figure opens, and closes four ways');
+  /* The complaint that started this was an image with no way out. A figure in
+     a reply is a 982px diagram whose legend is six-point type; scaled into the
+     panel it is legible as a shape and not as a document. */
+  /* At desktop width the figure already fits at its natural size, so "bigger
+     in the viewer" and "magnifies" have nothing to say. The claims are about a
+     panel narrower than the picture, which is the phone and the iPad. */
+  await page.setViewportSize({ width: 430, height: 932 });
+  await page.waitForTimeout(300);
+  const view = await page.evaluate(async () => {
+    /* Its own fixture: the thread state a few checks ago is not this check's
+       business, and depending on it is how a suite starts failing for reasons
+       that have nothing to do with what it tests. */
+    const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
+    const key = /refimg:\/\/([^)\s]+)/.exec(note.body)[1];
+    CHATS['_general'] = [
+      { role: 'user', content: 'explain' },
+      { role: 'assistant', content: 'Look: ![Troponin triage algorithm](refimg://' + key + ')' },
+    ];
+    S.screen = 'home';
+    buildAI();
+    await new Promise(r => setTimeout(r, 500));
+    const fig = document.querySelector('.msg.bot figure.ref-fig');
+    if (!fig) return { none: true };
+    fig.click();
+    await new Promise(r => setTimeout(r, 300));
+    const w = document.getElementById('peek');
+    const img = w.querySelector('.figv-scroll img');
+    const out = {
+      opened: /fig-open/.test(w.className),
+      locked: document.body.classList.contains('peek-locked'),
+      hasClose: !!w.querySelector('.figv-x'),
+      fitW: img ? Math.round(img.getBoundingClientRect().width) : 0,
+      natural: img ? img.naturalWidth : 0,
+    };
+    /* Tapping the picture magnifies rather than dismisses — you cannot read a
+       legend you dismissed. */
+    img.click();
+    await new Promise(r => setTimeout(r, 350));
+    out.stillOpen = /fig-open/.test(document.getElementById('peek').className);
+    out.zoomW = Math.round(img.getBoundingClientRect().width);
+    out.pannable = img.closest('.figv-scroll').scrollWidth > img.closest('.figv-scroll').clientWidth;
+    /* Escape. */
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await new Promise(r => setTimeout(r, 200));
+    out.afterEsc = document.getElementById('peek').className;
+    out.unlocked = !document.body.classList.contains('peek-locked');
+    /* Backdrop. The obvious ev.target===wrap test is wrong here: .figv is
+       stretched over the whole overlay, so the backdrop is never the target
+       and tap-to-dismiss silently does nothing. */
+    fig.click();
+    await new Promise(r => setTimeout(r, 250));
+    document.querySelector('.figv').click();
+    await new Promise(r => setTimeout(r, 200));
+    out.afterBackdrop = document.getElementById('peek').className;
+    return out;
+  });
+  ok('tapping a figure opens it full size', !view.none && view.opened && view.hasClose);
+  ok('and it is bigger there than it was in the panel',
+     view.fitW > 0 && view.natural > view.fitW, `${view.fitW}px shown, ${view.natural}px source`);
+  ok('tapping the picture magnifies instead of dismissing',
+     view.stillOpen && view.zoomW === view.natural && view.pannable,
+     `${view.zoomW}px, pannable ${view.pannable}`);
+  ok('Escape closes it and gives the page back',
+     view.afterEsc === '' && view.unlocked, JSON.stringify(view.afterEsc));
+  ok('and so does a tap outside the picture', view.afterBackdrop === '', JSON.stringify(view.afterBackdrop));
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.waitForTimeout(250);
+
   head('the strip is evidence, not furniture');
   const empty = await page.evaluate(() => {
     delete CHATS['_general']; saveJSON(AI_CHAT, CHATS);

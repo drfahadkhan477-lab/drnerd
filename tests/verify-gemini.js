@@ -287,6 +287,101 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
     ok('the functionResponse carries content, not an id (Gemini has no id to match)', false);
   }
 
+  head('the thought signature goes back exactly as it came');
+  /* Gemini 3 signs the parts of a turn that involved thinking and validates on
+     the next request that the signature returned unchanged. Dropping it does
+     not degrade the answer — it fails the call with HTTP 400, "Function call is
+     missing a thought_signature in functionCall parts", and the conversation
+     dies at the moment Apex reached for a tool. Which is exactly what happened
+     on a real device. */
+  {
+    const sigReqs = [];
+    let sigRound = 0;
+    await page.unroute('**/v1beta/models/**:streamGenerateContent*').catch(() => {});
+    await page.route('**/v1beta/models/**:streamGenerateContent*', route => {
+      sigReqs.push(JSON.parse(route.request().postData() || '{}'));
+      sigRound++;
+      const ev = parts => parts.map(p =>
+        'data: ' + JSON.stringify({ candidates: [{ content: { parts: [p] } }] }) + '\n\n').join('') + 'data: [DONE]\n\n';
+      if (sigRound === 1) {
+        return route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
+          body: ev([{ text: 'Saving that. ' },
+                    { functionCall: { name: 'save_reference_note', args: { title: 'T', body: 'B' } },
+                      thoughtSignature: 'SIG-ABC-123' }]) });
+      }
+      /* Round two enforces Google's rule rather than merely recording it: a
+         missing or altered signature is answered the way the API answers it. */
+      const model = (sigReqs[sigReqs.length - 1].contents || []).filter(c => c.role === 'model').pop();
+      const fc = ((model && model.parts) || []).find(x => x.functionCall);
+      if (!fc || fc.thoughtSignature !== 'SIG-ABC-123') {
+        return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({
+          error: { message: 'Function call is missing a thought_signature in functionCall parts.' } }) });
+      }
+      return route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
+        body: ev([{ text: 'Signed and saved.' }]) });
+    });
+
+    const signed = await page.evaluate(async () => {
+      CHATS['_general'] = []; S.screen = 'home';
+      fire('save this');
+      for (let i = 0; i < 90 && aiBusy; i++) await new Promise(r => setTimeout(r, 120));
+      return CHATS['_general'].map(m => ({ err: !!m.err, text: String(m.content) }));
+    });
+    const back = (sigReqs[1] && (sigReqs[1].contents || []).filter(c => c.role === 'model').pop()) || null;
+    const call = back && (back.parts || []).find(p => p.functionCall);
+    ok('the signature is carried on the functionCall part it arrived with',
+       !!call && call.thoughtSignature === 'SIG-ABC-123', call && call.thoughtSignature);
+    ok('so the follow-up is accepted rather than 400ing',
+       signed.some(m => !m.err && /Signed and saved/.test(m.text)) && !signed.some(m => m.err),
+       signed.map(m => (m.err ? 'ERR:' : '') + m.text.slice(0, 40)).join(' | '));
+
+    /* And a floor under it: an unsigned call must not be fatal. Google
+       publishes an opt-out token for calls it did not generate. */
+    sigReqs.length = 0; sigRound = 0;
+    await page.unroute('**/v1beta/models/**:streamGenerateContent*');
+    await page.route('**/v1beta/models/**:streamGenerateContent*', route => {
+      sigReqs.push(JSON.parse(route.request().postData() || '{}'));
+      sigRound++;
+      const ev = parts => parts.map(p =>
+        'data: ' + JSON.stringify({ candidates: [{ content: { parts: [p] } }] }) + '\n\n').join('') + 'data: [DONE]\n\n';
+      if (sigRound === 1) return route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
+        body: ev([{ functionCall: { name: 'get_performance', args: {} } }]) });
+      return route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
+        body: ev([{ text: 'ok.' }]) });
+    });
+    await page.evaluate(async () => {
+      CHATS['_general'] = []; fire('again');
+      for (let i = 0; i < 90 && aiBusy; i++) await new Promise(r => setTimeout(r, 120));
+    });
+    const b2 = (sigReqs[1] && (sigReqs[1].contents || []).filter(c => c.role === 'model').pop()) || null;
+    const c2 = b2 && (b2.parts || []).find(p => p.functionCall);
+    ok('an unsigned call falls back to the documented opt-out, not to a 400',
+       !!c2 && c2.thoughtSignature === 'skip_thought_signature_validator', c2 && c2.thoughtSignature);
+
+    /* A signature can arrive in a chunk of its own, after the part it belongs
+       to. It must attach backwards, not be dropped. */
+    sigReqs.length = 0; sigRound = 0;
+    await page.unroute('**/v1beta/models/**:streamGenerateContent*');
+    await page.route('**/v1beta/models/**:streamGenerateContent*', route => {
+      sigReqs.push(JSON.parse(route.request().postData() || '{}'));
+      sigRound++;
+      const ev = parts => parts.map(p =>
+        'data: ' + JSON.stringify({ candidates: [{ content: { parts: [p] } }] }) + '\n\n').join('') + 'data: [DONE]\n\n';
+      if (sigRound === 1) return route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
+        body: ev([{ functionCall: { name: 'get_performance', args: {} } }, { thoughtSignature: 'LATE-SIG' }]) });
+      return route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
+        body: ev([{ text: 'ok.' }]) });
+    });
+    await page.evaluate(async () => {
+      CHATS['_general'] = []; fire('once more');
+      for (let i = 0; i < 90 && aiBusy; i++) await new Promise(r => setTimeout(r, 120));
+    });
+    const b3 = (sigReqs[1] && (sigReqs[1].contents || []).filter(c => c.role === 'model').pop()) || null;
+    const c3 = b3 && (b3.parts || []).find(p => p.functionCall);
+    ok('a signature arriving in its own chunk attaches to the part before it',
+       !!c3 && c3.thoughtSignature === 'LATE-SIG', c3 && c3.thoughtSignature);
+  }
+
   head('the streamed reply reaches the chat');
   const chatText = await page.evaluate(() => {
     const hist = CHATS[ALL_Q.find(x => !x.bad && x.img > 0).id] || CHATS['_general'] || [];

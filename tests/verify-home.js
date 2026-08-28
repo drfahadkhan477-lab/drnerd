@@ -142,6 +142,31 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('and the screen begins below the bar', inset.appTop >= inset.barH - 1,
      `app at ${Math.round(inset.appTop)}, bar ${Math.round(inset.barH)}`);
 
+  /* AND env() CANNOT TELL US ABOUT AN IPAD. iPadOS reports
+     safe-area-inset-top: 0 for an installed web app, because a device with no
+     notch has no geometrically unsafe area — yet the status bar is still drawn
+     over the page, so the clock landed on the wordmark. Being installed is the
+     fact that matters, and .installed on <html> carries it. */
+  const home = await page.evaluate(() => {
+    const read = () => {
+      const bar = document.getElementById('navbar').getBoundingClientRect();
+      const nav = document.querySelector('.nav').getBoundingClientRect();
+      return { barH: bar.height, navTop: nav.top };
+    };
+    const inBrowser = read();
+    document.documentElement.classList.add('installed');
+    const installed = read();
+    document.documentElement.classList.remove('installed');
+    return { inBrowser, installed, tall: innerHeight >= 600 };
+  });
+  ok('in a browser tab nothing is reserved — the browser draws its own chrome',
+     home.inBrowser.navTop < 1, `${home.inBrowser.navTop}px`);
+  ok('but installed, the bar reserves the strip the status bar is drawn in',
+     !home.tall || home.installed.navTop >= 23.5, `${home.installed.navTop}px`);
+  ok('and grows rather than shifting, so the colour still meets the top edge',
+     !home.tall || home.installed.barH > home.inBrowser.barH + 20,
+     `${Math.round(home.inBrowser.barH)} → ${Math.round(home.installed.barH)}`);
+
   head('home says one thing, and the rest is behind a door');
   const homeShape = await page.evaluate(() => ({
     hero: !!document.querySelector('.hero-live #heroECG'),
