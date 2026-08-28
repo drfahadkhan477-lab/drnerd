@@ -110,6 +110,26 @@ async function heapAfterBoot(page, url) {
   await page.close();
   }
 
+  head('an update reaches an installed app, without costing the figures');
+  {
+    const sw = await (await fetch(new URL('sw.js', target).href)).text();
+    const contentV = (/const CONTENT_V\s*=\s*'([^']+)'/.exec(sw) || [])[1];
+    const shellV = (/const SHELL_V\s*=\s*'([^']+)'/.exec(sw) || [])[1];
+    /* Both cache names were keyed on the content digest — a hash of the ACCSAP
+       export — so every change to the app's own code produced a byte-identical
+       sw.js. The browser saw no new worker, never re-primed the shell cache,
+       and an installed app went on serving old code. */
+    ok('the shell is versioned by its own bytes', !!shellV && shellV !== contentV,
+       `shell ${shellV}, content ${contentV}`);
+    ok('the shell cache is keyed on the shell version',
+       new RegExp(`SHELL\\s*=\\s*'accsap-shell-'\\s*\\+\\s*SHELL_V`).test(sw));
+    /* And the figure cache is NOT. Rekeying it on a code change would throw
+       away the 408 figures the fellow pressed a button to download — 19 MB
+       re-fetched because a stylesheet moved. */
+    ok('but the figure cache is keyed on the content, so a code change keeps them',
+       new RegExp(`FIGS\\s*=\\s*'accsap-figs-'\\s*\\+\\s*CONTENT_V`).test(sw));
+  }
+
   head('content is served intact');
   {
     const qs = await (await fetch(ORIGIN + '/content/questions.json')).json();

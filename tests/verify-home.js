@@ -94,6 +94,54 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('the caption states both figures', /mastered/.test(prog.val) && /seen/.test(prog.val), prog.val);
   ok('a highlight sweeps the bar', prog.hasShine);
 
+  head('it fills the display, like an app');
+  /* Added to the Home Screen, iPadOS gives a web app the whole screen and draws
+     the status bar over it. The bar lived inside #app — a 960px reading
+     measure, centred — so on a 1366px iPad it was a floating strip with 203px
+     of page showing either side: a browser with the chrome hidden, not an app. */
+  const chrome = await page.evaluate(() => {
+    const bar = document.getElementById('navbar');
+    const nav = document.querySelector('.nav');
+    if (!bar || !nav) return null;
+    const b = bar.getBoundingClientRect(), n = nav.getBoundingClientRect();
+    return {
+      barL: b.left, barR: b.right, vw: innerWidth,
+      navL: n.left, navW: n.width,
+      outsideApp: !document.getElementById('app').contains(nav),
+      overflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+    };
+  });
+  ok('the bar is outside the reading column', chrome && chrome.outsideApp);
+  ok('and its colour reaches both edges of the display',
+     chrome.barL <= 0 && chrome.barR >= chrome.vw, `${chrome.barL}–${chrome.barR} of ${chrome.vw}`);
+  /* Full bleed must not mean full width: a wordmark alone in the far corner of
+     a 1366px screen is not what a native app does either. */
+  ok('while its contents keep the measure the page below it keeps',
+     chrome.navW <= chrome.vw, `${Math.round(chrome.navW)}px in ${chrome.vw}px`);
+  /* Fixed, not 100vw — 100vw counts the scrollbar and would add a sideways
+     scroll on a desktop. */
+  ok('and nothing spills sideways', chrome.overflow);
+
+  /* env() cannot be given a value from a test, which is why the insets are
+     named variables. Set a real one and the chrome must move: the colour stays
+     welded to the top edge, the contents step below the clock, and the screen
+     starts below all of it. */
+  const inset = await page.evaluate(() => {
+    document.documentElement.style.setProperty('--sat', '24px');
+    return new Promise(r => setTimeout(() => {
+      const b = document.getElementById('navbar').getBoundingClientRect();
+      const n = document.querySelector('.nav').getBoundingClientRect();
+      const app = document.getElementById('app').getBoundingClientRect();
+      document.documentElement.style.removeProperty('--sat');
+      r({ barTop: b.top, barH: b.height, navTop: n.top, appTop: app.top });
+    }, 200));
+  });
+  ok('with a status bar, the colour still starts at the very top', inset.barTop <= 0.5, `${inset.barTop}px`);
+  ok('the bar grows by exactly the inset', inset.barH >= 58 + 24 - 1, `${Math.round(inset.barH)}px`);
+  ok('its contents clear the clock', inset.navTop >= 23.5, `${Math.round(inset.navTop)}px`);
+  ok('and the screen begins below the bar', inset.appTop >= inset.barH - 1,
+     `app at ${Math.round(inset.appTop)}, bar ${Math.round(inset.barH)}`);
+
   head('home says one thing, and the rest is behind a door');
   const homeShape = await page.evaluate(() => ({
     hero: !!document.querySelector('.hero-live #heroECG'),

@@ -443,6 +443,21 @@ step('every content path the code names is on disk', () => {
 /* Cache version is derived from the content digest, so publishing a new
    export invalidates the old caches instead of serving a stale bank. */
 const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.json'), 'utf8'));
+/* THE SHELL NEEDS A VERSION OF ITS OWN. Both cache names were keyed on the
+   content digest, which is a hash of the ACCSAP export — so every change to
+   the app's own code produced a byte-identical sw.js. The browser saw no new
+   worker, never ran install, never re-primed the shell cache, and an installed
+   app went on serving the old code; the only route to an update was the
+   background refresh in the fetch handler, which lands on the launch AFTER
+   next. Two relaunches to see a fix is indistinguishable from a fix that did
+   not ship.
+
+   Keyed separately, not both on one version. Rekeying the FIGURE cache on a
+   code change would throw away the 408 figures the fellow pressed a button to
+   download — 19 MB re-fetched because a stylesheet moved. Figures change when
+   the content changes; the shell changes when the shell changes. */
+const shellDigest = require('crypto').createHash('sha256')
+  .update(html).update(appCode).digest('hex').slice(0, 16);
 const SW = `/* ACCSAP 12 service worker.
    Shell is precached so a cold launch is instant and works offline. Figures
    are cache-first at runtime rather than precached: there are 408 of them and
@@ -450,9 +465,10 @@ const SW = `/* ACCSAP 12 service worker.
    sake of questions you may never open. iOS can still evict this cache under
    pressure, so every miss falls through to the network rather than assuming
    what was cached once is cached forever. */
-const VERSION = '${contentManifest.sourceDigest}';
-const SHELL = 'accsap-shell-' + VERSION;
-const FIGS  = 'accsap-figs-'  + VERSION;
+const CONTENT_V = '${contentManifest.sourceDigest}';
+const SHELL_V   = '${shellDigest}';
+const SHELL = 'accsap-shell-' + SHELL_V;
+const FIGS  = 'accsap-figs-'  + CONTENT_V;
 /* Split deliberately. cache.addAll() is all-or-nothing: one 404 rejects the
    whole call, the install event fails, the worker never activates, and the app
    silently loses offline support entirely. That is exactly what happened when

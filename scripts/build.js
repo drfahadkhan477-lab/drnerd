@@ -73,12 +73,14 @@ const ROOT = path.join(__dirname, '..');
                    homeflow, whose door row it sits under
      pvloop        the pearl's strip becomes the pressure–volume loop the
                    cardiac-cycle screen already computes — last, it restyles
+     fullbleed     the bar leaves the reading column so it reaches both edges
+                   of an iPad, and reserves the strip the status bar sits in
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
-  'pearlcard', 'offline', 'pvloop',
+  'pearlcard', 'offline', 'pvloop', 'fullbleed',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
