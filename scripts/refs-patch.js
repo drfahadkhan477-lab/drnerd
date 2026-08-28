@@ -111,29 +111,73 @@ function patch(label, find, replace) {
 patch('refs: the library ships already populated',
 `let REF = loadJSON(REF_KEY, []);          // [{id,title,tags,body,ts}]`,
 `const REF_SEED = /*REF_SEED_START*/${SEED}/*REF_SEED_END*/;
-/* Bump this key to re-seed after the corpus changes. Leaving it alone is what
-   stops a deleted note reappearing on every reload. */
-const REF_SEED_KEY = 'accsap12.refseed.v1';
-/* Merge, never overwrite: a title already present is left exactly as it is,
-   so your edits to a seeded note survive and your own notes are untouched. */
+/* Keyed by the CONTENT of the seed, not by a version number somebody has to
+   remember to bump.
+ *
+ * The first version stored a bare '1' here and returned early whenever it was
+ * present, so a device was seeded exactly once, for ever. That was wrong in a
+ * way that took a while to surface: when the corpus later grew figure
+ * citations, every already-seeded device kept the old bodies and showed no
+ * figures at all — and nothing in the app could explain why, because the new
+ * seed was right there in the build. Compounding it, the merge skipped any
+ * title it already had, so even a forced re-seed would have skipped all 146
+ * notes: the titles had not changed, only the bodies.
+ *
+ * Now the stored value is a hash of the seed itself. Change the corpus and it
+ * changes, so the sync runs. Change nothing and it does not. */
+const REF_SEED_KEY = 'accsap12.refseed';
+/* FNV-1a, 32-bit. Small, dependency-free, and only ever compared against
+   itself — this is change detection, not cryptography. */
+function refHash(s){
+  let h=0x811c9dc5;
+  for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193); }
+  return (h>>>0).toString(36);
+}
+/* Sync, not merely seed — while still never clobbering your own writing:
+     · a note you wrote yourself is never touched;
+     · a seeded note you have since edited is left alone, detected by its body
+       no longer hashing to what was written when it was seeded;
+     · an untouched seeded note is brought up to date, which is what lets a
+       corpus change — new figures, a corrected trial number — actually reach
+       a device seeded months ago;
+     · a seeded note you deleted comes back only when the corpus itself
+       changes, which is the price of not keeping a tombstone for every title
+       ever shipped. */
 function refSeedApply(cur, seed){
   try{
     /* The split build empties REF_SEED and fetches it instead, so an empty
        seed means "not here yet" — never "seeded, nothing to do". Marking the
        key now would permanently block the fetched copy from ever landing. */
     if(!seed || !seed.length) return cur;
-    if(localStorage.getItem(REF_SEED_KEY)) return cur;
-    const have = Object.create(null);
-    for(const r of cur) have[r.title] = 1;
-    let n = 0;
+    const version = refHash(JSON.stringify(seed));
+    if(localStorage.getItem(REF_SEED_KEY) === version) return cur;
+    const byTitle = Object.create(null);
+    for(const r of cur) byTitle[r.title] = r;
+    let added=0, updated=0;
     for(const s of seed){
-      if(have[s.title]) continue;
-      cur.push({ id:'seed'+(n++).toString(36)+Math.random().toString(36).slice(2,6),
-                 title:s.title, body:s.body, tags:s.tags, source:s.source,
-                 ts:Date.now(), seed:true });
+      const r = byTitle[s.title];
+      if(!r){
+        cur.push({ id:'seed'+(added++).toString(36)+Math.random().toString(36).slice(2,6),
+                   title:s.title, body:s.body, tags:s.tags, source:s.source,
+                   ts:Date.now(), seed:true, seedHash:refHash(s.body||'') });
+        continue;
+      }
+      if(!r.seed) continue;                       // yours, not ours — hands off
+      /* Notes seeded before seedHash existed carry no fingerprint, so an edit
+         cannot be told from an original. They are adopted rather than frozen:
+         they were machine-written and are almost certainly untouched, and
+         freezing them would mean the devices that most need this fix are the
+         only ones it never reaches. */
+      if(r.seedHash !== undefined && r.seedHash !== refHash(r.body||'')) continue;
+      if(r.body !== s.body || r.tags !== s.tags || r.source !== s.source) updated++;
+      r.body = s.body; r.tags = s.tags; r.source = s.source;
+      r.seedHash = refHash(s.body||'');
     }
-    localStorage.setItem(REF_SEED_KEY,'1');
-    if(n) saveJSON(REF_KEY, cur);
+    localStorage.setItem(REF_SEED_KEY, version);
+    if(added || updated){
+      saveJSON(REF_KEY, cur);
+      if(typeof invalidateIndex === 'function') invalidateIndex();
+    }
   }catch(_){ /* private mode, quota, anything — an unseeded library still works */ }
   return cur;
 }

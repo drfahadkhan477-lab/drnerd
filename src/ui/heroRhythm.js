@@ -22,14 +22,21 @@ const HERO_PLAYLIST = [
 ];
 
 /* Never repeats the immediately preceding rhythm — a "random" pick that can
-   land on the same thing twice in a row reads as broken, not random. */
+   land on the same thing twice in a row reads as broken, not random.
+
+   Done by stepping off a collision rather than by drawing again. A reroll loop
+   (`do { pick } while (pick === prevKey)`) is unbounded by construction: with
+   this playlist it terminates on the first retry ~95% of the time, but nothing
+   in the code says the list cannot contain the same key twice, and a list that
+   did would hang the hero animation for ever with no way to see why. One
+   deterministic step is the same result with no loop to reason about. */
 function nextInPlaylist(prevKey, playlist, rand) {
   const list = playlist || HERO_PLAYLIST;
   const r = rand || Math.random;
-  if (list.length <= 1) return list[0];
-  let pick;
-  do { pick = list[Math.floor(r() * list.length)]; } while (pick === prevKey);
-  return pick;
+  if (!list.length) return undefined;
+  if (list.length === 1) return list[0];
+  const i = Math.min(list.length - 1, Math.max(0, Math.floor(r() * list.length)));
+  return list[i] === prevKey ? list[(i + 1) % list.length] : list[i];
 }
 
 /* Look up a rhythm's {name,hr,desc} across both the base RHYTHMS table and
