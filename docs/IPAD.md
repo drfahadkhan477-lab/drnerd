@@ -95,8 +95,29 @@ the zipped `dist/` can be picked straight out of Files.
 1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
    **Upload assets**. Give it a name, then choose the zip.
 2. **Settings → Access** on the new project → require your email address.
-3. Open the `*.pages.dev` URL on the iPad, sign in once, **Add to Home Screen**.
-4. Press **Download the rest** on the home screen.
+3. **Settings → Environment variables → Add variable**, name `GEMINI_API_KEY`,
+   paste your AI Studio key, and press **Encrypt** before saving. Redeploy once
+   so the running Worker picks it up.
+4. Open the `*.pages.dev` URL on the iPad, sign in once, **Add to Home Screen**.
+5. Press **Download the rest** on the home screen.
+
+### The key lives on the edge now
+
+`_worker.js` at the root of the upload makes the deployment a Worker as well as
+a site: it answers `/api/apex/gemini/*` with your key attached server-side, and
+hands every other request straight back to the static site. Apex opens with
+nothing to type.
+
+That is Gemini only. **Groq and Anthropic are still bring-your-own-key**, and so
+is Gemini the moment you paste a key into Apex settings — a key you typed always
+wins. The single-file `systole.html` has no server at all, so it is always BYOK.
+
+What bounds the cost: Access means only your signed-in address can reach the
+endpoint; the Worker clamps `maxOutputTokens` to 2000 whatever the browser asks
+for, caps the request body at 6 MB, and refuses any model that is not a Gemini
+one. The per-minute limiter is **best-effort** — a Worker isolate has no shared
+counter, so it is a speed bump against a runaway loop rather than a quota. If
+you ever share this URL with someone else, put a KV-backed limiter in first.
 
 Well within the platform limits — 430 files against a ceiling of 20,000, and
 5.4 MB for the largest against 25 MB.

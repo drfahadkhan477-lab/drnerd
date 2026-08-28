@@ -110,6 +110,30 @@ async function heapAfterBoot(page, url) {
   await page.close();
   }
 
+  head('the Worker ships with the site, and the site still serves');
+  {
+    const w = await (await fetch(new URL('_worker.js', target).href)).text();
+    /* Pages ignores a functions/ directory on dashboard direct upload, which is
+       how this is deployed. A _worker.js at the root IS honoured, so the Worker
+       has to be a file in dist/ like everything else. */
+    ok('_worker.js is in the upload', w.length > 500, `${w.length} bytes`);
+    /* In advanced mode the Worker owns every request to the project. Without
+       this line it does not break the API — it 404s the whole app. */
+    ok('and it hands everything that is not the API back to the site',
+       /env\.ASSETS\.fetch\(request\)/.test(w));
+    ok('the API path is the only thing it intercepts',
+       /pathname\.startsWith\('\/api\/apex\/'\)/.test(w));
+    /* A secret in the bundle would defeat the entire exercise. */
+    ok('no key is baked into it — it reads one from the environment',
+       /env\.GEMINI_API_KEY/.test(w) && !/AIza[0-9A-Za-z_\-]{20}/.test(w) && !/AQ\.[0-9A-Za-z_\-]{20}/.test(w));
+    const sw = await (await fetch(new URL('sw.js', target).href)).text();
+    /* The model list is a GET, and a cached model list outlives the key that
+       produced it. */
+    ok('and the service worker never caches the API',
+       /pathname\.startsWith\('\/api\/apex\/'\)\s*\)\s*return;/.test(sw.replace(/\s+/g, ' ')) ||
+       /\/api\/apex\//.test(sw), 'bypass present');
+  }
+
   head('an update reaches an installed app, without costing the figures');
   {
     const sw = await (await fetch(new URL('sw.js', target).href)).text();

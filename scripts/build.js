@@ -79,12 +79,14 @@ const ROOT = path.join(__dirname, '..');
                    because it hangs a viewer on markup every earlier step set
      slowcycle     the cardiac cycle runs at a fraction of real time, and says
                    so rather than redefining the heart rate
+     hosted        Gemini moves behind the Cloudflare Worker; Groq and Anthropic
+                   stay bring-your-own-key — last, it rewrites gemini's own work
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
-  'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle',
+  'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

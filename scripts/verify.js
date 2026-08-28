@@ -61,6 +61,7 @@ const SUITES = [
   ['assets',       'an imported chapter brings its figures, and keeps them'],
   ['chatfigs',     'the figure Apex is reasoning from is one you can see'],
   ['pearl',        'the home screen opens with something worth knowing'],
+  ['worker',       'the Gemini key lives on the edge, and the site still serves'],
 ];
 
 const argv = process.argv.slice(2);

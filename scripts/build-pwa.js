@@ -403,6 +403,22 @@ const splashDir = path.join(DIST, 'content', 'splash-heart');
 fs.mkdirSync(splashDir, { recursive: true });
 for (const [name, body] of splashAssets) fs.writeFileSync(path.join(splashDir, name), body);
 
+/* THE WORKER. Pages ignores a functions/ directory on dashboard direct upload —
+   which is how this is deployed, as a zip dragged from an iPad — but it does
+   honour a _worker.js at the root of the upload. So the Worker ships as a file
+   in dist/ like everything else, and the same drag-and-drop that publishes the
+   site publishes the API with it. In advanced mode it owns every request, so it
+   is also what serves all of the above; see src/worker/apex.js. */
+const WORKER_SRC = path.join(ROOT, 'src', 'worker', 'apex.js');
+step('ship the Worker that holds the Gemini key', () => {
+  if (!fs.existsSync(WORKER_SRC)) throw new Error('src/worker/apex.js is missing');
+  const src = fs.readFileSync(WORKER_SRC, 'utf8');
+  if (!/env\.ASSETS\.fetch/.test(src)) {
+    throw new Error('the Worker has no ASSETS passthrough — that would 404 the whole site');
+  }
+  fs.writeFileSync(path.join(DIST, '_worker.js'), src);
+});
+
 const fontDir = path.join(DIST, 'fonts');
 fs.mkdirSync(fontDir, { recursive: true });
 for (const [name, body] of fontAssets) fs.writeFileSync(path.join(fontDir, name), body);
@@ -500,6 +516,11 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
+
+  /* The API is never cached and never intercepted. Non-GET already falls
+     through above, but the model list is a GET, and a cached model list would
+     outlive the key that produced it. */
+  if (url.pathname.startsWith('/api/apex/')) return;
 
   if (url.pathname.includes('/content/figures/')) {
     e.respondWith(caches.open(FIGS).then(async c => {
