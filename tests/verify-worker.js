@@ -153,14 +153,37 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     ok('a note that quotes the field is not rewritten',
        /"maxOutputTokens": 99999 somewhere/.test(JSON.parse(f3.calls[0].opts.body).contents[0].parts[0].text));
 
-    /* Burying generationConfig behind a megabyte to dodge the clamp is refused
-       rather than quietly allowed. */
+    /* THIS USED TO ASSERT A REFUSAL, AND THE REFUSAL WAS WRONG. The rule was
+       "generationConfig must be inside the 64 KB head window or the request is
+       rejected", on the stated grounds that the app always puts it first. The
+       app does not: the streaming body is systemInstruction, tools,
+       generationConfig, contents — and systemInstruction carries the system
+       prompt plus every retrieved note clipped at 4000 characters plus memory.
+       A heavy grounded turn is past 64 KB, so the edge was rejecting its own
+       client's real traffic.
+
+       What actually protects the bill is the clamp, not the window. So a
+       buried generationConfig is now found and clamped. The property under
+       test is the one that always mattered: nothing gets through unclamped. */
     const f4 = stub();
     const buried = '{"contents":[{"role":"user","parts":[{"text":"' + 'y'.repeat(70 * 1024) +
                    '"}]}],"generationConfig":{"maxOutputTokens":900000}}';
     const r4 = await handleApex(post('/api/apex/gemini/stream?model=gemini-3-flash-preview', buried), ENV, f4);
-    ok('and burying it past the head window is refused, not unclamped',
-       r4.status === 400 && f4.calls.length === 0, String(r4.status));
+    ok('a generationConfig past the head window is still found', f4.calls.length === 1, String(r4.status));
+    ok('and clamped rather than let through',
+       f4.calls.length === 1 && /"maxOutputTokens":2000/.test(f4.calls[0].opts.body) &&
+       !/900000/.test(f4.calls[0].opts.body));
+
+    /* A grounded turn, shaped the way the app actually shapes one. */
+    const f5 = stub();
+    const grounded = '{"systemInstruction":{"parts":[{"text":"' + 'note. '.repeat(14000) +
+                     '"}]},"tools":[],"generationConfig":{"maxOutputTokens":2000},' +
+                     '"contents":[{"role":"user","parts":[{"text":"what is takotsubo?"}]}]}';
+    const r5 = await handleApex(post('/api/apex/gemini/stream?model=gemini-3-flash-preview', grounded), ENV, f5);
+    ok('a real grounded turn with 80 KB of notes is forwarded, not refused',
+       r5.status === 200 && f5.calls.length === 1, String(r5.status));
+    ok('and reaches Google byte-for-byte, since it asked for no more than allowed',
+       f5.calls.length === 1 && f5.calls[0].opts.body === grounded);
   }
 
   head('the model list, so the menu comes from the live key');

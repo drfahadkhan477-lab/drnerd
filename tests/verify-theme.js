@@ -286,6 +286,103 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('and every glass surface carries the -webkit- spelling Safari needs',
      prefixes.missing.length === 0, prefixes.missing.join(', '));
 
+  head('auto follows the system, not just the first paint');
+  {
+    /* THE FAILURE THIS DEFENDS AGAINST. Auto is the default, and it only ever
+       read prefers-color-scheme at load. When the iPad flips to dark at sunset
+       with the app open, the CSS follows on its own — so this looked fine —
+       but the three canvas renderers hold their own palette and are only told
+       through notifyThemeRenderers(), which nothing called. The heart, the
+       12-lead and the cardiac cycle stayed light on a dark page until reload.
+
+       emulateMedia is a real change event, the same one the OS fires. */
+    await page.evaluate(() => setTheme('auto'));
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.waitForTimeout(250);
+    const before = await page.evaluate(() => ({
+      dark: themeIsDark(),
+      bar: (document.querySelector('meta[name="theme-color"]') || {}).content,
+      heart: typeof heroHeart3d !== 'undefined' && heroHeart3d ? !!heroHeart3d.isDark : null,
+    }));
+
+    /* The renderers do not expose their palette, so the change is observed the
+       way the app makes it: count the calls that carry it to them. */
+    await page.evaluate(() => {
+      window.__notified = 0;
+      const real = window.notifyThemeRenderers;
+      window.notifyThemeRenderers = function () { window.__notified++; return real.apply(this, arguments); };
+    });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(() => ({
+      dark: themeIsDark(),
+      bar: (document.querySelector('meta[name="theme-color"]') || {}).content,
+      notified: window.__notified,
+      attr: document.documentElement.getAttribute('data-theme'),
+    }));
+
+    ok('the emulated flip actually reached the page',
+       before.dark === false && after.dark === true, `${before.dark} → ${after.dark}`);
+    ok('the canvases are told the palette moved under them',
+       after.notified > 0, `${after.notified} notification(s)`);
+    ok('and the status-bar colour follows it',
+       before.bar !== after.bar, `${before.bar} → ${after.bar}`);
+    ok('auto still leaves data-theme off, so the CSS keeps deciding for itself',
+       after.attr === null, String(after.attr));
+
+    /* And the other half: a theme you chose is a decision, and the sun going
+       down is not a reason to revisit it. */
+    await page.evaluate(() => { setTheme('daylight'); window.__notified = 0; });
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.waitForTimeout(300);
+    const chosen = await page.evaluate(() => ({ notified: window.__notified, dark: themeIsDark(), id: themeDef().id }));
+    ok('a theme you picked is not overridden by the system',
+       chosen.notified === 0 && chosen.dark === false && chosen.id === 'daylight',
+       `${chosen.id}, ${chosen.notified} notification(s)`);
+
+    await page.emulateMedia({ colorScheme: null });
+    await page.evaluate(() => setTheme('auto'));
+  }
+
+  head('a swatch is a promise about the palette');
+  {
+    /* The eight swatches are hard-coded hex in THEMES, and the palettes they
+       claim to preview live in CSS. Nothing held them together, so a palette
+       could be retuned and its swatch would go on showing the old colour —
+       silently, because a swatch has nothing to be wrong against. */
+    const drift = await page.evaluate(async () => {
+      const out = [];
+      const near = (a, b) => {
+        const hex = h => { h = String(h).replace('#', ''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+        const rgb = c => {
+          const m = String(c).match(/-?[\d.]+/g);
+          return m ? m.slice(0, 3).map(Number) : null;
+        };
+        const x = /^#/.test(a) ? hex(a) : rgb(a), y = /^#/.test(b) ? hex(b) : rgb(b);
+        if (!x || !y) return false;
+        /* Generous: a swatch is a preview, not a colour match. This catches a
+           palette that moved, not one that was nudged. */
+        return Math.max(...[0, 1, 2].map(i => Math.abs(x[i] - y[i]))) <= 40;
+      };
+      for (const t of THEMES) {
+        if (t.id === 'auto') continue;            // auto has no palette of its own
+        setTheme(t.id);
+        await new Promise(r => requestAnimationFrame(r));
+        const cs = getComputedStyle(document.documentElement);
+        const bg = cs.getPropertyValue('--bg').trim();
+        /* --teal is the accent token. The name is historical — it was the one
+           accent before there were palettes — and every palette overrides it. */
+        const ac = cs.getPropertyValue('--teal').trim();
+        if (!near(t.bg, bg)) out.push(`${t.id} bg ${t.bg} vs ${bg}`);
+        if (!near(t.ac, ac)) out.push(`${t.id} accent ${t.ac} vs ${ac}`);
+      }
+      setTheme('auto');
+      return out;
+    });
+    ok('every swatch still shows the palette it claims to preview',
+       drift.length === 0, drift.slice(0, 3).join(' | '));
+  }
+
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();

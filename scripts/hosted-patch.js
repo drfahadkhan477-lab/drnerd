@@ -165,6 +165,33 @@ patch('hosted: name the model even when it is not in the built-in list',
 `Powered by <b>\${e((MODELS[AI.provider].find(m=>m[0]===cur().model)||['','\u2014'])[1].split(' \u2014 ')[0])}</b>`,
 `Powered by <b>\${e(((MODELS[AI.provider]||[]).find(m=>m[0]===cur().model)||['',cur().model||'\u2014'])[1].split(' \u2014 ')[0])}</b>`);
 
+/* ── 6. generationConfig leads every Gemini body ─────────────────────────────
+   The Worker looks for "generationConfig" in a 64 KB head window before
+   falling back to scanning the whole body, and the fast path is free — so it
+   is worth putting the field where the fast path finds it. These two put
+   `contents` first, which is what made the fallback necessary in the first
+   place; the streamed turn already leads with systemInstruction, and that one
+   genuinely can exceed the window with a full grounded context behind it. */
+patch('hosted: the key validation body leads with generationConfig',
+`    return fetch(gemUrl('generate',model,k),{method:'POST',
+      headers:gemHeaders(k,true),
+      body:JSON.stringify({contents:[{role:'user',parts:[{text:'hi'}]}],
+        generationConfig:{maxOutputTokens:1}})});`,
+`    return fetch(gemUrl('generate',model,k),{method:'POST',
+      headers:gemHeaders(k,true),
+      body:JSON.stringify({generationConfig:{maxOutputTokens:1},
+        contents:[{role:'user',parts:[{text:'hi'}]}]})});`);
+
+patch('hosted: and so does the session summariser',
+`      const r=await fetch(gemUrl('generate',model,k),{method:'POST',
+        headers:gemHeaders(k,true),
+        body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],
+          generationConfig:{maxOutputTokens:maxTokens}})});`,
+`      const r=await fetch(gemUrl('generate',model,k),{method:'POST',
+        headers:gemHeaders(k,true),
+        body:JSON.stringify({generationConfig:{maxOutputTokens:maxTokens},
+          contents:[{role:'user',parts:[{text:prompt}]}]})});`);
+
 fs.writeFileSync(OUT, html);
 console.log(`Gemini, hosted — ${applied.length} edits applied`);
 applied.forEach(a => console.log('  ✓ ' + a));

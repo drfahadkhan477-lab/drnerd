@@ -41,13 +41,21 @@ const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/models';
    without being unbounded. */
 const MAX_BODY = 6 * 1024 * 1024;
 
-/* generationConfig must appear inside this many bytes of the body. The app's
-   own JSON.stringify puts it before `contents`, which is the megabyte, so this
-   is comfortable for the real client and a hard limit for anything else: a
-   caller that buries generationConfig behind a megabyte of text to dodge the
-   clamp gets refused rather than quietly unclamped. Scanning a 64 KB window is
-   also the difference between a regex and parsing 2 MB of JSON, which matters
-   on a CPU-metered platform. */
+/* Where generationConfig is looked for first. Scanning a window rather than
+   parsing is the difference between a regex and JSON.parse over 2 MB, which
+   matters on a CPU-metered platform.
+
+   IT IS A FAST PATH, NOT A RULE, and it took a review to notice why. The
+   streaming body is ordered systemInstruction, tools, generationConfig,
+   contents — and systemInstruction carries the system prompt PLUS every
+   retrieved note, each clipped at 4000 characters, plus the memory block. Four
+   notes and a full memory is comfortably past 64 KB, so a heavy grounded turn
+   pushed generationConfig out of the window and got a 400 from its own edge.
+   Two of the three Gemini call sites put `contents` first outright.
+
+   So the window is tried first, and a miss falls through to one indexOf over
+   the whole body before anything is refused. That is a single pass over a
+   string already in memory — nothing like parsing it. */
 const HEAD_WINDOW = 64 * 1024;
 
 const DEFAULT_MODEL_RE = /^gemini-[a-z0-9][a-z0-9.\-]*$/;
@@ -85,13 +93,13 @@ const fail = (status, message) => json(status, { error: { message } });
 /* Clamp maxOutputTokens without parsing the body.
    Returns { body, error }. */
 function clampOutput(raw, max) {
-  const head = raw.slice(0, HEAD_WINDOW);
-  const at = head.indexOf('"generationConfig"');
-  if (at < 0) return { error: 'generationConfig is required, and must come before contents.' };
+  let at = raw.slice(0, HEAD_WINDOW).indexOf('"generationConfig"');
+  if (at < 0) at = raw.indexOf('"generationConfig"');      // see HEAD_WINDOW above
+  if (at < 0) return { error: 'generationConfig is required.' };
   /* Anchored to the generationConfig object rather than searched for globally:
      a note quoting the literal text "maxOutputTokens": 99999 must not be
      rewritten, because that would corrupt the fellow's own prose. */
-  const slice = head.slice(at, at + 400);
+  const slice = raw.slice(at, at + 400);
   const m = /"maxOutputTokens"\s*:\s*(\d+)/.exec(slice);
   if (!m) return { error: 'generationConfig.maxOutputTokens is required.' };
   const asked = +m[1];

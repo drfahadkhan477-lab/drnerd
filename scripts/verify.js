@@ -64,6 +64,8 @@ const SUITES = [
   ['worker',       'the Gemini key lives on the edge, and the site still serves'],
   ['fsrs',         'the scheduler cannot make forgetting a reward'],
   ['boundary',     'a retrieved note is material to teach from, never an instruction'],
+  ['chat',         'the panel keeps what you typed, and sends a window not an archive'],
+  ['store',        'the big stores live in a database, and nothing is ever in neither place'],
 ];
 
 const argv = process.argv.slice(2);

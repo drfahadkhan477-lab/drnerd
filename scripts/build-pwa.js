@@ -173,6 +173,36 @@ const LOADER = `<script>
   }).catch(function(err){ fail('The application code failed to load.', err); });
 
   if('serviceWorker' in navigator){
+    /* THE UPDATE THAT ARRIVES UNDER A RUNNING APP. sw.js calls skipWaiting on
+       install and clients.claim on activate, so a new worker takes control of
+       THIS page — which is still running the app.js it parsed at launch. From
+       that moment the worker serves new content to old code: a renamed figure
+       path 404s, a changed questions.json shape is read by a parser that
+       predates it. On an iPad a home-screen app is rarely killed, so that
+       state can persist for weeks.
+
+       Before the shell and figure caches were versioned separately, sw.js was
+       byte-identical across code changes and the browser never saw an update
+       at all — so this was unreachable. Fixing the versioning is what made it
+       reachable, which is the honest reason it is being fixed now.
+
+       One reload, guarded by a flag that lives for this tab only: if the new
+       code somehow triggers another controllerchange, the flag is already set
+       and the page will not loop. sessionStorage rather than a variable
+       because the reload itself discards variables. */
+    var hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+      /* controllerchange ALSO fires on the very first install, when there was
+         no controller to be stale — reloading there would be a pointless
+         flash on first launch, and worse, it would spend the one-shot guard
+         below so a genuine update later in the same tab would be ignored. */
+      if(!hadController) { hadController = true; return; }
+      try{
+        if(sessionStorage.getItem('accsap12.swreloaded')) return;
+        sessionStorage.setItem('accsap12.swreloaded','1');
+      }catch(_){ return; }   // no sessionStorage means no loop guard, so do not reload
+      location.reload();
+    });
     try{ await navigator.serviceWorker.register('sw.js'); }catch(_){}
   }
 })();

@@ -186,6 +186,31 @@ async function heapAfterBoot(page, url) {
        !/if \(res\.ok\) c\.put/.test(swSrc) && calls === 2, calls + ' call sites');
   }
 
+  head('an update does not leave old code running against new content');
+  {
+    /* THE SKEW THIS DEFENDS AGAINST. sw.js calls skipWaiting on install and
+       clients.claim on activate, so a new worker takes control of a page that
+       is still running the app.js it parsed at launch — and then serves it new
+       content. On an iPad a home-screen app is rarely killed, so that pairing
+       can persist for weeks.
+
+       It only became reachable when the shell and figure caches were versioned
+       separately: before that sw.js was byte-identical across code changes and
+       the browser never saw an update at all. */
+    const shell = await (await fetch(target)).text();
+    ok('the page listens for the worker taking over',
+       /addEventListener\(\s*['"]controllerchange['"]/.test(shell), 'controllerchange handler');
+    ok('and reloads when it does', /controllerchange[\s\S]{0,600}location\.reload\(\)/.test(shell));
+    /* Two guards, and both matter. */
+    ok('but not on the first install, when there was nothing stale to replace',
+       /hadController/.test(shell) && /if\(!hadController\)/.test(shell.replace(/\s/g, '')),
+       'first-install guard');
+    ok('and never twice, so a reload cannot loop',
+       /sessionStorage[\s\S]{0,200}swreloaded/.test(shell), 'one-shot guard');
+    ok('the guard is per-tab storage, since a reload discards variables',
+       /sessionStorage\.setItem\(\s*['"]accsap12\.swreloaded['"]/.test(shell));
+  }
+
   head('an update reaches an installed app, without costing the figures');
   {
     const sw = await (await fetch(new URL('sw.js', target).href)).text();

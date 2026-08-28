@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 734 + 57 checks
+node scripts/verify.js --pwa                           # → 812 + 62 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -84,7 +84,11 @@ The cost is that order matters, and the dependencies are real:
 | 35 | `slowcycle` | the cardiac cycle runs at a fraction of real time, with a speed control that does not pretend to be a heart rate |
 | 36 | `hosted` | Gemini moves behind the Cloudflare Worker, Groq and Anthropic stay bring-your-own-key — last, it rewrites what `gemini` built |
 | 37 | `split` | Apex sits beside the question in landscape and under it in portrait, never over it — last, it re-lays out screens every earlier step built |
-| 38 | `boundary` | a retrieved note is fenced with a per-turn nonce and named as data, not direction — genuinely last, it wraps text every earlier retrieval step produces |
+| 38 | `boundary` | a retrieved note is fenced with a per-turn nonce and named as data, not direction — after every earlier retrieval step, because it wraps the text they produce |
+| 39 | `toolfence` | the same fence on `search_question_bank`, the channel the model opens itself; and a failed request stops being something Apex said — after `boundary`, whose `refBlock`/`refSafe` it reuses |
+| 40 | `chatfix` | the panel keeps the sentence you were typing and the place you were reading, and sends a window of the thread rather than all of it |
+| 41 | `autotheme` | `auto` notices the system flipping, so the heart, the 12-lead and the cardiac cycle follow it instead of waiting for a reload |
+| 42 | `store` | ink, notes, chats and the review log move to IndexedDB — genuinely last, it rewrites the load and save calls every step above installed |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -120,7 +124,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Twenty-four suites, 734 checks, plus 57 more on the split build. They run one at a
+Twenty-six suites, 812 checks, plus 62 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
@@ -133,14 +137,28 @@ mis-keyed questions, so a future export cannot introduce a seventh silently;
 `verify-splash-heart` measures that the splash heart's conduction nodes light
 in the order the heart depolarises rather than blinking together.
 
-Three of them have no browser in them at all, because the thing under test has
+Two of them have no browser in them at all, because the thing under test has
 no browser in it either. `verify-worker` drives the Cloudflare Worker's exported
 `handleApex` with a fake `env` and a stub `fetch`; `verify-fsrs` sweeps the
 scheduler across the whole reachable state space rather than checking a handful
 of remembered numbers — it is what found that a lapse could make a card *more*
-durable; `verify-boundary` imports a note whose title, tags and body are all
-trying to end the app's framing and give orders, fires a real turn, and reads
-what left the app.
+durable.
+
+Of the rest, `verify-boundary` imports a note whose title, tags and body are all
+trying to end the app's framing and give orders, fires a real turn — including
+one that calls a tool — and reads what left the app; `verify-chat` types into
+the composer, fires a turn with a tool step underneath it, and checks the
+sentence is still there afterwards; `verify-store` drives the IndexedDB
+migration from each of its starting states, including the one where a previous
+migration was interrupted half-way.
+
+**A check that passes on the broken build is worth nothing.** Every check added
+for a bug was run against the build from before the fix and confirmed to fail
+there first. That is not ceremony: three of them passed on the broken build the
+first time — one asserted on an error string `apiError()` never produces, one
+used a fixture that sat exactly at the ceiling it was meant to prove, and one
+opened a second browser context so the localStorage fixture it depended on was
+never loaded. All three looked green and measured nothing.
 
 Some modules can be checked without a browser at all, which is much faster
 while iterating on the physiology or the ECG maths:

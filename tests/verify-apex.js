@@ -217,36 +217,66 @@ const head = t => console.log('\n── ' + t + ' ──');
      wants width, stacked wants height, and a 1210×834 iPad and a 834×1194 iPad
      are the same iPad. */
   {
+    /* Returns the numbers alongside the verdict. A layout check that fails with
+       the single word "sheet" tells you nothing about WHY, and this one has a
+       history of failing intermittently — so when it does, it now says what it
+       measured. */
     const shape = async () => page.evaluate(() => {
       const app = document.getElementById('app'), ai = document.getElementById('ai');
       const a = app.getBoundingClientRect(), i = ai.getBoundingClientRect();
-      if (i.width < 20 || i.height < 20) return 'closed';
-      if (i.x >= a.x + a.width - 2 && i.height > 200) return 'side';
-      if (Math.abs(i.x - a.x) < 40 && i.y >= a.y + a.height - 2 && i.height > 150) return 'stacked';
-      return 'sheet';
+      const r = n => Math.round(n);
+      const at = `app ${r(a.x)},${r(a.y)} ${r(a.width)}x${r(a.height)} · ` +
+                 `ai ${r(i.x)},${r(i.y)} ${r(i.width)}x${r(i.height)} · ` +
+                 `vp ${window.innerWidth}x${window.innerHeight} · ` +
+                 `open ${document.getElementById('shell').classList.contains('ai-open')}`;
+      /* A bottom sheet is identified by what it IS — a fixed-position overlay —
+         rather than by being what is left when the other two tests fail. The
+         previous version required #app and #ai to share a left edge before it
+         would call a layout "stacked", and #app is a centred reading column
+         with a max-width, so its left edge moves with the length of the
+         question on screen. On a long stem it sat at x=0 and the check passed;
+         on a short one it sat at x=251 and the same correct layout was reported
+         as a sheet. That is where the intermittent failure came from — not from
+         timing, and not from the app. */
+      const fixed = getComputedStyle(ai).position === 'fixed';
+      let verdict = 'other';
+      if (i.width < 20 || i.height < 20) verdict = 'closed';
+      else if (fixed) verdict = 'sheet';
+      else if (i.x >= a.x + a.width - 2 && i.height > 200) verdict = 'side';
+      else if (i.y >= a.y + a.height - 2 && i.height > 150) verdict = 'stacked';
+      return { verdict, at: at + ' · ' + getComputedStyle(ai).position };
     });
     /* #ai transitions flex-basis over 280ms, so a measurement taken straight
        after a resize catches it mid-animation and reads as neither layout.
-       Sleeping longer only moves the flake around — the first three runs of
-       this check disagreed with each other. So it waits for the geometry to
-       STOP CHANGING: poll until #ai's box is identical across three animation
-       frames, then read the shape. Deterministic instead of hopeful. */
+       Sleeping longer only moves the flake around. So it waits for the geometry
+       to STOP CHANGING: poll until the box is identical across three animation
+       frames, then read the shape.
+
+       TWO THINGS MAKE THAT ACTUALLY DETERMINISTIC, and it took a while to get
+       both. Resetting the counters is not enough on its own: setViewportSize
+       resolves before the page has resized, and the PREVIOUS layout is
+       perfectly stable while the resize is pending — three identical frames of
+       the old shape is exactly what this was measuring, which is why it read
+       `sheet` in portrait on roughly one run in three, and still did after the
+       reset was added. So the viewport is waited for first, and its dimensions
+       are part of the stability key, so a resize landing mid-poll resets the
+       count instead of being averaged into it. */
     const open = async (w, h) => {
       await page.setViewportSize({ width: w, height: h });
+      await page.waitForFunction(
+        ([w, h]) => Math.abs(window.innerWidth - w) <= 2 && Math.abs(window.innerHeight - h) <= 2,
+        [w, h], { timeout: 8000 });
       await page.evaluate(() => {
         const sh = document.getElementById('shell');
         if (!sh.classList.contains('ai-open')) toggleAI();
         buildAI();
-        /* Reset the settling counters. Left over from the previous size they
-           can satisfy "stable for three frames" using the OLD layout's rect and
-           return before the resize has landed — which is why this check read
-           `sheet` in portrait on roughly one run in three. */
         window.__stable = 0; window.__lastRect = null;
       });
       await page.waitForFunction(() => {
         const ai = document.getElementById('ai');
         const r = ai.getBoundingClientRect();
-        const key = [r.x, r.y, r.width, r.height].map(n => Math.round(n)).join(',');
+        const key = [window.innerWidth, window.innerHeight, r.x, r.y, r.width, r.height]
+          .map(n => Math.round(n)).join(',');
         window.__stable = (window.__lastRect === key) ? (window.__stable || 0) + 1 : 0;
         window.__lastRect = key;
         return window.__stable >= 3;
@@ -255,20 +285,25 @@ const head = t => console.log('\n── ' + t + ' ──');
     };
 
     const sLand = await open(1210, 834);
-    ok('an iPad in landscape puts it beside the question', sLand === 'side', sLand);
+    ok('an iPad in landscape puts it beside the question', sLand.verdict === 'side',
+       `${sLand.verdict} — ${sLand.at}`);
     const sPort = await open(834, 1194);
-    ok('the same iPad in portrait puts it underneath', sPort === 'stacked', sPort);
+    ok('the same iPad in portrait puts it underneath', sPort.verdict === 'stacked',
+       `${sPort.verdict} — ${sPort.at}`);
     /* 1024 is the old breakpoint's edge and a real iPad Pro width — it must go
        by orientation like everything else, not by having cleared a number. */
     const sPro = await open(1024, 1366);
-    ok('and a 1024pt portrait iPad is stacked too, not split by width', sPro === 'stacked', sPro);
+    ok('and a 1024pt portrait iPad is stacked too, not split by width', sPro.verdict === 'stacked',
+       `${sPro.verdict} — ${sPro.at}`);
     /* A smaller tablet in landscape has the width for two columns even though
        the old breakpoint gave it a sheet. */
     const sSmall = await open(900, 700);
-    ok('a landscape tablet under the old breakpoint gets two columns too', sSmall === 'side', sSmall);
+    ok('a landscape tablet under the old breakpoint gets two columns too', sSmall.verdict === 'side',
+       `${sSmall.verdict} — ${sSmall.at}`);
     /* And a phone gets neither, because at that size the sheet is right. */
     const sPhone = await open(430, 932);
-    ok('a phone keeps the bottom sheet, which is correct at that size', sPhone === 'sheet', sPhone);
+    ok('a phone keeps the bottom sheet, which is correct at that size', sPhone.verdict === 'sheet',
+       `${sPhone.verdict} — ${sPhone.at}`);
 
     /* In a stacked split the document stops scrolling and #app scrolls instead,
        which silently breaks every window.scrollTo(0,0) in the app — you arrive
