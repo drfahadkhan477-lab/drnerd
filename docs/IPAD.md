@@ -28,7 +28,7 @@ code, so any static host will do.
 
 | | Where the content lives | Offline | Effort |
 |---|---|---|---|
-| **Tailscale** | your own machine | after first visit | one install |
+| **Tailscale** | your own machine | full, after one download | one install |
 | **Cloudflare Pages + Access** | Cloudflare, behind a login | full | ~15 min, needs an account |
 | **Plain LAN over HTTP** | your own machine | **no** | one command |
 
@@ -59,9 +59,12 @@ Why this one works when a LAN address does not: service workers require a
 secure context means no service worker, which means no offline and no real
 install — just a web page that stops working when you close the laptop.
 
-**The catch.** Figures are fetched per question and cached as you meet them, so
-the first pass through a chapter still needs the laptop reachable. Everything
-you have already seen stays available offline forever after.
+**Press "Download the rest" first.** Figures are otherwise fetched one at a
+time, as you meet the questions that use them — which would mean every figure
+you had not already seen was a broken image the moment the laptop slept. The
+card under the doors on the home screen pulls all 408 down in one go, about
+19 MB over the wifi you are already on. After that the tablet holds the whole
+bank whether or not the machine that served it still exists.
 
 ## 2. Cloudflare Pages + Access — works from anywhere
 
@@ -84,6 +87,27 @@ node scripts/serve.js 8080 dist          # then browse http://<your-ip>:8080
 Fine for a look. No service worker (see above), so no offline and no install.
 
 ---
+
+## Putting the whole bank on the tablet
+
+The split build streams figures on demand — the right default for a web app,
+and the wrong one for a ward round. So the home screen carries a card:
+
+```
+ON THIS DEVICE                        0 of 408 figures here
+▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+Pull every figure down once and the bank works
+with no network at all.              [ Download the rest ]
+```
+
+It does not keep a cache of its own: it only *requests* each figure, and the
+service worker's ordinary fetch handler does the storing — the same cache, with
+the same name and the same eviction, that a figure met the normal way goes
+through. Six requests at a time, about ten seconds on a laptop over Tailscale,
+and a reload afterwards finds all 408 without fetching one of them again.
+
+The card appears only in the split build. In the single file every figure is
+already inline, and a button offering to download them would be a lie.
 
 ## What "installed" gets you
 

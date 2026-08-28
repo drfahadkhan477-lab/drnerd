@@ -248,9 +248,9 @@ patch('pearl: a trace along its foot',
       </div>\`; })()}`,
 `          <p class="pearl-body pearl-in" id="pearlBody">\${e(p.text)}</p>
           <button class="pearl-open" onclick="goRefs()">Open the note \${icon('arrow-right','icon-sm')}</button>
+          <canvas id="pearlECG" class="pearl-ecg" aria-hidden="true"></canvas>
         </div>
         \${pearlFigure(p)}
-        <canvas id="pearlECG" class="pearl-ecg" aria-hidden="true"></canvas>
       </div>\`; })()}`);
 
 patch('pearl: mount the trace on the same monitor the hero uses',
@@ -292,9 +292,11 @@ patch('pearl: glass, and room for the trace',
   transition:box-shadow .4s var(--glide),transform .4s var(--glide);
   animation:riseIn .7s var(--glide) .06s both}
 .pearl-card:hover{box-shadow:0 1px 2px rgba(10,22,40,.05),0 20px 44px -14px rgba(10,22,40,.20)}
-/* The trace runs the full width along the foot — the card's pulse, not a
-   panel of its own — and fades out at both ends so it reads as passing
-   through rather than starting and stopping inside the card. */
+/* The trace runs along the foot of the PROSE, not of the whole card. It is
+   positioned against .pearl-main, so on a wide screen it underlines the
+   sentence rather than crossing under the figure beside it — and on a narrow
+   one, where the figure wraps below, it no longer lies across that figure's
+   caption. It fades at both ends so it reads as passing through. */
 .pearl-ecg{position:absolute;left:0;right:0;bottom:0;width:100%;height:42px;
   pointer-events:none;opacity:.5;
   -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);

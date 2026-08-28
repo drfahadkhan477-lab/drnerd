@@ -228,6 +228,82 @@ async function heapAfterBoot(page, url) {
     await ctx.close();
   }
 
+  head('one press puts the whole bank on the device');
+  /* The reason this exists: served from a laptop over Tailscale, opened on an
+     iPad, then studied with the laptop shut. Under that pattern every figure
+     not already met is a broken image, discovered at the worst moment. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 430, height: 932 } });
+    const page = await ctx.newPage();
+    let figReqs = 0;
+    page.on('request', r => { if (r.url().includes('/content/figures/')) figReqs++; });
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
+                               { timeout: 120000 });
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
+                               { timeout: 60000 });
+
+    const before = await page.evaluate(() => {
+      const c = document.getElementById('offlineCard');
+      return c ? { total: offlineJob.total, have: offlineJob.have,
+                   val: c.querySelector('.off-val').textContent,
+                   btn: c.querySelector('.off-btn').textContent } : null;
+    });
+    ok('the card is on the home screen of the split build', !!before);
+    ok('and knows how many figures the bank has', before && before.total > 400, String(before && before.total));
+    /* Surveying must not BE a download: caches.match asks the question without
+       fetching, and 408 fetches on every home screen would be the opposite of
+       the feature. */
+    ok('surveying what is here costs no requests', figReqs === 0, String(figReqs));
+
+    const t0 = Date.now();
+    await page.evaluate(() => offlineDownload());
+    await page.waitForFunction(() => !offlineJob.busy, { timeout: 300000 });
+    const after = await page.evaluate(() => {
+      const c = document.getElementById('offlineCard');
+      return { have: offlineJob.have, total: offlineJob.total,
+               val: c.querySelector('.off-val').textContent,
+               btn: c.querySelector('.off-btn').textContent,
+               disabled: c.querySelector('.off-btn').disabled,
+               allHere: c.classList.contains('all-here'),
+               width: c.querySelector('.off-fill').style.width };
+    });
+    ok('the download fetches every figure', after.have === after.total,
+       `${after.have}/${after.total} in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+    ok('and the card says so rather than still offering', /^all \d+ figures/.test(after.val) &&
+       after.disabled && after.allHere && after.width === '100%', after.val + ' · ' + after.btn);
+
+    /* It does not own a cache: it only requests, and the service worker's own
+       fetch handler does the storing. So a reload must find them all through
+       exactly the same lookup a figure met the ordinary way goes through. */
+    figReqs = 0;
+    await page.reload({ waitUntil: 'load', timeout: 200000 });
+    await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
+                               { timeout: 60000 });
+    const reloaded = await page.evaluate(() => ({ have: offlineJob.have, total: offlineJob.total }));
+    ok('a reload finds them all still there', reloaded.have === reloaded.total,
+       `${reloaded.have}/${reloaded.total}`);
+    ok('and re-fetches none of them', figReqs === 0, String(figReqs));
+
+    /* The claim, tested the only way that means anything: network off, and a
+       question this session has never opened. */
+    await ctx.setOffline(true);
+    const cold = await page.evaluate(async () => {
+      const q = ALL_Q.filter(x => x.figs && x.figs.length).slice(-1)[0];
+      jumpTo(q.id);
+      await new Promise(r => setTimeout(r, 2500));
+      const img = document.querySelector('img[src*="content/figures/"]');
+      return { id: q.id, found: !!img, complete: !!img && img.complete,
+               px: img ? img.naturalWidth : 0 };
+    });
+    await ctx.setOffline(false);
+    ok('offline, a figure never visited this session still draws',
+       cold.found && cold.complete && cold.px > 500,
+       `${cold.id} at ${cold.px}px`);
+    await ctx.close();
+  }
+
   head('memory: the whole bank is no longer resident');
   {
     const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });

@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 595 + 26 checks
+node scripts/verify.js --pwa                           # → 595 + 34 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -35,7 +35,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Thirty patch scripts run in order against the export. Each applies a list of
+Thirty-one patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -76,7 +76,8 @@ The cost is that order matters, and the dependencies are real:
 | 27 | `chatfigs` | the figure Apex reasons from appears in the answer — after `assets` and `ref-images`, whose work it rewrites |
 | 28 | `pearl` | one sentence from your own notes, on the home screen |
 | 29 | `homeflow` | home cut to the trace, the pearl and the progress bar; everything else behind a door — last, so it moves finished markup |
-| 30 | `pearlcard` | the pearl as a numbered ladder on ECG paper, and the `-webkit-` spellings Safari needs — last, so it rewrites finished styles |
+| 30 | `pearlcard` | the pearl as a numbered ladder on ECG paper, and the `-webkit-` spellings Safari needs |
+| 31 | `offline` | one press pulls all 408 figures onto the device — under `homeflow`'s door row, and only alive in the split build |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -112,7 +113,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Twenty-one suites, 595 checks, plus 26 more on the split build. They run one at a
+Twenty-one suites, 595 checks, plus 34 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.

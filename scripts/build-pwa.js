@@ -159,6 +159,10 @@ const LOADER = `<script>
       if(q.figs && q.figs.length) imgs[q.id] = q.figs.map(function(f){ return 'content/figures/'+f; });
     }
     window.IMGS = imgs;
+    /* Which build this is, stated rather than inferred. The offline downloader
+       is only meaningful here — in the single file every figure is a data: URI
+       already in memory, and a button offering to fetch them would be a lie. */
+    window.SPLIT_BUILD = true;
   }catch(err){
     return fail('Open this over http, not as a file — it needs to fetch its content.', err);
   }

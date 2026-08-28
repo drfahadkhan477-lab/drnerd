@@ -20,7 +20,7 @@ and a row of glass doors to everything else.
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
 node scripts/verify.js                              # 595 checks, 21 suites
-node scripts/verify.js --pwa                        # + the split build, over HTTP
+node scripts/verify.js --pwa                        # + 34 more on the split build
 ```
 
 **The question bank is licensed content and is not in this repository.** It
