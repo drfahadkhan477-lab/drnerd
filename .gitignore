@@ -30,3 +30,7 @@ dist/
 # Local build output — contains a copy of the licensed content.
 build/
 source/
+
+# Python bytecode from tools/
+__pycache__/
+*.pyc
