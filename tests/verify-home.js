@@ -172,6 +172,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     hero: !!document.querySelector('.hero-live #heroECG'),
     pearl: !!document.querySelector('.pearl-card'),
     pearlPV: !!document.querySelector('.pearl-card #pearlPV'),
+    pearlCurrent: !!document.querySelector('.pearl-card #pearlCurrent'),
     progress: !!document.querySelector('.hp-track'),
     doors: document.querySelectorAll('.door-row .door').length,
     rail: !!document.querySelector('.story-rail'),
@@ -182,7 +183,11 @@ const head = t => console.log('\n── ' + t + ' ──');
   }));
   ok('the trace, the pearl and the progress bar are all on it',
      homeShape.hero && homeShape.pearl && homeShape.progress);
-  ok('the pearl carries a loop of its own', homeShape.pearlPV);
+  /* The pressure-volume loop was a good drawing in a bad place — 104px pinned
+     in the corner of the prose column. It is now a full-width ECG trace running
+     behind the words, which is what the card wanted along its foot. */
+  ok('the pearl carries a current of its own', homeShape.pearlCurrent);
+  ok('and the corner loop it replaced is gone', homeShape.pearlPV === false);
   ok('and a row of doors under them', homeShape.doors >= 5, String(homeShape.doors));
   const firstDoor = await page.evaluate(() => {
     const d = document.querySelector('.door-row .door');
@@ -271,6 +276,80 @@ const head = t => console.log('\n── ' + t + ' ──');
   }));
   ok('a cold load restores the saved layout', afterReload.state === 'focus' && afterReload.attr === 'focus', JSON.stringify(afterReload));
   ok('and marks the active segment', /focus/i.test(afterReload.activeSeg || ''), afterReload.activeSeg);
+
+  head('the home screen fills the iPad it is on');
+  {
+    /* MEASURED BEFORE THIS WAS BUILT, on 1366x1024: #app was capped at 960px —
+       406px of dead space down the sides — and the four stacked blocks ran to
+       1142px against a 1024px viewport, so it scrolled by 118px. Both numbers
+       are asserted here, from the other side. */
+    const settle = async () => {
+      await page.evaluate(() => { window.__s = 0; window.__l = null; });
+      await page.waitForFunction(() => {
+        const a = document.getElementById('app');
+        const r = a.getBoundingClientRect();
+        const k = [innerWidth, innerHeight, Math.round(r.width), Math.round(r.height)].join(',');
+        window.__s = (window.__l === k) ? (window.__s || 0) + 1 : 0;
+        window.__l = k;
+        return window.__s >= 5;
+      }, { timeout: 15000, polling: 'raf' });
+    };
+    const at = async (w, h) => {
+      await page.setViewportSize({ width: w, height: h });
+      await page.waitForFunction(([w, h]) =>
+        Math.abs(innerWidth - w) <= 2 && Math.abs(innerHeight - h) <= 2, [w, h], { timeout: 8000 });
+      await page.evaluate(() => { goHome(); render(); });
+      await settle();
+      return page.evaluate(() => {
+        const app = document.getElementById('app');
+        const R = s => { const el = document.querySelector(s); if (!el) return null;
+          const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y),
+            w: Math.round(r.width), h: Math.round(r.height) }; };
+        return { appW: Math.round(app.getBoundingClientRect().width), vw: innerWidth,
+                 over: document.documentElement.scrollHeight - innerHeight,
+                 screen: app.dataset.screen,
+                 hero: R('.hero-live'), pearl: R('.pearl-card'), doors: R('.door-row') };
+      });
+    };
+
+    const pro = await at(1366, 1024);
+    ok('the shell says which screen it is showing', pro.screen === 'home', String(pro.screen));
+    ok('a landscape iPad Pro uses its whole width',
+       pro.appW / pro.vw > 0.9, `${pro.appW} of ${pro.vw}`);
+    ok('and the home screen fits in one screen, with nothing to scroll',
+       pro.over <= 0, `${pro.over}px over`);
+    ok('the pearl sits beside the hero rather than under it',
+       pro.pearl.x > pro.hero.x + pro.hero.w - 4, `pearl x${pro.pearl.x} vs hero right ${pro.hero.x + pro.hero.w}`);
+    ok('and it runs taller than the letterbox it used to be',
+       pro.pearl.h > 400, `${pro.pearl.h}px tall`);
+    ok('the doors span the full width underneath',
+       pro.doors.w / pro.vw > 0.85 && pro.doors.y > pro.hero.y, `${pro.doors.w} wide`);
+
+    const air = await at(1194, 834);
+    ok('an 11-inch iPad in landscape fits too',
+       air.over <= 0 && air.appW / air.vw > 0.9, `${air.appW}/${air.vw}, ${air.over}px over`);
+
+    /* PORTRAIT MUST NOT MOVE. It already fitted, and a second layout for it
+       would be change for its own sake. */
+    const port = await at(1024, 1366);
+    ok('portrait still stacks, and still fits',
+       port.over <= 0 && port.pearl.x < port.hero.x + 40, `pearl x${port.pearl.x}`);
+    ok('and its column is a fixed measure, not the width of whatever pearl was picked',
+       port.appW === 960, `${port.appW}px`);
+
+    /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
+       vignette is readable; widening the home screen must not widen a stem. */
+    await page.setViewportSize({ width: 1366, height: 1024 });
+    const quiz = await page.evaluate(() => {
+      const q = ALL_Q.find(x => !x.bad);
+      jumpTo(q.id); render();
+      const app = document.getElementById('app');
+      return { w: Math.round(app.getBoundingClientRect().width), screen: app.dataset.screen };
+    });
+    ok('a question stem keeps its reading measure on the same wide screen',
+       quiz.screen === 'quiz' && quiz.w <= 980, `${quiz.w}px on ${quiz.screen}`);
+    await page.evaluate(() => { goHome(); render(); });
+  }
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 

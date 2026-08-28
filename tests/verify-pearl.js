@@ -73,7 +73,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     const all = Pearl.harvest(REF);
     return { n: all.length, notes: REF.length,
              withFig: all.filter(p => p.figKey).length,
-             tooLong: all.filter(p => p.text.length > 210).length,
+             tooLong: all.filter(p => p.text.length > Pearl.MAX).length,
              unterminated: all.filter(p => !/[.!?]$/.test(p.text)).length,
              stillMarked: all.filter(p => /[*_`]/.test(p.text)).length,
              everyChapterNamed: all.every(p => p.chapter && p.chapter.length > 1) };
@@ -81,7 +81,10 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('the library yields a usable number of pearls', harvest.n > 40,
      `${harvest.n} from ${harvest.notes} notes`);
   ok('some carry a figure from their note', harvest.withFig > 5, harvest.withFig + ' with a figure');
-  ok('none is longer than a sentence', harvest.tooLong === 0);
+  /* Was "none is longer than a sentence". A pearl is now allowed to be a run
+     of up to three sentences forming one statement — the cap that made them
+     read as clipped. The ceiling is still real and is asserted below. */
+  ok('none runs past the ceiling', harvest.tooLong === 0);
   ok('none is a clipped fragment', harvest.unterminated === 0);
   ok('markdown emphasis is stripped before display', harvest.stillMarked === 0);
   ok('each names the note it came from', harvest.everyChapterNamed);
@@ -182,7 +185,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     return new Promise(r => setTimeout(() => {
       const card = document.getElementById('pearlCard');
       const main = document.querySelector('.pearl-main');
-      const ecg = document.getElementById('pearlPV');
+      const ecg = document.getElementById('pearlCurrent');
       r({
         rungs: document.querySelectorAll('.pearl-step').length,
         numbered: [...document.querySelectorAll('.pearl-n')].map(n => n.textContent.trim()).join(''),
@@ -206,7 +209,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('the rungs are numbered in order', /^123/.test(rung.numbered), rung.numbered);
   ok('the rungs arrive one at a time', rung.staggered);
   ok('the ECG paper is painted behind, not laid out beside', rung.paperAbs);
-  ok('and so is the loop in the corner', rung.traceAbs);
+  ok('and so is the current behind it', rung.traceAbs);
   ok('so the prose keeps the card', rung.mainShare > 0.5, (rung.mainShare * 100).toFixed(0) + '%');
 
   /* THE LOOP IS THE APP'S OWN PHYSIOLOGY, NOT AN ANIMATION THAT LOOKS CARDIAC.
@@ -214,40 +217,59 @@ const head = t => console.log('\n── ' + t + ' ──');
      cycle screen plots — so the figure in this corner cannot drift from the
      one on that screen. A vectorcardiogram was tried first and rejected: the
      dipole here is three time-separated Gaussians, so the vector goes out and
-     back along one axis and draws a needle rather than a loop. */
-  const loop = await page.evaluate(() => {
-    const cv = document.getElementById('pearlPV');
+     back along one axis and draws a needle rather than a loop.
+
+     AND THEN THE LOOP WENT TOO. A 104px square pinned in the corner of the
+     prose column competed with the words and won. What the card wanted was a
+     pulse along its foot, which is where this started — so the trace is back,
+     full width, behind the text, with a travelling head. */
+  const trace = await page.evaluate(() => {
+    const cv = document.getElementById('pearlCurrent');
     if (!cv) return null;
     const r = cv.getBoundingClientRect();
-    const pts = [];
-    for (let i = 0; i <= 240; i++) { const t = i / 240; pts.push([Physio.lvVolume(t), Physio.lvPressure(t)]); }
-    let vLo = 1e9, vHi = -1e9, qHi = -1e9;
-    for (const [v, q] of pts) { if (v < vLo) vLo = v; if (v > vHi) vHi = v; if (q > qHi) qHi = q; }
-    /* A closed loop returns to where it started. */
-    const gap = Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]);
+    const card = document.querySelector('.pearl-card').getBoundingClientRect();
+    const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    /* Where the ink actually lands, as a fraction of the canvas height: the
+       trace is meant to run along the FOOT of the card, under the prose. */
+    let lit = 0, lowest = 1, highest = 0;
+    for (let y = 0; y < cv.height; y++) {
+      for (let x = 0; x < cv.width; x++) {
+        if (d[(y * cv.width + x) * 4 + 3] > 8) { lit++;
+          const f = y / cv.height;
+          if (f < lowest) lowest = f;
+          if (f > highest) highest = f; }
+      }
+    }
     return {
-      mounted: !!pearlPV,
-      square: Math.abs(r.width - r.height) < 2,
+      mounted: !!pearlTrace,
+      lit, topOfInk: lowest, bottomOfInk: highest,
+      fullWidth: Math.abs(r.width - card.width) < 2,
       backing: r.width ? cv.width / r.width : 0,
       dpr: window.devicePixelRatio,
       behind: +getComputedStyle(cv).zIndex === 0 &&
               +getComputedStyle(document.querySelector('.pearl-steps')).zIndex === 1,
-      vLo, vHi, qHi, gap,
-      esv: Physio.ESV, edv: Physio.EDV,
     };
   });
-  ok('the pearl carries a loop, and it is running', loop && loop.mounted);
-  ok('it is square, which a strip was not', loop.square, `${loop.backing.toFixed(1)}× backing`);
+  /* Guarded, not dereferenced. On a build without the canvas this section
+     should report four failures, not throw on the second line and take the
+     rest of the suite with it. */
+  const T = trace || { mounted: false, fullWidth: false, backing: 0, dpr: 1, behind: false,
+                       topOfInk: 0, bottomOfInk: 0, lit: 0 };
+  ok('the pearl carries a current, and it is running', T.mounted === true);
+  ok('it spans the whole card, where the loop was a corner',
+     T.fullWidth, `${T.backing.toFixed(1)}× backing`);
   ok('and backed at device-pixel density like every other canvas here',
-     loop.backing >= Math.min(loop.dpr, 3) - 0.05, `${loop.backing.toFixed(2)}× at dpr ${loop.dpr}`);
-  ok('it sits behind the words rather than over them', loop.behind);
-  /* The volume axis must run end-systolic to end-diastolic, and the pressure
-     must reach systolic. If this ever drifts, the corner is drawing something
-     that is not the cardiac cycle. */
-  ok('the loop spans ESV to EDV', Math.abs(loop.vLo - loop.esv) < 2 && Math.abs(loop.vHi - loop.edv) < 2,
-     `${loop.vLo.toFixed(0)}–${loop.vHi.toFixed(0)} mL vs ESV ${loop.esv} / EDV ${loop.edv}`);
-  ok('and reaches a systolic pressure', loop.qHi > 90, `${loop.qHi.toFixed(0)} mmHg`);
-  ok('and it closes, as a cycle must', loop.gap < 2, loop.gap.toFixed(2));
+     T.backing >= Math.min(T.dpr, 3) - 0.05, `${T.backing.toFixed(2)}× at dpr ${T.dpr}`);
+  ok('it sits behind the words rather than over them', T.behind);
+  /* The trace belongs along the foot of the card. If it ever drifts up into
+     the body of the prose, the contrast check further down is the only thing
+     standing between the fellow and an unreadable pearl — so it is held here
+     as well, structurally, rather than relying on one number. */
+  ok('the trace runs along the foot of the card, not through the prose',
+     T.topOfInk > 0.55, `ink from ${(T.topOfInk * 100).toFixed(0)}% down`);
+  ok('and it is a real waveform, not a flat line',
+     T.bottomOfInk - T.topOfInk > 0.05 && T.lit > 500,
+     `${T.lit} lit px across ${((T.bottomOfInk - T.topOfInk) * 100).toFixed(0)}% of height`);
 
   const marks = await page.evaluate(() => {
     const all = pearlAll();
@@ -316,6 +338,119 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('and nothing throws', !empty.threw);
 
   head('regression');
+  head('a pearl is a whole thought now');
+  {
+    /* The old rules capped a pearl at 210 characters and required exactly one
+       sentence. Measured over the 146 shipped notes that gave 96 pearls with a
+       median of 143 characters — true statements that stopped before they
+       taught anything. */
+    const stats = await page.evaluate(() => {
+      const all = Pearl.harvest(REF);
+      const lens = all.map(p => p.text.length).sort((a, b) => a - b);
+      return {
+        n: all.length, min: lens[0], max: lens[lens.length - 1],
+        median: lens[Math.floor(lens.length / 2)],
+        MIN: Pearl.MIN || 0, MAX: Pearl.MAX || 1e9,
+        allEnd: all.every(p => /[.!?]$/.test(p.text.trim())),
+        noMarkup: all.every(p => !/[*_`]/.test(p.text)),
+        multi: all.filter(p => Pearl.sentences(p.text).length > 1).length,
+      };
+    });
+    ok('the corpus still yields plenty of pearls', stats.n > 100, `${stats.n} pearls`);
+    ok('and the median is a statement, not a clause',
+       stats.median >= 220, `${stats.median} characters`);
+    ok('none is below the floor', stats.min >= stats.MIN, `shortest ${stats.min}, floor ${stats.MIN}`);
+    ok('none runs past the ceiling', stats.max <= stats.MAX, `longest ${stats.max}, ceiling ${stats.MAX}`);
+    ok('many are more than one sentence, which is the point',
+       stats.multi > stats.n * 0.3, `${stats.multi} of ${stats.n}`);
+    ok('every one still ends on a sentence ender', stats.allEnd);
+    ok('and none leaks markdown into the card', stats.noMarkup);
+
+    /* The specific shape that made "not meaningful" true: a bolded lead-in
+       written as a paragraph, with no main verb anywhere in it. */
+    const verbless = 'A falling antihypertensive requirement over time in a previously '
+      + 'hypertensive patient, which reflects declining stroke volume rather than improving hypertension.';
+    const labelled = 'R1 — epicardial conduit arteries. Normally there is no measurable '
+      + 'pressure drop, so conduit resistance is negligible and the vessel behaves as a conduit.';
+    const judged = await page.evaluate(([a, b]) => ({ verbless: Pearl.isPearl(a), labelled: Pearl.isPearl(b) }),
+                                       [verbless, labelled]);
+    ok('a verbless noun phrase is refused however long it is', judged.verbless === false);
+    ok('but a label followed by its statement is kept', judged.labelled === true);
+  }
+
+  head('the current runs behind the words, not over them');
+  {
+    /* Back to the home screen first: earlier sections navigate away, and a
+       card that is not rendered has no canvas to measure. */
+    await page.evaluate(() => { goHome(); render(); });
+    await page.waitForTimeout(900);
+    const seen = await page.evaluate(() => {
+      const cv = document.getElementById('pearlCurrent');
+      if (!cv) return null;
+      const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+      let ink = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 8) ink++;
+      return { ink, pv: !!document.getElementById('pearlPV'),
+               z: getComputedStyle(cv).zIndex, pe: getComputedStyle(cv).pointerEvents };
+    });
+    const V = seen || { ink: 0, pv: true, z: '', pe: '' };
+    ok('the pressure-volume loop is gone', V.pv === false);
+    ok('and a trace is actually painted', V.ink > 500, `${V.ink} lit pixels`);
+    ok('it sits behind the card\'s contents', V.z === '0', String(V.z));
+    ok('and never takes a tap', V.pe === 'none', String(V.pe));
+
+    /* THE PROMISE, AS A NUMBER. The brightest pixel the trace paints,
+       composited over the card, against the pearl text — in every theme. WCAG
+       AA for body text is 4.5:1, and "vibrant" is not a licence to go under
+       it. color(srgb r g b / a) gives components 0-1 where rgb() gives 0-255;
+       reading that wrong is what made an earlier version of this check report
+       1.17:1 for black text on a white card. */
+    const contrast = await page.evaluate(async () => {
+      const RGBA = s => { s = String(s); const m = s.match(/-?[\d.]+/g); if (!m) return null;
+        const sc = /^color\(/.test(s) ? 255 : 1;
+        return [+m[0] * sc, +m[1] * sc, +m[2] * sc, m.length > 3 ? +m[3] : 1]; };
+      const over = (f, g) => [0, 1, 2].map(i => f[i] * f[3] + g[i] * (1 - f[3]));
+      const lum = c => { const [r, g, b] = c.map(v => { v /= 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+      const ratio = (a, b) => { const L1 = lum(a), L2 = lum(b);
+        return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05); };
+      const out = [];
+      for (const t of THEMES) {
+        setTheme(t.id);
+        await new Promise(r => setTimeout(r, 450));
+        const wrap = document.querySelector('.pearl-bodywrap');
+        const card = document.querySelector('.pearl-card');
+        const cv = document.getElementById('pearlCurrent');
+        if (!wrap || !card || !cv) continue;
+        const txt = RGBA(getComputedStyle(wrap).color).slice(0, 3);
+        const page = RGBA(getComputedStyle(document.body).backgroundColor);
+        const cardEff = over(RGBA(getComputedStyle(card).backgroundColor),
+                             over(page, [255, 255, 255, 1]).concat(1));
+        const op = parseFloat(getComputedStyle(cv).opacity) || 1;
+        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        let worst = ratio(txt, cardEff), lit = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const a = (d[i + 3] / 255) * op;
+          if (a < 0.02) continue;
+          lit++;
+          const r = ratio(txt, over([d[i], d[i + 1], d[i + 2], a], cardEff));
+          if (r < worst) worst = r;
+        }
+        out.push({ theme: t.id, worst: +worst.toFixed(2), lit });
+      }
+      setTheme('auto');
+      return out;
+    });
+    const under = contrast.filter(c => c.worst < 4.5);
+    ok('the text clears 4.5:1 over the trace in every theme', under.length === 0,
+       under.length ? under.map(c => `${c.theme} ${c.worst}`).join(', ')
+                    : `worst ${Math.min(...contrast.map(c => c.worst))}:1`);
+    ok('and the trace is visible in every theme, not just legal',
+       contrast.every(c => c.lit > 500),
+       `least ${Math.min(...contrast.map(c => c.lit))} lit pixels`);
+  }
+
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();

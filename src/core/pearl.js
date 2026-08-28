@@ -33,7 +33,19 @@
 (function (root) {
 'use strict';
 
-const MIN = 55, MAX = 210;          // characters: a sentence, not a clause or a paragraph
+/* A PEARL IS A COMPLETE THOUGHT, NOT A SHORT ONE. The first version capped a
+   pearl at 210 characters and required it to be exactly one sentence, on the
+   theory that one sentence is what you can hold. In use that was wrong twice
+   over: it threw away the sentence that gave a rule its exception, and it let
+   through 60-character clauses that were true but taught nothing. Length was
+   never the thing that made a pearl memorable — Pearl.steps() is, by breaking
+   whatever arrives at its own joints.
+
+   So the floor rises to something that has to contain a real claim, the
+   ceiling rises to a short paragraph, and a pearl may now be a RUN of up to
+   three consecutive sentences where they form one statement. */
+const MIN = 90, MAX = 700;
+const MAX_RUN = 3;                  // sentences; beyond this it is a paragraph, not a pearl
 const LEADS = /^(this|that|these|those|it|they|he|she|there|such|both|either|neither|hence|so|then|thus|however|instead|again)\b/i;
 
 /* Strip the note's markup back to the prose underneath. Figures go entirely —
@@ -51,8 +63,22 @@ function plain(body) {
        a non-sequitur on its own. Only prose sentences survive being quoted. */
     .replace(/^\s*([-*·+]|\d+\.)\s+.*$/gm, ' ')      // list items
     .replace(/^\s*\|.*$/gm, ' ')                     // table rows
-    .replace(/\s+/g, ' ')
+    /* PARAGRAPH BREAKS SURVIVE, where they used to be collapsed with every
+       other run of whitespace. Now that a pearl can be several sentences, the
+       boundary matters: two sentences either side of a blank line are two
+       different points, and joining them makes the non-sequitur this module
+       exists to avoid. Runs of spaces still collapse. */
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/* The note as paragraphs of sentences. A run may never cross a blank line. */
+function paragraphs(body) {
+  return plain(body).split(/\n{2,}/)
+    .map(p => p.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
 }
 
 function sentences(text) {
@@ -68,14 +94,79 @@ function sentences(text) {
     .map(s => s.replace(/<abbr>/g, '.').trim());
 }
 
-/* Does this sentence stand up on its own, away from its paragraph? */
-function isPearl(raw) {
+const BACKREF = /\b(above|below|as discussed|see the|earlier|the previous)\b/i;
+
+/* A PEARL HAS TO BE A SENTENCE, NOT A LABEL. These notes use a bolded phrase
+   followed by a qualifier as a pseudo-bullet written as a paragraph:
+
+     "**A falling antihypertensive requirement over time** in a previously
+      hypertensive patient, which reflects declining stroke volume rather
+      than improving hypertension."
+
+   That is a noun phrase with no main verb. It is true, it is well written, and
+   quoted on its own it reads as a non-sequitur — the module already drops real
+   markdown bullets for exactly this reason, and this one escapes because it is
+   punctuated as a paragraph. So the test is structural rather than typographic:
+   strip any trailing subordinate clause and require a finite verb in what is
+   left. The example above reduces to "A falling antihypertensive requirement
+   over time in a previously hypertensive patient" and is refused. */
+const FINITE = new RegExp('\\b(is|are|was|were|be|been|being|has|have|had|does|do|did|can|could|'
+  + 'should|shall|must|may|might|will|would|remain|remains|become|becomes|cause|causes|reduce|reduces|'
+  + 'increase|increases|require|requires|predict|predicts|occur|occurs|present|presents|reflect|reflects|'
+  + 'show|shows|suggest|suggests|prevent|prevents|improve|improves|worsen|worsens|carry|carries|confer|'
+  + 'confers|need|needs|mean|means|make|makes|give|gives|leave|leaves|add|adds|fall|falls|rise|rises|'
+  + 'begin|begins|start|starts|stop|stops|follow|follows|depend|depends|differ|differs|exceed|exceeds|'
+  + 'produce|produces|drive|drives|explain|explains|support|supports|favour|favours|favor|favors)\\b', 'i');
+function hasMainVerb(raw) {
+  const main = String(raw).replace(/,\s*(which|who|whom|whose|where|whereas|although|though|because|while)\b[\s\S]*$/i, '');
+  return FINITE.test(main);
+}
+
+/* Is this ONE sentence usable as part of a pearl? Length is not judged here —
+   a run is judged as a whole — and neither is the opening pronoun, because
+   "This is why…" is perfectly good as the second sentence of a statement and
+   only fails as the first. */
+function usable(raw) {
   const s = raw.trim();
-  if (s.length < MIN || s.length > MAX) return false;
-  if (LEADS.test(s)) return false;                   // refers to what came before
+  if (!s) return false;
   if (!/[.!?]$/.test(s)) return false;               // a fragment, or a clipped tail
-  if (/\b(above|below|as discussed|see the|earlier|the previous)\b/i.test(s)) return false;
+  if (BACKREF.test(s)) return false;                 // points outside the pearl
   return true;
+}
+
+/* Does this stand up on its own, away from its paragraph? Kept as the single
+   exported predicate, and it now accepts a run as readily as a sentence. */
+function isPearl(raw) {
+  /* JUDGED ON WHAT IS DISPLAYED, not on the markup it came from. clean() strips
+     the bold markers, and these notes write a lead-in as "**R1 — epicardial
+     conduit arteries.** Normally there is…" — with the full stop INSIDE the
+     bold span. In the raw text that is one sentence; cleaned, it is two. Both
+     the length and the sentence boundaries therefore have to be measured after
+     cleaning, or the module is deciding about a string nobody will ever read. */
+  const s = clean(String(raw || '')).trim();
+  if (s.length < MIN || s.length > MAX) return false;
+  if (LEADS.test(s)) return false;                   // the FIRST sentence may not
+  const parts = sentences(s);
+  if (parts.length > MAX_RUN + 1) return false;      // +1: cleaning can split a lead-in
+  if (!parts.every(usable)) return false;
+  /* A main clause has to arrive early, but not necessarily in the first
+     sentence: "R1 — epicardial conduit arteries." is a label, and the statement
+     it labels is the sentence after it. Requiring the verb in sentence one
+     would throw away that whole shape, which is a good one. Two sentences is
+     the grace, and the verbless fragment this test exists to catch is a single
+     sentence, so it is still refused. */
+  return hasMainVerb(parts.slice(0, 2).join(' '));
+}
+
+/* Every run of one to MAX_RUN consecutive sentences within one paragraph.
+   Longest first, so an equal score prefers the fuller statement — which is the
+   whole point of the change. */
+function runs(sents) {
+  const out = [];
+  for (let n = Math.min(MAX_RUN, sents.length); n >= 1; n--) {
+    for (let i = 0; i + n <= sents.length; i++) out.push(sents.slice(i, i + n).join(' '));
+  }
+  return out;
 }
 
 /* Higher is better. The first version scored capitals and digits, and promoted
@@ -101,7 +192,15 @@ function score(raw) {
   if (ACT.test(raw)) n += 3;                         // tells you what to do
   if (DISC.test(raw)) n += 3;                        // tells one thing from another
   if (TRIAL.test(raw)) n += 1;                       // PARADIGM, COAPT, STICH
-  if (raw.length > 90 && raw.length < 175) n += 1;   // a statement, not a label
+  /* Retuned for the new range. The old bonus peaked at 90-175 characters,
+     which after the ceiling moved would have gone on quietly preferring the
+     shortest thing that qualified — the exact complaint this is fixing. A
+     complete statement in these notes runs about 150-450 characters. */
+  if (raw.length >= 150 && raw.length <= 450) n += 2;
+  else if (raw.length > 450) n += 1;
+  /* A rule and its qualification in one breath is the shape of a real pearl,
+     and it is almost always two sentences rather than one. */
+  if (ACT.test(raw) && DISC.test(raw)) n += 2;
 
   /* An enumeration of proper nouns reads as a glossary entry pulled out of
      context. Commas are the tell: four or more in one sentence is a list. */
@@ -130,10 +229,15 @@ function harvest(notes) {
   const out = [];
   for (const r of (notes || [])) {
     let best = null, bestScore = -1;
-    for (const s of sentences(plain(r.body))) {
-      if (!isPearl(s)) continue;
-      const sc = score(s);
-      if (sc > bestScore) { bestScore = sc; best = s; }
+    for (const para of paragraphs(r.body)) {
+      const sents = sentences(para);
+      for (const run of runs(sents)) {
+        if (!isPearl(run)) continue;
+        const sc = score(run);
+        /* Strictly greater, and runs() yields longest first — so among equals
+           the fuller statement is the one that was seen first and kept. */
+        if (sc > bestScore) { bestScore = sc; best = run; }
+      }
     }
     if (best && bestScore >= 5) {
       /* The note's own first figure, so a pearl can be shown with the diagram
@@ -304,6 +408,7 @@ function steps(text) {
   }).filter(s => s.text);
 }
 
-root.Pearl = { harvest, pick, isPearl, score, sentences, plain, clean, weakWords, steps };
+root.Pearl = { harvest, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
+               weakWords, steps, runs, MIN, MAX, MAX_RUN };
 
 })(typeof window !== 'undefined' ? window : this);

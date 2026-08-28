@@ -210,6 +210,97 @@ const TOOL_SSE = [
        counted.after === counted.first, `${counted.first} → ${counted.after} calls`);
   }
 
+  head('the prompts are there when asked for, and not before');
+  {
+    const chips = await page.evaluate(() => {
+      const strip = document.getElementById('aiChips'), more = document.getElementById('aiMore');
+      if (!strip || !more) return null;
+      const shut = { display: getComputedStyle(strip).display,
+                     h: Math.round(strip.getBoundingClientRect().height),
+                     aria: more.getAttribute('aria-expanded') };
+      more.click();
+      const open = { display: getComputedStyle(strip).display,
+                     n: strip.querySelectorAll('[data-chip]').length,
+                     aria: more.getAttribute('aria-expanded') };
+      more.click();
+      const shutAgain = getComputedStyle(strip).display;
+      return { shut, open, shutAgain };
+    });
+    /* Guarded: on a build without the button this reports six failures rather
+       than throwing on the next line and ending the run. */
+    const C = chips || { shut: { display: 'flex', h: -1, aria: null },
+                         open: { display: 'flex', n: 0, aria: null }, shutAgain: 'flex' };
+    ok('there is a button for them at all', chips !== null);
+    ok('the panel opens with no prompts above the box',
+       C.shut.display === 'none' && C.shut.h === 0, `${C.shut.display}, ${C.shut.h}px`);
+    ok('and they take no space while shut — display:none, not height:0',
+       C.shut.display === 'none');
+    ok('the button reveals all of them', C.open.display !== 'none' && C.open.n >= 9,
+       `${C.open.n} prompts`);
+    ok('and puts them away again', C.shutAgain === 'none');
+    ok('the button says what it is doing, for a screen reader',
+       C.shut.aria === 'false' && C.open.aria === 'true');
+
+    /* WHAT THE CHIPS WERE COSTING. This needs its own state and its own wait:
+       a thread long enough to fill the panel, and the panel's 280ms open
+       transition finished. Measuring whatever the previous section happened to
+       leave behind is how an earlier version of this reported 275px and a
+       31% share — the panel was short because the thread was two messages
+       long, which says nothing about the chips. */
+    await page.evaluate(qid => {
+      /* And clear what the figure-memo section left in lastHits: a cited figure
+         legitimately takes room in the panel, and measuring the chips' effect
+         with one on screen measures the figure instead. */
+      lastHits = []; lastHitsKey = null;
+      const h = CHATS[qid] || (CHATS[qid] = []);
+      h.length = 0;
+      for (let i = 0; i < 20; i++) {
+        h.push({ role: 'user', content: 'question ' + i });
+        h.push({ role: 'assistant', content: ('a paragraph of reply ' + i + ' ').repeat(30) });
+      }
+      buildAI();
+    }, qid);
+    await page.waitForTimeout(900);
+    const room = await page.evaluate(() => {
+      const bd = document.getElementById('aiBody'), ai = document.getElementById('ai');
+      return { share: bd.clientHeight / ai.getBoundingClientRect().height,
+               px: bd.clientHeight,
+               panelW: Math.round(ai.getBoundingClientRect().width),
+               panelH: Math.round(ai.getBoundingClientRect().height),
+               kids: [...ai.children].map(k => k.className.split(' ')[0] + ':' +
+                 Math.round(k.getBoundingClientRect().height)).join(' ') };
+    });
+    ok('the thread gets most of the panel', room.share > 0.8,
+       `${Math.round(room.share * 100)}% — ${room.px}px of ${room.panelH}, panel ${room.panelW}w · ${room.kids}`);
+  }
+
+  head('the scroll container is built to scroll');
+  {
+    /* None of this is claimed to BE the iOS bug — the panel scrolls when
+       measured here. These are the two known WebKit causes of a nested
+       scroller feeling locked, closed off by inspection. */
+    const css = await page.evaluate(() => {
+      const bd = document.getElementById('aiBody');
+      const tw = document.createElement('div');
+      tw.className = 'tw';
+      const msg = document.querySelector('.msg') || document.body;
+      msg.appendChild(tw);
+      const twStyle = getComputedStyle(tw).touchAction;
+      tw.remove();
+      return { overscroll: getComputedStyle(bd).overscrollBehavior,
+               minHeight: getComputedStyle(bd).minHeight,
+               twTouch: twStyle,
+               scrollable: bd.scrollHeight - bd.clientHeight };
+    });
+    ok('the gesture stops at the thread instead of chaining to a locked parent',
+       /contain/.test(css.overscroll), css.overscroll);
+    ok('and the box may shrink below its content, so overflow can engage',
+       css.minHeight === '0px', css.minHeight);
+    ok('a table inside a message does not swallow a vertical drag',
+       /pan-y/.test(css.twTouch), css.twTouch);
+    ok('and the thread does scroll', css.scrollable > 100, `${css.scrollable}px of range`);
+  }
+
   head('a config that names a provider this build does not have');
   {
     /* A cold load, in this same context, so the fixture written to localStorage

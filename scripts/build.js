@@ -95,8 +95,14 @@ const ROOT = path.join(__dirname, '..');
                    12-lead and the cycle follow it rather than waiting for a
                    reload
      store         ink, notes, chats and the review log move to IndexedDB —
-                   genuinely last, it rewrites load and save calls that every
-                   step above installed
+                   after every step that reads or writes through loadJSON
+     homewide      the home screen fills a landscape iPad instead of sitting in
+                   a 960px column with 406px of dead space either side
+     pearlrich     a pearl is a whole thought, over a travelling ECG current
+                   instead of a corner PV loop — after homewide, which is what
+                   gives it a tall column to be long in
+     apexroom      the tutor panel is spacious, its chips are behind a button,
+                   and it scrolls on iOS
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -104,6 +110,7 @@ const CHAIN = [
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
+  'homewide', 'pearlrich', 'apexroom',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
