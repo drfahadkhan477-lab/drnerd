@@ -305,10 +305,10 @@ patch('pearl: it reads larger, and clears its own trace',
 `.pearl-main{flex:1;min-width:0;padding:22px 24px 46px}`);
 
 patch('pearl: the sentence is the largest thing on the screen after the wordmark',
-`.pearl-body{margin:0;font-family:var(--font-serif);font-size:19px;line-height:1.5;
-  color:var(--ink);text-wrap:pretty}`,
-`.pearl-body{margin:0;font-family:var(--font-serif);font-size:23px;line-height:1.45;
-  color:var(--ink);text-wrap:pretty;letter-spacing:-.01em}
+`.pearl-body{margin:0;font-family:var(--font-display);font-size:19px;line-height:1.5;
+  color:var(--text);text-wrap:pretty}`,
+`.pearl-body{margin:0;font-family:var(--font-display);font-size:23px;line-height:1.45;
+  color:var(--text);text-wrap:pretty;letter-spacing:-.01em}
 @media(max-width:900px){.pearl-body{font-size:19px}}`);
 
 patch('home: doors, in glass — and the study page they open onto',
@@ -325,7 +325,7 @@ patch('home: doors, in glass — and the study page they open onto',
   padding:15px 16px;border-radius:16px;cursor:pointer;font-family:inherit;
   background:color-mix(in srgb, var(--white) 74%, transparent);
   backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);
-  border:1.5px solid var(--border2);color:var(--ink);
+  border:1.5px solid var(--border2);color:var(--text);
   transition:transform .34s var(--spring),box-shadow .34s var(--glide),border-color .22s var(--ease);
   animation:riseIn .6s var(--glide) both}
 .door:nth-child(1){animation-delay:.04s}.door:nth-child(2){animation-delay:.08s}
@@ -357,7 +357,7 @@ patch('home: doors, in glass — and the study page they open onto',
   transition:color .2s,border-color .2s,transform .26s var(--spring)}
 .study-back:hover{color:var(--teal);border-color:var(--teal);transform:translateX(-2px)}
 .study-title{margin-bottom:var(--s4,16px);animation:riseIn .6s var(--glide) .04s both}
-.study-title h2{margin:0;font-size:33px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+.study-title h2{margin:0;font-size:33px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
 .study-title p{margin:6px 0 0;font-size:13px;line-height:1.5;color:var(--dim);max-width:52ch}
 @media(max-width:700px){
   .study-title h2{font-size:28px}

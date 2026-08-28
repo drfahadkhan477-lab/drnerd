@@ -130,6 +130,114 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('there is a way to see another', card.hasNext);
   ok('and a way into the note behind it', card.hasOpen);
 
+  head('one sentence, broken at its own joints');
+  const lad = await page.evaluate(() => {
+    const S1 = 'The highest risk of ischaemic complications is within 180 days, after which risk becomes roughly linear — so the first six months are where secondary prevention earns most of its benefit.';
+    const S2 = 'Oral beta-blockers should be started within the first 24 hours — a Class I recommendation — in patients without contraindications.';
+    const S3 = 'Early invasive — angiography within 2 hours if very high risk, meaning haemodynamic or electrical instability, cardiogenic shock, or refractory angina; otherwise within 24 hours.';
+    const S4 = 'STEMI has persistent ST elevation of 20 minutes or more in at least two contiguous leads.';
+    const words = t => t.toLowerCase().replace(/[^a-z0-9%]+/g, ' ').trim().split(' ').filter(Boolean);
+    /* The connective a step was cut at is PARAPHRASED into its label — "after
+       which" becomes THEN — so those words legitimately do not survive. Every
+       other word must: the ladder rearranges the sentence's punctuation, never
+       its content. */
+    const LIFTED = ['so','therefore','thus','hence','but','however','yet','after','which','then','or','and'];
+    const lost = t => {
+      const before = words(t);
+      const after = words(Pearl.steps(t).map(s => (s.lead || '') + ' ' + s.text).join(' '));
+      return before.filter(w => after.indexOf(w) < 0 && LIFTED.indexOf(w) < 0);
+    };
+    return {
+      joints: Pearl.steps(S1),
+      paired: Pearl.steps(S2).length,
+      list: Pearl.steps(S3),
+      jointless: Pearl.steps(S4).length,
+      lost: [S1, S2, S3, S4].map(lost),
+      empty: Pearl.steps('').length,
+    };
+  });
+  ok('a sentence with joints becomes a ladder', lad.joints.length === 3,
+     lad.joints.map(s => s.text.slice(0, 22)).join(' | '));
+  ok('the connective that opens a step is lifted into its label',
+     lad.joints[1].lead === 'then' && lad.joints[2].lead === 'so',
+     JSON.stringify(lad.joints.map(s => s.lead)));
+  /* The single most likely way this goes wrong: an em-dash PAIR is a
+     parenthesis, and cutting inside it leaves a fragment and an aside. */
+  ok('a pair of em-dashes is a parenthesis, not a joint', lad.paired === 1, String(lad.paired));
+  /* And the second: "…, or refractory angina" closes a list of three, so
+     cutting there beheads it. */
+  ok('the tail of a list is not cut off from the list',
+     lad.list.some(s => /instability.*shock.*refractory/i.test(s.text)),
+     lad.list.map(s => s.text.slice(0, 30)).join(' | '));
+  ok('a sentence with no joint stays one step', lad.jointless === 1, String(lad.jointless));
+  ok('no content word is dropped — only the connective the label replaced',
+     lad.lost.every(l => l.length === 0), JSON.stringify(lad.lost));
+  ok('an empty pearl yields no steps', lad.empty === 0);
+
+  head('the ladder, on the page');
+  const rung = await page.evaluate(() => {
+    const all = pearlAll();
+    pearlCurrent = all.find(p => Pearl.steps(p.text).length >= 3) || all[0];
+    S.screen = 'home'; render();
+    return new Promise(r => setTimeout(() => {
+      const card = document.getElementById('pearlCard');
+      const main = document.querySelector('.pearl-main');
+      const ecg = document.getElementById('pearlECG');
+      r({
+        rungs: document.querySelectorAll('.pearl-step').length,
+        numbered: [...document.querySelectorAll('.pearl-n')].map(n => n.textContent.trim()).join(''),
+        marked: document.querySelectorAll('.pearl-num').length,
+        /* Every rung arrives after the one above it, not all at once. */
+        staggered: [...document.querySelectorAll('.pearl-step')]
+          .map(el => parseFloat(getComputedStyle(el).animationDelay))
+          .every((d, i, a) => i === 0 || d > a[i - 1]),
+        /* The paper and the wash are painted behind, and are not in the flow.
+           Both are pseudo-elements on a flex row: if either were ever given a
+           position other than absolute it would become a flex item and crush
+           the prose into a column one word wide. */
+        paperAbs: getComputedStyle(card, '::before').position === 'absolute' &&
+                  getComputedStyle(card, '::after').position === 'absolute',
+        traceAbs: ecg ? getComputedStyle(ecg).position === 'absolute' : false,
+        mainShare: main.getBoundingClientRect().width / card.getBoundingClientRect().width,
+      });
+    }, 800));
+  });
+  ok('the sentence is set as a numbered ladder', rung.rungs >= 3, String(rung.rungs));
+  ok('the rungs are numbered in order', /^123/.test(rung.numbered), rung.numbered);
+  ok('the rungs arrive one at a time', rung.staggered);
+  ok('the ECG paper is painted behind, not laid out beside', rung.paperAbs);
+  ok('and so is the trace along the foot', rung.traceAbs);
+  ok('so the prose keeps the card', rung.mainShare > 0.5, (rung.mainShare * 100).toFixed(0) + '%');
+
+  const marks = await page.evaluate(() => {
+    const all = pearlAll();
+    const p = all.find(x => /\d+\s?(mg|%|days|hours|months)/i.test(x.text) && Pearl.steps(x.text).length > 1);
+    if (!p) return null;
+    pearlCurrent = p; S.screen = 'home'; render();
+    return new Promise(r => setTimeout(() => r({
+      text: p.text,
+      marked: [...document.querySelectorAll('.pearl-num')].map(n => n.textContent),
+    }), 700));
+  });
+  ok('the measurement the question turns on is marked',
+     marks && marks.marked.length > 0 && marks.marked.every(m => /\d/.test(m)),
+     marks ? marks.marked.join(' · ') : 'no numeric pearl found');
+
+  /* A jointless sentence must fall back to prose rather than render as a
+     numbered list of one, which reads as a formatting error. */
+  const prose = await page.evaluate(() => {
+    const all = pearlAll();
+    const p = all.find(x => Pearl.steps(x.text).length === 1);
+    if (!p) return null;
+    pearlCurrent = p; S.screen = 'home'; render();
+    return new Promise(r => setTimeout(() => r({
+      steps: document.querySelectorAll('.pearl-step').length,
+      body: !!document.querySelector('.pearl-body'),
+    }), 700));
+  });
+  ok('a sentence with no joint is set as prose, not a list of one',
+     !prose || (prose.steps === 0 && prose.body), JSON.stringify(prose));
+
   head('asking for another');
   const next = await page.evaluate(() => {
     const before = (document.getElementById('pearlBody') || {}).textContent;

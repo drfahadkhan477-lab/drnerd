@@ -56,13 +56,58 @@ async function heapAfterBoot(page, url) {
     ok('no inline figure blob in the document', !shellHtml.includes('const IMGS={'));
     ok('no base64 image payload anywhere in the shell',
        !/data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/]{500}/.test(shellHtml + appJs));
+    /* The four woff2 faces are inlined in the single-file build, where one
+       file that works offline cannot reference a sibling. Here they are their
+       own immutable, separately-cacheable files: 250 KB of base64 the browser
+       no longer parses before it can apply a rule. */
+    ok('no base64 font payload in the shell either',
+       !/data:font\/woff2;base64,/.test(shellHtml + appJs));
+    const faces = [...shellHtml.matchAll(/@font-face\{[^}]*src:url\((fonts\/[^)]+)\)/g)].map(m => m[1]);
+    ok('every face points at a file of its own', faces.length === 4, faces.join(', '));
+    const served = await Promise.all(faces.map(async f => {
+      const r = await fetch(new URL(f, target).href);
+      return r.ok && +r.headers.get('content-length') > 5000;
+    }));
+    ok('and every one of those files is actually served', served.every(Boolean),
+       `${served.filter(Boolean).length}/${faces.length}`);
     const shellBytes = Buffer.byteLength(shellHtml) + Buffer.byteLength(appJs);
-    ok('shell is under 800 KB', shellBytes < 800 * 1024, kb(shellBytes));
+    /* Tightened from 800 KB once the fonts came out. A budget that sits far
+       above the real figure stops being a budget: it was 800 to catch a
+       megabyte of inlined base64 heart scan, and at 557 KB there is room to
+       grow without room to hide a payload. */
+    ok('shell is under 640 KB', shellBytes < 640 * 1024, kb(shellBytes));
     if (baseline) {
       const before = require('fs').statSync(baseline).size;
       ok('and is a large fraction smaller than the single file',
          shellBytes < before / 20, `${mb(before)} → ${kb(shellBytes)}`);
     }
+  }
+
+  head('the library arrives late, and the home screen notices');
+  /* The single-file build has REF inline; here it is fetched, so the first
+     paint happens without it. That silently cost the home screen its pearl —
+     the card was absent, and nothing asked for it again. */
+  {
+  const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+  await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
+                             { timeout: 120000 });
+  const late = await page.evaluate(() => new Promise(r => setTimeout(() => r({
+    refs: typeof REF !== 'undefined' ? REF.length : -1,
+    pearls: typeof pearlAll === 'function' ? pearlAll().length : -1,
+    card: !!document.getElementById('pearlCard'),
+    rungsOrProse: document.querySelectorAll('.pearl-step').length ||
+                  (document.querySelector('.pearl-body') ? 1 : 0),
+    notesDoor: [...document.querySelectorAll('.door')]
+      .map(d => d.textContent.replace(/\s+/g, ' ').trim())
+      .find(t => /^Notes/.test(t)) || '',
+  }), 2500)));
+  ok('the reference seed is fetched and applied', late.refs > 100, String(late.refs));
+  ok('and yields pearls', late.pearls > 40, String(late.pearls));
+  ok('the pearl card is repainted onto the home screen', late.card);
+  ok('with its sentence set', late.rungsOrProse > 0, String(late.rungsOrProse));
+  ok('and the Notes door counts what arrived', /\d+ references/.test(late.notesDoor), late.notesDoor);
+  await page.close();
   }
 
   head('content is served intact');

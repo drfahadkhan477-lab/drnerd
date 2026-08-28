@@ -262,6 +262,30 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('and every coloured border moves with it too', stuck.length === 0,
      stuck.length ? stuck.join(', ') : `${Object.keys(warmE).length} coloured borders, all themed`);
 
+  head('glass, on the browser this is meant to be installed from');
+  /* iPadOS Safari shipped backdrop-filter behind -webkit- and only dropped the
+     prefix in Safari 18. A glass surface written with the unprefixed property
+     alone does not blur there — it is a flat translucent panel, which is worse
+     than not having tried. Every use must carry both spellings. */
+  /* Read the stylesheet as text rather than through the CSSOM: Chromium drops
+     a property it does not recognise, so -webkit-backdrop-filter is not in the
+     parsed rule at all and the very thing under test would be invisible. */
+  const prefixes = await page.evaluate(() => {
+    const css = [...document.querySelectorAll('style')].map(s => s.textContent).join('\n');
+    const plain = [], missing = [];
+    for (const m of css.matchAll(/\{[^{}]*\}/g)) {
+      const block = m[0];
+      const bare = block.replace(/-webkit-backdrop-filter/g, '');
+      if (!/backdrop-filter\s*:/.test(bare)) continue;
+      plain.push(block.slice(0, 60));
+      if (!/-webkit-backdrop-filter\s*:/.test(block)) missing.push(block.slice(0, 90));
+    }
+    return { plain, missing };
+  });
+  ok('the app actually uses glass', prefixes.plain.length >= 6, String(prefixes.plain.length));
+  ok('and every glass surface carries the -webkit- spelling Safari needs',
+     prefixes.missing.length === 0, prefixes.missing.join(', '));
+
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();

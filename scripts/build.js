@@ -67,11 +67,14 @@ const ROOT = path.join(__dirname, '..');
      pearl         the hero teaches something, from the notes already on the shelf
      homeflow      the home screen is three things — the trace, the pearl, the
                    progress — and everything else moves behind a door
+     pearlcard     the pearl becomes a ladder on ECG paper — last, because it
+                   rewrites markup and styles that pearl and homeflow both set
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
+  'pearlcard',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

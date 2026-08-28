@@ -186,6 +186,124 @@ function pick(pearls, prevId, rand) {
   return list[list.length - 1];
 }
 
-root.Pearl = { harvest, pick, isPearl, score, sentences, plain, clean, weakWords };
+/* ═══ One sentence, broken at its own joints ═══════════════════════════════
+   A pearl is one sentence, and one sentence is a wall. Broken where it
+   already bends — at a colon, at a semicolon, at the connective that
+   introduces a consequence or a caveat — it becomes a short ladder, and a
+   ladder is what gets memorised. "Clinical restenosis is a different process:
+   intimal hyperplasia, generally developing within the first 6–9 months,
+   presenting as recurrent angina rather than an acute event" is four facts
+   wearing the costume of one; numbered, it is four things to remember.
+
+   Nothing is invented and nothing is reordered. Every step is a span of the
+   original sentence, in sequence.
+
+   THE EM-DASH IS THE ONE AMBIGUOUS JOINT. A single one is a real break —
+   "…risk becomes roughly linear — so the first six months are where
+   prevention earns its benefit". A PAIR is a parenthesis: "Oral beta-blockers
+   should be started within the first 24 hours — a Class I recommendation — in
+   patients without contraindications." Cutting inside that leaves a fragment
+   and an aside pretending to be steps, so the cut is only made when there is
+   exactly one dash to make it at.
+
+   THE LABEL IS LIFTED, NOT DUPLICATED. A step opening "so …" is tagged SO and
+   loses the word, because printing it in both places reads as a stutter. Only
+   connectives whose removal is grammatically inert are lifted — "so", "but",
+   "or", "and", "after which". "Because", "if", "unless" and "which" carry
+   meaning inside the clause and are left exactly where the author put them. */
+
+const CONNECTIVES =
+  'so|but|which|because|since|whereas|although|though|yet|unless|provided|or|and|with|without|' +
+  'after which|then|if|when|while|resulting|leading|presenting|showing|developing|meaning|' +
+  'performed|given|producing|causing|followed|' +
+  /* a purpose clause followed by its instruction — "To avoid X, use Y" */
+  'use|give|start|consider|check|avoid|treat|prefer|repeat|stop';
+
+/* Lifted into the step's label. Deliberately short: every entry here is a word
+   the sentence still reads correctly without. */
+const LIFT = [
+  [/^(?:so|therefore|thus|hence)\b[,]?\s+/i,   'so'],
+  [/^(?:but|however|yet)\b[,]?\s+/i,           'but'],
+  [/^(?:after which|then)\b[,]?\s+/i,          'then'],
+  [/^or\b\s+/i,                                'or'],
+  [/^and\b\s+/i,                               ''],
+];
+
+const MIN_STEP = 16;   // shorter than this is an aside, not a step
+const WEAK_MIN = 30;   // "…, or X" needs to be a clause, not the tail of a list
+const MAX_STEPS = 5;   // more than five is a list again
+
+function steps(text) {
+  const t = String(text || '').trim();
+  if (!t) return [];
+
+  const dashes = (t.match(/\s[—–]\s/g) || []).length;
+  /* Captured, not consumed: a piece that turns out not to be a step has to be
+     put back the way it was found, and that needs the separator it was cut at. */
+  const cut = new RegExp(
+    '(:\\s+' +
+    '|;\\s+' +
+    (dashes === 1 ? '|\\s[—–]\\s' : '') +
+    '|,\\s+(?=(?:' + CONNECTIVES + ')\\b))', 'i');
+
+  const raw = t.split(cut);
+  const pieces = [{ sep: '', text: (raw[0] || '').trim() }];
+  for (let i = 1; i < raw.length; i += 2) {
+    const body = (raw[i + 1] || '').trim();
+    if (body) pieces.push({ sep: raw[i], text: body });
+  }
+
+  const join = (a, b) => a.text + (/^\s*[,;:]/.test(b.sep) ? b.sep.replace(/\s+$/, ' ') : ' — ') + b.text;
+
+  /* Three ways a piece is not a step of its own:
+       · it is too short to stand up — an apposition, "…, 42% versus 31%";
+       · it is the tail of a list rather than a new clause — "…, or refractory
+         angina" closes "haemodynamic instability, cardiogenic shock, or
+         refractory angina", and cutting there leaves the list beheaded;
+       · the FIRST piece is short, which the others' rule cannot fix because
+         there is nothing behind it to fold into.
+     The first two fold backwards, the third forwards, and all three keep the
+     separator they were cut at, so the sentence survives being rejoined. */
+  const weak = p => /^(?:or|and)\b/i.test(p.text);
+  const merged = [];
+  for (const p of pieces) {
+    const tooShort = p.text.length < MIN_STEP;
+    const listTail = weak(p) && p.text.length < WEAK_MIN;
+    if (merged.length && (tooShort || listTail)) {
+      merged[merged.length - 1] = { sep: merged[merged.length - 1].sep,
+                                    text: join(merged[merged.length - 1], p) };
+    } else merged.push(p);
+  }
+  while (merged.length > 1 && merged[0].text.length < MIN_STEP) {
+    const head = merged.shift();
+    merged[0] = { sep: head.sep, text: join(head, merged[0]) };
+  }
+  while (merged.length > MAX_STEPS) {
+    const tail = merged.pop();
+    merged[merged.length - 1] = { sep: merged[merged.length - 1].sep,
+                                  text: join(merged[merged.length - 1], tail) };
+  }
+  if (merged.length < 2) return [{ lead: '', text: t.replace(/\s*\.$/, '') }];
+
+  return merged.map((piece, i) => {
+    let body = piece.text, lead = '';
+    if (i > 0) {
+      for (const [re, label] of LIFT) {
+        if (re.test(body)) { body = body.replace(re, ''); lead = label; break; }
+      }
+    }
+    /* A step opens a line of its own, so it is given a capital — except where
+       the first word is cased the way the notes cased it: a gene, a trial name,
+       a drug whose lower-case initial is the term. */
+    if (body && /^[a-z]/.test(body) && !/^[a-z]+[A-Z0-9]/.test(body)) {
+      body = body.charAt(0).toUpperCase() + body.slice(1);
+    }
+    /* No step ends in a full stop. Only the last one would have had one, and a
+       ladder where the final rung alone is punctuated looks like an error. */
+    return { lead, text: body.replace(/[,;:]\s*$/, '').replace(/\s*\.$/, '') };
+  }).filter(s => s.text);
+}
+
+root.Pearl = { harvest, pick, isPearl, score, sentences, plain, clean, weakWords, steps };
 
 })(typeof window !== 'undefined' ? window : this);

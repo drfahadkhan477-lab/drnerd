@@ -254,12 +254,37 @@ step('pull the reference seed out of the app code', () => {
   refSeed = m[1];
   appCode = appCode.replace(re, '[]');
   appCode += `
+/* ── the library arrives after the first paint ─────────────────────────────
+   In the single-file build REF is inline, so the home screen is painted with
+   the library already in hand. Here it is fetched, and the first paint happens
+   without it — which silently cost the home screen its centrepiece: no notes
+   means no pearl, so the card simply was not there, and nothing ever asked for
+   it again. Filling the binding is not enough; something has to repaint.
+
+   Not a blanket repaint. render() remounts the hero, which restarts an ECG
+   canvas and a WebGL heart, and doing that for nothing is worse than the bug.
+   So it repaints only when the library actually changed what is on screen, and
+   never while a question is up. */
+function refLatePaint(){
+  if(typeof render !== 'function' || typeof S === 'undefined') return;
+  if(S.screen === 'refs'){ render(); return; }
+  if(S.screen !== 'home') return;
+  var card = document.getElementById('pearlCard');
+  var wantPearl = typeof pearlAll === 'function' && pearlAll().length > 0;
+  /* Two ways the library can have changed home: there is no pearl and there
+     should be one, or a pearl is showing whose figure had not downloaded when
+     it was painted. */
+  var missingFig = !!card && typeof pearlCurrent !== 'undefined' && pearlCurrent &&
+                   pearlCurrent.figKey && !document.getElementById('pearlFig');
+  if((!card && wantPearl) || missingFig) render();
+}
 /* ── reference seed, fetched (see build-pwa.js) ───────────────────────────── */
 (function(){
   if(typeof REF === 'undefined' || typeof refSeedApply !== 'function') return;
   fetch('content/refs-seed.json').then(function(r){ return r.json(); }).then(function(seed){
     REF = refSeedApply(REF, seed);
     if(typeof invalidateIndex === 'function') invalidateIndex();
+    refLatePaint();
   }).catch(function(){ /* an unseeded library still works, and still imports */ });
 })();
 `;
@@ -284,9 +309,64 @@ step('pull the reference figures out of the app code', () => {
   if(typeof REF_IMGS === 'undefined') return;
   fetch('content/refs-images.json').then(function(r){ return r.json(); }).then(function(imgs){
     REF_IMGS = imgs;
+    /* The pearl may already be on screen quoting a note whose figure only
+       just landed. */
+    if(typeof refLatePaint === 'function') refLatePaint();
   }).catch(function(){ /* notes still render — just without their figures */ });
 })();
 `;
+});
+
+/* ── 3.8. the fonts ───────────────────────────────────────────────────────
+   Four woff2 faces are inlined as base64 in the single-file build — 250 KB of
+   the 802 KB shell, and correctly so there: one file that works offline cannot
+   reference a sibling. In the split build that reasoning inverts. A font is a
+   static, immutable, separately-cacheable asset; leaving it as base64 makes
+   the browser parse a quarter-megabyte of text before it can apply a single
+   rule, and re-download all four whenever one byte of CSS changes.
+
+   Out they come. The shell drops to ~560 KB, the CSS parses sooner, and the
+   service worker precaches them best-effort — best-effort rather than
+   required, because every face has a real fallback stack behind it and a font
+   that failed to cache should cost the fellow a typeface, not an install. */
+const fontAssets = [];
+step('lift the base64 fonts out of the stylesheet', () => {
+  const FACE = /@font-face\{([^}]*?)src:url\(data:font\/woff2;base64,([A-Za-z0-9+/=]+)\)([^}]*)\}/g;
+  const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  let found = 0;
+  html = html.replace(FACE, (whole, head, b64, tail) => {
+    const fam = (/font-family:\s*'([^']+)'/.exec(head) || [, 'font'])[1];
+    const ital = /font-style:\s*italic/.test(head);
+    const name = slug(fam) + (ital ? '-italic' : '') + '.woff2';
+    fontAssets.push([name, Buffer.from(b64, 'base64')]);
+    found++;
+    return `@font-face{${head}src:url(fonts/${name})${tail}}`;
+  });
+  /* The Lottie player carries an @font-face template of its own, in a JS
+     string. It has no data: URL, so it is not matched — and if this ever
+     stops finding the four real faces, that is a silently unstyled app. */
+  if (found !== 4) throw new Error(`expected 4 inlined font faces, found ${found}`);
+});
+
+/* ── 3.9. the head, told the truth about itself ───────────────────────────
+   Two lines in the head are written for the single-file build and are wrong
+   the moment it is split. The comment claims the typefaces are embedded and
+   that the file requests nothing from the network; neither is true here. And
+   `apple-mobile-web-app-capable` is the vendor-prefixed spelling — iOS still
+   honours it, but the standard name is what every other browser reads, and
+   this build's whole purpose is to be installed from Safari. */
+step('correct the head for a build that has a network', () => {
+  const note = /<!-- Typefaces are embedded[\s\S]*?-->/;
+  if (!note.test(html)) throw new Error('the typeface note was not found in the head');
+  html = html.replace(note,
+`<!-- The typefaces (DM Sans, DM Serif Display, JetBrains Mono — SIL Open Font
+     License) are in fonts/, and the question bank and figures are in content/.
+     The service worker caches all of it on first visit, so after one load this
+     opens identically on a plane or a hospital wifi. -->`);
+
+  const cap = '<meta name="apple-mobile-web-app-capable" content="yes">';
+  if (html.split(cap).length - 1 !== 1) throw new Error('the iOS capability meta was not found exactly once');
+  html = html.replace(cap, '<meta name="mobile-web-app-capable" content="yes">\n' + cap);
 });
 
 /* ── 4. write it all out ─────────────────────────────────────────────────── */
@@ -300,6 +380,10 @@ fs.cpSync(CONTENT, path.join(DIST, 'content'), { recursive: true });
 const splashDir = path.join(DIST, 'content', 'splash-heart');
 fs.mkdirSync(splashDir, { recursive: true });
 for (const [name, body] of splashAssets) fs.writeFileSync(path.join(splashDir, name), body);
+
+const fontDir = path.join(DIST, 'fonts');
+fs.mkdirSync(fontDir, { recursive: true });
+for (const [name, body] of fontAssets) fs.writeFileSync(path.join(fontDir, name), body);
 
 if (refSeed) fs.writeFileSync(path.join(DIST, 'content', 'refs-seed.json'), refSeed);
 if (refImgs) fs.writeFileSync(path.join(DIST, 'content', 'refs-images.json'), refImgs);
@@ -345,7 +429,8 @@ const FIGS  = 'accsap-figs-'  + VERSION;
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
 const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', 'content/questions.json'];
-const NICE_TO_HAVE = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
+const NICE_TO_HAVE = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
+                      ${JSON.stringify(fontAssets.map(([n]) => 'fonts/' + n)).slice(1, -1)}];
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {

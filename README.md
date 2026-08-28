@@ -13,12 +13,13 @@ reference notes, reads the figures they cite, and remembers you between
 sessions.
 
 The home screen says one thing: a live ECG, one pearl drawn from your own
-reference notes with a trace of its own running along its foot, how far through
-the bank you are, and a row of glass doors to everything else.
+reference notes — broken at its own joints into a numbered ladder, over ECG
+paper, with a trace running along its foot — how far through the bank you are,
+and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 578 checks, 21 suites
+node scripts/verify.js                              # 595 checks, 21 suites
 node scripts/verify.js --pwa                        # + the split build, over HTTP
 ```
 
@@ -28,6 +29,7 @@ gitignored.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why
+- **[docs/IPAD.md](docs/IPAD.md)** — getting it onto an iPad, in Safari, without a third-party app
 - **[docs/REFERENCE-GUIDE.md](docs/REFERENCE-GUIDE.md)** — writing reference notes for Apex, with [three worked examples](docs/reference-examples/)
 
 Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.

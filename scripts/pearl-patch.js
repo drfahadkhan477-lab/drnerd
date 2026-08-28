@@ -157,8 +157,8 @@ patch('pearl: an editorial card, set apart from the cards that are controls',
   transition:color .18s var(--ease),background .18s var(--ease),transform .3s var(--spring)}
 .pearl-next:hover{color:var(--teal);background:var(--card)}
 .pearl-next:active{transform:rotate(-90deg)}
-.pearl-body{margin:0;font-family:var(--font-serif);font-size:19px;line-height:1.5;
-  color:var(--ink);text-wrap:pretty}
+.pearl-body{margin:0;font-family:var(--font-display);font-size:19px;line-height:1.5;
+  color:var(--text);text-wrap:pretty}
 .pearl-open{margin-top:11px;background:transparent;border:0;padding:0;cursor:pointer;
   display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;
   color:var(--teal);font-family:inherit}
