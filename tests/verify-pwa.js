@@ -134,6 +134,58 @@ async function heapAfterBoot(page, url) {
        /\/api\/apex\//.test(sw), 'bypass present');
   }
 
+  head('a sign-in page is never written into a cache');
+  {
+    /* THE FAILURE THIS DEFENDS AGAINST. Cloudflare Access with a lapsed session
+       answers 200 OK and an HTML sign-in page for any URL. res.ok is true. The
+       service worker used to cache on res.ok alone, so one lapsed session while
+       the shell was being refreshed in the background would write the login page
+       into the precache AS app.js — permanently, on a device that then launches
+       offline into a blank screen.
+
+       The real sw.js is loaded and its keepable() run against fabricated
+       responses. No browser: a service worker is a module with a fetch handler,
+       the same shape verify-worker.js drives, and there is no way to make a
+       local server return a Cloudflare login page anyway. */
+    const swSrc = await (await fetch(new URL('sw.js', target).href)).text();
+    const res = (ct, ok = true, type = 'basic') =>
+      ({ ok, type, headers: { get: h => (h.toLowerCase() === 'content-type' ? ct : null) } });
+    const req = u => ({ url: ORIGIN + u });
+    let keepable;
+    try {
+      keepable = new Function('URL', swSrc.slice(swSrc.indexOf('function keepable')) + '\nreturn keepable;')(URL);
+    } catch (err) { keepable = null; }
+    ok('the worker has a keepable() gate at all', typeof keepable === 'function',
+       typeof keepable);
+    if (typeof keepable === 'function') {
+      ok('a sign-in page is not cached as app.js',
+         keepable(req('/app.js'), res('text/html; charset=utf-8')) === false);
+      ok('nor as a figure',
+         keepable(req('/content/figures/f001.webp'), res('text/html; charset=utf-8')) === false);
+      ok('nor as questions.json',
+         keepable(req('/content/questions.json'), res('text/html; charset=utf-8')) === false);
+      ok('a figure that is not an image is not a figure',
+         keepable(req('/content/figures/f001.webp'), res('application/json')) === false);
+      ok('a real figure is kept',
+         keepable(req('/content/figures/f001.webp'), res('image/webp')) === true);
+      ok('real code is kept',
+         keepable(req('/app.js'), res('text/javascript')) === true);
+      ok('the document itself is still allowed to be HTML',
+         keepable(req('/index.html'), res('text/html; charset=utf-8')) === true &&
+         keepable(req('/'), res('text/html; charset=utf-8')) === true);
+      ok('a font with no content-type at all is still kept — absence is not a login page',
+         keepable(req('/fonts/dm-sans.woff2'), res(null)) === true);
+      ok('an error is never cached', keepable(req('/app.js'), res('text/javascript', false)) === false);
+      ok('and neither is an opaque cross-origin response',
+         keepable(req('/app.js'), res('text/javascript', true, 'opaque')) === false);
+    }
+    /* Counting `if (keepable(...))` rather than every mention, because the
+       function's own declaration matches the bare name too. */
+    const calls = (swSrc.match(/if \(keepable\(req, res\)\)/g) || []).length;
+    ok('both cache writes go through it, not through res.ok',
+       !/if \(res\.ok\) c\.put/.test(swSrc) && calls === 2, calls + ' call sites');
+  }
+
   head('an update reaches an installed app, without costing the figures');
   {
     const sw = await (await fetch(new URL('sw.js', target).href)).text();

@@ -57,13 +57,21 @@ const TIMEOUT_MS = 120000;      // generous: a long grounded answer streams for 
 
 /* Best-effort, per-isolate. See the note at the top of the file. */
 const seen = new Map();
+function sweep(minute) {
+  /* The sweep has to run on the NEW-key path, not only the repeat path. It was
+     originally below the early return, which is exactly backwards: a repeat
+     caller reuses one entry and grows nothing, while a stream of distinct
+     callers — the case the map actually needs defending against — took the
+     early return every time and never swept. */
+  if (seen.size <= 500) return;
+  for (const [k, v] of seen) if (v.minute !== minute) seen.delete(k);
+}
 function overRate(key, limit) {
   const minute = Math.floor(Date.now() / 60000);
   const at = seen.get(key);
-  if (!at || at.minute !== minute) { seen.set(key, { minute, n: 1 }); return false; }
+  if (!at || at.minute !== minute) { seen.set(key, { minute, n: 1 }); sweep(minute); return false; }
   at.n++;
-  /* The map would otherwise grow for the life of the isolate. */
-  if (seen.size > 500) for (const [k, v] of seen) { if (v.minute !== minute) seen.delete(k); }
+  sweep(minute);
   return at.n > limit;
 }
 

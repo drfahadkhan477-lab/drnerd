@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 662 + 45 checks
+node scripts/verify.js --pwa                           # → 734 + 57 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -84,6 +84,7 @@ The cost is that order matters, and the dependencies are real:
 | 35 | `slowcycle` | the cardiac cycle runs at a fraction of real time, with a speed control that does not pretend to be a heart rate |
 | 36 | `hosted` | Gemini moves behind the Cloudflare Worker, Groq and Anthropic stay bring-your-own-key — last, it rewrites what `gemini` built |
 | 37 | `split` | Apex sits beside the question in landscape and under it in portrait, never over it — last, it re-lays out screens every earlier step built |
+| 38 | `boundary` | a retrieved note is fenced with a per-turn nonce and named as data, not direction — genuinely last, it wraps text every earlier retrieval step produces |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -119,7 +120,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Twenty-two suites, 662 checks, plus 45 more on the split build. They run one at a
+Twenty-four suites, 734 checks, plus 57 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
@@ -131,6 +132,15 @@ and the R wave progresses; `verify-keys` re-runs the comparison that found six
 mis-keyed questions, so a future export cannot introduce a seventh silently;
 `verify-splash-heart` measures that the splash heart's conduction nodes light
 in the order the heart depolarises rather than blinking together.
+
+Three of them have no browser in them at all, because the thing under test has
+no browser in it either. `verify-worker` drives the Cloudflare Worker's exported
+`handleApex` with a fake `env` and a stub `fetch`; `verify-fsrs` sweeps the
+scheduler across the whole reachable state space rather than checking a handful
+of remembered numbers — it is what found that a lapse could make a card *more*
+durable; `verify-boundary` imports a note whose title, tags and body are all
+trying to end the app's framing and give orders, fires a real turn, and reads
+what left the app.
 
 Some modules can be checked without a browser at all, which is much faster
 while iterating on the physiology or the ECG maths:

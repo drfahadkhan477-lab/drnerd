@@ -127,7 +127,10 @@ const RETRIEVAL = [
     const results = await page.evaluate(qs => qs.map(([q, want]) => {
       const r = retrievedContext(q, null) || {};
       const text = typeof r === 'string' ? r : (r.text || '');
-      const hits = [...text.matchAll(/REFERENCE NOTE: "([^"]+)"/g)].map(m => m[1]);
+      /* Retrieved notes are fenced with a per-turn nonce now (boundary-patch),
+         so the title is the first line inside the opening fence rather than
+         part of a plain heading. */
+      const hits = [...text.matchAll(/<<<NOTE-[A-Z0-9]{12}>>>\ntitle: ([^\n]+)/g)].map(m => m[1]);
       return { want, first: hits[0] || '(nothing)', top3: hits.slice(0, 3) };
     }), RETRIEVAL);
 

@@ -62,6 +62,8 @@ const SUITES = [
   ['chatfigs',     'the figure Apex is reasoning from is one you can see'],
   ['pearl',        'the home screen opens with something worth knowing'],
   ['worker',       'the Gemini key lives on the edge, and the site still serves'],
+  ['fsrs',         'the scheduler cannot make forgetting a reward'],
+  ['boundary',     'a retrieved note is material to teach from, never an instruction'],
 ];
 
 const argv = process.argv.slice(2);

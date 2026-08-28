@@ -150,7 +150,8 @@ specific haemodynamic finding.
      /Do not supplement them from your own knowledge/.test(sysText));
   ok('it is given the exact words to refuse with',
      /Your notes do not cover this/.test(sysText));
-  ok('the fellow\'s notes are in the context', /REFERENCE NOTE: "Cardiac amyloidosis/.test(sysText));
+  ok('the fellow\'s notes are in the context, inside their own fence',
+     /<<<NOTE-[A-Z0-9]{12}>>> title: Cardiac amyloidosis/.test(sysText));
   ok('the note\'s source travels with it, so a citation is checkable',
      /source: Braunwald/.test(sysText));
   ok('no retrieved question-bank items are included',

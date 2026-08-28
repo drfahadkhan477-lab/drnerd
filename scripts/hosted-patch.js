@@ -66,11 +66,17 @@ function apexHosted(){
 }
 /* BYOK → Google directly, exactly as before. Hosted → the Worker, which
    attaches the secret. op is 'stream' | 'generate' | 'models'. */
-function gemUrl(op,model,key){
+function gemUrl(op,model,key,page){
+  /* The page token belongs in here rather than at the call site. It used to be
+     concatenated on by the caller as '&pageToken=…', which is right for
+     Google's URL — that one already carries ?pageSize=200 — and wrong for the
+     hosted one, which had no query string at all, so the '&' started nothing
+     and every page after the first silently re-fetched page one. */
+  const pt=page?'&pageToken='+encodeURIComponent(page):'';
   if(key) return op==='models'
-    ? \`\${ENDPOINT.gemini}?pageSize=200\`
+    ? \`\${ENDPOINT.gemini}?pageSize=200\${pt}\`
     : \`\${ENDPOINT.gemini}/\${model}:\${op==='stream'?'streamGenerateContent?alt=sse':'generateContent'}\`;
-  return op==='models' ? \`\${APEX_API}/models\`
+  return op==='models' ? \`\${APEX_API}/models?pageSize=200\${pt}\`
                        : \`\${APEX_API}/\${op}?model=\${encodeURIComponent(model||'')}\`;
 }
 function gemHeaders(key,post){
@@ -106,8 +112,15 @@ patch('hosted: validating a key is still a key thing, but the route moves',
 patch('hosted: the model menu is built from whichever key is in play',
 `r=await fetch(\`\${ENDPOINT.gemini}?pageSize=200\${pageToken?'&pageToken='+encodeURIComponent(pageToken):''}\`,
         {headers:{'x-goog-api-key':key}});`,
-`r=await fetch(gemUrl('models','',key)+(pageToken?'&pageToken='+encodeURIComponent(pageToken):''),
-        {headers:gemHeaders(key,false)});`);
+`r=await fetch(gemUrl('models','',key,pageToken),{headers:gemHeaders(key,false)});`);
+
+/* A lapsed Access session is 200 OK and a login page, and Connect is the first
+   thing a returning fellow presses — so the check that guards the streamed turn
+   guards the model menu too. Without it the menu simply comes back empty. */
+patch('hosted: a lapsed session is not an empty model list',
+`    if(!r.ok) return {error:await apiError(r,'gemini'), models:[], raw:[]};`,
+`    if(apexSessionLapsed(r)) return {error:APEX_LAPSED, models:[], raw:[]};
+    if(!r.ok) return {error:await apiError(r,'gemini'), models:[], raw:[]};`);
 
 patch('hosted: the streamed turn, which is the one that matters',
 `  const r=await fetch(\`\${ENDPOINT.gemini}/\${model}:streamGenerateContent?alt=sse\`,{

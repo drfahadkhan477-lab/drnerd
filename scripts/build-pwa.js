@@ -527,7 +527,8 @@ self.addEventListener('fetch', e => {
       const hit = await c.match(req);
       if (hit) return hit;
       const res = await fetch(req);
-      if (res.ok) c.put(req, res.clone());
+      /* A figure is an image or it is not kept. See keepable() below. */
+      if (keepable(req, res)) c.put(req, res.clone());
       return res;
     }));
     return;
@@ -535,10 +536,35 @@ self.addEventListener('fetch', e => {
   // shell: cache first, but refresh in the background so an update lands
   e.respondWith(caches.open(SHELL).then(async c => {
     const hit = await c.match(req);
-    const net = fetch(req).then(res => { if (res.ok) c.put(req, res.clone()); return res; }).catch(() => hit);
+    const net = fetch(req).then(res => { if (keepable(req, res)) c.put(req, res.clone()); return res; }).catch(() => hit);
     return hit || net;
   }));
 });
+
+/* AN AUTHENTICATING PROXY DOES NOT ANSWER WITH AN ERROR. Cloudflare Access with
+   a lapsed session, a corporate SSO gateway, a hotel captive portal: every one
+   of them replies 200 OK with an HTML sign-in page, for whatever URL you asked
+   for. res.ok was therefore never enough to decide something was worth keeping.
+
+   The app's own figure downloader already knew this — it content-type checks
+   before it stores anything. The service worker did not, and the service worker
+   is the worse place to get it wrong: it caches app.js. One lapsed session while
+   the shell was being refreshed and the sign-in page becomes app.js in the
+   precache, permanently, on a device that then launches offline into a blank
+   screen with no way to ask for help.
+
+   So an HTML answer is only kept for something that asked for HTML, and a
+   figure is only kept if it is actually an image. The response is still
+   RETURNED either way — that is the network's business, and the app has its own
+   error handling — it is just never written down. */
+function keepable(req, res) {
+  if (!res || !res.ok || res.type === 'opaque') return false;
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  const p = new URL(req.url).pathname;
+  if (p.includes('/content/figures/')) return ct.indexOf('image/') === 0;
+  if (ct.indexOf('text/html') !== 0) return true;
+  return p.endsWith('/') || p.endsWith('.html');
+}
 `;
 fs.writeFileSync(path.join(DIST, 'sw.js'), SW);
 

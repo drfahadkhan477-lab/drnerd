@@ -83,13 +83,16 @@ const ROOT = path.join(__dirname, '..');
                    stay bring-your-own-key — last, it rewrites gemini's own work
      split         Apex sits beside the question in landscape and under it in
                    portrait, instead of covering it
+     boundary      a retrieved note is fenced with a per-turn nonce and named as
+                   data — last, because it wraps text every earlier retrieval
+                   step produces
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
-  'split',
+  'split', 'boundary',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
