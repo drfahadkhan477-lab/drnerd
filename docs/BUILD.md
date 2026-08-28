@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 398 + 18 checks
+node scripts/verify.js --pwa                           # → 578 + 18 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -35,7 +35,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Twenty patch scripts run in order against the export. Each applies a list of
+Twenty-nine patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -66,7 +66,16 @@ The cost is that order matters, and the dependencies are real:
 | 17 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
 | 18 | `type`  | the modular type scale, snapped over everything above |
 | 19 | `lab` | removes the Rhythm Lab's 3D heart — late, so what it deletes is final |
-| 20 | `review`| fixes from the full code review — last, so it sees everything |
+| 20 | `review`| fixes from the full code review |
+| 21 | `refs` | the reference-note store, and the seeded library that ships with it |
+| 22 | `read` | the reading view those notes are read in |
+| 23 | `ref-images` | `refimg://`, so a note can cite a figure |
+| 24 | `gemini` | a third provider, with its own wire shape and model discovery |
+| 25 | `memory` | what Apex keeps about you between sessions |
+| 26 | `assets` | an imported chapter brings its figures — rewrites the importer, the renderer and the vision path, so it must follow all three |
+| 27 | `chatfigs` | the figure Apex reasons from appears in the answer — after `assets` and `ref-images`, whose work it rewrites |
+| 28 | `pearl` | one sentence from your own notes, on the home screen |
+| 29 | `homeflow` | home cut to the trace, the pearl and the progress bar; everything else behind a door — last, so it moves finished markup |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -102,7 +111,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Sixteen suites, ~398 checks, plus 18 more on the split build. They run one at a
+Twenty-one suites, 578 checks, plus 18 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
@@ -155,7 +164,7 @@ node tests/verify-pwa.js http://localhost:8080
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
 scripts/      build · verify · 20 *-patch · build-pwa · serve · shots
-tests/        17 Playwright suites (16 single-file + pwa)
+tests/        22 Playwright suites (21 single-file + pwa)
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

@@ -12,9 +12,13 @@ spaced repetition, and Apex — an AI tutor that can be grounded in your own
 reference notes, reads the figures they cite, and remembers you between
 sessions.
 
+The home screen says one thing: a live ECG, one pearl drawn from your own
+reference notes with a trace of its own running along its foot, how far through
+the bank you are, and a row of glass doors to everything else.
+
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 567 checks, 21 suites
+node scripts/verify.js                              # 578 checks, 21 suites
 node scripts/verify.js --pwa                        # + the split build, over HTTP
 ```
 
