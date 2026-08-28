@@ -59,6 +59,7 @@ const SUITES = [
   ['gemini',       'a free provider with real vision, wired to its own wire shape'],
   ['memory',       'Apex still knows you next time, and you can see what it kept'],
   ['assets',       'an imported chapter brings its figures, and keeps them'],
+  ['chatfigs',     'the figure Apex is reasoning from is one you can see'],
 ];
 
 const argv = process.argv.slice(2);

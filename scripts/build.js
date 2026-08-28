@@ -62,11 +62,13 @@ const ROOT = path.join(__dirname, '..');
      assets        an imported chapter brings its own figures — after memory,
                    because it embeds beside that module and rewrites the
                    importer, the renderer and the vision path it all sits on
+     chatfigs      the figure Apex is reasoning from appears in the answer —
+                   last, because it rewrites what assets and ref-images built
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
-  'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets',
+  'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
