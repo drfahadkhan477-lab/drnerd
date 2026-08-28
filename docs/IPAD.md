@@ -18,8 +18,9 @@ node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
 node scripts/build-pwa.js build/systole.html       # → dist/
 ```
 
-`dist/` is a plain static folder. Nothing in it needs a server that can run
-code — any static host will do.
+`dist/` is a plain static folder, about 23 MB — the bank, 408 figures, the
+shell and the fonts, and nothing else. Nothing in it needs a server that can run
+code, so any static host will do.
 
 ---
 

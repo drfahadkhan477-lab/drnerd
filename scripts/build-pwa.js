@@ -375,7 +375,25 @@ fs.mkdirSync(path.join(DIST, 'icons'), { recursive: true });
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 fs.writeFileSync(path.join(DIST, 'app.js'), appCode);
 
-fs.cpSync(CONTENT, path.join(DIST, 'content'), { recursive: true });
+/* content/ is the build's INPUT directory as well as the deployed one, and a
+   blind recursive copy shipped 18 MB the app never asks for: the per-figure
+   visual atlas the reference figures were cut from (14 MB), the markdown the
+   seed was baked from, and the loose figure files that were base64'd into
+   refs-images.json. Dead weight anywhere; worse on the iPad route, where this
+   folder is uploaded to a host and synced to a tablet.
+
+   So only what the shipped code actually fetches is copied. The list is short
+   and checked against the built code below, because a folder silently dropped
+   here is a feature that 404s at runtime rather than a build that fails. */
+const SHIPPED = ['questions.json', 'manifest.json', 'figures'];
+step('copy only the content the app asks for', () => {
+  fs.mkdirSync(path.join(DIST, 'content'), { recursive: true });
+  for (const name of SHIPPED) {
+    const from = path.join(CONTENT, name);
+    if (!fs.existsSync(from)) throw new Error(`content/${name} is missing`);
+    fs.cpSync(from, path.join(DIST, 'content', name), { recursive: true });
+  }
+});
 
 const splashDir = path.join(DIST, 'content', 'splash-heart');
 fs.mkdirSync(splashDir, { recursive: true });
@@ -405,6 +423,18 @@ const manifest = {
   ],
 };
 fs.writeFileSync(path.join(DIST, 'manifest.webmanifest'), JSON.stringify(manifest, null, 2));
+
+/* Every content path the shipped code names must exist on disk. This is the
+   safety net under the selective copy above: add a fetch without adding the
+   file it wants and the build stops here, rather than the app 404ing on a
+   tablet with no console to read. */
+step('every content path the code names is on disk', () => {
+  const code = html + appCode;
+  const wanted = new Set();
+  for (const m of code.matchAll(/['"`](content\/[A-Za-z0-9_.-]+)/g)) wanted.add(m[1]);
+  const missing = [...wanted].filter(rel => !fs.existsSync(path.join(DIST, rel)));
+  if (missing.length) throw new Error(`the code fetches ${missing.join(', ')}, which was not copied`);
+});
 
 /* Cache version is derived from the content digest, so publishing a new
    export invalidates the old caches instead of serving a stale bank. */
