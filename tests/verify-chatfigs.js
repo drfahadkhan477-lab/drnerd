@@ -126,6 +126,34 @@ const sse = text => [
   ok('a citation the model copied renders inside the reply', inline.inBody === 1, inline.inBody + ' inline');
   ok('and the strip does not repeat it underneath', inline.inStrip === 0, inline.inStrip + ' in strip');
 
+  head('the evidence belongs to one conversation');
+  /* lastHits is a single global. Before it was tagged with its thread, asking
+     about one question and then opening another that already had a chat showed
+     the first question's notes — and, once figures were added, printed the
+     first question's diagram as the evidence for the second. */
+  const leak = await page.evaluate(async () => {
+    const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
+    const [a, b] = ALL_Q.filter(x => !x.bad).slice(0, 2);
+    /* A conversation exists on B, but the retrieval that produced lastHits
+       happened on A. */
+    CHATS[b.id] = [{ role: 'user', content: 'unrelated' },
+                   { role: 'assistant', content: 'An answer with no figure in it.' }];
+    saveJSON(AI_CHAT, CHATS);
+    lastHits = [{ kind: 'r', id: note.id, title: note.title }];
+    lastHitsKey = a.id;
+    jumpTo(b.id); buildAI();
+    const strayFigs = document.querySelectorAll('.fig-strip .ai-fig').length;
+    const strayPills = document.querySelectorAll('.src-strip .src-pill').length;
+    /* And when the hits do belong to this thread, they draw as normal. */
+    lastHitsKey = b.id; buildAI();
+    return { strayFigs, strayPills,
+             ownFigs: document.querySelectorAll('.fig-strip .ai-fig').length };
+  });
+  ok('another thread\'s figure is not printed as this one\'s evidence',
+     leak.strayFigs === 0, leak.strayFigs + ' stray figure(s)');
+  ok('nor are its "drawing on" pills', leak.strayPills === 0, leak.strayPills + ' stray pill(s)');
+  ok('while the thread\'s own figure still shows', leak.ownFigs === 1, leak.ownFigs + ' figure(s)');
+
   head('the strip is evidence, not furniture');
   const empty = await page.evaluate(() => {
     delete CHATS['_general']; saveJSON(AI_CHAT, CHATS);

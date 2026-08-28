@@ -98,14 +98,36 @@ function refImagesForHits(hits){
   return AI_GROUNDED ? refFiguresForHits(hits,4) : [];
 }`);
 
-/* ── 2. the strip under the reply ────────────────────────────────────────── */
+/* ── 2. the sources belong to one conversation ───────────────────────────────
+   lastHits is a single global, written by fire() and never associated with the
+   thread it was retrieved for. Ask about one question, move to another that
+   already has a conversation, and its "drawing on" pills name the notes from
+   the question you left. That was mild while it was a row of small pills; it
+   is not mild now that the same list decides which diagram is printed under
+   the answer, captioned as the evidence for it.
+
+   Tagging the hits with their thread is enough — the strips simply do not draw
+   for a thread the hits did not come from. */
+patch('sources: remember which conversation the retrieved notes belong to',
+`let lastHits=[];`,
+`let lastHits=[], lastHitsKey=null;`);
+
+patch('sources: tag them as they are retrieved',
+`  lastHits=extra.hits;
+  aiBusy=true; buildAI();`,
+`  lastHits=extra.hits; lastHitsKey=q?q.id:'_general';
+  aiBusy=true; buildAI();`);
+
+/* ── 3. the strip under the reply ────────────────────────────────────────── */
 patch('figures: show them under the answer, captioned to their note',
 `  const srcStrip=lastHits.length?\`<div class="src-strip"><span class="src-lbl">drawing on</span>\${
     lastHits.map(h=>h.kind==='r'
       ? \`<span class="src-pill ref">\${icon('folder','icon-sm')} \${e(clip(h.title,26))}</span>\`
       : \`<button class="src-pill" data-jump="\${h.id}">\${e(h.ch.split(' ')[0])} · \${h.n}</button>\`).join('')}</div>\`:'';`,
-`  const srcStrip=lastHits.length?\`<div class="src-strip"><span class="src-lbl">drawing on</span>\${
-    lastHits.map(h=>h.kind==='r'
+`  /* Only the notes retrieved for THIS conversation — see lastHitsKey. */
+  const hits=(lastHitsKey===(q?q.id:'_general'))?lastHits:[];
+  const srcStrip=hits.length?\`<div class="src-strip"><span class="src-lbl">drawing on</span>\${
+    hits.map(h=>h.kind==='r'
       ? \`<span class="src-pill ref">\${icon('folder','icon-sm')} \${e(clip(h.title,26))}</span>\`
       : \`<button class="src-pill" data-jump="\${h.id}">\${e(h.ch.split(' ')[0])} · \${h.n}</button>\`).join('')}</div>\`:'';
   /* Only while a reply is on screen: a figure hanging under an empty thread,
@@ -114,7 +136,7 @@ patch('figures: show them under the answer, captioned to their note',
      twice in one answer. */
   const lastBot=hist.length&&hist[hist.length-1].role!=='user'?String(hist[hist.length-1].content||''):'';
   const figs=(hist.length&&!aiBusy)
-    ? refFiguresForHits(lastHits,3).filter(f=>lastBot.indexOf('refimg://'+f.key)<0)
+    ? refFiguresForHits(hits,3).filter(f=>lastBot.indexOf('refimg://'+f.key)<0)
     : [];
   const figStrip=figs.length?\`<div class="fig-strip"><span class="src-lbl">figure\${figs.length===1?'':'s'} from those notes</span>
     \${figs.map(f=>\`<figure class="ai-fig"><img src="\${f.dataUrl}" alt="\${e(f.caption)}" loading="lazy">
