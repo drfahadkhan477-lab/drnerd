@@ -77,7 +77,32 @@ function offlineFigures(){
   }catch(_){ }
   return out;
 }
-let offlineJob={have:0,total:0,busy:false,stop:false,counted:false};
+let offlineJob={have:0,total:0,bad:0,busy:false,stop:false,counted:false};
+/* IS THIS ACTUALLY A FIGURE? Behind an authenticating proxy — Cloudflare
+   Access, an SSO gateway, a captive portal on hospital wifi — an expired
+   session does not answer with an error. It answers 200 OK with a login page.
+   r.ok is true, the fetch resolves, and without this check the downloader
+   would count four hundred sign-in forms as four hundred figures and cache
+   every one of them, leaving the fellow with a bank of broken images and a
+   progress bar that said everything was fine.
+
+   The content type is the whole test: a figure is an image and a login page is
+   not, whatever the status code says. */
+function offlineIsImage(res){
+  if(!res||!res.ok) return false;
+  const ct=(res.headers.get('content-type')||'').toLowerCase();
+  return ct.indexOf('image/')===0;
+}
+/* Something that is not a figure must not be left in the cache pretending to
+   be one, or every later survey counts it as present. The worker's fetch
+   handler has already stored it by the time we can look, so it is hunted down
+   across whatever caches this origin has and removed. */
+async function offlinePurge(url){
+  try{
+    const names=await caches.keys();
+    for(const n of names){ const c=await caches.open(n); await c.delete(url); }
+  }catch(_){ }
+}
 /* caches.match() with no cache named searches every cache the origin has, so
    this asks the same question the worker's fetch handler asks, without needing
    to know what the worker called its cache. */
@@ -88,7 +113,8 @@ async function offlineSurvey(){
   let have=0;
   for(let i=0;i<urls.length;i+=24){
     const batch=urls.slice(i,i+24);
-    const hits=await Promise.all(batch.map(u=>caches.match(u).then(r=>!!r).catch(()=>false)));
+    const hits=await Promise.all(batch.map(u=>
+      caches.match(u).then(r=>offlineIsImage(r)).catch(()=>false)));
     have+=hits.filter(Boolean).length;
   }
   offlineJob.have=have; offlineJob.counted=true;
@@ -100,10 +126,10 @@ async function offlineSurvey(){
 async function offlineDownload(){
   if(!offlineCapable()||offlineJob.busy) return;
   const urls=offlineFigures();
-  offlineJob={have:offlineJob.have,total:urls.length,busy:true,stop:false,counted:true};
+  offlineJob={have:offlineJob.have,total:urls.length,bad:0,busy:true,stop:false,counted:true};
   offlinePaint();
   const todo=[];
-  for(const u of urls) if(!(await caches.match(u).catch(()=>null))) todo.push(u);
+  for(const u of urls) if(!offlineIsImage(await caches.match(u).catch(()=>null))) todo.push(u);
   offlineJob.have=urls.length-todo.length;
   let i=0;
   async function worker(){
@@ -115,7 +141,11 @@ async function offlineDownload(){
          make this feature worse than the problem. A failure is skipped
          rather than fatal — one missing figure is not a reason to abandon
          the other four hundred. */
-      try{ const r=await fetch(u,{cache:'no-store'}); if(r.ok) offlineJob.have++; }catch(_){ }
+      try{
+        const r=await fetch(u,{cache:'no-store'});
+        if(offlineIsImage(r)) offlineJob.have++;
+        else { offlineJob.bad++; await offlinePurge(u); }
+      }catch(_){ offlineJob.bad++; }
       offlinePaint();
     }
   }
@@ -136,6 +166,14 @@ function offlinePaint(){
   if(val) val.textContent=!offlineJob.counted?'checking…'
     :done?\`all \${offlineJob.total} figures on this device\`
     :\`\${offlineJob.have} of \${offlineJob.total} figures here\`;
+  /* Said out loud rather than swallowed: a silent shortfall is how you end up
+     revising from a bank of broken images. */
+  const note=card.querySelector('.off-note');
+  if(note) note.textContent=offlineJob.bad
+    ?\`\${offlineJob.bad} did not come back as an image — if this is behind a sign-in, open it in a browser tab, sign in again, and retry.\`
+    :done?'This device has the whole bank. It works with no network at all.'
+    :'Pull every figure down once and the bank works with no network at all.';
+  card.classList.toggle('has-trouble',offlineJob.bad>0);
   const btn=card.querySelector('.off-btn');
   if(btn){
     btn.textContent=offlineJob.busy?'Stop':done?'Up to date':'Download the rest';
@@ -213,6 +251,8 @@ patch('offline: styled as the doors are, since it sits with them',
 /* Nothing left to fetch: the bar is the whole width and the prose stops
    asking for something that has already happened. */
 .off-card.all-here .off-note{color:var(--teal)}
+.off-card.has-trouble .off-note{color:var(--amber)}
+.off-card.has-trouble .off-fill{background:linear-gradient(90deg,var(--amber2),var(--amber))}
 @media(max-width:520px){
   .off-foot{flex-direction:column;align-items:stretch}
   .off-btn{width:100%}

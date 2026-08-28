@@ -86,17 +86,30 @@ card under the doors on the home screen pulls all 408 down in one go, about
 19 MB over the wifi you are already on. After that the tablet holds the whole
 bank whether or not the machine that served it still exists.
 
-## 2. Cloudflare Pages + Access — works from anywhere
+## 2. Cloudflare Pages + Access — works from anywhere, and needs no computer
 
-Free, and Access is free for up to 50 users.
+Free, Access is free for up to 50 users, and the whole thing can be done from
+the iPad: the dashboard's direct upload takes a **zip**, not just a folder, so
+the zipped `dist/` can be picked straight out of Files.
 
 1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
-   **Upload assets**, and drag `dist/` in.
+   **Upload assets**. Give it a name, then choose the zip.
 2. **Settings → Access** on the new project → require your email address.
 3. Open the `*.pages.dev` URL on the iPad, sign in once, **Add to Home Screen**.
+4. Press **Download the rest** on the home screen.
+
+Well within the platform limits — 430 files against a ceiling of 20,000, and
+5.4 MB for the largest against 25 MB.
 
 Fully offline afterwards, and reachable from a hospital wifi. The trade is that
 `dist/content/` — the bank and 408 figures — sits on Cloudflare's storage.
+
+**An authenticating proxy does not answer with an error.** Access with an
+expired session replies `200 OK` and a sign-in page, which is exactly what a
+naive downloader counts as a figure. So every response is checked for an
+`image/` content type before it counts, anything else is deleted back out of
+the cache rather than left there pretending, and the card turns amber and says
+how many failed. Sign in again in a browser tab and press the button once more.
 
 ## 3. Plain LAN — quickest, and the most limited
 

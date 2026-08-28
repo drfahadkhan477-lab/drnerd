@@ -286,6 +286,40 @@ async function heapAfterBoot(page, url) {
        `${reloaded.have}/${reloaded.total}`);
     ok('and re-fetches none of them', figReqs === 0, String(figReqs));
 
+    /* AN AUTHENTICATING PROXY DOES NOT ANSWER WITH AN ERROR. Cloudflare Access
+       with an expired session, an SSO gateway, a captive portal: all reply
+       200 OK with a sign-in page. Without a content-type check the downloader
+       counts four hundred login forms as four hundred figures and caches every
+       one, leaving a bank of broken images under a progress bar reading 100%. */
+    const gated = await page.evaluate(async () => {
+      const url = offlineFigures()[0];
+      const looksOk = offlineIsImage(new Response('<html>sign in</html>',
+        { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }));
+      /* Poison the cache the way a gated fetch would. The real figure has to
+         go first: caches.match() returns the first hit across all caches, so
+         with the good copy still present the survey would find that instead
+         and the check would pass for the wrong reason. */
+      const before = offlineJob.have;
+      await offlinePurge(url);
+      const c = await caches.open('accsap-test-poison');
+      await c.put(url, new Response('<html>sign in</html>',
+        { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }));
+      await offlineSurvey();
+      const counted = offlineJob.have;
+      await offlinePurge(url);
+      await caches.delete('accsap-test-poison');
+      return { looksOk, before, counted };
+    });
+    ok('a 200 sign-in page is not mistaken for a figure', gated.looksOk === false);
+    ok('and one already in the cache is not counted as present',
+       gated.counted === gated.before - 1, `${gated.before} → ${gated.counted}`);
+
+    /* Put the real one back so the offline check below has it. */
+    await page.evaluate(() => offlineDownload());
+    await page.waitForFunction(() => !offlineJob.busy, { timeout: 300000 });
+    ok('and a retry restores it', await page.evaluate(() => offlineJob.have === offlineJob.total &&
+       offlineJob.bad === 0));
+
     /* The claim, tested the only way that means anything: network off, and a
        question this session has never opened. */
     await ctx.setOffline(true);
