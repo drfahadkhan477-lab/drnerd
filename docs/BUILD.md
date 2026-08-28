@@ -35,7 +35,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Thirty-four patch scripts run in order against the export. Each applies a list of
+Thirty-five patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -80,7 +80,8 @@ The cost is that order matters, and the dependencies are real:
 | 31 | `offline` | one press pulls all 408 figures onto the device — under `homeflow`'s door row, and only alive in the split build |
 | 32 | `pvloop` | the pearl's strip becomes the pressure–volume loop the cardiac-cycle screen already computes |
 | 33 | `fullbleed` | the navigation bar leaves the reading column so its colour reaches both edges of an iPad, and reserves the strip the status bar sits in |
-| 34 | `figview` | a figure opens full size and closes four ways — last, it hangs a viewer on markup every earlier step set |
+| 34 | `figview` | a figure opens full size and closes four ways |
+| 35 | `slowcycle` | the cardiac cycle runs at a fraction of real time, with a speed control that does not pretend to be a heart rate |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
