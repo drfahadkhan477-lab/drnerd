@@ -44,20 +44,40 @@ not a technical one — which is why there is no single recommendation here.
 Tailscale gives your machines a private network with real HTTPS certificates.
 The iPad talks to your laptop directly; nothing is published anywhere.
 
+It takes two commands because of a macOS limitation worth knowing about:
+`tailscale serve` can point at a **folder** or at a **local port**, but the
+folder form is unavailable on the Mac App Store and Standalone builds — the app
+sandbox forbids it. So a small web server holds the folder, and Tailscale
+proxies its port. That form works on every platform, so it is the one
+documented here.
+
 ```bash
-# on the machine holding dist/
-node scripts/serve.js 8080 dist &
+# 1. serve the folder locally. python3 ships with macOS; nothing to install.
+cd /path/to/dist
+python3 -m http.server 8080
+
+# 2. in a second terminal, put that port on your tailnet
 tailscale serve --bg 8080
 tailscale serve status          # prints the https://<machine>.<tailnet>.ts.net URL
 ```
 
+The first `tailscale serve` will offer to enable HTTPS certificates for your
+tailnet if they are not already on — say yes; the URL depends on it.
+
+`python3 -m http.server` is enough: the suite passes 34/34 against it, with the
+manifest, the woff2 faces, the webp figures and the service worker all served
+under the right content types by its stock table. If you would rather use the
+repo's own server, `node scripts/serve.js 8080 dist` is equivalent.
+
 Install Tailscale on the iPad from the App Store, sign in to the same account,
 open that URL in Safari, then **Share → Add to Home Screen**.
 
-Why this one works when a LAN address does not: service workers require a
-*secure context*. `https://…ts.net` is one; `http://192.168.1.42` is not. No
-secure context means no service worker, which means no offline and no real
-install — just a web page that stops working when you close the laptop.
+To stop sharing: `tailscale serve off`.
+
+Why this works when a LAN address does not: service workers require a *secure
+context*. `https://….ts.net` is one; `http://192.168.1.42` is not. No secure
+context means no service worker, which means no offline and no real install —
+just a web page that stops working when you close the laptop.
 
 **Press "Download the rest" first.** Figures are otherwise fetched one at a
 time, as you meet the questions that use them — which would mean every figure
