@@ -155,7 +155,7 @@ patch('figures: styles, following the note figure rather than inventing a look',
 `.src-strip{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:0 14px 8px}
 .fig-strip{display:flex;flex-direction:column;gap:8px;padding:0 14px 10px}
 .ai-fig{margin:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--white)}
-.ai-fig img{display:block;width:100%;height:auto;max-height:320px;object-fit:contain;background:#fff}
+.ai-fig img{display:block;width:100%;height:auto;max-height:320px;object-fit:contain;background:var(--white)}
 /* 13px, not 12: the type suite holds every fixed size to the 9/11/13/16 ladder,
    and "just a bit smaller than 13" is exactly the twenty-ninth size it exists
    to refuse. Matches the note figure's own caption, which is the same thing in

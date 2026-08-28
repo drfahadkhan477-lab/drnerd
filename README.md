@@ -14,7 +14,7 @@ sessions.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 539 checks, 20 suites
+node scripts/verify.js                              # 567 checks, 21 suites
 node scripts/verify.js --pwa                        # + the split build, over HTTP
 ```
 

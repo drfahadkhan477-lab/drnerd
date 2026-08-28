@@ -60,6 +60,7 @@ const SUITES = [
   ['memory',       'Apex still knows you next time, and you can see what it kept'],
   ['assets',       'an imported chapter brings its figures, and keeps them'],
   ['chatfigs',     'the figure Apex is reasoning from is one you can see'],
+  ['pearl',        'the home screen opens with something worth knowing'],
 ];
 
 const argv = process.argv.slice(2);
