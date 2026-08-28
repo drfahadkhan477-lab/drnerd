@@ -71,12 +71,14 @@ const ROOT = path.join(__dirname, '..');
                    rewrites markup and styles that pearl and homeflow both set
      offline       one press puts all 408 figures on the device — after
                    homeflow, whose door row it sits under
+     pvloop        the pearl's strip becomes the pressure–volume loop the
+                   cardiac-cycle screen already computes — last, it restyles
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
-  'pearlcard', 'offline',
+  'pearlcard', 'offline', 'pvloop',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

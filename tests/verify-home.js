@@ -98,7 +98,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   const homeShape = await page.evaluate(() => ({
     hero: !!document.querySelector('.hero-live #heroECG'),
     pearl: !!document.querySelector('.pearl-card'),
-    pearlECG: !!document.querySelector('.pearl-card #pearlECG'),
+    pearlPV: !!document.querySelector('.pearl-card #pearlPV'),
     progress: !!document.querySelector('.hp-track'),
     doors: document.querySelectorAll('.door-row .door').length,
     rail: !!document.querySelector('.story-rail'),
@@ -109,7 +109,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   }));
   ok('the trace, the pearl and the progress bar are all on it',
      homeShape.hero && homeShape.pearl && homeShape.progress);
-  ok('the pearl carries a trace of its own', homeShape.pearlECG);
+  ok('the pearl carries a loop of its own', homeShape.pearlPV);
   ok('and a row of doors under them', homeShape.doors >= 5, String(homeShape.doors));
   const firstDoor = await page.evaluate(() => {
     const d = document.querySelector('.door-row .door');

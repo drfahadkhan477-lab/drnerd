@@ -126,6 +126,33 @@ const sse = text => [
   ok('a citation the model copied renders inside the reply', inline.inBody === 1, inline.inBody + ' inline');
   ok('and the strip does not repeat it underneath', inline.inStrip === 0, inline.inStrip + ' in strip');
 
+  /* AND IT MUST FIT. Every .ref-fig rule was scoped to .ref-body — the Notes
+     panel — so a figure the model placed in a reply had no styles at all and
+     took its natural size: 824px inside a 430px panel. The conversation then
+     scrolled sideways, which on a touch device reads as the app being stuck:
+     you cannot swipe back to the thread, and the composer is off the edge.
+     Checked at phone width, where the panel is narrowest. */
+  await page.setViewportSize({ width: 430, height: 932 });
+  await page.waitForTimeout(400);
+  const fits = await page.evaluate(() => {
+    buildAI();
+    return new Promise(r => setTimeout(() => {
+      const body = document.querySelector('.ai-body');
+      const img = document.querySelector('.msg.bot figure.ref-fig img');
+      r({ bodyW: body.clientWidth, bodyScrollW: body.scrollWidth,
+          imgW: img ? Math.round(img.getBoundingClientRect().width) : 0,
+          natural: img ? img.naturalWidth : 0,
+          maxW: img ? getComputedStyle(img).maxWidth : '' });
+    }, 700));
+  });
+  ok('the figure is scaled down to the panel, not shown at its own size',
+     fits.imgW > 0 && fits.imgW <= fits.bodyW && fits.natural > fits.bodyW,
+     `${fits.imgW}px in ${fits.bodyW}px, natural ${fits.natural}px`);
+  ok('so the conversation never scrolls sideways',
+     fits.bodyScrollW <= fits.bodyW + 1, `scrollWidth ${fits.bodyScrollW} vs ${fits.bodyW}`);
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.waitForTimeout(300);
+
   head('the evidence belongs to one conversation');
   /* lastHits is a single global. Before it was tagged with its thread, asking
      about one question and then opening another that already had a chat showed

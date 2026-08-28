@@ -14,12 +14,13 @@ sessions.
 
 The home screen says one thing: a live ECG, one pearl drawn from your own
 reference notes — broken at its own joints into a numbered ladder, over ECG
-paper, with a trace running along its foot — how far through the bank you are,
+paper, with the pressure–volume loop turning in its corner — how far through
+the bank you are,
 and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 595 checks, 21 suites
+node scripts/verify.js                              # 604 checks, 21 suites
 node scripts/verify.js --pwa                        # + 37 more on the split build
 ```
 

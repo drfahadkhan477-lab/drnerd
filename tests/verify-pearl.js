@@ -182,7 +182,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     return new Promise(r => setTimeout(() => {
       const card = document.getElementById('pearlCard');
       const main = document.querySelector('.pearl-main');
-      const ecg = document.getElementById('pearlECG');
+      const ecg = document.getElementById('pearlPV');
       r({
         rungs: document.querySelectorAll('.pearl-step').length,
         numbered: [...document.querySelectorAll('.pearl-n')].map(n => n.textContent.trim()).join(''),
@@ -206,8 +206,48 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('the rungs are numbered in order', /^123/.test(rung.numbered), rung.numbered);
   ok('the rungs arrive one at a time', rung.staggered);
   ok('the ECG paper is painted behind, not laid out beside', rung.paperAbs);
-  ok('and so is the trace along the foot', rung.traceAbs);
+  ok('and so is the loop in the corner', rung.traceAbs);
   ok('so the prose keeps the card', rung.mainShare > 0.5, (rung.mainShare * 100).toFixed(0) + '%');
+
+  /* THE LOOP IS THE APP'S OWN PHYSIOLOGY, NOT AN ANIMATION THAT LOOKS CARDIAC.
+     It is drawn from Physio.lvPressure/lvVolume — the same pair the cardiac
+     cycle screen plots — so the figure in this corner cannot drift from the
+     one on that screen. A vectorcardiogram was tried first and rejected: the
+     dipole here is three time-separated Gaussians, so the vector goes out and
+     back along one axis and draws a needle rather than a loop. */
+  const loop = await page.evaluate(() => {
+    const cv = document.getElementById('pearlPV');
+    if (!cv) return null;
+    const r = cv.getBoundingClientRect();
+    const pts = [];
+    for (let i = 0; i <= 240; i++) { const t = i / 240; pts.push([Physio.lvVolume(t), Physio.lvPressure(t)]); }
+    let vLo = 1e9, vHi = -1e9, qHi = -1e9;
+    for (const [v, q] of pts) { if (v < vLo) vLo = v; if (v > vHi) vHi = v; if (q > qHi) qHi = q; }
+    /* A closed loop returns to where it started. */
+    const gap = Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]);
+    return {
+      mounted: !!pearlPV,
+      square: Math.abs(r.width - r.height) < 2,
+      backing: r.width ? cv.width / r.width : 0,
+      dpr: window.devicePixelRatio,
+      behind: +getComputedStyle(cv).zIndex === 0 &&
+              +getComputedStyle(document.querySelector('.pearl-steps')).zIndex === 1,
+      vLo, vHi, qHi, gap,
+      esv: Physio.ESV, edv: Physio.EDV,
+    };
+  });
+  ok('the pearl carries a loop, and it is running', loop && loop.mounted);
+  ok('it is square, which a strip was not', loop.square, `${loop.backing.toFixed(1)}× backing`);
+  ok('and backed at device-pixel density like every other canvas here',
+     loop.backing >= Math.min(loop.dpr, 3) - 0.05, `${loop.backing.toFixed(2)}× at dpr ${loop.dpr}`);
+  ok('it sits behind the words rather than over them', loop.behind);
+  /* The volume axis must run end-systolic to end-diastolic, and the pressure
+     must reach systolic. If this ever drifts, the corner is drawing something
+     that is not the cardiac cycle. */
+  ok('the loop spans ESV to EDV', Math.abs(loop.vLo - loop.esv) < 2 && Math.abs(loop.vHi - loop.edv) < 2,
+     `${loop.vLo.toFixed(0)}–${loop.vHi.toFixed(0)} mL vs ESV ${loop.esv} / EDV ${loop.edv}`);
+  ok('and reaches a systolic pressure', loop.qHi > 90, `${loop.qHi.toFixed(0)} mmHg`);
+  ok('and it closes, as a cycle must', loop.gap < 2, loop.gap.toFixed(2));
 
   const marks = await page.evaluate(() => {
     const all = pearlAll();

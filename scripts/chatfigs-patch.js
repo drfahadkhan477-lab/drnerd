@@ -162,7 +162,27 @@ patch('figures: styles, following the note figure rather than inventing a look',
    a different panel. */
 .ai-fig figcaption{padding:7px 11px;font-size:13px;line-height:1.45;color:var(--muted);
   border-top:1px solid var(--border)}
-.ai-fig-src{display:block;margin-top:3px;font-size:11px;color:var(--dim)}`);
+.ai-fig-src{display:block;margin-top:3px;font-size:11px;color:var(--dim)}
+/* A FIGURE THE MODEL PLACED INLINE, WHICH HAD NO STYLES AT ALL.
+   md() emits <figure class="ref-fig">, and every .ref-fig rule was scoped to
+   .ref-body — the Notes panel. Inside a reply there was no rule, so the image
+   took its natural size: 824px in a 430px panel, max-width:none. The message
+   list then scrolled sideways, which on a touch device reads as the app being
+   stuck — you cannot swipe the conversation back, and the composer and the
+   close button are off the edge. The inline citation was the whole point of
+   letting the model place a figure, and it was unusable the moment it worked. */
+.msg .ref-fig{margin:10px 0;border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;background:var(--white);max-width:100%}
+.msg .ref-fig img{display:block;width:100%;height:auto;max-width:100%;
+  max-height:340px;object-fit:contain;background:var(--white)}
+.msg .ref-fig figcaption{padding:7px 11px;font-size:13px;line-height:1.45;
+  color:var(--muted);border-top:1px solid var(--border)}
+/* And a floor under all of it. A model may emit any markup it likes, and one
+   over-wide element in a reply breaks the same way — so nothing in the panel
+   is allowed past its edge, and the things that genuinely need width scroll
+   inside themselves instead of taking the conversation with them. */
+.ai-body img,.ai-body table,.ai-body pre,.ai-body figure{max-width:100%}
+.ai-body pre,.ai-body table{overflow-x:auto;display:block}`);
 
 /* ── 4. let the model place one where it belongs ─────────────────────────── */
 patch('figures: the model may place one inline, by copying a citation exactly',
