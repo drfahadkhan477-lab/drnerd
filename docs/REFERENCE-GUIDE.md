@@ -137,7 +137,37 @@ in front of you on an unrelated question.
 Write the caption as if the reader cannot see the image, because sometimes it
 cannot — a text-only provider gets the caption and nothing else.
 
-To produce the files, point the atlas tool at a page-image dump of a unit:
+### Importing a chapter that has its own figures
+
+**Notes → ⤒ Import** takes a `.zip` as well as loose files, which is the easy
+path: pick the whole package and the chapter and its figures go in together.
+
+```
+Chapter.zip
+├── chapter.md          ![Fig 54.1](visuals/001.jpg)
+└── visuals/
+    ├── 001.jpg
+    └── 002.jpg
+```
+
+On import each `![caption](visuals/001.jpg)` is resolved against the files that
+came with it, stored, and rewritten to a `refimg://` citation — so it renders,
+reaches a vision model, and survives a reload. Selecting the `.md` and its
+images together in the file picker works the same way; paths are matched
+exactly first, then by path ending, then by filename.
+
+The toast afterwards says what actually happened — *"Added 14 notes · 37 figures
+linked · 2 images not found"* — because an import that quietly drops half its
+figures is the failure worth naming. An image that cannot be found is left in
+the note as written rather than deleted, so you can see which one it was.
+
+Imported figures live in IndexedDB, not `localStorage`: a chapter of figures is
+a megabyte or two and would blow the 5 MB cliff the rest of the app's storage
+sits under. Delete the last note citing a figure and the figure is released.
+
+### Building an atlas from a page-image dump
+
+To produce figure files from a unit that has none, point the atlas tool at it:
 
 ```
 python3 tools/visual-atlas.py <pages-dir> <text.md> <out-dir> --name Braunwald_HF

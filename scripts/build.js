@@ -58,14 +58,15 @@ const ROOT = path.join(__dirname, '..');
      read          notes and Apex replies render as prose, not their own source
      ref-images    figures the notes cite render for real, and reach Apex's eyes
      gemini        a free provider that still sees a figure, alongside Groq and Claude
-     memory        what Apex knows about the fellow, kept across sessions — last,
-                   because it edits the tools, the context and the panels that
-                   every step above it builds
+     memory        what Apex knows about the fellow, kept across sessions
+     assets        an imported chapter brings its own figures — after memory,
+                   because it embeds beside that module and rewrites the
+                   importer, the renderer and the vision path it all sits on
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
-  'refs', 'read', 'ref-images', 'gemini', 'memory',
+  'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
