@@ -20,8 +20,8 @@
    the signature round-trip or drop an image. It routes, it checks a few bounds,
    it attaches a header.
 
-   ONLY GEMINI. Groq and Anthropic remain bring-your-own-key in the app and
-   never reach this file. One secret to set, one path to get wrong.
+   ONLY GEMINI. Mistral remains bring-your-own-key in the app and never
+   reaches this file. One secret to set, one path to get wrong.
 
    WHAT ACTUALLY PROTECTS THE BILL, honestly ordered:
      1. Cloudflare Access in front of the whole project — only a signed-in

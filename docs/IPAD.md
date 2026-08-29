@@ -108,9 +108,9 @@ a site: it answers `/api/apex/gemini/*` with your key attached server-side, and
 hands every other request straight back to the static site. Apex opens with
 nothing to type.
 
-That is Gemini only. **Groq and Anthropic are still bring-your-own-key**, and so
-is Gemini the moment you paste a key into Apex settings — a key you typed always
-wins. The single-file `systole.html` has no server at all, so it is always BYOK.
+That is Gemini only. **Mistral is still bring-your-own-key**, and so is Gemini
+the moment you paste a key into Apex settings — a key you typed always wins.
+The single-file `systole.html` has no server at all, so it is always BYOK.
 
 What bounds the cost: Access means only your signed-in address can reach the
 endpoint; the Worker clamps `maxOutputTokens` to 2000 whatever the browser asks

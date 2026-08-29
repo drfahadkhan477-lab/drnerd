@@ -132,11 +132,11 @@ function zip(entries) {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
 
-  const anth = [];
-  await page.route('**/v1/messages', route => {
-    try { anth.push(JSON.parse(route.request().postData() || '{}')); } catch (_) {}
+  const mist = [];
+  await page.route('**/v1/chat/completions', route => {
+    try { mist.push(JSON.parse(route.request().postData() || '{}')); } catch (_) {}
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
-      body: 'data: {"type":"message_start","message":{"id":"m","content":[]}}\n\ndata: {"type":"message_stop"}\n\n' });
+      body: 'data: ' + JSON.stringify({ choices: [{ delta: { content: '' } }] }) + '\n\ndata: [DONE]\n\n' });
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
@@ -235,8 +235,8 @@ function zip(entries) {
       'Body text that mentions amyloidosis and cardiac imaging at some length.\n\n' +
       '![An imported figure](refimg://' + key + ')', 'amyloid, imaging', 'Test');
     invalidateIndex();
-    AI.provider = 'anthropic';
-    AI.anthropic = { key: 'sk-ant-test', model: 'claude-sonnet-5' };
+    AI.provider = 'mistral';
+    AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
     AI_GROUNDED = true;
     lastHits = [{ kind: 'r', id: r.id, title: r.title }];
     const imgs = refImagesForHits(lastHits);

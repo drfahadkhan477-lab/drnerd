@@ -32,22 +32,16 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 const sse = text => [
-  'data: {"type":"message_start","message":{"id":"m","content":[]}}',
-  'data: {"type":"content_block_start","content_block":{"type":"text"}}',
-  `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":${JSON.stringify(text)}}}`,
-  'data: {"type":"content_block_stop"}',
-  'data: {"type":"message_stop"}',
+  `data: {"choices":[{"delta":{"content":${JSON.stringify(text)}}}]}`,
+  'data: [DONE]',
   '',
 ].join('\n\n');
 
 /* A tool round, so the panel rebuilds mid-reply — which is exactly when the
    composer used to be wiped. */
 const TOOL_SSE = [
-  'data: {"type":"message_start","message":{"id":"mt","content":[]}}',
-  'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"toolu_1","name":"get_performance"}}',
-  'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{}"}}',
-  'data: {"type":"content_block_stop"}',
-  'data: {"type":"message_stop"}',
+  'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"get_performance","arguments":"{}"}}]}}]}',
+  'data: [DONE]',
   '',
 ].join('\n\n');
 
@@ -62,7 +56,7 @@ const TOOL_SSE = [
 
   const captured = [];
   const queued = [];
-  await page.route('**/v1/messages', route => {
+  await page.route('**/v1/chat/completions', route => {
     try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: queued.shift() || sse('Noted.') });
   });
@@ -72,8 +66,8 @@ const TOOL_SSE = [
   await page.waitForTimeout(800);
 
   const openPanel = () => page.evaluate(() => {
-    AI.provider = 'anthropic';
-    AI.anthropic = { key: 'sk-ant-test', model: 'claude-sonnet-5' };
+    AI.provider = 'mistral';
+    AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
     const q = ALL_Q.find(x => !x.bad);
     jumpTo(q.id);
     const sh = document.getElementById('shell');
@@ -158,7 +152,11 @@ const TOOL_SSE = [
     await page.evaluate(() => fire('one more'));
     await page.waitForTimeout(1600);
     const req = captured.find(Boolean);
-    const msgs = (req && req.messages) || [];
+    /* Mistral's wire puts the system prompt as messages[0]. Stripping it here
+       isolates the conversation window, so the assertions below stay about
+       the windowing, not the wire. */
+    const allMsgs = (req && req.messages) || [];
+    const msgs = (allMsgs[0] && allMsgs[0].role === 'system') ? allMsgs.slice(1) : allMsgs;
     ok('a long thread exists to be windowed', sent.total === 120, String(sent.total));
     ok('the request carries a window, not the whole thread',
        msgs.length > 0 && msgs.length <= 17, `${msgs.length} messages`);
@@ -330,7 +328,7 @@ const TOOL_SSE = [
     page.off('pageerror', onErr);
     ok('the panel still renders', !panel.threw && panel.html > 200, panel.threw || `${panel.html} chars`);
     ok('the provider was corrected to one this build actually has a path for',
-       ['groq', 'anthropic', 'gemini'].indexOf(panel.provider) > -1 && panel.hasSlot === true,
+       ['gemini', 'mistral'].indexOf(panel.provider) > -1 && panel.hasSlot === true,
        String(panel.provider));
     ok('and nothing threw on the way', bootErrors.length === 0, bootErrors.slice(0, 2).join(' | '));
   }

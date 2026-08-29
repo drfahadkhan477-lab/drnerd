@@ -79,20 +79,19 @@ step('strip the inline figure blob', () => {
   if (appCode.length === before) throw new Error('IMGS line not removed');
 });
 
-/* ── 2. the one place that genuinely needed data URLs ────────────────────── */
-/* Figures now live at URLs, which <img src> takes happily but the Messages
-   API does not — it wants base64. So the AI path resolves them at send time.
-   Only there: fetching and encoding 18 MB up front is exactly what we are
-   getting away from, and an API call is rare next to a render. */
-const AI_CALL = `      messages:Vision.withImages(
-        Vision.withFigures(wire, q, (typeof IMGS!=='undefined'?IMGS[q&&q.id]:null), AI.provider),
-        refImagesForHits(lastHits), AI.provider)})`;
+/* ── 2. the two places that genuinely needed data URLs ───────────────────── */
+/* Figures now live at URLs, which <img src> takes happily but neither
+   provider's chat API does — both want base64. So the AI path resolves them
+   at send time. Only there: fetching and encoding 18 MB up front is exactly
+   what we are getting away from, and an API call is rare next to a render.
+   Two call sites, one per remaining provider (oneTurnGemini, oneTurnMistral)
+   — each builds its own wire shape around the same withFigures/withImages
+   pair, so each has its own copy of this fragment. */
+const AI_CALL = `(typeof IMGS!=='undefined'?IMGS[q&&q.id]:null)`;
 step('AI path resolves figure URLs to base64 at send time', () => {
-  if (appCode.split(AI_CALL).length - 1 !== 1) throw new Error('vision call site not found exactly once');
-  appCode = appCode.replace(AI_CALL,
-    `      messages:Vision.withImages(
-        Vision.withFigures(wire, q, await figuresAsDataUrls(q), AI.provider),
-        refImagesForHits(lastHits), AI.provider)})`);
+  const n = appCode.split(AI_CALL).length - 1;
+  if (n !== 2) throw new Error(`vision call site expected in exactly 2 places (one per provider), found ${n}`);
+  appCode = appCode.split(AI_CALL).join('await figuresAsDataUrls(q)');
 });
 
 step('add the figure resolver', () => {

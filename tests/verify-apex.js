@@ -160,7 +160,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('idle by default', noKeyState.state === 'idle', noKeyState.state);
 
   const listening = await page.evaluate(() => {
-    AI[AI.provider] = { key: 'sk-ant-test-not-real', model: 'claude-sonnet-5' };
+    AI[AI.provider] = { key: 'test-key-not-real', model: 'gemini-2.5-flash' };
     toggleAI();
     const ta = document.getElementById('aiIn');
     ta.value = 'why is this the answer';

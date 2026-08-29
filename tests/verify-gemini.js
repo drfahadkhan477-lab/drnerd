@@ -4,13 +4,14 @@
  *
  *   NODE_PATH=$(npm root -g) node tests/verify-gemini.js /path/to/patched.html
  *
- * Gemini's wire shape is close to neither Anthropic's nor Groq's — a top-level
- * systemInstruction instead of a system message, roles 'user'/'model' instead
- * of 'user'/'assistant', images as inlineData instead of a source block, tool
- * results matched by name instead of by id. Getting any one of those wrong is
- * invisible until a real request 400s, so — same discipline as verify-stage3
- * for the other two providers — this intercepts the actual outbound request
- * and inspects the JSON body rather than trusting that the code "looks right".
+ * Gemini's wire shape is nothing like Mistral's, the app's other provider — a
+ * top-level systemInstruction instead of a system message, roles 'user'/'model'
+ * instead of 'user'/'assistant', images as inlineData instead of an image_url
+ * block, tool results matched by name instead of by id. Getting any one of
+ * those wrong is invisible until a real request 400s, so — same discipline as
+ * verify-mistral for the other provider — this intercepts the actual outbound
+ * request and inspects the JSON body rather than trusting that the code
+ * "looks right".
  */
 'use strict';
 const path = require('path');
@@ -115,19 +116,25 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('Vision.providerSeesFigures says gemini can see a figure', config.sees === true);
   ok('endpoint points at the Generative Language API', /generativelanguage\.googleapis\.com/.test(config.endpoint || ''));
 
-  head('an existing config saved before Gemini existed does not crash on switch');
+  head('an existing config saved before Mistral existed does not crash on switch');
+  /* The self-heal runs once, at script load — so proving the APP repairs this
+     (not the test) means saving the stale shape, then reloading, rather than
+     hand-patching AI in the page and asserting on the patch. */
+  await page.evaluate(() => {
+    saveJSON(AI_CFG, { provider: 'gemini', gemini: { key: '', model: 'gemini-2.5-flash' } });  // pre-Mistral shape, no .mistral
+  });
+  await page.reload({ waitUntil: 'load', timeout: 200000 });
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await page.waitForTimeout(800);
   const repaired = await page.evaluate(() => {
-    AI = { provider: 'groq', groq: { key: 'gsk_x', model: 'openai/gpt-oss-120b' },
-            anthropic: { key: '', model: 'claude-sonnet-5' } };   // pre-Gemini shape, no .gemini
-    saveJSON(AI_CFG, AI);
-    AI = loadJSON(AI_CFG, AI_DEFAULT);
-    if (AI && !AI.gemini) AI.gemini = { key: '', model: 'gemini-2.5-flash' };
-    AI.provider = 'gemini';
+    const hasSlot = !!AI.mistral;
+    AI.provider = 'mistral';
     let threw = false;
     try { buildAI(); } catch (_) { threw = true; }
-    return { hasSlot: !!AI.gemini, threw };
+    return { hasSlot, threw };
   });
-  ok('a .gemini slot exists even for a config saved before this feature', repaired.hasSlot);
+  ok('a .mistral slot exists even for a config saved before this feature — the app healed it on load, not the test',
+     repaired.hasSlot);
   ok('switching to it does not throw', !repaired.threw);
 
   head('key validation — the throwaway call is shaped right');

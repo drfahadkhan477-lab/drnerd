@@ -32,11 +32,8 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 const sse = text => [
-  'data: {"type":"message_start","message":{"id":"m","content":[]}}',
-  'data: {"type":"content_block_start","content_block":{"type":"text"}}',
-  'data: ' + JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text } }),
-  'data: {"type":"content_block_stop"}',
-  'data: {"type":"message_stop"}',
+  'data: ' + JSON.stringify({ choices: [{ delta: { content: text } }] }),
+  'data: [DONE]',
   '',
 ].join('\n\n');
 
@@ -49,7 +46,7 @@ const sse = text => [
 
   const sent = [];
   let reply = 'Pressure overload adds sarcomeres in parallel.';
-  await page.route('**/v1/messages', route => {
+  await page.route('**/v1/chat/completions', route => {
     try { sent.push(JSON.parse(route.request().postData() || '{}')); } catch (_) {}
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse(reply) });
   });
@@ -63,8 +60,8 @@ const sse = text => [
   const ask = async grounded => {
     sent.length = 0;
     return page.evaluate(async grounded => {
-      AI.provider = 'anthropic';
-      AI.anthropic = { key: 'sk-ant-test', model: 'claude-sonnet-5' };
+      AI.provider = 'mistral';
+      AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
       AI_GROUNDED = grounded;
       const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
       const sh = document.getElementById('shell');
@@ -96,14 +93,14 @@ const sse = text => [
 
   head('the vision attachment stays rationed, though the display is not');
   const openSys = (sent.find(Boolean) || {});
-  const openHasImage = JSON.stringify(openSys).includes('"type":"image"');
+  const openHasImage = JSON.stringify(openSys).includes('"type":"image_url"');
   ok('open mode still does not spend tokens sending note figures', !openHasImage);
 
   head('grounded mode — shown and sent');
   const grounded = await ask(true);
   ok('the figure is still shown', grounded.figs >= 1, grounded.figs + ' figure(s)');
   const gReq = sent.find(Boolean) || {};
-  ok('and now it is sent to the model too', JSON.stringify(gReq).includes('"type":"image"'));
+  ok('and now it is sent to the model too', JSON.stringify(gReq).includes('"type":"image_url"'));
 
   head('the model may place one inline, and then it is not shown twice');
   const inline = await page.evaluate(async () => {

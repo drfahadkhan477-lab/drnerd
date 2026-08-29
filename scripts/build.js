@@ -103,6 +103,10 @@ const ROOT = path.join(__dirname, '..');
                    gives it a tall column to be long in
      apexroom      the tutor panel is spacious, its chips are behind a button,
                    and it scrolls on iOS
+     mistral       Groq and Anthropic leave, Mistral arrives bring-your-own-key
+                   and vision-capable — genuinely last, it revises code that
+                   apex, gemini, hosted, memory, ref-images, toolfence, chatfix
+                   and apexroom all touched
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -110,7 +114,7 @@ const CHAIN = [
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
-  'homewide', 'pearlrich', 'apexroom',
+  'homewide', 'pearlrich', 'apexroom', 'mistral',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

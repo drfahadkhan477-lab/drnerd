@@ -30,11 +30,8 @@ const head = t => console.log('\n── ' + t + ' ──');
 const flat = t => String(t || '').replace(/\s+/g, ' ');
 
 const SSE = [
-  'data: {"type":"message_start","message":{"id":"msg_test","content":[]}}',
-  'data: {"type":"content_block_start","content_block":{"type":"text"}}',
-  'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Noted."}}',
-  'data: {"type":"content_block_stop"}',
-  'data: {"type":"message_stop"}',
+  'data: {"choices":[{"delta":{"content":"Noted."}}]}',
+  'data: [DONE]',
   '',
 ].join('\n\n');
 
@@ -51,14 +48,14 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
 
-  const anth = [], gem = [];
-  await page.route('**/v1/messages', route => {
+  const mist = [], gem = [];
+  await page.route('**/v1/chat/completions', route => {
     let b = null; try { b = JSON.parse(route.request().postData() || '{}'); } catch (_) {}
-    anth.push(b);
-    /* The summariser is the only non-streaming Anthropic call this app makes. */
+    mist.push(b);
+    /* The summariser is the only non-streaming Mistral call this app makes. */
     if (b && !b.stream) {
       route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: [{ type: 'text', text: SUMMARY }] }) });
+        body: JSON.stringify({ choices: [{ message: { content: SUMMARY } }] }) });
       return;
     }
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
@@ -151,10 +148,10 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   ok('memories are still there after a reload', survived.n === 3 && survived.has, 'count ' + survived.n);
 
   const ask = async (provider) => {
-    anth.length = 0; gem.length = 0;
+    mist.length = 0; gem.length = 0;
     await page.evaluate(async (provider) => {
       AI.provider = provider;
-      AI.anthropic = { key: 'sk-ant-test', model: 'claude-sonnet-5' };
+      AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
       AI.gemini = { key: 'AQ.test', model: 'gemini-9.9-flash' };
       const q = ALL_Q.find(x => !x.bad);
       jumpTo(q.id);
@@ -164,13 +161,13 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
       fire('why is this the answer?');
     }, provider);
     await page.waitForTimeout(1500);
-    return provider === 'anthropic' ? anth.find(Boolean)
+    return provider === 'mistral' ? mist.find(Boolean)
       : (gem.find(g => /:streamGenerateContent/.test(g.url)) || {}).body;
   };
 
-  head('it actually reaches the model — Anthropic');
-  const aReq = await ask('anthropic');
-  const aSys = flat((aReq && aReq.system || []).map(b => b.text || '').join('\n'));
+  head('it actually reaches the model — Mistral');
+  const aReq = await ask('mistral');
+  const aSys = flat((aReq && aReq.messages || []).find(m => m.role === 'system')?.content || '');
   ok('a request was made', !!aReq);
   ok('the memory block is in the system prompt', /WHAT YOU ALREADY KNOW ABOUT THIS FELLOW/.test(aSys));
   ok('the actual memory text is there, not just the heading', /boards in October 2026/.test(aSys));
@@ -183,17 +180,17 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   ok('the actual memory text is there', /boards in October 2026/.test(gSys));
 
   head('grounded mode keeps it — it is who you teach, not what you teach from');
-  anth.length = 0;
+  mist.length = 0;
   await page.evaluate(async () => {
-    AI.provider = 'anthropic';
+    AI.provider = 'mistral';
     AI_GROUNDED = true;
     const q = ALL_Q.find(x => !x.bad);
     jumpTo(q.id); buildAI();
     fire('what do my notes say?');
   });
   await page.waitForTimeout(1500);
-  const gReq2 = anth.find(Boolean);
-  const gSys2 = flat((gReq2 && gReq2.system || []).map(b => b.text || '').join('\n'));
+  const gReq2 = mist.find(Boolean);
+  const gSys2 = flat((gReq2 && gReq2.messages || []).find(m => m.role === 'system')?.content || '');
   ok('grounded mode is genuinely on', /GROUNDED MODE IS ON/.test(gSys2));
   ok('memory is still present in grounded mode', /WHAT YOU ALREADY KNOW ABOUT THIS FELLOW/.test(gSys2));
   ok('and the commentary is still withheld, so grounding was not weakened',
@@ -258,17 +255,17 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   head('the session summariser');
   await page.evaluate(() => {
     Memory.clear();
-    AI.provider = 'anthropic'; AI_GROUNDED = false;
+    AI.provider = 'mistral'; AI_GROUNDED = false;
     S.sessionCorrect = 14; S.sessionTotal = 20;
     sessionSummarised = false;
   });
-  anth.length = 0;
+  mist.length = 0;
   await page.evaluate(() => summariseSession());
   await page.waitForTimeout(900);
   const summ = await page.evaluate(() => ({ n: Memory.count(),
     kinds: [...new Set(Memory.all().map(m => m.kind))],
     texts: Memory.all().map(m => m.text) }));
-  const oneShot = anth.filter(b => b && !b.stream);
+  const oneShot = mist.filter(b => b && !b.stream);
   ok('exactly one non-streaming call was made', oneShot.length === 1, oneShot.length + ' call(s)');
   ok('it is small — this runs unasked, on a free tier', oneShot[0] && oneShot[0].max_tokens <= 400,
      oneShot[0] && String(oneShot[0].max_tokens));
@@ -278,10 +275,10 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   ok('list punctuation is stripped from the model output',
      summ.texts.every(t => !/^[-•*\d.]/.test(t)), JSON.stringify(summ.texts));
 
-  anth.length = 0;
+  mist.length = 0;
   await page.evaluate(() => summariseSession());
   await page.waitForTimeout(500);
-  ok('it will not fire twice for one sitting', anth.filter(b => b && !b.stream).length === 0);
+  ok('it will not fire twice for one sitting', mist.filter(b => b && !b.stream).length === 0);
 
   const thin = await page.evaluate(async () => {
     Memory.clear();
@@ -295,10 +292,10 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   const survivesError = await page.evaluate(async () => {
     Memory.clear();
     S.sessionCorrect = 9; S.sessionTotal = 12; sessionSummarised = false;
-    AI.anthropic = { key: '', model: 'claude-sonnet-5' };      // no key → oneShot bails
+    AI.mistral = { key: '', model: 'pixtral-large-latest' };   // no key → oneShot bails
     let threw = false;
     try { await summariseSession(); } catch (_) { threw = true; }
-    AI.anthropic = { key: 'sk-ant-test', model: 'claude-sonnet-5' };
+    AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
     return { threw, n: Memory.count() };
   });
   ok('a summariser that cannot run fails silently rather than breaking the screen',
