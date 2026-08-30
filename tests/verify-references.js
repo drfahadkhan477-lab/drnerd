@@ -98,6 +98,11 @@ const RETRIEVAL = [
 
   const payload = files.map(f => ({ name: f, raw: fs.readFileSync(path.join(DIR, f), 'utf8') }));
   const imported = await page.evaluate(fs_ => {
+    /* The build ships a seeded library now (refs-patch). Start from empty:
+       the count below is a claim about what THIS corpus produced, and the
+       retrieval check further down wants your notes ranked against each
+       other rather than against whatever else happened to be on the shelf. */
+    REF.length = 0; invalidateIndex();
     const out = [];
     for (const f of fs_) {
       const notes = parseImportText(f.raw, f.name);
@@ -122,7 +127,10 @@ const RETRIEVAL = [
     const results = await page.evaluate(qs => qs.map(([q, want]) => {
       const r = retrievedContext(q, null) || {};
       const text = typeof r === 'string' ? r : (r.text || '');
-      const hits = [...text.matchAll(/REFERENCE NOTE: "([^"]+)"/g)].map(m => m[1]);
+      /* Retrieved notes are fenced with a per-turn nonce now (boundary-patch),
+         so the title is the first line inside the opening fence rather than
+         part of a plain heading. */
+      const hits = [...text.matchAll(/<<<NOTE-[A-Z0-9]{12}>>>\ntitle: ([^\n]+)/g)].map(m => m[1]);
       return { want, first: hits[0] || '(nothing)', top3: hits.slice(0, 3) };
     }), RETRIEVAL);
 
@@ -137,6 +145,58 @@ const RETRIEVAL = [
     ok('and most of them rank first, not merely somewhere in the context',
        first >= RETRIEVAL.length - 2, `${first}/${RETRIEVAL.length} ranked first`);
   }
+
+  /* The seeded library has to keep up with the corpus. The first version of
+     refSeedApply stored a bare flag and returned early whenever it was set, so
+     a device seeded before the notes gained figure citations kept the old
+     bodies for ever — the figures were in the build and never reached the
+     shelf. These drive refSeedApply directly, because the failure is invisible
+     from the outside: the library looks fully populated either way. */
+  head('a seeded library keeps up when the corpus changes');
+  const sync = await page.evaluate(() => {
+    const key = 'accsap12.refseed';
+    const v1 = [{ title: 'A — one', body: 'first body', tags: 't', source: 's' }];
+    const v2 = [{ title: 'A — one', body: 'first body ![f](refimg://x.jpg)', tags: 't', source: 's' },
+                { title: 'B — two', body: 'brand new', tags: 't', source: 's' }];
+
+    localStorage.removeItem(key);
+    let shelf = refSeedApply([], v1);
+    const seededOnce = shelf.length;
+
+    /* Same seed again: nothing should move, or a deleted note would return on
+       every reload. */
+    shelf = refSeedApply(shelf, v1);
+    const stableOnRerun = shelf.length;
+
+    /* Corpus changes: the untouched note updates, the new one arrives. */
+    shelf = refSeedApply(shelf, v2);
+    const updated = shelf.find(r => r.title === 'A — one');
+    const updatedBody = updated.body;          // read now: it is mutated below
+    const addedNew = !!shelf.find(r => r.title === 'B — two');
+
+    /* An edited seeded note must survive a later change to the same title. */
+    updated.body = 'I rewrote this myself.';
+    const v3 = [{ title: 'A — one', body: 'third body', tags: 't', source: 's' }];
+    shelf = refSeedApply(shelf, v3);
+    const mine = shelf.find(r => r.title === 'A — one').body;
+
+    /* And a note the fellow wrote is never touched at all. */
+    shelf.push({ id: 'own1', title: 'C — mine', body: 'my own note', tags: '', source: '' });
+    const v4 = [{ title: 'C — mine', body: 'REPLACED', tags: '', source: '' }];
+    shelf = refSeedApply(shelf, v4);
+    const own = shelf.find(r => r.title === 'C — mine').body;
+
+    localStorage.removeItem(key);
+    return { seededOnce, stableOnRerun, updatedBody, addedNew, mine, own };
+  });
+  ok('a fresh shelf gets seeded', sync.seededOnce === 1, String(sync.seededOnce));
+  ok('the same seed twice changes nothing, so a deleted note stays deleted',
+     sync.stableOnRerun === 1, String(sync.stableOnRerun));
+  ok('an untouched seeded note picks up the new body — this is the figures bug',
+     /refimg:\/\//.test(sync.updatedBody), sync.updatedBody);
+  ok('a note added to the corpus arrives on an already-seeded shelf', sync.addedNew);
+  ok('a seeded note you edited is never overwritten', sync.mine === 'I rewrote this myself.', sync.mine);
+  ok('a note you wrote yourself is never touched', sync.own === 'my own note', sync.own);
 
   ok('no page errors across the run', errors.length === 0, errors.slice(0, 2).join(' | '));
   await browser.close();

@@ -28,11 +28,8 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 const SSE = [
-  'data: {"type":"message_start","message":{"id":"msg_test","content":[]}}',
-  'data: {"type":"content_block_start","content_block":{"type":"text"}}',
-  'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Per your notes."}}',
-  'data: {"type":"content_block_stop"}',
-  'data: {"type":"message_stop"}',
+  'data: ' + JSON.stringify({ choices: [{ delta: { content: 'Per your notes.' } }] }),
+  'data: [DONE]',
   '',
 ].join('\n\n');
 
@@ -66,7 +63,7 @@ specific haemodynamic finding.
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
 
   const captured = [];
-  await page.route('**/v1/messages', route => {
+  await page.route('**/v1/chat/completions', route => {
     try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
   });
@@ -77,6 +74,11 @@ specific haemodynamic finding.
 
   head('importing a corpus');
   await page.evaluate(() => { goRefs(); render(); });
+  /* The build ships a seeded library now (refs-patch), so the importer's own
+     fixture has to start from a known-empty one. The assertions below are
+     absolute counts, and they are about what the IMPORTER produced — not
+     about what happened to be on the shelf when it ran. */
+  await page.evaluate(() => { REF.length = 0; invalidateIndex(); });
   const [chooser] = await Promise.all([
     page.waitForEvent('filechooser'),
     page.evaluate(() => refImportText()),
@@ -120,8 +122,8 @@ specific haemodynamic finding.
   const ask = async () => {
     captured.length = 0;
     await page.evaluate(async () => {
-      AI.provider = 'anthropic';
-      AI.anthropic = { key: 'sk-ant-test', model: 'claude-sonnet-5' };
+      AI.provider = 'mistral';
+      AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
       const q = ALL_Q.find(x => !x.bad);
       jumpTo(q.id);
       const sh = document.getElementById('shell');
@@ -138,14 +140,15 @@ specific haemodynamic finding.
   /* Collapse whitespace before matching: the prompt is hard-wrapped for
      readability in source, so a phrase can straddle a newline. */
   const flat = t => String(t || '').replace(/\s+/g, ' ');
-  const sysText = flat((groundedReq.system || []).map(b => b.text || '').join('\n'));
+  const sysText = flat((groundedReq.messages || []).find(m => m.role === 'system')?.content || '');
   ok('a request was captured', !!groundedReq);
   ok('the prohibition is in the system prompt', /GROUNDED MODE IS ON/.test(sysText));
   ok('it is told not to supplement from its own knowledge',
      /Do not supplement them from your own knowledge/.test(sysText));
   ok('it is given the exact words to refuse with',
      /Your notes do not cover this/.test(sysText));
-  ok('the fellow\'s notes are in the context', /REFERENCE NOTE: "Cardiac amyloidosis/.test(sysText));
+  ok('the fellow\'s notes are in the context, inside their own fence',
+     /<<<NOTE-[A-Z0-9]{12}>>> title: Cardiac amyloidosis/.test(sysText));
   ok('the note\'s source travels with it, so a citation is checkable',
      /source: Braunwald/.test(sysText));
   ok('no retrieved question-bank items are included',
@@ -158,7 +161,7 @@ specific haemodynamic finding.
   head('open mode: unchanged behaviour');
   await page.evaluate(() => { toggleGrounded(); });
   const openReq = await ask();
-  const openSys = flat((openReq.system || []).map(b => b.text || '').join('\n'));
+  const openSys = flat((openReq.messages || []).find(m => m.role === 'system')?.content || '');
   ok('the prohibition is gone', !/GROUNDED MODE IS ON/.test(openSys));
   ok('the answer key and bank come back', /OFFICIAL ACC COMMENTARY/.test(openSys));
 

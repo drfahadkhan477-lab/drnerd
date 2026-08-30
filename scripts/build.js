@@ -54,10 +54,67 @@ const ROOT = path.join(__dirname, '..');
      lab           removes the lab's 3D heart — late, so every earlier step's
                    version of the code it deletes is the final one
      review        fixes from the full code review, last
+     refs          ships content/refs/*.md already loaded as a note seed
+     read          notes and Apex replies render as prose, not their own source
+     ref-images    figures the notes cite render for real, and reach Apex's eyes
+     gemini        a free provider that still sees a figure, alongside Groq and Claude
+     memory        what Apex knows about the fellow, kept across sessions
+     assets        an imported chapter brings its own figures — after memory,
+                   because it embeds beside that module and rewrites the
+                   importer, the renderer and the vision path it all sits on
+     chatfigs      the figure Apex is reasoning from appears in the answer —
+                   after assets and ref-images, whose work it rewrites
+     pearl         the hero teaches something, from the notes already on the shelf
+     homeflow      the home screen is three things — the trace, the pearl, the
+                   progress — and everything else moves behind a door
+     pearlcard     the pearl becomes a ladder on ECG paper — last, because it
+                   rewrites markup and styles that pearl and homeflow both set
+     offline       one press puts all 408 figures on the device — after
+                   homeflow, whose door row it sits under
+     pvloop        the pearl's strip becomes the pressure–volume loop the
+                   cardiac-cycle screen already computes — last, it restyles
+     fullbleed     the bar leaves the reading column so it reaches both edges
+                   of an iPad, and reserves the strip the status bar sits in
+     figview       a figure opens full size, and closes four ways — last,
+                   because it hangs a viewer on markup every earlier step set
+     slowcycle     the cardiac cycle runs at a fraction of real time, and says
+                   so rather than redefining the heart rate
+     hosted        Gemini moves behind the Cloudflare Worker; Groq and Anthropic
+                   stay bring-your-own-key — last, it rewrites gemini's own work
+     split         Apex sits beside the question in landscape and under it in
+                   portrait, instead of covering it
+     boundary      a retrieved note is fenced with a per-turn nonce and named as
+                   data — after every earlier retrieval step, because it wraps
+                   the text they produce
+     toolfence     the same fence on the channel the model opens itself, and an
+                   error stops being something Apex said — after boundary,
+                   whose refBlock and refSafe it reuses rather than reinventing
+     chatfix       the panel keeps what you typed and where you were reading,
+                   and stops re-sending a thread that only grows
+     autotheme     'auto' notices the system flipping, so the heart, the
+                   12-lead and the cycle follow it rather than waiting for a
+                   reload
+     store         ink, notes, chats and the review log move to IndexedDB —
+                   after every step that reads or writes through loadJSON
+     homewide      the home screen fills a landscape iPad instead of sitting in
+                   a 960px column with 406px of dead space either side
+     pearlrich     a pearl is a whole thought, over a travelling ECG current
+                   instead of a corner PV loop — after homewide, which is what
+                   gives it a tall column to be long in
+     apexroom      the tutor panel is spacious, its chips are behind a button,
+                   and it scrolls on iOS
+     mistral       Groq and Anthropic leave, Mistral arrives bring-your-own-key
+                   and vision-capable — genuinely last, it revises code that
+                   apex, gemini, hosted, memory, ref-images, toolfence, chatfix
+                   and apexroom all touched
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
+  'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
+  'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
+  'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
+  'homewide', 'pearlrich', 'apexroom', 'mistral',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

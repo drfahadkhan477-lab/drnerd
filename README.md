@@ -9,11 +9,19 @@ personal ACCSAP 12 export. A procedural WebGL heart that beats on a real cardiac
 clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
 (Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5
 spaced repetition, and Apex — an AI tutor that can be grounded in your own
-reference notes.
+reference notes, reads the figures they cite, and remembers you between
+sessions.
+
+The home screen says one thing: a live ECG, one pearl drawn from your own
+reference notes — broken at its own joints into a numbered ladder, over ECG
+paper, with the pressure–volume loop turning in its corner — how far through
+the bank you are,
+and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 399 checks, 17 suites
+node scripts/verify.js                              # 906 checks, 27 suites
+node scripts/verify.js --pwa                        # + 62 more on the split build
 ```
 
 **The question bank is licensed content and is not in this repository.** It
@@ -22,6 +30,7 @@ gitignored.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why
+- **[docs/IPAD.md](docs/IPAD.md)** — getting it onto an iPad, in Safari, without a third-party app
 - **[docs/REFERENCE-GUIDE.md](docs/REFERENCE-GUIDE.md)** — writing reference notes for Apex, with [three worked examples](docs/reference-examples/)
 
 Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.

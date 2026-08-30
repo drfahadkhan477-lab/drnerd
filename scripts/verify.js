@@ -56,6 +56,17 @@ const SUITES = [
   ['crisp',        'every canvas backs itself at high device-pixel density'],
   ['type',         'one modular type scale and one spacing scale, still held'],
   ['references',   'the worked reference notes obey the guide, and are retrievable'],
+  ['gemini',       'a free provider with real vision, wired to its own wire shape'],
+  ['memory',       'Apex still knows you next time, and you can see what it kept'],
+  ['assets',       'an imported chapter brings its figures, and keeps them'],
+  ['chatfigs',     'the figure Apex is reasoning from is one you can see'],
+  ['pearl',        'the home screen opens with something worth knowing'],
+  ['worker',       'the Gemini key lives on the edge, and the site still serves'],
+  ['fsrs',         'the scheduler cannot make forgetting a reward'],
+  ['boundary',     'a retrieved note is material to teach from, never an instruction'],
+  ['chat',         'the panel keeps what you typed, and sends a window not an archive'],
+  ['store',        'the big stores live in a database, and nothing is ever in neither place'],
+  ['mistral',      'a free provider with real vision and honest capability discovery'],
 ];
 
 const argv = process.argv.slice(2);

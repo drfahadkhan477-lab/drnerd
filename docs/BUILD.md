@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 398 + 18 checks
+node scripts/verify.js --pwa                           # → 906 + 62 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -35,7 +35,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Twenty patch scripts run in order against the export. Each applies a list of
+Forty-six patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -66,7 +66,33 @@ The cost is that order matters, and the dependencies are real:
 | 17 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
 | 18 | `type`  | the modular type scale, snapped over everything above |
 | 19 | `lab` | removes the Rhythm Lab's 3D heart — late, so what it deletes is final |
-| 20 | `review`| fixes from the full code review — last, so it sees everything |
+| 20 | `review`| fixes from the full code review |
+| 21 | `refs` | the reference-note store, and the seeded library that ships with it |
+| 22 | `read` | the reading view those notes are read in |
+| 23 | `ref-images` | `refimg://`, so a note can cite a figure |
+| 24 | `gemini` | a third provider, with its own wire shape and model discovery |
+| 25 | `memory` | what Apex keeps about you between sessions |
+| 26 | `assets` | an imported chapter brings its figures — rewrites the importer, the renderer and the vision path, so it must follow all three |
+| 27 | `chatfigs` | the figure Apex reasons from appears in the answer — after `assets` and `ref-images`, whose work it rewrites |
+| 28 | `pearl` | one sentence from your own notes, on the home screen |
+| 29 | `homeflow` | home cut to the trace, the pearl and the progress bar; everything else behind a door — last, so it moves finished markup |
+| 30 | `pearlcard` | the pearl as a numbered ladder on ECG paper, and the `-webkit-` spellings Safari needs |
+| 31 | `offline` | one press pulls all 408 figures onto the device — under `homeflow`'s door row, and only alive in the split build |
+| 32 | `pvloop` | the pearl's strip becomes the pressure–volume loop the cardiac-cycle screen already computes |
+| 33 | `fullbleed` | the navigation bar leaves the reading column so its colour reaches both edges of an iPad, and reserves the strip the status bar sits in |
+| 34 | `figview` | a figure opens full size and closes four ways |
+| 35 | `slowcycle` | the cardiac cycle runs at a fraction of real time, with a speed control that does not pretend to be a heart rate |
+| 36 | `hosted` | Gemini moves behind the Cloudflare Worker, Groq and Anthropic stay bring-your-own-key — last, it rewrites what `gemini` built |
+| 37 | `split` | Apex sits beside the question in landscape and under it in portrait, never over it — last, it re-lays out screens every earlier step built |
+| 38 | `boundary` | a retrieved note is fenced with a per-turn nonce and named as data, not direction — after every earlier retrieval step, because it wraps the text they produce |
+| 39 | `toolfence` | the same fence on `search_question_bank`, the channel the model opens itself; and a failed request stops being something Apex said — after `boundary`, whose `refBlock`/`refSafe` it reuses |
+| 40 | `chatfix` | the panel keeps the sentence you were typing and the place you were reading, and sends a window of the thread rather than all of it |
+| 41 | `autotheme` | `auto` notices the system flipping, so the heart, the 12-lead and the cardiac cycle follow it instead of waiting for a reload |
+| 42 | `store` | ink, notes, chats and the review log move to IndexedDB — after every step that reads or writes through `loadJSON` |
+| 43 | `homewide` | the home screen fills a landscape iPad instead of a 960px column with 406px of dead space either side, and portrait stops being sized by the length of whichever pearl was picked |
+| 44 | `pearlrich` | a pearl is a whole thought — up to three sentences, median 143→295 characters — over a travelling ECG current instead of a corner PV loop; after `homewide`, which gives it a tall column to be long in |
+| 45 | `apexroom` | the tutor panel is spacious, its nine prompts are behind a button, and the two known iOS scroll traps are closed |
+| 46 | `mistral` | Groq and Anthropic leave, Mistral arrives BYOK and vision-capable — genuinely last, it revises code that `apex`, `gemini`, `hosted`, `memory`, `ref-images`, `toolfence`, `chatfix` and `apexroom` all touched |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -102,7 +128,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Sixteen suites, ~398 checks, plus 18 more on the split build. They run one at a
+Twenty-seven suites, 906 checks, plus 62 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
@@ -114,6 +140,29 @@ and the R wave progresses; `verify-keys` re-runs the comparison that found six
 mis-keyed questions, so a future export cannot introduce a seventh silently;
 `verify-splash-heart` measures that the splash heart's conduction nodes light
 in the order the heart depolarises rather than blinking together.
+
+Two of them have no browser in them at all, because the thing under test has
+no browser in it either. `verify-worker` drives the Cloudflare Worker's exported
+`handleApex` with a fake `env` and a stub `fetch`; `verify-fsrs` sweeps the
+scheduler across the whole reachable state space rather than checking a handful
+of remembered numbers — it is what found that a lapse could make a card *more*
+durable.
+
+Of the rest, `verify-boundary` imports a note whose title, tags and body are all
+trying to end the app's framing and give orders, fires a real turn — including
+one that calls a tool — and reads what left the app; `verify-chat` types into
+the composer, fires a turn with a tool step underneath it, and checks the
+sentence is still there afterwards; `verify-store` drives the IndexedDB
+migration from each of its starting states, including the one where a previous
+migration was interrupted half-way.
+
+**A check that passes on the broken build is worth nothing.** Every check added
+for a bug was run against the build from before the fix and confirmed to fail
+there first. That is not ceremony: three of them passed on the broken build the
+first time — one asserted on an error string `apiError()` never produces, one
+used a fixture that sat exactly at the ceiling it was meant to prove, and one
+opened a second browser context so the localStorage fixture it depended on was
+never loaded. All three looked green and measured nothing.
 
 Some modules can be checked without a browser at all, which is much faster
 while iterating on the physiology or the ECG maths:
@@ -154,8 +203,8 @@ node tests/verify-pwa.js http://localhost:8080
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 20 *-patch · build-pwa · serve · shots
-tests/        17 Playwright suites (16 single-file + pwa)
+scripts/      build · verify · 46 *-patch · build-pwa · serve · shots
+tests/        28 Playwright suites (27 single-file + pwa)
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

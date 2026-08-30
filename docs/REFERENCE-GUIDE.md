@@ -114,6 +114,71 @@ a textbook's.
 
 ---
 
+## Citing a figure
+
+A note can put a real figure at the point in the prose that figure illustrates:
+
+```markdown
+![Braunwald Fig. 56.5 — the two-by-two bedside profile: congestion at rest
+against perfusion at rest](refimg://hf/049_FIG.56.5_p058.jpg)
+```
+
+`refimg://<unit>/<file>` resolves against `content/refs-images/`, and the build
+step `scripts/ref-images-patch.js` does two things with it. In the Notes panel
+the citation renders as the figure with your caption beneath it. And in
+**grounded mode**, when Apex cites that note, the figure is attached to the
+request as an actual image — so it describes what is in the diagram rather than
+paraphrasing your alt text. Four figures per turn, at most.
+
+Grounded mode only, and deliberately: open mode surfaces a note on thin keyword
+overlap, which is fine for an optional citation and wrong for putting a diagram
+in front of you on an unrelated question.
+
+Write the caption as if the reader cannot see the image, because sometimes it
+cannot — a text-only provider gets the caption and nothing else.
+
+### Importing a chapter that has its own figures
+
+**Notes → ⤒ Import** takes a `.zip` as well as loose files, which is the easy
+path: pick the whole package and the chapter and its figures go in together.
+
+```
+Chapter.zip
+├── chapter.md          ![Fig 54.1](visuals/001.jpg)
+└── visuals/
+    ├── 001.jpg
+    └── 002.jpg
+```
+
+On import each `![caption](visuals/001.jpg)` is resolved against the files that
+came with it, stored, and rewritten to a `refimg://` citation — so it renders,
+reaches a vision model, and survives a reload. Selecting the `.md` and its
+images together in the file picker works the same way; paths are matched
+exactly first, then by path ending, then by filename.
+
+The toast afterwards says what actually happened — *"Added 14 notes · 37 figures
+linked · 2 images not found"* — because an import that quietly drops half its
+figures is the failure worth naming. An image that cannot be found is left in
+the note as written rather than deleted, so you can see which one it was.
+
+Imported figures live in IndexedDB, not `localStorage`: a chapter of figures is
+a megabyte or two and would blow the 5 MB cliff the rest of the app's storage
+sits under. Delete the last note citing a figure and the figure is released.
+
+### Building an atlas from a page-image dump
+
+To produce figure files from a unit that has none, point the atlas tool at it:
+
+```
+python3 tools/visual-atlas.py <pages-dir> <text.md> <out-dir> --name Braunwald_HF
+```
+
+It finds each `FIG.`/`TABLE` caption, crops the artwork that belongs to it, and
+writes a manifest with the legend as printed. Pick the ones worth citing into
+`content/refs-images/<unit>/` — a few per note, not everything.
+
+---
+
 ## Suggested corpus shape
 
 One file per Braunwald chapter you're revising, sections following how you'd
@@ -164,6 +229,41 @@ In that mode:
   and offers to answer from its own knowledge only if you ask.
 
 Turn it off and Apex goes back to using everything it knows.
+
+---
+
+## What Apex remembers about you
+
+Your notes are what Apex teaches *from*. Separately, it keeps a short list of
+things about *you* — and unlike a chat thread, that list survives closing the
+app:
+
+```
+About them:            Sitting the boards in October 2026.
+Where they go wrong:   Reads constrictive pericarditis as restrictive.
+How they want it:      Mechanism before the trial.
+From past sessions:    (written automatically at the end of a sitting)
+```
+
+Three ways things get there. You can say so — *"remember that I sit boards in
+October"*. Apex can decide something is worth keeping and save it mid-lesson,
+without stopping to ask. And at the end of a study session it writes up to three
+lines about what it noticed, in one small background call.
+
+Nothing interrupts you, which is only fair if you can see what was kept —
+**Memory** on the home screen, or from the tutor settings, lists everything with
+a Delete on each. Deleting takes effect on the next question.
+
+It is deliberately small: 80 entries, and when that fills, the automatic session
+summaries are dropped oldest-first. What you told it, and the gaps it spotted in
+you, are kept — an exam date should never be evicted to make room for "answered
+12 questions on Tuesday".
+
+If something in there has gone stale, tell Apex and it will drop it — every line
+carries an id it can act on. Or delete it yourself in the panel; a wrong memory
+is worse than a missing one.
+
+Memory travels with your **Export**, so a restore does not wipe what Apex knew.
 
 ---
 
