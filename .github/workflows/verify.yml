@@ -1,0 +1,114 @@
+# Systole CI — the honest subset.
+#
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 999 checks in
+# `node scripts/verify.js` plus 75 more under `--pwa`, this workflow runs 89.
+# The other 985 all drive a real build of the app in a real browser
+# (Playwright), and a real build needs the ACCSAP 12 export — the licensed
+# question bank scripts/build.js refuses to run without, on purpose, and
+# which is deliberately never committed to this repository or to any secret
+# GitHub holds either. There is no way to build the app in this workflow, so
+# there is no way to run those 910 checks here. See docs/BUILD.md and the
+# comment at the top of scripts/build.js for why, and README.md for how to
+# run the full suite yourself, locally, against your own copy.
+#
+# What DOES run here needs no source file and no browser, and is genuinely
+# worth having on every push:
+#
+#   syntax       every .js and .py file in the repo parses, and the two
+#                listing commands (which patch chain steps exist, which test
+#                suites exist) don't crash. Cheap, and it catches a real class
+#                of mistake — a chain step registered under one name and
+#                shipped under another, a patch script with a stray syntax
+#                error nobody would notice until running the full chain by
+#                hand.
+#
+#   logic        the two suites that are pure Node with no Playwright and no
+#                built artifact at all: verify-fsrs.js (the scheduler itself
+#                — the math that decides when a card comes back) and
+#                verify-worker.js (the Cloudflare Worker that holds the
+#                Gemini key, driven directly as a request handler). 89 real
+#                checks, and not incidental ones: this is the scheduling math
+#                and the API-key boundary, the two places a subtle bug does
+#                the most damage silently.
+#
+#   build-guard  scripts/build.js must still refuse to run without a source
+#                file, with a clear message, and exit non-zero. This is
+#                asserting the ABSENCE of a feature on purpose — if that
+#                guard were ever loosened to "warn and continue anyway," this
+#                is what would notice before a build silently shipped without
+#                the fellow's own realized intent.
+#
+# Adding the other 910 checks to this file is possible — GitHub Actions
+# supports encrypted repository secrets, and a workflow could decode the
+# export from one, build the app, and run the rest — but that means the
+# licensed export living, encrypted, inside GitHub's infrastructure rather
+# than only on your own devices. That is a real, deliberate choice about
+# where a copy of paid content lives, not a technical detail, and it is not
+# made here. If you want that tier, say so explicitly and it can be added.
+
+name: verify (source-independent subset)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax:
+    name: syntax — every file parses, both listings work
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: every .js file parses
+        run: |
+          set -e
+          find scripts src tests tools -name '*.js' -print0 \
+            | xargs -0 -n1 node --check
+      - name: every .py tool parses
+        run: |
+          set -e
+          find tools -name '*.py' -print0 \
+            | xargs -0 -n1 python3 -m py_compile
+      - name: the patch chain lists without crashing
+        run: npm run steps
+      - name: the verify suite list lists without crashing
+        run: npm run suites
+
+  logic:
+    name: logic — the scheduler and the Worker, no build required
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: FSRS-5 scheduling (38 checks)
+        run: node tests/verify-fsrs.js
+      - name: the Cloudflare Worker request handler (51 checks)
+        run: node tests/verify-worker.js
+
+  build-guard:
+    name: build-guard — refuses to run without the licensed source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: build.js exits non-zero and explains why, with no source present
+        run: |
+          set +e
+          output="$(node scripts/build.js 2>&1)"
+          status=$?
+          set -e
+          echo "$output"
+          if [ "$status" -eq 0 ]; then
+            echo "::error::scripts/build.js exited 0 with no source file present — it must refuse to build."
+            exit 1
+          fi
+          if ! echo "$output" | grep -q "deliberately not in this repository"; then
+            echo "::error::scripts/build.js failed, but not with its documented refusal message — the guard may have changed shape."
+            exit 1
+          fi
