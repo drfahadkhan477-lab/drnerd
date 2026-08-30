@@ -476,6 +476,48 @@ patch('mistral: the dispatcher is two-way now',
   return AI.provider==='gemini' ? oneTurnGemini(q,wire,extra)
        : oneTurnMistral(q,wire,extra);`);
 
+/* ── 4. the error body, which the two providers do not spell the same ────── */
+/* THE SECOND HALF OF THE capabilities.chat BUG. Reading an error body is
+   guessing at a shape too, and this file guessed once already. Gemini and
+   Anthropic both nest the text under `error`; Mistral puts it at the top
+   level ({"object":"error","message":"…"}), and its FastAPI validation
+   errors use `detail` instead — sometimes an array rather than a string.
+   So `j.error?.message` was empty for every Mistral failure there is,
+   which silently disabled the out-of-credit branch and left the fallback
+   printing "API error 400." with the explanation cut off.
+
+   The fix is not to swap one guess for another: it reads whichever of the
+   three documented shapes is actually present. Gemini is unaffected — its
+   own shape is tried first and still wins. */
+patch('mistral: read the error body every provider actually sends, not one of them',
+`async function apiError(r,provider){
+  let d=''; try{ d=(await r.json()).error?.message||''; }catch(_){}`,
+`/* Gemini/Anthropic: {error:{message}}. Mistral: {message} at the top level,
+   or {detail} on a validation error, either of which may be an object rather
+   than a string. Take the first that is actually there. */
+function errMsg(j){
+  if(!j||typeof j!=='object') return '';
+  const m = (j.error&&j.error.message) ?? j.message ?? j.detail;
+  if(typeof m==='string') return m;
+  if(m==null) return '';
+  try{ return JSON.stringify(m).slice(0,300); }catch(_){ return ''; }
+}
+async function apiError(r,provider){
+  let d=''; try{ d=errMsg(await r.json()); }catch(_){}`);
+
+/* A mid-stream error is the same bug with a worse ending. Mistral can abort a
+   turn by emitting one error object into the SSE stream; `if(j.error)` never
+   matched its shape, so the object fell through to the choices check, was
+   skipped as an ordinary chunk, and the reply simply stopped — a truncated
+   answer with no error anywhere, which reads as the app losing the thread.
+   Anchored on the line after it, because the identical line exists in
+   oneTurnGemini and is correct there. */
+patch('mistral: a mid-stream error stops the turn instead of being skipped',
+`      if(j.error) throw new Error(j.error.message||'stream error');
+      const ch=j.choices&&j.choices[0]; if(!ch)continue;`,
+`      if(j.error||j.object==='error') throw new Error(errMsg(j)||'stream error');
+      const ch=j.choices&&j.choices[0]; if(!ch)continue;`);
+
 fs.writeFileSync(OUT, html);
 console.log(`Mistral arrives, Groq and Anthropic leave — ${applied.length} edits applied`);
 applied.forEach(a => console.log('  ✓ ' + a));

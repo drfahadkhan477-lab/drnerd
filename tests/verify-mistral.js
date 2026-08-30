@@ -264,6 +264,64 @@ const MODEL_LIST = {
   ok('a 429 is a plain rate limit — Mistral\'s free tier is per-minute, not Gemini\'s daily quota',
      /rate limited/i.test(err429) && !/tomorrow/i.test(err429), err429);
 
+  head('the error body is read in the shape each provider actually sends it');
+  /* Mistral does not nest the text under `error` the way Gemini and Anthropic
+     do — it is {"object":"error","message":"…"} at the top level, or {detail}
+     on a validation error. Reading only j.error.message left every Mistral
+     failure with an empty explanation: the out-of-credit branch never fired
+     and the fallback printed a bare status. Each shape is driven directly. */
+  const shapes = await page.evaluate(async () => ({
+    mistralTop: await apiError({ status: 400,
+      json: async () => ({ object: 'error', message: 'You have exceeded your credit balance.' }) }, 'mistral'),
+    mistralDetailStr: await apiError({ status: 418,
+      json: async () => ({ detail: 'Extra inputs are not permitted' }) }, 'mistral'),
+    mistralDetailArr: await apiError({ status: 422,
+      json: async () => ({ detail: [{ msg: 'field required', loc: ['body', 'model'] }] }) }, 'mistral'),
+    geminiNested: await apiError({ status: 418,
+      json: async () => ({ error: { message: 'nested shape still wins' } }) }, 'gemini'),
+    empty: await apiError({ status: 418, json: async () => ({}) }, 'mistral'),
+    notJson: await apiError({ status: 418, json: async () => { throw new Error('not json'); } }, 'mistral'),
+  }));
+  ok('a top-level {message} reaches the out-of-credit branch, which it never used to',
+     /out of credit/i.test(shapes.mistralTop), shapes.mistralTop);
+  ok('a string {detail} is surfaced rather than swallowed',
+     /Extra inputs are not permitted/.test(shapes.mistralDetailStr), shapes.mistralDetailStr);
+  ok('an array {detail} is serialised rather than printed as [object Object]',
+     /field required/.test(shapes.mistralDetailArr) && !/\[object Object\]/.test(shapes.mistralDetailArr),
+     shapes.mistralDetailArr);
+  ok('Gemini\'s nested shape is still read first, so nothing regressed there',
+     /nested shape still wins/.test(shapes.geminiNested), shapes.geminiNested);
+  ok('an error body with nothing in it does not print "undefined"',
+     !/undefined|null/.test(shapes.empty), shapes.empty);
+  ok('a body that is not JSON at all is survived, not thrown through',
+     typeof shapes.notJson === 'string' && !/undefined/.test(shapes.notJson), shapes.notJson);
+
+  head('a mid-stream error ends the turn instead of vanishing');
+  /* The same wrong shape with a worse ending. Mistral can abort a turn by
+     emitting one error object into the SSE stream; because it is not
+     {error:{…}}, the old check skipped it as an ordinary chunk and the reply
+     simply stopped — a truncated answer with no error shown anywhere, which
+     reads as the app losing the thread rather than the API refusing. */
+  queued.length = 0;
+  queued.push('data: ' + JSON.stringify({ object: 'error',
+    message: 'Service tier capacity exceeded for this model.' }) + '\n\ndata: [DONE]\n\n');
+  const midStream = await page.evaluate(async () => {
+    AI.provider = 'mistral';
+    AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
+    CHATS['_general'] = []; S.screen = 'home';
+    buildAI();
+    fire('this turn dies mid-stream');
+    for (let i = 0; i < 90 && aiBusy; i++) await new Promise(r => setTimeout(r, 120));
+    return (CHATS['_general'] || []).map(m => ({ err: !!m.err, text: String(m.content || '') }));
+  });
+  const errTurn = midStream.find(m => m.err);
+  ok('the failure is recorded as an error turn, not silently dropped',
+     !!errTurn, midStream.map(m => (m.err ? 'ERR:' : '') + m.text.slice(0, 40)).join(' | '));
+  ok('and it carries what the API actually said, so it is diagnosable',
+     !!errTurn && /Service tier capacity exceeded/.test(errTurn.text), errTurn && errTurn.text);
+  ok('the turn is not left stuck busy afterwards',
+     await page.evaluate(() => aiBusy === false));
+
   head('a config saved before Mistral existed gets a slot, and an existing key is not disturbed');
   /* The self-heal runs once, at script load — so proving the APP repairs this
      means saving the stale shape and reloading, not hand-patching AI. */
