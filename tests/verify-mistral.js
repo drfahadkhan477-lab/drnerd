@@ -12,9 +12,13 @@
  * a bare string, tools as {type:'function',function:{...}}, and a distinct
  * assistant tool_calls message followed by one role:'tool' message per
  * result. Discovery is verified against Mistral's real capability booleans
- * (capabilities.chat/.function_calling/.vision) rather than a name regex —
- * the thing that made this provider's model-list filter simpler to write
- * (and to get right) than Gemini's ever was.
+ * (capabilities.completion_chat/.function_calling/.vision) rather than a
+ * name regex — simpler than Gemini's filter, but "simpler" is not the same
+ * as "obviously right": a first version of this fixture used capabilities.
+ * chat, matching a first version of the app's own filter, and the two wrong
+ * guesses agreed with each other and passed. A real key exposed it — Mistral
+ * names that field completion_chat — so the fixture now matches the field a
+ * real response actually sends, not the field a plausible guess invented.
  */
 'use strict';
 const path = require('path');
@@ -46,11 +50,11 @@ const toolSSE = (name, args) => 'data: ' + JSON.stringify({ choices: [{ delta: {
    function calling, and neither (a pure embedding model). */
 const MODEL_LIST = {
   data: [
-    { id: 'pixtral-large-latest', capabilities: { chat: true, function_calling: true, vision: true } },
-    { id: 'mistral-small-latest', capabilities: { chat: true, function_calling: true, vision: true } },
-    { id: 'mistral-embed', capabilities: { chat: false, function_calling: false, vision: false } },
-    { id: 'open-mistral-7b', capabilities: { chat: true, function_calling: false, vision: false } },
-    { id: 'pixtral-12b-2409', capabilities: { chat: true, function_calling: true, vision: false } },
+    { id: 'pixtral-large-latest', capabilities: { completion_chat: true, function_calling: true, vision: true } },
+    { id: 'mistral-small-latest', capabilities: { completion_chat: true, function_calling: true, vision: true } },
+    { id: 'mistral-embed', capabilities: { completion_chat: false, function_calling: false, vision: false } },
+    { id: 'open-mistral-7b', capabilities: { completion_chat: true, function_calling: false, vision: false } },
+    { id: 'pixtral-12b-2409', capabilities: { completion_chat: true, function_calling: true, vision: false } },
   ],
 };
 
@@ -169,7 +173,7 @@ const MODEL_LIST = {
      Array.isArray(gate.cached) && gate.cached.some(m => m[0] === 'pixtral-large-latest'));
 
   head('a key with nothing usable shows its evidence, not a generic failure');
-  listBody = { data: [{ id: 'mistral-embed', capabilities: { chat: false, function_calling: false, vision: false } }] };
+  listBody = { data: [{ id: 'mistral-embed', capabilities: { completion_chat: false, function_calling: false, vision: false } }] };
   const starved = await connect('starved-key-0000000000', 'pixtral-large-latest');
   ok('it does not report a false success', !/Connected/i.test(starved.msg), starved.msg);
   ok('it names what Mistral actually returned', /mistral-embed/.test(starved.msg), starved.msg);

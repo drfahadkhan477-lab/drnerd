@@ -27,7 +27,7 @@
  * rather than growing a second parser.
  *
  * MISTRAL'S GET /v1/models RETURNS REAL CAPABILITY BOOLEANS
- * (capabilities.chat / .function_calling / .vision) — Gemini's list has
+ * (capabilities.completion_chat / .function_calling / .vision) — Gemini's list has
  * nothing like this and needed a name-exclusion regex (GEM_NOT_CHAT) built
  * from a bug report. Filtering on those booleans directly means every model
  * that ever reaches the dropdown is vision-capable BY CONSTRUCTION, so
@@ -280,11 +280,15 @@ patch('mistral: model discovery with real capability booleans, not a name regex'
   return (plain||anyFlash||models[0])[0];
 }
 /* Ask Mistral what this key can actually reach. Simpler than Gemini's
-   discovery: the list carries real capability booleans (capabilities.chat,
-   .function_calling, .vision), so this is a direct filter rather than a name
-   regex assembled from a bug report. Every model that survives is therefore
-   vision-capable BY CONSTRUCTION, which is what lets VISION_PROVIDERS stay a
-   flat per-provider boolean instead of needing a per-model check. */
+   discovery: the list carries real capability booleans (capabilities.
+   completion_chat, .function_calling, .vision), so this is a direct filter
+   rather than a name regex assembled from a bug report. Every model that
+   survives is therefore vision-capable BY CONSTRUCTION, which is what lets
+   VISION_PROVIDERS stay a flat per-provider boolean instead of needing a
+   per-model check. completion_chat, not chat — the field name a real key's
+   real response actually uses, confirmed the hard way: a first version
+   checked cap.chat, which is never set on anything Mistral returns, so
+   every model failed the filter and a working key looked starved. */
 async function mistralModels(key){
   let r;
   try{ r=await fetch(\`\${ENDPOINT.mistral}/models\`,{headers:{authorization:'Bearer '+key}}); }
@@ -296,7 +300,7 @@ async function mistralModels(key){
     const id=String(m.id||''); if(!id) continue;
     raw.push(id);
     const cap=m.capabilities||{};
-    if(!cap.chat||!cap.function_calling||!cap.vision) continue;
+    if(!cap.completion_chat||!cap.function_calling||!cap.vision) continue;
     out.push([id, id]);
   }
   return {models:out, raw};
