@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 946 + 75 checks
+node scripts/verify.js --pwa                           # → 999 + 75 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -128,7 +128,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Twenty-seven suites, 946 checks, plus 75 more on the split build. They run one at a
+Thirty suites, 999 checks, plus 75 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.

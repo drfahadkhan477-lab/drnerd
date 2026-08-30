@@ -114,6 +114,12 @@ const ROOT = path.join(__dirname, '..');
      chipfix       apexroom hid .chips globally to fold the tutor's prompts
                    away; the Lab and the search screen share that class and
                    lost their rows. Scoped to #aiChips — after apexroom
+     quiznav       a Previous button, and the per-question memory that makes
+                   going back safe without re-grading or re-scheduling
+     homeprog       the home screen's progress bar becomes a card: a legend,
+                   a due-review pill, numbers that count up with the fill
+     chapters       the Chapters grid finally uses its own stagger timing,
+                   the bar transition gets a starting point to run from
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -121,7 +127,7 @@ const CHAIN = [
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
-  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix',
+  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

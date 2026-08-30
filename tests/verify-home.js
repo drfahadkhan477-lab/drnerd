@@ -74,7 +74,12 @@ const head = t => console.log('\n── ' + t + ' ──');
   const prog = await page.evaluate(() => {
     const track = document.querySelector('.hp-track');
     const seen = document.querySelector('.hp-seen'), mast = document.querySelector('.hp-mast');
-    const val = document.querySelector('.hp-val').textContent;
+    /* .hp-val was one caption stating both figures in a single line; homeprog
+       split it into a legend with one .hp-stat per figure. The claim below —
+       that both words appear somewhere on the card — still holds over the
+       legend's combined text, so this reads that instead of a span that no
+       longer exists. */
+    const val = document.querySelector('.hp-legend')?.textContent || '';
     const trackW = track.getBoundingClientRect().width;
     return {
       aria: +track.getAttribute('aria-valuenow'),
@@ -91,7 +96,12 @@ const head = t => console.log('\n── ' + t + ' ──');
      `${prog.mastPctStyle} ≤ ${prog.seenPctStyle}`);
   ok('the rendered mastery width matches its aria value',
      Math.abs(prog.mastW * 100 - prog.aria) < 2, `width ${(prog.mastW * 100).toFixed(0)}% vs aria ${prog.aria}`);
-  ok('the caption states both figures', /mastered/.test(prog.val) && /seen/.test(prog.val), prog.val);
+  /* Case-insensitive: the claim is that both words are legible somewhere on
+     the card, not that they keep the exact casing of the sentence .hp-val
+     used to embed them in. The legend states them as title-cased keys
+     ("Mastered", "Seen") rather than lowercase inside a run-on caption —
+     a real, deliberate change in presentation, not a loss of the words. */
+  ok('the caption states both figures', /mastered/i.test(prog.val) && /seen/i.test(prog.val), prog.val);
   ok('a highlight sweeps the bar', prog.hasShine);
 
   head('it fills the display, like an app');
