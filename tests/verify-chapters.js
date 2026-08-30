@@ -43,6 +43,36 @@ const head = t => console.log('\n── ' + t + ' ──');
   await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
   await page.waitForTimeout(1000);
 
+  head('the page cascades top to bottom, like the home screen does');
+  /* Every piece here already animated on its own — the rail's own popIn
+     ladder, the tile grid's own 11-step ladder, the title's own riseIn. What
+     was missing is that none of them were SEQUENCED: all fired at delay 0,
+     so the title, the rail, the feed and the first tile all appeared on the
+     same frame. studyflow gives each section a base delay instead of adding
+     new animation, so the real claim is ordering, not novelty. */
+  {
+    const r = await page.evaluate(() => {
+      goStudy(); render();
+      const delayOf = sel => { const el = document.querySelector(sel); return el ? parseFloat(getComputedStyle(el).animationDelay) : null; };
+      return {
+        back: delayOf('.study-back'),
+        title: delayOf('.study-title'),
+        rail: delayOf('.story-rail .story'),
+        feed: delayOf('.feed .feed-card'),
+        label: delayOf('.section-label'),
+        tiles: delayOf('.ch-tiles>*'),
+      };
+    });
+    const order = ['back', 'title', 'rail', 'feed', 'label', 'tiles'];
+    const values = order.map(k => r[k]);
+    ok('every section has a real, present delay', values.every(v => v !== null && Number.isFinite(v)), JSON.stringify(r));
+    const ascending = values.every((v, i) => i === 0 || v >= values[i - 1]);
+    ok('and the sections cascade in the order they appear on the page, not all at once',
+       ascending, order.map(k => `${k}=${r[k]}s`).join(' < '));
+    ok('the whole cascade spans a real amount of time, not a rounding difference',
+       values[values.length - 1] - values[0] >= 0.3, `${values[0]}s → ${values[values.length - 1]}s`);
+  }
+
   head('the eleven tiles stagger in, they do not all fire on the same frame');
   {
     const r = await page.evaluate(async () => {

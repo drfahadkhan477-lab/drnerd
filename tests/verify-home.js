@@ -13,10 +13,13 @@
  *   · home says ONE thing: the trace, the pearl, the progress bar and a row of
  *     doors — and the study material it used to carry is behind a door rather
  *     than below the fold;
- *   · the three layouts are one markup and a data attribute — switching is a
- *     CSS state change, it persists, and each layout actually differs (Focus
- *     drops the rail; Grid lays the feed out as a grid). The switch lives on
- *     the study page now, with the rail, the feed and the tiles it governs.
+ *   · S.homeLayout still persists and still reaches the home screen's own
+ *     hero sizing on a cold load. It used to also drive a visible three-way
+ *     switch — Signal/Focus/Grid — but studyflow removed that control: it
+ *     lived on the Chapters page despite the name, governed only that page's
+ *     rail/feed/tile density, and Chapters is now one fixed, uniform design.
+ *     What is left of homeLayout is inert for Chapters and real for Home,
+ *     and only the Home-real part is still asserted here.
  */
 'use strict';
 const path = require('path');
@@ -233,36 +236,33 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('the review queue and the full shuffle came with them', study.review && study.shuffle);
   ok('there is a way back', study.back);
 
-  head('three layouts, one markup');
-  /* The switch governs the rail, the feed and the tile density — all of which
-     live on the study page now, so that is where it is. */
-  const segs = await page.evaluate(() => document.querySelectorAll('.hl-seg').length);
-  ok('the switch offers three layouts', segs === 3, String(segs));
-
-  const layoutState = await page.evaluate(async () => {
-    const out = {};
-    for (const id of ['signal', 'focus', 'grid']) {
-      setHomeLayout(id);
-      await new Promise(r => setTimeout(r, 260));
-      const wrap = document.querySelector('.home-wrap');
-      const rail = document.querySelector('.story-rail');
-      const feed = document.querySelector('.feed');
-      out[id] = {
-        attr: wrap.getAttribute('data-home'),
-        railShown: rail ? getComputedStyle(rail).display !== 'none' : false,
-        feedDisplay: feed ? getComputedStyle(feed).display : '',
-        cardPad: parseFloat(getComputedStyle(document.querySelector('.feed-card')).paddingTop),
-      };
-    }
-    return out;
+  head('chapters is one fixed design now, not a switch between three');
+  /* studyflow removed the only control that ever called setHomeLayout() from
+     the UI. The rail/feed/tile density it used to govern all lived on this
+     page, so the honest claim now is "the switch is gone and Chapters no
+     longer varies", not "Focus/Grid still work" — calling setHomeLayout
+     directly and checking for an effect on this screen would be asserting a
+     behavior no user can ever reach again. */
+  const gone = await page.evaluate(async () => {
+    const before = document.querySelectorAll('.hl-seg').length;
+    const railBefore = getComputedStyle(document.querySelector('.story-rail')).display;
+    /* 'focus' specifically, not 'grid': focus is the one value that used to
+       hide the rail outright, so this is the value that actually exercises
+       whether calling the function still reaches this page at all. */
+    setHomeLayout('focus');                     // still callable — see "the choice persists" below
+    await new Promise(r => setTimeout(r, 260));
+    const railAfter = getComputedStyle(document.querySelector('.story-rail')).display;
+    return {
+      segsOnPage: before,
+      studyWrapAttr: document.querySelector('.study-wrap').getAttribute('data-home'),
+      railUnaffectedByGrid: railBefore === railAfter,
+    };
   });
-  ok('each layout stamps its own data-home attribute',
-     layoutState.signal.attr === 'signal' && layoutState.focus.attr === 'focus' && layoutState.grid.attr === 'grid');
-  ok('Signal shows the chapter rings', layoutState.signal.railShown);
-  ok('Focus strips the rings away and enlarges the cards',
-     !layoutState.focus.railShown && layoutState.focus.cardPad > layoutState.grid.cardPad,
-     `focus ${layoutState.focus.cardPad}px vs grid ${layoutState.grid.cardPad}px`);
-  ok('Grid lays the feed out as a grid, not a stack', layoutState.grid.feedDisplay === 'grid', layoutState.grid.feedDisplay);
+  ok('no layout switch remains on the page', gone.segsOnPage === 0, String(gone.segsOnPage));
+  ok('the study wrapper carries no data-home for anything to key off',
+     gone.studyWrapAttr === null, String(gone.studyWrapAttr));
+  ok('calling the old function directly no longer changes this page',
+     gone.railUnaffectedByGrid);
 
   head('the choice persists');
   const persisted = await page.evaluate(() => {
@@ -273,19 +273,15 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   await page.reload({ waitUntil: 'load', timeout: 250000 });
   await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.home-wrap'), { timeout: 150000 });
-  /* A cold load lands on home, which carries data-home too — the density the
-     switch sets reaches the hero as well as the material. The segments
-     themselves are on the study page, so go there to read the active one. */
-  const homeAttr = await page.evaluate(() => document.querySelector('.home-wrap').getAttribute('data-home'));
-  ok('the home screen wears the restored layout too', homeAttr === 'focus', homeAttr);
-  await page.evaluate(() => goStudy());
-  await page.waitForFunction(() => S.screen === 'study' && !!document.querySelector('.hl-seg'), { timeout: 15000 });
+  /* A cold load lands on home, which still carries data-home — the one real
+     survivor of the old switch, since it sizes buildHome()'s own hero. This
+     is genuinely Home's behavior, not Chapters', so it stays asserted. */
   const afterReload = await page.evaluate(() => ({
-    state: S.homeLayout, attr: document.querySelector('.home-wrap').getAttribute('data-home'),
-    activeSeg: document.querySelector('.hl-seg.on')?.textContent,
+    state: S.homeLayout,
+    attr: document.querySelector('.home-wrap').getAttribute('data-home'),
   }));
-  ok('a cold load restores the saved layout', afterReload.state === 'focus' && afterReload.attr === 'focus', JSON.stringify(afterReload));
-  ok('and marks the active segment', /focus/i.test(afterReload.activeSeg || ''), afterReload.activeSeg);
+  ok('the persisted state itself survives a cold load', afterReload.state === 'focus', afterReload.state);
+  ok('and the home screen wears the restored layout too', afterReload.attr === 'focus', afterReload.attr);
 
   head('the home screen fills the iPad it is on');
   {

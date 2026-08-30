@@ -120,6 +120,9 @@ const ROOT = path.join(__dirname, '..');
                    a due-review pill, numbers that count up with the fill
      chapters       the Chapters grid finally uses its own stagger timing,
                    the bar transition gets a starting point to run from
+     studyflow      the Signal/Focus/Grid switcher removed — it only ever
+                   affected Chapters despite the name — and the page's
+                   sections cascade in like the home screen's do
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -128,6 +131,7 @@ const CHAIN = [
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
+  'studyflow',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
