@@ -230,6 +230,62 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     ok('and the ones under it went through', codes.filter(c => c === 200).length === 3, codes.join(','));
   }
 
+  head('the model name is a model name, whatever APEX_MODELS says');
+  /* The model is interpolated into a URL path. The DEFAULT regex is anchored
+     and refuses anything structural, but APEX_MODELS exists precisely so an
+     operator can replace it — and "gemini-" is the obvious thing to write to
+     widen the allowlist. Unanchored, it let a model of
+     "gemini-2.5-flash/../../../v1beta/tunedModels/private" through, and the
+     URL normalised to a different Google endpoint reached with this
+     deployment's key attached. The shape check must not be delegable. */
+  {
+    const traversal = 'gemini-2.5-flash/../../../v1beta/tunedModels/private';
+    const loose = { ...ENV, APEX_RPM: '0', APEX_MODELS: 'gemini-' };
+    let reached = null;
+    const spy = async (url) => { reached = url; return new Response('ok', { status: 200 }); };
+    const r = await handleApex(new Request(
+      'https://systole.pages.dev/api/apex/gemini/stream?model=' + encodeURIComponent(traversal),
+      { method: 'POST', body: body() }), loose, spy);
+    ok('a widened allowlist still cannot admit a path', r.status === 400, String(r.status));
+    ok('and no request left for anywhere', reached === null, String(reached));
+
+    /* The widened allowlist must still do its actual job. */
+    let ok2 = null;
+    const spy2 = async (url) => { ok2 = url; return new Response('ok', { status: 200 }); };
+    const good = await handleApex(new Request(
+      'https://systole.pages.dev/api/apex/gemini/stream?model=gemini-9.9-flash',
+      { method: 'POST', body: body() }), loose, spy2);
+    ok('while a genuine model it was widened for still goes through',
+       good.status === 200 && /\/models\/gemini-9\.9-flash:/.test(ok2 || ''), String(good.status));
+
+    for (const bad of ['gemini-x?key=leak', 'gemini-x#frag', 'gemini-x:generateContent', '../etc', '']) {
+      const rr = await handleApex(new Request(
+        'https://systole.pages.dev/api/apex/gemini/stream?model=' + encodeURIComponent(bad),
+        { method: 'POST', body: body() }), loose, async () => new Response('ok'));
+      ok(`"${bad || '(empty)'}" is refused`, rr.status === 400, String(rr.status));
+    }
+  }
+
+  head('the output clamp is bounded by the object, not by a character count');
+  /* generationConfig was scanned in a fixed 400-character window. Add
+     stopSequences or a responseSchema and maxOutputTokens slides out of it,
+     and a request carrying a perfectly good value is refused as though it
+     carried none. */
+  {
+    const pad = '"stopSequences":[' + Array.from({ length: 30 }, (_, i) => `"seq${i}xxxxxxxxxx"`).join(',') + '],';
+    const big = '{"systemInstruction":{},"generationConfig":{' + pad + '"maxOutputTokens":9999},"contents":[]}';
+    let sent = null;
+    const f = async (u, init) => { sent = init && init.body; return new Response('ok', { status: 200 }); };
+    const r = await handleApex(new Request(
+      'https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
+      { method: 'POST', body: big }), { ...ENV, APEX_RPM: '0' }, f);
+    ok('a generationConfig larger than the old window is not refused', r.status === 200, String(r.status));
+    ok('and its maxOutputTokens is still clamped', /"maxOutputTokens":2000/.test(sent || ''),
+       (sent || '').slice(-60));
+    ok('the padding either side of it is untouched',
+       /"stopSequences"/.test(sent || '') && /"contents":\[\]/.test(sent || ''));
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

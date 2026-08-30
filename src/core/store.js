@@ -74,7 +74,20 @@ function merge(key, stored, written) {
   if (Array.isArray(stored) || Array.isArray(written)) {
     const a = Array.isArray(stored) ? stored : [];
     const b = Array.isArray(written) ? written : [];
-    return a.concat(b);
+    /* NOT a.concat(b). saveJSON writes the WHOLE array, never a delta — the
+       review log is saved as `saveJSON(LOG_KEY, LOG)` after LOG.push(row) — so
+       `written` normally already contains every row of `stored`, and
+       concatenating produced each of them twice. The visible symptom was the
+       review count on the notes screen climbing by the size of the log.
+       Keep only the rows of `stored` that `written` has not already got, and
+       keep `written` whole: genuinely repeated rows inside `written` survive,
+       because it is never the side that gets filtered. */
+    const seen = new Set(b.map(x => { try { return JSON.stringify(x); } catch (_) { return x; } }));
+    const extras = a.filter(x => {
+      let k; try { k = JSON.stringify(x); } catch (_) { k = x; }
+      return !seen.has(k);
+    });
+    return extras.concat(b);
   }
   if (stored && written && typeof stored === 'object' && typeof written === 'object') {
     return Object.assign({}, stored, written);      // what was just made wins

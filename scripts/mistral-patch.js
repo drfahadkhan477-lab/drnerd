@@ -505,6 +505,24 @@ function errMsg(j){
 async function apiError(r,provider){
   let d=''; try{ d=errMsg(await r.json()); }catch(_){}`);
 
+/* THE OTHER END OF THE SAME WIRE. keyMsg() assigns its argument with
+   innerHTML — it has to, because several apiError branches deliberately return
+   markup ("press <b>Connect</b> again"). That makes the one interpolation of
+   the provider's own text into that string an injection sink: a body of
+   {"message":"<img src=x onerror=…>"} becomes a real element and the handler
+   runs, in the origin that holds the fellow's API keys, notes and chats.
+   networkErrorMsg() three lines down already writes ${e(raw)}; this call site
+   simply never got the same treatment.
+
+   IT IS ALSO A HOLE THIS STEP WIDENED. Before errMsg() above, `d` was
+   j.error?.message — which Mistral never sets, so nothing reached the sink on
+   that provider. Teaching the app to read Mistral's error text correctly also
+   handed that text to innerHTML. Escaping the value, not the sentence, keeps
+   the deliberate markup working. */
+patch('mistral: the provider says it, the fellow reads it — it does not get to run',
+'  return `API error ${r.status}. ${d}`;',
+'  return `API error ${r.status}. ${e(d)}`;');
+
 /* A mid-stream error is the same bug with a worse ending. Mistral can abort a
    turn by emitting one error object into the SSE stream; `if(j.error)` never
    matched its shape, so the object fell through to the choices check, was

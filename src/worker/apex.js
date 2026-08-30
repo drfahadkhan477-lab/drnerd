@@ -90,6 +90,27 @@ const json = (status, body) =>
    reads .error.message and turns it into a sentence a fellow can act on. */
 const fail = (status, message) => json(status, { error: { message } });
 
+/* Where the object opened at `from` ends, by brace matching. String contents
+   are skipped so a brace inside a prompt cannot close the object early, and a
+   backslash-escaped quote cannot end the string early. Returns -1 if the
+   object never closes. */
+function objectEnd(raw, from) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = from; i < raw.length; i++) {
+    const c = raw[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i + 1;
+  }
+  return -1;
+}
+
 /* Clamp maxOutputTokens without parsing the body.
    Returns { body, error }. */
 function clampOutput(raw, max) {
@@ -98,8 +119,19 @@ function clampOutput(raw, max) {
   if (at < 0) return { error: 'generationConfig is required.' };
   /* Anchored to the generationConfig object rather than searched for globally:
      a note quoting the literal text "maxOutputTokens": 99999 must not be
-     rewritten, because that would corrupt the fellow's own prose. */
-  const slice = raw.slice(at, at + 400);
+     rewritten, because that would corrupt the fellow's own prose.
+
+     BOUNDED BY THE OBJECT, NOT BY A FIXED NUMBER OF CHARACTERS. This was a
+     400-character window, which is ample for {maxOutputTokens:2000} and quietly
+     wrong for anything larger: add stopSequences or a responseSchema and the
+     field slides out of the window, whereupon a request carrying a perfectly
+     good maxOutputTokens is refused with "maxOutputTokens is required". Brace
+     matching costs one pass over an object that is small by construction, and
+     it cannot be outgrown. */
+  const open = raw.indexOf('{', at);
+  const end = open < 0 ? -1 : objectEnd(raw, open);
+  if (end < 0) return { error: 'generationConfig is malformed.' };
+  const slice = raw.slice(at, end);
   const m = /"maxOutputTokens"\s*:\s*(\d+)/.exec(slice);
   if (!m) return { error: 'generationConfig.maxOutputTokens is required.' };
   const asked = +m[1];
@@ -141,6 +173,18 @@ export async function handleApex(request, env, fetchImpl) {
   if (request.method !== 'POST') return fail(405, 'Use POST.');
 
   const model = url.searchParams.get('model') || '';
+  /* THE SHAPE CHECK COMES FIRST, AND DOES NOT DEPEND ON APEX_MODELS. The model
+     is interpolated into a URL path, so anything structural in it — a slash, a
+     dot-dot, a query or fragment marker, a second colon — can steer the request
+     somewhere other than the model it names, with this deployment's key
+     attached. The DEFAULT regex is anchored and already refuses all of that;
+     a custom APEX_MODELS need not be, and an operator writing "gemini-" to
+     widen the allowlist would not expect to have opened a path traversal.
+     A configurable allowlist may choose WHICH models are permitted; it may not
+     choose whether the value is still a bare model name. */
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(model)) {
+    return fail(400, `"${model}" is not a valid model name.`);
+  }
   if (!modelRe.test(model)) return fail(400, `"${model}" is not a model this deployment will call.`);
 
   const raw = await request.text();

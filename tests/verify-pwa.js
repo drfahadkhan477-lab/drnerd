@@ -476,6 +476,31 @@ async function heapAfterBoot(page, url) {
     }
   }
 
+  head('the server that hosts this cannot be walked out of');
+  /* docs/IPAD.md offers scripts/serve.js as a hosting route over Tailscale, so
+     its root guard is load-bearing rather than a development convenience. It
+     was `file.startsWith(DIR)` with no trailing separator, which also accepts
+     any SIBLING whose name merely begins with the root's — "/../dist-old/x"
+     escaped a root of "dist". path.join has already collapsed the "..", so the
+     separator is the entire check. Requested with the raw path, because a
+     normalising client would resolve the traversal before it was ever sent. */
+  {
+    const raw = p => new Promise(resolve => {
+      const http = require('http'), u = new URL(ORIGIN);
+      const req = http.request({ host: u.hostname, port: u.port, path: p, method: 'GET' },
+        r => { let b = ''; r.on('data', d => b += d); r.on('end', () => resolve({ status: r.statusCode, body: b })); });
+      req.on('error', () => resolve({ status: 0, body: '' }));
+      req.end();
+    });
+    const control = await raw('/index.html');
+    ok('a file inside the root is still served', control.status === 200, String(control.status));
+    const sibling = await raw('/../dist-old/secret.txt');
+    ok('a sibling directory sharing the root\'s name prefix is refused',
+       sibling.status === 403 || sibling.status === 404, String(sibling.status));
+    const outside = await raw('/../../etc/hostname');
+    ok('and so is a plain walk upwards', outside.status === 403 || outside.status === 404, String(outside.status));
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

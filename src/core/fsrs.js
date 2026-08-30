@@ -128,9 +128,23 @@ function fsrsIvl(stability) {
    stability already was; difficulty starts at the neutral midpoint and
    corrects itself within a review or two. Returns null for a genuinely new
    card, since there is no prior state to decay from at all. */
+/* EVERY FIELD READ HERE IS CHECKED, because a card is not always a card this
+   module wrote. accsap12.v2 — which carries S.srs — is restored wholesale from
+   a user-picked file by the backup importer, and a truncated or hand-edited
+   backup can supply a card with no difficulty, or a stability of 0 or null.
+   Untreated, those produce a NaN stability, which becomes a NaN interval,
+   which becomes `new Date(NaN).toISOString()` — a RangeError thrown from
+   inside render(), on the review screen, which is the screen the fellow was
+   trying to reach when they restored the backup in the first place. */
 function fsrsSeed(card) {
-  if (card && card.stability !== undefined) return { difficulty: card.difficulty, stability: card.stability };
-  if (card && card.ivl !== undefined && card.last) return { difficulty: 5, stability: Math.max(0.5, card.ivl) };
+  if (!card) return null;
+  const s = Number(card.stability);
+  if (Number.isFinite(s) && s > 0) {
+    const d = Number(card.difficulty);
+    return { difficulty: Number.isFinite(d) ? Math.min(10, Math.max(1, d)) : 5, stability: s };
+  }
+  const ivl = Number(card.ivl);
+  if (Number.isFinite(ivl) && card.last) return { difficulty: 5, stability: Math.max(0.5, ivl) };
   return null;
 }
 
@@ -161,6 +175,14 @@ function fsrsUpdate(card, rating, today) {
       ? fsrsNextStabilityFail(prev.difficulty, prev.stability, r)
       : fsrsNextStabilitySuccess(prev.difficulty, prev.stability, r, rating);
   }
+  /* The floor under all of the above. fsrsSeed now refuses to hand out a
+     malformed prior, but the arithmetic has several routes to a non-finite
+     result and only one of them needs to be open for the scheduler to throw
+     from inside a render. Falling back to the first-review values for this
+     rating is the same answer the card would have got had it never been seen —
+     defensible, and above all finite. */
+  if (!Number.isFinite(stability) || stability <= 0) stability = fsrsInitStability(rating);
+  if (!Number.isFinite(difficulty)) difficulty = fsrsInitDifficulty(rating);
   const ivl = fsrsIvl(stability);
   const reps = rating === 1 ? 0 : (card && card.reps || 0) + 1;
   const lapses = (card && card.lapses || 0) + (rating === 1 ? 1 : 0);
