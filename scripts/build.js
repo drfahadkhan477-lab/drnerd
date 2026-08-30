@@ -111,6 +111,9 @@ const ROOT = path.join(__dirname, '..');
                    and apexroom all touched
      guards        the quiz keyboard steps aside for a focused SELECT — after
                    apexroom, which is what puts a <select> over the quiz screen
+     chipfix       apexroom hid .chips globally to fold the tutor's prompts
+                   away; the Lab and the search screen share that class and
+                   lost their rows. Scoped to #aiChips — after apexroom
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -118,7 +121,7 @@ const CHAIN = [
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
-  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards',
+  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

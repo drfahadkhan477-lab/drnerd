@@ -184,6 +184,27 @@ async function heapAfterBoot(page, url) {
     const calls = (swSrc.match(/if \(keepable\(req, res\)\)/g) || []).length;
     ok('both cache writes go through it, not through res.ok',
        !/if \(res\.ok\) c\.put/.test(swSrc) && calls === 2, calls + ' call sites');
+
+    /* INSTALL IS THE PATH THAT MATTERED, and it was the one without the check.
+       cache.addAll() stores whatever comes back, so a Cloudflare Access
+       sign-in page — 200 OK, text/html, for any URL — became app.js in the
+       precache permanently, and the device then launched offline into a blank
+       screen. Exactly the failure the comment above it describes, on the one
+       path it had not been applied to. */
+    ok('install no longer trusts addAll with the critical shell',
+       !/addAll\(PRECACHE\)/.test(swSrc));
+    ok('and screens every precached response through keepable first',
+       /keepable\(req, res\) \? res : null/.test(swSrc));
+    ok('refusing the whole install rather than caching a sign-in page',
+       /precache refused/.test(swSrc));
+
+    /* Offline, a navigation that misses used to resolve to undefined —
+       respondWith(undefined) is a dead page, which is "the app will not open"
+       rather than "the app opens from cache". */
+    ok('a shell lookup ignores the query string Access appends',
+       (swSrc.match(/ignoreSearch: true/g) || []).length >= 2);
+    ok('and a missed navigation falls back to the cached shell',
+       /req\.mode === 'navigate'/.test(swSrc) && /c\.match\('index\.html'/.test(swSrc));
   }
 
   head('an update does not leave old code running against new content');

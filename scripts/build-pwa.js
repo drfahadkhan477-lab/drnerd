@@ -583,10 +583,29 @@ const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', 'content
 const NICE_TO_HAVE = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
                       ${JSON.stringify(fontAssets.map(([n]) => 'fonts/' + n)).slice(1, -1)}];
 
+/* INSTALL CHECKS WHAT IT IS STORING, because addAll does not. The note further
+   down about authenticating proxies — Access answering 200 OK with a sign-in
+   page for any URL — was acted on in the fetch handler and nowhere else, and
+   install was the path that actually mattered. cache.addAll() keeps whatever
+   comes back: one lapsed session during install and the sign-in page IS app.js
+   in the precache, permanently, and the device launches offline into a blank
+   screen. That is not hypothetical; it is what this worker was doing.
+
+   So every critical URL is fetched and passed through the same keepable() the
+   fetch handler uses. If any one of them fails the check the install REJECTS —
+   no partial shell, nothing poisoned — and the browser tries again on the next
+   launch, by which time the session is usually back. */
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const c = await caches.open(SHELL);
-    await c.addAll(PRECACHE);
+    const fresh = await Promise.all(PRECACHE.map(async u => {
+      const req = new Request(u, { cache: 'reload' });
+      let res; try { res = await fetch(req); } catch (_) { return [u, null]; }
+      return [u, keepable(req, res) ? res : null];
+    }));
+    const bad = fresh.filter(([, res]) => !res).map(([u]) => u);
+    if (bad.length) throw new Error('precache refused: ' + bad.join(', '));
+    await Promise.all(fresh.map(([u, res]) => c.put(new Request(u), res)));
     await Promise.all(NICE_TO_HAVE.map(u => c.add(u).catch(() => {})));
     await self.skipWaiting();
   })());
@@ -620,9 +639,26 @@ self.addEventListener('fetch', e => {
   }
   // shell: cache first, but refresh in the background so an update lands
   e.respondWith(caches.open(SHELL).then(async c => {
-    const hit = await c.match(req);
+    /* ignoreSearch, because the cached key is a bare path and the URL that
+       comes back from an Access redirect is not — it carries the parameters
+       Access appended. Without this a launch after re-authenticating misses
+       every shell entry it actually has. */
+    const hit = await c.match(req, { ignoreSearch: true });
     const net = fetch(req).then(res => { if (keepable(req, res)) c.put(req, res.clone()); return res; }).catch(() => hit);
-    return hit || net;
+    /* A NAVIGATION MUST NEVER RESOLVE TO undefined. Returning hit || net looks
+       safe and is not: offline, net's catch resolves to the same missing hit,
+       so respondWith gets undefined and Safari shows its cannot-connect page —
+       the app "not opening" rather than opening from cache. Any navigation
+       that misses falls back to the cached shell, which is what a single-page
+       app wants for every route anyway. */
+    if (hit) return hit;
+    const res = await net;
+    if (res) return res;
+    if (req.mode === 'navigate') {
+      const shell = await c.match('index.html', { ignoreSearch: true }) || await c.match('.', { ignoreSearch: true });
+      if (shell) return shell;
+    }
+    return Response.error();
   }));
 });
 
