@@ -86,6 +86,15 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     const j6 = await r6.json();
     ok('a missing secret is a 503 that names it', r6.status === 503 && /GEMINI_API_KEY/.test(j6.error.message),
        j6.error.message.slice(0, 60));
+    /* Isolates the Content-Length fast path from the raw.length backstop: the
+       body actually attached here is tiny, well under MAX_BODY, so the old
+       post-buffering check alone would let this through. Only a check
+       against the declared header, made before request.text() ever runs,
+       catches it. */
+    const spoofed = new Request('https://systole.pages.dev/api/apex/gemini/generate?model=gemini-3-flash-preview',
+      { method: 'POST', body: body(), headers: { 'content-length': String(50 * 1024 * 1024) } });
+    const r7 = await handleApex(spoofed, ENV, f);
+    ok('a declared Content-Length over the cap is refused even though the real body is tiny', r7.status === 413, String(r7.status));
   }
 
   head('what it attaches, and what it never sends back');

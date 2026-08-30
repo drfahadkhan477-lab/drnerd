@@ -70,6 +70,7 @@ const SUITES = [
   ['quiznav',      'going back never re-grades a question or re-schedules a card'],
   ['homeprog',     'the progress card counts up in step with the bar it sits beside'],
   ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn'],
+  ['failsafe',     'render() throwing shows a real screen, never a blank or frozen one'],
 ];
 
 const argv = process.argv.slice(2);

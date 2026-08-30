@@ -213,6 +213,17 @@ export async function handleApex(request, env, fetchImpl) {
   }
   if (!modelRe.test(model)) return fail(400, `"${model}" is not a model this deployment will call.`);
 
+  /* Checked twice on purpose. Content-Length is the cheap rejection for the
+     common case — refusing an oversized request before request.text() ever
+     buffers it into memory or spends CPU decoding it, which matters on a
+     CPU-metered platform. It is also the only one a client can lie about or
+     omit (chunked transfer encoding sends none at all), so the length check
+     below stays as the backstop that is actually authoritative. */
+  const declaredLength = +(request.headers.get('content-length') || 0);
+  if (declaredLength > MAX_BODY) {
+    return fail(413, 'That request is too large. Try again without attaching so many figures.');
+  }
+
   const raw = await request.text();
   if (raw.length > MAX_BODY) {
     return fail(413, 'That request is too large. Try again without attaching so many figures.');
