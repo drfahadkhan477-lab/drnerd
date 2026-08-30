@@ -158,6 +158,32 @@ patch('a11y: the Rhythm Lab monitor is meaningful, so it is labelled',
 `<canvas id="labCanvas"></canvas>`,
 `<canvas id="labCanvas" aria-label="Live electrocardiogram trace"></canvas>`);
 
+/* ── an error message that showed its own markup ─────────────────────────────
+ * When a turn throws — an aborted stream aside — the catch block pushes an
+ * assistant message whose content is `icon('alert','icon-sm')+' '+err.message`:
+ * a literal `<svg>...</svg>` string glued onto the text.
+ *
+ * That message is chat history, so it renders through md(), and md() opens
+ * with `e(t)` — it escapes the whole string before doing anything else, the
+ * same defence that stops a fellow's own note from injecting markup. The icon
+ * is not exempt. A fellow hitting a real error — a bad key, a rate limit, a
+ * dropped connection — sees `<svg class="icon icon-sm" ...>` as literal text
+ * ahead of the message that actually explains what happened.
+ *
+ * The icon was never the problem; running it through the same escaper as
+ * untrusted text is. Store the plain message, flag the entry, and have the
+ * one place that renders chat history skip md() for it — an error line is a
+ * status string, not markdown, and it doesn't need tables or headings, only
+ * the icon rendered as itself and the text escaped once.
+ */
+patch('chat: an API error no longer prints its own icon markup as text',
+`hist.push({role:'assistant',content:icon('alert','icon-sm')+' '+(err.message||'Request failed. Check the connection.')});`,
+`hist.push({role:'assistant',err:true,content:err.message||'Request failed. Check the connection.'});`);
+
+patch('chat: render an error entry as icon + escaped text, not through md()',
+`: \`<div class="msg bot">\${md(m.content)}</div>\`).join('')`,
+`: \`<div class="msg bot">\${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}</div>\`).join('')`);
+
 /* title is announced by most screen readers but guaranteed by none. */
 const TOOLS = [
   ['pen', 'Pen'], ['hl', 'Highlighter'], ['erase', 'Eraser'],

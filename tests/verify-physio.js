@@ -174,13 +174,19 @@ const head = t => console.log('\n── ' + t + ' ──');
     const t1 = physio.time();
     /* Cycle fraction wraps, so measure forward distance around the circle. */
     const advanced = ((t1 - t0) % 1 + 1) % 1;
-    return { t0, t1, advanced, hr: RHYTHMS[labKind].hr };
+    return { t0, t1, advanced, hr: RHYTHMS[labKind].hr,
+             slow: (physio.slow ? physio.slow() : 1) };
   });
   ok('the cursor advances on its own', ownClock.advanced > 0.001,
      `${ownClock.t0.toFixed(3)} → ${ownClock.t1.toFixed(3)}`);
-  /* 600ms at 68 bpm is 0.68 of a cycle. Generous bounds: this is asserting the
+  /* 600ms at 68 bpm is 0.68 of a cycle, DIVIDED BY the playback speed. Both
+     halves matter and the suite now pins both: the clock is driven by the
+     rhythm's own rate rather than a free-running constant, and the slow-motion
+     control is a divisor on that rather than a redefinition of the heart rate.
+     A Wiggers diagram running at "34 bpm" would be a bradycardia, not a replay,
+     so the two must stay separable. Generous bounds — this is asserting the
      clock runs at roughly the right speed, not benchmarking the frame timer. */
-  const expected = 0.6 * (ownClock.hr / 60);
+  const expected = 0.6 * (ownClock.hr / 60) / (ownClock.slow || 1);
   ok('and at roughly the rate the rhythm implies, not some free-running speed',
      Math.abs(ownClock.advanced - expected) < 0.25 || Math.abs(ownClock.advanced - expected + 1) < 0.25,
      `advanced ${ownClock.advanced.toFixed(2)} of a cycle, expected ~${expected.toFixed(2)} at ${ownClock.hr} bpm`);

@@ -31,6 +31,6 @@ dist/
 build/
 source/
 
-# Python
+# Python bytecode from tools/
 __pycache__/
 *.pyc

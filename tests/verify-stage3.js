@@ -7,8 +7,7 @@
  * The important checks here intercept the actual outbound request and inspect
  * the JSON body. Vision code that "looks right" but sends a malformed image
  * block fails at the API with a 400 the user sees and I would not — so these
- * assert the wire format directly, against the shape the Anthropic vision
- * documentation specifies.
+ * assert the wire format directly, against Mistral's actual image_url shape.
  */
 'use strict';
 const path = require('path');
@@ -31,11 +30,8 @@ const head = t => console.log('\n── ' + t + ' ──');
    needed: capture the request body, then reply with a minimal valid SSE
    stream so the app's own parser runs end-to-end over it. */
 const SSE = [
-  'data: {"type":"message_start","message":{"id":"msg_test","content":[]}}',
-  'data: {"type":"content_block_start","content_block":{"type":"text"}}',
-  'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"The tracing shows atrial flutter."}}',
-  'data: {"type":"content_block_stop"}',
-  'data: {"type":"message_stop"}',
+  'data: ' + JSON.stringify({ choices: [{ delta: { content: 'The tracing shows atrial flutter.' } }] }),
+  'data: [DONE]',
   '',
 ].join('\n\n');
 
@@ -47,14 +43,9 @@ const SSE = [
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
 
   const captured = [];
-  await page.route('**/v1/messages', route => {
+  await page.route('**/v1/chat/completions', route => {
     try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
-  });
-  await page.route('**/openai/v1/chat/completions', route => {
-    try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
-    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
-      body: 'data: {"choices":[{"delta":{"content":"Text-only reply."}}]}\n\ndata: [DONE]\n\n' });
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
@@ -64,13 +55,13 @@ const SSE = [
   await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
   await page.waitForTimeout(1200);
 
-  /* Drive one full exchange on a question that has a figure. */
-  const ask = async (provider, wantFigure) => {
+  /* Drive one full exchange on a question that has a figure, against Mistral —
+     the one remaining BYOK provider with real vision. */
+  const ask = async wantFigure => {
     captured.length = 0;
-    await page.evaluate(async ({ provider, wantFigure }) => {
-      AI.provider = provider;
-      AI[provider] = { key: provider === 'anthropic' ? 'sk-ant-test' : 'gsk_test',
-                       model: provider === 'anthropic' ? 'claude-sonnet-5' : 'openai/gpt-oss-120b' };
+    await page.evaluate(async wantFigure => {
+      AI.provider = 'mistral';
+      AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
       const q = ALL_Q.find(x => !x.bad && (wantFigure ? (x.img > 0 && (IMGS[x.id] || []).length) : !x.img));
       jumpTo(q.id);
       const sh = document.getElementById('shell');
@@ -78,38 +69,35 @@ const SSE = [
       buildAI();
       window.__q = q;
       fire('why is this the answer?');
-    }, { provider, wantFigure });
+    }, wantFigure);
     for (let i = 0; i < 60 && !captured.length; i++) await page.waitForTimeout(100);
     await page.waitForTimeout(400);
     return captured[0];
   };
 
-  head('vision: the figure actually reaches the Anthropic request');
-  const withFig = await ask('anthropic', true);
+  head('vision: the figure actually reaches the Mistral request');
+  const withFig = await ask(true);
   ok('a request was made', !!withFig);
   const msgs = (withFig && withFig.messages) || [];
-  const first = msgs[0] || {};
+  const first = msgs.find(m => m.role === 'user') || {};
   ok('first user turn carries content blocks, not a bare string', Array.isArray(first.content),
      typeof first.content);
-  const imgBlocks = Array.isArray(first.content) ? first.content.filter(b => b.type === 'image') : [];
+  const imgBlocks = Array.isArray(first.content) ? first.content.filter(b => b.type === 'image_url') : [];
   ok('at least one image block is present', imgBlocks.length > 0, imgBlocks.length + ' image block(s)');
 
-  const src = imgBlocks[0] && imgBlocks[0].source;
-  ok('image source is base64-shaped', !!src && src.type === 'base64', JSON.stringify(src && src.type));
-  ok('media_type is a supported image type', !!src && /^image\/(webp|png|jpeg|gif)$/.test(src.media_type),
-     src && src.media_type);
-  ok('data is raw base64, with no data: URL prefix left on',
-     !!src && typeof src.data === 'string' && !src.data.startsWith('data:') && src.data.length > 100,
-     src ? (src.data || '').slice(0, 16) + '… (' + (src.data || '').length + ' chars)' : '');
+  const url = imgBlocks[0] && imgBlocks[0].image_url && imgBlocks[0].image_url.url;
+  const m = /^data:(image\/[a-z]+);base64,(.+)$/.exec(url || '');
+  ok('image is a data: URL, not a dead reference', !!m, (url || '').slice(0, 24));
+  ok('media_type is a supported image type', !!m && /^image\/(webp|png|jpeg|gif)$/.test(m[1]), m && m[1]);
   ok('data decodes as base64', (() => {
-    try { return Buffer.from(src.data, 'base64').length > 100; } catch (_) { return false; }
+    try { return !!m && Buffer.from(m[2], 'base64').length > 100; } catch (_) { return false; }
   })());
   ok('image is under the 10MB per-image API limit',
-     Buffer.from(src.data, 'base64').length < 10 * 1024 * 1024,
-     (Buffer.from(src.data, 'base64').length / 1024).toFixed(0) + ' KB');
+     !!m && Buffer.from(m[2], 'base64').length < 10 * 1024 * 1024,
+     m ? (Buffer.from(m[2], 'base64').length / 1024).toFixed(0) + ' KB' : '');
 
   const blocks = first.content;
-  const firstImgIdx = blocks.findIndex(b => b.type === 'image');
+  const firstImgIdx = blocks.findIndex(b => b.type === 'image_url');
   const lastTextIdx = blocks.length - 1;
   ok('images precede the question text, as the docs recommend', firstImgIdx < lastTextIdx);
   ok('the fellow\'s actual question is still the final text block',
@@ -120,25 +108,30 @@ const SSE = [
      labels.map(l => l.text).join(' '));
 
   head('vision: the system prompt matches what was actually sent');
-  const sysText = (withFig.system || []).map(s => s.text).join('\n');
+  const sysText = (withFig.messages || []).find(s => s.role === 'system')?.content || '';
   ok('context says the figures are attached', /attached to this conversation/.test(sysText));
   ok('context no longer claims the tutor is blind', !/which you cannot see/.test(sysText));
   ok('teaching instruction for figures is present', /start by saying what you actually see/i.test(sysText));
   ok('commentary-is-ground-truth guardrail present', /commentary is the ground truth/i.test(sysText));
 
-  head('vision: text-only provider is told the truth instead');
-  const groq = await ask('groq', true);
-  ok('a Groq request was made', !!groq);
-  const groqSys = ((groq.messages || []).find(m => m.role === 'system') || {}).content || '';
-  ok('Groq request carries no image blocks', !JSON.stringify(groq).includes('"type":"image"'));
-  ok('Groq context says the figures are NOT visible', /cannot see/.test(groqSys), groqSys.slice(0, 40));
-  ok('Groq context names the reason', /does not accept images/.test(groqSys));
+  /* Both remaining providers see figures — no real provider takes the "cannot
+     see this" path any more. The fallback is still correct and cheap, so it
+     is tested directly against Vision's own functions rather than through a
+     live provider that no longer exists. */
+  head('vision: a provider not on the list is told the truth instead');
+  const noVision = await page.evaluate(() => ({
+    sees: Vision.providerSeesFigures('not-a-real-provider'),
+    ctx: Vision.figureContextLine({ img: 2 }, 'not-a-real-provider'),
+  }));
+  ok('an unlisted provider is not treated as seeing figures', noVision.sees === false);
+  ok('its context line says the figures are NOT visible', /cannot see/.test(noVision.ctx), noVision.ctx);
+  ok('the context line names the reason', /does not accept images/.test(noVision.ctx));
 
   head('vision: a question with no figure sends no image');
-  const noFig = await ask('anthropic', false);
-  ok('no image block on a text-only question', !JSON.stringify(noFig).includes('"type":"image"'));
+  const noFig = await ask(false);
+  ok('no image block on a text-only question', !JSON.stringify(noFig).includes('"type":"image_url"'));
   ok('first turn stays a plain string when there is nothing to attach',
-     typeof (noFig.messages[0] || {}).content === 'string');
+     typeof (noFig.messages.find(x => x.role === 'user') || {}).content === 'string');
 
   head('images are never persisted to localStorage');
   const persisted = await page.evaluate(() => {
@@ -171,22 +164,28 @@ const SSE = [
   });
   ok('a fresh install produces no profile at all', emptyProfile === '', JSON.stringify(emptyProfile));
 
-  const inRequest = await ask('anthropic', true);
-  const sysWithProfile = (inRequest.system || []).map(s => s.text).join('\n');
+  const inRequest = await ask(true);
+  const sysWithProfile = (inRequest.messages || []).find(s => s.role === 'system')?.content || '';
   ok('profile is absent from the request when there is no history',
      !/CURRENT STANDING/.test(sysWithProfile));
 
   head('ui badge');
   const badge = await page.evaluate(() => {
-    AI.provider = 'anthropic';
+    AI.provider = 'mistral';
     const q = ALL_Q.find(x => !x.bad && x.img > 0);
     jumpTo(q.id); buildAI();
-    const anth = document.querySelector('.ai-sub').textContent;
-    AI.provider = 'groq'; buildAI();
+    const mist = document.querySelector('.ai-sub').textContent;
+    /* Not a real remaining provider — a synthetic id to exercise the branch
+       VISION_PROVIDERS leaves in place for a provider that cannot see images.
+       buildAI reads AI[AI.provider] regardless of whether it is a real
+       provider, so it needs a slot of its own. */
+    AI.provider = 'not-a-real-provider';
+    AI['not-a-real-provider'] = { key: 'x', model: 'x' };
+    buildAI();
     const gq = document.querySelector('.ai-sub').textContent;
-    return { anth, gq };
+    return { mist, gq };
   });
-  ok('badge says the figures are visible on Anthropic', /sees \d+ figure/.test(badge.anth), badge.anth);
+  ok('badge says the figures are visible on Mistral', /sees \d+ figure/.test(badge.mist), badge.mist);
   ok('badge says they are not on a text-only provider', /not visible to this model/.test(badge.gq), badge.gq);
 
   head('regression');

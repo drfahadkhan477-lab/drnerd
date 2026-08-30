@@ -56,13 +56,179 @@ async function heapAfterBoot(page, url) {
     ok('no inline figure blob in the document', !shellHtml.includes('const IMGS={'));
     ok('no base64 image payload anywhere in the shell',
        !/data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/]{500}/.test(shellHtml + appJs));
+    /* The four woff2 faces are inlined in the single-file build, where one
+       file that works offline cannot reference a sibling. Here they are their
+       own immutable, separately-cacheable files: 250 KB of base64 the browser
+       no longer parses before it can apply a rule. */
+    ok('no base64 font payload in the shell either',
+       !/data:font\/woff2;base64,/.test(shellHtml + appJs));
+    const faces = [...shellHtml.matchAll(/@font-face\{[^}]*src:url\((fonts\/[^)]+)\)/g)].map(m => m[1]);
+    ok('every face points at a file of its own', faces.length === 4, faces.join(', '));
+    const served = await Promise.all(faces.map(async f => {
+      const r = await fetch(new URL(f, target).href);
+      return r.ok && +r.headers.get('content-length') > 5000;
+    }));
+    ok('and every one of those files is actually served', served.every(Boolean),
+       `${served.filter(Boolean).length}/${faces.length}`);
     const shellBytes = Buffer.byteLength(shellHtml) + Buffer.byteLength(appJs);
-    ok('shell is under 800 KB', shellBytes < 800 * 1024, kb(shellBytes));
+    /* Tightened from 800 KB once the fonts came out. A budget that sits far
+       above the real figure stops being a budget: it was 800 to catch a
+       megabyte of inlined base64 heart scan, and at 557 KB there is room to
+       grow without room to hide a payload. */
+    ok('shell is under 640 KB', shellBytes < 640 * 1024, kb(shellBytes));
     if (baseline) {
       const before = require('fs').statSync(baseline).size;
       ok('and is a large fraction smaller than the single file',
          shellBytes < before / 20, `${mb(before)} → ${kb(shellBytes)}`);
     }
+  }
+
+  head('the library arrives late, and the home screen notices');
+  /* The single-file build has REF inline; here it is fetched, so the first
+     paint happens without it. That silently cost the home screen its pearl —
+     the card was absent, and nothing asked for it again. */
+  {
+  const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+  await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
+                             { timeout: 120000 });
+  const late = await page.evaluate(() => new Promise(r => setTimeout(() => r({
+    refs: typeof REF !== 'undefined' ? REF.length : -1,
+    pearls: typeof pearlAll === 'function' ? pearlAll().length : -1,
+    card: !!document.getElementById('pearlCard'),
+    rungsOrProse: document.querySelectorAll('.pearl-step').length ||
+                  (document.querySelector('.pearl-body') ? 1 : 0),
+    notesDoor: [...document.querySelectorAll('.door')]
+      .map(d => d.textContent.replace(/\s+/g, ' ').trim())
+      .find(t => /^Notes/.test(t)) || '',
+  }), 2500)));
+  ok('the reference seed is fetched and applied', late.refs > 100, String(late.refs));
+  ok('and yields pearls', late.pearls > 40, String(late.pearls));
+  ok('the pearl card is repainted onto the home screen', late.card);
+  ok('with its sentence set', late.rungsOrProse > 0, String(late.rungsOrProse));
+  ok('and the Notes door counts what arrived', /\d+ references/.test(late.notesDoor), late.notesDoor);
+  await page.close();
+  }
+
+  head('the Worker ships with the site, and the site still serves');
+  {
+    const w = await (await fetch(new URL('_worker.js', target).href)).text();
+    /* Pages ignores a functions/ directory on dashboard direct upload, which is
+       how this is deployed. A _worker.js at the root IS honoured, so the Worker
+       has to be a file in dist/ like everything else. */
+    ok('_worker.js is in the upload', w.length > 500, `${w.length} bytes`);
+    /* In advanced mode the Worker owns every request to the project. Without
+       this line it does not break the API — it 404s the whole app. */
+    ok('and it hands everything that is not the API back to the site',
+       /env\.ASSETS\.fetch\(request\)/.test(w));
+    ok('the API path is the only thing it intercepts',
+       /pathname\.startsWith\('\/api\/apex\/'\)/.test(w));
+    /* A secret in the bundle would defeat the entire exercise. */
+    ok('no key is baked into it — it reads one from the environment',
+       /env\.GEMINI_API_KEY/.test(w) && !/AIza[0-9A-Za-z_\-]{20}/.test(w) && !/AQ\.[0-9A-Za-z_\-]{20}/.test(w));
+    const sw = await (await fetch(new URL('sw.js', target).href)).text();
+    /* The model list is a GET, and a cached model list outlives the key that
+       produced it. */
+    ok('and the service worker never caches the API',
+       /pathname\.startsWith\('\/api\/apex\/'\)\s*\)\s*return;/.test(sw.replace(/\s+/g, ' ')) ||
+       /\/api\/apex\//.test(sw), 'bypass present');
+  }
+
+  head('a sign-in page is never written into a cache');
+  {
+    /* THE FAILURE THIS DEFENDS AGAINST. Cloudflare Access with a lapsed session
+       answers 200 OK and an HTML sign-in page for any URL. res.ok is true. The
+       service worker used to cache on res.ok alone, so one lapsed session while
+       the shell was being refreshed in the background would write the login page
+       into the precache AS app.js — permanently, on a device that then launches
+       offline into a blank screen.
+
+       The real sw.js is loaded and its keepable() run against fabricated
+       responses. No browser: a service worker is a module with a fetch handler,
+       the same shape verify-worker.js drives, and there is no way to make a
+       local server return a Cloudflare login page anyway. */
+    const swSrc = await (await fetch(new URL('sw.js', target).href)).text();
+    const res = (ct, ok = true, type = 'basic') =>
+      ({ ok, type, headers: { get: h => (h.toLowerCase() === 'content-type' ? ct : null) } });
+    const req = u => ({ url: ORIGIN + u });
+    let keepable;
+    try {
+      keepable = new Function('URL', swSrc.slice(swSrc.indexOf('function keepable')) + '\nreturn keepable;')(URL);
+    } catch (err) { keepable = null; }
+    ok('the worker has a keepable() gate at all', typeof keepable === 'function',
+       typeof keepable);
+    if (typeof keepable === 'function') {
+      ok('a sign-in page is not cached as app.js',
+         keepable(req('/app.js'), res('text/html; charset=utf-8')) === false);
+      ok('nor as a figure',
+         keepable(req('/content/figures/f001.webp'), res('text/html; charset=utf-8')) === false);
+      ok('nor as questions.json',
+         keepable(req('/content/questions.json'), res('text/html; charset=utf-8')) === false);
+      ok('a figure that is not an image is not a figure',
+         keepable(req('/content/figures/f001.webp'), res('application/json')) === false);
+      ok('a real figure is kept',
+         keepable(req('/content/figures/f001.webp'), res('image/webp')) === true);
+      ok('real code is kept',
+         keepable(req('/app.js'), res('text/javascript')) === true);
+      ok('the document itself is still allowed to be HTML',
+         keepable(req('/index.html'), res('text/html; charset=utf-8')) === true &&
+         keepable(req('/'), res('text/html; charset=utf-8')) === true);
+      ok('a font with no content-type at all is still kept — absence is not a login page',
+         keepable(req('/fonts/dm-sans.woff2'), res(null)) === true);
+      ok('an error is never cached', keepable(req('/app.js'), res('text/javascript', false)) === false);
+      ok('and neither is an opaque cross-origin response',
+         keepable(req('/app.js'), res('text/javascript', true, 'opaque')) === false);
+    }
+    /* Counting `if (keepable(...))` rather than every mention, because the
+       function's own declaration matches the bare name too. */
+    const calls = (swSrc.match(/if \(keepable\(req, res\)\)/g) || []).length;
+    ok('both cache writes go through it, not through res.ok',
+       !/if \(res\.ok\) c\.put/.test(swSrc) && calls === 2, calls + ' call sites');
+  }
+
+  head('an update does not leave old code running against new content');
+  {
+    /* THE SKEW THIS DEFENDS AGAINST. sw.js calls skipWaiting on install and
+       clients.claim on activate, so a new worker takes control of a page that
+       is still running the app.js it parsed at launch — and then serves it new
+       content. On an iPad a home-screen app is rarely killed, so that pairing
+       can persist for weeks.
+
+       It only became reachable when the shell and figure caches were versioned
+       separately: before that sw.js was byte-identical across code changes and
+       the browser never saw an update at all. */
+    const shell = await (await fetch(target)).text();
+    ok('the page listens for the worker taking over',
+       /addEventListener\(\s*['"]controllerchange['"]/.test(shell), 'controllerchange handler');
+    ok('and reloads when it does', /controllerchange[\s\S]{0,600}location\.reload\(\)/.test(shell));
+    /* Two guards, and both matter. */
+    ok('but not on the first install, when there was nothing stale to replace',
+       /hadController/.test(shell) && /if\(!hadController\)/.test(shell.replace(/\s/g, '')),
+       'first-install guard');
+    ok('and never twice, so a reload cannot loop',
+       /sessionStorage[\s\S]{0,200}swreloaded/.test(shell), 'one-shot guard');
+    ok('the guard is per-tab storage, since a reload discards variables',
+       /sessionStorage\.setItem\(\s*['"]accsap12\.swreloaded['"]/.test(shell));
+  }
+
+  head('an update reaches an installed app, without costing the figures');
+  {
+    const sw = await (await fetch(new URL('sw.js', target).href)).text();
+    const contentV = (/const CONTENT_V\s*=\s*'([^']+)'/.exec(sw) || [])[1];
+    const shellV = (/const SHELL_V\s*=\s*'([^']+)'/.exec(sw) || [])[1];
+    /* Both cache names were keyed on the content digest — a hash of the ACCSAP
+       export — so every change to the app's own code produced a byte-identical
+       sw.js. The browser saw no new worker, never re-primed the shell cache,
+       and an installed app went on serving old code. */
+    ok('the shell is versioned by its own bytes', !!shellV && shellV !== contentV,
+       `shell ${shellV}, content ${contentV}`);
+    ok('the shell cache is keyed on the shell version',
+       new RegExp(`SHELL\\s*=\\s*'accsap-shell-'\\s*\\+\\s*SHELL_V`).test(sw));
+    /* And the figure cache is NOT. Rekeying it on a code change would throw
+       away the 408 figures the fellow pressed a button to download — 19 MB
+       re-fetched because a stylesheet moved. */
+    ok('but the figure cache is keyed on the content, so a code change keeps them',
+       new RegExp(`FIGS\\s*=\\s*'accsap-figs-'\\s*\\+\\s*CONTENT_V`).test(sw));
   }
 
   head('content is served intact');
@@ -180,6 +346,116 @@ async function heapAfterBoot(page, url) {
     }, figId);
     ok('a figure seen before is still there offline', offlineFig.complete === true, JSON.stringify(offlineFig));
     await ctx.setOffline(false);
+    await ctx.close();
+  }
+
+  head('one press puts the whole bank on the device');
+  /* The reason this exists: served from a laptop over Tailscale, opened on an
+     iPad, then studied with the laptop shut. Under that pattern every figure
+     not already met is a broken image, discovered at the worst moment. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 430, height: 932 } });
+    const page = await ctx.newPage();
+    let figReqs = 0;
+    page.on('request', r => { if (r.url().includes('/content/figures/')) figReqs++; });
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
+                               { timeout: 120000 });
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
+                               { timeout: 60000 });
+
+    const before = await page.evaluate(() => {
+      const c = document.getElementById('offlineCard');
+      return c ? { total: offlineJob.total, have: offlineJob.have,
+                   val: c.querySelector('.off-val').textContent,
+                   btn: c.querySelector('.off-btn').textContent } : null;
+    });
+    ok('the card is on the home screen of the split build', !!before);
+    ok('and knows how many figures the bank has', before && before.total > 400, String(before && before.total));
+    /* Surveying must not BE a download: caches.match asks the question without
+       fetching, and 408 fetches on every home screen would be the opposite of
+       the feature. */
+    ok('surveying what is here costs no requests', figReqs === 0, String(figReqs));
+
+    const t0 = Date.now();
+    await page.evaluate(() => offlineDownload());
+    await page.waitForFunction(() => !offlineJob.busy, { timeout: 300000 });
+    const after = await page.evaluate(() => {
+      const c = document.getElementById('offlineCard');
+      return { have: offlineJob.have, total: offlineJob.total,
+               val: c.querySelector('.off-val').textContent,
+               btn: c.querySelector('.off-btn').textContent,
+               disabled: c.querySelector('.off-btn').disabled,
+               allHere: c.classList.contains('all-here'),
+               width: c.querySelector('.off-fill').style.width };
+    });
+    ok('the download fetches every figure', after.have === after.total,
+       `${after.have}/${after.total} in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+    ok('and the card says so rather than still offering', /^all \d+ figures/.test(after.val) &&
+       after.disabled && after.allHere && after.width === '100%', after.val + ' · ' + after.btn);
+
+    /* It does not own a cache: it only requests, and the service worker's own
+       fetch handler does the storing. So a reload must find them all through
+       exactly the same lookup a figure met the ordinary way goes through. */
+    figReqs = 0;
+    await page.reload({ waitUntil: 'load', timeout: 200000 });
+    await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
+                               { timeout: 60000 });
+    const reloaded = await page.evaluate(() => ({ have: offlineJob.have, total: offlineJob.total }));
+    ok('a reload finds them all still there', reloaded.have === reloaded.total,
+       `${reloaded.have}/${reloaded.total}`);
+    ok('and re-fetches none of them', figReqs === 0, String(figReqs));
+
+    /* AN AUTHENTICATING PROXY DOES NOT ANSWER WITH AN ERROR. Cloudflare Access
+       with an expired session, an SSO gateway, a captive portal: all reply
+       200 OK with a sign-in page. Without a content-type check the downloader
+       counts four hundred login forms as four hundred figures and caches every
+       one, leaving a bank of broken images under a progress bar reading 100%. */
+    const gated = await page.evaluate(async () => {
+      const url = offlineFigures()[0];
+      const looksOk = offlineIsImage(new Response('<html>sign in</html>',
+        { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }));
+      /* Poison the cache the way a gated fetch would. The real figure has to
+         go first: caches.match() returns the first hit across all caches, so
+         with the good copy still present the survey would find that instead
+         and the check would pass for the wrong reason. */
+      const before = offlineJob.have;
+      await offlinePurge(url);
+      const c = await caches.open('accsap-test-poison');
+      await c.put(url, new Response('<html>sign in</html>',
+        { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }));
+      await offlineSurvey();
+      const counted = offlineJob.have;
+      await offlinePurge(url);
+      await caches.delete('accsap-test-poison');
+      return { looksOk, before, counted };
+    });
+    ok('a 200 sign-in page is not mistaken for a figure', gated.looksOk === false);
+    ok('and one already in the cache is not counted as present',
+       gated.counted === gated.before - 1, `${gated.before} → ${gated.counted}`);
+
+    /* Put the real one back so the offline check below has it. */
+    await page.evaluate(() => offlineDownload());
+    await page.waitForFunction(() => !offlineJob.busy, { timeout: 300000 });
+    ok('and a retry restores it', await page.evaluate(() => offlineJob.have === offlineJob.total &&
+       offlineJob.bad === 0));
+
+    /* The claim, tested the only way that means anything: network off, and a
+       question this session has never opened. */
+    await ctx.setOffline(true);
+    const cold = await page.evaluate(async () => {
+      const q = ALL_Q.filter(x => x.figs && x.figs.length).slice(-1)[0];
+      jumpTo(q.id);
+      await new Promise(r => setTimeout(r, 2500));
+      const img = document.querySelector('img[src*="content/figures/"]');
+      return { id: q.id, found: !!img, complete: !!img && img.complete,
+               px: img ? img.naturalWidth : 0 };
+    });
+    await ctx.setOffline(false);
+    ok('offline, a figure never visited this session still draws',
+       cold.found && cold.complete && cold.px > 500,
+       `${cold.id} at ${cold.px}px`);
     await ctx.close();
   }
 
