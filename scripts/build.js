@@ -36,6 +36,8 @@ const ROOT = path.join(__dirname, '..');
 
      stage0        stabilises the raw export — everything else assumes it
      keys          six answer keys the export gets wrong; before anything reads them
+     flags         two questions whose lettered answer panels the export never
+                   shipped; flagged beside keys, for the same reason
      apex          embeds heart3d.js and apex.js (the ONLY place heart3d enters)
      stage2/3      FSRS scheduling, then Apex's vision and memory
      polish        the rhythm registry the hero and the lab both read
@@ -107,14 +109,16 @@ const ROOT = path.join(__dirname, '..');
                    and vision-capable — genuinely last, it revises code that
                    apex, gemini, hosted, memory, ref-images, toolfence, chatfix
                    and apexroom all touched
+     guards        the quiz keyboard steps aside for a focused SELECT — after
+                   apexroom, which is what puts a <select> over the quiz screen
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
-  'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
+  'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
-  'homewide', 'pearlrich', 'apexroom', 'mistral',
+  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

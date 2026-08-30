@@ -231,6 +231,23 @@ async function heapAfterBoot(page, url) {
        new RegExp(`FIGS\\s*=\\s*'accsap-figs-'\\s*\\+\\s*CONTENT_V`).test(sw));
   }
 
+  head('the split build evaluates no fetched code');
+  {
+    /* The splash player used to be fetched as text and run with (0, eval).
+       The single-file build has never needed that — it carries the player as an
+       ordinary inline <script> — so the split build was the only place in the
+       product where launching involved evaluating text pulled off the network.
+       Beyond the injection surface, it is the one construct that makes a
+       meaningful Content-Security-Policy unadoptable later. */
+    const idx = await (await fetch(ORIGIN + '/index.html')).text();
+    ok('index.html contains no eval of fetched text', !/\(\s*0\s*,\s*eval\s*\)|\beval\s*\(/.test(idx),
+       (idx.match(/.{0,40}eval.{0,40}/) || [''])[0]);
+    ok('the splash player is loaded as a script instead',
+       /script\.?\s*\)?;?[\s\S]{0,200}lottie\.min\.js/.test(idx) || /s\.src\s*=\s*'content\/splash-heart\/lottie\.min\.js'/.test(idx));
+    const app = await (await fetch(ORIGIN + '/app.js')).text();
+    ok('and app.js does not eval either', !/\(\s*0\s*,\s*eval\s*\)/.test(app));
+  }
+
   head('content is served intact');
   {
     const qs = await (await fetch(ORIGIN + '/content/questions.json')).json();
@@ -239,6 +256,37 @@ async function heapAfterBoot(page, url) {
     ok('all 408 figures referenced', figs === 408, String(figs));
     const declared = qs.reduce((a, q) => a + (q.img || 0), 0);
     ok('q.img and the extracted figure lists agree', declared === figs, `${declared} vs ${figs}`);
+
+    /* THE SIX KEYS THE EXPORT GETS WRONG MUST BE RIGHT IN *THIS* BUILD TOO.
+       scripts/keys-patch.js corrects them into the ALL_Q embedded in the
+       single-file build; this build serves content/questions.json instead, and
+       for a long time build-pwa copied that from the licensed export
+       byte-for-byte — so the iPad shipped the export's own wrong keys while the
+       single-file build had them right. A wrong key fails silently in the worst
+       possible way: it marks a correct answer wrong and teaches the distractor.
+       Asserted here against the shipped JSON, on the ids and letters from
+       keys-patch's own table. */
+    const KEYS = [['CON_16', 'C'], ['MIS_25', 'D'], ['PER_9', 'A'],
+                  ['SYS_9', 'A'], ['SYS_26', 'C'], ['SYS_44', 'E']];
+    const byId = new Map(qs.map(q => [q.id, q]));
+    const wrong = KEYS.filter(([id, want]) => {
+      const q = byId.get(id);
+      return !q || 'ABCDEFGH'[q.ci] !== want;
+    });
+    ok('the six corrected answer keys are corrected in the served bank too',
+       wrong.length === 0,
+       wrong.map(([id, want]) => `${id} wants ${want}, has ${'ABCDEFGH'[(byId.get(id) || {}).ci]}`).join('; '));
+
+    /* THE RULE, not the instance. A question with `imgopt` is asking the fellow
+       to choose between lettered panels; with no figure shipped, there are no
+       panels to choose between and it cannot be answered at all. Such a
+       question must carry `bad` (kept out of the pool) or `flag` (shown with a
+       notice saying why). COR_108 had one; COR_89 had neither and sat live in
+       the pool offering five patterns nobody could see. This is the check that
+       would have caught it, and catches the next one. */
+    const unanswerable = qs.filter(q => q.imgopt && !(q.figs || []).length && !q.bad && !q.flag);
+    ok('no question asks about a figure it does not ship, untriaged',
+       unanswerable.length === 0, unanswerable.map(q => q.id).join(', '));
     const man = await (await fetch(ORIGIN + '/manifest.webmanifest')).json();
     ok('web app manifest is installable-shaped',
        man.display === 'standalone' && Array.isArray(man.icons) && man.icons.length >= 2 && !!man.start_url,

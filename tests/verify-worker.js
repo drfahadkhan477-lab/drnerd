@@ -286,6 +286,53 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
        /"stopSequences"/.test(sent || '') && /"contents":\[\]/.test(sent || ''));
   }
 
+  head('a typo in a dashboard field does not disable a safeguard');
+  /* All three of these are strings typed into a Cloudflare settings field, and
+     each used to fail differently and quietly:
+       APEX_RPM         +"twenty" is NaN and NaN > 0 is false, so the limiter
+                        was skipped entirely — a rate limit that stops limiting
+                        and looks no different from one that works.
+       APEX_MAX_OUTPUT  NaN was written into the body as "maxOutputTokens":NaN,
+                        which is not valid JSON, so every request failed at
+                        Google with nothing useful said about why.
+       APEX_MODELS      new RegExp() threw, the outer handler caught it, and it
+                        surfaced as "Could not reach Google" — blaming Google
+                        for a typo in your own settings. */
+  {
+    const codes = [];
+    for (let i = 0; i < 25; i++) {
+      const r = await handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
+        { method: 'POST', body: body(), headers: { 'cf-connecting-ip': '198.51.100.7' } }),
+        { ...ENV, APEX_RPM: 'twenty' }, stub());
+      codes.push(r.status);
+    }
+    ok('a non-numeric APEX_RPM falls back to the default instead of switching the limiter off',
+       codes.includes(429), `${codes.filter(c => c === 200).length} ok, ${codes.filter(c => c === 429).length} limited`);
+
+    let sent = null;
+    const spy = async (u, i) => { sent = i && i.body; return new Response('ok', { status: 200 }); };
+    await handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
+      { method: 'POST', body: body() }), { ...ENV, APEX_RPM: '0', APEX_MAX_OUTPUT: '2k' }, spy);
+    ok('a non-numeric APEX_MAX_OUTPUT never reaches the body as NaN', !/NaN/.test(sent || ''), (sent || '').slice(0, 70));
+    let parses = true; try { JSON.parse(sent); } catch (_) { parses = false; }
+    ok('so what is forwarded is still valid JSON', parses);
+
+    const r = await worker.fetch(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
+      { method: 'POST', body: body() }),
+      { ...ENV, APEX_RPM: '0', APEX_MODELS: 'gemini-([a-z', ASSETS: { fetch: async () => new Response('site') } });
+    const msg = (await r.json()).error.message;
+    ok('a malformed APEX_MODELS names the variable rather than blaming Google',
+       /APEX_MODELS/.test(msg) && !/reach Google/.test(msg), `${r.status} ${msg.slice(0, 60)}`);
+
+    /* And a good configuration is untouched by any of it. */
+    let good = null;
+    const spy2 = async (u, i) => { good = i && i.body; return new Response('ok', { status: 200 }); };
+    const okr = await handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
+      { method: 'POST', body: body() }), { ...ENV, APEX_RPM: '0', APEX_MAX_OUTPUT: '500' }, spy2);
+    ok('a valid APEX_MAX_OUTPUT still clamps to exactly that',
+       okr.status === 200 && /"maxOutputTokens":500/.test(good || ''), (good || '').slice(0, 60));
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

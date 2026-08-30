@@ -83,6 +83,28 @@ function overRate(key, limit) {
   return at.n > limit;
 }
 
+/* EVERY ONE OF THESE IS A STRING FROM A DASHBOARD FIELD, and each of the three
+   fails differently when it is a typo:
+
+     APEX_RPM        +"twenty" is NaN, and NaN > 0 is false — so the rate-limit
+                     branch is skipped entirely and the limiter silently turns
+                     OFF. A misconfigured limit that stops limiting is the worst
+                     of the three, because nothing about it looks wrong.
+     APEX_MAX_OUTPUT NaN reaches the clamp and gets written into the body as
+                     "maxOutputTokens":NaN, which is not valid JSON — so every
+                     request fails at Google with an opaque error.
+     APEX_MODELS     new RegExp() on a bad pattern throws, is caught by the
+                     outer handler, and surfaces as "Could not reach Google" —
+                     blaming Google for a typo in your own settings.
+
+   So: parse strictly and fall back to the documented default, and let a bad
+   regex say which variable is wrong. */
+function positiveInt(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && Math.floor(n) === n ? n : fallback;
+}
+
 const json = (status, body) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -148,15 +170,19 @@ export async function handleApex(request, env, fetchImpl) {
   const key = env.GEMINI_API_KEY;
   if (!key) return fail(503, 'This deployment has no GEMINI_API_KEY set. Add it in the Cloudflare dashboard under Settings → Environment variables, or paste your own key in Apex settings.');
 
-  const rpm = +(env.APEX_RPM || DEFAULT_RPM);
+  const rpm = positiveInt(env.APEX_RPM, DEFAULT_RPM);
   const who = request.headers.get('cf-access-authenticated-user-email')
     || request.headers.get('cf-connecting-ip') || 'anon';
   if (rpm > 0 && overRate(who, rpm)) {
     return fail(429, 'Too many requests in a minute — wait a moment and try again.');
   }
 
-  const modelRe = env.APEX_MODELS ? new RegExp(env.APEX_MODELS) : DEFAULT_MODEL_RE;
-  const maxOut = +(env.APEX_MAX_OUTPUT || DEFAULT_MAX_OUTPUT);
+  let modelRe;
+  try { modelRe = env.APEX_MODELS ? new RegExp(env.APEX_MODELS) : DEFAULT_MODEL_RE; }
+  catch (_) {
+    return fail(500, 'APEX_MODELS is not a valid regular expression. Fix it in the Cloudflare dashboard under Settings \u2192 Environment variables, or remove it to use the default.');
+  }
+  const maxOut = positiveInt(env.APEX_MAX_OUTPUT, DEFAULT_MAX_OUTPUT) || DEFAULT_MAX_OUTPUT;
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   const headers = { 'content-type': 'application/json', 'x-goog-api-key': key };
 

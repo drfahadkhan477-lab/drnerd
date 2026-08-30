@@ -340,6 +340,57 @@ const head = t => console.log('\n── ' + t + ' ──');
   });
   ok('home renders', reg.home);
   ok('quiz still answers', reg.answered);
+  head('the quiz keyboard does not reach into the panel');
+  /* The panel is not a screen — it opens OVER whichever screen you are on, so
+     S.screen is still 'quiz' while the model picker is focusable. The quiz
+     keydown handler stepped aside for INPUT and TEXTAREA but not SELECT, so
+     using the <select>'s native type-ahead to pick a model also answered the
+     question underneath. Driven through the focused element, because a keypress
+     dispatched at the document has no tagName to guard on and would pass for a
+     reason that has nothing to do with the bug. */
+  {
+    const r = await page.evaluate(async () => {
+      /* The panel's settings view carries a <select> — that is the element the
+         guard has to survive. Asserted from the markup the app builds, so this
+         still means something if the panel is later restyled. */
+      const settingsHasSelect = /<select id="aiModel">/.test(
+        typeof aiSettingsMarkup === 'function' ? aiSettingsMarkup() : document.body.innerHTML) ||
+        !!document.getElementById('aiModel');
+
+      const q = ALL_Q.find(x => !x.bad && !x.flag);
+      jumpTo(q.id); S.answered = false; S.selected = null; render();
+      const onQuiz = S.screen === 'quiz';
+
+      /* A focused SELECT over the live quiz screen, driven the way a real
+         keypress arrives: at the focused element, bubbling to the document
+         handler. Dispatching at the document instead would carry no tagName
+         and pass the guard for a reason unrelated to the bug. */
+      const sel = document.createElement('select');
+      sel.innerHTML = '<option>alpha</option><option>bravo</option>';
+      document.body.appendChild(sel);
+      sel.focus();
+      sel.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+      await new Promise(r => setTimeout(r, 120));
+      const afterSelect = !!S.answered;
+
+      /* And the guard must not have gone too far: the shortcut still works when
+         nothing that takes typing has focus. */
+      S.answered = false; S.selected = null; render();
+      sel.remove();
+      document.body.focus();
+      document.querySelector('#app').dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+      await new Promise(r => setTimeout(r, 120));
+      const afterPlain = !!S.answered;
+
+      return { settingsHasSelect, onQuiz, afterSelect, afterPlain };
+    });
+    ok('the settings view really does carry a <select>', r.settingsHasSelect);
+    ok('a keystroke in a focused SELECT does not answer the question',
+       r.onQuiz && r.afterSelect === false, `onQuiz=${r.onQuiz} answered=${r.afterSelect}`);
+    ok('but the shortcut still answers when nothing is focused',
+       r.afterPlain === true, String(r.afterPlain));
+  }
+
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();
