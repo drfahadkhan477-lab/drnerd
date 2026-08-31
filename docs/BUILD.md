@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1017 + 75 checks
+node scripts/verify.js --pwa                           # → 1031 + 75 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -128,7 +128,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Thirty-one suites, 1017 checks, plus 75 more on the split build. They run one at a
+Thirty-one suites, 1031 checks, plus 75 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
@@ -213,6 +213,40 @@ For a same-shape sibling of an existing provider — another OpenAI-compatible
 API, say — starting from that provider's already-real fixture and changing
 only what the docs say differs is safer than writing a new one from scratch:
 it inherits what was already checked instead of re-guessing it.
+
+### An animation is not shipped until something has watched it move
+
+CSS that reads correctly is not evidence that anything moves. Two animations
+in this app shipped having never once fired, and both survived review because
+the stylesheet looked right:
+
+- **The chapter progress bars** were written with a `width` transition but
+  their markup shipped the final width inline, so there was no starting value
+  for the transition to run *from*. Every bar arrived already full. The fix
+  was to ship `width:0` plus the real value in a `data-` attribute and set it
+  two animation frames later (`mountChapterBars`).
+- **The suggested-prompt chip rows** were hidden outright by a rule that
+  renamed a shared class, which silently took two *other* screens' chip rows
+  down with it. Nothing errored; the rows simply were not there.
+
+Neither was caught by reading the diff. Both were caught by driving a real
+browser and reading `getComputedStyle`. So, for anything that moves or that
+has a distinct empty/zero state:
+
+1. Drive it in Playwright and assert on **computed style or measured
+   geometry**, sampled more than once over the animation's window — a single
+   reading cannot tell "it animated" from "it was already there".
+2. Capture a before/after pair from the actual build and *look at it*. The
+   zero-state chapter track in this repo was verified exactly that way: the
+   before shot showed a flat grey bar indistinguishable from a loading
+   skeleton, which is what the change existed to fix.
+3. Sample only once the entrance animation has finished. Read a frame too
+   early and an element reports its own container's colour back at you —
+   which scores a perfect 1.00 contrast ratio and looks like a catastrophic
+   bug rather than a mistimed measurement. `verify-homeprog` waits for the
+   card's opacity to reach 1 rather than guessing a delay, and
+   `verify-chapters` carries a header note about the same trap in
+   `document.startViewTransition`.
 
 Some modules can be checked without a browser at all, which is much faster
 while iterating on the physiology or the ECG maths:

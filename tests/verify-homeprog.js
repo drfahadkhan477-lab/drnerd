@@ -147,6 +147,94 @@ const head = t => console.log('\n── ' + t + ' ──');
     ok('no horizontal overflow at 430px wide', r.w1 <= r.viewport + 1, `${r.w1} vs ${r.viewport}`);
   }
 
+  head('the legend ranks its two numbers the way their bars already rank them');
+  /* The mastered bar is a glowing teal gradient; the seen bar is a flat 30%
+     wash. The numbers beside them used to be byte-identical to each other —
+     same colour, same weight — so the card gave the reader two contradictory
+     rankings of the same pair. This asserts the numbers agree with the bars:
+     mastered is strictly the stronger of the two, by weight and by contrast. */
+  {
+    const r = await page.evaluate(async () => {
+      goHome(); render();
+      const card = document.getElementById('homeProgress');
+      const stats = [...card.querySelectorAll('.hp-stat')];
+      const mast = stats.find(s => !s.classList.contains('hp-stat-sub'));
+      const seen = stats.find(s => s.classList.contains('hp-stat-sub'));
+      const read = el => { const n = el && el.querySelector('.hp-num'); if (!n) return null;
+        const cs = getComputedStyle(n); return { color: cs.color, weight: +cs.fontWeight }; };
+      return { mast: read(mast), seen: read(seen) };
+    });
+    ok('both numbers are present and separately identifiable', !!(r.mast && r.seen), JSON.stringify(r));
+    ok('they are no longer styled identically to each other',
+       !!(r.mast && r.seen) && !(r.mast.color === r.seen.color && r.mast.weight === r.seen.weight),
+       `mastered ${r.mast && r.mast.color}/${r.mast && r.mast.weight} vs seen ${r.seen && r.seen.color}/${r.seen && r.seen.weight}`);
+    ok('and the mastered number is the heavier of the two',
+       !!(r.mast && r.seen) && r.mast.weight > r.seen.weight,
+       `${r.mast && r.mast.weight} vs ${r.seen && r.seen.weight}`);
+  }
+
+  head('every word in the legend clears WCAG AA, on all eight themes');
+  /* Measured, not eyeballed, and across every theme rather than whichever one
+     happened to be open. This began as a check on the hierarchy fix above and
+     found something worse on the way: the legend's labels were painted in
+     --dim, the app's decorative tertiary token, which lands at 2.3:1 on the
+     two default light themes. These are not decoration — they are the words
+     that say what the number beside them counts.
+
+     Contrast is computed against the card's own composited background, and
+     the card is only sampled once its entrance animation has actually
+     finished: read a frame too early and every element reports the
+     background's own colour back at you, which scores a perfect 1.00 and
+     looks like a catastrophic failure rather than a mistimed measurement. */
+  {
+    const results = await page.evaluate(async () => {
+      const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      const ratio = (a, b) => { const la = lum(a), lb = lum(b);
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
+      const parse = s => { const m = String(s).match(/rgba?\(([^)]+)\)/); if (!m) return null;
+        const p = m[1].split(/[,\s/]+/).filter(Boolean).map(Number);
+        return { rgb: [p[0], p[1], p[2]], a: p.length > 3 ? p[3] : 1 }; };
+      const over = (fg, bg) => fg.rgb.map((c, i) => Math.round(c * fg.a + bg[i] * (1 - fg.a)));
+      const stack = el => { let a = 1, n = el;
+        while (n && n !== document.documentElement) { a *= parseFloat(getComputedStyle(n).opacity || '1'); n = n.parentElement; }
+        return a; };
+
+      const out = [];
+      for (const t of THEMES) {
+        S.theme = t.id; applyTheme(); goHome(); render();
+        // wait for the card's entrance to finish rather than guessing a delay
+        let card = null;
+        for (let i = 0; i < 60; i++) {
+          card = document.getElementById('homeProgress');
+          if (card && stack(card) > 0.999) break;
+          await new Promise(r => requestAnimationFrame(r));
+        }
+        if (!card || stack(card) <= 0.999) { out.push({ theme: t.id, error: 'card never settled' }); continue; }
+        const pageRaw = parse(getComputedStyle(document.body).backgroundColor);
+        const pageBg = pageRaw && pageRaw.a === 1 ? pageRaw.rgb : [255, 255, 255];
+        const cardRaw = parse(getComputedStyle(card).backgroundColor);
+        const cardBg = cardRaw ? over(cardRaw, pageBg) : pageBg;
+        const worst = { part: null, r: Infinity };
+        for (const [sel, part] of [['.hp-stat', 'label'], ['.hp-num', 'number'], ['.hp-stat-count', 'count']]) {
+          for (const el of card.querySelectorAll(sel)) {
+            const c = parse(getComputedStyle(el).color);
+            if (!c) continue;
+            const rr = ratio(over({ rgb: c.rgb, a: c.a * stack(el) }, cardBg), cardBg);
+            if (rr < worst.r) { worst.r = rr; worst.part = part; }
+          }
+        }
+        out.push({ theme: t.id, worst: +worst.r.toFixed(2), part: worst.part });
+      }
+      S.theme = 'auto'; applyTheme(); goHome(); render();
+      return out;
+    });
+    for (const r of results) {
+      ok(`${r.theme}: the least-readable thing in the legend still clears AA`,
+         !r.error && r.worst >= 4.5, r.error || `${r.worst}:1 (${r.part})`);
+    }
+  }
+
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();

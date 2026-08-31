@@ -99,12 +99,30 @@ patch('homeprog: .home-progress becomes a card, the track triples in height',
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.48),transparent);
   animation:hpShine 2.8s var(--glide) 1.15s infinite}
 .hp-legend{display:flex;align-items:center;flex-wrap:wrap;column-gap:18px;row-gap:6px;margin-top:13px}
-.hp-stat{display:inline-flex;align-items:baseline;gap:6px;font-size:13px;color:var(--dim)}
+/* --muted, not --dim. --dim is this app's decorative tertiary token and
+   measures 2.3:1 against this card on the two default light themes — below
+   AA, and these are not decoration: they are the words that say what the
+   number beside them counts. Measured across all eight themes rather than
+   eyeballed; --muted clears 4.5:1 on every one. */
+.hp-stat{display:inline-flex;align-items:baseline;gap:6px;font-size:13px;color:var(--muted)}
 .hp-dot{width:8px;height:8px;border-radius:50%;flex:none;align-self:center}
 .hp-dot-mast{background:linear-gradient(135deg,var(--teal2),var(--teal))}
 .hp-dot-seen{background:color-mix(in srgb,var(--teal) 42%,transparent)}
 .hp-num{font-family:var(--font-mono);font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
-.hp-stat-count{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--dim);opacity:.8}
+/* THE TWO NUMBERS MUST RANK EACH OTHER THE WAY THEIR BARS ALREADY DO. The
+   mastered bar is a glowing teal gradient and the seen bar is a flat 30%
+   wash — the bars say plainly that one of these matters more. The numbers
+   used to be identical to each other (both --text at 800), so they said the
+   opposite, and the reader got two contradictory rankings of the same pair.
+   The obvious repair — tint the mastered number teal to match its bar — was
+   measured and rejected: --teal against this card is 3.68:1 on the default
+   light theme, so it would have dropped the single most important number on
+   the home screen from 16:1 to below AA in order to decorate it. Demoting
+   the secondary number says the same thing and costs nothing: mastered
+   stays at full strength, seen recedes to the same --muted as its own
+   label, and both stay comfortably readable. */
+.hp-stat-sub .hp-num{color:var(--muted);font-weight:700}
+.hp-stat-count{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--muted)}
 @keyframes hpGrow{from{width:0}}
 @keyframes hpShine{0%{transform:translateX(-130%)}60%,100%{transform:translateX(380%)}}
 @media(prefers-reduced-motion:reduce){
@@ -135,7 +153,7 @@ patch('homeprog: legend, a due pill, and hooks for the count-up',
       </div>
       <div class="hp-legend">
         <span class="hp-stat"><i class="hp-dot hp-dot-mast"></i>Mastered <b class="hp-num" data-count="\${masteryPct}">0</b>%</span>
-        <span class="hp-stat"><i class="hp-dot hp-dot-seen"></i>Seen <b class="hp-num" data-count="\${covered}">0</b>%</span>
+        <span class="hp-stat hp-stat-sub"><i class="hp-dot hp-dot-seen"></i>Seen <b class="hp-num" data-count="\${covered}">0</b>%</span>
         <span class="hp-stat-count">\${seenN} of \${TOTAL_Q}</span>
       </div>
     </div>`);

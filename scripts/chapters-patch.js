@@ -114,7 +114,24 @@ patch('chapters: the fill is a gradient with glow, and starts at zero so the tra
 `.ct-bar i{display:block;height:100%;border-radius:99px;width:0;
   background:linear-gradient(90deg,var(--accent),color-mix(in srgb, var(--accent) 65%, white));
   box-shadow:0 0 7px color-mix(in srgb, var(--accent) 50%, transparent);
-  transition:width 1s var(--glide)}`);
+  transition:width 1s var(--glide)}
+/* ZERO IS A STATE, NOT A MISSING VALUE. An untouched chapter draws a solid
+   grey track with nothing in it, which is the same thing this app's own
+   loading skeletons look like — so "you have not started this yet" and
+   "this failed to load" render identically, and the reader cannot tell
+   which one they are looking at. Dashes carry the same visual weight as
+   the solid track (same --border2, so nothing gets quieter or louder) and
+   change only the texture, which is the part that actually says the
+   emptiness is deliberate.
+
+   Keyed off data-w rather than a class because the markup already ships
+   the real value there and mountChapterBars only ever writes style.width,
+   never touching the attribute — so the selector stays true for the life
+   of the tile. Where :has() is unsupported the rule simply drops and the
+   tile falls back to today's solid track, which is the current behaviour
+   rather than a broken one. */
+.ct-bar:has(i[data-w="0"]){background:repeating-linear-gradient(90deg,
+  var(--border2) 0 5px,transparent 5px 10px)}`);
 
 /* ── the story rail: grown proportionally, so it does not look like an
    afterthought beside the larger tiles below it ── */

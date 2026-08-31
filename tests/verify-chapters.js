@@ -189,6 +189,45 @@ const head = t => console.log('\n── ' + t + ' ──');
     ok('no horizontal scroll at 430px wide', !overflow);
   }
 
+  head('an untouched chapter looks deliberately empty, not broken');
+  /* A chapter at 0% used to draw the same flat grey track this app's loading
+     skeletons use, so "not started yet" and "failed to load" were pixel-for-
+     pixel the same thing. The zero state now dashes the track instead —
+     same colour and weight, different texture — and the two must stay
+     distinguishable from each other, which is what this asserts: the zero
+     tracks carry a repeating gradient and the started ones still do not. */
+  {
+    const r = await page.evaluate(async () => {
+      S.srs = {};
+      /* Give exactly one chapter progress and leave the rest untouched, so a
+         single render contains both states and the comparison is between two
+         tiles on one screen rather than between two runs. */
+      const target = POOL[0].ch;
+      let n = 0;
+      for (const q of POOL) {
+        if (q.ch === target && n < 25) {
+          S.srs[q.id] = { difficulty: 5, stability: 20, ivl: 20, reps: 3, lapses: 0, last: '2026-08-20', due: '2026-09-20' };
+          n++;
+        }
+      }
+      goStudy(); render();
+      await new Promise(res => setTimeout(res, 160));
+      const read = b => {
+        const i = b.querySelector('i[data-w]');
+        return { w: i ? +i.dataset.w : null, bg: getComputedStyle(b).backgroundImage };
+      };
+      const all = [...document.querySelectorAll('.ct-bar')].map(read);
+      return { zero: all.filter(x => x.w === 0), started: all.filter(x => x.w > 0) };
+    });
+    const dashed = s => typeof s === 'string' && s.includes('repeating-linear-gradient');
+    ok('the fixture really does put both states on screen at once',
+       r.zero.length > 0 && r.started.length > 0, `${r.zero.length} at zero, ${r.started.length} started`);
+    ok('every untouched chapter draws a dashed track',
+       r.zero.length > 0 && r.zero.every(x => dashed(x.bg)), r.zero.length ? r.zero[0].bg.slice(0, 70) : 'none found');
+    ok('and a chapter with real progress keeps its solid one',
+       r.started.length > 0 && r.started.every(x => !dashed(x.bg)), r.started.length ? r.started[0].bg.slice(0, 40) : 'none found');
+  }
+
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();
