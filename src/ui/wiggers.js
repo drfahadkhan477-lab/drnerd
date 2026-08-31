@@ -68,6 +68,21 @@ function mount(canvas, opts) {
   };
   const secs = () => 60 / S.hr;
 
+  /* One set of margins per view, read by that view's own draw function AND by
+     scrubAt below — so a drag on the canvas can never disagree with where the
+     trace it is dragging over actually is. Kept once here after they drifted
+     apart once already: scrubAt carried its own copy (40, 14) that matched
+     drawRight by coincidence, was 2px off drawWiggers's real right margin,
+     and 4px off drawFlow's real left margin — a small but real, reproducible
+     mismatch between where a drag lands and the time it reports. pv and
+     curves are absent on purpose: scrubAt refuses those views before ever
+     reading a margin. */
+  const MARGINS = {
+    wiggers: { L: 40, R: 12 },
+    flow:    { L: 44, R: 14 },
+    right:   { L: 40, R: 14 },
+  };
+
   /* ── palette ──────────────────────────────────────────────────────────────
      Structure from the theme, meaning from the physiology. */
   function cssv(name, fb) {
@@ -241,7 +256,7 @@ function mount(canvas, opts) {
 
   /* ════════════════════ view: the Wiggers diagram ════════════════════════ */
   function drawWiggers(p) {
-    const L = 40, R = 12, TOP = 18, BOT = 64;
+    const { L, R } = MARGINS.wiggers, TOP = 18, BOT = 64;
     const w = W - L - R;
     const gap = 10;
     const hEcg = 50, hPhase = 28;
@@ -480,7 +495,7 @@ function mount(canvas, opts) {
 
   /* ════════════════════ view: flow, and coronary flow ════════════════════ */
   function drawFlow(p) {
-    const L = 44, R = 14, TOP = 16, BOT = 44, gap = 22;
+    const { L, R } = MARGINS.flow, TOP = 16, BOT = 44, gap = 22;
     const w = W - L - R;
     const hh = (H - TOP - BOT - gap) / 2;
     const Bq = box(L, TOP, w, hh);
@@ -530,7 +545,7 @@ function mount(canvas, opts) {
 
   /* ════════════════════ view: the right heart ════════════════════════════ */
   function drawRight(p) {
-    const L = 40, R = 14, TOP = 28, BOT = 56, gap = 22;
+    const { L, R } = MARGINS.right, TOP = 28, BOT = 56, gap = 22;
     const w = W - L - R;
     const hh = (H - TOP - BOT - gap) / 2;
     const Br = box(L, TOP, w, hh);
@@ -710,7 +725,7 @@ function mount(canvas, opts) {
        dragging it moves the heart too if the caller has wired them together. */
     scrubAt(x, y) {
       if (S.view === 'curves' || S.view === 'pv') return null;
-      const L = 40, R = 14;
+      const { L, R } = MARGINS[S.view] || MARGINS.wiggers;
       const t = clamp((x - L) / Math.max(1, W - L - R), 0, 0.9999);
       S.t = t; draw();
       return t;

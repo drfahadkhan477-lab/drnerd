@@ -89,8 +89,24 @@ function sentences(text) {
     /* The lookahead has to step over emphasis markers and an opening quote:
        these notes bold the term being taught, so a sentence very often starts
        "**Finerenone** is…", and looking only for a capital left two sentences
-       fused into one pearl that read as a non-sequitur. */
-    .split(/(?<=[.!?])\s+(?=[*_"'“(]*[A-Z(])/)
+       fused into one pearl that read as a non-sequitur.
+
+       NO LOOKBEHIND, DELIBERATELY. This used a lookbehind assertion on the
+       sentence ender — which says the same thing more directly, and is a
+       parse-time SyntaxError on iPadOS
+       Safari below 16.4. Not a caught exception: the whole enclosing <script>
+       block fails to compile, and that block also holds the rhythm registry,
+       the scheduler and most of the app. One unsupported character silently
+       took out everything on an older tablet, and nothing in the suite would
+       have said so, because the suite runs on Chromium.
+
+       Capturing the ender and re-attaching it does the same work with a
+       lookAHEAD only, which Safari has always had. The separator is NUL rather
+       than a text sentinel because prose cannot contain it — <abbr> above is
+       an established idiom in this function, but it is a string a note could
+       in principle write. */
+    .replace(/([.!?])\s+(?=[*_"'“(]*[A-Z(])/g, '$1\u0000')
+    .split('\u0000')
     .map(s => s.replace(/<abbr>/g, '.').trim());
 }
 

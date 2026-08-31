@@ -219,5 +219,37 @@ ok('stability, difficulty, interval and due are always finite and sane',
          && /^\d{4}-\d{2}-\d{2}$/.test(o.due);
    })), `${STATES.length * 4} combinations`);
 
+head('a card this module did not write cannot take the review screen down');
+/* accsap12.v2 carries S.srs, and importMarkup() restores it wholesale from a
+   file the fellow picks — so a truncated or hand-edited backup can hand the
+   scheduler a card with no difficulty, or a stability of 0 or null. Untreated
+   these produce a NaN interval, and new Date(NaN).toISOString() throws a
+   RangeError out of fsrsPreview(), which buildQuiz() calls inside a template
+   literal with no try/catch. The result is a review screen that will not
+   render — reached through the feature you use when something has already
+   gone wrong. */
+const MALFORMED = [
+  ['no difficulty at all',   { stability: 10, ivl: 10, reps: 2, lapses: 0, last: '2026-08-20' }],
+  ['stability of zero',      { difficulty: 5, stability: 0, ivl: 1, reps: 0, lapses: 1, last: '2026-08-20' }],
+  ['stability of null',      { difficulty: 5, stability: null, last: '2026-08-20' }],
+  ['difficulty of null',     { difficulty: null, stability: 10, last: '2026-08-20' }],
+  ['stability as a string',  { difficulty: 5, stability: '10', last: '2026-08-20' }],
+  ['nothing but junk',       { difficulty: 'x', stability: 'y', ivl: 'z', last: 'not-a-date' }],
+  ['an empty object',        {}],
+];
+for (const [label, bad] of MALFORMED) {
+  let out = null, threw = null;
+  try { out = F.update(bad, 3, '2026-08-30'); } catch (e) { threw = e.constructor.name + ': ' + e.message; }
+  ok(`a card with ${label} still schedules instead of throwing`,
+     !threw && out && isFinite(out.stability) && out.stability > 0
+       && Number.isInteger(out.ivl) && out.ivl >= 1
+       && /^\d{4}-\d{2}-\d{2}$/.test(out.due),
+     threw || (out && `ivl=${out.ivl} due=${out.due}`));
+}
+/* And the hardening must not have blunted a well-formed card. */
+const control = F.update({ difficulty: 5, stability: 10, ivl: 10, reps: 2, lapses: 0, last: '2026-08-20' }, 3, '2026-08-30');
+ok('a well-formed card is still scheduled on its own merits, not the fallback',
+   control.ivl > 10 && control.stability > 10, `ivl=${control.ivl}`);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

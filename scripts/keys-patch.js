@@ -34,12 +34,22 @@
  * undo any edit made there. Correcting it here means the fix lives in the build
  * and survives re-extraction, and the assertion below means a differently keyed
  * export fails loudly rather than being quietly "corrected" to the wrong thing.
+ *
+ * AND IT HAS TO REACH BOTH BUILDS. This step rewrites the ALL_Q embedded in the
+ * HTML, which is the whole of the single-file build's bank — but the split build
+ * does not read that. build-pwa.js serves content/questions.json, and used to
+ * copy it from the licensed export byte-for-byte, which meant every correction
+ * here stopped at the single-file build and the iPad shipped the export's own
+ * six wrong keys. A wrong key is not a visible failure: it marks a right answer
+ * wrong and teaches the distractor as fact.
+ *
+ * So the list and the applying are exported rather than run only as a CLI, and
+ * build-pwa.js applies the SAME list to the JSON bank, with the same `was`
+ * assertion. One list, two consumers — the alternative is two lists that agree
+ * until the day they don't.
  */
 'use strict';
 const fs = require('fs');
-
-const SRC = process.argv[2], OUT = process.argv[3];
-if (!SRC || !OUT) { console.error('usage: node scripts/keys-patch.js <in.html> <out.html>'); process.exit(1); }
 
 /* id, the key the export records, the key the commentary states, and the words
    that settle it. `was` is asserted: if the export ever ships a different value
@@ -59,33 +69,49 @@ const CORRECTIONS = [
     why: '"The correct answer choice is older age." Sodium sensitivity tracks with Black race and older age, and the stem\'s patient is Asian, which is what makes age the answer here.' },
 ];
 
-let html = fs.readFileSync(SRC, 'utf8');
-
-/* Same anchor the extractor uses, so the two agree about where the bank is. */
-const RE = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/;
-const m = RE.exec(html);
-if (!m) throw new Error('could not find "const ALL_Q=" — has stage0 run?');
-const bank = JSON.parse(m[1]);
-
-const byId = new Map(bank.map(q => [q.id, q]));
-const applied = [];
-for (const c of CORRECTIONS) {
-  const q = byId.get(c.id);
-  if (!q) throw new Error(`[${c.id}] not in the bank`);
-  const cur = 'ABCDEFGH'[q.ci];
-  if (cur !== c.was) {
-    throw new Error(`[${c.id}] the export now keys ${cur}, not ${c.was} as recorded here.\n` +
-                    `  This correction was written against a different export. Recheck the question before changing it.`);
+/* Apply every correction to a parsed bank, in place. Asserts `was` on each, so
+   an export that has since been rekeyed stops the build instead of being
+   silently "corrected" to something nobody rechecked. Returns the descriptions
+   of what it changed. Shared by this CLI and by build-pwa.js. */
+function applyKeyCorrections(bank) {
+  const byId = new Map(bank.map(q => [q.id, q]));
+  const applied = [];
+  for (const c of CORRECTIONS) {
+    const q = byId.get(c.id);
+    if (!q) throw new Error(`[${c.id}] not in the bank`);
+    const cur = 'ABCDEFGH'[q.ci];
+    if (cur !== c.was) {
+      throw new Error(`[${c.id}] the export now keys ${cur}, not ${c.was} as recorded here.\n` +
+                      `  This correction was written against a different export. Recheck the question before changing it.`);
+    }
+    const to = 'ABCDEFGH'.indexOf(c.now);
+    if (to < 0 || to >= q.o.length) throw new Error(`[${c.id}] no option ${c.now}`);
+    q.ci = to;
+    applied.push(`${c.id}  ${c.was} → ${c.now}   ${q.o[to].t}`);
   }
-  const to = 'ABCDEFGH'.indexOf(c.now);
-  if (to < 0 || to >= q.o.length) throw new Error(`[${c.id}] no option ${c.now}`);
-  q.ci = to;
-  applied.push(`${c.id}  ${c.was} → ${c.now}   ${q.o[to].t}`);
+  return applied;
 }
 
-html = html.slice(0, m.index) + '\nconst ALL_Q=' + JSON.stringify(bank) + ';\n' + html.slice(m.index + m[0].length);
-fs.writeFileSync(OUT, html);
+/* Same anchor the extractor uses, so the two agree about where the bank is. */
+const ALL_Q_RE = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/;
 
-console.log(`Answer keys corrected — ${applied.length} edits`);
-applied.forEach(a => console.log('  ✓ ' + a));
-console.log(`written: ${OUT}`);
+module.exports = { CORRECTIONS, applyKeyCorrections, ALL_Q_RE };
+
+if (require.main === module) {
+  const SRC = process.argv[2], OUT = process.argv[3];
+  if (!SRC || !OUT) { console.error('usage: node scripts/keys-patch.js <in.html> <out.html>'); process.exit(1); }
+
+  let html = fs.readFileSync(SRC, 'utf8');
+  const m = ALL_Q_RE.exec(html);
+  if (!m) throw new Error('could not find "const ALL_Q=" — has stage0 run?');
+  const bank = JSON.parse(m[1]);
+
+  const applied = applyKeyCorrections(bank);
+
+  html = html.slice(0, m.index) + '\nconst ALL_Q=' + JSON.stringify(bank) + ';\n' + html.slice(m.index + m[0].length);
+  fs.writeFileSync(OUT, html);
+
+  console.log(`Answer keys corrected — ${applied.length} edits`);
+  applied.forEach(a => console.log('  ✓ ' + a));
+  console.log(`written: ${OUT}`);
+}

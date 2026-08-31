@@ -22,11 +22,22 @@
    Not supported, deliberately: zip64 (>4 GB), encryption, and compression
    methods other than stored and deflate. Each is reported as a skipped entry
    rather than a silent empty file.
+
+   MAX_INFLATED CAPS WHAT ANY ONE ENTRY IS ALLOWED TO EXPAND TO. Deflate can
+   reach roughly 1000:1 on pathological input — a zip bomb — so a chapter
+   package a fellow drags in off their own iPad could, if malformed or
+   malicious, ask a phone-class browser tab to hold gigabytes it never
+   downloaded. The central directory's own uncompressed-size field is read
+   first as a cheap early skip, but it is declared by whoever built the zip
+   and cannot be trusted — the real backstop is the running total measured
+   while the DecompressionStream is actually read, which aborts the instant
+   it crosses the cap regardless of what the header claimed.
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
 'use strict';
 
 const EOCD_SIG = 0x06054b50, CEN_SIG = 0x02014b50;
+const MAX_INFLATED = 256 * 1024 * 1024;  // per entry — generous for a chapter's figures, nowhere near a bomb's target
 
 function u16(v, p) { return v.getUint16(p, true); }
 function u32(v, p) { return v.getUint32(p, true); }
@@ -42,10 +53,23 @@ function findEOCD(view) {
   return -1;
 }
 
-async function inflateRaw(bytes) {
+async function inflateRaw(bytes, limit) {
   if (typeof DecompressionStream === 'undefined') throw new Error('no DecompressionStream');
   const stream = new Response(bytes).body.pipeThrough(new DecompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) { reader.cancel(); throw new Error('inflated entry exceeds the size limit'); }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.byteLength; }
+  return out;
 }
 
 /* Returns [{name, bytes}] for every file it could read, plus the names it
@@ -65,6 +89,7 @@ async function read(arrayBuffer) {
     if (u32(view, p) !== CEN_SIG) break;
     const method = u16(view, p + 10);
     const compSize = u32(view, p + 20);
+    const uncompSize = u32(view, p + 24);
     const nameLen = u16(view, p + 28);
     const extraLen = u16(view, p + 30);
     const cmtLen = u16(view, p + 32);
@@ -75,6 +100,7 @@ async function read(arrayBuffer) {
     if (!name || name.endsWith('/')) continue;                  // a directory
     if (compSize === 0xffffffff || localAt === 0xffffffff) { skipped.push(name); continue; }  // zip64
     if (method !== 0 && method !== 8) { skipped.push(name); continue; }
+    if (uncompSize > MAX_INFLATED) { skipped.push(name); continue; }  // declared size alone rules it out
 
     /* The local header repeats the name and extra fields, and its extra field
        length may differ from the central one — so it has to be read here
@@ -87,7 +113,7 @@ async function read(arrayBuffer) {
     const raw = all.subarray(start, start + compSize);
 
     try {
-      files.push({ name, bytes: method === 0 ? raw : await inflateRaw(raw) });
+      files.push({ name, bytes: method === 0 ? raw : await inflateRaw(raw, MAX_INFLATED) });
     } catch (_) { skipped.push(name); }
   }
   return { files, skipped };

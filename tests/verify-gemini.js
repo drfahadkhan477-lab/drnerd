@@ -52,7 +52,9 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
      earlier fixture invented that entry, the filter was written to require it,
      and the pair agreed with each other while rejecting every real model. A
      fixture that encodes the assumption under test proves nothing, so this one
-     is deliberately faithful to the wire.
+     is deliberately faithful to the wire — see docs/BUILD.md, "A fixture is
+     not evidence until it has been checked against reality", for the rule
+     this incident (and two others) is what led to.
 
      Alongside the two usable models, the three kinds of thing that must still
      be rejected: an embedding model, an image model, and a TTS variant that

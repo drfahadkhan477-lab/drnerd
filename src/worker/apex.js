@@ -83,12 +83,55 @@ function overRate(key, limit) {
   return at.n > limit;
 }
 
+/* EVERY ONE OF THESE IS A STRING FROM A DASHBOARD FIELD, and each of the three
+   fails differently when it is a typo:
+
+     APEX_RPM        +"twenty" is NaN, and NaN > 0 is false — so the rate-limit
+                     branch is skipped entirely and the limiter silently turns
+                     OFF. A misconfigured limit that stops limiting is the worst
+                     of the three, because nothing about it looks wrong.
+     APEX_MAX_OUTPUT NaN reaches the clamp and gets written into the body as
+                     "maxOutputTokens":NaN, which is not valid JSON — so every
+                     request fails at Google with an opaque error.
+     APEX_MODELS     new RegExp() on a bad pattern throws, is caught by the
+                     outer handler, and surfaces as "Could not reach Google" —
+                     blaming Google for a typo in your own settings.
+
+   So: parse strictly and fall back to the documented default, and let a bad
+   regex say which variable is wrong. */
+function positiveInt(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && Math.floor(n) === n ? n : fallback;
+}
+
 const json = (status, body) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 /* Shaped like Google's own error envelope, because the app's apiError() already
    reads .error.message and turns it into a sentence a fellow can act on. */
 const fail = (status, message) => json(status, { error: { message } });
+
+/* Where the object opened at `from` ends, by brace matching. String contents
+   are skipped so a brace inside a prompt cannot close the object early, and a
+   backslash-escaped quote cannot end the string early. Returns -1 if the
+   object never closes. */
+function objectEnd(raw, from) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = from; i < raw.length; i++) {
+    const c = raw[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i + 1;
+  }
+  return -1;
+}
 
 /* Clamp maxOutputTokens without parsing the body.
    Returns { body, error }. */
@@ -98,8 +141,19 @@ function clampOutput(raw, max) {
   if (at < 0) return { error: 'generationConfig is required.' };
   /* Anchored to the generationConfig object rather than searched for globally:
      a note quoting the literal text "maxOutputTokens": 99999 must not be
-     rewritten, because that would corrupt the fellow's own prose. */
-  const slice = raw.slice(at, at + 400);
+     rewritten, because that would corrupt the fellow's own prose.
+
+     BOUNDED BY THE OBJECT, NOT BY A FIXED NUMBER OF CHARACTERS. This was a
+     400-character window, which is ample for {maxOutputTokens:2000} and quietly
+     wrong for anything larger: add stopSequences or a responseSchema and the
+     field slides out of the window, whereupon a request carrying a perfectly
+     good maxOutputTokens is refused with "maxOutputTokens is required". Brace
+     matching costs one pass over an object that is small by construction, and
+     it cannot be outgrown. */
+  const open = raw.indexOf('{', at);
+  const end = open < 0 ? -1 : objectEnd(raw, open);
+  if (end < 0) return { error: 'generationConfig is malformed.' };
+  const slice = raw.slice(at, end);
   const m = /"maxOutputTokens"\s*:\s*(\d+)/.exec(slice);
   if (!m) return { error: 'generationConfig.maxOutputTokens is required.' };
   const asked = +m[1];
@@ -116,15 +170,19 @@ export async function handleApex(request, env, fetchImpl) {
   const key = env.GEMINI_API_KEY;
   if (!key) return fail(503, 'This deployment has no GEMINI_API_KEY set. Add it in the Cloudflare dashboard under Settings → Environment variables, or paste your own key in Apex settings.');
 
-  const rpm = +(env.APEX_RPM || DEFAULT_RPM);
+  const rpm = positiveInt(env.APEX_RPM, DEFAULT_RPM);
   const who = request.headers.get('cf-access-authenticated-user-email')
     || request.headers.get('cf-connecting-ip') || 'anon';
   if (rpm > 0 && overRate(who, rpm)) {
     return fail(429, 'Too many requests in a minute — wait a moment and try again.');
   }
 
-  const modelRe = env.APEX_MODELS ? new RegExp(env.APEX_MODELS) : DEFAULT_MODEL_RE;
-  const maxOut = +(env.APEX_MAX_OUTPUT || DEFAULT_MAX_OUTPUT);
+  let modelRe;
+  try { modelRe = env.APEX_MODELS ? new RegExp(env.APEX_MODELS) : DEFAULT_MODEL_RE; }
+  catch (_) {
+    return fail(500, 'APEX_MODELS is not a valid regular expression. Fix it in the Cloudflare dashboard under Settings \u2192 Environment variables, or remove it to use the default.');
+  }
+  const maxOut = positiveInt(env.APEX_MAX_OUTPUT, DEFAULT_MAX_OUTPUT) || DEFAULT_MAX_OUTPUT;
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   const headers = { 'content-type': 'application/json', 'x-goog-api-key': key };
 
@@ -141,7 +199,30 @@ export async function handleApex(request, env, fetchImpl) {
   if (request.method !== 'POST') return fail(405, 'Use POST.');
 
   const model = url.searchParams.get('model') || '';
+  /* THE SHAPE CHECK COMES FIRST, AND DOES NOT DEPEND ON APEX_MODELS. The model
+     is interpolated into a URL path, so anything structural in it — a slash, a
+     dot-dot, a query or fragment marker, a second colon — can steer the request
+     somewhere other than the model it names, with this deployment's key
+     attached. The DEFAULT regex is anchored and already refuses all of that;
+     a custom APEX_MODELS need not be, and an operator writing "gemini-" to
+     widen the allowlist would not expect to have opened a path traversal.
+     A configurable allowlist may choose WHICH models are permitted; it may not
+     choose whether the value is still a bare model name. */
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(model)) {
+    return fail(400, `"${model}" is not a valid model name.`);
+  }
   if (!modelRe.test(model)) return fail(400, `"${model}" is not a model this deployment will call.`);
+
+  /* Checked twice on purpose. Content-Length is the cheap rejection for the
+     common case — refusing an oversized request before request.text() ever
+     buffers it into memory or spends CPU decoding it, which matters on a
+     CPU-metered platform. It is also the only one a client can lie about or
+     omit (chunked transfer encoding sends none at all), so the length check
+     below stays as the backstop that is actually authoritative. */
+  const declaredLength = +(request.headers.get('content-length') || 0);
+  if (declaredLength > MAX_BODY) {
+    return fail(413, 'That request is too large. Try again without attaching so many figures.');
+  }
 
   const raw = await request.text();
   if (raw.length > MAX_BODY) {

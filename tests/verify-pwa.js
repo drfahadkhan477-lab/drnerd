@@ -71,11 +71,22 @@ async function heapAfterBoot(page, url) {
     ok('and every one of those files is actually served', served.every(Boolean),
        `${served.filter(Boolean).length}/${faces.length}`);
     const shellBytes = Buffer.byteLength(shellHtml) + Buffer.byteLength(appJs);
-    /* Tightened from 800 KB once the fonts came out. A budget that sits far
-       above the real figure stops being a budget: it was 800 to catch a
-       megabyte of inlined base64 heart scan, and at 557 KB there is room to
-       grow without room to hide a payload. */
-    ok('shell is under 640 KB', shellBytes < 640 * 1024, kb(shellBytes));
+    /* Tightened from 800 KB once the fonts came out, then raised again here.
+       A budget that sits far above the real figure stops being a budget: it
+       was 800 to catch a megabyte of inlined base64 heart scan, and 640 held
+       for a long stretch precisely because nothing on the shell grew.
+
+       It was not going to hold through three real features landing in one
+       sitting — a quiz Previous button with the per-question state to make it
+       safe, a progress card with a legend and a due-review pill, and (next) a
+       Chapters screen asked to be larger and more animated than the one it
+       replaces. That is not a payload hiding in the shell, it is the shell
+       doing more, and 640 KB was measured for a version of the app that did
+       less. 680 KB is chosen with the same discipline as before: real
+       headroom over today's actual ~640 KB rather than a round number picked
+       to stop the check complaining, sized to clear the Chapters work still
+       to come without needing a third revision in the same week. */
+    ok('shell is under 680 KB', shellBytes < 680 * 1024, kb(shellBytes));
     if (baseline) {
       const before = require('fs').statSync(baseline).size;
       ok('and is a large fraction smaller than the single file',
@@ -184,6 +195,27 @@ async function heapAfterBoot(page, url) {
     const calls = (swSrc.match(/if \(keepable\(req, res\)\)/g) || []).length;
     ok('both cache writes go through it, not through res.ok',
        !/if \(res\.ok\) c\.put/.test(swSrc) && calls === 2, calls + ' call sites');
+
+    /* INSTALL IS THE PATH THAT MATTERED, and it was the one without the check.
+       cache.addAll() stores whatever comes back, so a Cloudflare Access
+       sign-in page — 200 OK, text/html, for any URL — became app.js in the
+       precache permanently, and the device then launched offline into a blank
+       screen. Exactly the failure the comment above it describes, on the one
+       path it had not been applied to. */
+    ok('install no longer trusts addAll with the critical shell',
+       !/addAll\(PRECACHE\)/.test(swSrc));
+    ok('and screens every precached response through keepable first',
+       /keepable\(req, res\) \? res : null/.test(swSrc));
+    ok('refusing the whole install rather than caching a sign-in page',
+       /precache refused/.test(swSrc));
+
+    /* Offline, a navigation that misses used to resolve to undefined —
+       respondWith(undefined) is a dead page, which is "the app will not open"
+       rather than "the app opens from cache". */
+    ok('a shell lookup ignores the query string Access appends',
+       (swSrc.match(/ignoreSearch: true/g) || []).length >= 2);
+    ok('and a missed navigation falls back to the cached shell',
+       /req\.mode === 'navigate'/.test(swSrc) && /c\.match\('index\.html'/.test(swSrc));
   }
 
   head('an update does not leave old code running against new content');
@@ -231,6 +263,23 @@ async function heapAfterBoot(page, url) {
        new RegExp(`FIGS\\s*=\\s*'accsap-figs-'\\s*\\+\\s*CONTENT_V`).test(sw));
   }
 
+  head('the split build evaluates no fetched code');
+  {
+    /* The splash player used to be fetched as text and run with (0, eval).
+       The single-file build has never needed that — it carries the player as an
+       ordinary inline <script> — so the split build was the only place in the
+       product where launching involved evaluating text pulled off the network.
+       Beyond the injection surface, it is the one construct that makes a
+       meaningful Content-Security-Policy unadoptable later. */
+    const idx = await (await fetch(ORIGIN + '/index.html')).text();
+    ok('index.html contains no eval of fetched text', !/\(\s*0\s*,\s*eval\s*\)|\beval\s*\(/.test(idx),
+       (idx.match(/.{0,40}eval.{0,40}/) || [''])[0]);
+    ok('the splash player is loaded as a script instead',
+       /script\.?\s*\)?;?[\s\S]{0,200}lottie\.min\.js/.test(idx) || /s\.src\s*=\s*'content\/splash-heart\/lottie\.min\.js'/.test(idx));
+    const app = await (await fetch(ORIGIN + '/app.js')).text();
+    ok('and app.js does not eval either', !/\(\s*0\s*,\s*eval\s*\)/.test(app));
+  }
+
   head('content is served intact');
   {
     const qs = await (await fetch(ORIGIN + '/content/questions.json')).json();
@@ -239,6 +288,37 @@ async function heapAfterBoot(page, url) {
     ok('all 408 figures referenced', figs === 408, String(figs));
     const declared = qs.reduce((a, q) => a + (q.img || 0), 0);
     ok('q.img and the extracted figure lists agree', declared === figs, `${declared} vs ${figs}`);
+
+    /* THE SIX KEYS THE EXPORT GETS WRONG MUST BE RIGHT IN *THIS* BUILD TOO.
+       scripts/keys-patch.js corrects them into the ALL_Q embedded in the
+       single-file build; this build serves content/questions.json instead, and
+       for a long time build-pwa copied that from the licensed export
+       byte-for-byte — so the iPad shipped the export's own wrong keys while the
+       single-file build had them right. A wrong key fails silently in the worst
+       possible way: it marks a correct answer wrong and teaches the distractor.
+       Asserted here against the shipped JSON, on the ids and letters from
+       keys-patch's own table. */
+    const KEYS = [['CON_16', 'C'], ['MIS_25', 'D'], ['PER_9', 'A'],
+                  ['SYS_9', 'A'], ['SYS_26', 'C'], ['SYS_44', 'E']];
+    const byId = new Map(qs.map(q => [q.id, q]));
+    const wrong = KEYS.filter(([id, want]) => {
+      const q = byId.get(id);
+      return !q || 'ABCDEFGH'[q.ci] !== want;
+    });
+    ok('the six corrected answer keys are corrected in the served bank too',
+       wrong.length === 0,
+       wrong.map(([id, want]) => `${id} wants ${want}, has ${'ABCDEFGH'[(byId.get(id) || {}).ci]}`).join('; '));
+
+    /* THE RULE, not the instance. A question with `imgopt` is asking the fellow
+       to choose between lettered panels; with no figure shipped, there are no
+       panels to choose between and it cannot be answered at all. Such a
+       question must carry `bad` (kept out of the pool) or `flag` (shown with a
+       notice saying why). COR_108 had one; COR_89 had neither and sat live in
+       the pool offering five patterns nobody could see. This is the check that
+       would have caught it, and catches the next one. */
+    const unanswerable = qs.filter(q => q.imgopt && !(q.figs || []).length && !q.bad && !q.flag);
+    ok('no question asks about a figure it does not ship, untriaged',
+       unanswerable.length === 0, unanswerable.map(q => q.id).join(', '));
     const man = await (await fetch(ORIGIN + '/manifest.webmanifest')).json();
     ok('web app manifest is installable-shaped',
        man.display === 'standalone' && Array.isArray(man.icons) && man.icons.length >= 2 && !!man.start_url,
@@ -474,6 +554,31 @@ async function heapAfterBoot(page, url) {
     } else {
       ok('heap after boot is under 40 MB', pwaHeap > 0 && pwaHeap < 40 * 1048576, mb(pwaHeap));
     }
+  }
+
+  head('the server that hosts this cannot be walked out of');
+  /* docs/IPAD.md offers scripts/serve.js as a hosting route over Tailscale, so
+     its root guard is load-bearing rather than a development convenience. It
+     was `file.startsWith(DIR)` with no trailing separator, which also accepts
+     any SIBLING whose name merely begins with the root's — "/../dist-old/x"
+     escaped a root of "dist". path.join has already collapsed the "..", so the
+     separator is the entire check. Requested with the raw path, because a
+     normalising client would resolve the traversal before it was ever sent. */
+  {
+    const raw = p => new Promise(resolve => {
+      const http = require('http'), u = new URL(ORIGIN);
+      const req = http.request({ host: u.hostname, port: u.port, path: p, method: 'GET' },
+        r => { let b = ''; r.on('data', d => b += d); r.on('end', () => resolve({ status: r.statusCode, body: b })); });
+      req.on('error', () => resolve({ status: 0, body: '' }));
+      req.end();
+    });
+    const control = await raw('/index.html');
+    ok('a file inside the root is still served', control.status === 200, String(control.status));
+    const sibling = await raw('/../dist-old/secret.txt');
+    ok('a sibling directory sharing the root\'s name prefix is refused',
+       sibling.status === 403 || sibling.status === 404, String(sibling.status));
+    const outside = await raw('/../../etc/hostname');
+    ok('and so is a plain walk upwards', outside.status === 403 || outside.status === 404, String(outside.status));
   }
 
   await browser.close();

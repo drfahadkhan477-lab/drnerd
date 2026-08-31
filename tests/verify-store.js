@@ -188,6 +188,20 @@ const RAW = `key => new Promise(resolve => {
     const merged = await page.evaluate(() => ({
       maps: Store.merge('accsap12.ink', { a: 1, b: 2 }, { b: 99, c: 3 }),
       arrays: Store.merge('accsap12.log', [1, 2], [3]),
+      /* THE SHAPE THE APP ACTUALLY WRITES. saveJSON persists the WHOLE array —
+         `LOG.push(row); saveJSON(LOG_KEY, LOG)` — so an early write arrives
+         already containing every row that is in the store. The fixture above
+         hands merge a delta, which the app never produces; against a plain
+         concat the two agreed with each other and disagreed with the app,
+         and every existing row came back twice. See docs/BUILD.md, "A
+         fixture is not evidence until it has been checked against reality",
+         for the rule this incident (and two others) is what led to. */
+      whole: Store.merge('accsap12.log', [1, 2, 3], [1, 2, 3, 4]),
+      /* A row the early write had no way of knowing about is still not lost. */
+      divergent: Store.merge('accsap12.log', [1, 2, 9], [1, 2, 3]),
+      /* A genuinely repeated row inside the write survives: `written` is never
+         the side that gets filtered. */
+      repeats: Store.merge('accsap12.log', [1], [1, 1]),
       empty: Store.merge('accsap12.ink', { a: 1 }, {}),
     }));
     ok('two maps are folded together, not replaced',
@@ -195,6 +209,12 @@ const RAW = `key => new Promise(resolve => {
     ok('and what was just made wins the collision', merged.maps.b === 99, String(merged.maps.b));
     ok('the log is appended to, never truncated',
        merged.arrays.join(',') === '1,2,3', merged.arrays.join(','));
+    ok('a whole-array write is not duplicated back onto itself',
+       merged.whole.join(',') === '1,2,3,4', merged.whole.join(','));
+    ok('a row only the store knew about still survives the fold',
+       merged.divergent.join(',') === '9,1,2,3', merged.divergent.join(','));
+    ok('a legitimately repeated row in the write is kept',
+       merged.repeats.join(',') === '1,1', merged.repeats.join(','));
     ok('an empty early write does not erase what was stored',
        merged.empty.a === 1, JSON.stringify(merged.empty));
   }

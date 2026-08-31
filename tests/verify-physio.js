@@ -263,6 +263,44 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('scrubbing moves the cursor to roughly where it was dragged', Math.abs(scrub.t1 - scrub.readAt1) < 0.02);
   ok('while scrubbing, the live heart clock does not overwrite the chosen instant', Math.abs(scrub.heldStill - scrub.readAt1) < 0.005, `${scrub.readAt1.toFixed(3)} → ${scrub.heldStill.toFixed(3)}`);
 
+  head('scrubAt reads back the SAME margins each view actually draws with');
+  /* The test above only checks scrubAt's return value against time() — which
+     it will always agree with, since scrubAt sets S.t and time() just reads
+     it back. That self-agreement survives even if scrubAt uses the wrong
+     margins entirely, so it could not have caught the real bug: scrubAt once
+     carried its own hardcoded (40, 14) that happened to match drawRight, was
+     2px off drawWiggers's real right margin, and 4px off drawFlow's real
+     left margin — every drag on Flow landed on a slightly wrong instant. The
+     fix is a margins table both scrubAt and each draw function now read from
+     the same place, which this checks against an independent oracle: the
+     margins each view is DOCUMENTED to draw with, taken from wiggers.js
+     itself rather than re-derived from scrubAt's own behaviour. */
+  const marginCheck = await page.evaluate(async ({ views }) => {
+    const out = {};
+    for (const v of views) {
+      document.querySelector(`[data-physio-view="${v.id}"]`).click();
+      /* render() rebuilds the whole screen on a chip click — including a
+         brand-new <canvas> node — so cv MUST be re-queried after the click
+         and settle, never cached from before it, or it points at a detached
+         element with a zero-size bounding rect. */
+      await new Promise(res => setTimeout(res, 150));
+      const cv = document.getElementById('physioCanvas');
+      const r = cv.getBoundingClientRect();
+      physio.setScrub(true);
+      const x = r.width * 0.5;
+      const got = physio.scrubAt(x, r.height * 0.3);
+      const expected = (x - v.L) / (r.width - v.L - v.R);
+      out[v.id] = { got, expected, w: r.width };
+      physio.setScrub(false);
+    }
+    return out;
+  }, { views: [{ id: 'wiggers', L: 40, R: 12 }, { id: 'flow', L: 44, R: 14 }, { id: 'right', L: 40, R: 14 }] });
+  for (const [id, m] of Object.entries(marginCheck)) {
+    ok(`${id}: scrubbing to the mid-canvas reports the instant that view's own margins predict`,
+       Math.abs(m.got - m.expected) < 0.0003, `got ${m.got.toFixed(4)} expected ${m.expected.toFixed(4)} (canvas ${m.w.toFixed(0)}px)`);
+  }
+  await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
+
   head('theme');
   const themed = await page.evaluate(() => {
     document.querySelector('[data-theme-toggle], [data-theme]')?.click();

@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying twenty patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying fifty-five patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -36,6 +36,8 @@ const ROOT = path.join(__dirname, '..');
 
      stage0        stabilises the raw export — everything else assumes it
      keys          six answer keys the export gets wrong; before anything reads them
+     flags         two questions whose lettered answer panels the export never
+                   shipped; flagged beside keys, for the same reason
      apex          embeds heart3d.js and apex.js (the ONLY place heart3d enters)
      stage2/3      FSRS scheduling, then Apex's vision and memory
      polish        the rhythm registry the hero and the lab both read
@@ -107,14 +109,36 @@ const ROOT = path.join(__dirname, '..');
                    and vision-capable — genuinely last, it revises code that
                    apex, gemini, hosted, memory, ref-images, toolfence, chatfix
                    and apexroom all touched
+     guards        the quiz keyboard steps aside for a focused SELECT — after
+                   apexroom, which is what puts a <select> over the quiz screen
+     chipfix       apexroom hid .chips globally to fold the tutor's prompts
+                   away; the Lab and the search screen share that class and
+                   lost their rows. Scoped to #aiChips — after apexroom
+     quiznav       a Previous button, and the per-question memory that makes
+                   going back safe without re-grading or re-scheduling
+     homeprog       the home screen's progress bar becomes a card: a legend,
+                   a due-review pill, numbers that count up with the fill
+     chapters       the Chapters grid finally uses its own stagger timing,
+                   the bar transition gets a starting point to run from
+     studyflow      the Signal/Focus/Grid switcher removed — it only ever
+                   affected Chapters despite the name — and the page's
+                   sections cascade in like the home screen's do
+     welcome       one dismissable line under the doors naming Chapters and
+                   Apex, for a first-time reader only — after homeflow, whose
+                   door row it sits beneath, and never shown to anyone whose
+                   scheduler or review log says they have been here before
+     failsafe      render() throwing stops meaning a blank or frozen
+                   screen — last, so it wraps every earlier step's own
+                   version of render() and boot's own render() call
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
-  'stage0', 'keys', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
+  'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
   'art', 'leads', 'physio', 'name', 'theme', 'home', 'splash-heart', 'crisp', 'scale', 'type', 'lab', 'review',
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
-  'homewide', 'pearlrich', 'apexroom', 'mistral',
+  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
+  'studyflow', 'welcome', 'failsafe',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

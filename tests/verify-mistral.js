@@ -19,6 +19,8 @@
  * guesses agreed with each other and passed. A real key exposed it — Mistral
  * names that field completion_chat — so the fixture now matches the field a
  * real response actually sends, not the field a plausible guess invented.
+ * See docs/BUILD.md, "A fixture is not evidence until it has been checked
+ * against reality", for the rule this incident (and two others) is what led to.
  */
 'use strict';
 const path = require('path');
@@ -295,6 +297,41 @@ const MODEL_LIST = {
      !/undefined|null/.test(shapes.empty), shapes.empty);
   ok('a body that is not JSON at all is survived, not thrown through',
      typeof shapes.notJson === 'string' && !/undefined/.test(shapes.notJson), shapes.notJson);
+
+  head('what the provider says is shown, not run');
+  /* keyMsg() assigns with innerHTML — it must, because several apiError
+     branches deliberately return markup ("press <b>Connect</b> again"). That
+     makes the one place the provider's own text is interpolated into that
+     string an injection sink, in the origin holding the fellow's API keys,
+     notes and chats. Driven through the real sink rather than by inspecting
+     the string, because the string looking wrong is not the failure — an
+     element being constructed and its handler running is. */
+  const inject = await page.evaluate(async () => {
+    aiSettings();                                     // puts #keyMsg in the DOM
+    delete window.__pwned;
+    const hostile = { status: 418, json: async () => ({ object: 'error',
+      message: '<img src=x onerror="window.__pwned=1"><b>markup</b>' }) };
+    const msg = await apiError(hostile, 'mistral');
+    keyMsg(msg, 'bad');
+    await new Promise(r => setTimeout(r, 350));
+    const el = document.getElementById('keyMsg');
+    return { imgs: el.querySelectorAll('img').length,
+             bolds: el.querySelectorAll('b').length,
+             ran: window.__pwned === 1,
+             shown: el.textContent };
+  });
+  ok('a provider error carrying markup builds no elements', inject.imgs === 0 && inject.bolds === 0,
+     `${inject.imgs} img, ${inject.bolds} b`);
+  ok('and nothing in it executes', !inject.ran);
+  ok('while the fellow still sees what the provider actually said',
+     /markup/.test(inject.shown) && /img src=x/.test(inject.shown), inject.shown.slice(0, 70));
+  /* The escaping must not have flattened the markup apiError writes itself. */
+  const ownMarkup = await page.evaluate(async () => {
+    aiSettings();
+    keyMsg(await apiError({ status: 404, json: async () => ({}) }, 'gemini'), 'bad');
+    return document.getElementById('keyMsg').querySelectorAll('b').length;
+  });
+  ok('apiError\'s own deliberate markup still renders', ownMarkup === 1, `${ownMarkup} <b>`);
 
   head('a mid-stream error ends the turn instead of vanishing');
   /* The same wrong shape with a worse ending. Mistral can abort a turn by

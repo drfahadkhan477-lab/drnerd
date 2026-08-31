@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 906 + 62 checks
+node scripts/verify.js --pwa                           # → 1049 + 75 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -35,7 +35,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Forty-six patch scripts run in order against the export. Each applies a list of
+Fifty-five patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -128,7 +128,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Twenty-seven suites, 906 checks, plus 62 more on the split build. They run one at a
+Thirty-one suites, 1049 checks, plus 75 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
@@ -163,6 +163,90 @@ first time — one asserted on an error string `apiError()` never produces, one
 used a fixture that sat exactly at the ceiling it was meant to prove, and one
 opened a second browser context so the localStorage fixture it depended on was
 never loaded. All three looked green and measured nothing.
+
+### A fixture is not evidence until it has been checked against reality
+
+A fixture written from documentation, memory, or "this looks about right" can
+encode the exact same wrong assumption as the code it is meant to be checking
+— and the two will agree with each other while both disagree with the real
+API. That is not a hypothetical: it happened three times, in three unrelated
+places, each caught only after the fact:
+
+- **Gemini's model filter** required a `streamGenerateContent` entry in
+  `supportedGenerationMethods`. A hand-written `ListModels` fixture had
+  invented that entry because it seemed like the obvious name for the
+  streaming variant. Google's real response never sends it — streaming is a
+  parameter on `generateContent`, not its own advertised method — so filter
+  and fixture agreed with each other and rejected every real model.
+  (`tests/verify-gemini.js`)
+- **Mistral's capability filter** checked `capabilities.chat`. A first draft
+  of the fixture also guessed `chat`. Mistral's real field is
+  `capabilities.completion_chat`; a real key is what exposed it.
+  (`tests/verify-mistral.js`)
+- **`Store.merge`'s array path** was tested by handing it a *delta* — `[3]`
+  folded onto `[1, 2]` — which is not a shape the app ever produces:
+  `saveJSON` persists the *whole* array on every write. Against a plain
+  concat, the fixture and the code agreed, and every stored row came back
+  duplicated on reload. (`tests/verify-store.js`)
+
+None of these were caught by review or by the tests passing green — a fixture
+that encodes the assumption under test proves nothing, on purpose or not.
+**Before writing `verify-<provider>.js` for a new integration:**
+
+1. Make one real call to the real API, with a real key, for every response
+   shape the code branches on differently — a normal reply, the model-list or
+   capability-discovery response, an error, a tool call.
+2. Save the raw response body, then redact only what must never be
+   committed: the key itself, any account-identifying field. Leave every
+   field name, nesting level and type exactly as the API sent it — those are
+   the parts a guess gets wrong.
+3. Write the fixture from that saved response, not from the provider's docs
+   page. Documentation drifts from the real wire format, or was wrong to
+   begin with, more often than the actual bytes on the wire do.
+4. If the fixture and the code's assumption about a field name were both
+   guessed rather than checked, they will agree — that agreement is the
+   failure mode this section is about, not evidence the field name is right.
+   Treat a fixture as unverified until a real round-trip has confirmed it,
+   even if every test using it is green.
+
+For a same-shape sibling of an existing provider — another OpenAI-compatible
+API, say — starting from that provider's already-real fixture and changing
+only what the docs say differs is safer than writing a new one from scratch:
+it inherits what was already checked instead of re-guessing it.
+
+### An animation is not shipped until something has watched it move
+
+CSS that reads correctly is not evidence that anything moves. Two animations
+in this app shipped having never once fired, and both survived review because
+the stylesheet looked right:
+
+- **The chapter progress bars** were written with a `width` transition but
+  their markup shipped the final width inline, so there was no starting value
+  for the transition to run *from*. Every bar arrived already full. The fix
+  was to ship `width:0` plus the real value in a `data-` attribute and set it
+  two animation frames later (`mountChapterBars`).
+- **The suggested-prompt chip rows** were hidden outright by a rule that
+  renamed a shared class, which silently took two *other* screens' chip rows
+  down with it. Nothing errored; the rows simply were not there.
+
+Neither was caught by reading the diff. Both were caught by driving a real
+browser and reading `getComputedStyle`. So, for anything that moves or that
+has a distinct empty/zero state:
+
+1. Drive it in Playwright and assert on **computed style or measured
+   geometry**, sampled more than once over the animation's window — a single
+   reading cannot tell "it animated" from "it was already there".
+2. Capture a before/after pair from the actual build and *look at it*. The
+   zero-state chapter track in this repo was verified exactly that way: the
+   before shot showed a flat grey bar indistinguishable from a loading
+   skeleton, which is what the change existed to fix.
+3. Sample only once the entrance animation has finished. Read a frame too
+   early and an element reports its own container's colour back at you —
+   which scores a perfect 1.00 contrast ratio and looks like a catastrophic
+   bug rather than a mistimed measurement. `verify-homeprog` waits for the
+   card's opacity to reach 1 rather than guessing a delay, and
+   `verify-chapters` carries a header note about the same trap in
+   `document.startViewTransition`.
 
 Some modules can be checked without a browser at all, which is much faster
 while iterating on the physiology or the ECG maths:

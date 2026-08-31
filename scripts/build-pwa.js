@@ -248,24 +248,40 @@ step('pull the animation data out of the splash', () => {
 step('swap the inline mount script for a fetch-and-mount loader', () => {
   const re = /<script data-splash-heart="mount">[\s\S]*?<\/script>/;
   if (!re.test(html)) throw new Error('splash-heart mount script not found');
+  /* THE PLAYER IS LOADED AS A SCRIPT, NOT FETCHED AND EVALLED. It used to be
+     fetch(...).then(text => (0, eval)(text)), for a real reason — the player is
+     plain code rather than a module, and it has to define its `lottie` global
+     in the same scope the inline single-file version does. But a <script src>
+     does that natively, and it is the mechanism the single-file build already
+     uses (an inline <script id="spHeartLib">); eval was solving a problem the
+     platform solves. It also put runtime evaluation of fetched text on the
+     critical path of every launch, which is the one construct that makes a
+     meaningful Content-Security-Policy impossible to adopt later.
+
+     The animation data stays a fetch — it is JSON, and JSON.parse is not eval. */
   const LOADER = `<script>
 (function(){
   var el = document.getElementById('spHeartMount');
   if(!el) return;
-  Promise.all([
-    fetch('content/splash-heart/lottie.min.js').then(function(r){ return r.text(); }),
-    fetch('content/splash-heart/heart.json').then(function(r){ return r.json(); }),
-  ]).then(function(res){
-    /* the player is plain code, not a module -- eval it into scope so the
-       global 'lottie' it defines is the same one the inline version got */
-    (0, eval)(res[0]);
+  function mount(data){
     if(typeof lottie === 'undefined') return;
     var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     var anim = lottie.loadAnimation({
-      container: el, renderer: 'svg', loop: true, autoplay: !reduce, animationData: res[1],
+      container: el, renderer: 'svg', loop: true, autoplay: !reduce, animationData: data,
     });
     if(reduce) anim.goToAndStop(0, true);
-  }).catch(function(){ /* the splash's static parts already carried the load */ });
+  }
+  var s = document.createElement('script');
+  s.src = 'content/splash-heart/lottie.min.js';
+  s.async = false;
+  s.onload = function(){
+    fetch('content/splash-heart/heart.json')
+      .then(function(r){ return r.json(); })
+      .then(mount)
+      .catch(function(){ /* the splash's static parts already carried the load */ });
+  };
+  s.onerror = function(){ /* same — the splash is not load-bearing */ };
+  document.head.appendChild(s);
 })();
 </script>`;
   html = html.replace(re, LOADER);
@@ -428,6 +444,46 @@ step('copy only the content the app asks for', () => {
   }
 });
 
+/* THE BANK IS NOT SHIPPABLE AS THE EXPORT WROTE IT. content/questions.json is
+   the licensed export, and the export keys six questions wrong — scripts/
+   keys-patch.js says which, why, and on what evidence. That step rewrites the
+   ALL_Q embedded in the HTML, which is the entire bank for the single-file
+   build; this build does not read that copy, it serves the JSON. So a plain
+   cpSync above shipped the uncorrected export to the iPad while the single-file
+   build had it right, and a wrong key is silent: it marks a correct answer
+   wrong and teaches the distractor as the fact.
+
+   The SAME list is applied here, from the same module, with the same `was`
+   assertion — not a second copy of it. */
+const { applyKeyCorrections } = require('./keys-patch.js');
+const { applyContentFlags } = require('./flags-patch.js');
+step('apply the bank corrections the chain makes to the single-file build', () => {
+  const p = path.join(DIST, 'content', 'questions.json');
+  const bank = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const applied = applyKeyCorrections(bank).concat(applyContentFlags(bank));
+  fs.writeFileSync(p, JSON.stringify(bank));
+  applied.forEach(a => console.log('      ✓ ' + a));
+});
+
+/* And the check that makes the class of bug impossible rather than this one
+   instance of it: every answer key the split build ships must equal the key the
+   single-file build carries. Any future step that corrects the bank in one
+   build and not the other fails here instead of on a ward round. */
+step('every answer key matches the single-file build', () => {
+  const shipped = JSON.parse(fs.readFileSync(path.join(DIST, 'content', 'questions.json'), 'utf8'));
+  /* Re-read SRC rather than use `html`: by this point the split has already
+     lifted ALL_Q out of the working copy, which is the entire point of it. */
+  const m = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/.exec(fs.readFileSync(SRC, 'utf8'));
+  if (!m) throw new Error('could not find "const ALL_Q=" in the single-file build');
+  const embedded = new Map(JSON.parse(m[1]).map(q => [q.id, q.ci]));
+  const drift = shipped.filter(q => embedded.has(q.id) && embedded.get(q.id) !== q.ci);
+  if (drift.length) {
+    throw new Error(`${drift.length} answer key(s) differ between the two builds: ` +
+      drift.map(q => `${q.id} (split ${'ABCDEFGH'[q.ci]}, single-file ${'ABCDEFGH'[embedded.get(q.id)]})`).join(', '));
+  }
+  console.log(`      ✓ ${shipped.length} keys agree across both builds`);
+});
+
 const splashDir = path.join(DIST, 'content', 'splash-heart');
 fs.mkdirSync(splashDir, { recursive: true });
 for (const [name, body] of splashAssets) fs.writeFileSync(path.join(splashDir, name), body);
@@ -527,10 +583,29 @@ const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', 'content
 const NICE_TO_HAVE = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
                       ${JSON.stringify(fontAssets.map(([n]) => 'fonts/' + n)).slice(1, -1)}];
 
+/* INSTALL CHECKS WHAT IT IS STORING, because addAll does not. The note further
+   down about authenticating proxies — Access answering 200 OK with a sign-in
+   page for any URL — was acted on in the fetch handler and nowhere else, and
+   install was the path that actually mattered. cache.addAll() keeps whatever
+   comes back: one lapsed session during install and the sign-in page IS app.js
+   in the precache, permanently, and the device launches offline into a blank
+   screen. That is not hypothetical; it is what this worker was doing.
+
+   So every critical URL is fetched and passed through the same keepable() the
+   fetch handler uses. If any one of them fails the check the install REJECTS —
+   no partial shell, nothing poisoned — and the browser tries again on the next
+   launch, by which time the session is usually back. */
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const c = await caches.open(SHELL);
-    await c.addAll(PRECACHE);
+    const fresh = await Promise.all(PRECACHE.map(async u => {
+      const req = new Request(u, { cache: 'reload' });
+      let res; try { res = await fetch(req); } catch (_) { return [u, null]; }
+      return [u, keepable(req, res) ? res : null];
+    }));
+    const bad = fresh.filter(([, res]) => !res).map(([u]) => u);
+    if (bad.length) throw new Error('precache refused: ' + bad.join(', '));
+    await Promise.all(fresh.map(([u, res]) => c.put(new Request(u), res)));
     await Promise.all(NICE_TO_HAVE.map(u => c.add(u).catch(() => {})));
     await self.skipWaiting();
   })());
@@ -564,9 +639,26 @@ self.addEventListener('fetch', e => {
   }
   // shell: cache first, but refresh in the background so an update lands
   e.respondWith(caches.open(SHELL).then(async c => {
-    const hit = await c.match(req);
+    /* ignoreSearch, because the cached key is a bare path and the URL that
+       comes back from an Access redirect is not — it carries the parameters
+       Access appended. Without this a launch after re-authenticating misses
+       every shell entry it actually has. */
+    const hit = await c.match(req, { ignoreSearch: true });
     const net = fetch(req).then(res => { if (keepable(req, res)) c.put(req, res.clone()); return res; }).catch(() => hit);
-    return hit || net;
+    /* A NAVIGATION MUST NEVER RESOLVE TO undefined. Returning hit || net looks
+       safe and is not: offline, net's catch resolves to the same missing hit,
+       so respondWith gets undefined and Safari shows its cannot-connect page —
+       the app "not opening" rather than opening from cache. Any navigation
+       that misses falls back to the cached shell, which is what a single-page
+       app wants for every route anyway. */
+    if (hit) return hit;
+    const res = await net;
+    if (res) return res;
+    if (req.mode === 'navigate') {
+      const shell = await c.match('index.html', { ignoreSearch: true }) || await c.match('.', { ignoreSearch: true });
+      if (shell) return shell;
+    }
+    return Response.error();
   }));
 });
 

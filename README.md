@@ -20,13 +20,28 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 906 checks, 27 suites
-node scripts/verify.js --pwa                        # + 62 more on the split build
+node scripts/verify.js                              # 1049 checks, 31 suites
+node scripts/verify.js --pwa                        # + 75 more on the split build
 ```
 
 **The question bank is licensed content and is not in this repository.** It
 stays on your own devices; `source/`, `build/`, `content/` and `dist/` are all
 gitignored.
+
+[![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
+
+**That badge is not the 1049 + 75 checks above — read it as 89, not 1124.**
+CI has no way to build the app at all: a real build needs the licensed
+export, which is deliberately never committed here and never will be, on
+GitHub or anywhere else that isn't your own devices. What CI *can* and does
+run on every push, with no browser and no source file: every script parses,
+the patch chain and the test-suite list both still list without crashing,
+`scripts/build.js` still refuses to run and explains why when no source is
+present, and the two suites that are pure logic with zero build dependency —
+`verify-fsrs.js` (the scheduler, 38 checks) and `verify-worker.js` (the
+Cloudflare Worker holding the Gemini key, 51 checks) — both stay green. See
+[`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
+scope and why the other 960 checks can't run here.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why

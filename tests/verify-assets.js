@@ -76,21 +76,25 @@ a sentence that exists only to make the counting work out correctly.
 `;
 
 /* Minimal zip writer: one deflated entry, the rest stored, so the reader's
-   both paths are exercised. */
+   both paths are exercised. A 4th, optional element per entry declares a
+   FALSE uncompressed size in both headers instead of the real buf.length —
+   for building a fixture that lies about its own size, the way a malicious
+   or merely corrupt zip could. */
 function zip(entries) {
   const files = [], cen = [];
   let offset = 0;
-  for (const [name, buf, deflate] of entries) {
+  for (const [name, buf, deflate, declaredSize] of entries) {
     const nameBuf = Buffer.from(name, 'utf8');
     const data = deflate ? zlib.deflateRawSync(buf) : buf;
     const crc = zlib.crc32 ? zlib.crc32(buf) : require('zlib').crc32(buf);
+    const uncompSize = declaredSize === undefined ? buf.length : declaredSize;
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
     local.writeUInt16LE(deflate ? 8 : 0, 8);
     local.writeUInt32LE(crc >>> 0, 14);
     local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(buf.length, 22);
+    local.writeUInt32LE(uncompSize, 22);
     local.writeUInt16LE(nameBuf.length, 26);
     files.push(local, nameBuf, data);
 
@@ -100,7 +104,7 @@ function zip(entries) {
     c.writeUInt16LE(deflate ? 8 : 0, 10);
     c.writeUInt32LE(crc >>> 0, 16);
     c.writeUInt32LE(data.length, 20);
-    c.writeUInt32LE(buf.length, 24);
+    c.writeUInt32LE(uncompSize, 24);
     c.writeUInt16LE(nameBuf.length, 28);
     c.writeUInt32LE(offset, 42);
     cen.push(c, nameBuf);
@@ -162,6 +166,41 @@ function zip(entries) {
   ok('a stored binary entry survives byte-for-byte', zipRead.storedLen === PNG_A.length, `${zipRead.storedLen} vs ${PNG_A.length}`);
   ok('a deflated binary entry inflates to its original length', zipRead.deflLen === PNG_B.length, `${zipRead.deflLen} vs ${PNG_B.length}`);
   ok('and is really a PNG, not shifted by a header', zipRead.pngMagic === 'PNG', zipRead.pngMagic);
+
+  head('a zip bomb is skipped, not allowed to exhaust memory');
+  /* An all-zero buffer compresses to almost nothing with deflate, which is
+     exactly the shape of a real bomb: tiny on the wire, enormous once
+     inflated. BOMB_SIZE sits comfortably over zipread.js's own 256 MB cap so
+     both entries below are genuinely over the line, not close to it. */
+  {
+    const BOMB_SIZE = 280 * 1024 * 1024;
+    const bombBuf = Buffer.alloc(BOMB_SIZE);
+    const bombZipPath = path.join(DIR, 'bomb.zip');
+    fs.writeFileSync(bombZipPath, zip([
+      ['ok.txt', Buffer.from('a perfectly normal file', 'utf8'), true],
+      // Honestly declares its real, huge size — the cheap early-skip path.
+      ['bomb-honest.bin', bombBuf, true],
+      // Declares a tiny size in both headers while the payload still
+      // inflates to BOMB_SIZE — the header cannot be trusted, so this has
+      // to be caught while the stream is actually being read, not before.
+      ['bomb-lying.bin', bombBuf, true, 1000],
+    ]));
+
+    const t0 = Date.now();
+    const bombRead = await page.evaluate(async b64 => {
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const { files, skipped } = await ZipRead.read(bytes.buffer);
+      return { fileNames: files.map(f => f.name), skipped };
+    }, fs.readFileSync(bombZipPath).toString('base64'));
+    const elapsedMs = Date.now() - t0;
+
+    ok('the ordinary file in the same archive still reads fine', bombRead.fileNames.includes('ok.txt'), bombRead.fileNames.join(','));
+    ok('the honestly-huge entry is skipped, not returned', !bombRead.fileNames.includes('bomb-honest.bin'));
+    ok('and the honestly-huge entry is reported skipped rather than silently dropped', bombRead.skipped.includes('bomb-honest.bin'), bombRead.skipped.join(','));
+    ok('the entry with a false, tiny declared size is ALSO skipped — the header is not trusted', !bombRead.fileNames.includes('bomb-lying.bin'));
+    ok('and it too is reported, not silently dropped', bombRead.skipped.includes('bomb-lying.bin'), bombRead.skipped.join(','));
+    ok('neither bomb froze the page — this returned in well under the test timeout', elapsedMs < 30000, `${elapsedMs}ms`);
+  }
 
   head('importing the zip');
   const imported = await page.evaluate(async ({ b64, name }) => {

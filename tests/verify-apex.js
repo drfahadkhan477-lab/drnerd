@@ -340,6 +340,122 @@ const head = t => console.log('\n── ' + t + ' ──');
   });
   ok('home renders', reg.home);
   ok('quiz still answers', reg.answered);
+  head('a chip row that is on screen is actually on screen');
+  /* apexroom folded the tutor's nine prompts away by hiding the class they
+     carry — .chips{display:none} — and .chips is shared. The Rhythm Lab's 27
+     rhythm buttons and the search screen's topic chips both vanished, silently,
+     and the Lab kept drawing one trace with no way to change it.
+
+     THE CHECK THAT MISSED IT COUNTED NODES. querySelectorAll('.chip').length
+     was 27 the whole time: built, attributed, in the DOM, painting nothing.
+     A node count cannot see display:none. So these read computed style and a
+     bounding box, which is the only thing that answers "can the fellow see
+     it". Every assertion about something being on screen should. */
+  {
+    const r = await page.evaluate(async () => {
+      const seen = el => {
+        if (!el) return { present: false };
+        const cs = getComputedStyle(el);
+        return { present: true, display: cs.display, visibility: cs.visibility,
+                 height: el.getBoundingClientRect().height,
+                 chips: el.querySelectorAll('.chip').length };
+      };
+      goLab(); await new Promise(r => setTimeout(r, 350));
+      const lab = seen(document.querySelector('.lab-chips'));
+      /* The topic chips only exist while the query is empty, and an earlier
+         check in this file leaves 'amyloid' in it. Clear it first, or this
+         measures a screen that legitimately has no chips. */
+      openSearch();
+      if (typeof SQ === 'object' && SQ) SQ.q = '';
+      render();
+      await new Promise(r => setTimeout(r, 350));
+      const sug = seen(document.querySelector('.chips.sug'));
+      /* And the tutor's own row must still fold away — the thing apexroom
+         actually wanted. */
+      goHome(); await new Promise(r => setTimeout(r, 250));
+      const sh = document.getElementById('shell');
+      if (!sh.classList.contains('ai-open')) toggleAI();
+      await new Promise(r => setTimeout(r, 300));
+      const ai = document.getElementById('aiChips');
+      const aiHidden = ai ? getComputedStyle(ai).display === 'none' : null;
+      const aiOpens = ai ? (ai.classList.add('open'), getComputedStyle(ai).display !== 'none') : null;
+      return { lab, sug, aiHidden, aiOpens };
+    });
+    ok('the Rhythm Lab chip row is visible, not merely present',
+       r.lab.present && r.lab.display !== 'none' && r.lab.height > 0,
+       `display=${r.lab.display} height=${r.lab.height}`);
+    ok('and it carries every rhythm', r.lab.chips >= 27, String(r.lab.chips));
+    ok('the search screen\'s topic chips are visible too',
+       r.sug.present && r.sug.display !== 'none' && r.sug.height > 0,
+       `display=${r.sug.display} height=${r.sug.height}`);
+    ok('while the tutor\'s own prompt row still folds away by default', r.aiHidden === true);
+    ok('and still opens when asked', r.aiOpens === true);
+  }
+
+  head('nothing ships a regex lookbehind');
+  /* A lookbehind is a parse-time SyntaxError on iPadOS Safari below 16.4 — not
+     a caught exception, a dead <script> block. The one this app had sat in the
+     same block as the rhythm registry and the scheduler, so an older tablet
+     would have lost most of the app to one character, with the suite green
+     because it runs on Chromium. Asserted against the bundle text, so it holds
+     however the code is later rearranged. */
+  {
+    const src = require('fs').readFileSync(target, 'utf8');
+    const hits = (src.match(/\(\?<[=!]/g) || []).length;
+    ok('the built bundle contains no lookbehind assertion', hits === 0, String(hits));
+  }
+
+  head('the quiz keyboard does not reach into the panel');
+  /* The panel is not a screen — it opens OVER whichever screen you are on, so
+     S.screen is still 'quiz' while the model picker is focusable. The quiz
+     keydown handler stepped aside for INPUT and TEXTAREA but not SELECT, so
+     using the <select>'s native type-ahead to pick a model also answered the
+     question underneath. Driven through the focused element, because a keypress
+     dispatched at the document has no tagName to guard on and would pass for a
+     reason that has nothing to do with the bug. */
+  {
+    const r = await page.evaluate(async () => {
+      /* The panel's settings view carries a <select> — that is the element the
+         guard has to survive. Asserted from the markup the app builds, so this
+         still means something if the panel is later restyled. */
+      const settingsHasSelect = /<select id="aiModel">/.test(
+        typeof aiSettingsMarkup === 'function' ? aiSettingsMarkup() : document.body.innerHTML) ||
+        !!document.getElementById('aiModel');
+
+      const q = ALL_Q.find(x => !x.bad && !x.flag);
+      jumpTo(q.id); S.answered = false; S.selected = null; render();
+      const onQuiz = S.screen === 'quiz';
+
+      /* A focused SELECT over the live quiz screen, driven the way a real
+         keypress arrives: at the focused element, bubbling to the document
+         handler. Dispatching at the document instead would carry no tagName
+         and pass the guard for a reason unrelated to the bug. */
+      const sel = document.createElement('select');
+      sel.innerHTML = '<option>alpha</option><option>bravo</option>';
+      document.body.appendChild(sel);
+      sel.focus();
+      sel.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+      await new Promise(r => setTimeout(r, 120));
+      const afterSelect = !!S.answered;
+
+      /* And the guard must not have gone too far: the shortcut still works when
+         nothing that takes typing has focus. */
+      S.answered = false; S.selected = null; render();
+      sel.remove();
+      document.body.focus();
+      document.querySelector('#app').dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+      await new Promise(r => setTimeout(r, 120));
+      const afterPlain = !!S.answered;
+
+      return { settingsHasSelect, onQuiz, afterSelect, afterPlain };
+    });
+    ok('the settings view really does carry a <select>', r.settingsHasSelect);
+    ok('a keystroke in a focused SELECT does not answer the question',
+       r.onQuiz && r.afterSelect === false, `onQuiz=${r.onQuiz} answered=${r.afterSelect}`);
+    ok('but the shortcut still answers when nothing is focused',
+       r.afterPlain === true, String(r.afterPlain));
+  }
+
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();

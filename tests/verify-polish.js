@@ -300,6 +300,24 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('and no heart is left in the Rhythm Lab', heartModule.noLabHeart);
   ok('no errors from mounting it', errors.length === 0, JSON.stringify(errors.slice(0, 2)));
 
+  head('the 3D heart and physio.js agree on where systole begins');
+  /* heart3d.js's cycle() carries its own literal 0.10 offset to align its
+     clock with physio.js's convention — a comment there says the two "cannot
+     disagree" because both call the instant ventricular contraction starts
+     mitral closure. But that offset and physio.js's T.mc are two separately
+     typed numbers that happen to agree today, not one shared constant — the
+     exact shape of drift this codebase has been bitten by before (a chain
+     array and its own doc comment, once). This is what actually holds the
+     comment's claim to account, rather than trusting two files to stay in
+     sync by memory. */
+  const align = await page.evaluate(() => {
+    const PR = 160;   // sinus PR interval, exactly as cycle() itself uses
+    const c = Heart3D.cycle(PR, 'sinus', {});
+    return { cyc: c.cyc, mc: Physio.T.mc };
+  });
+  ok('heart3d\'s cycle at ventricular-contraction onset lands on physio.js\'s own mitral-closure constant',
+     Math.abs(align.cyc - align.mc) < 1e-9, `heart3d ${align.cyc} vs physio ${align.mc}`);
+
   head('regression: everything prior still functions');
   const reg = await page.evaluate(() => {
     goHome(); render();

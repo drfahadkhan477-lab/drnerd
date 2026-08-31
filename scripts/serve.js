@@ -35,8 +35,13 @@ const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
   if (p.endsWith('/')) p += 'index.html';
   const file = path.join(DIR, p);
-  /* Never serve outside the root, however creative the path. */
-  if (!file.startsWith(DIR)) { res.writeHead(403).end('forbidden'); return; }
+  /* Never serve outside the root, however creative the path.
+     THE TRAILING SEPARATOR IS THE WHOLE GUARD. A bare startsWith(DIR) also
+     accepts any SIBLING whose name merely begins with the root's — serving
+     /dist-old or /dist.bak to anyone who asks for "/../dist-old/x". path.join
+     has already collapsed the "..", so the only thing standing between the
+     tailnet and the directory next door is comparing against DIR + sep. */
+  if (file !== DIR && !file.startsWith(DIR + path.sep)) { res.writeHead(403).end('forbidden'); return; }
 
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404).end('not found'); return; }
