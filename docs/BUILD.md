@@ -164,6 +164,56 @@ used a fixture that sat exactly at the ceiling it was meant to prove, and one
 opened a second browser context so the localStorage fixture it depended on was
 never loaded. All three looked green and measured nothing.
 
+### A fixture is not evidence until it has been checked against reality
+
+A fixture written from documentation, memory, or "this looks about right" can
+encode the exact same wrong assumption as the code it is meant to be checking
+— and the two will agree with each other while both disagree with the real
+API. That is not a hypothetical: it happened three times, in three unrelated
+places, each caught only after the fact:
+
+- **Gemini's model filter** required a `streamGenerateContent` entry in
+  `supportedGenerationMethods`. A hand-written `ListModels` fixture had
+  invented that entry because it seemed like the obvious name for the
+  streaming variant. Google's real response never sends it — streaming is a
+  parameter on `generateContent`, not its own advertised method — so filter
+  and fixture agreed with each other and rejected every real model.
+  (`tests/verify-gemini.js`)
+- **Mistral's capability filter** checked `capabilities.chat`. A first draft
+  of the fixture also guessed `chat`. Mistral's real field is
+  `capabilities.completion_chat`; a real key is what exposed it.
+  (`tests/verify-mistral.js`)
+- **`Store.merge`'s array path** was tested by handing it a *delta* — `[3]`
+  folded onto `[1, 2]` — which is not a shape the app ever produces:
+  `saveJSON` persists the *whole* array on every write. Against a plain
+  concat, the fixture and the code agreed, and every stored row came back
+  duplicated on reload. (`tests/verify-store.js`)
+
+None of these were caught by review or by the tests passing green — a fixture
+that encodes the assumption under test proves nothing, on purpose or not.
+**Before writing `verify-<provider>.js` for a new integration:**
+
+1. Make one real call to the real API, with a real key, for every response
+   shape the code branches on differently — a normal reply, the model-list or
+   capability-discovery response, an error, a tool call.
+2. Save the raw response body, then redact only what must never be
+   committed: the key itself, any account-identifying field. Leave every
+   field name, nesting level and type exactly as the API sent it — those are
+   the parts a guess gets wrong.
+3. Write the fixture from that saved response, not from the provider's docs
+   page. Documentation drifts from the real wire format, or was wrong to
+   begin with, more often than the actual bytes on the wire do.
+4. If the fixture and the code's assumption about a field name were both
+   guessed rather than checked, they will agree — that agreement is the
+   failure mode this section is about, not evidence the field name is right.
+   Treat a fixture as unverified until a real round-trip has confirmed it,
+   even if every test using it is green.
+
+For a same-shape sibling of an existing provider — another OpenAI-compatible
+API, say — starting from that provider's already-real fixture and changing
+only what the docs say differs is safer than writing a new one from scratch:
+it inherits what was already checked instead of re-guessing it.
+
 Some modules can be checked without a browser at all, which is much faster
 while iterating on the physiology or the ECG maths:
 

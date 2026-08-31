@@ -19,6 +19,8 @@
  * guesses agreed with each other and passed. A real key exposed it — Mistral
  * names that field completion_chat — so the fixture now matches the field a
  * real response actually sends, not the field a plausible guess invented.
+ * See docs/BUILD.md, "A fixture is not evidence until it has been checked
+ * against reality", for the rule this incident (and two others) is what led to.
  */
 'use strict';
 const path = require('path');

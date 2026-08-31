@@ -193,7 +193,9 @@ const RAW = `key => new Promise(resolve => {
          already containing every row that is in the store. The fixture above
          hands merge a delta, which the app never produces; against a plain
          concat the two agreed with each other and disagreed with the app,
-         and every existing row came back twice. */
+         and every existing row came back twice. See docs/BUILD.md, "A
+         fixture is not evidence until it has been checked against reality",
+         for the rule this incident (and two others) is what led to. */
       whole: Store.merge('accsap12.log', [1, 2, 3], [1, 2, 3, 4]),
       /* A row the early write had no way of knowing about is still not lost. */
       divergent: Store.merge('accsap12.log', [1, 2, 9], [1, 2, 3]),
