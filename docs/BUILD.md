@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1031 + 75 checks
+node scripts/verify.js --pwa                           # → 1049 + 75 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -35,7 +35,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Fifty-four patch scripts run in order against the export. Each applies a list of
+Fifty-five patch scripts run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -128,7 +128,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Thirty-one suites, 1031 checks, plus 75 more on the split build. They run one at a
+Thirty-one suites, 1049 checks, plus 75 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.

@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying fifty-four patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying fifty-five patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -123,6 +123,10 @@ const ROOT = path.join(__dirname, '..');
      studyflow      the Signal/Focus/Grid switcher removed — it only ever
                    affected Chapters despite the name — and the page's
                    sections cascade in like the home screen's do
+     welcome       one dismissable line under the doors naming Chapters and
+                   Apex, for a first-time reader only — after homeflow, whose
+                   door row it sits beneath, and never shown to anyone whose
+                   scheduler or review log says they have been here before
      failsafe      render() throwing stops meaning a blank or frozen
                    screen — last, so it wraps every earlier step's own
                    version of render() and boot's own render() call
@@ -134,7 +138,7 @@ const CHAIN = [
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
-  'studyflow', 'failsafe',
+  'studyflow', 'welcome', 'failsafe',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

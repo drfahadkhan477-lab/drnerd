@@ -1,13 +1,13 @@
 # Systole CI — the honest subset.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1031 checks in
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1049 checks in
 # `node scripts/verify.js` plus 75 more under `--pwa`, this workflow runs 89.
-# The other 1017 all drive a real build of the app in a real browser
+# The other 1035 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 942 checks here. See docs/BUILD.md and the
+# there is no way to run those 960 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
@@ -38,7 +38,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 942 checks to this file is possible — GitHub Actions
+# Adding the other 960 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather

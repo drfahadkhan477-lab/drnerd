@@ -357,6 +357,158 @@ const head = t => console.log('\n── ' + t + ' ──');
     await page.evaluate(() => { goHome(); render(); });
   }
 
+  head('the first-run hint appears for a newcomer and for nobody else');
+  /* Three gates, and each is tested on its own rather than trusting the one
+     that is easiest to set. The flag alone would have been the obvious
+     implementation and the wrong one: it would hand a "New here?" card to
+     every existing reader the first time they loaded a build containing this
+     step — exactly the audience it is not for — so the empty-scheduler and
+     empty-log gates are the ones actually worth proving. */
+  {
+    const r = await page.evaluate(async () => {
+      const fresh = () => { try { localStorage.removeItem('accsap12.welcomed'); } catch (_) {} };
+      const shown = () => !!document.getElementById('homeHello');
+
+      fresh(); S.srs = {}; if (typeof LOG !== 'undefined') LOG.length = 0;
+      goHome(); render();
+      const forNewcomer = shown();
+
+      // gate 2: a reader with scheduled cards is not new, flag unset or not
+      fresh(); S.srs = { X: { difficulty: 5, stability: 10, ivl: 5, reps: 1, lapses: 0, last: '2026-08-20', due: '2026-09-01' } };
+      goHome(); render();
+      const withHistory = shown();
+
+      // gate 3: a reader with a review log is not new either
+      fresh(); S.srs = {};
+      let loggedShown = null;
+      if (typeof LOG !== 'undefined') { LOG.length = 0; LOG.push({ id: 'X', r: 3, t: Date.now() }); goHome(); render(); loggedShown = shown(); LOG.length = 0; }
+
+      // gate 1: the dismissal flag
+      S.srs = {};
+      try { localStorage.setItem('accsap12.welcomed', '1'); } catch (_) {}
+      goHome(); render();
+      const afterFlag = shown();
+
+      // and dismissing it really does persist across a re-render
+      fresh(); goHome(); render();
+      const beforeTap = shown();
+      dismissHello();
+      await new Promise(res => setTimeout(res, 340));
+      const goneAfterTap = !shown();
+      goHome(); render();
+      const stillGone = !shown();
+      let flagWritten = null;
+      try { flagWritten = localStorage.getItem('accsap12.welcomed'); } catch (_) {}
+
+      fresh(); S.srs = {}; goHome(); render();
+      return { forNewcomer, withHistory, loggedShown, afterFlag, beforeTap, goneAfterTap, stillGone, flagWritten };
+    });
+    ok('a genuine newcomer is shown it', r.forNewcomer === true);
+    ok('someone with cards already scheduled never sees it', r.withHistory === false);
+    ok('nor does someone with a review log, even on a clean flag',
+       r.loggedShown === false || r.loggedShown === null, String(r.loggedShown));
+    ok('and it stays away once the flag is set', r.afterFlag === false);
+    ok('tapping Got it removes it', r.beforeTap === true && r.goneAfterTap === true,
+       `shown ${r.beforeTap} → gone ${r.goneAfterTap}`);
+    ok('and it does not come back on the next render', r.stillGone === true);
+    ok('because the dismissal was actually written down', r.flagWritten === '1', String(r.flagWritten));
+  }
+
+  head('the dismiss button is never buried under the Apex button');
+  /* Found by screenshotting the card rather than by reading its CSS. Apex's
+     button is position:fixed in the bottom-right corner, so it floats over
+     whatever is scrolled beneath it — and the first version of this card put
+     "Got it" at its own right-hand edge, which on an iPad in portrait put the
+     FAB exactly on top of it: elementFromPoint at the button's centre came
+     back as aiFab, so the control whose only job is dismissing the card could
+     not be pressed.
+
+     WHAT THIS ASSERTS, AND WHY IT IS NOT THE OBVIOUS THING. The first version
+     of this check compared the button's rectangle against the FAB's and
+     demanded they not intersect — and it PASSED against the broken
+     right-aligned layout, because whether those two rectangles happen to meet
+     depends on how tall the page is and where it is scrolled, neither of
+     which the suite controls. A guard that only fires when the page happens
+     to be the right height is not a guard. So this checks the property that
+     actually makes the collision impossible instead: the button keeps more
+     clearance from its card's right edge than the FAB is wide, so no amount
+     of scrolling can put the FAB over it. That is scroll-independent,
+     content-independent, and fails on the original layout. */
+  {
+    const prev = page.viewportSize();
+    const rows = [];
+    for (const [w, h, label] of [[390, 844, 'phone'], [834, 1112, 'iPad portrait'], [1194, 834, 'iPad landscape']]) {
+      await page.setViewportSize({ width: w, height: h });
+      const r = await page.evaluate(async () => {
+        try { localStorage.removeItem('accsap12.welcomed'); } catch (_) {}
+        S.srs = {}; if (typeof LOG !== 'undefined') LOG.length = 0;
+        goHome(); render();
+        await new Promise(res => setTimeout(res, 280));
+        const card = document.getElementById('homeHello');
+        const btn = card && card.querySelector('.hello-x');
+        const fab = document.getElementById('aiFab');
+        if (!btn) return { err: 'hint missing' };
+        const c = card.getBoundingClientRect(), a = btn.getBoundingClientRect();
+        const fabW = fab && getComputedStyle(fab).display !== 'none' ? fab.getBoundingClientRect().width : 0;
+        return { clearance: Math.round(c.right - a.right), fabW: Math.round(fabW) };
+      });
+      rows.push({ label, ...r });
+    }
+    if (prev) await page.setViewportSize(prev);
+    for (const r of rows) {
+      ok(`${r.label}: "Got it" keeps more room from the card's right edge than the Apex button is wide`,
+         !r.err && r.clearance > r.fabW, r.err || `${r.clearance}px clear vs a ${r.fabW}px button`);
+    }
+  }
+
+  head('and the hint itself is readable, on every theme');
+  /* The same AA floor the progress card is now held to, applied to the new
+     card rather than assumed of it — this is the component most likely to be
+     written in whatever colour looked nice. */
+  {
+    const rows = await page.evaluate(async () => {
+      const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      const ratio = (a, b) => { const la = lum(a), lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
+      const parse = s => { const m = String(s).match(/rgba?\(([^)]+)\)/); if (!m) return null;
+        const p = m[1].split(/[,\s/]+/).filter(Boolean).map(Number);
+        return { rgb: [p[0], p[1], p[2]], a: p.length > 3 ? p[3] : 1 }; };
+      const over = (fg, bg) => fg.rgb.map((c, i) => Math.round(c * fg.a + bg[i] * (1 - fg.a)));
+      const stack = el => { let a = 1, n = el;
+        while (n && n !== document.documentElement) { a *= parseFloat(getComputedStyle(n).opacity || '1'); n = n.parentElement; } return a; };
+      const out = [];
+      for (const t of THEMES) {
+        try { localStorage.removeItem('accsap12.welcomed'); } catch (_) {}
+        S.theme = t.id; applyTheme(); S.srs = {}; goHome(); render();
+        let card = null;
+        for (let i = 0; i < 60; i++) {
+          card = document.getElementById('homeHello');
+          if (card && stack(card) > 0.999) break;
+          await new Promise(res => requestAnimationFrame(res));
+        }
+        if (!card) { out.push({ theme: t.id, error: 'hint not rendered' }); continue; }
+        const pageRaw = parse(getComputedStyle(document.body).backgroundColor);
+        const pageBg = pageRaw && pageRaw.a === 1 ? pageRaw.rgb : [255, 255, 255];
+        const cardRaw = parse(getComputedStyle(card).backgroundColor);
+        const cardBg = cardRaw ? over(cardRaw, pageBg) : pageBg;
+        let worst = Infinity;
+        for (const el of card.querySelectorAll('b,i,button')) {
+          const c = parse(getComputedStyle(el).color);
+          if (!c) continue;
+          worst = Math.min(worst, ratio(over({ rgb: c.rgb, a: c.a * stack(el) }, cardBg), cardBg));
+        }
+        out.push({ theme: t.id, worst: +worst.toFixed(2) });
+      }
+      S.theme = 'auto'; applyTheme();
+      try { localStorage.setItem('accsap12.welcomed', '1'); } catch (_) {}
+      goHome(); render();
+      return out;
+    });
+    for (const r of rows) {
+      ok(`${r.theme}: every word in the hint clears AA`, !r.error && r.worst >= 4.5, r.error || `${r.worst}:1`);
+    }
+  }
+
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();
