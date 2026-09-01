@@ -318,6 +318,64 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('heart3d\'s cycle at ventricular-contraction onset lands on physio.js\'s own mitral-closure constant',
      Math.abs(align.cyc - align.mc) < 1e-9, `heart3d ${align.cyc} vs physio ${align.mc}`);
 
+  head('a felt pulse alongside the correct/wrong feedback');
+  {
+    const right = await page.evaluate(() => {
+      window.__vibes = [];
+      navigator.vibrate = p => { window.__vibes.push(p); return true; };
+      goHome(); render();
+      startQuiz('Arrhythmias');
+      const q = S.questions[0];
+      selectOpt(q.ci);
+      return window.__vibes.slice();
+    });
+    ok('answering correctly fires a single pulse',
+       right.length === 1 && typeof right[0] === 'number' && right[0] > 0, JSON.stringify(right));
+
+    const wrong = await page.evaluate(() => {
+      window.__vibes = [];
+      navigator.vibrate = p => { window.__vibes.push(p); return true; };
+      goHome(); render();
+      startQuiz('Arrhythmias');
+      const q = S.questions[0];
+      selectOpt((q.ci + 1) % q.o.length);
+      return window.__vibes.slice();
+    });
+    ok('answering wrong fires a three-beat pattern',
+       wrong.length === 1 && Array.isArray(wrong[0]) && wrong[0].length === 3, JSON.stringify(wrong));
+  }
+
+  head('haptics respect reduced motion and missing-API feature detection');
+  {
+    const reducedPage = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+    await reducedPage.emulateMedia({ reducedMotion: 'reduce' });
+    await reducedPage.goto(URL, { waitUntil: 'load', timeout: 200000 });
+    await reducedPage.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+    const underReduced = await reducedPage.evaluate(() => {
+      window.__vibes = [];
+      navigator.vibrate = p => { window.__vibes.push(p); return true; };
+      startQuiz('Arrhythmias');
+      selectOpt(S.questions[0].ci);
+      return window.__vibes.length;
+    });
+    ok('no vibration is requested under prefers-reduced-motion', underReduced === 0, String(underReduced));
+    await reducedPage.close();
+
+    const noVibratePage = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+    await noVibratePage.addInitScript(() => {
+      Object.defineProperty(window.navigator, 'vibrate', { value: undefined, configurable: true });
+    });
+    await noVibratePage.goto(URL, { waitUntil: 'load', timeout: 200000 });
+    await noVibratePage.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+    const noThrow = await noVibratePage.evaluate(() => {
+      try { startQuiz('Arrhythmias'); selectOpt(S.questions[0].ci); return 'ok'; }
+      catch (e) { return 'threw: ' + e.message; }
+    });
+    ok('answering never throws where the Vibration API does not exist — iOS Safari\'s real case',
+       noThrow === 'ok', noThrow);
+    await noVibratePage.close();
+  }
+
   head('regression: everything prior still functions');
   const reg = await page.evaluate(() => {
     goHome(); render();
