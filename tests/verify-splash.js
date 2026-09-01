@@ -129,6 +129,35 @@ const head = t => console.log('\n── ' + t + ' ──');
     await page.close();
   }
 
+  head('the heart has its own keyframes, not the word/subtitle\'s later-declared spRise');
+  {
+    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
+    page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
+    await page.waitForSelector('#splash', { timeout: 30000 });
+    const heart = await page.evaluate(() => {
+      const el = document.querySelector('.sp-heart-mount');
+      if (!el) return { found: false };
+      const name = getComputedStyle(el).animationName;
+      let fromTransform = null;
+      for (const sheet of document.styleSheets) {
+        let rules;
+        try { rules = sheet.cssRules; } catch (_) { continue; }
+        for (const rule of rules) {
+          if (rule instanceof CSSKeyframesRule && rule.name === name) {
+            for (const kf of rule.cssRules) {
+              if (kf.keyText === 'from' || kf.keyText === '0%') { fromTransform = kf.style.transform; break; }
+            }
+          }
+        }
+      }
+      return { found: true, name, fromTransform };
+    });
+    ok('.sp-heart-mount uses its own animation name, not the shared spRise', heart.name === 'spRiseHeart', JSON.stringify(heart));
+    ok('and that keyframes rule still carries the scale-in it was authored with',
+       !!heart.fromTransform && /scale/.test(heart.fromTransform), heart.fromTransform);
+    await page.close();
+  }
+
   head('the delay does not leak into the reduced-motion override');
   {
     const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });

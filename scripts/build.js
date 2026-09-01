@@ -149,6 +149,12 @@ const ROOT = path.join(__dirname, '..');
      haptics       a felt pulse alongside the correct/wrong feedback
                    selectOpt already draws — after splashtiming, no
                    dependency, just kept at the tail with the others
+     designfollowup two small fixes found and deliberately deferred during
+                   the design pass: --warn/--warn-bg/--warn-b become real
+                   aliases instead of four independently-restated literals
+                   (also fixing a latent auto+dark mismatch), and the
+                   heart gets its own @keyframes back instead of losing to
+                   spWord/spSub's later-declared, same-named spRise
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -158,7 +164,7 @@ const CHAIN = [
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
-  'semantictokens', 'splashtiming', 'haptics',
+  'semantictokens', 'splashtiming', 'haptics', 'designfollowup',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

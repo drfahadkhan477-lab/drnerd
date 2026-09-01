@@ -134,6 +134,65 @@ const ACCENT_BY_THEME = {
   });
   ok('a --warning-painted element is actually amber-coloured', !!warnProbe && warnProbe !== 'rgba(0, 0, 0, 0)', warnProbe);
 
+  head('the pre-existing --warn token is a real alias now, not a coincidentally-matching literal');
+  /* A snapshot comparison of --warn vs --warning cannot tell an alias from a
+     coincidence — they held the same literal hex before this fix too, which
+     is the exact hazard being closed. The only test that actually proves
+     aliasing is causal: override --warning live and see whether --warn
+     follows. An independent literal would not move. */
+  const warnCausal = await page.evaluate(() => {
+    setTheme('daylight');
+    const h = document.documentElement;
+    const before = getComputedStyle(h).getPropertyValue('--warn').trim();
+    h.style.setProperty('--warning', '#123456');
+    const after = getComputedStyle(h).getPropertyValue('--warn').trim();
+    h.style.removeProperty('--warning');
+    return { before, after };
+  });
+  ok('overriding --warning moves --warn with it — a real alias, not a coincidence',
+     warnCausal.after.toLowerCase() === '#123456', JSON.stringify(warnCausal));
+
+  const warnBgCausal = await page.evaluate(() => {
+    const h = document.documentElement;
+    h.style.setProperty('--amber-bg', '#abcdef');
+    const bg = getComputedStyle(h).getPropertyValue('--warn-bg').trim();
+    h.style.removeProperty('--amber-bg');
+    h.style.setProperty('--amber-b', '#fedcba');
+    const b = getComputedStyle(h).getPropertyValue('--warn-b').trim();
+    h.style.removeProperty('--amber-b');
+    return { bg, b };
+  });
+  ok('overriding --amber-bg moves --warn-bg with it', warnBgCausal.bg.toLowerCase() === '#abcdef', JSON.stringify(warnBgCausal));
+  ok('overriding --amber-b moves --warn-b with it', warnBgCausal.b.toLowerCase() === '#fedcba', JSON.stringify(warnBgCausal));
+
+  const notice = await page.evaluate(() => {
+    const el = document.createElement('div');
+    el.className = 'notice';
+    document.body.appendChild(el);
+    const cs = getComputedStyle(el);
+    const out = { color: cs.color, background: cs.backgroundColor, border: cs.borderColor };
+    el.remove();
+    return out;
+  });
+  ok('.notice, the one real reader of --warn, still paints amber', !!notice.color && notice.color !== 'rgba(0, 0, 0, 0)', JSON.stringify(notice));
+
+  head('--warn-bg follows the system under auto, the same as --amber-bg does');
+  /* The dark-mode media query only ever sets --amber-bg for a dark system —
+     it was never taught to also set --warn-bg, so before this fix an 'auto'
+     theme under a dark system left --warn-bg on its light literal while
+     --amber-bg correctly went dark. Aliasing --warn-bg to --amber-bg once,
+     in :root, fixes this without the media query needing to know --warn-bg
+     exists at all. */
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const autoDark = await page.evaluate(() => {
+    setTheme('auto');
+    const cs = getComputedStyle(document.documentElement);
+    return { amberBg: cs.getPropertyValue('--amber-bg').trim(), warnBg: cs.getPropertyValue('--warn-bg').trim() };
+  });
+  ok('under auto + a dark system, --warn-bg matches --amber-bg (both dark), not the light literal',
+     autoDark.warnBg !== '' && autoDark.warnBg === autoDark.amberBg, JSON.stringify(autoDark));
+  await page.emulateMedia({ colorScheme: null });
+
   head('no stray errors');
   ok('no console or page errors during the whole run', errors.length === 0, errors.join(' | '));
 
