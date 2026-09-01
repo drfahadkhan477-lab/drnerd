@@ -104,6 +104,75 @@ const head = t => console.log('\n── ' + t + ' ──');
     await page.close();
   }
 
+  head('the rhythm trace waits for the heart to settle, instead of sweeping in parallel with it');
+  {
+    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
+    page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
+    await page.waitForSelector('#splash', { timeout: 30000 });
+    const delays = await page.evaluate(() => {
+      const delayOf = sel => {
+        const el = document.querySelector(sel);
+        return el ? parseFloat(getComputedStyle(el).animationDelay) : null;
+      };
+      return {
+        heart: delayOf('.sp-heart-mount'),
+        word: delayOf('.sp-word'),
+        sub: delayOf('.sp-sub'),
+        trace: delayOf('.sp-trace'),
+      };
+    });
+    ok('the heart, word and subtitle keep their original entrance timing',
+       delays.heart === 0 && delays.word === 0.1 && delays.sub === 0.24, JSON.stringify(delays));
+    ok('the rhythm trace now waits for the heart to settle, instead of starting on the same frame',
+       delays.trace !== null && delays.trace > delays.sub && delays.trace >= 0.7 && delays.trace <= 1.0,
+       `trace delay ${delays.trace}s (heart settles at ~${delays.heart + 1}s)`);
+    await page.close();
+  }
+
+  head('the heart has its own keyframes, not the word/subtitle\'s later-declared spRise');
+  {
+    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
+    page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
+    await page.waitForSelector('#splash', { timeout: 30000 });
+    const heart = await page.evaluate(() => {
+      const el = document.querySelector('.sp-heart-mount');
+      if (!el) return { found: false };
+      const name = getComputedStyle(el).animationName;
+      let fromTransform = null;
+      for (const sheet of document.styleSheets) {
+        let rules;
+        try { rules = sheet.cssRules; } catch (_) { continue; }
+        for (const rule of rules) {
+          if (rule instanceof CSSKeyframesRule && rule.name === name) {
+            for (const kf of rule.cssRules) {
+              if (kf.keyText === 'from' || kf.keyText === '0%') { fromTransform = kf.style.transform; break; }
+            }
+          }
+        }
+      }
+      return { found: true, name, fromTransform };
+    });
+    ok('.sp-heart-mount uses its own animation name, not the shared spRise', heart.name === 'spRiseHeart', JSON.stringify(heart));
+    ok('and that keyframes rule still carries the scale-in it was authored with',
+       !!heart.fromTransform && /scale/.test(heart.fromTransform), heart.fromTransform);
+    await page.close();
+  }
+
+  head('the delay does not leak into the reduced-motion override');
+  {
+    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
+    await page.waitForSelector('#splash', { timeout: 30000 });
+    const trace = await page.evaluate(() => {
+      const el = document.querySelector('.sp-trace');
+      return el ? getComputedStyle(el).animationName : null;
+    });
+    ok('the rhythm trace still fully disables its animation under prefers-reduced-motion',
+       trace === 'none', trace);
+    await page.close();
+  }
+
   head('theme handover: no flash of the wrong theme');
   {
     const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });

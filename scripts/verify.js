@@ -73,6 +73,7 @@ const SUITES = [
   ['failsafe',     'render() throwing shows a real screen, never a blank or frozen one'],
   ['content',      'a question broken in a way the fellow cannot see is never shipped silently'],
   ['backup',       'a restored backup appears now, not only after the next launch'],
+  ['tokens',       'the semantic colour names alias the legacy hue names, not just resemble them'],
 ];
 
 const argv = process.argv.slice(2);

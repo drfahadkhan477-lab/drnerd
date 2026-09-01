@@ -130,9 +130,31 @@ const ROOT = path.join(__dirname, '..');
      streamthrottle a streaming reply repaints on animation frames, not on
                    every network chunk — after mistral and gemini, whose
                    oneTurn* functions it wraps a shared painter around
+     contrastfix   the 46 sites using --dim for text anyone is expected to
+                   read move to the already-AA --muted, and every
+                   interactive element gets a :focus-visible ring
      failsafe      render() throwing stops meaning a blank or frozen
                    screen — last, so it wraps every earlier step's own
                    version of render() and boot's own render() call
+     semantictokens the accent/success/danger/warning names become
+                   canonical in the root block and (accent only) the five
+                   named palettes; --teal, --teal2, --green, --green2,
+                   --red, --red2, --amber and --amber2 become pure var()
+                   aliases — after failsafe, rewriting theme's own settled
+                   literal values
+     splashtiming  the rhythm trace waits for the heart to settle instead
+                   of sweeping in parallel with it — a one-line
+                   animation-delay, after splash-heart, whose 1s settle it
+                   now sequences after
+     haptics       a felt pulse alongside the correct/wrong feedback
+                   selectOpt already draws — after splashtiming, no
+                   dependency, just kept at the tail with the others
+     designfollowup two small fixes found and deliberately deferred during
+                   the design pass: --warn/--warn-bg/--warn-b become real
+                   aliases instead of four independently-restated literals
+                   (also fixing a latent auto+dark mismatch), and the
+                   heart gets its own @keyframes back instead of losing to
+                   spWord/spSub's later-declared, same-named spRise
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -141,7 +163,8 @@ const CHAIN = [
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
-  'studyflow', 'welcome', 'streamthrottle', 'failsafe',
+  'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
+  'semantictokens', 'splashtiming', 'haptics', 'designfollowup',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
