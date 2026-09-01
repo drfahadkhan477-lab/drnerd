@@ -61,6 +61,15 @@ const head = t => console.log('\n── ' + t + ' ──');
   }
 
   head('the numbers climb in step with the bar, then hold');
+  /* Sampled by ELAPSED WALL-CLOCK TIME against the animation's own 900ms
+     duration, not by a fixed count of animation frames. The two are not the
+     same thing: requestAnimationFrame's real-time spacing in a headless,
+     possibly CPU-throttled container is not reliably ~16ms, so "12 frames"
+     is not reliably "~200ms" — it was observed, directly, firing short of
+     900ms often enough to fail this exact assertion about one run in three.
+     Sampling stops only once real time has genuinely passed the animation's
+     documented duration (with a margin), which is the only thing the claim
+     "settles on exactly the intended value" can actually mean. */
   {
     const r = await page.evaluate(async () => {
       for (let i = 0; i < 5; i++) S.srs[POOL[i].id] = { difficulty: 5, stability: 1, ivl: 1, reps: 1, lapses: 0, last: '2020-01-01', due: '2020-01-01' };
@@ -69,7 +78,9 @@ const head = t => console.log('\n── ' + t + ' ──');
       const nums = [...document.querySelectorAll('#homeProgress .hp-num')];
       const targets = nums.map(n => +n.dataset.count);
       const frames = [];
-      for (let i = 0; i < 12; i++) {
+      const t0 = performance.now();
+      const ANIM_MS = 900, MARGIN_MS = 300;   // mountHomeProgress's own dur, plus slack
+      while (performance.now() - t0 < ANIM_MS + MARGIN_MS) {
         await new Promise(res => requestAnimationFrame(res));
         frames.push(nums.map(n => +n.textContent));
       }
