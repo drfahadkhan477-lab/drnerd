@@ -631,8 +631,15 @@ self.addEventListener('fetch', e => {
       const hit = await c.match(req);
       if (hit) return hit;
       const res = await fetch(req);
-      /* A figure is an image or it is not kept. See keepable() below. */
-      if (keepable(req, res)) c.put(req, res.clone());
+      /* A figure is an image or it is not kept. See keepable() below.
+         waitUntil, not a bare call: respondWith's promise resolves the
+         instant this function returns res, and once it does the browser is
+         free to terminate the worker — iOS Safari especially aggressively —
+         with nothing else telling it work is still in flight. c.put() is a
+         promise that keeps running after res is returned; without waitUntil
+         wrapping it, the fellow sees the figure once, the worker is killed
+         before the write lands, and it is never actually offline. */
+      if (keepable(req, res)) e.waitUntil(c.put(req, res.clone()));
       return res;
     }));
     return;
@@ -644,7 +651,11 @@ self.addEventListener('fetch', e => {
        Access appended. Without this a launch after re-authenticating misses
        every shell entry it actually has. */
     const hit = await c.match(req, { ignoreSearch: true });
-    const net = fetch(req).then(res => { if (keepable(req, res)) c.put(req, res.clone()); return res; }).catch(() => hit);
+    /* Same waitUntil reasoning as the figure handler above: this write must
+       outlive respondWith's own promise, which resolves as soon as the
+       response (fresh or cached) is handed back — often before c.put() has
+       actually finished. */
+    const net = fetch(req).then(res => { if (keepable(req, res)) e.waitUntil(c.put(req, res.clone())); return res; }).catch(() => hit);
     /* A NAVIGATION MUST NEVER RESOLVE TO undefined. Returning hit || net looks
        safe and is not: offline, net's catch resolves to the same missing hit,
        so respondWith gets undefined and Safari shows its cannot-connect page —

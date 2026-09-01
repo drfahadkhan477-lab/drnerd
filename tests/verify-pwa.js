@@ -196,6 +196,20 @@ async function heapAfterBoot(page, url) {
     ok('both cache writes go through it, not through res.ok',
        !/if \(res\.ok\) c\.put/.test(swSrc) && calls === 2, calls + ' call sites');
 
+    /* THE WRITE MUST OUTLIVE respondWith's OWN PROMISE. Once the function
+       handling a fetch event returns its response, that promise settles, and
+       nothing else is telling the browser this worker still has work
+       in-flight — c.put() started but not yet finished is exactly the kind
+       of work a terminated worker drops silently. iOS Safari evicts service
+       workers more aggressively than desktop browsers, and this app is built
+       for an iPad: a figure that renders once and is never actually
+       persisted for offline use is a real, not theoretical, failure mode
+       here. Both call sites — figures and the shell's background refresh —
+       must wrap their cache write in e.waitUntil(), not call it bare. */
+    const waitUntilWrites = (swSrc.match(/e\.waitUntil\(c\.put\(req, res\.clone\(\)\)\)/g) || []).length;
+    ok('both cache writes are kept alive with e.waitUntil, not fired and forgotten',
+       waitUntilWrites === 2, waitUntilWrites + ' of 2 wrapped');
+
     /* INSTALL IS THE PATH THAT MATTERED, and it was the one without the check.
        cache.addAll() stores whatever comes back, so a Cloudflare Access
        sign-in page — 200 OK, text/html, for any URL — became app.js in the

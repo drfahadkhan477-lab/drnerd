@@ -359,6 +359,83 @@ const MODEL_LIST = {
   ok('the turn is not left stuck busy afterwards',
      await page.evaluate(() => aiBusy === false));
 
+  head('the streamed reply coalesces its paints onto frames, not network chunks');
+  /* Direct test of makeStreamPainter — the small factory oneTurnMistral and
+     oneTurnGemini both use to schedule live.innerHTML updates — rather than
+     driving a whole turn through the UI. This is the correct level for the
+     claim being made: whether repeated schedule() calls collapse onto one
+     animation frame, and whether flush() paints synchronously without
+     waiting on one. Parsing a real reply into Markdown is already covered
+     elsewhere; timing is the only thing this needs to prove. */
+  const paintTiming = await page.evaluate(async () => {
+    if (typeof makeStreamPainter !== 'function') return { missing: true };
+    const live = document.createElement('div');
+    const body = document.createElement('div');
+    document.body.appendChild(body); body.appendChild(live);
+    let text = '';
+    const painter = makeStreamPainter(live, body, () => text);
+
+    text = 'a';   painter.schedule();
+    text = 'ab';  painter.schedule();
+    text = 'abc'; painter.schedule();
+    const beforeFrame = live.innerHTML;
+
+    await new Promise(res => requestAnimationFrame(res));
+    await new Promise(res => requestAnimationFrame(res));
+    const afterFrame = live.innerHTML;
+
+    text = 'abcd';
+    painter.schedule();
+    painter.flush();                 // must not wait for the frame
+    const afterFlush = live.innerHTML;
+
+    live.remove(); body.remove();
+    return {
+      missing: false,
+      paintedNothingBeforeAnyFrame: beforeFrame === '',
+      collapsedToOneFrameShowsLatest: afterFrame.includes('abc') && !afterFrame.includes('undefined'),
+      flushIsSynchronous: afterFlush.includes('abcd'),
+    };
+  });
+  ok('makeStreamPainter exists as the shared mechanism', !paintTiming.missing);
+  if (!paintTiming.missing) {
+    ok('three rapid schedule() calls paint nothing before a frame arrives — proving they coalesce rather than firing immediately',
+       paintTiming.paintedNothingBeforeAnyFrame);
+    ok('once a frame does arrive, it shows the LATEST text, not an intermediate one — three schedules produced one paint',
+       paintTiming.collapsedToOneFrameShowsLatest);
+    ok('flush() paints synchronously without waiting for a frame — the correctness guarantee for the very last chunk',
+       paintTiming.flushIsSynchronous);
+  }
+
+  head('and the reply is never missing its last chunk when the stream ends');
+  /* The integration half of the same claim: with the throttle wired into a
+     REAL streaming turn, a burst of many small deltas arriving faster than
+     animation frames can still must not lose the final one. Twenty tiny
+     chunks is deliberately more than a single frame could plausibly coalesce
+     on a slow CI machine, so this is a real stress case, not a token one.
+     Read from CHATS, not #aiLive: the live bubble is only the in-progress
+     element while streaming, and is gone by the time a turn finishes — the
+     mid-stream-error test above reads its result the same way, from the
+     finalised message the panel actually keeps. */
+  queued.length = 0;
+  const manyChunks = Array.from({ length: 20 }, (_, i) => 'w' + i + ' ');
+  const fullReply = manyChunks.join('');
+  queued.push(manyChunks.map(c => 'data: ' + JSON.stringify({ choices: [{ delta: { content: c } }] }) + '\n\n').join('') + 'data: [DONE]\n\n');
+  const finished = await page.evaluate(async () => {
+    AI.provider = 'mistral';
+    AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
+    CHATS['_general'] = []; S.screen = 'home';
+    buildAI();
+    fire('say a lot of little words');
+    for (let i = 0; i < 90 && aiBusy; i++) await new Promise(r => setTimeout(r, 120));
+    const last = (CHATS['_general'] || []).filter(m => !m.err).pop();
+    return last ? String(last.content || '') : null;
+  });
+  ok('the full, exact reply is on screen once streaming ends — no chunk lost to a throttle',
+     !!finished && finished.replace(/\s+/g, ' ').trim().includes(fullReply.trim().replace(/\s+/g, ' ')),
+     JSON.stringify(finished && finished.slice(0, 90)));
+
+
   head('a config saved before Mistral existed gets a slot, and an existing key is not disturbed');
   /* The self-heal runs once, at script load — so proving the APP repairs this
      means saving the stale shape and reloading, not hand-patching AI. */
