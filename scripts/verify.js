@@ -72,6 +72,7 @@ const SUITES = [
   ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn'],
   ['failsafe',     'render() throwing shows a real screen, never a blank or frozen one'],
   ['content',      'a question broken in a way the fellow cannot see is never shipped silently'],
+  ['backup',       'a restored backup appears now, not only after the next launch'],
 ];
 
 const argv = process.argv.slice(2);
