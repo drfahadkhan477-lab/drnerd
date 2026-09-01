@@ -130,6 +130,9 @@ const ROOT = path.join(__dirname, '..');
      streamthrottle a streaming reply repaints on animation frames, not on
                    every network chunk — after mistral and gemini, whose
                    oneTurn* functions it wraps a shared painter around
+     contrastfix   the 46 sites using --dim for text anyone is expected to
+                   read move to the already-AA --muted, and every
+                   interactive element gets a :focus-visible ring
      failsafe      render() throwing stops meaning a blank or frozen
                    screen — last, so it wraps every earlier step's own
                    version of render() and boot's own render() call
@@ -141,7 +144,7 @@ const CHAIN = [
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
-  'studyflow', 'welcome', 'streamthrottle', 'failsafe',
+  'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
