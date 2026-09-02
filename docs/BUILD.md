@@ -50,49 +50,65 @@ The cost is that order matters, and the dependencies are real:
 |---|------|-----------|
 | 1 | `stage0` | stabilises the raw export — everything assumes it |
 | 2 | `keys` | six answer keys the export gets wrong, fixed before anything reads them |
-| 3 | `apex` | embeds `heart3d.js` and `apex.js`; the only place the heart enters |
-| 4–5 | `stage2`, `stage3` | FSRS-5 scheduling, then Apex's vision and memory |
-| 6 | `polish` | the rhythm registry the hero and Rhythm Lab both read |
-| 7 | `splash` | the pre-paint loading screen |
-| 8 | `braunwald` | the grounded reference library |
-| 9 | `art` | the design pass the later panels sit inside |
-| 10 | `leads` | the 12-lead — needs `art`'s panel styles |
-| 11 | `physio` | the cardiac cycle — anchors on the 12-lead's embed comment |
-| 12 | `name` | Systole |
-| 13 | `theme` | palettes — must follow `name`, it restyles the hero wordmark |
-| 14 | `home` | welcome bar, progress bar, layouts |
-| 15 | `splash-heart` | the mechanistic heart, into `splash`'s markup |
-| 16 | `crisp` | device-pixel ceilings |
-| 17 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
-| 18 | `type`  | the modular type scale, snapped over everything above |
-| 19 | `lab` | removes the Rhythm Lab's 3D heart — late, so what it deletes is final |
-| 20 | `review`| fixes from the full code review |
-| 21 | `refs` | the reference-note store, and the seeded library that ships with it |
-| 22 | `read` | the reading view those notes are read in |
-| 23 | `ref-images` | `refimg://`, so a note can cite a figure |
-| 24 | `gemini` | a third provider, with its own wire shape and model discovery |
-| 25 | `memory` | what Apex keeps about you between sessions |
-| 26 | `assets` | an imported chapter brings its figures — rewrites the importer, the renderer and the vision path, so it must follow all three |
-| 27 | `chatfigs` | the figure Apex reasons from appears in the answer — after `assets` and `ref-images`, whose work it rewrites |
-| 28 | `pearl` | one sentence from your own notes, on the home screen |
-| 29 | `homeflow` | home cut to the trace, the pearl and the progress bar; everything else behind a door — last, so it moves finished markup |
-| 30 | `pearlcard` | the pearl as a numbered ladder on ECG paper, and the `-webkit-` spellings Safari needs |
-| 31 | `offline` | one press pulls all 408 figures onto the device — under `homeflow`'s door row, and only alive in the split build |
-| 32 | `pvloop` | the pearl's strip becomes the pressure–volume loop the cardiac-cycle screen already computes |
-| 33 | `fullbleed` | the navigation bar leaves the reading column so its colour reaches both edges of an iPad, and reserves the strip the status bar sits in |
-| 34 | `figview` | a figure opens full size and closes four ways |
-| 35 | `slowcycle` | the cardiac cycle runs at a fraction of real time, with a speed control that does not pretend to be a heart rate |
-| 36 | `hosted` | Gemini moves behind the Cloudflare Worker, Groq and Anthropic stay bring-your-own-key — last, it rewrites what `gemini` built |
-| 37 | `split` | Apex sits beside the question in landscape and under it in portrait, never over it — last, it re-lays out screens every earlier step built |
-| 38 | `boundary` | a retrieved note is fenced with a per-turn nonce and named as data, not direction — after every earlier retrieval step, because it wraps the text they produce |
-| 39 | `toolfence` | the same fence on `search_question_bank`, the channel the model opens itself; and a failed request stops being something Apex said — after `boundary`, whose `refBlock`/`refSafe` it reuses |
-| 40 | `chatfix` | the panel keeps the sentence you were typing and the place you were reading, and sends a window of the thread rather than all of it |
-| 41 | `autotheme` | `auto` notices the system flipping, so the heart, the 12-lead and the cardiac cycle follow it instead of waiting for a reload |
-| 42 | `store` | ink, notes, chats and the review log move to IndexedDB — after every step that reads or writes through `loadJSON` |
-| 43 | `homewide` | the home screen fills a landscape iPad instead of a 960px column with 406px of dead space either side, and portrait stops being sized by the length of whichever pearl was picked |
-| 44 | `pearlrich` | a pearl is a whole thought — up to three sentences, median 143→295 characters — over a travelling ECG current instead of a corner PV loop; after `homewide`, which gives it a tall column to be long in |
-| 45 | `apexroom` | the tutor panel is spacious, its nine prompts are behind a button, and the two known iOS scroll traps are closed |
-| 46 | `mistral` | Groq and Anthropic leave, Mistral arrives BYOK and vision-capable — genuinely last, it revises code that `apex`, `gemini`, `hosted`, `memory`, `ref-images`, `toolfence`, `chatfix` and `apexroom` all touched |
+| 3 | `flags` | two questions whose lettered answer panels the export never shipped; flagged beside `keys`, for the same reason |
+| 4 | `apex` | embeds `heart3d.js` and `apex.js`; the only place the heart enters |
+| 5–6 | `stage2`, `stage3` | FSRS-5 scheduling, then Apex's vision and memory |
+| 7 | `polish` | the rhythm registry the hero and Rhythm Lab both read |
+| 8 | `splash` | the pre-paint loading screen |
+| 9 | `braunwald` | the grounded reference library |
+| 10 | `art` | the design pass the later panels sit inside |
+| 11 | `leads` | the 12-lead — needs `art`'s panel styles |
+| 12 | `physio` | the cardiac cycle — anchors on the 12-lead's embed comment |
+| 13 | `name` | Systole |
+| 14 | `theme` | palettes — must follow `name`, it restyles the hero wordmark |
+| 15 | `home` | welcome bar, progress bar, layouts |
+| 16 | `splash-heart` | the mechanistic heart, into `splash`'s markup |
+| 17 | `crisp` | device-pixel ceilings |
+| 18 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
+| 19 | `type` | the modular type scale, snapped over everything above |
+| 20 | `lab` | removes the Rhythm Lab's 3D heart — late, so what it deletes is final |
+| 21 | `review` | fixes from the full code review |
+| 22 | `refs` | the reference-note store, and the seeded library that ships with it |
+| 23 | `read` | the reading view those notes are read in |
+| 24 | `ref-images` | `refimg://`, so a note can cite a figure |
+| 25 | `gemini` | a third provider, with its own wire shape and model discovery |
+| 26 | `memory` | what Apex keeps about you between sessions |
+| 27 | `assets` | an imported chapter brings its figures — rewrites the importer, the renderer and the vision path, so it must follow all three |
+| 28 | `chatfigs` | the figure Apex reasons from appears in the answer — after `assets` and `ref-images`, whose work it rewrites |
+| 29 | `pearl` | one sentence from your own notes, on the home screen |
+| 30 | `homeflow` | home cut to the trace, the pearl and the progress bar; everything else behind a door — last, so it moves finished markup |
+| 31 | `pearlcard` | the pearl as a numbered ladder on ECG paper, and the `-webkit-` spellings Safari needs |
+| 32 | `offline` | one press pulls all 408 figures onto the device — under `homeflow`'s door row, and only alive in the split build |
+| 33 | `pvloop` | the pearl's strip becomes the pressure–volume loop the cardiac-cycle screen already computes |
+| 34 | `fullbleed` | the navigation bar leaves the reading column so its colour reaches both edges of an iPad, and reserves the strip the status bar sits in |
+| 35 | `figview` | a figure opens full size and closes four ways |
+| 36 | `slowcycle` | the cardiac cycle runs at a fraction of real time, with a speed control that does not pretend to be a heart rate |
+| 37 | `hosted` | Gemini moves behind the Cloudflare Worker, Groq and Anthropic stay bring-your-own-key — last, it rewrites what `gemini` built |
+| 38 | `split` | Apex sits beside the question in landscape and under it in portrait, never over it — last, it re-lays out screens every earlier step built |
+| 39 | `boundary` | a retrieved note is fenced with a per-turn nonce and named as data, not direction — after every earlier retrieval step, because it wraps the text they produce |
+| 40 | `toolfence` | the same fence on `search_question_bank`, the channel the model opens itself; and a failed request stops being something Apex said — after `boundary`, whose `refBlock`/`refSafe` it reuses |
+| 41 | `chatfix` | the panel keeps the sentence you were typing and the place you were reading, and sends a window of the thread rather than all of it |
+| 42 | `autotheme` | `auto` notices the system flipping, so the heart, the 12-lead and the cardiac cycle follow it instead of waiting for a reload |
+| 43 | `store` | ink, notes, chats and the review log move to IndexedDB — after every step that reads or writes through `loadJSON` |
+| 44 | `homewide` | the home screen fills a landscape iPad instead of a 960px column with 406px of dead space either side, and portrait stops being sized by the length of whichever pearl was picked |
+| 45 | `pearlrich` | a pearl is a whole thought — up to three sentences, median 143→295 characters — over a travelling ECG current instead of a corner PV loop; after `homewide`, which gives it a tall column to be long in |
+| 46 | `apexroom` | the tutor panel is spacious, its nine prompts are behind a button, and the two known iOS scroll traps are closed |
+| 47 | `mistral` | Groq and Anthropic leave, Mistral arrives BYOK and vision-capable — genuinely last, it revises code that `apex`, `gemini`, `hosted`, `memory`, `ref-images`, `toolfence`, `chatfix` and `apexroom` all touched |
+| 48 | `guards` | the quiz keyboard steps aside for a focused `<select>` — after `apexroom`, which is what put one over the quiz screen |
+| 49 | `chipfix` | `apexroom` hid `.chips` globally to fold the tutor's prompts away; the Lab and the search screen share that class and lost their rows. Scoped to `#aiChips` |
+| 50 | `quiznav` | a Previous button, and the per-question memory that makes going back safe without re-grading or re-scheduling |
+| 51 | `homeprog` | the home screen's progress bar becomes a card: a legend, a due-review pill, numbers that count up with the fill |
+| 52 | `chapters` | the Chapters grid uses its own stagger timing, and the bar transition gets a starting point to run from |
+| 53 | `studyflow` | the Signal/Focus/Grid switcher removed — it only ever affected Chapters despite the name — and the page's sections cascade in like the home screen's |
+| 54 | `welcome` | one dismissable line under the doors naming Chapters and Apex, for a first-time reader only — after `homeflow`, whose door row it sits beneath |
+| 55 | `streamthrottle` | a streaming reply repaints on animation frames, not on every network chunk — after `mistral` and `gemini`, whose `oneTurn*` functions it wraps a shared painter around |
+| 56 | `contrastfix` | the 46 sites using `--dim` for text anyone is expected to read move to the already-AA `--muted`, and every interactive element gains a `:focus-visible` ring |
+| 57 | `failsafe` | `render()` throwing stops meaning a blank or frozen screen — wraps every earlier step's own version of `render()`, and boot's own call |
+| 58 | `semantictokens` | `--accent`/`--success`/`--danger`/`--warning` become canonical; `--teal`, `--green`, `--red`, `--amber` and their `-2` variants become pure `var()` aliases — after `failsafe`, rewriting `theme`'s own settled literals |
+| 59 | `splashtiming` | the rhythm trace waits for the heart to settle instead of sweeping in parallel with it — after `splash-heart`, whose 1s settle it now sequences after |
+| 60 | `haptics` | a felt pulse alongside the correct/wrong feedback `selectOpt` already draws — feature-detected, and silent under `prefers-reduced-motion` |
+| 61 | `designfollowup` | `--warn`/`--warn-bg`/`--warn-b` become real aliases rather than four independently-restated literals (fixing a latent auto+dark mismatch), and the splash heart gets its own `@keyframes` back from a same-named collision |
+| 62 | `disclaimer` | the app says what it is — educational board review, not clinical decision support — in both of the Apex panel's states and on the Progress screen, and gains the `<main>` and `<h1>` landmarks it never had |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -287,8 +303,8 @@ node tests/verify-pwa.js http://localhost:8080
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 46 *-patch · build-pwa · serve · shots
-tests/        28 Playwright suites (27 single-file + pwa)
+scripts/      build · verify · 62 *-patch · build-pwa · serve · shots
+tests/        35 Playwright suites (34 single-file + pwa)
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
