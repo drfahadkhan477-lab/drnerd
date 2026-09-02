@@ -9,14 +9,14 @@
 # that can resolve the tags: the value wanted is the commit each tag points at,
 # with the version kept in a trailing comment.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1298 checks in
-# `node scripts/verify.js` plus 76 more under `--pwa`, this workflow runs 149.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1356 checks in
+# `node scripts/verify.js` plus 76 more under `--pwa`, this workflow runs 175.
 # The other 1052 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 1149 checks here. See docs/BUILD.md and the
+# there is no way to run those 1181 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
@@ -31,7 +31,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the five suites that are pure Node with no Playwright and no
+#   logic        the six suites that are pure Node with no Playwright and no
 #                built artifact at all: verify-fsrs.js (the scheduler — the
 #                math that decides when a card comes back), verify-worker.js
 #                (the Cloudflare Worker holding the Gemini key, driven
@@ -39,8 +39,10 @@
 #                events as real pressure crossings, isovolumetric phases that
 #                genuinely hold volume), verify-leads-pure.js (Einthoven and
 #                Goldberger, exact to floating point, every lead one dipole
-#                projected) and verify-zip.js (an imported archive cannot
-#                spend more memory than the device has). 149 real checks, up
+#                projected) verify-zip.js (an imported archive cannot spend
+#                more memory than the device has) and verify-calib-pure.js
+#                (the calibration arithmetic, which says nothing rather than
+#                something wrong on sparse data). 175 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -53,7 +55,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 1149 checks to this file is possible — GitHub Actions
+# Adding the other 1181 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -92,7 +94,7 @@ jobs:
         run: npm run suites
 
   logic:
-    name: logic — the scheduler, the Worker, the physiology and the 12-lead
+    name: logic — every suite that needs no browser and no build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,6 +111,8 @@ jobs:
         run: node tests/verify-leads-pure.js
       - name: the ZIP reader's memory ceiling (12 checks)
         run: node tests/verify-zip.js
+      - name: the calibration arithmetic (26 checks)
+        run: node tests/verify-calib-pure.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

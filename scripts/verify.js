@@ -81,6 +81,8 @@ const SUITES = [
   ['physio-pure',  'valves open on real pressure crossings, and isovolumetric means isovolumetric'],
   ['leads-pure',   "Einthoven and Goldberger hold exactly — every lead is one dipole, projected"],
   ['zip',          'an imported archive cannot spend more memory than the device has'],
+  ['calib-pure',   'the calibration arithmetic says nothing rather than something wrong'],
+  ['calibrate',    'confidence is an option not a gate, and a tagged miss updates one row'],
 ];
 
 const argv = process.argv.slice(2);

@@ -178,6 +178,16 @@ const ROOT = path.join(__dirname, '..');
                    The CME boilerplate this round also found is NOT here: it is
                    content, so it lives in flags-patch.js where a content fix
                    survives re-extraction.
+     calibrate     the review log stops recording only right-or-wrong: how long
+                   the answer took, how sure the fellow was before they gave
+                   it, and — after a miss — why they think they missed it.
+                   Three fields through logReview's one funnel, plus calib.js
+                   to read them back as calibration, pace and error mix on the
+                   Progress screen. Also finishes the WebGL context recovery
+                   `hardening` left half-wired, and fixes restoreQuizState
+                   inferring "answered" from an S.answers entry existing —
+                   which this step would otherwise have turned into a revealed
+                   answer for a question nobody answered.
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -188,7 +198,7 @@ const CHAIN = [
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
-  'curate',
+  'curate', 'calibrate',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
