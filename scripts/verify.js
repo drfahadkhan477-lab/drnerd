@@ -90,6 +90,7 @@ const SUITES = [
   ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
   ['selftest',     'the on-device self-test reports honestly, and can actually fail'],
+  ['layout',       'every screen fits, at every frame a real device produces'],
 ];
 
 const argv = process.argv.slice(2);
