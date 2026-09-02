@@ -92,7 +92,7 @@ jobs:
         run: npm run suites
 
   logic:
-    name: logic — the scheduler and the Worker, no build required
+    name: logic — the scheduler, the Worker, the physiology and the 12-lead
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
