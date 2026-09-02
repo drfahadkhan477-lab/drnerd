@@ -22,7 +22,7 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 1356 checks, 39 suites
+node scripts/verify.js                              # 1397 checks, 41 suites
 node scripts/verify.js --pwa                        # + 76 more on the split build
 ```
 
@@ -32,7 +32,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 1356 + 76 checks above — read it as 175, not 1432.**
+**That badge is not the 1397 + 76 checks above — read it as 191, not 1473.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does
@@ -43,7 +43,7 @@ present, and the two suites that are pure logic with zero build dependency —
 `verify-fsrs.js` (the scheduler, 38 checks) and `verify-worker.js` (the
 Cloudflare Worker holding the Gemini key, 51 checks) — both stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
-scope and why the other 1181 checks can't run here.
+scope and why the other 1206 checks can't run here.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why

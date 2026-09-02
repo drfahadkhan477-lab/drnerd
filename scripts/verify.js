@@ -83,6 +83,8 @@ const SUITES = [
   ['zip',          'an imported archive cannot spend more memory than the device has'],
   ['calib-pure',   'the calibration arithmetic says nothing rather than something wrong'],
   ['calibrate',    'confidence is an option not a gate, and a tagged miss updates one row'],
+  ['figzoom-pure', 'the point under your fingers does not move, over any number of pinches'],
+  ['figzoom',      'a figure can be examined, and still has four ways out'],
 ];
 
 const argv = process.argv.slice(2);
