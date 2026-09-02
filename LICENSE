@@ -1,0 +1,15 @@
+All rights reserved.
+
+This is a personal study tool. It is published here so its own source can be
+version-controlled and reviewed, not as a work offered for use, modification
+or redistribution. No licence is granted.
+
+It is built by patching a personal ACCSAP 12 export. That question bank — its
+stems, options, peer-response statistics, commentary and figures — is the
+copyrighted property of the American College of Cardiology and is NOT part of
+this repository. `content/`, `build/`, `dist/` and `source/` are gitignored
+for that reason, and scripts/build.js refuses to run without an export you
+supply yourself. Nothing here grants any right to ACCSAP content.
+
+The reference notes, the physiology and ECG models in src/core/, and the
+patch chain in scripts/ are the author's own work.

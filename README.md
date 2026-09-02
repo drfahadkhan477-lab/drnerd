@@ -1,6 +1,8 @@
 # drnerd
 
-This repository holds two unrelated projects.
+Personal project, not for redistribution — see `LICENSE`. The ACCSAP 12
+question bank it is built from is licensed content and is never committed
+here; `content/`, `build/`, `dist/` and `source/` are all gitignored.
 
 ## Systole — cardiology board review
 
@@ -20,7 +22,7 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 1238 checks, 34 suites
+node scripts/verify.js                              # 1298 checks, 37 suites
 node scripts/verify.js --pwa                        # + 76 more on the split build
 ```
 
@@ -30,7 +32,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 1238 + 76 checks above — read it as 89, not 1314.**
+**That badge is not the 1298 + 76 checks above — read it as 149, not 1374.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does

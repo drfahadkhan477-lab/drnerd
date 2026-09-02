@@ -74,6 +74,13 @@ const SUITES = [
   ['content',      'a question broken in a way the fellow cannot see is never shipped silently'],
   ['backup',       'a restored backup appears now, not only after the next launch'],
   ['tokens',       'the semantic colour names alias the legacy hue names, not just resemble them'],
+  /* The three below need no browser and no build — they load a src/ module
+     the way verify-fsrs does and assert properties over it. That is what lets
+     CI run them: CI has the repository but never the licensed export, so a
+     suite that needs build/systole.html cannot protect anything there. */
+  ['physio-pure',  'valves open on real pressure crossings, and isovolumetric means isovolumetric'],
+  ['leads-pure',   "Einthoven and Goldberger hold exactly — every lead is one dipole, projected"],
+  ['zip',          'an imported archive cannot spend more memory than the device has'],
 ];
 
 const argv = process.argv.slice(2);
