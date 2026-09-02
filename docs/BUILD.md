@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1496 + 76 checks
+node scripts/verify.js --pwa                           # → 1529 + 76 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -115,6 +115,7 @@ The cost is that order matters, and the dependencies are real:
 | 66 | `figzoom` | a figure stops being fitted-or-natural and becomes something you examine — pinch, wheel, drag to pan, double-tap, a control row and the keyboard, over `figzoom.js`'s zoom-about-a-point arithmetic. `figview`'s four ways out survive intact, which is most of what the event handling is for: a pan ends on the image, so without care the drag that moved the figure is also the tap that dismisses it |
 | 67 | `schema` | the saved blob carries a `DATA_SCHEMA_VERSION`, and `save()` preserves fields it does not recognise. Systole is a file you copy between your own devices, so two copies at different versions is the ordinary case — and until now the older one would silently drop whatever the newer one had added, the next time it wrote. Paired with `SCHEDULER_VERSION` in `fsrs.js`, which stamps each card with the model that scheduled it, pinned by a fingerprint of the FSRS weights so a tuning change cannot pass unnoticed |
 | 68 | `figfit` | two things a real iPad found, neither reachable by a synthetic test. **"Fit" did not fit**: the viewer image was `max-width` only, so a TALL figure overflowed into a clipped middle band — `figzoom` had replaced scrolling with transform panning, and panning is disabled while fitted because a fitted image is assumed whole. One `max-height:100%` makes scale 1 a true contain. **And the figures under an Apex answer had no control of any kind** — they arrived with the reply and stayed, taking a third of the panel. Now a disclosure, shut by default, following `apexChipsOpen` exactly: a module-level flag so it survives the re-render, a class toggle so a half-typed question is not destroyed |
+| 69 | `selftest` | the invariants run **on the device**, in the engine, at the size the iPad is actually held: open the app with `#selftest`. Both bugs that reached the fellow were invisible to 1,496 checks because the harness is Blink, portrait-ish, and a 400×300 rectangle — while the app is WebKit, landscape, and 408 real figures, 401 of which were clipped at "Fit". That gap cannot be closed from the harness, so the checks go to the device. It opens real figures and measures them rather than recomputing the sizing rule, which would agree with a wrong one |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -150,7 +151,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 44 suites, 1496 checks, plus 76 more on the split build. Those numbers are
+Across 45 suites, 1529 checks, plus 76 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
@@ -160,6 +161,26 @@ checks" for the same quantity.
 The suites run one at a time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
+
+### Checking a build on the device itself
+
+Open the app on the iPad and add `#selftest` to the URL — or tap **Run again** in
+the panel after rotating. It runs the invariants in real Safari, at the real
+size, in the orientation you are holding:
+
+```
+systole-9hq.pages.dev/#selftest        the hosted split build
+file:///…/systole.html#selftest        the single file
+```
+
+Five rows: the environment it is running in, whether every sampled figure fits
+the viewer at Fit, whether anything scrolls sideways, whether the Apex figures
+arrive folded, and whether annotations can actually be saved on this device.
+
+It is deliberately small. It cannot check that FSRS schedules correctly or that
+an answer key is right — those are settled exhaustively in Node and do not vary
+by device. It checks the things that only vary by device, which is exactly the
+set that has been reaching the fellow.
 
 ### Which engine they run in
 
@@ -347,7 +368,7 @@ node tests/verify-pwa.js http://localhost:8080
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 68 *-patch · build-pwa · serve · shots
+scripts/      build · verify · 69 *-patch · build-pwa · serve · shots
 tests/        35 Playwright suites (34 single-file + pwa)
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
