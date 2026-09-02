@@ -162,6 +162,13 @@ const ROOT = path.join(__dirname, '..');
                    11-inch iPad is the design, and a fourth block is what it
                    exists to refuse), and gains the <main> and <h1>
                    landmarks it had been missing entirely
+     announce      the quiz says what just happened: aria-pressed reports the
+                   user's own selection instead of the answer key (it was
+                   announcing the correct option as pressed), a permanent live
+                   region outside #app speaks the verdict, focus follows the
+                   reading order, ArrowLeft finally reaches the Previous
+                   button quiznav shipped without a key, and the last --dim
+                   on read text moves to --muted
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -171,7 +178,7 @@ const CHAIN = [
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
-  'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer',
+  'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

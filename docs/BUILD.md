@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1214 + 76 checks
+node scripts/verify.js --pwa                           # → 1227 + 76 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -52,7 +52,7 @@ The cost is that order matters, and the dependencies are real:
 | 2 | `keys` | six answer keys the export gets wrong, fixed before anything reads them |
 | 3 | `flags` | two questions whose lettered answer panels the export never shipped; flagged beside `keys`, for the same reason |
 | 4 | `apex` | embeds `heart3d.js` and `apex.js`; the only place the heart enters |
-| 5–6 | `stage2`, `stage3` | FSRS-5 scheduling, then Apex's vision and memory |
+| 5–6 | `stage2`, `stage3` | FSRS-5–derived scheduling, then Apex's vision and memory |
 | 7 | `polish` | the rhythm registry the hero and Rhythm Lab both read |
 | 8 | `splash` | the pre-paint loading screen |
 | 9 | `braunwald` | the grounded reference library |
@@ -109,6 +109,7 @@ The cost is that order matters, and the dependencies are real:
 | 60 | `haptics` | a felt pulse alongside the correct/wrong feedback `selectOpt` already draws — feature-detected, and silent under `prefers-reduced-motion` |
 | 61 | `designfollowup` | `--warn`/`--warn-bg`/`--warn-b` become real aliases rather than four independently-restated literals (fixing a latent auto+dark mismatch), and the splash heart gets its own `@keyframes` back from a same-named collision |
 | 62 | `disclaimer` | the app says what it is — educational board review, not clinical decision support — in both of the Apex panel's states and on the Progress screen, and gains the `<main>` and `<h1>` landmarks it never had |
+| 63 | `announce` | the quiz says what just happened: `aria-pressed` reports the user's own selection instead of the answer key, which had been announcing the correct option as pressed; a permanent live region outside `#app` speaks the verdict; focus follows the reading order; `ArrowLeft` reaches the Previous button `quiznav` shipped without a key; and the last `--dim` on read text moves to `--muted` |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -144,7 +145,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Thirty-four suites, 1214 checks, plus 76 more on the split build. They run one at a
+Thirty-four suites, 1227 checks, plus 76 more on the split build. They run one at a
 time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
@@ -163,6 +164,15 @@ no browser in it either. `verify-worker` drives the Cloudflare Worker's exported
 scheduler across the whole reachable state space rather than checking a handful
 of remembered numbers — it is what found that a lapse could make a card *more*
 durable.
+
+That finding is why the scheduler is described as FSRS-5–**derived** rather
+than FSRS-5. On the reference weights alone, 275 of 616 reachable states came
+out more durable after pressing Again than before it, and 136 of them
+scheduled the card *further out* than it already was. `fsrsNextStabilityFail`
+therefore caps the result at the stability it started from
+(`src/core/fsrs.js`, which carries the full reasoning). Everything else
+follows FSRS-5 as published; this one clamp does not, deliberately, and
+calling the whole thing canonical would misdescribe it.
 
 Of the rest, `verify-boundary` imports a note whose title, tags and body are all
 trying to end the app's framing and give orders, fires a real turn — including
@@ -303,7 +313,7 @@ node tests/verify-pwa.js http://localhost:8080
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 62 *-patch · build-pwa · serve · shots
+scripts/      build · verify · 63 *-patch · build-pwa · serve · shots
 tests/        35 Playwright suites (34 single-file + pwa)
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```

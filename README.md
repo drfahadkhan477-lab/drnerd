@@ -7,7 +7,7 @@ This repository holds two unrelated projects.
 A single-file study app for the ABIM cardiovascular boards, built by patching a
 personal ACCSAP 12 export. A procedural WebGL heart that beats on a real cardiac
 clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
-(Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5
+(Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5–derived
 spaced repetition, and Apex — an AI tutor that can be grounded in your own
 reference notes, reads the figures they cite, and remembers you between
 sessions.
@@ -20,7 +20,7 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 1214 checks, 34 suites
+node scripts/verify.js                              # 1227 checks, 34 suites
 node scripts/verify.js --pwa                        # + 76 more on the split build
 ```
 
@@ -30,7 +30,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 1214 + 76 checks above — read it as 89, not 1290.**
+**That badge is not the 1227 + 76 checks above — read it as 89, not 1303.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does
@@ -41,7 +41,7 @@ present, and the two suites that are pure logic with zero build dependency —
 `verify-fsrs.js` (the scheduler, 38 checks) and `verify-worker.js` (the
 Cloudflare Worker holding the Gemini key, 51 checks) — both stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
-scope and why the other 1125 checks can't run here.
+scope and why the other 1138 checks can't run here.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why
