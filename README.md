@@ -20,8 +20,8 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 1201 checks, 34 suites
-node scripts/verify.js --pwa                        # + 75 more on the split build
+node scripts/verify.js                              # 1214 checks, 34 suites
+node scripts/verify.js --pwa                        # + 76 more on the split build
 ```
 
 **The question bank is licensed content and is not in this repository.** It
@@ -30,7 +30,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 1201 + 76 checks above — read it as 89, not 1277.**
+**That badge is not the 1214 + 76 checks above — read it as 89, not 1290.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does
@@ -41,7 +41,7 @@ present, and the two suites that are pure logic with zero build dependency —
 `verify-fsrs.js` (the scheduler, 38 checks) and `verify-worker.js` (the
 Cloudflare Worker holding the Gemini key, 51 checks) — both stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
-scope and why the other 1112 checks can't run here.
+scope and why the other 1125 checks can't run here.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why
@@ -49,5 +49,20 @@ scope and why the other 1112 checks can't run here.
 - **[docs/REFERENCE-GUIDE.md](docs/REFERENCE-GUIDE.md)** — writing reference notes for Apex, with [three worked examples](docs/reference-examples/)
 
 Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.
+
+### The figure tools
+
+`tools/` holds two Python scripts used once, when the figures were first pulled
+out of the export — `visual-atlas.py` (extraction and OCR) and
+`trim-figure.py` (whitespace trimming). Neither is part of the build or the
+test suite; nothing in `scripts/verify.js` touches them. They need more than
+the standard library, which nothing said until now:
+
+```bash
+pip install Pillow numpy
+# visual-atlas.py shells out to tesseract for the OCR pass:
+sudo apt-get install -y tesseract-ocr     # Debian/Ubuntu
+brew install tesseract                    # macOS
+```
 
 ---
