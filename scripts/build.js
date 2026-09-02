@@ -211,6 +211,14 @@ const ROOT = path.join(__dirname, '..');
                    figures under an Apex answer had no control of any kind —
                    they arrived with the reply and stayed. Now a disclosure,
                    shut by default, following apexChipsOpen exactly
+
+     selftest      the invariants run on the device, in the engine, at the size
+                   the iPad is actually held: open the app with #selftest. Both
+                   bugs that reached the fellow were invisible to 1,496 checks
+                   because the harness is Blink, portrait-ish, and a 400x300
+                   rectangle — and the app is WebKit, landscape, and 408 real
+                   figures. That gap cannot be closed from the harness, so the
+                   checks go to the device instead
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -221,7 +229,7 @@ const CHAIN = [
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
-  'curate', 'calibrate', 'figzoom', 'schema', 'figfit',
+  'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

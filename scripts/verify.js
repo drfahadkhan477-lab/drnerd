@@ -89,6 +89,7 @@ const SUITES = [
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
   ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
+  ['selftest',     'the on-device self-test reports honestly, and can actually fail'],
 ];
 
 const argv = process.argv.slice(2);
