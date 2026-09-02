@@ -167,5 +167,46 @@ head('the general rule can actually fail — proven against a deliberately broke
   }
 }
 
+head('the CME administration boilerplate is gone from the teaching text');
+/* From the second "molecular" external audit — the one finding in it worth
+   acting on. 19 explanations ended with ACCSAP's course-credit administration
+   sentence, which is not cardiology: it is the CME paperwork notice, and it
+   also lands in whatever Apex retrieves when it reads an explanation. */
+{
+  const PHRASE = 'If you meet the minimum passing score';
+  const dirty = REAL_BANK.filter(q => (q.ex || '').includes(PHRASE));
+  ok('no explanation in the shipped bank still carries it',
+     dirty.length === 0, dirty.length ? `${dirty.length}: ${dirty.slice(0, 6).map(q => q.id).join(', ')}…` : '');
+
+  /* Not just "gone" — gone WITHOUT taking teaching text with it. Rebuild the
+     boilerplate onto a clean bank and confirm the stripper returns exactly
+     what was there before, byte for byte. */
+  const TAIL = ' If you meet the minimum passing score, you will receive the designated ' +
+               'credit(s) after completion of the course evaluation.';
+  const bank = clone();
+  const victims = bank.filter(q => (q.ex || '').length > 40).slice(0, 5);
+  const before = victims.map(q => q.ex);
+  victims.forEach(q => { q.ex = q.ex + TAIL; });
+  applyContentFlags(bank);
+  ok('stripping restores the explanation exactly, losing no teaching text',
+     victims.every((q, i) => q.ex === before[i]),
+     victims.map((q, i) => q.ex === before[i] ? '' : q.id).filter(Boolean).join(', '));
+
+  /* Idempotence matters because applyContentFlags runs in both builds. */
+  const twice = clone();
+  applyContentFlags(twice);
+  const once = JSON.stringify(twice);
+  applyContentFlags(twice);
+  ok('a second strip pass changes nothing', once === JSON.stringify(twice));
+
+  /* And it must not fire on an explanation that merely mentions a score. */
+  const decoy = clone();
+  const d = decoy.find(q => (q.ex || '').length > 40);
+  d.ex = 'A minimum passing score of 50% was used in the trial.';
+  applyContentFlags(decoy);
+  ok('an explanation that only mentions a passing score is left alone',
+     decoy.find(q => q.id === d.id).ex === 'A minimum passing score of 50% was used in the trial.');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

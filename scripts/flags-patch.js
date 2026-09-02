@@ -64,6 +64,44 @@ const FLAGS = [
   },
 ];
 
+/* ── the CME administration boilerplate ──────────────────────────────────
+   19 explanations end with ACCSAP's course-credit paperwork notice. It is not
+   cardiology, it is not commentary on the question, and it reaches the fellow
+   at the bottom of the teaching text every time one of those 19 comes up —
+   and reaches Apex too, because the explanation is what the tutor retrieves.
+   Found by an external audit; verified at exactly 19 occurrences of one
+   single variant, always trailing, always preceded by a space.
+
+   Anchored on the sentence opening rather than matched whole, so a trailing
+   variant that differs in its second half is still removed rather than
+   silently surviving. Deliberately NOT a general regex over the bank: it
+   deletes from a known phrase to end-of-string and nothing else, which is
+   why the test can prove no teaching text is lost.
+
+   Only this administrative sentence is stored here — no question text, no
+   explanation text. Same side of the licensed-content line as FLAGS. */
+const CME_BOILERPLATE = 'If you meet the minimum passing score';
+
+function stripBoilerplate(bank) {
+  const stripped = [];
+  for (const q of bank) {
+    const ex = q.ex;
+    if (typeof ex !== 'string') continue;
+    const i = ex.indexOf(CME_BOILERPLATE);
+    if (i < 0) continue;
+    /* Only when it runs to the end. If ACCSAP ever embeds this mid-paragraph
+       with real teaching after it, cutting to end-of-string would delete that
+       teaching — so leave it and let the test's count assertion fail loudly
+       rather than quietly lose commentary. */
+    if (!/[.\s]*$/.test(ex.slice(i)) || !ex.slice(i).endsWith('.')) continue;
+    const kept = ex.slice(0, i).replace(/\s+$/, '');
+    if (kept === ex) continue;
+    q.ex = kept;
+    stripped.push(q.id);
+  }
+  return stripped;
+}
+
 /* Apply every flag to a parsed bank, in place. Returns what it changed.
    Shared with build-pwa.js so the split build gets the same treatment — the
    answer keys were corrected in one build and not the other for exactly as
@@ -71,6 +109,16 @@ const FLAGS = [
 function applyContentFlags(bank) {
   const byId = new Map(bank.map(q => [q.id, q]));
   const applied = [];
+
+  /* Folded in here rather than exported as a second step the caller must
+     remember: this file's own history is that a content correction with two
+     call sites got applied to one build and not the other. One consumer.
+
+     Reported alongside `applied` rather than inside it. `applied` means "one
+     line per FLAGS entry" — verify-content.js asserts applied.length ===
+     FLAGS.length, and that assertion is worth more than the convenience of
+     one flat list. */
+  const stripped = stripBoilerplate(bank);
   for (const f of FLAGS) {
     const q = byId.get(f.id);
     if (!q) throw new Error(`[${f.id}] not in the bank`);
@@ -99,12 +147,13 @@ function applyContentFlags(bank) {
       else { q.bad = f.bad; applied.push(`${f.id}  marked bad: ${f.bad.slice(0, 56)}…`); }
     }
   }
+  applied.stripped = stripped;
   return applied;
 }
 
 const ALL_Q_RE = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/;
 
-module.exports = { FLAGS, applyContentFlags, ALL_Q_RE };
+module.exports = { FLAGS, applyContentFlags, stripBoilerplate, CME_BOILERPLATE, ALL_Q_RE };
 
 if (require.main === module) {
   const SRC = process.argv[2], OUT = process.argv[3];
@@ -121,6 +170,9 @@ if (require.main === module) {
   fs.writeFileSync(OUT, html);
 
   console.log(`Content flags applied — ${applied.length} edit(s)`);
+  if (applied.stripped && applied.stripped.length) {
+    console.log(`  ✓ CME credit boilerplate stripped from ${applied.stripped.length} explanation(s)`);
+  }
   applied.forEach(a => console.log('  ✓ ' + a));
   console.log(`written: ${OUT}`);
 }
