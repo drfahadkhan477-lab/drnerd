@@ -1,13 +1,25 @@
 # Systole CI — the honest subset.
 #
-# ACTIONS ARE ON FLOATING TAGS (@v4), NOT PINNED SHAS. Two external reviews
-# asked for SHA pins and they are right that a tag can be moved under you.
-# Not done here because the SHAs could not be verified from this environment —
-# GitHub access is scoped to this repository, so actions/checkout could not be
-# read — and a pin to a SHA nobody checked fails every job on the first run,
-# which is worse than the risk it is meant to remove. Pin them from a machine
-# that can resolve the tags: the value wanted is the commit each tag points at,
-# with the version kept in a trailing comment.
+# ACTIONS ARE PINNED TO COMMIT SHAS, NOT TO TAGS. A tag is a moveable label:
+# whoever controls the action's repository can repoint @v4 at different code,
+# and every job here would run it on the next push without a diff to notice.
+# Two external reviews asked for this and were right.
+#
+# It sat unpinned for a while because a pin to a SHA nobody has checked fails
+# every job on its first run, which is worse than the risk it removes, and the
+# tags could not be resolved from where the workflow was being edited. They can
+# be now, so each SHA below was resolved AND verified to be a commit object
+# (not an annotated tag object, which would not work) before being written in.
+#
+# TO UPDATE ONE, resolve the tag and confirm the object type first:
+#
+#   git ls-remote https://github.com/actions/checkout refs/tags/v4
+#   git ls-remote https://github.com/actions/checkout 'refs/tags/v4^{}'
+#
+# If the second command prints nothing the tag is lightweight and the first
+# SHA is the commit; if it prints a different SHA, that peeled one is the
+# commit and the one to use. Keep the human-readable version in the trailing
+# comment — it is the only thing that makes the pin auditable at a glance.
 #
 # READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1529 checks in
 # `node scripts/verify.js` plus 76 more under `--pwa`, this workflow runs 247.
@@ -83,8 +95,8 @@ jobs:
     name: syntax — every file parses, both listings work
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
       - name: every .js file parses
@@ -106,8 +118,8 @@ jobs:
     name: logic — every suite that needs no browser and no build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
       - name: FSRS-5–derived scheduling (46 checks)
@@ -133,8 +145,8 @@ jobs:
     name: build-guard — refuses to run without the licensed source
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
       - name: build.js exits non-zero and explains why, with no source present
