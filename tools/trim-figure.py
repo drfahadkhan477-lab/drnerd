@@ -105,9 +105,38 @@ def find_trim(path):
     return cut, f'{kept} rows of page text, {cut}px ({cut/h:.0%})'
 
 
+def apply_crops(root):
+    """Replay tools/figure-crops.json onto an extracted content/refs-images.
+
+    The images are licensed and gitignored, so a crop made by hand is lost the
+    moment they are regenerated unless it is recorded as data. Idempotent: a
+    file already at the cropped size is left alone, so running this twice does
+    not crop twice."""
+    import json
+    here = os.path.dirname(os.path.abspath(__file__))
+    spec = json.load(open(os.path.join(here, 'figure-crops.json')))
+    for key, c in spec['crops'].items():
+        f = os.path.join(root, key)
+        if not os.path.exists(f):
+            print(f'miss  {key} — not extracted here'); continue
+        im = Image.open(f)
+        want = (c['box'][2] - c['box'][0], c['box'][3] - c['box'][1])
+        if im.size == tuple(want):
+            print(f'done  {key} already {im.size[0]}x{im.size[1]}'); continue
+        if im.size != tuple(c['was']):
+            print(f'SKIP  {key} is {im.size[0]}x{im.size[1]}, not the '
+                  f'{c["was"][0]}x{c["was"][1]} this box was measured on'); continue
+        im.crop(tuple(c['box'])).convert('RGB').save(
+            f, 'JPEG', quality=92, optimize=True, subsampling=0)
+        print(f'CROP  {key} {c["was"][0]}x{c["was"][1]} -> {want[0]}x{want[1]}')
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     report = '--report' in sys.argv
+    if '--apply-crops' in sys.argv:
+        apply_crops(args[0] if args else 'content/refs-images')
+        return
     if '--dir' in sys.argv:
         src, dst = args[0], args[1]
         os.makedirs(dst, exist_ok=True)
