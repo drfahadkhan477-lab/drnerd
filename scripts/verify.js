@@ -286,7 +286,24 @@ if (flag('--pwa')) {
     process.exit(1);
   }
   console.log(`\n  pwa: ${m[1]} checks, all green\n`);
-  if (!blockers.length) writeStats(+m[1]);
+
+  /* The Worker Pages actually runs, against the directory just built. Here
+     rather than in the suite list because it needs dist/ to exist and to be
+     fresh — verify-pwa serves that directory with a plain static server and
+     never touches _worker.js, which in advanced mode owns every request to the
+     project. A deployment went down once while that path had no test at all. */
+  const wk = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pages.js'),
+                                          path.join(ROOT, 'dist')], { encoding: 'utf8' });
+  const wout = (wk.stdout || '') + (wk.stderr || '');
+  const wm = wout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
+  for (const ln of wout.split('\n')) if (/^\s*FAIL\s/.test(ln)) console.log(ln);
+  if (!wm || +wm[2] > 0 || wk.status !== 0) {
+    console.log(`\n  pages FAILED\n`);
+    process.exit(1);
+  }
+  console.log(`  pages: ${wm[1]} checks on the Worker, all green\n`);
+
+  if (!blockers.length) writeStats(+m[1] + +wm[1]);
 }
 
 /* Deferred to here so a stale record still gets rewritten above, but never
