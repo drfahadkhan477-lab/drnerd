@@ -247,6 +247,103 @@ const sse = text => [
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.waitForTimeout(250);
 
+  head('the figures can be put away — they arrive shut and fold back');
+  {
+    /* Reported from an iPad: the figures appeared with the reply, took a third
+       of the panel, and had no control of any kind. On a landscape split the
+       answer you asked for sat four lines above pictures you did not. */
+    await page.evaluate(() => { S.screen = 'home'; });
+    const shut = await ask(false);
+    const start = await page.evaluate(() => {
+      const wrap = document.querySelector('.fig-strip');
+      const btn = document.getElementById('aiFigs');
+      const list = document.getElementById('aiFigList');
+      if (!wrap || !btn || !list) return null;
+      return {
+        open: wrap.classList.contains('open'),
+        display: getComputedStyle(list).display,
+        tag: btn.tagName, expanded: btn.getAttribute('aria-expanded'),
+        controls: btn.getAttribute('aria-controls'),
+        label: btn.textContent.trim(),
+        listH: Math.round(list.getBoundingClientRect().height),
+      };
+    });
+    ok('the strip has a control at all', start !== null);
+    ok('and it is a button, not a label somebody has to guess is tappable',
+       !!start && start.tag === 'BUTTON', start ? start.tag : '—');
+    ok('it arrives shut', !!start && start.open === false);
+    ok('so the figures take no height until asked for',
+       !!start && start.display === 'none' && start.listH === 0,
+       start ? `${start.display}, ${start.listH}px` : '—');
+    ok('the collapsed row still says how many are behind it',
+       !!start && /^\d+ figures? from those notes$/.test(start.label), start ? start.label : '—');
+    ok('and it is wired to the list it controls, for a screen reader',
+       !!start && start.expanded === 'false' && start.controls === 'aiFigList',
+       start ? `${start.expanded} / ${start.controls}` : '—');
+    ok('the figures are really there, just folded', shut.figs >= 1, `${shut.figs} figure(s)`);
+
+    /* Guarded, not dereferenced. On a build without this step every one of
+       these throws out of page.evaluate and takes the rest of the FILE with
+       it — the six honest failures above became a crash the first time this
+       was pointed at the pre-step build. */
+    const noCtl = { open: null, display: null, listH: -1, expanded: null };
+    const opened = await page.evaluate(() => {
+      const b = document.getElementById('aiFigs');
+      if (!b) return { open: null, display: null, listH: -1, expanded: null };
+      b.click();
+      const list = document.getElementById('aiFigList');
+      return {
+        open: document.querySelector('.fig-strip').classList.contains('open'),
+        display: getComputedStyle(list).display,
+        listH: Math.round(list.getBoundingClientRect().height),
+        expanded: document.getElementById('aiFigs').getAttribute('aria-expanded'),
+      };
+    });
+    ok('one tap opens them', opened.open === true && opened.display !== 'none', String(opened.display));
+    ok('and they occupy real height once open', opened.listH > 40, `${opened.listH}px`);
+    ok('with aria-expanded following', opened.expanded === 'true');
+
+    /* The whole reason this is a class toggle rather than a buildAI(): the
+       panel re-renders from scratch, and a rebuild here would throw away a
+       half-written question. The chips control already avoids it this way. */
+    const draft = await page.evaluate(() => {
+      const ta = document.getElementById('aiIn');
+      if (!ta) return null;
+      ta.value = 'half-typed question';
+      const b = document.getElementById('aiFigs');
+      if (b) { b.click(); b.click(); }
+      return document.getElementById('aiIn').value;
+    });
+    ok('toggling does not discard what you were typing', draft === 'half-typed question', String(draft));
+
+    const closed = await page.evaluate(() => {
+      const btn = document.getElementById('aiFigs');
+      const wrap = document.querySelector('.fig-strip');
+      const list = document.getElementById('aiFigList');
+      if (!btn || !wrap || !list) return { open: null, display: null };
+      if (wrap.classList.contains('open')) btn.click();
+      return { open: wrap.classList.contains('open'), display: getComputedStyle(list).display };
+    });
+    ok('and tapping again folds them away', closed.open === false && closed.display === 'none');
+
+    /* buildAI() runs several times per exchange. A flag held in the DOM would
+       be reset by every one of them, so opening the figures would not survive
+       the next token of the next answer. */
+    const survives = await page.evaluate(() => {
+      const b = document.getElementById('aiFigs');
+      if (!b) return { open: null, expanded: null };
+      b.click();
+      buildAI();
+      const after = document.getElementById('aiFigs');
+      return {
+        open: !!document.querySelector('.fig-strip.open'),
+        expanded: after ? after.getAttribute('aria-expanded') : null,
+      };
+    });
+    ok('once opened, a panel re-render leaves them open', survives.open === true);
+    ok('and the control re-renders in the state it was left in', survives.expanded === 'true');
+  }
+
   head('the strip is evidence, not furniture');
   const empty = await page.evaluate(() => {
     delete CHATS['_general']; saveJSON(AI_CHAT, CHATS);

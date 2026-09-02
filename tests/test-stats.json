@@ -2,7 +2,7 @@
   "_generated": "by scripts/verify.js on a full green run — do not hand-edit",
   "engine": "chromium",
   "suiteCount": 44,
-  "total": 1473,
+  "total": 1496,
   "pwa": 76,
   "suites": {
     "stage0": 27,
@@ -24,7 +24,7 @@
     "gemini": 52,
     "memory": 49,
     "assets": 31,
-    "chatfigs": 25,
+    "chatfigs": 39,
     "pearl": 64,
     "worker": 52,
     "fsrs": 46,
@@ -45,7 +45,7 @@
     "calib-pure": 26,
     "calibrate": 32,
     "figzoom-pure": 16,
-    "figzoom": 29,
+    "figzoom": 38,
     "engine": 23,
     "schema": 17,
     "stats": 24
