@@ -203,6 +203,14 @@ const ROOT = path.join(__dirname, '..');
                    different versions is the ordinary case — and until now the
                    older one would silently drop whatever the newer one had
                    added, the next time it wrote.
+
+     figfit        two things a real iPad found. "Fit" did not fit: the viewer
+                   image was max-width-only, so a TALL figure overflowed into a
+                   clipped middle band with no scroll (figzoom had removed it)
+                   and no pan (a fitted image is assumed whole). And the
+                   figures under an Apex answer had no control of any kind —
+                   they arrived with the reply and stayed. Now a disclosure,
+                   shut by default, following apexChipsOpen exactly
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -213,7 +221,7 @@ const CHAIN = [
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
-  'curate', 'calibrate', 'figzoom', 'schema',
+  'curate', 'calibrate', 'figzoom', 'schema', 'figfit',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

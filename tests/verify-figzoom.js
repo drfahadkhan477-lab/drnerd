@@ -246,6 +246,66 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('it still opens', peek.opened === true);
   ok('and has no zoom controller attached', peek.controller === null, String(peek.controller));
 
+  head('a TALL figure is whole at Fit — the state that promises it');
+  {
+    /* The bug this defends against shipped and was found on an iPad, not here:
+       max-width:100% fits the WIDTH and says nothing about the height, so a
+       book-page crop overflowed. Every figure in the suite until now was wider
+       than it was tall, which is why nothing noticed. */
+    await page.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      closePeek();
+      openFigure('data:image/svg+xml,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="2000">' +
+        '<rect width="300" height="2000" fill="%23888"/>' +
+        '<rect y="0" width="300" height="40" fill="%23f00"/>' +
+        '<rect y="1960" width="300" height="40" fill="%2300f"/></svg>'
+      ), 'A tall figure', 'Source');
+      for (let i = 0; i < 40 && !document.querySelector('.figv-scroll img'); i++) await wait(25);
+      await wait(120);
+    });
+    const tall = await page.evaluate(() => {
+      const img = document.querySelector('.figv-scroll img');
+      const box = document.querySelector('.figv-scroll');
+      if (!img || !box) return null;
+      const i = img.getBoundingClientRect(), b = box.getBoundingClientRect();
+      return {
+        fitted: !!(__fz() && __fz().state && __fz().state().scale === 1),
+        pct: (document.querySelector('.figv-pct') || {}).textContent,
+        overflowTop: b.top - i.top, overflowBottom: i.bottom - b.bottom,
+        imgH: Math.round(i.height), boxH: Math.round(b.height),
+        imgW: Math.round(i.width), boxW: Math.round(b.width),
+      };
+    });
+    ok('the tall figure opened', tall !== null);
+    ok('and the controller really is at scale 1, not merely reporting it',
+       !!tall && tall.fitted === true);
+    /* Both ends, because flex centring splits the overflow: the old failure
+       showed a band from the middle, not a top-anchored crop. */
+    ok('its top edge is not clipped', !!tall && tall.overflowTop <= 1, tall ? `${Math.round(tall.overflowTop)}px above the frame` : '—');
+    ok('nor its bottom edge', !!tall && tall.overflowBottom <= 1, tall ? `${Math.round(tall.overflowBottom)}px below the frame` : '—');
+    ok('so the whole height sits inside the viewer',
+       !!tall && tall.imgH <= tall.boxH + 1, tall ? `${tall.imgH}px in ${tall.boxH}px` : '—');
+    ok('and it is still reported as 100%, because fitted is what it now is',
+       !!tall && tall.pct === '100%', tall ? String(tall.pct) : '—');
+    ok('the aspect ratio is intact — contained, not squashed',
+       !!tall && Math.abs(tall.imgW / tall.imgH - 300 / 2000) < 0.02,
+       tall ? `${tall.imgW}x${tall.imgH}` : '—');
+
+    /* A wide figure must not have been shrunk by the same rule: max-height
+       only ever caps, and the common case was already correct. */
+    await openFig();
+    const wide = await page.evaluate(() => {
+      const i = document.querySelector('.figv-scroll img').getBoundingClientRect();
+      const b = document.querySelector('.figv-scroll').getBoundingClientRect();
+      return { w: Math.round(i.width), h: Math.round(i.height), bw: Math.round(b.width), bh: Math.round(b.height) };
+    });
+    ok('a wide figure is unchanged by the fix', wide.w <= wide.bw + 1 && wide.h <= wide.bh + 1,
+       `${wide.w}x${wide.h} in ${wide.bw}x${wide.bh}`);
+    ok('and keeps its own aspect ratio too',
+       Math.abs(wide.w / wide.h - 400 / 300) < 0.02, `${wide.w}x${wide.h}`);
+  }
+
   head('no stray errors');
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
