@@ -169,6 +169,15 @@ const ROOT = path.join(__dirname, '..');
                    reading order, ArrowLeft finally reaches the Previous
                    button quiznav shipped without a key, and the last --dim
                    on read text moves to --muted
+     curate        the double-tap trap stops being document-wide (it was
+                   swallowing pinch and double-tap zoom on figures), the hero
+                   rotation stops while the page is hidden, the question card
+                   gains the accessible name it needed once it started taking
+                   focus, and two names that lied — reviewQueue's "cap", and
+                   "storage marked persistent" — start telling the truth.
+                   The CME boilerplate this round also found is NOT here: it is
+                   content, so it lives in flags-patch.js where a content fix
+                   survives re-extraction.
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -179,6 +188,7 @@ const CHAIN = [
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
+  'curate',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

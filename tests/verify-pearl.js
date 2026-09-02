@@ -227,7 +227,8 @@ const head = t => console.log('\n── ' + t + ' ──');
     const cv = document.getElementById('pearlCurrent');
     if (!cv) return null;
     const r = cv.getBoundingClientRect();
-    const card = document.querySelector('.pearl-card').getBoundingClientRect();
+    const cardEl = document.querySelector('.pearl-card');
+    const card = cardEl.getBoundingClientRect();
     const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
     /* Where the ink actually lands, as a fraction of the canvas height: the
        trace is meant to run along the FOOT of the card, under the prose. */
@@ -243,7 +244,14 @@ const head = t => console.log('\n── ' + t + ' ──');
     return {
       mounted: !!pearlTrace,
       lit, topOfInk: lowest, bottomOfInk: highest,
-      fullWidth: Math.abs(r.width - card.width) < 2,
+      /* Against the card's CONTENT box, not its border box. The card has a
+         1px border either side, so a canvas that fills it perfectly measures
+         exactly 2px narrower than the border box — and the old `< 2` fudge
+         sat exactly on that boundary, passing or failing on which side of a
+         reflow it happened to sample. clientWidth removes the fudge: the
+         canvas fills the content box to the pixel, so this is now a tighter
+         assertion, not a looser one. */
+      fullWidth: Math.abs(r.width - cardEl.clientWidth) < 1,
       backing: r.width ? cv.width / r.width : 0,
       dpr: window.devicePixelRatio,
       behind: +getComputedStyle(cv).zIndex === 0 &&

@@ -578,6 +578,92 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('it uses the legible --muted tier instead',
      /--muted/.test(pct.color || ''), JSON.stringify(pct));
 
+
+  head('touch: the double-tap trap is scoped, not global');
+  /* Three consecutive audits flagged a document-wide touchend that
+     preventDefaults any second tap — it suppressed iOS double-tap zoom on
+     figures too, the gesture a fellow reaches for on an ECG.
+
+     Its own page, with hasTouch, for two reasons this test learned the hard
+     way: without touch support Chromium does not deliver synthetic
+     TouchEvents to the listener at all (so the check passes whether the fix
+     is there or not), and the handler needs now-lastTap to be BOTH <350 and
+     >0, so two dispatches in the same millisecond never trigger it. */
+  {
+    const touchPage = await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true });
+    await touchPage.goto(URL, { waitUntil: 'load', timeout: 250000 });
+    await touchPage.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
+                                    { timeout: 150000 });
+    const touch = await touchPage.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const doubleTap = async (el) => {
+        const mk = () => new TouchEvent('touchend', { bubbles: true, cancelable: true });
+        el.dispatchEvent(mk());
+        await wait(60);
+        const second = mk();
+        el.dispatchEvent(second);
+        return second.defaultPrevented;
+      };
+      goHome(); render();
+      const loose = document.createElement('div');
+      document.body.appendChild(loose);
+      const onPlainSurface = await doubleTap(loose);
+      loose.remove();
+
+      /* render() runs inside a view transition on a screen change, so the
+         quiz DOM is not there synchronously. Poll rather than guess. */
+      startQuiz(CHAPTERS[0], 'all');
+      for (let i = 0; i < 60 && !document.querySelector('.opt'); i++) await wait(50);
+      const optEl = document.querySelector('.opt');
+      const onOption = optEl ? await doubleTap(optEl) : null;
+      return { onPlainSurface, onOption, foundOption: !!optEl };
+    });
+    await touchPage.close();
+    ok('a rapid double tap on a plain surface is no longer swallowed',
+       touch.onPlainSurface === false, JSON.stringify(touch));
+    ok('but it is still suppressed on a quiz option, where it misfires',
+       touch.onOption === true, JSON.stringify(touch));
+  }
+
+  head('perf: the hero rotation stops while the page is hidden');
+  const vis = await page.evaluate(() => {
+    goHome(); render();
+    const running = heroRotateTimer !== null;
+    document.dispatchEvent(new Event('visibilitychange'));
+    return { running, afterEvent: heroRotateTimer };
+  });
+  ok('the rotation timer is running on the home screen', vis.running, JSON.stringify(vis));
+  await page.evaluate(() => Object.defineProperty(document, 'visibilityState',
+    { configurable: true, get: () => 'hidden' }));
+  const hidden = await page.evaluate(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+    return heroRotateTimer;
+  });
+  ok('hiding the page clears it', hidden === null, String(hidden));
+  const shown = await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    return heroRotateTimer !== null;
+  });
+  ok('returning to a visible home screen restarts it', shown === true, String(shown));
+
+  head('a11y: the question card says which question it is');
+  const named = await page.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    goHome(); render();
+    /* render() goes through a view transition on a screen change, so the quiz
+       DOM is not present synchronously — reading it straight away returns the
+       home screen and the check passes or fails for the wrong reason. */
+    startQuiz(CHAPTERS[0], 'all');
+    for (let i = 0; i < 60 && !document.querySelector('.q-card'); i++) await wait(50);
+    const card = document.querySelector('.q-card');
+    const id = card ? card.getAttribute('aria-labelledby') : null;
+    const label = id ? document.getElementById(id) : null;
+    return { id, text: label ? label.textContent.trim() : null };
+  });
+  ok('.q-card is labelled by an element that exists', !!named.text, JSON.stringify(named));
+  ok('and that label names the question', /Question\s*\d+/.test(named.text || ''), named.text);
+
   head('regression: everything prior still functions');
   const reg = await page.evaluate(() => {
     goHome(); render();
