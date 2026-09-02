@@ -196,6 +196,13 @@ const ROOT = path.join(__dirname, '..');
                    event handling here is for — a pan ends on the image, so
                    without care the drag that moved the figure is also the tap
                    that dismisses it.
+
+     schema        the saved blob carries a DATA_SCHEMA_VERSION, and save()
+                   preserves fields it does not recognise. Systole is a file
+                   you copy between your own devices, so two copies at
+                   different versions is the ordinary case — and until now the
+                   older one would silently drop whatever the newer one had
+                   added, the next time it wrote.
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -206,7 +213,7 @@ const CHAIN = [
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
-  'curate', 'calibrate', 'figzoom',
+  'curate', 'calibrate', 'figzoom', 'schema',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

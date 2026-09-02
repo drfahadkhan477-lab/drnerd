@@ -37,6 +37,38 @@ const FSRS_W = [0.4072,1.1829,3.1262,15.4722,7.2102,0.5316,1.0651,0.0234,1.616,
 const FSRS_DECAY = -0.5;
 const FSRS_FACTOR = Math.pow(0.9, 1 / FSRS_DECAY) - 1;   // ≈0.234568, tuned so R(t=S)=0.9
 
+/* WHICH SCHEDULER WROTE A SCHEDULE.
+   A card stores `stability` and `ivl` — numbers, with no record of the model
+   that produced them. That is fine while the model never changes, and these
+   are the published FSRS-5 population defaults precisely because no deck here
+   has enough history to fit its own yet. The day one does, the weights change,
+   and every card already on disk was scheduled by a model that no longer
+   exists. Nothing today could tell those cards apart from fresh ones, so there
+   would be no way to decide whether to leave them, re-derive them, or let them
+   correct themselves over the next few reviews.
+
+   Stamped per card rather than once per store, because that is the truthful
+   granularity: a store accumulates cards over months and can easily span two
+   models, so a single stamp on the blob would be a lie about most of it. The
+   cost is ~5 bytes x 639 cards in a store that is bounded and small. */
+const SCHEDULER_VERSION = 1;
+
+/* And the forcing function, because a version somebody has to remember to
+   bump is a version that will be wrong. This hashes the numbers that actually
+   determine every interval the module produces; verify-fsrs.js pins the
+   result. Change a weight without bumping SCHEDULER_VERSION and the pin fails
+   and says so — the same bargain scripts/build.js makes with its exact-match
+   patches, and the same one SHELL_V makes by deriving itself from content.
+
+   FNV-1a: this module runs in a browser with no crypto import, and the job is
+   to notice a change, not to resist an adversary. */
+function fsrsParamsFingerprint() {
+  const src = FSRS_W.join(',') + '|' + FSRS_DECAY;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < src.length; i++) { h = Math.imul(h ^ src.charCodeAt(i), 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+
 function daysBetween(fromISO, toISO) {
   return Math.round((Date.parse(toISO + 'T00:00:00') - Date.parse(fromISO + 'T00:00:00')) / 86400000);
 }
@@ -187,13 +219,14 @@ function fsrsUpdate(card, rating, today) {
   const reps = rating === 1 ? 0 : (card && card.reps || 0) + 1;
   const lapses = (card && card.lapses || 0) + (rating === 1 ? 1 : 0);
   const dueDate = new Date(now + 'T00:00:00'); dueDate.setDate(dueDate.getDate() + ivl);
-  return { difficulty, stability, ivl, reps, lapses, due: dueDate.toISOString().slice(0, 10), last: now };
+  return { difficulty, stability, ivl, reps, lapses, due: dueDate.toISOString().slice(0, 10), last: now, sv: SCHEDULER_VERSION };
 }
 
 root.FSRS = {
   update: fsrsUpdate, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
   ivl: fsrsIvl, daysBetween, W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR,
+  SCHEDULER_VERSION, paramsFingerprint: fsrsParamsFingerprint,
 };
 
 })(typeof window !== 'undefined' ? window : this);

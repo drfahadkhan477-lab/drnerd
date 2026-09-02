@@ -20,7 +20,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-type.js <patched.html>'); process.exit(1); }
@@ -60,7 +60,7 @@ const LADDER = [9, 11, 13, 16, 19, 23, 28, 33, 40, 48, 58];
      `${(css.match(/var\(--s\d+\)/g) || []).length} uses`);
 
   head('the reading roles hold the body step at every width');
-  const browser = await chromium.launch();
+  const browser = await launch();
   const errors = [];
   for (const vw of [1280, 834, 460, 390]) {
     const page = await browser.newPage({ viewport: { width: vw, height: 1000 } });

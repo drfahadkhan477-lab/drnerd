@@ -18,7 +18,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-references.js <build.html> [dir]'); process.exit(1); }
@@ -89,7 +89,7 @@ const RETRIEVAL = [
   }
 
   head('the importer produces what the guide promises');
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));

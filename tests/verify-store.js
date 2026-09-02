@@ -24,7 +24,7 @@
  */
 'use strict';
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-store.js <patched.html|url>'); process.exit(1); }
@@ -59,7 +59,7 @@ const RAW = `key => new Promise(resolve => {
 })`;
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   const errors = [];

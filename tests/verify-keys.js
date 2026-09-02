@@ -26,7 +26,7 @@
  */
 'use strict';
 const fs = require('fs');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-keys.js <build.html>'); process.exit(1); }
@@ -119,7 +119,7 @@ ok('with nothing on a tolerated list to hide behind', MATCHER_MISSES.length === 
 
 head('and it reaches the screen');
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));

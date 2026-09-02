@@ -9,14 +9,14 @@
 # that can resolve the tags: the value wanted is the commit each tag points at,
 # with the version kept in a trailing comment.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1401 checks in
-# `node scripts/verify.js` plus 76 more under `--pwa`, this workflow runs 191.
-# The other 1052 all drive a real build of the app in a real browser
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1473 checks in
+# `node scripts/verify.js` plus 76 more under `--pwa`, this workflow runs 247.
+# The other 1302 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 1210 checks here. See docs/BUILD.md and the
+# there is no way to run those 1302 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
@@ -31,7 +31,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the seven suites that are pure Node with no Playwright and no
+#   logic        the nine suites that are pure Node with no Playwright and no
 #                built artifact at all: verify-fsrs.js (the scheduler — the
 #                math that decides when a card comes back), verify-worker.js
 #                (the Cloudflare Worker holding the Gemini key, driven
@@ -43,8 +43,15 @@
 #                more memory than the device has) and verify-calib-pure.js
 #                (the calibration arithmetic, which says nothing rather than
 #                something wrong on sparse data) and verify-figzoom-pure.js
-#                (zoom-about-a-point, where drift is invisible by eye).
-#                191 real checks, up
+#                (zoom-about-a-point, where drift is invisible by eye),
+#                verify-engine.js (the test suite's own discipline: that the
+#                browser engine stays a flag rather than drifting back to
+#                thirty-four hardcoded copies of Chromium) and
+#                verify-stats.js (that the counts quoted in this comment, the
+#                README and BUILD.md are the counts the tests actually
+#                produced — this file said both "1052" and "1210" for one
+#                quantity until that check existed).
+#                247 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -57,7 +64,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 1210 checks to this file is possible — GitHub Actions
+# Adding the other 1302 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -103,9 +110,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: FSRS-5–derived scheduling (38 checks)
+      - name: FSRS-5–derived scheduling (46 checks)
         run: node tests/verify-fsrs.js
-      - name: the Cloudflare Worker request handler (51 checks)
+      - name: the Cloudflare Worker request handler (52 checks)
         run: node tests/verify-worker.js
       - name: the cardiac cycle's physics (23 checks)
         run: node tests/verify-physio-pure.js
@@ -117,6 +124,10 @@ jobs:
         run: node tests/verify-calib-pure.js
       - name: the figure viewer's zoom arithmetic (16 checks)
         run: node tests/verify-figzoom-pure.js
+      - name: the engine is a flag, not thirty-four hardcoded copies of one (23 checks)
+        run: node tests/verify-engine.js
+      - name: the counts in the docs are the counts the tests produced (24 checks)
+        run: node tests/verify-stats.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

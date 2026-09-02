@@ -24,7 +24,7 @@
  */
 'use strict';
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-mistral.js <patched.html>'); process.exit(1); }
@@ -61,7 +61,7 @@ const MODEL_LIST = {
 };
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));

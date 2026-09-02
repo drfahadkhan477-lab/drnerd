@@ -15,7 +15,7 @@
  */
 'use strict';
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-memory.js <patched.html>'); process.exit(1); }
@@ -42,7 +42,7 @@ const GEM_SSE = 'data: {"candidates":[{"content":{"role":"model","parts":[{"text
 const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with restriction.\n\nPrefers mechanism before trials.';
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 950 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
