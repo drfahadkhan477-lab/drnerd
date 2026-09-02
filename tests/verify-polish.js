@@ -467,6 +467,117 @@ const head = t => console.log('\n── ' + t + ' ──');
        setup.text === connected.text, `setup ${(setup.text || '').length} chars, connected ${(connected.text || '').length}`);
   }
 
+
+  /* ── the quiz announces itself ──────────────────────────────────────────
+     From the fifth external audit, which was right about this: a screen
+     reader was being told the answer. aria-pressed carried `i===q.ci` — the
+     answer key — so on a wrong answer VoiceOver announced the CORRECT option
+     as pressed and the user's own choice as not. It gave the answer away and
+     misreported what the user did, in one attribute. */
+  head('a11y: aria-pressed reports what the user chose, not what was correct');
+  const pressed = await page.evaluate(() => {
+    goHome(); render();
+    startQuiz(CHAPTERS[0], 'all');
+    const q = S.questions[S.qIdx];
+    const wrongIdx = (q.ci + 1) % q.o.length;
+    selectOpt(wrongIdx);
+    const opts = [...document.querySelectorAll('.opt')];
+    return {
+      ci: q.ci, chose: wrongIdx,
+      onChosen: opts[wrongIdx] ? opts[wrongIdx].getAttribute('aria-pressed') : null,
+      onCorrect: opts[q.ci] ? opts[q.ci].getAttribute('aria-pressed') : null,
+      trueCount: opts.filter(o => o.getAttribute('aria-pressed') === 'true').length,
+    };
+  });
+  ok('the option the user actually chose is aria-pressed="true"',
+     pressed.onChosen === 'true', JSON.stringify(pressed));
+  ok('the correct-but-unchosen option is NOT aria-pressed',
+     pressed.onCorrect === 'false', JSON.stringify(pressed));
+  ok('exactly one option is pressed', pressed.trueCount === 1, String(pressed.trueCount));
+
+  head('a11y: the result is announced, not just painted');
+  /* The region must exist BEFORE the text lands — a live region injected
+     already-populated is not announced by any screen reader. So it is checked
+     in both states, empty first. */
+  const live = await page.evaluate(() => {
+    goHome(); render();
+    startQuiz(CHAPTERS[0], 'all');
+    const before = document.querySelector('[aria-live]');
+    const beforeText = before ? before.textContent.trim() : null;
+    const q = S.questions[S.qIdx];
+    selectOpt(q.ci);
+    const after = document.querySelector('[aria-live]');
+    return {
+      existedBefore: !!before, beforeText,
+      politeness: after ? after.getAttribute('aria-live') : null,
+      afterText: after ? after.textContent.trim() : null,
+    };
+  });
+  ok('a live region is already in the DOM before the answer', live.existedBefore, JSON.stringify(live));
+  ok('and it is empty until there is something to say', live.beforeText === '', JSON.stringify(live.beforeText));
+  ok('it is polite, not assertive', live.politeness === 'polite', String(live.politeness));
+  ok('after answering it states the verdict', /correct/i.test(live.afterText || ''), live.afterText);
+
+  head('a11y: focus follows the reading order through the quiz');
+  const focus = await page.evaluate(() => {
+    goHome(); render();
+    startQuiz(CHAPTERS[0], 'all');
+    const q = S.questions[S.qIdx];
+    selectOpt(q.ci);
+    const afterAnswer = document.activeElement ? document.activeElement.className : null;
+    nextQ();
+    const afterNext = document.activeElement ? document.activeElement.className : null;
+    return { afterAnswer, afterNext };
+  });
+  ok('answering moves focus to the reveal', /reveal-header/.test(focus.afterAnswer || ''), focus.afterAnswer);
+  ok('moving on moves focus to the new question', /q-card/.test(focus.afterNext || ''), focus.afterNext);
+
+  head('keyboard: Previous has a key, the way Next has two');
+  const keys = await page.evaluate(async () => {
+    goHome(); render();
+    startQuiz(CHAPTERS[0], 'all');
+    nextQ(); nextQ();
+    const start = S.qIdx;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    const afterLeft = S.qIdx;
+    /* The guard that keeps typing in Apex from driving the quiz must still
+       hold for the new key — guards-patch.js added SELECT for exactly this. */
+    const sel = document.createElement('select');
+    document.body.appendChild(sel); sel.focus();
+    sel.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    const afterGuarded = S.qIdx;
+    sel.remove();
+    return { start, afterLeft, afterGuarded };
+  });
+  ok('ArrowLeft steps back a question', keys.afterLeft === keys.start - 1, JSON.stringify(keys));
+  ok('but not while a <select> has focus', keys.afterGuarded === keys.afterLeft, JSON.stringify(keys));
+
+  head('contrast: the last --dim on read text is gone');
+  /* contrastfix-patch.js moved 46 sites off --dim (2.56:1, fails AA at every
+     theme). This one escaped the sweep: the peer-response percentage on every
+     option that is neither correct nor selected — a number the learner reads
+     to compare against their own choice. */
+  const pct = await page.evaluate(() => {
+    goHome(); render();
+    startQuiz(CHAPTERS[0], 'all');
+    const q = S.questions[S.qIdx];
+    const chose = (q.ci + 1) % q.o.length;
+    selectOpt(chose);
+    const opts = [...document.querySelectorAll('.opt')];
+    const otherIdx = opts.findIndex((_, i) => i !== q.ci && i !== chose);
+    const el = otherIdx > -1 ? opts[otherIdx].querySelector('.opt-pct') : null;
+    const cs = getComputedStyle(document.documentElement);
+    return {
+      color: el ? el.style.color : null,
+      dim: cs.getPropertyValue('--dim').trim(),
+      muted: cs.getPropertyValue('--muted').trim(),
+    };
+  });
+  ok('an unselected option\'s percentage is not painted with --dim',
+     !/--dim/.test(pct.color || ''), JSON.stringify(pct));
+  ok('it uses the legible --muted tier instead',
+     /--muted/.test(pct.color || ''), JSON.stringify(pct));
+
   head('regression: everything prior still functions');
   const reg = await page.evaluate(() => {
     goHome(); render();
