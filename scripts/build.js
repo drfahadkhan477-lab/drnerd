@@ -188,6 +188,14 @@ const ROOT = path.join(__dirname, '..');
                    inferring "answered" from an S.answers entry existing —
                    which this step would otherwise have turned into a revealed
                    answer for a question nobody answered.
+     figzoom       a figure stops being fitted-or-natural and becomes something
+                   you examine: pinch, wheel, drag to pan, double-tap, a
+                   control row and the keyboard, all over figzoom.js's
+                   zoom-about-a-point arithmetic. The four ways out that
+                   figview built survive intact, which is most of what the
+                   event handling here is for — a pan ends on the image, so
+                   without care the drag that moved the figure is also the tap
+                   that dismisses it.
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -198,7 +206,7 @@ const CHAIN = [
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
-  'curate', 'calibrate',
+  'curate', 'calibrate', 'figzoom',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
