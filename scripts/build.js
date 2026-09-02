@@ -149,6 +149,10 @@ const ROOT = path.join(__dirname, '..');
      haptics       a felt pulse alongside the correct/wrong feedback
                    selectOpt already draws — after splashtiming, no
                    dependency, just kept at the tail with the others
+     disclaimer    the app says what it is — an educational board-review tool,
+                   not clinical decision support — on the home screen and in
+                   both of the Apex panel's states, and gains the <main> and
+                   <h1> landmarks it had been missing entirely
      designfollowup two small fixes found and deliberately deferred during
                    the design pass: --warn/--warn-bg/--warn-b become real
                    aliases instead of four independently-restated literals
@@ -164,7 +168,7 @@ const CHAIN = [
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
-  'semantictokens', 'splashtiming', 'haptics', 'designfollowup',
+  'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

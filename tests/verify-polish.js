@@ -376,6 +376,97 @@ const head = t => console.log('\n── ' + t + ' ──');
     await noVibratePage.close();
   }
 
+  head('the app says what it is, in a structure a screen reader can navigate');
+  {
+    const doc = await page.evaluate(() => {
+      goHome(); render();
+      const h1s = document.querySelectorAll('h1');
+      const mains = document.querySelectorAll('main');
+      const hero = document.querySelector('.hero-h1');
+      const cs = hero ? getComputedStyle(hero) : null;
+      const heroWeight = cs ? cs.fontWeight : null;
+      const heroMarginTop = cs ? cs.marginTop : null;
+      goStats(); render();
+      const hd = document.querySelector('.app-disclaim');
+      return {
+        h1Count: h1s.length,
+        h1Text: h1s.length ? h1s[0].textContent.trim() : null,
+        h1IsHero: !!hero && hero.tagName === 'H1',
+        mainCount: mains.length,
+        mainIsApp: mains.length ? mains[0].id : null,
+        heroWeight, heroMarginTop,
+        disclaimText: hd ? hd.textContent.replace(/\s+/g, ' ').trim() : null,
+        disclaimColor: hd ? getComputedStyle(hd).color : null,
+        muted: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(),
+        dim: getComputedStyle(document.documentElement).getPropertyValue('--dim').trim(),
+      };
+    });
+    const hex = h => {
+      const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h.replace('#', '#'));
+      return m ? `rgb(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)})` : h;
+    };
+
+    ok('the page has exactly one <h1>', doc.h1Count === 1, String(doc.h1Count));
+    ok('and it is the hero title, not something incidental',
+       doc.h1IsHero && doc.h1Text === 'Systole', JSON.stringify({ text: doc.h1Text, isHero: doc.h1IsHero }));
+    ok('the page has exactly one <main> landmark', doc.mainCount === 1, String(doc.mainCount));
+    ok('and it is the app region itself', doc.mainIsApp === 'app', String(doc.mainIsApp));
+    /* The tag swap must not be a visual change: a bare <h1> would inherit the
+       user agent's bold and .67em top margin. */
+    ok('promoting the hero to <h1> did not let the UA styles through',
+       doc.heroWeight === '400' && doc.heroMarginTop === '0px',
+       JSON.stringify({ weight: doc.heroWeight, marginTop: doc.heroMarginTop }));
+
+    ok('the Progress screen carries a disclaimer', !!doc.disclaimText && /education|board preparation/i.test(doc.disclaimText),
+       (doc.disclaimText || '').slice(0, 70));
+    ok('and it says it is not clinical decision support',
+       !!doc.disclaimText && /not a clinical|not clinical|not a substitute/i.test(doc.disclaimText));
+    ok('and it is painted in the legible --muted tier, never --dim',
+       doc.disclaimColor === hex(doc.muted) && doc.disclaimColor !== hex(doc.dim),
+       `${doc.disclaimColor} (muted ${hex(doc.muted)}, dim ${hex(doc.dim)})`);
+  }
+
+  head('the Apex panel carries its own disclaimer, in BOTH of its states');
+  {
+    /* buildAI() early-returns to a setup screen when no key is configured, so
+       the two states render entirely different markup. The disclaimer has to
+       survive both — the un-set-up state is the first thing anyone sees. */
+    const setup = await page.evaluate(() => {
+      AI[AI.provider].key = '';
+      if (typeof toggleAI === 'function' && !document.getElementById('shell').classList.contains('ai-open')) toggleAI();
+      buildAI();
+      const d = document.querySelector('.ai-disclaim');
+      return {
+        onSetupScreen: !!document.querySelector('.setup, [class*="setup"]'),
+        text: d ? d.textContent.replace(/\s+/g, ' ').trim() : null,
+        color: d ? getComputedStyle(d).color : null,
+        muted: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(),
+      };
+    });
+    ok('before a key is entered, the setup screen still carries it',
+       !!setup.text && /not clinical advice/i.test(setup.text), (setup.text || 'ABSENT').slice(0, 60));
+
+    const connected = await page.evaluate(() => {
+      AI[AI.provider].key = 'test-key-not-real';
+      buildAI();
+      const d = document.querySelector('.ai-disclaim');
+      const out = {
+        text: d ? d.textContent.replace(/\s+/g, ' ').trim() : null,
+        beforeModelLine: !!(d && d.nextElementSibling && d.nextElementSibling.classList.contains('ai-powered')),
+        color: d ? getComputedStyle(d).color : null,
+      };
+      AI[AI.provider].key = '';
+      return out;
+    });
+    ok('once connected, it states that it is not clinical advice',
+       !!connected.text && /not clinical advice/i.test(connected.text), (connected.text || 'ABSENT').slice(0, 60));
+    ok('and that it can be wrong', !!connected.text && /can be wrong|check anything/i.test(connected.text));
+    ok('and it sits directly above the model line, where the answers end',
+       connected.beforeModelLine, String(connected.beforeModelLine));
+    ok('both placements say the same thing, so they cannot drift apart',
+       setup.text === connected.text, `setup ${(setup.text || '').length} chars, connected ${(connected.text || '').length}`);
+  }
+
   head('regression: everything prior still functions');
   const reg = await page.evaluate(() => {
     goHome(); render();
