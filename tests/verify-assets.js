@@ -261,7 +261,15 @@ function zip(entries) {
   head('it survives a reload — IndexedDB, not memory');
   await page.reload({ waitUntil: 'load', timeout: 250000 });
   await page.waitForFunction(() => typeof RefAssets !== 'undefined', { timeout: 150000 });
-  await page.waitForFunction(() => RefAssets.count() > 0, { timeout: 15000 }).catch(() => {});
+  /* WAIT FOR WHAT IS ABOUT TO BE ASSERTED, not for something weaker. This
+     waited for count() > 0 and then asserted count() === 2, so on a loaded
+     machine it sampled the moment after the first asset had been rehydrated
+     from IndexedDB and before the second — reporting "1 assets" on a store
+     that holds two. The check below it then failed as a consequence, because
+     RefAssets.keys() destructures a k2 that is not there yet. Both passed
+     standalone every time, which is the signature of a wait that does not
+     cover its own assertion. */
+  await page.waitForFunction(() => RefAssets.count() === 2, { timeout: 15000 }).catch(() => {});
   const after = await page.evaluate(() => ({ n: RefAssets.count(), bytes: RefAssets.bytes() }));
   ok('the images are still in the store after a reload', after.n === 2, after.n + ' assets');
   ok('and report a plausible size', after.bytes > 0, after.bytes + ' bytes');
