@@ -57,14 +57,47 @@ const FRAMES = [
 ];
 const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz'];
 
+/* Enough of a reply to overflow any panel, so "does it scroll" is a real
+   question rather than one the fixture answers for us. */
+const sse = text => [
+  'data: ' + JSON.stringify({ choices: [{ delta: { content: text } }] }),
+  'data: [DONE]', '',
+].join('\n\n');
+
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1194, height: 834 } });
+  await page.route('**/v1/chat/completions', route => route.fulfill({
+    status: 200, headers: { 'content-type': 'text/event-stream' },
+    body: sse('Long answer. '.repeat(80)),
+  }));
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+
+  /* WAIT FOR THE BOX TO STOP MOVING, NOT FOR A CLOCK. #ai transitions its
+     flex-basis over .28s, so a measurement taken on a fixed timer catches the
+     panel mid-open on a loaded machine — this suite reported the panel as 1px
+     wide and its input off-screen on one full run and passed the next, which
+     is not a bug in the app and not a flake to shrug at either. Polling until
+     two consecutive frames agree removes the timing from the question. */
+  await page.addInitScript(() => {
+    window.__settle = async (sel, tries) => {
+      let last = -1;
+      for (let i = 0; i < (tries || 60); i++) {
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const el = document.querySelector(sel);
+        const w = el ? Math.round(el.getBoundingClientRect().width) : -1;
+        if (w === last && w > 0) return w;
+        last = w;
+      }
+      return last;
+    };
+  });
+  await page.reload({ waitUntil: 'load', timeout: 250000 });
   await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
 
   /* One pass per frame, aggregated: a line per invariant naming every screen
@@ -181,7 +214,9 @@ const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'q
       AI.mistral = { key: 'layout-check', model: 'pixtral-large-latest' };
       const sh = document.getElementById('shell');
       if (!sh.classList.contains('ai-open')) toggleAI();
-      buildAI(); await wait(450);
+      buildAI();
+      await window.__settle('#ai');
+      await wait(80);
       const d = document.documentElement;
       const panel = document.getElementById('ai');
       const input = document.getElementById('aiIn');
@@ -203,6 +238,73 @@ const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'q
     ok('the panel itself sits inside the viewport', apex.panelOnScreen === true, apex.panel);
     ok('the question box is rendered once a provider is set', apex.hasInput === true);
     ok('and it stays on screen', apex.inputOnScreen === true, apex.input);
+  }
+
+  head('the Apex answer keeps room, with the figures open, at every frame');
+  {
+    /* REPORTED FROM AN IPAD, WITH A PHOTOGRAPH: the figures "cover the
+       explanation". Chain step 68 made the strip foldable but left the answer
+       with no floor, so opening it took .ai-body to 43px on an iPad held
+       portrait — one line. This suite did not catch it because it only ever
+       looked at the panel as a side rail at desktop width, where the crush is
+       mild, and never with the figures open. Both were the fixture being
+       kinder than the device, for the third time this week. */
+    const FLOOR = 100;
+    const rows = [];
+    for (const [name, w, h] of FRAMES) {
+      await page.setViewportSize({ width: w, height: h });
+      await page.waitForTimeout(240);
+      const r = await page.evaluate(async () => {
+        const wait = ms => new Promise(r => setTimeout(r, ms));
+        AI.provider = 'mistral';
+        AI.mistral = { key: 'layout-check', model: 'pixtral-large-latest' };
+        const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
+        const sh = document.getElementById('shell');
+        if (!sh.classList.contains('ai-open')) toggleAI();
+        buildAI();
+        await window.__settle('#ai');
+        fire('explain this'); await wait(1700);
+        lastHits = note ? [{ kind: 'r', id: note.id, title: note.title }] : [];
+        lastHitsKey = '_general';
+        buildAI(); await window.__settle('#ai'); await wait(120);
+        /* Only if it is not already open. apexFigsOpen is module-level and
+           survives the panel's re-render — deliberately, so a fellow who opens
+           the figures keeps them open — which means a blind click on the
+           second frame CLOSES them. That alternated true/false/true across the
+           sweep and made the floor numbers a mixture of both states. */
+        const t = document.getElementById('aiFigs');
+        if (t && !document.querySelector('.fig-strip.open')) t.click();
+        await wait(400);
+        const body = document.querySelector('.ai-body');
+        const input = document.getElementById('aiIn');
+        const ir = input ? input.getBoundingClientRect() : null;
+        if (!body) return null;
+        body.scrollTop = 99999; await wait(60);
+        const out = {
+          open: !!document.querySelector('.fig-strip.open'),
+          bodyH: body.clientHeight,
+          scrolls: body.scrollHeight - body.clientHeight > 0 ? body.scrollTop > 0 : true,
+          inputVisible: !!ir && ir.width > 40 && ir.bottom <= innerHeight + 2,
+        };
+        if (sh.classList.contains('ai-open')) toggleAI();
+        await wait(150);
+        return out;
+      });
+      rows.push([name, r]);
+    }
+    const opened = rows.filter(([, r]) => r && r.open);
+    ok('the figures could be opened at every frame', opened.length === rows.length,
+       `${opened.length} of ${rows.length}`);
+    const crushed = rows.filter(([, r]) => !r || r.bodyH < FLOOR)
+                        .map(([n, r]) => `${n}: ${r ? r.bodyH + 'px' : 'no panel'}`);
+    ok(`the answer keeps at least ${FLOOR}px with the figures open`, crushed.length === 0,
+       crushed.join('; ') || rows.map(([n, r]) => `${n.split(' ')[0]} ${r.bodyH}px`).join(', '));
+    const stuck = rows.filter(([, r]) => !r || !r.scrolls).map(([n]) => n);
+    ok('and still scrolls when the answer is longer than the room', stuck.length === 0,
+       stuck.join('; ') || 'every frame scrolls');
+    const hidden = rows.filter(([, r]) => !r || !r.inputVisible).map(([n]) => n);
+    ok('and the question box is never pushed off the bottom', hidden.length === 0,
+       hidden.join('; ') || 'visible at every frame');
   }
 
   head('regression');

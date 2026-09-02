@@ -223,9 +223,22 @@ const head = t => console.log('\n── ' + t + ' ──');
      prose column competed with the words and won. What the card wanted was a
      pulse along its foot, which is where this started — so the trace is back,
      full width, behind the text, with a travelling head. */
-  const trace = await page.evaluate(() => {
+  const trace = await page.evaluate(async () => {
     const cv = document.getElementById('pearlCurrent');
     if (!cv) return null;
+    /* Wait for the canvas to catch its card up before measuring. The card
+       lays out first and the canvas resizes itself on its own animation frame,
+       so a single sample taken while the machine is busy catches the gap — this
+       assertion failed once in a full run under load and passed twice
+       standalone, which is the signature of measuring before a thing settles
+       rather than of the thing being wrong. Polling does not loosen the check:
+       it still demands the canvas fill the content box to the pixel, and gives
+       up after a bounded wait so a genuine mismatch still fails. */
+    const cardWait = document.querySelector('.pearl-card');
+    for (let i = 0; i < 40; i++) {
+      if (cardWait && Math.abs(cv.getBoundingClientRect().width - cardWait.clientWidth) < 1) break;
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
     const r = cv.getBoundingClientRect();
     const cardEl = document.querySelector('.pearl-card');
     const card = cardEl.getBoundingClientRect();

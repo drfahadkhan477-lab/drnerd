@@ -219,6 +219,19 @@ const ROOT = path.join(__dirname, '..');
                    rectangle — and the app is WebKit, landscape, and 408 real
                    figures. That gap cannot be closed from the harness, so the
                    checks go to the device instead
+
+     answerroom    opening the figures under an Apex answer crushed the answer
+                   to 43px on an iPad held portrait — one line. .ai-body was
+                   the panel's only flex:1 child and carried min-height:0, so
+                   every pixel the figure list took came out of the answer with
+                   nothing to stop it at zero. An explicit 8rem floor, and the
+                   list gives up the difference
+
+     avatarfit     the Apex avatar's canvas throws IndexSizeError when it is
+                   briefly under 4px — a collapsing panel, a rotating iPad —
+                   because R = min(w,h)/2 - 2 goes negative and the throw
+                   happens inside the rAF loop, killing the animation for the
+                   session. fit() tested the width and never the height
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -229,7 +242,8 @@ const CHAIN = [
   'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
   'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
-  'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest',
+  'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest', 'answerroom',
+  'avatarfit',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
