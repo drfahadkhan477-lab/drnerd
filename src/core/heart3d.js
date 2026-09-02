@@ -1654,10 +1654,42 @@ void main(){
                   coron.indices.length + cond.indices.length + valves.indices.length) / 3),
       vertices: (outer.positions.length + cav.positions.length) / 3,
     },
-    start() { if (!S.raf && !S.dead) { if (reduced) { fit(); draw(0); } else S.raf = requestAnimationFrame(loop); } return api; },
+    get lost() { return !!S.lost; },
+    start() { if (!S.raf && !S.dead && !S.lost) { if (reduced) { fit(); draw(0); } else S.raf = requestAnimationFrame(loop); } return api; },
     stop() { if (S.raf) cancelAnimationFrame(S.raf); S.raf = null; S.last = null; return api; },
     destroy() { api.stop(); S.dead = true; },
   };
+
+  /* CONTEXT LOSS IS NORMAL ON iPadOS, not an error case. Safari drops WebGL
+     contexts under memory pressure and after a long spell in the background,
+     and until this existed the loss was silent and terminal: the render loop
+     kept calling into a dead context every frame, every call a no-op, and the
+     canvas stayed blank until the app was reloaded.
+
+     preventDefault() on the lost event is not optional — without it the
+     browser will not even attempt to restore the context, so omitting it
+     makes the loss permanent by definition.
+
+     WHAT THIS DELIBERATELY DOES NOT DO is rebuild the GPU objects in place.
+     Every buffer, program and VAO here is created inside create(), after a
+     surfaceNets pass that is the expensive part; splitting the GPU half out
+     to re-run it alone would be a refactor of the largest module in the
+     project for a path that cannot be exercised without the licensed build.
+     Instead the loss is reported, and the caller re-creates — which is one
+     line at the mount site, and mountHeroHeart3d already falls back to the
+     static SVG heart when WebGL is unavailable, so there is a correct thing
+     on screen in the meantime. */
+  canvas.addEventListener('webglcontextlost', function (ev) {
+    ev.preventDefault();
+    S.lost = true;
+    api.stop();
+    if (typeof opts.onLost === 'function') { try { opts.onLost(); } catch (_) {} }
+  });
+  canvas.addEventListener('webglcontextrestored', function () {
+    S.lost = false;
+    if (typeof opts.onRestored === 'function') { try { opts.onRestored(); } catch (_) {} }
+  });
+
   api.start();
   return api;
 }

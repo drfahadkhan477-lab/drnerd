@@ -39,6 +39,23 @@
 const EOCD_SIG = 0x06054b50, CEN_SIG = 0x02014b50;
 const MAX_INFLATED = 256 * 1024 * 1024;  // per entry — generous for a chapter's figures, nowhere near a bomb's target
 
+/* AND THE ARCHIVE AS A WHOLE. MAX_INFLATED bounds any single entry, which is
+   what stops one deflate bomb, but every entry that survives it is pushed into
+   an array and held until read() returns. An archive of many individually
+   legal entries therefore had no ceiling at all: 4,000 entries of 200 KB is
+   800 MB of live Uint8Array on a device whose whole tab budget is smaller
+   than that. Not an exploit — this reads a file the fellow chose — but an
+   out-of-memory on an iPad is indistinguishable from a crash, and a chapter
+   import is exactly when someone has picked a folder without counting it.
+
+   Overridable so the tests can drive the behaviour with small numbers. What
+   is worth protecting is that the cap is enforced and that exceeding it
+   degrades to `skipped` rather than throwing; the specific byte count is a
+   judgement about iPad memory, and a test that pinned it would only be a copy
+   of this line. */
+const MAX_ENTRIES = 4096;
+const MAX_TOTAL_INFLATED = MAX_INFLATED;   // the whole archive may not exceed what one entry already could
+
 function u16(v, p) { return v.getUint16(p, true); }
 function u32(v, p) { return v.getUint32(p, true); }
 
@@ -74,7 +91,10 @@ async function inflateRaw(bytes, limit) {
 
 /* Returns [{name, bytes}] for every file it could read, plus the names it
    could not, so the caller can say so rather than pretend the zip was empty. */
-async function read(arrayBuffer) {
+async function read(arrayBuffer, opts) {
+  const maxEntries = (opts && opts.maxEntries) || MAX_ENTRIES;
+  const maxTotal   = (opts && opts.maxTotal)   || MAX_TOTAL_INFLATED;
+  let totalOut = 0;
   const view = new DataView(arrayBuffer);
   const all = new Uint8Array(arrayBuffer);
   const eocd = findEOCD(view);
@@ -100,7 +120,17 @@ async function read(arrayBuffer) {
     if (!name || name.endsWith('/')) continue;                  // a directory
     if (compSize === 0xffffffff || localAt === 0xffffffff) { skipped.push(name); continue; }  // zip64
     if (method !== 0 && method !== 8) { skipped.push(name); continue; }
-    if (uncompSize > MAX_INFLATED) { skipped.push(name); continue; }  // declared size alone rules it out
+    if (files.length >= maxEntries) { skipped.push(name); continue; }
+
+    /* The remaining budget, not the per-entry cap. An entry that fits
+       MAX_INFLATED on its own can still be more than what is left, and the
+       inflate limit below has to be the smaller of the two or a single late
+       entry could spend the whole archive's allowance after the count check
+       has already passed it. */
+    const budget = maxTotal - totalOut;
+    const allow = Math.min(MAX_INFLATED, budget);
+    if (budget <= 0) { skipped.push(name); continue; }
+    if (uncompSize > allow) { skipped.push(name); continue; }  // declared size alone rules it out
 
     /* The local header repeats the name and extra fields, and its extra field
        length may differ from the central one — so it has to be read here
@@ -113,7 +143,9 @@ async function read(arrayBuffer) {
     const raw = all.subarray(start, start + compSize);
 
     try {
-      files.push({ name, bytes: method === 0 ? raw : await inflateRaw(raw, MAX_INFLATED) });
+      const bytes = method === 0 ? raw : await inflateRaw(raw, allow);
+      totalOut += bytes.length;
+      files.push({ name, bytes });
     } catch (_) { skipped.push(name); }
   }
   return { files, skipped };

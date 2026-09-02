@@ -1,7 +1,16 @@
 # Systole CI — the honest subset.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1238 checks in
-# `node scripts/verify.js` plus 75 more under `--pwa`, this workflow runs 89.
+# ACTIONS ARE ON FLOATING TAGS (@v4), NOT PINNED SHAS. Two external reviews
+# asked for SHA pins and they are right that a tag can be moved under you.
+# Not done here because the SHAs could not be verified from this environment —
+# GitHub access is scoped to this repository, so actions/checkout could not be
+# read — and a pin to a SHA nobody checked fails every job on the first run,
+# which is worse than the risk it is meant to remove. Pin them from a machine
+# that can resolve the tags: the value wanted is the commit each tag points at,
+# with the version kept in a trailing comment.
+#
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1298 checks in
+# `node scripts/verify.js` plus 76 more under `--pwa`, this workflow runs 149.
 # The other 1052 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
@@ -22,14 +31,20 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the two suites that are pure Node with no Playwright and no
-#                built artifact at all: verify-fsrs.js (the scheduler itself
-#                — the math that decides when a card comes back) and
-#                verify-worker.js (the Cloudflare Worker that holds the
-#                Gemini key, driven directly as a request handler). 89 real
-#                checks, and not incidental ones: this is the scheduling math
-#                and the API-key boundary, the two places a subtle bug does
-#                the most damage silently.
+#   logic        the five suites that are pure Node with no Playwright and no
+#                built artifact at all: verify-fsrs.js (the scheduler — the
+#                math that decides when a card comes back), verify-worker.js
+#                (the Cloudflare Worker holding the Gemini key, driven
+#                directly as a request handler), verify-physio-pure.js (valve
+#                events as real pressure crossings, isovolumetric phases that
+#                genuinely hold volume), verify-leads-pure.js (Einthoven and
+#                Goldberger, exact to floating point, every lead one dipole
+#                projected) and verify-zip.js (an imported archive cannot
+#                spend more memory than the device has). 149 real checks, up
+#                from 89: the physiology and the 12-lead geometry were pure
+#                arithmetic behind a Playwright harness they never needed,
+#                which meant the most mathematically load-bearing code in the
+#                project was invisible here. It no longer is.
 #
 #   build-guard  scripts/build.js must still refuse to run without a source
 #                file, with a clear message, and exit non-zero. This is
@@ -88,6 +103,12 @@ jobs:
         run: node tests/verify-fsrs.js
       - name: the Cloudflare Worker request handler (51 checks)
         run: node tests/verify-worker.js
+      - name: the cardiac cycle's physics (23 checks)
+        run: node tests/verify-physio-pure.js
+      - name: the 12-lead's geometry (25 checks)
+        run: node tests/verify-leads-pure.js
+      - name: the ZIP reader's memory ceiling (12 checks)
+        run: node tests/verify-zip.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source
