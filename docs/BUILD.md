@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1551 + 76 checks
+node scripts/verify.js --pwa                           # → 1555 + 76 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -116,6 +116,8 @@ The cost is that order matters, and the dependencies are real:
 | 67 | `schema` | the saved blob carries a `DATA_SCHEMA_VERSION`, and `save()` preserves fields it does not recognise. Systole is a file you copy between your own devices, so two copies at different versions is the ordinary case — and until now the older one would silently drop whatever the newer one had added, the next time it wrote. Paired with `SCHEDULER_VERSION` in `fsrs.js`, which stamps each card with the model that scheduled it, pinned by a fingerprint of the FSRS weights so a tuning change cannot pass unnoticed |
 | 68 | `figfit` | two things a real iPad found, neither reachable by a synthetic test. **"Fit" did not fit**: the viewer image was `max-width` only, so a TALL figure overflowed into a clipped middle band — `figzoom` had replaced scrolling with transform panning, and panning is disabled while fitted because a fitted image is assumed whole. One `max-height:100%` makes scale 1 a true contain. **And the figures under an Apex answer had no control of any kind** — they arrived with the reply and stayed, taking a third of the panel. Now a disclosure, shut by default, following `apexChipsOpen` exactly: a module-level flag so it survives the re-render, a class toggle so a half-typed question is not destroyed |
 | 69 | `selftest` | the invariants run **on the device**, in the engine, at the size the iPad is actually held: open the app with `#selftest`. Both bugs that reached the fellow were invisible to 1,496 checks because the harness is Blink, portrait-ish, and a 400×300 rectangle — while the app is WebKit, landscape, and 408 real figures, 401 of which were clipped at "Fit". That gap cannot be closed from the harness, so the checks go to the device. It opens real figures and measures them rather than recomputing the sizing rule, which would agree with a wrong one |
+| 70 | `answerroom` | opening the figures under an Apex answer crushed the answer to **43px** on an iPad held portrait — one line. `.ai-body` was the panel's only `flex:1` child and carried `min-height:0`, so every pixel the figure list took came out of the answer with nothing to stop it at zero. An explicit `8rem` floor, and the list gives up the difference. Four candidates were measured at three frames before this one was chosen; shrinking the figures too was rejected, because a 12-lead too small to read is not a saving |
+| 71 | `avatarfit` | the Apex avatar's canvas threw `IndexSizeError` whenever it was briefly under 4px — a collapsing panel, a rotating iPad — because `R = min(w,h)/2 - 2` goes negative and `createRadialGradient` refuses a negative `r0`. The throw happens inside the rAF loop, so it killed the animation for the session rather than skipping a frame. `fit()` tested the width and never the height. Found by `verify-layout`, which resizes |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -151,7 +153,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 46 suites, 1551 checks, plus 76 more on the split build. Those numbers are
+Across 46 suites, 1555 checks, plus 76 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
@@ -368,7 +370,7 @@ node tests/verify-pwa.js http://localhost:8080
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 69 *-patch · build-pwa · serve · shots
+scripts/      build · verify · 71 *-patch · build-pwa · serve · shots
 tests/        35 Playwright suites (34 single-file + pwa)
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```

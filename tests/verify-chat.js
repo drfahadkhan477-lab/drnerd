@@ -288,12 +288,20 @@ const TOOL_SSE = [
       return { overscroll: getComputedStyle(bd).overscrollBehavior,
                minHeight: getComputedStyle(bd).minHeight,
                twTouch: twStyle,
+               scrollH: bd.scrollHeight,
                scrollable: bd.scrollHeight - bd.clientHeight };
     });
     ok('the gesture stops at the thread instead of chaining to a locked parent',
        /contain/.test(css.overscroll), css.overscroll);
-    ok('and the box may shrink below its content, so overflow can engage',
-       css.minHeight === '0px', css.minHeight);
+    /* This asserted min-height:0 exactly, which snapshotted the MECHANISM
+       rather than the property in its own label. The answer now carries an
+       8rem floor so the figure strip cannot crush it to one line (chain step
+       70), and overflow still engages — a floor far below the content is not
+       the same thing as a floor that stops the box shrinking. That is what is
+       checked now, and the next assertion proves the outcome. */
+    ok('and the box may still shrink far below its content, so overflow can engage',
+       parseFloat(css.minHeight) < css.scrollH * 0.4,
+       `floor ${css.minHeight} against ${css.scrollH}px of content`);
     ok('a table inside a message does not swallow a vertical drag',
        /pan-y/.test(css.twTouch), css.twTouch);
     ok('and the thread does scroll', css.scrollable > 100, `${css.scrollable}px of range`);
