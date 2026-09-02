@@ -22,7 +22,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-assets.js <patched.html>'); process.exit(1); }
@@ -130,7 +130,7 @@ function zip(entries) {
     ['__MACOSX/pkg/._chapter.md', Buffer.from('junk'), false],   // must be ignored
   ]));
 
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1100, height: 950 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));

@@ -18,7 +18,7 @@
  */
 'use strict';
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-crisp.js <patched.html|url>'); process.exit(1); }
@@ -40,7 +40,7 @@ const ratioOf = (page, sel) => page.evaluate(s => {
 }, sel);
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   /* A 3× display. Desktop Chromium is pointer:fine, which is what the heart's
      device-aware ceiling keys on. */
   const page = await browser.newPage({ viewport: { width: 460, height: 1000 }, deviceScaleFactor: 3 });

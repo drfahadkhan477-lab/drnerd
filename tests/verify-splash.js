@@ -13,7 +13,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-splash.js <patched.html>'); process.exit(1); }
@@ -57,7 +57,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('the loading screen does not depend on Heart3D',
      !/id="splash"[\s\S]{0,900}Heart3D/.test(raw));
 
-  const browser = await chromium.launch();
+  const browser = await launch();
 
   head('the splash covers the blank window, on a throttled CPU');
   {

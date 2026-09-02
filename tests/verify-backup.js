@@ -23,7 +23,7 @@
  */
 'use strict';
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-backup.js <patched.html|url>'); process.exit(1); }
@@ -77,7 +77,7 @@ const restore = `(text) => new Promise(resolve => {
 })`;
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage();
   page.on('pageerror', e => ok('no uncaught page error', false, e.message));
   await boot(page);

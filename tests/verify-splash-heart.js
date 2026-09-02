@@ -28,7 +28,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-splash-heart.js <patched.html>'); process.exit(1); }
@@ -82,7 +82,7 @@ const head = t => console.log('\n── ' + t + ' ──');
      that timer in wall-clock terms right along with everything else, the same
      trick the splash's own screenshot check uses, so the window to look is
      comfortably wide instead of a coin flip. */
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 440, height: 900 }, deviceScaleFactor: 2 });
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });

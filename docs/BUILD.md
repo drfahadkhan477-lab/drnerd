@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1397 + 76 checks
+node scripts/verify.js --pwa                           # → 1473 + 76 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -113,6 +113,7 @@ The cost is that order matters, and the dependencies are real:
 | 64 | `curate` | the document-wide double-tap trap is scoped to the controls that need it — it had been swallowing pinch and double-tap zoom on figures; the hero rotation stops while the page is hidden; `.q-card` gains the accessible name it needed once `announce` gave it focus; and `reviewQueue`'s "cap" and "storage marked persistent" stop misdescribing what they do |
 | 65 | `calibrate` | the review log stops recording only right-or-wrong — how long the answer took, how sure you were before giving it, and after a miss why you think you missed it; `calib.js` reads the three back as calibration, pace and error mix. Also finishes the WebGL context recovery `hardening` left half-wired, and stops `restoreQuizState` inferring "answered" from an `S.answers` entry merely existing |
 | 66 | `figzoom` | a figure stops being fitted-or-natural and becomes something you examine — pinch, wheel, drag to pan, double-tap, a control row and the keyboard, over `figzoom.js`'s zoom-about-a-point arithmetic. `figview`'s four ways out survive intact, which is most of what the event handling is for: a pan ends on the image, so without care the drag that moved the figure is also the tap that dismisses it |
+| 67 | `schema` | the saved blob carries a `DATA_SCHEMA_VERSION`, and `save()` preserves fields it does not recognise. Systole is a file you copy between your own devices, so two copies at different versions is the ordinary case — and until now the older one would silently drop whatever the newer one had added, the next time it wrote. Paired with `SCHEDULER_VERSION` in `fsrs.js`, which stamps each card with the model that scheduled it, pinned by a fingerprint of the FSRS weights so a tuning change cannot pass unnoticed |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -148,10 +149,39 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Forty-one suites, 1397 checks, plus 76 more on the split build. They run one at a
-time deliberately: several drive a real WebGL context and several measure
+Across 44 suites, 1473 checks, plus 76 more on the split build. Those numbers are
+not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
+full green run and `verify-stats` fails if this sentence, the README or the CI
+header disagrees with it. They used to be maintained from memory in three files,
+and they drifted: the CI header claimed both "the other 1052" and "those 1210
+checks" for the same quantity.
+
+The suites run one at a time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
 rather than the app.
+
+### Which engine they run in
+
+Every suite launches through `tests/_engine.js`, so the engine is a flag:
+
+```bash
+node scripts/verify.js --engine webkit     # or firefox; chromium is the default
+```
+
+**They have not been run on WebKit yet, and that matters.** The target device
+for this app is an iPad, which is WebKit — Blink was never the engine that
+mattered most here, it was the engine that was easy. All thirty-four browser
+suites opened with `chromium.launch()`, not as a decision but because each was
+copied from the one before it. That is now one line instead of thirty-four, and
+`verify-engine` is what stops it drifting back: it fails if any suite launches
+an engine itself.
+
+What this does *not* do is claim the suites pass on WebKit. Nobody has run them
+there, because Playwright's WebKit build could not be downloaded in the
+environment this was written in. Expect real failures the first time — WebKit
+differs on `performance.memory` (absent, already guarded), on IndexedDB timing,
+on `hasTouch` pointer coalescing, and on how it resolves fonts. Those are worth
+finding. Finding them is the next piece of work, not this one.
 
 Every suite asserts the *claim*, not that something rendered. `verify-physio`
 checks that valve events are measured pressure crossings and that raising
@@ -316,7 +346,7 @@ node tests/verify-pwa.js http://localhost:8080
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 66 *-patch · build-pwa · serve · shots
+scripts/      build · verify · 67 *-patch · build-pwa · serve · shots
 tests/        35 Playwright suites (34 single-file + pwa)
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```

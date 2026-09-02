@@ -14,7 +14,7 @@
  */
 'use strict';
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-figzoom.js <patched.html>'); process.exit(1); }
@@ -28,7 +28,7 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -160,6 +160,47 @@ const head = t => console.log('\n── ' + t + ' ──');
   });
   ok('dragging moves the figure', drag.moved === true);
   ok('and the drag is not mistaken for the tap that closes it', drag.open === true);
+
+  head('a tap survives the wobble every real finger has');
+  /* THE BUG THIS CHECKS FOR SHIPPED. Any nonzero pointermove latched "moved",
+     and moved suppresses the tap so a drag cannot dismiss the viewer. A finger
+     never holds still to the pixel, so once zoomed, tap-to-fit failed roughly
+     whenever a human did it — while passing every synthetic test, because
+     dispatched pointers move exactly 0px unless told otherwise. The fix is a
+     slop threshold: movement under it is still a tap. */
+  await openFig();
+  const slop = await page.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const sc = document.querySelector('.figv-scroll');
+    if (!sc || !__fz()) return { skipped: true };
+    const b = sc.getBoundingClientRect();
+    const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    const pd = (x, y, t) => sc.dispatchEvent(new PointerEvent(t, { pointerId: 5, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    const tapWithWobble = async (px) => {
+      pd(cx, cy, 'pointerdown');
+      pd(cx + px, cy, 'pointermove');
+      pd(cx + px, cy, 'pointerup');
+      sc.querySelector('img').click();
+      await wait(40);
+      return __fz().state().scale;
+    };
+    __fz().zoomCentre(3); await wait(30);
+    const afterWobble = await tapWithWobble(1);        // a hand, not a robot
+    __fz().reset(); __fz().zoomCentre(3); await wait(30);
+    const afterThree = await tapWithWobble(3);
+    __fz().reset(); __fz().zoomCentre(3); await wait(30);
+    const afterRealDrag = await tapWithWobble(60);     // unambiguously a pan
+    return { skipped: false, afterWobble, afterThree, afterRealDrag,
+             open: !!document.querySelector('.figv-scroll') };
+  });
+  ok('a 1px wobble is still a tap, and returns to fitted',
+     slop.afterWobble === 1, `scale ${slop.afterWobble}`);
+  ok('and so is 3px', slop.afterThree === 1, `scale ${slop.afterThree}`);
+  /* The threshold must not be so generous that a real drag starts dismissing
+     things — that is the bug the `moved` latch exists to prevent. */
+  ok('but a 60px drag is a pan, not a tap — the zoom is left where it was',
+     slop.afterRealDrag === 3, `scale ${slop.afterRealDrag}`);
+  ok('and the viewer stayed open throughout', slop.open === true);
 
   head('every way out of a figure still works');
   const exits = {};

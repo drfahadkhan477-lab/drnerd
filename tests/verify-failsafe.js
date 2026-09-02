@@ -28,7 +28,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { chromium } = require('playwright');
+const { launch } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-failsafe.js <patched.html>'); process.exit(1); }
@@ -56,7 +56,7 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await launch();
 
   head('the real build boots clean — no false positives from the breaker itself');
   {

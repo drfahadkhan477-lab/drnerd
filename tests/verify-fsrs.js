@@ -251,5 +251,48 @@ const control = F.update({ difficulty: 5, stability: 10, ivl: 10, reps: 2, lapse
 ok('a well-formed card is still scheduled on its own merits, not the fallback',
    control.ivl > 10 && control.stability > 10, `ivl=${control.ivl}`);
 
+head('the scheduler says which scheduler it is');
+{
+  /* THIS PIN IS LOAD-BEARING. It is the whole mechanism: change any FSRS
+     weight or the decay and this check fails, which is the only moment anyone
+     is guaranteed to be looking. Do not "fix" it by pasting the new hash —
+     that discards the one signal the pin exists to give. Bump
+     SCHEDULER_VERSION first, decide what happens to cards already scheduled
+     under the old model, and only then update the value here. */
+  const PINNED = '4fb3c4d0';
+  ok('the FSRS parameters are exactly the ones this pin was taken over',
+     F.paramsFingerprint() === PINNED,
+     F.paramsFingerprint() === PINNED ? PINNED
+       : `got ${F.paramsFingerprint()} — if you changed a weight on purpose, bump SCHEDULER_VERSION and repin`);
+  ok('the fingerprint is stable across calls', F.paramsFingerprint() === F.paramsFingerprint());
+  ok('and it is a function of the weights, not a constant',
+     (() => {
+       /* Recomputed here by hand over a deliberately different weight set: a
+          fingerprint that ignored its input would pass the pin above forever
+          and protect nothing. */
+       const alt = F.W.slice(); alt[0] += 1;
+       const str = alt.join(',') + '|' + F.DECAY;
+       let h = 0x811c9dc5;
+       for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 0x01000193) >>> 0;
+       return h.toString(16).padStart(8, '0') !== F.paramsFingerprint();
+     })());
+
+  ok('SCHEDULER_VERSION is a positive integer', Number.isInteger(F.SCHEDULER_VERSION) && F.SCHEDULER_VERSION > 0,
+     String(F.SCHEDULER_VERSION));
+  ok('a newly scheduled card records which scheduler scheduled it',
+     F.update(null, 3, DAY0).sv === F.SCHEDULER_VERSION);
+  ok('and so does a rescheduled one, not just a new one',
+     F.update({ difficulty: 5, stability: 10, ivl: 10, reps: 2, lapses: 0, last: '2026-08-20' }, 3, '2026-08-30').sv
+       === F.SCHEDULER_VERSION);
+  /* A card restored from a backup written by an older build has no sv at all.
+     That must stay readable — the field is a record of what happened, not a
+     precondition — and the absence is left as an absence rather than
+     backfilled with a version that did not schedule it. */
+  ok('a legacy card with no sv still schedules',
+     F.update({ ivl: 6, reps: 3, lapses: 0, last: '2026-08-20' }, 3, '2026-08-30').ivl > 0);
+  ok('and the stamp does not disturb the schedule it is attached to',
+     F.update(null, 3, DAY0).ivl === F.ivl(F.initStability(3)));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

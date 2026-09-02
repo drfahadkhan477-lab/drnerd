@@ -8,6 +8,7 @@
  *   --skip <a,b>   run everything except these
  *   --bail         stop at the first failing suite
  *   --pwa          also build, serve and test the Stage 1 split build
+ *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
  * WHY THIS EXISTS. There are eighteen suites and roughly 418 checks, and they
@@ -85,6 +86,9 @@ const SUITES = [
   ['calibrate',    'confidence is an option not a gate, and a tagged miss updates one row'],
   ['figzoom-pure', 'the point under your fingers does not move, over any number of pinches'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
+  ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
+  ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
+  ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
 ];
 
 const argv = process.argv.slice(2);
@@ -100,7 +104,7 @@ if (flag('--list')) {
   process.exit(0);
 }
 
-const VALUED = ['--only', '--skip'];
+const VALUED = ['--only', '--skip', '--engine'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
 const TARGET = path.resolve(positional[0] || path.join(ROOT, 'build', 'systole.html'));
 
@@ -110,6 +114,17 @@ if (!fs.existsSync(TARGET)) {
 }
 
 const only = list(opt('--only')), skip = list(opt('--skip'));
+
+/* The engine, resolved once here and handed to every suite through the
+   environment. Validated before a single browser starts: a typo discovered on
+   suite thirty-four, forty minutes in, is a worse way to learn you meant
+   "webkit" than a refusal on the first line. */
+const { ENGINES, DEFAULT_ENGINE } = require(path.join(ROOT, 'tests', '_engine.js'));
+const ENGINE = (opt('--engine', DEFAULT_ENGINE) || '').trim().toLowerCase();
+if (!ENGINES.includes(ENGINE)) {
+  console.error(`\n  --engine ${JSON.stringify(ENGINE)} is not an engine. Use one of: ${ENGINES.join(', ')}.\n`);
+  process.exit(1);
+}
 const chosen = SUITES
   .filter(([n]) => (!only.length || only.includes(n)) && !skip.includes(n))
   .filter(([n]) => {
@@ -133,7 +148,7 @@ try {
 } catch (_) { /* a local node_modules will do just as well */ }
 
 console.log(`\nVerifying ${path.relative(process.cwd(), TARGET)}`);
-console.log(`  ${chosen.length} suite${chosen.length === 1 ? '' : 's'}, one at a time\n`);
+console.log(`  ${chosen.length} suite${chosen.length === 1 ? '' : 's'}, one at a time, on ${ENGINE}\n`);
 
 const results = [];
 const t0 = Date.now();
@@ -143,7 +158,7 @@ for (const [name, claim] of chosen) {
   const t = Date.now();
   const r = spawnSync(process.execPath, [path.join(ROOT, 'tests', `verify-${name}.js`), TARGET], {
     encoding: 'utf8', maxBuffer: 1 << 26,
-    env: { ...process.env, NODE_PATH: nodePath },
+    env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE },
   });
   const out = (r.stdout || '') + (r.stderr || '');
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
@@ -151,7 +166,7 @@ for (const [name, claim] of chosen) {
   const secs = ((Date.now() - t) / 1000).toFixed(0);
   const okRun = r.status === 0 && failed === 0;
 
-  results.push({ name, claim, passed, failed, secs, ok: okRun, out });
+  results.push({ name, claim, passed, failed, checks: passed + (failed || 0), secs, ok: okRun, out });
   if (failed === null) console.log(`did not report  (${secs}s)`);
   else console.log(`${okRun ? '✓' : '✗'} ${String(passed).padStart(3)} passed${failed ? `, ${failed} FAILED` : ''}   ${secs}s`);
 
@@ -163,14 +178,76 @@ for (const [name, claim] of chosen) {
   }
 }
 
-const total = results.reduce((n, r) => n + r.passed, 0);
+/* ── the counts, written down rather than remembered ──────────────────────────
+   README.md, docs/BUILD.md and .github/workflows/verify.yml all quote how many
+   checks exist and how many CI runs. Those numbers were maintained by hand, in
+   three files, and they drifted — the CI header currently claims both "the
+   other 1052" and "those 1210 checks" for the same quantity, because a total
+   moved and only some of the sentences moved with it. tests/verify-stats.js
+   reads this file and holds the prose to it, which is only possible if the
+   file is generated. So: generated here, never edited.
+
+   Written ONLY from a complete run on the default engine. A --only run knows
+   the count of two suites, a --skip run is missing some, and a --engine webkit
+   run measures a different browser; any of those overwriting this file would
+   put a confidently wrong number into three documents at once, which is worse
+   than the hand-editing it replaces. */
+function writeStats(pwaCount) {
+  if (only.length || skip.length) return;
+  if (ENGINE !== DEFAULT_ENGINE) return;
+  if (chosen.length !== SUITES.length) return;
+  const file = path.join(ROOT, 'tests', 'test-stats.json');
+  /* --pwa is a separate opt-in, so a run without it has nothing to say about
+     the split build. Carrying the previous value forward is the honest move:
+     the alternative is deleting a true number because this run did not measure
+     it. */
+  let prev = {};
+  try { prev = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+  const suites = {};
+  /* Checks EXECUTED, not checks passed. On a green run these are the same
+     number. They differ only in the one case that can still reach this
+     function — verify-stats failing because the record is stale — and there,
+     counting passes would record a smaller total than the same suite produces
+     once it goes green, so the docs would be updated to a number the next run
+     immediately contradicts. The record would never settle. */
+  for (const r of results) suites[r.name] = r.checks;
+  const stats = {
+    _generated: 'by scripts/verify.js on a full green run — do not hand-edit',
+    engine: ENGINE,
+    suiteCount: results.length,
+    total: results.reduce((n, r) => n + r.checks, 0),
+    pwa: pwaCount === undefined ? (prev.pwa === undefined ? null : prev.pwa) : pwaCount,
+    suites,
+  };
+  fs.writeFileSync(file, JSON.stringify(stats, null, 2) + '\n');
+  console.log(`  counts written to ${path.relative(process.cwd(), file)}\n`);
+}
+
+/* Written before the pass/fail gate, and deliberately NOT blocked by the one
+   suite whose whole job is to notice that this file is out of date. Gating it
+   on green would deadlock: add a suite, verify-stats fails because the record
+   does not mention it, the run is red, the record is never rewritten, and the
+   only way out is to know to pass --skip stats. So a run where verify-stats is
+   the only casualty still rewrites the record — and still exits non-zero,
+   because the prose in three documents may now disagree with it and that needs
+   a person. Run it again after fixing those and it goes green. */
+const blockers = results.filter(r => !r.ok && r.name !== 'stats');
+
+const total = results.reduce((n, r) => n + r.checks, 0);
 const bad = results.filter(r => !r.ok);
 console.log(`\n  ${total} checks across ${results.length} suites in ${((Date.now() - t0) / 60000).toFixed(1)} min`);
+if (!blockers.length && !flag('--pwa')) writeStats();
 if (bad.length) {
   console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}\n`);
-  process.exit(1);
-}
-console.log(`  all green\n`);
+  /* A stats-only failure means the record is out of date, which is the one
+     failure that must NOT stop the run: --pwa has not happened yet, and the
+     split build's count is part of what needs rewriting. Exiting here left the
+     record unwritten and the only way out was to know to pass --skip stats —
+     the deadlock this whole arrangement exists to avoid, reintroduced two
+     lines below where it was solved. */
+  if (blockers.length) process.exit(1);
+  console.log('  (only the counts record is stale — continuing so it can be rewritten)\n');
+} else console.log(`  all green\n`);
 
 /* ── the split build ──────────────────────────────────────────────────────────
    Built, served on a free port, tested, torn down. Kept out of the loop above
@@ -197,7 +274,7 @@ if (flag('--pwa')) {
   if (wait.status !== 0) { console.error('  the static server never came up'); done(); process.exit(1); }
 
   const r = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
-                      { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath } });
+                      { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE } });
   const out = (r.stdout || '') + (r.stderr || '');
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
   for (const ln of out.split('\n')) if (/^\s*(PASS|FAIL)\s/.test(ln)) console.log(ln);
@@ -207,4 +284,10 @@ if (flag('--pwa')) {
     process.exit(1);
   }
   console.log(`\n  pwa: ${m[1]} checks, all green\n`);
+  if (!blockers.length) writeStats(+m[1]);
 }
+
+/* Deferred to here so a stale record still gets rewritten above, but never
+   reports as a pass: the prose in three documents may now disagree with the
+   record, and that needs a person. */
+if (bad.length) process.exit(1);
