@@ -149,16 +149,19 @@ const ROOT = path.join(__dirname, '..');
      haptics       a felt pulse alongside the correct/wrong feedback
                    selectOpt already draws — after splashtiming, no
                    dependency, just kept at the tail with the others
-     disclaimer    the app says what it is — an educational board-review tool,
-                   not clinical decision support — on the home screen and in
-                   both of the Apex panel's states, and gains the <main> and
-                   <h1> landmarks it had been missing entirely
      designfollowup two small fixes found and deliberately deferred during
                    the design pass: --warn/--warn-bg/--warn-b become real
                    aliases instead of four independently-restated literals
                    (also fixing a latent auto+dark mismatch), and the
                    heart gets its own @keyframes back instead of losing to
                    spWord/spSub's later-declared, same-named spRise
+     disclaimer    the app says what it is — an educational board-review tool,
+                   not clinical decision support — in both of the Apex
+                   panel's states and on the Progress screen (not the home
+                   screen: verify-home.js's no-scroll guarantee for an
+                   11-inch iPad is the design, and a fourth block is what it
+                   exists to refuse), and gains the <main> and <h1>
+                   landmarks it had been missing entirely
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
