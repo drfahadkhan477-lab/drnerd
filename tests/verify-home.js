@@ -60,11 +60,28 @@ const head = t => console.log('\n── ' + t + ' ──');
     }
     save(); render();
   });
-  /* Wait past the 1.05s grow animation before measuring rendered widths — a
+  /* Wait for the grow animation to END before measuring rendered widths — a
      mid-flight bar is narrower than its settled value and would fail the
      width-matches-aria check for a reason that has nothing to do with the
-     number being right. */
-  await page.waitForTimeout(1400);
+     number being right.
+
+     This used to be waitForTimeout(1400) against a 1.05s animation, which is a
+     bet on the machine rather than a wait for the thing. Under load the bet
+     loses: three concurrent runs of this suite sampled the bar at 0% and 13%
+     against an aria value of 16. So it now waits for the animation itself to
+     finish and for the width to hold still — the quantity the check asserts.
+     Looping decorations (.hp-shine) never finish, so only finite animations
+     are waited on. */
+  await page.waitForFunction(() => {
+    const busy = document.getAnimations().some(a =>
+      a.playState === 'running' &&
+      Number.isFinite(a.effect && a.effect.getTiming().iterations));
+    const m = document.querySelector('.hp-mast');
+    const w = m ? Math.round(m.getBoundingClientRect().width * 100) : -1;
+    window.__bs = (window.__bl === w && !busy) ? (window.__bs || 0) + 1 : 0;
+    window.__bl = w;
+    return window.__bs >= 5;
+  }, { timeout: 15000, polling: 'raf' });
 
   head('the welcome bar is larger');
   const ecgH = await page.evaluate(() => {
@@ -294,8 +311,22 @@ const head = t => console.log('\n── ' + t + ' ──');
       await page.waitForFunction(() => {
         const a = document.getElementById('app');
         const r = a.getBoundingClientRect();
-        const k = [innerWidth, innerHeight, Math.round(r.width), Math.round(r.height)].join(',');
-        window.__s = (window.__l === k) ? (window.__s || 0) + 1 : 0;
+        /* The document's own height belongs in this key. #app can settle to a
+           stable box while a child — the pearl card, the hero canvas — is
+           still growing the page under it, and `over` is measured on
+           documentElement.scrollHeight, not on #app. Waiting for less than the
+           check asserts is what made this suite pass alone and fail under
+           load: the same defect verify-assets had. */
+        const k = [innerWidth, innerHeight, Math.round(r.width), Math.round(r.height),
+                   document.documentElement.scrollHeight].join(',');
+        /* A box that has held still for five frames is not settled if the
+           animation that will move it has not started yet — which is what a
+           loaded machine produces. Finite animations only: the shimmer and the
+           hero ECG loop forever and would never let this return. */
+        const busy = document.getAnimations().some(a =>
+          a.playState === 'running' &&
+          Number.isFinite(a.effect && a.effect.getTiming().iterations));
+        window.__s = (window.__l === k && !busy) ? (window.__s || 0) + 1 : 0;
         window.__l = k;
         return window.__s >= 5;
       }, { timeout: 15000, polling: 'raf' });
