@@ -1,0 +1,15 @@
+{
+  "_why": "Crops applied to content/refs-images after extraction. The pipeline cut a generous box around each detected FIG/TABLE caption; almost every one came out clean, but a few carry page prose that has nothing to do with the figure. content/ is gitignored — the images are licensed — so the correction has to live here as data, or it is lost the next time the images are regenerated. Boxes are [left, top, right, bottom] in the ORIGINAL image's pixels. Run: python3 tools/trim-figure.py --apply-crops content/refs-images",
+  "crops": {
+    "ischemia/045_FIG.33.22_p047.jpg": {
+      "box": [0, 391, 647, 909],
+      "was": [714, 909],
+      "why": "Page 47 came through as a full two-column page: six lines of the preceding paragraph and a section heading above the artwork, and the page's right-hand column of prose running down beside it. Reported from an iPad, where the figure — a wavefront-of-necrosis diagram whose four panels are the whole point — was a strip in the middle of a wall of text. The box keeps the Reversible/Irreversible labels, all four panels, the timeline, the Results boxes and the complete FIG 33.22 legend."
+    }
+  },
+  "_checked_and_left_alone": {
+    "hf/189_FIG.66.1_p294.jpg": "scored 57% prose by the detector and is in fact a clean five-panel figure — the detector mis-scores thin-lined greyscale artwork",
+    "hf/156_FIG.62.4_p224.jpg": "scored 35% and is eight clean echo panels",
+    "hf/022_FIG.55.1_p026.jpg": "scored 17%; an automatic crop would have cut at 177px and destroyed panel A entirely"
+  }
+}

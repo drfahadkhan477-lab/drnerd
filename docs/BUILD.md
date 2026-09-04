@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1555 + 76 checks
+node scripts/verify.js --pwa                           # → 1555 + 91 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -153,7 +153,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 46 suites, 1555 checks, plus 76 more on the split build. Those numbers are
+Across 46 suites, 1555 checks, plus 91 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
