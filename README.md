@@ -22,7 +22,7 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 1555 checks, 46 suites
+node scripts/verify.js                              # 1583 checks, 47 suites
 node scripts/verify.js --pwa                        # + 76 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
@@ -33,7 +33,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 1555 + 91 checks above — read it as 247, not 1646.**
+**That badge is not the 1583 + 91 checks above — read it as 247, not 1674.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does
@@ -55,11 +55,36 @@ Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.
 
 ### The figure tools
 
-`tools/` holds two Python scripts used once, when the figures were first pulled
-out of the export — `visual-atlas.py` (extraction and OCR) and
-`trim-figure.py` (whitespace trimming). Neither is part of the build or the
-test suite; nothing in `scripts/verify.js` touches them. They need more than
-the standard library, which nothing said until now:
+`tools/` holds three Python scripts. `visual-atlas.py` (extraction and OCR) and
+`trim-figure.py` (whitespace trimming, and replaying a crop record) were used
+when the figures were first pulled out of the export. `figure-review.py` builds
+the sheet a person decides crops on.
+
+```bash
+python3 tools/figure-review.py                      # → build/figure-review.html
+python3 tools/trim-figure.py --apply-crops content/refs-images
+```
+
+**Why a person decides.** Every automatic cropper tried on this corpus has been
+wrong in a way that destroys information: the colour-based one cut TABLE 56.5
+down to 5% of its page, and the ink-profile detector scores clean multi-panel
+artwork as prose — on `022_FIG.55.1` it would have cut at 177px and taken panel
+A with it. Three of the four figures it flagged were false positives. So it no
+longer decides anything; it *ranks*, worst first, and `figure-review.py` builds
+a self-contained offline sheet — every image inlined, so it opens on an iPad
+with no network — where each figure is kept whole or given a box by hand.
+
+What comes out is `tools/figure-crops.<tree>.json`: boxes in the original
+image's pixels with the reason each was cropped, alongside the figures looked
+at and deliberately left alone. That record is the durable artefact, because
+`content/` is gitignored — a crop that lives only in a JPEG is lost the next
+time the images are built. `tests/verify-figreview.js` drives the whole round
+trip, sheet to cropped pixels, and holds the one invariant the hour of tapping
+depends on: the box recorded is in *original* pixels, not preview pixels.
+
+`figure-review.py` and `trim-figure.py` are not part of the build; nothing in
+`scripts/build.js` touches them. They need more than the standard library,
+which nothing said until now:
 
 ```bash
 pip install Pillow numpy
