@@ -2,7 +2,7 @@
   "_generated": "by scripts/verify.js on a full green run — do not hand-edit",
   "engine": "chromium",
   "suiteCount": 49,
-  "total": 1638,
+  "total": 1639,
   "pwa": 91,
   "suites": {
     "stage0": 27,
@@ -40,7 +40,7 @@
     "backup": 19,
     "tokens": 107,
     "physio-pure": 23,
-    "leads-pure": 46,
+    "leads-pure": 47,
     "zip": 12,
     "calib-pure": 26,
     "calibrate": 32,

@@ -217,16 +217,46 @@ head('the morphology is derived, not drawn — for the rhythms where it is');
      than left to be discovered: a rhythm that silently moves from one side of
      it to the other is a change worth noticing. */
   const PURE = ['sinus', 'brady', 'tachy', 'rbbb', 'hyperk'];
-  const PAINTED = ['afib', 'flutter', 'lbbb', 'lvh', 'stemi_ant', 'stemi_inf', 'pericarditis'];
+  const PAINTED = ['afib', 'flutter', 'lbbb', 'lvh', 'stemi_ant', 'stemi_inf',
+                   'pericarditis', 'longqt'];
+
+  /* THE WINDOW, AND WHY IT IS ASSERTED RATHER THAN CHOSEN. sample() renders the
+     repeating rhythm; dipoleAt() renders ONE beat and is flat afterwards. So
+     past a certain point every rhythm "deviates" for a reason that says nothing
+     about projection: sample() has moved on to the next beat's P wave and
+     dipoleAt() has not.
+
+     The first draft hardcoded 600ms. The conduction rhythms first deviate at
+     589ms. It passed by eleven milliseconds of luck, and would have started
+     failing the day anyone shortened a cycle. So the comparison runs over one
+     beat's own span, and the margin between that span and the next beat is
+     CHECKED — a window whose validity is assumed is not a window, it is a
+     coincidence waiting to be discovered. */
+  const SPAN = 500;
+  const firstDeviation = r => {
+    for (let t = 0; t < 2000; t++)
+      for (const l of L.LEADS)
+        if (Math.abs(L.sample(l.id, t, r) - dot3(L.dipoleAt(t, r), l.axis)) > 1e-9) return t;
+    return Infinity;
+  };
   const worstFor = r => {
     let w = 0;
-    for (const l of L.LEADS) for (let t = 0; t < 600; t++)
+    for (const l of L.LEADS) for (let t = 0; t < SPAN; t++)
       w = Math.max(w, Math.abs(L.sample(l.id, t, r) - dot3(L.dipoleAt(t, r), l.axis)));
     return w;
   };
-  ok('every supported rhythm is on one side of the line or the other',
-     L.SUPPORTED.every(r => PURE.includes(r) || PAINTED.includes(r) || r === 'longqt'),
-     L.SUPPORTED.filter(r => !PURE.includes(r) && !PAINTED.includes(r) && r !== 'longqt').join(', ') || 'all accounted for');
+
+  const unclassified = L.SUPPORTED.filter(r => !PURE.includes(r) && !PAINTED.includes(r));
+  ok('every supported rhythm is on one side of the line — no exceptions',
+     unclassified.length === 0, unclassified.join(', ') || `${L.SUPPORTED.length} rhythms, all placed`);
+
+  const margins = PURE.map(r => ({ r, at: firstDeviation(r) }));
+  const tooTight = margins.filter(m => m.at < SPAN + 50);
+  ok(`the ${SPAN}ms window really is inside one beat, with room to spare`,
+     tooTight.length === 0,
+     tooTight.map(m => `${m.r} deviates at ${m.at}ms`).join(', ') ||
+       `earliest next-beat contamination at ${Math.min(...margins.map(m => m.at))}ms`);
+
   const impure = PURE.filter(r => worstFor(r) > 1e-6);
   ok('the conduction rhythms ARE the projection, to floating point', impure.length === 0,
      impure.map(r => `${r} off by ${worstFor(r).toExponential(1)}`).join(', ') || PURE.join(', '));
