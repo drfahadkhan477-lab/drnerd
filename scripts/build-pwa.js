@@ -704,12 +704,21 @@ const mb = b => (b / 1048576).toFixed(2) + ' MB';
 const kb = b => (b / 1024).toFixed(0) + ' KB';
 const shellBytes = fs.statSync(path.join(DIST, 'index.html')).size
                  + fs.statSync(path.join(DIST, 'app.js')).size;
+/* The shell budget is denominated in transferred bytes, so the build prints
+   the transferred figure rather than leaving it to be discovered by the check
+   that enforces it. Gzip at a pinned level: deterministic, and an upper bound
+   on what a device gets — Cloudflare serves brotli to anything that accepts
+   it, which is smaller again. See the budget note in tests/verify-pwa.js. */
+const gzipOf = f => require('zlib')
+  .gzipSync(fs.readFileSync(path.join(DIST, f)), { level: 6 }).length;
+const shellWire = gzipOf('index.html') + gzipOf('app.js');
 console.log('Stage 1 PWA build\n');
 steps.forEach(s => console.log('  ✓ ' + s));
 console.log('');
 console.log(`  index.html           ${kb(fs.statSync(path.join(DIST, 'index.html')).size)}`);
 console.log(`  app.js               ${kb(fs.statSync(path.join(DIST, 'app.js')).size)}`);
 console.log(`  shell total          ${kb(shellBytes)}   (was ${mb(fs.statSync(SRC).size)} in one file)`);
+console.log(`  shell transferred    ${kb(shellWire)} gzipped   (the budget: 280 KB)`);
 console.log(`  content/             ${mb(contentManifest.figureBytes)} of figures + questions.json`);
 console.log(`  content/splash-heart ${splashAssets.map(([n,b])=>`${n} ${(b.length/1024).toFixed(0)}KB`).join(', ')}`);
 console.log(`\n  written to           ${DIST}`);

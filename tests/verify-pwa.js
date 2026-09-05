@@ -71,39 +71,44 @@ async function heapAfterBoot(page, url) {
     ok('and every one of those files is actually served', served.every(Boolean),
        `${served.filter(Boolean).length}/${faces.length}`);
     const shellBytes = Buffer.byteLength(shellHtml) + Buffer.byteLength(appJs);
-    /* Tightened from 800 KB once the fonts came out, then raised again here.
-       A budget that sits far above the real figure stops being a budget: it
-       was 800 to catch a megabyte of inlined base64 heart scan, and 640 held
-       for a long stretch precisely because nothing on the shell grew.
+    /* WHAT THIS BUDGET NOW MEASURES, AND WHY IT CHANGED.
 
-       It was not going to hold through three real features landing in one
-       sitting — a quiz Previous button with the per-question state to make it
-       safe, a progress card with a legend and a due-review pill, and (next) a
-       Chapters screen asked to be larger and more animated than the one it
-       replaces. That is not a payload hiding in the shell, it is the shell
-       doing more, and 640 KB was measured for a version of the app that did
-       less. 680 KB is chosen with the same discipline as before: real
-       headroom over today's actual ~640 KB rather than a round number picked
-       to stop the check complaining, sized to clear the Chapters work still
-       to come without needing a third revision in the same week.
+       For most of this project the cap was on uncompressed bytes: 800 KB to
+       catch a megabyte of inlined base64 heart scan, then 640 once the fonts
+       came out, then 680, then 700. Each raise bought 3-6% of headroom, so
+       each one bound again within a handful of changes — and the way changes
+       kept paying their way was by deleting their own comments, twice down to
+       a margin under a hundred bytes. That is not a budget working. That is a
+       budget being satisfied by removing the documentation this codebase is
+       largely made of, which is the wrong variable to optimise.
 
-       680 KB then held for exactly four changes — figzoom, the tap-slop fix,
-       and this one — each of which paid its way by cutting its own comments,
-       twice down to a margin under a hundred bytes. That is not a budget
-       working; that is a budget being satisfied by deleting the documentation
-       this codebase is largely made of, which is the wrong variable to
-       optimise. Raised to 700 KB by the same rule as last time: headroom over
-       today's real 683 KB, not a number picked to stop the check complaining.
+       The deeper problem is that nobody downloads uncompressed bytes. The
+       last raise left 4.1 KB of margin on 700 KB — a tripwire, not a budget —
+       while the figure a device actually fetches was 225 KB and had never
+       been measured. Comments are close to free once compressed, so the cap
+       was taxing the one thing it should not have.
 
-       WORTH KNOWING BEFORE THE NEXT RAISE. This measures uncompressed bytes,
-       and nobody downloads those: gzipped, the same shell is about 225 KB
-       (app.js 183, index.html 37), and 28% of app.js is comments. So the
-       figure this check defends is roughly three times what any device
-       actually fetches. Keeping it uncompressed is still defensible — it is a
-       stable number that does not move when a server changes its compression
-       — but the next time this cap binds, the honest fix is probably to
-       measure what is transferred rather than to raise this by another 20. */
-    ok('shell is under 700 KB', shellBytes < 700 * 1024, kb(shellBytes));
+       So it measures what is transferred. Gzip at a pinned level rather than
+       whatever a server negotiates: it is deterministic, it does not move
+       when a CDN changes its settings, and it is an honest UPPER BOUND —
+       Cloudflare serves brotli to anything that will take it, which is
+       186 KB against gzip's 225 KB here. A budget that binds on gzip has
+       already been cleared for the compression the device really gets.
+
+       The cap is 280 KB against today's real 225 KB. That is 24% of headroom,
+       chosen against the history above rather than as a round number: 3-6%
+       is what produced four raises in as many weeks. 55 KB of gzipped
+       headroom is on the order of 165 KB of source — room for several real
+       features, and far more than the whole adoption plan asks for.
+
+       The uncompressed figure is still reported, because it is not
+       meaningless — it drives parse and compile time on the device. It is
+       simply not the thing a download budget should be denominated in. */
+    const gzip = buf => require('zlib').gzipSync(buf, { level: 6 }).length;
+    const wireBytes = gzip(Buffer.from(shellHtml)) + gzip(Buffer.from(appJs));
+    ok('the shell transfers under 280 KB', wireBytes < 280 * 1024,
+       `${kb(wireBytes)} gzipped, from ${kb(shellBytes)} on disk`);
+
     if (baseline) {
       const before = require('fs').statSync(baseline).size;
       ok('and is a large fraction smaller than the single file',
