@@ -198,6 +198,87 @@ im.save("${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
     await page.locator('#close').click();
   }
 
+  head('reviewing on the page, a box can grow — not only shrink');
+  {
+    /* THE REASON THIS MODE EXISTS. The per-file mode shows the crop, so its
+       box can only ever tighten. That is enough when a detector over-reaches
+       and useless when it cuts a figure's legend off, which on the valvular
+       unit it did to three of the first three sampled. A legend is not
+       optional; it is what makes a diagram a figure.
+
+       So this mode shows the whole page with the proposed box drawn on it, and
+       the box can be dragged outwards past what was proposed. That is the one
+       behaviour worth a check of its own. */
+    const pagesDir = path.join(TMP, 'pages');
+    fs.mkdirSync(pagesDir, { recursive: true });
+    /* A FRESH page, not the earlier fixture. That one has already been cropped
+       to 900x800 by the round-trip block above, and reusing it would declare a
+       page_size the file no longer has — which is exactly the mismatch
+       trim-figure.py refuses, and it would have been my fixture lying, not the
+       tool. */
+    execFileSync('python3', ['-c', `
+from PIL import Image, ImageDraw
+im = Image.new("RGB", (900, 1200), "white"); d = ImageDraw.Draw(im)
+d.rectangle([60, 120, 840, 880], outline=(0,0,0), width=6)     # the artwork
+for i in range(4):                                              # its legend
+    d.rectangle([60, 910 + i*22, 700, 910 + i*22 + 8], fill=(30,30,30))
+d.rectangle([60, 1020, 840, 1180], outline=(0,0,0), width=4)   # a second figure
+im.save("${pagesDir}/page-001.jpg", quality=92)
+`], { stdio: 'pipe' });
+    /* A proposal that is deliberately too small: it stops 300px short of the
+       bottom, exactly as a cut-off legend would. */
+    const manifest = path.join(TMP, 'manifest.json');
+    fs.writeFileSync(manifest, JSON.stringify({
+      source: 'test', source_pages: 1, visual_items_detected: 2,
+      items: [
+        { id: 1, label: 'FIG.9.1', page: 1, caption: 'the one whose legend was cut off',
+          image: 'visuals/001.jpg', box: [50, 100, 850, 900],
+          page_image: 'page-001.jpg', page_size: [900, 1200] },
+        /* Two figures on ONE page — the case a per-file review cannot express
+           at all, because both would be the same filename. */
+        { id: 2, label: 'FIG.9.2', page: 1, caption: 'the second on the same page',
+          image: 'visuals/002.jpg', box: [50, 950, 850, 1150],
+          page_image: 'page-001.jpg', page_size: [900, 1200] },
+      ],
+    }));
+    const rec = path.join(TMP, 'valv.json');
+    const said = execFileSync('python3',
+      [path.join(ROOT, 'tools', 'figure-review.py'), '--manifest', manifest,
+       '--pages', pagesDir, '--out', path.join(TMP, 'page.html'),
+       '--record', rec, '--max-width', '300'], { encoding: 'utf8' });
+    ok('both figures on the one page become their own card',
+       /2 figures/.test(said), said.trim().split('\n')[0]);
+    ok('and the sheet says they are shown on their page', /full page/.test(said));
+
+    await page.goto('file://' + path.join(TMP, 'page.html'));
+    await page.waitForSelector('.card');
+    ok('two cards, from one image', await page.locator('.card').count() === 2);
+
+    const first = page.locator('.card').first();
+    ok('the card opens at the PROPOSED box, not the whole page',
+       /800×800/.test(await first.locator('.dims').textContent()),
+       (await first.locator('.dims').textContent()).trim());
+
+    /* Drag the bottom edge DOWN, past the proposal, toward the page's end. */
+    const img = await first.locator('img').boundingBox();
+    const grip = await first.locator('.grip.g-b').boundingBox();
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(img.x + img.width / 2, img.y + img.height * 0.98, { steps: 12 });
+    await page.mouse.up();
+    await first.locator('button[data-a="crop"]').click();
+    await page.locator('#export').click();
+    const out = JSON.parse(await page.locator('#json').inputValue());
+    const c = out.crops['001_FIG.9.1_p001.jpg'];
+    ok('the recorded box reaches past where the detector stopped',
+       !!c && c.box[3] > 900, c && `bottom ${c.box[3]} vs proposed 900`);
+    ok('and it is still in the PAGE\'s pixels, not the preview\'s',
+       !!c && JSON.stringify(c.was) === '[900,1200]', c && JSON.stringify(c.was));
+    ok('the second figure on that page is untouched and separately keyed',
+       !out.crops['002_FIG.9.2_p001.jpg'], Object.keys(out.crops).join(', '));
+    await page.locator('#close').click();
+  }
+
   head('two trees cannot share one record');
   {
     /* A box measured on one image must never be applied to a different image

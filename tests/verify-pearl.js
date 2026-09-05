@@ -436,34 +436,68 @@ const head = t => console.log('\n── ' + t + ' ──');
         return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
       const ratio = (a, b) => { const L1 = lum(a), L2 = lum(b);
         return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05); };
+      /* ACROSS THE ANIMATION AND ACROSS PEARLS, NOT ONE FRAME OF ONE DRAW.
+         The trace is a travelling current and the pearl is chosen at random, so
+         a single getImageData samples one instant of one text layout. Measured,
+         that made this check's own verdict a coin flip: the same build reported
+         4.48 (fail) in one full run, 4.57 three times standalone, and 5.16,
+         5.15, 5.55, 5.42 under contention. A check whose answer moves by a
+         quarter of its own threshold is not measuring the app.
+
+         The claim is that the text clears 4.5:1 over the trace — at every
+         moment, on every pearl, not on average and not if you are lucky. So it
+         sweeps frames across the cycle and re-draws several pearls, and takes
+         the worst of all of it. That is strictly STRONGER: a lucky frame can no
+         longer hide a real shortfall. */
+      const FRAMES = 14, PEARLS = 3;
+      const frame = () => new Promise(r => requestAnimationFrame(() => r()));
       const out = [];
       for (const t of THEMES) {
         setTheme(t.id);
         await new Promise(r => setTimeout(r, 450));
-        const wrap = document.querySelector('.pearl-bodywrap');
-        const card = document.querySelector('.pearl-card');
-        const cv = document.getElementById('pearlCurrent');
-        if (!wrap || !card || !cv) continue;
-        const txt = RGBA(getComputedStyle(wrap).color).slice(0, 3);
-        const page = RGBA(getComputedStyle(document.body).backgroundColor);
-        const cardEff = over(RGBA(getComputedStyle(card).backgroundColor),
-                             over(page, [255, 255, 255, 1]).concat(1));
-        const op = parseFloat(getComputedStyle(cv).opacity) || 1;
-        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
-        let worst = ratio(txt, cardEff), lit = 0;
-        for (let i = 0; i < d.length; i += 4) {
-          const a = (d[i + 3] / 255) * op;
-          if (a < 0.02) continue;
-          lit++;
-          const r = ratio(txt, over([d[i], d[i + 1], d[i + 2], a], cardEff));
-          if (r < worst) worst = r;
+        let worst = Infinity, best = -Infinity, lit = 0, samples = 0;
+        for (let k = 0; k < PEARLS; k++) {
+          if (k) {                       /* a different pearl, same theme */
+            pearlCache = null; goHome(); render();
+            await new Promise(r => setTimeout(r, 350));
+          }
+          const wrap = document.querySelector('.pearl-bodywrap');
+          const card = document.querySelector('.pearl-card');
+          const cv = document.getElementById('pearlCurrent');
+          if (!wrap || !card || !cv) continue;
+          const txt = RGBA(getComputedStyle(wrap).color).slice(0, 3);
+          const page = RGBA(getComputedStyle(document.body).backgroundColor);
+          const cardEff = over(RGBA(getComputedStyle(card).backgroundColor),
+                               over(page, [255, 255, 255, 1]).concat(1));
+          const op = parseFloat(getComputedStyle(cv).opacity) || 1;
+          if (worst === Infinity) worst = ratio(txt, cardEff);
+          for (let f = 0; f < FRAMES; f++) {
+            await frame();
+            const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+            samples++;
+            for (let i = 0; i < d.length; i += 4) {
+              const a = (d[i + 3] / 255) * op;
+              if (a < 0.02) continue;
+              lit++;
+              const r = ratio(txt, over([d[i], d[i + 1], d[i + 2], a], cardEff));
+              if (r < worst) worst = r;
+              if (r > best) best = r;
+            }
+          }
         }
-        out.push({ theme: t.id, worst: +worst.toFixed(2), lit });
+        out.push({ theme: t.id, worst: +worst.toFixed(2),
+                   spread: +(best - worst).toFixed(2), lit, samples });
       }
       setTheme('auto');
       return out;
     });
     const under = contrast.filter(c => c.worst < 4.5);
+    /* A sweep that found no trace pixels would report Infinity and pass
+       vacuously — the failure mode that makes a strengthened check weaker. */
+    const blind = contrast.filter(c => !c.lit || !c.samples);
+    ok('every theme was actually sampled, on lit pixels', blind.length === 0,
+       blind.map(c => c.theme).join(', ') ||
+         `${contrast.length} themes, ${contrast[0].samples} frames each`);
     ok('the text clears 4.5:1 over the trace in every theme', under.length === 0,
        under.length ? under.map(c => `${c.theme} ${c.worst}`).join(', ')
                     : `worst ${Math.min(...contrast.map(c => c.worst))}:1`);
