@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1602 + 91 checks
+node scripts/verify.js --pwa                           # → 1617 + 91 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -154,12 +154,43 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 48 suites, 1602 checks, plus 91 more on the split build. Those numbers are
+Across 49 suites, 1617 checks, plus 91 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
+
+### The one suite that checks us against somebody else
+
+`verify-oracle` is different in kind from the rest. Every other suite was
+written by the same hand that wrote the code it checks, which catches typos and
+regressions but never a formula transcribed wrongly from the paper — the check
+would carry the same wrong transcription.
+
+So `src/core/fsrs.js` is compared against **ts-fsrs**, an independent
+implementation, fed *our* nineteen weights so the parameters are not the
+variable. It ran once; its answers are checked in as `tests/fixtures/`
+data, and the suite needs no dependency at all, which is what lets CI run it.
+
+```bash
+npm i ts-fsrs                      # dev-only; nothing ships it
+node tools/gen-fsrs-oracle.js      # → tests/fixtures/fsrs-oracle.json
+```
+
+Across 700 states the two agree to ts-fsrs's full output precision on
+retrievability, difficulty, and stability after Hard, Good and Easy. They part
+on exactly one thing, and the suite **asserts** the parting rather than
+tolerating it: on Again, ours is `min(theirs, the stability the card already
+had)`. `fsrsNextStabilityFail` explains why — without that cap, 275 of 616
+reachable states came out *more* durable after pressing Again than before it.
+
+Two things about the fixture are load-bearing. It is pinned to the parameter
+fingerprint, so weights that move make it stale rather than silently wrong — a
+mismatch says regenerate, never adjust. And the comparison tolerance is `1e-8`
+**absolute**, because ts-fsrs rounds every public result to eight decimals; the
+first draft compared at `1e-9` relative and reported five failures that were
+entirely its serialisation.
 
 The suites run one at a time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness

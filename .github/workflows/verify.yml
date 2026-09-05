@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1602 checks in
-# `node scripts/verify.js` plus 91 more under `--pwa`, this workflow runs 247.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1617 checks in
+# `node scripts/verify.js` plus 91 more under `--pwa`, this workflow runs 262.
 # The other 1446 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
@@ -63,7 +63,7 @@
 #                README and BUILD.md are the counts the tests actually
 #                produced — this file said both "1052" and "1210" for one
 #                quantity until that check existed).
-#                247 real checks, up
+#                262 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -124,6 +124,8 @@ jobs:
           node-version: '20'
       - name: FSRS-5–derived scheduling (46 checks)
         run: node tests/verify-fsrs.js
+      - name: the scheduler against ts-fsrs, on our own weights (15 checks)
+        run: node tests/verify-oracle.js
       - name: the Cloudflare Worker request handler (52 checks)
         run: node tests/verify-worker.js
       - name: the cardiac cycle's physics (23 checks)
