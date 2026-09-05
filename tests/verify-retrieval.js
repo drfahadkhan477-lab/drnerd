@@ -33,9 +33,15 @@
  * MiniSearch wins three of four and loses the fourth. That fourth is the one
  * production issues: groundedContext searches on the fellow's chat text
  * repeated three times plus 160 characters of question stem, which is a long
- * prose query, not a title. So the swap was not made. The gap on `prefix` is
- * real and is a separate, smaller piece of work against the existing index —
- * two of the five call sites pass short, partially-typed terms.
+ * prose query, not a title. So the swap was not made.
+ *
+ * THE `prefix` GAP WAS THEN CLOSED WITHOUT IT. Chain step 72 completes query
+ * tokens the index has never seen — at most two completions, nearest in
+ * length first — which took that column from 54.1% to 80.1% and its ten empty
+ * result sets to zero, for fifteen lines and 0.44 ms per query. Not 99%: that
+ * needs prefix matching inside the ranker rather than terms OR-ed into the
+ * query. It is the cheap 26 points, and it cost no dependency and no bytes
+ * worth measuring.
  *
  * The floors below are a REGRESSION GUARD, set roughly one point under
  * today's measured values. One point, not five, because the measurement is
@@ -135,18 +141,75 @@ const TARGET = process.argv[2] || path.join(__dirname, '..', 'build', 'systole.h
   ok('R@1 at or above 0.90 with one transposition', r.typo.r1 >= 0.90, pct(r.typo.r1));
   ok('R@5 at or above 0.97', r.typo.r5 >= 0.97, pct(r.typo.r5));
 
-  head('a half-typed title is the known weak point');
-  /* 54% R@1 and ten empty results out of 146. This is not a floor anyone
-     should be comfortable with; it is recorded so that the fix, when it comes,
-     has a number to beat, and so that it cannot quietly get worse first. */
-  ok('R@1 at or above 0.53 on truncated terms', r.prefix.r1 >= 0.53, pct(r.prefix.r1));
-  ok('and at most 11 of them return nothing at all', r.prefix.empty <= 11,
+  head('a half-typed title completes to the note');
+  ok('R@1 at or above 0.79 on truncated terms', r.prefix.r1 >= 0.79, pct(r.prefix.r1));
+  /* Zero, not "few". Returning nothing at all is a different failure from
+     ranking badly: it tells the fellow their library does not cover something
+     it does cover. Ten of 146 did that before step 72. */
+  ok('and NONE of them returns nothing at all', r.prefix.empty === 0,
      `${r.prefix.empty} empty of ${r.prefix.n}`);
 
   head('prose from the note itself — the shape production actually sends');
   ok('R@1 at or above 0.98', r.body.r1 >= 0.98, pct(r.body.r1));
   ok('R@5 at or above 0.99', r.body.r5 >= 0.99, pct(r.body.r5));
   ok('and nothing comes back empty', r.body.empty === 0, String(r.body.empty));
+
+  head('completion fires only where there was nothing to complete');
+  {
+    /* The safety property, stated directly rather than inferred from the
+       scores above: a token the index knows is returned untouched. If that
+       ever stops being true, every query that works today is being rewritten,
+       and the three unchanged columns above would be the last place it
+       showed. */
+    const probe = await page.evaluate(() => {
+      search('warm the index', { limit: 1 });
+      const known = Object.keys(IDX.df).filter(t => t.length >= 6 && IDX.df[t] > 2).slice(0, 40);
+      const untouched = known.every(t => {
+        const before = tok(t);
+        return JSON.stringify(expandStubs(tok(t))) === JSON.stringify(before);
+      });
+      /* And a stub does grow — otherwise "untouched" is true because the
+         function does nothing at all. */
+      const stub = known.find(t => t.length >= 8);
+      const cut = stub ? stub.slice(0, 5) : null;
+      const grew = cut && !IDX.df[cut]
+        ? expandStubs(tok(cut)).length > tok(cut).length : null;
+      return { n: known.length, untouched, cut, grew, vocab: Object.keys(IDX.df).length };
+    });
+    ok('a known word is passed through unchanged', probe.untouched,
+       `${probe.n} sampled from a ${probe.vocab}-term vocabulary`);
+    ok('and a stub really does grow — the guard is not vacuous',
+       probe.grew === true, `"${probe.cut}" → ${probe.grew}`);
+  }
+
+  head('the word list cannot outlive the index it came from');
+  {
+    /* Two caches, one invalidation. A vocabulary that survives an index rebuild
+       completes words that are no longer in the library. */
+    /* Rebuilding on an UNCHANGED corpus proves nothing — the same vocabulary
+       comes back either way. So the corpus changes: a note carrying a word
+       that exists nowhere else, and a stub of it that could only complete
+       against a word list built after the note arrived. */
+    const after = await page.evaluate(() => {
+      const NONCE = 'zylotrophin';                 // in no cardiology text ever
+      const before = search('zylot', { limit: 5 }).length;
+      REF.push({ id: 'nonce-probe', title: 'Probe ' + NONCE,
+                 body: NONCE + ' is a word invented by a test.', tags: '', ts: Date.now() });
+      const stale = search('zylot', { limit: 5 }).length;   // index not yet dropped
+      invalidateIndex();
+      const fresh = search('zylot', { limit: 5 })
+        .filter(h => h.meta.kind === 'r').map(h => h.meta.id);
+      REF.pop();
+      invalidateIndex();
+      const gone = search('zylot', { limit: 5 }).length;
+      return { before, stale, fresh, gone };
+    });
+    ok('a stub of a word not in the library completes to nothing',
+       after.before === 0, String(after.before));
+    ok('and once the note exists and the index is dropped, it completes to it',
+       after.fresh.includes('nonce-probe'), JSON.stringify(after.fresh));
+    ok('and when the note goes, so does the word', after.gone === 0, String(after.gone));
+  }
 
   head('the shape the tutor sends is the shape it is best at');
   /* The one comparison that decided against MiniSearch, kept as an assertion
