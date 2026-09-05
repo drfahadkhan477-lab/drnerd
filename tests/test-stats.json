@@ -1,8 +1,8 @@
 {
   "_generated": "by scripts/verify.js on a full green run — do not hand-edit",
   "engine": "chromium",
-  "suiteCount": 47,
-  "total": 1583,
+  "suiteCount": 48,
+  "total": 1597,
   "pwa": 91,
   "suites": {
     "stage0": 27,
@@ -51,6 +51,7 @@
     "stats": 24,
     "selftest": 27,
     "layout": 26,
-    "figreview": 28
+    "figreview": 28,
+    "retrieval": 14
   }
 }
