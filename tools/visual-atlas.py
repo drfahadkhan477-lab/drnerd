@@ -288,13 +288,23 @@ def main():
         name = f'{i:03d}_{pretty}_p{page:03d}.jpg'
         im = Image.open(os.path.join(args.pages_dir, 'page-%03d.jpg' % page)).convert('RGB')
         x0, y0, x1, y1 = fig['box']
-        im.crop((max(0, x0 - PAD), max(0, y0 - PAD),
-                 min(im.width, x1 + PAD), min(im.height, y1 + PAD))) \
-          .save(os.path.join(args.out_dir, 'visuals', name), 'JPEG',
-                quality=args.quality, optimize=True)
+        box = (max(0, x0 - PAD), max(0, y0 - PAD),
+               min(im.width, x1 + PAD), min(im.height, y1 + PAD))
+        im.crop(box).save(os.path.join(args.out_dir, 'visuals', name), 'JPEG',
+                          quality=args.quality, optimize=True)
         out.append({'id': i, 'label': pretty, 'page': page,
                     'caption': legend_text(texts[page], ('E' + kind) if e else kind, ch, num),
-                    'image': f'visuals/{name}'})
+                    'image': f'visuals/{name}',
+                    # THE BOX, RECORDED. Without it a crop cannot be reopened
+                    # on the page it came from, and this detector is wrong often
+                    # enough that reopening is the whole point: a figure whose
+                    # legend was cut off cannot be recovered by cropping the
+                    # crop, only by going back to the page. page_size travels
+                    # with it so a box is checkable against what it was measured
+                    # on, the same rule tools/figure-crops.json already follows.
+                    'box': list(box),
+                    'page_image': 'page-%03d.jpg' % page,
+                    'page_size': [im.width, im.height]})
 
     json.dump({'source': args.name, 'source_pages': len(texts),
                'visual_items_detected': len(out), 'items': out},

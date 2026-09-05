@@ -6,6 +6,11 @@ Build an offline review sheet so a person decides every figure crop.
     python3 tools/figure-review.py --dir content/atlas/hf/visuals
     python3 tools/figure-review.py --out build/review.html --max-width 720
 
+    # Review a freshly extracted unit ON ITS SOURCE PAGES, so a box can grow as
+    # well as shrink — the only way to recover a legend the detector cut off:
+    python3 tools/figure-review.py --manifest out/visual_manifest.json \
+                                   --pages pages/ --record tools/figure-crops.valvular.json
+
 WHY THIS EXISTS. Every automatic cropper tried here has been wrong in a way
 that destroys information. The colour-based one cut TABLE 56.5 down to 5% of
 its page. The ink-profile one in trim-figure.py scores clean multi-panel
@@ -76,6 +81,53 @@ def preview(path, max_w, quality):
     im.convert('RGB').save(buf, 'JPEG', quality=quality, optimize=True)
     return ('data:image/jpeg;base64,' +
             base64.b64encode(buf.getvalue()).decode('ascii')), w, h
+
+
+def collect_manifest(manifest, pages_dir, max_w, quality, limit=None, record=CROPS):
+    """Review a visual-atlas manifest ON ITS SOURCE PAGES, not on its crops.
+
+    The crop-per-file mode below can only ever tighten a box, because the image
+    it shows IS the crop. That is enough when the detector over-reaches. It is
+    useless when the detector cuts a figure's legend off, which on the valvular
+    unit it did — and a legend is not optional, it is what turns a diagram into
+    a figure.
+
+    So this mode shows the WHOLE PAGE with the proposed box drawn on it. Every
+    edge can move outwards as well as in. One page carrying two figures becomes
+    two cards over the same image, which is why the record is keyed by the
+    figure's label rather than by a filename."""
+    import copy
+    man = json.load(open(manifest))
+    rec = load_record(record)
+    items, seen = [], {}
+    for it in man.get('items', []):
+        if not it.get('box') or not it.get('page_image'):
+            continue
+        page = os.path.join(pages_dir, it['page_image'])
+        if not os.path.exists(page):
+            continue
+        key = f"{it['id']:03d}_{it['label']}_p{it['page']:03d}.jpg"
+        if key not in seen:
+            seen[key] = preview(page, max_w, quality)
+        uri, w, h = seen[key]
+        prior = None
+        if key in rec['crops']:
+            c = rec['crops'][key]
+            prior = {'verdict': 'crop', 'box': c['box'], 'was': c.get('was', [w, h]),
+                     'why': c.get('why', '')}
+        elif key in rec['_checked_and_left_alone']:
+            prior = {'verdict': 'keep', 'why': rec['_checked_and_left_alone'][key]}
+        items.append({
+            'key': key, 'w': w, 'h': h, 'src': uri,
+            'score': 0.0,
+            'hint': f"{it['label']} · page {it['page']} · " +
+                    (it.get('caption') or 'NO LEGEND FOUND')[:110],
+            'proposed': it['box'],
+            'prior': prior,
+        })
+    if limit:
+        items = items[:limit]
+    return items, rec
 
 
 def collect(root, max_w, quality, limit=None, record=CROPS):
@@ -253,7 +305,7 @@ function card(d){
       '<div class="grip v g-l" data-e="l"></div><div class="grip v g-r" data-e="r"></div>' +
     '</div>' +
     '<div class="ft">' +
-      '<button data-a="keep">Keep whole</button>' +
+      '<button data-a="keep">' + (d.proposed ? 'Skip this one' : 'Keep whole') + '</button>' +
       '<button data-a="crop">Use this crop</button>' +
       '<button data-a="reset">Reset box</button>' +
       '<span class="dims"></span>' +
@@ -266,7 +318,13 @@ function card(d){
   img.src = d.src;
 
   /* Box is held in ORIGINAL pixels throughout; the preview is only a lens. */
-  let box = (st.box && st.box.length === 4) ? st.box.slice() : [0, 0, d.w, d.h];
+  /* Where the box starts: a decision already made, else the detector's
+     proposal, else the whole image. The proposal matters — on a page review
+     there is nothing to see without it, since the card shows a full textbook
+     page and the figure is a rectangle somewhere inside it. */
+  let box = (st.box && st.box.length === 4) ? st.box.slice()
+          : (d.proposed && d.proposed.length === 4) ? d.proposed.slice()
+          : [0, 0, d.w, d.h];
   const why = el.querySelector('textarea');
   why.value = st.why || '';
   const wrap = el.querySelector('.why');
@@ -325,12 +383,16 @@ function card(d){
   el.addEventListener('click', ev => {
     const a = ev.target.closest('button[data-a]');
     if (!a) return;
-    if (a.dataset.a === 'reset') { box = [0,0,d.w,d.h]; paint(); return; }
+    if (a.dataset.a === 'reset') {
+      box = (d.proposed && d.proposed.length === 4) ? d.proposed.slice() : [0,0,d.w,d.h];
+      paint(); return;
+    }
     if (a.dataset.a === 'keep') {
       state[d.key] = {v:'keep', why: why.value.trim() ||
         'reviewed on the sheet and left whole — no page prose to remove'};
     } else {
-      if (box[0]===0 && box[1]===0 && box[2]===d.w && box[3]===d.h) {
+      const whole = box[0]===0 && box[1]===0 && box[2]===d.w && box[3]===d.h;
+      if (whole && !(d.proposed && d.proposed.length === 4)) {
         alert('That box is the whole image. Drag an edge in first, or press Keep whole.');
         return;
       }
@@ -403,8 +465,12 @@ render();
 '''
 
 
-def build(root, out, max_w, quality, limit=None, record=CROPS):
-    items, rec = collect(root, max_w, quality, limit, record)
+def build(root, out, max_w, quality, limit=None, record=CROPS,
+          manifest=None, pages_dir=None):
+    if manifest:
+        items, rec = collect_manifest(manifest, pages_dir, max_w, quality, limit, record)
+    else:
+        items, rec = collect(root, max_w, quality, limit, record)
     sig = hashlib.sha1((root + '|' + record + '|' + '|'.join(i['key'] for i in items))
                        .encode('utf-8')).hexdigest()[:12]
     html = (PAGE
@@ -418,8 +484,14 @@ def build(root, out, max_w, quality, limit=None, record=CROPS):
         fh.write(html)
     already = sum(1 for i in items if i['prior'])
     hot = sum(1 for i in items if i['score'] > 0.10)
-    print(f'{len(items)} figures from {root}  (record: {record})')
-    print(f'  {already} already decided, {hot} ranked worth a first look')
+    proposed = sum(1 for i in items if i.get('proposed'))
+    where = f'{manifest}' if manifest else root
+    print(f'{len(items)} figures from {where}  (record: {record})')
+    if proposed:
+        print(f'  {already} already decided, {proposed} shown on their full page '
+              f'with a proposed box')
+    else:
+        print(f'  {already} already decided, {hot} ranked worth a first look')
     print(f'  {os.path.getsize(out)/1e6:.1f} MB -> {out}')
     print('\nOpen it on the iPad, decide every card, then Export JSON.')
     return out
@@ -441,6 +513,17 @@ def main():
         'content/refs-images') else os.path.join(
             HERE, 'figure-crops.' + os.path.basename(os.path.normpath(root)) + '.json')
     record = opt('--record', default_record)
+    manifest = opt('--manifest')
+    pages_dir = opt('--pages')
+    if manifest:
+        if not pages_dir:
+            sys.exit('--manifest needs --pages: the manifest names page images, '
+                     'and this mode reviews the figure ON its page')
+        if not os.path.exists(manifest):
+            sys.exit(f'{manifest} does not exist')
+        build(root, out, max_w, quality, int(limit) if limit else None, record,
+              manifest=manifest, pages_dir=pages_dir)
+        return
     if not os.path.isdir(root):
         sys.exit(f'{root} is not a directory — build the content first')
     build(root, out, max_w, quality, int(limit) if limit else None, record)

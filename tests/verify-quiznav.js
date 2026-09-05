@@ -98,10 +98,24 @@ const head = t => console.log('\n── ' + t + ' ──');
   {
     const r = await page.evaluate(async () => {
       const qa = POOL[0];
-      S.srs[qa.id] = { difficulty: 5, stability: 10, ivl: 1, reps: 2, lapses: 0, last: '2020-01-01', due: todayISO() };
+      const mkDue = q => { S.srs[q.id] = { difficulty: 5, stability: 10, ivl: 1,
+        reps: 2, lapses: 0, last: '2020-01-01', due: todayISO() }; };
+      /* TWO cards due, not one. Rating the last question in a session correctly
+         does NOT advance — there is nowhere to go — so a session of one makes
+         "and advances to the next question" untestable rather than false. */
+      mkDue(qa); mkDue(POOL[1]);
       startQuiz(null, 'due');
-      const at = S.questions.findIndex(q => q.id === qa.id);
-      if (at < 0) return { found: false };
+      let at = S.questions.findIndex(q => q.id === qa.id);
+      if (at < 0 || S.questions.length < 2) return { found: false };
+      /* startQuiz shuffles the due queue, so this question's position is a
+         fresh draw every run. When it drew last, rating it advanced nowhere and
+         this block failed — intermittently, standalone, about one run in three.
+         The app was right each time; the assumption that a rated question has a
+         successor was what varied. Move it off the end rather than hope. */
+      if (at === S.questions.length - 1) {
+        const t = S.questions[0]; S.questions[0] = S.questions[at];
+        S.questions[at] = t; at = 0;
+      }
       S.qIdx = at; S.selected = null; S.answered = false;
 
       selectOpt(qa.ci);
@@ -119,11 +133,14 @@ const head = t => console.log('\n── ' + t + ' ──');
       const afterSecondAttempt = { stability: S.srs[qa.id].stability, unchanged: S.srs[qa.id].stability === beforeSecond };
 
       return { found: true, wasReviewing, before, afterFirstRate,
+               at, sessionLen: S.questions.length,
                back, rateRowGone: !htmlNow.includes('rate-prompt'),
                revealShown: htmlNow.includes('reveal-card'), afterSecondAttempt };
     });
 
     ok('a due session presents the rate row when first answered', r.found && r.wasReviewing);
+    ok('and the session has somewhere to advance TO — otherwise the next check is vacuous',
+       r.sessionLen >= 2 && r.at < r.sessionLen - 1, `question ${r.at + 1} of ${r.sessionLen}`);
     ok('rating it writes a real schedule change',
        r.afterFirstRate.stability !== r.before && r.afterFirstRate.rated, String(r.afterFirstRate.stability));
     ok('and advances to the next question', r.afterFirstRate.moved);
