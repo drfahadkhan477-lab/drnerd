@@ -21,14 +21,14 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1583 checks in
-# `node scripts/verify.js` plus 91 more under `--pwa`, this workflow runs 247.
-# The other 1427 all drive a real build of the app in a real browser
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 1639 checks in
+# `node scripts/verify.js` plus 91 more under `--pwa`, this workflow runs 284.
+# The other 1446 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 1427 checks here. See docs/BUILD.md and the
+# there is no way to run those 1446 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
@@ -63,7 +63,7 @@
 #                README and BUILD.md are the counts the tests actually
 #                produced — this file said both "1052" and "1210" for one
 #                quantity until that check existed).
-#                247 real checks, up
+#                284 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -76,7 +76,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 1427 checks to this file is possible — GitHub Actions
+# Adding the other 1446 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -124,11 +124,13 @@ jobs:
           node-version: '20'
       - name: FSRS-5–derived scheduling (46 checks)
         run: node tests/verify-fsrs.js
+      - name: the scheduler against ts-fsrs, on our own weights (15 checks)
+        run: node tests/verify-oracle.js
       - name: the Cloudflare Worker request handler (52 checks)
         run: node tests/verify-worker.js
       - name: the cardiac cycle's physics (23 checks)
         run: node tests/verify-physio-pure.js
-      - name: the 12-lead's geometry (25 checks)
+      - name: the 12-lead's geometry and morphology (47 checks)
         run: node tests/verify-leads-pure.js
       - name: the ZIP reader's memory ceiling (12 checks)
         run: node tests/verify-zip.js

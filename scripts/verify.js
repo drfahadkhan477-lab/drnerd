@@ -96,6 +96,14 @@ const SUITES = [
      tapping if the box it records is the box that gets applied. It needs
      python3 with Pillow, the same dependency tools/figure-review.py has. */
   ['figreview',    'the review sheet records the box in original pixels, not preview pixels'],
+  /* Retrieval quality as a number rather than an impression. It exists because
+     the adoption plan gated a MiniSearch swap on "measurably better recall"
+     and nothing could measure either side. */
+  ['retrieval',    'the library still finds the right note, and prose queries stay its best case'],
+  /* The scheduler against an implementation that is not ours. Its 46 checks
+     were all written by the hand that wrote the code, which catches typos and
+     regressions but never a formula transcribed wrongly from the paper. */
+  ['oracle',       'our FSRS agrees with ts-fsrs on our own weights, everywhere but the one cap we chose'],
 ];
 
 const argv = process.argv.slice(2);

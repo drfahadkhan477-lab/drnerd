@@ -232,6 +232,17 @@ const ROOT = path.join(__dirname, '..');
                    because R = min(w,h)/2 - 2 goes negative and the throw
                    happens inside the rAF loop, killing the animation for the
                    session. fit() tested the width and never the height
+
+     prefixq       a half-typed word finds the note anyway. tok() stems, and
+                   the stem of a truncation is a truncation — "amylo" is not
+                   "amyloidosis", so the index has no entry, no document
+                   scores, and the library's own search box answered ten of
+                   146 title queries with nothing at all. Query tokens the
+                   index has NEVER SEEN are completed against the vocabulary,
+                   at most two, nearest in length first; tokens it knows are
+                   left exactly alone, so nothing that works today is
+                   rewritten. 54.1% to 80.1% R@1, empty results to zero, and
+                   the other three query shapes unchanged to the decimal
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -244,6 +255,7 @@ const CHAIN = [
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
   'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest', 'answerroom',
   'avatarfit',
+  'prefixq',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

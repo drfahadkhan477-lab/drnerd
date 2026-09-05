@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1583 + 91 checks
+node scripts/verify.js --pwa                           # → 1639 + 91 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -118,6 +118,7 @@ The cost is that order matters, and the dependencies are real:
 | 69 | `selftest` | the invariants run **on the device**, in the engine, at the size the iPad is actually held: open the app with `#selftest`. Both bugs that reached the fellow were invisible to 1,496 checks because the harness is Blink, portrait-ish, and a 400×300 rectangle — while the app is WebKit, landscape, and 408 real figures, 401 of which were clipped at "Fit". That gap cannot be closed from the harness, so the checks go to the device. It opens real figures and measures them rather than recomputing the sizing rule, which would agree with a wrong one |
 | 70 | `answerroom` | opening the figures under an Apex answer crushed the answer to **43px** on an iPad held portrait — one line. `.ai-body` was the panel's only `flex:1` child and carried `min-height:0`, so every pixel the figure list took came out of the answer with nothing to stop it at zero. An explicit `8rem` floor, and the list gives up the difference. Four candidates were measured at three frames before this one was chosen; shrinking the figures too was rejected, because a 12-lead too small to read is not a saving |
 | 71 | `avatarfit` | the Apex avatar's canvas threw `IndexSizeError` whenever it was briefly under 4px — a collapsing panel, a rotating iPad — because `R = min(w,h)/2 - 2` goes negative and `createRadialGradient` refuses a negative `r0`. The throw happens inside the rAF loop, so it killed the animation for the session rather than skipping a frame. `fit()` tested the width and never the height. Found by `verify-layout`, which resizes |
+| 72 | `prefixq` | `tok()` stems, and the stem of a truncation is a truncation — "amylo" is not "amyloidosis", so `IDX.df` has no entry, no document scores, and the library's own search box answered **ten of 146** title queries with nothing at all. Query tokens the index has *never seen* are completed against the vocabulary, at most two, nearest in length first; tokens it knows are left exactly alone. `54.1% → 80.1%` R@1 on truncated terms, empty results to zero, and the other three query shapes unchanged to the decimal. Measured by `verify-retrieval` |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -153,12 +154,43 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 47 suites, 1583 checks, plus 91 more on the split build. Those numbers are
+Across 49 suites, 1639 checks, plus 91 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
+
+### The one suite that checks us against somebody else
+
+`verify-oracle` is different in kind from the rest. Every other suite was
+written by the same hand that wrote the code it checks, which catches typos and
+regressions but never a formula transcribed wrongly from the paper — the check
+would carry the same wrong transcription.
+
+So `src/core/fsrs.js` is compared against **ts-fsrs**, an independent
+implementation, fed *our* nineteen weights so the parameters are not the
+variable. It ran once; its answers are checked in as `tests/fixtures/`
+data, and the suite needs no dependency at all, which is what lets CI run it.
+
+```bash
+npm i ts-fsrs                      # dev-only; nothing ships it
+node tools/gen-fsrs-oracle.js      # → tests/fixtures/fsrs-oracle.json
+```
+
+Across 700 states the two agree to ts-fsrs's full output precision on
+retrievability, difficulty, and stability after Hard, Good and Easy. They part
+on exactly one thing, and the suite **asserts** the parting rather than
+tolerating it: on Again, ours is `min(theirs, the stability the card already
+had)`. `fsrsNextStabilityFail` explains why — without that cap, 275 of 616
+reachable states came out *more* durable after pressing Again than before it.
+
+Two things about the fixture are load-bearing. It is pinned to the parameter
+fingerprint, so weights that move make it stale rather than silently wrong — a
+mismatch says regenerate, never adjust. And the comparison tolerance is `1e-8`
+**absolute**, because ts-fsrs rounds every public result to eight decimals; the
+first draft compared at `1e-9` relative and reported five failures that were
+entirely its serialisation.
 
 The suites run one at a time deliberately: several drive a real WebGL context and several measure
 timing, so running them concurrently would produce failures about the harness
