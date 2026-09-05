@@ -105,17 +105,31 @@ def find_trim(path):
     return cut, f'{kept} rows of page text, {cut}px ({cut/h:.0%})'
 
 
-def apply_crops(root):
-    """Replay tools/figure-crops.json onto an extracted content/refs-images.
+def apply_crops(root, record=None):
+    """Replay a crop record onto an extracted image tree.
 
     The images are licensed and gitignored, so a crop made by hand is lost the
     moment they are regenerated unless it is recorded as data. Idempotent: a
     file already at the cropped size is left alone, so running this twice does
-    not crop twice."""
+    not crop twice.
+
+    Each tree carries its own record — tools/figure-crops.json for
+    content/refs-images, tools/figure-crops.<tree>.json for the others. Two
+    trees sharing one record would let a box measured on one image be applied
+    to a different image that happens to share its relative path."""
     import json
     here = os.path.dirname(os.path.abspath(__file__))
-    spec = json.load(open(os.path.join(here, 'figure-crops.json')))
-    for key, c in spec['crops'].items():
+    if record is None:
+        record = os.path.join(here, 'figure-crops.json') \
+            if os.path.normpath(root) == os.path.normpath('content/refs-images') \
+            else os.path.join(here, 'figure-crops.' +
+                              os.path.basename(os.path.normpath(root)) + '.json')
+    if not os.path.exists(record):
+        print(f'no record at {record} — nothing to replay')
+        return
+    spec = json.load(open(record))
+    print(f'replaying {record} onto {root}')
+    for key, c in spec.get('crops', {}).items():
         f = os.path.join(root, key)
         if not os.path.exists(f):
             print(f'miss  {key} — not extracted here'); continue
@@ -135,7 +149,10 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     report = '--report' in sys.argv
     if '--apply-crops' in sys.argv:
-        apply_crops(args[0] if args else 'content/refs-images')
+        rec = None
+        if '--record' in sys.argv:
+            rec = sys.argv[sys.argv.index('--record') + 1]
+        apply_crops(args[0] if args else 'content/refs-images', rec)
         return
     if '--dir' in sys.argv:
         src, dst = args[0], args[1]

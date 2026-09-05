@@ -91,6 +91,11 @@ const SUITES = [
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
   ['selftest',     'the on-device self-test reports honestly, and can actually fail'],
   ['layout',       'every screen fits, at every frame a real device produces'],
+  /* Build-side, not app-side. It drives the figure review sheet rather than
+     the app, because a crop decided by a person is only worth an hour of
+     tapping if the box it records is the box that gets applied. It needs
+     python3 with Pillow, the same dependency tools/figure-review.py has. */
+  ['figreview',    'the review sheet records the box in original pixels, not preview pixels'],
 ];
 
 const argv = process.argv.slice(2);
