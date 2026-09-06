@@ -6,10 +6,12 @@
    trace behind it. Handsome, and it taught nothing. A board candidate opening
    a study app should read something worth knowing before they read a metric.
 
-   WHERE THE PEARLS COME FROM. The 146 reference notes already on the shelf —
-   Braunwald-sourced, written for this exam. Nothing is invented here and no
-   second corpus is maintained: this only has to *find* the good sentence in
-   prose that already exists.
+   WHERE THE PEARLS COME FROM. The reference notes already on the shelf —
+   Braunwald-sourced, written for this exam; 295 of them across heart failure,
+   ischaemic heart disease and the valvular unit at the time of writing.
+   Nothing is invented here and no second corpus is maintained: this only has
+   to *find* the good sentence in prose that already exists, so adding a unit
+   to content/refs/ adds its pearls with no further work.
 
    WHAT MAKES A SENTENCE A PEARL. Not every sentence in a note survives being
    pulled out of it. The ones that do are self-contained and carry a fact:

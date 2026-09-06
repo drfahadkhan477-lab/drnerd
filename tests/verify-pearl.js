@@ -362,9 +362,10 @@ const head = t => console.log('\n── ' + t + ' ──');
   head('a pearl is a whole thought now');
   {
     /* The old rules capped a pearl at 210 characters and required exactly one
-       sentence. Measured over the 146 shipped notes that gave 96 pearls with a
-       median of 143 characters — true statements that stopped before they
-       taught anything. */
+       sentence. Measured over the 146 notes shipped at the time, that gave 96
+       pearls with a median of 143 characters — true statements that stopped
+       before they taught anything. The assertions below are thresholds, not
+       counts, so they hold as the corpus grows. */
     const stats = await page.evaluate(() => {
       const all = Pearl.harvest(REF);
       const lens = all.map(p => p.text.length).sort((a, b) => a - b);

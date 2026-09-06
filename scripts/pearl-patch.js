@@ -60,9 +60,9 @@ ${pearl}
 /* ── 2. choosing one, and holding it still ───────────────────────────────── */
 patch('pearl: chosen once, moved only on request',
 `function buildHome(){`,
-`/* Harvested once — 146 notes is a few milliseconds of regex, but render() is
-   called on every answer, and paying it there would be careless. Rebuilt when
-   the library changes, which is what invalidateIndex already signals. */
+`/* Harvested once — a few hundred notes is a few milliseconds of regex, but
+   render() is called on every answer, and paying it there would be careless.
+   Rebuilt when the library changes, which is what invalidateIndex signals. */
 let pearlCache=null, pearlCurrent=null;
 function pearlAll(){
   if(pearlCache) return pearlCache;

@@ -10,11 +10,12 @@
  *
  * THE LENGTH RULES LIVE IN src/core/pearl.js and are changed there — MIN 55
  * to 90, MAX 210 to 700, and a pearl may now be a run of up to three
- * consecutive sentences within one paragraph. Measured over the 146 shipped
- * notes, that takes the corpus from 96 pearls with a median of 143 characters
- * to 133 with a median of 295. Read that file's header for why length was
- * never what made a pearl memorable — Pearl.steps() is, and it now has
- * something worth breaking up.
+ * consecutive sentences within one paragraph. Measured over the 146 notes
+ * shipped at the time, that takes the corpus from 96 pearls with a median of
+ * 143 characters to 133 with a median of 295 — the shelf has since grown to
+ * 295 notes and 273 pearls, which does not change the ratio this measured.
+ * Read that file's header for why length was never what made a pearl
+ * memorable — Pearl.steps() is, and it now has something worth breaking up.
  *
  * THE PV LOOP GOES. It was a good drawing in the wrong place: 104px square,
  * pinned to the bottom-right of the prose column, competing with the words for
