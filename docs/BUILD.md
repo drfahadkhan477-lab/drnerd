@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1648 + 91 checks
+node scripts/verify.js --pwa                           # → 1651 + 91 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -119,6 +119,7 @@ The cost is that order matters, and the dependencies are real:
 | 70 | `answerroom` | opening the figures under an Apex answer crushed the answer to **43px** on an iPad held portrait — one line. `.ai-body` was the panel's only `flex:1` child and carried `min-height:0`, so every pixel the figure list took came out of the answer with nothing to stop it at zero. An explicit `8rem` floor, and the list gives up the difference. Four candidates were measured at three frames before this one was chosen; shrinking the figures too was rejected, because a 12-lead too small to read is not a saving |
 | 71 | `avatarfit` | the Apex avatar's canvas threw `IndexSizeError` whenever it was briefly under 4px — a collapsing panel, a rotating iPad — because `R = min(w,h)/2 - 2` goes negative and `createRadialGradient` refuses a negative `r0`. The throw happens inside the rAF loop, so it killed the animation for the session rather than skipping a frame. `fit()` tested the width and never the height. Found by `verify-layout`, which resizes |
 | 72 | `prefixq` | `tok()` stems, and the stem of a truncation is a truncation — "amylo" is not "amyloidosis", so `IDX.df` has no entry, no document scores, and the library's own search box answered **ten of 146** title queries with nothing at all. Query tokens the index has *never seen* are completed against the vocabulary, at most two, nearest in length first; tokens it knows are left exactly alone. `54.1% → 80.1%` R@1 on truncated terms, empty results to zero, and the other three query shapes unchanged to the decimal. Measured by `verify-retrieval` |
+| 73 | `prefixrank` | The rest of that gap, by **scoring** the prefix instead of substituting for it. Two chosen completions make a document whose only matching term is a *third* one invisible, credit a document holding both twice, and give each completion its own idf so a rare wrong one outargues the common right one. Raising the cap fixes none of these — at 2/3/4/6/8 it measured `63.4 / 61.7 / 61.0 / 62.7 / 63.4`, noise around a ceiling. A stub is now **one term whose postings are the union of every term it prefixes**: tf summed, df counted over documents. `buildIndex` keeps postings, so a stub costs the postings that can match rather than the whole collection — and stub queries got *faster*, 0.25 → 0.11 ms. A known token is still never treated as a prefix: `as` is aortic stenosis. `66.8% → 87.1%` R@1 on the 295-note shelf, above the `80.1%` the old mechanism reached on half as many notes; floor raised 0.79 → 0.86. Measured by `verify-retrieval` |
 
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
@@ -154,7 +155,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 49 suites, 1648 checks, plus 91 more on the split build. Those numbers are
+Across 49 suites, 1651 checks, plus 91 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,

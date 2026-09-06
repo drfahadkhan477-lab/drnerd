@@ -35,13 +35,40 @@
  * repeated three times plus 160 characters of question stem, which is a long
  * prose query, not a title. So the swap was not made.
  *
- * THE `prefix` GAP WAS THEN CLOSED WITHOUT IT. Chain step 72 completes query
- * tokens the index has never seen — at most two completions, nearest in
- * length first — which took that column from 54.1% to 80.1% and its ten empty
- * result sets to zero, for fifteen lines and 0.44 ms per query. Not 99%: that
- * needs prefix matching inside the ranker rather than terms OR-ed into the
- * query. It is the cheap 26 points, and it cost no dependency and no bytes
- * worth measuring.
+ * THE `prefix` GAP WAS THEN CLOSED WITHOUT IT, IN TWO STEPS. Chain step 72
+ * completed query tokens the index had never seen — at most two completions,
+ * nearest in length first — taking that column from 54.1% to 80.1% and its ten
+ * empty result sets to zero, for fifteen lines. Its own note said the rest
+ * "needs prefix matching inside the ranker rather than terms OR-ed into the
+ * query". Chain step 73 is that: a stub is scored as one term whose postings
+ * are the union of every term it prefixes, tf summed and df counted over
+ * documents, so there is no cap, no double counting, and the idf is the
+ * prefix's own. 66.8% to 87.1% on the 295-note shelf.
+ *
+ * `prefix` USED TO BE SENSITIVE TO HOW BIG THE LIBRARY IS. Under step 72 it
+ * fell as the shelf grew, and steeply: holding the query set fixed at the 146
+ * pre-existing notes and admitting valvular notes to the index in quarters,
+ *
+ *   index      146     183     221     258     295 notes
+ *   step 72   80.1%   77.4%   74.7%   72.6%   71.9%    −8.2 points
+ *   step 73   88.4%   88.4%   87.0%   87.0%   87.7%    −0.7 points
+ *
+ * Same queries, same target notes, only the number of documents competing for
+ * the same stems changing. The old decline was monotonic because a cap of two
+ * completions goes on getting less adequate as the vocabulary grows — the
+ * mechanism was sensitive to collection size on top of the ordinary BM25
+ * dilution. Scoring the whole prefix union removes that term, and what is left
+ * is flat to within its own noise: the step-73 row is not even monotonic.
+ *
+ * THIS IS WHY THE FLOOR IS TIGHT. Under step 72 a floor near the measured
+ * value would have tripped on the next unit imported, and the finding would
+ * have been "the shelf grew" every time — a guard that cries wolf gets
+ * ignored. At 0.7 points per 150 notes it now takes something like another 230
+ * notes of drift to move 87.1% to 86.0%, so a failure here is once again most
+ * likely to be what this file is for: a ranker regression. Should it fail
+ * anyway, the counterfactual above is how to tell the two apart in one run —
+ * index a subset, re-measure the same notes. `exact` is not sensitive in this
+ * way and did not move at all across the same change.
  *
  * The floors below are a REGRESSION GUARD, set roughly one point under
  * today's measured values. One point, not five, because the measurement is
@@ -52,7 +79,10 @@
  *
  * They are not a target to tune towards, and per standing discipline they are
  * never to be lowered to accommodate a regression: a number that drops is a
- * finding about retrieval, not about this file.
+ * finding about retrieval, not about this file. Raising one when the ranker
+ * genuinely improves is the other half of that bargain, and is why the
+ * `prefix` floor moved from 0.79 to 0.86 with step 73 — a point under the
+ * measured 87.1%, on a number that no longer drifts with the corpus.
  */
 'use strict';
 const path = require('path');
@@ -142,7 +172,7 @@ const TARGET = process.argv[2] || path.join(__dirname, '..', 'build', 'systole.h
   ok('R@5 at or above 0.97', r.typo.r5 >= 0.97, pct(r.typo.r5));
 
   head('a half-typed title completes to the note');
-  ok('R@1 at or above 0.79 on truncated terms', r.prefix.r1 >= 0.79, pct(r.prefix.r1));
+  ok('R@1 at or above 0.86 on truncated terms', r.prefix.r1 >= 0.86, pct(r.prefix.r1));
   /* Zero, not "few". Returning nothing at all is a different failure from
      ranking badly: it tells the fellow their library does not cover something
      it does cover. Ten of 146 did that before step 72. */
@@ -154,32 +184,82 @@ const TARGET = process.argv[2] || path.join(__dirname, '..', 'build', 'systole.h
   ok('R@5 at or above 0.99', r.body.r5 >= 0.99, pct(r.body.r5));
   ok('and nothing comes back empty', r.body.empty === 0, String(r.body.empty));
 
-  head('completion fires only where there was nothing to complete');
+  head('prefix matching fires only where there was nothing to match');
   {
-    /* The safety property, stated directly rather than inferred from the
-       scores above: a token the index knows is returned untouched. If that
-       ever stops being true, every query that works today is being rewritten,
-       and the three unchanged columns above would be the last place it
-       showed. */
+    /* THE SAFETY PROPERTY, and it is load-bearing rather than theoretical. A
+       token the index knows must be scored as itself and never as a prefix:
+       "as" is aortic stenosis on this shelf, and prefix-matching it would drag
+       aspirin, assess and asystole into every search that mentions it. If this
+       ever stops holding, every query that works today is being widened, and
+       the three unchanged columns above would be the last place it showed.
+
+       The vacuity guard is the second check: a stub must actually reach the
+       terms it prefixes, or "known words are left alone" is true only because
+       nothing is happening at all. */
     const probe = await page.evaluate(() => {
       search('warm the index', { limit: 1 });
-      const known = Object.keys(IDX.df).filter(t => t.length >= 6 && IDX.df[t] > 2).slice(0, 40);
-      const untouched = known.every(t => {
-        const before = tok(t);
-        return JSON.stringify(expandStubs(tok(t))) === JSON.stringify(before);
-      });
-      /* And a stub does grow — otherwise "untouched" is true because the
-         function does nothing at all. */
-      const stub = known.find(t => t.length >= 8);
-      const cut = stub ? stub.slice(0, 5) : null;
-      const grew = cut && !IDX.df[cut]
-        ? expandStubs(tok(cut)).length > tok(cut).length : null;
-      return { n: known.length, untouched, cut, grew, vocab: Object.keys(IDX.df).length };
+      const untouched = Object.keys(IDX.df).filter(t => t.length >= 6 && IDX.df[t] > 2)
+        .slice(0, 40).every(t => stubTerms(t) === null);
+      /* Measured over the whole vocabulary rather than one probe word. A single
+         pick is a lottery — the first long term happened to be "50-year-old",
+         whose stub reaches exactly one thing — and a check that depends on
+         which word sorts first is not measuring the mechanism. */
+      const reaches = [];
+      for (const w of Object.keys(IDX.df)) {
+        if (w.length < 9 || IDX.df[w] <= 2) continue;
+        const cut = w.slice(0, 5);
+        if (IDX.df[cut]) continue;
+        const r = stubTerms(cut);
+        reaches.push(r ? r.length : 0);
+      }
+      reaches.sort((a, b) => a - b);
+      return { untouched, n: reaches.length, median: reaches[reaches.length >> 1],
+               overCap: reaches.filter(x => x > 2).length,
+               vocab: Object.keys(IDX.df).length };
     });
-    ok('a known word is passed through unchanged', probe.untouched,
-       `${probe.n} sampled from a ${probe.vocab}-term vocabulary`);
-    ok('and a stub really does grow — the guard is not vacuous',
-       probe.grew === true, `"${probe.cut}" → ${probe.grew}`);
+    ok('a known word is never treated as a prefix', probe.untouched,
+       `40 sampled from a ${probe.vocab}-term vocabulary`);
+    /* The old mechanism took two completions however many there were, so every
+       stub in the majority below lost the rest of its postings. */
+    ok('and a stub reaches past the two completions the old cap allowed',
+       probe.median >= 3 && probe.overCap / probe.n >= 0.5,
+       `median reach ${probe.median}; ${probe.overCap}/${probe.n} `
+         + `(${(100 * probe.overCap / probe.n).toFixed(0)}%) reach more than two`);
+  }
+
+  head('a stub is one term over every completion, not a pick of two');
+  {
+    /* THE CLAIM OF STEP 73, STATED SO IT CAN FAIL. Three notes, three words
+       sharing a prefix, one word each, chosen so the lengths differ. The old
+       mechanism OR-ed in the two completions nearest in length, so the note
+       holding the third word matched nothing and was not ranked low but
+       absent. Scoring the prefix as a single term over the union reaches all
+       three.
+
+       Not asserted here, deliberately: that a lone five-character stub ranks
+       what the whole word ranks. Measured at 40% top-5 both before and after,
+       because a stub really is ambiguous — "cardi" is cardiac, cardiomyopathy
+       and cardioversion — and a check demanding otherwise would be asserting
+       something that should not be true. The prefix column above is where that
+       outcome is measured, over whole half-typed titles, which is the query a
+       fellow actually types. */
+    const reach = await page.evaluate(() => {
+      const WORDS = ['zylotropha', 'zylotrophin', 'zylotrophinase'];
+      const added = WORDS.map((w, i) => ({
+        id: 'stub-probe-' + i, title: 'Probe ' + i,
+        body: w + ' is a word invented by a test.', tags: '', ts: Date.now() }));
+      for (const a of added) REF.push(a);
+      invalidateIndex();
+      const hits = search('zylot', { limit: 10 })
+        .filter(h => h.meta.kind === 'r').map(h => h.meta.id);
+      const terms = stubTerms('zylot') || [];
+      for (let i = 0; i < added.length; i++) REF.pop();
+      invalidateIndex();
+      return { hits, found: added.map(a => hits.includes(a.id)), terms };
+    });
+    ok('every note holding a word with that prefix is reached',
+       reach.found.every(Boolean),
+       `${reach.found.filter(Boolean).length}/3 found; stub covers ${reach.terms.length} terms`);
   }
 
   head('the word list cannot outlive the index it came from');

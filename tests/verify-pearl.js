@@ -90,26 +90,56 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('each names the note it came from', harvest.everyChapterNamed);
 
   head('aimed at weak chapters, without becoming only weak chapters');
+  /* THIS USED TO ASSERT A BARE COUNT, AND PASSED FOR THE WRONG REASON.
+     "hitWeak >= 12 of 60" is only evidence of aiming if you know what share of
+     the shelf the weak chapter already occupies. It did not, and the shelf was
+     mostly heart failure, so a draw with the weighting entirely broken still
+     cleared 12 on the base rate alone — which is exactly what was happening:
+     the token "heart", split out of "Heart Failure & Cardiomyopathies",
+     matched every source on the shelf ("Braunwald's Heart Disease"), so every
+     pearl was boosted and the boost cancelled out.
+
+     So the count is now measured against the base rate it has to beat. A
+     broken weighting scores 1.0x by construction, whatever the corpus looks
+     like, and the check no longer depends on the corpus staying heart-shaped.
+     Note the ratio falls toward 1.0 as the weak chapter's share approaches the
+     whole shelf; the floor here is set for the case aiming exists for, where
+     the weak chapter is a minority of what is on offer. */
   const weighting = await page.evaluate(() => {
     S.chStats = { 'Heart Failure & Cardiomyopathies': { correct: 4, total: 30 },
                   'Arrhythmias': { correct: 28, total: 30 } };
     const words = Pearl.weakWords(3);
     const all = Pearl.harvest(REF);
+    const aimed = Pearl.aimWords(all, words);
     /* Deterministic sampling: a fixed sequence rather than Math.random, so a
        failure here is a real change in the weighting and not bad luck. */
     let i = 0; const seq = () => ((i = (i * 9301 + 49297) % 233280) / 233280);
     const picks = [];
     for (let n = 0; n < 60; n++) picks.push(Pearl.pick(all, null, seq));
-    const hitWeak = picks.filter(p => /failure|cardiomyopath/i.test(p.title + ' ' + p.source)).length;
+    const isWeak = p => /failure|cardiomyopath/i.test(p.title + ' ' + p.source);
+    const hitWeak = picks.filter(isWeak).length;
+    const baseWeak = all.filter(isWeak).length / all.length;
     const distinct = new Set(picks.map(p => p.id)).size;
-    return { words, hitWeak, distinct };
+    const strong = new Set(picks.filter(p => !isWeak(p)).map(p => p.chapter)).size;
+    return { words, aimed, hitWeak, baseWeak, distinct, strong, pool: all.length };
   });
   ok('weak chapters are identified from the score history', weighting.words.length > 0,
      weighting.words.join(', '));
-  ok('the weak chapter is over-represented', weighting.hitWeak >= 12,
-     weighting.hitWeak + '/60 from the weak chapter');
+  /* The guard on the bug itself. Every source on this shelf carries the book's
+     name, so a chapter word that also appears in it matches everything. */
+  ok('a word that matches the whole shelf is not used to aim',
+     weighting.aimed.length > 0 && weighting.aimed.length < weighting.words.length
+       && !weighting.aimed.includes('heart'),
+     `kept ${weighting.aimed.join(', ') || 'nothing'} of ${weighting.words.join(', ')}`);
+  const lift = weighting.baseWeak ? (weighting.hitWeak / 60) / weighting.baseWeak : 0;
+  ok('the weak chapter is over-represented against its share of the shelf', lift >= 1.25,
+     `${weighting.hitWeak}/60 = ${(100 * weighting.hitWeak / 60).toFixed(0)}% drawn `
+       + `vs ${(100 * weighting.baseWeak).toFixed(0)}% of the ${weighting.pool}-pearl shelf `
+       + `→ ${lift.toFixed(2)}x`);
   ok('but the pearl is not always the same one', weighting.distinct > 15,
      weighting.distinct + ' distinct in 60 draws');
+  ok('and the strong chapters have not been crowded out', weighting.strong >= 5,
+     weighting.strong + ' other chapters in the same 60 draws');
 
   head('on the page');
   const card = await page.evaluate(() => {
@@ -362,9 +392,10 @@ const head = t => console.log('\n── ' + t + ' ──');
   head('a pearl is a whole thought now');
   {
     /* The old rules capped a pearl at 210 characters and required exactly one
-       sentence. Measured over the 146 shipped notes that gave 96 pearls with a
-       median of 143 characters — true statements that stopped before they
-       taught anything. */
+       sentence. Measured over the 146 notes shipped at the time, that gave 96
+       pearls with a median of 143 characters — true statements that stopped
+       before they taught anything. The assertions below are thresholds, not
+       counts, so they hold as the corpus grows. */
     const stats = await page.evaluate(() => {
       const all = Pearl.harvest(REF);
       const lens = all.map(p => p.text.length).sort((a, b) => a - b);

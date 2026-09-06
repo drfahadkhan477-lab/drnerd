@@ -6,10 +6,12 @@
    trace behind it. Handsome, and it taught nothing. A board candidate opening
    a study app should read something worth knowing before they read a metric.
 
-   WHERE THE PEARLS COME FROM. The 146 reference notes already on the shelf —
-   Braunwald-sourced, written for this exam. Nothing is invented here and no
-   second corpus is maintained: this only has to *find* the good sentence in
-   prose that already exists.
+   WHERE THE PEARLS COME FROM. The reference notes already on the shelf —
+   Braunwald-sourced, written for this exam; 295 of them across heart failure,
+   ischaemic heart disease and the valvular unit at the time of writing.
+   Nothing is invented here and no second corpus is maintained: this only has
+   to *find* the good sentence in prose that already exists, so adding a unit
+   to content/refs/ adds its pearls with no further work.
 
    WHAT MAKES A SENTENCE A PEARL. Not every sentence in a note survives being
    pulled out of it. The ones that do are self-contained and carry a fact:
@@ -290,12 +292,48 @@ function weightOf(p, words) {
   return words.some(w => hay.includes(w)) ? 3 : 1;
 }
 
+/* A WORD THAT MATCHES EVERYTHING AIMS AT NOTHING.
+ *
+ * weakWords splits a chapter name into its words, and weightOf matches those
+ * against the pearl's title AND ITS SOURCE. But every source on this shelf
+ * begins "Braunwald's Heart Disease", so the token "heart", taken from the
+ * chapter name "Heart Failure & Cardiomyopathies", matched every pearl in the
+ * library. weightOf then returned 3 for all of them — and a multiplier applied
+ * uniformly cancels out of a weighted draw completely. The aiming this module
+ * exists for was doing nothing at all.
+ *
+ * It survived because the shelf used to be mostly heart failure. A uniform
+ * draw still returned plenty of heart-failure pearls, so the check that
+ * watched this passed on the base rate rather than on any weighting. Adding a
+ * unit that shares none of those words dropped the base rate and exposed it:
+ * measured over 273 pearls the weak chapter came back at 0.89x its own share
+ * of the shelf, which is to say the draw was indistinguishable from uniform.
+ *
+ * So a word earns its place only if it actually divides the pool. This is the
+ * same reasoning as the inverse document frequency the search index already
+ * uses, applied to the one place that was missing it, and it needs no list of
+ * stop-words to maintain: a word that stops discriminating stops being used,
+ * whatever the corpus grows into. */
+const AIM_CEILING = 0.5;    // matches more than half the shelf → carries no signal
+
+function aimWords(pool, words) {
+  if (!words || !words.length || !pool || !pool.length) return [];
+  const cap = pool.length * AIM_CEILING;
+  return words.filter(w => {
+    let n = 0;
+    for (const p of pool) {
+      if ((p.title + ' ' + p.source).toLowerCase().includes(w) && ++n > cap) return false;
+    }
+    return n > 0;
+  });
+}
+
 /* Weighted pick, with the previous pearl excluded so "next" always moves. */
 function pick(pearls, prevId, rand) {
   const r = rand || Math.random;
   const list = pearls.filter(p => p.id !== prevId || pearls.length === 1);
   if (!list.length) return null;
-  const words = weakWords(3);
+  const words = aimWords(list, weakWords(3));
   const weights = list.map(p => weightOf(p, words) * (1 + p.score / 10));
   const total = weights.reduce((a, b) => a + b, 0);
   let t = r() * total;
@@ -425,6 +463,6 @@ function steps(text) {
 }
 
 root.Pearl = { harvest, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
-               weakWords, steps, runs, MIN, MAX, MAX_RUN };
+               weakWords, aimWords, steps, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
 
 })(typeof window !== 'undefined' ? window : this);

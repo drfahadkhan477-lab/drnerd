@@ -243,6 +243,20 @@ const ROOT = path.join(__dirname, '..');
                    left exactly alone, so nothing that works today is
                    rewritten. 54.1% to 80.1% R@1, empty results to zero, and
                    the other three query shapes unchanged to the decimal
+
+     prefixrank    the rest of that gap, by scoring the prefix instead of
+                   substituting for it. Two chosen completions leave a document
+                   whose only matching term is a third one invisible, credit a
+                   document holding both twice, and give each completion its
+                   own idf so a rare wrong one outargues the common right one.
+                   Raising the cap fixes none of that — measured at 2/3/4/6/8 it
+                   is noise around a ceiling. A stub is now ONE term whose
+                   postings are the union of every term it prefixes: tf summed,
+                   df counted over documents. buildIndex keeps postings so the
+                   cost is the matching postings, not the collection. A known
+                   token is still never treated as a prefix — "as" is aortic
+                   stenosis. 66.8% to 87.1% R@1 on a 295-note shelf, above the
+                   80.1% the old mechanism reached on half as many notes
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -255,7 +269,7 @@ const CHAIN = [
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
   'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest', 'answerroom',
   'avatarfit',
-  'prefixq',
+  'prefixq', 'prefixrank',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
