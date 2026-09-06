@@ -2,7 +2,7 @@
   "_generated": "by scripts/verify.js on a full green run — do not hand-edit",
   "engine": "chromium",
   "suiteCount": 49,
-  "total": 1648,
+  "total": 1651,
   "pwa": 91,
   "suites": {
     "stage0": 27,
@@ -25,7 +25,7 @@
     "memory": 49,
     "assets": 31,
     "chatfigs": 39,
-    "pearl": 65,
+    "pearl": 67,
     "worker": 52,
     "fsrs": 46,
     "boundary": 54,
@@ -52,7 +52,7 @@
     "selftest": 27,
     "layout": 26,
     "figreview": 35,
-    "retrieval": 19,
+    "retrieval": 20,
     "oracle": 15
   }
 }
