@@ -35,7 +35,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-Fifty-six patch scripts run in order against the export. Each applies a list of
+The chain is 73 patch scripts, run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
