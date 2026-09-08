@@ -1,0 +1,6 @@
+# Normalize all text files to LF line endings on checkout, regardless of
+# each contributor's local core.autocrlf setting.
+* text=auto eol=lf
+
+# Fonts are binary; never let git touch their line endings.
+*.woff2 binary
