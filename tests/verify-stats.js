@@ -79,6 +79,15 @@ head('every registered suite is in the record');
      Object.entries(stats.suites).filter(([, n]) => !(n > 0)).map(([k]) => k).join(', ') || 'none');
 }
 
+/* How long the patch chain is, derived from the chain itself. Three sentences
+   quote this number and none of them was checked, so all three had drifted:
+   docs/BUILD.md said fifty-six, scripts/build.js said fifty-six, package.json
+   said 64, and the chain was 73. Nobody had been careless — the number moves
+   whenever a step is added, which is exactly the kind of fact prose loses and
+   a derivation keeps. */
+const chainLength = ((read('scripts/build.js').match(/const CHAIN = \[([\s\S]*?)\];/) || [, ''])[1]
+                     .match(/'[^']+'/g) || []).length;
+
 /* The honest CI number, derived rather than quoted: whichever suites the
    workflow actually invokes, summed from what they actually reported. */
 const yml = read('.github/workflows/verify.yml');
@@ -129,6 +138,12 @@ head('the prose agrees with the record');
      /Adding the other (\d+) checks to this file/, r => [+r[1] === stats.total + stats.pwa - ciTotal]],
     ['.github/workflows/verify.yml', 'the honest subset total',
      /(\d+) real checks/, r => [+r[1] === ciTotal]],
+    ['docs/BUILD.md', 'the length of the patch chain',
+     /The chain is (\d+) patch scripts/, r => [+r[1] === chainLength]],
+    ['scripts/build.js', 'the length of the patch chain',
+     /applying (\d+) patch scripts/, r => [+r[1] === chainLength]],
+    ['package.json', 'the length of the patch chain',
+     /standard library and (\d+) patch scripts/, r => [+r[1] === chainLength]],
   ];
   for (const [file, what, re, judge] of claims) {
     const m = read(file).match(re);
@@ -136,6 +151,16 @@ head('the prose agrees with the record');
     const verdicts = judge(m);
     ok(`${file}: ${what}`, verdicts.every(Boolean), verdicts.every(Boolean) ? m[0].replace(/\s+/g, ' ').slice(0, 72) : `says "${m[0].replace(/\s+/g, ' ').slice(0, 72)}"`);
   }
+}
+
+head('the chain is as long as the prose says');
+{
+  ok('the chain has steps to count', chainLength > 0, `${chainLength} steps`);
+  /* Vacuity guard: a derivation that silently returns zero would make every
+     claim above compare 0 against 0 the moment somebody reformats the array. */
+  const onDisk = fs.readdirSync(path.join(ROOT, 'scripts')).filter(f => f.endsWith('-patch.js')).length;
+  ok('and every step in it has a patch script on disk', chainLength === onDisk,
+     `${chainLength} in CHAIN, ${onDisk} scripts`);
 }
 
 head('the arithmetic in the header is self-consistent');

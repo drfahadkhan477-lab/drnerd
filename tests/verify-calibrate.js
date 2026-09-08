@@ -94,7 +94,15 @@ const head = t => console.log('\n── ' + t + ' ──');
     if (!ext) return { skipped: true };
     const activeBefore = !!document.getElementById('heroHeart')?.classList.contains('heart-3d-active');
     ext.loseContext();
-    await wait(120);
+    /* WAIT FOR THE HANDLER, NOT FOR A DURATION. This was a flat 120 ms, which
+       is a guess about a machine you are not running on: the browser dispatches
+       webglcontextlost on its own schedule, and on a real GPU that is slower
+       than on this container's software renderer. The restore path six lines
+       below already polls for its condition — only the loss path guessed, and
+       it reported {instance:true, active:true} on a desktop where the heart was
+       demonstrably rendering. Bounded, so an onLost that never runs still fails
+       rather than hanging. */
+    for (let i = 0; i < 60 && heroHeart3d; i++) await wait(50);
     const afterLoss = {
       instance: !!heroHeart3d,
       active: !!document.getElementById('heroHeart')?.classList.contains('heart-3d-active'),

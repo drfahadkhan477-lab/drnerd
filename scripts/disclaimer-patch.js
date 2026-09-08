@@ -60,9 +60,27 @@ patch('disclaimer: #app becomes the <main> landmark it already was in fact',
 `  <div id="app"></div>`,
 `  <main id="app"></main>`);
 
+/* WHICH FONT TOKEN THE HERO USES IS NOT OURS TO ASSUME. This rule is the
+   export's, not the chain's — nothing here writes it, so its exact text is
+   whatever the ACCSAP export shipped. Exports differ: one says
+   var(--font-display), another var(--font-serif), and both define both tokens.
+   Hard-coding either spelling makes this step fail on the other export with
+   "expected exactly 1 match, found 0" and no hint that a single word is the
+   difference.
+   So the token is read off the file rather than assumed. The rest of the rule
+   is still pinned exactly, and patch() still asserts it appears exactly once —
+   this widens what counts as the hero rule by one token name, not what counts
+   as a match. */
+const HERO = /\.hero-h1\{font-family:var\(--font-[a-z-]+\);font-size:48px;line-height:1;color:#fff;/;
+const heroLine = (html.match(HERO) || [])[0];
+if (!heroLine) {
+  throw new Error('disclaimer: the hero title rule was not found. Expected a line like\n'
+    + '  .hero-h1{font-family:var(--font-serif);font-size:48px;line-height:1;color:#fff;\n'
+    + 'If your export writes it differently, that regex is what needs widening.');
+}
 patch('disclaimer: the hero title keeps its look, pinned against the h1 user-agent styles',
-`.hero-h1{font-family:var(--font-display);font-size:48px;line-height:1;color:#fff;`,
-`.hero-h1{font-family:var(--font-display);font-size:48px;line-height:1;color:#fff;
+heroLine,
+heroLine + `
   margin-top:0;font-weight:400;`);
 
 patch('disclaimer: the hero title becomes the document\'s one real <h1>',

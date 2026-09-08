@@ -17,7 +17,7 @@
     "serve": "node scripts/serve.js 8080 dist"
   },
   "comments": {
-    "dependencies": "The build has none on purpose — it is Node's standard library and 64 patch scripts. Playwright is needed only to run the test suites and is expected globally (npm i -g playwright && npx playwright install chromium), so a plain build never has to install a browser.",
+    "dependencies": "The build has none on purpose — it is Node's standard library and 73 patch scripts. Playwright is needed only to run the test suites and is expected globally (npm i -g playwright && npx playwright install chromium), so a plain build never has to install a browser.",
     "usage": "npm run build -- path/to/ACCSAP_export.html   then   npm test"
   }
 }

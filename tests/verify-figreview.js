@@ -59,9 +59,30 @@ d.rectangle([30, 30, 370, 270], outline=(0, 0, 0), width=5)
 im.save("${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
 `;
 
+/* WHICH INTERPRETER IS NOT THE SAME EVERYWHERE. Hard-coding python3 makes this
+   suite fail on Windows before a single check runs — "Command failed: python3
+   -c", reported as "did not report" rather than as a missing interpreter, so
+   the message says nothing about what is wrong. Windows installs Python as
+   `python`, and ships a `py` launcher; python3 there is often either absent or
+   a stub that opens the Store. Resolved once, by asking each candidate for its
+   version, so a failure to find any of them says so plainly. */
+const PY = (() => {
+  for (const c of [['python3'], ['python'], ['py', '-3']]) {
+    try {
+      execFileSync(c[0], [...c.slice(1), '--version'], { stdio: 'pipe' });
+      return c;
+    } catch (_) { /* try the next */ }
+  }
+  console.error('\n  No Python found. This suite needs python3 with Pillow, the same\n'
+    + '  dependency tools/figure-review.py has. Tried: python3, python, py -3.\n');
+  process.exit(1);
+})();
+const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
+
 (async () => {
-  execFileSync('python3', ['-c', MAKE], { stdio: 'pipe' });
-  execFileSync('python3', [path.join(ROOT, 'tools', 'figure-review.py'),
+  py(['-c', MAKE], { stdio: 'pipe' });
+  py(
+[path.join(ROOT, 'tools', 'figure-review.py'),
     '--dir', SRC, '--out', OUT, '--max-width', '300'], { stdio: 'pipe' });
 
   head('the sheet is built, and it is self-contained');
@@ -177,13 +198,14 @@ im.save("${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
     fs.writeFileSync(rec, text);
     const box = JSON.parse(text).crops['demo/tall_FIG.1.1_p001.jpg'].box;
 
-    const run = () => execFileSync('python3',
-      [path.join(ROOT, 'tools', 'trim-figure.py'), '--apply-crops', SRC, '--record', rec],
+    const run = () => py(
+[path.join(ROOT, 'tools', 'trim-figure.py'), '--apply-crops', SRC, '--record', rec],
       { encoding: 'utf8' });
     const first = run();
     ok('it reports the crop it made', /CROP/.test(first), first.trim().split('\n').pop());
 
-    const size = execFileSync('python3', ['-c',
+    const size = py(
+['-c',
       `from PIL import Image;print(*Image.open("${SRC}/demo/tall_FIG.1.1_p001.jpg").size)`],
       { encoding: 'utf8' }).trim().split(' ').map(Number);
     ok('the image on disk is now exactly the box the sheet recorded',
@@ -216,7 +238,8 @@ im.save("${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
        page_size the file no longer has — which is exactly the mismatch
        trim-figure.py refuses, and it would have been my fixture lying, not the
        tool. */
-    execFileSync('python3', ['-c', `
+    py(
+['-c', `
 from PIL import Image, ImageDraw
 im = Image.new("RGB", (900, 1200), "white"); d = ImageDraw.Draw(im)
 d.rectangle([60, 120, 840, 880], outline=(0,0,0), width=6)     # the artwork
@@ -242,8 +265,8 @@ im.save("${pagesDir}/page-001.jpg", quality=92)
       ],
     }));
     const rec = path.join(TMP, 'valv.json');
-    const said = execFileSync('python3',
-      [path.join(ROOT, 'tools', 'figure-review.py'), '--manifest', manifest,
+    const said = py(
+[path.join(ROOT, 'tools', 'figure-review.py'), '--manifest', manifest,
        '--pages', pagesDir, '--out', path.join(TMP, 'page.html'),
        '--record', rec, '--max-width', '300'], { encoding: 'utf8' });
     ok('both figures on the one page become their own card',
@@ -284,8 +307,8 @@ im.save("${pagesDir}/page-001.jpg", quality=92)
     /* A box measured on one image must never be applied to a different image
        that happens to share its relative path. The guard is that each tree
        defaults to its own record file. */
-    const sheet = (dir, out) => execFileSync('python3',
-      [path.join(ROOT, 'tools', 'figure-review.py'), '--dir', dir,
+    const sheet = (dir, out) => py(
+[path.join(ROOT, 'tools', 'figure-review.py'), '--dir', dir,
        '--out', path.join(TMP, out), '--max-width', '160'], { encoding: 'utf8' });
     const other = path.join(TMP, 'other');
     fs.mkdirSync(other, { recursive: true });
