@@ -103,6 +103,19 @@ function render(){
     if(changingScreen && document.startViewTransition && !reduced){
       const vt=document.startViewTransition(()=>renderNow());
       vt.updateCallbackDone.catch(showCrashScreen);
+      /* A TRANSITION SKIPPED BY THE NEXT ONE IS NAVIGATION, NOT A FAILURE.
+         startViewTransition hands back three promises. Only updateCallbackDone
+         can carry a render throw, which is why it alone reaches the crash
+         screen — curate-patch.js records why that must not be loosened. But
+         ready and finished reject with AbortError whenever a newer transition
+         starts before the current one settles, and a fellow tapping through
+         screens faster than the animation does exactly that. Unhandled, those
+         become unhandled promise rejections: harmless to the app, and enough
+         to fail every "no console or page errors" check in the suite — which
+         is how this was found, on a newer Chromium than it was written on.
+         Swallowed, not reported: there is nothing here to tell anybody. */
+      if(vt.ready) vt.ready.catch(()=>{});
+      if(vt.finished) vt.finished.catch(()=>{});
     } else {
       renderNow();
     }
