@@ -113,7 +113,32 @@ const sse = text => [
     let media = 0;
     for (const s of screens) {
       try { go[s](); } catch (e) { sideways.push(s + ' (threw: ' + e.message.slice(0, 30) + ')'); continue; }
-      await wait(380);
+      /* WAIT FOR THE COUNT TO HOLD STILL, NOT FOR 380 ms. A fixed wait is a
+         guess about the machine you are not running on: on a real GPU the
+         canvases on lab and stats paint later than they do on this container's
+         software renderer, and the sweep counted the screen before they
+         existed — 18 media elements on a desktop where all of them render.
+         This file already had __settle for exactly this reason and the sweep
+         was the one place not using it. Finite animations only: looping
+         decorations never finish. Bounded, so a screen that never settles
+         still fails rather than hangs. */
+      {
+        const visible = m => {
+          const cs = getComputedStyle(m);
+          if (cs.pointerEvents === 'none' || cs.display === 'none' || cs.visibility === 'hidden') return false;
+          const r = m.getBoundingClientRect();
+          return r.width >= 8 && r.height >= 8;
+        };
+        let last = -1, held = 0;
+        for (let i = 0; i < 90 && held < 3; i++) {
+          await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const busy = document.getAnimations().some(a => a.playState === 'running'
+            && Number.isFinite(a.effect && a.effect.getTiming().iterations));
+          const n = [...document.querySelectorAll('#app img, #app canvas')].filter(visible).length;
+          held = (n === last && !busy) ? held + 1 : 0;
+          last = n;
+        }
+      }
 
       const d = document.documentElement;
       const over = Math.round(d.scrollWidth - d.clientWidth);
@@ -154,13 +179,14 @@ const sse = text => [
     return { sideways, clipped, offLeft, media };
   }, screens);
 
-  let totalMedia = 0;
+  let totalMedia = 0; const perFrame = [], perFrameN = [];
   for (const [name, w, h] of FRAMES) {
     await page.setViewportSize({ width: w, height: h });
     await page.waitForTimeout(240);
     head(`${name} — ${w}x${h}`);
     const r = await sweep(SCREENS);
     totalMedia += r.media;
+    perFrame.push(`${name.split(' ')[0]} ${r.media}`); perFrameN.push(r.media);
     ok('no screen scrolls sideways', r.sideways.length === 0,
        r.sideways.join('; ') || `${SCREENS.length} screens clean`);
     ok('no figure is clipped by something that cannot scroll', r.clipped.length === 0,
@@ -168,8 +194,26 @@ const sse = text => [
     ok('nothing sits off the left edge', r.offLeft.length === 0,
        r.offLeft.slice(0, 2).join('; ') || 'all content starts on screen');
   }
+  /* THE 20 THIS ASKED FOR WAS A COIN FLIP, not a measurement. The sweep opens
+     the quiz with startQuiz(CHAPTERS[0], 'all'), and startQuiz shuffles: which
+     question is shown varies per run, and so does whether it carries a figure.
+     One element per frame, five frames — the total swings by up to five. Three
+     consecutive runs here gave 18, 20 and 22. A floor at 20 therefore passed or
+     failed on the shuffle, and the desktop report that started this was not a
+     machine difference at all; it was a run that landed low.
+     (The settle above is a separate, real fix: a flat 380 ms was sampling two
+     of the frames mid transition. It is worth having on its own, and it is not
+     what made this check unstable.)
+     So the vacuity claim the check's own name makes is now asserted directly —
+     no frame found nothing — with a total floor set below the shuffle's range
+     rather than inside it. Per-frame is the sharper guard anyway: a total can
+     look respectable while one viewport renders nothing at all.
+     The per-frame numbers travel with the total, because when this failed it
+     took a round trip to learn which frames were short — the runner prints
+     only failures, and the breakdown lived in a passing check. */
   ok('the sweep actually looked at media, rather than finding none to check',
-     totalMedia >= 20, `${totalMedia} media elements across ${FRAMES.length} frames`);
+     totalMedia >= 15 && perFrameN.every(n => n > 0),
+     `${totalMedia} media elements across ${FRAMES.length} frames — ${perFrame.join(', ')}`);
 
   head('the overlays, which sit above every screen');
   {
