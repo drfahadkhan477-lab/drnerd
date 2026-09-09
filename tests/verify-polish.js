@@ -73,23 +73,29 @@ const head = t => console.log('\n── ' + t + ' ──');
     return {
       hasLabel: !!document.getElementById('heroRhythmLabel'),
       labelText: document.getElementById('heroRhythmLabel')?.textContent || '',
-      hasHeart3d: !!document.getElementById('heroHeart3d'),
-      instanceLive: !!heroHeart3d,
+      /* The hero's 3D canvas is gone — heroart-patch.js replaced it with the
+         photograph. What this suite still owns is the rotation; that the
+         picture is mounted and beats is tests/verify-heroart.js's ground and
+         is deliberately not restated here. */
+      hasPlate: !!document.querySelector('#heroHeart.hero-heart-plate'),
       firstKind: heroCurrentKind,
+      inRegistry: heroCurrentKind in RHYTHMS,
     };
   });
   ok('rhythm label is present and populated', heroState.hasLabel && heroState.labelText.trim().length > 0,
      heroState.labelText);
-  ok('mini 3D heart canvas is mounted', heroState.hasHeart3d);
-  ok('a live Heart3D instance is driving it', heroState.instanceLive);
-  ok('first rhythm is a real playlist entry', HeroList => true);   // sanity below covers this properly
+  ok('the hero art is mounted for the rotation to drive', heroState.hasPlate);
+  /* This line used to read `ok('first rhythm is a real playlist entry', HeroList => true)`
+     — an arrow function, which is truthy, so the check passed unconditionally
+     and its own comment deferred the real work to a check further down that
+     never covered the FIRST rhythm. Made into the assertion it claimed. */
+  ok('the first rhythm is a real registry entry', heroState.inRegistry, heroState.firstKind)
 
   const rotation = await page.evaluate(async () => {
     const seen = [heroCurrentKind];
     for (let i = 0; i < 4; i++) {
       heroCurrentKind = HeroRhythm.nextInPlaylist(heroCurrentKind);
       heroMon.setRhythm(heroCurrentKind);
-      if (heroHeart3d) heroHeart3d.setRhythm(heroCurrentKind);
       setHeroBeatRate(heroCurrentKind);
       paintHeroLabel(heroCurrentKind);
       seen.push(heroCurrentKind);
@@ -106,27 +112,21 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('every rotated-to rhythm is a real registry entry', rotation.allInRegistry);
   ok('vfib/asystole excluded from ambient rotation', rotation.excludesAlarming);
   ok('label updates on rotation', rotation.labelAfter.trim().length > 0, rotation.labelAfter);
-  ok('SVG fallback beat duration is set from the rhythm\'s actual rate', /ms$/.test(rotation.beatMs || ''),
+  ok('the picture\'s beat duration is set from the rhythm\'s actual rate', /ms$/.test(rotation.beatMs || ''),
      rotation.beatMs);
 
-  head('hero heart: survives the same view-transition race the lab heart was fixed for');
-  await page.evaluate(() => { goHome(); render(); });
-  const race = await page.evaluate(() => { goHome(); render(); return true; });
-  await page.waitForTimeout(1500);
-  const afterRace = await page.evaluate(() => ({
-    live: !!heroHeart3d,
-    canvasMatches: heroHeart3d ? heroHeart3dCanvas === document.getElementById('heroHeart3d') : null,
-  }));
-  ok('a single live instance survives rapid re-renders', afterRace.live);
-  ok('the instance is bound to the CURRENT canvas node, not a detached one',
-     afterRace.canvasMatches === true, JSON.stringify(afterRace));
+  /* SIX HERO-3D LIFECYCLE CHECKS USED TO SIT HERE, AND ARE GONE. They asserted
+     that one live Heart3D instance survived a rapid re-render, that it was
+     bound to the current canvas node rather than a detached one, that it was
+     destroyed on leaving home and re-mounted on returning. heroart-patch.js
+     replaced the hero canvas with an <img>: there is no instance to keep, to
+     bind, to destroy, or to re-mount, and every one of those checks now
+     references an identifier that does not exist.
 
-  const teardown = await page.evaluate(() => { goLab(); render(); return heroHeart3d === null; });
-  ok('hero heart instance is destroyed when leaving home', teardown);
-  await page.evaluate(() => { goHome(); render(); });
-  await page.waitForTimeout(300);
-  const remount = await page.evaluate(() => !!heroHeart3d);
-  ok('remounts cleanly on returning home', remount);
+     What survives the swap is the rotation above and the picture's beat, and
+     both are asserted — here for the playlist, and in verify-heroart.js for the
+     beat's coupling to it. The re-render race those checks defended cannot
+     recur: an <img> in the markup is rebuilt with the markup. */
 
   head('pencil: width responds to pressure, tilt, and size — verified against the real paint path');
   const widths = await page.evaluate(() => ({
@@ -273,29 +273,44 @@ const head = t => console.log('\n── ' + t + ' ──');
   });
   ok('with auto-minimize OFF, a Pencil touch does not force-expand the rail', autoOffNoExpand === true);
 
-  head('the heart module is embedded whole, and the hero mounts it');
+  head('the heart module is embedded whole');
   /* This used to open the lab, switch the heart to cutaway and check that the
-     blood particles drew. The lab has no heart any more — it has the cardiac
-     cycle instead — so the claim moves to where the heart still lives. What
-     polish-patch is actually responsible for is re-embedding heart3d.js in one
-     piece; the hero mounting an instance from it is the evidence that the
-     module arrived intact, and it does not need a lab screen to show it. */
+     blood particles drew; then, when the lab lost its heart, it moved to the
+     hero's instance instead. The hero has since become a photograph, so there
+     is no screen left that mounts this module at all. What polish-patch is
+     responsible for has not changed — re-embedding heart3d.js in one piece —
+     so the evidence moves onto a canvas this test creates itself. */
   const heartModule = await page.evaluate(() => {
     goHome(); render();
     return new Promise(res => setTimeout(() => res({
       moduleLoaded: typeof Heart3D !== 'undefined' && typeof Heart3D.create === 'function',
       cycleFn: typeof Heart3D !== 'undefined' && typeof Heart3D.cycle === 'function',
       heroCanvas: !!document.getElementById('heroECG'),
-      heroLive: typeof heroHeart3d !== 'undefined' && !!heroHeart3d,
-      tris: (typeof heroHeart3d !== 'undefined' && heroHeart3d && heroHeart3d.stats)
-              ? heroHeart3d.stats.triangles : 0,
+      /* THE MESH IS BUILT ON A CANVAS THIS TEST OWNS. It used to read
+         heroHeart3d.stats.triangles off the hero's live instance — but the
+         hero is a photograph now and no screen mounts Heart3D at all, so the
+         only way left to prove the module arrived whole rather than merely
+         parseable is to drive it. Which also states the situation plainly:
+         after heroart-patch.js this 79 KB renderer has no callers in the app.
+         It is still embedded on purpose (see that step's header); this is what
+         keeps it from rotting silently while that decision is outstanding. */
+      tris: (() => {
+        try {
+          const cv = document.createElement('canvas');
+          cv.width = cv.height = 128;
+          const h = Heart3D.create(cv, { rhythm: 'sinus', mode: 'whole', resolution: [24, 32, 20] });
+          if (!h) return -1;                      // no WebGL2 in this environment
+          const n = h.stats ? h.stats.triangles : 0;
+          h.destroy();
+          return n;
+        } catch (_) { return -2; }
+      })(),
       noLabHeart: !document.getElementById('labHeartCanvas'),
     }), 900));
   });
   ok('Heart3D module is loaded and exposes create()', heartModule.moduleLoaded);
   ok('and the cardiac clock the rest of the app reads', heartModule.cycleFn);
-  ok('the hero mounts a live instance', heartModule.heroLive);
-  ok('whose mesh actually built triangles — the module came through whole',
+  ok('its mesh still builds triangles — the module came through whole',
      heartModule.tris > 5000, `${heartModule.tris} triangles`);
   ok('and no heart is left in the Rhythm Lab', heartModule.noLabHeart);
   ok('no errors from mounting it', errors.length === 0, JSON.stringify(errors.slice(0, 2)));

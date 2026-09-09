@@ -108,11 +108,29 @@ const head = t => console.log('\n── ' + t + ' ──');
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const chips = [...document.querySelectorAll('.cf-chip')];
     if (!chips.length) return { none: true };
+    /* WAIT ON THE CAUSE, THEN READ THE EFFECT. These were two flat 30 ms
+       sleeps, which is a guess about how quickly a machine you are not running
+       on gets from a click to a repaint. It held until an unrelated step added
+       about 2 KB to the build and the second read started landing before the
+       repaint — reporting a chip still marked while S.answers already said
+       null, which is a failure that says nothing about the app.
+
+       Polling the state and then asserting the class keeps the assertion
+       whole: the class is still what is being checked, and a DOM that stops
+       following the state still fails. Bounded, so a click that never
+       registers fails rather than hanging. */
+    const settle = async want => {
+      for (let i = 0; i < 60; i++) {
+        const cf = S.answers[S.qIdx] && S.answers[S.qIdx].cf;
+        if (cf === want) return;
+        await wait(16);
+      }
+    };
     chips[3].click();                                    // "Certain"
-    await wait(30);
+    await settle(3);
     const chosen = { on: chips[3].classList.contains('on'), pressed: chips[3].getAttribute('aria-pressed') };
     chips[3].click();                                    // tapping again clears it
-    await wait(30);
+    await settle(null);
     const cleared = { on: chips[3].classList.contains('on'), cf: S.answers[S.qIdx] && S.answers[S.qIdx].cf };
     chips[3].click();
     const q = S.questions[S.qIdx];

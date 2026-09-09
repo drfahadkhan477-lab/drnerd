@@ -201,9 +201,13 @@ patch('apex: full-page geometry and the reading measure',
 
 /* ── how an answer reads ──────────────────────────────────────────────────
    Written after the .msg.bot block above, so these override it by order. */
-.msg.bot h3{font-size:17px;font-weight:700;color:var(--teal);
+/* --t-lead over --t-body, and --t-body in bold under it: three steps of
+   hierarchy taken from the modular scale rather than invented. The first
+   version of this used 17px and 15px, which are not steps on that ladder —
+   the type suite exists to catch exactly that and did. */
+.msg.bot h3{font-size:var(--t-lead);font-weight:700;color:var(--teal);
   margin:22px 0 7px;line-height:1.3;letter-spacing:-.012em}
-.msg.bot h4{font-size:15px;font-weight:700;color:var(--text);
+.msg.bot h4{font-size:var(--t-body);font-weight:700;color:var(--text);
   margin:18px 0 5px;line-height:1.35;letter-spacing:-.008em}
 /* A heading that opens a message has nothing above it to be separated from. */
 .msg.bot>h3:first-child,.msg.bot>h4:first-child{margin-top:0}

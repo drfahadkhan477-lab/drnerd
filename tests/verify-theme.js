@@ -225,12 +225,30 @@ const head = t => console.log('\n── ' + t + ' ──');
       return out;
     });
   };
+  /* ONE SURFACE IS MEANT TO STAY PUT, AND IT IS ASSERTED RATHER THAN SKIPPED.
+     The hero medallion holds a photograph that carries its own dark ground;
+     the plate behind it is that ground continued, which is what lets one
+     picture read on Parchment's cream and Nocturne's near-black without being
+     masked out of its background. Following the palette would put a cream
+     plate behind a navy photograph.
+
+     An exemption list is how a sweep like this rots, so this is not one. The
+     plate is REQUIRED to be identical under both palettes and everything else
+     is required to move — so the check now fails in both directions: if the
+     medallion starts following the theme, and if anything else stops. */
+  const FIXED = 'div.hero-heart-plate';
   const warm = await paint('parchment'), green = await paint('monitor');
   const painted = Object.keys(warm).length;
   const blind = Object.keys(warm).filter(k => k in green && warm[k] === green[k]);
   ok('the sweep found surfaces to compare at all', painted >= 8, `${painted} painted surfaces`);
-  ok('every one of them moves when the palette does', blind.length === 0,
-     blind.length ? blind.join(', ') : `${painted}/${painted} follow the palette`);
+  ok('the hero medallion is on screen to be judged', FIXED in warm,
+     FIXED in warm ? warm[FIXED] : 'not painted — has the hero art been renamed?');
+  ok('it holds its own ground across two palettes that share nothing',
+     warm[FIXED] === green[FIXED], `${warm[FIXED]} / ${green[FIXED]}`);
+  ok('and every other painted surface moves when the palette does',
+     blind.filter(k => k !== FIXED).length === 0,
+     blind.filter(k => k !== FIXED).join(', ')
+       || `${painted - 1}/${painted - 1} follow the palette`);
 
   /* Borders carry the same risk and hid one more: the review card's edge was a
      fixed teal, so it stayed teal on an amber page. The rule here has to be
