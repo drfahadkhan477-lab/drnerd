@@ -59,7 +59,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   const browser = await launch();
 
-  head('the splash covers the blank window, on a throttled CPU');
+  head('the splash covers the blank window before the app renders');
   {
     const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
     /* Throttling widens the gap this section is trying to observe; it does
@@ -85,7 +85,15 @@ const head = t => console.log('\n── ' + t + ' ──');
       })();
     });
     page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
-    await page.waitForSelector('#splash', { timeout: 30000 });
+    /* Tolerated, not awaited for its own sake, and ONLY here. The init script
+       above is what records when #splash and the app each first appear, and
+       the assertion below already treats a splash that never came as a
+       failure with numbers attached. Letting this throw turns "the splash was
+       late on this engine" — the finding — into a suite that reports nothing,
+       which is exactly how WebKit's version of this looked before anyone ran
+       it. The four later waits stay strict: their sections need the splash on
+       screen to have anything to examine. */
+    await page.waitForSelector('#splash', { timeout: 30000 }).catch(() => {});
     await page.waitForFunction(() => window.__t && window.__t.app, { timeout: 120000 });
     const during = await page.evaluate(() => ({
       splashAt: Math.round(window.__t.splash),
@@ -93,7 +101,8 @@ const head = t => console.log('\n── ' + t + ' ──');
       traceAnimated: !!document.querySelector('.sp-trace'),
     }));
     ok('the splash is on screen before the app renders',
-       during.splashAt !== undefined && during.splashAt <= during.appAt,
+       during.splashAt !== undefined && during.splashAt !== null
+       && during.splashAt <= during.appAt,
        `splash@${during.splashAt}ms  app@${during.appAt}ms  (covered ${during.appAt - during.splashAt}ms`
        + `${throttled ? ', CPU at 1/4' : ', UNTHROTTLED — this engine has no CDP'})`);
     ok('the rhythm strip is present on it', during.traceAnimated);
