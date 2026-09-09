@@ -301,19 +301,33 @@ async function heapAfterBoot(page, url) {
 
   head('the split build evaluates no fetched code');
   {
-    /* The splash player used to be fetched as text and run with (0, eval).
-       The single-file build has never needed that — it carries the player as an
-       ordinary inline <script> — so the split build was the only place in the
-       product where launching involved evaluating text pulled off the network.
-       Beyond the injection surface, it is the one construct that makes a
-       meaningful Content-Security-Policy unadoptable later. */
+    /* The splash animation used to be a Lottie player fetched as text and run
+       with (0, eval) — the one place in the product where launching involved
+       evaluating text pulled off the network. Beyond the injection surface,
+       that is the construct that makes a meaningful Content-Security-Policy
+       unadoptable later. The player is gone entirely now (the splash heart is
+       a photograph), so the claim is simply that nothing brought eval back. */
     const idx = await (await fetch(ORIGIN + '/index.html')).text();
     ok('index.html contains no eval of fetched text', !/\(\s*0\s*,\s*eval\s*\)|\beval\s*\(/.test(idx),
        (idx.match(/.{0,40}eval.{0,40}/) || [''])[0]);
-    ok('the splash player is loaded as a script instead',
-       /script\.?\s*\)?;?[\s\S]{0,200}lottie\.min\.js/.test(idx) || /s\.src\s*=\s*'content\/splash-heart\/lottie\.min\.js'/.test(idx));
     const app = await (await fetch(ORIGIN + '/app.js')).text();
     ok('and app.js does not eval either', !/\(\s*0\s*,\s*eval\s*\)/.test(app));
+
+    /* THE SPLASH HEART IS FETCHED, NOT INLINED — IN BOTH FILES. This replaces
+       the old "the player is loaded as a script instead" check, and it guards
+       a regression that already happened once: heroart-patch reads the picture
+       out of the splash markup, where at that point in the chain it is still a
+       data: URI, so a second 57 KB base64 copy was ending up in app.js. Base64
+       of an already-compressed WebP does not gzip, and the shell went from
+       229 KB transferred to 276 against a 280 KB budget. Nothing visible would
+       have broken — it would just have been slower, permanently. */
+    ok('the splash heart is referenced as a file, not inlined',
+       /content\/splash-heart\/heart\.webp/.test(idx));
+    const inlined = ((idx + app).match(/data:image\/webp;base64,/g) || []).length;
+    ok('and neither the shell nor the app code carries a copy of it as base64',
+       inlined === 0, `${inlined} inline WebP data: URI(s)`);
+    const heart = await fetch(ORIGIN + '/content/splash-heart/heart.webp');
+    ok('and that file is actually served', heart.status === 200, String(heart.status));
   }
 
   head('content is served intact');
