@@ -261,16 +261,25 @@ function zip(entries) {
   head('it survives a reload — IndexedDB, not memory');
   await page.reload({ waitUntil: 'load', timeout: 250000 });
   await page.waitForFunction(() => typeof RefAssets !== 'undefined', { timeout: 150000 });
-  /* WAIT FOR WHAT IS ABOUT TO BE ASSERTED, not for something weaker. This
-     waited for count() > 0 and then asserted count() === 2, so on a loaded
-     machine it sampled the moment after the first asset had been rehydrated
-     from IndexedDB and before the second — reporting "1 assets" on a store
-     that holds two. The check below it then failed as a consequence, because
-     RefAssets.keys() destructures a k2 that is not there yet. Both passed
-     standalone every time, which is the signature of a wait that does not
-     cover its own assertion. */
-  await page.waitForFunction(() => RefAssets.count() === 2, { timeout: 15000 }).catch(() => {});
+  /* WAIT ON THE COMPLETION SIGNAL, NOT ON THE ANSWER.
+     This has been wrong twice, in two different ways, and the second way is
+     the instructive one. It began as "wait for count() > 0, then assert
+     count() === 2", which on a loaded machine sampled between the first asset
+     rehydrating and the second and reported one. That was replaced by "poll
+     until count() === 2, with a timeout, and swallow the timeout" — which is
+     the same bug wearing a disguise: polling for the value you are about to
+     assert means a slow machine and a broken store produce the identical
+     failure line, and the one time it fired it said "1 assets", which reads as
+     data loss rather than as a wait that ran out.
+
+     RefAssets.ready() resolves only once its cursor has walked the entire
+     object store, so awaiting it is a statement about hydration being FINISHED
+     rather than a guess about how long that takes. After it resolves, a count
+     of one is a real count of one and the check means what it says. */
+  const hydrated = await page.evaluate(() => RefAssets.ready());
   const after = await page.evaluate(() => ({ n: RefAssets.count(), bytes: RefAssets.bytes() }));
+  ok('hydration from IndexedDB completed rather than timing out',
+     typeof hydrated === 'number', String(hydrated));
   ok('the images are still in the store after a reload', after.n === 2, after.n + ' assets');
   ok('and report a plausible size', after.bytes > 0, after.bytes + ' bytes');
 
