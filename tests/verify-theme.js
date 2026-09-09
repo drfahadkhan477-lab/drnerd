@@ -208,11 +208,16 @@ const head = t => console.log('\n── ' + t + ' ──');
      stay put. There are no unthemed semantics on the home screen, so the
      expected count here is zero, and a new hardcoded colour anywhere on it will
      fail this check on the day it is added. */
-  const paint = async id => {
+  /* MATCHED ON THE ELEMENT, NOT ON THE KEY. The key is derived from the first
+     two class names, so an element that gains a class at runtime changes key —
+     the hero medallion picks up .heart-3d-active the moment a WebGL context
+     mounts, and a FIXED list written as strings silently stopped matching it.
+     Asking the element whether it matches a selector cannot drift that way. */
+  const paint = async (id, fixedSel) => {
     await page.evaluate(t => setTheme(t), id);
     await page.waitForTimeout(500);
-    return page.evaluate(() => {
-      const out = {};
+    return page.evaluate(sel => {
+      const out = {}, fixed = {};
       for (const el of document.querySelectorAll('*')) {
         const cs = getComputedStyle(el);
         const bg = cs.backgroundImage !== 'none' ? cs.backgroundImage : cs.backgroundColor;
@@ -221,16 +226,63 @@ const head = t => console.log('\n── ' + t + ' ──');
         if (r.width * r.height < 3000) continue;
         const key = el.tagName.toLowerCase() + '.' + (el.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.');
         if (!(key in out)) out[key] = bg;
+        if (sel.some(x => el.matches(x))) fixed[key] = true;
       }
-      return out;
-    });
+      return { out, fixed };
+    }, fixedSel);
   };
-  const warm = await paint('parchment'), green = await paint('monitor');
+  /* ONE SURFACE IS MEANT TO STAY PUT, AND IT IS ASSERTED RATHER THAN SKIPPED.
+     The hero medallion holds a photograph that carries its own dark ground;
+     the plate behind it is that ground continued, which is what lets one
+     picture read on Parchment's cream and Nocturne's near-black without being
+     masked out of its background. Following the palette would put a cream
+     plate behind a navy photograph.
+
+     An exemption list is how a sweep like this rots, so this is not one. The
+     plate is REQUIRED to be identical under both palettes and everything else
+     is required to move — so the check now fails in both directions: if the
+     medallion starts following the theme, and if anything else stops. */
+  /* ONE fixed surface, and it is the still photograph's frame. The picture has
+     a dark ground baked into it, so the plate behind it carries that ground on
+     purpose and cannot follow the palette.
+
+     The turning heart is NOT on this list, and that is the point: its canvas
+     paints nothing at all, so the sweep never sees it. It used to have the same
+     dark plate and this list named it — then the plate was removed so the model
+     would sit on the hero rather than in a black box, and this check went red
+     because it was still expecting two. That it went red is the sweep working;
+     what it needed was the claim below, which asserts the transparency
+     directly rather than inferring it from an absence. */
+  const FIXED_SEL = ['.hero-heart-plate'];
+  const w = await paint('parchment', FIXED_SEL), g = await paint('monitor', FIXED_SEL);
+  const warm = w.out, green = g.out;
+  const FIXED = Object.keys(w.fixed);
   const painted = Object.keys(warm).length;
   const blind = Object.keys(warm).filter(k => k in green && warm[k] === green[k]);
   ok('the sweep found surfaces to compare at all', painted >= 8, `${painted} painted surfaces`);
-  ok('every one of them moves when the palette does', blind.length === 0,
-     blind.length ? blind.join(', ') : `${painted}/${painted} follow the palette`);
+  ok('the hero medallion is on screen to be judged', FIXED.length === 1,
+     FIXED.length ? FIXED.join(', ') : 'the plate did not paint — has the hero art been renamed?');
+  /* Asserted, not assumed. A background creeping back onto the canvas — a
+     token, a debugging fill, a copied rule — puts a black rectangle around the
+     model on every theme, and it is the kind of thing that looks deliberate in
+     a diff. */
+  const modelBg = await page.evaluate(() => {
+    const cv = document.querySelector('.hero-heart-3d');
+    if (!cv) return null;
+    const cs = getComputedStyle(cv);
+    return { color: cs.backgroundColor, image: cs.backgroundImage };
+  });
+  ok('and the turning heart has no ground behind it', modelBg
+     && (modelBg.color === 'rgba(0, 0, 0, 0)' || modelBg.color === 'transparent')
+     && modelBg.image === 'none',
+     modelBg ? `${modelBg.color} / ${modelBg.image}` : 'no canvas');
+  ok('it holds its own ground across two palettes that share nothing',
+     FIXED.length > 0 && FIXED.every(k => warm[k] === green[k]),
+     FIXED.map(k => `${k} ${warm[k]}`).join(' · '));
+  const others = blind.filter(k => !FIXED.includes(k));
+  ok('and every other painted surface moves when the palette does',
+     others.length === 0,
+     others.join(', ') || `${painted - FIXED.length}/${painted - FIXED.length} follow the palette`);
 
   /* Borders carry the same risk and hid one more: the review card's edge was a
      fixed teal, so it stayed teal on an amber page. The rule here has to be

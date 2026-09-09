@@ -13,7 +13,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, cpuThrottle } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-splash.js <patched.html>'); process.exit(1); }
@@ -59,11 +59,15 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   const browser = await launch();
 
-  head('the splash covers the blank window, on a throttled CPU');
+  head('the splash covers the blank window before the app renders');
   {
     const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+    /* Throttling widens the gap this section is trying to observe; it does
+       not create it. Where the engine cannot throttle, the ordering claim is
+       still the claim — just measured through a narrower window, which the
+       detail line says out loud so a tight number is not read as a tight
+       margin. */
+    const throttled = await cpuThrottle(page, 4);
     /* Record when each first appears rather than trying to catch the gap by
        polling. Racing it was fine against the 26 MB single file, where the gap
        is seconds wide; against the Stage 1 shell the app can render before the
@@ -81,7 +85,15 @@ const head = t => console.log('\n── ' + t + ' ──');
       })();
     });
     page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
-    await page.waitForSelector('#splash', { timeout: 30000 });
+    /* Tolerated, not awaited for its own sake, and ONLY here. The init script
+       above is what records when #splash and the app each first appear, and
+       the assertion below already treats a splash that never came as a
+       failure with numbers attached. Letting this throw turns "the splash was
+       late on this engine" — the finding — into a suite that reports nothing,
+       which is exactly how WebKit's version of this looked before anyone ran
+       it. The four later waits stay strict: their sections need the splash on
+       screen to have anything to examine. */
+    await page.waitForSelector('#splash', { timeout: 30000 }).catch(() => {});
     await page.waitForFunction(() => window.__t && window.__t.app, { timeout: 120000 });
     const during = await page.evaluate(() => ({
       splashAt: Math.round(window.__t.splash),
@@ -89,8 +101,10 @@ const head = t => console.log('\n── ' + t + ' ──');
       traceAnimated: !!document.querySelector('.sp-trace'),
     }));
     ok('the splash is on screen before the app renders',
-       during.splashAt !== undefined && during.splashAt <= during.appAt,
-       `splash@${during.splashAt}ms  app@${during.appAt}ms  (covered ${during.appAt - during.splashAt}ms)`);
+       during.splashAt !== undefined && during.splashAt !== null
+       && during.splashAt <= during.appAt,
+       `splash@${during.splashAt}ms  app@${during.appAt}ms  (covered ${during.appAt - during.splashAt}ms`
+       + `${throttled ? ', CPU at 1/4' : ', UNTHROTTLED — this engine has no CDP'})`);
     ok('the rhythm strip is present on it', during.traceAnimated);
 
     await page.waitForFunction(() => !!document.querySelector('.hero-h1'), { timeout: 120000 });

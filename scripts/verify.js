@@ -53,7 +53,7 @@ const SUITES = [
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
   ['theme',        'eight palettes, two axes, unthemed semantics'],
   ['home',         'the welcome bar, the progress bar, three layouts'],
-  ['splash-heart', 'the crystal heart paints before the app parses'],
+  ['splash-heart', 'the photographed heart paints before the app parses'],
   ['crisp',        'every canvas backs itself at high device-pixel density'],
   ['type',         'one modular type scale and one spacing scale, still held'],
   ['references',   'the worked reference notes obey the guide, and are retrievable'],
@@ -104,6 +104,10 @@ const SUITES = [
      were all written by the hand that wrote the code, which catches typos and
      regressions but never a formula transcribed wrongly from the paper. */
   ['oracle',       'our FSRS agrees with ts-fsrs on our own weights, everywhere but the one cap we chose'],
+  /* The two hearts the app shows are now one photograph, and the panel that
+     reads the long answers can take the whole page. */
+  ['heroart',      'the home hero beats on the rhythm, and the home screen spends no WebGL'],
+  ['apexpage',     'Apex can take the whole page, and a numbered list stays numbered'],
 ];
 
 const argv = process.argv.slice(2);
@@ -135,7 +139,19 @@ const only = list(opt('--only')), skip = list(opt('--skip'));
    suite thirty-four, forty minutes in, is a worse way to learn you meant
    "webkit" than a refusal on the first line. */
 const { ENGINES, DEFAULT_ENGINE } = require(path.join(ROOT, 'tests', '_engine.js'));
-const ENGINE = (opt('--engine', DEFAULT_ENGINE) || '').trim().toLowerCase();
+/* SYSTOLE_ENGINE IS HONOURED HERE TOO, AND IT WAS NOT.
+   tests/_engine.js reads the environment, so `SYSTOLE_ENGINE=webkit node
+   tests/verify-layout.js …` runs one suite on WebKit exactly as documented.
+   This file read only --engine, and then handed children an explicit
+   SYSTOLE_ENGINE of its own — so the same variable set in the same shell was
+   silently overwritten with chromium, and `SYSTOLE_ENGINE=webkit node
+   scripts/verify.js` produced a full green chromium run that looked like a
+   WebKit one. A run that reports the wrong browser is worse than one that
+   refuses, because nobody re-reads a green summary.
+
+   The flag still wins when both are given: an argument is a decision made for
+   this run, an environment variable is a default set for the shell. */
+const ENGINE = (opt('--engine', process.env.SYSTOLE_ENGINE || DEFAULT_ENGINE) || '').trim().toLowerCase();
 if (!ENGINES.includes(ENGINE)) {
   console.error(`\n  --engine ${JSON.stringify(ENGINE)} is not an engine. Use one of: ${ENGINES.join(', ')}.\n`);
   process.exit(1);
@@ -246,6 +262,56 @@ function writeStats(pwaCount) {
    the only casualty still rewrites the record — and still exits non-zero,
    because the prose in three documents may now disagree with it and that needs
    a person. Run it again after fixing those and it goes green. */
+/* ── what ran, said in the log's own words ────────────────────────────────────
+   A run reported from another machine arrives as the summary line — "17 suites
+   failing: apex, polish, splash, …" — because that is what fits in a paste.
+   The failures underneath it, which are the whole content of the report, get
+   scrolled past. Worse, the summary carries no provenance: a run against a
+   checkout three days old and a run against the current one produce the same
+   shape of sentence, and the only way to tell them apart is to notice that the
+   suite count is wrong, which nobody does.
+
+   So a failing run writes the transcript out, with a header that names the
+   branch, the commit and the build it tested. That header is the part that
+   matters: it makes a stale run self-identifying instead of something to be
+   deduced from arithmetic.
+
+   Gitignored, deliberately: suite output quotes note titles and stem text out
+   of the licensed corpus, and that stays on the machine that built it. */
+function provenance() {
+  const git = c => { try { return execSync(c, { cwd: ROOT, encoding: 'utf8' }).trim(); } catch (_) { return ''; } };
+  const sha = git('git rev-parse --short HEAD') || 'unknown';
+  const branch = git('git rev-parse --abbrev-ref HEAD') || 'unknown';
+  const dirty = git('git status --porcelain') ? ' +uncommitted changes' : '';
+  return `${branch} @ ${sha}${dirty}`;
+}
+
+function writeFailLog() {
+  const file = path.join(ROOT, 'tests', 'last-run.log');
+  let built = 'not found';
+  try {
+    const st = fs.statSync(TARGET);
+    built = `${(st.size / 1048576).toFixed(2)} MB, modified ${st.mtime.toISOString()}`;
+  } catch (_) {}
+  const header = [
+    `# systole verify — ${new Date().toISOString()}`,
+    `# checkout  ${provenance()}`,
+    `# engine    ${ENGINE}`,
+    `# target    ${path.relative(ROOT, TARGET)}  (${built})`,
+    `# suites    ${results.length} run, ${total} checks, ${bad.length} failing`,
+    `# failing   ${bad.map(r => r.name).join(', ')}`,
+    '',
+    '# Full output of the failing suites follows. The passing ones are omitted;',
+    '# they are the same lines every time and they are not what you came for.',
+  ].join('\n');
+  const rule = '='.repeat(74);
+  const body = bad.map(r =>
+    `\n${rule}\n== verify-${r.name}  —  ${r.passed} passed, ${r.failed === null ? 'did not report' : r.failed + ' failed'}, ${r.secs}s\n${rule}\n${r.out.trimEnd()}\n`
+  ).join('');
+  fs.writeFileSync(file, header + body + '\n');
+  return file;
+}
+
 const blockers = results.filter(r => !r.ok && r.name !== 'stats');
 
 const total = results.reduce((n, r) => n + r.checks, 0);
@@ -253,7 +319,9 @@ const bad = results.filter(r => !r.ok);
 console.log(`\n  ${total} checks across ${results.length} suites in ${((Date.now() - t0) / 60000).toFixed(1)} min`);
 if (!blockers.length && !flag('--pwa')) writeStats();
 if (bad.length) {
-  console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}\n`);
+  console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}`);
+  console.log(`  full output of those suites: ${path.relative(process.cwd(), writeFailLog())}`);
+  console.log(`  checkout: ${provenance()}\n`);
   /* A stats-only failure means the record is out of date, which is the one
      failure that must NOT stop the run: --pwa has not happened yet, and the
      split build's count is part of what needs rewriting. Exiting here left the
@@ -262,7 +330,7 @@ if (bad.length) {
      lines below where it was solved. */
   if (blockers.length) process.exit(1);
   console.log('  (only the counts record is stale — continuing so it can be rewritten)\n');
-} else console.log(`  all green\n`);
+} else console.log(`  all green   —   ${provenance()} on ${ENGINE}\n`);
 
 /* ── the split build ──────────────────────────────────────────────────────────
    Built, served on a free port, tested, torn down. Kept out of the loop above

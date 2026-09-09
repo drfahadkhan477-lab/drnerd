@@ -83,55 +83,56 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('an answer after a long absence records null, not forty minutes',
      stale === null, String(stale));
 
-  head('a lost WebGL context falls back, and comes back');
-  const gl = await page.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    goHome(); render();
-    for (let i = 0; i < 60 && !heroHeart3d; i++) await wait(50);
-    const cv = document.getElementById('heroHeart3d');
-    if (!cv || !heroHeart3d) return { skipped: true };
-    const ext = cv.getContext('webgl2') && cv.getContext('webgl2').getExtension('WEBGL_lose_context');
-    if (!ext) return { skipped: true };
-    const activeBefore = !!document.getElementById('heroHeart')?.classList.contains('heart-3d-active');
-    ext.loseContext();
-    /* WAIT FOR THE HANDLER, NOT FOR A DURATION. This was a flat 120 ms, which
-       is a guess about a machine you are not running on: the browser dispatches
-       webglcontextlost on its own schedule, and on a real GPU that is slower
-       than on this container's software renderer. The restore path six lines
-       below already polls for its condition — only the loss path guessed, and
-       it reported {instance:true, active:true} on a desktop where the heart was
-       demonstrably rendering. Bounded, so an onLost that never runs still fails
-       rather than hanging. */
-    for (let i = 0; i < 60 && heroHeart3d; i++) await wait(50);
-    const afterLoss = {
-      instance: !!heroHeart3d,
-      active: !!document.getElementById('heroHeart')?.classList.contains('heart-3d-active'),
-    };
-    ext.restoreContext();
-    for (let i = 0; i < 60 && !heroHeart3d; i++) await wait(50);
-    return { skipped: false, activeBefore, afterLoss, instanceAfterRestore: !!heroHeart3d };
-  });
-  if (gl.skipped) {
-    ok('WEBGL_lose_context is available to drive this', false, 'extension or heart unavailable');
-  } else {
-    ok('the heart was live before the context was lost', gl.activeBefore === true);
-    ok('losing the context clears the stale instance', gl.afterLoss.instance === false);
-    ok('and unhides the static SVG fallback rather than leaving a blank canvas',
-       gl.afterLoss.active === false, JSON.stringify(gl.afterLoss));
-    ok('restoring the context brings the heart back without a reload',
-       gl.instanceAfterRestore === true);
-  }
+  /* THE HERO'S WebGL CONTEXT-LOSS CHECKS USED TO LIVE HERE, AND ARE GONE.
+     They lost the hero canvas's context, waited for onLost to clear the
+     instance, asserted the flat SVG fallback came back, then restored and
+     asserted the heart re-mounted. heroart-patch.js replaced the hero's
+     WebGL canvas with a photograph, so there is no hero context to lose:
+     every one of those four checks would now either skip or assert something
+     about an element that is not in the document.
+
+     Deleted rather than left skipping. A suite that reports "extension or
+     heart unavailable" on every run is not coverage, it is a line of output
+     that looks like coverage — and this file has already been burnt once by a
+     check that passed for the wrong reason (the flat 120 ms wait below the
+     old loseContext call, which reported success on a machine where the heart
+     was demonstrably still rendering).
+
+     They did not come back when the hero did. The hero mounts Heart3D again,
+     in the specimen style, and its context loss and restore ARE asserted —
+     in tests/verify-heroart.js, which owns that screen and can say what the
+     fallback should look like. Restoring them here would be two suites
+     testing one behaviour, and the second copy to be updated is the one that
+     silently stops meaning anything. */
 
   head('confidence: an option, never a gate');
   const conf = await (async () => { await startAndWait(); return page.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const chips = [...document.querySelectorAll('.cf-chip')];
     if (!chips.length) return { none: true };
+    /* WAIT ON THE CAUSE, THEN READ THE EFFECT. These were two flat 30 ms
+       sleeps, which is a guess about how quickly a machine you are not running
+       on gets from a click to a repaint. It held until an unrelated step added
+       about 2 KB to the build and the second read started landing before the
+       repaint — reporting a chip still marked while S.answers already said
+       null, which is a failure that says nothing about the app.
+
+       Polling the state and then asserting the class keeps the assertion
+       whole: the class is still what is being checked, and a DOM that stops
+       following the state still fails. Bounded, so a click that never
+       registers fails rather than hanging. */
+    const settle = async want => {
+      for (let i = 0; i < 60; i++) {
+        const cf = S.answers[S.qIdx] && S.answers[S.qIdx].cf;
+        if (cf === want) return;
+        await wait(16);
+      }
+    };
     chips[3].click();                                    // "Certain"
-    await wait(30);
+    await settle(3);
     const chosen = { on: chips[3].classList.contains('on'), pressed: chips[3].getAttribute('aria-pressed') };
     chips[3].click();                                    // tapping again clears it
-    await wait(30);
+    await settle(null);
     const cleared = { on: chips[3].classList.contains('on'), cf: S.answers[S.qIdx] && S.answers[S.qIdx].cf };
     chips[3].click();
     const q = S.questions[S.qIdx];

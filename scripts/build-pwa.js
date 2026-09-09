@@ -220,71 +220,49 @@ step('link the manifest and the iOS icon', () => {
 </head>`);
 });
 
-/* ── 3.5. the splash heart's own two assets, pulled the same way ─────────── */
-/* The single-file build inlines the Lottie player (168 KB) and the animation
-   JSON (23 KB) directly into the splash markup, because paint-before-parse is
-   the whole reason the splash exists and nothing should make it wait. That is
-   fine at 27 MB; it is not fine against an 800 KB shell budget. So here they
-   come back out, the same move extract-content.js makes for the question bank
-   — except this pair lives in index.html itself (the splash predates the
-   <script>ALL_Q=… split entirely), so it is extracted from `html`, not
-   `appCode`. */
-const splashAssets = [];
-step('pull the Lottie player out of the splash', () => {
-  const re = /<script id="spHeartLib" data-splash-heart="lib">([\s\S]*?)<\/script>/;
-  const m = re.exec(html);
-  if (!m) throw new Error('spHeartLib script block not found');
-  splashAssets.push(['lottie.min.js', m[1]]);
-  html = html.replace(m[0], '');
-});
-step('pull the animation data out of the splash', () => {
-  const re = /<script id="spHeartData" data-splash-heart="data" type="application\/json">([\s\S]*?)<\/script>/;
-  const m = re.exec(html);
-  if (!m) throw new Error('spHeartData script block not found');
-  JSON.parse(m[1]);   // fail loudly here, not silently at runtime
-  splashAssets.push(['heart.json', m[1]]);
-  html = html.replace(m[0], '');
-});
-step('swap the inline mount script for a fetch-and-mount loader', () => {
-  const re = /<script data-splash-heart="mount">[\s\S]*?<\/script>/;
-  if (!re.test(html)) throw new Error('splash-heart mount script not found');
-  /* THE PLAYER IS LOADED AS A SCRIPT, NOT FETCHED AND EVALLED. It used to be
-     fetch(...).then(text => (0, eval)(text)), for a real reason — the player is
-     plain code rather than a module, and it has to define its `lottie` global
-     in the same scope the inline single-file version does. But a <script src>
-     does that natively, and it is the mechanism the single-file build already
-     uses (an inline <script id="spHeartLib">); eval was solving a problem the
-     platform solves. It also put runtime evaluation of fetched text on the
-     critical path of every launch, which is the one construct that makes a
-     meaningful Content-Security-Policy impossible to adopt later.
+/* ── 3.5. the splash heart's image, pulled the same way ──────────────────── */
+/* The single-file build inlines the heart photograph as a data: URI directly
+   in the splash markup, because paint-before-parse is the whole reason the
+   splash exists and nothing should make it wait. That is fine at 27 MB; it is
+   not fine against the shell budget. Base64 of an already-compressed WebP does
+   not gzip, so inlining puts its full ~57 KB onto the transferred shell — a
+   fifth of the 280 KB budget for one decorative image. So here it comes back
+   out, the same move extract-content.js makes for the question bank — except
+   this lives in index.html itself (the splash predates the <script>ALL_Q=…
+   split entirely), so it is extracted from `html`, not `appCode`.
 
-     The animation data stays a fetch — it is JSON, and JSON.parse is not eval. */
-  const LOADER = `<script>
-(function(){
-  var el = document.getElementById('spHeartMount');
-  if(!el) return;
-  function mount(data){
-    if(typeof lottie === 'undefined') return;
-    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var anim = lottie.loadAnimation({
-      container: el, renderer: 'svg', loop: true, autoplay: !reduce, animationData: data,
-    });
-    if(reduce) anim.goToAndStop(0, true);
+   The static parts of the splash — ground, wordmark, ECG sweep — still paint
+   instantly either way. Only the heart itself arrives a beat later here, which
+   is exactly the trade the Lottie pair made before it. */
+const splashAssets = [];
+step('pull the heart image out of the splash', () => {
+  const re = /(<img class="sp-heart-img" data-splash-heart="img" alt="" decoding="sync" src=")data:image\/webp;base64,([A-Za-z0-9+/=]+)(">)/;
+  const m = re.exec(html);
+  if (!m) throw new Error('splash heart <img> with an inline data: URI not found');
+  const bytes = Buffer.from(m[2], 'base64');
+  if (bytes.slice(0, 4).toString('ascii') !== 'RIFF' || bytes.slice(8, 12).toString('ascii') !== 'WEBP') {
+    throw new Error('the splash heart data: URI did not decode to a WebP');
   }
-  var s = document.createElement('script');
-  s.src = 'content/splash-heart/lottie.min.js';
-  s.async = false;
-  s.onload = function(){
-    fetch('content/splash-heart/heart.json')
-      .then(function(r){ return r.json(); })
-      .then(mount)
-      .catch(function(){ /* the splash's static parts already carried the load */ });
-  };
-  s.onerror = function(){ /* same — the splash is not load-bearing */ };
-  document.head.appendChild(s);
-})();
-</script>`;
-  html = html.replace(re, LOADER);
+  splashAssets.push(['heart.webp', bytes]);
+  html = html.replace(m[0], m[1] + 'content/splash-heart/heart.webp' + m[3]);
+
+  /* AND THE HERO'S COPY, WHICH IS THE ONE THAT IS EASY TO MISS. heroart-patch
+     reads the picture out of the splash markup so the two hearts can never be
+     different images — but at that point in the chain the splash still holds
+     the inline data: URI, so buildHome() ends up with a second 57 KB base64
+     string baked into it. That one lives in appCode, not html, and pulling
+     only the splash copy left the split build shipping the image twice: the
+     shell went from 229 KB gzipped to 276 KB against a 280 KB budget, which
+     is how this was noticed. Both copies point at the one file. */
+  const heroRe = /(<img data-hero-heart="img" src=")data:image\/webp;base64,[A-Za-z0-9+/=]+(")/;
+  if (!heroRe.test(appCode)) throw new Error('the hero heart <img> with an inline data: URI was not found in the app code');
+  appCode = appCode.replace(heroRe, (mm, a, b) => a + 'content/splash-heart/heart.webp' + b);
+
+  /* Neither copy may survive as base64. Checked rather than assumed: this is
+     a size regression that no test screen would show and no feature would
+     break — it would just be slower, forever. */
+  const leftover = (html + appCode).match(/data:image\/webp;base64,/g);
+  if (leftover) throw new Error(`${leftover.length} inline WebP data: URI(s) survived into the split build`);
 });
 
 /* ── 3.6 the reference seed ───────────────────────────────────────────────
