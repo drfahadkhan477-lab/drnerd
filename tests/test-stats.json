@@ -3,7 +3,7 @@
   "engine": "chromium",
   "suiteCount": 51,
   "total": 1681,
-  "pwa": 91,
+  "pwa": 93,
   "suites": {
     "stage0": 27,
     "keys": 19,
