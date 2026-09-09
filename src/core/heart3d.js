@@ -1866,7 +1866,28 @@ void main(){
     get lost() { return !!S.lost; },
     start() { if (!S.raf && !S.dead && !S.lost) { if (reduced) { fit(); draw(0); } else S.raf = requestAnimationFrame(loop); } return api; },
     stop() { if (S.raf) cancelAnimationFrame(S.raf); S.raf = null; S.last = null; return api; },
-    destroy() { api.stop(); S.dead = true; },
+    /* GIVING THE CONTEXT BACK IS PART OF DYING. Stopping the loop and setting
+       a dead flag leaves the WebGL2 context attached to the canvas, alive,
+       until the canvas is collected — and collection is not something a
+       caller can schedule. Every screen change rebuilds the DOM, so the hero
+       mounts onto a fresh <canvas> and the previous one's context outlives
+       it. Twenty mount/destroy cycles leave sixteen live contexts and six
+       "too many active WebGL contexts on this page, the oldest context will
+       be lost" warnings — the browser saying it has begun evicting them on
+       our behalf. On iPadOS, where contexts are scarcer and memory pressure
+       chooses, the one it evicts can be the one on screen.
+
+       WEBGL_lose_context is the only way to hand one back deliberately. It is
+       an extension, and an already-lost context has nothing to give back, so
+       both cases are tolerated rather than assumed. */
+    destroy() {
+      api.stop();
+      S.dead = true;
+      try {
+        const ext = gl.getExtension('WEBGL_lose_context');
+        if (ext && !gl.isContextLost()) ext.loseContext();
+      } catch (_) {}
+    },
   };
 
   /* CONTEXT LOSS IS NORMAL ON iPadOS, not an error case. Safari drops WebGL
@@ -1890,6 +1911,12 @@ void main(){
      on screen in the meantime. */
   canvas.addEventListener('webglcontextlost', function (ev) {
     ev.preventDefault();
+    /* A context we released ourselves in destroy() also arrives here, and it
+       is not a loss anybody should hear about: onLost exists to make a mount
+       site re-create the heart, which for a destroyed instance would resurrect
+       exactly what the caller has just torn down. Deliberate release is the
+       one case where this event means nothing. */
+    if (S.dead) return;
     S.lost = true;
     api.stop();
     if (typeof opts.onLost === 'function') { try { opts.onLost(); } catch (_) {} }

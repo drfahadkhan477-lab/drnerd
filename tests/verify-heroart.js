@@ -59,6 +59,12 @@ const head = t => console.log('\n── ' + t + ' ──');
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+  /* Collected separately because it arrives as a WARNING, not an error, so the
+     line above never sees it. Asserting against `errors` would have passed on
+     a build that emits six of these — a check that cannot fail is worse than
+     no check, because it reads as coverage. */
+  const glWarnings = [];
+  page.on('console', m => { if (/too many active webgl/i.test(m.text())) glWarnings.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'commit', timeout: 250000 });
   await page.waitForFunction(() => !!document.getElementById('heroHeart'), null, { timeout: 60000 });
@@ -236,6 +242,61 @@ const head = t => console.log('\n── ' + t + ' ──');
        lost.after.active === false, JSON.stringify(lost.after));
     ok('restoring it brings the heart back without a reload', lost.back === true);
   }
+
+head('a destroyed heart gives its context back');
+{
+  /* WHY THIS EXISTS. destroy() stopped the render loop and set a dead flag,
+     and left the WebGL2 context attached to the canvas — alive until the
+     canvas was collected, which no caller can schedule. Every screen change
+     rebuilds the DOM, so the hero mounts onto a fresh <canvas> and the
+     previous one's context outlives it. Twenty cycles left sixteen live
+     contexts (the browser's cap) and six "too many active WebGL contexts on
+     this page, the oldest context will be lost" warnings, which is the
+     browser announcing it has begun evicting them for us.
+
+     Chromium found this too, once it was looked for; WebKit was simply the
+     browser that said so out loud, in verify-polish and verify-theme's
+     console checks, on the fellow's own iPad-shaped target.
+
+     The cycle count matters. Sixteen is the cap here, so a check that mounted
+     ten would pass on a leak; twenty crosses it on every engine tried. */
+  const cycles = await page.evaluate(async () => {
+    const gls = [];
+    let made = 0, firstLost = null, resurrected = 0;
+    for (let i = 0; i < 20; i++) {
+      const cv = document.createElement('canvas');
+      cv.width = 64; cv.height = 64;
+      document.body.appendChild(cv);
+      /* onLost must NOT fire for a context we released ourselves: it exists to
+         make a mount site re-create the heart, which for a destroyed instance
+         resurrects exactly what the caller has just torn down. */
+      const h = Heart3D.create(cv, { rhythm: 'sinus', mode: 'whole', dark: 1,
+                                     resolution: [16, 20, 14], autoRotate: false,
+                                     onLost: () => { resurrected++; } });
+      if (!h) break;
+      made++;
+      gls.push(cv.getContext('webgl2'));
+      h.destroy();
+      cv.remove();
+      if (i === 0) firstLost = gls[0].isContextLost();
+      await new Promise(r => setTimeout(r, 30));
+    }
+    /* The event is queued, not synchronous — give the last ones a turn. */
+    await new Promise(r => setTimeout(r, 200));
+    return { made, firstLost, live: gls.filter(g => g && !g.isContextLost()).length, resurrected };
+  });
+
+  ok('twenty hearts could be built at all', cycles.made === 20, `${cycles.made} built`);
+  ok('destroy() releases the context rather than waiting for collection',
+     cycles.firstLost === true, `isContextLost() → ${cycles.firstLost}`);
+  ok('and twenty mount/destroy cycles leave none of them alive',
+     cycles.live === 0, `${cycles.live} still live`);
+  ok('no "too many active WebGL contexts" warning across the cycles',
+     glWarnings.length === 0, `${glWarnings.length} warning(s)`);
+  /* The guard that stops the fix eating its own tail. */
+  ok('a deliberate release is not reported as a lost context',
+     cycles.resurrected === 0, `onLost fired ${cycles.resurrected} time(s)`);
+}
 
   head('reduced motion holds the fallback still');
   const rm = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
