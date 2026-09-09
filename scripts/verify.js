@@ -139,7 +139,19 @@ const only = list(opt('--only')), skip = list(opt('--skip'));
    suite thirty-four, forty minutes in, is a worse way to learn you meant
    "webkit" than a refusal on the first line. */
 const { ENGINES, DEFAULT_ENGINE } = require(path.join(ROOT, 'tests', '_engine.js'));
-const ENGINE = (opt('--engine', DEFAULT_ENGINE) || '').trim().toLowerCase();
+/* SYSTOLE_ENGINE IS HONOURED HERE TOO, AND IT WAS NOT.
+   tests/_engine.js reads the environment, so `SYSTOLE_ENGINE=webkit node
+   tests/verify-layout.js …` runs one suite on WebKit exactly as documented.
+   This file read only --engine, and then handed children an explicit
+   SYSTOLE_ENGINE of its own — so the same variable set in the same shell was
+   silently overwritten with chromium, and `SYSTOLE_ENGINE=webkit node
+   scripts/verify.js` produced a full green chromium run that looked like a
+   WebKit one. A run that reports the wrong browser is worse than one that
+   refuses, because nobody re-reads a green summary.
+
+   The flag still wins when both are given: an argument is a decision made for
+   this run, an environment variable is a default set for the shell. */
+const ENGINE = (opt('--engine', process.env.SYSTOLE_ENGINE || DEFAULT_ENGINE) || '').trim().toLowerCase();
 if (!ENGINES.includes(ENGINE)) {
   console.error(`\n  --engine ${JSON.stringify(ENGINE)} is not an engine. Use one of: ${ENGINES.join(', ')}.\n`);
   process.exit(1);

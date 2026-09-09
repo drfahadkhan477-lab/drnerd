@@ -126,6 +126,17 @@ head('the runner can actually be told which engine to use');
      and the run dies on "No build at .../webkit" — which is a confusing way
      to be told about an argv bug. */
   ok('--engine is registered as a flag that takes a value', /VALUED\s*=\s*\[[^\]]*'--engine'/.test(v));
+  /* THE TWO ENTRY POINTS HAVE TO AGREE ON WHICH BROWSER THIS IS.
+     A single suite run directly reads SYSTOLE_ENGINE from the environment; the
+     runner used to read only --engine and then hand every child an explicit
+     SYSTOLE_ENGINE of its own, so the same variable set in the same shell was
+     silently overwritten with chromium. `SYSTOLE_ENGINE=webkit node
+     scripts/verify.js` gave a full green chromium run that read as a WebKit
+     one — and nobody re-reads a green summary. */
+  ok('the runner takes SYSTOLE_ENGINE as its default, so the two entry points cannot disagree',
+     /opt\('--engine',\s*process\.env\.SYSTOLE_ENGINE\s*\|\|\s*DEFAULT_ENGINE\)/.test(v));
+  ok('and an explicit --engine still wins over it, because a flag is a decision for this run',
+     /opt\('--engine',/.test(v) && v.indexOf("opt('--engine',") < v.indexOf('process.env.SYSTOLE_ENGINE'));
   ok('and the choice reaches the suites through the environment',
      (v.match(/SYSTOLE_ENGINE:\s*ENGINE/g) || []).length >= 2,
      `${(v.match(/SYSTOLE_ENGINE:\s*ENGINE/g) || []).length} spawn site(s)`);
