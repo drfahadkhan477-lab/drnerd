@@ -15,7 +15,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, heapUsedBytes, engineName } = require('./_engine');
 
 const target = process.argv[2];
 const baseline = process.argv[3];
@@ -25,10 +25,20 @@ if (!target || !/^https?:\/\//.test(target)) {
 }
 const ORIGIN = new URL(target).origin;
 
-let passed = 0, failed = 0;
+let passed = 0, failed = 0, unmeasured = 0;
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
+};
+/* A THIRD OUTCOME, FOR CLAIMS THIS ENGINE CANNOT WEIGH. The heap section needs
+   a heap profiler, which only Chromium has. Failing it on WebKit would call
+   the app broken over a missing instrument; passing it would report a budget
+   nobody checked. Both are lies, and the second is the worse one because it
+   reads as coverage. So it is neither — printed, counted, and named in the
+   summary, where a shrinking check count is visible rather than silent. */
+const unmeasurable = (label, why) => {
+  unmeasured++;
+  console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
 const head = t => console.log('\n── ' + t + ' ──');
 const kb = b => (b / 1024).toFixed(0) + ' KB';
@@ -39,10 +49,11 @@ async function heapAfterBoot(page, url) {
   await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
                              { timeout: 120000 });
   await page.waitForTimeout(2500);
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('HeapProfiler.enable');
-  await cdp.send('HeapProfiler.collectGarbage');
-  return (await page.evaluate(() => performance.memory ? performance.memory.usedJSHeapSize : 0));
+  /* null where the engine cannot measure a heap, NOT zero. Reading
+     performance.memory directly gave `undefined` on WebKit, which became 0,
+     which is under every budget — so the check reported green on the one
+     engine where it had measured nothing at all. */
+  return heapUsedBytes(page);
 }
 
 (async () => {
@@ -594,7 +605,10 @@ async function heapAfterBoot(page, url) {
     const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
     const pwaHeap = await heapAfterBoot(page, target);
     await page.close();
-    if (baseline) {
+    if (pwaHeap === null) {
+      unmeasurable('the shell\'s heap after boot',
+                   `${engineName()} has no heap profiler — run this section on chromium`);
+    } else if (baseline) {
       const p2 = await browser.newPage({ viewport: { width: 900, height: 1000 } });
       const baseHeap = await heapAfterBoot(p2, 'file://' + path.resolve(baseline));
       await p2.close();
@@ -632,6 +646,7 @@ async function heapAfterBoot(page, url) {
   }
 
   await browser.close();
-  console.log(`\n${passed} passed, ${failed} failed`);
+  console.log(`\n${passed} passed, ${failed} failed`
+              + (unmeasured ? `, ${unmeasured} not measurable on ${engineName()}` : ''));
   process.exit(failed ? 1 : 0);
 })();

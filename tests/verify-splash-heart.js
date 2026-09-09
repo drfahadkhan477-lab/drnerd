@@ -28,7 +28,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, cpuThrottle } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-splash-heart.js <patched.html>'); process.exit(1); }
@@ -88,8 +88,11 @@ const head = t => console.log('\n── ' + t + ' ──');
      comfortably wide instead of a coin flip. */
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 440, height: 900 }, deviceScaleFactor: 2 });
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  /* See _engine.js: false on any engine without CDP. The section below
+     already treats "the splash went before both samples" as inconclusive
+     rather than as a failure, which is exactly the case an unthrottled run
+     makes more likely, so nothing here needs to change shape. */
+  const throttled = await cpuThrottle(page, 4);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
@@ -146,8 +149,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('reduced motion actually stops it');
   const rmPage = await browser.newPage({ viewport: { width: 440, height: 900 }, deviceScaleFactor: 2, reducedMotion: 'reduce' });
-  const rmCdp = await rmPage.context().newCDPSession(rmPage);
-  await rmCdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  await cpuThrottle(rmPage, 4);
   await rmPage.goto(URL, { waitUntil: 'commit', timeout: 250000 });
   await rmPage.waitForFunction(() => {
     const im = document.querySelector('#spHeartMount img');

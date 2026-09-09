@@ -14,9 +14,11 @@
  * here makes the choice one line instead of thirty-four, so running the whole
  * suite on WebKit costs a flag rather than a refactor.
  *
- * It does NOT claim the suites pass on WebKit. Nobody has run them there yet
- * (see docs/BUILD.md); this removes the obstacle to finding out, and finding
- * out is a separate piece of work with its own failures to fix.
+ * THEY HAVE NOW BEEN RUN THERE, and finding out cost what it usually costs:
+ * a WebGL context leak Chromium had been absorbing quietly, three suites that
+ * could not start at all because they asked for a Chrome DevTools Protocol
+ * session, and one heap budget that passed by measuring nothing. None of
+ * those were WebKit being difficult. WebKit was the engine that said so.
  *
  * Chromium stays the default deliberately. Changing what `npm test` means as
  * a side effect of making the engine configurable would be exactly the kind
@@ -63,10 +65,44 @@ function launchOptions(opts = {}, name = engineName()) {
   return o;
 }
 
+/* -- capabilities that are Chromium's, not the web's -------------------------
+   Emulation.setCPUThrottlingRate and HeapProfiler.collectGarbage are Chrome
+   DevTools Protocol calls. Playwright refuses newCDPSession outright on any
+   other engine — "CDP session is only available in Chromium" — and three
+   suites called it directly, so on WebKit they threw mid-run and printed no
+   summary at all. The runner shows that as "did not report", which says
+   nothing about the cause; it took a browser to find out.
+
+   Both return whether they took effect rather than throwing or pretending,
+   because the two honest failures here are opposite and equally bad: a check
+   that dies on an engine it could mostly have run, and a check that passes
+   because the thing it measures is unavailable and therefore reads as zero. */
+async function cpuThrottle(page, rate) {
+  if (engineName() !== 'chromium') return false;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate });
+  return true;
+}
+
+/* Resolves to a heap size in bytes, or null where the engine cannot say.
+   NULL IS THE POINT. performance.memory is also Chromium-only, so a caller
+   that read it directly on WebKit got `undefined`, coalesced it to 0, and
+   compared 0 against a budget — a heap check that reports green precisely
+   where it measured nothing. */
+async function heapUsedBytes(page) {
+  if (engineName() !== 'chromium') return null;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('HeapProfiler.enable');
+  await cdp.send('HeapProfiler.collectGarbage');
+  const n = await page.evaluate(() => (performance.memory ? performance.memory.usedJSHeapSize : null));
+  return typeof n === 'number' ? n : null;
+}
+
 function launch(opts = {}) {
   const name = engineName();
   const playwright = require('playwright');
   return playwright[name].launch(launchOptions(opts, name));
 }
 
-module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch };
+module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch,
+                   cpuThrottle, heapUsedBytes };
