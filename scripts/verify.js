@@ -262,6 +262,56 @@ function writeStats(pwaCount) {
    the only casualty still rewrites the record — and still exits non-zero,
    because the prose in three documents may now disagree with it and that needs
    a person. Run it again after fixing those and it goes green. */
+/* ── what ran, said in the log's own words ────────────────────────────────────
+   A run reported from another machine arrives as the summary line — "17 suites
+   failing: apex, polish, splash, …" — because that is what fits in a paste.
+   The failures underneath it, which are the whole content of the report, get
+   scrolled past. Worse, the summary carries no provenance: a run against a
+   checkout three days old and a run against the current one produce the same
+   shape of sentence, and the only way to tell them apart is to notice that the
+   suite count is wrong, which nobody does.
+
+   So a failing run writes the transcript out, with a header that names the
+   branch, the commit and the build it tested. That header is the part that
+   matters: it makes a stale run self-identifying instead of something to be
+   deduced from arithmetic.
+
+   Gitignored, deliberately: suite output quotes note titles and stem text out
+   of the licensed corpus, and that stays on the machine that built it. */
+function provenance() {
+  const git = c => { try { return execSync(c, { cwd: ROOT, encoding: 'utf8' }).trim(); } catch (_) { return ''; } };
+  const sha = git('git rev-parse --short HEAD') || 'unknown';
+  const branch = git('git rev-parse --abbrev-ref HEAD') || 'unknown';
+  const dirty = git('git status --porcelain') ? ' +uncommitted changes' : '';
+  return `${branch} @ ${sha}${dirty}`;
+}
+
+function writeFailLog() {
+  const file = path.join(ROOT, 'tests', 'last-run.log');
+  let built = 'not found';
+  try {
+    const st = fs.statSync(TARGET);
+    built = `${(st.size / 1048576).toFixed(2)} MB, modified ${st.mtime.toISOString()}`;
+  } catch (_) {}
+  const header = [
+    `# systole verify — ${new Date().toISOString()}`,
+    `# checkout  ${provenance()}`,
+    `# engine    ${ENGINE}`,
+    `# target    ${path.relative(ROOT, TARGET)}  (${built})`,
+    `# suites    ${results.length} run, ${total} checks, ${bad.length} failing`,
+    `# failing   ${bad.map(r => r.name).join(', ')}`,
+    '',
+    '# Full output of the failing suites follows. The passing ones are omitted;',
+    '# they are the same lines every time and they are not what you came for.',
+  ].join('\n');
+  const rule = '='.repeat(74);
+  const body = bad.map(r =>
+    `\n${rule}\n== verify-${r.name}  —  ${r.passed} passed, ${r.failed === null ? 'did not report' : r.failed + ' failed'}, ${r.secs}s\n${rule}\n${r.out.trimEnd()}\n`
+  ).join('');
+  fs.writeFileSync(file, header + body + '\n');
+  return file;
+}
+
 const blockers = results.filter(r => !r.ok && r.name !== 'stats');
 
 const total = results.reduce((n, r) => n + r.checks, 0);
@@ -269,7 +319,9 @@ const bad = results.filter(r => !r.ok);
 console.log(`\n  ${total} checks across ${results.length} suites in ${((Date.now() - t0) / 60000).toFixed(1)} min`);
 if (!blockers.length && !flag('--pwa')) writeStats();
 if (bad.length) {
-  console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}\n`);
+  console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}`);
+  console.log(`  full output of those suites: ${path.relative(process.cwd(), writeFailLog())}`);
+  console.log(`  checkout: ${provenance()}\n`);
   /* A stats-only failure means the record is out of date, which is the one
      failure that must NOT stop the run: --pwa has not happened yet, and the
      split build's count is part of what needs rewriting. Exiting here left the
@@ -278,7 +330,7 @@ if (bad.length) {
      lines below where it was solved. */
   if (blockers.length) process.exit(1);
   console.log('  (only the counts record is stale — continuing so it can be rewritten)\n');
-} else console.log(`  all green\n`);
+} else console.log(`  all green   —   ${provenance()} on ${ENGINE}\n`);
 
 /* ── the split build ──────────────────────────────────────────────────────────
    Built, served on a free port, tested, torn down. Kept out of the loop above

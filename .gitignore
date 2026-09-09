@@ -34,3 +34,6 @@ source/
 # Python bytecode from tools/
 __pycache__/
 *.pyc
+
+# Transcript of the last failing verify run — quotes licensed suite output.
+tests/last-run.log

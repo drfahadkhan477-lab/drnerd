@@ -146,5 +146,49 @@ head('the runner can actually be told which engine to use');
      /ENGINES\.includes\(ENGINE\)/.test(v));
 }
 
+head('a run reported from somewhere else says where it came from');
+{
+  const v = fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8');
+  /* WHY THIS EXISTS. A WebKit run came back as one line — "1335 checks across
+     49 suites … 17 suites failing: apex, polish, splash, …" — and the only way
+     to learn that it had been run against a three-day-old checkout was to
+     notice that 49 was not 51 and do the subtraction. The summary looked
+     exactly like a current run. Two properties fix that, and neither is
+     something the reader should have to supply:
+
+       - the run states its own branch and commit, so a stale tree is legible
+         in the output rather than deducible from a count;
+       - the failures are written to a file, so reporting a run is sending one
+         file instead of scrolling a terminal and pasting the last line.
+
+     Both are asserted against scripts/verify.js's text, as everything else in
+     this block is: the alternative is spawning a full run to make one fail,
+     which costs a browser and fifteen minutes to test a console.log. */
+  ok('a failing run writes the failing suites out in full, not just their names',
+     /function writeFailLog\(\)/.test(v) && /last-run\.log/.test(v));
+  /* Printed, not silently written: a file nobody is told about is a file
+     nobody sends. The check is that writeFailLog()'s return value — the path —
+     reaches a console.log, rather than that some particular sentence does. */
+  ok('and says on the console where it put them',
+     /console\.log\([^\n]*writeFailLog\(\)/.test(v));
+  ok('the run names its own branch and commit',
+     /function provenance\(\)/.test(v)
+     && /rev-parse --abbrev-ref HEAD/.test(v) && /rev-parse --short HEAD/.test(v));
+  ok('and admits to uncommitted changes, which are the other way a run is not what it says',
+     /git status --porcelain/.test(v));
+  /* Provenance on the green line too. A green run from a stale tree is the
+     more dangerous of the two: nobody re-reads a summary that says green. */
+  ok('a green run carries the same provenance as a failing one',
+     /all green[\s\S]{0,60}provenance\(\)/.test(v));
+  ok('the log header names the engine and the build it tested, not only the code',
+     /engine\s+\$\{ENGINE\}/.test(v) && /statSync\(TARGET\)/.test(v));
+  /* The transcript quotes suite output verbatim, and suite output quotes note
+     titles and stem text out of the licensed corpus. It is a local diagnostic
+     and must never become a commit. */
+  const ignored = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+  ok('and the transcript is gitignored, because suite output quotes licensed content',
+     /^tests\/last-run\.log\s*$/m.test(ignored));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
