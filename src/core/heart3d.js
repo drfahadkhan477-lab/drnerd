@@ -670,13 +670,36 @@ function buildCoronaries() {
   tubeAlong(bezier(v3(0.35, 0.80, 2.45), v3(1.35, 0.30, 2.20), v3(2.20, -0.70, 1.40), v3(2.85, -1.90, 0.30), 14), 0.085, out, CORONARY_RGB, true);
   /* LCx — around the left atrioventricular groove, onto the obtuse margin */
   tubeAlong(bezier(v3(0.05, 2.95, 1.15), v3(1.85, 2.35, 0.55), v3(3.05, 1.20, -1.10), v3(2.55, -0.40, -2.35), 20), 0.115, out, CORONARY_RGB, true);
+  /* second diagonal, lower on the free wall — two diagonals is what turns a
+     stripe into a territory, and D1 alone left the mid-anterior wall bare */
+  tubeAlong(bezier(v3(1.15, -0.85, 2.45), v3(1.95, -1.35, 2.05), v3(2.55, -2.20, 1.20), v3(2.95, -3.35, 0.25), 12), 0.070, out, CORONARY_RGB, true);
+  /* first obtuse marginal, off the LCx down the obtuse margin */
+  tubeAlong(bezier(v3(2.60, 1.75, -0.55), v3(2.95, 0.55, -0.85), v3(3.00, -1.05, -1.20), v3(2.65, -2.75, -1.30), 14), 0.080, out, CORONARY_RGB, true);
+  /* second obtuse marginal, shorter and more posterior */
+  tubeAlong(bezier(v3(2.85, 0.85, -1.65), v3(2.90, -0.25, -2.00), v3(2.60, -1.45, -2.05), v3(2.10, -2.60, -1.75), 11), 0.060, out, CORONARY_RGB, true);
   /* RCA — right AV groove, down the acute margin and round to the inferior wall */
   tubeAlong(bezier(v3(-1.15, 3.10, 1.25), v3(-2.85, 2.30, 1.35), v3(-3.35, 0.30, 0.10), v3(-1.70, -2.10, -1.55), 22), 0.125, out, CORONARY_RGB, true);
+  /* acute marginal, off the RCA along the sharp right border */
+  tubeAlong(bezier(v3(-3.30, 0.85, 0.70), v3(-3.15, -0.55, 1.05), v3(-2.45, -1.95, 1.15), v3(-1.55, -3.20, 0.85), 13), 0.070, out, CORONARY_RGB, true);
+  /* posterior descending, the RCA's continuation in the inferior groove —
+     right dominance, which is four hearts in five */
+  tubeAlong(bezier(v3(-1.70, -2.10, -1.55), v3(-0.75, -2.70, -1.85), v3(0.55, -3.55, -1.35), v3(1.65, -4.55, -0.55), 14), 0.080, out, CORONARY_RGB, true);
+  /* three septal perforators leaving the LAD at right angles. They dive into
+     the septum immediately, so only their stubs show — but those stubs are
+     most of why a real anterior surface does not read as four smooth lines. */
+  tubeAlong(bezier(v3(0.20, 1.15, 2.50), v3(0.05, 0.95, 2.15), v3(-0.10, 0.80, 1.80), v3(-0.20, 0.70, 1.50), 6), 0.045, out, CORONARY_RGB);
+  tubeAlong(bezier(v3(0.85, -0.55, 2.55), v3(0.70, -0.75, 2.20), v3(0.55, -0.95, 1.85), v3(0.45, -1.10, 1.55), 6), 0.042, out, CORONARY_RGB);
+  tubeAlong(bezier(v3(1.55, -2.10, 2.35), v3(1.45, -2.30, 2.00), v3(1.35, -2.50, 1.70), v3(1.30, -2.65, 1.45), 6), 0.038, out, CORONARY_RGB);
   /* Great cardiac vein, alongside the LAD, and the coronary sinus it becomes
      in the posterior AV groove — the veins are half the picture in the grooves
      and the sinus is the landmark every posterior view is oriented by. */
   tubeAlong(bezier(v3(0.10, 2.70, 1.70), v3(0.70, 0.90, 2.45), v3(1.55, -1.30, 2.45), v3(2.55, -3.90, 1.65), 20), 0.100, out, VENOUS_RGB, true);
   tubeAlong(bezier(v3(2.35, 1.35, -2.05), v3(1.20, 2.15, -2.70), v3(-0.70, 2.35, -2.35), v3(-2.05, 2.30, -1.15), 18), 0.150, out, VENOUS_RGB, true);
+  /* Middle cardiac vein up the inferior groove to the sinus, and a posterior
+     vein of the left ventricle. Veins run beside arteries rather than instead
+     of them, and a groove with only its artery in it looks half drawn. */
+  tubeAlong(bezier(v3(1.85, -4.35, -0.75), v3(0.75, -3.35, -1.55), v3(-0.35, -2.35, -2.00), v3(-1.35, -1.15, -2.10), 15), 0.085, out, VENOUS_RGB, true);
+  tubeAlong(bezier(v3(2.45, -2.45, -1.55), v3(2.55, -1.15, -2.05), v3(2.40, 0.25, -2.30), v3(1.95, 1.35, -2.30), 13), 0.070, out, VENOUS_RGB, true);
   return out;
 }
 function buildConduction() {
@@ -1170,23 +1193,106 @@ void main(){
   // steeper power than the colour render would tolerate.
   if (uStyle > 2.5) {
     vec3 slate = toLinear(mix(vec3(0.40,0.44,0.48), vec3(0.31,0.36,0.41), uDark));
-    float key = pow(max(d1, 0.0), 0.85);
-    float occ = max(pow(ao, 2.4), 0.05);
-    col = slate * (0.055 + key * 0.92) * occ
-        + slate * d2 * 0.16 * ao;
-    col += vec3(0.72,0.80,0.90) * pow(max(dot(N,H),0.0), 26.0) * 0.30 * ao;  // soft sheen, not gloss
-    col += toLinear(vec3(0.34,0.46,0.62)) * fres * 0.30;                     // cool silhouette
+
+    /* MYOCARDIUM IS NOT A SMOOTH SURFACE. A distance field meshed by surface
+       nets gives a clean shell, and a clean shell under one hard key reads as
+       moulded plastic — which is what the first version of this looked like at
+       any size worth looking at. Real muscle carries the fibre direction, and
+       fibres on the ventricle are helical: they wind around the long axis,
+       reversing hand between the inner and outer layers.
+
+       So the normal is perturbed by two bands of noise. One follows the helix
+       and gives the wall its grain; the second is finer, unaligned, and stands
+       in for the fat and the fine vasculature over it. Perturbing the NORMAL
+       rather than tinting the colour is what makes it survive the light moving
+       — a painted-on texture stays put when the heart turns, and that is the
+       tell that it is paint. */
+    vec3 P = vWorld;
+    float helix = sin(P.y * 3.1 + atan(P.z, P.x) * 2.6) * 0.5
+                + sin(P.y * 6.7 - atan(P.z, P.x) * 1.7) * 0.25;
+    float grain = sin(P.x * 21.0) * sin(P.y * 19.0) * sin(P.z * 23.0);
+    vec3 bump = normalize(N + vec3(
+        helix * 0.035 + grain * 0.020,
+        grain * 0.018,
+        helix * 0.030 + grain * 0.020));
+    float kd1 = max(dot(bump, L1), 0.0);
+    float kd2 = max(dot(bump, L2), 0.0);
+
+    /* LIT LIKE A PHOTOGRAPHED OBJECT, NOT LIKE A DARK ONE. The first pass here
+       had an ambient of 0.055 and a key of 0.92, which is what you write when
+       you are thinking "the reference is dark". The reference is not dark; it
+       is a mid-grey object photographed against a dark ground with a strong
+       key, and that is a completely different image. Against this hero's own
+       near-black the under-lit version simply disappeared into it. */
+    /* CONTRAST, NOT BRIGHTNESS. Two passes were spent moving the exposure and
+       both missed: the first was so dark it disappeared into the hero's own
+       near-black, the second so evenly lit it read as grey clay. The reference
+       is neither — it is a dark object with near-black shadows AND a hard
+       specular, and it is the distance between those two that makes it look
+       photographed. So the ambient goes back down, the key stays up, occlusion
+       goes deeper than any of the other styles would tolerate, and the sheen
+       roughly doubles. */
+    float key = pow(kd1, 0.80);
+    float occ = max(pow(ao, 2.9), 0.03);
+    col = slate * (0.055 + key * 1.30) * occ
+        + slate * kd2 * 0.20 * ao;
+    col += vec3(0.78,0.86,0.96) * pow(max(dot(bump,H),0.0), 34.0) * 0.62 * ao;  // the hard half
+    col += vec3(0.70,0.80,0.92) * pow(max(dot(bump,H),0.0), 8.0) * 0.10 * ao;   // and a broad one under it
+
+    /* AN ENVIRONMENT, WHICH IS THE THING THAT WAS ACTUALLY MISSING. Three
+       passes were spent moving exposure and contrast around and none of them
+       closed the gap to the reference, because the gap was never exposure. Two
+       directional lights and a vertex occlusion term cannot look photographed:
+       a real object is lit from every direction at once, brightly from the sky
+       above and dimly from the ground below, and that gradient across a curved
+       surface is most of what the eye reads as "photograph" rather than
+       "render".
+
+       So: a two-lobe environment, sampled by the normal for the diffuse and by
+       the reflection for the specular. No texture, no probe — just a sky
+       colour, a ground colour, and the vertical component of a vector. It is
+       the cheapest possible approximation of image-based lighting and it does
+       nearly all of the work that the real thing would. */
+    vec3 sky    = toLinear(vec3(0.42, 0.52, 0.66));
+    vec3 ground = toLinear(vec3(0.05, 0.07, 0.10));
+    vec3 envN = mix(ground, sky, bump.y * 0.5 + 0.5);
+    vec3 R = reflect(-V, bump);
+    vec3 envR = mix(ground, sky, R.y * 0.5 + 0.5);
+    col += slate * envN * 0.85 * ao;                 // irradiance
+    col += envR * (0.06 + fres * 0.80) * ao;         // reflection, Fresnel-weighted
+
+    col += toLinear(vec3(0.36,0.50,0.70)) * fres * 0.30;                        // cool silhouette
     if (uKind == 1) {
       /* The single most recognisable thing about the reference photograph is
          that the coronary tree is not drawn ON the surface, it stands proud OF
          it in the same material. So they take the same slate and only more of
-         the key light, plus their own narrow sheen — never a second colour. */
-      col *= 1.55;
-      col += vec3(0.66,0.74,0.84) * pow(max(dot(N,H),0.0), 42.0) * 0.34;
+         the key light, plus their own narrow sheen — never a second colour.
+
+         Seventeen vessels since the branches were added, and at 1.55 with one
+         sheen term the thin ones were invisible: a 0.038-radius septal
+         perforator subtends about a pixel and a half, so whatever light it
+         catches has to be caught hard. The specular is the important half —
+         a tube reads as a tube because of the highlight running along it. */
+      /* RELIEF IS A HIGHLIGHT AND A SHADOW, NOT A LIGHTER STRIPE. Brightening
+         the vessel body made the tree read as pale ribbon laid over the
+         muscle — the opposite of the reference, where the vessels are the same
+         dark material and you see them because a hard line of light runs along
+         the top of each one and the muscle falls away dark beneath. So the
+         body stays close to the wall it sits on and nearly all of the budget
+         goes into the specular. */
+      col *= 1.12;
+      col += vec3(0.80,0.88,0.98) * pow(max(dot(N,H),0.0), 26.0) * 1.05;
+      /* Sharper Fresnel than the wall. A tube's silhouette turns away from the
+         eye far faster than a ventricle does, and matching the wall's falloff
+         is what made the vessels look painted onto it rather than lying on it. */
+      col += mix(ground, sky, reflect(-V, N).y * 0.5 + 0.5) * (0.10 + fres * 1.15);
     }
     if (uKind == 3) col = slate * (0.10 + key * 0.5);  // leaflets, same material
     // The conduction system is not a lit surface here, it is a source.
-    if (uKind == 2) col = toLinear(vec3(1.00,0.83,0.20)) * 2.4;
+    /* 1.7, not 2.4. Fully blown out, the tubes lost their own shading and read
+       as flat yellow ribbon laid over the heart rather than as cord inside it.
+       Keeping some falloff on them is what makes them cylindrical. */
+    if (uKind == 2) col = toLinear(vec3(1.00,0.83,0.20)) * (1.15 + kd1 * 0.75);
 
     // THE CURRENT. uAct is the depolarisation front in ms since the sinus node
     // fired and vExtra.y is each vertex's own activation time, so the pulse
@@ -1641,7 +1747,7 @@ void main(){
          the atrium rather than as something glowing inside it. The travelling
          pulse is bright on its own account, so dimming the resting tree costs
          the current nothing and buys back the depth. */
-      gl.blendColor(0, 0, 0, 0.16);
+      gl.blendColor(0, 0, 0, 0.11);
       gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE);
       gl.depthMask(false);
       gl.disable(gl.DEPTH_TEST);

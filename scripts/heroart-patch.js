@@ -116,12 +116,18 @@ patch('hero: one medallion, two things that can fill it',
   17%{transform:scale(1.05)}
   31%{transform:scale(1.014)}
   45%{transform:scale(1.03)}}
-/* The canvas carries the same frame as the plate, so the crossfade does not
-   change the shape of the thing in the corner — only what is inside it. */
+/* NO GROUND UNDER THE MODEL. The canvas is created with alpha:true and cleared
+   to (0,0,0,0), so the heart has always been transparent — the black square was
+   this rule painting a plate behind it. The still photograph needs its frame
+   because the picture has a dark ground baked into it and would otherwise be a
+   rectangle pasted on the hero; the model needs no frame because it has no
+   rectangle. So the two states are framed differently on purpose, and only one
+   of them is ever on screen. */
 .hero-heart-3d{
   opacity:0;transition:opacity .6s var(--glide);pointer-events:none;
-  border-radius:24%;background:#0b1622;
-  box-shadow:0 10px 26px rgba(3,12,24,.34), 0 0 0 1px rgba(148,190,220,.13)}
+  background:transparent;
+  /* The shadow moves onto the heart itself rather than onto a box behind it. */
+  filter:drop-shadow(0 12px 22px rgba(3,10,20,.55))}
 #heroHeart.heart-3d-active{opacity:0}
 #heroHeart.heart-3d-active ~ .hero-heart-3d{opacity:1}
 @media(prefers-reduced-motion:reduce){ .hero-heart-plate .h-beat{animation:none} }`);
@@ -159,9 +165,14 @@ patch('hero: the specimen style, turning, on the rhythm the strip is drawing',
        See the style's own comment in src/core/heart3d.js — the current is the
        module's existing wave, not an effect added for the look of it. */
     style:'specimen',
-    /* distance 30, not 26: the medallion is a rounded square and the great
-       vessels were being cropped by its top corners at the closer framing. */
-    resolution:[40,52,32], distance:30, yaw:0.32, pitch:0.10, autoRotate:true,`);
+    /* THE MESH IS NO LONGER THE COARSE ONE. [40,52,32] was chosen when this
+       was a 92px mark in the corner, where nobody could see a facet. At the
+       size it is drawn now the low mesh showed as flat planes across the
+       ventricular wall, and the coronary tree — seventeen vessels since the
+       branches were added — was landing on a surface too blocky to sit on.
+       Roughly 2.6x the cells and about a third of a second at mount, which
+       happens once, behind the splash. */
+    resolution:[58,76,48], distance:26, yaw:0.32, pitch:0.10, autoRotate:true,`);
 
 /* ── 4. the guard ───────────────────────────────────────────────────────── */
 /* The style has to survive into the build, not just into this file. A typo in
