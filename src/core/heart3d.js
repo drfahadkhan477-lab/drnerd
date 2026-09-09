@@ -1289,10 +1289,18 @@ void main(){
     }
     if (uKind == 3) col = slate * (0.10 + key * 0.5);  // leaflets, same material
     // The conduction system is not a lit surface here, it is a source.
-    /* 1.7, not 2.4. Fully blown out, the tubes lost their own shading and read
-       as flat yellow ribbon laid over the heart rather than as cord inside it.
-       Keeping some falloff on them is what makes them cylindrical. */
-    if (uKind == 2) col = toLinear(vec3(1.00,0.83,0.20)) * (1.15 + kd1 * 0.75);
+    /* THE CURRENT IS SET AGAINST THE WALL IT SITS ON, NOT ABSOLUTELY. This was
+       dimmed from a flat 2.4 to about 1.5 because fully blown out the tubes
+       lost their own shading and read as flat ribbon. That was right at the
+       time — and then the environment term went in and lifted the muscle by
+       roughly a factor of three, and the same tubes measured 0.45% of lit
+       pixels against 9.2% before. The tree was still there; it had simply
+       stopped being brighter than what it lies on, which for something meant
+       to read as current inside tissue is the whole of the effect.
+
+       So it goes back up, and keeps its falloff: emissive enough to sit well
+       clear of the lit wall, still shaded enough to be cylindrical. */
+    if (uKind == 2) col = toLinear(vec3(1.00,0.83,0.20)) * (2.05 + kd1 * 1.15);
 
     // THE CURRENT. uAct is the depolarisation front in ms since the sinus node
     // fired and vExtra.y is each vertex's own activation time, so the pulse
@@ -1315,7 +1323,7 @@ void main(){
          apex to base, and the tubes get a wider one (sigma ~17 ms) so the
          pulse is legible as it runs the tree. */
       if (uKind == 2) {
-        col += toLinear(vec3(1.00,0.86,0.28)) * exp(-dt2*dt2/600.0) * 2.2;
+        col += toLinear(vec3(1.00,0.86,0.28)) * exp(-dt2*dt2/600.0) * 2.6;
       } else {
         /* Multiplied into the surface, not added over it. Depolarising tissue
            brightens; it does not acquire a colour of its own, and adding one
@@ -1747,7 +1755,7 @@ void main(){
          the atrium rather than as something glowing inside it. The travelling
          pulse is bright on its own account, so dimming the resting tree costs
          the current nothing and buys back the depth. */
-      gl.blendColor(0, 0, 0, 0.11);
+      gl.blendColor(0, 0, 0, 0.20);
       gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE);
       gl.depthMask(false);
       gl.disable(gl.DEPTH_TEST);
