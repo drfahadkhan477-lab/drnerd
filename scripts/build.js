@@ -270,6 +270,7 @@ const CHAIN = [
   'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest', 'answerroom',
   'avatarfit',
   'prefixq', 'prefixrank',
+  'heroart', 'apexpage',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

@@ -53,7 +53,7 @@ const SUITES = [
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
   ['theme',        'eight palettes, two axes, unthemed semantics'],
   ['home',         'the welcome bar, the progress bar, three layouts'],
-  ['splash-heart', 'the crystal heart paints before the app parses'],
+  ['splash-heart', 'the photographed heart paints before the app parses'],
   ['crisp',        'every canvas backs itself at high device-pixel density'],
   ['type',         'one modular type scale and one spacing scale, still held'],
   ['references',   'the worked reference notes obey the guide, and are retrievable'],
@@ -104,6 +104,10 @@ const SUITES = [
      were all written by the hand that wrote the code, which catches typos and
      regressions but never a formula transcribed wrongly from the paper. */
   ['oracle',       'our FSRS agrees with ts-fsrs on our own weights, everywhere but the one cap we chose'],
+  /* The two hearts the app shows are now one photograph, and the panel that
+     reads the long answers can take the whole page. */
+  ['heroart',      'the home hero beats on the rhythm, and the home screen spends no WebGL'],
+  ['apexpage',     'Apex can take the whole page, and a numbered list stays numbered'],
 ];
 
 const argv = process.argv.slice(2);
