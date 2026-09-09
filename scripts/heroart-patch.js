@@ -1,61 +1,45 @@
 #!/usr/bin/env node
 /*
- * The home hero wears the photograph, and stops spending a WebGL context on it.
+ * The hero is the anatomical heart again — turning, in the photograph's
+ * material, with the conduction system running through it.
  *
  *   node scripts/heroart-patch.js <in.html> <out.html>
  *
- * WHAT IT REPLACES. The hero on the home screen carried two hearts stacked:
- * a flat SVG (heartSVG('heroHeart')) as the always-there fallback, and a
- * <canvas id="heroHeart3d"> running the same Heart3D renderer Rhythm Lab uses,
- * revealed by a .heart-3d-active class once a WebGL2 context existed. The
- * splash now shows a photographed heart; the home screen showing a different,
- * lower-fidelity one directly underneath the same wordmark read as two apps.
- * So the hero takes the same picture.
+ * WHAT THIS IS. src/core/heart3d.js gained a fourth style, `specimen`: one
+ * desaturated slate material instead of red muscle, the coronary tree reading
+ * as relief rather than as vessels, and the conduction system drawn as a
+ * source rather than a lit surface — a yellow tree threaded through the
+ * muscle with a pulse travelling it. This step mounts that on the home screen.
  *
- * WHAT IS ACTUALLY LOST, SAID PLAINLY. The 3D hero was not decoration alone.
- * It took setRhythm() from the 11-second rotation, so the model's beat tracked
- * whichever rhythm the strip was drawing, and setDark() on a theme change.
- * A photograph cannot deform per rhythm. What it CAN do is beat at the right
- * rate, and that path already exists and is untouched by this step:
- * setHeroBeatRate() writes animationDuration onto '#heroHeart .h-beat', which
- * is how the flat SVG fallback has always followed the rotation. The markup
- * below keeps that exact selector, so the picture beats at 72 in sinus and at
- * whatever HeroRhythm says in atrial fibrillation, with no new wiring.
+ * THE CURRENT IS NOT AN EFFECT. It is the depolarisation wave the module has
+ * always modelled: `uAct` is the front in milliseconds since the sinus node
+ * fired, `vExtra.y` is each vertex's own activation time, so the pulse runs
+ * SA → AV → His → bundles → Purkinje at the real sequence, and the muscle
+ * lights a beat behind it because that is what depolarisation spreading
+ * through tissue does. It is driven by the same cardiac clock as the ECG
+ * strip beside it, so when the hero rotation moves to atrial fibrillation the
+ * current goes irregular and loses its atrial start — the trace and the heart
+ * cannot tell different stories.
  *
- * WHAT IS GAINED BESIDES THE PICTURE. The home screen stops creating a WebGL2
- * context at all. That context was live on the app's most-visited screen,
- * competed with Rhythm Lab's for the browser's small context budget, and
- * brought with it the whole context-loss dance — onLost nulling two handles so
- * the identity guard would stop refusing to re-mount, onRestored re-calling the
- * mount, and a fallback class to toggle. All of it goes.
+ * WHY THIS STEP EXISTS TWICE OVER. Its first version replaced the hero's
+ * stacked pair — a flat SVG under a WebGL canvas — with a still photograph,
+ * and recorded that this left Heart3D with no callers anywhere: 79 KB of
+ * renderer shipped for nothing. The answer to that was never to delete the
+ * renderer. It was to give it something worth doing. The photograph supplied
+ * the look; the module supplies the anatomy and the motion.
  *
- * AND THAT LEAVES Heart3D WITH NO CALLERS AT ALL. Stated here rather than
- * discovered later. An earlier step took the 3D heart out of Rhythm Lab, so
- * the hero was its last consumer; grep the build after this step and the only
- * mentions of Heart3D are its own export line and a usage example inside its
- * own header comment. That is ~79 KB of renderer shipped for nothing —
- * irrelevant against a 37 MB single file, but 79 KB of a 705 KB PWA shell.
+ * THE PHOTOGRAPH IS STILL HERE, AS THE FALLBACK. A device with no WebGL2 —
+ * an old iPad, a locked-down browser, a lost context — shows the still image
+ * in the same medallion at the same size, and `.heart-3d-active` is what
+ * swaps between them. That is a better fallback than the flat SVG this step
+ * originally replaced: the two states now differ in motion, not in quality.
  *
- * IT IS DELIBERATELY NOT DELETED HERE. This step was asked to change a
- * picture, and deleting a renderer the app's owner built over several sessions
- * and has already chosen twice where to place is their call, not a side effect
- * of swapping an image. src/core/heart3d.js is untouched and still embedded.
- * If it is to go, that is its own step, with the apex/polish/theme suites'
- * references to it updated in the same commit.
- *
- * ONE CONSEQUENCE FOR THE TEST SUITE, RECORDED HERE. verify-calibrate.js
- * asserts the hero's WebGL context-loss recovery — it loses the context and
- * waits for the fallback. There is no hero context to lose after this step, so
- * those checks describe an app that no longer exists and are removed rather
- * than left passing vacuously on a screen with no canvas. The equivalent
- * recovery on the Rhythm Lab heart, which is still real, keeps its coverage.
- *
- * THE IMAGE ARRIVES ALREADY IN THE DOCUMENT. splash-heart-patch.js has already
- * put the same photograph on the page as a data: URI (or, in the split build,
- * as a URL that build-pwa.js rewrote). This step reads it back out of the
- * splash markup rather than re-encoding the file, so the two hearts can never
- * be different pictures, and so the split build gets one request for one image
- * instead of two copies of it.
+ * THE SPLASH KEEPS THE STILL, DELIBERATELY. It would be easy to put this on
+ * the startup screen too and it would be wrong. The splash exists to paint
+ * before the app's megabytes parse; a WebGL context, a mesh built by surface
+ * nets at load, and a first frame are all things that happen after parse.
+ * verify-splash-heart asserts that nothing on the splash asks for WebGL, and
+ * that assertion is protecting the one property the splash has.
  */
 'use strict';
 const fs = require('fs');
@@ -72,35 +56,29 @@ function patch(label, find, replace) {
   applied.push(label);
 }
 
-/* Whatever the splash's img is pointing at — a data: URI in the single-file
-   build, 'content/splash-heart/heart.webp' after build-pwa.js has run. Taking
-   it from the document rather than from disk is what guarantees the hero and
-   the splash are the same heart. */
+/* The picture the splash is already carrying — a data: URI in the single-file
+   build, a URL after build-pwa.js has rewritten it. Read from the document so
+   the fallback and the splash can never drift into being two different
+   images. */
 const srcMatch = /<img class="sp-heart-img" data-splash-heart="img" alt="" decoding="sync" src="([^"]+)">/.exec(html);
 if (!srcMatch) {
-  throw new Error('heroart: the splash heart <img> was not found, so there is no image to reuse.\n'
-    + '  This step reads the picture out of the splash markup that splash-heart-patch.js writes.\n'
+  throw new Error('heroart: the splash heart <img> was not found, so there is no fallback image to reuse.\n'
+    + '  This step reads the picture out of the markup splash-heart-patch.js writes.\n'
     + '  If that step changed its markup, this is the line that needs to follow it.');
 }
 const IMG_SRC = srcMatch[1];
 
-/* ── 1. the markup ────────────────────────────────────────────────────────
-   The flat SVG and the canvas both go. The replacement keeps the id
-   #heroHeart and an inner .h-beat, because setHeroBeatRate() addresses
-   '#heroHeart .h-beat' and is deliberately left alone by this step. */
-patch('hero: the photograph replaces the flat SVG and the 3D canvas',
+/* ── 1. the markup ──────────────────────────────────────────────────────── */
+patch('hero: the turning heart, with the photograph behind it as the fallback',
 `      ${'$'}{heartSVG('heroHeart')}
       <canvas id="heroHeart3d" class="heart-3d-mini" aria-hidden="true"></canvas>`,
 `      <div class="hero-heart-plate" id="heroHeart" aria-hidden="true">
         <div class="h-beat"><img data-hero-heart="img" src="${IMG_SRC}" alt="" loading="eager" decoding="async"></div>
-      </div>`);
+      </div>
+      <canvas id="heroHeart3d" class="hero-heart-3d" aria-hidden="true"></canvas>`);
 
-/* ── 2. the CSS ───────────────────────────────────────────────────────────
-   Inherits .heart-3d-mini's box exactly — that is where the 3D heart sat and
-   the composition was tuned around it — and drops the opacity gate, which
-   existed only to hold the canvas hidden until WebGL proved itself. The two
-   .heart-3d-active rules go with it: nothing sets that class any more. */
-patch('hero: the medallion takes the box the 3D canvas had',
+/* ── 2. the CSS ─────────────────────────────────────────────────────────── */
+patch('hero: one medallion, two things that can fill it',
 `/* the real anatomical heart — same renderer as Rhythm Lab, coarser mesh,
    no interaction. Sits under the flat SVG fallback and is only shown once
    a WebGL2 context actually exists (see heart-3d-active). */
@@ -109,17 +87,26 @@ patch('hero: the medallion takes the box the 3D canvas had',
   opacity:0;transition:opacity .5s var(--glide)}
 #heroHeart.heart-3d-active ~ .heart-3d-mini{opacity:1}
 #heroHeart.heart-3d-active{opacity:0;pointer-events:none}`,
-`/* the photographed heart, in a medallion that carries its own dark ground so
-   it reads the same on Parchment's cream as on Nocturne's near-black. Same
-   box the 3D canvas occupied — the composition was tuned around it. */
-.hero-heart-plate{position:absolute;right:clamp(10px,2.4vw,22px);top:clamp(6px,1.6vw,16px);
-  width:clamp(92px,12vw,124px);height:clamp(98px,13vw,132px);z-index:1;
+`/* THE MEDALLION IS ONE BOX WITH TWO OCCUPANTS. The still photograph is in the
+   markup and visible from the first paint; the turning heart fades in over it
+   once a WebGL2 context exists and its first frame is up. Sharing one box and
+   one frame means the swap is a crossfade rather than a jump, and a device
+   that never gets a context simply keeps what it already had.
+
+   Larger than the box the old mini heart had — clamp(92px…) to clamp(124px…).
+   At the old size the conduction tree was three yellow pixels. A drawing has
+   to be big enough to be read or it is only texture. */
+.hero-heart-plate,.hero-heart-3d{
+  position:absolute;right:clamp(10px,2.4vw,22px);top:clamp(6px,1.6vw,16px);
+  width:clamp(124px,15vw,168px);height:clamp(132px,16vw,178px);z-index:1}
+.hero-heart-plate{
   border-radius:24%;overflow:hidden;background:#0b1622;pointer-events:none;
+  transition:opacity .5s var(--glide);
   box-shadow:0 10px 26px rgba(3,12,24,.34), 0 0 0 1px rgba(148,190,220,.13),
              inset 0 0 34px rgba(4,10,18,.5)}
-/* The beat lives on this element and nothing else, because setHeroBeatRate()
-   writes animationDuration onto '#heroHeart .h-beat' — the same selector the
-   flat SVG used, so the rhythm rotation drives the picture with no new code. */
+/* The beat lives here and nowhere else, because setHeroBeatRate() writes
+   animationDuration onto '#heroHeart .h-beat'. It drives the still image; the
+   turning heart runs its own clock from the same rhythm. */
 .hero-heart-plate .h-beat{width:100%;height:100%;
   animation:heroBeat 850ms infinite cubic-bezier(.28,.9,.32,1)}
 .hero-heart-plate img{display:block;width:100%;height:100%;object-fit:cover}
@@ -129,12 +116,18 @@ patch('hero: the medallion takes the box the 3D canvas had',
   17%{transform:scale(1.05)}
   31%{transform:scale(1.014)}
   45%{transform:scale(1.03)}}
+/* The canvas carries the same frame as the plate, so the crossfade does not
+   change the shape of the thing in the corner — only what is inside it. */
+.hero-heart-3d{
+  opacity:0;transition:opacity .6s var(--glide);pointer-events:none;
+  border-radius:24%;background:#0b1622;
+  box-shadow:0 10px 26px rgba(3,12,24,.34), 0 0 0 1px rgba(148,190,220,.13)}
+#heroHeart.heart-3d-active{opacity:0}
+#heroHeart.heart-3d-active ~ .hero-heart-3d{opacity:1}
 @media(prefers-reduced-motion:reduce){ .hero-heart-plate .h-beat{animation:none} }`);
 
-/* ── 3. the mount function, whole ─────────────────────────────────────────
-   Deleted rather than emptied. A function that exists and does nothing is how
-   a caller three months from now concludes the hero still has a 3D heart. */
-patch('hero: mountHeroHeart3d is deleted, not stubbed',
+/* ── 3. the mount ───────────────────────────────────────────────────────── */
+patch('hero: mount the specimen heart, and hand the medallion back if it is lost',
 `/* Same identity-checked mount pattern as the lab heart (see mountLabHeart) —
    a screen-change render() can replace this canvas node out from under a
    running instance, so we compare nodes, not just check truthiness. Falls
@@ -144,95 +137,49 @@ function mountHeroHeart3d(){
   if(!cv||typeof Heart3D==='undefined'||!hasWebGL2()){
     document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
     return;
-  }
-  if(heroHeart3d && heroHeart3dCanvas===cv) return;
-  if(heroHeart3d){ heroHeart3d.destroy(); heroHeart3d=null; }
-  const dark=document.documentElement.getAttribute('data-theme')==='dark'
-    || (!document.documentElement.hasAttribute('data-theme')
-        && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  heroHeart3d=Heart3D.create(cv,{rhythm:heroCurrentKind||'sinus',mode:'whole',dark,
-    resolution:[40,52,32], distance:26, yaw:0.32, pitch:0.10, autoRotate:true,
-    /* Clearing both handles matters as much as showing the fallback: the
-       identity guard at the top of this function returns early while a stale
-       instance is still assigned to this canvas, so without nulling them a
-       restore could not re-mount even when asked. */
-    onLost:function(){
-      heroHeart3d=null; heroHeart3dCanvas=null;
-      document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
-    },
-    onRestored:function(){
-      if(S.screen==='home') mountHeroHeart3d();
-    }});
-  if(!heroHeart3d) return;
-  heroHeart3dCanvas=cv;
-  cv.style.pointerEvents='none';           // decorative — never eats a home-screen scroll
-  document.getElementById('heroHeart')?.classList.add('heart-3d-active');
-}
-`,
-`/* The hero's heart is a photograph in the markup (see heroart-patch.js). It
-   needs no mount: setHeroBeatRate() drives its beat through the same
-   '#heroHeart .h-beat' selector the flat SVG used, and there is no WebGL
-   context on this screen to create, lose, or restore. */
-`);
-
-/* ── 4. the three call sites and the two dead handles ─────────────────── */
-patch('hero: nothing calls the mount from render()',
-`  if(typeof mountHero==='function') mountHero();
-  if(typeof mountHeroHeart3d==='function') mountHeroHeart3d();`,
-`  if(typeof mountHero==='function') mountHero();`);
-
-patch('hero: nothing calls the mount from mountHero()',
-`  heroMon.start();
-  mountHeroHeart3d();
-  paintHeroLabel(heroCurrentKind);`,
-`  heroMon.start();
-  paintHeroLabel(heroCurrentKind);`);
-
-patch('hero: the two handles it kept are gone',
-`let heroMon=null, heroHeart3d=null, heroHeart3dCanvas=null, heroRotateTimer=null, heroCurrentKind=null;`,
-`let heroMon=null, heroRotateTimer=null, heroCurrentKind=null;`);
-
-patch('hero: the early return has no instance to destroy',
-`  const cv=document.getElementById('heroECG');
-  if(!cv){
-    if(heroHeart3d){ heroHeart3d.destroy(); heroHeart3d=null; heroHeart3dCanvas=null; }
-    return;
   }`,
-`  const cv=document.getElementById('heroECG');
-  if(!cv) return;`);
+`/* Same identity-checked mount pattern as the lab heart (see mountLabHeart) —
+   a screen-change render() can replace this canvas node out from under a
+   running instance, so we compare nodes, not just check truthiness. Falls
+   back to the photograph, already in the markup and already painted, if
+   WebGL2 is missing. */
+function mountHeroHeart3d(){
+  const cv=document.getElementById('heroHeart3d');
+  if(!cv||typeof Heart3D==='undefined'||!hasWebGL2()){
+    document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
+    return;
+  }`);
 
-patch('hero: the rotation drives the strip and the beat, not a model',
-`    heroMon.setRhythm(heroCurrentKind);
-    if(heroHeart3d) heroHeart3d.setRhythm(heroCurrentKind);
-    setHeroBeatRate(heroCurrentKind);`,
-`    heroMon.setRhythm(heroCurrentKind);
-    setHeroBeatRate(heroCurrentKind);`);
+patch('hero: the specimen style, turning, on the rhythm the strip is drawing',
+`  heroHeart3d=Heart3D.create(cv,{rhythm:heroCurrentKind||'sinus',mode:'whole',dark,
+    resolution:[40,52,32], distance:26, yaw:0.32, pitch:0.10, autoRotate:true,`,
+`  heroHeart3d=Heart3D.create(cv,{rhythm:heroCurrentKind||'sinus',mode:'whole',dark,
+    /* specimen: slate material, coronaries as relief, and the conduction
+       system drawn as a source with the depolarisation front travelling it.
+       See the style's own comment in src/core/heart3d.js — the current is the
+       module's existing wave, not an effect added for the look of it. */
+    style:'specimen',
+    /* distance 30, not 26: the medallion is a rounded square and the great
+       vessels were being cropped by its top corners at the closer framing. */
+    resolution:[40,52,32], distance:30, yaw:0.32, pitch:0.10, autoRotate:true,`);
 
-/* A photograph has no light model to re-tune, and the medallion carries its
-   own ground on purpose, so a theme change has nothing to tell it. */
-patch('hero: a theme change no longer has a model to re-light',
-`  if(typeof heroHeart3d!=='undefined'&&heroHeart3d) heroHeart3d.setDark(d);
-`, '');
-
-/* ── 5. the guard ─────────────────────────────────────────────────────────
-   Every mention should now be gone. If one survives, this build is shipping a
-   reference to a handle that no longer exists, and that is a runtime error on
-   the app's first screen — worth stopping the build over. */
-const DEAD = /heroHeart3d|heart-3d-active/g;
-const left = (html.match(DEAD) || []).length;
-if (left) {
-  const where = [];
-  const re = new RegExp(DEAD.source, 'g'); let m;
-  while ((m = re.exec(html))) {
-    const a = html.lastIndexOf('\n', m.index) + 1;
-    where.push(html.slice(a, html.indexOf('\n', m.index)).trim().slice(0, 120));
-  }
-  throw new Error(`heroart: ${left} dead reference(s) to the 3D hero survived:\n  ` + [...new Set(where)].join('\n  '));
+/* ── 4. the guard ───────────────────────────────────────────────────────── */
+/* The style has to survive into the build, not just into this file. A typo in
+   the option name silently falls back to `anatomic` — a red heart on the home
+   screen, which is wrong but not obviously broken, and exactly the kind of
+   thing that ships. */
+if (!/style:\s*'specimen'/.test(html)) {
+  throw new Error('heroart: the specimen style did not reach the mount site');
 }
-applied.push('hero: no reference to heroHeart3d or heart-3d-active survives anywhere in the build');
+if (!/uStyle > 2\.5/.test(html)) {
+  throw new Error('heroart: the specimen branch is not in the embedded shader.\n'
+    + '  src/core/heart3d.js is embedded by apex-patch.js earlier in the chain;\n'
+    + '  if that step no longer carries the module, this style has nowhere to run.');
+}
+applied.push('hero: the style reaches both the mount site and the embedded shader');
 
 fs.writeFileSync(OUT, html);
-console.log(`Hero photograph applied — ${applied.length} edits`);
+console.log(`Hero specimen heart applied — ${applied.length} edits`);
 applied.forEach(a => console.log('  ✓ ' + a));
-console.log(`  image     ${IMG_SRC.startsWith('data:') ? `inline data: URI, ${(IMG_SRC.length / 1024).toFixed(1)} KB` : IMG_SRC}`);
+console.log(`  fallback  ${IMG_SRC.startsWith('data:') ? `inline data: URI, ${(IMG_SRC.length / 1024).toFixed(1)} KB` : IMG_SRC}`);
 console.log(`written: ${OUT}`);

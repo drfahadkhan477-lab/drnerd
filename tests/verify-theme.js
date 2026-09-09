@@ -208,11 +208,16 @@ const head = t => console.log('\n── ' + t + ' ──');
      stay put. There are no unthemed semantics on the home screen, so the
      expected count here is zero, and a new hardcoded colour anywhere on it will
      fail this check on the day it is added. */
-  const paint = async id => {
+  /* MATCHED ON THE ELEMENT, NOT ON THE KEY. The key is derived from the first
+     two class names, so an element that gains a class at runtime changes key —
+     the hero medallion picks up .heart-3d-active the moment a WebGL context
+     mounts, and a FIXED list written as strings silently stopped matching it.
+     Asking the element whether it matches a selector cannot drift that way. */
+  const paint = async (id, fixedSel) => {
     await page.evaluate(t => setTheme(t), id);
     await page.waitForTimeout(500);
-    return page.evaluate(() => {
-      const out = {};
+    return page.evaluate(sel => {
+      const out = {}, fixed = {};
       for (const el of document.querySelectorAll('*')) {
         const cs = getComputedStyle(el);
         const bg = cs.backgroundImage !== 'none' ? cs.backgroundImage : cs.backgroundColor;
@@ -221,9 +226,10 @@ const head = t => console.log('\n── ' + t + ' ──');
         if (r.width * r.height < 3000) continue;
         const key = el.tagName.toLowerCase() + '.' + (el.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.');
         if (!(key in out)) out[key] = bg;
+        if (sel.some(x => el.matches(x))) fixed[key] = true;
       }
-      return out;
-    });
+      return { out, fixed };
+    }, fixedSel);
   };
   /* ONE SURFACE IS MEANT TO STAY PUT, AND IT IS ASSERTED RATHER THAN SKIPPED.
      The hero medallion holds a photograph that carries its own dark ground;
@@ -236,19 +242,27 @@ const head = t => console.log('\n── ' + t + ' ──');
      plate is REQUIRED to be identical under both palettes and everything else
      is required to move — so the check now fails in both directions: if the
      medallion starts following the theme, and if anything else stops. */
-  const FIXED = 'div.hero-heart-plate';
-  const warm = await paint('parchment'), green = await paint('monitor');
+  /* TWO surfaces now, not one: the medallion holds a still photograph and a
+     canvas that crossfades over it, and both carry the same dark ground for
+     the same reason. Named individually rather than matched by prefix — a
+     pattern would quietly absorb the next element someone adds with a
+     hardcoded colour, which is the exact failure this sweep exists to catch. */
+  const FIXED_SEL = ['.hero-heart-plate', '.hero-heart-3d'];
+  const w = await paint('parchment', FIXED_SEL), g = await paint('monitor', FIXED_SEL);
+  const warm = w.out, green = g.out;
+  const FIXED = Object.keys(w.fixed);
   const painted = Object.keys(warm).length;
   const blind = Object.keys(warm).filter(k => k in green && warm[k] === green[k]);
   ok('the sweep found surfaces to compare at all', painted >= 8, `${painted} painted surfaces`);
-  ok('the hero medallion is on screen to be judged', FIXED in warm,
-     FIXED in warm ? warm[FIXED] : 'not painted — has the hero art been renamed?');
+  ok('the hero medallion is on screen to be judged', FIXED.length === 2,
+     FIXED.length ? FIXED.join(', ') : 'neither the plate nor the canvas painted — renamed?');
   ok('it holds its own ground across two palettes that share nothing',
-     warm[FIXED] === green[FIXED], `${warm[FIXED]} / ${green[FIXED]}`);
+     FIXED.length > 0 && FIXED.every(k => warm[k] === green[k]),
+     FIXED.map(k => `${k} ${warm[k]}`).join(' · '));
+  const others = blind.filter(k => !FIXED.includes(k));
   ok('and every other painted surface moves when the palette does',
-     blind.filter(k => k !== FIXED).length === 0,
-     blind.filter(k => k !== FIXED).join(', ')
-       || `${painted - 1}/${painted - 1} follow the palette`);
+     others.length === 0,
+     others.join(', ') || `${painted - FIXED.length}/${painted - FIXED.length} follow the palette`);
 
   /* Borders carry the same risk and hid one more: the review card's edge was a
      fixed teal, so it stayed teal on an amber page. The rule here has to be

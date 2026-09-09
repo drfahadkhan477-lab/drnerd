@@ -98,10 +98,12 @@ const head = t => console.log('\n── ' + t + ' ──');
      old loseContext call, which reported success on a machine where the heart
      was demonstrably still rendering).
 
-     Nothing replaced them, because after that step the app creates no WebGL
-     context at all: Heart3D has no remaining callers. tests/verify-heroart.js
-     asserts exactly that — zero getContext('webgl*') calls on the home
-     screen — which is the honest successor claim. */
+     They did not come back when the hero did. The hero mounts Heart3D again,
+     in the specimen style, and its context loss and restore ARE asserted —
+     in tests/verify-heroart.js, which owns that screen and can say what the
+     fallback should look like. Restoring them here would be two suites
+     testing one behaviour, and the second copy to be updated is the one that
+     silently stops meaning anything. */
 
   head('confidence: an option, never a gate');
   const conf = await (async () => { await startAndWait(); return page.evaluate(async () => {

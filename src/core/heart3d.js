@@ -1140,7 +1140,7 @@ void main(){
   // but vanish. The vessels stay solid — that is what gives the eye something
   // to look THROUGH the glass at.
   float alpha = 1.0;
-  if (uStyle > 1.5) {
+  if (uStyle > 1.5 && uStyle < 2.5) {
     float fr = pow(1.0 - max(dot(N, V), 0.0), 2.1);
     if (uKind == 1) {
       col = toLinear(vec3(0.72, 0.13, 0.13)) * (0.55 + d1 * 0.95)
@@ -1158,6 +1158,66 @@ void main(){
       /* A floor of 0.06 keeps the far wall faintly present rather than absent,
          which is what stops the whole thing reading as an empty outline. */
       alpha = clamp(0.06 + fr * 0.86 + tight * 0.7, 0.0, 1.0);
+    }
+  }
+
+  // ── specimen ──
+  // A sculpted anatomical study rather than a living organ: one desaturated
+  // slate material, no red anywhere, and the coronary tree reading as RELIEF
+  // standing proud of the surface instead of as vessels laid on it. What
+  // carries a dark object is not its colour, it is its occlusion and one hard
+  // key light — so the ambient term is nearly nothing and ao is raised to a
+  // steeper power than the colour render would tolerate.
+  if (uStyle > 2.5) {
+    vec3 slate = toLinear(mix(vec3(0.40,0.44,0.48), vec3(0.31,0.36,0.41), uDark));
+    float key = pow(max(d1, 0.0), 0.85);
+    float occ = max(pow(ao, 2.4), 0.05);
+    col = slate * (0.055 + key * 0.92) * occ
+        + slate * d2 * 0.16 * ao;
+    col += vec3(0.72,0.80,0.90) * pow(max(dot(N,H),0.0), 26.0) * 0.30 * ao;  // soft sheen, not gloss
+    col += toLinear(vec3(0.34,0.46,0.62)) * fres * 0.30;                     // cool silhouette
+    if (uKind == 1) {
+      /* The single most recognisable thing about the reference photograph is
+         that the coronary tree is not drawn ON the surface, it stands proud OF
+         it in the same material. So they take the same slate and only more of
+         the key light, plus their own narrow sheen — never a second colour. */
+      col *= 1.55;
+      col += vec3(0.66,0.74,0.84) * pow(max(dot(N,H),0.0), 42.0) * 0.34;
+    }
+    if (uKind == 3) col = slate * (0.10 + key * 0.5);  // leaflets, same material
+    // The conduction system is not a lit surface here, it is a source.
+    if (uKind == 2) col = toLinear(vec3(1.00,0.83,0.20)) * 2.4;
+
+    // THE CURRENT. uAct is the depolarisation front in ms since the sinus node
+    // fired and vExtra.y is each vertex's own activation time, so the pulse
+    // travels the real conduction path at the real sequence — SA, AV, His,
+    // bundles, Purkinje — and the muscle lights a beat behind it, which is
+    // what depolarisation spreading through tissue actually looks like. It is
+    // the same clock the ECG trace runs on, so the two cannot disagree.
+    if (uAct >= 0.0) {
+      float dt2 = vExtra.y - uAct;
+      /* TWO WIDTHS, BECAUSE THE TWO GEOMETRIES CARRY DIFFERENT SPREADS.
+         activationAt gives the whole ventricular wall about 60 ms of spread
+         (150 at the apex to 210 at the base), while the conduction tree runs
+         6 to 210. One band wide enough to read on the tree therefore covers
+         the entire ventricle at once — which is exactly what the first version
+         of this did: at any instant mid-sweep the muscle went uniformly
+         yellow, and it read as a heart that had been painted rather than one
+         being depolarised.
+
+         So the muscle gets a tight band (sigma ~9 ms) that visibly travels
+         apex to base, and the tubes get a wider one (sigma ~17 ms) so the
+         pulse is legible as it runs the tree. */
+      if (uKind == 2) {
+        col += toLinear(vec3(1.00,0.86,0.28)) * exp(-dt2*dt2/600.0) * 2.2;
+      } else {
+        /* Multiplied into the surface, not added over it. Depolarising tissue
+           brightens; it does not acquire a colour of its own, and adding one
+           flat is what turns slate olive. */
+        float band = exp(-dt2*dt2/150.0);
+        col *= 1.0 + band * 1.5;
+        col += toLinear(vec3(1.00,0.86,0.28)) * band * 0.09;
+      }
     }
   }
 
@@ -1419,7 +1479,7 @@ void main(){
   }
 
   /* ── state ── */
-  const STYLES = { anatomic: 0, ink: 1, crystal: 2 };
+  const STYLES = { anatomic: 0, ink: 1, crystal: 2, specimen: 3 };
   const S = {
     rhythm: opts.rhythm || 'sinus',
     mode: opts.mode || 'whole',
@@ -1552,6 +1612,41 @@ void main(){
       gl.cullFace(gl.FRONT); drawMesh(mOuter, 0);
       gl.cullFace(gl.BACK);  drawMesh(mOuter, 0);
       gl.disable(gl.CULL_FACE);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+    } else if (S.style === 3) {
+      /* THE CONDUCTION SYSTEM IS DRAWN TWICE, AND THAT IS THE WHOLE STYLE.
+         Once depth-tested, so where the tree emerges it sits correctly behind
+         and in front of the muscle it threads through. Then again with the
+         depth test off and blended additively, so the buried three quarters
+         of it glow THROUGH the tissue.
+
+         Without the second pass this is a diagram of a heart with a hidden
+         wire in it; with the second pass alone it is a sticker of a wire on
+         a heart. The pair is what reads as current inside muscle.
+
+         The see-through pass is dimmed with blendColor rather than a new
+         uniform: CONSTANT_ALPHA takes 30% of whatever the fragment shader
+         already computed, which means the travelling pulse stays brightest
+         and the resting tree stays faint, with no second code path deciding
+         that separately and drifting from the first. */
+      drawMesh(mOuter, 0);
+      if (mode === 1) drawMesh(mCav, 0);
+      drawMesh(mCoron, 1);
+      drawMesh(mCond, 2);
+      gl.enable(gl.BLEND);
+      /* 0.16, not 0.30. At the higher value the atrial tracts — which are the
+         fattest tubes in the tree and are seen nearly edge-on from the hero's
+         camera — integrated to a flat yellow patch that read as a sticker on
+         the atrium rather than as something glowing inside it. The travelling
+         pulse is bright on its own account, so dimming the resting tree costs
+         the current nothing and buys back the depth. */
+      gl.blendColor(0, 0, 0, 0.16);
+      gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE);
+      gl.depthMask(false);
+      gl.disable(gl.DEPTH_TEST);
+      drawMesh(mCond, 2);
+      gl.enable(gl.DEPTH_TEST);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
     } else {

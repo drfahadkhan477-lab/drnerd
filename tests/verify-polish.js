@@ -274,12 +274,17 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('with auto-minimize OFF, a Pencil touch does not force-expand the rail', autoOffNoExpand === true);
 
   head('the heart module is embedded whole');
-  /* This used to open the lab, switch the heart to cutaway and check that the
-     blood particles drew; then, when the lab lost its heart, it moved to the
-     hero's instance instead. The hero has since become a photograph, so there
-     is no screen left that mounts this module at all. What polish-patch is
-     responsible for has not changed — re-embedding heart3d.js in one piece —
-     so the evidence moves onto a canvas this test creates itself. */
+  /* This has followed the heart around twice. It used to open the lab, switch
+     to cutaway and check the blood particles drew; when the lab lost its
+     heart it moved to the hero's instance; when the hero briefly became a
+     still photograph there was no mounting screen left at all, so it moved
+     onto a canvas this test creates itself.
+
+     The hero mounts the module again now, in the specimen style — but the
+     evidence stays on this test's own canvas deliberately. What polish-patch
+     is responsible for is re-embedding heart3d.js in one piece, and that claim
+     should not depend on which screen happens to use it this month.
+     tests/verify-heroart.js owns the hero. */
   const heartModule = await page.evaluate(() => {
     goHome(); render();
     return new Promise(res => setTimeout(() => res({
