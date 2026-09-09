@@ -119,6 +119,14 @@ head('the prose agrees with the record');
   const claims = [
     ['README.md', 'the headline count and suite count',
      /#\s*(\d+)\s+checks,\s*(\d+)\s+suites/, r => [+r[1] === stats.total, +r[2] === stats.suiteCount]],
+    /* THE LINE BETWEEN THE OTHER TWO, WHICH IS HOW IT DRIFTED. The command
+       block in the README has three numbers in it and only two of them were
+       guarded — this one sat between them, said "+ 76 more on the split build"
+       while the real figure had been 93 for some time, and nothing noticed. A
+       guard with a hole in it is worse than no guard, because the surrounding
+       green reads as coverage of the whole block. */
+    ['README.md', 'the split-build count in the command block',
+     /#\s*\+\s*(\d+)\s+more on the split build/, r => [+r[1] === stats.pwa]],
     ['README.md', 'the badge caveat',
      /badge is not the (\d+) \+ (\d+) checks above — read it as (\d+), not (\d+)\./,
      r => [+r[1] === stats.total, +r[2] === stats.pwa, +r[3] === ciTotal, +r[4] === stats.total + stats.pwa]],
