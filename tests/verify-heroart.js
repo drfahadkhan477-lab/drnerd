@@ -40,16 +40,23 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, engineName, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-heroart.js <patched.html>'); process.exit(1); }
 const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
-let passed = 0, failed = 0;
+let passed = 0, failed = 0, unmeasured = 0;
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
+};
+/* Neither a pass nor a failure: a claim this engine cannot weigh. Same device
+   as verify-pwa's heap section — printed, counted, and named in the summary,
+   so a WebKit run's smaller check count is visible rather than silent. */
+const unmeasurable = (label, why) => {
+  unmeasured++;
+  console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
 const head = t => console.log('\n── ' + t + ' ──');
 
@@ -58,7 +65,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
   /* Collected separately because it arrives as a WARNING, not an error, so the
      line above never sees it. Asserting against `errors` would have passed on
      a build that emits six of these — a check that cannot fail is worse than
@@ -223,6 +230,16 @@ const head = t => console.log('\n── ' + t + ' ──');
     const ext = gl && gl.getExtension('WEBGL_lose_context');
     if (!ext) return { skipped: true };
     const before = document.getElementById('heroHeart').classList.contains('heart-3d-active');
+    /* GUARDED, BECAUSE THIS LINE WAS THE ERROR IT THEN FAILED ON. WebKit caps a
+       page at sixteen WebGL contexts and does not return a slot when one is
+       released, so by the time this section runs the hero's context may already
+       have been evicted. Calling loseContext() on it emits
+       "INVALID_OPERATION: loseContext: context already lost" — which the
+       suite's own console-error check then reports as a failure of the app.
+       Isolated on a blank page: removing the one unguarded call took the error
+       count from 3 to 1, and all three guards tested (isContextLost alone,
+       plus VERSION==null, plus getError) gave zero. The cheapest is enough. */
+    if (gl.isContextLost()) return { skipped: true, reason: 'the context was already evicted' };
     ext.loseContext();
     for (let i = 0; i < 60 && heroHeart3d; i++) await wait(50);
     const after = {
@@ -233,7 +250,13 @@ const head = t => console.log('\n── ' + t + ' ──');
     for (let i = 0; i < 60 && !heroHeart3d; i++) await wait(50);
     return { skipped: false, before, after, back: !!heroHeart3d };
   });
-  if (lost.skipped) {
+  if (lost.skipped && lost.reason) {
+    /* The context was gone before this section could take it — WebKit's cap,
+       not a defect in the recovery path it was about to exercise. Failing here
+       would report the app broken over the browser's bookkeeping; passing would
+       claim a recovery path nobody drove. */
+    unmeasurable('losing and restoring the hero\'s context', lost.reason);
+  } else if (lost.skipped) {
     ok('WEBGL_lose_context is available to drive this', false, 'extension unavailable');
   } else {
     ok('the heart was live before the context was lost', lost.before === true);
@@ -291,8 +314,27 @@ head('a destroyed heart gives its context back');
      cycles.firstLost === true, `isContextLost() → ${cycles.firstLost}`);
   ok('and twenty mount/destroy cycles leave none of them alive',
      cycles.live === 0, `${cycles.live} still live`);
-  ok('no "too many active WebGL contexts" warning across the cycles',
-     glWarnings.length === 0, `${glWarnings.length} warning(s)`);
+  /* CHROMIUM ONLY, AND NOT AS A CONCESSION. Measured on a BLANK PAGE with no
+     Systole code at all, twenty contexts created and released one at a time:
+
+                              WebKit      Chromium
+       never released         4 warns     4 warns
+       loseContext()          4 warns     0 warns
+       loseContext() + 1x1    4 warns     0 warns
+
+     Chromium returns the slot; WebKit does not. So on WebKit this warning is
+     emitted no matter how diligently a page releases — no correct
+     implementation can drive it to zero, and asserting it there would be
+     asserting a property of the browser. The claim the APP owns is the line
+     above: every context released, none left alive. That one holds on both
+     engines and is where the regression would actually show. */
+  if (engineName() === 'chromium') {
+    ok('no "too many active WebGL contexts" warning across the cycles',
+       glWarnings.length === 0, `${glWarnings.length} warning(s)`);
+  } else {
+    unmeasurable('the browser\'s own context-cap warning',
+                 `${engineName()} emits it however the page releases — see the table above`);
+  }
   /* The guard that stops the fix eating its own tail. */
   ok('a deliberate release is not reported as a lost context',
      cycles.resurrected === 0, `onLost fired ${cycles.resurrected} time(s)`);
@@ -310,6 +352,7 @@ head('a destroyed heart gives its context back');
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
-  console.log(`\n${passed} passed, ${failed} failed`);
+  console.log(`\n${passed} passed, ${failed} failed`
+            + (unmeasured ? `, ${unmeasured} not measurable on ${engineName()}` : ''));
   process.exit(failed ? 1 : 0);
 })();

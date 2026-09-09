@@ -22,7 +22,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-assets.js <patched.html>'); process.exit(1); }
@@ -134,7 +134,7 @@ function zip(entries) {
   const page = await browser.newPage({ viewport: { width: 1100, height: 950 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   const mist = [];
   await page.route('**/v1/chat/completions', route => {

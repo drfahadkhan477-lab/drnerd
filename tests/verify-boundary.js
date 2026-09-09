@@ -28,7 +28,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-boundary.js <patched.html|url>'); process.exit(1); }
@@ -80,7 +80,7 @@ Recovery is usually complete within weeks.
   let expectFailure = false;
   page.on('console', m => {
     if (m.type() !== 'error') return;
-    if (/GroupMarker|GL Driver|swiftshader/i.test(m.text())) return;
+    if (isEngineNoise(m.text())) return;
     if (expectFailure) return;
     errors.push(m.text());
   });

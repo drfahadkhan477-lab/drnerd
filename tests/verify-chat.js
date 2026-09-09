@@ -18,7 +18,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chat.js <patched.html|url>'); process.exit(1); }
@@ -51,7 +51,7 @@ const TOOL_SSE = [
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => {
-    if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text());
+    if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text());
   });
 
   const captured = [];

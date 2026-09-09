@@ -15,7 +15,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-gemini.js <patched.html>'); process.exit(1); }
@@ -43,7 +43,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   /* The two deliberately-triggered error responses below (403, 429) log as
      browser-level resource-load failures regardless of how gracefully the
      app's own code handles them — that is Chromium's console, not a bug. */
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())
       && !/Failed to load resource.*(403|404|429)/.test(m.text())) errors.push(m.text()); });
 
   /* A ListModels page shaped the way Google really sends one. The method list

@@ -18,7 +18,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chatfigs.js <patched.html>'); process.exit(1); }
@@ -42,7 +42,7 @@ const sse = text => [
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   const sent = [];
   let reply = 'Pressure overload adds sarcomeres in parallel.';

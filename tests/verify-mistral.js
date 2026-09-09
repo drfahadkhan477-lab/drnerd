@@ -24,7 +24,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-mistral.js <patched.html>'); process.exit(1); }
@@ -65,7 +65,7 @@ const MODEL_LIST = {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())
       && !/Failed to load resource.*(401|404|429)/.test(m.text())) errors.push(m.text()); });
 
   const captured = [];

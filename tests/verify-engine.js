@@ -146,6 +146,41 @@ head('the runner can actually be told which engine to use');
      /ENGINES\.includes\(ENGINE\)/.test(v));
 }
 
+head('console noise the engine makes, told apart from noise the app makes');
+{
+  /* THE SAME COPY-PASTE, ONE LEVEL UP. Twenty-five suites each carried
+     /GroupMarker|GL Driver|swiftshader/, for exactly the reason all of them
+     called chromium.launch(): the one before it did. */
+  /* This file is excluded and has to be: the assertion below names the pattern
+     it is looking for, so scanning itself would always find it. Same exception
+     the engine scan above already makes for the two suites that discuss
+     Chromium in prose. */
+  const browserSuites = fs.readdirSync(TESTS)
+    .filter(f => /^verify-.*\.js$/.test(f) && f !== 'verify-engine.js').sort();
+  const inlined = browserSuites.filter(f => /GroupMarker/.test(fs.readFileSync(path.join(TESTS, f), 'utf8')));
+  ok('every browser suite routes its console filter through the helper',
+     inlined.length === 0, inlined.join(', ') || `${browserSuites.length} suites, none inline it`);
+
+  ok('driver chatter is noise on every engine',
+     E.isEngineNoise('GroupMarker not set', 'chromium')
+     && E.isEngineNoise('swiftshader fallback', 'webkit'));
+  ok('an application error is never noise',
+     !E.isEngineNoise('TypeError: x is not a function', 'chromium')
+     && !E.isEngineNoise('TypeError: x is not a function', 'webkit'));
+
+  /* The measured asymmetry, asserted so it cannot quietly become symmetric.
+     On a blank page with no application code, twenty contexts created and
+     released one at a time: WebKit warns four times whatever the page does,
+     Chromium warns zero once they are released. So the message is a browser
+     property on one engine and a real regression detector on the other, and
+     the helper has to keep telling those apart. */
+  const capWarning = 'There are too many active WebGL contexts on this page, the oldest context will be lost.';
+  ok('the context-cap notice is tolerated on WebKit, where no page can prevent it',
+     E.isEngineNoise(capWarning, 'webkit'));
+  ok('and stays a hard failure on Chromium, where releasing contexts does silence it',
+     !E.isEngineNoise(capWarning, 'chromium'));
+}
+
 head('a run reported from somewhere else says where it came from');
 {
   const v = fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8');
