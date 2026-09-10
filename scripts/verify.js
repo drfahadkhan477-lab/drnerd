@@ -110,6 +110,7 @@ const SUITES = [
   ['apexpage',     'Apex can take the whole page, and a numbered list stays numbered'],
   ['resume',       'a chapter you left is the chapter you come back to'],
   ['figsharp',     'no figure is drawn wider than the pixels it has'],
+  ['heartreuse',   'navigating the app does not spend WebGL contexts'],
 ];
 
 const argv = process.argv.slice(2);
