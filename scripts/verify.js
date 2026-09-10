@@ -108,6 +108,7 @@ const SUITES = [
      reads the long answers can take the whole page. */
   ['heroart',      'the home hero beats on the rhythm, and the home screen spends no WebGL'],
   ['apexpage',     'Apex can take the whole page, and a numbered list stays numbered'],
+  ['resume',       'a chapter you left is the chapter you come back to'],
 ];
 
 const argv = process.argv.slice(2);
