@@ -17,7 +17,12 @@
     "serve": "node scripts/serve.js 8080 dist"
   },
   "comments": {
-    "dependencies": "The build has none on purpose — it is Node's standard library and 75 patch scripts. Playwright is needed only to run the test suites and is expected globally (npm i -g playwright && npx playwright install chromium), so a plain build never has to install a browser.",
-    "usage": "npm run build -- path/to/ACCSAP_export.html   then   npm test"
+    "dependencies": "The BUILD has none on purpose — it is Node's standard library and 82 patch scripts, and `npm run build` needs no install at all. devDependencies are for the TESTS only: playwright drives the suites, ts-fsrs regenerates tests/fixtures/fsrs-oracle.json and is otherwise unused (the fixture itself is committed, so verify-oracle runs without it). Both are pinned to exact versions rather than ranges, and package-lock.json pins their transitive tree, because a suite that measures a browser is measuring a specific browser.",
+    "usage": "npm run build -- path/to/ACCSAP_export.html   then   npm test",
+    "browsers": "Playwright downloads its own browsers on install. Set PLAYWRIGHT_BROWSERS_PATH to share one copy, and PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 where they are already provisioned. `npx playwright install chromium webkit` is the minimum for a full run; firefox is accepted by --engine and has to be installed before it will work."
+  },
+  "devDependencies": {
+    "playwright": "1.56.0",
+    "ts-fsrs": "5.4.2"
   }
 }

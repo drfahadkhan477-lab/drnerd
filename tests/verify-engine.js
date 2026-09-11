@@ -146,6 +146,58 @@ head('the runner can actually be told which engine to use');
      /ENGINES\.includes\(ENGINE\)/.test(v));
 }
 
+head('console noise the engine makes, told apart from noise the app makes');
+{
+  /* THE SAME COPY-PASTE, ONE LEVEL UP. Twenty-five suites each carried
+     /GroupMarker|GL Driver|swiftshader/, for exactly the reason all of them
+     called chromium.launch(): the one before it did. */
+  /* This file is excluded and has to be: the assertion below names the pattern
+     it is looking for, so scanning itself would always find it. Same exception
+     the engine scan above already makes for the two suites that discuss
+     Chromium in prose. */
+  const browserSuites = fs.readdirSync(TESTS)
+    .filter(f => /^verify-.*\.js$/.test(f) && f !== 'verify-engine.js').sort();
+  const inlined = browserSuites.filter(f => /GroupMarker/.test(fs.readFileSync(path.join(TESTS, f), 'utf8')));
+  ok('every browser suite routes its console filter through the helper',
+     inlined.length === 0, inlined.join(', ') || `${browserSuites.length} suites, none inline it`);
+
+  ok('driver chatter is noise on every engine',
+     E.isEngineNoise('GroupMarker not set', 'chromium')
+     && E.isEngineNoise('swiftshader fallback', 'webkit'));
+  ok('an application error is never noise',
+     !E.isEngineNoise('TypeError: x is not a function', 'chromium')
+     && !E.isEngineNoise('TypeError: x is not a function', 'webkit'));
+
+  /* The measured asymmetry, asserted so it cannot quietly become symmetric.
+     On a blank page with no application code, twenty contexts created and
+     released one at a time: WebKit warns four times whatever the page does,
+     Chromium warns zero once they are released. So the message is a browser
+     property on one engine and a real regression detector on the other, and
+     the helper has to keep telling those apart. */
+  const capWarning = 'There are too many active WebGL contexts on this page, the oldest context will be lost.';
+  ok('the context-cap notice is tolerated on WebKit, where no page can prevent it',
+     E.isEngineNoise(capWarning, 'webkit'));
+  ok('and stays a hard failure on Chromium, where releasing contexts does silence it',
+     !E.isEngineNoise(capWarning, 'chromium'));
+
+  /* The cap's other message, and the same asymmetry for the same reason. Past
+     sixteen contexts WebKit evicts on its own, and releasing an evicted one
+     logs INVALID_OPERATION — not an exception, so nothing in the page can catch
+     it. The app has one loseContext() call site and it is guarded twice over;
+     eight cycles produce none of these. Chromium returns released slots, never
+     reaches the cap, and so a message like this there means something real. */
+  const lostMsg = 'WebGL: INVALID_OPERATION: loseContext: context already lost';
+  ok('releasing a context WebKit already evicted is tolerated there',
+     E.isEngineNoise(lostMsg, 'webkit'));
+  ok('and stays a hard failure on Chromium, which never reaches the cap',
+     !E.isEngineNoise(lostMsg, 'chromium'));
+  /* The guard that message is about, asserted in the module rather than
+     remembered: isContextLost() alone is not enough on WebKit. */
+  const h3d = fs.readFileSync(path.join(ROOT, 'src', 'core', 'heart3d.js'), 'utf8');
+  ok('and the one place that releases a context checks more than isContextLost()',
+     /isContextLost\(\)[\s\S]{0,80}getParameter\(gl\.VERSION\)/.test(h3d));
+}
+
 head('a run reported from somewhere else says where it came from');
 {
   const v = fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8');
@@ -188,6 +240,122 @@ head('a run reported from somewhere else says where it came from');
   const ignored = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
   ok('and the transcript is gitignored, because suite output quotes licensed content',
      /^tests\/last-run\.log\s*$/m.test(ignored));
+}
+
+head('the tools the suites need are pinned, and named before they are missed');
+{
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const dev = pkg.devDependencies || {};
+  /* PINNED, NOT RANGED. A suite that measures a browser is measuring a specific
+     browser: "^1.56.0" makes a green run mean "green on whatever shipped this
+     week", which is not a claim anybody can act on later. */
+  ok('playwright is a devDependency', !!dev.playwright, dev.playwright || 'absent');
+  ok('and pinned to one exact version', /^\d+\.\d+\.\d+$/.test(dev.playwright || ''), dev.playwright || '');
+  /* ts-fsrs generates tests/fixtures/fsrs-oracle.json and is used for nothing
+     else. The fixture is committed, so verify-oracle runs without it — but the
+     version that produced the fixture has to be recorded somewhere a person can
+     find, and the fixture names it too. */
+  ok('ts-fsrs is a devDependency, pinned', /^\d+\.\d+\.\d+$/.test(dev['ts-fsrs'] || ''), dev['ts-fsrs'] || 'absent');
+  const fx = JSON.parse(fs.readFileSync(path.join(TESTS, 'fixtures', 'fsrs-oracle.json'), 'utf8'));
+  ok('and it is the version the committed oracle was generated with',
+     fx.generator && fx.generator.version === dev['ts-fsrs'],
+     `${fx.generator && fx.generator.version} in the fixture, ${dev['ts-fsrs']} in package.json`);
+  /* The transitive tree, so "the same versions" survives a reinstall. */
+  const lockPath = path.join(ROOT, 'package-lock.json');
+  ok('a lockfile is committed', fs.existsSync(lockPath));
+  if (fs.existsSync(lockPath)) {
+    const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    const pkgs = lock.packages || {};
+    ok('and it pins the same playwright the manifest asks for',
+       pkgs['node_modules/playwright'] && pkgs['node_modules/playwright'].version === dev.playwright,
+       (pkgs['node_modules/playwright'] || {}).version || 'not in the lockfile');
+    ok('down to playwright-core, which is what actually drives the browser',
+       !!(pkgs['node_modules/playwright-core'] || {}).version,
+       (pkgs['node_modules/playwright-core'] || {}).version || 'not in the lockfile');
+  }
+
+  /* AN ENGINE THE HARNESS ACCEPTS IS NOT AN ENGINE THAT IS INSTALLED. firefox
+     is in ENGINES and is not provisioned everywhere; without a check the run
+     spawns every suite, each fails identically on a missing executable, and
+     fifteen minutes later says one thing once. */
+  const v = fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8');
+  ok('the runner checks the browser exists before spawning a single suite',
+     /executablePath\(\)/.test(v) && /npx playwright install/.test(v));
+}
+
+head('a suite pointed at a URL either runs whole or does not run');
+{
+  /* WHY THIS IS ANCHORED TO NAMES. scripts/verify.js can now be given a served
+     build instead of a file, and it asks tests/_targets.js which suites that
+     is safe for. A classifier checked only against its own logic proves
+     nothing — so the anchors below are suites whose behaviour against a URL
+     was OBSERVED, and the classifier has to agree with what happened:
+
+       apex          threw ENOENT opening 'http://localhost:8141/index.html'
+       splash-heart  finished GREEN with 8 checks where it has 14
+       keys          threw ENOENT — it has no URL guard at all
+       type          path.resolve made '/home/user/drnerd/http:/localhost:8141/…'
+       home, physio, stage0, pearl   ran and reported in full
+
+     splash-heart is the one that matters. The other three failed loudly, which
+     is survivable; it passed, with six checks missing, which is not. Any
+     rewrite of the matching that readmits it fails here. */
+  const T = require('./_targets.js');
+
+  const MUST_NOT = {
+    apex: 'reads its target from disk after building the page URL',
+    splash: 'the same',
+    'splash-heart': 'the same, and it goes GREEN with 8 of 14 checks when it happens',
+    keys: 'no URL guard — path.resolve mangles the URL',
+    type: 'the same',
+  };
+  const MUST = ['home', 'physio', 'stage0', 'pearl', 'layout', 'theme'];
+
+  for (const [name, why] of Object.entries(MUST_NOT)) {
+    const v = T.classify(name);
+    ok(`${name} is not offered a URL — ${why}`, v.capable === false, v.reason || 'classified capable');
+  }
+  for (const name of MUST) {
+    const v = T.classify(name);
+    ok(`${name} can be run against a served build`, v.capable === true, v.reason);
+  }
+
+  /* The guard alone is not the test, and this is the check that says so: all
+     three of the observed failures DO carry `^https?:`. A classifier that
+     looked only for it would call them capable. */
+  const guarded = ['apex', 'splash', 'splash-heart'].filter(n =>
+    /\^https\?:/.test(fs.readFileSync(path.join(TESTS, `verify-${n}.js`), 'utf8')));
+  ok('and the three that cannot are excluded despite carrying the URL guard',
+     guarded.length === 3, `${guarded.length} of 3 carry it`);
+
+  /* Vacuity guard. If the source matching stops finding anything — a renamed
+     variable, a reformat — every suite would come back "takes no target
+     argument", every URL run would skip everything, and each check above would
+     still pass because they assert incapability for five of them. */
+  const all = T.allSuiteNames();
+  const capable = all.filter(T.takesUrl);
+  ok('the classifier still finds suites of both kinds', capable.length > 20 && capable.length < all.length,
+     `${capable.length} capable of ${all.length}`);
+  /* The precise risk is the ARGV pattern silently failing to match: a suite
+     that DOES bind process.argv[2] but whose binding this cannot see comes
+     back "takes no target argument", which reads like the pure-logic suites
+     that genuinely take none. So the two are told apart by the source itself
+     rather than by a list of names — a suite that mentions process.argv[2]
+     must have been parsed. */
+  const uncommented = src => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const mentionsArgv = all.filter(n =>
+    /process\.argv\[2\]/.test(uncommented(fs.readFileSync(path.join(TESTS, `verify-${n}.js`), 'utf8'))));
+  const unparsed = mentionsArgv.filter(n => T.classify(n).reason === 'takes no target argument');
+  ok('every suite that binds a target argument was understood to bind one',
+     unparsed.length === 0, unparsed.join(', ') || `${mentionsArgv.length} parsed, none missed`);
+
+  /* The runner has to actually consult it. The classifier being right is no
+     use if verify.js keeps its own copy of the question. */
+  const v = fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8');
+  ok('the runner asks _targets.js rather than matching for itself',
+     /require\([^)]*_targets\.js[^)]*\)/.test(v) && !/function takesUrl/.test(v));
+  ok('and names what it skipped instead of quietly running fewer suites',
+     /urlIncapable/.test(v) && /cannot take a URL/.test(v));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

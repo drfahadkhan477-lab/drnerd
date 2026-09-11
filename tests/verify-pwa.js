@@ -303,11 +303,15 @@ async function heapAfterBoot(page, url) {
        `shell ${shellV}, content ${contentV}`);
     ok('the shell cache is keyed on the shell version',
        new RegExp(`SHELL\\s*=\\s*'accsap-shell-'\\s*\\+\\s*SHELL_V`).test(sw));
-    /* And the figure cache is NOT. Rekeying it on a code change would throw
+    /* And the content cache is NOT. Rekeying it on a code change would throw
        away the 408 figures the fellow pressed a button to download — 19 MB
-       re-fetched because a stylesheet moved. */
-    ok('but the figure cache is keyed on the content, so a code change keeps them',
-       new RegExp(`FIGS\\s*=\\s*'accsap-figs-'\\s*\\+\\s*CONTENT_V`).test(sw));
+       re-fetched because a stylesheet moved. It was called FIGS and held only
+       /content/figures/; it is called CONTENT and holds all of /content/,
+       because the two large JSON files were falling through to the shell.
+       tests/verify-cachebuckets.js is where that routing is checked; here it
+       is only the key that matters. */
+    ok('but the content cache is keyed on the content, so a code change keeps them',
+       new RegExp(`CONTENT\\s*=\\s*'accsap-content-'\\s*\\+\\s*CONTENT_V`).test(sw));
   }
 
   head('the split build evaluates no fetched code');
@@ -503,6 +507,14 @@ async function heapAfterBoot(page, url) {
     await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
                                { timeout: 120000 });
     await page.evaluate(() => navigator.serviceWorker.ready);
+    /* IT LIVES ON PROGRESS NOW, not on the home screen. The landscape home grid
+       gives its whole one-screen budget to four named areas and appends
+       everything else outside it, so this card was 114.5px of guaranteed
+       overflow on an 11-inch iPad held sideways — see chain step 82. The
+       survey moved with it, so nothing is counted until Progress is open. */
+    const onHome = await page.evaluate(() => !!document.getElementById('offlineCard'));
+    ok('the home screen no longer carries the card', onHome === false);
+    await page.evaluate(() => goStats());
     await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
                                { timeout: 60000 });
 
@@ -512,7 +524,7 @@ async function heapAfterBoot(page, url) {
                    val: c.querySelector('.off-val').textContent,
                    btn: c.querySelector('.off-btn').textContent } : null;
     });
-    ok('the card is on the home screen of the split build', !!before);
+    ok('the card is on the Progress screen of the split build', !!before);
     ok('and knows how many figures the bank has', before && before.total > 400, String(before && before.total));
     /* Surveying must not BE a download: caches.match asks the question without
        fetching, and 408 fetches on every home screen would be the opposite of
@@ -541,6 +553,9 @@ async function heapAfterBoot(page, url) {
        exactly the same lookup a figure met the ordinary way goes through. */
     figReqs = 0;
     await page.reload({ waitUntil: 'load', timeout: 200000 });
+    /* A reload lands on home, and the survey now runs from Progress. */
+    await page.waitForFunction(() => typeof goStats === 'function', { timeout: 120000 });
+    await page.evaluate(() => goStats());
     await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
                                { timeout: 60000 });
     const reloaded = await page.evaluate(() => ({ have: offlineJob.have, total: offlineJob.total }));
@@ -618,6 +633,283 @@ async function heapAfterBoot(page, url) {
     } else {
       ok('heap after boot is under 40 MB', pwaHeap > 0 && pwaHeap < 40 * 1048576, mb(pwaHeap));
     }
+  }
+
+  head('a bootloader that could not start the app installs nothing');
+  /* The two failure paths in the bootloader were written to the same shape and
+     only one of them kept it: the content-fetch failure returns out of the
+     async function, the app.js-load failure did not, so execution carried on
+     into the service-worker registration below it and installed a worker for
+     an application that had never started. Nothing visibly broke — which is
+     why it survived — but the next launch is then served by a worker whose
+     whole job is to cache a shell that could not run.
+
+     Driven by refusing app.js at the network, which is what a half-deployed
+     site or a truncated download actually looks like. A fresh context, because
+     registrations are per-origin and every other section here installs one. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+    const page = await ctx.newPage();
+    await page.route('**/app.js', r => r.abort());
+    await page.goto(ORIGIN + '/index.html', { waitUntil: 'load', timeout: 120000 });
+    const shown = await page.waitForFunction(
+      () => /failed to load/i.test(document.body.textContent || ''), { timeout: 30000 })
+      .then(() => true, () => false);
+    ok('the failure reaches the splash instead of a blank screen', shown);
+    /* Long enough for a registration to have happened if one were going to:
+       register() is called synchronously on the line after, and the section
+       below proves the same wait is enough to see one when it is there. */
+    await page.waitForTimeout(2500);
+    const supported = await page.evaluate(() => 'serviceWorker' in navigator);
+    if (!supported) {
+      unmeasurable('no worker is registered for an app that never started',
+                   'this engine has no navigator.serviceWorker');
+      unmeasurable('and a healthy load still registers one', 'the same');
+    } else {
+      const regs = await page.evaluate(() => navigator.serviceWorker.getRegistrations().then(r => r.length));
+      ok('no worker is registered for an app that never started', regs === 0,
+         `${regs} registration(s)`);
+      /* THE HALF THAT STOPS A BROKEN REGISTRATION PASSING. Zero is also what a
+         build that never registers anything would score, so the same context
+         loads the page without the block and has to reach one. */
+      const healthy = await ctx.newPage();
+      await healthy.goto(ORIGIN + '/index.html', { waitUntil: 'load', timeout: 120000 });
+      await healthy.waitForFunction(() => typeof S !== 'undefined', { timeout: 120000 });
+      const after = await healthy.evaluate(async () => {
+        for (let i = 0; i < 50; i++) {
+          const r = await navigator.serviceWorker.getRegistrations();
+          if (r.length) return r.length;
+          await new Promise(res => setTimeout(res, 100));
+        }
+        return 0;
+      });
+      ok('and a healthy load still registers one', after > 0, `${after} registration(s)`);
+      await healthy.close();
+    }
+    await ctx.close();
+  }
+
+  head('the figure cache the AI path fills has a lid on it');
+  /* WHAT THIS IS ABOUT. figuresAsDataUrls() base64s a question's figures for
+     the Messages API, which cannot take a URL it has no access to, and cached
+     the result per question id — for the life of the tab, with no bound. Base64
+     is a third larger again than the bytes on the wire, and a fellow working
+     through a chapter with Apex open touches dozens of questions in a sitting.
+     An iPad reclaims memory by killing the tab rather than by asking.
+     
+     Re-resolving costs nothing worth saving: the service worker has the figure,
+     so a miss is a cache read rather than a download. The cache only has to
+     cover an agent loop sending the same figures several times in a row. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+    const page = await ctx.newPage();
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
+                               { timeout: 120000 });
+    await page.evaluate(() => navigator.serviceWorker.ready);
+
+    const lid = await page.evaluate(async () => {
+      const withFigs = ALL_Q.filter(q => q.img && IMGS[q.id] && IMGS[q.id].length).slice(0, 40);
+      if (withFigs.length < 30) return { skipped: withFigs.length };
+      for (const q of withFigs) await figuresAsDataUrls(q);
+      /* Ask again for the one requested LAST of the first batch: under
+         least-recently-used it is long gone, and under insertion-order-only it
+         would also be gone — so the discriminating probe is the one below. */
+      return { asked: withFigs.length, size: _figDataCache.size,
+               cap: FIG_CACHE_MAX_ENTRIES, bytes: _figCacheBytes, byteCap: FIG_CACHE_MAX_BYTES,
+               newestKept: _figDataCache.has(withFigs[withFigs.length - 1].id),
+               oldestDropped: !_figDataCache.has(withFigs[0].id) };
+    });
+    if (lid.skipped !== undefined) {
+      unmeasurable('the cache stops growing', `only ${lid.skipped} questions in this bank carry figures`);
+      unmeasurable('and it keeps the newest rather than the first', 'the same');
+      unmeasurable('it is least-recently-USED, not merely first-in-first-out', 'the same');
+    } else {
+      ok('the cache stops growing', lid.size <= lid.cap,
+         `${lid.size} entries after ${lid.asked} questions, cap ${lid.cap}`);
+      ok('and its bytes stay under the budget', lid.bytes <= lid.byteCap,
+         `${(lid.bytes / 1048576).toFixed(1)} MB of ${(lid.byteCap / 1048576).toFixed(0)} MB`);
+      ok('and it keeps the newest rather than the first',
+         lid.newestKept === true && lid.oldestDropped === true,
+         `newest kept ${lid.newestKept}, oldest dropped ${lid.oldestDropped}`);
+
+      /* THE CHECK THAT TELLS LRU FROM FIFO, and the reason it matters: an agent
+         loop asks for the SAME question's figures on every iteration. Under
+         first-in-first-out a question asked about repeatedly is still evicted on
+         schedule and re-resolved every time; under least-recently-used it stays.
+         Re-touch one, fill past the cap, and see whether it survived. */
+      const lru = await page.evaluate(async () => {
+        const withFigs = ALL_Q.filter(q => q.img && IMGS[q.id] && IMGS[q.id].length);
+        const keep = withFigs.find(q => _figDataCache.has(q.id));
+        if (!keep) return { skipped: true };
+        await figuresAsDataUrls(keep);                       // touched: now newest
+        const fresh = withFigs.filter(q => !_figDataCache.has(q.id)).slice(0, FIG_CACHE_MAX_ENTRIES - 1);
+        for (const q of fresh) await figuresAsDataUrls(q);   // fill to the cap around it
+        return { skipped: false, survived: _figDataCache.has(keep.id), pushed: fresh.length };
+      });
+      ok('it is least-recently-USED, not merely first-in-first-out',
+         lru.skipped ? false : lru.survived === true,
+         lru.skipped ? 'nothing was in the cache to re-touch' : `${lru.pushed} newer entries pushed in after it`);
+    }
+
+    /* The limits exist as named numbers rather than as literals buried in the
+       resolver, because the next person to tune them should not have to find
+       them by reading the fetch. */
+    const limits = await page.evaluate(() => ({
+      timeout: typeof FIG_FETCH_TIMEOUT_MS === 'number' ? FIG_FETCH_TIMEOUT_MS : null,
+      maxBytes: typeof FIG_MAX_BYTES === 'number' ? FIG_MAX_BYTES : null,
+    }));
+    ok('a figure fetch cannot hang a turn forever', limits.timeout > 0 && limits.timeout <= 60000,
+       `${limits.timeout}ms`);
+    /* Above the largest figure in the bank and far below anything that hurts. */
+    ok('and an enormous one is refused rather than base64ed to find out',
+       limits.maxBytes >= 1048576 && limits.maxBytes <= 32 * 1048576,
+       `${(limits.maxBytes / 1048576).toFixed(0)} MB`);
+    await ctx.close();
+  }
+
+  head('a shell and a code file from different builds do not run together');
+  /* THE WINDOW THIS CLOSES. sw.js serves the shell cache-first and refreshes it
+     in the background, one request at a time. A deploy that lands between the
+     request for index.html and the request for app.js leaves a launch running
+     one build's HTML against the other build's code — and because the refresh
+     writes each file as it arrives, the mixed pair persists in the cache until
+     something replaces it. Nothing crashes. The app behaves like neither
+     version, which is worse, because there is nothing to report.
+     
+     Both files now carry a stamp taken over the shell digest and the content
+     digest together, so any change to either moves it. Driven here by serving
+     an app.js from a build that does not exist, which is exactly what the
+     browser would have been handed. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+    const page = await ctx.newPage();
+    let loads = 0;
+    page.on('framenavigated', f => { if (f === page.mainFrame()) loads++; });
+    /* One character different is a different build. */
+    await page.route('**/app.js', async route => {
+      const res = await route.fetch();
+      const body = (await res.text()).replace(/var APP_BUILD_ID='[a-f0-9]+'/,
+                                              "var APP_BUILD_ID='0000000000000000'");
+      await route.fulfill({ response: res, body });
+    });
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    /* It reloads once, finds the same mismatch, and must then STOP and say so
+       rather than spin. Waiting on the message, not on a stopwatch. */
+    const told = await page.waitForFunction(
+      () => /updated while it was opening/i.test(document.body.textContent || ''),
+      null, { timeout: 30000 }).then(() => true, () => false);
+    ok('a mixed pair is noticed rather than run', told);
+    /* The loop guard, which is the half that makes this safe to ship: exactly
+       one retry. A reload that does not fix it must never become a reload
+       that never stops. */
+    await page.waitForTimeout(2500);
+    ok('and it retries once, not forever', loads <= 3, `${loads} navigations`);
+    const flagged = await page.evaluate(() => {
+      try { return sessionStorage.getItem('accsap-mixed-build'); } catch (_) { return 'unreadable'; }
+    });
+    ok('the retry is remembered per tab, so the reload cannot loop', flagged === '1', String(flagged));
+    await ctx.close();
+  }
+
+  head('and the three files a deploy writes agree on which build they are');
+  {
+    /* Read off the served directory rather than the page: this is a property of
+       the artifact, and it is the one a person can check by hand on a server. */
+    const shell = await (await fetch(new URL('index.html', target).href)).text();
+    const app = await (await fetch(new URL('app.js', target).href)).text();
+    const sw = await (await fetch(new URL('sw.js', target).href)).text();
+    const idOf = (src, re) => (re.exec(src) || [])[1] || null;
+    const a = idOf(shell, /SHELL_BUILD_ID = '([a-f0-9]+)'/);
+    const b = idOf(app, /var APP_BUILD_ID='([a-f0-9]+)'/);
+    const c = idOf(sw, /const BUILD_ID\s*=\s*'([a-f0-9]+)'/);
+    ok('index.html carries a build stamp', !!a, a || 'absent');
+    ok('app.js carries one too', !!b, b || 'absent');
+    ok('and so does the worker', !!c, c || 'absent');
+    ok('all three are the same build', !!a && a === b && b === c, `${a} / ${b} / ${c}`);
+    /* And it is derived from both digests, so a content-only change moves it —
+       which is the whole reason it is not just the shell digest again. */
+    const shellV = idOf(sw, /const SHELL_V\s*=\s*'([a-f0-9]+)'/);
+    ok('the stamp is not merely the shell digest under another name',
+       !!shellV && a !== shellV, `build ${a}, shell ${shellV}`);
+  }
+
+  head('the split build fits the screen it is held on');
+  /* WHY THIS IS HERE AND NOT IN verify-home. verify-home tests whichever target
+     the runner was given, and the screen that overflowed was the SPLIT build
+     specifically — it is the only one with an offline-download card, because it
+     is the only one whose figures are not already data: URIs in memory. --pwa is
+     the only run that always has a served build, so this is where the claim can
+     be made unconditionally.
+
+     1194x834 is an 11-inch iPad in landscape: the widest and shortest shape the
+     app is held in, and the one the landscape grid is written for. It measured
+     97px over — the hero's axis (step 81) took 50 of that and moving the card to
+     Progress (step 82) took the rest. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1194, height: 834 } });
+    const page = await ctx.newPage();
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
+                               { timeout: 120000 });
+    await page.evaluate(() => { goHome(); render(); });
+    /* verify-home's settle, for the same reason it has one: a box that has held
+       still for five frames with no finite animation running is settled, and a
+       fixed sleep is a guess that passes on a fast machine and lies on a slow
+       one. */
+    await page.waitForFunction(() => {
+      const r = document.getElementById('app').getBoundingClientRect();
+      const k = [innerWidth, innerHeight, Math.round(r.width), Math.round(r.height),
+                 document.documentElement.scrollHeight].join(',');
+      const busy = document.getAnimations().some(a => a.playState === 'running' &&
+        Number.isFinite(a.effect && a.effect.getTiming().iterations));
+      window.__s = (window.__l === k && !busy) ? (window.__s || 0) + 1 : 0;
+      window.__l = k;
+      return window.__s >= 5;
+    }, null, { timeout: 15000, polling: 'raf' });
+    /* FIRST RUN AND EVERY RUN AFTER IT ARE DIFFERENT SCREENS, and only one of
+       them is a standing property. A brand-new install also carries the welcome
+       card — "New here?", with a Got it button — which is 130px and goes away
+       for good the moment it is tapped. The screen that has to fit is the one a
+       fellow sees every day, so that is what is asserted; the first-run number
+       is measured too and printed beside it, because a cost nobody prints is a
+       cost nobody notices growing. */
+    const firstRun = await page.evaluate(() => ({
+      over: document.documentElement.scrollHeight - innerHeight,
+      hello: !!document.querySelector('.hello'),
+    }));
+    await page.evaluate(() => { try { dismissHello(); } catch (_) {} goHome(); render(); });
+    await page.waitForFunction(() => !document.querySelector('.hello'), null, { timeout: 15000 });
+    await page.waitForFunction(() => {
+      const r = document.getElementById('app').getBoundingClientRect();
+      const k = [innerWidth, innerHeight, Math.round(r.width), Math.round(r.height),
+                 document.documentElement.scrollHeight].join(',');
+      const busy = document.getAnimations().some(a => a.playState === 'running' &&
+        Number.isFinite(a.effect && a.effect.getTiming().iterations));
+      window.__s2 = (window.__l2 === k && !busy) ? (window.__s2 || 0) + 1 : 0;
+      window.__l2 = k;
+      return window.__s2 >= 5;
+    }, null, { timeout: 15000, polling: 'raf' });
+    const m = await page.evaluate(() => ({
+      over: document.documentElement.scrollHeight - innerHeight,
+      card: !!document.getElementById('offlineCard'),
+      appW: Math.round(document.getElementById('app').getBoundingClientRect().width),
+      vw: innerWidth,
+    }));
+    ok('an 11-inch iPad in landscape needs no scrolling on the home screen',
+       m.over <= 0, `${m.over}px over — first run, with the welcome card, was ${firstRun.over}px`);
+    /* The half that stops this being satisfied by an empty screen: it must still
+       be using the width, which is what the landscape layout is for. */
+    ok('and it is still filling the width while it does',
+       m.appW / m.vw > 0.9, `${m.appW} of ${m.vw}`);
+    ok('the card that used to overflow it is on Progress instead', m.card === false);
+    /* render() goes through startViewTransition, so the markup it produces lands
+       in an async callback and is NOT in the document when goStats() returns. */
+    const onStats = await page.evaluate(() => { goStats(); }).then(() =>
+      page.waitForFunction(() => !!document.getElementById('offlineCard'), null, { timeout: 15000 })
+        .then(() => true, () => false));
+    ok('and it really is there, rather than merely gone', onStats === true);
+    await ctx.close();
   }
 
   head('the server that hosts this cannot be walked out of');

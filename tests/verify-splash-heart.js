@@ -28,7 +28,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { launch, cpuThrottle } = require('./_engine');
+const { launch, cpuThrottle, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-splash-heart.js <patched.html>'); process.exit(1); }
@@ -95,7 +95,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   const throttled = await cpuThrottle(page, 4);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
   await page.goto(URL, { waitUntil: 'commit', timeout: 250000 });
 
   /* Wait for the decode, not the element — on the split build the <img> is in

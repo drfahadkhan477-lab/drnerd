@@ -15,7 +15,8 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
+const { systemText, turns, toolResults } = require('./_wire');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-memory.js <patched.html>'); process.exit(1); }
@@ -46,7 +47,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   const page = await browser.newPage({ viewport: { width: 1280, height: 950 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   const mist = [], gem = [];
   await page.route('**/v1/chat/completions', route => {
@@ -151,7 +152,6 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
     mist.length = 0; gem.length = 0;
     await page.evaluate(async (provider) => {
       AI.provider = provider;
-      AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
       AI.gemini = { key: 'AQ.test', model: 'gemini-9.9-flash' };
       const q = ALL_Q.find(x => !x.bad);
       jumpTo(q.id);
@@ -165,14 +165,13 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
       : (gem.find(g => /:streamGenerateContent/.test(g.url)) || {}).body;
   };
 
-  head('it actually reaches the model — Mistral');
-  const aReq = await ask('mistral');
-  const aSys = flat((aReq && aReq.messages || []).find(m => m.role === 'system')?.content || '');
-  ok('a request was made', !!aReq);
-  ok('the memory block is in the system prompt', /WHAT YOU ALREADY KNOW ABOUT THIS FELLOW/.test(aSys));
-  ok('the actual memory text is there, not just the heading', /boards in October 2026/.test(aSys));
-
-  head('it actually reaches the model — Gemini, with no per-provider code');
+  /* THIS SECTION USED TO RUN TWICE, once per provider, and the point of the
+     pair was the claim in the second heading: memory is injected with NO
+     per-provider code. That claim needed two providers to demonstrate and
+     cannot be demonstrated with one, so the Mistral half retires with the
+     provider rather than being restated against the same wire twice — which
+     would look like coverage and prove nothing. */
+  head('it actually reaches the model');
   const gReq = await ask('gemini');
   const gSys = flat(((gReq && gReq.systemInstruction || {}).parts || []).map(p => p.text || '').join('\n'));
   ok('a request was made', !!gReq);
@@ -180,17 +179,17 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   ok('the actual memory text is there', /boards in October 2026/.test(gSys));
 
   head('grounded mode keeps it — it is who you teach, not what you teach from');
-  mist.length = 0;
+  gem.length = 0;
   await page.evaluate(async () => {
-    AI.provider = 'mistral';
+    AI.provider = 'gemini';
     AI_GROUNDED = true;
     const q = ALL_Q.find(x => !x.bad);
     jumpTo(q.id); buildAI();
     fire('what do my notes say?');
   });
   await page.waitForTimeout(1500);
-  const gReq2 = mist.find(Boolean);
-  const gSys2 = flat((gReq2 && gReq2.messages || []).find(m => m.role === 'system')?.content || '');
+  const gReq2 = (gem.find(g => /:streamGenerateContent/.test(g.url)) || {}).body;
+  const gSys2 = flat(systemText(gReq2));
   ok('grounded mode is genuinely on', /GROUNDED MODE IS ON/.test(gSys2));
   ok('memory is still present in grounded mode', /WHAT YOU ALREADY KNOW ABOUT THIS FELLOW/.test(gSys2));
   ok('and the commentary is still withheld, so grounding was not weakened',
@@ -255,20 +254,24 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   head('the session summariser');
   await page.evaluate(() => {
     Memory.clear();
-    AI.provider = 'mistral'; AI_GROUNDED = false;
+    AI.provider = 'gemini'; AI_GROUNDED = false;
     S.sessionCorrect = 14; S.sessionTotal = 20;
     sessionSummarised = false;
   });
-  mist.length = 0;
+  gem.length = 0;
   await page.evaluate(() => summariseSession());
   await page.waitForTimeout(900);
   const summ = await page.evaluate(() => ({ n: Memory.count(),
     kinds: [...new Set(Memory.all().map(m => m.kind))],
     texts: Memory.all().map(m => m.text) }));
-  const oneShot = mist.filter(b => b && !b.stream);
+  /* oneShot goes to :generateContent, the streamed turns to
+     :streamGenerateContent — so the URL is what tells them apart on this wire,
+     where the old one carried a `stream` flag in the body. */
+  const oneShot = gem.filter(g => /:generateContent/.test(g.url)).map(g => g.body);
   ok('exactly one non-streaming call was made', oneShot.length === 1, oneShot.length + ' call(s)');
-  ok('it is small — this runs unasked, on a free tier', oneShot[0] && oneShot[0].max_tokens <= 400,
-     oneShot[0] && String(oneShot[0].max_tokens));
+  ok('it is small — this runs unasked, on a free tier',
+     oneShot[0] && (oneShot[0].generationConfig || {}).maxOutputTokens <= 400,
+     oneShot[0] && String((oneShot[0].generationConfig || {}).maxOutputTokens));
   ok('it carries no tools, so it cannot wander off', oneShot[0] && !oneShot[0].tools);
   ok('at most three memories are kept from one sitting', summ.n > 0 && summ.n <= 3, String(summ.n));
   ok('they are filed as session summaries', summ.kinds.length === 1 && summ.kinds[0] === 'session', summ.kinds.join(','));
@@ -292,10 +295,10 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   const survivesError = await page.evaluate(async () => {
     Memory.clear();
     S.sessionCorrect = 9; S.sessionTotal = 12; sessionSummarised = false;
-    AI.mistral = { key: '', model: 'pixtral-large-latest' };   // no key → oneShot bails
+    AI.gemini = { key: '', model: 'gemini-9.9-flash' };   // no key → oneShot bails
     let threw = false;
     try { await summariseSession(); } catch (_) { threw = true; }
-    AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
+    AI.gemini = { key: 'AQ.test', model: 'gemini-9.9-flash' };
     return { threw, n: Memory.count() };
   });
   ok('a summariser that cannot run fails silently rather than breaking the screen',

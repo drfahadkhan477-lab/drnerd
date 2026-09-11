@@ -18,7 +18,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chat.js <patched.html|url>'); process.exit(1); }
@@ -51,12 +51,12 @@ const TOOL_SSE = [
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => {
-    if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text());
+    if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text());
   });
 
   const captured = [];
   const queued = [];
-  await page.route('**/v1/chat/completions', route => {
+  await page.route('**/generativelanguage.googleapis.com/**', route => {
     try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: queued.shift() || sse('Noted.') });
   });
@@ -66,8 +66,8 @@ const TOOL_SSE = [
   await page.waitForTimeout(800);
 
   const openPanel = () => page.evaluate(() => {
-    AI.provider = 'mistral';
-    AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
+    AI.provider = 'gemini';
+    AI.gemini = { key: 'test-gemini-key', model: 'gemini-2.5-flash' };
     const q = ALL_Q.find(x => !x.bad);
     jumpTo(q.id);
     const sh = document.getElementById('shell');
@@ -152,11 +152,15 @@ const TOOL_SSE = [
     await page.evaluate(() => fire('one more'));
     await page.waitForTimeout(1600);
     const req = captured.find(Boolean);
-    /* Mistral's wire puts the system prompt as messages[0]. Stripping it here
-       isolates the conversation window, so the assertions below stay about
-       the windowing, not the wire. */
-    const allMsgs = (req && req.messages) || [];
-    const msgs = (allMsgs[0] && allMsgs[0].role === 'system') ? allMsgs.slice(1) : allMsgs;
+    /* Gemini carries the conversation in `contents`, each turn a role plus an
+       array of parts, and the system prompt travels separately in
+       systemInstruction rather than as turn zero. Flattening each turn's parts
+       to one string keeps the assertions below about the WINDOWING — which is
+       what this section is for — rather than about the wire that carries it. */
+    const msgs = ((req && req.contents) || []).map(c => ({
+      role: c.role === 'model' ? 'assistant' : c.role,
+      content: (c.parts || []).map(p => p.text || '').join(''),
+    }));
     ok('a long thread exists to be windowed', sent.total === 120, String(sent.total));
     ok('the request carries a window, not the whole thread',
        msgs.length > 0 && msgs.length <= 17, `${msgs.length} messages`);
@@ -336,7 +340,7 @@ const TOOL_SSE = [
     page.off('pageerror', onErr);
     ok('the panel still renders', !panel.threw && panel.html > 200, panel.threw || `${panel.html} chars`);
     ok('the provider was corrected to one this build actually has a path for',
-       ['gemini', 'mistral'].indexOf(panel.provider) > -1 && panel.hasSlot === true,
+       panel.provider === 'gemini' && panel.hasSlot === true,
        String(panel.provider));
     ok('and nothing threw on the way', bootErrors.length === 0, bootErrors.slice(0, 2).join(' | '));
   }

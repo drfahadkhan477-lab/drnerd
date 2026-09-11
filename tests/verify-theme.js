@@ -24,7 +24,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-theme.js <patched.html|url>'); process.exit(1); }
@@ -42,7 +42,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   const page = await browser.newPage({ viewport: { width: 460, height: 900 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
   await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
@@ -365,7 +365,18 @@ const head = t => console.log('\n── ' + t + ' ──');
       window.notifyThemeRenderers = function () { window.__notified++; return real.apply(this, arguments); };
     });
     await page.emulateMedia({ colorScheme: 'dark' });
-    await page.waitForTimeout(400);
+    /* WAIT FOR THE EVENT, NOT FOR A STOPWATCH. This was a flat 400ms, which is
+       plenty on an idle machine and not always enough beside two other
+       browsers: the flip reaches the page immediately — themeIsDark() reads
+       matchMedia directly — while notifyThemeRenderers runs from the change
+       listener, and a sample taken before that listener has run reports zero
+       notifications and an unchanged status bar. Reproduced one run in three
+       under `node scripts/verify.js --jobs 3`, and never once alone.
+
+       This does not soften the check. The assertion below is still
+       `notified > 0`; a build that never tells the renderers still fails,
+       eight seconds later instead of four tenths. */
+    await page.waitForFunction(() => window.__notified > 0, { timeout: 8000 }).catch(() => {});
     const after = await page.evaluate(() => ({
       dark: themeIsDark(),
       bar: (document.querySelector('meta[name="theme-color"]') || {}).content,
@@ -386,7 +397,13 @@ const head = t => console.log('\n── ' + t + ' ──');
        down is not a reason to revisit it. */
     await page.evaluate(() => { setTheme('daylight'); window.__notified = 0; });
     await page.emulateMedia({ colorScheme: 'light' });
-    await page.waitForTimeout(300);
+    /* A FIXED WAIT IS THE RIGHT INSTRUMENT HERE, and a longer one is stricter.
+       You cannot wait for an event that must not arrive, so this one is slept
+       through — but 300ms was short enough that a busy machine could report
+       "no notification" about a listener that simply had not run yet, which is
+       a PASS for the wrong reason. Widening the window can only catch more of
+       what it forbids. */
+    await page.waitForTimeout(1200);
     const chosen = await page.evaluate(() => ({ notified: window.__notified, dark: themeIsDark(), id: themeDef().id }));
     ok('a theme you picked is not overridden by the system',
        chosen.notified === 0 && chosen.dark === false && chosen.id === 'daylight',

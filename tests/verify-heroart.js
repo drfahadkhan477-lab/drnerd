@@ -40,16 +40,23 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, engineName, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-heroart.js <patched.html>'); process.exit(1); }
 const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
-let passed = 0, failed = 0;
+let passed = 0, failed = 0, unmeasured = 0;
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
+};
+/* Neither a pass nor a failure: a claim this engine cannot weigh. Same device
+   as verify-pwa's heap section — printed, counted, and named in the summary,
+   so a WebKit run's smaller check count is visible rather than silent. */
+const unmeasurable = (label, why) => {
+  unmeasured++;
+  console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
 const head = t => console.log('\n── ' + t + ' ──');
 
@@ -58,7 +65,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
   /* Collected separately because it arrives as a WARNING, not an error, so the
      line above never sees it. Asserting against `errors` would have passed on
      a build that emits six of these — a check that cannot fail is worse than
@@ -136,6 +143,56 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('and a yellow conduction tree is visible through it',
      px.lit > 0 && px.yellowish / px.lit > 0.01,
      `${(100 * px.yellowish / Math.max(px.lit, 1)).toFixed(2)}% yellow`);
+
+  head('what the heart is allowed to cost');
+  /* CEILINGS, NOT FLOORS. The mesh checks elsewhere in this file are floors —
+     "it has a mesh", "it is drawing" — and a floor is satisfied by anything
+     bigger, including a heart four times the size that stutters on the device
+     it was built for. This mounts on the HOME SCREEN, on an iPad, on the
+     main thread, and the numbers below are the ones it actually costs today
+     with roughly twice that as the allowance:
+
+       triangles       42,654   budget  90,000
+       vertices        19,009   budget  40,000
+       build           510ms chromium, 581ms webkit   budget 2,500ms
+
+     Build time is main-thread work at mount, which is why it is bounded at all:
+     a mesh that got expensive does not look slower, it delays the home screen.
+     The allowance is generous on purpose — this is meant to catch a mesh that
+     doubled, not to benchmark the machine, and it holds on both engines with
+     four times over. */
+  {
+    const cost = await page.evaluate(() => {
+      const h = typeof heroHeart3d !== 'undefined' ? heroHeart3d : null;
+      const cv = document.getElementById('heroHeart3d');
+      let buf = null;
+      try {
+        const gl = cv && (cv.getContext('webgl2') || cv.getContext('webgl'));
+        if (gl && !gl.isContextLost()) buf = { w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+      } catch (_) {}
+      return h && h.stats ? { tris: h.stats.triangles, verts: h.stats.vertices,
+                              buildMs: h.stats.buildMs, buf, dpr: window.devicePixelRatio } : null;
+    });
+    if (!cost) {
+      unmeasurable('the mesh stays inside its budget', 'no live heart to measure');
+      unmeasurable('and it is built quickly enough not to hold up the home screen', 'the same');
+      unmeasurable('and the drawing buffer is a medallion, not a viewport', 'the same');
+    } else {
+      ok('the mesh stays inside its budget',
+         cost.tris <= 90000 && cost.verts <= 40000,
+         `${cost.tris} triangles, ${cost.verts} vertices`);
+      ok('and it is built quickly enough not to hold up the home screen',
+         cost.buildMs <= 2500, `${cost.buildMs}ms`);
+      /* A canvas accidentally sized to the viewport instead of to the medallion
+         is the classic way a WebGL cost multiplies without the mesh changing at
+         all: same triangles, twenty times the fragments. 4M covers a 3x iPad
+         medallion many times over and is far under a full-screen buffer. */
+      const px = cost.buf ? cost.buf.w * cost.buf.h : 0;
+      ok('and the drawing buffer is a medallion, not a viewport',
+         px > 0 && px <= 4000000,
+         cost.buf ? `${cost.buf.w}x${cost.buf.h} = ${px} px at dpr ${cost.dpr}` : 'no buffer to read');
+    }
+  }
 
   head('the current travels — it is a wave, not a painted-on tree');
   /* Sampled inside one activation window. Heart3D's own cycle() reports the
@@ -223,6 +280,28 @@ const head = t => console.log('\n── ' + t + ' ──');
     const ext = gl && gl.getExtension('WEBGL_lose_context');
     if (!ext) return { skipped: true };
     const before = document.getElementById('heroHeart').classList.contains('heart-3d-active');
+    /* GUARDED, BECAUSE THIS LINE WAS THE ERROR IT THEN FAILED ON. WebKit caps a
+       page at sixteen WebGL contexts and does not return a slot when one is
+       released, so by the time this section runs the hero's context may already
+       have been evicted. Calling loseContext() on it emits
+       "INVALID_OPERATION: loseContext: context already lost" — which the
+       suite's own console-error check then reports as a failure of the app.
+       Isolated on a blank page: removing the one unguarded call took the error
+       count from 3 to 1, and all three guards tested (isContextLost alone,
+       plus VERSION==null, plus getError) gave zero.
+
+       "THE CHEAPEST IS ENOUGH" IS WHAT THIS USED TO SAY, AND IT WAS WRONG.
+       isContextLost() alone still answers false for a context WebKit has
+       already evicted under its sixteen-context cap, and the loseContext()
+       below then emitted the very error the guard exists to prevent — three of
+       them, every run, reported as a fault in the app. getParameter(VERSION)
+       answers null on that same context, which is why the blank-page experiment
+       found it sufficient and why it is now what is actually used. The app's
+       own release in src/core/heart3d.js carries the same pair for the same
+       reason. */
+    if (gl.isContextLost() || gl.getParameter(gl.VERSION) == null) {
+      return { skipped: true, reason: 'the context was already evicted' };
+    }
     ext.loseContext();
     for (let i = 0; i < 60 && heroHeart3d; i++) await wait(50);
     const after = {
@@ -233,7 +312,13 @@ const head = t => console.log('\n── ' + t + ' ──');
     for (let i = 0; i < 60 && !heroHeart3d; i++) await wait(50);
     return { skipped: false, before, after, back: !!heroHeart3d };
   });
-  if (lost.skipped) {
+  if (lost.skipped && lost.reason) {
+    /* The context was gone before this section could take it — WebKit's cap,
+       not a defect in the recovery path it was about to exercise. Failing here
+       would report the app broken over the browser's bookkeeping; passing would
+       claim a recovery path nobody drove. */
+    unmeasurable('losing and restoring the hero\'s context', lost.reason);
+  } else if (lost.skipped) {
     ok('WEBGL_lose_context is available to drive this', false, 'extension unavailable');
   } else {
     ok('the heart was live before the context was lost', lost.before === true);
@@ -291,8 +376,27 @@ head('a destroyed heart gives its context back');
      cycles.firstLost === true, `isContextLost() → ${cycles.firstLost}`);
   ok('and twenty mount/destroy cycles leave none of them alive',
      cycles.live === 0, `${cycles.live} still live`);
-  ok('no "too many active WebGL contexts" warning across the cycles',
-     glWarnings.length === 0, `${glWarnings.length} warning(s)`);
+  /* CHROMIUM ONLY, AND NOT AS A CONCESSION. Measured on a BLANK PAGE with no
+     Systole code at all, twenty contexts created and released one at a time:
+
+                              WebKit      Chromium
+       never released         4 warns     4 warns
+       loseContext()          4 warns     0 warns
+       loseContext() + 1x1    4 warns     0 warns
+
+     Chromium returns the slot; WebKit does not. So on WebKit this warning is
+     emitted no matter how diligently a page releases — no correct
+     implementation can drive it to zero, and asserting it there would be
+     asserting a property of the browser. The claim the APP owns is the line
+     above: every context released, none left alive. That one holds on both
+     engines and is where the regression would actually show. */
+  if (engineName() === 'chromium') {
+    ok('no "too many active WebGL contexts" warning across the cycles',
+       glWarnings.length === 0, `${glWarnings.length} warning(s)`);
+  } else {
+    unmeasurable('the browser\'s own context-cap warning',
+                 `${engineName()} emits it however the page releases — see the table above`);
+  }
   /* The guard that stops the fix eating its own tail. */
   ok('a deliberate release is not reported as a lost context',
      cycles.resurrected === 0, `onLost fired ${cycles.resurrected} time(s)`);
@@ -310,6 +414,7 @@ head('a destroyed heart gives its context back');
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
-  console.log(`\n${passed} passed, ${failed} failed`);
+  console.log(`\n${passed} passed, ${failed} failed`
+            + (unmeasured ? `, ${unmeasured} not measurable on ${engineName()}` : ''));
   process.exit(failed ? 1 : 0);
 })();

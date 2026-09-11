@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 75 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 82 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -257,6 +257,61 @@ const ROOT = path.join(__dirname, '..');
                    token is still never treated as a prefix — "as" is aortic
                    stenosis. 66.8% to 87.1% R@1 on a 295-note shelf, above the
                    80.1% the old mechanism reached on half as many notes
+
+     heroart       the home hero is the anatomical heart again, in the
+                   photograph's material, with the conduction system running
+                   through it as a source rather than a lit surface. The
+                   current is the depolarisation wave the module already
+                   modelled, on the same cardiac clock as the ECG strip beside
+                   it, so the trace and the heart cannot tell different stories
+
+     apexpage      Apex takes the whole viewport under the nav, and its answers
+                   get set like prose. A class on #shell rather than a screen,
+                   because #ai lives outside #app so that render() cannot tear
+                   down a conversation mid-reply
+
+     resume        a chapter you left is the chapter you come back to. The
+                   place is saved per chapter, restored when the same deck is
+                   opened again, cleared by a reset, and refusable
+
+     figsharp      a note figure is drawn at the size it has, not the size of
+                   the card. A 480px figure was being upscaled to fill a
+                   full-width block and read as blurry on any wider screen
+
+     heartreuse    navigating stops spending WebGL contexts. The hero built a
+                   new one every visit home; Chromium returns a released slot
+                   and WebKit does not, so the cap was reached after about
+                   eight visits and a LIVE context began being evicted. One
+                   canvas, created once, moved between screens
+
+     onetutor      the second provider leaves — asked for, after an audit that
+                   found no dead code at all. 7.6 KB across 23 edits, late in
+                   the chain so what it deletes is final, and the provider maps
+                   keep their shape with one entry. The in-app importer stays:
+                   the step was scoped to both and narrowed to Mistral only
+
+     flushguard    the last chunk is painted however the stream ends: the read
+                   loop's flush() moves into a finally, so an abort or a
+                   mid-stream error leaves by the same door as a tidy finish.
+                   And the stop button stops being rendered disabled in exactly
+                   the state where it is the stop button — abort() had one
+                   caller in the app and nothing could reach it
+
+     heroflex      the hero stops reserving vertical space by how WIDE the
+                   screen is. Both its clamps take their tallest value at
+                   1194px across — an 11-inch iPad in landscape, the shortest
+                   shape the app is held in — so the hero was largest exactly
+                   where there was least room. A height term through min(),
+                   floors untouched. 97px over to 47px over on that screen
+
+     offhome       the offline-download card leaves the home screen for
+                   Progress. The landscape grid gives its whole one-screen
+                   budget to four named areas and appends everything else
+                   outside it, so the card was overflow by construction rather
+                   than by size. Squashing the hero instead reaches 0px too and
+                   makes the medallion overlap the ECG by 87px where it used to
+                   overlap by 19. The survey goes with the card, so four
+                   hundred cache lookups stop running on every visit home
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -270,7 +325,8 @@ const CHAIN = [
   'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest', 'answerroom',
   'avatarfit',
   'prefixq', 'prefixrank',
-  'heroart', 'apexpage',
+  'heroart', 'apexpage', 'resume', 'figsharp', 'heartreuse', 'onetutor', 'flushguard',
+  'heroflex', 'offhome',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

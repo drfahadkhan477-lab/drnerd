@@ -98,6 +98,57 @@ async function heapUsedBytes(page) {
   return typeof n === 'number' ? n : null;
 }
 
+/* -- console noise that is the engine talking, not the app ------------------
+   Twenty-five suites carried their own copy of
+   /GroupMarker|GL Driver|swiftshader/ — the same copy-paste that had all of
+   them calling chromium.launch(), one level up. It is here now so that adding
+   an engine's quirk is one edit rather than twenty-five.
+
+   WHY WEBKIT GETS ONE MORE. "There are too many active WebGL contexts on this
+   page, the oldest context will be lost" is a resource notice from the
+   browser's own bookkeeping. Measured on a BLANK PAGE with no application code
+   at all, twenty contexts created and released one at a time:
+
+                          WebKit      Chromium
+     never released       4 warns     4 warns
+     loseContext()        4 warns     0 warns
+     loseContext() + 1x1  4 warns     0 warns
+
+   Chromium returns the slot when a page releases a context; WebKit does not.
+   So on WebKit no correct implementation can drive that message to zero, and a
+   console-error check that fails on it is failing the app for a property of
+   the browser — the same shape of error as a heap budget on an engine with no
+   heap profiler.
+
+   IT STAYS A HARD FAILURE ON CHROMIUM, deliberately. There it goes to zero
+   when contexts are released properly, which makes it a real regression
+   detector for the leak Heart3D.destroy() was fixed to stop. Suppressing it
+   everywhere would trade a WebKit-only annoyance for the loss of the one
+   signal that catches the bug coming back. */
+function isEngineNoise(text, name = engineName()) {
+  if (/GroupMarker|GL Driver|swiftshader/i.test(text)) return true;
+  if (name !== 'chromium' && /too many active WebGL contexts/i.test(text)) return true;
+  /* THE OTHER HALF OF THE SAME CAP, and it is the engine talking about a
+     context the engine itself took away. WebKit allows a page sixteen WebGL
+     contexts and does not return a slot when one is released; verify-heroart's
+     destroy section deliberately builds TWENTY, to prove that destroy() hands
+     its context back. Past the cap, WebKit evicts on its own, and a release of
+     an evicted context logs "INVALID_OPERATION: loseContext: context already
+     lost" — which is not an exception, so no try/catch can suppress it.
+
+     Filtered rather than fixed because there is nothing left to fix: the app
+     has exactly ONE loseContext() call site, in src/core/heart3d.js's
+     destroy(), and it is guarded twice over — isContextLost() AND
+     getParameter(VERSION) != null, because on WebKit the first still answers
+     false for a context that has been evicted. Eight cycles produce zero of
+     these; they appear only past sixteen, which is past what the engine
+     supports and only a stress test ever reaches. Chromium returns released
+     slots, never hits the cap, and so never emits this — which is why it stays
+     a failure there. */
+  if (name !== 'chromium' && /loseContext: context already lost/i.test(text)) return true;
+  return false;
+}
+
 function launch(opts = {}) {
   const name = engineName();
   const playwright = require('playwright');
@@ -105,4 +156,4 @@ function launch(opts = {}) {
 }
 
 module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch,
-                   cpuThrottle, heapUsedBytes };
+                   cpuThrottle, heapUsedBytes, isEngineNoise };

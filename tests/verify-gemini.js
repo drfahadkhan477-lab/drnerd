@@ -15,7 +15,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-gemini.js <patched.html>'); process.exit(1); }
@@ -43,7 +43,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   /* The two deliberately-triggered error responses below (403, 429) log as
      browser-level resource-load failures regardless of how gracefully the
      app's own code handles them — that is Chromium's console, not a bug. */
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())
       && !/Failed to load resource.*(403|404|429)/.test(m.text())) errors.push(m.text()); });
 
   /* A ListModels page shaped the way Google really sends one. The method list
@@ -118,26 +118,32 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('Vision.providerSeesFigures says gemini can see a figure', config.sees === true);
   ok('endpoint points at the Generative Language API', /generativelanguage\.googleapis\.com/.test(config.endpoint || ''));
 
-  head('an existing config saved before Mistral existed does not crash on switch');
-  /* The self-heal runs once, at script load — so proving the APP repairs this
-     (not the test) means saving the stale shape, then reloading, rather than
-     hand-patching AI in the page and asserting on the patch. */
+  head('a config naming a provider this build no longer has');
+  /* THIS USED TO CHECK THE OPPOSITE. When Mistral was added, the risk was a
+     stored config from BEFORE it existed; the check proved the app grew the
+     missing slot on load. Mistral has since been removed, so the risk has
+     inverted: a config written by the older build names a provider with no
+     code path behind it, and "it has a slot" would happily keep it — leaving
+     the tutor pointed at nothing.
+
+     The self-heal runs once, at script load, so proving the APP repairs this
+     (rather than the test doing it) means saving the stale shape and
+     reloading, not hand-patching AI in the page and asserting on the patch. */
   await page.evaluate(() => {
-    saveJSON(AI_CFG, { provider: 'gemini', gemini: { key: '', model: 'gemini-2.5-flash' } });  // pre-Mistral shape, no .mistral
+    saveJSON(AI_CFG, { provider: 'mistral', mistral: { key: 'k', model: 'pixtral-large-latest' } });
   });
   await page.reload({ waitUntil: 'load', timeout: 200000 });
   await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
   await page.waitForTimeout(800);
   const repaired = await page.evaluate(() => {
-    const hasSlot = !!AI.mistral;
-    AI.provider = 'mistral';
     let threw = false;
     try { buildAI(); } catch (_) { threw = true; }
-    return { hasSlot, threw };
+    return { provider: AI.provider, threw, known: !!AI_DEFAULT[AI.provider] };
   });
-  ok('a .mistral slot exists even for a config saved before this feature — the app healed it on load, not the test',
-     repaired.hasSlot);
-  ok('switching to it does not throw', !repaired.threw);
+  ok('a stored provider this build cannot serve is healed to one it can',
+     repaired.provider === 'gemini', `provider is ${repaired.provider}`);
+  ok('and the healed provider is a real one', repaired.known);
+  ok('opening the panel on it does not throw', !repaired.threw);
 
   head('key validation — the throwaway call is shaped right');
   await page.evaluate(async () => {

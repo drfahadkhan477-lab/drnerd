@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 1701 + 93 checks
+node scripts/verify.js --pwa                           # → 1758 + 125 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -28,14 +28,35 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## Prerequisites
 
-- **Node 18+** — no dependencies for the build itself.
-- **Playwright + Chromium** — for the test suites only:
-  `npm i -g playwright && npx playwright install chromium`
+- **Node 18+** — no dependencies for the build itself. `npm run build` installs nothing.
+- **Playwright** — for the test suites only, and pinned:
+
+  ```bash
+  npm ci                                     # playwright 1.56.0, ts-fsrs 5.4.2, from the lockfile
+  npx playwright install chromium webkit     # the two engines the suites are run on
+  ```
+
+  Pinned rather than ranged, and with `package-lock.json` committed, because a
+  suite that measures a browser is measuring a *specific* browser — `^1.56.0`
+  would make a green run mean "green on whatever shipped this week".
+
+  `--engine firefox` is accepted by the harness but is not part of the
+  provisioned set; `scripts/verify.js` checks the executable exists and tells
+  you how to install it before it spawns a single suite, rather than failing
+  fifty-four times identically.
+
+  A global install still works — the suites resolve Playwright through
+  `NODE_PATH`, which `scripts/verify.js` fills in from `npm root -g` — so
+  `npm i -g playwright` remains a valid way to run them. The lockfile is what
+  makes a run reproducible, not where the package lives.
+
+  `ts-fsrs` regenerates `tests/fixtures/fsrs-oracle.json` and is used for
+  nothing else; the fixture is committed, so `verify-oracle` runs without it.
 ---
 
 ## How the build works
 
-The chain is 75 patch scripts, run in order against the export. Each applies a list of
+The chain is 82 patch scripts, run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -120,7 +141,13 @@ The cost is that order matters, and the dependencies are real:
 | 71 | `avatarfit` | the Apex avatar's canvas threw `IndexSizeError` whenever it was briefly under 4px — a collapsing panel, a rotating iPad — because `R = min(w,h)/2 - 2` goes negative and `createRadialGradient` refuses a negative `r0`. The throw happens inside the rAF loop, so it killed the animation for the session rather than skipping a frame. `fit()` tested the width and never the height. Found by `verify-layout`, which resizes |
 | 72 | `prefixq` | `tok()` stems, and the stem of a truncation is a truncation — "amylo" is not "amyloidosis", so `IDX.df` has no entry, no document scores, and the library's own search box answered **ten of 146** title queries with nothing at all. Query tokens the index has *never seen* are completed against the vocabulary, at most two, nearest in length first; tokens it knows are left exactly alone. `54.1% → 80.1%` R@1 on truncated terms, empty results to zero, and the other three query shapes unchanged to the decimal. Measured by `verify-retrieval` |
 | 73 | `prefixrank` | The rest of that gap, by **scoring** the prefix instead of substituting for it. Two chosen completions make a document whose only matching term is a *third* one invisible, credit a document holding both twice, and give each completion its own idf so a rare wrong one outargues the common right one. Raising the cap fixes none of these — at 2/3/4/6/8 it measured `63.4 / 61.7 / 61.0 / 62.7 / 63.4`, noise around a ceiling. A stub is now **one term whose postings are the union of every term it prefixes**: tf summed, df counted over documents. `buildIndex` keeps postings, so a stub costs the postings that can match rather than the whole collection — and stub queries got *faster*, 0.25 → 0.11 ms. A known token is still never treated as a prefix: `as` is aortic stenosis. `66.8% → 87.1%` R@1 on the 295-note shelf, above the `80.1%` the old mechanism reached on half as many notes; floor raised 0.79 → 0.86. Measured by `verify-retrieval` |
-
+| 74 | `heroart` | the home hero becomes the anatomical heart again — `heart3d.js` gains a fourth style, `specimen`, and the conduction system is drawn as a source rather than a lit surface. The current is not an effect: `uAct` is the depolarisation front in ms since the sinus node fired and each vertex carries its own activation time, driven by the same cardiac clock as the ECG strip beside it, so when the hero rotation reaches atrial fibrillation the current goes irregular too |
+| 75 | `apexpage` | Apex gets the whole viewport under the nav, and its answers get set like prose. Full-page is a class on `#shell` rather than an `S.screen`, because `#ai` lives outside `#app` precisely so `render()` cannot tear down a conversation mid-reply — one Apex, one thread, one composer, a different box |
+| 76 | `resume` | a chapter you left is the chapter you come back to. The place is written per chapter under `resume` in the saved blob (added to `SCHEMA_KEYS`, capped at 12 chapters), restored when the same deck is opened again, and cleared by a reset — with an explicit restart control, because resuming has to be refusable |
+| 77 | `figsharp` | a note figure is drawn at the size it has rather than the size of the card. `.ref-fig` was a full-width block, so a 480 px figure was upscaled to fill it and read as blurry on every screen wider than the figure. `width:fit-content` on the frame and `width:auto` on the image; the copy Apex shows gets the same treatment |
+| 78 | `heartreuse` | navigating the app stops spending WebGL contexts. The hero built a new one on every visit home — twenty round trips, forty contexts — which Chromium absorbs because it returns a released slot and WebKit does not, so the same code hit the sixteen-context cap after about eight visits and began evicting a LIVE context. The markup now carries a slot; the canvas is created once and moved into it, and leaving home pauses the heart instead of destroying it |
+| 79 | `onetutor` | asked for after an audit that found no dead code at all, which leaves only this kind of removal: the second provider, working and not wanted. 7.6 KB out across 23 edits. The in-app importer stays — the step was scoped to both and narrowed to Mistral only before a line was written, and the patch's own header went on describing the wider version until it was corrected. `PROVIDERS`/`ENDPOINT`/`MODELS` stay maps with one entry rather than collapsing into bare Gemini constants, and the nine suites that mocked Mistral's OpenAI shape move onto `tests/_wire.js`, which says what a suite wants to know — the system prompt, the turns — instead of spelling Gemini's JSON out nine times |
+| 80 | `flushguard` | the last chunk is painted however the stream ends. `makeStreamPainter` exists so that "the very last chunk is never left unpainted waiting on a frame that may not come", and its `flush()` sat after the read loop — honoured on the one path where the loop ends tidily and on no other. Now a `try`/`finally` around the loop. Found in the same pass: the composer rendered `<button id="aiSend" ${aiBusy?'disabled':''}>` with a ■ glyph, so the stop button was disabled in exactly the state where it was the stop button, and `aiAbort.abort()` — its only caller anywhere — was unreachable || 81 | `heroflex` | the hero stops reserving vertical space by how **wide** the screen is. `.hero-ecg{height:clamp(92px,13.5vw,140px)}` and `.hero-live{padding-bottom:clamp(104px,16vw,158px)}` both take their tallest value at 1194px wide — which is an 11-inch iPad in *landscape*, the shortest shape the app is held in. Rotate it to portrait and the hero gets shorter on a screen with 360px more room. Each clamp gains a height term through `min()`, so whichever axis is scarcer decides; the floors are untouched, and a phone renders identically. Measured by `verify-home`: the 11-inch landscape home screen goes from `97px over` to `47px over` || 82 | `offhome` | the offline-download card moves off the home screen and onto Progress. The landscape home grid budgets itself exactly one screen and gives all of it to four named areas, sweeping every other child into implicit rows **beyond** that budget — under a rule whose own comment describes it as a fallback for the story rail and feed that had moved to the Chapters page. The card inherited that fallback and became 114.5px of guaranteed overflow on an 11-inch iPad held sideways. Bringing the tail into the grid and capping the wrap was tested and reaches 0px too, but squashes the hero 268px → 200px and widens the medallion/ECG overlap from 19px to 87px; the owner chose the move. Progress already opens with "Saved locally on this device", which is the same subject, and the cache survey moved with the card so it no longer runs on every visit home. `verify-pwa`: `0px over — first run, with the welcome card, was 43px` |
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
 
@@ -155,7 +182,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 51 suites, 1701 checks, plus 93 more on the split build. Those numbers are
+Across 54 suites, 1758 checks, plus 125 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,

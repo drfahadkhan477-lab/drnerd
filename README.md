@@ -22,8 +22,8 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 1701 checks, 51 suites
-node scripts/verify.js --pwa                        # + 93 more on the split build
+node scripts/verify.js                              # 1758 checks, 54 suites
+node scripts/verify.js --pwa                        # + 125 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
 
@@ -33,7 +33,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 1701 + 93 checks above — read it as 299, not 1794.**
+**That badge is not the 1758 + 125 checks above — read it as 331, not 1883.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does

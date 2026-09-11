@@ -1885,7 +1885,18 @@ void main(){
       S.dead = true;
       try {
         const ext = gl.getExtension('WEBGL_lose_context');
-        if (ext && !gl.isContextLost()) ext.loseContext();
+        /* isContextLost() ALONE IS NOT ENOUGH ON WEBKIT. It caps a page at
+           sixteen contexts and evicts the oldest when a seventeenth is asked
+           for, and for an evicted context isContextLost() still answers false
+           while getParameter(VERSION) already answers null. loseContext() on
+           that context does not throw — it emits
+           "INVALID_OPERATION: loseContext: context already lost" to the
+           console, which a try/catch cannot suppress and which every suite
+           watching for console errors reports as a fault in the app.
+           verify-heroart carries the measurement in its own comment: three
+           errors with this guard, zero with VERSION added. */
+        const alive = !gl.isContextLost() && gl.getParameter(gl.VERSION) != null;
+        if (ext && alive) ext.loseContext();
       } catch (_) {}
     },
   };

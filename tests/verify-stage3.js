@@ -11,7 +11,8 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
+const { systemText, turns } = require('./_wire');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-stage3.js <patched.html>'); process.exit(1); }
@@ -30,7 +31,7 @@ const head = t => console.log('\n── ' + t + ' ──');
    needed: capture the request body, then reply with a minimal valid SSE
    stream so the app's own parser runs end-to-end over it. */
 const SSE = [
-  'data: ' + JSON.stringify({ choices: [{ delta: { content: 'The tracing shows atrial flutter.' } }] }),
+  'data: ' + JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: 'The tracing shows atrial flutter.' }] } }] }),
   'data: [DONE]',
   '',
 ].join('\n\n');
@@ -40,10 +41,10 @@ const SSE = [
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   const captured = [];
-  await page.route('**/v1/chat/completions', route => {
+  await page.route('**/generativelanguage.googleapis.com/**', route => {
     try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
   });
@@ -60,8 +61,8 @@ const SSE = [
   const ask = async wantFigure => {
     captured.length = 0;
     await page.evaluate(async wantFigure => {
-      AI.provider = 'mistral';
-      AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
+      AI.provider = 'gemini';
+      AI.gemini = { key: 'test-gemini-key', model: 'gemini-2.5-flash' };
       const q = ALL_Q.find(x => !x.bad && (wantFigure ? (x.img > 0 && (IMGS[x.id] || []).length) : !x.img));
       jumpTo(q.id);
       const sh = document.getElementById('shell');
@@ -75,40 +76,46 @@ const SSE = [
     return captured[0];
   };
 
-  head('vision: the figure actually reaches the Mistral request');
+  head('vision: the figure actually reaches the request');
   const withFig = await ask(true);
   ok('a request was made', !!withFig);
-  const msgs = (withFig && withFig.messages) || [];
+  const msgs = turns(withFig);
   const first = msgs.find(m => m.role === 'user') || {};
-  ok('first user turn carries content blocks, not a bare string', Array.isArray(first.content),
-     typeof first.content);
-  const imgBlocks = Array.isArray(first.content) ? first.content.filter(b => b.type === 'image_url') : [];
+  const blocks = first.parts || [];
+  ok('first user turn carries parts, not a bare string', Array.isArray(blocks) && blocks.length > 0,
+     blocks.length + ' part(s)');
+  /* Gemini spells an image inlineData:{mimeType,data}; the OpenAI shape spelled
+     it image_url:{url:'data:...'}. Same claim either way — a real, decodable
+     image travelled — so the parts are normalised once here and every
+     assertion below reads the same as it did. */
+  const imgBlocks = blocks.filter(b => b && b.inlineData).map(b => ({
+    mime: b.inlineData.mimeType, data: b.inlineData.data,
+  }));
   ok('at least one image block is present', imgBlocks.length > 0, imgBlocks.length + ' image block(s)');
 
-  const url = imgBlocks[0] && imgBlocks[0].image_url && imgBlocks[0].image_url.url;
-  const m = /^data:(image\/[a-z]+);base64,(.+)$/.exec(url || '');
-  ok('image is a data: URL, not a dead reference', !!m, (url || '').slice(0, 24));
-  ok('media_type is a supported image type', !!m && /^image\/(webp|png|jpeg|gif)$/.test(m[1]), m && m[1]);
+  const img = imgBlocks[0];
+  ok('image data is present, not a dead reference', !!(img && img.data), (img && img.mime) || '');
+  ok('media_type is a supported image type',
+     !!img && /^image\/(webp|png|jpeg|gif)$/.test(img.mime || ''), img && img.mime);
   ok('data decodes as base64', (() => {
-    try { return !!m && Buffer.from(m[2], 'base64').length > 100; } catch (_) { return false; }
+    try { return !!img && Buffer.from(img.data, 'base64').length > 100; } catch (_) { return false; }
   })());
   ok('image is under the 10MB per-image API limit',
-     !!m && Buffer.from(m[2], 'base64').length < 10 * 1024 * 1024,
-     m ? (Buffer.from(m[2], 'base64').length / 1024).toFixed(0) + ' KB' : '');
+     !!img && Buffer.from(img.data, 'base64').length < 10 * 1024 * 1024,
+     img ? (Buffer.from(img.data, 'base64').length / 1024).toFixed(0) + ' KB' : '');
 
-  const blocks = first.content;
-  const firstImgIdx = blocks.findIndex(b => b.type === 'image_url');
+  const firstImgIdx = blocks.findIndex(b => b && b.inlineData);
   const lastTextIdx = blocks.length - 1;
   ok('images precede the question text, as the docs recommend', firstImgIdx < lastTextIdx);
   ok('the fellow\'s actual question is still the final text block',
-     blocks[lastTextIdx].type === 'text' && /why is this the answer/i.test(blocks[lastTextIdx].text),
+     typeof blocks[lastTextIdx].text === 'string' && /why is this the answer/i.test(blocks[lastTextIdx].text),
      JSON.stringify(blocks[lastTextIdx].text).slice(0, 60));
-  const labels = blocks.filter(b => b.type === 'text' && /^Figure/.test(b.text));
+  const labels = blocks.filter(b => typeof b.text === 'string' && /^Figure/.test(b.text));
   ok('each figure is labelled', labels.length === imgBlocks.length,
      labels.map(l => l.text).join(' '));
 
   head('vision: the system prompt matches what was actually sent');
-  const sysText = (withFig.messages || []).find(s => s.role === 'system')?.content || '';
+  const sysText = systemText(withFig);
   ok('context says the figures are attached', /attached to this conversation/.test(sysText));
   ok('context no longer claims the tutor is blind', !/which you cannot see/.test(sysText));
   ok('teaching instruction for figures is present', /start by saying what you actually see/i.test(sysText));
@@ -129,9 +136,13 @@ const SSE = [
 
   head('vision: a question with no figure sends no image');
   const noFig = await ask(false);
-  ok('no image block on a text-only question', !JSON.stringify(noFig).includes('"type":"image_url"'));
-  ok('first turn stays a plain string when there is nothing to attach',
-     typeof (noFig.messages.find(x => x.role === 'user') || {}).content === 'string');
+  ok('no image block on a text-only question', !/"inlineData"/.test(JSON.stringify(noFig)));
+  /* On this wire every turn is parts[], so the old "stays a plain string"
+     phrasing has no counterpart. The claim underneath it survives: nothing but
+     text goes up when there is nothing to attach. */
+  ok('the turn carries text and nothing else when there is nothing to attach',
+     (turns(noFig).find(x => x.role === 'user') || { parts: [] })
+       .parts.every(pt => typeof pt.text === 'string'));
 
   head('images are never persisted to localStorage');
   const persisted = await page.evaluate(() => {
@@ -171,7 +182,7 @@ const SSE = [
 
   head('ui badge');
   const badge = await page.evaluate(() => {
-    AI.provider = 'mistral';
+    AI.provider = 'gemini';
     const q = ALL_Q.find(x => !x.bad && x.img > 0);
     jumpTo(q.id); buildAI();
     const mist = document.querySelector('.ai-sub').textContent;

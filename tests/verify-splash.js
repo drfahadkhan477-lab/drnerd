@@ -13,7 +13,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { launch, cpuThrottle } = require('./_engine');
+const { launch, cpuThrottle, isEngineNoise } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-splash.js <patched.html>'); process.exit(1); }
@@ -212,7 +212,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
-    page.on('console', m => { if (m.type() === 'error' && !/GroupMarker|GL Driver|swiftshader/i.test(m.text())) errors.push(m.text()); });
+    page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
     await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —

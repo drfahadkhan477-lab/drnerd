@@ -84,13 +84,15 @@ step('strip the inline figure blob', () => {
    provider's chat API does — both want base64. So the AI path resolves them
    at send time. Only there: fetching and encoding 18 MB up front is exactly
    what we are getting away from, and an API call is rare next to a render.
-   Two call sites, one per remaining provider (oneTurnGemini, oneTurnMistral)
-   — each builds its own wire shape around the same withFigures/withImages
-   pair, so each has its own copy of this fragment. */
+   ONE call site now, not two. Each provider built its own wire shape around
+   the same withFigures/withImages pair and so carried its own copy of this
+   fragment; with the second provider gone there is one copy, and this guard
+   moved with it rather than being loosened to "one or more" — the count is
+   the point, because a silently-missed call site ships an 18 MB fetch. */
 const AI_CALL = `(typeof IMGS!=='undefined'?IMGS[q&&q.id]:null)`;
 step('AI path resolves figure URLs to base64 at send time', () => {
   const n = appCode.split(AI_CALL).length - 1;
-  if (n !== 2) throw new Error(`vision call site expected in exactly 2 places (one per provider), found ${n}`);
+  if (n !== 1) throw new Error(`vision call site expected in exactly 1 place, found ${n}`);
   appCode = appCode.split(AI_CALL).join('await figuresAsDataUrls(q)');
 });
 
@@ -104,26 +106,82 @@ step('add the figure resolver', () => {
    Messages API cannot take a URL it has no access to, so only the AI path
    pays to base64 them, and only for the question actually being asked.
    Cached per question id, because a tutor conversation sends the same
-   figures on every iteration of the agent loop. */
+   figures on every iteration of the agent loop.
+
+   BOUNDED, BECAUSE BASE64 IS THE EXPENSIVE SHAPE. This held every figure of
+   every question ever asked about, for the life of the tab, as base64 — which
+   is a third larger again than the bytes on the wire. A fellow working through
+   a chapter with Apex open touches dozens of questions in a sitting, and an
+   iPad reclaims memory by killing the tab rather than by asking. The URLs cost
+   nothing to re-resolve: the service worker has the figure, so a miss is a
+   cache read, not a download. So the cache is small on purpose — an agent loop
+   sends the same figures several times in a row, which is all it has to cover.
+
+   Least-recently-used, which a Map gives almost for free: it iterates in
+   insertion order, so re-inserting on a hit moves an entry to the back and the
+   front is always the coldest. */
+const FIG_CACHE_MAX_ENTRIES = 24;
+const FIG_CACHE_MAX_BYTES   = 24 * 1024 * 1024;
+/* A figure that never answers must not hold a turn open, and one that answers
+   with something enormous must not be base64ed into memory to find out. The
+   cap is well above the largest figure in the bank (the widest is under 400 KB)
+   and well below anything that would hurt. */
+const FIG_FETCH_TIMEOUT_MS  = 15000;
+const FIG_MAX_BYTES         = 8 * 1024 * 1024;
 const _figDataCache = new Map();
+let _figCacheBytes = 0;
+const _figBytes = v => v.reduce((n,s)=>n+(s?s.length:0),0);
+function _figTrim(){
+  while(_figDataCache.size > FIG_CACHE_MAX_ENTRIES || _figCacheBytes > FIG_CACHE_MAX_BYTES){
+    const k = _figDataCache.keys().next().value;
+    if(k===undefined) break;
+    _figCacheBytes -= _figBytes(_figDataCache.get(k)||[]);
+    _figDataCache.delete(k);
+  }
+  if(_figCacheBytes < 0) _figCacheBytes = 0;
+}
 async function figuresAsDataUrls(q){
   if(!q || !q.img) return null;
   const urls = (typeof IMGS!=='undefined' && IMGS[q.id]) || null;
   if(!urls || !urls.length) return null;
-  if(_figDataCache.has(q.id)) return _figDataCache.get(q.id);
+  if(_figDataCache.has(q.id)){
+    const hit = _figDataCache.get(q.id);
+    _figDataCache.delete(q.id); _figDataCache.set(q.id, hit);   // now the newest
+    return hit;
+  }
+  const ctl = typeof AbortController!=='undefined' ? new AbortController() : null;
+  const timer = ctl ? setTimeout(()=>{ try{ ctl.abort(); }catch(_){} }, FIG_FETCH_TIMEOUT_MS) : null;
   try{
     const out = await Promise.all(urls.map(async u=>{
-      const blob = await (await fetch(u)).blob();
+      const r = await fetch(u, ctl ? {signal:ctl.signal} : undefined);
+      if(!r.ok) throw new Error('figure '+r.status);
+      /* Refused on the header where there is one, so an oversized figure is
+         never read into memory at all; checked again on the blob, because
+         content-length is absent on a chunked or service-worker response. */
+      const len = +(r.headers.get('content-length')||0);
+      if(len && len > FIG_MAX_BYTES) throw new Error('figure too large: '+len);
+      const blob = await r.blob();
+      if(blob.size > FIG_MAX_BYTES) throw new Error('figure too large: '+blob.size);
       return await new Promise((res,rej)=>{
         const fr = new FileReader();
         fr.onload = ()=>res(fr.result); fr.onerror = rej;
         fr.readAsDataURL(blob);
       });
     }));
-    _figDataCache.set(q.id, out);
+    const bytes = _figBytes(out);
+    /* One question whose figures exceed the whole budget is returned and not
+       kept, rather than evicting everything else to store it and then being
+       evicted itself on the next insert. */
+    if(bytes <= FIG_CACHE_MAX_BYTES){
+      _figDataCache.set(q.id, out);
+      _figCacheBytes += bytes;
+      _figTrim();
+    }
     return out;
   }catch(_){
     return null;      // a figure that will not load must not take the chat down
+  }finally{
+    if(timer) clearTimeout(timer);
   }
 }
 `);
@@ -136,6 +194,8 @@ const LOADER = `<script>
    top-level declarations land in global scope exactly as they did when this
    was one file. The splash is already on screen and covers all of this. */
 (async function(){
+  /* Replaced at build time; see BUILD_ID in scripts/build-pwa.js. */
+  var SHELL_BUILD_ID = '__BUILD_ID__';
   function fail(msg, err){
     console.error(msg, err||'');
     var sp = document.getElementById('splash');
@@ -165,11 +225,56 @@ const LOADER = `<script>
   }catch(err){
     return fail('Open this over http, not as a file — it needs to fetch its content.', err);
   }
-  await new Promise(function(resolve, reject){
-    var s = document.createElement('script');
-    s.src = 'app.js'; s.onload = resolve; s.onerror = reject;
-    document.body.appendChild(s);
-  }).catch(function(err){ fail('The application code failed to load.', err); });
+  /* STOPS HERE WHEN app.js DOES NOT LOAD. It used to be a trailing
+     .catch(function(err){ fail(...) }) with nothing else, so the splash showed
+     the error and execution carried straight on into the service-worker
+     registration below — installing a worker whose whole job is to cache a
+     shell that never ran. The first attempt at this put a return inside that
+     callback, which reads like the content-fetch path above but is not the
+     same thing at all: it returns from the CALLBACK, the awaited promise then
+     resolves normally, and the registration runs exactly as before.
+     tests/verify-pwa.js caught it by blocking app.js at the network and
+     counting registrations, which is the only reason this is a try/catch and
+     not a plausible-looking one-liner. */
+  try{
+    await new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = 'app.js'; s.onload = resolve; s.onerror = reject;
+      document.body.appendChild(s);
+    });
+  }catch(err){
+    return fail('The application code failed to load.', err);
+  }
+
+  /* THE SHELL AND THE CODE HAVE TO BE FROM THE SAME BUILD, and until this ran
+     nothing checked. sw.js serves the shell cache-first and refreshes it in the
+     background, per request — so a deploy landing between the request for
+     index.html and the request for app.js leaves a launch running one build's
+     HTML against the other build's code, and the mixed pair persists in the
+     cache until something replaces it. Nothing crashes; the app just behaves
+     like neither version.
+
+     Both files carry the same stamp, generated over the shell digest and the
+     content digest together, so any change to either moves it. A disagreement
+     means the pair is mixed, and one reload is enough: the worker has since
+     settled on one build and will serve both halves of it.
+
+     GUARDED, because a reload that does not fix it must not become a loop.
+     sessionStorage rather than a variable, for the same reason the update
+     reload below uses it — the reload discards variables. Second time through,
+     the fellow is told rather than spun. */
+  try{
+    if(typeof APP_BUILD_ID !== 'undefined' && APP_BUILD_ID !== SHELL_BUILD_ID){
+      if(sessionStorage.getItem('accsap-mixed-build')){
+        return fail('This app updated while it was opening. Close it completely and open it again.',
+                    new Error('build mismatch: shell ' + SHELL_BUILD_ID + ', app ' + APP_BUILD_ID));
+      }
+      sessionStorage.setItem('accsap-mixed-build','1');
+      location.reload();
+      return;
+    }
+    sessionStorage.removeItem('accsap-mixed-build');
+  }catch(_){ /* private mode: the check is a safety net, not a requirement */ }
 
   if('serviceWorker' in navigator){
     /* THE UPDATE THAT ARRIVES UNDER A RUNNING APP. sw.js calls skipWaiting on
@@ -399,6 +504,29 @@ step('correct the head for a build that has a network', () => {
 /* ── 4. write it all out ─────────────────────────────────────────────────── */
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'icons'), { recursive: true });
+/* Read here rather than beside the service worker, because the build stamp
+   below needs the content digest and is computed before either file is
+   written. */
+const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.json'), 'utf8'));
+
+/* ── the build stamp ─────────────────────────────────────────────────────────
+   Computed over the shell and the content TOGETHER, so it moves when either
+   does — that is the whole point: it answers "are these two files from the same
+   deploy?", which neither digest answers alone. Taken over the UNSTAMPED bytes,
+   because stamping changes them; deterministic either way, since the
+   placeholder is a constant. */
+const shellDigest = require('crypto').createHash('sha256')
+  .update(html).update(appCode).digest('hex').slice(0, 16);
+const BUILD_ID = require('crypto').createHash('sha256')
+  .update(shellDigest).update(String(contentManifest.sourceDigest)).digest('hex').slice(0, 16);
+
+if (html.indexOf('__BUILD_ID__') < 0) throw new Error('the loader lost its build-stamp placeholder');
+html = html.replace('__BUILD_ID__', BUILD_ID);
+if (html.indexOf('__BUILD_ID__') >= 0) throw new Error('more than one build-stamp placeholder in the loader');
+/* A var at the top level of a classic script is a global, which is what the
+   loader's typeof check reads. */
+appCode = `var APP_BUILD_ID='${BUILD_ID}';\n` + appCode;
+
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 fs.writeFileSync(path.join(DIST, 'app.js'), appCode);
 
@@ -521,7 +649,6 @@ step('every content path the code names is on disk', () => {
 
 /* Cache version is derived from the content digest, so publishing a new
    export invalidates the old caches instead of serving a stale bank. */
-const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.json'), 'utf8'));
 /* THE SHELL NEEDS A VERSION OF ITS OWN. Both cache names were keyed on the
    content digest, which is a hash of the ACCSAP export — so every change to
    the app's own code produced a byte-identical sw.js. The browser saw no new
@@ -535,8 +662,6 @@ const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.
    code change would throw away the 408 figures the fellow pressed a button to
    download — 19 MB re-fetched because a stylesheet moved. Figures change when
    the content changes; the shell changes when the shell changes. */
-const shellDigest = require('crypto').createHash('sha256')
-  .update(html).update(appCode).digest('hex').slice(0, 16);
 const SW = `/* ACCSAP 12 service worker.
    Shell is precached so a cold launch is instant and works offline. Figures
    are cache-first at runtime rather than precached: there are 408 of them and
@@ -546,8 +671,21 @@ const SW = `/* ACCSAP 12 service worker.
    what was cached once is cached forever. */
 const CONTENT_V = '${contentManifest.sourceDigest}';
 const SHELL_V   = '${shellDigest}';
-const SHELL = 'accsap-shell-' + SHELL_V;
-const FIGS  = 'accsap-figs-'  + CONTENT_V;
+/* The same stamp index.html and app.js carry, so the three can be compared
+   from the outside — by a test, or by anyone reading a deployed directory. */
+const BUILD_ID  = '${BUILD_ID}';
+const SHELL   = 'accsap-shell-'   + SHELL_V;
+/* EVERYTHING UNDER /content/ LIVES HERE, not just the figures, and the name
+   changed with the scope. It used to be FIGS and only /content/figures/ was
+   routed into it; refs-images.json (14.4 MB) and refs-seed.json (0.7 MB) are
+   fetched at runtime like any other same-origin URL and so fell through to the
+   SHELL bucket. activate() deletes every cache that is not the CURRENT shell,
+   and SHELL_V is a digest of the shell code — so a CSS tweak with no content
+   change at all evicted 15.1 MB, and the next launch had to pull it down again
+   before reference figures worked offline. Keyed by CONTENT_V, these now
+   survive any number of code deploys and are evicted only when the content
+   they were built from actually changes. */
+const CONTENT = 'accsap-content-' + CONTENT_V;
 /* Split deliberately. cache.addAll() is all-or-nothing: one 404 rejects the
    whole call, the install event fails, the worker never activates, and the app
    silently loses offline support entirely. That is exactly what happened when
@@ -558,6 +696,13 @@ const FIGS  = 'accsap-figs-'  + CONTENT_V;
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
 const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', 'content/questions.json'];
+/* Which bucket a precached URL belongs in. questions.json is precached because
+   the app cannot start without it, and content-versioned because that is what
+   it is — so install writes it to CONTENT while the shell files go to SHELL.
+   Without this it would land in SHELL, be evicted by the next code deploy, and
+   be re-fetched into CONTENT on first use: self-healing, but a 1.7 MB download
+   nobody asked for. */
+const isContent = u => u.indexOf('content/') === 0 || u.indexOf('/content/') > -1;
 const NICE_TO_HAVE = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
                       ${JSON.stringify(fontAssets.map(([n]) => 'fonts/' + n)).slice(1, -1)}];
 
@@ -576,6 +721,7 @@ const NICE_TO_HAVE = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-ma
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const c = await caches.open(SHELL);
+    const cc = await caches.open(CONTENT);
     const fresh = await Promise.all(PRECACHE.map(async u => {
       const req = new Request(u, { cache: 'reload' });
       let res; try { res = await fetch(req); } catch (_) { return [u, null]; }
@@ -583,14 +729,14 @@ self.addEventListener('install', e => {
     }));
     const bad = fresh.filter(([, res]) => !res).map(([u]) => u);
     if (bad.length) throw new Error('precache refused: ' + bad.join(', '));
-    await Promise.all(fresh.map(([u, res]) => c.put(new Request(u), res)));
+    await Promise.all(fresh.map(([u, res]) => (isContent(u) ? cc : c).put(new Request(u), res)));
     await Promise.all(NICE_TO_HAVE.map(u => c.add(u).catch(() => {})));
     await self.skipWaiting();
   })());
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(ks => Promise.all(ks.filter(k => k !== SHELL && k !== FIGS).map(k => caches.delete(k))))
+    .then(ks => Promise.all(ks.filter(k => k !== SHELL && k !== CONTENT).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
@@ -604,8 +750,13 @@ self.addEventListener('fetch', e => {
      outlive the key that produced it. */
   if (url.pathname.startsWith('/api/apex/')) return;
 
-  if (url.pathname.includes('/content/figures/')) {
-    e.respondWith(caches.open(FIGS).then(async c => {
+  /* Was /content/figures/ only. Widened to all of /content/ so the two large
+     JSON files stop being shell. keepable() already tells the two kinds apart:
+     a figure must come back as an image, and anything else must not come back
+     as text/html — which is what an expired Cloudflare Access session looks
+     like when it answers 200 OK with a sign-in page. */
+  if (url.pathname.includes('/content/')) {
+    e.respondWith(caches.open(CONTENT).then(async c => {
       const hit = await c.match(req);
       if (hit) return hit;
       const res = await fetch(req);
