@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 80 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 81 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -296,6 +296,13 @@ const ROOT = path.join(__dirname, '..');
                    And the stop button stops being rendered disabled in exactly
                    the state where it is the stop button — abort() had one
                    caller in the app and nothing could reach it
+
+     heroflex      the hero stops reserving vertical space by how WIDE the
+                   screen is. Both its clamps take their tallest value at
+                   1194px across — an 11-inch iPad in landscape, the shortest
+                   shape the app is held in — so the hero was largest exactly
+                   where there was least room. A height term through min(),
+                   floors untouched. 97px over to 47px over on that screen
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -310,6 +317,7 @@ const CHAIN = [
   'avatarfit',
   'prefixq', 'prefixrank',
   'heroart', 'apexpage', 'resume', 'figsharp', 'heartreuse', 'onetutor', 'flushguard',
+  'heroflex',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
