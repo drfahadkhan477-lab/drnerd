@@ -42,44 +42,37 @@ const head = t => console.log('\n── ' + t + ' ──');
 const measure = (page) => page.evaluate(async () => {
   const notes = (typeof REF !== 'undefined' ? REF : []).filter(n => /refimg:\/\//.test(n.body || ''));
   if (!notes.length) return { err: 'no reference notes cite a figure' };
-  if (typeof goRefs === 'function') goRefs();
-  if (typeof render === 'function') render();
+  /* goRefs() ALREADY RENDERS. Calling render() after it ran a SECOND view
+     transition, and that is what this suite kept tripping over: each one swaps
+     the DOM in an async callback, so nodes collected before the swap are
+     detached afterwards. A detached <img> still decodes — naturalWidth lands
+     normally — and getBoundingClientRect() is all zeros for ever. That is
+     exactly the "all 55 decoded, 0 boxed" the owner's laptop reported, and why
+     this machine never saw it: the same race, landing the other way on a
+     faster renderer.
 
-  /* IMMEDIATELY, AND NOT AFTER WAITING FOR THE SCREEN. Waiting for a .ref-card
-     to have a real width before collecting these — which sounds like the
-     precondition, and is what the image loop below assumes — measured 0 of 119
-     here where collecting them at once measures 119 of 119. Reverted rather
-     than shipped: a change that breaks a green suite and cannot be explained is
-     not an improvement, whatever it was meant to fix. */
-  /* Not scoped to .ref-body: the refs screen lays out differently in landscape
-     and the note body is not always that element. What is being asserted is a
-     property of every rendered ref figure, wherever the layout put it. */
-  const imgs = [...document.querySelectorAll('.ref-fig img')];
-  imgs.forEach(i => { try { i.loading = 'eager'; } catch (_) {} });
-  /* TWO conditions, and the second one cost an hour. render() goes through
-     startViewTransition, so the markup it produces lands in an async callback:
-     measure too early and every image reports a zero-width box while its
-     <figure> already measures 878px. A fixed sleep hid that in portrait and
-     exposed it in landscape, which is the signature of a race rather than a
-     layout bug. Waiting for the boxes to exist is waiting for the precondition
-     these measurements need; if they never do, the timeout leaves rows empty
-     and the suite says so instead of dividing by zero. */
+     So nothing is collected once. The list is re-queried every pass, eager is
+     re-applied to whatever is live now, and the measurement below reads the
+     set the loop actually settled on. A DOM swap mid-wait then costs an
+     iteration rather than the whole run. */
+  if (typeof goRefs === 'function') goRefs();
+
+  const live = () => [...document.querySelectorAll('.ref-fig img')];
   const ready = i => i.naturalWidth > 0 && i.getBoundingClientRect().width > 0;
+  let imgs = [];
   const t0 = Date.now();
   while (Date.now() - t0 < 20000) {
+    imgs = live();
+    /* loading="lazy" keeps naturalWidth at 0 for anything below the fold, and
+       most of 295 note cards are below it. Re-applied every pass because a
+       swap brings back a fresh set with the attribute as authored. */
+    imgs.forEach(i => { try { i.loading = 'eager'; } catch (_) {} });
     if (imgs.length && imgs.every(ready)) break;
     await new Promise(r => setTimeout(r, 150));
   }
-  /* NO EARLY EXIT EITHER, and that attempt is worth recording too. Breaking as
-     soon as SOME image was ready looked like an obvious improvement and also
-     measured 0 of 119: setting loading='eager' starts every decode at once,
-     naturalWidth lands as each finishes, and the layout reflows after that, so
-     a sample taken between the two sees everything decoded and nothing boxed.
-     The full wait is what lets the reflow catch up. */
-  /* The refs screen renders every note's body, so most of these figures are in
-     collapsed cards with a zero-width box. A ratio against a zero width is not
-     a measurement of anything — only figures the layout actually placed can
-     say whether the layout upscaled them. */
+  imgs = live();
+  imgs.forEach(i => { try { i.loading = 'eager'; } catch (_) {} });
+
   const rows = imgs.filter(i => i.naturalWidth > 0 && i.getBoundingClientRect().width > 0).map(i => {
     const fig = i.closest('figure');
     /* The container is the figure's PARENT, never the figure itself: once the
