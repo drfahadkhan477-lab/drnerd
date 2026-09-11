@@ -196,11 +196,19 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
         if (settled(t)) { msg = t; break; }
         await new Promise(r => setTimeout(r, 40));
       }
-      /* Nothing settled in eight seconds: report what IS there, so the failure
-         names the state the app was actually left in. */
+      /* Nothing settled in eight seconds. Reporting what IS there is not enough
+         when what is there is nothing: an empty string makes ok()'s detail
+         empty too, so the failure prints a bare label and the checks that
+         assert ABSENCE — "does not report a false success" — pass vacuously
+         beside it. That is what the owner's laptop showed: two failures with no
+         detail at all, which says the message never arrived and says nothing
+         about why. So the state is described rather than quoted. */
       if (!msg) {
         const el = document.getElementById('keyMsg');
-        msg = el ? el.textContent : '';
+        const raw = el ? el.textContent : null;
+        msg = raw && raw.trim() ? raw
+          : `(no message after 8s: #keyMsg ${el ? 'present but empty' : 'is not in the document'}`
+            + `, panel ${document.getElementById('ai') ? 'open' : 'gone'})`;
       }
       await new Promise(r => setTimeout(r, 500));
       let cached = null;

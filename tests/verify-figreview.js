@@ -238,9 +238,14 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
     const first = run();
     ok('it reports the crop it made', /CROP/.test(first), first.trim().split('\n').pop());
 
+    /* THE SECOND ONE, and it is the same bug as the first. A Windows temp path
+       inside a Python string literal reads \U as a unicode escape:
+       C:\Users\... is a SyntaxError before a single line runs. The fixture
+       generator was moved onto sys.argv earlier; this call site was missed,
+       because it fits on one line and does not look like source. It is. */
     const size = py(
-['-c',
-      `from PIL import Image;print(*Image.open("${SRC}/demo/tall_FIG.1.1_p001.jpg").size)`],
+['-c', 'import sys;from PIL import Image;print(*Image.open(sys.argv[1]).size)',
+      path.join(SRC, 'demo', 'tall_FIG.1.1_p001.jpg')],
       { encoding: 'utf8' }).trim().split(' ').map(Number);
     ok('the image on disk is now exactly the box the sheet recorded',
        size[0] === box[2] - box[0] && size[1] === box[3] - box[1],
