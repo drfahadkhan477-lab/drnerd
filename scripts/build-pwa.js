@@ -106,26 +106,82 @@ step('add the figure resolver', () => {
    Messages API cannot take a URL it has no access to, so only the AI path
    pays to base64 them, and only for the question actually being asked.
    Cached per question id, because a tutor conversation sends the same
-   figures on every iteration of the agent loop. */
+   figures on every iteration of the agent loop.
+
+   BOUNDED, BECAUSE BASE64 IS THE EXPENSIVE SHAPE. This held every figure of
+   every question ever asked about, for the life of the tab, as base64 — which
+   is a third larger again than the bytes on the wire. A fellow working through
+   a chapter with Apex open touches dozens of questions in a sitting, and an
+   iPad reclaims memory by killing the tab rather than by asking. The URLs cost
+   nothing to re-resolve: the service worker has the figure, so a miss is a
+   cache read, not a download. So the cache is small on purpose — an agent loop
+   sends the same figures several times in a row, which is all it has to cover.
+
+   Least-recently-used, which a Map gives almost for free: it iterates in
+   insertion order, so re-inserting on a hit moves an entry to the back and the
+   front is always the coldest. */
+const FIG_CACHE_MAX_ENTRIES = 24;
+const FIG_CACHE_MAX_BYTES   = 24 * 1024 * 1024;
+/* A figure that never answers must not hold a turn open, and one that answers
+   with something enormous must not be base64ed into memory to find out. The
+   cap is well above the largest figure in the bank (the widest is under 400 KB)
+   and well below anything that would hurt. */
+const FIG_FETCH_TIMEOUT_MS  = 15000;
+const FIG_MAX_BYTES         = 8 * 1024 * 1024;
 const _figDataCache = new Map();
+let _figCacheBytes = 0;
+const _figBytes = v => v.reduce((n,s)=>n+(s?s.length:0),0);
+function _figTrim(){
+  while(_figDataCache.size > FIG_CACHE_MAX_ENTRIES || _figCacheBytes > FIG_CACHE_MAX_BYTES){
+    const k = _figDataCache.keys().next().value;
+    if(k===undefined) break;
+    _figCacheBytes -= _figBytes(_figDataCache.get(k)||[]);
+    _figDataCache.delete(k);
+  }
+  if(_figCacheBytes < 0) _figCacheBytes = 0;
+}
 async function figuresAsDataUrls(q){
   if(!q || !q.img) return null;
   const urls = (typeof IMGS!=='undefined' && IMGS[q.id]) || null;
   if(!urls || !urls.length) return null;
-  if(_figDataCache.has(q.id)) return _figDataCache.get(q.id);
+  if(_figDataCache.has(q.id)){
+    const hit = _figDataCache.get(q.id);
+    _figDataCache.delete(q.id); _figDataCache.set(q.id, hit);   // now the newest
+    return hit;
+  }
+  const ctl = typeof AbortController!=='undefined' ? new AbortController() : null;
+  const timer = ctl ? setTimeout(()=>{ try{ ctl.abort(); }catch(_){} }, FIG_FETCH_TIMEOUT_MS) : null;
   try{
     const out = await Promise.all(urls.map(async u=>{
-      const blob = await (await fetch(u)).blob();
+      const r = await fetch(u, ctl ? {signal:ctl.signal} : undefined);
+      if(!r.ok) throw new Error('figure '+r.status);
+      /* Refused on the header where there is one, so an oversized figure is
+         never read into memory at all; checked again on the blob, because
+         content-length is absent on a chunked or service-worker response. */
+      const len = +(r.headers.get('content-length')||0);
+      if(len && len > FIG_MAX_BYTES) throw new Error('figure too large: '+len);
+      const blob = await r.blob();
+      if(blob.size > FIG_MAX_BYTES) throw new Error('figure too large: '+blob.size);
       return await new Promise((res,rej)=>{
         const fr = new FileReader();
         fr.onload = ()=>res(fr.result); fr.onerror = rej;
         fr.readAsDataURL(blob);
       });
     }));
-    _figDataCache.set(q.id, out);
+    const bytes = _figBytes(out);
+    /* One question whose figures exceed the whole budget is returned and not
+       kept, rather than evicting everything else to store it and then being
+       evicted itself on the next insert. */
+    if(bytes <= FIG_CACHE_MAX_BYTES){
+      _figDataCache.set(q.id, out);
+      _figCacheBytes += bytes;
+      _figTrim();
+    }
     return out;
   }catch(_){
     return null;      // a figure that will not load must not take the chat down
+  }finally{
+    if(timer) clearTimeout(timer);
   }
 }
 `);

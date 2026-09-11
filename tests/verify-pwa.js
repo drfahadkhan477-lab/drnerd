@@ -689,6 +689,85 @@ async function heapAfterBoot(page, url) {
     await ctx.close();
   }
 
+  head('the figure cache the AI path fills has a lid on it');
+  /* WHAT THIS IS ABOUT. figuresAsDataUrls() base64s a question's figures for
+     the Messages API, which cannot take a URL it has no access to, and cached
+     the result per question id — for the life of the tab, with no bound. Base64
+     is a third larger again than the bytes on the wire, and a fellow working
+     through a chapter with Apex open touches dozens of questions in a sitting.
+     An iPad reclaims memory by killing the tab rather than by asking.
+     
+     Re-resolving costs nothing worth saving: the service worker has the figure,
+     so a miss is a cache read rather than a download. The cache only has to
+     cover an agent loop sending the same figures several times in a row. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+    const page = await ctx.newPage();
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
+                               { timeout: 120000 });
+    await page.evaluate(() => navigator.serviceWorker.ready);
+
+    const lid = await page.evaluate(async () => {
+      const withFigs = ALL_Q.filter(q => q.img && IMGS[q.id] && IMGS[q.id].length).slice(0, 40);
+      if (withFigs.length < 30) return { skipped: withFigs.length };
+      for (const q of withFigs) await figuresAsDataUrls(q);
+      /* Ask again for the one requested LAST of the first batch: under
+         least-recently-used it is long gone, and under insertion-order-only it
+         would also be gone — so the discriminating probe is the one below. */
+      return { asked: withFigs.length, size: _figDataCache.size,
+               cap: FIG_CACHE_MAX_ENTRIES, bytes: _figCacheBytes, byteCap: FIG_CACHE_MAX_BYTES,
+               newestKept: _figDataCache.has(withFigs[withFigs.length - 1].id),
+               oldestDropped: !_figDataCache.has(withFigs[0].id) };
+    });
+    if (lid.skipped !== undefined) {
+      unmeasurable('the cache stops growing', `only ${lid.skipped} questions in this bank carry figures`);
+      unmeasurable('and it keeps the newest rather than the first', 'the same');
+      unmeasurable('it is least-recently-USED, not merely first-in-first-out', 'the same');
+    } else {
+      ok('the cache stops growing', lid.size <= lid.cap,
+         `${lid.size} entries after ${lid.asked} questions, cap ${lid.cap}`);
+      ok('and its bytes stay under the budget', lid.bytes <= lid.byteCap,
+         `${(lid.bytes / 1048576).toFixed(1)} MB of ${(lid.byteCap / 1048576).toFixed(0)} MB`);
+      ok('and it keeps the newest rather than the first',
+         lid.newestKept === true && lid.oldestDropped === true,
+         `newest kept ${lid.newestKept}, oldest dropped ${lid.oldestDropped}`);
+
+      /* THE CHECK THAT TELLS LRU FROM FIFO, and the reason it matters: an agent
+         loop asks for the SAME question's figures on every iteration. Under
+         first-in-first-out a question asked about repeatedly is still evicted on
+         schedule and re-resolved every time; under least-recently-used it stays.
+         Re-touch one, fill past the cap, and see whether it survived. */
+      const lru = await page.evaluate(async () => {
+        const withFigs = ALL_Q.filter(q => q.img && IMGS[q.id] && IMGS[q.id].length);
+        const keep = withFigs.find(q => _figDataCache.has(q.id));
+        if (!keep) return { skipped: true };
+        await figuresAsDataUrls(keep);                       // touched: now newest
+        const fresh = withFigs.filter(q => !_figDataCache.has(q.id)).slice(0, FIG_CACHE_MAX_ENTRIES - 1);
+        for (const q of fresh) await figuresAsDataUrls(q);   // fill to the cap around it
+        return { skipped: false, survived: _figDataCache.has(keep.id), pushed: fresh.length };
+      });
+      ok('it is least-recently-USED, not merely first-in-first-out',
+         lru.skipped ? false : lru.survived === true,
+         lru.skipped ? 'nothing was in the cache to re-touch' : `${lru.pushed} newer entries pushed in after it`);
+    }
+
+    /* The limits exist as named numbers rather than as literals buried in the
+       resolver, because the next person to tune them should not have to find
+       them by reading the fetch. */
+    const limits = await page.evaluate(() => ({
+      timeout: typeof FIG_FETCH_TIMEOUT_MS === 'number' ? FIG_FETCH_TIMEOUT_MS : null,
+      maxBytes: typeof FIG_MAX_BYTES === 'number' ? FIG_MAX_BYTES : null,
+    }));
+    ok('a figure fetch cannot hang a turn forever', limits.timeout > 0 && limits.timeout <= 60000,
+       `${limits.timeout}ms`);
+    /* Above the largest figure in the bank and far below anything that hurts. */
+    ok('and an enormous one is refused rather than base64ed to find out',
+       limits.maxBytes >= 1048576 && limits.maxBytes <= 32 * 1048576,
+       `${(limits.maxBytes / 1048576).toFixed(0)} MB`);
+    await ctx.close();
+  }
+
   head('a shell and a code file from different builds do not run together');
   /* THE WINDOW THIS CLOSES. sw.js serves the shell cache-first and refreshes it
      in the background, one request at a time. A deploy that lands between the

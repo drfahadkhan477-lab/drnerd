@@ -144,6 +144,56 @@ const head = t => console.log('\n── ' + t + ' ──');
      px.lit > 0 && px.yellowish / px.lit > 0.01,
      `${(100 * px.yellowish / Math.max(px.lit, 1)).toFixed(2)}% yellow`);
 
+  head('what the heart is allowed to cost');
+  /* CEILINGS, NOT FLOORS. The mesh checks elsewhere in this file are floors —
+     "it has a mesh", "it is drawing" — and a floor is satisfied by anything
+     bigger, including a heart four times the size that stutters on the device
+     it was built for. This mounts on the HOME SCREEN, on an iPad, on the
+     main thread, and the numbers below are the ones it actually costs today
+     with roughly twice that as the allowance:
+
+       triangles       42,654   budget  90,000
+       vertices        19,009   budget  40,000
+       build           510ms chromium, 581ms webkit   budget 2,500ms
+
+     Build time is main-thread work at mount, which is why it is bounded at all:
+     a mesh that got expensive does not look slower, it delays the home screen.
+     The allowance is generous on purpose — this is meant to catch a mesh that
+     doubled, not to benchmark the machine, and it holds on both engines with
+     four times over. */
+  {
+    const cost = await page.evaluate(() => {
+      const h = typeof heroHeart3d !== 'undefined' ? heroHeart3d : null;
+      const cv = document.getElementById('heroHeart3d');
+      let buf = null;
+      try {
+        const gl = cv && (cv.getContext('webgl2') || cv.getContext('webgl'));
+        if (gl && !gl.isContextLost()) buf = { w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+      } catch (_) {}
+      return h && h.stats ? { tris: h.stats.triangles, verts: h.stats.vertices,
+                              buildMs: h.stats.buildMs, buf, dpr: window.devicePixelRatio } : null;
+    });
+    if (!cost) {
+      unmeasurable('the mesh stays inside its budget', 'no live heart to measure');
+      unmeasurable('and it is built quickly enough not to hold up the home screen', 'the same');
+      unmeasurable('and the drawing buffer is a medallion, not a viewport', 'the same');
+    } else {
+      ok('the mesh stays inside its budget',
+         cost.tris <= 90000 && cost.verts <= 40000,
+         `${cost.tris} triangles, ${cost.verts} vertices`);
+      ok('and it is built quickly enough not to hold up the home screen',
+         cost.buildMs <= 2500, `${cost.buildMs}ms`);
+      /* A canvas accidentally sized to the viewport instead of to the medallion
+         is the classic way a WebGL cost multiplies without the mesh changing at
+         all: same triangles, twenty times the fragments. 4M covers a 3x iPad
+         medallion many times over and is far under a full-screen buffer. */
+      const px = cost.buf ? cost.buf.w * cost.buf.h : 0;
+      ok('and the drawing buffer is a medallion, not a viewport',
+         px > 0 && px <= 4000000,
+         cost.buf ? `${cost.buf.w}x${cost.buf.h} = ${px} px at dpr ${cost.dpr}` : 'no buffer to read');
+    }
+  }
+
   head('the current travels — it is a wave, not a painted-on tree');
   /* Sampled inside one activation window. Heart3D's own cycle() reports the
      depolarisation front, so the samples are taken when there IS a front to
@@ -238,8 +288,20 @@ const head = t => console.log('\n── ' + t + ' ──');
        suite's own console-error check then reports as a failure of the app.
        Isolated on a blank page: removing the one unguarded call took the error
        count from 3 to 1, and all three guards tested (isContextLost alone,
-       plus VERSION==null, plus getError) gave zero. The cheapest is enough. */
-    if (gl.isContextLost()) return { skipped: true, reason: 'the context was already evicted' };
+       plus VERSION==null, plus getError) gave zero.
+
+       "THE CHEAPEST IS ENOUGH" IS WHAT THIS USED TO SAY, AND IT WAS WRONG.
+       isContextLost() alone still answers false for a context WebKit has
+       already evicted under its sixteen-context cap, and the loseContext()
+       below then emitted the very error the guard exists to prevent — three of
+       them, every run, reported as a fault in the app. getParameter(VERSION)
+       answers null on that same context, which is why the blank-page experiment
+       found it sufficient and why it is now what is actually used. The app's
+       own release in src/core/heart3d.js carries the same pair for the same
+       reason. */
+    if (gl.isContextLost() || gl.getParameter(gl.VERSION) == null) {
+      return { skipped: true, reason: 'the context was already evicted' };
+    }
     ext.loseContext();
     for (let i = 0; i < 60 && heroHeart3d; i++) await wait(50);
     const after = {

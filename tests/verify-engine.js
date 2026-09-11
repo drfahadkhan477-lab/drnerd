@@ -179,6 +179,23 @@ head('console noise the engine makes, told apart from noise the app makes');
      E.isEngineNoise(capWarning, 'webkit'));
   ok('and stays a hard failure on Chromium, where releasing contexts does silence it',
      !E.isEngineNoise(capWarning, 'chromium'));
+
+  /* The cap's other message, and the same asymmetry for the same reason. Past
+     sixteen contexts WebKit evicts on its own, and releasing an evicted one
+     logs INVALID_OPERATION — not an exception, so nothing in the page can catch
+     it. The app has one loseContext() call site and it is guarded twice over;
+     eight cycles produce none of these. Chromium returns released slots, never
+     reaches the cap, and so a message like this there means something real. */
+  const lostMsg = 'WebGL: INVALID_OPERATION: loseContext: context already lost';
+  ok('releasing a context WebKit already evicted is tolerated there',
+     E.isEngineNoise(lostMsg, 'webkit'));
+  ok('and stays a hard failure on Chromium, which never reaches the cap',
+     !E.isEngineNoise(lostMsg, 'chromium'));
+  /* The guard that message is about, asserted in the module rather than
+     remembered: isContextLost() alone is not enough on WebKit. */
+  const h3d = fs.readFileSync(path.join(ROOT, 'src', 'core', 'heart3d.js'), 'utf8');
+  ok('and the one place that releases a context checks more than isContextLost()',
+     /isContextLost\(\)[\s\S]{0,80}getParameter\(gl\.VERSION\)/.test(h3d));
 }
 
 head('a run reported from somewhere else says where it came from');

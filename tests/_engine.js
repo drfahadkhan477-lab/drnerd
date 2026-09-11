@@ -128,6 +128,24 @@ async function heapUsedBytes(page) {
 function isEngineNoise(text, name = engineName()) {
   if (/GroupMarker|GL Driver|swiftshader/i.test(text)) return true;
   if (name !== 'chromium' && /too many active WebGL contexts/i.test(text)) return true;
+  /* THE OTHER HALF OF THE SAME CAP, and it is the engine talking about a
+     context the engine itself took away. WebKit allows a page sixteen WebGL
+     contexts and does not return a slot when one is released; verify-heroart's
+     destroy section deliberately builds TWENTY, to prove that destroy() hands
+     its context back. Past the cap, WebKit evicts on its own, and a release of
+     an evicted context logs "INVALID_OPERATION: loseContext: context already
+     lost" — which is not an exception, so no try/catch can suppress it.
+
+     Filtered rather than fixed because there is nothing left to fix: the app
+     has exactly ONE loseContext() call site, in src/core/heart3d.js's
+     destroy(), and it is guarded twice over — isContextLost() AND
+     getParameter(VERSION) != null, because on WebKit the first still answers
+     false for a context that has been evicted. Eight cycles produce zero of
+     these; they appear only past sixteen, which is past what the engine
+     supports and only a stress test ever reaches. Chromium returns released
+     slots, never hits the cap, and so never emits this — which is why it stays
+     a failure there. */
+  if (name !== 'chromium' && /loseContext: context already lost/i.test(text)) return true;
   return false;
 }
 
