@@ -208,12 +208,36 @@ if (!ENGINES.includes(ENGINE)) {
   console.error(`\n  --engine ${JSON.stringify(ENGINE)} is not an engine. Use one of: ${ENGINES.join(', ')}.\n`);
   process.exit(1);
 }
+/* WHICH SUITES CAN BE POINTED AT A URL, ASKED RATHER THAN ASSUMED. The commit
+   that added URL targets claimed every suite took either a path or a URL.
+   Nineteen do not: the pure-node ones have no browser to point anywhere, and
+   several browser suites read the build off disk as TEXT to grep its source
+   before they ever open it. Handed a URL those did not fail loudly — they
+   failed as `ENOENT: open 'http://localhost:8141/index.html'`, or worse, as
+   path.resolve turning it into '/home/user/drnerd/http:/localhost:8141/...',
+   and the run reported 24 failing suites of which most were this.
+
+   The property is decidable from the suite's own source: one that accepts a
+   URL tests for it before building a file:// URL. Read rather than listed,
+   because a hardcoded list would be wrong the first time somebody converts a
+   suite and right nowhere in the meantime. */
+function takesUrl(name) {
+  try { return /\^https\?:/.test(fs.readFileSync(path.join(ROOT, 'tests', `verify-${name}.js`), 'utf8')); }
+  catch (_) { return false; }
+}
+
+const urlIncapable = [];
 const chosen = SUITES
   .filter(([n]) => (!only.length || only.includes(n)) && !skip.includes(n))
   .filter(([n]) => {
     const f = path.join(ROOT, 'tests', `verify-${n}.js`);
     if (fs.existsSync(f)) return true;
     console.error(`  (skipping ${n}: tests/verify-${n}.js not found)`);
+    return false;
+  })
+  .filter(([n]) => {
+    if (!TARGET_IS_URL || takesUrl(n)) return true;
+    urlIncapable.push(n);
     return false;
   });
 
@@ -256,6 +280,14 @@ const parallelSet = chosen.filter(([n]) => !SERIAL.has(n)).sort((a, b) => cost(b
 const serialSet = chosen.filter(([n]) => SERIAL.has(n));
 
 console.log(`\nVerifying ${shortTarget}`);
+if (urlIncapable.length) {
+  /* Named, counted, and NOT quietly re-pointed at the default build. Running
+     them against a different artifact than the one on the command line would
+     put two targets under one summary line. */
+  console.log(`  ${urlIncapable.length} suite${urlIncapable.length === 1 ? '' : 's'} cannot take a URL and are not run:`);
+  console.log(`    ${urlIncapable.join(', ')}`);
+  console.log(`    (they read the build from disk — give them a file path instead)`);
+}
 if (JOBS > 1) {
   console.log(`  ${chosen.length} suites on ${ENGINE}, ${JOBS} at a time`
     + ` — ${serialSet.length} of them alone (${serialSet.map(([n]) => n).join(', ')})\n`);
