@@ -113,16 +113,18 @@ const head = t => console.log('\n── ' + t + ' ──');
       const raw = load();
       save();
       const after = JSON.parse(localStorage.getItem(KEY));
-      return { raw, after };
+      /* Read the known-key list OUT OF THE PAGE rather than restating it here.
+         A second copy in this file goes stale the moment a step adds a field —
+         which is exactly what happened when `resume` was added — and a check
+         that fails for that reason is reporting on the test, not on save(). */
+      return { raw, after, known: SCHEMA_KEYS.slice() };
     }, KEY);
     ok('an unversioned blob loads rather than being discarded', r.raw.sessionTotal === 12);
     ok('and is stamped on the next write, not backfilled on read',
        r.raw.schemaVersion === undefined && r.after.schemaVersion === 1);
+    const strays = Object.keys(r.after).filter(k => !r.known.includes(k));
     ok('with no stray foreign keys invented from its known fields',
-       !Object.keys(r.after).some(k => !['schemaVersion', 'chStats', 'missed', 'theme', 'homeLayout',
-         'sessionCorrect', 'sessionTotal', 'srs', 'reviewStreak', 'lastReviewDay', 'daily',
-         'practice', 'sinceBackup', 'lastBackup'].includes(k)),
-       Object.keys(r.after).join(', '));
+       strays.length === 0, strays.join(', ') || `${r.known.length} known keys, no strays`);
   }
 
   head('a scheduled card records which scheduler scheduled it');

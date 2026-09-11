@@ -29,6 +29,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { systemText, turns, toolResults } = require('./_wire');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-boundary.js <patched.html|url>'); process.exit(1); }
@@ -41,11 +42,9 @@ const ok = (label, cond, detail = '') => {
 };
 const head = t => console.log('\n── ' + t + ' ──');
 
-const SSE = [
-  'data: ' + JSON.stringify({ choices: [{ delta: { content: 'Noted.' } }] }),
-  'data: [DONE]',
-  '',
-].join('\n\n');
+const SSE = 'data: ' + JSON.stringify({
+  candidates: [{ content: { role: 'model', parts: [{ text: 'Noted.' }] } }],
+}) + '\n\n';
 
 /* The hostile note. Every line of it is trying something different:
    a forged closing fence, a forged opening one, a heading in the app's own
@@ -90,7 +89,7 @@ Recovery is usually complete within weeks.
      reply it expects. */
   const captured = [];
   const queued = [];
-  await page.route('**/v1/chat/completions', route => {
+  await page.route('**/generativelanguage.googleapis.com/**', route => {
     try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: queued.shift() || SSE });
   });
@@ -141,8 +140,8 @@ Recovery is usually complete within weeks.
   const ask = async () => {
     captured.length = 0;
     await page.evaluate(async () => {
-      AI.provider = 'mistral';
-      AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
+      AI.provider = 'gemini';
+      AI.gemini = { key: 'test-gemini-key', model: 'gemini-2.5-flash' };
       const q = ALL_Q.find(x => !x.bad);
       jumpTo(q.id);
       const sh = document.getElementById('shell');
@@ -163,7 +162,7 @@ Recovery is usually complete within weeks.
   head('grounded: what actually leaves the app');
   const req = await ask();
   ok('a request was captured', !!req);
-  const sys = (req.messages || []).find(m => m.role === 'system')?.content || '';
+  const sys = systemText(req);
   const flat = sys.replace(/\s+/g, ' ');
 
   const fences = [...sys.matchAll(/<<<(\/?)([A-Z]+)-([A-Z0-9]{12})>>>/g)].map(m => ({ close: !!m[1], label: m[2], id: m[3] }));
@@ -204,16 +203,15 @@ Recovery is usually complete within weeks.
        note that never wins retrieval only has to be worth searching for. This
        scripts a real two-round exchange: round one asks for the tool, round two
        is the reply, and what is asserted is the role:'tool' message on the wire. */
-    const toolSSE = [
-      'data: ' + JSON.stringify({ choices: [{ delta: { tool_calls: [{
-        index: 0, id: 'toolu_1', function: {
-          name: 'search_question_bank',
-          arguments: JSON.stringify({ query: 'takotsubo apical ballooning' }),
-        },
-      }] } }] }),
-      'data: [DONE]',
-      '',
-    ].join('\n\n');
+    /* Gemini streams a tool call as a functionCall part with its args already
+       parsed — no id to correlate by, and no fragment reassembly, which is the
+       difference that mattered when the other provider left. */
+    const toolSSE = 'data: ' + JSON.stringify({
+      candidates: [{ content: { role: 'model', parts: [{ functionCall: {
+        name: 'search_question_bank',
+        args: { query: 'takotsubo apical ballooning' },
+      } }] } }],
+    }) + '\n\n';
 
     captured.length = 0;
     queued.length = 0;
@@ -225,8 +223,8 @@ Recovery is usually complete within weeks.
     ok('the tool ran and a second request went out', !!second, `${captured.length} request(s)`);
     /* The tool result rides as its own role:'tool' message — the OpenAI shape
        pushToolExchange's else branch builds. */
-    const toolMsgs = ((second && second.messages) || []).filter(m => m.role === 'tool');
-    const body = toolMsgs.map(m => String(m.content || '')).join('\n');
+    const toolMsgs = toolResults(second);
+    const body = toolMsgs.join('\n');
     ok('it came back carrying the note', /Apical ballooning/.test(body), body.slice(0, 60));
     ok('and the note is fenced, exactly as a retrieved one is',
        /<<<NOTE-[A-Z0-9]{12}>>>/.test(body) && /<<<\/NOTE-[A-Z0-9]{12}>>>/.test(body),
@@ -239,7 +237,7 @@ Recovery is usually complete within weeks.
        /Ignore all previous instructions/.test(body));
 
     head('and the rule that a fence cannot enforce');
-    const sys2 = ((((second && second.messages) || []).find(m => m.role === 'system') || {}).content || '')
+    const sys2 = (systemText(second) || '')
       .replace(/\s+/g, ' ');
     ok('the prompt says a fence in a tool result is still a fence',
        /reaches you through a tool result/.test(sys2));
@@ -257,7 +255,7 @@ Recovery is usually complete within weeks.
        second's messages: an expired session is the panel's record of what
        happened, not a thing the model told you. */
     expectFailure = true;
-    await page.route('**/v1/chat/completions', route =>
+    await page.route('**/generativelanguage.googleapis.com/**', route =>
       route.fulfill({ status: 500, headers: { 'content-type': 'application/json' }, body: '{"error":{"message":"upstream exploded"}}' }));
     await page.evaluate(() => fire('this one fails'));
     await page.waitForTimeout(1500);
@@ -273,16 +271,16 @@ Recovery is usually complete within weeks.
     });
     ok('the failure is kept in the thread, so you can see it', !!errText, errText.slice(0, 60));
 
-    await page.unroute('**/v1/chat/completions');
+    await page.unroute('**/generativelanguage.googleapis.com/**');
     expectFailure = false;
-    await page.route('**/v1/chat/completions', route => {
+    await page.route('**/generativelanguage.googleapis.com/**', route => {
       try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
       route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
     });
     await page.evaluate(() => fire('and this one works'));
     await page.waitForTimeout(1500);
     const after = captured.find(Boolean);
-    const text = JSON.stringify((after && after.messages) || []);
+    const text = JSON.stringify((after && after.contents) || []);
     ok('but it is never sent back as an assistant turn',
        !!after && !!errText && text.indexOf(errText) < 0, errText.slice(0, 50));
     ok('while the real conversation is still there', /and this one works/.test(text));
@@ -317,7 +315,7 @@ Recovery is usually complete within weeks.
   head('a second turn');
   const first = [...ids][0];
   const req2 = await ask();
-  const sys2 = (req2.messages || []).find(m => m.role === 'system')?.content || '';
+  const sys2 = systemText(req2);
   const ids2 = new Set([...sys2.matchAll(/<<<\/?[A-Z]+-([A-Z0-9]{12})>>>/g)].map(m => m[1]));
   ok('the nonce rolled — yesterday\'s note cannot hold today\'s fence',
      ids2.size === 1 && [...ids2][0] !== first, `${first} → ${[...ids2][0]}`);
@@ -325,7 +323,7 @@ Recovery is usually complete within weeks.
   head('open mode fences too');
   await page.evaluate(() => { toggleGrounded(); });
   const req3 = await ask();
-  const sys3 = (req3.messages || []).find(m => m.role === 'system')?.content || '';
+  const sys3 = systemText(req3);
   ok('grounded mode is off', !/GROUNDED MODE IS ON/.test(sys3.replace(/\s+/g, ' ')));
   ok('the note is fenced regardless — the boundary is not a grounded-mode feature',
      /<<<NOTE-[A-Z0-9]{12}>>>/.test(sys3) && /<<<\/NOTE-[A-Z0-9]{12}>>>/.test(sys3));

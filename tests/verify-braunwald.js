@@ -15,6 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { systemText, turns, toolResults } = require('./_wire');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-braunwald.js <patched.html|url>'); process.exit(1); }
@@ -28,7 +29,7 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 const SSE = [
-  'data: ' + JSON.stringify({ choices: [{ delta: { content: 'Per your notes.' } }] }),
+  'data: ' + JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: 'Per your notes.' }] } }] }),
   'data: [DONE]',
   '',
 ].join('\n\n');
@@ -63,7 +64,7 @@ specific haemodynamic finding.
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   const captured = [];
-  await page.route('**/v1/chat/completions', route => {
+  await page.route('**/generativelanguage.googleapis.com/**', route => {
     try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
   });
@@ -122,8 +123,8 @@ specific haemodynamic finding.
   const ask = async () => {
     captured.length = 0;
     await page.evaluate(async () => {
-      AI.provider = 'mistral';
-      AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
+      AI.provider = 'gemini';
+      AI.gemini = { key: 'test-gemini-key', model: 'gemini-2.5-flash' };
       const q = ALL_Q.find(x => !x.bad);
       jumpTo(q.id);
       const sh = document.getElementById('shell');
@@ -140,7 +141,7 @@ specific haemodynamic finding.
   /* Collapse whitespace before matching: the prompt is hard-wrapped for
      readability in source, so a phrase can straddle a newline. */
   const flat = t => String(t || '').replace(/\s+/g, ' ');
-  const sysText = flat((groundedReq.messages || []).find(m => m.role === 'system')?.content || '');
+  const sysText = flat(systemText(groundedReq));
   ok('a request was captured', !!groundedReq);
   ok('the prohibition is in the system prompt', /GROUNDED MODE IS ON/.test(sysText));
   ok('it is told not to supplement from its own knowledge',
@@ -161,7 +162,7 @@ specific haemodynamic finding.
   head('open mode: unchanged behaviour');
   await page.evaluate(() => { toggleGrounded(); });
   const openReq = await ask();
-  const openSys = flat((openReq.messages || []).find(m => m.role === 'system')?.content || '');
+  const openSys = flat(systemText(openReq));
   ok('the prohibition is gone', !/GROUNDED MODE IS ON/.test(openSys));
   ok('the answer key and bank come back', /OFFICIAL ACC COMMENTARY/.test(openSys));
 

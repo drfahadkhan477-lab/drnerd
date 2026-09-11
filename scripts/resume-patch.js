@@ -215,7 +215,7 @@ patch('resume: the restart control looks like the counter, not like an action',
    are part-way through — with the escape hatch attached. Loud enough to
    explain why the quiz opened at question twelve, not so loud that it competes
    with the question. */
-.q-restart{font-size:12px;font-weight:600;color:var(--muted);background:none;
+.q-restart{font-size:var(--t-tiny);font-weight:600;color:var(--muted);background:none;
   border:1px solid var(--border);border-radius:999px;padding:3px 10px;cursor:pointer;
   margin-left:8px;line-height:1.4}
 .q-restart:hover{color:var(--fg);border-color:var(--fg)}`);

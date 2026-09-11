@@ -84,13 +84,15 @@ step('strip the inline figure blob', () => {
    provider's chat API does — both want base64. So the AI path resolves them
    at send time. Only there: fetching and encoding 18 MB up front is exactly
    what we are getting away from, and an API call is rare next to a render.
-   Two call sites, one per remaining provider (oneTurnGemini, oneTurnMistral)
-   — each builds its own wire shape around the same withFigures/withImages
-   pair, so each has its own copy of this fragment. */
+   ONE call site now, not two. Each provider built its own wire shape around
+   the same withFigures/withImages pair and so carried its own copy of this
+   fragment; with the second provider gone there is one copy, and this guard
+   moved with it rather than being loosened to "one or more" — the count is
+   the point, because a silently-missed call site ships an 18 MB fetch. */
 const AI_CALL = `(typeof IMGS!=='undefined'?IMGS[q&&q.id]:null)`;
 step('AI path resolves figure URLs to base64 at send time', () => {
   const n = appCode.split(AI_CALL).length - 1;
-  if (n !== 2) throw new Error(`vision call site expected in exactly 2 places (one per provider), found ${n}`);
+  if (n !== 1) throw new Error(`vision call site expected in exactly 1 place, found ${n}`);
   appCode = appCode.split(AI_CALL).join('await figuresAsDataUrls(q)');
 });
 

@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 75 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 79 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -270,7 +270,7 @@ const CHAIN = [
   'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest', 'answerroom',
   'avatarfit',
   'prefixq', 'prefixrank',
-  'heroart', 'apexpage', 'resume', 'figsharp', 'heartreuse',
+  'heroart', 'apexpage', 'resume', 'figsharp', 'heartreuse', 'onetutor',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

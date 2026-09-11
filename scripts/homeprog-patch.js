@@ -173,7 +173,17 @@ function mountHomeProgress(){
     if(reduced){ el.textContent=target; return; }
     const dur=900,start=performance.now();
     const tick=now=>{
-      const t=Math.min(1,(now-start)/dur);
+      /* CLAMPED AT BOTH ENDS, and the lower end is not theoretical. start is
+         a performance.now() taken when the animation is scheduled; now is
+         the timestamp requestAnimationFrame hands the callback, which is the
+         START of that frame. Schedule from inside a frame's own task — which
+         is exactly what happens here, because render() runs this from a view
+         transition callback — and the next callback can carry a timestamp
+         EARLIER than start. t then goes negative, 1-(1-t)^3 goes negative
+         with it, and the card paints "-2" before counting up. Caught by
+         verify-homeprog about one run in three, with data-count reading a
+         perfectly valid 91 and 100 while the text read -1 and -2. */
+      const t=Math.max(0,Math.min(1,(now-start)/dur));
       const eased=1-Math.pow(1-t,3);
       el.textContent=Math.round(target*eased);
       if(t<1)requestAnimationFrame(tick);

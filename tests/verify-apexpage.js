@@ -91,8 +91,8 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('the panel can take the whole page');
   const open = () => page.evaluate(() => {
-    AI.provider = 'mistral';
-    AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
+    AI.provider = 'gemini';
+    AI.gemini = { key: 'test-gemini-key', model: 'gemini-2.5-flash' };
     const sh = document.getElementById('shell');
     if (!sh.classList.contains('ai-open')) toggleAI(); else buildAI();
   });

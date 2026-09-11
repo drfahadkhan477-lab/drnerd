@@ -32,7 +32,7 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 const sse = text => [
-  'data: ' + JSON.stringify({ choices: [{ delta: { content: text } }] }),
+  'data: ' + JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: text }] } }] }),
   'data: [DONE]',
   '',
 ].join('\n\n');
@@ -46,7 +46,7 @@ const sse = text => [
 
   const sent = [];
   let reply = 'Pressure overload adds sarcomeres in parallel.';
-  await page.route('**/v1/chat/completions', route => {
+  await page.route('**/generativelanguage.googleapis.com/**', route => {
     try { sent.push(JSON.parse(route.request().postData() || '{}')); } catch (_) {}
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse(reply) });
   });
@@ -60,8 +60,8 @@ const sse = text => [
   const ask = async grounded => {
     sent.length = 0;
     return page.evaluate(async grounded => {
-      AI.provider = 'mistral';
-      AI.mistral = { key: 'test-mistral-key', model: 'pixtral-large-latest' };
+      AI.provider = 'gemini';
+      AI.gemini = { key: 'test-gemini-key', model: 'gemini-2.5-flash' };
       AI_GROUNDED = grounded;
       const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
       const sh = document.getElementById('shell');
@@ -100,7 +100,10 @@ const sse = text => [
   const grounded = await ask(true);
   ok('the figure is still shown', grounded.figs >= 1, grounded.figs + ' figure(s)');
   const gReq = sent.find(Boolean) || {};
-  ok('and now it is sent to the model too', JSON.stringify(gReq).includes('"type":"image_url"'));
+  /* Gemini carries an image as an inlineData part with its own mimeType, where
+     the OpenAI shape used {type:'image_url'}. Same claim, this wire's spelling. */
+  ok('and now it is sent to the model too',
+     /"inlineData"\s*:\s*\{[^}]*"mimeType"\s*:\s*"image\//.test(JSON.stringify(gReq)));
 
   head('the model may place one inline, and then it is not shown twice');
   const inline = await page.evaluate(async () => {

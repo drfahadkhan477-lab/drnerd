@@ -67,7 +67,6 @@ const SUITES = [
   ['boundary',     'a retrieved note is material to teach from, never an instruction'],
   ['chat',         'the panel keeps what you typed, and sends a window not an archive'],
   ['store',        'the big stores live in a database, and nothing is ever in neither place'],
-  ['mistral',      'a free provider with real vision and honest capability discovery'],
   ['quiznav',      'going back never re-grades a question or re-schedules a card'],
   ['homeprog',     'the progress card counts up in step with the bar it sits beside'],
   ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn'],

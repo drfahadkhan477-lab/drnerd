@@ -60,14 +60,14 @@ const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'q
 /* Enough of a reply to overflow any panel, so "does it scroll" is a real
    question rather than one the fixture answers for us. */
 const sse = text => [
-  'data: ' + JSON.stringify({ choices: [{ delta: { content: text } }] }),
+  'data: ' + JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: text }] } }] }),
   'data: [DONE]', '',
 ].join('\n\n');
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1194, height: 834 } });
-  await page.route('**/v1/chat/completions', route => route.fulfill({
+  await page.route('**/generativelanguage.googleapis.com/**', route => route.fulfill({
     status: 200, headers: { 'content-type': 'text/event-stream' },
     body: sse('Long answer. '.repeat(80)),
   }));
@@ -254,8 +254,8 @@ const sse = text => [
          which has no textarea — the first version of this check asserted the
          input was on screen in a state where the input does not exist. No key
          is used: nothing here sends a request. */
-      AI.provider = 'mistral';
-      AI.mistral = { key: 'layout-check', model: 'pixtral-large-latest' };
+      AI.provider = 'gemini';
+      AI.gemini = { key: 'layout-check', model: 'gemini-2.5-flash' };
       const sh = document.getElementById('shell');
       if (!sh.classList.contains('ai-open')) toggleAI();
       buildAI();
@@ -300,8 +300,8 @@ const sse = text => [
       await page.waitForTimeout(240);
       const r = await page.evaluate(async () => {
         const wait = ms => new Promise(r => setTimeout(r, ms));
-        AI.provider = 'mistral';
-        AI.mistral = { key: 'layout-check', model: 'pixtral-large-latest' };
+        AI.provider = 'gemini';
+        AI.gemini = { key: 'layout-check', model: 'gemini-2.5-flash' };
         const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
         const sh = document.getElementById('shell');
         if (!sh.classList.contains('ai-open')) toggleAI();
