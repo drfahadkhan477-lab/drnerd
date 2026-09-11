@@ -689,6 +689,72 @@ async function heapAfterBoot(page, url) {
     await ctx.close();
   }
 
+  head('a shell and a code file from different builds do not run together');
+  /* THE WINDOW THIS CLOSES. sw.js serves the shell cache-first and refreshes it
+     in the background, one request at a time. A deploy that lands between the
+     request for index.html and the request for app.js leaves a launch running
+     one build's HTML against the other build's code — and because the refresh
+     writes each file as it arrives, the mixed pair persists in the cache until
+     something replaces it. Nothing crashes. The app behaves like neither
+     version, which is worse, because there is nothing to report.
+     
+     Both files now carry a stamp taken over the shell digest and the content
+     digest together, so any change to either moves it. Driven here by serving
+     an app.js from a build that does not exist, which is exactly what the
+     browser would have been handed. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+    const page = await ctx.newPage();
+    let loads = 0;
+    page.on('framenavigated', f => { if (f === page.mainFrame()) loads++; });
+    /* One character different is a different build. */
+    await page.route('**/app.js', async route => {
+      const res = await route.fetch();
+      const body = (await res.text()).replace(/var APP_BUILD_ID='[a-f0-9]+'/,
+                                              "var APP_BUILD_ID='0000000000000000'");
+      await route.fulfill({ response: res, body });
+    });
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    /* It reloads once, finds the same mismatch, and must then STOP and say so
+       rather than spin. Waiting on the message, not on a stopwatch. */
+    const told = await page.waitForFunction(
+      () => /updated while it was opening/i.test(document.body.textContent || ''),
+      null, { timeout: 30000 }).then(() => true, () => false);
+    ok('a mixed pair is noticed rather than run', told);
+    /* The loop guard, which is the half that makes this safe to ship: exactly
+       one retry. A reload that does not fix it must never become a reload
+       that never stops. */
+    await page.waitForTimeout(2500);
+    ok('and it retries once, not forever', loads <= 3, `${loads} navigations`);
+    const flagged = await page.evaluate(() => {
+      try { return sessionStorage.getItem('accsap-mixed-build'); } catch (_) { return 'unreadable'; }
+    });
+    ok('the retry is remembered per tab, so the reload cannot loop', flagged === '1', String(flagged));
+    await ctx.close();
+  }
+
+  head('and the three files a deploy writes agree on which build they are');
+  {
+    /* Read off the served directory rather than the page: this is a property of
+       the artifact, and it is the one a person can check by hand on a server. */
+    const shell = await (await fetch(new URL('index.html', target).href)).text();
+    const app = await (await fetch(new URL('app.js', target).href)).text();
+    const sw = await (await fetch(new URL('sw.js', target).href)).text();
+    const idOf = (src, re) => (re.exec(src) || [])[1] || null;
+    const a = idOf(shell, /SHELL_BUILD_ID = '([a-f0-9]+)'/);
+    const b = idOf(app, /var APP_BUILD_ID='([a-f0-9]+)'/);
+    const c = idOf(sw, /const BUILD_ID\s*=\s*'([a-f0-9]+)'/);
+    ok('index.html carries a build stamp', !!a, a || 'absent');
+    ok('app.js carries one too', !!b, b || 'absent');
+    ok('and so does the worker', !!c, c || 'absent');
+    ok('all three are the same build', !!a && a === b && b === c, `${a} / ${b} / ${c}`);
+    /* And it is derived from both digests, so a content-only change moves it —
+       which is the whole reason it is not just the shell digest again. */
+    const shellV = idOf(sw, /const SHELL_V\s*=\s*'([a-f0-9]+)'/);
+    ok('the stamp is not merely the shell digest under another name',
+       !!shellV && a !== shellV, `build ${a}, shell ${shellV}`);
+  }
+
   head('the split build fits the screen it is held on');
   /* WHY THIS IS HERE AND NOT IN verify-home. verify-home tests whichever target
      the runner was given, and the screen that overflowed was the SPLIT build

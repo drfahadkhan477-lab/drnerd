@@ -138,6 +138,8 @@ const LOADER = `<script>
    top-level declarations land in global scope exactly as they did when this
    was one file. The splash is already on screen and covers all of this. */
 (async function(){
+  /* Replaced at build time; see BUILD_ID in scripts/build-pwa.js. */
+  var SHELL_BUILD_ID = '__BUILD_ID__';
   function fail(msg, err){
     console.error(msg, err||'');
     var sp = document.getElementById('splash');
@@ -187,6 +189,36 @@ const LOADER = `<script>
   }catch(err){
     return fail('The application code failed to load.', err);
   }
+
+  /* THE SHELL AND THE CODE HAVE TO BE FROM THE SAME BUILD, and until this ran
+     nothing checked. sw.js serves the shell cache-first and refreshes it in the
+     background, per request — so a deploy landing between the request for
+     index.html and the request for app.js leaves a launch running one build's
+     HTML against the other build's code, and the mixed pair persists in the
+     cache until something replaces it. Nothing crashes; the app just behaves
+     like neither version.
+
+     Both files carry the same stamp, generated over the shell digest and the
+     content digest together, so any change to either moves it. A disagreement
+     means the pair is mixed, and one reload is enough: the worker has since
+     settled on one build and will serve both halves of it.
+
+     GUARDED, because a reload that does not fix it must not become a loop.
+     sessionStorage rather than a variable, for the same reason the update
+     reload below uses it — the reload discards variables. Second time through,
+     the fellow is told rather than spun. */
+  try{
+    if(typeof APP_BUILD_ID !== 'undefined' && APP_BUILD_ID !== SHELL_BUILD_ID){
+      if(sessionStorage.getItem('accsap-mixed-build')){
+        return fail('This app updated while it was opening. Close it completely and open it again.',
+                    new Error('build mismatch: shell ' + SHELL_BUILD_ID + ', app ' + APP_BUILD_ID));
+      }
+      sessionStorage.setItem('accsap-mixed-build','1');
+      location.reload();
+      return;
+    }
+    sessionStorage.removeItem('accsap-mixed-build');
+  }catch(_){ /* private mode: the check is a safety net, not a requirement */ }
 
   if('serviceWorker' in navigator){
     /* THE UPDATE THAT ARRIVES UNDER A RUNNING APP. sw.js calls skipWaiting on
@@ -416,6 +448,29 @@ step('correct the head for a build that has a network', () => {
 /* ── 4. write it all out ─────────────────────────────────────────────────── */
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'icons'), { recursive: true });
+/* Read here rather than beside the service worker, because the build stamp
+   below needs the content digest and is computed before either file is
+   written. */
+const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.json'), 'utf8'));
+
+/* ── the build stamp ─────────────────────────────────────────────────────────
+   Computed over the shell and the content TOGETHER, so it moves when either
+   does — that is the whole point: it answers "are these two files from the same
+   deploy?", which neither digest answers alone. Taken over the UNSTAMPED bytes,
+   because stamping changes them; deterministic either way, since the
+   placeholder is a constant. */
+const shellDigest = require('crypto').createHash('sha256')
+  .update(html).update(appCode).digest('hex').slice(0, 16);
+const BUILD_ID = require('crypto').createHash('sha256')
+  .update(shellDigest).update(String(contentManifest.sourceDigest)).digest('hex').slice(0, 16);
+
+if (html.indexOf('__BUILD_ID__') < 0) throw new Error('the loader lost its build-stamp placeholder');
+html = html.replace('__BUILD_ID__', BUILD_ID);
+if (html.indexOf('__BUILD_ID__') >= 0) throw new Error('more than one build-stamp placeholder in the loader');
+/* A var at the top level of a classic script is a global, which is what the
+   loader's typeof check reads. */
+appCode = `var APP_BUILD_ID='${BUILD_ID}';\n` + appCode;
+
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 fs.writeFileSync(path.join(DIST, 'app.js'), appCode);
 
@@ -538,7 +593,6 @@ step('every content path the code names is on disk', () => {
 
 /* Cache version is derived from the content digest, so publishing a new
    export invalidates the old caches instead of serving a stale bank. */
-const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.json'), 'utf8'));
 /* THE SHELL NEEDS A VERSION OF ITS OWN. Both cache names were keyed on the
    content digest, which is a hash of the ACCSAP export — so every change to
    the app's own code produced a byte-identical sw.js. The browser saw no new
@@ -552,8 +606,6 @@ const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.
    code change would throw away the 408 figures the fellow pressed a button to
    download — 19 MB re-fetched because a stylesheet moved. Figures change when
    the content changes; the shell changes when the shell changes. */
-const shellDigest = require('crypto').createHash('sha256')
-  .update(html).update(appCode).digest('hex').slice(0, 16);
 const SW = `/* ACCSAP 12 service worker.
    Shell is precached so a cold launch is instant and works offline. Figures
    are cache-first at runtime rather than precached: there are 408 of them and
@@ -563,6 +615,9 @@ const SW = `/* ACCSAP 12 service worker.
    what was cached once is cached forever. */
 const CONTENT_V = '${contentManifest.sourceDigest}';
 const SHELL_V   = '${shellDigest}';
+/* The same stamp index.html and app.js carry, so the three can be compared
+   from the outside — by a test, or by anyone reading a deployed directory. */
+const BUILD_ID  = '${BUILD_ID}';
 const SHELL   = 'accsap-shell-'   + SHELL_V;
 /* EVERYTHING UNDER /content/ LIVES HERE, not just the figures, and the name
    changed with the scope. It used to be FIGS and only /content/figures/ was
