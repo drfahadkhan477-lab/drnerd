@@ -208,6 +208,23 @@ if (!ENGINES.includes(ENGINE)) {
   console.error(`\n  --engine ${JSON.stringify(ENGINE)} is not an engine. Use one of: ${ENGINES.join(', ')}.\n`);
   process.exit(1);
 }
+/* AND THAT THE BROWSER IS ACTUALLY THERE. Naming an engine the harness accepts
+   is not the same as having it installed: firefox is in ENGINES and is not
+   provisioned in every environment, and without this the run spawns
+   fifty-four suites that each launch, each fail with
+   "Executable doesn't exist at .../firefox-1495/firefox/firefox", and take
+   fifteen minutes to say one thing once. Checked by path rather than by
+   launching, so it costs nothing on the ordinary run. */
+(() => {
+  let exe = null;
+  try { exe = require('playwright')[ENGINE].executablePath(); } catch (_) { return; }
+  if (exe && !fs.existsSync(exe)) {
+    console.error(`\n  --engine ${ENGINE}: playwright has no browser installed for it.`);
+    console.error(`  expected   ${exe}`);
+    console.error(`  install    npx playwright install ${ENGINE}\n`);
+    process.exit(1);
+  }
+})();
 /* WHICH SUITES CAN BE POINTED AT A URL. The first version of this asked the
    wrong question: it looked for the `^https?:` guard and called that the
    answer. Three suites have that guard AND read the target off disk as text

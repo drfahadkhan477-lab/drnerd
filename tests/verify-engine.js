@@ -225,6 +225,47 @@ head('a run reported from somewhere else says where it came from');
      /^tests\/last-run\.log\s*$/m.test(ignored));
 }
 
+head('the tools the suites need are pinned, and named before they are missed');
+{
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const dev = pkg.devDependencies || {};
+  /* PINNED, NOT RANGED. A suite that measures a browser is measuring a specific
+     browser: "^1.56.0" makes a green run mean "green on whatever shipped this
+     week", which is not a claim anybody can act on later. */
+  ok('playwright is a devDependency', !!dev.playwright, dev.playwright || 'absent');
+  ok('and pinned to one exact version', /^\d+\.\d+\.\d+$/.test(dev.playwright || ''), dev.playwright || '');
+  /* ts-fsrs generates tests/fixtures/fsrs-oracle.json and is used for nothing
+     else. The fixture is committed, so verify-oracle runs without it — but the
+     version that produced the fixture has to be recorded somewhere a person can
+     find, and the fixture names it too. */
+  ok('ts-fsrs is a devDependency, pinned', /^\d+\.\d+\.\d+$/.test(dev['ts-fsrs'] || ''), dev['ts-fsrs'] || 'absent');
+  const fx = JSON.parse(fs.readFileSync(path.join(TESTS, 'fixtures', 'fsrs-oracle.json'), 'utf8'));
+  ok('and it is the version the committed oracle was generated with',
+     fx.generator && fx.generator.version === dev['ts-fsrs'],
+     `${fx.generator && fx.generator.version} in the fixture, ${dev['ts-fsrs']} in package.json`);
+  /* The transitive tree, so "the same versions" survives a reinstall. */
+  const lockPath = path.join(ROOT, 'package-lock.json');
+  ok('a lockfile is committed', fs.existsSync(lockPath));
+  if (fs.existsSync(lockPath)) {
+    const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    const pkgs = lock.packages || {};
+    ok('and it pins the same playwright the manifest asks for',
+       pkgs['node_modules/playwright'] && pkgs['node_modules/playwright'].version === dev.playwright,
+       (pkgs['node_modules/playwright'] || {}).version || 'not in the lockfile');
+    ok('down to playwright-core, which is what actually drives the browser',
+       !!(pkgs['node_modules/playwright-core'] || {}).version,
+       (pkgs['node_modules/playwright-core'] || {}).version || 'not in the lockfile');
+  }
+
+  /* AN ENGINE THE HARNESS ACCEPTS IS NOT AN ENGINE THAT IS INSTALLED. firefox
+     is in ENGINES and is not provisioned everywhere; without a check the run
+     spawns every suite, each fails identically on a missing executable, and
+     fifteen minutes later says one thing once. */
+  const v = fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8');
+  ok('the runner checks the browser exists before spawning a single suite',
+     /executablePath\(\)/.test(v) && /npx playwright install/.test(v));
+}
+
 head('a suite pointed at a URL either runs whole or does not run');
 {
   /* WHY THIS IS ANCHORED TO NAMES. scripts/verify.js can now be given a served

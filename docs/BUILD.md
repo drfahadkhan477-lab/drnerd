@@ -28,9 +28,30 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## Prerequisites
 
-- **Node 18+** — no dependencies for the build itself.
-- **Playwright + Chromium** — for the test suites only:
-  `npm i -g playwright && npx playwright install chromium`
+- **Node 18+** — no dependencies for the build itself. `npm run build` installs nothing.
+- **Playwright** — for the test suites only, and pinned:
+
+  ```bash
+  npm ci                                     # playwright 1.56.0, ts-fsrs 5.4.2, from the lockfile
+  npx playwright install chromium webkit     # the two engines the suites are run on
+  ```
+
+  Pinned rather than ranged, and with `package-lock.json` committed, because a
+  suite that measures a browser is measuring a *specific* browser — `^1.56.0`
+  would make a green run mean "green on whatever shipped this week".
+
+  `--engine firefox` is accepted by the harness but is not part of the
+  provisioned set; `scripts/verify.js` checks the executable exists and tells
+  you how to install it before it spawns a single suite, rather than failing
+  fifty-four times identically.
+
+  A global install still works — the suites resolve Playwright through
+  `NODE_PATH`, which `scripts/verify.js` fills in from `npm root -g` — so
+  `npm i -g playwright` remains a valid way to run them. The lockfile is what
+  makes a run reproducible, not where the package lives.
+
+  `ts-fsrs` regenerates `tests/fixtures/fsrs-oracle.json` and is used for
+  nothing else; the fixture is committed, so `verify-oracle` runs without it.
 ---
 
 ## How the build works
