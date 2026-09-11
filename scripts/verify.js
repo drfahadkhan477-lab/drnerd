@@ -156,10 +156,31 @@ if (flag('--list')) {
 
 const VALUED = ['--only', '--skip', '--engine'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
-const TARGET = path.resolve(positional[0] || path.join(ROOT, 'build', 'systole.html'));
+/* A PATH OR A URL. Every suite already takes either — `file://` is just how a
+   path reaches them — and the split build can only be driven over HTTP,
+   because a fetch() will not cross file:// origins. Until now this file
+   resolved the argument as a path unconditionally, so the only way to run the
+   registry against a served build was --pwa, which runs one suite.
 
-if (!fs.existsSync(TARGET)) {
+   That mattered the first time WebKit was pointed at the single file: the
+   44 MB of inline base64 takes WebKitGTK about 150 seconds to parse, so every
+   suite paid a 150s floor and a 5-second launch budget measured the container
+   rather than the app. The same suites against dist/ over HTTP load a 731 KB
+   shell — which is also what actually goes on the iPad. */
+const rawTarget = positional[0] || path.join(ROOT, 'build', 'systole.html');
+const TARGET_IS_URL = /^https?:\/\//.test(rawTarget);
+const TARGET = TARGET_IS_URL ? rawTarget : path.resolve(rawTarget);
+const shortTarget = TARGET_IS_URL ? TARGET : path.relative(process.cwd(), TARGET);
+
+if (!TARGET_IS_URL && !fs.existsSync(TARGET)) {
   console.error(`\nNo build at ${TARGET}\n\n  Build one first:  node scripts/build.js\n`);
+  process.exit(1);
+}
+/* --pwa builds dist/ from a standalone file and serves it. Handed a URL it has
+   nothing to build FROM, and would be verifying whatever the URL already
+   serves while claiming to have built it. */
+if (TARGET_IS_URL && flag('--pwa')) {
+  console.error('\n  --pwa builds the split build from a standalone file; it has nothing to do with a URL target.\n');
   process.exit(1);
 }
 
@@ -234,7 +255,7 @@ const cost = n => (n in PREV_SECS ? PREV_SECS[n] : Infinity);
 const parallelSet = chosen.filter(([n]) => !SERIAL.has(n)).sort((a, b) => cost(b[0]) - cost(a[0]));
 const serialSet = chosen.filter(([n]) => SERIAL.has(n));
 
-console.log(`\nVerifying ${path.relative(process.cwd(), TARGET)}`);
+console.log(`\nVerifying ${shortTarget}`);
 if (JOBS > 1) {
   console.log(`  ${chosen.length} suites on ${ENGINE}, ${JOBS} at a time`
     + ` — ${serialSet.length} of them alone (${serialSet.map(([n]) => n).join(', ')})\n`);
@@ -347,6 +368,10 @@ if (flag('--bail') && stopScheduling) console.log('\n  --bail: stopping here.\n'
    than the hand-editing it replaces. */
 function writeStats(pwaCount) {
   if (only.length || skip.length) return;
+  /* A URL run measures the split build, and the numbers in the docs are the
+     single-file build's. Same reason --engine webkit does not write: a true
+     number about the wrong thing is still wrong in the sentence it lands in. */
+  if (TARGET_IS_URL) return;
   if (ENGINE !== DEFAULT_ENGINE) return;
   if (chosen.length !== SUITES.length) return;
   const file = path.join(ROOT, 'tests', 'test-stats.json');
@@ -423,16 +448,18 @@ function provenance() {
 
 function writeFailLog() {
   const file = path.join(ROOT, 'tests', 'last-run.log');
-  let built = 'not found';
-  try {
-    const st = fs.statSync(TARGET);
-    built = `${(st.size / 1048576).toFixed(2)} MB, modified ${st.mtime.toISOString()}`;
-  } catch (_) {}
+  let built = TARGET_IS_URL ? 'served over HTTP' : 'not found';
+  if (!TARGET_IS_URL) {
+    try {
+      const st = fs.statSync(TARGET);
+      built = `${(st.size / 1048576).toFixed(2)} MB, modified ${st.mtime.toISOString()}`;
+    } catch (_) {}
+  }
   const header = [
     `# systole verify — ${new Date().toISOString()}`,
     `# checkout  ${provenance()}`,
     `# engine    ${ENGINE}`,
-    `# target    ${path.relative(ROOT, TARGET)}  (${built})`,
+    `# target    ${TARGET_IS_URL ? TARGET : path.relative(ROOT, TARGET)}  (${built})`,
     `# suites    ${results.length} run, ${total} checks, ${bad.length} failing`,
     `# failing   ${bad.map(r => r.name).join(', ')}`,
     '',
