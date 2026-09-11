@@ -284,10 +284,11 @@ const ROOT = path.join(__dirname, '..');
                    eight visits and a LIVE context began being evicted. One
                    canvas, created once, moved between screens
 
-     onetutor      the second provider and the in-app importer leave — asked
-                   for, after an audit that found no dead code at all. 7.6 KB
-                   across 22 edits, late in the chain so what it deletes is
-                   final, and the provider maps keep their shape with one entry
+     onetutor      the second provider leaves — asked for, after an audit that
+                   found no dead code at all. 7.6 KB across 23 edits, late in
+                   the chain so what it deletes is final, and the provider maps
+                   keep their shape with one entry. The in-app importer stays:
+                   the step was scoped to both and narrowed to Mistral only
 
      flushguard    the last chunk is painted however the stream ends: the read
                    loop's flush() moves into a finally, so an abort or a

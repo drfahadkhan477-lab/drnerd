@@ -4,10 +4,10 @@
  *
  *   node scripts/onetutor-patch.js <in.html> <out.html>
  *
- * ASKED FOR, AFTER AN AUDIT. Neither was broken. Both were surface the owner
+ * ASKED FOR, AFTER AN AUDIT. It was not broken. It was surface the owner
  * decided the app does not need, and the audit that preceded this found no
- * dead code at all — so this is the only kind of removal left: features that
- * work, that somebody has to maintain, and that nobody uses.
+ * dead code at all — so this is the only kind of removal left: a feature that
+ * works, that somebody has to maintain, and that nobody uses.
  *
  * WHY A LATE STEP RATHER THAN DELETING THE EARLY ONES. The chain is 78 steps
  * of exact-match patches, and a step's find-string frequently depends on text
@@ -26,12 +26,17 @@
  * IDENTIFIERS are gone from the whole document, which is the property that
  * actually matters and which no amount of careful transcription would prove.
  *
- * WHAT GOES WITH THE IMPORTER, and it is worth knowing before running this:
- * the button read "Import .md / .txt / .zip", and it imported reference notes
- * as well as chapters. Removing it removes both. The corpus is seeded through
- * the build chain (content/refs), notes can still be written in the app by
- * hand, and refExport() still writes them out — but a markdown file can no
- * longer be read in on the device.
+ * THE IMPORTER STAYS, AND THIS COMMENT ONCE SAID OTHERWISE. The step was
+ * scoped to two removals — the second provider and the in-app importer — and
+ * then narrowed to "Mistral only" before a line was written. The code follows
+ * the narrowed instruction; this paragraph did not, and described a removal
+ * that never happened, two screens above a guard asserting refImportText and
+ * ZipRead must survive. Anyone reading top-down believed the wrong half.
+ *
+ * So, plainly: ⤒ Import .md / .txt / .json is untouched, and so is everything
+ * behind it — multi-file, .zip through ZipRead, and images linked to the notes
+ * that cite them. refExport() still writes them out. importMarkup(), the
+ * backup restore, was never in scope at all.
  *
  * WHAT STAYS BEHIND FROM MISTRAL. The provider machinery keeps its shape:
  * PROVIDERS, ENDPOINT, KEY_PREFIX and MODELS remain maps, now with one entry.
@@ -316,9 +321,9 @@ patch('onetutor: the error-shape note stops promising shapes nothing sends',
 
 /* ═══════════════════ the guards ═══════════════════ */
 /* The find-strings above prove each edit matched something. These prove the
-   RESULT: that no identifier from either feature survives anywhere in the
-   document, which is the property a reader actually wants and which no amount
-   of careful transcription would establish. */
+   RESULT: that no identifier from the removed provider survives anywhere in
+   the document, which is the property a reader actually wants and which no
+   amount of careful transcription would establish. */
 const GONE = ['oneTurnMistral', 'toMistralMessages', 'mistralParts',
               'mistralModels', 'mistralDefaultModel', 'MISTRAL_MODELS_KEY',
               'ENDPOINT.mistral'];
@@ -332,8 +337,10 @@ if (left.length) {
 if (!/a stored 'mistral' from a build before that/.test(html)) {
   throw new Error('onetutor: the note about migrating an older config lost its explanation');
 }
-/* And what must NOT have gone with them. refExport is the other half of the
-   button that was removed; RefAssets still serves figures in the split build. */
+/* And what must NOT have gone with it. refImportText and ZipRead are the
+   importer, which this step does not touch and which a span across the wrong
+   neighbourhood could still take by accident — that is precisely why they are
+   asserted here rather than assumed. */
 /* makeStreamPainter is on this list because it was ALREADY removed once by
    accident: it lives between toMistralMessages and oneTurnMistral, and a
    single span across that neighbourhood took it. Both turns paint through it. */
@@ -341,7 +348,7 @@ for (const keep of ['refImportText', 'ZipRead', 'oneTurnGemini', 'pushToolExchan
                     'makeStreamPainter', 'refImagesForHits']) {
   if (html.indexOf(keep) === -1) throw new Error(`onetutor: ${keep} was removed and should not have been`);
 }
-applied.push('onetutor: nothing of either feature survives, and nothing else went with them');
+applied.push('onetutor: nothing of the second provider survives, and nothing else went with it');
 
 fs.writeFileSync(OUT, html);
 console.log(`One tutor applied — ${applied.length} edits, ${(removed / 1024).toFixed(1)} KB removed`);
