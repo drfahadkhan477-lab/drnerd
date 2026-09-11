@@ -127,7 +127,9 @@ def apply_crops(root, record=None):
     if not os.path.exists(record):
         print(f'no record at {record} — nothing to replay')
         return
-    spec = json.load(open(record))
+    # Same reason as the sheet writer: a record naming a figure with any
+    # non-ASCII character in its caption is unreadable under cp1252.
+    spec = json.load(open(record, encoding='utf-8'))
     print(f'replaying {record} onto {root}')
     for key, c in spec.get('crops', {}).items():
         f = os.path.join(root, key)
