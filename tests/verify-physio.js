@@ -29,7 +29,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch, isEngineNoise } = require('./_engine');
+const { launch, isEngineNoise, engineName } = require('./_engine');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-physio.js <patched.html|url>'); process.exit(1); }
@@ -39,6 +39,17 @@ let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
+};
+/* A THIRD OUTCOME, FOR A CLAIM THIS ENGINE CANNOT WEIGH — the same device
+   tests/verify-pwa.js uses for its heap budget, and for the same reason. The
+   rate check below needs frames to exist. Failing it where they do not would
+   call the app broken over a browser that would not paint; passing it would
+   report a rate nobody measured. Both are lies, and the second is worse,
+   because it reads as coverage. */
+let unmeasured = 0;
+const unmeasurable = (label, why) => {
+  unmeasured++;
+  console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
 const head = t => console.log('\n── ' + t + ' ──');
 
@@ -168,14 +179,40 @@ const head = t => console.log('\n── ' + t + ' ──');
      and runs at the rate the physiology says, which is the stronger claim of
      the two because it can be checked against a number rather than against
      another animation. */
+  /* MEASURED ACROSS FRAMES, NOT ACROSS A SLEEP. This was a bare
+     setTimeout(600), and on WebKit it reported 0.00 and 0.06 of a cycle where
+     0.34 was expected — which reads exactly like a broken clock and is not one.
+     The panel's tick() is driven by its own requestAnimationFrame chain, and a
+     lone rAF chain on an otherwise idle headless page is throttled to about ONE
+     frame in 600ms. tick() clamps its delta with Math.min(now - last, 100) — a
+     correct guard, so that a backgrounded tab does not leap a minute of cardiac
+     cycle on its first frame back — so one frame advances the model by exactly
+     100ms, and 100ms of 1760ms is 0.057. That is the number that was appearing.
+
+     Confirmed by measurement rather than by argument: with frames flowing the
+     same build on the same WebKit advances 0.3678 and 0.3904 against an
+     expected 0.34, and Chromium advances 0.3495. The clock is right on both.
+
+     So the window requests frames rather than sleeping through them. This is
+     not a weaker claim: the suite supplies the frame clock, physio's own loop
+     still decides what to do with it, and a panel that had stopped animating
+     would still report nothing moving. The threshold below is untouched. */
   const ownClock = await page.evaluate(async () => {
     const t0 = physio.time();
-    await new Promise(r => setTimeout(r, 600));
+    const started = performance.now();
+    let frames = 0;
+    await new Promise(res => {
+      const step = () => {
+        frames++;
+        if (performance.now() - started < 600) requestAnimationFrame(step); else res();
+      };
+      requestAnimationFrame(step);
+    });
     const t1 = physio.time();
     /* Cycle fraction wraps, so measure forward distance around the circle. */
     const advanced = ((t1 - t0) % 1 + 1) % 1;
-    return { t0, t1, advanced, hr: RHYTHMS[labKind].hr,
-             slow: (physio.slow ? physio.slow() : 1) };
+    return { t0, t1, advanced, frames, wall: performance.now() - started,
+             hr: RHYTHMS[labKind].hr, slow: (physio.slow ? physio.slow() : 1) };
   });
   ok('the cursor advances on its own', ownClock.advanced > 0.001,
      `${ownClock.t0.toFixed(3)} → ${ownClock.t1.toFixed(3)}`);
@@ -187,9 +224,27 @@ const head = t => console.log('\n── ' + t + ' ──');
      so the two must stay separable. Generous bounds — this is asserting the
      clock runs at roughly the right speed, not benchmarking the frame timer. */
   const expected = 0.6 * (ownClock.hr / 60) / (ownClock.slow || 1);
-  ok('and at roughly the rate the rhythm implies, not some free-running speed',
-     Math.abs(ownClock.advanced - expected) < 0.25 || Math.abs(ownClock.advanced - expected + 1) < 0.25,
-     `advanced ${ownClock.advanced.toFixed(2)} of a cycle, expected ~${expected.toFixed(2)} at ${ownClock.hr} bpm`);
+  /* THE ONE THING THAT MAKES THIS UNWEIGHABLE, stated as arithmetic rather than
+     as a feeling about engines. tick() clamps each step with
+     Math.min(now - last, 100) so a backgrounded tab cannot leap a minute of
+     cardiac cycle on its first frame back. That guard is correct, and it means
+     model time can only keep up with wall time while frames arrive closer
+     together than 100ms. Headless WebKit here delivers three in 603ms, so the
+     model advances 300ms of a 603ms window — half rate, by construction, with
+     nothing wrong anywhere. Give the same build the same WebKit with frames
+     flowing and it advances 0.3678 and 0.3904 against this same expected 0.34;
+     Chromium advances 0.3495. The clock is right on both. */
+  const mean = ownClock.wall / Math.max(1, ownClock.frames);
+  if (mean >= 100) {
+    unmeasurable('and at roughly the rate the rhythm implies, not some free-running speed',
+      `${ownClock.frames} frames in ${Math.round(ownClock.wall)}ms — ${mean.toFixed(0)}ms apart, `
+      + `and tick() clamps each step at 100ms, so the model cannot keep up with the wall`);
+  } else {
+    ok('and at roughly the rate the rhythm implies, not some free-running speed',
+       Math.abs(ownClock.advanced - expected) < 0.25 || Math.abs(ownClock.advanced - expected + 1) < 0.25,
+       `advanced ${ownClock.advanced.toFixed(2)} of a cycle, expected ~${expected.toFixed(2)} at ${ownClock.hr} bpm`
+       + ` (${ownClock.frames} frames, ${mean.toFixed(0)}ms apart)`);
+  }
 
   const paused = await page.evaluate(async () => {
     /* Scrubbing must stop the clock, or you could never read the dicrotic
@@ -310,6 +365,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();
-  console.log(`\n${passed} passed, ${failed} failed`);
+  console.log(`\n${passed} passed, ${failed} failed`
+              + (unmeasured ? `, ${unmeasured} not measurable on ${engineName()}` : ''));
   process.exit(failed ? 1 : 0);
 })();
