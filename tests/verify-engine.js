@@ -225,5 +225,80 @@ head('a run reported from somewhere else says where it came from');
      /^tests\/last-run\.log\s*$/m.test(ignored));
 }
 
+head('a suite pointed at a URL either runs whole or does not run');
+{
+  /* WHY THIS IS ANCHORED TO NAMES. scripts/verify.js can now be given a served
+     build instead of a file, and it asks tests/_targets.js which suites that
+     is safe for. A classifier checked only against its own logic proves
+     nothing — so the anchors below are suites whose behaviour against a URL
+     was OBSERVED, and the classifier has to agree with what happened:
+
+       apex          threw ENOENT opening 'http://localhost:8141/index.html'
+       splash-heart  finished GREEN with 8 checks where it has 14
+       keys          threw ENOENT — it has no URL guard at all
+       type          path.resolve made '/home/user/drnerd/http:/localhost:8141/…'
+       home, physio, stage0, pearl   ran and reported in full
+
+     splash-heart is the one that matters. The other three failed loudly, which
+     is survivable; it passed, with six checks missing, which is not. Any
+     rewrite of the matching that readmits it fails here. */
+  const T = require('./_targets.js');
+
+  const MUST_NOT = {
+    apex: 'reads its target from disk after building the page URL',
+    splash: 'the same',
+    'splash-heart': 'the same, and it goes GREEN with 8 of 14 checks when it happens',
+    keys: 'no URL guard — path.resolve mangles the URL',
+    type: 'the same',
+  };
+  const MUST = ['home', 'physio', 'stage0', 'pearl', 'layout', 'theme'];
+
+  for (const [name, why] of Object.entries(MUST_NOT)) {
+    const v = T.classify(name);
+    ok(`${name} is not offered a URL — ${why}`, v.capable === false, v.reason || 'classified capable');
+  }
+  for (const name of MUST) {
+    const v = T.classify(name);
+    ok(`${name} can be run against a served build`, v.capable === true, v.reason);
+  }
+
+  /* The guard alone is not the test, and this is the check that says so: all
+     three of the observed failures DO carry `^https?:`. A classifier that
+     looked only for it would call them capable. */
+  const guarded = ['apex', 'splash', 'splash-heart'].filter(n =>
+    /\^https\?:/.test(fs.readFileSync(path.join(TESTS, `verify-${n}.js`), 'utf8')));
+  ok('and the three that cannot are excluded despite carrying the URL guard',
+     guarded.length === 3, `${guarded.length} of 3 carry it`);
+
+  /* Vacuity guard. If the source matching stops finding anything — a renamed
+     variable, a reformat — every suite would come back "takes no target
+     argument", every URL run would skip everything, and each check above would
+     still pass because they assert incapability for five of them. */
+  const all = T.allSuiteNames();
+  const capable = all.filter(T.takesUrl);
+  ok('the classifier still finds suites of both kinds', capable.length > 20 && capable.length < all.length,
+     `${capable.length} capable of ${all.length}`);
+  /* The precise risk is the ARGV pattern silently failing to match: a suite
+     that DOES bind process.argv[2] but whose binding this cannot see comes
+     back "takes no target argument", which reads like the pure-logic suites
+     that genuinely take none. So the two are told apart by the source itself
+     rather than by a list of names — a suite that mentions process.argv[2]
+     must have been parsed. */
+  const uncommented = src => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const mentionsArgv = all.filter(n =>
+    /process\.argv\[2\]/.test(uncommented(fs.readFileSync(path.join(TESTS, `verify-${n}.js`), 'utf8'))));
+  const unparsed = mentionsArgv.filter(n => T.classify(n).reason === 'takes no target argument');
+  ok('every suite that binds a target argument was understood to bind one',
+     unparsed.length === 0, unparsed.join(', ') || `${mentionsArgv.length} parsed, none missed`);
+
+  /* The runner has to actually consult it. The classifier being right is no
+     use if verify.js keeps its own copy of the question. */
+  const v = fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8');
+  ok('the runner asks _targets.js rather than matching for itself',
+     /require\([^)]*_targets\.js[^)]*\)/.test(v) && !/function takesUrl/.test(v));
+  ok('and names what it skipped instead of quietly running fewer suites',
+     /urlIncapable/.test(v) && /cannot take a URL/.test(v));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -168,6 +168,57 @@ const head = t => console.log('\n── ' + t + ' ──');
      `${beforeReload.at} → ${afterReload.at}`);
   ok('and still has the same deck', afterReload.ids.every((id, i) => id === beforeReload.ids[i]));
 
+  head('the answer you gave before walking away');
+  /* THE CASE EVERY SECTION ABOVE MISSES. All of them answer and then advance,
+     and nextQ() is one of the two places that wrote the record — so the record
+     was always written by the navigation, never by the answer. Answering and
+     stopping, which is what closing the iPad on the question you just did looks
+     like, went through selectOpt alone: save(), not saveResume().
+
+     It worked anyway. S.resume[key].answers holds the LIVE S.answers object
+     rather than a copy, so save() serialised the new answer through the alias.
+     Correct by accident, and the obvious tidy-up — copying the answers
+     defensively, which is what anyone thinking about aliasing would do — loses
+     it silently. Nothing above would notice: goHome() and startQuiz() keep the
+     same objects alive, so only a reload can tell the difference between a
+     record that was written and an object that was still being shared. */
+  const uncommitted = await page.evaluate(() => {
+    const ch = CHAPTERS[0];
+    restartQuiz();
+    startQuiz(ch);
+    selectOpt(0); nextQ();        // a record now exists, sitting at index 1
+    selectOpt(1);                 // answer the one we are on — and stop here
+    return { ch, idx: S.qIdx, selected: S.selected,
+             id: S.questions[S.qIdx].id, opts: S.questions[S.qIdx].o.length };
+  });
+  ok('the question we stopped on offers the option we picked',
+     uncommitted.opts > 1 && uncommitted.selected === 1, `${uncommitted.opts} options`);
+  /* The store write is not synchronous, and reloading on top of it would be
+     testing the race rather than the record. */
+  await page.evaluate(() => new Promise(r => setTimeout(r, 500)));
+  await page.reload({ waitUntil: 'load', timeout: 200000 });
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  const kept = await page.evaluate((ch) => {
+    startQuiz(ch);
+    return { idx: S.qIdx, answered: S.answered, selected: S.selected, resumed: !!S.resumed,
+             id: S.questions[S.qIdx] ? S.questions[S.qIdx].id : null,
+             nonAll: Object.keys(S.resume).filter(k => k.indexOf('all|') !== 0) };
+  }, uncommitted.ch);
+
+  ok('a reload lands on the question you were answering, not the one after it',
+     kept.idx === uncommitted.idx && kept.id === uncommitted.id,
+     `${uncommitted.idx}/${uncommitted.id} → ${kept.idx}/${kept.id}`);
+  /* The check the alias was silently carrying. */
+  ok('and the answer you gave on it is still given',
+     kept.answered === true && kept.selected === uncommitted.selected,
+     `answered=${kept.answered} selected=${kept.selected}`);
+  ok('so it comes back revealed rather than asking again', kept.resumed === true);
+  /* Due and missed decks still write nothing, across a reload as well as
+     within a session: resumeKey() returns null for them, so recordResume()
+     declines before it touches S.resume at all. */
+  ok('and no mode but `all` left a record behind, reload included',
+     kept.nonAll.length === 0, kept.nonAll.join(', ') || 'none');
+
   head('the screen says so');
   /* render() goes through startViewTransition, so the DOM it produces lands in
      an async callback and is NOT in the document when render() returns. Waiting

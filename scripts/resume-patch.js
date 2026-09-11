@@ -82,9 +82,13 @@ function resumeKey(ch,mode){
    what this can cost in a store that is already carrying the FSRS cards for
    the whole bank. Oldest touched goes first. */
 const RESUME_MAX=12;
-function saveResume(){
+/* WRITING THE RECORD AND WRITING THE STORE ARE SEPARATE, because selectOpt
+   already calls save() and a second write per answer would be pure waste.
+   recordResume() updates S.resume and stops; saveResume() does both, for the
+   navigation paths that were not going to save anyway. */
+function recordResume(){
   const key=resumeKey(S.chapter,S.mode);
-  if(!key||S.screen!=='quiz'||!S.questions.length) return;
+  if(!key||S.screen!=='quiz'||!S.questions.length) return false;
   S.resume[key]={ids:S.questions.map(q=>q.id), i:S.qIdx,
     answers:S.answers, correct:S.quizCorrect, total:S.quizTotal, ts:Date.now()};
   const keys=Object.keys(S.resume);
@@ -92,8 +96,9 @@ function saveResume(){
     keys.sort((a,b)=>(S.resume[a].ts||0)-(S.resume[b].ts||0));
     while(keys.length>RESUME_MAX) delete S.resume[keys.shift()];
   }
-  save();
+  return true;
 }
+function saveResume(){ if(recordResume()) save(); }
 function clearResume(ch,mode){
   const key=resumeKey(ch,mode);
   if(key&&S.resume[key]){ delete S.resume[key]; save(); }
@@ -153,6 +158,26 @@ patch('resume: deal the deck you were already holding',
   render();toTop();clearAnnounce();markShown();`);
 
 /* ── 4. every move writes the place down ────────────────────────────────── */
+/* THE THIRD OF THE THREE, which the note below has always claimed and the code
+   did not do. selectOpt changes S.answers and called save() alone; the record
+   was nonetheless correct, because S.resume[key].answers holds the LIVE
+   S.answers object rather than a copy, so save() serialised the new answer
+   through the alias. Correct by accident: the obvious tidy-up — copying the
+   answers defensively, the way you would if you were thinking about
+   aliasing — silently loses the answer you gave before you walked away, and
+   nothing in the suite would have said so, because goHome() and startQuiz()
+   keep the same objects alive and only a reload can tell. So the call is now
+   explicit, and tests/verify-resume.js reloads the page to prove it. */
+patch('resume: committing an answer writes the place down too',
+`  S.selected=idx;S.answered=true;
+  S.answers[S.qIdx]={selected:idx,rated:false,
+    cf:(S.answers[S.qIdx]&&S.answers[S.qIdx].cf!=null)?S.answers[S.qIdx].cf:null};
+  save();render();`,
+`  S.selected=idx;S.answered=true;
+  S.answers[S.qIdx]={selected:idx,rated:false,
+    cf:(S.answers[S.qIdx]&&S.answers[S.qIdx].cf!=null)?S.answers[S.qIdx].cf:null};
+  recordResume();save();render();`);
+
 /* nextQ and prevQ are the only two things that change qIdx, and selectOpt is
    the only thing that changes S.answers. Saving from those three covers the
    state completely without a save() on every render. */
