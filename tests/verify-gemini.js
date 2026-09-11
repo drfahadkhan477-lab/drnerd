@@ -174,12 +174,34 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
         if ([...sel.options].some(o => o.value === picked)) sel.value = picked;
       }
       document.getElementById('aiSave').click();
-      /* Read the message BEFORE the success path's deferred buildAI() fires and
-         replaces the whole panel, then wait past that timer so the next connect
-         starts from a settled DOM rather than racing a pending re-render. */
-      await new Promise(r => setTimeout(r, 450));
-      const el = document.getElementById('keyMsg');
-      const msg = el ? el.textContent : '';
+      /* WAIT FOR THE ANSWER, NOT FOR A STOPWATCH. This was a flat 450ms, which
+         is comfortably enough here and was not on the owner's laptop — a
+         machine roughly half this one's speed, where the ListModels round trip
+         had not landed and #keyMsg still read "Asking Google which models this
+         key can use…". One check failed, for the message rather than for the
+         behaviour: the fallback itself had already happened and every
+         assertion around it passed.
+
+         Still read BEFORE the success path's deferred buildAI() replaces the
+         whole panel — polling every 40ms catches the settled message well
+         inside that window — and still followed by a wait past that timer, so
+         the next connect starts from a settled DOM rather than racing a
+         pending re-render. */
+      const settled = t => t && !/Asking Google/i.test(t);
+      let msg = '';
+      const until = Date.now() + 8000;
+      while (Date.now() < until) {
+        const el = document.getElementById('keyMsg');
+        const t = el ? el.textContent : '';
+        if (settled(t)) { msg = t; break; }
+        await new Promise(r => setTimeout(r, 40));
+      }
+      /* Nothing settled in eight seconds: report what IS there, so the failure
+         names the state the app was actually left in. */
+      if (!msg) {
+        const el = document.getElementById('keyMsg');
+        msg = el ? el.textContent : '';
+      }
       await new Promise(r => setTimeout(r, 500));
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem('accsap12.gemini.models') || 'null'); } catch (_) {}
