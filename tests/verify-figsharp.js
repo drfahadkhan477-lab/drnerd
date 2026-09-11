@@ -80,7 +80,16 @@ const measure = (page) => page.evaluate(async () => {
       avail: host ? host.getBoundingClientRect().width : 0,
     };
   });
-  return { rows, decoded: rows.length, total: imgs.length,
+  /* WHY, NOT JUST HOW MANY. "0 of 55 placed" has two completely different
+     causes and the same wording for both: an image that never decoded
+     (naturalWidth 0 — the citation did not resolve, or 20s was not enough on
+     this machine) and an image that decoded perfectly into a collapsed card
+     (width 0 — the refs screen simply did not lay that note out). Reported on
+     the owner's laptop where this build has 55 figures and none qualified, and
+     the message could not say which half was missing. */
+  const gotPixels = imgs.filter(i => i.naturalWidth > 0).length;
+  const gotBox = imgs.filter(i => i.getBoundingClientRect().width > 0).length;
+  return { rows, decoded: rows.length, total: imgs.length, gotPixels, gotBox,
            cardW: rows.length ? Math.round(Math.max(...rows.map(r => r.avail))) : 0 };
 });
 
@@ -100,8 +109,12 @@ const measure = (page) => page.evaluate(async () => {
     const m = await measure(page);
     if (m.err) { ok('a note with figures could be opened', false, m.err); await page.close(); continue; }
 
+    const why = m.decoded > 0 ? ''
+      : m.gotPixels === 0 ? ` — none of ${m.total} decoded at all, so the citations did not resolve or 20s was not enough here`
+      : m.gotBox === 0 ? ` — all ${m.gotPixels} decoded, but every card was collapsed to zero width`
+      : ` — ${m.gotPixels} decoded and ${m.gotBox} laid out, but never the same one`;
     ok('figures were found, decoded and laid out', m.decoded > 0,
-     `${m.decoded} of ${m.total} placed, card ${m.cardW}px`);
+     `${m.decoded} of ${m.total} placed, card ${m.cardW}px${why}`);
   if (!m.decoded) { await page.close(); continue; }
 
     const upscaled = m.rows.filter(r => r.css > r.nat + 1);
