@@ -8,6 +8,9 @@
  *   --skip <a,b>   run everything except these
  *   --bail         stop at the first failing suite
  *   --pwa          also build, serve and test the Stage 1 split build
+ *   --jobs N       run N suites at once (default 1; `auto` = cores-1, capped
+ *                  at 4). The suites that measure wall-clock time or WebGL
+ *                  contexts always run alone — see SERIAL below.
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
@@ -34,7 +37,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { spawnSync, execSync } = require('child_process');
+const { spawn, spawnSync, execSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -113,6 +116,31 @@ const SUITES = [
   ['flushguard',   'a reply can be stopped, and the last chunk is painted however the stream ends'],
 ];
 
+/* ── the suites that must have the machine to themselves ──────────────────────
+   --jobs runs suites concurrently, which is free for a suite that asserts on
+   what is on screen and dishonest for one that asserts on how long something
+   took. Four browsers competing for four cores make every wall-clock number
+   larger and every animation advance smaller; a suite measuring those would
+   fail for a reason that has nothing to do with the build.
+
+   So these run alone, with the pool drained first, whatever --jobs says. Each
+   is here because of a specific assertion, named — not because it felt risky:
+
+     stage0       ok('launches without stalling', launchMs < 5000)
+     physio       the cursor's advance over 600ms of wall clock, at 68 bpm
+     homeprog     the progress ring's rAF timestamps against performance.now()
+     splash       fixed waits for the splash sequence to have finished
+     splash-heart the same, for the heart's own animation
+     heroart      twenty mount/destroy cycles against the 16-context cap
+     heartreuse   twenty navigations against the same cap
+
+   The last two are here for a resource the driver shares between processes
+   rather than for a clock. Everything else in the registry asserts on content,
+   geometry or arithmetic, and was verified to give the same result under
+   --jobs 3 as it does alone — that comparison is the evidence, not this list. */
+const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
+                        'heroart', 'heartreuse']);
+
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(n);
 const opt = (n, fb) => { const i = argv.indexOf(n); return i > -1 && argv[i + 1] ? argv[i + 1] : fb; };
@@ -181,36 +209,127 @@ try {
   }
 } catch (_) { /* a local node_modules will do just as well */ }
 
+/* ── how many at once ─────────────────────────────────────────────────────────
+   One, unless asked otherwise: the default has to stay the arrangement every
+   recorded number was produced under, so that turning this on is a decision
+   somebody makes rather than something that happens to them. `auto` leaves a
+   core for the parent and for whatever else is on the machine — four browsers
+   on four cores is how you turn a 5s launch budget into a 6s launch. */
+const CORES = require('os').cpus().length || 1;
+const jobsArg = opt('--jobs', '1');
+const JOBS = jobsArg === 'auto' ? Math.max(1, Math.min(4, CORES - 1))
+                                : Math.max(1, parseInt(jobsArg, 10) || 1);
+
+/* Longest first, so the tail of the run is not one 90-second suite finishing
+   alone while three workers idle. The durations come from the last recorded
+   run — the same generated file the counts live in — and an unknown suite
+   sorts first rather than last, because a suite nobody has timed is more
+   likely to be new and slow than new and instant. */
+const PREV_SECS = (() => {
+  try { return require(path.join(ROOT, 'tests', 'test-stats.json')).seconds || {}; }
+  catch (_) { return {}; }
+})();
+const cost = n => (n in PREV_SECS ? PREV_SECS[n] : Infinity);
+
+const parallelSet = chosen.filter(([n]) => !SERIAL.has(n)).sort((a, b) => cost(b[0]) - cost(a[0]));
+const serialSet = chosen.filter(([n]) => SERIAL.has(n));
+
 console.log(`\nVerifying ${path.relative(process.cwd(), TARGET)}`);
-console.log(`  ${chosen.length} suite${chosen.length === 1 ? '' : 's'}, one at a time, on ${ENGINE}\n`);
+if (JOBS > 1) {
+  console.log(`  ${chosen.length} suites on ${ENGINE}, ${JOBS} at a time`
+    + ` — ${serialSet.length} of them alone (${serialSet.map(([n]) => n).join(', ')})\n`);
+} else {
+  console.log(`  ${chosen.length} suite${chosen.length === 1 ? '' : 's'}, one at a time, on ${ENGINE}\n`);
+}
 
 const results = [];
 const t0 = Date.now();
+let stopScheduling = false;
 
-for (const [name, claim] of chosen) {
-  process.stdout.write(`  ${name.padEnd(14)} `);
-  const t = Date.now();
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'tests', `verify-${name}.js`), TARGET], {
-    encoding: 'utf8', maxBuffer: 1 << 26,
-    env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE },
+function runSuite(name, claim) {
+  return new Promise(resolve => {
+    const t = Date.now();
+    const ch = spawn(process.execPath, [path.join(ROOT, 'tests', `verify-${name}.js`), TARGET], {
+      env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE },
+    });
+    let out = '';
+    ch.stdout.on('data', d => { out += d; });
+    ch.stderr.on('data', d => { out += d; });
+    ch.on('error', e => { out += '\n' + (e && e.message || e); });
+    ch.on('close', status => {
+      const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
+      const passed = m ? +m[1] : 0, failed = m ? +m[2] : null;
+      resolve({
+        name, claim, passed, failed, checks: passed + (failed || 0),
+        secs: ((Date.now() - t) / 1000).toFixed(0),
+        ok: status === 0 && failed === 0, out,
+      });
+    });
   });
-  const out = (r.stdout || '') + (r.stderr || '');
-  const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
-  const passed = m ? +m[1] : 0, failed = m ? +m[2] : null;
-  const secs = ((Date.now() - t) / 1000).toFixed(0);
-  const okRun = r.status === 0 && failed === 0;
+}
 
-  results.push({ name, claim, passed, failed, checks: passed + (failed || 0), secs, ok: okRun, out });
-  if (failed === null) console.log(`did not report  (${secs}s)`);
-  else console.log(`${okRun ? '✓' : '✗'} ${String(passed).padStart(3)} passed${failed ? `, ${failed} FAILED` : ''}   ${secs}s`);
-
-  if (!okRun) {
+/* One whole line per suite, written when it finishes. In serial mode the name
+   still goes out first so a suite that hangs is visible while it hangs; in
+   parallel mode that would interleave four half-written lines. */
+function report(r) {
+  const head = JOBS > 1 ? `  ${r.name.padEnd(14)} ` : '';
+  if (r.failed === null) console.log(`${head}did not report  (${r.secs}s)`);
+  else console.log(`${head}${r.ok ? '✓' : '✗'} ${String(r.passed).padStart(3)} passed`
+    + `${r.failed ? `, ${r.failed} FAILED` : ''}   ${r.secs}s`);
+  if (!r.ok) {
     /* Print only the failing lines: the full transcript of seventeen suites is
        thousands of lines, and the failures are what you came for. */
-    for (const ln of out.split('\n')) if (/^\s*FAIL\s/.test(ln) || /^\s*(Error|TypeError|ReferenceError)/.test(ln)) console.log(`      ${ln.trim()}`);
-    if (flag('--bail')) { console.log('\n  --bail: stopping here.\n'); break; }
+    for (const ln of r.out.split('\n')) {
+      if (/^\s*FAIL\s/.test(ln) || /^\s*(Error|TypeError|ReferenceError)/.test(ln)) console.log(`      ${ln.trim()}`);
+    }
+    if (flag('--bail')) stopScheduling = true;
   }
 }
+
+async function runPool(list, n) {
+  const queue = list.slice();
+  const workers = [];
+  for (let i = 0; i < Math.min(n, queue.length); i++) {
+    workers.push((async () => {
+      while (queue.length && !stopScheduling) {
+        const [name, claim] = queue.shift();
+        const r = await runSuite(name, claim);
+        results.push(r);
+        report(r);
+      }
+    })());
+  }
+  await Promise.all(workers);
+}
+
+async function runSerial(list) {
+  for (const [name, claim] of list) {
+    if (stopScheduling) break;
+    if (JOBS === 1) process.stdout.write(`  ${name.padEnd(14)} `);
+    const r = await runSuite(name, claim);
+    results.push(r);
+    report(r);
+  }
+}
+
+/* The shared ones first, then the ones that need the machine quiet — so the
+   serial suites are never measuring a machine with three browsers still on it.
+   At --jobs 1 the two calls are the same thing and the registry order is
+   preserved, which is what every previous run printed. */
+(async () => {
+if (JOBS === 1) {
+  await runSerial(chosen);
+} else {
+  await runPool(parallelSet, JOBS);
+  await runSerial(serialSet);
+}
+/* Back into registry order: the run may have finished them in any order, and
+   a log whose rows move between runs is a log nobody can diff. */
+{
+  const rank = new Map(chosen.map(([n], i) => [n, i]));
+  results.sort((a, b) => rank.get(a.name) - rank.get(b.name));
+}
+if (flag('--bail') && stopScheduling) console.log('\n  --bail: stopping here.\n');
 
 /* ── the counts, written down rather than remembered ──────────────────────────
    README.md, docs/BUILD.md and .github/workflows/verify.yml all quote how many
@@ -245,13 +364,26 @@ function writeStats(pwaCount) {
      once it goes green, so the docs would be updated to a number the next run
      immediately contradicts. The record would never settle. */
   for (const r of results) suites[r.name] = r.checks;
+  /* How long each one took, so the next parallel run can pack the slow ones
+     first instead of discovering them. Wall-clock seconds from THIS machine
+     under THIS --jobs, which makes them a scheduling hint and nothing else —
+     no check reads them, and a wrong one costs a worse packing, not a wrong
+     verdict. Carried forward for a suite this run did not time. */
+  const seconds = Object.assign({}, prev.seconds || {});
+  for (const r of results) seconds[r.name] = +r.secs;
   const stats = {
     _generated: 'by scripts/verify.js on a full green run — do not hand-edit',
     engine: ENGINE,
+    /* The arrangement the numbers were produced under. 1 is one suite at a
+       time; anything higher ran the shared suites concurrently and the ones in
+       SERIAL alone. It changes no count — it is here so a reader of the record
+       knows which it is looking at. */
+    jobs: JOBS,
     suiteCount: results.length,
     total: results.reduce((n, r) => n + r.checks, 0),
     pwa: pwaCount === undefined ? (prev.pwa === undefined ? null : prev.pwa) : pwaCount,
     suites,
+    seconds,
   };
   fs.writeFileSync(file, JSON.stringify(stats, null, 2) + '\n');
   console.log(`  counts written to ${path.relative(process.cwd(), file)}\n`);
@@ -341,7 +473,6 @@ if (bad.length) {
    server's lifetime into a loop over file-path suites is how a stray node
    process outlives its run. */
 if (flag('--pwa')) {
-  const { spawn } = require('child_process');
   const PORT = 8137;
   console.log('── the Stage 1 split build, over HTTP ──\n');
   const b = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'build-pwa.js'), TARGET], { encoding: 'utf8' });
@@ -410,3 +541,7 @@ if (flag('--pwa')) {
    reports as a pass: the prose in three documents may now disagree with the
    record, and that needs a person. */
 if (bad.length) process.exit(1);
+
+/* The whole run after the pool lives inside the async wrapper the scheduler
+   needs. Nothing below it — every exit above is a real exit. */
+})();
