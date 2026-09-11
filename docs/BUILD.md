@@ -52,6 +52,19 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
   `ts-fsrs` regenerates `tests/fixtures/fsrs-oracle.json` and is used for
   nothing else; the fixture is committed, so `verify-oracle` runs without it.
+
+- **Python 3 with Pillow and numpy** — for `verify-figreview` only, which
+  drives the figure-review sheet the way `tools/figure-review.py` and
+  `tools/trim-figure.py` do:
+
+  ```bash
+  python -m pip install Pillow numpy
+  ```
+
+  Without it that one suite refuses with the install command and the other 53
+  run normally — it is 35 of the 1758 checks. The suite tries `python3`,
+  `python` and `py -3` in turn, so the Windows spelling is covered, and it
+  checks both libraries before running rather than dying halfway through.
 ---
 
 ## How the build works

@@ -87,10 +87,30 @@ const PY = (() => {
       return c;
     } catch (_) { /* try the next */ }
   }
-  console.error('\n  No Python found. This suite needs python3 with Pillow, the same\n'
-    + '  dependency tools/figure-review.py has. Tried: python3, python, py -3.\n');
+  console.error('\n  No Python found. This suite needs python3 with Pillow and numpy,\n'
+    + '  the same dependencies tools/figure-review.py and tools/trim-figure.py\n'
+    + '  have. Tried: python3, python, py -3.\n');
   process.exit(1);
 })();
+
+/* AND ITS LIBRARIES, WHICH FINDING THE INTERPRETER SAYS NOTHING ABOUT. Asked
+   once, up front, because the alternative is what the owner actually got: the
+   suite ran thirteen checks, reached the replay step, and died on
+   "ModuleNotFoundError: No module named 'numpy'" wrapped in forty lines of
+   execFileSync stack — reported as "did not report" with the one line that
+   mattered buried in the middle. Pillow is needed by the sheet builder and
+   numpy by the crop applier, so a machine with one and not the other gets
+   halfway and then stops. */
+for (const [mod, why] of [['PIL', 'tools/figure-review.py builds the sheet with it'],
+                          ['numpy', 'tools/trim-figure.py applies the crops with it']]) {
+  try {
+    execFileSync(PY[0], [...PY.slice(1), '-c', `import ${mod}`], { stdio: 'pipe' });
+  } catch (_) {
+    const pip = `${PY.join(' ')} -m pip install ${mod === 'PIL' ? 'Pillow' : mod}`;
+    console.error(`\n  Python is here but ${mod} is not — ${why}.\n\n    ${pip}\n`);
+    process.exit(1);
+  }
+}
 const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
 
 (async () => {
