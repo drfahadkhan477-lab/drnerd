@@ -1,9 +1,9 @@
 {
   "_generated": "by scripts/verify.js on a full green run — do not hand-edit",
   "engine": "chromium",
-  "suiteCount": 53,
-  "total": 1696,
-  "pwa": 93,
+  "suiteCount": 54,
+  "total": 1723,
+  "pwa": 106,
   "suites": {
     "stage0": 27,
     "keys": 19,
@@ -57,6 +57,7 @@
     "apexpage": 19,
     "resume": 22,
     "figsharp": 9,
-    "heartreuse": 25
+    "heartreuse": 25,
+    "flushguard": 27
   }
 }
