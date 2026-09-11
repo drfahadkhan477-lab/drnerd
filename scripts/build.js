@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 81 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 82 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -303,6 +303,15 @@ const ROOT = path.join(__dirname, '..');
                    shape the app is held in — so the hero was largest exactly
                    where there was least room. A height term through min(),
                    floors untouched. 97px over to 47px over on that screen
+
+     offhome       the offline-download card leaves the home screen for
+                   Progress. The landscape grid gives its whole one-screen
+                   budget to four named areas and appends everything else
+                   outside it, so the card was overflow by construction rather
+                   than by size. Squashing the hero instead reaches 0px too and
+                   makes the medallion overlap the ECG by 87px where it used to
+                   overlap by 19. The survey goes with the card, so four
+                   hundred cache lookups stop running on every visit home
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -317,7 +326,7 @@ const CHAIN = [
   'avatarfit',
   'prefixq', 'prefixrank',
   'heroart', 'apexpage', 'resume', 'figsharp', 'heartreuse', 'onetutor', 'flushguard',
-  'heroflex',
+  'heroflex', 'offhome',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

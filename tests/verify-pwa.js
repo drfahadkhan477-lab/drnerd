@@ -507,6 +507,14 @@ async function heapAfterBoot(page, url) {
     await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
                                { timeout: 120000 });
     await page.evaluate(() => navigator.serviceWorker.ready);
+    /* IT LIVES ON PROGRESS NOW, not on the home screen. The landscape home grid
+       gives its whole one-screen budget to four named areas and appends
+       everything else outside it, so this card was 114.5px of guaranteed
+       overflow on an 11-inch iPad held sideways — see chain step 82. The
+       survey moved with it, so nothing is counted until Progress is open. */
+    const onHome = await page.evaluate(() => !!document.getElementById('offlineCard'));
+    ok('the home screen no longer carries the card', onHome === false);
+    await page.evaluate(() => goStats());
     await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
                                { timeout: 60000 });
 
@@ -516,7 +524,7 @@ async function heapAfterBoot(page, url) {
                    val: c.querySelector('.off-val').textContent,
                    btn: c.querySelector('.off-btn').textContent } : null;
     });
-    ok('the card is on the home screen of the split build', !!before);
+    ok('the card is on the Progress screen of the split build', !!before);
     ok('and knows how many figures the bank has', before && before.total > 400, String(before && before.total));
     /* Surveying must not BE a download: caches.match asks the question without
        fetching, and 408 fetches on every home screen would be the opposite of
@@ -545,6 +553,9 @@ async function heapAfterBoot(page, url) {
        exactly the same lookup a figure met the ordinary way goes through. */
     figReqs = 0;
     await page.reload({ waitUntil: 'load', timeout: 200000 });
+    /* A reload lands on home, and the survey now runs from Progress. */
+    await page.waitForFunction(() => typeof goStats === 'function', { timeout: 120000 });
+    await page.evaluate(() => goStats());
     await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
                                { timeout: 60000 });
     const reloaded = await page.evaluate(() => ({ have: offlineJob.have, total: offlineJob.total }));
@@ -675,6 +686,84 @@ async function heapAfterBoot(page, url) {
       ok('and a healthy load still registers one', after > 0, `${after} registration(s)`);
       await healthy.close();
     }
+    await ctx.close();
+  }
+
+  head('the split build fits the screen it is held on');
+  /* WHY THIS IS HERE AND NOT IN verify-home. verify-home tests whichever target
+     the runner was given, and the screen that overflowed was the SPLIT build
+     specifically — it is the only one with an offline-download card, because it
+     is the only one whose figures are not already data: URIs in memory. --pwa is
+     the only run that always has a served build, so this is where the claim can
+     be made unconditionally.
+
+     1194x834 is an 11-inch iPad in landscape: the widest and shortest shape the
+     app is held in, and the one the landscape grid is written for. It measured
+     97px over — the hero's axis (step 81) took 50 of that and moving the card to
+     Progress (step 82) took the rest. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1194, height: 834 } });
+    const page = await ctx.newPage();
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
+                               { timeout: 120000 });
+    await page.evaluate(() => { goHome(); render(); });
+    /* verify-home's settle, for the same reason it has one: a box that has held
+       still for five frames with no finite animation running is settled, and a
+       fixed sleep is a guess that passes on a fast machine and lies on a slow
+       one. */
+    await page.waitForFunction(() => {
+      const r = document.getElementById('app').getBoundingClientRect();
+      const k = [innerWidth, innerHeight, Math.round(r.width), Math.round(r.height),
+                 document.documentElement.scrollHeight].join(',');
+      const busy = document.getAnimations().some(a => a.playState === 'running' &&
+        Number.isFinite(a.effect && a.effect.getTiming().iterations));
+      window.__s = (window.__l === k && !busy) ? (window.__s || 0) + 1 : 0;
+      window.__l = k;
+      return window.__s >= 5;
+    }, null, { timeout: 15000, polling: 'raf' });
+    /* FIRST RUN AND EVERY RUN AFTER IT ARE DIFFERENT SCREENS, and only one of
+       them is a standing property. A brand-new install also carries the welcome
+       card — "New here?", with a Got it button — which is 130px and goes away
+       for good the moment it is tapped. The screen that has to fit is the one a
+       fellow sees every day, so that is what is asserted; the first-run number
+       is measured too and printed beside it, because a cost nobody prints is a
+       cost nobody notices growing. */
+    const firstRun = await page.evaluate(() => ({
+      over: document.documentElement.scrollHeight - innerHeight,
+      hello: !!document.querySelector('.hello'),
+    }));
+    await page.evaluate(() => { try { dismissHello(); } catch (_) {} goHome(); render(); });
+    await page.waitForFunction(() => !document.querySelector('.hello'), null, { timeout: 15000 });
+    await page.waitForFunction(() => {
+      const r = document.getElementById('app').getBoundingClientRect();
+      const k = [innerWidth, innerHeight, Math.round(r.width), Math.round(r.height),
+                 document.documentElement.scrollHeight].join(',');
+      const busy = document.getAnimations().some(a => a.playState === 'running' &&
+        Number.isFinite(a.effect && a.effect.getTiming().iterations));
+      window.__s2 = (window.__l2 === k && !busy) ? (window.__s2 || 0) + 1 : 0;
+      window.__l2 = k;
+      return window.__s2 >= 5;
+    }, null, { timeout: 15000, polling: 'raf' });
+    const m = await page.evaluate(() => ({
+      over: document.documentElement.scrollHeight - innerHeight,
+      card: !!document.getElementById('offlineCard'),
+      appW: Math.round(document.getElementById('app').getBoundingClientRect().width),
+      vw: innerWidth,
+    }));
+    ok('an 11-inch iPad in landscape needs no scrolling on the home screen',
+       m.over <= 0, `${m.over}px over — first run, with the welcome card, was ${firstRun.over}px`);
+    /* The half that stops this being satisfied by an empty screen: it must still
+       be using the width, which is what the landscape layout is for. */
+    ok('and it is still filling the width while it does',
+       m.appW / m.vw > 0.9, `${m.appW} of ${m.vw}`);
+    ok('the card that used to overflow it is on Progress instead', m.card === false);
+    /* render() goes through startViewTransition, so the markup it produces lands
+       in an async callback and is NOT in the document when goStats() returns. */
+    const onStats = await page.evaluate(() => { goStats(); }).then(() =>
+      page.waitForFunction(() => !!document.getElementById('offlineCard'), null, { timeout: 15000 })
+        .then(() => true, () => false));
+    ok('and it really is there, rather than merely gone', onStats === true);
     await ctx.close();
   }
 
