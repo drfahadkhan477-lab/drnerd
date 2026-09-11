@@ -134,12 +134,28 @@ const SUITES = [
      heroart      twenty mount/destroy cycles against the 16-context cap
      heartreuse   twenty navigations against the same cap
 
-   The last two are here for a resource the driver shares between processes
-   rather than for a clock. Everything else in the registry asserts on content,
-   geometry or arithmetic, and was verified to give the same result under
-   --jobs 3 as it does alone — that comparison is the evidence, not this list. */
+   heroart and heartreuse are here for a resource the driver shares between
+   processes rather than for a clock.
+
+   AND THREE MORE THE OWNER'S LAPTOP FOUND, which this machine did not:
+
+     home         viewport sweeps with a five-identical-frames settle
+     figsharp     waits for 55 ref figures to DECODE, 20s cap
+     chatfigs     the same, for the figures under an Apex answer
+
+   All three passed on that machine run serially and failed under --jobs 3 —
+   home "did not report" after 170s, figsharp reported "0 of 55 placed" with
+   every image still undecoded. They are not measuring a clock; they wait on
+   work the browser does off the main thread, and three browsers sharing the
+   cores starve exactly that. The tell was the wall time: that run went 23.6 min
+   serial to 24.2 min at --jobs 3, so the parallelism bought nothing there and
+   cost three suites to do it.
+
+   Everything else in the registry asserts on content, geometry or arithmetic,
+   and was verified to give the same result under --jobs 3 as it does alone —
+   that comparison is the evidence, not this list. */
 const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
-                        'heroart', 'heartreuse']);
+                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs']);
 
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(n);
@@ -274,6 +290,16 @@ const CORES = require('os').cpus().length || 1;
 const jobsArg = opt('--jobs', '1');
 const JOBS = jobsArg === 'auto' ? Math.max(1, Math.min(4, CORES - 1))
                                 : Math.max(1, parseInt(jobsArg, 10) || 1);
+/* SAID OUT LOUD, NOT CLAMPED. Asking for more workers than the machine has
+   cores does not fail, it just makes every suite slower and starves the ones
+   waiting on image decode — measured on a laptop where --jobs 3 took 24.2 min
+   against 23.6 serial, bought nothing, and cost three suites. Printing the
+   comparison is enough; someone who knows their machine better than this does
+   should still be able to ask for it. */
+if (JOBS > 1 && JOBS >= CORES) {
+  console.log(`\n  note: --jobs ${JOBS} on ${CORES} core${CORES === 1 ? '' : 's'}.`
+    + ` Suites will contend; --jobs ${Math.max(1, CORES - 1)} or the default 1 is usually faster.`);
+}
 
 /* Longest first, so the tail of the run is not one 90-second suite finishing
    alone while three workers idle. The durations come from the last recorded

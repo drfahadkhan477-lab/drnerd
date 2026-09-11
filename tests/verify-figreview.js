@@ -44,19 +44,33 @@ const OUT = path.join(TMP, 'review.html');
 /* A tall page-shaped image with a band of "prose" on top and artwork below,
    and a small clean one. Different sizes on purpose: one box scaled wrong
    would still look plausible if every fixture were the same shape. */
+/* THE PATH ARRIVES AS AN ARGUMENT, NOT AS SOURCE. It used to be interpolated
+   into these string literals, which is fine until the path has backslashes in
+   it. On Windows the temp directory is C:\Users\...\Temp\figreview-XXXXXX,
+   and Python reads \U as the start of a unicode escape:
+
+     os.makedirs("C:\Users\Fairy\AppData\Local\Temp\figreview-78E0PZ\src/demo")
+     SyntaxError: 'unicodeescape' codec can't decode bytes in position 2-3:
+                  truncated \UXXXXXXXX escape
+
+   The suite reported "did not report" and the whole 35 checks vanished from
+   the run. Escaping the backslashes would work and would be one more thing to
+   get right every time this string is edited; sys.argv has no quoting rules at
+   all, so the path never becomes source in the first place. */
 const MAKE = `
-import os
+import os, sys
 from PIL import Image, ImageDraw
-os.makedirs("${SRC}/demo", exist_ok=True)
+src = sys.argv[1]
+os.makedirs(os.path.join(src, "demo"), exist_ok=True)
 im = Image.new("RGB", (900, 1200), "white"); d = ImageDraw.Draw(im)
 for i in range(12):                      # page prose across the top
     d.rectangle([60, 40 + i * 26, 840, 40 + i * 26 + 9], fill=(40, 40, 40))
 d.rectangle([120, 420, 780, 1120], outline=(0, 0, 0), width=6)
 d.ellipse([260, 560, 640, 940], outline=(0, 0, 0), width=6)
-im.save("${SRC}/demo/tall_FIG.1.1_p001.jpg", quality=90)
+im.save(os.path.join(src, "demo", "tall_FIG.1.1_p001.jpg"), quality=90)
 im = Image.new("RGB", (400, 300), "white"); d = ImageDraw.Draw(im)
 d.rectangle([30, 30, 370, 270], outline=(0, 0, 0), width=5)
-im.save("${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
+im.save(os.path.join(src, "demo", "small_FIG.1.2_p002.jpg"), quality=90)
 `;
 
 /* WHICH INTERPRETER IS NOT THE SAME EVERYWHERE. Hard-coding python3 makes this
@@ -80,7 +94,7 @@ const PY = (() => {
 const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
 
 (async () => {
-  py(['-c', MAKE], { stdio: 'pipe' });
+  py(['-c', MAKE, SRC], { stdio: 'pipe' });
   py(
 [path.join(ROOT, 'tools', 'figure-review.py'),
     '--dir', SRC, '--out', OUT, '--max-width', '300'], { stdio: 'pipe' });
