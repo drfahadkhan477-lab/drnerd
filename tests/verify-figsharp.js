@@ -45,6 +45,12 @@ const measure = (page) => page.evaluate(async () => {
   if (typeof goRefs === 'function') goRefs();
   if (typeof render === 'function') render();
 
+  /* IMMEDIATELY, AND NOT AFTER WAITING FOR THE SCREEN. Waiting for a .ref-card
+     to have a real width before collecting these — which sounds like the
+     precondition, and is what the image loop below assumes — measured 0 of 119
+     here where collecting them at once measures 119 of 119. Reverted rather
+     than shipped: a change that breaks a green suite and cannot be explained is
+     not an improvement, whatever it was meant to fix. */
   /* Not scoped to .ref-body: the refs screen lays out differently in landscape
      and the note body is not always that element. What is being asserted is a
      property of every rendered ref figure, wherever the layout put it. */
@@ -58,11 +64,18 @@ const measure = (page) => page.evaluate(async () => {
      layout bug. Waiting for the boxes to exist is waiting for the precondition
      these measurements need; if they never do, the timeout leaves rows empty
      and the suite says so instead of dividing by zero. */
+  const ready = i => i.naturalWidth > 0 && i.getBoundingClientRect().width > 0;
   const t0 = Date.now();
   while (Date.now() - t0 < 20000) {
-    if (imgs.length && imgs.every(i => i.naturalWidth > 0 && i.getBoundingClientRect().width > 0)) break;
+    if (imgs.length && imgs.every(ready)) break;
     await new Promise(r => setTimeout(r, 150));
   }
+  /* NO EARLY EXIT EITHER, and that attempt is worth recording too. Breaking as
+     soon as SOME image was ready looked like an obvious improvement and also
+     measured 0 of 119: setting loading='eager' starts every decode at once,
+     naturalWidth lands as each finishes, and the layout reflows after that, so
+     a sample taken between the two sees everything decoded and nothing boxed.
+     The full wait is what lets the reflow catch up. */
   /* The refs screen renders every note's body, so most of these figures are in
      collapsed cards with a zero-width box. A ratio against a zero width is not
      a measurement of anything — only figures the layout actually placed can
