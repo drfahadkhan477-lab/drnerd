@@ -167,11 +167,26 @@ const LOADER = `<script>
   }catch(err){
     return fail('Open this over http, not as a file — it needs to fetch its content.', err);
   }
-  await new Promise(function(resolve, reject){
-    var s = document.createElement('script');
-    s.src = 'app.js'; s.onload = resolve; s.onerror = reject;
-    document.body.appendChild(s);
-  }).catch(function(err){ fail('The application code failed to load.', err); });
+  /* STOPS HERE WHEN app.js DOES NOT LOAD. It used to be a trailing
+     .catch(function(err){ fail(...) }) with nothing else, so the splash showed
+     the error and execution carried straight on into the service-worker
+     registration below — installing a worker whose whole job is to cache a
+     shell that never ran. The first attempt at this put a return inside that
+     callback, which reads like the content-fetch path above but is not the
+     same thing at all: it returns from the CALLBACK, the awaited promise then
+     resolves normally, and the registration runs exactly as before.
+     tests/verify-pwa.js caught it by blocking app.js at the network and
+     counting registrations, which is the only reason this is a try/catch and
+     not a plausible-looking one-liner. */
+  try{
+    await new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = 'app.js'; s.onload = resolve; s.onerror = reject;
+      document.body.appendChild(s);
+    });
+  }catch(err){
+    return fail('The application code failed to load.', err);
+  }
 
   if('serviceWorker' in navigator){
     /* THE UPDATE THAT ARRIVES UNDER A RUNNING APP. sw.js calls skipWaiting on
@@ -548,8 +563,18 @@ const SW = `/* ACCSAP 12 service worker.
    what was cached once is cached forever. */
 const CONTENT_V = '${contentManifest.sourceDigest}';
 const SHELL_V   = '${shellDigest}';
-const SHELL = 'accsap-shell-' + SHELL_V;
-const FIGS  = 'accsap-figs-'  + CONTENT_V;
+const SHELL   = 'accsap-shell-'   + SHELL_V;
+/* EVERYTHING UNDER /content/ LIVES HERE, not just the figures, and the name
+   changed with the scope. It used to be FIGS and only /content/figures/ was
+   routed into it; refs-images.json (14.4 MB) and refs-seed.json (0.7 MB) are
+   fetched at runtime like any other same-origin URL and so fell through to the
+   SHELL bucket. activate() deletes every cache that is not the CURRENT shell,
+   and SHELL_V is a digest of the shell code — so a CSS tweak with no content
+   change at all evicted 15.1 MB, and the next launch had to pull it down again
+   before reference figures worked offline. Keyed by CONTENT_V, these now
+   survive any number of code deploys and are evicted only when the content
+   they were built from actually changes. */
+const CONTENT = 'accsap-content-' + CONTENT_V;
 /* Split deliberately. cache.addAll() is all-or-nothing: one 404 rejects the
    whole call, the install event fails, the worker never activates, and the app
    silently loses offline support entirely. That is exactly what happened when
@@ -560,6 +585,13 @@ const FIGS  = 'accsap-figs-'  + CONTENT_V;
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
 const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', 'content/questions.json'];
+/* Which bucket a precached URL belongs in. questions.json is precached because
+   the app cannot start without it, and content-versioned because that is what
+   it is — so install writes it to CONTENT while the shell files go to SHELL.
+   Without this it would land in SHELL, be evicted by the next code deploy, and
+   be re-fetched into CONTENT on first use: self-healing, but a 1.7 MB download
+   nobody asked for. */
+const isContent = u => u.indexOf('content/') === 0 || u.indexOf('/content/') > -1;
 const NICE_TO_HAVE = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
                       ${JSON.stringify(fontAssets.map(([n]) => 'fonts/' + n)).slice(1, -1)}];
 
@@ -578,6 +610,7 @@ const NICE_TO_HAVE = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-ma
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const c = await caches.open(SHELL);
+    const cc = await caches.open(CONTENT);
     const fresh = await Promise.all(PRECACHE.map(async u => {
       const req = new Request(u, { cache: 'reload' });
       let res; try { res = await fetch(req); } catch (_) { return [u, null]; }
@@ -585,14 +618,14 @@ self.addEventListener('install', e => {
     }));
     const bad = fresh.filter(([, res]) => !res).map(([u]) => u);
     if (bad.length) throw new Error('precache refused: ' + bad.join(', '));
-    await Promise.all(fresh.map(([u, res]) => c.put(new Request(u), res)));
+    await Promise.all(fresh.map(([u, res]) => (isContent(u) ? cc : c).put(new Request(u), res)));
     await Promise.all(NICE_TO_HAVE.map(u => c.add(u).catch(() => {})));
     await self.skipWaiting();
   })());
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(ks => Promise.all(ks.filter(k => k !== SHELL && k !== FIGS).map(k => caches.delete(k))))
+    .then(ks => Promise.all(ks.filter(k => k !== SHELL && k !== CONTENT).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
@@ -606,8 +639,13 @@ self.addEventListener('fetch', e => {
      outlive the key that produced it. */
   if (url.pathname.startsWith('/api/apex/')) return;
 
-  if (url.pathname.includes('/content/figures/')) {
-    e.respondWith(caches.open(FIGS).then(async c => {
+  /* Was /content/figures/ only. Widened to all of /content/ so the two large
+     JSON files stop being shell. keepable() already tells the two kinds apart:
+     a figure must come back as an image, and anything else must not come back
+     as text/html — which is what an expired Cloudflare Access session looks
+     like when it answers 200 OK with a sign-in page. */
+  if (url.pathname.includes('/content/')) {
+    e.respondWith(caches.open(CONTENT).then(async c => {
       const hit = await c.match(req);
       if (hit) return hit;
       const res = await fetch(req);

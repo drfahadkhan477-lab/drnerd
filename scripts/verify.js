@@ -110,6 +110,7 @@ const SUITES = [
   ['resume',       'a chapter you left is the chapter you come back to'],
   ['figsharp',     'no figure is drawn wider than the pixels it has'],
   ['heartreuse',   'navigating the app does not spend WebGL contexts'],
+  ['flushguard',   'a reply can be stopped, and the last chunk is painted however the stream ends'],
 ];
 
 const argv = process.argv.slice(2);
@@ -386,7 +387,23 @@ if (flag('--pwa')) {
   }
   console.log(`  pages: ${wm[1]} checks on the Worker, all green\n`);
 
-  if (!blockers.length) writeStats(+m[1] + +wm[1]);
+  /* And the cache buckets, read off the worker that was just generated. Here
+     for the same reason as pages: it needs a dist/ that matches the build
+     under test, and reading a stale one would report on a deploy that is not
+     the one being verified. It drives no browser — the failure it guards is
+     two deploys apart and is decidable from the worker's own source. */
+  const cb = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-cachebuckets.js'),
+                                          path.join(ROOT, 'dist')], { encoding: 'utf8' });
+  const cout = (cb.stdout || '') + (cb.stderr || '');
+  const cm = cout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
+  for (const ln of cout.split('\n')) if (/^\s*FAIL\s/.test(ln)) console.log(ln);
+  if (!cm || +cm[2] > 0 || cb.status !== 0) {
+    console.log(`\n  cachebuckets FAILED\n`);
+    process.exit(1);
+  }
+  console.log(`  cachebuckets: ${cm[1]} checks on the caches, all green\n`);
+
+  if (!blockers.length) writeStats(+m[1] + +wm[1] + +cm[1]);
 }
 
 /* Deferred to here so a stale record still gets rewritten above, but never

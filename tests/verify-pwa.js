@@ -303,11 +303,15 @@ async function heapAfterBoot(page, url) {
        `shell ${shellV}, content ${contentV}`);
     ok('the shell cache is keyed on the shell version',
        new RegExp(`SHELL\\s*=\\s*'accsap-shell-'\\s*\\+\\s*SHELL_V`).test(sw));
-    /* And the figure cache is NOT. Rekeying it on a code change would throw
+    /* And the content cache is NOT. Rekeying it on a code change would throw
        away the 408 figures the fellow pressed a button to download — 19 MB
-       re-fetched because a stylesheet moved. */
-    ok('but the figure cache is keyed on the content, so a code change keeps them',
-       new RegExp(`FIGS\\s*=\\s*'accsap-figs-'\\s*\\+\\s*CONTENT_V`).test(sw));
+       re-fetched because a stylesheet moved. It was called FIGS and held only
+       /content/figures/; it is called CONTENT and holds all of /content/,
+       because the two large JSON files were falling through to the shell.
+       tests/verify-cachebuckets.js is where that routing is checked; here it
+       is only the key that matters. */
+    ok('but the content cache is keyed on the content, so a code change keeps them',
+       new RegExp(`CONTENT\\s*=\\s*'accsap-content-'\\s*\\+\\s*CONTENT_V`).test(sw));
   }
 
   head('the split build evaluates no fetched code');
@@ -618,6 +622,60 @@ async function heapAfterBoot(page, url) {
     } else {
       ok('heap after boot is under 40 MB', pwaHeap > 0 && pwaHeap < 40 * 1048576, mb(pwaHeap));
     }
+  }
+
+  head('a bootloader that could not start the app installs nothing');
+  /* The two failure paths in the bootloader were written to the same shape and
+     only one of them kept it: the content-fetch failure returns out of the
+     async function, the app.js-load failure did not, so execution carried on
+     into the service-worker registration below it and installed a worker for
+     an application that had never started. Nothing visibly broke — which is
+     why it survived — but the next launch is then served by a worker whose
+     whole job is to cache a shell that could not run.
+
+     Driven by refusing app.js at the network, which is what a half-deployed
+     site or a truncated download actually looks like. A fresh context, because
+     registrations are per-origin and every other section here installs one. */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+    const page = await ctx.newPage();
+    await page.route('**/app.js', r => r.abort());
+    await page.goto(ORIGIN + '/index.html', { waitUntil: 'load', timeout: 120000 });
+    const shown = await page.waitForFunction(
+      () => /failed to load/i.test(document.body.textContent || ''), { timeout: 30000 })
+      .then(() => true, () => false);
+    ok('the failure reaches the splash instead of a blank screen', shown);
+    /* Long enough for a registration to have happened if one were going to:
+       register() is called synchronously on the line after, and the section
+       below proves the same wait is enough to see one when it is there. */
+    await page.waitForTimeout(2500);
+    const supported = await page.evaluate(() => 'serviceWorker' in navigator);
+    if (!supported) {
+      unmeasurable('no worker is registered for an app that never started',
+                   'this engine has no navigator.serviceWorker');
+      unmeasurable('and a healthy load still registers one', 'the same');
+    } else {
+      const regs = await page.evaluate(() => navigator.serviceWorker.getRegistrations().then(r => r.length));
+      ok('no worker is registered for an app that never started', regs === 0,
+         `${regs} registration(s)`);
+      /* THE HALF THAT STOPS A BROKEN REGISTRATION PASSING. Zero is also what a
+         build that never registers anything would score, so the same context
+         loads the page without the block and has to reach one. */
+      const healthy = await ctx.newPage();
+      await healthy.goto(ORIGIN + '/index.html', { waitUntil: 'load', timeout: 120000 });
+      await healthy.waitForFunction(() => typeof S !== 'undefined', { timeout: 120000 });
+      const after = await healthy.evaluate(async () => {
+        for (let i = 0; i < 50; i++) {
+          const r = await navigator.serviceWorker.getRegistrations();
+          if (r.length) return r.length;
+          await new Promise(res => setTimeout(res, 100));
+        }
+        return 0;
+      });
+      ok('and a healthy load still registers one', after > 0, `${after} registration(s)`);
+      await healthy.close();
+    }
+    await ctx.close();
   }
 
   head('the server that hosts this cannot be walked out of');
