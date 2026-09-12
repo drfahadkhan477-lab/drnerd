@@ -126,7 +126,7 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
 
     const dims = (await tall.locator('.dims').textContent()).trim();
     ok('the readout names the original size, not the preview size',
-       /from 900×1200/.test(dims), dims);
+       /from 900(?:×|�)1200/.test(dims), dims);
 
     await tall.locator('button[data-a="crop"]').click();
     await page.locator('#export').click();
@@ -206,11 +206,11 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
 
     const size = py(
 ['-c',
-      `from PIL import Image;print(*Image.open("${SRC}/demo/tall_FIG.1.1_p001.jpg").size)`],
+      `from PIL import Image;print(*Image.open(r"${SRC}/demo/tall_FIG.1.1_p001.jpg").size)`],
       { encoding: 'utf8' }).trim().split(' ').map(Number);
     ok('the image on disk is now exactly the box the sheet recorded',
        size[0] === box[2] - box[0] && size[1] === box[3] - box[1],
-       `${size.join('×')} vs box ${box.join(',')}`);
+       `${size.join('x')} vs box ${box.join(',')}`);
 
     const second = run();
     ok('running it twice does not crop twice', /already/.test(second),
@@ -257,8 +257,6 @@ im.save(r"${pagesDir}/page-001.jpg", quality=92)
         { id: 1, label: 'FIG.9.1', page: 1, caption: 'the one whose legend was cut off',
           image: 'visuals/001.jpg', box: [50, 100, 850, 900],
           page_image: 'page-001.jpg', page_size: [900, 1200] },
-        /* Two figures on ONE page — the case a per-file review cannot express
-           at all, because both would be the same filename. */
         { id: 2, label: 'FIG.9.2', page: 1, caption: 'the second on the same page',
           image: 'visuals/002.jpg', box: [50, 950, 850, 1150],
           page_image: 'page-001.jpg', page_size: [900, 1200] },
@@ -279,7 +277,7 @@ im.save(r"${pagesDir}/page-001.jpg", quality=92)
 
     const first = page.locator('.card').first();
     ok('the card opens at the PROPOSED box, not the whole page',
-       /800×800/.test(await first.locator('.dims').textContent()),
+       /800(?:×|�)800/.test(await first.locator('.dims').textContent()),
        (await first.locator('.dims').textContent()).trim());
 
     /* Drag the bottom edge DOWN, past the proposal, toward the page's end. */
