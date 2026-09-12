@@ -47,16 +47,16 @@ const OUT = path.join(TMP, 'review.html');
 const MAKE = `
 import os
 from PIL import Image, ImageDraw
-os.makedirs("${SRC}/demo", exist_ok=True)
+os.makedirs(r"${SRC}/demo", exist_ok=True)
 im = Image.new("RGB", (900, 1200), "white"); d = ImageDraw.Draw(im)
 for i in range(12):                      # page prose across the top
     d.rectangle([60, 40 + i * 26, 840, 40 + i * 26 + 9], fill=(40, 40, 40))
 d.rectangle([120, 420, 780, 1120], outline=(0, 0, 0), width=6)
 d.ellipse([260, 560, 640, 940], outline=(0, 0, 0), width=6)
-im.save("${SRC}/demo/tall_FIG.1.1_p001.jpg", quality=90)
+im.save(r"${SRC}/demo/tall_FIG.1.1_p001.jpg", quality=90)
 im = Image.new("RGB", (400, 300), "white"); d = ImageDraw.Draw(im)
 d.rectangle([30, 30, 370, 270], outline=(0, 0, 0), width=5)
-im.save("${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
+im.save(r"${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
 `;
 
 /* WHICH INTERPRETER IS NOT THE SAME EVERYWHERE. Hard-coding python3 makes this
@@ -126,7 +126,7 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
 
     const dims = (await tall.locator('.dims').textContent()).trim();
     ok('the readout names the original size, not the preview size',
-       /from 900×1200/.test(dims), dims);
+       /from 900(?:×|�)1200/.test(dims), dims);
 
     await tall.locator('button[data-a="crop"]').click();
     await page.locator('#export').click();
@@ -206,11 +206,11 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
 
     const size = py(
 ['-c',
-      `from PIL import Image;print(*Image.open("${SRC}/demo/tall_FIG.1.1_p001.jpg").size)`],
+      `from PIL import Image;print(*Image.open(r"${SRC}/demo/tall_FIG.1.1_p001.jpg").size)`],
       { encoding: 'utf8' }).trim().split(' ').map(Number);
     ok('the image on disk is now exactly the box the sheet recorded',
        size[0] === box[2] - box[0] && size[1] === box[3] - box[1],
-       `${size.join('×')} vs box ${box.join(',')}`);
+       `${size.join('x')} vs box ${box.join(',')}`);
 
     const second = run();
     ok('running it twice does not crop twice', /already/.test(second),
@@ -246,7 +246,7 @@ d.rectangle([60, 120, 840, 880], outline=(0,0,0), width=6)     # the artwork
 for i in range(4):                                              # its legend
     d.rectangle([60, 910 + i*22, 700, 910 + i*22 + 8], fill=(30,30,30))
 d.rectangle([60, 1020, 840, 1180], outline=(0,0,0), width=4)   # a second figure
-im.save("${pagesDir}/page-001.jpg", quality=92)
+im.save(r"${pagesDir}/page-001.jpg", quality=92)
 `], { stdio: 'pipe' });
     /* A proposal that is deliberately too small: it stops 300px short of the
        bottom, exactly as a cut-off legend would. */
@@ -257,8 +257,6 @@ im.save("${pagesDir}/page-001.jpg", quality=92)
         { id: 1, label: 'FIG.9.1', page: 1, caption: 'the one whose legend was cut off',
           image: 'visuals/001.jpg', box: [50, 100, 850, 900],
           page_image: 'page-001.jpg', page_size: [900, 1200] },
-        /* Two figures on ONE page — the case a per-file review cannot express
-           at all, because both would be the same filename. */
         { id: 2, label: 'FIG.9.2', page: 1, caption: 'the second on the same page',
           image: 'visuals/002.jpg', box: [50, 950, 850, 1150],
           page_image: 'page-001.jpg', page_size: [900, 1200] },
@@ -279,7 +277,7 @@ im.save("${pagesDir}/page-001.jpg", quality=92)
 
     const first = page.locator('.card').first();
     ok('the card opens at the PROPOSED box, not the whole page',
-       /800×800/.test(await first.locator('.dims').textContent()),
+       /800(?:×|�)800/.test(await first.locator('.dims').textContent()),
        (await first.locator('.dims').textContent()).trim());
 
     /* Drag the bottom edge DOWN, past the proposal, toward the page's end. */
