@@ -47,16 +47,16 @@ const OUT = path.join(TMP, 'review.html');
 const MAKE = `
 import os
 from PIL import Image, ImageDraw
-os.makedirs("${SRC}/demo", exist_ok=True)
+os.makedirs(r"${SRC}/demo", exist_ok=True)
 im = Image.new("RGB", (900, 1200), "white"); d = ImageDraw.Draw(im)
 for i in range(12):                      # page prose across the top
     d.rectangle([60, 40 + i * 26, 840, 40 + i * 26 + 9], fill=(40, 40, 40))
 d.rectangle([120, 420, 780, 1120], outline=(0, 0, 0), width=6)
 d.ellipse([260, 560, 640, 940], outline=(0, 0, 0), width=6)
-im.save("${SRC}/demo/tall_FIG.1.1_p001.jpg", quality=90)
+im.save(r"${SRC}/demo/tall_FIG.1.1_p001.jpg", quality=90)
 im = Image.new("RGB", (400, 300), "white"); d = ImageDraw.Draw(im)
 d.rectangle([30, 30, 370, 270], outline=(0, 0, 0), width=5)
-im.save("${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
+im.save(r"${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
 `;
 
 /* WHICH INTERPRETER IS NOT THE SAME EVERYWHERE. Hard-coding python3 makes this
