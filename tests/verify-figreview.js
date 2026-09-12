@@ -246,7 +246,7 @@ d.rectangle([60, 120, 840, 880], outline=(0,0,0), width=6)     # the artwork
 for i in range(4):                                              # its legend
     d.rectangle([60, 910 + i*22, 700, 910 + i*22 + 8], fill=(30,30,30))
 d.rectangle([60, 1020, 840, 1180], outline=(0,0,0), width=4)   # a second figure
-im.save("${pagesDir}/page-001.jpg", quality=92)
+im.save(r"${pagesDir}/page-001.jpg", quality=92)
 `], { stdio: 'pipe' });
     /* A proposal that is deliberately too small: it stops 300px short of the
        bottom, exactly as a cut-off legend would. */
