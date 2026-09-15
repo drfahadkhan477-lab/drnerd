@@ -118,6 +118,11 @@ const SUITES = [
      different fixes, and a probe that confused them would send an
      investigation somewhere expensive and wrong. */
   ['figprobe',     'a figure that never rendered is told apart from one that rendered invisibly'],
+  /* The one suite whose subject is the repository rather than the app: 638
+     questions and 408 figures belonging to the ACC must not reach a public
+     remote, and .gitignore stops being a boundary the moment somebody types
+     `git add -f`. */
+  ['leakguard',    'the licensed question bank cannot be committed, however it is renamed'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -154,7 +159,7 @@ const SUITES = [
    Nothing is fabricated to clear it. Writing a measured count here by hand
    would mean also inventing the --pwa figure and the CI subset total, which is
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
-const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe'];
+const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
