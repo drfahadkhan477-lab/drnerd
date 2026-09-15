@@ -108,6 +108,11 @@ const SUITES = [
      race is a property of startViewTransition, so isolating it proves more than
      burying it under 42 MB of question bank, and it runs in seconds. */
   ['render',       'a suite that reads after a screen change reads the new screen, not the old one'],
+  /* The permissive half of this one matters more than the restrictive half:
+     the policy is shipped to an app that cannot be run here, so what must be
+     proven first is that inline scripts, inline handlers, inline styles and
+     data: images all still work under it. */
+  ['csp',          'the policy contains an injection without breaking anything the app does'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -144,7 +149,7 @@ const SUITES = [
    Nothing is fabricated to clear it. Writing a measured count here by hand
    would mean also inventing the --pwa figure and the CI subset total, which is
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
-const PENDING_RECORD = ['figaudit', 'render'];
+const PENDING_RECORD = ['figaudit', 'render', 'csp'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

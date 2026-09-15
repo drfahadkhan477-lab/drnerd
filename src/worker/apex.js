@@ -246,6 +246,30 @@ export async function handleApex(request, env, fetchImpl) {
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 
+/* Kept in step with scripts/csp.js by scripts/build-pwa.js, which refuses to
+   write _worker.js if this string and that module's HEADER_POLICY differ. It
+   is spelled out here rather than substituted from a placeholder because this
+   file is deployed verbatim and imported verbatim by tests/verify-worker.js —
+   a half-built worker carrying '__CSP__' would be a valid file shipping an
+   inert policy, which is the failure that looks most like success.
+
+   frame-ancestors appears here and not in the shell's <meta>, because a meta
+   policy ignores it. See scripts/csp.js for what this policy contains and,
+   more importantly, what it does not claim to prevent. */
+const SECURITY_HEADERS = {
+  /* ONE UNBROKEN LITERAL, and it has to stay that way. scripts/build-pwa.js
+     refuses to write _worker.js unless this file CONTAINS scripts/csp.js's
+     policy as a substring, and tests/verify-csp.js asserts the same. Splitting
+     it across a concatenation for line length defeats both: the runtime value
+     stays correct while every textual check silently stops matching. That is
+     not hypothetical — it is what the first version of this did, and the build
+     guard would have thrown on every build. */
+  // eslint-disable-next-line max-len
+  'Content-Security-Policy': "base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; connect-src 'self' https://generativelanguage.googleapis.com; frame-ancestors 'none'",
+  'Referrer-Policy': 'no-referrer',
+  'X-Content-Type-Options': 'nosniff',
+};
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -261,7 +285,18 @@ export default {
     }
     /* EVERYTHING ELSE IS THE SITE. In advanced mode this Worker owns every
        request to the project, so forgetting this line does not break the API —
-       it 404s the entire app. */
-    return env.ASSETS.fetch(request);
+       it 404s the entire app.
+
+       It is also why the security headers go here and not in a dist/_headers
+       file: Pages honours _headers only when no _worker.js is present, and
+       this one owns every request, so _headers would be silently ignored and
+       the policy would look shipped while doing nothing. */
+    const res = await env.ASSETS.fetch(request);
+    /* new Response(body, res) copies status and headers and gives back a
+       MUTABLE header set; the one on the ASSETS response is immutable, so
+       setting on it directly throws. */
+    const out = new Response(res.body, res);
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) out.headers.set(k, v);
+    return out;
   },
 };
