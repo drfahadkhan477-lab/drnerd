@@ -45,6 +45,7 @@ if (!SRC) {
 const ROOT = path.join(__dirname, '..');
 const CONTENT = path.join(ROOT, 'content');
 const DIST = path.join(ROOT, 'dist');
+const CSP = require('./csp.js');
 
 if (!fs.existsSync(path.join(CONTENT, 'questions.json'))) {
   console.error('content/questions.json is missing — run scripts/extract-content.js first');
@@ -499,6 +500,13 @@ step('correct the head for a build that has a network', () => {
   const cap = '<meta name="apple-mobile-web-app-capable" content="yes">';
   if (html.split(cap).length - 1 !== 1) throw new Error('the iOS capability meta was not found exactly once');
   html = html.replace(cap, '<meta name="mobile-web-app-capable" content="yes">\n' + cap);
+
+  /* The policy goes in the shell, not in app.js, because a <meta> policy only
+     applies to the document that carries it and only if it arrives before the
+     content it governs. See scripts/csp.js for what it does and does not
+     claim — it contains an injection, it does not prevent one. */
+  if (html.includes('Content-Security-Policy')) throw new Error('the shell already carries a CSP');
+  html = html.replace(cap, cap + '\n' + CSP.META);
 });
 
 /* ── 4. write it all out ─────────────────────────────────────────────────── */
@@ -606,6 +614,15 @@ step('ship the Worker that holds the Gemini key', () => {
   const src = fs.readFileSync(WORKER_SRC, 'utf8');
   if (!/env\.ASSETS\.fetch/.test(src)) {
     throw new Error('the Worker has no ASSETS passthrough — that would 404 the whole site');
+  }
+  /* The Worker owns every request, so it — not dist/_headers, which Pages
+     ignores whenever a _worker.js exists — is what actually sets the policy on
+     the deployed site. Asserted rather than substituted: this file ships and is
+     imported verbatim, and a placeholder left unreplaced would be a valid
+     worker serving an inert policy. Drift fails the build here. */
+  if (!src.includes(CSP.HEADER_POLICY)) {
+    throw new Error('the Worker\'s Content-Security-Policy no longer matches scripts/csp.js\n' +
+                    `  expected  ${CSP.HEADER_POLICY}`);
   }
   fs.writeFileSync(path.join(DIST, '_worker.js'), src);
 });
