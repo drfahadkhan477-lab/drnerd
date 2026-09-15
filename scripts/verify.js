@@ -113,6 +113,11 @@ const SUITES = [
      proven first is that inline scripts, inline handlers, inline styles and
      data: images all still work under it. */
   ['csp',          'the policy contains an injection without breaking anything the app does'],
+  /* Guards tools/figure-probe.js, whose whole value is the DISTINCTION it
+     draws: absent, undecoded and unboxed are three different bugs with three
+     different fixes, and a probe that confused them would send an
+     investigation somewhere expensive and wrong. */
+  ['figprobe',     'a figure that never rendered is told apart from one that rendered invisibly'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -149,7 +154,7 @@ const SUITES = [
    Nothing is fabricated to clear it. Writing a measured count here by hand
    would mean also inventing the --pwa figure and the CI subset total, which is
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
-const PENDING_RECORD = ['figaudit', 'render', 'csp'];
+const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
