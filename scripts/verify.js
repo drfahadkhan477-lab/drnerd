@@ -98,6 +98,12 @@ const SUITES = [
      tapping if the box it records is the box that gets applied. It needs
      python3 with Pillow, the same dependency tools/figure-review.py has. */
   ['figreview',    'the review sheet records the box in original pixels, not preview pixels'],
+  /* Also build-side, and pure Node — no browser, no target, no licensed text.
+     It guards tools/figure-audit.js, whose whole value is its false-positive
+     rate: an auditor that flags a third of the bank as referring to missing
+     pictures is worse than none, so the fixtures that must stay QUIET are the
+     load-bearing half of that suite. */
+  ['figaudit',     'a stem that points at a picture is told apart from one that only sounds like it'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
