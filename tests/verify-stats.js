@@ -25,6 +25,7 @@
  */
 'use strict';
 const fs = require('fs');
+const { blankComments } = require('./_source.js');
 const path = require('path');
 
 let passed = 0, failed = 0;
@@ -247,10 +248,6 @@ head('the arithmetic in the header is self-consistent');
    inside a comment will otherwise open a string that swallows the rest. */
 head('no assertion is incapable of failing');
 {
-  const blankComments = src => src
-    .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))
-    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, p) => p + ' '.repeat(m.length - p.length));
-
   const CONSTANT = [
     [/^\s*true\s*$/,               'literal true'],
     [/^\s*!\s*(false|0)\s*$/,      'negated falsy literal'],
