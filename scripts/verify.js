@@ -132,6 +132,11 @@ const SUITES = [
      without the licensed export, which is the only way it gets tested anywhere
      but the one laptop that has it. */
   ['contentrules', 'a structurally broken question is caught, and a sound one is left alone'],
+  /* Two core modules that had no direct test at all, each now carrying
+     something worth proving without a forty-minute build: where a memory came
+     from, and the one channel a fence cannot reach. */
+  ['memory-pure',  'an inference is not stored, or read back, as something the fellow said'],
+  ['vision-pure',  'text inside a figure is named as data, never as an instruction'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -168,7 +173,8 @@ const SUITES = [
    Nothing is fabricated to clear it. Writing a measured count here by hand
    would mean also inventing the --pwa figure and the CI subset total, which is
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
-const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release', 'contentrules'];
+const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release',
+                        'contentrules', 'memory-pure', 'vision-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
