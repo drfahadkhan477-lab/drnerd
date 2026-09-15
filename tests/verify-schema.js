@@ -19,6 +19,7 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-schema.js <patched.html>'); process.exit(1); }
@@ -39,7 +40,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
 
   const KEY = 'accsap12.v2';
 

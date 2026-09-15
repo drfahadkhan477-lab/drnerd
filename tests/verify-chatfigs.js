@@ -19,6 +19,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chatfigs.js <patched.html>'); process.exit(1); }
@@ -52,7 +53,7 @@ const sse = text => [
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
   await page.waitForTimeout(900);
 
   /* Ask a question, then pin lastHits to a note that definitely has a figure —

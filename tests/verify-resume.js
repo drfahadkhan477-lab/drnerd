@@ -20,6 +20,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-resume.js <patched.html>'); process.exit(1); }
@@ -40,7 +41,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
 
   /* Answer `n` questions of a chapter, then go home. Returns the deck as it
      was dealt, so the next entry can be compared against it. */
@@ -159,7 +160,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     return { ch, at, ids };
   });
   await page.reload({ waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   const afterReload = await page.evaluate((ch) => {
     startQuiz(ch);
     return { at: S.qIdx, ids: S.questions.map(q => q.id), resumed: !!S.resumed };
@@ -197,7 +198,7 @@ const head = t => console.log('\n── ' + t + ' ──');
      testing the race rather than the record. */
   await page.evaluate(() => new Promise(r => setTimeout(r, 500)));
   await page.reload({ waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   const kept = await page.evaluate((ch) => {
     startQuiz(ch);
     return { idx: S.qIdx, answered: S.answered, selected: S.selected, resumed: !!S.resumed,

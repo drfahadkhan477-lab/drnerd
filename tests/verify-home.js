@@ -24,6 +24,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-home.js <patched.html|url>'); process.exit(1); }
@@ -44,7 +45,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
 
   /* Seed a realistic spread of progress so the bar and the numbers are testable
      and mastery lands strictly below coverage. */
@@ -81,7 +82,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     window.__bs = (window.__bl === w && !busy) ? (window.__bs || 0) + 1 : 0;
     window.__bl = w;
     return window.__bs >= 5;
-  }, { timeout: 15000, polling: 'raf' });
+  }, null, { timeout: 15000, polling: 'raf' });
 
   head('the welcome bar is larger');
   const ecgH = await page.evaluate(() => {
@@ -237,7 +238,7 @@ const head = t => console.log('\n── ' + t + ' ──');
      door opens onto rather than reading straight after. */
   await page.evaluate(() => document.querySelector('.door-wide').click());
   await page.waitForFunction(() => typeof S !== 'undefined' && S.screen === 'study'
-    && !!document.querySelector('.ch-tile'), { timeout: 15000 });
+    && !!document.querySelector('.ch-tile'), null, { timeout: 15000 });
   const study = await page.evaluate(() => ({
     screen: S.screen,
     tiles: document.querySelectorAll('.ch-tile').length,
@@ -289,7 +290,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   ok('the layout is saved', persisted === 'focus', persisted);
 
   await page.reload({ waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.home-wrap'), { timeout: 150000 });
+  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.home-wrap'), null, { timeout: 150000 });
   /* A cold load lands on home, which still carries data-home — the one real
      survivor of the old switch, since it sizes buildHome()'s own hero. This
      is genuinely Home's behavior, not Chapters', so it stays asserted. */
@@ -329,7 +330,7 @@ const head = t => console.log('\n── ' + t + ' ──');
         window.__s = (window.__l === k && !busy) ? (window.__s || 0) + 1 : 0;
         window.__l = k;
         return window.__s >= 5;
-      }, { timeout: 15000, polling: 'raf' });
+      }, null, { timeout: 15000, polling: 'raf' });
     };
     const at = async (w, h) => {
       await page.setViewportSize({ width: w, height: h });

@@ -24,6 +24,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-figsharp.js <patched.html>'); process.exit(1); }
@@ -109,7 +110,7 @@ const measure = (page) => page.evaluate(async () => {
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
     await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+    await booted(page);
 
     head(`${vp.name} — ${vp.width}x${vp.height} at 2x`);
     const m = await measure(page);

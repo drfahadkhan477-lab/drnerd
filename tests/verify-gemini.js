@@ -16,6 +16,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-gemini.js <patched.html>'); process.exit(1); }
@@ -99,7 +100,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(1200);
 
   head('provider is listed, free, and marked as seeing figures');
@@ -133,7 +134,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
     saveJSON(AI_CFG, { provider: 'mistral', mistral: { key: 'k', model: 'pixtral-large-latest' } });
   });
   await page.reload({ waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(800);
   const repaired = await page.evaluate(() => {
     let threw = false;

@@ -12,6 +12,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 const { systemText, turns } = require('./_wire');
 
 const target = process.argv[2];
@@ -53,7 +54,7 @@ const SSE = [
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —
      a no-op on the single-file build, where this is already true. */
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(1200);
 
   /* Drive one full exchange on a question that has a figure, against Mistral —

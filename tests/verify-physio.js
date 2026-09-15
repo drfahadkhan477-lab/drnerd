@@ -30,6 +30,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, engineName } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-physio.js <patched.html|url>'); process.exit(1); }
@@ -61,7 +62,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
 
   /* ═══════════════════════ the model, in isolation ═══════════════════════ */
   head('the physiology, independent of any rendering');

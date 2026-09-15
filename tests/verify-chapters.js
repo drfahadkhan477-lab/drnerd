@@ -21,6 +21,7 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chapters.js <patched.html>'); process.exit(1); }
@@ -40,7 +41,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   page.on('pageerror', e => errors.push(e.message));
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(1000);
 
   head('the page cascades top to bottom, like the home screen does');
@@ -140,7 +141,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     const page2 = await browser.newPage({ viewport: { width: 430, height: 1400 } });
     await page2.emulateMedia({ reducedMotion: 'reduce' });
     await page2.goto(URL, { waitUntil: 'load', timeout: 200000 });
-    await page2.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+    await booted(page2);
     await page2.waitForTimeout(900);
     const r = await page2.evaluate(async () => {
       const q = POOL[0];

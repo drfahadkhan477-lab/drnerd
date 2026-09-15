@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { launch, cpuThrottle, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-splash.js <patched.html>'); process.exit(1); }
@@ -94,7 +95,7 @@ const head = t => console.log('\n── ' + t + ' ──');
        it. The four later waits stay strict: their sections need the splash on
        screen to have anything to examine. */
     await page.waitForSelector('#splash', { timeout: 30000 }).catch(() => {});
-    await page.waitForFunction(() => window.__t && window.__t.app, { timeout: 120000 });
+    await page.waitForFunction(() => window.__t && window.__t.app, null, { timeout: 120000 });
     const during = await page.evaluate(() => ({
       splashAt: Math.round(window.__t.splash),
       appAt: Math.round(window.__t.app),
@@ -107,7 +108,7 @@ const head = t => console.log('\n── ' + t + ' ──');
        + `${throttled ? ', CPU at 1/4' : ', UNTHROTTLED — this engine has no CDP'})`);
     ok('the rhythm strip is present on it', during.traceAnimated);
 
-    await page.waitForFunction(() => !!document.querySelector('.hero-h1'), { timeout: 120000 });
+    await page.waitForFunction(() => !!document.querySelector('.hero-h1'), null, { timeout: 120000 });
     await page.waitForTimeout(1400);
     const after = await page.evaluate(() => ({
       splashGone: !document.getElementById('splash'),
@@ -194,7 +195,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —
      a no-op on the single-file build, where this is already true. */
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
     await page.evaluate(() => { S.theme = 'dark'; applyTheme(); save(); });
     await page.reload({ waitUntil: 'commit' });
     await page.waitForSelector('#splash', { timeout: 30000 });
@@ -217,7 +218,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —
      a no-op on the single-file build, where this is already true. */
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
     await page.waitForTimeout(2200);
     const hero = await page.evaluate(() => {
       const el = document.querySelector('.hero-live');

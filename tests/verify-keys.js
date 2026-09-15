@@ -27,6 +27,7 @@
 'use strict';
 const fs = require('fs');
 const { launch } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-keys.js <build.html>'); process.exit(1); }
@@ -124,7 +125,7 @@ head('and it reaches the screen');
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
 
   const inPage = await page.evaluate(ids => ids.map(id => {
     const q = ALL_Q.find(x => x.id === id);

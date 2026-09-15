@@ -49,7 +49,7 @@ const ACCENT_BY_THEME = {
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && typeof THEMES !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await page.waitForFunction(() => typeof S !== 'undefined' && typeof THEMES !== 'undefined' && !!document.querySelector('.hero-h1'), null, { timeout: 150000 });
 
   head('the semantic names alias the legacy hue names, under every theme');
   const perTheme = await page.evaluate(() => {
