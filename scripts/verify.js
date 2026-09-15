@@ -98,6 +98,16 @@ const SUITES = [
      tapping if the box it records is the box that gets applied. It needs
      python3 with Pillow, the same dependency tools/figure-review.py has. */
   ['figreview',    'the review sheet records the box in original pixels, not preview pixels'],
+  /* Also build-side, and pure Node — no browser, no target, no licensed text.
+     It guards tools/figure-audit.js, whose whole value is its false-positive
+     rate: an auditor that flags a third of the bank as referring to missing
+     pictures is worse than none, so the fixtures that must stay QUIET are the
+     load-bearing half of that suite. */
+  ['figaudit',     'a stem that points at a picture is told apart from one that only sounds like it'],
+  /* Guards tests/_render.js against synthetic fixtures rather than the app: the
+     race is a property of startViewTransition, so isolating it proves more than
+     burying it under 42 MB of question bank, and it runs in seconds. */
+  ['render',       'a suite that reads after a screen change reads the new screen, not the old one'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -115,6 +125,26 @@ const SUITES = [
   ['heartreuse',   'navigating the app does not spend WebGL contexts'],
   ['flushguard',   'a reply can be stopped, and the last chunk is painted however the stream ends'],
 ];
+
+/* ── suites registered since the last full green run ──────────────────────────
+   tests/test-stats.json records what a full green run measured, and nothing
+   else may write it. A suite added between two such runs is therefore
+   registered above and absent from the record, which is a real and temporary
+   state rather than a defect — but it is indistinguishable, to a checker, from
+   the defect verify-stats exists to catch: a suite registered and then quietly
+   never run, showing up only as a total that is mysteriously too low.
+
+   So the difference is DECLARED here instead of being inferred. Naming a suite
+   in this list says "measured counts are pending, on purpose"; leaving it out
+   says "this should already be in the record". verify-stats asserts both
+   directions, and the second one is what keeps this list from rotting: an
+   entry that IS in the record fails, so a name cannot be parked here to
+   silence anything — the next full run forces its removal.
+
+   Nothing is fabricated to clear it. Writing a measured count here by hand
+   would mean also inventing the --pwa figure and the CI subset total, which is
+   exactly the hand-maintained arithmetic that made verify-stats necessary. */
+const PENDING_RECORD = ['figaudit', 'render'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -134,12 +164,28 @@ const SUITES = [
      heroart      twenty mount/destroy cycles against the 16-context cap
      heartreuse   twenty navigations against the same cap
 
-   The last two are here for a resource the driver shares between processes
-   rather than for a clock. Everything else in the registry asserts on content,
-   geometry or arithmetic, and was verified to give the same result under
-   --jobs 3 as it does alone — that comparison is the evidence, not this list. */
+   heroart and heartreuse are here for a resource the driver shares between
+   processes rather than for a clock.
+
+   AND THREE MORE THE OWNER'S LAPTOP FOUND, which this machine did not:
+
+     home         viewport sweeps with a five-identical-frames settle
+     figsharp     waits for 55 ref figures to DECODE, 20s cap
+     chatfigs     the same, for the figures under an Apex answer
+
+   All three passed on that machine run serially and failed under --jobs 3 —
+   home "did not report" after 170s, figsharp reported "0 of 55 placed" with
+   every image still undecoded. They are not measuring a clock; they wait on
+   work the browser does off the main thread, and three browsers sharing the
+   cores starve exactly that. The tell was the wall time: that run went 23.6 min
+   serial to 24.2 min at --jobs 3, so the parallelism bought nothing there and
+   cost three suites to do it.
+
+   Everything else in the registry asserts on content, geometry or arithmetic,
+   and was verified to give the same result under --jobs 3 as it does alone —
+   that comparison is the evidence, not this list. */
 const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
-                        'heroart', 'heartreuse']);
+                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs']);
 
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(n);
@@ -274,6 +320,16 @@ const CORES = require('os').cpus().length || 1;
 const jobsArg = opt('--jobs', '1');
 const JOBS = jobsArg === 'auto' ? Math.max(1, Math.min(4, CORES - 1))
                                 : Math.max(1, parseInt(jobsArg, 10) || 1);
+/* SAID OUT LOUD, NOT CLAMPED. Asking for more workers than the machine has
+   cores does not fail, it just makes every suite slower and starves the ones
+   waiting on image decode — measured on a laptop where --jobs 3 took 24.2 min
+   against 23.6 serial, bought nothing, and cost three suites. Printing the
+   comparison is enough; someone who knows their machine better than this does
+   should still be able to ask for it. */
+if (JOBS > 1 && JOBS >= CORES) {
+  console.log(`\n  note: --jobs ${JOBS} on ${CORES} core${CORES === 1 ? '' : 's'}.`
+    + ` Suites will contend; --jobs ${Math.max(1, CORES - 1)} or the default 1 is usually faster.`);
+}
 
 /* Longest first, so the tail of the run is not one 90-second suite finishing
    alone while three workers idle. The durations come from the last recorded

@@ -44,7 +44,7 @@ def load_record(path=CROPS):
     """The crops already decided. Missing file is not an error — first run."""
     if not os.path.exists(path):
         return {'crops': {}, '_checked_and_left_alone': {}}
-    r = json.load(open(path))
+    r = json.load(open(path, encoding='utf-8'))
     r.setdefault('crops', {})
     r.setdefault('_checked_and_left_alone', {})
     return r
@@ -97,7 +97,7 @@ def collect_manifest(manifest, pages_dir, max_w, quality, limit=None, record=CRO
     two cards over the same image, which is why the record is keyed by the
     figure's label rather than by a filename."""
     import copy
-    man = json.load(open(manifest))
+    man = json.load(open(manifest, encoding='utf-8'))
     rec = load_record(record)
     items, seen = [], {}
     for it in man.get('items', []):
@@ -480,7 +480,13 @@ def build(root, out, max_w, quality, limit=None, record=CROPS,
             .replace('__RECORD__', os.path.relpath(record, os.path.dirname(HERE)))
             .replace('__SIG__', json.dumps(sig)))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    with open(out, 'w') as fh:
+    # UTF-8 EXPLICITLY, BECAUSE WINDOWS DOES NOT DEFAULT TO IT. Python's text
+    # mode uses the locale encoding, which is cp1252 on a default Windows
+    # install — so the × in the size readout ("900×1200") was written as a lone
+    # 0xD7 byte into a file the browser reads as UTF-8, and came back as the
+    # replacement character. The sheet still rendered, which is why this
+    # survived: only verify-figreview, matching on the literal ×, ever noticed.
+    with open(out, 'w', encoding='utf-8') as fh:
         fh.write(html)
     already = sum(1 for i in items if i['prior'])
     hot = sum(1 for i in items if i['score'] > 0.10)

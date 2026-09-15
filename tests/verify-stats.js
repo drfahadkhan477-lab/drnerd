@@ -69,10 +69,27 @@ head('every registered suite is in the record');
   const block = v.slice(v.indexOf('const SUITES = ['), v.indexOf('\n];', v.indexOf('const SUITES = [')));
   const registered = [...block.matchAll(/^\s*\['([a-z0-9-]+)',/gm)].map(m => m[1]);
   ok('the registry was found and is not empty', registered.length > 30, `${registered.length} suites`);
-  const missing = registered.filter(n => !(n in stats.suites));
+  /* A suite registered since the last full green run is absent from the record
+     for a legitimate reason, and scripts/verify.js says which ones those are.
+     The declaration is the point: an undeclared absence is still the defect
+     this block was written for — a suite registered and then quietly never
+     run, visible only as a total that is mysteriously too low. */
+  const pendBlock = v.slice(v.indexOf('const PENDING_RECORD = ['));
+  const pending = [...pendBlock.slice(0, pendBlock.indexOf('];') + 2)
+                    .matchAll(/'([a-z0-9-]+)'/g)].map(m => m[1]);
+  const missing = registered.filter(n => !(n in stats.suites) && !pending.includes(n));
   const stale = Object.keys(stats.suites).filter(n => !registered.includes(n));
-  ok('no registered suite is missing from the record', missing.length === 0,
+  ok('no registered suite is missing from the record without saying so', missing.length === 0,
      missing.join(', ') || 'none');
+  /* Both directions, because a one-way check would let a name be parked in
+     PENDING_RECORD forever to silence a real gap. An entry that the record has
+     since caught up with fails here, so the next full green run forces it out. */
+  ok('nothing is declared pending that is not a registered suite',
+     pending.every(n => registered.includes(n)),
+     pending.filter(n => !registered.includes(n)).join(', ') || 'none');
+  ok('and nothing is still declared pending that the record already holds',
+     pending.every(n => !(n in stats.suites)),
+     pending.filter(n => n in stats.suites).join(', ') || 'none');
   ok('and the record holds nothing that is no longer a suite', stale.length === 0,
      stale.join(', ') || 'none');
   ok('every recorded suite reported at least one check', !Object.entries(stats.suites).some(([, n]) => !(n > 0)),

@@ -44,19 +44,33 @@ const OUT = path.join(TMP, 'review.html');
 /* A tall page-shaped image with a band of "prose" on top and artwork below,
    and a small clean one. Different sizes on purpose: one box scaled wrong
    would still look plausible if every fixture were the same shape. */
+/* THE PATH ARRIVES AS AN ARGUMENT, NOT AS SOURCE. It used to be interpolated
+   into these string literals, which is fine until the path has backslashes in
+   it. On Windows the temp directory is C:\Users\...\Temp\figreview-XXXXXX,
+   and Python reads \U as the start of a unicode escape:
+
+     os.makedirs("C:\Users\Fairy\AppData\Local\Temp\figreview-78E0PZ\src/demo")
+     SyntaxError: 'unicodeescape' codec can't decode bytes in position 2-3:
+                  truncated \UXXXXXXXX escape
+
+   The suite reported "did not report" and the whole 35 checks vanished from
+   the run. Escaping the backslashes would work and would be one more thing to
+   get right every time this string is edited; sys.argv has no quoting rules at
+   all, so the path never becomes source in the first place. */
 const MAKE = `
-import os
+import os, sys
 from PIL import Image, ImageDraw
-os.makedirs(r"${SRC}/demo", exist_ok=True)
+src = sys.argv[1]
+os.makedirs(os.path.join(src, "demo"), exist_ok=True)
 im = Image.new("RGB", (900, 1200), "white"); d = ImageDraw.Draw(im)
 for i in range(12):                      # page prose across the top
     d.rectangle([60, 40 + i * 26, 840, 40 + i * 26 + 9], fill=(40, 40, 40))
 d.rectangle([120, 420, 780, 1120], outline=(0, 0, 0), width=6)
 d.ellipse([260, 560, 640, 940], outline=(0, 0, 0), width=6)
-im.save(r"${SRC}/demo/tall_FIG.1.1_p001.jpg", quality=90)
+im.save(os.path.join(src, "demo", "tall_FIG.1.1_p001.jpg"), quality=90)
 im = Image.new("RGB", (400, 300), "white"); d = ImageDraw.Draw(im)
 d.rectangle([30, 30, 370, 270], outline=(0, 0, 0), width=5)
-im.save(r"${SRC}/demo/small_FIG.1.2_p002.jpg", quality=90)
+im.save(os.path.join(src, "demo", "small_FIG.1.2_p002.jpg"), quality=90)
 `;
 
 /* WHICH INTERPRETER IS NOT THE SAME EVERYWHERE. Hard-coding python3 makes this
@@ -73,14 +87,34 @@ const PY = (() => {
       return c;
     } catch (_) { /* try the next */ }
   }
-  console.error('\n  No Python found. This suite needs python3 with Pillow, the same\n'
-    + '  dependency tools/figure-review.py has. Tried: python3, python, py -3.\n');
+  console.error('\n  No Python found. This suite needs python3 with Pillow and numpy,\n'
+    + '  the same dependencies tools/figure-review.py and tools/trim-figure.py\n'
+    + '  have. Tried: python3, python, py -3.\n');
   process.exit(1);
 })();
+
+/* AND ITS LIBRARIES, WHICH FINDING THE INTERPRETER SAYS NOTHING ABOUT. Asked
+   once, up front, because the alternative is what the owner actually got: the
+   suite ran thirteen checks, reached the replay step, and died on
+   "ModuleNotFoundError: No module named 'numpy'" wrapped in forty lines of
+   execFileSync stack — reported as "did not report" with the one line that
+   mattered buried in the middle. Pillow is needed by the sheet builder and
+   numpy by the crop applier, so a machine with one and not the other gets
+   halfway and then stops. */
+for (const [mod, why] of [['PIL', 'tools/figure-review.py builds the sheet with it'],
+                          ['numpy', 'tools/trim-figure.py applies the crops with it']]) {
+  try {
+    execFileSync(PY[0], [...PY.slice(1), '-c', `import ${mod}`], { stdio: 'pipe' });
+  } catch (_) {
+    const pip = `${PY.join(' ')} -m pip install ${mod === 'PIL' ? 'Pillow' : mod}`;
+    console.error(`\n  Python is here but ${mod} is not — ${why}.\n\n    ${pip}\n`);
+    process.exit(1);
+  }
+}
 const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
 
 (async () => {
-  py(['-c', MAKE], { stdio: 'pipe' });
+  py(['-c', MAKE, SRC], { stdio: 'pipe' });
   py(
 [path.join(ROOT, 'tools', 'figure-review.py'),
     '--dir', SRC, '--out', OUT, '--max-width', '300'], { stdio: 'pipe' });
@@ -204,9 +238,14 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
     const first = run();
     ok('it reports the crop it made', /CROP/.test(first), first.trim().split('\n').pop());
 
+    /* THE SECOND ONE, and it is the same bug as the first. A Windows temp path
+       inside a Python string literal reads \U as a unicode escape:
+       C:\Users\... is a SyntaxError before a single line runs. The fixture
+       generator was moved onto sys.argv earlier; this call site was missed,
+       because it fits on one line and does not look like source. It is. */
     const size = py(
-['-c',
-      `from PIL import Image;print(*Image.open(r"${SRC}/demo/tall_FIG.1.1_p001.jpg").size)`],
+['-c', 'import sys;from PIL import Image;print(*Image.open(sys.argv[1]).size)',
+      path.join(SRC, 'demo', 'tall_FIG.1.1_p001.jpg')],
       { encoding: 'utf8' }).trim().split(' ').map(Number);
     ok('the image on disk is now exactly the box the sheet recorded',
        size[0] === box[2] - box[0] && size[1] === box[3] - box[1],
@@ -238,16 +277,17 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
        page_size the file no longer has — which is exactly the mismatch
        trim-figure.py refuses, and it would have been my fixture lying, not the
        tool. */
-    py(
-['-c', `
+    const pageFixture = `
+import os, sys
 from PIL import Image, ImageDraw
 im = Image.new("RGB", (900, 1200), "white"); d = ImageDraw.Draw(im)
-d.rectangle([60, 120, 840, 880], outline=(0,0,0), width=6)     # the artwork
-for i in range(4):                                              # its legend
+d.rectangle([60, 120, 840, 880], outline=(0,0,0), width=6)
+for i in range(4):
     d.rectangle([60, 910 + i*22, 700, 910 + i*22 + 8], fill=(30,30,30))
 d.rectangle([60, 1020, 840, 1180], outline=(0,0,0), width=4)   # a second figure
-im.save(r"${pagesDir}/page-001.jpg", quality=92)
-`], { stdio: 'pipe' });
+im.save(os.path.join(sys.argv[1], "page-001.jpg"), quality=92)
+`;
+py(['-c', pageFixture, pagesDir], { stdio: 'pipe' });
     /* A proposal that is deliberately too small: it stops 300px short of the
        bottom, exactly as a cut-off legend would. */
     const manifest = path.join(TMP, 'manifest.json');

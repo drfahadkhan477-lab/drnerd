@@ -42,31 +42,37 @@ const head = t => console.log('\n── ' + t + ' ──');
 const measure = (page) => page.evaluate(async () => {
   const notes = (typeof REF !== 'undefined' ? REF : []).filter(n => /refimg:\/\//.test(n.body || ''));
   if (!notes.length) return { err: 'no reference notes cite a figure' };
-  if (typeof goRefs === 'function') goRefs();
-  if (typeof render === 'function') render();
+  /* goRefs() ALREADY RENDERS. Calling render() after it ran a SECOND view
+     transition, and that is what this suite kept tripping over: each one swaps
+     the DOM in an async callback, so nodes collected before the swap are
+     detached afterwards. A detached <img> still decodes — naturalWidth lands
+     normally — and getBoundingClientRect() is all zeros for ever. That is
+     exactly the "all 55 decoded, 0 boxed" the owner's laptop reported, and why
+     this machine never saw it: the same race, landing the other way on a
+     faster renderer.
 
-  /* Not scoped to .ref-body: the refs screen lays out differently in landscape
-     and the note body is not always that element. What is being asserted is a
-     property of every rendered ref figure, wherever the layout put it. */
-  const imgs = [...document.querySelectorAll('.ref-fig img')];
-  imgs.forEach(i => { try { i.loading = 'eager'; } catch (_) {} });
-  /* TWO conditions, and the second one cost an hour. render() goes through
-     startViewTransition, so the markup it produces lands in an async callback:
-     measure too early and every image reports a zero-width box while its
-     <figure> already measures 878px. A fixed sleep hid that in portrait and
-     exposed it in landscape, which is the signature of a race rather than a
-     layout bug. Waiting for the boxes to exist is waiting for the precondition
-     these measurements need; if they never do, the timeout leaves rows empty
-     and the suite says so instead of dividing by zero. */
+     So nothing is collected once. The list is re-queried every pass, eager is
+     re-applied to whatever is live now, and the measurement below reads the
+     set the loop actually settled on. A DOM swap mid-wait then costs an
+     iteration rather than the whole run. */
+  if (typeof goRefs === 'function') goRefs();
+
+  const live = () => [...document.querySelectorAll('.ref-fig img')];
+  const ready = i => i.naturalWidth > 0 && i.getBoundingClientRect().width > 0;
+  let imgs = [];
   const t0 = Date.now();
   while (Date.now() - t0 < 20000) {
-    if (imgs.length && imgs.every(i => i.naturalWidth > 0 && i.getBoundingClientRect().width > 0)) break;
+    imgs = live();
+    /* loading="lazy" keeps naturalWidth at 0 for anything below the fold, and
+       most of 295 note cards are below it. Re-applied every pass because a
+       swap brings back a fresh set with the attribute as authored. */
+    imgs.forEach(i => { try { i.loading = 'eager'; } catch (_) {} });
+    if (imgs.length && imgs.every(ready)) break;
     await new Promise(r => setTimeout(r, 150));
   }
-  /* The refs screen renders every note's body, so most of these figures are in
-     collapsed cards with a zero-width box. A ratio against a zero width is not
-     a measurement of anything — only figures the layout actually placed can
-     say whether the layout upscaled them. */
+  imgs = live();
+  imgs.forEach(i => { try { i.loading = 'eager'; } catch (_) {} });
+
   const rows = imgs.filter(i => i.naturalWidth > 0 && i.getBoundingClientRect().width > 0).map(i => {
     const fig = i.closest('figure');
     /* The container is the figure's PARENT, never the figure itself: once the
@@ -80,7 +86,16 @@ const measure = (page) => page.evaluate(async () => {
       avail: host ? host.getBoundingClientRect().width : 0,
     };
   });
-  return { rows, decoded: rows.length, total: imgs.length,
+  /* WHY, NOT JUST HOW MANY. "0 of 55 placed" has two completely different
+     causes and the same wording for both: an image that never decoded
+     (naturalWidth 0 — the citation did not resolve, or 20s was not enough on
+     this machine) and an image that decoded perfectly into a collapsed card
+     (width 0 — the refs screen simply did not lay that note out). Reported on
+     the owner's laptop where this build has 55 figures and none qualified, and
+     the message could not say which half was missing. */
+  const gotPixels = imgs.filter(i => i.naturalWidth > 0).length;
+  const gotBox = imgs.filter(i => i.getBoundingClientRect().width > 0).length;
+  return { rows, decoded: rows.length, total: imgs.length, gotPixels, gotBox,
            cardW: rows.length ? Math.round(Math.max(...rows.map(r => r.avail))) : 0 };
 });
 
@@ -100,8 +115,12 @@ const measure = (page) => page.evaluate(async () => {
     const m = await measure(page);
     if (m.err) { ok('a note with figures could be opened', false, m.err); await page.close(); continue; }
 
+    const why = m.decoded > 0 ? ''
+      : m.gotPixels === 0 ? ` — none of ${m.total} decoded at all, so the citations did not resolve or 20s was not enough here`
+      : m.gotBox === 0 ? ` — all ${m.gotPixels} decoded, but every card was collapsed to zero width`
+      : ` — ${m.gotPixels} decoded and ${m.gotBox} laid out, but never the same one`;
     ok('figures were found, decoded and laid out', m.decoded > 0,
-     `${m.decoded} of ${m.total} placed, card ${m.cardW}px`);
+     `${m.decoded} of ${m.total} placed, card ${m.cardW}px${why}`);
   if (!m.decoded) { await page.close(); continue; }
 
     const upscaled = m.rows.filter(r => r.css > r.nat + 1);
