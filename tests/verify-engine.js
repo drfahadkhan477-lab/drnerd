@@ -20,6 +20,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { blankComments } = require('./_source.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -103,7 +104,11 @@ head('every browser suite goes through the helper, none launches an engine itsel
        expression. But a real call sits in statement position with no quote to
        its left on the line, and a mention always has one — a distinction that
        needs no lexer. */
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+    /* Blanked rather than collapsed. This replaced a whole multi-line comment
+       with ONE space, which joins the code before it to the code after it —
+       and every pattern below is ^-anchored with /m, so a merged line can hide
+       a real launch() or invent one. */
+    const code = blankComments(src);
     if (/^[^'"`\n]*\b(?:chromium|webkit|firefox)\.launch\(/m.test(code)) direct.push(f);
     /* A suite that uses a browser must get it from here. One that does not
        (the pure-arithmetic suites, this one included) is not required to
@@ -114,6 +119,30 @@ head('every browser suite goes through the helper, none launches an engine itsel
   }
   ok('no suite calls chromium.launch() / webkit.launch() directly',
      direct.length === 0, direct.join(', ') || 'none');
+
+  /* THE SAME RULE, ABOUT A DIFFERENT SHARED THING. Reading this repository's
+     source as text requires blanking its comments first, because the files
+     explain themselves at length and those explanations QUOTE the patterns
+     being hunted — a scan that reads comments finds the paragraph warning
+     about the bug and reports it as the bug. That happened three times in one
+     day, in three different files, twice to the person who had just written
+     the paragraph, which is precisely the shape of thing this suite exists to
+     stop: one helper, not five local copies drifting apart. Two of the five
+     already had: one stripped comments (shifting every index after) and one
+     collapsed them to a single space (merging lines under ^-anchored /m). */
+  const rolled = [];
+  for (const f of suites.concat(fs.readdirSync(TESTS).filter(n => /^_.*\.js$/.test(n)))) {
+    if (f === '_source.js') continue;
+    const src = fs.readFileSync(path.join(TESTS, f), 'utf8');
+    /* Scanned on the BLANKED copy, which is the rule applying to itself: the
+       paragraph above quotes what it hunts for, and reading it would report
+       this very check as a violation. The exemption is requiring _source —
+       a file that uses the shared helper is not rolling its own. */
+    if (/_source/.test(src)) continue;
+    if (/\[\\s\\S\]\*\?\\\*\\\//.test(blankComments(src))) rolled.push(f);
+  }
+  ok('no suite rolls its own comment blanker — it is in tests/_source.js',
+     rolled.length === 0, rolled.join(', ') || 'none');
   ok('no suite requires playwright behind the helper’s back',
      unwired.length === 0, unwired.join(', ') || 'none');
 }

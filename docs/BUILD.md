@@ -337,8 +337,9 @@ places, each caught only after the fact:
   (`tests/verify-gemini.js`)
 - **Mistral's capability filter** checked `capabilities.chat`. A first draft
   of the fixture also guessed `chat`. Mistral's real field is
-  `capabilities.completion_chat`; a real key is what exposed it.
-  (`tests/verify-mistral.js`)
+  `capabilities.completion_chat`; a real key is what exposed it. (The suite
+  that caught it went with the provider in step 79, `onetutor` — the lesson
+  outlived the code, which is why it is still written down here.)
 - **`Store.merge`'s array path** was tested by handing it a *delta* — `[3]`
   folded onto `[1, 2]` — which is not a shape the app ever produces:
   `saveJSON` persists the *whole* array on every write. Against a plain

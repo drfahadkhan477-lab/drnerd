@@ -28,6 +28,7 @@ const { launch, engineName } = require('./_engine.js');
 const R = require('./_render.js');
 const fs = require('fs');
 const path = require('path');
+const { blankComments } = require('./_source.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -89,15 +90,6 @@ const FIXTURE = `<!doctype html><html><body>
    here contain commas, braces, strings and nested calls, and a pattern that
    tried to skip them would be the same kind of guess this file exists to
    replace. */
-/* Comments are blanked, not removed, so every index and line number below
-   still points at the real file. Without this the scan finds the pattern in
-   the paragraph above and reports this file — which it did, first run. */
-function blankComments(src) {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))
-    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, p) => p + ' '.repeat(m.length - p.length));
-}
-
 function twoArgWaits() {
   const dir = __dirname;
   const out = [];

@@ -27,6 +27,7 @@
 const { scan, figCount } = require('../tools/figure-audit.js');
 const fs = require('fs');
 const path = require('path');
+const { blankComments } = require('./_source.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -145,9 +146,7 @@ head('a bank whose question text it cannot find is refused, not passed');
      today a scan has read a comment as code — see the same treatment in
      verify-render.js and verify-stats.js — which is why it is done the same
      way here rather than by narrowing the pattern until it happens to miss. */
-  const code = src
-    .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))
-    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, p) => p + ' '.repeat(m.length - p.length));
+  const code = blankComments(src);
   ok('and it no longer guesses at three field names in the code itself',
      !/q\.q \|\| q\.stem \|\| q\.text/.test(code));
 }

@@ -1,17 +1,7 @@
-# Xcode
-*.xcuserstate
-*.xcdatamodeld
-*.xcworkspace
-DerivedData/
-*.app
-*.dSYM
-
-# CocoaPods
-Pods/
-Podfile.lock
-
-# Firebase
-GoogleService-Info.plist
+# Xcode, CocoaPods and Firebase rules lived here from a template this project
+# never used — it is Node scripts, plain HTML and a Cloudflare Worker, and
+# nothing matching them has ever been tracked. Removed rather than left to
+# suggest a shape the repository does not have.
 
 # macOS
 .DS_Store

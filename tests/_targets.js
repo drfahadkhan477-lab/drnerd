@@ -59,9 +59,11 @@ const GUARD = /\^https\?:/;
 /* Comments are not code. This file's own prose quotes the shapes it matches,
    and so does verify-engine.js's section about it; scanning the raw text finds
    those and classifies a suite by its documentation. */
-const stripComments = src => src
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+/* Blanked rather than stripped — see tests/_source.js. Removing a comment
+   shifts every index after it, which does not matter to the patterns below
+   but makes this the fifth local copy of a thing that is now in one place. */
+const { blankComments } = require('./_source.js');
+const stripComments = blankComments;
 
 function classifySource(raw) {
   const src = stripComments(raw);
