@@ -42,7 +42,23 @@ new Function('module', 'exports', fs.readFileSync(path.join(__dirname, '..', 'sr
 const F = mod.FSRS;
 
 const DAY0 = '2026-01-01';
-const plus = (iso, d) => new Date(Date.parse(iso + 'T00:00:00') + d * 86400000).toISOString().slice(0, 10);
+/* Pure string arithmetic, with no Date in it anywhere. That is the whole point:
+   the previous version parsed `iso + 'T00:00:00'` as local midnight, added
+   d * 86400000 milliseconds and formatted back through toISOString(), which is
+   the UTC day — the EXACT bug it was being used to check fsrs.js for. The two
+   agreed, so the suite passed in every timezone while the scheduler shipped
+   due dates a day early everywhere east of Greenwich.
+   Adding milliseconds is wrong a second way: across a spring-forward boundary
+   a calendar day is 23 hours, so d * 86400000 lands on the wrong date even
+   when the formatting is right. */
+const addDaysISO = (iso, n) => {
+  let [y, m, d] = iso.split('-').map(Number);
+  const leap = yy => (yy % 4 === 0 && yy % 100 !== 0) || yy % 400 === 0;
+  const len = (yy, mm) => [31, leap(yy) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mm - 1];
+  for (let i = 0; i < n; i++) { d++; if (d > len(y, m)) { d = 1; m++; if (m > 12) { m = 1; y++; } } }
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+};
+const plus = (iso, d) => addDaysISO(iso, d);
 const card = (S, D, extra) => Object.assign({ stability: S, difficulty: D, last: DAY0, reps: 3, lapses: 0,
                                               ivl: Math.max(1, Math.ceil(S)) }, extra || {});
 /* Every state the app can actually reach, not a happy path. */
@@ -292,6 +308,85 @@ head('the scheduler says which scheduler it is');
      F.update({ ivl: 6, reps: 3, lapses: 0, last: '2026-08-20' }, 3, '2026-08-30').ivl > 0);
   ok('and the stamp does not disturb the schedule it is attached to',
      F.update(null, 3, DAY0).ivl === F.ivl(F.initStability(3)));
+}
+
+
+/* ── a calendar day is the fellow's calendar day, in any timezone ────────── */
+/* THE DEFECT THIS EXISTS FOR. fsrsUpdate built its due date by parsing
+   `now + 'T00:00:00'` — which ES parses as LOCAL midnight — and then reading
+   the result back with `.toISOString().slice(0,10)`, which is the UTC day.
+   East of Greenwich those are different days, so every card was scheduled one
+   day EARLY: in Karachi (UTC+5) a one-day interval came due today.
+
+   It survived because the only test helper that computed an expected date,
+   `plus()`, derived it exactly the same wrong way — local parse, UTC format —
+   so both sides agreed and the suite passed in every timezone on earth. That
+   is the failure mode a shared helper produces, and it is why the checks below
+   assert PROPERTIES rather than compare against a second derivation.
+
+   Run in real child processes under real TZ values, because a timezone cannot
+   be changed inside a running V8 once Date has cached it, and because CI's own
+   zone must not decide whether this is tested. */
+head('a due date means the same thing in every timezone');
+{
+  const { execFileSync } = require('child_process');
+  const FSRS_PATH = path.join(__dirname, '..', 'src', 'core', 'fsrs.js');
+
+  /* Deliberately spans both sides of Greenwich, the half-hour and
+     three-quarter-hour offsets that break naive arithmetic, and a
+     southern-hemisphere DST zone. Kathmandu is UTC+5:45. */
+  const ZONES = ['UTC', 'Asia/Karachi', 'Asia/Kathmandu', 'Pacific/Kiritimati',
+                 'America/New_York', 'Pacific/Auckland', 'Australia/Adelaide'];
+
+  /* The probe returns facts, not judgements — the assertions stay in here. */
+  const PROBE = `
+    const fs=require('fs'), mod={};
+    new Function('module','exports',fs.readFileSync(${JSON.stringify(FSRS_PATH)},'utf8'))
+      .call(mod,{exports:mod},mod);
+    const F=mod.FSRS;
+    const out={};
+    /* A one-day interval from a known day must land on the next day. ivl is
+       whatever the scheduler says, so ask it and add that many days by hand
+       using plain string arithmetic that has no Date in it at all. */
+    const r=F.update(null,3,'2026-01-01');
+    out.ivl=r.ivl; out.due=r.due; out.last=r.last;
+    /* Identity: a zero-day round trip through the scheduler's own date path
+       must give back the day it was handed. */
+    out.dayIn='2026-06-15';
+    out.daysBetweenSelf=F.daysBetween('2026-06-15','2026-06-15');
+    out.daysBetweenOne=F.daysBetween('2026-06-15','2026-06-16');
+    /* Across a spring-forward boundary, where a day is 23 hours long. */
+    out.daysAcrossDst=F.daysBetween('2026-03-01','2026-04-01');
+    /* And the default "today" the module picks when no day is passed. */
+    out.defaultToday=F.update(null,3).last;
+    process.stdout.write(JSON.stringify(out));
+  `;
+
+  ok('the expected-date arithmetic is itself correct across a month end',
+     addDaysISO('2026-01-31', 1) === '2026-02-01' && addDaysISO('2026-02-28', 1) === '2026-03-01'
+     && addDaysISO('2026-12-31', 1) === '2027-01-01');
+
+  for (const tz of ZONES) {
+    let r;
+    try {
+      r = JSON.parse(execFileSync(process.execPath, ['-e', PROBE],
+        { env: Object.assign({}, process.env, { TZ: tz }), encoding: 'utf8' }));
+    } catch (e) {
+      ok(`${tz}: the scheduler runs at all`, false, String(e.message).slice(0, 120));
+      continue;
+    }
+    const want = addDaysISO('2026-01-01', r.ivl);
+    ok(`${tz}: a ${r.ivl}-day interval from 2026-01-01 is due ${want}`,
+       r.due === want, r.due === want ? '' : `got ${r.due}`);
+    ok(`${tz}: the day it was handed is the day it records`,
+       r.last === '2026-01-01', `got ${r.last}`);
+    ok(`${tz}: a day is zero days from itself`, r.daysBetweenSelf === 0, String(r.daysBetweenSelf));
+    ok(`${tz}: consecutive days are one day apart`, r.daysBetweenOne === 1, String(r.daysBetweenOne));
+    ok(`${tz}: March has 31 days even where one of them is 23 hours long`,
+       r.daysAcrossDst === 31, String(r.daysAcrossDst));
+    ok(`${tz}: the default today is a well-formed calendar day`,
+       /^\d{4}-\d{2}-\d{2}$/.test(r.defaultToday), String(r.defaultToday));
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

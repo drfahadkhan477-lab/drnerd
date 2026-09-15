@@ -69,8 +69,47 @@ function fsrsParamsFingerprint() {
   return h.toString(16).padStart(8, '0');
 }
 
+/* ── calendar days, in the fellow's own timezone ──────────────────────────
+   A DAY HERE IS A LOCAL CALENDAR DAY, never a UTC one, and these three are the
+   only place that convention is expressed.
+
+   The bug they replace: due dates were built by parsing `iso + 'T00:00:00'`,
+   which ES parses as LOCAL midnight, and then read back with
+   `.toISOString().slice(0,10)`, which is the UTC day. Anywhere east of
+   Greenwich those are different days, so every card was scheduled one day
+   EARLY — in Karachi at UTC+5, a one-day interval came due today. It went
+   unnoticed for as long as it did because the suite's own expected-date helper
+   derived its answer the same wrong way, so the two agreed and the tests
+   passed in every timezone.
+
+   The property that makes this correct is that a date string never touches UTC
+   at all: it is split into its parts, rebuilt as a local Date, and formatted
+   back from local parts. '2026-06-15' in, '2026-06-15' out, at any offset —
+   including the 45-minute one Kathmandu uses, which defeats arithmetic that
+   assumes whole-hour zones. */
+function isoToLocalDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);   /* local midnight */
+  return isNaN(d.getTime()) ? null : d;
+}
+function localDateToISO(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function todayISO() { return localDateToISO(new Date()); }
+
+/* Both ends parsed the same way, so the difference is whole days even across a
+   spring-forward boundary where one of them is only 23 hours long — Math.round
+   absorbs the hour that DST adds or removes. A malformed date yields 0 rather
+   than NaN, because this feeds retrievability, which feeds stability, and a
+   NaN there reaches `new Date(NaN).toISOString()` and throws from inside
+   render() — the failure mode the rest of this module is already written
+   against. */
 function daysBetween(fromISO, toISO) {
-  return Math.round((Date.parse(toISO + 'T00:00:00') - Date.parse(fromISO + 'T00:00:00')) / 86400000);
+  const a = isoToLocalDate(fromISO), b = isoToLocalDate(toISO);
+  if (!a || !b) return 0;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
 
 /* Probability of recall after `elapsedDays` since a card with the given
@@ -192,7 +231,12 @@ function fsrsUpdate(card, rating, today) {
      not throw, and the neutral rating is the only defensible guess. */
   rating = Number(rating);
   rating = isFinite(rating) ? Math.max(1, Math.min(4, Math.round(rating))) : 3;
-  const now = today || (new Date().toISOString().slice(0, 10));
+  /* A caller that passes a day decides what day it is; the app always does,
+     via its own todayISO(). The fallback must agree with the parse convention
+     above, which the old `new Date().toISOString().slice(0,10)` did not — it
+     is the UTC day, so between local midnight and 05:00 in Karachi this module
+     thought today was yesterday. */
+  const now = (today && isoToLocalDate(today)) ? today : todayISO();
   const prev = fsrsSeed(card);
   let difficulty, stability;
   if (!prev) {
@@ -218,14 +262,18 @@ function fsrsUpdate(card, rating, today) {
   const ivl = fsrsIvl(stability);
   const reps = rating === 1 ? 0 : (card && card.reps || 0) + 1;
   const lapses = (card && card.lapses || 0) + (rating === 1 ? 1 : 0);
-  const dueDate = new Date(now + 'T00:00:00'); dueDate.setDate(dueDate.getDate() + ivl);
-  return { difficulty, stability, ivl, reps, lapses, due: dueDate.toISOString().slice(0, 10), last: now, sv: SCHEDULER_VERSION };
+  /* setDate() rolls months and years for us and steps whole calendar days, so
+     a DST boundary inside the interval does not shift the due date — which
+     adding ivl * 86400000 milliseconds would. */
+  const dueDate = isoToLocalDate(now); dueDate.setDate(dueDate.getDate() + ivl);
+  return { difficulty, stability, ivl, reps, lapses, due: localDateToISO(dueDate), last: now, sv: SCHEDULER_VERSION };
 }
 
 root.FSRS = {
   update: fsrsUpdate, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
-  ivl: fsrsIvl, daysBetween, W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR,
+  ivl: fsrsIvl, daysBetween, todayISO, isoToLocalDate, localDateToISO,
+  W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR,
   SCHEDULER_VERSION, paramsFingerprint: fsrsParamsFingerprint,
 };
 

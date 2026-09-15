@@ -104,6 +104,10 @@ const SUITES = [
      pictures is worse than none, so the fixtures that must stay QUIET are the
      load-bearing half of that suite. */
   ['figaudit',     'a stem that points at a picture is told apart from one that only sounds like it'],
+  /* Guards tests/_render.js against synthetic fixtures rather than the app: the
+     race is a property of startViewTransition, so isolating it proves more than
+     burying it under 42 MB of question bank, and it runs in seconds. */
+  ['render',       'a suite that reads after a screen change reads the new screen, not the old one'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
