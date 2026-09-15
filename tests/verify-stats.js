@@ -200,5 +200,87 @@ head('the arithmetic in the header is self-consistent');
      `${stats.total} + ${stats.pwa} − ${ciTotal} = ${stats.total + stats.pwa - ciTotal}`);
 }
 
+
+/* ── a check that cannot fail is a number that means nothing ─────────────── */
+/* THIS FILE'S OWN PREMISE, APPLIED ONE LEVEL DOWN. Everything above holds the
+   documentation to the recorded totals. That is only worth doing if the totals
+   themselves mean something, and "1758 checks" means nothing if some of those
+   checks are incapable of failing. The count goes up, the confidence goes up,
+   and nothing was measured.
+
+   Two real instances, both found by sweeping for this shape rather than by
+   noticing them:
+
+     · verify-render.js asserted `ok('booted() returns once state and the first
+       render are both up', true)` on the reasoning that a throw inside
+       booted() means the line is never reached. That is exactly what made it
+       worthless: booted() rejecting takes the suite down as an unhandled
+       rejection, printing no FAIL and leaving the count wrong, so the one
+       failure it described is the one it could not report.
+     · verify-splash-heart.js counted a SKIP as a pass — `ok('(skipped file
+       content checks …)', true)` — so "14 passed" meant thirteen things
+       verified and one thing declined.
+
+   Scoped deliberately to conditions that are literally constant. A wider sweep
+   was tried first and abandoned on the evidence: 203 assertions in this repo
+   are "absence" checks (=== null, .length === 0, a negated regex), and reading
+   them showed the overwhelming majority are the POINT of the check — "null,
+   not 0, because 0 would read as never". A lint with that false-positive rate
+   would be ignored within a week, which is worse than no lint. Constant
+   conditions have no such defence.
+
+   Parenthesis walking with comments blanked, for the reasons tests/verify-
+   render.js documents: predicates contain commas and braces, and an apostrophe
+   inside a comment will otherwise open a string that swallows the rest. */
+head('no assertion is incapable of failing');
+{
+  const blankComments = src => src
+    .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, p) => p + ' '.repeat(m.length - p.length));
+
+  const CONSTANT = [
+    [/^\s*true\s*$/,               'literal true'],
+    [/^\s*!\s*(false|0)\s*$/,      'negated falsy literal'],
+    [/^\s*!!\s*(true|1)\s*$/,      'double-negated truthy literal'],
+    [/^\s*1\s*$/,                  'literal 1'],
+    [/\.length\s*>=\s*0\s*$/,      'length >= 0, true of every array'],
+  ];
+
+  const dir = path.join(__dirname);
+  const bad = [];
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith('.js')) continue;
+    const src = blankComments(fs.readFileSync(path.join(dir, name), 'utf8'));
+    const re = /\bok\(/g;
+    let m;
+    while ((m = re.exec(src))) {
+      let i = m.index + m[0].length, depth = 1, inS = null, start = i;
+      const parts = [];
+      for (; i < src.length && depth > 0; i++) {
+        const c = src[i];
+        if (inS) { if (c === '\\') { i++; continue; } if (c === inS) inS = null; continue; }
+        if (c === "'" || c === '"' || c === '`') { inS = c; continue; }
+        if ('([{'.includes(c)) depth++;
+        else if (')]}'.includes(c)) depth--;
+        if (depth === 0) break;
+        if (c === ',' && depth === 1) { parts.push(src.slice(start, i)); start = i + 1; }
+      }
+      parts.push(src.slice(start, i));
+      if (parts.length < 2) continue;
+      const why = (CONSTANT.find(([p]) => p.test(parts[1])) || [])[1];
+      if (why) bad.push(`${name}:${src.slice(0, m.index).split('\n').length} (${why})`);
+    }
+  }
+  ok('every ok() has a condition that could come out false',
+     bad.length === 0, bad.slice(0, 8).join(', ') || 'none');
+
+  /* The lint is only worth having if it can fire, and the cheapest way to be
+     sure is to hand it the shape it hunts for. */
+  const probe = (cond) => CONSTANT.some(([p]) => p.test(cond));
+  ok('and it recognises the shapes it is looking for',
+     probe(' true ') && probe('x.length >= 0') && probe(' 1 ') && !probe('a === b') &&
+     !probe('list.length === 0') && !probe('found !== null'));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

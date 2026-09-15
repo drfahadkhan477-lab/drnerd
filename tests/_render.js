@@ -33,6 +33,37 @@
  * for afterwards, when the question is whether animation has finished.
  */
 
+/* ── BEFORE MIGRATING A waitForTimeout TO settled(), READ THIS ────────────
+ * There are 113 fixed sleeps left in tests/, and 66 of them are immediately
+ * followed by an evaluate() that reads the thing the next assertion checks.
+ * That makes the conversion look mechanical. It is not, and doing it the
+ * obvious way is worse than leaving the sleep alone.
+ *
+ * The obvious way, on a real example from verify-apex.js:
+ *
+ *     await page.evaluate(() => { goLab(); render(); });
+ *     await page.waitForTimeout(1200);
+ *     const mounted = await page.evaluate(() => ({
+ *       hasCanvas: !!document.getElementById('physioCanvas'), … }));
+ *     ok('the cycle canvas is in the lab markup', mounted.hasCanvas);
+ *
+ * The predicate that suggests itself is "wait until physioCanvas exists" —
+ * which is precisely what the next line asserts. Make that change and the
+ * assertion can no longer fail: either the wait succeeds and the check is
+ * tautological, or the wait times out and the suite CRASHES instead of
+ * reporting a failure. A check that cannot come out false is the thing
+ * verify-stats.js now fails the build over, and this is how one gets written
+ * without anyone deciding to write one.
+ *
+ * THE RULE: a wait must be a PRECONDITION, never the proposition under test.
+ * Wait for something that establishes the app got where it was going — the
+ * screen flag, a container the assertion does not look at, a control the test
+ * is not about — and let the assertion still be capable of failing. If no such
+ * precondition exists, the sleep is doing real work and should stay, with a
+ * comment saying what it is waiting for and why nothing observable marks it.
+ *
+ * This needs the app in front of you, one site at a time. It is not a sweep. */
+
 /* Boot can be genuinely slow: the single-file build is ~42 MB of HTML and the
    laptop's WebKit spends ~100s parsing it before a line of app code runs. This
    is not padding for a race, it is the real cost of the target artifact. */
