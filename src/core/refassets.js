@@ -156,6 +156,21 @@ function bytes() {
    deletion is not, so without this an imported chapter that gets deleted would
    leave its figures behind for ever. */
 function sweep(bodies) {
+  /* NOTHING TO SWEEP AGAINST IS NOT THE SAME AS NOTHING BEING CITED, and the
+     difference is irreversible in one direction. The only caller is
+
+         RefAssets.sweep(REF.map(r => r.body))
+
+     so an empty list means either "every note has been deleted" or "the notes
+     have not loaded yet" — during a restore, or when the note store failed
+     while the asset store did not. Those are indistinguishable from in here,
+     and treating the second as the first deletes every figure the fellow ever
+     imported. They are their own imported chapters; unlike the shipped corpus
+     they cannot be rebuilt from source.
+
+     Doing nothing costs a delayed reclaim that the next sweep performs anyway.
+     Doing the wrong thing costs a chapter of figures for good. */
+  if (!Array.isArray(bodies) || !bodies.length) return 0;
   const live = Object.create(null);
   const re = /!\[[^\]]*\]\(refimg:\/\/([^)\s]+)\)/g;
   for (const b of bodies || []) {
