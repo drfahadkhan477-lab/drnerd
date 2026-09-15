@@ -208,5 +208,56 @@ head('the CME administration boilerplate is gone from the teaching text');
      decoy.find(q => q.id === d.id).ex === 'A minimum passing score of 50% was used in the trial.');
 }
 
+
+/* ── the structural rules, against the bank as it actually ships ─────────── */
+/* THE GAP THIS CLOSES, which is the one the block above named and did not
+   fill. The imgopt and empty-commentary rules catch two shapes of defect, and
+   they exist because COR_89 and COR_85 were each found by hand, one at a time.
+   Nothing caught a third — and "a third" means an answer index past the end of
+   the options, two questions sharing an id, a question declaring three figures
+   and carrying one. Those are machine-decidable and nothing was deciding them.
+
+   THE RULE IS STILL "DISCLOSED", NOT "PERFECT". The bank is a licensed export;
+   a defect in it cannot be fixed from this repository, so a gate demanding a
+   clean bank would block every build on something nobody can repair and would
+   be switched off within the week. A broken question must instead carry `bad`
+   or `flag`, which the app SHOWS — the remedy is to add it to FLAGS in
+   scripts/flags-patch.js, putting a notice in front of the fellow rather than
+   leaving them to wonder at 1am why an item made no sense.
+
+   The rules themselves are proven in tests/verify-contentrules.js, against
+   synthetic banks, in bare Node — so they are testable without the licensed
+   export, which is the only way they get tested anywhere but one laptop. */
+head('the bank has no structural defect the fellow is not told about');
+{
+  const { check, undisclosed, stemKey } = require('../scripts/content-checks.js');
+
+  /* Read the questions before judging them. If the stem field cannot be found,
+     the STEM and DUPLICATE_STEM rules silently examine nothing — and a checker
+     reporting "clean" because it read nothing is worse than no checker. */
+  const stem = stemKey(REAL_BANK);
+  ok('the question text was actually found and read', stem !== null,
+     stem ? `field "${stem}"` : 'NO STEM FIELD FOUND — the text rules examined nothing');
+
+  const all = check(REAL_BANK);
+  const open = undisclosed(REAL_BANK);
+  const byRule = {};
+  for (const f of open) byRule[f.rule] = (byRule[f.rule] || 0) + 1;
+
+  ok('no question is structurally broken without a bad/flag notice',
+     open.length === 0,
+     open.length
+       ? `${Object.entries(byRule).map(([r, n]) => `${r} ${n}`).join(', ')}  ` +
+         `— e.g. ${open.slice(0, 3).map(f => `${f.id} (${f.detail})`).join('; ')}  ` +
+         `— add these to FLAGS in scripts/flags-patch.js so the app says so`
+       : 'none');
+
+  /* Disclosed defects are expected and are reported, not asserted away: this
+     line is how you notice the list growing. */
+  const disclosed = all.length - open.length;
+  ok('and every defect that does exist is disclosed', open.length === 0,
+     `${all.length} structural finding(s), ${disclosed} already carrying bad/flag`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

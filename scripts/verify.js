@@ -127,6 +127,11 @@ const SUITES = [
      it did not check. The permissive direction is the dangerous one here, so
      the checks are mostly about what it REFUSES to claim. */
   ['release',      'the release gate never claims more than it measured'],
+  /* The rules tests/verify-content.js applies to the REAL bank, proven here
+     against synthetic ones — so a checker for the licensed export is testable
+     without the licensed export, which is the only way it gets tested anywhere
+     but the one laptop that has it. */
+  ['contentrules', 'a structurally broken question is caught, and a sound one is left alone'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -163,7 +168,7 @@ const SUITES = [
    Nothing is fabricated to clear it. Writing a measured count here by hand
    would mean also inventing the --pwa figure and the CI subset total, which is
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
-const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release'];
+const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release', 'contentrules'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

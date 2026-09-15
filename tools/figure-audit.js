@@ -164,6 +164,22 @@ if (!RUN) return;
 
 const { bank, shape } = loadBank(SRC);
 
+/* WHICH FIELD HOLDS THE STEM, established rather than guessed. This read
+   `q.q || q.stem || q.text` — three guesses at a key that lives in ACCSAP's
+   own export and is written down nowhere in this repository. If all three were
+   wrong, every scan below would run against an empty string and this tool
+   would print "No question refers to a picture it does not carry" — silence
+   dressed as evidence, and the most dangerous output a checker can produce.
+   It now refuses to report rather than report on nothing. */
+const { stemKey } = require('../scripts/content-checks.js');
+const STEM_KEY = stemKey(bank);
+if (!STEM_KEY) {
+  console.error('Could not find the field holding the question text in this bank.');
+  console.error('Refusing to report: every check below would have examined an empty');
+  console.error('string and come back clean, which would mean nothing at all.');
+  process.exit(2);
+}
+
 /* ── the audit ──────────────────────────────────────────────────────────── */
 const integrity = [];   /* should be empty; the build gates on it already */
 const orphans   = [];   /* the population this tool exists to find */
@@ -182,7 +198,7 @@ for (const q of bank) {
      The explanation is checked too but reported separately — commentary that
      refers to a figure the question never showed is a smaller problem than a
      stem that does. */
-  const stem = q.q || q.stem || q.text || '';
+  const stem = q[STEM_KEY] || '';
   const hit  = scan(stem);
   if (hit) {
     orphans.push({ q, where: 'stem', ...hit });
