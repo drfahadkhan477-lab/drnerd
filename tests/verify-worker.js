@@ -43,8 +43,19 @@ function stub(reply) {
   fn.calls = calls;
   return fn;
 }
-const req = (path, init = {}) => new Request('https://systole.pages.dev' + path, init);
+/* Every request below carries an Access identity, because the Worker now
+   refuses one that does not — see the fail-closed block in handleApex. The
+   header is added HERE rather than at each call site so that the gate's own
+   tests, which deliberately omit it, are the only place in this file where its
+   absence appears. Adding it site by site would have meant sixty chances to
+   write an authenticated test that was quietly testing the anonymous path. */
+const ACCESS = { 'cf-access-authenticated-user-email': 'fellow@example.org' };
+const req = (path, init = {}) => new Request('https://systole.pages.dev' + path,
+  { ...init, headers: { ...ACCESS, ...(init.headers || {}) } });
 const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? body() : b });
+/* Deliberately without one. */
+const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
+  { method: 'POST', body: b === undefined ? body() : b });
 
 (async () => {
   const { handleApex, default: worker } = await import('file://' + require('path').resolve(__dirname, '..', 'src', 'worker', 'apex.js'));
@@ -92,7 +103,7 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
        against the declared header, made before request.text() ever runs,
        catches it. */
     const spoofed = new Request('https://systole.pages.dev/api/apex/gemini/generate?model=gemini-3-flash-preview',
-      { method: 'POST', body: body(), headers: { 'content-length': String(50 * 1024 * 1024) } });
+      { method: 'POST', body: body(), headers: { ...ACCESS, 'content-length': String(50 * 1024 * 1024) } });
     const r7 = await handleApex(spoofed, ENV, f);
     ok('a declared Content-Length over the cap is refused even though the real body is tiny', r7.status === 413, String(r7.status));
   }
@@ -284,8 +295,15 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
   {
     const f = stub();
     const env = { ...ENV, APEX_RPM: '3' };
+    /* Its OWN identity, not the file's shared one. Buckets are keyed on `who`,
+       and `who` now prefers the Access identity over the connecting IP — so a
+       burst test sharing the default identity counts against every other test
+       in this file and starts already spent. It is also the more realistic
+       key: behind Access, one person on two networks is one caller. */
     const mk = () => handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
-      { method: 'POST', body: body(), headers: { 'cf-connecting-ip': '203.0.113.9' } }), env, f);
+      { method: 'POST', body: body(),
+        headers: { 'cf-access-authenticated-user-email': 'burst@example.org',
+                   'cf-connecting-ip': '203.0.113.9' } }), env, f);
     const codes = [];
     for (let i = 0; i < 5; i++) codes.push((await mk()).status);
     ok('a burst past the limit is refused', codes.filter(c => c === 429).length >= 1, codes.join(','));
@@ -307,7 +325,7 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     const spy = async (url) => { reached = url; return new Response('ok', { status: 200 }); };
     const r = await handleApex(new Request(
       'https://systole.pages.dev/api/apex/gemini/stream?model=' + encodeURIComponent(traversal),
-      { method: 'POST', body: body() }), loose, spy);
+      { method: 'POST', body: body(), headers: ACCESS }), loose, spy);
     ok('a widened allowlist still cannot admit a path', r.status === 400, String(r.status));
     ok('and no request left for anywhere', reached === null, String(reached));
 
@@ -316,14 +334,14 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     const spy2 = async (url) => { ok2 = url; return new Response('ok', { status: 200 }); };
     const good = await handleApex(new Request(
       'https://systole.pages.dev/api/apex/gemini/stream?model=gemini-9.9-flash',
-      { method: 'POST', body: body() }), loose, spy2);
+      { method: 'POST', body: body(), headers: ACCESS }), loose, spy2);
     ok('while a genuine model it was widened for still goes through',
        good.status === 200 && /\/models\/gemini-9\.9-flash:/.test(ok2 || ''), String(good.status));
 
     for (const bad of ['gemini-x?key=leak', 'gemini-x#frag', 'gemini-x:generateContent', '../etc', '']) {
       const rr = await handleApex(new Request(
         'https://systole.pages.dev/api/apex/gemini/stream?model=' + encodeURIComponent(bad),
-        { method: 'POST', body: body() }), loose, async () => new Response('ok'));
+        { method: 'POST', body: body(), headers: ACCESS }), loose, async () => new Response('ok'));
       ok(`"${bad || '(empty)'}" is refused`, rr.status === 400, String(rr.status));
     }
   }
@@ -340,7 +358,7 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     const f = async (u, init) => { sent = init && init.body; return new Response('ok', { status: 200 }); };
     const r = await handleApex(new Request(
       'https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
-      { method: 'POST', body: big }), { ...ENV, APEX_RPM: '0' }, f);
+      { method: 'POST', body: big, headers: ACCESS }), { ...ENV, APEX_RPM: '0' }, f);
     ok('a generationConfig larger than the old window is not refused', r.status === 200, String(r.status));
     ok('and its maxOutputTokens is still clamped', /"maxOutputTokens":2000/.test(sent || ''),
        (sent || '').slice(-60));
@@ -364,7 +382,7 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     const codes = [];
     for (let i = 0; i < 25; i++) {
       const r = await handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
-        { method: 'POST', body: body(), headers: { 'cf-connecting-ip': '198.51.100.7' } }),
+        { method: 'POST', body: body(), headers: { ...ACCESS, 'cf-connecting-ip': '198.51.100.7' } }),
         { ...ENV, APEX_RPM: 'twenty' }, stub());
       codes.push(r.status);
     }
@@ -374,13 +392,13 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     let sent = null;
     const spy = async (u, i) => { sent = i && i.body; return new Response('ok', { status: 200 }); };
     await handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
-      { method: 'POST', body: body() }), { ...ENV, APEX_RPM: '0', APEX_MAX_OUTPUT: '2k' }, spy);
+      { method: 'POST', body: body(), headers: ACCESS }), { ...ENV, APEX_RPM: '0', APEX_MAX_OUTPUT: '2k' }, spy);
     ok('a non-numeric APEX_MAX_OUTPUT never reaches the body as NaN', !/NaN/.test(sent || ''), (sent || '').slice(0, 70));
     let parses = true; try { JSON.parse(sent); } catch (_) { parses = false; }
     ok('so what is forwarded is still valid JSON', parses);
 
     const r = await worker.fetch(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
-      { method: 'POST', body: body() }),
+      { method: 'POST', body: body(), headers: ACCESS }),
       { ...ENV, APEX_RPM: '0', APEX_MODELS: 'gemini-([a-z', ASSETS: { fetch: async () => new Response('site') } });
     const msg = (await r.json()).error.message;
     ok('a malformed APEX_MODELS names the variable rather than blaming Google',
@@ -390,11 +408,91 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     let good = null;
     const spy2 = async (u, i) => { good = i && i.body; return new Response('ok', { status: 200 }); };
     const okr = await handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
-      { method: 'POST', body: body() }), { ...ENV, APEX_RPM: '0', APEX_MAX_OUTPUT: '500' }, spy2);
+      { method: 'POST', body: body(), headers: ACCESS }), { ...ENV, APEX_RPM: '0', APEX_MAX_OUTPUT: '500' }, spy2);
     ok('a valid APEX_MAX_OUTPUT still clamps to exactly that',
        okr.status === 200 && /"maxOutputTokens":500/.test(good || ''), (good || '').slice(0, 60));
   }
 
-  console.log(`\n${passed} passed, ${failed} failed`);
+  head('it will not hand out the key to a caller it cannot name');
+{
+  /* THE FINDING THIS CLOSES. The Access identity used to be READ and never
+     REQUIRED: `who` fell back to the connecting IP and then to 'anon', and the
+     request went through either way. The entire protection was a sentence in a
+     comment telling the deployer to put Cloudflare Access in front. A project
+     deployed without that policy was a public proxy to the owner's Gemini key.
+
+     These checks are what make the protection a property of the code rather
+     than of the deployment. */
+  const f = stub();
+  /* APEX_RPM '0' throughout this block: the limiter is a shared in-memory
+     bucket across the whole file, and none of these checks are about it. */
+  const NORATE = { ...ENV, APEX_RPM: '0' };
+  const r = await handleApex(anonPost('/api/apex/gemini/stream?model=gemini-3-flash-preview'), NORATE, f);
+  ok('an unauthenticated request is refused', r.status === 403, String(r.status));
+  ok('and Google is never called for it', f.calls.length === 0, String(f.calls.length));
+  const said = await r.json();
+  ok('and the refusal says how to fix it, both ways',
+     /Cloudflare Access/.test(said.error.message) && /APEX_ALLOW_UNAUTHENTICATED/.test(said.error.message),
+     String(said.error.message).slice(0, 80));
+
+  /* The escape hatch exists for wrangler dev and for a deployment kept private
+     by other means — but it must be typed on purpose. */
+  const f2 = stub();
+  const r2 = await handleApex(anonPost('/api/apex/gemini/stream?model=gemini-3-flash-preview'),
+    { ...NORATE, APEX_ALLOW_UNAUTHENTICATED: 'yes' }, f2);
+  ok('an explicit opt-out lets an unauthenticated request through', r2.status === 200, String(r2.status));
+
+  /* And it is the WORD that opts out, not merely the variable existing. A
+     deployer who sets it to "no", "false" or "0" meaning to disable it would
+     otherwise have switched the protection off with the opposite word. */
+  for (const v of ['no', 'false', '0', '', 'true', '1']) {
+    const f3 = stub();
+    const r3 = await handleApex(anonPost('/api/apex/gemini/stream?model=gemini-3-flash-preview'),
+      { ...NORATE, APEX_ALLOW_UNAUTHENTICATED: v }, f3);
+    ok(`APEX_ALLOW_UNAUTHENTICATED="${v}" does not open the gate`, r3.status === 403, String(r3.status));
+  }
+
+  const f4 = stub();
+  const r4 = await handleApex(post('/api/apex/gemini/stream?model=gemini-3-flash-preview'), NORATE, f4);
+  ok('an authenticated request is served as before', r4.status === 200, String(r4.status));
+}
+
+head('the size cap counts bytes, not characters');
+{
+  /* MAX_BODY is a byte budget and content-length is measured in bytes, but the
+     backstop counted raw.length — UTF-16 code units. Urdu, Arabic, an emoji or
+     a µ in a caption encodes to two to four bytes per unit, so a body this
+     check believed was under 6 MB could be three times that on the wire. It
+     mattered precisely where the header is absent or wrong, which is the only
+     case the backstop exists for. */
+  const enc = new TextEncoder();
+  /* Comfortably under the cap as UTF-16 units, comfortably over it as bytes. */
+  const fat = 'ت'.repeat(3.2 * 1024 * 1024);
+  const payload = JSON.stringify({
+    systemInstruction: { parts: [{ text: fat }] },
+    generationConfig: { maxOutputTokens: 2000 },
+    contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+  });
+  ok('the fixture is the shape the bug needed — short in units, long in bytes',
+     payload.length < 6 * 1024 * 1024 && enc.encode(payload).length > 6 * 1024 * 1024,
+     `${payload.length} units, ${enc.encode(payload).length} bytes`);
+
+  const f = stub();
+  /* No content-length, so the header check cannot catch it and the backstop
+     is the only thing standing there — exactly the case it is for. */
+  const r = await handleApex(post('/api/apex/gemini/stream?model=gemini-3-flash-preview', payload),
+    { ...ENV, APEX_RPM: '0' }, f);
+  ok('a body over the byte cap is refused', r.status === 413, String(r.status));
+  ok('and Google is never called for it', f.calls.length === 0, String(f.calls.length));
+
+  /* The other direction: ordinary ASCII well under the cap still goes through,
+     so this is a cap and not a blanket refusal. */
+  const f2 = stub();
+  const r2 = await handleApex(post('/api/apex/gemini/stream?model=gemini-3-flash-preview'),
+    { ...ENV, APEX_RPM: '0' }, f2);
+  ok('an ordinary request is unaffected', r2.status === 200, String(r2.status));
+}
+
+console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
