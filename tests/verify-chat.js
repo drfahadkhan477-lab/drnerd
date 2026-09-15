@@ -19,6 +19,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chat.js <patched.html|url>'); process.exit(1); }
@@ -62,7 +63,7 @@ const TOOL_SSE = [
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(800);
 
   const openPanel = () => page.evaluate(() => {
@@ -322,7 +323,7 @@ const TOOL_SSE = [
     const onErr = e => bootErrors.push(e.message);
     page.on('pageerror', onErr);
     await page.reload({ waitUntil: 'load', timeout: 200000 });
-    await page.waitForFunction(() => typeof S !== 'undefined', { timeout: 120000 });
+    await page.waitForFunction(() => typeof S !== 'undefined', null, { timeout: 120000 });
     await page.waitForTimeout(600);
     /* Caught rather than allowed to propagate: on a build without the fix this
        throws inside buildAI, and an uncaught rejection would end the run

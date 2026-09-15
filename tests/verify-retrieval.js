@@ -103,7 +103,7 @@ const TARGET = process.argv[2] || path.join(__dirname, '..', 'build', 'systole.h
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   await page.goto('file://' + path.resolve(TARGET));
   await page.waitForFunction(
-    () => typeof S !== 'undefined' && typeof search === 'function' && typeof REF !== 'undefined',
+    () => typeof S !== 'undefined' && typeof search === 'function' && typeof REF !== 'undefined', null,
     { timeout: 120000 });
 
   const r = await page.evaluate(() => {

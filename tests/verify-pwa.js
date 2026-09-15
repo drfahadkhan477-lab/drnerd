@@ -16,6 +16,7 @@
 'use strict';
 const path = require('path');
 const { launch, heapUsedBytes, engineName } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 const baseline = process.argv[3];
@@ -46,8 +47,7 @@ const mb = b => (b / 1048576).toFixed(1) + ' MB';
 
 async function heapAfterBoot(page, url) {
   await page.goto(url, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
-                             { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(2500);
   /* null where the engine cannot measure a heap, NOT zero. Reading
      performance.memory directly gave `undefined` on WebKit, which became 0,
@@ -134,8 +134,7 @@ async function heapAfterBoot(page, url) {
   {
   const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
   await page.goto(target, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
-                             { timeout: 120000 });
+  await booted(page);
   const late = await page.evaluate(() => new Promise(r => setTimeout(() => r({
     refs: typeof REF !== 'undefined' ? REF.length : -1,
     pearls: typeof pearlAll === 'function' ? pearlAll().length : -1,
@@ -396,8 +395,7 @@ async function heapAfterBoot(page, url) {
     const figReqs = [];
     page.on('request', r => { if (r.url().includes('/content/figures/')) figReqs.push(r.url()); });
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
-                               { timeout: 120000 });
+    await booted(page);
     await page.waitForTimeout(1200);
     ok('home screen fetches no figures at all', figReqs.length === 0, String(figReqs.length));
 
@@ -428,8 +426,7 @@ async function heapAfterBoot(page, url) {
   {
     const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
-                               { timeout: 120000 });
+    await booted(page);
     const resolved = await page.evaluate(async () => {
       const q = ALL_Q.find(x => x.img > 0 && !x.bad);
       const urls = await figuresAsDataUrls(q);
@@ -454,8 +451,7 @@ async function heapAfterBoot(page, url) {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
     const page = await ctx.newPage();
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
-                               { timeout: 120000 });
+    await booted(page);
     const swReady = await page.evaluate(() =>
       navigator.serviceWorker.ready.then(r => !!r.active).catch(() => false));
     ok('service worker registers and activates', swReady === true);
@@ -504,8 +500,7 @@ async function heapAfterBoot(page, url) {
     let figReqs = 0;
     page.on('request', r => { if (r.url().includes('/content/figures/')) figReqs++; });
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
-                               { timeout: 120000 });
+    await booted(page);
     await page.evaluate(() => navigator.serviceWorker.ready);
     /* IT LIVES ON PROGRESS NOW, not on the home screen. The landscape home grid
        gives its whole one-screen budget to four named areas and appends
@@ -515,7 +510,7 @@ async function heapAfterBoot(page, url) {
     const onHome = await page.evaluate(() => !!document.getElementById('offlineCard'));
     ok('the home screen no longer carries the card', onHome === false);
     await page.evaluate(() => goStats());
-    await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
+    await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted, null,
                                { timeout: 60000 });
 
     const before = await page.evaluate(() => {
@@ -533,7 +528,7 @@ async function heapAfterBoot(page, url) {
 
     const t0 = Date.now();
     await page.evaluate(() => offlineDownload());
-    await page.waitForFunction(() => !offlineJob.busy, { timeout: 300000 });
+    await page.waitForFunction(() => !offlineJob.busy, null, { timeout: 300000 });
     const after = await page.evaluate(() => {
       const c = document.getElementById('offlineCard');
       return { have: offlineJob.have, total: offlineJob.total,
@@ -554,9 +549,9 @@ async function heapAfterBoot(page, url) {
     figReqs = 0;
     await page.reload({ waitUntil: 'load', timeout: 200000 });
     /* A reload lands on home, and the survey now runs from Progress. */
-    await page.waitForFunction(() => typeof goStats === 'function', { timeout: 120000 });
+    await page.waitForFunction(() => typeof goStats === 'function', null, { timeout: 120000 });
     await page.evaluate(() => goStats());
-    await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted,
+    await page.waitForFunction(() => typeof offlineJob !== 'undefined' && offlineJob.counted, null,
                                { timeout: 60000 });
     const reloaded = await page.evaluate(() => ({ have: offlineJob.have, total: offlineJob.total }));
     ok('a reload finds them all still there', reloaded.have === reloaded.total,
@@ -593,7 +588,7 @@ async function heapAfterBoot(page, url) {
 
     /* Put the real one back so the offline check below has it. */
     await page.evaluate(() => offlineDownload());
-    await page.waitForFunction(() => !offlineJob.busy, { timeout: 300000 });
+    await page.waitForFunction(() => !offlineJob.busy, null, { timeout: 300000 });
     ok('and a retry restores it', await page.evaluate(() => offlineJob.have === offlineJob.total &&
        offlineJob.bad === 0));
 
@@ -653,7 +648,7 @@ async function heapAfterBoot(page, url) {
     await page.route('**/app.js', r => r.abort());
     await page.goto(ORIGIN + '/index.html', { waitUntil: 'load', timeout: 120000 });
     const shown = await page.waitForFunction(
-      () => /failed to load/i.test(document.body.textContent || ''), { timeout: 30000 })
+      () => /failed to load/i.test(document.body.textContent || ''), null, { timeout: 30000 })
       .then(() => true, () => false);
     ok('the failure reaches the splash instead of a blank screen', shown);
     /* Long enough for a registration to have happened if one were going to:
@@ -674,7 +669,7 @@ async function heapAfterBoot(page, url) {
          loads the page without the block and has to reach one. */
       const healthy = await ctx.newPage();
       await healthy.goto(ORIGIN + '/index.html', { waitUntil: 'load', timeout: 120000 });
-      await healthy.waitForFunction(() => typeof S !== 'undefined', { timeout: 120000 });
+      await healthy.waitForFunction(() => typeof S !== 'undefined', null, { timeout: 120000 });
       const after = await healthy.evaluate(async () => {
         for (let i = 0; i < 50; i++) {
           const r = await navigator.serviceWorker.getRegistrations();
@@ -704,8 +699,7 @@ async function heapAfterBoot(page, url) {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
     const page = await ctx.newPage();
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
-                               { timeout: 120000 });
+    await booted(page);
     await page.evaluate(() => navigator.serviceWorker.ready);
 
     const lid = await page.evaluate(async () => {
@@ -850,8 +844,7 @@ async function heapAfterBoot(page, url) {
     const ctx = await browser.newContext({ viewport: { width: 1194, height: 834 } });
     const page = await ctx.newPage();
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
-                               { timeout: 120000 });
+    await booted(page);
     await page.evaluate(() => { goHome(); render(); });
     /* verify-home's settle, for the same reason it has one: a box that has held
        still for five frames with no finite animation running is settled, and a

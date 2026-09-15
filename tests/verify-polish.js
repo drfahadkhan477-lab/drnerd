@@ -8,6 +8,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-polish.js <patched.html>'); process.exit(1); }
@@ -33,7 +34,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —
      a no-op on the single-file build, where this is already true. */
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(1000);
 
   head('rhythm library: the new arrhythmias are real, everywhere the old 12 were');
@@ -370,7 +371,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     const reducedPage = await browser.newPage({ viewport: { width: 900, height: 1000 } });
     await reducedPage.emulateMedia({ reducedMotion: 'reduce' });
     await reducedPage.goto(URL, { waitUntil: 'load', timeout: 200000 });
-    await reducedPage.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+    await booted(reducedPage);
     const underReduced = await reducedPage.evaluate(() => {
       window.__vibes = [];
       navigator.vibrate = p => { window.__vibes.push(p); return true; };
@@ -386,7 +387,7 @@ const head = t => console.log('\n── ' + t + ' ──');
       Object.defineProperty(window.navigator, 'vibrate', { value: undefined, configurable: true });
     });
     await noVibratePage.goto(URL, { waitUntil: 'load', timeout: 200000 });
-    await noVibratePage.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+    await booted(noVibratePage);
     const noThrow = await noVibratePage.evaluate(() => {
       try { startQuiz('Arrhythmias'); selectOpt(S.questions[0].ci); return 'ok'; }
       catch (e) { return 'threw: ' + e.message; }
@@ -612,8 +613,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   {
     const touchPage = await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true });
     await touchPage.goto(URL, { waitUntil: 'load', timeout: 250000 });
-    await touchPage.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'),
-                                    { timeout: 150000 });
+    await booted(touchPage, { timeout: 150000 });
     const touch = await touchPage.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       const doubleTap = async (el) => {

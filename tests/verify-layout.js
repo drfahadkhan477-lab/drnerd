@@ -33,6 +33,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-layout.js <patched.html>'); process.exit(1); }
@@ -76,7 +77,7 @@ const sse = text => [
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
 
   /* WAIT FOR THE BOX TO STOP MOVING, NOT FOR A CLOCK. #ai transitions its
      flex-basis over .28s, so a measurement taken on a fixed timer catches the
@@ -98,7 +99,7 @@ const sse = text => [
     };
   });
   await page.reload({ waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
 
   /* One pass per frame, aggregated: a line per invariant naming every screen
      that broke it, rather than forty near-identical PASS lines to scroll past. */

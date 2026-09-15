@@ -39,7 +39,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 const boot = async page => {
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   await page.waitForFunction(() => typeof S !== 'undefined' && typeof Store !== 'undefined' &&
-    typeof importMarkup === 'function', { timeout: 120000 });
+    typeof importMarkup === 'function', null, { timeout: 120000 });
   await page.evaluate(() => Store.ready());
   await page.waitForTimeout(250);
 };

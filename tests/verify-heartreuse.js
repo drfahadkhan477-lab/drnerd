@@ -25,6 +25,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-heartreuse.js <patched.html>'); process.exit(1); }
@@ -62,7 +63,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   const settle = ms => page.evaluate(m => new Promise(r => setTimeout(r, m)), ms);
   await settle(800);
 

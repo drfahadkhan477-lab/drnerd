@@ -25,6 +25,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-theme.js <patched.html|url>'); process.exit(1); }
@@ -45,7 +46,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
 
   head('the presets');
   const presets = await page.evaluate(() => ({
@@ -376,7 +377,7 @@ const head = t => console.log('\n── ' + t + ' ──');
        This does not soften the check. The assertion below is still
        `notified > 0`; a build that never tells the renderers still fails,
        eight seconds later instead of four tenths. */
-    await page.waitForFunction(() => window.__notified > 0, { timeout: 8000 }).catch(() => {});
+    await page.waitForFunction(() => window.__notified > 0, null, { timeout: 8000 }).catch(() => {});
     const after = await page.evaluate(() => ({
       dark: themeIsDark(),
       bar: (document.querySelector('meta[name="theme-color"]') || {}).content,

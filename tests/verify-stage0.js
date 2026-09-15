@@ -14,6 +14,7 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) {
@@ -68,8 +69,8 @@ const head = t => console.log('\n── ' + t + ' ──');
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —
      a no-op on the single-file build, where this is already true. */
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
-  await page.waitForFunction(() => document.querySelector('.hero-h1'), { timeout: 60000 });
+  await booted(page);
+  await page.waitForFunction(() => document.querySelector('.hero-h1'), null, { timeout: 60000 });
   const launchMs = Date.now() - t0;
   await page.waitForTimeout(1200);
   ok('boots with no JS errors', errors.length === 0, errors.slice(0, 2).join(' | '));
@@ -134,7 +135,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —
      a no-op on the single-file build, where this is already true. */
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(1200);
   const practice = await page.evaluate(() => {
     startQuiz('Pericardial Disease');

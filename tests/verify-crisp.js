@@ -19,6 +19,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-crisp.js <patched.html|url>'); process.exit(1); }
@@ -49,7 +50,7 @@ const ratioOf = (page, sel) => page.evaluate(s => {
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
 
   const env = await page.evaluate(() => ({
     dpr: window.devicePixelRatio,
@@ -58,7 +59,7 @@ const ratioOf = (page, sel) => page.evaluate(s => {
   ok('the test really is running on a 3× display', env.dpr === 3, `dpr ${env.dpr}`);
 
   head('the home ECG strip');
-  await page.waitForFunction(() => { const c = document.getElementById('heroECG'); return c && c.width > 0; }, { timeout: 30000 });
+  await page.waitForFunction(() => { const c = document.getElementById('heroECG'); return c && c.width > 0; }, null, { timeout: 30000 });
   const hero = await ratioOf(page, '#heroECG');
   ok('the hero ECG strip backs itself at ~3×, not the old 2×', hero >= 2.8, `${hero ? hero.toFixed(2) : hero}×`);
 
@@ -66,7 +67,7 @@ const ratioOf = (page, sel) => page.evaluate(s => {
   await page.evaluate(() => { goLab(); render(); });
   await page.waitForTimeout(500);
   await page.evaluate(() => { document.querySelector('[data-physio-view="pv"]') && null; });
-  await page.waitForFunction(() => { const c = document.getElementById('physioCanvas'); return c && c.width > 0; }, { timeout: 30000 });
+  await page.waitForFunction(() => { const c = document.getElementById('physioCanvas'); return c && c.width > 0; }, null, { timeout: 30000 });
 
   const physio = await ratioOf(page, '#physioCanvas');
   ok('the cardiac-cycle diagram backs itself at ~3×', physio >= 2.8, `${physio ? physio.toFixed(2) : physio}×`);

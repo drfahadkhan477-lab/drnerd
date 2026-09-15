@@ -26,6 +26,8 @@
 'use strict';
 const { launch, engineName } = require('./_engine.js');
 const R = require('./_render.js');
+const fs = require('fs');
+const path = require('path');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -66,6 +68,90 @@ const FIXTURE = `<!doctype html><html><body>
                         : '<div class="q-counter">Q 1 / 10</div>';
   }, 400); }
 </script></body></html>`;
+
+/* ── every wait in this repo waits as long as it says it does ───────────── */
+/* THE BUG THIS CATCHES, which hid in plain sight across 69 call sites.
+   Playwright's signature is waitForFunction(pageFunction, arg, options). Write
+   it with two arguments — waitForFunction(pred, { timeout: 120000 }) — and the
+   object binds to `arg`, is handed to the predicate, which ignores it, and the
+   wait runs on the DEFAULT 30 second timeout. The number is not overridden or
+   clamped; it is simply never read.
+
+   Nothing fails loudly. The suite still passes on a fast machine, and on a
+   slow one it reports "Timeout 30000ms exceeded" — which reads like the app
+   failing to boot rather than like an option in the wrong position. The single
+   file is ~42 MB of HTML and WebKit spends around 100 seconds parsing it
+   before a line of app code runs, so on the owner's laptop a 30 second cap
+   cannot be met no matter how healthy the app is. The 120000 was right; it was
+   never in effect.
+
+   Checked by walking parentheses rather than by regex, because the predicates
+   here contain commas, braces, strings and nested calls, and a pattern that
+   tried to skip them would be the same kind of guess this file exists to
+   replace. */
+/* Comments are blanked, not removed, so every index and line number below
+   still points at the real file. Without this the scan finds the pattern in
+   the paragraph above and reports this file — which it did, first run. */
+function blankComments(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, p) => p + ' '.repeat(m.length - p.length));
+}
+
+function twoArgWaits() {
+  const dir = __dirname;
+  const out = [];
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith('.js')) continue;
+    const raw = fs.readFileSync(path.join(dir, name), 'utf8');
+    const src = blankComments(raw);
+    const rawLines = raw.split('\n');
+    const re = /waitForFunction\(/g;
+    let m;
+    while ((m = re.exec(src))) {
+      let i = m.index + m[0].length, depth = 1, inS = null, argStart = i;
+      const args = [];
+      for (; i < src.length && depth > 0; i++) {
+        const c = src[i];
+        if (inS) { if (c === '\\') { i++; continue; } if (c === inS) inS = null; continue; }
+        if (c === "'" || c === '"' || c === '`') { inS = c; continue; }
+        if ('([{'.includes(c)) depth++;
+        else if (')]}'.includes(c)) depth--;
+        if (depth === 0) break;
+        if (c === ',' && depth === 1) { args.push(src.slice(argStart, i)); argStart = i + 1; }
+      }
+      args.push(src.slice(argStart, i));
+      if (args.length === 2 && /\{\s*timeout\s*:/.test(args[1])) {
+        const line = src.slice(0, m.index).split('\n').length;
+        /* One deliberate instance has to exist: the behavioural check below
+           proves the premise of this whole block by making the mistake on
+           purpose and measuring that the timeout is ignored. It is marked
+           rather than excluded, so the rest of THIS file stays covered and the
+           exemption is one grep away from anyone who wonders. */
+        const marked = [rawLines[line - 1], rawLines[line - 2]]
+          .some(l => l && l.includes('lint-allow: two-arg'));
+        if (!marked) out.push(`${name}:${line}`);
+      }
+    }
+  }
+  return out;
+}
+
+head('no wait passes its options where the argument goes');
+{
+  const bad = twoArgWaits();
+  ok('every waitForFunction passes options as the third argument',
+     bad.length === 0, bad.slice(0, 6).join(', ') || 'none');
+
+  /* And the boot wait is not hand-rolled anywhere any more: one predicate, one
+     timeout default, one place to change when the target artifact gets slower. */
+  const handRolled = fs.readdirSync(__dirname)
+    .filter(n => n.endsWith('.js') && n !== '_render.js' && n !== 'verify-render.js')
+    .filter(n => fs.readFileSync(path.join(__dirname, n), 'utf8')
+      .includes("typeof S !== 'undefined' && !!document.querySelector('.hero-h1')"));
+  ok('and no suite still spells the boot wait out by hand',
+     handRolled.length === 0, handRolled.join(', ') || 'none');
+}
 
 (async () => {
   const browser = await launch();
@@ -123,6 +209,34 @@ const FIXTURE = `<!doctype html><html><body>
                       { label: 'the quiz counter', timeout: 10000 });
   ok('afterRender() lands on the new screen and lets it finish',
      await page.evaluate(() => !!document.querySelector('.q-counter')));
+
+  head('the two-argument form really does ignore its timeout');
+  /* The static check above is only worth having if its premise is true, so the
+     premise is measured rather than asserted. Both calls ask for 500ms against
+     a condition that never becomes true. The correct form must reject at about
+     500ms; the two-argument form must still be waiting well past it, because
+     it is running on the 30 second default. Raced against a 3 second timer so
+     proving this costs 3 seconds instead of 30. */
+  {
+    const race = (promise, ms) => Promise.race([
+      promise.then(() => 'resolved', () => 'rejected'),
+      new Promise(r => setTimeout(() => r('still waiting'), ms)),
+    ]);
+    const blank = await (await browser.newContext()).newPage();
+    await blank.setContent('<!doctype html><html><body>nothing</body></html>');
+
+    const right = await race(
+      blank.waitForFunction(() => window.__never === true, null, { timeout: 500 }), 3000);
+    ok('options in the third position are honoured — it gives up at 500ms',
+       right === 'rejected', right);
+
+    const wrong = await race(
+      /* lint-allow: two-arg — deliberately wrong, that is the measurement */
+      blank.waitForFunction(() => window.__never === true, { timeout: 500 }), 3000);
+    ok('options in the second position are not — it is still waiting at 3s',
+       wrong === 'still waiting', wrong);
+    await blank.close();
+  }
 
   head('a wait that never comes true says what it was waiting for');
   let msg = '';

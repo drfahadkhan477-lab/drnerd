@@ -29,6 +29,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { launch } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-failsafe.js <patched.html>'); process.exit(1); }
@@ -64,7 +65,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(URL, { waitUntil: 'load', timeout: 60000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 60000 });
+    await booted(page, { timeout: 60000 });
     const crash = await page.evaluate(crashButton);
     ok('no page errors on a normal boot', errors.length === 0, errors.slice(0, 3).join(' | '));
     ok('the crash screen never appears on a normal boot', !crash);
@@ -108,7 +109,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   {
     const page = await browser.newPage();
     await page.goto(URL, { waitUntil: 'load', timeout: 60000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 60000 });
+    await booted(page, { timeout: 60000 });
     await page.evaluate(() => {
       window.dispatchEvent(new ErrorEvent('error', { error: new Error('unrelated'), message: 'unrelated' }));
     });

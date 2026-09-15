@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { launch } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-references.js <build.html> [dir]'); process.exit(1); }
@@ -94,7 +95,7 @@ const RETRIEVAL = [
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
 
   const payload = files.map(f => ({ name: f, raw: fs.readFileSync(path.join(DIR, f), 'utf8') }));
   const imported = await page.evaluate(fs_ => {

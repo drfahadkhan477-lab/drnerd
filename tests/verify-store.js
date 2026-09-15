@@ -39,7 +39,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
 const boot = async page => {
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && typeof Store !== 'undefined', { timeout: 120000 });
+  await page.waitForFunction(() => typeof S !== 'undefined' && typeof Store !== 'undefined', null, { timeout: 120000 });
   await page.evaluate(() => Store.ready());
   await page.waitForTimeout(250);
 };
@@ -247,7 +247,7 @@ const RAW = `key => new Promise(resolve => {
       Object.defineProperty(window, 'indexedDB', { get() { throw new Error('IndexedDB is blocked'); } });
     });
     await p2.goto(URL, { waitUntil: 'load', timeout: 200000 });
-    await p2.waitForFunction(() => typeof S !== 'undefined' && typeof Store !== 'undefined', { timeout: 120000 });
+    await p2.waitForFunction(() => typeof S !== 'undefined' && typeof Store !== 'undefined', null, { timeout: 120000 });
     await p2.evaluate(() => Store.ready());
     await p2.waitForTimeout(300);
     const fallback = await p2.evaluate(() => {

@@ -29,6 +29,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 const { systemText, turns, toolResults } = require('./_wire');
 
 const target = process.argv[2];
@@ -95,7 +96,7 @@ Recovery is usually complete within weeks.
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(800);
 
   head('the sanitiser, on its own');

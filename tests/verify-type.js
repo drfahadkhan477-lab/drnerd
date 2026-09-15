@@ -21,6 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const { launch } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-type.js <patched.html>'); process.exit(1); }
@@ -66,7 +67,7 @@ const LADDER = [9, 11, 13, 16, 19, 23, 28, 33, 40, 48, 58];
     const page = await browser.newPage({ viewport: { width: vw, height: 1000 } });
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-    await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+    await booted(page, { timeout: 150000 });
     await page.evaluate(() => startQuiz(null));
     await page.waitForTimeout(900);
     const fs2 = await page.evaluate(() => {

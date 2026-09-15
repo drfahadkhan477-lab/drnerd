@@ -16,6 +16,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 const { systemText, turns, toolResults } = require('./_wire');
 
 const target = process.argv[2];
@@ -80,7 +81,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(900);
 
   const seed = () => page.evaluate(() => {
@@ -143,7 +144,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
 
   head('it survives a reload — the whole point');
   await page.reload({ waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && typeof Memory !== 'undefined', { timeout: 120000 });
+  await page.waitForFunction(() => typeof S !== 'undefined' && typeof Memory !== 'undefined', null, { timeout: 120000 });
   await page.waitForTimeout(600);
   const survived = await page.evaluate(() => ({ n: Memory.count(), has: /October 2026/.test(Memory.build()) }));
   ok('memories are still there after a reload', survived.n === 3 && survived.has, 'count ' + survived.n);
@@ -226,7 +227,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   /* render() runs through startViewTransition when the screen changes, so the
      new DOM is not there on the next line — wait for the cards, not a timer. */
   await page.evaluate(() => goMemory());
-  await page.waitForFunction(() => document.querySelectorAll('.ref-card').length > 0, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelectorAll('.ref-card').length > 0, null, { timeout: 5000 });
   const panel = await page.evaluate(() => ({
     screen: S.screen,
     cards: document.querySelectorAll('.ref-card').length,
@@ -244,7 +245,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
     document.querySelector('.ref-card .chip').click();
     return n;
   });
-  await page.waitForFunction(() => document.querySelectorAll('.ref-card').length === 2, { timeout: 5000 })
+  await page.waitForFunction(() => document.querySelectorAll('.ref-card').length === 2, null, { timeout: 5000 })
     .catch(() => {});
   const deleted = await page.evaluate(() => ({
     after: Memory.count(), stillOnScreen: document.querySelectorAll('.ref-card').length }));

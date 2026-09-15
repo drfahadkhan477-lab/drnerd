@@ -8,6 +8,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-apex.js <patched.html>'); process.exit(1); }
@@ -33,7 +34,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —
      a no-op on the single-file build, where this is already true. */
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(1200);
 
   head('rebrand: Braunwald is gone from every UI-facing string');
@@ -280,7 +281,7 @@ const head = t => console.log('\n── ' + t + ' ──');
         window.__stable = (window.__lastRect === key) ? (window.__stable || 0) + 1 : 0;
         window.__lastRect = key;
         return window.__stable >= 3;
-      }, { timeout: 8000, polling: 'raf' });
+      }, null, { timeout: 8000, polling: 'raf' });
       return shape();
     };
 

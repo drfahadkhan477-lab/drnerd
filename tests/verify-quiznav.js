@@ -14,6 +14,7 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-quiznav.js <patched.html>'); process.exit(1); }
@@ -33,7 +34,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   page.on('pageerror', e => errors.push(e.message));
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 120000 });
+  await booted(page);
   await page.waitForTimeout(1000);
 
   head('a skip is recoverable, an answer is not');

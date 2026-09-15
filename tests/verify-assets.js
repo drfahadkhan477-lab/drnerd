@@ -23,6 +23,7 @@ const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
 const { launch, isEngineNoise } = require('./_engine');
+const { booted } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-assets.js <patched.html>'); process.exit(1); }
@@ -144,7 +145,7 @@ function zip(entries) {
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), { timeout: 150000 });
+  await booted(page, { timeout: 150000 });
   await page.waitForTimeout(900);
 
   head('the zip reader');
@@ -260,7 +261,7 @@ function zip(entries) {
 
   head('it survives a reload — IndexedDB, not memory');
   await page.reload({ waitUntil: 'load', timeout: 250000 });
-  await page.waitForFunction(() => typeof RefAssets !== 'undefined', { timeout: 150000 });
+  await page.waitForFunction(() => typeof RefAssets !== 'undefined', null, { timeout: 150000 });
   /* WAIT ON THE COMPLETION SIGNAL, NOT ON THE ANSWER.
      This has been wrong twice, in two different ways, and the second way is
      the instructive one. It began as "wait for count() > 0, then assert
