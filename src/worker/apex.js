@@ -25,7 +25,14 @@
 
    WHAT ACTUALLY PROTECTS THE BILL, honestly ordered:
      1. Cloudflare Access in front of the whole project — only a signed-in
-        address reaches this at all.
+        address reaches this at all. This line USED TO BE THE WHOLE PROTECTION:
+        the Access identity was read for rate-limit bucketing and never
+        required, so a project deployed without that policy — or with it
+        removed, or scoped to the wrong path — was a public proxy to this key,
+        and nothing in the code would have said so. It is now enforced here
+        rather than assumed of the deployment: no identity, no request, unless
+        APEX_ALLOW_UNAUTHENTICATED is set to exactly "yes" by someone who meant
+        it (wrangler dev, or a deployment kept private some other way).
      2. The output clamp below, which bounds what any single request can cost.
      3. The body cap.
      4. The rate limiter, which is best-effort and says so: a Worker isolate has
@@ -223,9 +230,32 @@ export async function handleApex(request, env, fetchImpl) {
   const key = env.GEMINI_API_KEY;
   if (!key) return fail(503, 'This deployment has no GEMINI_API_KEY set. Add it in the Cloudflare dashboard under Settings → Environment variables, or paste your own key in Apex settings.');
 
+  /* ── WHO IS ASKING, AND WHETHER THEY MAY ────────────────────────────────
+     This used to READ the Access identity and never REQUIRE it: `who` fell
+     back to the connecting IP and then to the string 'anon', and the request
+     proceeded either way. The whole protection was a sentence in the header
+     comment telling the deployer to put Cloudflare Access in front. A project
+     deployed without that policy — or with it removed, or scoped to the wrong
+     path — was a public proxy to the owner's Gemini key, spending their quota
+     for anyone who found the URL, and nothing anywhere would have said so.
+
+     So it fails closed. No Access identity, no request. The escape hatch is
+     deliberate and explicit, because a local `wrangler dev` has no Access in
+     front of it and neither does a deployment someone has decided to keep
+     private by other means — but it has to be TYPED, once, by a person who
+     meant it, and it is named so that it cannot be set by accident. */
+  const identity = request.headers.get('cf-access-authenticated-user-email');
+  if (!identity && String(env.APEX_ALLOW_UNAUTHENTICATED || '') !== 'yes') {
+    return fail(403,
+      'This deployment is not protected. Put Cloudflare Access in front of the ' +
+      'project so only you can reach it — or, if it is private by other means, set ' +
+      'APEX_ALLOW_UNAUTHENTICATED to "yes" in Settings → Environment variables. ' +
+      'Until one of those is true the Gemini key is not handed out.');
+  }
   const rpm = positiveInt(env.APEX_RPM, DEFAULT_RPM);
-  const who = request.headers.get('cf-access-authenticated-user-email')
-    || request.headers.get('cf-connecting-ip') || 'anon';
+  /* Rate limiting still prefers the identity and falls back, because once the
+     gate above has passed, the only question left is how to bucket a caller. */
+  const who = identity || request.headers.get('cf-connecting-ip') || 'anon';
   if (rpm > 0 && overRate(who, rpm)) {
     return fail(429, 'Too many requests in a minute — wait a moment and try again.');
   }
@@ -278,7 +308,16 @@ export async function handleApex(request, env, fetchImpl) {
   }
 
   const raw = await request.text();
-  if (raw.length > MAX_BODY) {
+  /* BYTES, not characters. This was raw.length, which is UTF-16 code units:
+     MAX_BODY is a byte budget, content-length above is measured in bytes, and
+     the two checks disagreed on what they were counting. Anything outside the
+     BMP or simply outside ASCII — Urdu or Arabic in a pasted note, an emoji,
+     a figure caption with a µ in it — encodes to two, three or four bytes per
+     unit, so a body this check believed was under 6 MB could be three times
+     that on the wire. It only ever mattered where the header was absent or
+     wrong, which is exactly the case this check exists to be the backstop
+     for. TextEncoder is what the platform gives; Buffer does not exist here. */
+  if (new TextEncoder().encode(raw).length > MAX_BODY) {
     return fail(413, 'That request is too large. Try again without attaching so many figures.');
   }
 

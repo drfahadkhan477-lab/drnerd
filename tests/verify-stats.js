@@ -61,6 +61,15 @@ ok('the suite count matches the suites recorded',
    `${stats.suiteCount} vs ${Object.keys(stats.suites).length}`);
 ok('the split build was measured too', Number.isInteger(stats.pwa), String(stats.pwa));
 
+/* Suites registered since the last full green run. Parsed once, because the
+   record is stale for them in BOTH directions: they are missing from it, and
+   any number derived from it cannot account for them either. */
+const PENDING = (() => {
+  const v = read('scripts/verify.js');
+  const block = v.slice(v.indexOf('const PENDING_RECORD = ['));
+  return [...block.slice(0, block.indexOf('];') + 2).matchAll(/'([a-z0-9-]+)'/g)].map(m => m[1]);
+})();
+
 head('every registered suite is in the record');
 {
   /* Read out of the runner's own registry, so adding a suite and forgetting to
@@ -74,10 +83,7 @@ head('every registered suite is in the record');
      The declaration is the point: an undeclared absence is still the defect
      this block was written for — a suite registered and then quietly never
      run, visible only as a total that is mysteriously too low. */
-  const pendBlock = v.slice(v.indexOf('const PENDING_RECORD = ['));
-  const pending = [...pendBlock.slice(0, pendBlock.indexOf('];') + 2)
-                    .matchAll(/'([a-z0-9-]+)'/g)].map(m => m[1]);
-  const missing = registered.filter(n => !(n in stats.suites) && !pending.includes(n));
+  const missing = registered.filter(n => !(n in stats.suites) && !PENDING.includes(n));
   const stale = Object.keys(stats.suites).filter(n => !registered.includes(n));
   ok('no registered suite is missing from the record without saying so', missing.length === 0,
      missing.join(', ') || 'none');
@@ -85,11 +91,11 @@ head('every registered suite is in the record');
      PENDING_RECORD forever to silence a real gap. An entry that the record has
      since caught up with fails here, so the next full green run forces it out. */
   ok('nothing is declared pending that is not a registered suite',
-     pending.every(n => registered.includes(n)),
-     pending.filter(n => !registered.includes(n)).join(', ') || 'none');
+     PENDING.every(n => registered.includes(n)),
+     PENDING.filter(n => !registered.includes(n)).join(', ') || 'none');
   ok('and nothing is still declared pending that the record already holds',
-     pending.every(n => !(n in stats.suites)),
-     pending.filter(n => n in stats.suites).join(', ') || 'none');
+     PENDING.every(n => !(n in stats.suites)),
+     PENDING.filter(n => n in stats.suites).join(', ') || 'none');
   ok('and the record holds nothing that is no longer a suite', stale.length === 0,
      stale.join(', ') || 'none');
   ok('every recorded suite reported at least one check', !Object.entries(stats.suites).some(([, n]) => !(n > 0)),
@@ -114,7 +120,12 @@ const ciTotal = ciSuites.reduce((n, s) => n + (stats.suites[s] || 0), 0);
 head('CI runs what the workflow says it runs');
 {
   ok('the workflow invokes some suites directly', ciSuites.length > 0, ciSuites.join(', '));
-  const unknown = ciSuites.filter(s => !(s in stats.suites));
+  /* A suite the workflow runs but the record has not measured yet is the same
+     staleness PENDING_RECORD already declares above, seen from the other side.
+     It contributes 0 to ciTotal, so the arithmetic below is unaffected, and the
+     next full green run removes it from PENDING_RECORD and from this exemption
+     in one move. */
+  const unknown = ciSuites.filter(s => !(s in stats.suites) && !PENDING.includes(s));
   ok('and every one of them is a suite the record knows', unknown.length === 0, unknown.join(', ') || 'none');
   /* Each step is labelled "(N checks)". A label is documentation that sits
      directly beside the command, which makes it the most likely of all these
@@ -122,7 +133,9 @@ head('CI runs what the workflow says it runs');
   const labels = [...yml.matchAll(/name:\s*(.+?)\((\d+)\s+checks\)\s*\n\s*run:\s*node\s+tests\/verify-([a-z0-9-]+)\.js/g)];
   ok('every directly-invoked suite carries a labelled count',
      labels.length === ciSuites.length, `${labels.length} labelled of ${ciSuites.length}`);
-  const wrong = labels.filter(m => stats.suites[m[3]] !== +m[2])
+  /* Same exemption, same reason: there is no recorded count to compare a
+     pending suite's label against. Everything else is held to it exactly. */
+  const wrong = labels.filter(m => !PENDING.includes(m[3]) && stats.suites[m[3]] !== +m[2])
                       .map(m => `${m[3]}: says ${m[2]}, is ${stats.suites[m[3]]}`);
   ok('and each label is the count that suite reported', wrong.length === 0, wrong.join('; ') || 'none');
 }

@@ -1,0 +1,12 @@
+#!/bin/sh
+# Refuse to commit the licensed question bank. See scripts/leak-guard.js.
+#
+# Hooks are not installed by cloning — git will not run anything a repository
+# ships unless you point it at them, which is the right default. Turn this on
+# once, per clone:
+#
+#     git config core.hooksPath .githooks
+#
+# Verified in CI by tests/verify-leakguard.js, which runs the guard over every
+# tracked file and over fixtures of each thing it must refuse.
+exec node "$(dirname "$0")/../scripts/leak-guard.js" --quiet

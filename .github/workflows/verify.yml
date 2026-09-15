@@ -140,6 +140,10 @@ jobs:
         run: node tests/verify-figzoom-pure.js
       - name: the engine is a flag, not thirty-four hardcoded copies of one (64 checks)
         run: node tests/verify-engine.js
+      - name: the licensed question bank cannot be committed (17 checks)
+        run: node tests/verify-leakguard.js
+      - name: the release gate never claims more than it measured (26 checks)
+        run: node tests/verify-release.js
       - name: the counts in the docs are the counts the tests produced (30 checks)
         run: node tests/verify-stats.js
 
