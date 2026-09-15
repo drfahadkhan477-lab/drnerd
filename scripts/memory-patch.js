@@ -102,7 +102,8 @@ patch('tools: remember and forget',
   description:"Keep one durable fact about this fellow, so you still know it in a month. Use it for things that outlive the current question: their exam date and training year, a confusion they keep repeating across topics, how they like to be taught. Do NOT use it for facts about the item in front of you — the transcript already carries those — and do not ask permission first, just keep it. If something you were told stops being true, call forget and keep the corrected version.",
   input_schema:{type:'object',properties:{
     text:{type:'string',description:'One sentence, written about them in the third person, e.g. "Sitting the boards in October 2026."'},
-    kind:{type:'string',enum:['fact','gap','preference'],description:'fact = true about them; gap = a confusion worth pressing on; preference = how they want to be taught'}},
+    kind:{type:'string',enum:['fact','gap','preference'],description:'fact = true about them; gap = a confusion worth pressing on; preference = how they want to be taught'},
+    said:{type:'boolean',description:'true only if the fellow ACTUALLY SAID this, in their own words, in this conversation. false if you concluded it from how they were answering. Leave it out when unsure — an unmarked memory is stored as your inference, which is the safe reading, and you can set it to true later if they confirm.'}},
    required:['text']}},
  {name:'forget',
   description:'Delete one memory that has stopped being true. Use the id printed in square brackets beside it in what you know about this fellow.',
@@ -114,7 +115,8 @@ patch('tools: run them',
 `    if(name==='save_reference_note'){`,
 `    if(name==='remember'){
       if(typeof Memory==='undefined') return {result:'Memory is unavailable.'};
-      const r=Memory.add(String(input.text||''),String(input.kind||'fact'));
+      const r=Memory.add(String(input.text||''),String(input.kind||'fact'),
+        {src:'tool',said:input.said===true});
       if(!r) return {result:'Nothing to remember — the text was empty.'};
       toolTrace.push({kind:'mem',text:r.text});
       return {result:\`Kept as [\${r.id}]. You will see this at the top of every future conversation, so do not repeat it back to them now.\`};
@@ -209,7 +211,9 @@ single word NOTHING.\`, 220);
     if(!out || /^\\s*NOTHING\\s*$/i.test(out)) return;
     out.split('\\n').map(l=>l.replace(/^[-•*\\d.\\s]+/,'').trim())
       .filter(l=>l.length>12 && !/^NOTHING$/i.test(l))
-      .slice(0,3).forEach(l=>Memory.add(l,'session'));
+      /* A summary is always Apex's own reading of a sitting, never the
+         fellow's words, so said stays false and the model is told so. */
+      .slice(0,3).forEach(l=>Memory.add(l,'session',{src:'summary',said:false}));
   }catch(_){ /* a broken summariser must never break the results screen */ }
 }
 

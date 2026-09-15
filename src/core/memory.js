@@ -40,9 +40,20 @@
 
 const MEM_KEY = 'accsap12.mem';
 const MAX = 80;               // beyond this, session summaries start to decay
-const BUDGET = 1200;          // chars of memory allowed into a prompt
+/* Chars of memory LINES allowed into a prompt. The preamble build() wraps them
+   in costs ~440 more, and tests/verify-memory.js has always asserted the whole
+   block stays under 1600 — so the two numbers are related and were not. When
+   provenance markers were added, the preamble grew and a full store came out at
+   1641: over the bound, discovered by measuring rather than on the owner's
+   laptop. 1100 leaves real headroom, and verify-memory-pure.js now asserts the
+   worst case in bare Node so the next person to lengthen that preamble finds
+   out in CI. */
+const BUDGET = 1100;
 
 const KINDS = ['fact', 'gap', 'preference', 'session'];
+/* Which mechanism wrote it. Known for certain at each call site, so this is
+   recorded rather than inferred — unlike `said`, which is a claim. */
+const SOURCES = ['tool', 'summary'];
 const HEADING = {
   fact:       'About them',
   gap:        'Where they keep going wrong',
@@ -90,14 +101,46 @@ function prune() {
   return over;
 }
 
-function add(text, kind) {
+/* WHERE A MEMORY CAME FROM, and whether the fellow actually said it.
+
+   Both writers here are the model: the `remember` tool, and the summariser
+   that writes one line per finished quiz. Nothing recorded which, and nothing
+   recorded the difference that matters more — between
+
+     "Sitting the boards in October."        the fellow said this
+     "Keeps reading constrictive as restrictive."   Apex concluded this
+
+   Stored identically, build() rendered them identically, and the model read
+   both back as established fact. An inference presented as something they told
+   you is how a tutor ends up confidently teaching around a weakness the fellow
+   never had.
+
+   `src` is MECHANICALLY KNOWN at the call site and is never guessed: 'tool' or
+   'summary'. `said` is the model's claim that these were the fellow's own
+   words, and it DEFAULTS TO FALSE — an unmarked memory is treated as Apex's
+   conclusion, because the safe default for "did they really say that?" is no.
+
+   Old records carry neither. They are left alone rather than backfilled, the
+   same rule logReview follows for `ef`: a record written before the field
+   existed is honestly empty, and inventing a provenance for it would be the
+   only thing here worse than not having one. */
+function add(text, kind, meta) {
   const t = String(text == null ? '' : text).trim().replace(/\s+/g, ' ');
   if (!t) return null;
   const k = KINDS.indexOf(kind) > -1 ? kind : 'fact';
+  const m = meta || {};
+  const src = SOURCES.indexOf(m.src) > -1 ? m.src : 'tool';
+  const said = m.said === true;
   const key = norm(t);
-  const dupe = MEM.find(m => norm(m.text) === key);
-  if (dupe) return dupe;                       // saying it twice is not two memories
-  const rec = { id: newId(), text: t, kind: k, created: Date.now(), seq: ++seq };
+  const dupe = MEM.find(mm => norm(mm.text) === key);
+  if (dupe) {
+    /* Saying it twice is not two memories — but the fellow confirming
+       something Apex had merely inferred IS new information, and it only ever
+       moves one way. Inference never overwrites a statement. */
+    if (said && !dupe.said) { dupe.said = true; persist(); }
+    return dupe;
+  }
+  const rec = { id: newId(), text: t, kind: k, src, said, created: Date.now(), seq: ++seq };
   MEM.push(rec);
   prune();
   persist();
@@ -139,7 +182,18 @@ function build() {
     const head = `${HEADING[kind]}:`;
     const rows = [];
     for (const m of group) {
-      const line = `  • [${m.id}] ${m.text}`;
+      /* The marker is the whole point of recording provenance: a memory the
+         fellow stated and one Apex concluded must not read the same to the
+         model. Absent is "they said it" — the unmarked case is the strongest
+         one, so the tags carry the doubt rather than the confidence. */
+      /* Short, because it repeats on every line and every character comes out
+         of BUDGET — a forty-character explanation on each of twenty memories
+         would spend a third of the block restating the same caveat. It is
+         explained once in the header instead. */
+      const tag = m.said === true ? ''
+                : m.src === undefined ? ' (unrecorded)'
+                : ' (inferred)';
+      const line = `  • [${m.id}]${tag} ${m.text}`;
       if (used + line.length > BUDGET) break;
       used += line.length;
       rows.push(line);
@@ -150,7 +204,10 @@ function build() {
   if (!lines.length) return '';
   return '\n\nWHAT YOU ALREADY KNOW ABOUT THIS FELLOW (kept from earlier sessions — ' +
     'teach in a way that fits it, and do not recite it back to them). If something ' +
-    'here has stopped being true, call the forget tool with the id in brackets:\n' +
+    'here has stopped being true, call the forget tool with the id in brackets. ' +
+    'Unmarked means they told you. (inferred) means you concluded it — check it ' +
+    'rather than assert it, and if they confirm it call remember again with said ' +
+    'true. (unrecorded) predates the distinction and could be either:\n' +
     lines.join('\n');
 }
 

@@ -146,6 +146,10 @@ jobs:
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
         run: node tests/verify-contentrules.js
+      - name: an inference is not read back as something the fellow said (20 checks)
+        run: node tests/verify-memory-pure.js
+      - name: text inside a figure is data, never an instruction (23 checks)
+        run: node tests/verify-vision-pure.js
       - name: the counts in the docs are the counts the tests produced (30 checks)
         run: node tests/verify-stats.js
 
