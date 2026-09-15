@@ -161,7 +161,19 @@ head('no wait passes its options where the argument goes');
 
   head('the fixture reproduces the race it is here to guard against');
   await R.booted(page, { timeout: 10000 });
-  ok('booted() returns once state and the first render are both up', true);
+  /* The postcondition, not `true`. This was `ok(..., true)` on the reasoning
+     that a throw inside booted() means the line is never reached — which is
+     exactly why it was worthless: booted() rejecting takes the whole suite
+     down as an unhandled rejection, printing no FAIL and leaving the count
+     wrong, so the one failure this was meant to describe is the one it could
+     not report. Asserting what booted() PROMISES can fail, and says which half
+     is missing when it does. */
+  const afterBoot = await page.evaluate(() => ({
+    state: typeof S !== 'undefined',
+    firstRender: !!document.querySelector('.hero-h1'),
+  }));
+  ok('booted() returns only once state and the first render are both up',
+     afterBoot.state && afterBoot.firstRender, JSON.stringify(afterBoot));
 
   /* Reading with no wait at all. If this sees the quiz counter, the fixture is
      not reproducing the deferred swap and nothing below means anything. */

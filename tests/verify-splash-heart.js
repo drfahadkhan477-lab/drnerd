@@ -74,7 +74,12 @@ const head = t => console.log('\n── ' + t + ' ──');
     ok('and the Lottie runtime is gone from the build entirely',
        !/lottie/i.test(src));
   } else {
-    ok('(skipped file-content checks — target is a URL, served from the split build)', true);
+    /* A NOTE, not a check. This was ok(..., true), which counts a skip as a
+       pass: "14 passed" then meant 13 things verified and one thing declined.
+       A number that includes things nobody measured is the exact dishonesty
+       this repo's CI header exists to avoid, and the count is lower and true
+       rather than higher and not. */
+    console.log('  ----  file-content checks skipped — target is a URL, served from the split build');
   }
 
   head('it actually renders — a decoded image in a real box');
