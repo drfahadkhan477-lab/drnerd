@@ -137,6 +137,11 @@ const SUITES = [
      from, and the one channel a fence cannot reach. */
   ['memory-pure',  'an inference is not stored, or read back, as something the fellow said'],
   ['vision-pure',  'text inside a figure is named as data, never as an instruction'],
+  /* The last two core modules that had no direct test. Both turned out to be
+     carrying a real failure: a torn store took the whole Apex turn down, and
+     an empty note list reclaimed every imported figure. */
+  ['profile-pure', 'a torn store costs the profile line, never the turn'],
+  ['refassets-pure', 'imported figures are reclaimed only against notes that actually loaded'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -174,7 +179,8 @@ const SUITES = [
    would mean also inventing the --pwa figure and the CI subset total, which is
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
 const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release',
-                        'contentrules', 'memory-pure', 'vision-pure'];
+                        'contentrules', 'memory-pure', 'vision-pure',
+                        'profile-pure', 'refassets-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
