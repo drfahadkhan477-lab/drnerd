@@ -162,6 +162,59 @@ const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? bo
     ok('a note that quotes the field is not rewritten',
        /"maxOutputTokens": 99999 somewhere/.test(JSON.parse(f3.calls[0].opts.body).contents[0].parts[0].text));
 
+    /* THE CHECK ABOVE PASSED FOR A REASON THAT WAS NOT THE ANCHORING. JSON
+       escapes a quote inside a string as \\", so "generationConfig" with bare
+       quotes cannot occur inside prose — the old indexOf anchor could not be
+       fooled by a note no matter what it said, and the comment crediting
+       anchoring for that was describing the wrong mechanism.
+
+       Where it DID break is a whole string VALUE, which is not escaped: a
+       message whose text is exactly "generationConfig" puts a real token in
+       the body. indexOf stopped there, the next { was an unrelated object, and
+       the request was refused 400 — the fellow's own question rejected because
+       of one word in it. Reproduced at 400 before the fix, against the control
+       below which differs only in that word. */
+    const withWord = JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: 'generationConfig' }, { text: 'what is it?' }] }],
+      generationConfig: { maxOutputTokens: 900000 },
+    });
+    const fWord = stub();
+    const rWord = await handleApex(post('/api/apex/gemini/stream?model=gemini-3-flash-preview', withWord), ENV, fWord);
+    ok('a message that is exactly the field name is not refused', rWord.status === 200, String(rWord.status));
+    ok('and it is still clamped correctly',
+       fWord.calls.length === 1 &&
+       JSON.parse(fWord.calls[0].opts.body).generationConfig.maxOutputTokens === 2000,
+       fWord.calls.length ? String(JSON.parse(fWord.calls[0].opts.body).generationConfig.maxOutputTokens) : 'never sent');
+    ok('and the message itself is untouched',
+       fWord.calls.length === 1 &&
+       JSON.parse(fWord.calls[0].opts.body).contents[0].parts[0].text === 'generationConfig');
+
+    /* The control: identical shape, one word different. If this ever fails the
+       one above proves nothing. */
+    const control = JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: 'aortic stenosis' }, { text: 'what is it?' }] }],
+      generationConfig: { maxOutputTokens: 900000 },
+    });
+    const fCtrl = stub();
+    const rCtrl = await handleApex(post('/api/apex/gemini/stream?model=gemini-3-flash-preview', control), ENV, fCtrl);
+    ok('the same request without that word behaves identically', rCtrl.status === 200, String(rCtrl.status));
+
+    /* A nested key must not be mistaken for the real one. Here the only
+       top-level generationConfig comes second, and the first is a key of an
+       object inside contents — depth, not position, is what tells them apart. */
+    const nested = JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: 'x' }], meta: { generationConfig: { maxOutputTokens: 7 } } }],
+      generationConfig: { maxOutputTokens: 900000 },
+    });
+    const fNest = stub();
+    await handleApex(post('/api/apex/gemini/stream?model=gemini-3-flash-preview', nested), ENV, fNest);
+    const sentNest = JSON.parse(fNest.calls[0].opts.body);
+    ok('a nested generationConfig is not mistaken for the top-level one',
+       sentNest.generationConfig.maxOutputTokens === 2000, String(sentNest.generationConfig.maxOutputTokens));
+    ok('and the nested one is left exactly as the caller wrote it',
+       sentNest.contents[0].meta.generationConfig.maxOutputTokens === 7,
+       String(sentNest.contents[0].meta.generationConfig.maxOutputTokens));
+
     /* THIS USED TO ASSERT A REFUSAL, AND THE REFUSAL WAS WRONG. The rule was
        "generationConfig must be inside the 64 KB head window or the request is
        rejected", on the stated grounds that the app always puts it first. The

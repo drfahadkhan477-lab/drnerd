@@ -41,22 +41,19 @@ const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/models';
    without being unbounded. */
 const MAX_BODY = 6 * 1024 * 1024;
 
-/* Where generationConfig is looked for first. Scanning a window rather than
-   parsing is the difference between a regex and JSON.parse over 2 MB, which
-   matters on a CPU-metered platform.
+/* The scan that finds generationConfig used to start with a 64 KB window over
+   the head of the body, on the theory that the field is near the front. It was
+   removed with the indexOf anchor it belonged to — see topLevelKey() below.
 
-   IT IS A FAST PATH, NOT A RULE, and it took a review to notice why. The
-   streaming body is ordered systemInstruction, tools, generationConfig,
-   contents — and systemInstruction carries the system prompt PLUS every
-   retrieved note, each clipped at 4000 characters, plus the memory block. Four
-   notes and a full memory is comfortably past 64 KB, so a heavy grounded turn
-   pushed generationConfig out of the window and got a 400 from its own edge.
-   Two of the three Gemini call sites put `contents` first outright.
-
-   So the window is tried first, and a miss falls through to one indexOf over
-   the whole body before anything is refused. That is a single pass over a
-   string already in memory — nothing like parsing it. */
-const HEAD_WINDOW = 64 * 1024;
+   Worth keeping the reason the window was already known to be wrong, because
+   it is the same shape of mistake: the streaming body is ordered
+   systemInstruction, tools, generationConfig, contents, and systemInstruction
+   carries the system prompt PLUS every retrieved note clipped at 4000
+   characters PLUS the memory block. Four notes and a full memory is
+   comfortably past 64 KB, so a heavy grounded turn pushed generationConfig out
+   of the window and got a 400 from its own edge. A fallback covered it. Both
+   are gone now: the replacement skips over string contents natively, so the
+   payload it was trying to avoid reading is the part it no longer reads. */
 
 const DEFAULT_MODEL_RE = /^gemini-[a-z0-9][a-z0-9.\-]*$/;
 const DEFAULT_MAX_OUTPUT = 2000;
@@ -135,9 +132,65 @@ function objectEnd(raw, from) {
 
 /* Clamp maxOutputTokens without parsing the body.
    Returns { body, error }. */
+/* Find a KEY of the top-level object, rather than the first place its name
+   happens to appear.
+
+   WHY THIS IS NOT indexOf. The old anchor was
+   raw.indexOf('"generationConfig"'), and the comment beside it credited
+   anchoring with protecting the fellow's own prose from being rewritten. That
+   protection was real but it came from somewhere else: JSON escapes a quote
+   inside a string value as \", so the byte sequence "generationConfig" with
+   bare quotes cannot appear inside prose at all. The anchor was correct by
+   luck, not by construction.
+
+   The luck runs out when the name is a whole string VALUE, which is not
+   escaped. A message whose text is exactly "generationConfig" puts a real
+   "generationConfig" token in the body, indexOf stops there, the next { is
+   some unrelated object, and a request carrying a perfectly good
+   generationConfig is refused with "maxOutputTokens is required" — a 400 on
+   the fellow's own question because of a word in it. Reproduced before this
+   was written, against the identical request with the word changed.
+
+   So: track string state, require depth 1, and require a colon after the
+   name. A value fails the colon test; a nested key fails the depth test.
+
+   STRINGS ARE JUMPED, NOT WALKED. A vision request carries figures as inline
+   base64 and runs to megabytes, so stepping character by character through it
+   would be a real cost on every call. indexOf finds each closing quote
+   natively, and base64 contains neither quotes nor backslashes, so a figure is
+   crossed in one call. That is why HEAD_WINDOW is gone: it existed to keep the
+   common case off a full-body scan, and a scan that skips the payload no
+   longer needs it. */
+function topLevelKey(raw, name) {
+  const needle = `"${name}"`;
+  let depth = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    if (c === '"') {
+      if (depth === 1 && raw.startsWith(needle, i)) {
+        let j = i + needle.length;
+        while (j < raw.length && (raw[j] === ' ' || raw[j] === '\n' ||
+                                  raw[j] === '\r' || raw[j] === '\t')) j++;
+        if (raw[j] === ':') return i;
+      }
+      /* Skip to this string's unescaped closing quote. A quote is closing only
+         when an EVEN number of backslashes precedes it — \\" ends the string,
+         \" does not. */
+      for (let j = i; ;) {
+        j = raw.indexOf('"', j + 1);
+        if (j < 0) return -1;
+        let b = j - 1, slashes = 0;
+        while (b >= 0 && raw[b] === '\\') { slashes++; b--; }
+        if (slashes % 2 === 0) { i = j; break; }
+      }
+    } else if (c === '{' || c === '[') depth++;
+    else if (c === '}' || c === ']') depth--;
+  }
+  return -1;
+}
+
 function clampOutput(raw, max) {
-  let at = raw.slice(0, HEAD_WINDOW).indexOf('"generationConfig"');
-  if (at < 0) at = raw.indexOf('"generationConfig"');      // see HEAD_WINDOW above
+  const at = topLevelKey(raw, 'generationConfig');
   if (at < 0) return { error: 'generationConfig is required.' };
   /* Anchored to the generationConfig object rather than searched for globally:
      a note quoting the literal text "maxOutputTokens": 99999 must not be
