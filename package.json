@@ -16,7 +16,8 @@
     "pwa": "node scripts/build-pwa.js build/systole.html",
     "serve": "node scripts/serve.js 8080 dist",
     "leak-guard": "node scripts/leak-guard.js --all-tracked",
-    "hooks": "git config core.hooksPath .githooks && echo \"hooks on: .githooks\""
+    "hooks": "git config core.hooksPath .githooks && echo \"hooks on: .githooks\"",
+    "release-check": "node scripts/release-check.js"
   },
   "comments": {
     "dependencies": "The BUILD has none on purpose \u2014 it is Node's standard library and 82 patch scripts, and `npm run build` needs no install at all. devDependencies are for the TESTS only: playwright drives the suites, ts-fsrs regenerates tests/fixtures/fsrs-oracle.json and is otherwise unused (the fixture itself is committed, so verify-oracle runs without it). Both are pinned to exact versions rather than ranges, and package-lock.json pins their transitive tree, because a suite that measures a browser is measuring a specific browser.",
