@@ -25,6 +25,8 @@
  */
 'use strict';
 const { scan, figCount } = require('../tools/figure-audit.js');
+const fs = require('fs');
+const path = require('path');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -109,6 +111,45 @@ head('a question figure count is read the way the app reads it');
      'the COR_102 / HEA_3 / HEA_40 / HEA_56 / VAL_65 shape');
   ok('neither means none',               figCount({ id: 'X' }) === 0);
   ok('an explicit zero means none',      figCount({ img: 0, figs: [] }) === 0);
+}
+
+/* ── it refuses to report on a bank it cannot read ───────────────────────── */
+/* THE HOLE THIS CLOSES. The tool used to read `q.q || q.stem || q.text` —
+   three guesses at a key that lives in ACCSAP's export and is written down
+   nowhere here. Had all three been wrong, every scan would have run against an
+   empty string and the tool would have printed "No question refers to a picture
+   it does not carry": a clean bill of health from a check that examined
+   nothing. The stem field is established now, and a bank it cannot read is a
+   refusal rather than a pass. */
+head('a bank whose question text it cannot find is refused, not passed');
+{
+  const { stemKey } = require('../scripts/content-checks.js');
+  const long = n => `A ${50 + n}-year-old presents with exertional dyspnoea and a systolic ` +
+                    `murmur radiating to the carotids; the gradient is ${20 + n} mmHg.`;
+  const readable = [
+    { id: 'A_1', ch: 'X', text: long(1), img: 0 },
+    { id: 'A_2', ch: 'X', text: long(2), img: 0 },
+  ];
+  ok('it finds the stem field in a readable bank', stemKey(readable) === 'text', String(stemKey(readable)));
+
+  const unreadable = readable.map(q => ({ id: q.id, ch: q.ch, img: q.img }));
+  ok('and returns null when there is none, rather than guessing',
+     stemKey(unreadable) === null, String(stemKey(unreadable)));
+
+  const src = fs.readFileSync(path.join(__dirname, '..', 'tools', 'figure-audit.js'), 'utf8');
+  ok('the tool exits rather than scanning an empty string', /process\.exit\(2\)/.test(src) &&
+     /Refusing to report/.test(src));
+  /* Comments blanked before looking. The tool's own header QUOTES the old
+     `q.q || q.stem || q.text` to explain what was wrong with it, so a raw
+     search finds the explanation and calls it the bug. That is the third time
+     today a scan has read a comment as code — see the same treatment in
+     verify-render.js and verify-stats.js — which is why it is done the same
+     way here rather than by narrowing the pattern until it happens to miss. */
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, p) => p + ' '.repeat(m.length - p.length));
+  ok('and it no longer guesses at three field names in the code itself',
+     !/q\.q \|\| q\.stem \|\| q\.text/.test(code));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -144,6 +144,8 @@ jobs:
         run: node tests/verify-leakguard.js
       - name: the release gate never claims more than it measured (26 checks)
         run: node tests/verify-release.js
+      - name: a structurally broken question is caught, a sound one is left alone (24 checks)
+        run: node tests/verify-contentrules.js
       - name: the counts in the docs are the counts the tests produced (30 checks)
         run: node tests/verify-stats.js
 
