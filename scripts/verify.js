@@ -126,6 +126,26 @@ const SUITES = [
   ['flushguard',   'a reply can be stopped, and the last chunk is painted however the stream ends'],
 ];
 
+/* ── suites registered since the last full green run ──────────────────────────
+   tests/test-stats.json records what a full green run measured, and nothing
+   else may write it. A suite added between two such runs is therefore
+   registered above and absent from the record, which is a real and temporary
+   state rather than a defect — but it is indistinguishable, to a checker, from
+   the defect verify-stats exists to catch: a suite registered and then quietly
+   never run, showing up only as a total that is mysteriously too low.
+
+   So the difference is DECLARED here instead of being inferred. Naming a suite
+   in this list says "measured counts are pending, on purpose"; leaving it out
+   says "this should already be in the record". verify-stats asserts both
+   directions, and the second one is what keeps this list from rotting: an
+   entry that IS in the record fails, so a name cannot be parked here to
+   silence anything — the next full run forces its removal.
+
+   Nothing is fabricated to clear it. Writing a measured count here by hand
+   would mean also inventing the --pwa figure and the CI subset total, which is
+   exactly the hand-maintained arithmetic that made verify-stats necessary. */
+const PENDING_RECORD = ['figaudit', 'render'];
+
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
    what is on screen and dishonest for one that asserts on how long something
