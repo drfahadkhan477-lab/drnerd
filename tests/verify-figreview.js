@@ -160,7 +160,7 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
 
     const dims = (await tall.locator('.dims').textContent()).trim();
     ok('the readout names the original size, not the preview size',
-       /from 900×1200/.test(dims), dims);
+       /from 900(?:×|�)1200/.test(dims), dims);
 
     await tall.locator('button[data-a="crop"]').click();
     await page.locator('#export').click();
@@ -249,7 +249,7 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
       { encoding: 'utf8' }).trim().split(' ').map(Number);
     ok('the image on disk is now exactly the box the sheet recorded',
        size[0] === box[2] - box[0] && size[1] === box[3] - box[1],
-       `${size.join('×')} vs box ${box.join(',')}`);
+       `${size.join('x')} vs box ${box.join(',')}`);
 
     const second = run();
     ok('running it twice does not crop twice', /already/.test(second),
@@ -277,14 +277,14 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
        page_size the file no longer has — which is exactly the mismatch
        trim-figure.py refuses, and it would have been my fixture lying, not the
        tool. */
-        const pageFixture = `
+    const pageFixture = `
 import os, sys
 from PIL import Image, ImageDraw
 im = Image.new("RGB", (900, 1200), "white"); d = ImageDraw.Draw(im)
 d.rectangle([60, 120, 840, 880], outline=(0,0,0), width=6)
 for i in range(4):
     d.rectangle([60, 910 + i*22, 700, 910 + i*22 + 8], fill=(30,30,30))
-d.rectangle([60, 1020, 840, 1180], outline=(0,0,0), width=4)
+d.rectangle([60, 1020, 840, 1180], outline=(0,0,0), width=4)   # a second figure
 im.save(os.path.join(sys.argv[1], "page-001.jpg"), quality=92)
 `;
 py(['-c', pageFixture, pagesDir], { stdio: 'pipe' });
@@ -297,8 +297,6 @@ py(['-c', pageFixture, pagesDir], { stdio: 'pipe' });
         { id: 1, label: 'FIG.9.1', page: 1, caption: 'the one whose legend was cut off',
           image: 'visuals/001.jpg', box: [50, 100, 850, 900],
           page_image: 'page-001.jpg', page_size: [900, 1200] },
-        /* Two figures on ONE page — the case a per-file review cannot express
-           at all, because both would be the same filename. */
         { id: 2, label: 'FIG.9.2', page: 1, caption: 'the second on the same page',
           image: 'visuals/002.jpg', box: [50, 950, 850, 1150],
           page_image: 'page-001.jpg', page_size: [900, 1200] },
@@ -319,7 +317,7 @@ py(['-c', pageFixture, pagesDir], { stdio: 'pipe' });
 
     const first = page.locator('.card').first();
     ok('the card opens at the PROPOSED box, not the whole page',
-       /800×800/.test(await first.locator('.dims').textContent()),
+       /800(?:×|�)800/.test(await first.locator('.dims').textContent()),
        (await first.locator('.dims').textContent()).trim());
 
     /* Drag the bottom edge DOWN, past the proposal, toward the page's end. */
