@@ -121,19 +121,113 @@ for (const step of STEPS) {
       const r = spawnSync(bin, real, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
       const out = (r.stdout || '') + (r.stderr || '');
       if (r.status !== 0) {
-        record(step, 'FAIL', lastLines(out, 3), (Date.now() - t0) / 1000);
+        record(step, 'FAIL',
+          safeDetail(out, `exit ${r.status === null ? 'signal ' + r.signal : r.status} — full output in tests/last-run.log on this machine`),
+          (Date.now() - t0) / 1000);
         continue;
       }
-      detail = lastLines(out, 1);
+      detail = safeDetail(out, '');
     }
     record(step, 'PASS', detail, (Date.now() - t0) / 1000);
   } catch (e) {
-    record(step, 'FAIL', String(e.message).split('\n')[0].slice(0, 200), (Date.now() - t0) / 1000);
+    /* A thrown error's message is not subprocess output, but it is still text
+       from outside this file — an fs error carries a path, and a path can
+       carry the export's filename. Same rule: the code, not the prose. */
+    record(step, 'FAIL', `threw: ${String(e && e.code || 'Error').slice(0, 40)}`, (Date.now() - t0) / 1000);
   }
 }
 
-function lastLines(s, n) {
-  return s.split('\n').map(l => l.trim()).filter(Boolean).slice(-n).join(' | ').slice(0, 300);
+/* ── what a step is allowed to say about itself ──────────────────────────────
+   THIS USED TO BE lastLines(out, 3): the last three lines of the failing
+   subprocess, passed through verbatim into both the console and the report.
+   The report's own footer has always promised
+
+       "No question text, options, commentary or figure data appears in this
+        report."
+
+   and nothing enforced it. In practice those three lines are verify's summary
+   and harmless, which is exactly what made it comfortable — but a crash, a
+   stack trace, or a Playwright error quoting the page carries whatever it
+   carries, and a suite FAIL line puts its interpolated detail after an arrow.
+   A promise the code does not keep is the "claims more than it measured"
+   failure this file's own header is about, sitting in the file.
+
+   Two things it turned out to reach, not one. `detail` is printed by record()
+   as well as written to the report, so it is also every line the self-hosted
+   CI job would put into a GitHub Actions log — shared infrastructure, on a
+   corpus that must not leave the machine.
+
+   SO NOTHING IS PASSED THROUGH. Each shape below is a fact this function can
+   PARSE, and the string that comes out is rebuilt from validated captures:
+   integers stay integers, and a name is emitted only if it is a bare
+   [a-z0-9-] suite id. A line that matches nothing contributes nothing.
+
+   FAIL-CLOSED: when no shape matches — the interesting case, because that is
+   what a novel crash looks like — the answer is the exit code and where the
+   real output is. It is on the machine that ran it, which is the only machine
+   allowed to read it. */
+/* AN ALLOWLIST, BECAUSE A SHAPE IS NOT A DISCRIMINATOR. Filtering the suite
+   list by "looks like an identifier" was tried and does not work: `dyspnea`
+   and `exertional` are lower-case, hyphen-free and short, so every rule that
+   admits `figzoom-pure` admits them too. A test proved it — the filter let
+   four words of a stem through while reporting the suite id beside them as a
+   success.
+
+   The names are knowable, so they are looked up rather than judged. This is
+   the registry verify.js actually runs, read at call time, so it cannot drift
+   from it. If the registry cannot be read the answer is no names at all, not
+   unchecked ones: the count alone still tells you to go and look. */
+let SUITE_NAMES = null;
+function isSuiteName(n) {
+  if (SUITE_NAMES === null) {
+    try {
+      const src = fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8');
+      const block = src.match(/const SUITES\s*=\s*\[([\s\S]*?)\n\];/);
+      const names = block ? [...block[1].matchAll(/\[\s*'([a-z0-9-]+)'/g)].map(x => x[1]) : [];
+      /* SUITES is not the whole registry. Three suites are spawned by name from
+         the --pwa path instead of being registered — and they are precisely the
+         ones a --pwa run reports as failing, so an allowlist built from SUITES
+         alone drops exactly the names worth having. Taken from the same file by
+         the path it spawns them on, so adding a fourth needs no edit here. */
+      for (const m of src.matchAll(/'tests',\s*'verify-([a-z0-9-]+)\.js'/g)) names.push(m[1]);
+      SUITE_NAMES = new Set(names);
+    } catch (_) { SUITE_NAMES = new Set(); }
+  }
+  return SUITE_NAMES.has(n);
+}
+
+const SHAPES = [
+  [/\b(\d+) checks across (\d+) suites in ([\d.]+) min\b/,
+   m => `${m[1]} checks across ${m[2]} suites in ${m[3]} min`],
+  /* THE CAPTURE IS DELIBERATELY WIDE AND THE FILTER DOES THE WORK. It was the
+     other way round first — the class was [a-z0-9,\s-]+, which silently made
+     the token filter below unreachable, because every token it could ever see
+     already matched. The protection was an accident of a character class, and
+     a test written against it passed with the filter deleted. Capturing the
+     rest of the line puts the decision where it can be read and where removing
+     it fails a test. Bounded as well as filtered: a suite id is short and
+     there are never many, so prose cannot arrive as a long list of very short
+     lowercase words. */
+  [/\b(\d+) suites? failing:\s*(.+)$/m,
+   m => {
+     const names = m[2].split(/[,\s]+/).filter(isSuiteName).slice(0, 12);
+     return names.length ? `${m[1]} failing: ${names.join(', ')}` : `${m[1]} failing`;
+   }],
+  [/\ball green\b/, () => 'all green'],
+  [/\b(\d+) checks, all green\b/, m => `${m[1]} checks, all green`],
+  [/\b(\d+) passed, (\d+) failed\b/, m => `${m[1]} passed, ${m[2]} failed`],
+  [/\bshell total\s+([\d.]+)\s*([kKmM]?B)\b/, m => `shell total ${m[1]} ${m[2]}`],
+  [/\b(\d+) file\(s\) checked, nothing licensed\b/, m => `${m[1]} files checked, nothing licensed`],
+  [/\bwrote\s+(\d+)\s+figures?\b/, m => `wrote ${m[1]} figures`],
+];
+
+function safeDetail(out, fallback) {
+  const found = [];
+  for (const [re, render] of SHAPES) {
+    const m = re.exec(String(out || ''));
+    if (m && found.length < 3) found.push(render(m));
+  }
+  return found.length ? found.join(' | ') : fallback;
 }
 
 /* ── what was produced ───────────────────────────────────────────────────── */
@@ -195,8 +289,13 @@ if (skipped.length) {
 }
 lines.push('', '---', '');
 lines.push('Counts and digests only. No question text, options, commentary or figure');
-lines.push('data appears in this report. It is written into `build/`, which is');
-lines.push('gitignored and refused by `scripts/leak-guard.js`.');
+lines.push('data appears in this report — enforced rather than intended: a step reports');
+lines.push('itself through safeDetail(), which rebuilds a line from facts it could parse');
+lines.push('and emits nothing it could not. A failure it does not recognise becomes an');
+lines.push('exit code and a pointer to `tests/last-run.log`, which stays on the machine.');
+lines.push('');
+lines.push('It is also written into `build/`, which is gitignored and refused by');
+lines.push('`scripts/leak-guard.js`.');
 
 fs.mkdirSync(path.dirname(REPORT), { recursive: true });
 fs.writeFileSync(REPORT, lines.join('\n') + '\n');

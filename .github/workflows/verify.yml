@@ -210,9 +210,14 @@ jobs:
   # route nobody thought of as uploading. The whole design of this job is that
   # constraint:
   #
-  #   · release-check's own stdout is ids and a verdict, nothing else. It runs
-  #     every step with stdio ['ignore','pipe','pipe'], so no subprocess writes
-  #     to this log at any point.
+  #   · release-check runs every step with stdio ['ignore','pipe','pipe'], so no
+  #     subprocess writes to this log directly. What it does report about a step
+  #     goes through safeDetail(), which rebuilds a line from facts it could
+  #     parse — integers, and suite names checked against the registry verify.js
+  #     actually runs — and emits nothing it could not. An unrecognised failure
+  #     becomes an exit code and a pointer to the local log. (The first draft of
+  #     this comment claimed the stdout was "ids and a verdict, nothing else".
+  #     It was not: record() printed the failing subprocess's last three lines.)
   #   · build/release-report.md is NEVER echoed and NEVER uploaded as an
   #     artifact. It stays on the machine that produced it.
   #   · no actions/upload-artifact step exists here, on purpose. Adding one is
