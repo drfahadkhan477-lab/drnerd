@@ -99,6 +99,67 @@ const say = (...a) => console.log(stamp(), ...a);
     }
   };
 
+  /* What the suite's at() does: resize, wait for the page to agree about its
+     own size, rebuild, let it settle. */
+  const at = async (w, h) => {
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForFunction(([w2, h2]) =>
+      Math.abs(innerWidth - w2) <= 2 && Math.abs(innerHeight - h2) <= 2, [w, h], { timeout: 8000 })
+      .catch(() => {});
+    await page.evaluate(() => { if (typeof goHome === 'function') { goHome(); render(); } });
+    await page.waitForTimeout(350);
+  };
+
+  /* Declared above the list that uses it. The closures would not have minded —
+     they run later — but a const below its call site is the shape that has cost
+     this project a whole debugging session before. */
+  /* THE SUITE'S OWN SEQUENCE, in order, named. The first version of this probe
+     replayed only the viewport sweep the suite dies in, and the page survived
+     six cycles of it — which proved the sweep innocent and nothing else. The
+     death needs what the first 51 checks do first, and the expensive things
+     among those are a full page.reload() at verify-home.js:312, three
+     measured viewport changes at :356, and a jump into a question at :400.
+
+     Kept as a list so the step that kills the page is named rather than
+     inferred, and so a step can be commented out to bisect without editing
+     control flow. */
+  const steps = [
+    ['reload the whole app (verify-home.js:312)', async () => {
+      await page.reload({ waitUntil: 'load', timeout: 250000 });
+      /* The suite allows 150s here because the single file can take that long
+         to parse. A probe that waits that long on a page which is never going
+         to answer reads as a hang, so this gives up in 60 and says so — the
+         step is then reported as threw, not as a death, and the run carries
+         on to the ones that matter. */
+      await page.waitForFunction(
+        () => typeof S !== 'undefined' && !!document.querySelector('.home-wrap'),
+        null, { timeout: 60000 });
+    }],
+    ['measure at 1366x1024 (:356)', () => at(1366, 1024)],
+    ['measure at 1194x834 (:356)', () => at(1194, 834)],
+    ['measure at 1024x1366 (:356)', () => at(1024, 1366)],
+    ['jump into a question at 1366x1024 (:400)', async () => {
+      await page.setViewportSize({ width: 1366, height: 1024 });
+      await page.evaluate(() => {
+        if (typeof ALL_Q === 'undefined' || typeof jumpTo !== 'function') return;
+        const q = ALL_Q.find(x => !x.bad);
+        if (q) { jumpTo(q.id); render(); }
+      });
+      await page.waitForTimeout(400);
+    }],
+    ['back home (:405)', () => page.evaluate(() => {
+      if (typeof goHome === 'function') { goHome(); render(); }
+    })],
+    ['the hint gates (:440)', () => page.evaluate(async () => {
+      for (const v of ['1', null]) {
+        try { v === null ? localStorage.removeItem('accsap12.welcomed')
+                         : localStorage.setItem('accsap12.welcomed', v); } catch (_) {}
+        if (typeof goHome === 'function') { goHome(); render(); }
+        await new Promise(r => setTimeout(r, 150));
+      }
+    })],
+  ];
+
   try {
     await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
     say('loaded');
@@ -107,6 +168,18 @@ const say = (...a) => console.log(stamp(), ...a);
     say('booted');
     if (!await alive('boot')) throw new Error('dead on arrival');
 
+    for (const [label, run] of steps) {
+      say(label);
+      try { await run(); }
+      catch (e) {
+        const msg = String(e.message).split('\n')[0];
+        say(`  ${GONE.test(msg) ? 'DEAD' : 'threw'} during "${label}"  ${msg}`);
+        if (GONE.test(msg)) throw e;
+      }
+      if (!await alive(label)) throw new Error('died at: ' + label);
+    }
+
+    say('--- the suite\'s prelude survived; now the sweep it dies in ---');
     outer:
     for (let c = 1; c <= CYCLES; c++) {
       for (const [w, h, label] of SIZES) {
