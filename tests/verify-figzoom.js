@@ -315,17 +315,52 @@ const head = t => console.log('\n── ' + t + ' ──');
        825px, and 401 of them were clipped at "Fit" on an 11-inch iPad in
        landscape while 29 checks reported green. Synthetic fixtures test the
        code; they do not test the app. These open the actual figures. */
-    const sizes = await page.evaluate(() => {
+    const sizes = await page.evaluate(async () => {
       /* Dimensions straight from the WebP/PNG header — no decode, so all 408
-         can be read without a gigabyte of bitmaps. */
+         can be read without a gigabyte of bitmaps.
+
+         TWO DELIVERY SHAPES, ONE HEADER. In the single file every figure is a
+         data: URI; in the split build the same figure is a path under
+         content/figures/ that the browser fetches. This read data: only, so
+         against the served build atob() had nothing to decode and it reported
+         "0 of 408 figures" — and then `sizes.tallest.u` threw on undefined and
+         took the rest of the suite with it. Measured on a fixture of 140
+         synthetic headers served over HTTP: data:-only read 0, this reads 140
+         in 211ms. The bytes are the same bytes either way, so the parser below
+         is unchanged; only getting hold of them differs.
+
+         The fetch asks for a Range and takes the first chunk regardless —
+         scripts/serve.js does not implement 206, so the saving comes from
+         cancelling the body after the header rather than from the header
+         being honoured. */
       const urls = [];
       try { for (const id in IMGS) { const l = IMGS[id]; if (l) for (const u of l) if (typeof u === 'string') urls.push(u); } } catch (_) {}
-      const head = u => {
-        const i = u.indexOf(','); if (i < 0) return null;
-        let bin; try { bin = atob(u.slice(i + 1, i + 1 + 120)); } catch (_) { return null; }
-        const a = new Uint8Array(bin.length);
-        for (let k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k);
-        if (a.length < 32) return null;
+      const bytesOf = async u => {
+        if (/^data:/i.test(u)) {
+          const i = u.indexOf(','); if (i < 0) return null;
+          let bin; try { bin = atob(u.slice(i + 1, i + 1 + 120)); } catch (_) { return null; }
+          const a = new Uint8Array(bin.length);
+          for (let k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k);
+          return a;
+        }
+        try {
+          const r = await fetch(u, { headers: { Range: 'bytes=0-127' } });
+          if (!r.ok) return null;
+          const rd = r.body.getReader();
+          const parts = []; let got = 0;
+          while (got < 32) {
+            const { value, done } = await rd.read();
+            if (done) break;
+            parts.push(value); got += value.length;
+          }
+          try { await rd.cancel(); } catch (_) {}
+          const a = new Uint8Array(got); let o = 0;
+          for (const part of parts) { a.set(part, o); o += part.length; }
+          return a;
+        } catch (_) { return null; }
+      };
+      const head = a => {
+        if (!a || a.length < 32) return null;
         const d = new DataView(a.buffer, a.byteOffset, a.byteLength);
         const tag = String.fromCharCode(a[0], a[1], a[2], a[3]);
         if (tag === 'RIFF') {
@@ -338,7 +373,13 @@ const head = t => console.log('\n── ' + t + ' ──');
         return null;
       };
       const out = [];
-      for (const u of urls) { const dd = head(u); if (dd && dd[0] && dd[1]) out.push({ u, w: dd[0], h: dd[1] }); }
+      /* Sixteen at a time: 408 sequential round trips is a suite that takes
+         minutes, 408 at once is a connection pool the server has to queue
+         anyway. */
+      for (let i = 0; i < urls.length; i += 16) {
+        const got = await Promise.all(urls.slice(i, i + 16).map(async u => ({ u, a: await bytesOf(u) })));
+        for (const g of got) { const dd = head(g.a); if (dd && dd[0] && dd[1]) out.push({ u: g.u, w: dd[0], h: dd[1] }); }
+      }
       return { n: urls.length, read: out.length,
         tallest: out.slice().sort((a, b) => (b.h / b.w) - (a.h / a.w))[0],
         highest: out.slice().sort((a, b) => b.h - a.h)[0],
@@ -349,6 +390,16 @@ const head = t => console.log('\n── ' + t + ' ──');
        `${sizes.read} of ${sizes.n} figures`);
     ok('and they are nothing like the fixture above',
        sizes.medianH > 400, `median height ${sizes.medianH}px vs the fixture's 300px`);
+
+    /* NOT DEREFERENCED ON AN EMPTY READ. When the two checks above fail there
+       is no tallest figure, and `sizes.tallest.u` below threw a TypeError that
+       ended the suite — so the four checks after it reported nothing at all and
+       the runner showed a suite that DIED where it should have shown a suite
+       that FAILED. Those are different diagnoses and only one of them points at
+       the build. An empty read now feeds the frames below an empty list, which
+       fails them on `seen >= 8` and says why. */
+    const haveFigs = !!(sizes.tallest && sizes.highest && sizes.sample && sizes.sample.length);
+    const noneWhy = 'no figure header could be read from this build';
 
     /* The frames an iPad actually produces, landscape first — the orientation
        in which the bug was total and which no other suite exercises here. */
@@ -384,20 +435,23 @@ const head = t => console.log('\n── ' + t + ' ──');
     for (const [name, w, h] of frames) {
       await page.setViewportSize({ width: w, height: h });
       await page.waitForTimeout(220);
-      const list = [sizes.tallest.u, sizes.highest.u].concat(sizes.sample.map(x => x.u));
+      const list = haveFigs
+        ? [sizes.tallest.u, sizes.highest.u].concat(sizes.sample.map(x => x.u)) : [];
       const r = await worstOf(list);
       ok(`${name}: every sampled figure fits at Fit`, r.worst <= 1 && r.seen >= 8,
-         `${r.seen} figures, worst overflow ${r.worst}px${r.worst > 1 ? ' on ' + r.at : ''}`);
+         haveFigs
+           ? `${r.seen} figures, worst overflow ${r.worst}px${r.worst > 1 ? ' on ' + r.at : ''}`
+           : noneWhy);
     }
 
     /* The single worst case in the bank, named, so a partial fix that handles
        the median and not the extreme cannot pass. */
     await page.setViewportSize({ width: 1194, height: 834 });
     await page.waitForTimeout(220);
-    const extreme = await worstOf([sizes.tallest.u]);
+    const extreme = await worstOf(haveFigs ? [sizes.tallest.u] : []);
     ok('the tallest figure in the bank fits too',
        extreme.worst <= 1 && extreme.seen === 1,
-       `${sizes.tallest.w}x${sizes.tallest.h}, overflow ${extreme.worst}px`);
+       haveFigs ? `${sizes.tallest.w}x${sizes.tallest.h}, overflow ${extreme.worst}px` : noneWhy);
 
     await page.setViewportSize({ width: 900, height: 1000 });
     await page.waitForTimeout(220);
