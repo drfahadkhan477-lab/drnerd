@@ -22,7 +22,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
-const { launch, isEngineNoise } = require('./_engine');
+const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted } = require('./_render.js');
 
 const target = process.argv[2];
@@ -132,7 +132,7 @@ function zip(entries) {
   ]));
 
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1100, height: 950 } });
+  const page = await routablePage(browser, { viewport: { width: 1100, height: 950 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });

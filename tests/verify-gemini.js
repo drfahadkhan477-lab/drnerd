@@ -15,7 +15,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch, isEngineNoise } = require('./_engine');
+const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted } = require('./_render.js');
 
 const target = process.argv[2];
@@ -38,7 +38,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const page = await routablePage(browser, { viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   /* The two deliberately-triggered error responses below (403, 429) log as

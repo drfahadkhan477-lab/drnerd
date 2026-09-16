@@ -32,7 +32,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch, isEngineNoise } = require('./_engine');
+const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted } = require('./_render.js');
 
 const target = process.argv[2];
@@ -67,7 +67,7 @@ const sse = text => [
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1194, height: 834 } });
+  const page = await routablePage(browser, { viewport: { width: 1194, height: 834 } });
   await page.route('**/generativelanguage.googleapis.com/**', route => route.fulfill({
     status: 200, headers: { 'content-type': 'text/event-stream' },
     body: sse('Long answer. '.repeat(80)),

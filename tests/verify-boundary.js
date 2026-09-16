@@ -28,7 +28,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch, isEngineNoise } = require('./_engine');
+const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted } = require('./_render.js');
 const { systemText, turns, toolResults } = require('./_wire');
 
@@ -71,7 +71,7 @@ Recovery is usually complete within weeks.
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 950 } });
+  const page = await routablePage(browser, { viewport: { width: 1280, height: 950 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   /* One section below fails a request on purpose. Its 500 is the point of the

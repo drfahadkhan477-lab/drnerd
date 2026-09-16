@@ -155,5 +155,36 @@ function launch(opts = {}) {
   return playwright[name].launch(launchOptions(opts, name));
 }
 
-module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch,
+/* ── a page whose requests a test can actually intercept ──────────────────────
+
+   MEASURED, NOT GUESSED. The first run of the suite against the SERVED split
+   build failed every AI assertion in ten suites — no stub ever fired, and the
+   app's fetch went to the real Google endpoint and came back 400. The cause is
+   the service worker: a controlled page's fetches are re-issued by the worker,
+   and page.route() does not see requests a service worker makes.
+
+   Two contexts against a fixture that registers a passthrough worker and then
+   fetches a routed URL:
+
+       serviceWorkers: allow   controlled: true    route fired: 0   fetch threw
+       serviceWorkers: block   controlled: false   route fired: 1   stub returned
+
+   That is the whole of it. The suites have always passed on file://, where no
+   service worker exists to swallow anything, and the moment the same build is
+   served they stop being able to stub at all.
+
+   So a suite that intercepts requests asks for a context with no service
+   worker. It changes nothing on file:// — there was never one — and on http it
+   is the difference between testing the app and testing Google's 400 page.
+
+   NOT FOR SUITES THAT TEST THE WORKER ITSELF. verify-pwa and verify-
+   cachebuckets are about caching and offline behaviour, and blocking the thing
+   they exist to exercise would make them pass while proving nothing. Checked:
+   none of the ten suites that stub AI requests mentions a service worker. */
+async function routablePage(browser, opts = {}) {
+  const context = await browser.newContext({ ...opts, serviceWorkers: 'block' });
+  return context.newPage();
+}
+
+module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch, routablePage,
                    cpuThrottle, heapUsedBytes, isEngineNoise };
