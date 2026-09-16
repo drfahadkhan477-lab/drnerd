@@ -198,10 +198,16 @@ const SUITES = [
    Nothing is fabricated to clear it. Writing a measured count here by hand
    would mean also inventing the --pwa figure and the CI subset total, which is
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
-const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release',
-                        'contentrules', 'memory-pure', 'vision-pure',
-                        'profile-pure', 'refassets-pure', 'rhythms-pure',
-                        'ipad-pure', 'store-pure'];
+/* Suites registered since the last full green run, whose counts the record has
+   not seen yet. Checked in BOTH directions, so it self-cleans: a name left here
+   after its suite has recorded fails just as loudly as a suite missing from the
+   record.
+
+   EMPTY, AND THAT IS NEWS. It held fourteen names for weeks — every suite added
+   while the only machine that could run the full thing was not being run. The
+   first full green run wrote all fourteen at once. If this fills up again, that
+   is the same gap reopening. */
+const PENDING_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
