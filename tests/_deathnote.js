@@ -72,10 +72,36 @@ function onDeath(collect) {
     fired = true;
     let info = {};
     try { info = collect() || {}; } catch (_) { /* the note must not die too */ }
-    for (const line of deathNote(err, info)) console.log(line);
-    /* LAST, so scripts/cause.js finds it at the tail. */
-    console.error(err && err.stack ? err.stack : String(err));
-    process.exit(1);
+
+    /* ONE WRITE, ONE STREAM, and this is not tidiness. scripts/verify.js
+       captures a suite with
+
+           ch.stdout.on('data', d => { out += d; });
+           ch.stderr.on('data', d => { out += d; });
+
+       — two pipes concatenated into one string, whose relative order nothing
+       guarantees. The first version printed the note with console.log and the
+       exception with console.error, and in the owner's log the exception
+       landed in the MIDDLE of the note:
+
+           88:  last section reached: the dismiss button is never buried …
+           89:page.setViewportSize: Target page, context or browser has been closed
+           90:    at C:\Users\Fairy\drnerd\tests\verify-home.js:481:18
+           91:  checks completed: 51
+           92:  the page logged nothing at all
+
+       noteOf() reads the note as a contiguous indented block and stopped at
+       line 89, so a complete note reported one line of four — and looked for
+       all the world like a note that had been cut off. Two streams is the bug;
+       a cleverer reader would only have hidden it.
+
+       Exiting is deferred to the write's callback because stdout to a pipe is
+       asynchronous, and process.exit() does not wait for it. The timer is the
+       safety net for a callback that never comes: a suite that dies still owns
+       an open browser, so returning without exiting would hang the runner. */
+    const text = [...deathNote(err, info), err && err.stack ? err.stack : String(err)].join('\n') + '\n';
+    const bail = setTimeout(() => process.exit(1), 3000);
+    process.stdout.write(text, () => { clearTimeout(bail); process.exit(1); });
   };
   process.on('unhandledRejection', emit);
   process.on('uncaughtException', emit);

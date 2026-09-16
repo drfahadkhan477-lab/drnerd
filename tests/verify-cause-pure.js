@@ -232,6 +232,25 @@ head('and the note itself reaches the summary, not only the log');
      ].join('\n'), 5).length === 6, `${noteOf(['  PASS  a', ...deathNote(err, { errors: Array.from({ length: 40 }, (_, i) => 'e' + i) })].join('\n'), 5).length} lines`);
 }
 
+head('the note and the exception go out together, on one stream');
+{
+  /* NOT A STYLE CHECK. scripts/verify.js concatenates a suite's stdout and
+     stderr into one string from two pipes, and nothing orders them against
+     each other. Printing the note on one and the exception on the other put
+     the exception INSIDE the note in a real log — so noteOf(), which reads the
+     note as a contiguous indented block, stopped at it and a complete note
+     reported one line of four. The invariant is structural, so the check is
+     too: one write, no console.error, or the interleaving comes back. */
+  const { blankComments } = require('./_source.js');
+  const src = blankComments(require('fs').readFileSync(require('path').join(__dirname, '_deathnote.js'), 'utf8'));
+  ok('the death note never writes to stderr', !/console\.error|process\.stderr/.test(src));
+  ok('and never prints line by line', !/console\.log/.test(src));
+  ok('it is a single write to stdout',
+     (src.match(/process\.stdout\.write/g) || []).length === 1);
+  ok('whose completion is what triggers the exit — a pipe does not flush on exit()',
+     /process\.stdout\.write\([\s\S]{0,80}?,\s*\(\)\s*=>/.test(src));
+}
+
 head('it stays one line in a table');
 {
   const long = '  PASS  a\n' + 'locator.click: ' + 'x'.repeat(400);
