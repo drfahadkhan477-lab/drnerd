@@ -46,10 +46,14 @@ if (!target) {
   process.exit(1);
 }
 const URL = /^https?:/.test(target) ? target
-                                    : 'file://' + path.resolve(target).split(path.sep).join('/');
+                                    : 'file:///' + path.resolve(target).split(path.sep).join('/').replace(/^\/+/, '');
 
 (async () => {
-  const { browser, page } = await launch();
+  /* launch() returns the browser, not a {browser, page} pair — the same shape
+     tools/figure-probe.js uses three lines below its own call. Assumed rather
+     than read, and it cost the owner a round trip on a laptop at midnight. */
+  const browser = await launch();
+  const page = await (await browser.newContext()).newPage();
   console.log(`Boot probe — ${engineName()}\n  ${target}\n`);
 
   /* Stamp the moment the hero exists, from inside the page, so the number is
