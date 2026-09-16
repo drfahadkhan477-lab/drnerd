@@ -99,10 +99,6 @@ const EXTRA = {
     desc: 'Diffuse concave ST elevation with PR depression — not a coronary territory.' },
 };
 
-/* Deterministic pseudo-random from an integer, so a trace looks irregular but
-   is stable frame to frame (the built-in AF generator uses the same trick). */
-function hash01(n) { return Math.abs(Math.sin(n * 12.9898) * 43758.5453) % 1; }
-
 function extraRhythmMV(kind, tms, state) {
   const st = state || {};
   const def = EXTRA[kind];
@@ -188,6 +184,6 @@ function extraRhythmMV(kind, tms, state) {
   return null;
 }
 
-root.RhythmsExtra = { EXTRA, extraRhythmMV, xBeat, hash01 };
+root.RhythmsExtra = { EXTRA, extraRhythmMV, xBeat };
 
 })(typeof window !== 'undefined' ? window : this);

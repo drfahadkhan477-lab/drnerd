@@ -177,6 +177,18 @@ head('the prose agrees with the record');
      /Adding the other (\d+) checks to this file/, r => [+r[1] === stats.total + stats.pwa - ciTotal]],
     ['.github/workflows/verify.yml', 'the honest subset total',
      /(\d+) real checks/, r => [+r[1] === ciTotal]],
+    /* THE ONE UNGUARDED SENTENCE IN A BLOCK OF GUARDED ONES. The header
+       describing the logic job opened "the nine suites that are pure Node" and
+       still said nine when there were eighteen — it had been maintained by
+       hand while every number around it was checked, so the surrounding green
+       read as coverage of the paragraph. Same hole, same shape, as the split-
+       build line in the README.
+
+       This one is a fact about the workflow rather than about the record, so
+       it is compared against the suites the file actually invokes — which
+       means it is true today rather than after the next full run. */
+    ['.github/workflows/verify.yml', 'the size of the logic job',
+     /the (\d+) suites that are pure Node/, r => [+r[1] === ciSuites.length]],
     ['docs/BUILD.md', 'the length of the patch chain',
      /The chain is (\d+) patch scripts/, r => [+r[1] === chainLength]],
     ['scripts/build.js', 'the length of the patch chain',

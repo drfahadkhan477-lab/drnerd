@@ -43,26 +43,33 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the nine suites that are pure Node with no Playwright and no
-#                built artifact at all: verify-fsrs.js (the scheduler — the
-#                math that decides when a card comes back), verify-worker.js
-#                (the Cloudflare Worker holding the Gemini key, driven
-#                directly as a request handler), verify-physio-pure.js (valve
-#                events as real pressure crossings, isovolumetric phases that
-#                genuinely hold volume), verify-leads-pure.js (Einthoven and
-#                Goldberger, exact to floating point, every lead one dipole
-#                projected) verify-zip.js (an imported archive cannot spend
-#                more memory than the device has) and verify-calib-pure.js
-#                (the calibration arithmetic, which says nothing rather than
-#                something wrong on sparse data) and verify-figzoom-pure.js
-#                (zoom-about-a-point, where drift is invisible by eye),
-#                verify-engine.js (the test suite's own discipline: that the
-#                browser engine stays a flag rather than drifting back to
-#                thirty-four hardcoded copies of Chromium) and
-#                verify-stats.js (that the counts quoted in this comment, the
-#                README and BUILD.md are the counts the tests actually
-#                produced — this file said both "1052" and "1210" for one
-#                quantity until that check existed).
+#   logic        the 18 suites that are pure Node with no Playwright and no
+#                built artifact at all. It started at nine and this sentence
+#                still said nine at eighteen, because the list was maintained
+#                by hand and nothing read it; the count is now checked in
+#                verify-stats against the suites this file actually invokes,
+#                so it cannot drift again. Broadly they cover:
+#
+#                  the arithmetic  — verify-fsrs (when a card comes back),
+#                    verify-physio-pure (valve events as real pressure
+#                    crossings), verify-leads-pure (Einthoven and Goldberger,
+#                    exact to floating point), verify-calib-pure (which says
+#                    nothing rather than something wrong on sparse data),
+#                    verify-figzoom-pure (zoom-about-a-point, where drift is
+#                    invisible by eye), verify-rhythms-pure (an arrhythmia in
+#                    the picker that nothing knows how to draw)
+#                  the untrusted input — verify-worker (the Cloudflare Worker,
+#                    driven directly as a request handler), verify-zip (an
+#                    imported archive cannot spend more memory than the device
+#                    has), verify-vision-pure, verify-memory-pure,
+#                    verify-profile-pure, verify-refassets-pure
+#                  the project's own discipline — verify-engine (the browser
+#                    engine stays a flag), verify-leakguard, verify-release,
+#                    verify-contentrules, verify-oracle, and verify-stats
+#                    (that the counts quoted in this comment, the README and
+#                    BUILD.md are the counts the tests actually produced —
+#                    this file said both "1052" and "1210" for one quantity
+#                    until that check existed).
 #                331 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
@@ -154,6 +161,8 @@ jobs:
         run: node tests/verify-profile-pure.js
       - name: imported figures survive a note list that has not loaded (31 checks)
         run: node tests/verify-refassets-pure.js
+      - name: every arrhythmia the picker offers has something that draws it (13 checks)
+        run: node tests/verify-rhythms-pure.js
       - name: the counts in the docs are the counts the tests produced (30 checks)
         run: node tests/verify-stats.js
 
