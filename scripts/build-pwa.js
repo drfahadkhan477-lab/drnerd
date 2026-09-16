@@ -558,24 +558,57 @@ step('copy only the content the app asks for', () => {
   }
 });
 
-/* THE BANK IS NOT SHIPPABLE AS THE EXPORT WROTE IT. content/questions.json is
-   the licensed export, and the export keys six questions wrong — scripts/
-   keys-patch.js says which, why, and on what evidence. That step rewrites the
-   ALL_Q embedded in the HTML, which is the entire bank for the single-file
-   build; this build does not read that copy, it serves the JSON. So a plain
-   cpSync above shipped the uncorrected export to the iPad while the single-file
-   build had it right, and a wrong key is silent: it marks a correct answer
-   wrong and teaches the distractor as the fact.
+/* THE BANK IS NOT SHIPPABLE AS THE EXPORT WROTE IT. The export keys six
+   questions wrong — scripts/keys-patch.js says which, why, and on what
+   evidence — and a wrong key is silent: it marks a correct answer wrong and
+   teaches the distractor as the fact.
 
-   The SAME list is applied here, from the same module, with the same `was`
-   assertion — not a second copy of it. */
-const { applyKeyCorrections } = require('./keys-patch.js');
+   THIS STEP USED TO APPLY THEM AGAIN HERE, and the comment justifying it
+   opened "content/questions.json is the licensed export". That was true once
+   and is not now: extract-content.js reads build/systole.html, which the chain
+   has ALREADY corrected, so the extracted bank arrives carrying them. Applying
+   the list a second time hit keys-patch's own `was` assertion and stopped the
+   build:
+
+       [CON_16] the export now keys C, not A as recorded here.
+
+   C is what the correction changes it TO. The guard was right and the pipeline
+   was wrong. It went unseen because extract and pwabuild had never run
+   back-to-back — `npm run pwa` by hand read a content/ directory left over
+   from before those corrections existed.
+
+   SO THIS VERIFIES RATHER THAN MUTATES, which is idempotent by construction
+   and cannot be run twice into a contradiction. It also closes what the apply
+   was covering by accident: the cross-check below proves the two builds AGREE,
+   and two builds that both lost the corrections agree perfectly. This asserts
+   the corrections are actually present in what ships. */
+const { CORRECTIONS } = require('./keys-patch.js');
 const { applyContentFlags } = require('./flags-patch.js');
-step('apply the bank corrections the chain makes to the single-file build', () => {
+step('the bank corrections are present in what ships', () => {
   const p = path.join(DIST, 'content', 'questions.json');
   const bank = JSON.parse(fs.readFileSync(p, 'utf8'));
-  const applied = applyKeyCorrections(bank).concat(applyContentFlags(bank));
+  const byId = new Map(bank.map(q => [q.id, q]));
+  const wrong = CORRECTIONS.filter(c => {
+    const q = byId.get(c.id);
+    return !q || 'ABCDEFGH'[q.ci] !== c.now;
+  });
+  if (wrong.length) {
+    throw new Error(
+      `${wrong.length} correction(s) did not reach the split build: ` +
+      wrong.map(c => {
+        const q = byId.get(c.id);
+        return `${c.id} (ships ${q ? 'ABCDEFGH'[q.ci] : 'absent'}, should be ${c.now})`;
+      }).join(', ') +
+      `\n  The chain's keys step corrects ALL_Q before extract-content reads it.` +
+      `\n  If they are missing here, that step did not run or extraction lost them.`);
+  }
+  /* The flags are applied rather than asserted because applyContentFlags is
+     already idempotent — it leaves a question the export flagged itself alone
+     and reports it as such — and it is the only thing that puts them in the
+     split build if extraction ever drops one. */
+  const applied = applyContentFlags(bank);
   fs.writeFileSync(p, JSON.stringify(bank));
+  console.log(`      ✓ ${CORRECTIONS.length} key corrections present in the shipped bank`);
   applied.forEach(a => console.log('      ✓ ' + a));
 });
 
