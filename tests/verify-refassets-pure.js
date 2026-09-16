@@ -110,6 +110,46 @@ head('and refuses to reclaim against nothing — the irreversible direction');
   ok('while a genuine list still reclaims the orphan', n === 1 && R.has(a) && !R.has(b), String(n));
 }
 
+head('unless the caller vouches that the list is the whole set');
+{
+  /* THE OTHER HALF, AND IT WAS MISSING — the refusal above shipped without it
+     and broke the case it did not think about. Deleting the LAST note that
+     cites a figure produces a legitimately empty list, so a blanket refusal
+     means that final figure is never reclaimed and the store only ever grows.
+
+     verify-assets found it in a browser, three runs running:
+
+         FAIL  and when the last citation goes, so does the figure  → 1
+
+     which is the right suite to have caught it and the wrong place to have
+     needed to: that one needs a build, a browser and the licensed export, so
+     it runs on one machine when someone remembers. Everything the failure
+     turns on is arithmetic over strings, and belongs here where it runs on a
+     push. That is the whole argument for this file existing, made against it.
+
+     refDelete has just rebuilt REF from the live array, so it knows. A future
+     boot-time sweep would not, and would say nothing — which is why the
+     assurance is opt-in and its absence keeps the safe refusal. */
+  const R = fresh();
+  const a = R.add(bytesOf('the last chapter'), 'a.png');
+  const b = R.add(bytesOf('and its second figure'), 'b.png');
+  ok('two imported figures are in the store', R.count() === 2);
+
+  const n = R.sweep([], { authoritative: true });
+  ok('an empty list the caller vouches for reclaims everything', n === 2, String(n));
+  ok('and the store is empty afterwards', R.count() === 0 && !R.has(a) && !R.has(b),
+     String(R.count()));
+
+  /* The assurance must be exactly true, not merely truthy: a caller that
+     passes an options object for some other reason must not reclaim the shelf
+     by accident. */
+  const R2 = fresh();
+  R2.add(bytesOf('x'), 'x.png');
+  ok('a bare options object does not vouch', R2.sweep([], {}) === 0 && R2.count() === 1);
+  ok('and neither does a truthy non-true value',
+     R2.sweep([], { authoritative: 'yes' }) === 0 && R2.count() === 1, String(R2.count()));
+}
+
 head('the citation pattern matches what md() actually writes');
 {
   const R = fresh();

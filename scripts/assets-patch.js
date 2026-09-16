@@ -223,8 +223,11 @@ patch('import: deleting the last note that cited a figure lets the figure go',
 `function refDelete(id){
   REF=REF.filter(x=>x.id!==id); saveJSON(REF_KEY,REF); invalidateIndex();
   /* Import is content-addressed, deletion is not, so without this an imported
-     chapter that gets deleted would leave its figures in the store for ever. */
-  try{ if(typeof RefAssets!=='undefined') RefAssets.sweep(REF.map(r=>r.body)); }catch(_){}
+     chapter that gets deleted would leave its figures in the store for ever.
+     authoritative: REF was just rebuilt from the live array, so an empty list
+     here means every note really is gone — including the last one, whose
+     figure would otherwise never be reclaimed. */
+  try{ if(typeof RefAssets!=='undefined') RefAssets.sweep(REF.map(r=>r.body),{authoritative:true}); }catch(_){}
 }`);
 
 /* Boot, from immediately after the module rather than from the REF line the
