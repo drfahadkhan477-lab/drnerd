@@ -1,0 +1,69 @@
+'use strict';
+/*
+ * Why a suite that did not report stopped reporting.
+ *
+ * A suite that throws prints no summary, so the runner has nothing to count
+ * and says "did not report". That line is useless on its own — every death
+ * looks the same — so this digs the message out of what the suite did manage
+ * to print before it died.
+ *
+ * THE FIRST VERSION SCANNED FROM THE TOP and returned the first line that was
+ * not furniture. That is the wrong end of the file. Node prints an uncaught
+ * rejection LAST, after everything the suite logged, so scanning downward
+ * finds the earliest chatty line instead of the death. It shipped, and the
+ * first suite it was pointed at answered:
+ *
+ *     home           did not report  (21s)  — 51 had passed first
+ *         Mastered 16%
+ *
+ * which is not an error. verify-home.js:125 passes `.hp-legend` textContent as
+ * a check's detail, that element holds two spans, and its text carries the
+ * newline between them — so the PASS line printed across two lines and the
+ * second had no PASS prefix to be filtered by. A continuation of a check's own
+ * detail was being reported as the cause of the crash.
+ *
+ * THE RULE NOW IS POSITIONAL, because that is what is actually true: a suite
+ * prints its checks and then dies, so the death is whatever comes after the
+ * LAST PASS/FAIL line. Everything before that boundary is the suite working,
+ * however it happens to be worded, and no amount of pattern-matching on the
+ * wording would have told "Mastered 16%" from a message.
+ *
+ * Within that tail an error-shaped line wins over a plain one, so a detail
+ * that wrapped under the final check cannot outrank the exception below it.
+ */
+
+/* node's uncaught-exception furniture, in the two shapes it comes in: the
+   promises boilerplate for a rejection, and a bare `path/to/file.js:12`
+   header with the offending source line and a caret under it for a throw. */
+const NOISE = /^(node:internal|\s*triggerUncaughtException|\s*\^|Node\.js v|\s*at\s)/;
+const FILE_POS = /^([A-Za-z]:\\|\/|\.{0,2}[\\/])\S*:\d+$/;
+
+/* What a thrown message looks like, as opposed to a line of app text that
+   happened to land in the tail. Playwright's are `page.evaluate: Target
+   crashed` and `locator.click: Timeout 30000ms exceeded` — an API path, a
+   colon, then prose — and node's are `TypeError: ...`. */
+const ERRORISH = /^([A-Za-z_$][\w$]*)?Error\b|^[a-z][\w$]*(\.[A-Za-z_$][\w$]*)+\s*:\s|^Target (crashed|page|closed)/;
+
+function causeOf(out) {
+  const lines = String(out || '').split('\n');
+  /* After the last check the suite managed to print. A suite that died before
+     its first check has no boundary, and the whole output is the tail. */
+  let start = 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/^\s*(PASS|FAIL)\s/.test(lines[i])) { start = i + 1; break; }
+  }
+  const usable = [];
+  for (const raw of lines.slice(start)) {
+    if (NOISE.test(raw)) continue;
+    const t = raw.trim();
+    if (!t || /^[─=#]/.test(t) || /^(PASS|FAIL)\s/.test(t)) continue;
+    if (FILE_POS.test(t)) continue;
+    /* The source line node echoes under that header is code, not a message. */
+    if (/^(const|let|var|await|return|throw|function|\}|\{)/.test(t)) continue;
+    usable.push(t);
+  }
+  const hit = usable.find(t => ERRORISH.test(t)) || usable[0] || '';
+  return hit.slice(0, 96);
+}
+
+module.exports = { causeOf, NOISE, FILE_POS, ERRORISH };

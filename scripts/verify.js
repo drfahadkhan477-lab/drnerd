@@ -162,6 +162,11 @@ const SUITES = [
      own localStorage fallback reaches the case where it is not, and the newer
      copy was being deleted. */
   ['store-pure',   'the newer copy survives, and a refused write is not lost'],
+  /* The runner's own diagnosis of a dead suite, which is the only thing said
+     about one on a machine the reader does not have. Its first version scanned
+     the output from the wrong end and reported a check's own wrapped detail as
+     the cause of a crash. */
+  ['cause-pure',   'a dead suite is diagnosed by what killed it, not by what it last printed'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -207,7 +212,7 @@ const SUITES = [
    while the only machine that could run the full thing was not being run. The
    first full green run wrote all fourteen at once. If this fills up again, that
    is the same gap reopening. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['cause-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -467,26 +472,10 @@ function runSuite(name, claim) {
    suites died loading the 42 MB single file, and reading it took a round trip
    through tests/last-run.log on someone else's machine.
 
-   Skips node's uncaught-rejection boilerplate and the suite's own headings, and
-   returns the first thing that is actually a message. Truncated, because this
-   is a table and the full text is in the log either way. */
-function causeOf(out) {
-  /* node's uncaught-exception furniture, in the two shapes it comes in: the
-     promises boilerplate for a rejection, and a bare `path/to/file.js:12`
-     header with the offending source line and a caret under it for a throw. */
-  const noise = /^(node:internal|\s*triggerUncaughtException|\s*\^|Node\.js v|\s*at\s)/;
-  const filePos = /^([A-Za-z]:\\|\/|\.{0,2}[\\/])\S*:\d+$/;
-  for (const raw of String(out || '').split('\n')) {
-    if (noise.test(raw)) continue;
-    const t = raw.trim();
-    if (!t || /^[─=#]/.test(t) || /^(PASS|FAIL)\s/.test(t)) continue;
-    if (filePos.test(t)) continue;
-    /* The source line node echoes under that header is code, not a message. */
-    if (/^(const|let|var|await|return|throw|function|\}|\{)/.test(t)) continue;
-    return t.slice(0, 96);
-  }
-  return '';
-}
+   The extraction itself lives in scripts/cause.js, with tests/verify-cause-pure.js
+   over it: the first version of it scanned from the wrong end of the output and
+   reported a check's own wrapped detail as the cause of a crash. */
+const { causeOf } = require(path.join(ROOT, 'scripts', 'cause.js'));
 
 function report(r) {
   const head = JOBS > 1 ? `  ${r.name.padEnd(14)} ` : '';
