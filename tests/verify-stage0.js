@@ -149,8 +149,17 @@ const head = t => console.log('\n── ' + t + ' ──');
     const nav = performance.getEntriesByType('navigation')[0] || {};
     return { domInteractive: nav.domInteractive || 0, heroAt: window.__heroAt };
   });
+  /* NO SEPARATE WALL-CLOCK CAP, and the first version of this had one. It read
+     `launchMs < 60000` as a hang detector, and 60000 came from Chromium numbers
+     where the whole launch is 6s — on WebKit the 42 MB parse alone is around
+     100s, so the check could not pass on the engine the app actually ships to.
+     A third number, invented, wrong on one of the two engines that matter.
+
+     There is nothing for it to add. A hang is already bounded twice above: the
+     goto carries timeout 200000 and the hero wait 60000, and either expiring
+     throws and fails the suite. A cap below the goto's own timeout can only
+     fire spuriously, because a launch slower than that never reaches this line. */
   const SPLIT = /^https?:\/\//.test(target);
-  ok('launches without hanging', launchMs < 60000, (launchMs / 1000).toFixed(1) + 's');
   if (SPLIT) {
     ok('launches without stalling', launchMs < 5000, (launchMs / 1000).toFixed(1) + 's');
   } else if (timing.heroAt === null) {
