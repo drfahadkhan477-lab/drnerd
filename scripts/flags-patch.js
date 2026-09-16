@@ -54,6 +54,50 @@ const FLAGS = [
     why: 'imgopt is set and figs is empty; options are "Pattern A" through "Pattern E". ' +
          'Same defect as COR_108, which the export already flags in these words.',
   },
+  /* ── three stems that ask about a picture the export does not carry ──────
+     Found by tools/figure-audit.js on the first full run of it against a real
+     build. It reports 14 questions whose wording points at an image they do
+     not have; six already carry ACCSAP's own notice, and five of the rest
+     mention an image only in the COMMENTARY, where nothing is being asked of
+     the fellow and a notice would be noise on a question that works.
+
+     These three are the ones where it is in the STEM. That is the difference
+     between an untidy explanation and a question that cannot be answered: the
+     fellow is told to read an echocardiogram or an ECG, there is nothing to
+     read, and until now nothing said so. "The figures are missing" is exactly
+     how this was first reported, and this is what was behind it.
+
+     NOT A BUILD PROBLEM, which the same run establishes: the audit's count
+     integrity line reports every declared figure present across 305 questions
+     and 408 figures, so nothing is being lost or failing to decode in the
+     chain. These items declare no figure at all.
+
+     THE WORDING IS CAREFUL ON PURPOSE. It says the image is not in the export
+     and sends the fellow to ACCSAP; it does not claim ACCSAP never shipped
+     one. Telling those two apart means reading the licensed source as a
+     document, which is not something this project does — and the fellow with
+     an ACCSAP subscription can settle it in a way this build cannot. */
+  {
+    id: 'COR_128',
+    wantFigs: 0,
+    flag: 'The image this question refers to is not present in the ACCSAP export, ' +
+          'so it cannot be displayed — review this question inside ACCSAP.',
+    why: 'the stem says an echocardiogram "is shown" and figs is empty.',
+  },
+  {
+    id: 'COR_58',
+    wantFigs: 0,
+    flag: 'The image this question refers to is not present in the ACCSAP export, ' +
+          'so it cannot be displayed — review this question inside ACCSAP.',
+    why: 'the stem asks about "the following findings on electrocardiogram" and figs is empty.',
+  },
+  {
+    id: 'HEA_10',
+    wantFigs: 0,
+    flag: 'The image this question refers to is not present in the ACCSAP export, ' +
+          'so it cannot be displayed — review this question inside ACCSAP.',
+    why: 'the stem refers to "this echocardiogram" and figs is empty.',
+  },
   {
     id: 'COR_85',
     wantEx: '',
