@@ -198,10 +198,16 @@ const SUITES = [
    Nothing is fabricated to clear it. Writing a measured count here by hand
    would mean also inventing the --pwa figure and the CI subset total, which is
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
-const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release',
-                        'contentrules', 'memory-pure', 'vision-pure',
-                        'profile-pure', 'refassets-pure', 'rhythms-pure',
-                        'ipad-pure', 'store-pure'];
+/* Suites registered since the last full green run, whose counts the record has
+   not seen yet. Checked in BOTH directions, so it self-cleans: a name left here
+   after its suite has recorded fails just as loudly as a suite missing from the
+   record.
+
+   EMPTY, AND THAT IS NEWS. It held fourteen names for weeks — every suite added
+   while the only machine that could run the full thing was not being run. The
+   first full green run wrote all fourteen at once. If this fills up again, that
+   is the same gap reopening. */
+const PENDING_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -447,16 +453,65 @@ function runSuite(name, claim) {
 /* One whole line per suite, written when it finishes. In serial mode the name
    still goes out first so a suite that hangs is visible while it hangs; in
    parallel mode that would interleave four half-written lines. */
+/* WHY A SUITE DIED, not merely that it did.
+
+   A suite that throws prints no summary line, so verify records "did not
+   report" and that is all the table said. The reason was in the child's output
+   the whole time and the filter below walked past it: it matches lines opening
+   with Error, TypeError or ReferenceError, and Playwright's own failures do not
+   open that way —
+
+       page.goto: Timeout 200000ms exceeded.
+
+   That one line is the entire diagnosis of the first WebKit run, where 34 of 68
+   suites died loading the 42 MB single file, and reading it took a round trip
+   through tests/last-run.log on someone else's machine.
+
+   Skips node's uncaught-rejection boilerplate and the suite's own headings, and
+   returns the first thing that is actually a message. Truncated, because this
+   is a table and the full text is in the log either way. */
+function causeOf(out) {
+  /* node's uncaught-exception furniture, in the two shapes it comes in: the
+     promises boilerplate for a rejection, and a bare `path/to/file.js:12`
+     header with the offending source line and a caret under it for a throw. */
+  const noise = /^(node:internal|\s*triggerUncaughtException|\s*\^|Node\.js v|\s*at\s)/;
+  const filePos = /^([A-Za-z]:\\|\/|\.{0,2}[\\/])\S*:\d+$/;
+  for (const raw of String(out || '').split('\n')) {
+    if (noise.test(raw)) continue;
+    const t = raw.trim();
+    if (!t || /^[─=#]/.test(t) || /^(PASS|FAIL)\s/.test(t)) continue;
+    if (filePos.test(t)) continue;
+    /* The source line node echoes under that header is code, not a message. */
+    if (/^(const|let|var|await|return|throw|function|\}|\{)/.test(t)) continue;
+    return t.slice(0, 96);
+  }
+  return '';
+}
+
 function report(r) {
   const head = JOBS > 1 ? `  ${r.name.padEnd(14)} ` : '';
-  if (r.failed === null) console.log(`${head}did not report  (${r.secs}s)`);
+  let said = '';
+  if (r.failed === null) {
+    /* Checks that ran before the throw are real and are lost from the count,
+       so say how many rather than letting the table imply none happened. */
+    const ran = (String(r.out || '').match(/^\s*PASS\s/gm) || []).length;
+    said = causeOf(r.out);
+    console.log(`${head}did not report  (${r.secs}s)`
+      + (ran ? `  — ${ran} had passed first` : '')
+      + (said ? `\n      ${said}` : ''));
+  }
   else console.log(`${head}${r.ok ? '✓' : '✗'} ${String(r.passed).padStart(3)} passed`
     + `${r.failed ? `, ${r.failed} FAILED` : ''}   ${r.secs}s`);
   if (!r.ok) {
     /* Print only the failing lines: the full transcript of seventeen suites is
        thousands of lines, and the failures are what you came for. */
     for (const ln of r.out.split('\n')) {
-      if (/^\s*FAIL\s/.test(ln) || /^\s*(Error|TypeError|ReferenceError)/.test(ln)) console.log(`      ${ln.trim()}`);
+      const t = ln.trim();
+      /* Not the cause again: when node formats the rejection with an `Error`
+         prefix the filter below matches the very line already printed above,
+         and the table said the same thing twice. */
+      if (t && t === said) continue;
+      if (/^\s*FAIL\s/.test(ln) || /^\s*(Error|TypeError|ReferenceError)/.test(ln)) console.log(`      ${t}`);
     }
     if (flag('--bail')) stopScheduling = true;
   }

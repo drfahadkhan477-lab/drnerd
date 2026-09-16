@@ -61,6 +61,21 @@ const head = t => console.log('\n── ' + t + ' ──');
       constructor(f) { super(f); window.__made++; }
       disconnect() { window.__gone++; return super.disconnect(); }
     };
+    /* Stamp the moment the hero exists, on the page's own clock, so it can be
+       compared against the navigation timings rather than against a stopwatch
+       in node. Observes `document` and not documentElement, which is null this
+       early; the interval is a second route in case an observer is not. */
+    window.__heroAt = null;
+    const stamp = () => {
+      if (window.__heroAt === null && document.querySelector('.hero-h1')) {
+        window.__heroAt = performance.now();
+        return true;
+      }
+      return false;
+    };
+    try { new MutationObserver(stamp).observe(document, { childList: true, subtree: true }); }
+    catch (_) { /* the interval is the fallback */ }
+    const tick = setInterval(() => { if (stamp()) clearInterval(tick); }, 30);
   });
 
   head('launch, with the network cut off');
@@ -75,7 +90,86 @@ const head = t => console.log('\n── ' + t + ' ──');
   await page.waitForTimeout(1200);
   ok('boots with no JS errors', errors.length === 0, errors.slice(0, 2).join(' | '));
   ok('makes zero third-party network requests', external.length === 0, external.slice(0, 2).join(' | '));
-  ok('launches without stalling', launchMs < 5000, (launchMs / 1000).toFixed(1) + 's');
+  /* ── WHAT "WITHOUT STALLING" CAN HONESTLY MEAN HERE ──────────────────────
+     This asserted launchMs < 5000, where launchMs spans page.goto() to the
+     hero being on screen. On the owner's laptop that is 5.6-6.1s and on the
+     machine the 5000 was calibrated on it passes, and neither number is about
+     the app. tools/boot-probe.js measured where it goes, on the single file:
+
+         read off disk      1.58s
+         hero on screen     4.96s
+         document parsed    5.52s
+         wall clock         6.10s
+
+     The hero lands half a second BEFORE the document finishes parsing. The app
+     is inline in the document, so its script runs, paints, and the browser
+     carries on through the remaining megabytes — the app's own boot cost is
+     effectively nil and the whole number is the browser getting through 42 MB.
+     A threshold over that measures a disk, and raising it to fit a slower disk
+     would measure a slower disk.
+
+     THE TWO BUILDS ARE NOT THE SAME MEASUREMENT, which is why one budget could
+     never fit both. The single file is 42 MB with the app inline; the split
+     build is a 756 KB shell that fetches app.js. So each is asserted on the
+     property that is actually about the app in that shape:
+
+       single file  the hero must appear BEFORE the document finishes parsing.
+                    A ratio inside one run, so it holds on any machine.
+
+                    WHAT IT CATCHES AND WHAT IT DOES NOT, measured rather than
+                    claimed — the first version of this paragraph asserted it
+                    would catch "a real stall in the app's init", and a fixture
+                    written to prove that showed otherwise. Three 12.8 MB
+                    documents through Chromium:
+
+                      paints inline, healthy        hero 0.01s  parsed 1.91s  ok
+                      1.5s busy loop during parse   hero 3.29s  parsed 3.44s  ok
+                      paint moved to DOMContentLoaded  hero 1.88s  parsed 1.88s  FAILS
+
+                    A script that runs during the parse blocks the parser, so a
+                    slowdown inside it delays domInteractive by the same amount
+                    and the ratio cannot see it. What this does catch is the app
+                    ceasing to paint DURING the parse at all — deferring to
+                    DOMContentLoaded, to a timeout, to an await — which is the
+                    change that would cost an iPad its first paint on a 42 MB
+                    file. That is a narrower proposition than "without
+                    stalling", and the label says the narrower thing.
+
+                    Catching a synchronous slowdown needs a performance.mark
+                    where the app's own script begins, so the measurement can
+                    start there instead of at navigationStart. That is a chain
+                    change and is not in this one.
+
+       split build  the wall clock, as before. There is almost nothing to parse,
+                    so the number really is fetch plus boot.
+
+     Both keep a generous absolute cap, which is the hang detector the original
+     number was doing double duty as. */
+  const timing = await page.evaluate(() => {
+    const nav = performance.getEntriesByType('navigation')[0] || {};
+    return { domInteractive: nav.domInteractive || 0, heroAt: window.__heroAt };
+  });
+  /* NO SEPARATE WALL-CLOCK CAP, and the first version of this had one. It read
+     `launchMs < 60000` as a hang detector, and 60000 came from Chromium numbers
+     where the whole launch is 6s — on WebKit the 42 MB parse alone is around
+     100s, so the check could not pass on the engine the app actually ships to.
+     A third number, invented, wrong on one of the two engines that matter.
+
+     There is nothing for it to add. A hang is already bounded twice above: the
+     goto carries timeout 200000 and the hero wait 60000, and either expiring
+     throws and fails the suite. A cap below the goto's own timeout can only
+     fire spuriously, because a launch slower than that never reaches this line. */
+  const SPLIT = /^https?:\/\//.test(target);
+  if (SPLIT) {
+    ok('launches without stalling', launchMs < 5000, (launchMs / 1000).toFixed(1) + 's');
+  } else if (timing.heroAt === null) {
+    ok('the hero was stamped so the paint can be placed in the parse', false,
+       'no stamp — the init script did not run');
+  } else {
+    ok('paints before the document has finished parsing',
+       timing.heroAt < timing.domInteractive,
+       `hero ${(timing.heroAt / 1000).toFixed(2)}s, parsed ${(timing.domInteractive / 1000).toFixed(2)}s`);
+  }
 
   head('embedded typefaces');
   const fonts = await page.evaluate(async () => {
