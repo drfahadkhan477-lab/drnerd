@@ -64,21 +64,37 @@ const say = (...a) => console.log(stamp(), ...a);
   page.on('console', m => { if (m.type() === 'error') note('console', m.text()); });
   page.on('requestfailed', r => note('requestfailed', `${r.url().slice(-70)} — ${(r.failure() || {}).errorText}`));
 
+  /* THE ONLY WAY A PAGE IS GONE, spelled out rather than inferred from "the
+     evaluate threw". Those are not the same thing: a typo in the snippet
+     below, or a page-side exception, also throws — and a probe that reports
+     DEAD when what it actually hit was its own bug is this project's oldest
+     failure mode in a new hat. It would report hardest when nothing was wrong.
+
+     This is Playwright's wording for a target that no longer exists; anything
+     else is printed as a probe error and the loop carries on, so a broken
+     probe looks broken instead of looking like a finding. */
+  const GONE = /Target (crashed|closed)|Target page, context or browser has been closed|Browser has been closed/i;
+
   /* Answers, or says why it cannot. Called after every step so the step that
      killed the page is the one reported. */
   const alive = async where => {
     try {
-      const s = await page.evaluate(() => ({
-        canvases: document.querySelectorAll('canvas').length,
-        imgs: document.querySelectorAll('img').length,
-        anims: document.getAnimations ? document.getAnimations().length : -1,
-        nodes: document.getElementsByTagName('*').length,
-        screen: (document.getElementById('app') || {}).dataset ? document.getElementById('app').dataset.screen : '?',
-      }));
+      const s = await page.evaluate(() => {
+        const app = document.getElementById('app');
+        return {
+          canvases: document.querySelectorAll('canvas').length,
+          imgs: document.querySelectorAll('img').length,
+          anims: document.getAnimations ? document.getAnimations().length : -1,
+          nodes: document.getElementsByTagName('*').length,
+          screen: (app && app.dataset && app.dataset.screen) || '?',
+        };
+      });
       say(`  ok ${where}  canvas ${s.canvases}  img ${s.imgs}  anim ${s.anims}  nodes ${s.nodes}  screen ${s.screen}`);
       return true;
     } catch (e) {
-      say(`  DEAD at ${where}  ${String(e.message).split('\n')[0]}`);
+      const msg = String(e.message).split('\n')[0];
+      if (!GONE.test(msg)) { say(`  probe error at ${where} — the PAGE is fine: ${msg}`); return true; }
+      say(`  DEAD at ${where}  ${msg}`);
       return false;
     }
   };
@@ -96,7 +112,11 @@ const say = (...a) => console.log(stamp(), ...a);
       for (const [w, h, label] of SIZES) {
         say(`cycle ${c}  ${label} ${w}x${h}`);
         try { await page.setViewportSize({ width: w, height: h }); }
-        catch (e) { say(`  DEAD at setViewportSize  ${String(e.message).split('\n')[0]}`); break outer; }
+        catch (e) {
+          const msg = String(e.message).split('\n')[0];
+          say(`  ${GONE.test(msg) ? 'DEAD' : 'threw'} at setViewportSize  ${msg}`);
+          break outer;
+        }
         if (!await alive('setViewportSize')) break outer;
 
         try {
@@ -108,7 +128,11 @@ const say = (...a) => console.log(stamp(), ...a);
             if (typeof render === 'function') render();
             await new Promise(res => setTimeout(res, 280));
           });
-        } catch (e) { say(`  DEAD at goHome/render  ${String(e.message).split('\n')[0]}`); break outer; }
+        } catch (e) {
+          const msg = String(e.message).split('\n')[0];
+          say(`  ${GONE.test(msg) ? 'DEAD' : 'threw'} at goHome/render  ${msg}`);
+          break outer;
+        }
         if (!await alive('render')) break outer;
       }
     }
