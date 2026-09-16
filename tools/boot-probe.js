@@ -58,6 +58,13 @@ const URL = /^https?:/.test(target) ? target
 
   /* Stamp the moment the hero exists, from inside the page, so the number is
      on the same clock as the navigation timings rather than Node's. */
+  /* OBSERVES `document`, NOT `document.documentElement`. An init script runs at
+     document-start, where documentElement is still null, so observing it threw
+     and the stamp was never installed — the probe then waited two minutes for a
+     value nothing was going to write. Document is always there. The interval is
+     a second route to the same answer in case a MutationObserver is not, and
+     Node has a third below, because an instrument that reports nothing is
+     worse than a crude number. */
   await page.addInitScript(() => {
     window.__heroAt = null;
     const stamp = () => {
@@ -67,15 +74,19 @@ const URL = /^https?:/.test(target) ? target
       }
       return false;
     };
-    if (document.readyState !== 'loading') stamp();
-    new MutationObserver(() => { if (stamp()) { /* keep observing is harmless */ } })
-      .observe(document.documentElement, { childList: true, subtree: true });
+    try { new MutationObserver(stamp).observe(document, { childList: true, subtree: true }); }
+    catch (_) { /* the interval below is the fallback */ }
+    const tick = setInterval(() => { if (stamp()) clearInterval(tick); }, 30);
   });
 
   const t0 = Date.now();
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await page.waitForFunction(() => window.__heroAt !== null, null, { timeout: 120000 });
+  /* Wait on the DOM condition verify-stage0 itself waits on — proven to work
+     against this build — rather than on the stamp, so a stamp that failed to
+     install costs precision and not the whole reading. */
+  await page.waitForFunction(() => !!document.querySelector('.hero-h1'), null, { timeout: 120000 });
   const wallMs = Date.now() - t0;
+  const heroFallback = await page.evaluate(() => performance.now());
 
   const t = await page.evaluate(() => {
     const nav = performance.getEntriesByType('navigation')[0] || {};
@@ -85,9 +96,15 @@ const URL = /^https?:/.test(target) ? target
       domContentLoaded: nav.domContentLoadedEventEnd || 0,
       loadEvent: nav.loadEventEnd || 0,
       heroAt: window.__heroAt,
+      stamped: window.__heroAt !== null,
       bytes: (performance.getEntriesByType('resource')[0] || {}).transferSize || 0,
     };
   });
+
+  /* The stamp is the moment the hero appeared; the fallback is the moment Node
+     noticed, which is later by a poll interval and an RPC. Say which is being
+     reported rather than presenting one as the other. */
+  const heroAt = t.stamped ? t.heroAt : heroFallback;
 
   const row = (label, ms, note) =>
     console.log('  ' + label.padEnd(26) + (ms / 1000).toFixed(2).padStart(7) + 's' +
@@ -95,12 +112,13 @@ const URL = /^https?:/.test(target) ? target
 
   row('bytes to first byte', t.responseEnd);
   row('fetch + parse', t.domInteractive, 'navigationStart → domInteractive');
-  row('to hero', Math.max(0, t.heroAt - t.domInteractive), 'domInteractive → hero on screen');
+  row('to hero', Math.max(0, heroAt - t.domInteractive), 'domInteractive → hero on screen');
   console.log('  ' + '─'.repeat(44));
-  row('hero, on the page clock', t.heroAt);
+  row('hero, on the page clock', heroAt,
+      t.stamped ? 'stamped when it appeared' : 'measured when node noticed — slightly late');
   row('wall clock in node', wallMs, 'what verify-stage0 asserts on');
 
-  const share = t.heroAt > 0 ? Math.round(t.domInteractive / t.heroAt * 100) : 0;
+  const share = heroAt > 0 ? Math.round(t.domInteractive / heroAt * 100) : 0;
   console.log(`\n  ${share}% of the time to hero is fetch and parse.`);
   console.log('  Everything after domInteractive is the app\'s own boot.\n');
 
