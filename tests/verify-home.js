@@ -44,11 +44,23 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
    `ok('no console or page errors across the run', …)` — the check that would
    have shown why — is the one check a death never reaches. */
 const errors = [];
-onDeath(() => ({ section, checks: passed + failed, errors }));
+/* CRASH AND CLOSE ARE DIFFERENT DIAGNOSES and the runner cannot tell them
+   apart: Playwright says "Target page, context or browser has been closed" for
+   both, on the next call either way. If the crash event fired, the browser
+   killed the page and the answer is not in the JavaScript. */
+const events = [];
+onDeath(() => ({ section, checks: passed + failed, errors,
+                 events: events.length ? events.join(', ') : 'none' }));
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 460, height: 1000 }, deviceScaleFactor: 2 });
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-60)} — ${why}`);
+  });
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 

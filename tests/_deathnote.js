@@ -42,8 +42,13 @@ const HEADING = '── what the page said before the suite died ──';
 
 function deathNote(err, info = {}) {
   const lines = ['', HEADING];
-  if (info.section) lines.push(`  last section reached: ${info.section}`);
-  if (typeof info.checks === 'number') lines.push(`  checks completed: ${info.checks}`);
+  /* UNCONDITIONAL, both of them. A line that is only printed when its value
+     is the right type cannot be distinguished, in the output, from a note that
+     was cut short — and a missing line is exactly how the first real note was
+     misread. An absent value says "unknown" and stays visible. */
+  lines.push(`  last section reached: ${info.section || 'none — it died before the first'}`);
+  lines.push(`  checks completed: ${typeof info.checks === 'number' ? info.checks : 'unknown'}`);
+  if (info.events) lines.push(`  page events: ${info.events}`);
   const msgs = (info.errors || []).map(m => String(m).split('\n')[0].trim()).filter(Boolean);
   if (!msgs.length) lines.push('  the page logged nothing at all');
   /* Deduped: one broken resource can log the same line on every render, and a

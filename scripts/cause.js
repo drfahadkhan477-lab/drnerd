@@ -54,6 +54,22 @@ function causeOf(out) {
   for (let i = lines.length - 1; i >= 0; i--) {
     if (/^\s*(PASS|FAIL)\s/.test(lines[i])) { start = i + 1; break; }
   }
+  /* AND PAST THE NOTE, whose body is mostly the page's own exceptions. Adding
+     the note put error-shaped lines into the tail this reads, ahead of the real
+     one, so the runner started reporting the page's first console error as the
+     cause of the death. The two are different claims and the note is already
+     printed in full underneath.
+
+     There was a check here meant to catch exactly this — "the exception still
+     wins over the note above it" — and it passed, because its fixture used
+     "Unhandled Promise Rejection: …", which is not error-shaped. It was
+     measuring something narrower than it claimed. The fixture is a bare
+     TypeError now and it fails without the skip below. */
+  const noteAt = lines.findIndex((l, i) => i >= start && l.includes(HEADING));
+  if (noteAt >= 0) {
+    start = noteAt + 1;
+    while (start < lines.length && /^ {2}\S/.test(lines[start])) start++;
+  }
   const usable = [];
   for (const raw of lines.slice(start)) {
     if (NOISE.test(raw)) continue;
@@ -78,19 +94,30 @@ function causeOf(out) {
 
    Returns the note's body without its heading, and without the exception below
    it: report() prints that separately and a table that says it twice is a table
-   nobody trusts. */
+   nobody trusts.
+
+   THE BOUNDARY IS THE INDENT, NOT THE WORDING. The first version stopped at
+   the first line that looked like an exception, which is the one thing a
+   note's body is FULL of — the page's own errors. Pointed at a real death it
+   dropped the page's first message and kept only the bookkeeping above it:
+
+       BREAKS  "TypeError: null is not an object (evaluating…"   2 lines
+       kept    "Unhandled Promise Rejection: TypeError: null…"   3 lines
+       BREAKS  "ReferenceError: Can't find variable: setTheme"   2 lines
+
+   A filter that discards the evidence and keeps the labels reads as a note
+   that had nothing to say. deathNote() indents every body line by exactly two
+   spaces; node's exception has none and its stack frames have four, so the
+   shape of the line says where the note ends and nothing about its content
+   has to be guessed at. */
 function noteOf(out, cap = 12) {
   const lines = String(out || '').split('\n');
   const at = lines.findIndex(l => l.includes(HEADING));
   if (at < 0) return [];
   const body = [];
   for (const raw of lines.slice(at + 1)) {
-    const t = raw.trim();
-    if (!t) continue;
-    /* The note ends where node's furniture or the exception begins. */
-    if (NOISE.test(raw) || FILE_POS.test(t) || ERRORISH.test(t)) break;
-    if (/^(PASS|FAIL)\s/.test(t) || /^[─=#]/.test(t)) break;
-    body.push(t.slice(0, 160));
+    if (!/^ {2}\S/.test(raw)) break;
+    body.push(raw.trim().slice(0, 160));
     if (body.length >= cap) { body.push('…'); break; }
   }
   return body;

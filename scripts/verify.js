@@ -479,7 +479,7 @@ const { causeOf, noteOf } = require(path.join(ROOT, 'scripts', 'cause.js'));
 
 function report(r) {
   const head = JOBS > 1 ? `  ${r.name.padEnd(14)} ` : '';
-  let said = '';
+  let said = '', note = [];
   if (r.failed === null) {
     /* Checks that ran before the throw are real and are lost from the count,
        so say how many rather than letting the table imply none happened. */
@@ -492,7 +492,8 @@ function report(r) {
        open with none of FAIL, Error, TypeError or ReferenceError, so the first
        suite to leave a note had it written to tests/last-run.log and printed
        nowhere — evidence collected, kept, and still not read. */
-    for (const line of noteOf(r.out)) console.log(`      ${line}`);
+    note = noteOf(r.out);
+    for (const line of note) console.log(`      ${line}`);
   }
   else console.log(`${head}${r.ok ? '✓' : '✗'} ${String(r.passed).padStart(3)} passed`
     + `${r.failed ? `, ${r.failed} FAILED` : ''}   ${r.secs}s`);
@@ -505,6 +506,9 @@ function report(r) {
          prefix the filter below matches the very line already printed above,
          and the table said the same thing twice. */
       if (t && t === said) continue;
+      /* Nor anything the note already showed: the page's errors are error-
+         shaped, so without this every one of them printed twice. */
+      if (t && note.includes(t)) continue;
       if (/^\s*FAIL\s/.test(ln) || /^\s*(Error|TypeError|ReferenceError)/.test(ln)) console.log(`      ${t}`);
     }
     if (flag('--bail')) stopScheduling = true;

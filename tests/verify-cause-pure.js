@@ -161,8 +161,13 @@ head('a death note does not displace the cause');
     ...deathNote(err, {
       section: 'the dismiss button is never buried under the Apex button',
       checks: 51,
-      errors: ['Unhandled Promise Rejection: TypeError: null is not an object',
-               'Unhandled Promise Rejection: TypeError: null is not an object'],
+      /* BARE, not "Unhandled Promise Rejection: …". This fixture used the
+         wrapped form and the check below passed without the skip in causeOf
+         that it exists to hold — the wrapped form is not error-shaped, so it
+         never reached the code path being tested. The check was measuring
+         something narrower than its label. */
+      errors: ["TypeError: null is not an object (evaluating 'el.getBoundingClientRect')",
+               "TypeError: null is not an object (evaluating 'el.getBoundingClientRect')"],
     }),
     'Error: page.setViewportSize: Target page, context or browser has been closed',
     '    at /home/user/drnerd/tests/verify-home.js:473:18',
@@ -195,7 +200,8 @@ head('and the note itself reaches the summary, not only the log');
     ...deathNote(err, {
       section: 'the dismiss button is never buried under the Apex button',
       checks: 50,
-      errors: ["Unhandled Promise Rejection: TypeError: null is not an object (evaluating 'x.getBoundingClientRect')"],
+      errors: ["TypeError: null is not an object (evaluating 'x.getBoundingClientRect')",
+               'Failed to load resource: the server responded with a status of 404 (Not Found)'],
     }),
     'Error: page.setViewportSize: Target page, context or browser has been closed',
     '    at /home/user/drnerd/tests/verify-home.js:473:18',
@@ -206,8 +212,15 @@ head('and the note itself reaches the summary, not only the log');
      out.split('\n').filter(l => /^\s*FAIL\s/.test(l) || /^\s*(Error|TypeError|ReferenceError)/.test(l))
         .every(l => !/last section reached|checks completed|Unhandled/.test(l)));
   ok('the section reached is in the note', body.some(l => /^last section reached: the dismiss/.test(l)), body[0]);
+  ok('a note with no section says so rather than omitting the line',
+     deathNote(err, {}).some(l => /last section reached: none/.test(l)));
+  ok('and an unknown check count is visible rather than absent',
+     deathNote(err, {}).some(l => /checks completed: unknown/.test(l)));
   ok('so is the count', body.some(l => l === 'checks completed: 50'));
-  ok('so is what the page logged', body.some(l => /Unhandled Promise Rejection/.test(l)));
+  ok('so is what the page logged, even error-shaped',
+     body.some(l => /^TypeError: null is not an object/.test(l)), String(body.length) + ' lines');
+  ok('and the line after it, which a content boundary would have cut off',
+     body.some(l => /Failed to load resource/.test(l)));
   ok('the exception is NOT — report() prints that itself',
      body.every(l => !/^Error: page\.setViewportSize/.test(l)));
   ok('nor is the heading, which report() does not need to repeat',
