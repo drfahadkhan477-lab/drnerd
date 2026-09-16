@@ -137,11 +137,17 @@ const SUITES = [
      from, and the one channel a fence cannot reach. */
   ['memory-pure',  'an inference is not stored, or read back, as something the fellow said'],
   ['vision-pure',  'text inside a figure is named as data, never as an instruction'],
-  /* The last two core modules that had no direct test. Both turned out to be
+  /* Two more core modules that had no direct test. Both turned out to be
      carrying a real failure: a torn store took the whole Apex turn down, and
      an empty note list reclaimed every imported figure. */
   ['profile-pure', 'a torn store costs the profile line, never the turn'],
   ['refassets-pure', 'imported figures are reclaimed only against notes that actually loaded'],
+  /* rhythms-extra's header has invited a unit test since it was written — it
+     duplicates the beat model rather than importing it for exactly that. The
+     drift it guards is silent in the worst way for a study aid: a rhythm added
+     to the picker table without its generator draws a NORMAL beat under a
+     pathology's name and rate. */
+  ['rhythms-pure', 'every arrhythmia the picker offers has something that draws it'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -180,7 +186,7 @@ const SUITES = [
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
 const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release',
                         'contentrules', 'memory-pure', 'vision-pure',
-                        'profile-pure', 'refassets-pure'];
+                        'profile-pure', 'refassets-pure', 'rhythms-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
