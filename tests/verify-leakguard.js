@@ -126,7 +126,25 @@ head('the hook is wired the way the README says');
   ok('it calls the guard', /leak-guard\.js/.test(src));
   ok('and it says how to turn it on, since cloning does not',
      /core\.hooksPath/.test(src));
-  ok('and it is executable', (fs.statSync(hook).mode & 0o111) !== 0);
+  /* ASKS GIT, NOT THE FILESYSTEM. This read fs.statSync(hook).mode & 0o111,
+     which is the Unix executable bit — a thing NTFS does not have. Node reports
+     0o666 for every file on Windows, so the check could not pass there however
+     correct the repository was, and it failed every run on the owner's laptop.
+
+     It was also asking the wrong question on Linux. What makes a hook
+     executable in someone else's clone is the mode GIT RECORDS (100755), not
+     the mode this checkout happens to have — a Windows checkout has no bit and
+     the Unix clone made from the same commit still does. So the property that
+     travels is the one in the index, and it is the same answer on every
+     platform. */
+  const mode = (() => {
+    try {
+      return execFileSync('git', ['ls-files', '-s', '.githooks/pre-commit'],
+                          { cwd: ROOT, encoding: 'utf8' }).trim().split(/\s+/)[0];
+    } catch (_) { return ''; }
+  })();
+  ok('git records it as executable, so a fresh clone can run it',
+     mode === '100755', mode || 'git could not be asked');
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });
