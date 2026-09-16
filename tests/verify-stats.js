@@ -195,6 +195,11 @@ head('the prose agrees with the record');
      /applying (\d+) patch scripts/, r => [+r[1] === chainLength]],
     ['package.json', 'the length of the patch chain',
      /standard library and (\d+) patch scripts/, r => [+r[1] === chainLength]],
+    /* CLAUDE.md tells the next agent "if you write a sentence containing a
+       number, guard it or do not write it". It had one unguarded sentence of
+       its own when it was written. This is that sentence. */
+    ['CLAUDE.md', 'the length of the patch chain',
+     /holds `CHAIN`: (\d+) steps/, r => [+r[1] === chainLength]],
   ];
   for (const [file, what, re, judge] of claims) {
     const m = read(file).match(re);
