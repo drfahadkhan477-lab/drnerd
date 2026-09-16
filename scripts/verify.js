@@ -148,6 +148,13 @@ const SUITES = [
      to the picker table without its generator draws a NORMAL beat under a
      pathology's name and rate. */
   ['rhythms-pure', 'every arrhythmia the picker offers has something that draws it'],
+  /* The suite runs on Chromium; the app runs on an iPad. A regex lookbehind is
+     a parse-time SyntaxError below Safari 16.4 — a dead <script> block, not a
+     caught exception — and this app lost most of itself to one once, with CI
+     green throughout. verify-apex asserts it against the built bundle, which
+     is broader and needs a build; this is the same rule on every push, over
+     the files whose every character ships verbatim. */
+  ['ipad-pure',    'nothing in src/ uses syntax the target device cannot parse'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -186,7 +193,8 @@ const SUITES = [
    exactly the hand-maintained arithmetic that made verify-stats necessary. */
 const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release',
                         'contentrules', 'memory-pure', 'vision-pure',
-                        'profile-pure', 'refassets-pure', 'rhythms-pure'];
+                        'profile-pure', 'refassets-pure', 'rhythms-pure',
+                        'ipad-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

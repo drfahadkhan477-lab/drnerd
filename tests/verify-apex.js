@@ -406,6 +406,48 @@ const head = t => console.log('\n── ' + t + ' ──');
     ok('the built bundle contains no lookbehind assertion', hits === 0, String(hits));
   }
 
+  head('every glass surface blurs on an iPad');
+  /* iPadOS Safari shipped backdrop-filter behind -webkit- and only dropped the
+     prefix in Safari 18. An unprefixed declaration is not an error — it is a
+     surface that quietly does not blur on the one device this app is for,
+     which is how three of nine survived until someone looked at a tablet.
+     pearlcard-patch fixed those three; nothing stopped a fourth.
+
+     ASSERTED AGAINST THE BUNDLE, and it has to be. The CSS lives in patch
+     scripts, and a patch holds both states — the fix's own `find` string is
+     the unprefixed BEFORE, so a scan of the source counts it as a live
+     declaration and reports the fix as the defect. Reading only the
+     replacements reaches 541 of 678 patch() calls, and a rule that skips a
+     fifth of the files while printing PASS is worse than no rule. Here there
+     is no before-state and no extraction: this text is the CSS that ships.
+
+     Paired by value and count rather than by proximity, because these are
+     minified one-line rules — a new unprefixed rule written beside a correct
+     one sits inside any proximity window and reads as fine. */
+  {
+    const src = require('fs').readFileSync(target, 'utf8');
+    const norm = v => v.trim().replace(/\s+/g, ' ').toLowerCase();
+    const tally = re => {
+      const out = new Map(); let m;
+      while ((m = re.exec(src))) {
+        const k = norm(m[m.length - 1]);
+        out.set(k, (out.get(k) || 0) + 1);
+      }
+      return out;
+    };
+    const webkit = tally(/-webkit-backdrop-filter\s*:\s*([^;}\n]+)/g);
+    const plain  = tally(/(?:^|[^-\w])backdrop-filter\s*:\s*([^;}\n]+)/g);
+    const bare = [];
+    for (const [val, n] of plain) {
+      const have = webkit.get(val) || 0;
+      if (have < n) bare.push(`${val.slice(0, 28)}: ${n} plain, ${have} prefixed`);
+    }
+    /* Vacuity guard: this is a zero-count, and a bundle with no glass at all
+       would satisfy it for ever. */
+    ok('the bundle has glass surfaces to check', plain.size > 0, `${plain.size} distinct values`);
+    ok('each is declared as often with -webkit- as without', bare.length === 0, bare.join(' | '));
+  }
+
   head('the quiz keyboard does not reach into the panel');
   /* The panel is not a screen — it opens OVER whichever screen you are on, so
      S.screen is still 'quiz' while the model picker is focusable. The quiz
