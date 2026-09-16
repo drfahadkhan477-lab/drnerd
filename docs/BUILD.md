@@ -488,8 +488,24 @@ the defaults:
   boring.
 
 Run it with `./run.sh` when you want it, or install the service to have it
-always on. Either way the job only fires on a push to `master` or a manual
-dispatch.
+always on.
+
+### Turning it on properly, after the first green run
+
+The job is **manual only** to begin with: Actions → `full` → Run workflow. That
+is deliberate. A job whose labels match no online runner does not fail, it
+QUEUES, and GitHub leaves a pending job for about a day before cancelling it —
+so wiring it to `push` before a runner exists would have left every push to
+master showing a check pending for 24 hours. `timeout-minutes` does not help;
+it bounds execution, not the wait for a runner.
+
+Once a dispatched run has gone green end to end, make it automatic by adding
+the push arm back to the job's `if:`:
+
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+
+Do that when the runner is proven and not before. Checks that are usually
+yellow are checks people stop reading.
 
 ### What it will and will not tell you
 

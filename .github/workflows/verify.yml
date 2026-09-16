@@ -238,15 +238,32 @@ jobs:
   full:
     name: full — the browser suites, on a machine with the export
     runs-on: [self-hosted, systole]
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    # MANUAL ONLY, UNTIL A RUNNER EXISTS AND HAS BEEN PROVEN.
+    #
+    # `push` was here first and was wrong. A job whose labels match no online
+    # runner does not fail — it QUEUES, and GitHub only cancels a pending job
+    # after about 24 hours, so every push to master would have left a check
+    # pending on master for a day. timeout-minutes does not help: it bounds
+    # execution, not the wait for a runner. The comment below said otherwise
+    # and was simply incorrect.
+    #
+    # Opt-in has to mean nothing happens until someone asks. Once a runner is
+    # registered and a dispatched run has gone green end to end, add
+    #
+    #     || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    #
+    # and it becomes automatic. Not before: an unregistered runner turning
+    # master's checks yellow is how a team learns to ignore them.
+    if: github.event_name == 'workflow_dispatch'
     # A queued run holding build/ while another starts is how two release
     # checks overwrite each other's artifacts. One at a time, and let the
     # running one finish rather than cancelling it mid-build.
     concurrency:
       group: systole-full
       cancel-in-progress: false
-    # Longer than a cold run with WebKit, short enough that an offline runner
-    # fails the job instead of queueing for a week.
+    # Longer than a cold run with WebKit on the 42 MB single file, which is the
+    # slowest thing here. This bounds a run that HANGS; it does nothing about a
+    # run that never starts, which is why the trigger above is manual.
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
