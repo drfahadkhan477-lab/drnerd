@@ -25,6 +25,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-home.js <patched.html|url>'); process.exit(1); }
@@ -35,12 +36,19 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
+
+/* The array the last check asserts on, hoisted out of the closure so the death
+   note can read it. This suite dies on WebKit against the served build, and
+   `ok('no console or page errors across the run', …)` — the check that would
+   have shown why — is the one check a death never reaches. */
+const errors = [];
+onDeath(() => ({ section, checks: passed + failed, errors }));
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 460, height: 1000 }, deviceScaleFactor: 2 });
-  const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 

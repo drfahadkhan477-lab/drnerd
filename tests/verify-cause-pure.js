@@ -146,6 +146,41 @@ head('what it does when there is nothing to find');
      /^Error: SYSTOLE_ENGINE/.test(causeOf(early)), causeOf(early));
 }
 
+head('a death note does not displace the cause');
+{
+  /* tests/_deathnote.js prints what the page said before a suite died, between
+     the last check and the exception. Everything it adds lands in the tail this
+     reads, so the two have to be checked together or the note quietly becomes
+     the answer — which is the whole bug this suite was written for, reoccurring
+     one layer up. */
+  const { deathNote } = require('./_deathnote.js');
+  const err = new Error('page.setViewportSize: Target page, context or browser has been closed');
+  const out = [
+    '  PASS  the caption states both figures  → Seen 42%',
+    'Mastered 16%',
+    ...deathNote(err, {
+      section: 'the dismiss button is never buried under the Apex button',
+      checks: 51,
+      errors: ['Unhandled Promise Rejection: TypeError: null is not an object',
+               'Unhandled Promise Rejection: TypeError: null is not an object'],
+    }),
+    'Error: page.setViewportSize: Target page, context or browser has been closed',
+    '    at /home/user/drnerd/tests/verify-home.js:473:18',
+  ].join('\n');
+  ok('the exception still wins over the note above it',
+     /^Error: page\.setViewportSize/.test(causeOf(out)), causeOf(out));
+
+  const lines = deathNote(err, { section: 's', checks: 1, errors: [] });
+  ok('its heading is in the form cause.js skips', /^── /.test(lines[1].trim()), lines[1].trim());
+  ok('an empty collection says so rather than printing nothing',
+     lines.some(l => /logged nothing at all/.test(l)));
+  ok('repeats are collapsed — one broken resource logs on every render',
+     deathNote(err, { errors: ['same', 'same', 'same'] }).filter(l => l.trim() === 'same').length === 1);
+  ok('and a flood is capped',
+     deathNote(err, { errors: Array.from({ length: 50 }, (_, i) => 'e' + i) })
+       .some(l => /and 30 more/.test(l)));
+}
+
 head('it stays one line in a table');
 {
   const long = '  PASS  a\n' + 'locator.click: ' + 'x'.repeat(400);
