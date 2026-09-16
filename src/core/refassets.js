@@ -155,22 +155,30 @@ function bytes() {
 /* Anything no surviving note cites any more. Import is content-addressed and
    deletion is not, so without this an imported chapter that gets deleted would
    leave its figures behind for ever. */
-function sweep(bodies) {
+function sweep(bodies, opts) {
   /* NOTHING TO SWEEP AGAINST IS NOT THE SAME AS NOTHING BEING CITED, and the
-     difference is irreversible in one direction. The only caller is
+     difference is irreversible in one direction. An empty list means either
+     "every note has been deleted" or "the notes have not loaded yet" — during
+     a restore, or when the note store failed while the asset store did not.
+     Treating the second as the first deletes every figure the fellow ever
+     imported, and unlike the shipped corpus those cannot be rebuilt.
 
-         RefAssets.sweep(REF.map(r => r.body))
+     THE FIRST VERSION OF THIS REFUSED EVERY EMPTY LIST, and that was wrong in
+     a way only a real browser could show. Deleting the LAST note that cites a
+     figure produces a legitimately empty list, so the guard meant the final
+     figure was never reclaimed — verify-assets caught it three runs running
+     with "and when the last citation goes, so does the figure → 1". The guard
+     was written to protect a case its only caller cannot produce: sweep runs
+     from refDelete, which the fellow reaches by deleting a note they can see,
+     which means the notes had loaded.
 
-     so an empty list means either "every note has been deleted" or "the notes
-     have not loaded yet" — during a restore, or when the note store failed
-     while the asset store did not. Those are indistinguishable from in here,
-     and treating the second as the first deletes every figure the fellow ever
-     imported. They are their own imported chapters; unlike the shipped corpus
-     they cannot be rebuilt from source.
-
-     Doing nothing costs a delayed reclaim that the next sweep performs anyway.
-     Doing the wrong thing costs a chapter of figures for good. */
-  if (!Array.isArray(bodies) || !bodies.length) return 0;
+     So the CALLER vouches rather than this function guessing. It is the only
+     one that can: refDelete has just rebuilt REF from the live array and knows
+     it is the whole set, and a future boot-time sweep would know it is not.
+     Absent the assurance the old refusal stands, which keeps the safe default
+     for anything added later that forgets to think about it. */
+  if (!Array.isArray(bodies)) return 0;
+  if (!bodies.length && !(opts && opts.authoritative === true)) return 0;
   const live = Object.create(null);
   const re = /!\[[^\]]*\]\(refimg:\/\/([^)\s]+)\)/g;
   for (const b of bodies || []) {

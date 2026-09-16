@@ -155,6 +155,13 @@ const SUITES = [
      is broader and needs a build; this is the same rule on every push, over
      the files whose every character ships verbatim. */
   ['ipad-pure',    'nothing in src/ uses syntax the target device cannot parse'],
+  /* The four keys that hold a fellow's work — annotations, notes, chat, the
+     review log — and the only thing exercising them needed a build, a browser
+     and the licensed export. migrate() resolved "both copies exist" by
+     asserting the database was "the newer of the two by definition"; set()'s
+     own localStorage fallback reaches the case where it is not, and the newer
+     copy was being deleted. */
+  ['store-pure',   'the newer copy survives, and a refused write is not lost'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -194,7 +201,7 @@ const SUITES = [
 const PENDING_RECORD = ['figaudit', 'render', 'csp', 'figprobe', 'leakguard', 'release',
                         'contentrules', 'memory-pure', 'vision-pure',
                         'profile-pure', 'refassets-pure', 'rhythms-pure',
-                        'ipad-pure'];
+                        'ipad-pure', 'store-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

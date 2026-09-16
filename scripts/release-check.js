@@ -77,66 +77,22 @@ const STEPS = [
   { id: 'build',     what: 'the patch chain applies, all of it',
     cmd: ['node', ['scripts/build.js', () => SRC]] },
   { id: 'extract',   what: 'every figure decodes and reads back byte-identical',
-    cmd: ['node', ['scripts/extract-content.js', () => BUILD]], needs: () => fs.existsSync(BUILD) },
+    cmd: ['node', ['scripts/extract-content.js', () => BUILD]], after: 'build', needs: () => fs.existsSync(BUILD) },
   { id: 'pwabuild',  what: 'the split build assembles',
-    cmd: ['node', ['scripts/build-pwa.js', () => BUILD]], needs: () => fs.existsSync(BUILD) },
+    cmd: ['node', ['scripts/build-pwa.js', () => BUILD]], after: 'build', needs: () => fs.existsSync(BUILD) },
   { id: 'chromium',  what: 'the full suite, on chromium',
-    cmd: ['node', ['scripts/verify.js', () => BUILD]], needs: () => fs.existsSync(BUILD) },
+    cmd: ['node', ['scripts/verify.js', () => BUILD]], after: 'build', needs: () => fs.existsSync(BUILD) },
   { id: 'pwa',       what: 'the full suite, against the split build over http',
-    cmd: ['node', ['scripts/verify.js', () => BUILD, '--pwa']], needs: () => fs.existsSync(DIST) },
+    cmd: ['node', ['scripts/verify.js', () => BUILD, '--pwa']], after: 'pwabuild', needs: () => fs.existsSync(DIST) },
   /* WebKit is the ACTUAL TARGET — the app is used on an iPad — so it is on by
      default and skipping it costs you the CERTIFIED line rather than passing
      quietly. It is also the engine where the 42 MB single file takes ~100s to
      parse before a line of app code runs, which is why the boot waits matter. */
   { id: 'webkit',    what: 'the full suite, on webkit — the engine the app actually runs on',
-    cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'webkit']], needs: () => fs.existsSync(BUILD) },
+    cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'webkit']], after: 'build', needs: () => fs.existsSync(BUILD) },
 ];
 
 /* ── running one ─────────────────────────────────────────────────────────── */
-const results = [];
-function record(step, state, detail, seconds) {
-  results.push({ id: step.id, what: step.what, state, detail, seconds });
-  const mark = { PASS: '  ✓', FAIL: '  ✗', SKIP: '  –' }[state];
-  console.log(`${mark} ${step.id.padEnd(10)} ${step.what}${detail ? `\n               ${detail}` : ''}`);
-}
-
-for (const step of STEPS) {
-  if (SKIP.has(step.id)) { record(step, 'SKIP', 'asked for with --skip'); continue; }
-  if (step.needs && !DRY && !step.needs()) {
-    record(step, 'SKIP', 'what it needs was not produced by an earlier step'); continue;
-  }
-  const t0 = Date.now();
-  /* A dry run is a SKIP, not a PASS, and the difference is the whole point of
-     this file. The first version recorded PASS and printed CERTIFIED having
-     executed nothing — the exact overclaim the header above forbids, written
-     by the person who had just finished writing the header. It survives here
-     as the reason the rule is stated in code rather than in prose. */
-  if (DRY) { record(step, 'SKIP', 'dry run — the step was not executed', 0); continue; }
-  try {
-    let detail = '';
-    if (step.run) detail = step.run() || '';
-    else {
-      const [bin, args] = step.cmd;
-      const real = args.map(a => (typeof a === 'function' ? a() : a));
-      const r = spawnSync(bin, real, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-      const out = (r.stdout || '') + (r.stderr || '');
-      if (r.status !== 0) {
-        record(step, 'FAIL',
-          safeDetail(out, `exit ${r.status === null ? 'signal ' + r.signal : r.status} — full output in tests/last-run.log on this machine`),
-          (Date.now() - t0) / 1000);
-        continue;
-      }
-      detail = safeDetail(out, '');
-    }
-    record(step, 'PASS', detail, (Date.now() - t0) / 1000);
-  } catch (e) {
-    /* A thrown error's message is not subprocess output, but it is still text
-       from outside this file — an fs error carries a path, and a path can
-       carry the export's filename. Same rule: the code, not the prose. */
-    record(step, 'FAIL', `threw: ${String(e && e.code || 'Error').slice(0, 40)}`, (Date.now() - t0) / 1000);
-  }
-}
-
 /* ── what a step is allowed to say about itself ──────────────────────────────
    THIS USED TO BE lastLines(out, 3): the last three lines of the failing
    subprocess, passed through verbatim into both the console and the report.
@@ -229,6 +185,75 @@ function safeDetail(out, fallback) {
   }
   return found.length ? found.join(' | ') : fallback;
 }
+
+const results = [];
+const outcome = new Map();
+function record(step, state, detail, seconds) {
+  results.push({ id: step.id, what: step.what, state, detail, seconds });
+  outcome.set(step.id, state);
+  const mark = { PASS: '  ✓', FAIL: '  ✗', SKIP: '  –' }[state];
+  console.log(`${mark} ${step.id.padEnd(10)} ${step.what}${detail ? `\n               ${detail}` : ''}`);
+}
+
+for (const step of STEPS) {
+  if (SKIP.has(step.id)) { record(step, 'SKIP', 'asked for with --skip'); outcome.set(step.id, 'SKIP'); continue; }
+  /* `needs` ASKED THE DISK, WHICH IS NOT THE SAME QUESTION. build/systole.html
+     existing says a build happened once, not that the build in THIS run
+     succeeded — so a run whose build step failed went on to test whatever
+     artifact was left over from the last one and report on it. That is the
+     overclaim this file exists to prevent, in the file itself: a gate
+     certifying an artifact it did not produce.
+
+     It also made the suite for this file unsafe to run. verify-release drives
+     the gate with a nonexistent source to prove a missing export is refused,
+     and its comment says "nothing can run here — there is no licensed export
+     in this container", which was true where it was written and false on the
+     owner's laptop: with a build on disk, that one line ran the whole 68-suite
+     verify three times, WebKit included, from inside a verify run. The test
+     was not wrong about what it wanted to prove; the gate was wrong about what
+     `needs` meant. */
+  if (step.after && !DRY && outcome.get(step.after) !== 'PASS') {
+    record(step, 'SKIP', `${step.after} did not pass in this run`);
+    outcome.set(step.id, 'SKIP');
+    continue;
+  }
+  if (step.needs && !DRY && !step.needs()) {
+    record(step, 'SKIP', 'what it needs was not produced by an earlier step');
+    outcome.set(step.id, 'SKIP');
+    continue;
+  }
+  const t0 = Date.now();
+  /* A dry run is a SKIP, not a PASS, and the difference is the whole point of
+     this file. The first version recorded PASS and printed CERTIFIED having
+     executed nothing — the exact overclaim the header above forbids, written
+     by the person who had just finished writing the header. It survives here
+     as the reason the rule is stated in code rather than in prose. */
+  if (DRY) { record(step, 'SKIP', 'dry run — the step was not executed', 0); continue; }
+  try {
+    let detail = '';
+    if (step.run) detail = step.run() || '';
+    else {
+      const [bin, args] = step.cmd;
+      const real = args.map(a => (typeof a === 'function' ? a() : a));
+      const r = spawnSync(bin, real, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      const out = (r.stdout || '') + (r.stderr || '');
+      if (r.status !== 0) {
+        record(step, 'FAIL',
+          safeDetail(out, `exit ${r.status === null ? 'signal ' + r.signal : r.status} — full output in tests/last-run.log on this machine`),
+          (Date.now() - t0) / 1000);
+        continue;
+      }
+      detail = safeDetail(out, '');
+    }
+    record(step, 'PASS', detail, (Date.now() - t0) / 1000);
+  } catch (e) {
+    /* A thrown error's message is not subprocess output, but it is still text
+       from outside this file — an fs error carries a path, and a path can
+       carry the export's filename. Same rule: the code, not the prose. */
+    record(step, 'FAIL', `threw: ${String(e && e.code || 'Error').slice(0, 40)}`, (Date.now() - t0) / 1000);
+  }
+}
+
 
 /* ── what was produced ───────────────────────────────────────────────────── */
 const sha = buf => crypto.createHash('sha256').update(buf).digest('hex');

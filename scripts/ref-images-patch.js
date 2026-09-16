@@ -165,6 +165,7 @@ patch('ref-images: typography for the rendered figure',
 patch('vision: ref-note figures get the same treatment as question figures',
 `root.Vision = {
   withFigures, figureBlocks, figureContextLine, providerSeesFigures, dataUrlToSource,
+  IMAGE_RULE,
   VISION_PROVIDERS,
 };`,
 `/* Turns {caption, dataUrl, noteTitle} entries into the same [text, image]
@@ -206,6 +207,7 @@ function withImages(wire, images, provider) {
 root.Vision = {
   withFigures, figureBlocks, figureContextLine, providerSeesFigures, dataUrlToSource,
   refImageBlocks, withImages,
+  IMAGE_RULE,
   VISION_PROVIDERS,
 };`);
 

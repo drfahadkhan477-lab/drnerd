@@ -62,7 +62,44 @@ head('a skip costs the certificate, and is named');
   ok('and it exits non-zero', r.code === 1, String(r.code));
   ok('the failing step is named', /source/.test(r.out));
   ok('downstream steps skip rather than fail confusingly',
-     /what it needs was not produced/.test(r.out));
+     /did not pass in this run|what it needs was not produced/.test(r.out));
+  /* THE SKIP MUST NOT DEPEND ON WHAT IS ON DISK. This check used to pass for
+     the wrong reason: the comment above says "nothing can run here — there is
+     no licensed export in this container", and it was the ABSENCE of
+     build/systole.html that made the browser steps skip. On a machine that has
+     a build, this one line ran the whole 68-suite verify three times, WebKit
+     included, from inside a verify run — reported as the suite hanging for
+     half an hour. The gate now gates on what passed in THIS run, so the skip
+     holds either way; asserted by name so it cannot quietly revert to the
+     disk check. */
+  ok('and they skip because the build did not pass, not because a file is missing',
+     /build did not pass in this run/.test(r.out));
+  ok('nothing downstream of a failed build ran at all',
+     !/the full suite, on chromium\n\s+\d/.test(r.out));
+}
+
+head('a step that really runs is recorded as having passed');
+{
+  /* THE CHECK THAT WAS NOT HERE, and its absence hid a broken gate for three
+     commits. Every other test in this file uses --dry-run, which records each
+     step SKIP before any of them executes — so nothing exercised the path
+     where a step runs, succeeds, and reports itself.
+
+     It was broken the whole time. safeDetail() and its SHAPES table were
+     declared BELOW the loop that calls them, and `const` in the temporal dead
+     zone throws rather than reading undefined, so every step that succeeded
+     threw on the way to being recorded and was written down as FAILED. A gate
+     that fails a passing step is worse than no gate, and every test here was
+     green.
+
+     leakguard is the one step that needs no export, no build and no browser,
+     which is what makes this cheap enough to keep. */
+  const r = run('/nonexistent/export.html', '--skip',
+                'source,build,extract,pwabuild,chromium,pwa,webkit');
+  ok('leakguard ran and passed', /✓ leakguard/.test(r.out),
+     (r.out.match(/[✓✗–] leakguard.*/) || ['not found'])[0]);
+  ok('and it is not reported as having thrown', !/threw/.test(r.out),
+     (r.out.match(/threw.*/) || [''])[0]);
 }
 
 head('--skip is honoured and held against the verdict');
