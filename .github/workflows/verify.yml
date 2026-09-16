@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 19 suites that are pure Node with no Playwright and no
+#   logic        the 20 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -165,6 +165,8 @@ jobs:
         run: node tests/verify-rhythms-pure.js
       - name: nothing in src/ uses syntax an iPad cannot parse (4 checks)
         run: node tests/verify-ipad-pure.js
+      - name: the newer copy survives and a refused write is not lost (21 checks)
+        run: node tests/verify-store-pure.js
       - name: the counts in the docs are the counts the tests produced (30 checks)
         run: node tests/verify-stats.js
 

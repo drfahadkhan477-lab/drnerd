@@ -95,6 +95,53 @@ function merge(key, stored, written) {
   return written === undefined ? stored : written;
 }
 
+/* WHICH KEYS WERE WRITTEN TO localStorage AFTER THE DATABASE STOPPED TAKING
+   THEM. This exists to answer one question that migrate() cannot otherwise
+   answer, and used to guess wrong.
+
+   Once a key has migrated, localStorage no longer holds it — so finding a
+   value there again means one of exactly two things, and they want opposite
+   treatment:
+
+     · an earlier migration wrote the database and was interrupted before it
+       cleared localStorage. The two copies are identical; the database is
+       authoritative and the local copy is litter.
+     · set() could not reach the database and fell back to localStorage. The
+       LOCAL copy is the newer one, and the database is holding whatever it
+       had before that session.
+
+   migrate() assumed the first, always, in a comment that said the database
+   was newer "by definition". It is not: the second case is reachable straight
+   from set()'s own fallback, and taking the database there silently reverts
+   however long the fellow spent with the database unavailable. Annotations,
+   notes, chat and the review log are the four keys this can lose.
+
+   So the fallback stamps what it wrote, and migrate() reads the stamp instead
+   of guessing. An absent stamp means the old behaviour, which is right for the
+   first case and is also what every existing install looks like. */
+const FALLBACK_KEY = 'accsap12.store.fellback';
+
+function fellBack() {
+  try {
+    const raw = localStorage.getItem(FALLBACK_KEY);
+    const a = raw ? JSON.parse(raw) : [];
+    return Array.isArray(a) ? a.filter(k => typeof k === 'string') : [];
+  } catch (_) { return []; }
+}
+function markFellBack(key) {
+  const a = fellBack();
+  if (a.indexOf(key) > -1) return;
+  a.push(key);
+  try { localStorage.setItem(FALLBACK_KEY, JSON.stringify(a)); } catch (_) {}
+}
+function clearFellBack(key) {
+  const a = fellBack().filter(k => k !== key);
+  try {
+    if (a.length) localStorage.setItem(FALLBACK_KEY, JSON.stringify(a));
+    else localStorage.removeItem(FALLBACK_KEY);
+  } catch (_) {}
+}
+
 let mem = Object.create(null);      // key -> parsed value
 let hydrated = false;
 let dirty = Object.create(null);    // keys written before hydration finished
@@ -161,15 +208,32 @@ async function migrate(d) {
     if (local === undefined) continue;                 // nothing here to move
     const already = await idbGet(d, key);
     if (already !== undefined) {
-      /* Both copies exist — an earlier migration wrote the database and was
-         interrupted before it cleared localStorage. The database is the newer
-         of the two by definition, so keep it and finish the job. */
+      if (fellBack().indexOf(key) < 0) {
+        /* Both copies exist and nothing stamped this one, so an earlier
+           migration wrote the database and was interrupted before it cleared
+           localStorage. The two are identical; finish the job. */
+        try { localStorage.removeItem(key); } catch (_) {}
+        continue;
+      }
+      /* Stamped: set() wrote this to localStorage because the database would
+         not take it, so the LOCAL copy is the newer one. Folded rather than
+         chosen — merge() is the same function hydration already uses for a
+         write that landed before the store was ready, and it exists precisely
+         so that neither side is thrown away: arrays union without duplicating
+         rows, and for the two map-shaped keys the newer side wins per entry.
+         Choosing would be a guess about which session mattered. */
+      const folded = merge(key, already, local);
+      if (!(await idbPut(d, key, folded))) continue;     // try again next launch
+      if ((await idbGet(d, key)) === undefined) continue;
       try { localStorage.removeItem(key); } catch (_) {}
+      clearFellBack(key);
+      moved.push(key);
       continue;
     }
     if (!(await idbPut(d, key, local))) continue;      // try again next launch
     if ((await idbGet(d, key)) === undefined) continue; // wrote nothing; leave the original
     try { localStorage.removeItem(key); } catch (_) {}
+    clearFellBack(key);
     moved.push(key);
   }
   return moved;
@@ -218,19 +282,45 @@ function get(key, fallback) {
 
 /* Returns false when the value could not be persisted at all, so the caller
    can say so — the old saveJSON contract, kept. A queued IndexedDB write has
-   not landed yet and is reported as true; that is the same promise
-   localStorage made, since it could be evicted a second later either way. */
+   not landed yet and is still reported as true, because get() is synchronous
+   and the app is built on that; what changed is what happens when the queued
+   write FAILS.
+
+   IT USED TO BE DISCARDED. idbPut resolves false on a transaction that aborts
+   — quota, a database closed underneath us, a version change — and the result
+   was thrown away. The value stayed correct in memory for the rest of the
+   session and was simply not there on the next launch. The comment here
+   defended that by saying it was "the same promise localStorage made", which
+   was wrong in the way that mattered: lsSet is synchronous and returns false
+   when it fails, so a caller told `true` by localStorage had its bytes
+   written. A queued IndexedDB write reported as true might never be written
+   at all.
+
+   So a failed write now falls back to localStorage and stamps the key, which
+   both keeps the data and tells the next migrate() which copy is newer. */
 function set(key, value) {
   if (MANAGED.indexOf(key) < 0) return lsSet(key, value);
   mem[key] = value;
-  if (usable === false) return lsSet(key, value);      // no database: as before
+  if (usable === false) return lsFallback(key, value);  // no database: as before
   if (!hydrated) dirty[key] = 1;
   open().then(d => {
-    if (!d) { lsSet(key, value); return; }
+    if (!d) { lsFallback(key, value); return; }
     if (!hydrated) return;               // ready() will flush it against the merge
-    idbPut(d, key, mem[key]);
-  });
+    return idbPut(d, key, mem[key]).then(stored => {
+      if (!stored) lsFallback(key, mem[key]);
+    });
+  }).catch(() => { lsFallback(key, mem[key]); });
   return true;
+}
+
+/* localStorage as the fallback rather than as the store: the same write, plus
+   the stamp that stops migrate() from preferring a stale database copy over
+   it. Unstamped on success is not an option — an unstamped local copy is
+   exactly what migrate() is entitled to delete. */
+function lsFallback(key, value) {
+  const wrote = lsSet(key, value);
+  if (wrote) markFellBack(key);
+  return wrote;
 }
 
 function available() { return usable === true; }
@@ -243,6 +333,15 @@ function bytes() {
   return n;
 }
 
-root.Store = { ready, get, set, available, isHydrated, bytes, merge, MANAGED, DB_NAME, STORE };
+/* OBSERVABLE, not just recovered. The storage card can say "four keys are on
+   localStorage because the database refused them" instead of the app looking
+   perfectly healthy while running on the fallback. Named as what it is: keys
+   that FELL BACK, which is a fact about where the bytes are, not a diagnosis. */
+function health() {
+  return { usable: usable === true, hydrated, fellBack: fellBack() };
+}
+
+root.Store = { ready, get, set, available, isHydrated, bytes, merge, health,
+               MANAGED, DB_NAME, STORE, FALLBACK_KEY };
 
 })(typeof window !== 'undefined' ? window : this);
