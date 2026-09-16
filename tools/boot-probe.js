@@ -110,17 +110,34 @@ const URL = /^https?:/.test(target) ? target
     console.log('  ' + label.padEnd(26) + (ms / 1000).toFixed(2).padStart(7) + 's' +
                 (note ? '   ' + note : ''));
 
-  row('bytes to first byte', t.responseEnd);
-  row('fetch + parse', t.domInteractive, 'navigationStart → domInteractive');
-  row('to hero', Math.max(0, heroAt - t.domInteractive), 'domInteractive → hero on screen');
-  console.log('  ' + '─'.repeat(44));
-  row('hero, on the page clock', heroAt,
+  row('read off disk', t.responseEnd, 'navigationStart → responseEnd');
+  row('hero on screen', heroAt,
       t.stamped ? 'stamped when it appeared' : 'measured when node noticed — slightly late');
+  row('document parsed', t.domInteractive, 'navigationStart → domInteractive');
+  console.log('  ' + '─'.repeat(52));
   row('wall clock in node', wallMs, 'what verify-stage0 asserts on');
 
-  const share = heroAt > 0 ? Math.round(t.domInteractive / heroAt * 100) : 0;
-  console.log(`\n  ${share}% of the time to hero is fetch and parse.`);
-  console.log('  Everything after domInteractive is the app\'s own boot.\n');
+  /* THE FIRST VERSION OF THIS PRINTED 111%, which is the tell that the metric
+     was wrong rather than the build. It assumed the hero would appear AFTER
+     domInteractive, so that "to hero" could be heroAt - domInteractive and the
+     app's own boot would be the remainder. That is how a page with external
+     scripts behaves. It is not how this one does: the app is INLINE in the
+     document being parsed, so its script runs, paints the hero, and the
+     browser carries on through the remaining megabytes. The hero lands before
+     the document is finished. */
+  console.log('');
+  if (heroAt < t.domInteractive) {
+    const early = ((t.domInteractive - heroAt) / 1000).toFixed(2);
+    console.log(`  The hero was on screen ${early}s BEFORE the document finished parsing.`);
+    console.log('  The app is inline in the document, so it paints as soon as its script');
+    console.log('  runs and the browser keeps parsing behind it. Everything before that');
+    console.log('  point is the browser getting through the file — not the app booting.');
+  } else {
+    const own = ((heroAt - t.domInteractive) / 1000).toFixed(2);
+    console.log(`  ${own}s passed between the document being parsed and the hero appearing.`);
+    console.log('  That interval is the app\'s own boot and is the part it controls.');
+  }
+  console.log('');
 
   await browser.close();
 })().catch(e => { console.error(e); process.exit(1); });
