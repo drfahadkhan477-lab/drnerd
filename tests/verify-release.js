@@ -93,6 +93,85 @@ head('the report is written, and is safe to share');
   ok('and the leak guard refuses it, so it cannot be committed', guard.status === 1);
 }
 
+head('and a failing step cannot put its output in either place');
+{
+  /* THE PROMISE IN THE FOOTER, ENFORCED. The report ends by claiming "no
+     question text, options, commentary or figure data appears in this report",
+     and for a long time nothing made that true: the failing subprocess's last
+     three lines went through verbatim. Two destinations, not one — `detail` is
+     printed by record() as well as written to the report, so it is also what
+     the self-hosted CI job puts into a GitHub Actions log.
+
+     Driven through safeDetail directly rather than by failing a real step:
+     a real failure would need a build, and the property under test is the
+     function's, not the pipeline's. A stem is the thing that must not survive,
+     so the fixture is shaped like one. */
+  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'release-check.js'), 'utf8');
+  const mod = {};
+  /* Only the two pieces are lifted out — running the file would run the gate. */
+  const m = src.match(/let SUITE_NAMES = null;[\s\S]*?\nfunction safeDetail[\s\S]*?\n\}/);
+  ok('safeDetail and its shapes are where the test expects them', !!m);
+  if (m) {
+    /* fs, path and ROOT are the allowlist's dependencies — it reads the suite
+       registry out of verify.js at call time. Handing it the real ones means
+       the test exercises the real registry rather than a stand-in. */
+    new Function('module', 'fs', 'path', 'ROOT',
+      m[0] + '\nmodule.exports = { safeDetail, SHAPES, isSuiteName };')(mod, fs, path, ROOT);
+    const { safeDetail, isSuiteName } = mod.exports;
+    ok('the allowlist is the registry verify.js runs', isSuiteName('csp') && isSuiteName('render'));
+    ok('and a word that is not a suite is not one', !isSuiteName('dyspnea') && !isSuiteName('man'));
+
+    const STEM = 'A 54-year-old man with exertional dyspnea and a mid-systolic murmur';
+    const noisy = [
+      'Error: expected true',
+      `  FAIL  the answer is disclosed  → ${STEM}`,
+      `    at Object.<anonymous> (/Users/someone/Downloads/ACCSAP_12_super_v12.html:1:1)`,
+    ].join('\n');
+
+    const outFail = safeDetail(noisy, 'exit 1 — full output in tests/last-run.log on this machine');
+    ok('nothing resembling a stem survives', !outFail.includes(STEM), outFail);
+    ok('no fragment of it survives either', !/54-year-old|dyspnea|murmur/i.test(outFail));
+    ok('and the export filename does not either', !/ACCSAP/i.test(outFail));
+    ok('an unrecognised failure falls back to the exit code', /exit 1/.test(outFail), outFail);
+    ok('and points at the machine, not at itself', /last-run\.log/.test(outFail));
+
+    /* FAIL-CLOSED MEANS CLOSED WHEN THE LOOKUP ITSELF BREAKS, which is the
+       case nothing covered until an injected defect went green: making the
+       catch return true instead of an empty set passed every check here. A
+       registry that cannot be read must admit no names, not all of them.
+
+       Instantiated a second time against a ROOT with no scripts/verify.js in
+       it, because that is the only way to reach the catch without breaking the
+       real file. */
+    const blind = {};
+    new Function('module', 'fs', 'path', 'ROOT',
+      m[0] + '\nmodule.exports = { safeDetail, isSuiteName };')(
+        blind, fs, path, path.join(ROOT, 'no-such-directory'));
+    ok('an unreadable registry admits nothing', !blind.exports.isSuiteName('csp'));
+    ok('and the failing line degrades to a bare count',
+       /^3 failing$/.test(blind.exports.safeDetail('  3 suites failing: csp, render, pwa\n', 'FB')),
+       blind.exports.safeDetail('  3 suites failing: csp, render, pwa\n', 'FB'));
+
+    /* Fail-closed must not mean useless: the shapes it DOES know still come
+       through, because a report that says nothing is one nobody reads. */
+    const real = safeDetail('  1758 checks across 65 suites in 41.2 min\n  3 suites failing: csp, render, pwa\n', 'FALLBACK');
+    ok('a summary it can parse is still reported', /1758 checks across 65 suites/.test(real), real);
+    ok('and failing suite names come through', /csp, render, pwa/.test(real));
+    ok('the fallback is not used when a shape matched', !/FALLBACK/.test(real));
+
+    /* The names are re-rendered from validated captures, never passed through.
+       THIS FIXTURE IS LOWERCASE ON PURPOSE. The first version of it said
+       "A 54-year-old man..." and passed with the filter deleted, because the
+       shape's character class had already excluded uppercase — the test was
+       exercising a regex and reporting it as coverage of the filter. Every
+       token here is one the capture admits, so only the filter can reject it. */
+    const sneaky = safeDetail('  2 suites failing: csp, a 54-year-old man with exertional dyspnea\n', 'FB');
+    ok('prose smuggled into the suite list is dropped',
+       !/exertional|dyspnea/i.test(sneaky), sneaky);
+    ok('and the real suite id beside it still comes through', /csp/.test(sneaky), sneaky);
+  }
+}
+
 head('the steps are the ones a release actually needs');
 {
   const src = fs.readFileSync(GATE, 'utf8');

@@ -456,3 +456,73 @@ edited by hand.
 Modules are plain IIFEs that export onto `window`, so they can be required and
 tested in bare Node without a bundler or a browser. That is not an accident of
 style; it is what makes the numeric verification above possible.
+
+## The laptop as a CI runner (optional)
+
+CI runs the honest subset because GitHub's runners cannot build the app — the
+ACCSAP 12 export is licensed and is not in this repository nor in any secret
+GitHub holds. That leaves the browser suites running only when you remember to
+run them, which is why "CSP has never met the real app" was true for weeks.
+
+The `full` job in `.github/workflows/verify.yml` closes that, by running on
+your own machine. It is opt-in: with no runner registered it never starts, and
+nothing else changes.
+
+### Registering it
+
+Settings → Actions → Runners → New self-hosted runner, then follow the
+commands GitHub gives you. Two things must match this repository rather than
+the defaults:
+
+- **Labels.** Add `systole`. The job asks for `[self-hosted, systole]`, so a
+  runner without that label is ignored — which is what you want if you ever
+  register a second one for something else.
+- **`SYSTOLE_SOURCE`.** Put the absolute path of the export in the runner's
+  own environment, in the `.env` file beside `run.sh` in the runner directory:
+
+      SYSTOLE_SOURCE=/Users/you/Downloads/ACCSAP_12_super_v12.html
+
+  In the runner's environment and **not** as a repository secret. A secret is
+  a copy of the path on GitHub's infrastructure, and while a path is not the
+  content, the rule that the export has exactly one home is worth keeping
+  boring.
+
+Run it with `./run.sh` when you want it, or install the service to have it
+always on.
+
+### Turning it on properly, after the first green run
+
+The job is **manual only** to begin with: Actions → `full` → Run workflow. That
+is deliberate. A job whose labels match no online runner does not fail, it
+QUEUES, and GitHub leaves a pending job for about a day before cancelling it —
+so wiring it to `push` before a runner exists would have left every push to
+master showing a check pending for 24 hours. `timeout-minutes` does not help;
+it bounds execution, not the wait for a runner.
+
+Once a dispatched run has gone green end to end, make it automatic by adding
+the push arm back to the job's `if:`:
+
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+
+Do that when the runner is proven and not before. Checks that are usually
+yellow are checks people stop reading.
+
+### What it will and will not tell you
+
+The log holds the verdict and, if it failed, which step failed. That is all it
+will ever hold, deliberately: an Actions log is shared infrastructure, suite
+output quotes question text, and streaming a verify run into one would upload
+the licensed corpus by a route nobody would think of as uploading. The report
+and the failing suite output stay on the machine, at
+`build/release-report.md` and `tests/last-run.log`.
+
+So the workflow answers *did it certify* and the machine answers *why not*.
+If you find yourself wanting to add `actions/upload-artifact` to get the
+report into the run summary — that is the leak. Read it locally.
+
+### Why it does not run on pull requests
+
+A self-hosted runner executes the workflow on real hardware that has the
+licensed corpus and your home directory on it, and on a `pull_request` trigger
+that workflow comes from the PR's branch. This repository is private and
+single-author so the exposure is small, but the mitigation costs nothing.

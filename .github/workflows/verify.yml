@@ -189,3 +189,120 @@ jobs:
             echo "::error::scripts/build.js failed, but not with its documented refusal message — the guard may have changed shape."
             exit 1
           fi
+
+  # ── the other 1552 checks, on a machine that has the export ────────────────
+  #
+  # Everything above runs on GitHub's runners and therefore cannot build the
+  # app: scripts/build.js refuses without the ACCSAP 12 export, the export is
+  # licensed, and it is deliberately not in this repository nor in any secret
+  # GitHub holds. That is why the three jobs above are "the honest subset".
+  #
+  # This job closes that gap the only way it can be closed — by running on a
+  # machine that already has the export, which means the owner's laptop acting
+  # as a self-hosted runner. It is opt-in: with no runner registered it simply
+  # never starts, and the jobs above are unaffected.
+  #
+  # ─ WHY IT PRINTS SO LITTLE ─────────────────────────────────────────────────
+  #
+  # A GitHub Actions log is shared infrastructure. Suite output quotes question
+  # text — that is why tests/last-run.log is gitignored — so streaming a verify
+  # run into a workflow log would upload the licensed corpus to Microsoft by a
+  # route nobody thought of as uploading. The whole design of this job is that
+  # constraint:
+  #
+  #   · release-check runs every step with stdio ['ignore','pipe','pipe'], so no
+  #     subprocess writes to this log directly. What it does report about a step
+  #     goes through safeDetail(), which rebuilds a line from facts it could
+  #     parse — integers, and suite names checked against the registry verify.js
+  #     actually runs — and emits nothing it could not. An unrecognised failure
+  #     becomes an exit code and a pointer to the local log. (The first draft of
+  #     this comment claimed the stdout was "ids and a verdict, nothing else".
+  #     It was not: record() printed the failing subprocess's last three lines.)
+  #   · build/release-report.md is NEVER echoed and NEVER uploaded as an
+  #     artifact. It stays on the machine that produced it.
+  #   · no actions/upload-artifact step exists here, on purpose. Adding one is
+  #     how this leaks.
+  #
+  # So the log answers exactly one question — did it certify, and if not which
+  # step failed — and the detail is read on the machine, where it already is.
+  #
+  # ─ WHY NOT pull_request ────────────────────────────────────────────────────
+  #
+  # A self-hosted runner executes whatever the workflow says, on real hardware
+  # with the licensed corpus and the owner's home directory on it. On a
+  # pull_request trigger, that is code from the PR's branch. This repository is
+  # private and single-author, so the exposure is small — but the mitigation is
+  # free, so this job runs only on pushes to master and on manual dispatch.
+  # Do not add pull_request here without reading GitHub's own warning about
+  # self-hosted runners and untrusted workflows.
+  full:
+    name: full — the browser suites, on a machine with the export
+    runs-on: [self-hosted, systole]
+    # MANUAL ONLY, UNTIL A RUNNER EXISTS AND HAS BEEN PROVEN.
+    #
+    # `push` was here first and was wrong. A job whose labels match no online
+    # runner does not fail — it QUEUES, and GitHub only cancels a pending job
+    # after about 24 hours, so every push to master would have left a check
+    # pending on master for a day. timeout-minutes does not help: it bounds
+    # execution, not the wait for a runner. The comment below said otherwise
+    # and was simply incorrect.
+    #
+    # Opt-in has to mean nothing happens until someone asks. Once a runner is
+    # registered and a dispatched run has gone green end to end, add
+    #
+    #     || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    #
+    # and it becomes automatic. Not before: an unregistered runner turning
+    # master's checks yellow is how a team learns to ignore them.
+    if: github.event_name == 'workflow_dispatch'
+    # A queued run holding build/ while another starts is how two release
+    # checks overwrite each other's artifacts. One at a time, and let the
+    # running one finish rather than cancelling it mid-build.
+    concurrency:
+      group: systole-full
+      cancel-in-progress: false
+    # Longer than a cold run with WebKit on the 42 MB single file, which is the
+    # slowest thing here. This bounds a run that HANGS; it does nothing about a
+    # run that never starts, which is why the trigger above is manual.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # SYSTOLE_SOURCE is set in the runner's own environment (its .env file or
+      # the service definition), never here and never as a repository secret —
+      # a secret is a copy, and the rule is that the export has exactly one.
+      - name: the licensed export is where the runner says it is
+        run: |
+          if [ -z "${SYSTOLE_SOURCE:-}" ]; then
+            echo "SYSTOLE_SOURCE is not set on this runner."
+            echo "Set it to the absolute path of the ACCSAP 12 export in the runner's environment."
+            exit 1
+          fi
+          if [ ! -f "$SYSTOLE_SOURCE" ]; then
+            echo "SYSTOLE_SOURCE points at something that is not a file."
+            exit 1
+          fi
+          # Size and digest only — never the name, which can carry the title.
+          echo "export present: $(wc -c < "$SYSTOLE_SOURCE") bytes"
+
+      # NO SEPARATE leak-guard STEP HERE, and that is deliberate. The obvious
+      # thing to write is `run: node scripts/leak-guard.js` before the gate. On
+      # a fresh checkout it stages nothing, checks 0 files and exits 0 — it
+      # would pass exactly as happily with the script deleted. release-check
+      # runs leakguard as its own step, against something, which is the
+      # difference between a gate and a decoration.
+
+      # The gate itself. Exit 0 only if every step ran AND passed; INCOMPLETE
+      # if something was skipped, which is not a pass. Its stdout is the
+      # verdict and the failing step ids, and that is all this log will hold.
+      - name: release-check
+        run: npm run release-check -- "$SYSTOLE_SOURCE"
+
+      # Runs even when the gate failed, because "which step" is the one thing
+      # worth having here and a failed run is when you want it. Still ids only:
+      # the report is read on the machine.
+      - name: where to look
+        if: always()
+        run: |
+          echo "Full report (on this machine, not uploaded): build/release-report.md"
+          echo "Failing suite output: tests/last-run.log"
