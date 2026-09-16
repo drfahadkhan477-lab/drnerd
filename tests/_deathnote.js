@@ -35,8 +35,13 @@
 
 /* Formatting kept separate from the exiting so it can be tested without one.
    Returns lines; the caller prints them. */
+/* The heading, shared rather than spelled twice: scripts/cause.js finds the
+   note in a suite's captured output by looking for this exact line, and two
+   copies of a string that must match is how they stop matching. */
+const HEADING = '── what the page said before the suite died ──';
+
 function deathNote(err, info = {}) {
-  const lines = ['', '── what the page said before the suite died ──'];
+  const lines = ['', HEADING];
   if (info.section) lines.push(`  last section reached: ${info.section}`);
   if (typeof info.checks === 'number') lines.push(`  checks completed: ${info.checks}`);
   const msgs = (info.errors || []).map(m => String(m).split('\n')[0].trim()).filter(Boolean);
@@ -72,4 +77,4 @@ function onDeath(collect) {
   return emit;
 }
 
-module.exports = { deathNote, onDeath };
+module.exports = { deathNote, onDeath, HEADING };

@@ -24,7 +24,7 @@
  * prose nobody has seen.
  */
 'use strict';
-const { causeOf } = require('../scripts/cause.js');
+const { causeOf, noteOf } = require('../scripts/cause.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -179,6 +179,44 @@ head('a death note does not displace the cause');
   ok('and a flood is capped',
      deathNote(err, { errors: Array.from({ length: 50 }, (_, i) => 'e' + i) })
        .some(l => /and 30 more/.test(l)));
+}
+
+head('and the note itself reaches the summary, not only the log');
+{
+  /* The runner prints a died suite's cause, then filters the rest of its
+     output to lines opening with FAIL, Error, TypeError or ReferenceError. A
+     note's lines open with none of those, so the first suite to leave one had
+     it written to tests/last-run.log and shown nowhere — which for the reader
+     is the same as the evidence having been thrown away one step earlier. */
+  const { deathNote } = require('./_deathnote.js');
+  const err = new Error('page.setViewportSize: Target page, context or browser has been closed');
+  const out = [
+    '  PASS  a newcomer sees it',
+    ...deathNote(err, {
+      section: 'the dismiss button is never buried under the Apex button',
+      checks: 50,
+      errors: ["Unhandled Promise Rejection: TypeError: null is not an object (evaluating 'x.getBoundingClientRect')"],
+    }),
+    'Error: page.setViewportSize: Target page, context or browser has been closed',
+    '    at /home/user/drnerd/tests/verify-home.js:473:18',
+    'Node.js v22.22.2',
+  ].join('\n');
+  const body = noteOf(out);
+  ok('the old filter showed none of it',
+     out.split('\n').filter(l => /^\s*FAIL\s/.test(l) || /^\s*(Error|TypeError|ReferenceError)/.test(l))
+        .every(l => !/last section reached|checks completed|Unhandled/.test(l)));
+  ok('the section reached is in the note', body.some(l => /^last section reached: the dismiss/.test(l)), body[0]);
+  ok('so is the count', body.some(l => l === 'checks completed: 50'));
+  ok('so is what the page logged', body.some(l => /Unhandled Promise Rejection/.test(l)));
+  ok('the exception is NOT — report() prints that itself',
+     body.every(l => !/^Error: page\.setViewportSize/.test(l)));
+  ok('nor is the heading, which report() does not need to repeat',
+     body.every(l => !/what the page said/.test(l)));
+  ok('output with no note yields nothing rather than guessing',
+     noteOf('  PASS  a\nTypeError: boom\n').length === 0);
+  ok('and a long note is capped', noteOf([
+       '  PASS  a', ...deathNote(err, { errors: Array.from({ length: 40 }, (_, i) => 'e' + i) }),
+     ].join('\n'), 5).length === 6, `${noteOf(['  PASS  a', ...deathNote(err, { errors: Array.from({ length: 40 }, (_, i) => 'e' + i) })].join('\n'), 5).length} lines`);
 }
 
 head('it stays one line in a table');

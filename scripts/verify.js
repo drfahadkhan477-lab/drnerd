@@ -475,7 +475,7 @@ function runSuite(name, claim) {
    The extraction itself lives in scripts/cause.js, with tests/verify-cause-pure.js
    over it: the first version of it scanned from the wrong end of the output and
    reported a check's own wrapped detail as the cause of a crash. */
-const { causeOf } = require(path.join(ROOT, 'scripts', 'cause.js'));
+const { causeOf, noteOf } = require(path.join(ROOT, 'scripts', 'cause.js'));
 
 function report(r) {
   const head = JOBS > 1 ? `  ${r.name.padEnd(14)} ` : '';
@@ -488,6 +488,11 @@ function report(r) {
     console.log(`${head}did not report  (${r.secs}s)`
       + (ran ? `  — ${ran} had passed first` : '')
       + (said ? `\n      ${said}` : ''));
+    /* AND WHAT THE PAGE SAID, which the filter below cannot show: its lines
+       open with none of FAIL, Error, TypeError or ReferenceError, so the first
+       suite to leave a note had it written to tests/last-run.log and printed
+       nowhere — evidence collected, kept, and still not read. */
+    for (const line of noteOf(r.out)) console.log(`      ${line}`);
   }
   else console.log(`${head}${r.ok ? '✓' : '✗'} ${String(r.passed).padStart(3)} passed`
     + `${r.failed ? `, ${r.failed} FAILED` : ''}   ${r.secs}s`);

@@ -42,6 +42,8 @@ const FILE_POS = /^([A-Za-z]:\\|\/|\.{0,2}[\\/])\S*:\d+$/;
    happened to land in the tail. Playwright's are `page.evaluate: Target
    crashed` and `locator.click: Timeout 30000ms exceeded` — an API path, a
    colon, then prose — and node's are `TypeError: ...`. */
+const { HEADING } = require('../tests/_deathnote.js');
+
 const ERRORISH = /^([A-Za-z_$][\w$]*)?Error\b|^[a-z][\w$]*(\.[A-Za-z_$][\w$]*)+\s*:\s|^Target (crashed|page|closed)/;
 
 function causeOf(out) {
@@ -66,4 +68,32 @@ function causeOf(out) {
   return hit.slice(0, 96);
 }
 
-module.exports = { causeOf, NOISE, FILE_POS, ERRORISH };
+/* ── the note a suite leaves when it dies ────────────────────────────────────
+   tests/_deathnote.js prints what the page said before the suite went, and the
+   runner's failure filter dropped every line of it: that filter shows lines
+   opening with FAIL, Error, TypeError or ReferenceError, and a note's lines
+   open with none of those. So the note reached tests/last-run.log and nothing
+   else — written, and then not shown, which for the reader is the same as the
+   evidence having been discarded one step earlier.
+
+   Returns the note's body without its heading, and without the exception below
+   it: report() prints that separately and a table that says it twice is a table
+   nobody trusts. */
+function noteOf(out, cap = 12) {
+  const lines = String(out || '').split('\n');
+  const at = lines.findIndex(l => l.includes(HEADING));
+  if (at < 0) return [];
+  const body = [];
+  for (const raw of lines.slice(at + 1)) {
+    const t = raw.trim();
+    if (!t) continue;
+    /* The note ends where node's furniture or the exception begins. */
+    if (NOISE.test(raw) || FILE_POS.test(t) || ERRORISH.test(t)) break;
+    if (/^(PASS|FAIL)\s/.test(t) || /^[─=#]/.test(t)) break;
+    body.push(t.slice(0, 160));
+    if (body.length >= cap) { body.push('…'); break; }
+  }
+  return body;
+}
+
+module.exports = { causeOf, noteOf, NOISE, FILE_POS, ERRORISH, HEADING };
