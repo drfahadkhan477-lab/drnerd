@@ -30,6 +30,7 @@ const os = require('os');
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 const { systemText, turns, toolResults } = require('./_wire');
 
 const target = process.argv[2];
@@ -41,7 +42,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 const SSE = 'data: ' + JSON.stringify({
   candidates: [{ content: { role: 'model', parts: [{ text: 'Noted.' }] } }],
@@ -72,7 +74,22 @@ Recovery is usually complete within weeks.
 (async () => {
   const browser = await launch();
   const page = await routablePage(browser, { viewport: { width: 1280, height: 950 } });
+  /* Hoisted so the death note can read them — this suite dies on WebKit
+     against the served build, and the check that reports console errors is
+     the one check a death never reaches. See tests/_deathnote.js. */
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* Installed once the arrays exist. A crash and a close are different
+     diagnoses and Playwright reports both as "Target page, context or
+     browser has been closed" on the next call; only the event says which. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   /* One section below fails a request on purpose. Its 500 is the point of the
      test, not a defect, so it is fenced off by a flag rather than by a pattern

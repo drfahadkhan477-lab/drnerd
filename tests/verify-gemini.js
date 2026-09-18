@@ -17,6 +17,7 @@
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-gemini.js <patched.html>'); process.exit(1); }
@@ -27,7 +28,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 /* One complete Gemini streamGenerateContent SSE reply: a text part, then a
    functionCall part, so a single stub covers both the plain-answer path and
@@ -39,7 +41,22 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
 (async () => {
   const browser = await launch();
   const page = await routablePage(browser, { viewport: { width: 1280, height: 900 } });
+  /* Hoisted so the death note can read them — this suite dies on WebKit
+     against the served build, and the check that reports console errors is
+     the one check a death never reaches. See tests/_deathnote.js. */
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* Installed once the arrays exist. A crash and a close are different
+     diagnoses and Playwright reports both as "Target page, context or
+     browser has been closed" on the next call; only the event says which. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   /* The two deliberately-triggered error responses below (403, 429) log as
      browser-level resource-load failures regardless of how gracefully the

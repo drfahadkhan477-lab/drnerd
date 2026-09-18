@@ -17,6 +17,7 @@
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 const { systemText, turns, toolResults } = require('./_wire');
 
 const target = process.argv[2];
@@ -28,7 +29,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 const flat = t => String(t || '').replace(/\s+/g, ' ');
 
 const SSE = [
@@ -46,7 +48,22 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
 (async () => {
   const browser = await launch();
   const page = await routablePage(browser, { viewport: { width: 1280, height: 950 } });
+  /* Hoisted so the death note can read them — this suite dies on WebKit
+     against the served build, and the check that reports console errors is
+     the one check a death never reaches. See tests/_deathnote.js. */
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* Installed once the arrays exist. A crash and a close are different
+     diagnoses and Playwright reports both as "Target page, context or
+     browser has been closed" on the next call; only the event says which. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
