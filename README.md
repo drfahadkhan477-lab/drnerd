@@ -22,7 +22,7 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 2146 checks, 68 suites
+node scripts/verify.js                              # 2331 checks, 71 suites
 node scripts/verify.js --pwa                        # + 125 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
@@ -33,7 +33,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 2146 + 125 checks above — read it as 661, not 2271.**
+**That badge is not the 2331 + 125 checks above — read it as 847, not 2456.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does
@@ -42,7 +42,7 @@ the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
 present, and the 24 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
-the exact scope and why the other 1610 checks can't run here.
+the exact scope and why the other 1609 checks can't run here.
 
 ### The device this is for
 

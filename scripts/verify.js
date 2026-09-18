@@ -220,7 +220,7 @@ const SUITES = [
    while the only machine that could run the full thing was not being run. The
    first full green run wrote all fourteen at once. If this fills up again, that
    is the same gap reopening. */
-const PENDING_RECORD = ['cause-pure', 'md-pure', 'ecg12-pure'];
+const PENDING_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
