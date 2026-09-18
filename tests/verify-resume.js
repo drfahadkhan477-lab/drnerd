@@ -196,7 +196,18 @@ const head = t => console.log('\n── ' + t + ' ──');
      uncommitted.opts > 1 && uncommitted.selected === 1, `${uncommitted.opts} options`);
   /* The store write is not synchronous, and reloading on top of it would be
      testing the race rather than the record. */
-  await page.evaluate(() => new Promise(r => setTimeout(r, 500)));
+  /* WAITED FROM THE DRIVER, NOT INSIDE THE PAGE. This was
+     `page.evaluate(() => new Promise(r => setTimeout(r, 500)))`, which holds an
+     execution context open for half a second — and any navigation in that
+     window destroys it. On the served build the app can navigate on its own:
+     the service worker calls clients.claim() on activate, and index.html
+     reloads when a worker takes over from a previous one. The suite then dies
+     with "Execution context was destroyed, most likely because of a
+     navigation", which describes the harness rather than the app.
+
+     The wait exists to let an asynchronous store write land before reloading
+     on top of it. Nothing about that needs to run in the page. */
+  await page.waitForTimeout(500);
   await page.reload({ waitUntil: 'load', timeout: 200000 });
   await booted(page);
   const kept = await page.evaluate((ch) => {

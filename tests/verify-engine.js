@@ -387,5 +387,63 @@ head('a suite pointed at a URL either runs whole or does not run');
      /urlIncapable/.test(v) && /cannot take a URL/.test(v));
 }
 
+head('a reload is not a boot, and the split build is why');
+{
+  /* WHAT THIS CATCHES, found in verify-theme and not by reading it.
+     page.reload() resolves on a navigation event — `load`, or worse
+     `domcontentloaded`. In the SINGLE FILE that is close enough to "the app is
+     running", because every line of it is inline and has executed by then. In
+     the SPLIT BUILD it is not: index.html's loader fetches
+     content/questions.json and only THEN injects app.js, so both events fire
+     long before a single application symbol exists.
+
+     verify-theme reloaded with `domcontentloaded`, read the pre-paint
+     attributes — which is the point of that section and correct — and then
+     carried straight on into a section that needs the app. Against the single
+     file it passed for years. Against the served build it died with
+
+         page.evaluate: ReferenceError: Can't find variable: setTheme
+
+     which reads like a missing function and is a missing WAIT. That is the
+     same shape as the four races tests/_render.js was written for.
+
+     THE RULE IS "WAIT FOR SOMETHING", deliberately loose. Every other reload in
+     the repository already does: booted(), a waitForFunction naming an app
+     global, a waitForSelector, or a poll on `typeof S`. Requiring booted()
+     specifically would have flagged five suites that are already correct —
+     verify-splash reloads with `commit` precisely to catch the page BEFORE the
+     app, and being made to wait for it would destroy the check. So the guard
+     asks only that something between the reload and the next read is capable
+     of being false before the app is up. It has no exemption list because it
+     needs none. */
+  const RELOAD = /await\s+page\.reload\s*\(/;
+  const WAITS = /booted\s*\(|waitFor[A-Za-z]*\s*\(|typeof\s+[A-Za-z_$]/;
+  const suites = fs.readdirSync(TESTS).filter(n => /^verify-.+\.js$/.test(n));
+  let reloads = 0;
+  const blind = [];
+  for (const f of suites) {
+    const lines = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8')).split('\n');
+    lines.forEach((l, i) => {
+      if (!RELOAD.test(l)) return;
+      reloads++;
+      /* AS FAR AS THE NEXT SECTION, not a fixed handful of lines. A reload
+         may legitimately be followed by reads that must happen BEFORE the app
+         is back — verify-theme reads the pre-paint attributes, verify-splash
+         catches the splash — and the wait then comes after those. A six-line
+         window called verify-theme's own fix a violation. The section is the
+         real boundary: whatever a reload sets up, it sets up for the checks
+         under the same heading. */
+      let end = i + 1;
+      while (end < lines.length && !/^\s*head\s*\(/.test(lines[end]) && end - i < 60) end++;
+      if (!WAITS.test(lines.slice(i + 1, end).join('\n'))) blind.push(`${f}:${i + 1}`);
+    });
+  }
+  /* Vacuity guard: "count the blind reloads and expect none" is also what a
+     scan that found no reloads at all returns. */
+  ok('there are reloads to check', reloads >= 8, `${reloads} across ${suites.length} suites`);
+  ok('and every one of them waits for something afterwards',
+     blind.length === 0, blind.join(', ') || 'none');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
