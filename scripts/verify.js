@@ -171,6 +171,10 @@ const SUITES = [
      it transforms, which is right and was asserted nowhere — and the escaper
      it leans on is not in this repository at all. */
   ['md-pure',      'nothing a model says can become something the page runs'],
+  /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
+     in three of its checks; what a fellow MEASURES on — a millimetre, a big
+     square, 0.04 s — had nothing on it, and needed a browser to reach. */
+  ['ecg12-pure',   'a big square is 0.2 s, on every canvas the panel is given'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -216,7 +220,7 @@ const SUITES = [
    while the only machine that could run the full thing was not being run. The
    first full green run wrote all fourteen at once. If this fills up again, that
    is the same gap reopening. */
-const PENDING_RECORD = ['cause-pure', 'md-pure'];
+const PENDING_RECORD = ['cause-pure', 'md-pure', 'ecg12-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
