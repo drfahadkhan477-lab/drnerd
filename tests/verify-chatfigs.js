@@ -19,7 +19,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, watchTransitions, resized } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chatfigs.js <patched.html>'); process.exit(1); }
@@ -41,6 +41,7 @@ const sse = text => [
 (async () => {
   const browser = await launch();
   const page = await routablePage(browser, { viewport: { width: 1280, height: 1000 } });
+  await watchTransitions(page);   /* before goto: see _render.js */
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
@@ -133,7 +134,7 @@ const sse = text => [
      scrolled sideways, which on a touch device reads as the app being stuck:
      you cannot swipe back to the thread, and the composer is off the edge.
      Checked at phone width, where the panel is narrowest. */
-  await page.setViewportSize({ width: 430, height: 932 });
+  await resized(page, 430, 932);
   await page.waitForTimeout(400);
   const fits = await page.evaluate(() => {
     buildAI();
@@ -151,7 +152,7 @@ const sse = text => [
      `${fits.imgW}px in ${fits.bodyW}px, natural ${fits.natural}px`);
   ok('so the conversation never scrolls sideways',
      fits.bodyScrollW <= fits.bodyW + 1, `scrollWidth ${fits.bodyScrollW} vs ${fits.bodyW}`);
-  await page.setViewportSize({ width: 1280, height: 1000 });
+  await resized(page, 1280, 1000);
   await page.waitForTimeout(300);
 
   head('the evidence belongs to one conversation');
@@ -189,7 +190,7 @@ const sse = text => [
   /* At desktop width the figure already fits at its natural size, so "bigger
      in the viewer" and "magnifies" have nothing to say. The claims are about a
      panel narrower than the picture, which is the phone and the iPad. */
-  await page.setViewportSize({ width: 430, height: 932 });
+  await resized(page, 430, 932);
   await page.waitForTimeout(300);
   const view = await page.evaluate(async () => {
     /* Its own fixture: the thread state a few checks ago is not this check's
@@ -248,7 +249,7 @@ const sse = text => [
   ok('Escape closes it and gives the page back',
      view.afterEsc === '' && view.unlocked, JSON.stringify(view.afterEsc));
   ok('and so does a tap outside the picture', view.afterBackdrop === '', JSON.stringify(view.afterBackdrop));
-  await page.setViewportSize({ width: 1280, height: 1000 });
+  await resized(page, 1280, 1000);
   await page.waitForTimeout(250);
 
   head('the figures can be put away — they arrive shut and fold back');

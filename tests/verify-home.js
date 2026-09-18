@@ -24,7 +24,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, watchTransitions, resized } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -55,6 +55,7 @@ onDeath(() => ({ section, checks: passed + failed, errors,
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 460, height: 1000 }, deviceScaleFactor: 2 });
+  await watchTransitions(page);   /* before goto: see _render.js */
   page.on('crash', () => events.push('the browser CRASHED the page'));
   page.on('close', () => events.push('the page closed'));
   page.on('requestfailed', r => {
@@ -353,7 +354,7 @@ onDeath(() => ({ section, checks: passed + failed, errors,
       }, null, { timeout: 15000, polling: 'raf' });
     };
     const at = async (w, h) => {
-      await page.setViewportSize({ width: w, height: h });
+      await resized(page, w, h);
       await page.waitForFunction(([w, h]) =>
         Math.abs(innerWidth - w) <= 2 && Math.abs(innerHeight - h) <= 2, [w, h], { timeout: 8000 });
       await page.evaluate(() => { goHome(); render(); });
@@ -397,7 +398,7 @@ onDeath(() => ({ section, checks: passed + failed, errors,
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
        vignette is readable; widening the home screen must not widen a stem. */
-    await page.setViewportSize({ width: 1366, height: 1024 });
+    await resized(page, 1366, 1024);
     const quiz = await page.evaluate(() => {
       const q = ALL_Q.find(x => !x.bad);
       jumpTo(q.id); render();
@@ -490,7 +491,7 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const prev = page.viewportSize();
     const rows = [];
     for (const [w, h, label] of [[390, 844, 'phone'], [834, 1112, 'iPad portrait'], [1194, 834, 'iPad landscape']]) {
-      await page.setViewportSize({ width: w, height: h });
+      await resized(page, w, h);
       const r = await page.evaluate(async () => {
         try { localStorage.removeItem('accsap12.welcomed'); } catch (_) {}
         S.srs = {}; if (typeof LOG !== 'undefined') LOG.length = 0;
@@ -506,7 +507,7 @@ onDeath(() => ({ section, checks: passed + failed, errors,
       });
       rows.push({ label, ...r });
     }
-    if (prev) await page.setViewportSize(prev);
+    if (prev) await resized(page, prev.width, prev.height);
     for (const r of rows) {
       ok(`${r.label}: "Got it" keeps more room from the card's right edge than the Apex button is wide`,
          !r.err && r.clearance > r.fabW, r.err || `${r.clearance}px clear vs a ${r.fabW}px button`);

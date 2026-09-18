@@ -15,7 +15,7 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, watchTransitions, resized } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-figzoom.js <patched.html>'); process.exit(1); }
@@ -31,6 +31,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true });
+  await watchTransitions(page);   /* before goto: see _render.js */
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -433,7 +434,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     }, list);
 
     for (const [name, w, h] of frames) {
-      await page.setViewportSize({ width: w, height: h });
+      await resized(page, w, h);
       await page.waitForTimeout(220);
       const list = haveFigs
         ? [sizes.tallest.u, sizes.highest.u].concat(sizes.sample.map(x => x.u)) : [];
@@ -446,14 +447,14 @@ const head = t => console.log('\n── ' + t + ' ──');
 
     /* The single worst case in the bank, named, so a partial fix that handles
        the median and not the extreme cannot pass. */
-    await page.setViewportSize({ width: 1194, height: 834 });
+    await resized(page, 1194, 834);
     await page.waitForTimeout(220);
     const extreme = await worstOf(haveFigs ? [sizes.tallest.u] : []);
     ok('the tallest figure in the bank fits too',
        extreme.worst <= 1 && extreme.seen === 1,
        haveFigs ? `${sizes.tallest.w}x${sizes.tallest.h}, overflow ${extreme.worst}px` : noneWhy);
 
-    await page.setViewportSize({ width: 900, height: 1000 });
+    await resized(page, 900, 1000);
     await page.waitForTimeout(220);
   }
 
