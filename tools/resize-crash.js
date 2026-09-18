@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /*
- * Which viewport change kills WebKit, isolated one at a time.
+ * What kills the page on WebKit, isolated one thing at a time.
+ *
+ * Started as a bisect of viewport changes and grew a second half: six suites
+ * crash without resizing at all, so the shrink was never the only way in. The
+ * cases below cover both — a resize after some setup, and navigation with no
+ * resize whatsoever.
  *
  *   $env:SYSTOLE_ENGINE="webkit"
  *   node tools\resize-crash.js http://localhost:8080
@@ -73,6 +78,22 @@ const STASH_VT = () => {
     try { window.__vt = vt; } catch (_) {}
     return vt;
   };
+};
+
+/* heartreuse's loop, parameterised: n round trips between home and a chapter,
+   with the two pauses it uses. `awaitVt` waits for each transition to settle
+   instead of sleeping, which is the candidate fix. */
+const navigate = (n, inMs, outMs, awaitVt) => async p => {
+  for (let i = 0; i < n; i++) {
+    await p.evaluate(() => { if (typeof startQuiz === 'function') startQuiz(CHAPTERS[0]); });
+    if (awaitVt) await p.evaluate(() => (window.__vtLive && window.__vtLive.finished
+      ? window.__vtLive.finished.catch(() => {}) : null));
+    await p.waitForTimeout(inMs);
+    await p.evaluate(() => { if (typeof goHome === 'function') goHome(); });
+    if (awaitVt) await p.evaluate(() => (window.__vtLive && window.__vtLive.finished
+      ? window.__vtLive.finished.catch(() => {}) : null));
+    await p.waitForTimeout(outMs);
+  }
 };
 
 /* Each case: what it does BEFORE the resize that is under suspicion. An `init`
@@ -229,6 +250,34 @@ const CASES = [
     await visitAQuestion(p);
     await p.waitForTimeout(300);
   }],
+
+  /* ── ROUND FOUR: the other six, which never resize ───────────────────────
+     Six suites crash without resizing at all — gemini, memory, boundary, chat,
+     flushguard and heartreuse — so the shrink cannot be the only way in.
+     heartreuse says where to look. It dies after four checks, and check four
+     is the line immediately before this:
+
+         for (let i = 0; i < 20; i++) {
+           await page.evaluate(() => { startQuiz(CHAPTERS[0]); });
+           await settle(110);
+           await page.evaluate(() => { goHome(); });
+           await settle(210);
+         }
+
+     Twenty screen changes at 110 and 210 milliseconds. Every one starts a view
+     transition, and they start faster than they settle — which the app already
+     knows about: failsafe-patch swallows the AbortError that ready and
+     finished reject with "whenever a newer transition starts before the
+     current one settles". Harmless on Chromium. The question is whether it is
+     harmless here.
+
+     If overlapping is the trigger, spacing them out fixes it and awaiting each
+     one fixes it completely. Both are cheap to try, and both are the same
+     shape as the fix already applied to resizing. */
+  ['twenty navigations at the heartreuse pace, no resize', navigate(20, 110, 210), null, 'none'],
+  ['twenty navigations, awaiting each transition', navigate(20, 110, 210, true), STASH_VT, 'none'],
+  ['twenty navigations, spaced 600ms apart', navigate(20, 600, 600), null, 'none'],
+  ['five navigations at the same pace', navigate(5, 110, 210), null, 'none'],
 ];
 
 (async () => {
@@ -247,9 +296,12 @@ const CASES = [
         const { booted } = require('../tests/_render.js');
         await booted(page, { timeout: 150000 });
         await before(page);
-        /* The move under suspicion — SMALL unless a case asks otherwise. */
-        const t = to || SMALL;
-        await resize(page, t.width, t.height);
+        /* The move under suspicion — SMALL unless a case asks otherwise, and
+           skipped entirely for the cases that are about navigation instead. */
+        if (to !== 'none') {
+          const t = to || SMALL;
+          await resize(page, t.width, t.height);
+        }
         await page.evaluate(() => document.getElementsByTagName('*').length);
         verdict = 'survived';
       } catch (e) {
