@@ -167,6 +167,10 @@ const SUITES = [
      the output from the wrong end and reported a check's own wrapped detail as
      the cause of a crash. */
   ['cause-pure',   'a dead suite is diagnosed by what killed it, not by what it last printed'],
+  /* The one place a model's words become the page's HTML. md() escapes before
+     it transforms, which is right and was asserted nowhere — and the escaper
+     it leans on is not in this repository at all. */
+  ['md-pure',      'nothing a model says can become something the page runs'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -212,7 +216,7 @@ const SUITES = [
    while the only machine that could run the full thing was not being run. The
    first full green run wrote all fourteen at once. If this fills up again, that
    is the same gap reopening. */
-const PENDING_RECORD = ['cause-pure'];
+const PENDING_RECORD = ['cause-pure', 'md-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
