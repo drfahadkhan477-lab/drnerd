@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { launch } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-type.js <patched.html>'); process.exit(1); }
@@ -30,7 +31,8 @@ const URL = 'file://' + FILE;
 
 let passed = 0, failed = 0;
 const ok = (l, c, d = '') => { c ? passed++ : failed++; console.log((c ? '  PASS  ' : '  FAIL  ') + l + (d ? '  → ' + d : '')); };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 const LADDER = [9, 11, 13, 16, 19, 23, 28, 33, 40, 48, 58];
 
@@ -63,9 +65,23 @@ const LADDER = [9, 11, 13, 16, 19, 23, 28, 33, 40, 48, 58];
   head('the reading roles hold the body step at every width');
   const browser = await launch();
   const errors = [];
+  /* A page PER WIDTH here rather than one for the suite, so the listeners go
+     on inside the loop and the note is installed once over arrays every page
+     shares. A crash and a close are different diagnoses and Playwright reports
+     both as "Target page, context or browser has been closed" on the next
+     call; only the event says which. See tests/_deathnote.js. */
+  const events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   for (const vw of [1280, 834, 460, 390]) {
     const page = await browser.newPage({ viewport: { width: vw, height: 1000 } });
     page.on('pageerror', e => errors.push(e.message));
+    page.on('crash', () => events.push(`${vw}px: the browser CRASHED the page`));
+    page.on('close', () => events.push(`${vw}px: the page closed`));
+    page.on('requestfailed', r => {
+      const why = (r.failure() || {}).errorText || '';
+      if (why) events.push(`${vw}px: request failed ${String(r.url()).slice(-40)} — ${why}`);
+    });
     await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
     await booted(page, { timeout: 150000 });
     await page.evaluate(() => startQuiz(null));
