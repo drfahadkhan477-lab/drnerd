@@ -616,13 +616,29 @@ const head = t => console.log('\n── ' + t + ' ──');
     await booted(touchPage, { timeout: 150000 });
     const touch = await touchPage.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
+      /* WATCH THE CALL, NOT THE FLAG. This read `second.defaultPrevented`,
+         which is only true if the browser HONOURS preventDefault() on a
+         synthetic TouchEvent. WebKit appears not to, so the flag stayed false
+         whatever the app did — and the two checks below cannot both catch
+         that: the first expects false and passes either way, the second
+         expects true and went red on WebKit. A check that cannot tell "the app
+         did not suppress" from "this browser will not let us see it" is
+         measuring the harness.
+
+         Wrapping the instance's own preventDefault records whether the APP
+         called it, which is the app's side of the contract and is the same on
+         every engine. cancelable and defaultPrevented are reported alongside
+         so the browser's half is visible rather than assumed. */
       const doubleTap = async (el) => {
         const mk = () => new TouchEvent('touchend', { bubbles: true, cancelable: true });
         el.dispatchEvent(mk());
         await wait(60);
         const second = mk();
+        let asked = false;
+        const orig = second.preventDefault;
+        second.preventDefault = function () { asked = true; try { return orig.call(this); } catch (_) {} };
         el.dispatchEvent(second);
-        return second.defaultPrevented;
+        return { asked, honoured: second.defaultPrevented, cancelable: second.cancelable };
       };
       goHome(); render();
       const loose = document.createElement('div');
@@ -640,9 +656,14 @@ const head = t => console.log('\n── ' + t + ' ──');
     });
     await touchPage.close();
     ok('a rapid double tap on a plain surface is no longer swallowed',
-       touch.onPlainSurface === false, JSON.stringify(touch));
-    ok('but it is still suppressed on a quiz option, where it misfires',
-       touch.onOption === true, JSON.stringify(touch));
+       touch.onPlainSurface.asked === false, JSON.stringify(touch.onPlainSurface));
+    /* "asks to suppress", not "is suppressed": whether the browser acts on it
+       is the browser's half, and a synthetic event cannot answer for a real
+       finger. The app's half is exactly this call, and it is what the scoping
+       in curate-patch changed. */
+    ok('but the app still asks to suppress it on a quiz option, where it misfires',
+       touch.foundOption === true && touch.onOption && touch.onOption.asked === true,
+       JSON.stringify(touch));
   }
 
   head('perf: the hero rotation stops while the page is hidden');
