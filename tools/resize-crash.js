@@ -45,11 +45,14 @@ const GONE = /Target (crashed|closed)|Target page, context or browser has been c
 const resize = async (page, w, h) => { await page.setViewportSize({ width: w, height: h }); };
 /* The one action that kills it, so the cases testing WHY all do the same thing
    rather than three slightly different things. */
-const visitAQuestion = async p => {
-  await p.evaluate(() => {
+const visitAQuestion = async (p, wantFigure) => {
+  await p.evaluate(async want => {
     if (typeof ALL_Q === 'undefined' || typeof jumpTo !== 'function') return;
-    const q = ALL_Q.find(x => !x.bad); if (q) { jumpTo(q.id); render(); }
-  });
+    const has = x => x.img > 0;
+    const q = want === undefined ? ALL_Q.find(x => !x.bad)
+            : ALL_Q.find(x => !x.bad && (want ? has(x) : !has(x)));
+    if (q) { jumpTo(q.id); render(); }
+  }, wantFigure);
   await p.waitForTimeout(300);
   await p.evaluate(() => { if (typeof goHome === 'function') { goHome(); render(); } });
   await p.waitForTimeout(250);
@@ -89,9 +92,19 @@ const CASES = [
     await resize(p, 1024, 1366); await rebuild(p);
   }],
 
-  /* ── the hypothesis, and the three ways of testing it ────────────────────
-     A jump into a question and back is the only thing that kills it, at both
-     scale factors. The mechanism the source suggests:
+  /* ── ROUND ONE'S HYPOTHESIS, AND ITS THREE REFUTATIONS ───────────────────
+     Kept, not deleted. The story was: a question card registers a
+     ResizeObserver, sweepInkHosts() only runs from mountInk(), so going home
+     leaves an observer on a detached node and the next resize fires it. It
+     explained every observation and it is WRONG — all three of these crash,
+     including booting with ResizeObserver deleted, where no observer exists to
+     fire. They stay in the list because a refuted case is evidence: anything
+     that explains this crash must also explain why removing the observer
+     entirely changes nothing.
+     ──────────────────────────────────────────────────────────────────────── */
+  /* The refuted mechanism, written down so nobody re-derives it:
+     a jump into a question and back is the only thing that kills it, at both
+     scale factors, and the source suggested this:
 
        scripts/stage0-patch.js registers an ink host per question card —
            host.__ro = new ResizeObserver(fit); host.__ro.observe(host);
@@ -123,14 +136,57 @@ const CASES = [
   ['a question and back, with ResizeObserver removed at boot',
    visitAQuestion,
    () => { delete window.ResizeObserver; }],
+
+  /* ── ROUND TWO: what about the visit, then? ──────────────────────────────
+     Round one established that the visit is necessary and that the observer is
+     not the reason. These take the visit apart instead of theorising about
+     what it leaves behind. Each isolates one thing the others share. */
+
+  /* Is it the RETURN that matters, or merely having been there? */
+  ['a question, and the resize while still on it', async p => {
+    await p.evaluate(() => {
+      if (typeof ALL_Q === 'undefined' || typeof jumpTo !== 'function') return;
+      const q = ALL_Q.find(x => !x.bad); if (q) { jumpTo(q.id); render(); }
+    });
+    await p.waitForTimeout(400);
+  }],
+  /* If one more render clears it, whatever it is survives exactly one. */
+  ['a question and back, then a second rebuild', async p => {
+    await visitAQuestion(p);
+    await rebuild(p);
+  }],
+  /* Figures are the heaviest thing a question carries. */
+  ['a question with NO figure, and back', p => visitAQuestion(p, false)],
+  ['a question WITH a figure, and back', p => visitAQuestion(p, true)],
+  /* If time alone fixes it, something is being collected or settled. */
+  ['a question and back, then two seconds of nothing', async p => {
+    await visitAQuestion(p);
+    await p.waitForTimeout(2000);
+  }],
+  /* The ink layer, ablated at the source rather than swept afterwards: if the
+     card never mounts one, nothing it owns can be what is left behind. */
+  ['a question and back, with the ink layer never mounted', async p => {
+    await p.evaluate(() => { try { window.mountInk = function () {}; } catch (_) {} });
+    await visitAQuestion(p);
+  }],
+  /* render() swaps the DOM inside an async startViewTransition callback, which
+     CLAUDE.md records as the cause of four separate suite races. The app has a
+     documented fallback for browsers without it, so taking it away exercises
+     the same screen change through plain DOM replacement. */
+  ['a question and back, with startViewTransition removed at boot',
+   visitAQuestion,
+   () => { try { delete Document.prototype.startViewTransition; } catch (_) {}
+           try { delete document.startViewTransition; } catch (_) {} }],
+  /* And is it the SMALL size, or any resize at all? */
+  ['a question and back, then a resize UP instead', visitAQuestion, null, { width: 1366, height: 1024 }],
 ];
 
 (async () => {
   console.log(`engine ${engineName()}   target ${URL}`);
-  console.log('each case is a fresh browser; the resize under test is always → 390×844\n');
+  console.log('each case is a fresh browser; the resize under test is → 390×844 unless the case says otherwise\n');
   const rows = [];
   for (const dpr of [2, 1]) {
-    for (const [name, before, init] of CASES) {
+    for (const [name, before, init, to] of CASES) {
       const browser = await launch();
       let crashed = false, verdict = '?', note = '';
       try {
@@ -141,8 +197,9 @@ const CASES = [
         const { booted } = require('../tests/_render.js');
         await booted(page, { timeout: 150000 });
         await before(page);
-        /* The move under suspicion. */
-        await resize(page, SMALL.width, SMALL.height);
+        /* The move under suspicion — SMALL unless a case asks otherwise. */
+        const t = to || SMALL;
+        await resize(page, t.width, t.height);
         await page.evaluate(() => document.getElementsByTagName('*').length);
         verdict = 'survived';
       } catch (e) {
