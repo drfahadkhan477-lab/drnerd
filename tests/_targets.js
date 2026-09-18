@@ -106,4 +106,97 @@ function allSuiteNames() {
     .sort();
 }
 
-module.exports = { classify, classifySource, takesUrl, allSuiteNames };
+/* ── which suites CI can run at all ──────────────────────────────────────────
+   .github/workflows/verify.yml names every suite it runs as its own step, and
+   scripts/verify.js has its own registry of seventy. Two lists, maintained
+   separately, and they had already drifted: verify-cause-pure was registered,
+   passed 32 checks, needed no browser, and the workflow had never heard of it.
+   Nineteen green steps read as "the logic suites pass".
+
+   So the workflow is held to this instead of to memory. A suite can run in CI
+   when it needs no browser and no built app:
+
+     · no browser — neither it nor any repo script it spawns reaches Playwright
+     · no build   — it does not take a target as process.argv[2]
+
+   ONE LEVEL OF SPAWNING IS FOLLOWED, and that is not arbitrary: it is the
+   depth the repository actually uses. verify-figprobe requires nothing from
+   Playwright and launches a browser anyway, through
+   tools/figure-probe.js — so reading its requires alone classifies it as
+   CI-able, and CI has no browser in that job. verify-leakguard spawns too, to
+   scripts/leak-guard.js and to git, and neither reaches a browser, so it stays
+   correctly included. Depth one tells those two apart; nothing here needs two.
+
+   CONSERVATIVE IN THE DIRECTION THAT MATTERS, like classify() above. A suite
+   wrongly excluded costs a check CI does not run, which someone notices the
+   next time the registry is read. A suite wrongly INCLUDED costs a red
+   workflow, or worse a green one that launched nothing and measured nothing.
+   Those are not the same mistake.
+
+   MEASURED, NOT ASSUMED. The first version of this matched
+   require('./_engine') without allowing the .js extension, and verify-render
+   and verify-csp — which both write require('./_engine.js') — came back
+   CI-able. Together with figprobe that was three false positives out of five,
+   and all three would have gone into a workflow with no browser in it. */
+/* PATH-AGNOSTIC ON PURPOSE. This matched `./_engine` with an optional `.js`
+   and nothing else, which is how verify-render and
+   verify-csp slipped through writing `./_engine.js`, and how
+   tools/figure-probe.js slipped through writing `../tests/_engine.js`. The
+   question is whether a file reaches the engine module, not how it spells the
+   way there, so the prefix is no longer part of the question. */
+const NEEDS_ENGINE = /require\(\s*['"][^'"]*\b_engine(?:\.js)?['"]\s*\)|require\(\s*['"]playwright['"]\s*\)/;
+
+/* A spawn of another node script in this repository, as
+   execFile(process.execPath, [path.join(__dirname, '..', 'tools', 'x.js'), …]).
+   The quoted segments of the first array element are the path. */
+const SPAWN = /(?:execFile|execFileSync|spawn|spawnSync)\s*\(\s*process\.execPath\s*,\s*\[([^\]]*)\]/g;
+/* A require of another file in this repository, by relative path. */
+const REQ = /require\(\s*['"](\.[^'"]*\.js)['"]\s*\)/g;
+
+/* Every repo file a suite reaches directly — spawned or required. Both, because
+   a browser can be reached either way and the repository does both:
+   verify-figprobe SPAWNS tools/figure-probe.js, and verify-figaudit REQUIRES
+   tools/figure-audit.js. Resolved against the file doing the reaching, not
+   against tests/, or a tool's own '../tests/…' would point outside the repo. */
+function reaches(file, src) {
+  const dir = path.dirname(file);
+  const out = [];
+  for (const m of src.matchAll(SPAWN)) {
+    const first = m[1].split(',').slice(0, 5).join(',');
+    const parts = [...first.matchAll(/['"]([^'"]+)['"]/g)].map(x => x[1]);
+    if (!parts.length) continue;
+    const guess = path.resolve(dir, parts.join(path.sep));
+    if (fs.existsSync(guess)) out.push(guess);
+  }
+  for (const m of src.matchAll(REQ)) {
+    const guess = path.resolve(dir, m[1]);
+    if (fs.existsSync(guess)) out.push(guess);
+  }
+  return out;
+}
+
+function runsInCI(name) {
+  let src;
+  try { src = stripComments(fs.readFileSync(suitePath(name), 'utf8')); }
+  catch (_) { return { able: false, reason: 'suite not found' }; }
+  if (NEEDS_ENGINE.test(src)) return { able: false, reason: 'needs a browser' };
+  if (ARGV.test(src)) return { able: false, reason: 'needs a built app as its target' };
+  const root = path.join(SUITE_DIR, '..');
+  const rel = p => path.relative(root, p).split(path.sep).join('/');
+  for (const p of reaches(suitePath(name), src)) {
+    /* Not another suite's helper: _source, _targets and _fakeweb are required
+       by everything and reach nothing, and following into tests/_engine.js
+       itself would exclude verify-engine, whose whole job is to test it
+       without launching it. Only tools/ and scripts/ are followed, which is
+       where the two real cases live. */
+    if (!/^(tools|scripts)\//.test(rel(p))) continue;
+    let child;
+    try { child = stripComments(fs.readFileSync(p, 'utf8')); } catch (_) { continue; }
+    if (NEEDS_ENGINE.test(child)) {
+      return { able: false, reason: `reaches ${rel(p)}, which needs a browser` };
+    }
+  }
+  return { able: true, reason: '' };
+}
+
+module.exports = { classify, classifySource, takesUrl, allSuiteNames, runsInCI };
