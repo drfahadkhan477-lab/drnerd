@@ -148,7 +148,32 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   /* Pixels, because "an instance exists" is not "something is on screen". */
   const painted = await page.evaluate(async () => {
-    const cv = document.getElementById('heroHeart3d');
+    /* WAITED FOR, NOT ASSUMED. This read the canvas straight out of the
+       document and dereferenced it:
+
+           const cv = document.getElementById('heroHeart3d');
+           off.width = cv.width;
+
+       and on WebKit cv came back null — "TypeError: null is not an object
+       (evaluating 'cv.width')" — which threw out of the evaluate and took the
+       whole suite with it, four checks from the end. Not a crash: the page
+       events said none and nothing was logged.
+
+       It is a race, and the four checks directly above prove it: they measured
+       that same canvas and found a live instance, an intact mesh and a real
+       box. So it was there a moment earlier and gone a moment later, which is
+       a render landing between two evaluates — the exact hazard
+       tests/_render.js was written for, twenty navigations in.
+
+       A precondition, not a proposition: the canvas has to be in the document
+       before its pixels mean anything. And if it never arrives, that is a
+       finding to report rather than an exception to die of. */
+    let cv = null;
+    for (let i = 0; i < 90 && !cv; i++) {
+      cv = document.getElementById('heroHeart3d');
+      if (!cv) await new Promise(r => requestAnimationFrame(r));
+    }
+    if (!cv) return { lit: 0, total: 0, absent: true };
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     const off = document.createElement('canvas');
     off.width = cv.width; off.height = cv.height;
@@ -159,7 +184,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return { lit, total: (d.length / 4) };
   });
   ok('and it is actually drawing after the twentieth visit',
-     painted.lit > 500, `${painted.lit} lit pixels of ${painted.total}`);
+     painted.lit > 500,
+     painted.absent ? 'the canvas never came back into the document'
+                    : `${painted.lit} lit pixels of ${painted.total}`);
 
   head('leaving costs nothing but the frames');
   const paused = await page.evaluate(async () => {

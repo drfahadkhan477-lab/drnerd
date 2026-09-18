@@ -618,12 +618,19 @@ const head = t => console.log('\n── ' + t + ' ──');
       const wait = ms => new Promise(r => setTimeout(r, ms));
       /* WATCH THE CALL, NOT THE FLAG. This read `second.defaultPrevented`,
          which is only true if the browser HONOURS preventDefault() on a
-         synthetic TouchEvent. WebKit appears not to, so the flag stayed false
-         whatever the app did — and the two checks below cannot both catch
-         that: the first expects false and passes either way, the second
-         expects true and went red on WebKit. A check that cannot tell "the app
-         did not suppress" from "this browser will not let us see it" is
-         measuring the harness.
+         synthetic TouchEvent — and the two checks below cannot tell that apart
+         from the app not suppressing: the first expects false and passes
+         either way, the second expects true. A check that cannot separate
+         "the app did not suppress" from "this browser will not let us see it"
+         is measuring the harness.
+
+         I GUESSED WHICH IT WAS AND GUESSED WRONG. The commit that made this
+         change said WebKit "appears not to" honour cancelable. It does:
+         measured on the served build, cancelable came back TRUE and `asked`
+         came back FALSE. So the browser was willing and the app never asked,
+         which is the opposite of what I wrote. The new reading is still the
+         right one — it separates the two — but it did not find what I said it
+         would.
 
          Wrapping the instance's own preventDefault records whether the APP
          called it, which is the app's side of the contract and is the same on
@@ -637,8 +644,21 @@ const head = t => console.log('\n── ' + t + ' ──');
         let asked = false;
         const orig = second.preventDefault;
         second.preventDefault = function () { asked = true; try { return orig.call(this); } catch (_) {} };
+        /* CONNECTED, BECAUSE A DETACHED NODE HAS NO PATH TO THE DOCUMENT. The
+           app's handler is a single document-level touchend listener. An event
+           dispatched on a node that is no longer in the tree does not bubble
+           to the document at all, so the handler never runs — which is
+           indistinguishable, from `asked` alone, from a handler that ran and
+           returned early. The first tap can cause a render that replaces the
+           option row, and then the second tap is fired at a corpse.
+
+           Reported rather than worked around: if this comes back false, the
+           check is measuring a stale reference and the fix is to re-resolve
+           the element between taps, not to change what the app does. */
+        const connected = el.isConnected;
         el.dispatchEvent(second);
-        return { asked, honoured: second.defaultPrevented, cancelable: second.cancelable };
+        return { asked, honoured: second.defaultPrevented,
+                 cancelable: second.cancelable, connected };
       };
       goHome(); render();
       const loose = document.createElement('div');
