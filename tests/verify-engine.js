@@ -387,6 +387,61 @@ head('a suite pointed at a URL either runs whole or does not run');
      /urlIncapable/.test(v) && /cannot take a URL/.test(v));
 }
 
+head('no suite waits inside a page that may not survive the wait');
+{
+  /* TWICE IN ONE EVENING, in two suites, from the same shape:
+
+         const settle = ms => page.evaluate(m => new Promise(r => setTimeout(r, m)), ms);
+         await page.evaluate(() => new Promise(r => setTimeout(r, 500)));
+
+     An evaluate whose entire body is a timer holds an execution context open
+     in the page for the whole pause. If anything navigates or the page goes
+     away in that window — and on the served build the app can navigate on its
+     own, since the service worker reloads when a new one takes over — the
+     wait fails, and the failure is reported as a failure OF THE WAIT:
+
+         verify-resume      Execution context was destroyed, most likely
+                            because of a navigation
+         verify-heartreuse  Target page, context or browser has been closed
+                            at settle (verify-heartreuse.js:84)
+
+     Neither described what happened. One pointed at a navigation that was
+     incidental and the other named the sleep as the victim. Both are
+     page.waitForTimeout now, which runs in the driver, cannot be destroyed by
+     anything the page does, and reports the page's death as the page's death.
+
+     SCOPED TO SLEEP-ONLY EVALUATES on purpose. An evaluate that does real work
+     AND waits has to run in the page — the work does — and moving it is not
+     possible, only splitting it is. Those are left alone. What this refuses is
+     the case where the evaluate exists ONLY to pass time, which never needs to
+     be in the page and has now cost two debugging sessions. */
+  /* THE RESOLVER PASSED STRAIGHT TO setTimeout, and nothing else — a
+     backreference, so `new Promise(r => setTimeout(r, 800))` matches and
+     `new Promise(r => setTimeout(() => r({ … }), 1200))` does not. The second
+     is a wait that then READS something, which has to be in the page because
+     the reading does. The first version of this check lacked the
+     backreference and called verify-pwa:138 a violation on that basis — a
+     check whose comment said "with nothing else to do" flagging something
+     that had plenty. Narrowed to what it claims. */
+  const SLEEP_ONLY = /\.evaluate\(\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>\s*new Promise\(\s*(\w+)\s*=>\s*setTimeout\(\s*\1\s*,/;
+  const suites = fs.readdirSync(TESTS).filter(n => /^verify-.+\.js$/.test(n));
+  const sleeping = [];
+  let evaluates = 0;
+  for (const f of suites) {
+    const src = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8'));
+    evaluates += (src.match(/\.evaluate\(/g) || []).length;
+    /* Newlines collapsed, because the two real instances were written across
+       one line and across two, and a line-by-line scan found only one. */
+    const flat = src.replace(/\s+/g, ' ');
+    if (SLEEP_ONLY.test(flat)) sleeping.push(f);
+  }
+  /* Vacuity guard: "count the sleeping evaluates and expect none" is also what
+     a scan that found no evaluates at all returns. */
+  ok('there are evaluates to check', evaluates > 200, `${evaluates} across ${suites.length} suites`);
+  ok('and none of them is a sleep with nothing else to do',
+     sleeping.length === 0, sleeping.join(', ') || 'none');
+}
+
 head('a reload is not a boot, and the split build is why');
 {
   /* WHAT THIS CATCHES, found in verify-theme and not by reading it.

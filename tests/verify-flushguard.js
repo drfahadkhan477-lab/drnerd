@@ -100,7 +100,11 @@ const CALL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   await booted(page);
-  await page.evaluate(() => new Promise(r => setTimeout(r, 800)));
+  /* Driver-side. An evaluate whose whole body is a timer holds an execution
+     context open in the page for the pause, and a page that goes away in that
+     window reports the failure as a failure of the wait — which is how this
+     suite's crash arrived looking like a broken sleep. */
+  await page.waitForTimeout(800);
 
   /* The spy. innerHTML is read straight after the real flush returns, because
      streamReply's finally calls buildAI() a tick later and the node the tail
@@ -217,7 +221,7 @@ const CALL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
     /* Wait for both chunks to have been read and accumulated, so there is a
        tail to lose. */
     await page.waitForFunction(() => (window.__fg.built === 1), null, { timeout: 20000 });
-    await page.evaluate(() => new Promise(r => setTimeout(r, 250)));
+    await page.waitForTimeout(250);
     /* The app's own stop: the send button is the stop button while busy. It
        used to be rendered `disabled` in exactly that state, so this is the
        check that the control is a control — clicking a disabled button does
