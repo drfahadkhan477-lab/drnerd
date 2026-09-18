@@ -636,10 +636,24 @@ const head = t => console.log('\n── ' + t + ' ──');
          called it, which is the app's side of the contract and is the same on
          every engine. cancelable and defaultPrevented are reported alongside
          so the browser's half is visible rather than assumed. */
-      const doubleTap = async (el) => {
+      /* RE-RESOLVED BETWEEN TAPS, because the first tap changes the DOM.
+         Measured: connected came back FALSE for the option — selecting it
+         re-renders the card, the original row leaves the document, and an
+         event dispatched at a node that is no longer in the tree never
+         reaches the document-level listener the app installs. The handler was
+         not failing to suppress; it was never being asked, because the test
+         was tapping a node that no longer existed.
+
+         Taking a getter rather than an element is what makes the second tap
+         land on whatever is on screen NOW, which is what a finger does. */
+      const doubleTap = async (get) => {
+        const at = () => (typeof get === 'function' ? get() : get);
         const mk = () => new TouchEvent('touchend', { bubbles: true, cancelable: true });
-        el.dispatchEvent(mk());
+        const first = at();
+        if (!first) return { asked: false, honoured: false, cancelable: null, connected: null, missing: true };
+        first.dispatchEvent(mk());
         await wait(60);
+        const el = at() || first;
         const second = mk();
         let asked = false;
         const orig = second.preventDefault;
@@ -663,6 +677,7 @@ const head = t => console.log('\n── ' + t + ' ──');
       goHome(); render();
       const loose = document.createElement('div');
       document.body.appendChild(loose);
+      /* A plain div nothing re-renders, so the element itself is stable. */
       const onPlainSurface = await doubleTap(loose);
       loose.remove();
 
@@ -671,7 +686,8 @@ const head = t => console.log('\n── ' + t + ' ──');
       startQuiz(CHAPTERS[0], 'all');
       for (let i = 0; i < 60 && !document.querySelector('.opt'); i++) await wait(50);
       const optEl = document.querySelector('.opt');
-      const onOption = optEl ? await doubleTap(optEl) : null;
+      /* By selector, so the second tap finds the row the re-render left. */
+      const onOption = optEl ? await doubleTap(() => document.querySelector('.opt')) : null;
       return { onPlainSurface, onOption, foundOption: !!optEl };
     });
     await touchPage.close();

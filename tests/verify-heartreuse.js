@@ -81,7 +81,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   await booted(page);
-  const settle = ms => page.evaluate(m => new Promise(r => setTimeout(r, m)), ms);
+  /* DRIVER-SIDE. This was page.evaluate(m => new Promise(r => setTimeout(r, m))),
+     which holds an execution context open for the whole pause — and this suite
+     crashed inside it, at settle() on line 84, during the navigation loop. An
+     in-page sleep turns "the page went away" into an error about the sleep,
+     and it is the same shape that took verify-resume down. Nothing about
+     waiting needs to happen in the page. */
+  const settle = ms => page.waitForTimeout(ms);
   await settle(800);
 
   head('the markup hands over a place, not a canvas');
