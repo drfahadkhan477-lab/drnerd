@@ -25,6 +25,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-figsharp.js <patched.html>'); process.exit(1); }
@@ -35,7 +36,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 /* Open a note that cites figures, wait for the images to actually decode
    (loading="lazy" means naturalWidth is 0 until they do — a measurement taken
@@ -103,12 +105,24 @@ const measure = (page) => page.evaluate(async () => {
 (async () => {
   const browser = await launch();
   const errors = [];
+  /* A page PER VIEWPORT here, unlike the other suites — so the listeners go on
+     inside the loop and the note is installed once, over arrays both pages
+     share. head() records the viewport, so a death names which one it was. */
+  const events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
 
   for (const vp of [{ width: 1024, height: 1366, name: 'iPad portrait' },
                     { width: 1366, height: 1024, name: 'iPad landscape' }]) {
     const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 2 });
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
+    page.on('crash', () => events.push(`${vp.name}: the browser CRASHED the page`));
+    page.on('close', () => events.push(`${vp.name}: the page closed`));
+    page.on('requestfailed', r => {
+      const why = (r.failure() || {}).errorText || '';
+      if (why) events.push(`${vp.name}: request failed ${String(r.url()).slice(-40)} — ${why}`);
+    });
     await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
 
