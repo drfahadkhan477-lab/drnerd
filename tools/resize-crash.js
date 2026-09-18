@@ -84,15 +84,38 @@ const STASH_VT = () => {
    with the two pauses it uses. `awaitVt` waits for each transition to settle
    instead of sleeping, which is the candidate fix. */
 const navigate = (n, inMs, outMs, awaitVt) => async p => {
+  let changes = 0;
+  const screen = () => p.evaluate(() => {
+    const a = document.getElementById('app');
+    return (a && a.dataset && a.dataset.screen) || null;
+  });
   for (let i = 0; i < n; i++) {
+    const was = await screen();
     await p.evaluate(() => { if (typeof startQuiz === 'function') startQuiz(CHAPTERS[0]); });
     if (awaitVt) await p.evaluate(() => (window.__vtLive && window.__vtLive.finished
       ? window.__vtLive.finished.catch(() => {}) : null));
     await p.waitForTimeout(inMs);
+    if (await screen() !== was) changes++;
+    const mid = await screen();
     await p.evaluate(() => { if (typeof goHome === 'function') goHome(); });
     if (awaitVt) await p.evaluate(() => (window.__vtLive && window.__vtLive.finished
       ? window.__vtLive.finished.catch(() => {}) : null));
     await p.waitForTimeout(outMs);
+    if (await screen() !== mid) changes++;
+  }
+  /* VACUITY GUARD, and it is not hypothetical. Both calls are behind
+     `typeof … === 'function'`, so on a build where startQuiz is named
+     something else — or where CHAPTERS is not defined and the evaluate throws
+     before reaching it — this loop does nothing at all and the case reports
+     SURVIVED. "Twenty navigations did not crash the page" and "no navigation
+     happened" would arrive as the same word, which is the failure this whole
+     repository is organised against, and I wrote it into the tool.
+
+     A case that could not do its own setup is not evidence about the thing it
+     was testing. Thrown rather than returned, so the runner reports it as a
+     probe error instead of a result. */
+  if (changes < n) {
+    throw new Error(`probe: asked for ${n * 2} screen changes, observed ${changes}`);
   }
 };
 
