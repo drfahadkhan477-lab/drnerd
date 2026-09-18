@@ -338,11 +338,36 @@ const CASES = [
     }
     console.log('');
   }
+  /* THE TAIL HAS TO BE ENOUGH ON ITS OWN. This printed only the cases that
+     lost the page, which cannot distinguish a case that survived from one that
+     never ran: a probe error crashes nothing, so it is absent from that list
+     exactly like a success. Two runs were read as "navigation is innocent" on
+     that basis and neither could support it.
+
+     So every verdict is counted, and probe errors are named. A case that could
+     not do its own setup is not evidence about the thing it was testing, and
+     the summary now says which those were instead of leaving them silent. */
+  const by = {};
+  for (const r of rows) by[r.verdict] = (by[r.verdict] || 0) + 1;
+  console.log(`${rows.length} cases: ` +
+    Object.entries(by).sort().map(([k, v]) => `${v} ${k}`).join(', '));
+
+  const broken = rows.filter(r => r.verdict === 'probe error');
+  if (broken.length) {
+    console.log('\nCASES THAT NEVER RAN — these prove nothing either way:');
+    for (const r of broken) console.log(`   dpr ${r.dpr}  ${r.name}\n        ${r.note}`);
+  }
+
   const died = rows.filter(r => r.verdict === 'CRASHED' || r.verdict === 'page gone');
-  console.log(`${died.length} of ${rows.length} cases lost the page.`);
   if (died.length && died.length < rows.length) {
-    console.log('the smallest thing that killed it:');
+    console.log('\nlost the page:');
     for (const r of died) console.log(`   dpr ${r.dpr}  ${r.name}`);
+  }
+
+  const lived = rows.filter(r => r.verdict === 'survived');
+  if (lived.length && lived.length < rows.length) {
+    console.log('\nsurvived — and actually ran:');
+    for (const r of lived) console.log(`   dpr ${r.dpr}  ${r.name}`);
   }
   process.exit(0);
 })();
