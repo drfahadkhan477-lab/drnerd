@@ -182,6 +182,219 @@ function reload(prev, opts) {
        JSON.parse(b.ls.get('accsap12.store.fellback') || '[]').indexOf(KEY) > -1);
   }
 
+  /* ── the mirror ─────────────────────────────────────────────────────────
+     accsap12.v2 — the FSRS cards, the chapter statistics, the streak — stays
+     in localStorage because load() reads it synchronously at boot. That makes
+     it the one irreplaceable key with no protection against iOS evicting a
+     site's localStorage after seven days. The mirror keeps a copy in the
+     database without touching the synchronous path.
+
+     An eviction is modelled as what it actually is: the database survives and
+     localStorage does not. reload() copies both, so these build the second
+     session by hand. */
+  const V2 = 'accsap12.v2';
+  const PROGRESS = { schemaVersion: 1, srs: { COR_1: { d: 4.2, s: 91 } }, reviewStreak: 63 };
+  const EMPTY = { schemaVersion: 1, srs: {}, reviewStreak: 0 };
+  /* What a session that has been through ready() leaves in the database. */
+  const afterASession = async (value) => {
+    const web = makeWeb({});
+    web.ls.set(V2, JSON.stringify(value));
+    const S = loadStore(web);
+    await S.ready();
+    await settle();
+    S.mirror(V2);
+    await settle();
+    return web;
+  };
+  /* An eviction: the database as it was, localStorage wiped. */
+  const evict = prev => makeWeb({ seed: Object.fromEntries(prev.db) });
+
+  head('the mirrored key is not a managed key');
+  {
+    const S = loadStore(makeWeb({}));
+    ok('accsap12.v2 is mirrored', S.MIRRORED.indexOf(V2) > -1, S.MIRRORED.join(', '));
+    ok('and is NOT managed — the synchronous boot read is untouched',
+       S.MANAGED.indexOf(V2) < 0);
+    ok('the copy is namespaced away from the managed keys',
+       S.MIRROR_PREFIX.length > 0 && S.MANAGED.every(k => k !== S.MIRROR_PREFIX + V2));
+  }
+
+  head('a copy is kept, and localStorage is never taken over');
+  {
+    const web = await afterASession(PROGRESS);
+    ok('the database holds a copy', JSON.stringify(web.db.get('mirror:' + V2)) === JSON.stringify(PROGRESS),
+       JSON.stringify(web.db.get('mirror:' + V2)));
+    ok('and localStorage still holds the original, untouched',
+       web.ls.get(V2) === JSON.stringify(PROGRESS));
+    ok('the key did not move into the managed store',
+       web.db.get(V2) === undefined);
+  }
+
+  head('an eviction is survived — the whole point');
+  {
+    const first = await afterASession(PROGRESS);
+    const web = evict(first);
+    ok('localStorage really is empty at the start of the session',
+       web.ls.get(V2) === undefined);
+    const S = loadStore(web);
+    const r = await S.ready();
+    await settle();
+    ok('ready() reports what it put back', !!r && (r.restored || []).indexOf(V2) > -1,
+       JSON.stringify(r && r.restored));
+    ok('and the streak is back in localStorage, where load() will find it',
+       JSON.parse(web.ls.get(V2) || '{}').reviewStreak === 63,
+       String(JSON.parse(web.ls.get(V2) || '{}').reviewStreak));
+    ok('with the cards intact, which is the part nobody can rebuild',
+       JSON.stringify(JSON.parse(web.ls.get(V2)).srs) === JSON.stringify(PROGRESS.srs));
+  }
+
+  head('a save during the evicted boot does not destroy the copy');
+  {
+    /* THE FAILURE THIS WHOLE DESIGN IS SHAPED AROUND. The app boots on an
+       empty store and calls save() long before the database answers. If the
+       mirror were live at that moment it would copy a blob of empty defaults
+       over the only surviving progress — destroyed by the boot that was about
+       to rescue it, and looking exactly like success. */
+    const first = await afterASession(PROGRESS);
+    const web = evict(first);
+    const S = loadStore(web);
+    const booting = S.ready();
+    /* The app, mid-boot: empty S, and a save. */
+    web.ls.set(V2, JSON.stringify(EMPTY));
+    ok('the mirror refuses to write before the restore pass has run',
+       S.mirror(V2) === false);
+    ok('and says so in health(), rather than looking protected',
+       S.health().mirroring === false);
+    await booting;
+    await settle();
+    ok('the copy in the database is still the real progress',
+       JSON.parse(JSON.stringify(web.db.get('mirror:' + V2))).reviewStreak === 63,
+       JSON.stringify(web.db.get('mirror:' + V2)));
+    ok('and the empty blob the boot wrote has been replaced by it',
+       JSON.parse(web.ls.get(V2)).reviewStreak === 63,
+       String(JSON.parse(web.ls.get(V2)).reviewStreak));
+    ok('the mirror is armed once the pass is done', S.health().mirroring === true);
+  }
+
+  head('a live localStorage is always the authority');
+  {
+    /* The reverse direction, which must never happen: a stale copy must not
+       come back over a store that has something in it. */
+    const first = await afterASession(PROGRESS);
+    const web = makeWeb({ seed: Object.fromEntries(first.db) });
+    const NEWER = { schemaVersion: 1, srs: { COR_1: { d: 9.9, s: 400 } }, reviewStreak: 64 };
+    web.ls.set(V2, JSON.stringify(NEWER));
+    const S = loadStore(web);
+    const r = await S.ready();
+    await settle();
+    ok('nothing is restored over a store that has a value',
+       (r.restored || []).length === 0, JSON.stringify(r.restored));
+    ok('localStorage still holds the newer value',
+       JSON.parse(web.ls.get(V2)).reviewStreak === 64);
+    ok('and the copy was refreshed from it, not the other way round',
+       JSON.parse(JSON.stringify(web.db.get('mirror:' + V2))).reviewStreak === 64,
+       JSON.stringify(web.db.get('mirror:' + V2)));
+  }
+
+  head('a first run is not mistaken for an eviction');
+  {
+    const web = makeWeb({});
+    const S = loadStore(web);
+    const r = await S.ready();
+    await settle();
+    ok('nothing is restored when there was never anything',
+       (r.restored || []).length === 0, JSON.stringify(r.restored));
+    ok('and localStorage is left empty rather than stamped with a default',
+       web.ls.get(V2) === undefined);
+  }
+
+  head('no database means no false sense of safety');
+  {
+    const web = makeWeb({ openFails: true });
+    web.ls.set(V2, JSON.stringify(PROGRESS));
+    const S = loadStore(web);
+    await S.ready();
+    await settle();
+    ok('health() says the mirror is not running', S.health().mirroring === false);
+    ok('mirror() is a no-op rather than a thrown error', S.mirror(V2) === false);
+    ok('and the data is exactly where the app left it',
+       web.ls.get(V2) === JSON.stringify(PROGRESS));
+  }
+
+  head('a database that will not accept the copy loses nothing');
+  {
+    const web = makeWeb({ putFails: true });
+    web.ls.set(V2, JSON.stringify(PROGRESS));
+    const S = loadStore(web);
+    await S.ready();
+    await settle();
+    S.mirror(V2);
+    await settle();
+    ok('localStorage is untouched by a refused copy',
+       web.ls.get(V2) === JSON.stringify(PROGRESS));
+    ok('and no copy was recorded', web.db.get('mirror:' + V2) === undefined);
+  }
+
+  head('mirroring is cheap enough to call on a timer');
+  {
+    /* The caller is a visibility handler and an interval, not save() — save()'s
+       last line is the anchor scripts/resume-patch.js matches on. So mirror()
+       has to be free when nothing changed. */
+    const web = makeWeb({});
+    web.ls.set(V2, JSON.stringify(PROGRESS));
+    const S = loadStore(web);
+    await S.ready();
+    await settle();
+    let writes = 0;
+    const put = web.db.set.bind(web.db);
+    web.db.set = (k, v) => { if (String(k).indexOf('mirror:') === 0) writes++; return put(k, v); };
+
+    ok('the first call after a change copies', S.mirror(V2) === true);
+    await settle();
+    /* Counted as a DELTA around each phase. The first version of this asserted
+       an absolute total and was simply wrong about when counting began — the
+       code was right and the check was not. */
+    const before = writes;
+    ok('an unchanged blob is skipped', S.mirror(V2) === false);
+    await settle();
+    ok('and cost no transaction', writes - before === 0, `${writes - before} write(s)`);
+
+    web.ls.set(V2, JSON.stringify({ ...PROGRESS, reviewStreak: 64 }));
+    const beforeChange = writes;
+    ok('a changed blob is copied again', S.mirror(V2) === true);
+    await settle();
+    ok('which did write exactly once', writes - beforeChange === 1, `${writes - beforeChange} write(s)`);
+    ok('and the copy is the new value',
+       JSON.parse(JSON.stringify(web.db.get('mirror:' + V2))).reviewStreak === 64);
+  }
+
+  head('a refused copy is retried rather than remembered as done');
+  {
+    /* The skip above must not make a failure permanent: if the write was
+       refused, the next call has to try again. */
+    const web = makeWeb({ putFails: true });
+    web.ls.set(V2, JSON.stringify(PROGRESS));
+    const S = loadStore(web);
+    await S.ready();
+    await settle();
+    S.mirror(V2);
+    await settle();
+    ok('nothing was stored', web.db.get('mirror:' + V2) === undefined);
+    ok('and the same unchanged blob is attempted again, not skipped',
+       S.mirror(V2) === true);
+  }
+
+  head('an unmirrored key is refused by name');
+  {
+    const web = makeWeb({});
+    web.ls.set(KEY, JSON.stringify({ a: 1 }));
+    const S = loadStore(web);
+    await S.ready();
+    await settle();
+    ok('mirror() only takes the keys it was told about', S.mirror(KEY) === false);
+    ok('and wrote no copy of one it was not', web.db.get('mirror:' + KEY) === undefined);
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();
