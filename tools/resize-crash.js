@@ -62,6 +62,19 @@ const rebuild = page => page.evaluate(async () => {
   await new Promise(r => setTimeout(r, 250));
 });
 
+/* Keeps hold of whatever transition the app starts, so a case can wait for it
+   or skip it. Wraps rather than replaces: the page still goes through
+   document.startViewTransition exactly as failsafe-patch wrote it. */
+const STASH_VT = () => {
+  const orig = Document.prototype.startViewTransition;
+  if (!orig) return;
+  Document.prototype.startViewTransition = function (cb) {
+    const vt = orig.call(this, cb);
+    try { window.__vt = vt; } catch (_) {}
+    return vt;
+  };
+};
+
 /* Each case: what it does BEFORE the resize that is under suspicion. An `init`
    runs before the page navigates, for the cases that need the app to boot in a
    different world rather than to be poked afterwards. */
@@ -179,6 +192,43 @@ const CASES = [
            try { delete document.startViewTransition; } catch (_) {} }],
   /* And is it the SMALL size, or any resize at all? */
   ['a question and back, then a resize UP instead', visitAQuestion, null, { width: 1366, height: 1024 }],
+
+  /* ── ROUND THREE: the transition, and whether skipping it is the fix ─────
+     Round two's three survivors all say the same thing. A view transition
+     only starts when the SCREEN CHANGES — failsafe-patch.js:
+
+         const changingScreen = lastScreen!==null && lastScreen!==S.screen;
+         if(changingScreen && document.startViewTransition && !reduced){
+           const vt=document.startViewTransition(()=>renderNow());
+
+     — which is why a rebuild at the boot size and the whole prelude survive
+     (home to home starts nothing) and why a question visit does not (home to
+     quiz to home starts two). Waiting two seconds survives because the
+     transition has finished. Removing the API survives because none starts.
+     Resizing UP survives, so it is the shrink specifically. And the second
+     rebuild survived at dpr 1 and died at dpr 2 — a bigger snapshot taking
+     longer to settle is exactly the shape of a race.
+
+     These three separate "the transition is live" from "some time has passed",
+     and test the fix before anybody writes it. The wrapper stashes the
+     transition the app creates, so the page is driven through its own code
+     path rather than a substitute for it. */
+  ['a question and back, then awaiting the transition', async p => {
+    await visitAQuestion(p);
+    await p.evaluate(() => (window.__vt && window.__vt.finished
+      ? window.__vt.finished.catch(() => {}) : null));
+  }, STASH_VT],
+  ['a question and back, then skipTransition() on the live one', async p => {
+    await visitAQuestion(p);
+    await p.evaluate(() => {
+      try { if (window.__vt && window.__vt.skipTransition) window.__vt.skipTransition(); } catch (_) {}
+    });
+  }, STASH_VT],
+  /* Bounds the window: two seconds is plenty, is a third of a second? */
+  ['a question and back, then 300ms of nothing', async p => {
+    await visitAQuestion(p);
+    await p.waitForTimeout(300);
+  }],
 ];
 
 (async () => {
