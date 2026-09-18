@@ -43,12 +43,25 @@ const SMALL = { width: 390, height: 844 };
 const GONE = /Target (crashed|closed)|Target page, context or browser has been closed|Browser has been closed/i;
 
 const resize = async (page, w, h) => { await page.setViewportSize({ width: w, height: h }); };
+/* The one action that kills it, so the cases testing WHY all do the same thing
+   rather than three slightly different things. */
+const visitAQuestion = async p => {
+  await p.evaluate(() => {
+    if (typeof ALL_Q === 'undefined' || typeof jumpTo !== 'function') return;
+    const q = ALL_Q.find(x => !x.bad); if (q) { jumpTo(q.id); render(); }
+  });
+  await p.waitForTimeout(300);
+  await p.evaluate(() => { if (typeof goHome === 'function') { goHome(); render(); } });
+  await p.waitForTimeout(250);
+};
 const rebuild = page => page.evaluate(async () => {
   if (typeof goHome === 'function') { goHome(); render(); }
   await new Promise(r => setTimeout(r, 250));
 });
 
-/* Each case: what it does BEFORE the resize that is under suspicion. */
+/* Each case: what it does BEFORE the resize that is under suspicion. An `init`
+   runs before the page navigates, for the cases that need the app to boot in a
+   different world rather than to be poked afterwards. */
 const CASES = [
   ['nothing at all', async () => {}],
   ['one resize to 1366×1024', async p => { await resize(p, 1366, 1024); }],
@@ -75,6 +88,41 @@ const CASES = [
     await resize(p, 1194, 834); await rebuild(p);
     await resize(p, 1024, 1366); await rebuild(p);
   }],
+
+  /* ── the hypothesis, and the three ways of testing it ────────────────────
+     A jump into a question and back is the only thing that kills it, at both
+     scale factors. The mechanism the source suggests:
+
+       scripts/stage0-patch.js registers an ink host per question card —
+           host.__ro = new ResizeObserver(fit); host.__ro.observe(host);
+       and sweepInkHosts(), which disconnects the observers of hosts that have
+       left the document, is called from EXACTLY ONE PLACE: mountInk().
+
+     mountInk() runs when a QUESTION mounts. Going home replaces the DOM and
+     detaches the card, but mounts no question — so the sweep never runs and
+     the observer is left watching a node nobody can see. The next resize is
+     what fires it.
+
+     That story predicts all three of these. If it is wrong, they will say so
+     together rather than one at a time. */
+  ['a question, back, then the app\'s own sweep', async p => {
+    await visitAQuestion(p);
+    await p.evaluate(() => { if (typeof sweepInkHosts === 'function') sweepInkHosts(); });
+  }],
+  ['a question, back, then disconnecting every ink observer', async p => {
+    await visitAQuestion(p);
+    await p.evaluate(() => {
+      if (typeof INK_HOSTS === 'undefined') return;
+      for (const h of INK_HOSTS) { if (h.__ro) { h.__ro.disconnect(); h.__ro = null; } }
+    });
+  }],
+  /* THE DECISIVE ONE. The app already has a fallback for browsers without
+     ResizeObserver — a plain window resize listener — so taking the API away
+     before boot exercises the same feature through a different mechanism. If
+     this survives where the control dies, it is the observer and nothing else. */
+  ['a question and back, with ResizeObserver removed at boot',
+   visitAQuestion,
+   () => { delete window.ResizeObserver; }],
 ];
 
 (async () => {
@@ -82,12 +130,13 @@ const CASES = [
   console.log('each case is a fresh browser; the resize under test is always → 390×844\n');
   const rows = [];
   for (const dpr of [2, 1]) {
-    for (const [name, before] of CASES) {
+    for (const [name, before, init] of CASES) {
       const browser = await launch();
       let crashed = false, verdict = '?', note = '';
       try {
         const page = await browser.newPage({ viewport: { width: 460, height: 1000 }, deviceScaleFactor: dpr });
         page.on('crash', () => { crashed = true; });
+        if (init) await page.addInitScript(init);
         await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
         const { booted } = require('../tests/_render.js');
         await booted(page, { timeout: 150000 });
