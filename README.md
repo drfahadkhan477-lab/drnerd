@@ -40,11 +40,23 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the two suites that are pure logic with zero build dependency —
-`verify-fsrs.js` (the scheduler, 38 checks) and `verify-worker.js` (the
-Cloudflare Worker holding the Gemini key, 51 checks) — both stay green. See
-[`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
-scope and why the other 1210 checks can't run here.
+present, and the 24 suites that need neither a browser nor a build all stay
+green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
+the exact scope and why the other 1610 checks can't run here.
+
+### The device this is for
+
+**iPadOS 13.4 or newer.** Not a preference — the shipped app uses optional
+chaining and `??`, which Safari gained in 13.1 (iPadOS 13.4), and unsupported
+syntax is not a caught exception: it is a `<script>` block that never runs, and
+in this app that block holds the scheduler, the rhythm registry and most of the
+rest. One character costs an older tablet the whole application.
+
+Everything above that floor is either used freely or feature-guarded —
+`ResizeObserver` falls back to a `resize` listener, `startViewTransition` is
+guarded four times over, and `backdrop-filter` carries its `-webkit-` prefix.
+Nothing in the app requires a Safari newer than 13.4 unconditionally, and
+`tests/verify-ipad-pure.js` holds it to that.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why

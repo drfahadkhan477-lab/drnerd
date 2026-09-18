@@ -203,6 +203,20 @@ head('the prose agrees with the record');
      /Adding the other (\d+) checks to this file/, r => [+r[1] === stats.total + stats.pwa - ciTotal]],
     ['.github/workflows/verify.yml', 'the honest subset total',
      /(\d+) real checks/, r => [+r[1] === ciTotal]],
+    /* THE SAME HOLE AGAIN, in the README this time, and it had been open long
+       enough to go three ways stale: "the two suites that are pure logic",
+       naming verify-fsrs at 38 checks and verify-worker at 51 when they are 89
+       and 73, and "the other 1210 checks" when it was 1646. Every number
+       around that paragraph was guarded and it was not, so the surrounding
+       green read as coverage of it. It no longer names individual suites —
+       a sentence that lists two of twenty-four is a sentence that goes stale
+       the next time one is added. */
+    ['README.md', 'the size of what CI can run',
+     /the (\d+) suites that need neither a browser nor a build/,
+     r => [+r[1] === ciSuites.length]],
+    ['README.md', 'the count of what CI cannot run',
+     /why the other (\d+) checks can't run here/,
+     r => [+r[1] === stats.total + stats.pwa - ciTotal]],
     /* THE ONE UNGUARDED SENTENCE IN A BLOCK OF GUARDED ONES. The header
        describing the logic job opened "the nine suites that are pure Node" and
        still said nine when there were eighteen — it had been maintained by

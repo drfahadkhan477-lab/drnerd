@@ -56,8 +56,18 @@ function walk(dir, out = []) {
 const rel = p => path.relative(ROOT, p).split(path.sep).join('/');
 const blanked = p => blankComments(fs.readFileSync(p, 'utf8'));
 
-/* Everything under src/ is embedded into the app verbatim by the chain, so
-   every character of it is parsed by Safari. */
+/* Everything under src/ is embedded into the app by the chain, so every
+   character of it is parsed by Safari.
+
+   NOT QUITE "VERBATIM", WHICH IS WHAT THIS SAID. Measured: at least eight
+   patch steps rewrite text that lives in src/ — three of them inside
+   src/core/vision.js alone, which is why that file still reads
+   {anthropic:true, groq:false} while the app ships {gemini:true}. The
+   direction of the error is safe for the rule below, since a line the chain
+   later replaces is still scanned, but the claim was wider than the check:
+   syntax a PATCH introduces is invisible here, and the comment implied
+   otherwise. The bundle-level version in verify-apex is the one that covers
+   that, and it needs a build. */
 const SRC_FILES = walk(path.join(ROOT, 'src'));
 head('the scan has something to scan');
 {
@@ -126,6 +136,115 @@ head('nothing in src/ ships a regex lookbehind');
    text. Same constraint, same device; one can be checked cheaply and one
    cannot, and pretending otherwise is the failure this repository keeps
    finding in itself. */
+
+/* ── the floor, written down once and held to ───────────────────────────────
+   THE PROJECT NEVER SAID WHICH iPadOS IT SUPPORTS. It defends against a
+   lookbehind because that is a SyntaxError "below Safari 16.4", which fixes
+   the ceiling of the problem and leaves the floor unstated — so whether `?.`
+   (13.1) or crypto.randomUUID (15.4) was allowed had to be re-decided, by
+   feel, every time it came up.
+
+   IT IS NOT A PREFERENCE, IT IS ALREADY DECIDED. The shipped app uses optional
+   chaining and ?? in six patch replacements — heartreuse, heroart, polish,
+   calibrate, gemini and mistral — and both landed in Safari 13.1, which is
+   iPadOS 13.4. Nothing can lower the floor below that without those going
+   first. So 13.4 is not chosen here; it is read off the code and written down.
+
+   WHAT THIS CHECKS IS THE CEILING ON NEW WORK. Everything below shipped AFTER
+   Safari 13.4, so any of it appearing in src/ would raise the floor silently.
+   Each one is the kind of thing that gets reached for without thinking —
+   .at(-1) instead of [len-1], structuredClone instead of a JSON round trip —
+   and none of them announces that it has just dropped support for a tablet.
+
+   FEATURE-GUARDED USE IS NOT A FLOOR, and the app already does this properly:
+   ResizeObserver is behind `typeof ResizeObserver!=='undefined'` with a resize
+   listener as the fallback, and startViewTransition is guarded four times in
+   failsafe-patch. Those are not caught here because they are not in src/;
+   if one appears here it will be flagged, and a guard around it is the fix. */
+const FLOOR = '13.4';
+const ABOVE_FLOOR = [
+  ['Array.prototype.at', /\.at\(\s*-?\d/, 'Safari 15.4'],
+  ['Object.hasOwn', /\bObject\.hasOwn\s*\(/, 'Safari 15.4'],
+  ['Array.prototype.findLast', /\.findLast(?:Index)?\s*\(/, 'Safari 15.4'],
+  ['structuredClone', /\bstructuredClone\s*\(/, 'Safari 15.4'],
+  ['crypto.randomUUID', /\bcrypto\.randomUUID\b/, 'Safari 15.4'],
+  ['logical assignment (||= &&= ??=)', /(?:\|\||&&|\?\?)=[^=]/, 'Safari 14'],
+  ['Promise.any', /\bPromise\.any\s*\(/, 'Safari 14'],
+  ['Intl.RelativeTimeFormat', /\bIntl\.RelativeTimeFormat\b/, 'Safari 14'],
+  ['AbortSignal.timeout', /\bAbortSignal\.timeout\b/, 'Safari 16'],
+  ['Array.prototype.group', /\.group(?:By)?\s*\(/, 'Safari 17.4'],
+];
+
+/* WHAT SAFARI ACTUALLY PARSES, which is not all of src/. src/worker/apex.js
+   is the Cloudflare Worker that holds the Gemini key: build-pwa.js writes it
+   out as _worker.js at the root of the upload, where Cloudflare runs it, and
+   it is never embedded into the HTML the iPad loads. Holding it to Safari's
+   floor would be holding server code to a browser's limits — it uses
+   AbortSignal.timeout quite legitimately.
+
+   THE EXCLUSION IS ASSERTED, NOT ASSUMED, below: if that file ever starts
+   being embedded into the bundle, the check that says it is not will fail
+   before this list silently stops covering it. */
+const SAFARI_FILES = SRC_FILES.filter(f => !/[\\/]worker[\\/]/.test(f));
+
+head('the worker is server code, and is excluded on that basis');
+{
+  ok('src/ has a worker to exclude', SRC_FILES.length - SAFARI_FILES.length === 1,
+     `${SRC_FILES.length - SAFARI_FILES.length} excluded`);
+  const pwa = fs.readFileSync(path.join(ROOT, 'scripts', 'build-pwa.js'), 'utf8');
+  ok('build-pwa writes it out as its own file, not into the bundle',
+     /_worker\.js/.test(pwa) && /'worker',\s*'apex\.js'/.test(pwa));
+  ok('and no patch step embeds it into the app',
+     fs.readdirSync(path.join(ROOT, 'scripts'))
+       .filter(n => /-patch\.js$/.test(n))
+       .every(n => !/worker[\\/]apex/.test(fs.readFileSync(path.join(ROOT, 'scripts', n), 'utf8'))));
+  ok('so what Safari parses is the rest', SAFARI_FILES.length > 5, `${SAFARI_FILES.length} files`);
+}
+
+head(`nothing Safari parses needs a Safari newer than the floor (iPadOS ${FLOOR})`);
+{
+  const hits = [];
+  for (const f of SAFARI_FILES) {
+    const src = blanked(f);
+    for (const [name, re, since] of ABOVE_FLOOR) {
+      const g = new RegExp(re.source, 'g');
+      const n = (src.match(g) || []).length;
+      if (n) hits.push(`${rel(f)}: ${name} ×${n} (${since})`);
+    }
+  }
+  ok('no construct that arrived after the floor', hits.length === 0, hits.join('; ') || 'none');
+  /* Vacuity guard, and a real one: the list above is only worth anything if
+     its patterns match the thing they name. A typo'd regex matches nothing and
+     the check passes forever. */
+  const fixture = 'a.at(-1); Object.hasOwn(o,"k"); structuredClone(x); ' +
+                  'crypto.randomUUID(); let z; z ||= 1; Promise.any([]); ' +
+                  'new Intl.RelativeTimeFormat(); AbortSignal.timeout(1); ' +
+                  'xs.findLast(f); xs.groupBy(f);';
+  const matched = ABOVE_FLOOR.filter(([, re]) => re.test(fixture));
+  ok('and every pattern in the list can actually match',
+     matched.length === ABOVE_FLOOR.length,
+     `${matched.length} of ${ABOVE_FLOOR.length}` +
+     (matched.length === ABOVE_FLOOR.length ? ''
+       : ' — missed: ' + ABOVE_FLOOR.filter(x => !matched.includes(x)).map(x => x[0]).join(', ')));
+}
+
+head('and the floor is written down where somebody will find it');
+{
+  /* Prose follows the record here too. A floor that lives only in this file is
+     a floor nobody reading the README knows about, and a floor in the README
+     alone is one that drifts. */
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  const m = readme.match(/\*\*iPadOS (\d+\.\d+) or newer\.\*\*/);
+  ok('README states a minimum iPadOS', !!m, m ? m[1] : 'no such sentence');
+  ok('and it is the same floor this file checks against',
+     !!m && m[1] === FLOOR, m ? `README ${m[1]} vs ${FLOOR}` : '—');
+  /* \s+ RATHER THAN A SPACE. The first version matched /optional chaining/ and
+     went red on a README that says exactly that — markdown hard-wraps, the
+     phrase straddles a line break, and the check was testing the column width
+     of a paragraph rather than its content. */
+  ok('and it says why, rather than only what',
+     /optional\s+chaining/.test(readme) && /<script>/.test(readme));
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
