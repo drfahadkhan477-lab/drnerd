@@ -206,9 +206,41 @@ const LOADER = `<script>
       if(s) s.textContent = msg;
     }
   }
+  /* WHY IT FAILED, RATHER THAN A GUESS AT WHY. This said one sentence for
+     every possible failure — "Open this over http, not as a file" — and that
+     sentence is right for exactly one of them. A deployment whose content
+     folder did not upload prints it too, and so does a sign-in page returned
+     in place of the bank. Both happened; the second cost an evening, because
+     the screen names a cause it has not checked and the obvious next move is
+     to go looking for a file:// problem that is not there.
+
+     The stage variable records how far the load got, which is the only thing
+     that can tell these apart from inside the catch. Kept as a plain function
+     so tests/verify-loader-pure.js can drive every branch without a browser.
+
+     NO BACKTICKS IN HERE. This whole loader is a template literal in
+     scripts/build-pwa.js, and one in a comment ends the string — which is how
+     the first version of this paragraph broke the build script rather than
+     the build. */
+  function whyContentFailed(stage, status, proto){
+    if(proto === 'file:')
+      return 'Open this over http, not as a file — it needs to fetch its content.';
+    if(stage === 'network')
+      return 'Could not reach the server for content/questions.json.';
+    if(stage === 'status')
+      return status === 404
+        ? 'content/questions.json is not on the server (404). If this was just deployed, the content folder did not make it into the upload.'
+        : 'The server answered ' + status + ' for content/questions.json.';
+    if(stage === 'parse')
+      return 'content/questions.json loaded but is not the question bank — a sign-in page or an error page in its place will do this.';
+    return 'Could not load content/questions.json.';
+  }
+  var res = null, stage = 'network';
   try{
-    var res = await fetch('content/questions.json', {cache:'no-cache'});
+    res = await fetch('content/questions.json', {cache:'no-cache'});
+    stage = 'status';
     if(!res.ok) throw new Error('HTTP '+res.status);
+    stage = 'parse';
     var qs = await res.json();
     window.ALL_Q = qs;
     /* id → array of figure URLs. Same shape the app already expected, so
@@ -224,7 +256,7 @@ const LOADER = `<script>
        already in memory, and a button offering to fetch them would be a lie. */
     window.SPLIT_BUILD = true;
   }catch(err){
-    return fail('Open this over http, not as a file — it needs to fetch its content.', err);
+    return fail(whyContentFailed(stage, res && res.status, location.protocol), err);
   }
   /* STOPS HERE WHEN app.js DOES NOT LOAD. It used to be a trailing
      .catch(function(err){ fail(...) }) with nothing else, so the splash showed

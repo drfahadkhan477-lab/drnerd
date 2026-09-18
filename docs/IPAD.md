@@ -110,8 +110,13 @@ folders, because its unzipper guesses. Cloudflare's does not. It reads
 `content\questions.json` as one oddly-named file at the root, so no `content/`
 directory is ever created and every figure, font and icon is missing while the
 five root files work perfectly. The app loads, the service worker installs,
-and the splash says **"Could not load the question bank"** — which is the one
-message the loader prints for any failed fetch, and it blames the wrong thing.
+and the splash says **"Could not load the question bank"**, with a second line
+naming which failure it was. When this happened that second line read *"open
+this over http, not as a file"* — the only sentence the loader had, and the
+wrong one, which is why it sent the search in the wrong direction. It now says
+*"content/questions.json is not on the server (404) — if this was just
+deployed, the content folder did not make it into the upload"*, which is the
+sentence that would have ended it in a minute.
 
 This happened. 420 of 425 entries were affected; the five that were not are
 the five at the root.

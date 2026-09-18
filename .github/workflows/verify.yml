@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 24 suites that are pure Node with no Playwright and no
+#   logic        the 25 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -177,6 +177,8 @@ jobs:
         run: node tests/verify-md-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
+      - name: a splash that cannot load the bank says which failure it was (23 checks)
+        run: node tests/verify-loader-pure.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

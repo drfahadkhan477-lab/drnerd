@@ -175,6 +175,10 @@ const SUITES = [
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
   ['ecg12-pure',   'a big square is 0.2 s, on every canvas the panel is given'],
+  /* The only diagnostic a fellow standing in front of a broken deployment
+     has. It said one sentence for every failure and that sentence was right
+     for one of them; the wrong one cost an evening. */
+  ['loader-pure',  'a splash that cannot load the bank says which failure it was'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -220,7 +224,7 @@ const SUITES = [
    while the only machine that could run the full thing was not being run. The
    first full green run wrote all fourteen at once. If this fills up again, that
    is the same gap reopening. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['loader-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
