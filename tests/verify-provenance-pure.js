@@ -224,5 +224,82 @@ head('the artifact names the commit that produced it');
      && /dirty \? at \+ '-dirty' : at/.test(EXTRACT));
 }
 
+head('the single file says which commit made it, too');
+{
+  /* IT SAID NOTHING AT ALL until now. The split build has carried a BUILD_ID
+     since the shell/content split and a commit since the provenance pass;
+     systole.html carried neither — and it is the artifact that actually
+     travels, dropped into Files and opened on a tablet away from the
+     repository that made it. "Is this the build with the fix?" had no answer
+     in the file.
+
+     AFTER THE CHAIN, NOT INSIDE IT, and that is the property worth holding:
+     a stamping step would be an 83rd link whose output every later anchor
+     would have to tolerate. Asserted by position — the stamp must be written
+     below the loop that runs CHAIN. */
+  const BUILD = fs.readFileSync(path.join(ROOT, 'scripts', 'build.js'), 'utf8');
+  ok('build.js stamps the finished document', /systole-build \$\{digest\} commit \$\{commit\}/.test(BUILD));
+  const loopAt = BUILD.indexOf('for (const step of CHAIN)');
+  const stampAt = BUILD.indexOf('systole-build ${digest}');
+  ok('and does it after the chain has run, so no patch anchor can see it',
+     loopAt > 0 && stampAt > loopAt, `chain@${loopAt} stamp@${stampAt}`);
+  /* The chain itself must not have grown a step for this. */
+  ok('the chain is not one step longer for it',
+     !/stamp-patch|provenance-patch/.test(BUILD));
+
+  /* A COMMENT, NOT A SCRIPT: nothing to execute, so no CSP question and no
+     new inline script for verify-csp or verify-stage0 to account for. */
+  ok('the stamp is an HTML comment', /const stamp = `<!-- systole-build/.test(BUILD));
+
+  /* </head> is the boundary build-pwa.js already holds to exactly one
+     occurrence, so this reuses a checked anchor rather than guessing a new
+     one — and refuses rather than appending blindly when it is not there. */
+  ok('it is placed at the one anchor this repo already checks',
+     /built\.split\('<\/head>'\)\.length - 1 !== 1/.test(BUILD)
+     && /built\.replace\('<\/head>', stamp \+ '<\/head>'\)/.test(BUILD));
+  ok('and a document without exactly one </head> is refused, not stamped',
+     /process\.exit\(1\)/.test(BUILD.slice(BUILD.indexOf('nowhere to stamp it'), BUILD.indexOf('nowhere to stamp it') + 120)));
+
+  /* Over the UNSTAMPED bytes, because stamping changes them — the same move
+     BUILD_ID makes in build-pwa.js, for the same reason. */
+  ok('the digest is taken before the stamp goes in',
+     /const built = fs\.readFileSync\(input, 'utf8'\);[\s\S]{0,120}?createHash\('sha256'\)\.update\(built\)/.test(BUILD));
+
+  /* NO CLOCK. The same export at the same commit must produce the same
+     bytes; a timestamp in the artifact would end that for nothing. */
+  ok('no timestamp rides along, so the build stays reproducible',
+     !/new Date\(\)/.test(BUILD.slice(stampAt - 900, stampAt + 300)));
+
+  /* Same two rules as everywhere else: a tarball is a legitimate place to
+     build from, and a dirty tree is a claim the repository cannot honour. */
+  ok('a missing git is "unknown" here as well', /return 'unknown';/.test(BUILD));
+  ok('and a dirty tree is marked', /dirty \? at \+ '-dirty' : at/.test(BUILD));
+}
+
+head('the built artifacts are checked where only a build can check them');
+{
+  /* WHAT THIS FILE CANNOT DO, said once rather than implied. Everything above
+     reads build-pwa.js and build.js as TEXT: it proves they EMIT the stamps.
+     It cannot tell whether a stamp survived substitution, the split, the font
+     lift or eight later rewrites of `html`. Only the artifact answers that,
+     and only a run with the licensed export produces one.
+
+     So the browser suite must carry the other half, and this asserts it does
+     — otherwise "provenance is tested" would be true of the emitting and
+     false of the artifact, which is the shape of hole this repository keeps
+     finding: green that covers the paragraph beside the one with the hole. */
+  const PWASUITE = fs.readFileSync(path.join(ROOT, 'tests', 'verify-pwa.js'), 'utf8');
+  ok('verify-pwa reads the commit off the served shell', /SHELL_COMMIT = '\(\[\^'\]\*\)'/.test(PWASUITE));
+  ok('and off app.js and the worker',
+     /var APP_COMMIT='\(\[\^'\]\*\)'/.test(PWASUITE) && /const COMMIT\\s\*=\\s\*'\(\[\^'\]\*\)'/.test(PWASUITE));
+  ok('and holds all three to the same commit', /all three agree on which commit that was/.test(PWASUITE));
+  ok('and refuses an unsubstituted placeholder in the artifact',
+     /no unsubstituted placeholder reached the artifact/.test(PWASUITE));
+  ok('and will not accept the build stamp in the commit slot',
+     /the commit is a commit, not a copy of the build stamp/.test(PWASUITE));
+  ok('and checks the content manifest the freshness gate compares against',
+     /the extracted content records a commit as well/.test(PWASUITE));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

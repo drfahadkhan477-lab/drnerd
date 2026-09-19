@@ -27,6 +27,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
@@ -436,7 +437,63 @@ for (const step of CHAIN) {
   input = out;
 }
 
-fs.copyFileSync(input, OUT);
+/* ── the stamp ───────────────────────────────────────────────────────────────
+ *
+ * WHAT THE SINGLE FILE COULD NOT SAY. The split build has carried a BUILD_ID
+ * and, since the provenance pass, the commit that produced it — in
+ * index.html, app.js, sw.js and content/manifest.json. systole.html carried
+ * neither. It is the artifact that actually travels: the one dropped into
+ * Files and opened on a tablet, away from the repository that made it, and
+ * the one that comes back months later as "is this the build with the fix?".
+ * Nothing in it answered that.
+ *
+ * AFTER THE CHAIN, NOT INSIDE IT. A stamping step would be an 83rd link whose
+ * output every later anchor would have to tolerate, for a change that has
+ * nothing to do with the app. This runs once the 82 are done, on the finished
+ * document, so no patch() anchor can see it and the chain is untouched.
+ *
+ * A COMMENT, NOT A SCRIPT. It executes nothing, so there is no CSP question
+ * and no new inline script to account for; and `grep systole-build` on the
+ * build machine is how this actually gets read. The split build's window
+ * global exists because a deployed site can be opened in a console; a 42 MB
+ * file on an iPad cannot, so the global would be decoration there.
+ *
+ * NO TIMESTAMP, deliberately. The same export at the same commit produces the
+ * same bytes, and a clock in the artifact would end that for nothing — the
+ * digest already distinguishes two builds, and the commit already dates one.
+ *
+ * THE DIGEST IS OVER THE UNSTAMPED DOCUMENT, because stamping changes it.
+ * Same move, same reason, as BUILD_ID in scripts/build-pwa.js.
+ */
+function gitCommit() {
+  try {
+    const at = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'],
+                            { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (!/^[0-9a-f]{7,40}$/.test(at)) return 'unknown';
+    const dirty = execFileSync('git', ['status', '--porcelain'],
+                               { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().length > 0;
+    return dirty ? at + '-dirty' : at;
+  } catch (_) { return 'unknown'; }
+}
+{
+  const built = fs.readFileSync(input, 'utf8');
+  const digest = crypto.createHash('sha256').update(built).digest('hex').slice(0, 16);
+  const commit = gitCommit();
+  /* </head> is the anchor scripts/build-pwa.js already holds to exactly one
+     occurrence, so it is a boundary this repository has checked rather than a
+     new guess. Asserted here too: the stamp going in twice is as wrong as it
+     not going in, and silently appending to a document that has no head is
+     worse than refusing. */
+  if (built.split('</head>').length - 1 !== 1) {
+    console.error('the built document does not have exactly one </head>, so there is nowhere to stamp it');
+    process.exit(1);
+  }
+  /* No "--" inside: a hex digest, a hex commit with an optional -dirty, and a
+     middle dot. Nothing here can close the comment early. */
+  const stamp = `<!-- systole-build ${digest} commit ${commit} -->\n`;
+  fs.writeFileSync(OUT, built.replace('</head>', stamp + '</head>'));
+  console.log(`\n  build ${digest}   from commit ${commit}`);
+}
 if (!KEEP) for (const s of CHAIN) { const f = stepFile(s); if (f !== OUT && fs.existsSync(f)) fs.unlinkSync(f); }
 
 const totalEdits = report.reduce((n, r) => n + (+r.edits || 0), 0);

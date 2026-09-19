@@ -837,6 +837,47 @@ async function heapAfterBoot(page, url) {
     const shellV = idOf(sw, /const SHELL_V\s*=\s*'([a-f0-9]+)'/);
     ok('the stamp is not merely the shell digest under another name',
        !!shellV && a !== shellV, `build ${a}, shell ${shellV}`);
+
+    /* ── AND WHICH COMMIT MADE THEM ────────────────────────────────────────
+       BUILD_ID says the three files are from the same deploy. It cannot say
+       which commit to open to read what is in them, and three months after a
+       deployment that is the question. The commit rides beside it in all
+       three files and in content/manifest.json.
+
+       CHECKED HERE, OFF THE SERVED DIRECTORY, because until now nothing did.
+       tests/verify-provenance-pure.js asserts build-pwa.js EMITS these — it
+       reads that script as text and cannot tell whether a stamp survived
+       substitution, the split, the font lift or the minifier. This reads the
+       artifact, which is the only thing that answers it. Same division as
+       every other pair of pure and browser suites here. */
+    const gitish = /^(?:[0-9a-f]{7,40}(?:-dirty)?|unknown)$/;
+    const ca = idOf(shell, /SHELL_COMMIT = '([^']*)'/);
+    const cb = idOf(app, /var APP_COMMIT='([^']*)'/);
+    const cc = idOf(sw, /const COMMIT\s*=\s*'([^']*)'/);
+    ok('index.html names the commit it was built from', !!ca && gitish.test(ca), ca || 'absent');
+    ok('app.js names it too', !!cb && gitish.test(cb), cb || 'absent');
+    ok('and so does the worker', !!cc && gitish.test(cc), cc || 'absent');
+    ok('all three agree on which commit that was', !!ca && ca === cb && cb === cc,
+       `${ca} / ${cb} / ${cc}`);
+    /* THE PLACEHOLDER MUST NOT SURVIVE. build-pwa.js throws if __COMMIT__ is
+       still present after substitution, but that check reads `html` before
+       eight further steps rewrite it. A literal __COMMIT__ reaching a device
+       is a stamp that looks present and says nothing. */
+    ok('no unsubstituted placeholder reached the artifact',
+       !/__COMMIT__|__BUILD_ID__/.test(shell + app + sw));
+    /* AND IT IS NOT THE BUILD ID WEARING A HAT. If someone ever folded the
+       commit into BUILD_ID, or stamped BUILD_ID into both slots, these would
+       read identically and every check above would still pass. */
+    ok('the commit is a commit, not a copy of the build stamp', ca !== a,
+       `commit ${ca}, build ${a}`);
+    /* The content half, which is written by a different script entirely
+       (extract-content.js) and is the one that says which commit the BANK
+       came from — the half the freshness check compares. */
+    const manifest = await (await fetch(new URL('content/manifest.json', target).href)).json();
+    ok('the extracted content records a commit as well',
+       !!manifest.commit && gitish.test(String(manifest.commit)), String(manifest.commit));
+    ok('and a sourceDigest, which is what build-pwa compares against',
+       /^[a-f0-9]{16}$/.test(String(manifest.sourceDigest)), String(manifest.sourceDigest));
   }
 
   head('the split build fits the screen it is held on');
