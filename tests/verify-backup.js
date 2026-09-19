@@ -24,6 +24,7 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-backup.js <patched.html|url>'); process.exit(1); }
@@ -34,7 +35,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 const boot = async page => {
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
@@ -78,8 +80,15 @@ const restore = `(text) => new Promise(resolve => {
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage();
-  page.on('pageerror', e => ok('no uncaught page error', false, e.message));
+  /* The page errors were only ever asserted on, live. Kept — an error here is
+     still a failure the moment it happens — but also collected, because a
+     suite that dies never gets to print the assertion it was building towards.
+     See tests/_deathnote.js. */
+  const events = [], errors = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
+  const page = watch(await browser.newPage(), events);
+  page.on('pageerror', e => { errors.push(e.message); ok('no uncaught page error', false, e.message); });
   await boot(page);
 
   head('a well-formed backup is restored — live view and store together');

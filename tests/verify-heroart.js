@@ -41,6 +41,7 @@
 'use strict';
 const path = require('path');
 const { launch, engineName, isEngineNoise } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-heroart.js <patched.html>'); process.exit(1); }
@@ -58,12 +59,15 @@ const unmeasurable = (label, why) => {
   unmeasured++;
   console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
-  const errors = [];
+  const errors = [], events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
+  const page = watch(await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 }), events, 'main');
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
   /* Collected separately because it arrives as a WARNING, not an error, so the
@@ -403,7 +407,7 @@ head('a destroyed heart gives its context back');
 }
 
   head('reduced motion holds the fallback still');
-  const rm = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+  const rm = watch(await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' }), events, 'reduced-motion');
   await rm.goto(URL, { waitUntil: 'commit', timeout: 250000 });
   await rm.waitForFunction(() => !!document.querySelector('#heroHeart .h-beat'), null, { timeout: 60000 });
   const r1 = await rm.evaluate(() => getComputedStyle(document.querySelector('#heroHeart .h-beat')).transform);

@@ -141,6 +141,32 @@ head('CI runs what the workflow says it runs');
   ok('and each label is the count that suite reported', wrong.length === 0, wrong.join('; ') || 'none');
 }
 
+head('CI runs everything it is capable of running');
+{
+  /* THE OTHER DIRECTION, and the one that was missing. Everything above asks
+     whether the suites the workflow names are real and correctly labelled. It
+     never asked whether a suite the workflow COULD run is absent from it — and
+     one was: verify-cause-pure, registered in scripts/verify.js, 32 checks, no
+     browser, and the workflow had never heard of it. Nineteen green steps read
+     as "the logic suites pass", which is exactly the shape CLAUDE.md warns
+     about: a guard with a hole in it is worse than no guard, because the
+     surrounding green reads as coverage of the whole paragraph.
+
+     Two lists maintained by hand will drift again, so the workflow is held to
+     the registry rather than to whoever remembers. tests/_targets.js decides
+     what "capable" means and is conservative in the direction that matters —
+     see runsInCI() there. */
+  const { runsInCI } = require('./_targets.js');
+  const registered = [...read('scripts/verify.js')
+    .matchAll(/\[\s*'([a-z0-9-]+)',\s*'/g)].map(m => m[1]);
+  ok('the registry was read', registered.length > 40, `${registered.length} suites`);
+  const able = registered.filter(n => runsInCI(n).able);
+  ok('and some of them need no browser at all', able.length > 5, `${able.length} of ${registered.length}`);
+  const missing = able.filter(n => !ciSuites.includes(n));
+  ok('every suite CI can run, CI runs', missing.length === 0,
+     missing.length ? missing.join(', ') + ' — registered, browser-free, not in the workflow' : 'none missing');
+}
+
 head('the prose agrees with the record');
 {
   /* Each of these is one sentence somebody would otherwise maintain from
@@ -177,6 +203,20 @@ head('the prose agrees with the record');
      /Adding the other (\d+) checks to this file/, r => [+r[1] === stats.total + stats.pwa - ciTotal]],
     ['.github/workflows/verify.yml', 'the honest subset total',
      /(\d+) real checks/, r => [+r[1] === ciTotal]],
+    /* THE SAME HOLE AGAIN, in the README this time, and it had been open long
+       enough to go three ways stale: "the two suites that are pure logic",
+       naming verify-fsrs at 38 checks and verify-worker at 51 when they are 89
+       and 73, and "the other 1210 checks" when it was 1646. Every number
+       around that paragraph was guarded and it was not, so the surrounding
+       green read as coverage of it. It no longer names individual suites —
+       a sentence that lists two of twenty-four is a sentence that goes stale
+       the next time one is added. */
+    ['README.md', 'the size of what CI can run',
+     /the (\d+) suites that need neither a browser nor a build/,
+     r => [+r[1] === ciSuites.length]],
+    ['README.md', 'the count of what CI cannot run',
+     /why the other (\d+) checks can't run here/,
+     r => [+r[1] === stats.total + stats.pwa - ciTotal]],
     /* THE ONE UNGUARDED SENTENCE IN A BLOCK OF GUARDED ONES. The header
        describing the logic job opened "the nine suites that are pure Node" and
        still said nine when there were eighteen — it had been maintained by

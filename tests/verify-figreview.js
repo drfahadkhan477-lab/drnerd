@@ -28,13 +28,22 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { launch } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
+
+/* Out here, and installed out here, because the tail is `})().catch(…)`: a
+   catch handles the rejection, so nothing is ever unhandled and a note
+   installed inside the IIFE would never fire. The catch takes the emitter. */
+const errs = [], events = [];
+const died = onDeath(() => ({ section, checks: passed + failed, errors: errs,
+                              events: events.length ? events.join(', ') : 'none' }));
 
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'figreview-'));
@@ -128,8 +137,7 @@ const py = (args, opts) => execFileSync(PY[0], [...PY.slice(1), ...args], opts);
      !/https?:\/\//.test(html.replace(/data:image[^"']+/g, '')));
 
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 900, height: 1100 }, hasTouch: true });
-  const errs = [];
+  const page = watch(await browser.newPage({ viewport: { width: 900, height: 1100 }, hasTouch: true }), events);
   page.on('pageerror', e => errs.push(String(e)));
   await page.goto('file://' + OUT);
   await page.waitForSelector('.card');
@@ -367,4 +375,4 @@ py(['-c', pageFixture, pagesDir], { stdio: 'pipe' });
   fs.rmSync(TMP, { recursive: true, force: true });
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
-})().catch(e => { console.error(e); process.exit(1); });
+})().catch(died);

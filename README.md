@@ -22,7 +22,7 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 2146 checks, 68 suites
+node scripts/verify.js                              # 2453 checks, 74 suites
 node scripts/verify.js --pwa                        # + 125 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
@@ -33,18 +33,30 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 2146 + 125 checks above — read it as 625, not 2271.**
+**That badge is not the 2453 + 125 checks above — read it as 969, not 2578.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the two suites that are pure logic with zero build dependency —
-`verify-fsrs.js` (the scheduler, 38 checks) and `verify-worker.js` (the
-Cloudflare Worker holding the Gemini key, 51 checks) — both stay green. See
-[`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
-scope and why the other 1210 checks can't run here.
+present, and the 27 suites that need neither a browser nor a build all stay
+green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
+the exact scope and why the other 1609 checks can't run here.
+
+### The device this is for
+
+**iPadOS 13.4 or newer.** Not a preference — the shipped app uses optional
+chaining and `??`, which Safari gained in 13.1 (iPadOS 13.4), and unsupported
+syntax is not a caught exception: it is a `<script>` block that never runs, and
+in this app that block holds the scheduler, the rhythm registry and most of the
+rest. One character costs an older tablet the whole application.
+
+Everything above that floor is either used freely or feature-guarded —
+`ResizeObserver` falls back to a `resize` listener, `startViewTransition` is
+guarded four times over, and `backdrop-filter` carries its `-webkit-` prefix.
+Nothing in the app requires a Safari newer than 13.4 unconditionally, and
+`tests/verify-ipad-pure.js` holds it to that.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why

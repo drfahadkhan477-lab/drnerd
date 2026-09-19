@@ -44,8 +44,9 @@
  */
 'use strict';
 const path = require('path');
-const { launch, isEngineNoise } = require('./_engine');
+const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-flushguard.js <patched.html|url>'); process.exit(1); }
@@ -56,7 +57,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 const TAIL = 'and the tail of the answer arrived last.';
 const part = p => 'data: ' + JSON.stringify({ candidates: [{ content: { role: 'model', parts: [p] } }] }) + '\n\n';
@@ -70,8 +72,23 @@ const CALL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 950 } });
+  const page = await routablePage(browser, { viewport: { width: 1280, height: 950 } });
+  /* Hoisted so the death note can read them — this suite dies on WebKit
+     against the served build, and the check that reports console errors is
+     the one check a death never reaches. See tests/_deathnote.js. */
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* Installed once the arrays exist. A crash and a close are different
+     diagnoses and Playwright reports both as "Target page, context or
+     browser has been closed" on the next call; only the event says which. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
@@ -83,7 +100,11 @@ const CALL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   await booted(page);
-  await page.evaluate(() => new Promise(r => setTimeout(r, 800)));
+  /* Driver-side. An evaluate whose whole body is a timer holds an execution
+     context open in the page for the pause, and a page that goes away in that
+     window reports the failure as a failure of the wait — which is how this
+     suite's crash arrived looking like a broken sleep. */
+  await page.waitForTimeout(800);
 
   /* The spy. innerHTML is read straight after the real flush returns, because
      streamReply's finally calls buildAI() a tick later and the node the tail
@@ -200,7 +221,7 @@ const CALL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
     /* Wait for both chunks to have been read and accumulated, so there is a
        tail to lose. */
     await page.waitForFunction(() => (window.__fg.built === 1), null, { timeout: 20000 });
-    await page.evaluate(() => new Promise(r => setTimeout(r, 250)));
+    await page.waitForTimeout(250);
     /* The app's own stop: the send button is the stop button while busy. It
        used to be rendered `disabled` in exactly that state, so this is the
        check that the control is a control — clicking a disabled button does

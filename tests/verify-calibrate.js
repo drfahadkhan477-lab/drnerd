@@ -19,6 +19,7 @@
 const path = require('path');
 const { launch } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-calibrate.js <patched.html>'); process.exit(1); }
@@ -29,12 +30,25 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* A crash and a close are different diagnoses; Playwright reports both
+     as "Target page, context or browser has been closed" on the next call,
+     so only the event says which. See tests/_deathnote.js. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 

@@ -24,7 +24,8 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, watchTransitions, resized } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-home.js <patched.html|url>'); process.exit(1); }
@@ -35,12 +36,32 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
+
+/* The array the last check asserts on, hoisted out of the closure so the death
+   note can read it. This suite dies on WebKit against the served build, and
+   `ok('no console or page errors across the run', …)` — the check that would
+   have shown why — is the one check a death never reaches. */
+const errors = [];
+/* CRASH AND CLOSE ARE DIFFERENT DIAGNOSES and the runner cannot tell them
+   apart: Playwright says "Target page, context or browser has been closed" for
+   both, on the next call either way. If the crash event fired, the browser
+   killed the page and the answer is not in the JavaScript. */
+const events = [];
+onDeath(() => ({ section, checks: passed + failed, errors,
+                 events: events.length ? events.join(', ') : 'none' }));
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 460, height: 1000 }, deviceScaleFactor: 2 });
-  const errors = [];
+  await watchTransitions(page);   /* before goto: see _render.js */
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-60)} — ${why}`);
+  });
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
@@ -333,7 +354,7 @@ const head = t => console.log('\n── ' + t + ' ──');
       }, null, { timeout: 15000, polling: 'raf' });
     };
     const at = async (w, h) => {
-      await page.setViewportSize({ width: w, height: h });
+      await resized(page, w, h);
       await page.waitForFunction(([w, h]) =>
         Math.abs(innerWidth - w) <= 2 && Math.abs(innerHeight - h) <= 2, [w, h], { timeout: 8000 });
       await page.evaluate(() => { goHome(); render(); });
@@ -377,7 +398,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
        vignette is readable; widening the home screen must not widen a stem. */
-    await page.setViewportSize({ width: 1366, height: 1024 });
+    await resized(page, 1366, 1024);
     const quiz = await page.evaluate(() => {
       const q = ALL_Q.find(x => !x.bad);
       jumpTo(q.id); render();
@@ -470,7 +491,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     const prev = page.viewportSize();
     const rows = [];
     for (const [w, h, label] of [[390, 844, 'phone'], [834, 1112, 'iPad portrait'], [1194, 834, 'iPad landscape']]) {
-      await page.setViewportSize({ width: w, height: h });
+      await resized(page, w, h);
       const r = await page.evaluate(async () => {
         try { localStorage.removeItem('accsap12.welcomed'); } catch (_) {}
         S.srs = {}; if (typeof LOG !== 'undefined') LOG.length = 0;
@@ -486,7 +507,7 @@ const head = t => console.log('\n── ' + t + ' ──');
       });
       rows.push({ label, ...r });
     }
-    if (prev) await page.setViewportSize(prev);
+    if (prev) await resized(page, prev.width, prev.height);
     for (const r of rows) {
       ok(`${r.label}: "Got it" keeps more room from the card's right edge than the Apex button is wide`,
          !r.err && r.clearance > r.fabW, r.err || `${r.clearance}px clear vs a ${r.fabW}px button`);

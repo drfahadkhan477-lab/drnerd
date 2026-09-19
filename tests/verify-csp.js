@@ -29,6 +29,7 @@
 'use strict';
 const http = require('http');
 const { launch, engineName } = require('./_engine.js');
+const { onDeath, watch } = require('./_deathnote.js');
 const CSP = require('../scripts/csp.js');
 const fs = require('fs');
 const path = require('path');
@@ -38,7 +39,18 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
+
+/* Declared out here, and the handler installed out here, because the tail of
+   this file is `})().catch(…)` — a catch that HANDLES the rejection, so no
+   unhandledRejection is ever emitted and a note installed inside the IIFE
+   would never fire. The catch takes the note's own emitter instead, which
+   also moves the exception off stderr: scripts/verify.js concatenates the two
+   pipes in no guaranteed order. See tests/_deathnote.js. */
+const errors = [], events = [];
+const died = onDeath(() => ({ section, checks: passed + failed, errors,
+                              events: events.length ? events.join(', ') : 'none' }));
 
 /* ── the policy is the same string in all three places ───────────────────── */
 head('one policy, not three copies of one');
@@ -126,7 +138,8 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
   const origin = `http://127.0.0.1:${server.address().port}`;
 
   const browser = await launch();
-  const page = await (await browser.newContext()).newPage();
+  const page = watch(await (await browser.newContext()).newPage(), events);
+  page.on('pageerror', e => errors.push(e.message));
   await page.goto(origin + '/', { waitUntil: 'load' });
   console.log(`  engine: ${engineName()}   origin: ${origin}`);
 
@@ -200,4 +213,4 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
   server.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
-})().catch(e => { console.error(e); process.exit(1); });
+})().catch(died);

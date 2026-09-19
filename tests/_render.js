@@ -149,5 +149,70 @@ async function afterRender(page, pred, opts = {}) {
   await quiet(page, opts);
 }
 
+/* ── resizing, which is not safe at any moment ───────────────────────────────
+
+   WHAT HAPPENS IF YOU JUST CALL setViewportSize. On WebKit, shrinking the
+   viewport while one of render()'s view transitions is still live kills the
+   page outright — no exception, nothing logged, the process simply goes. It
+   took twenty-three isolated cases to pin down and every one of them is in
+   tools/resize-crash.js; the short version:
+
+     survived  home to home, which starts no transition at all
+     CRASHED   a screen change, then a shrink
+     survived  a screen change, then awaiting the transition, then a shrink
+     survived  a screen change, then a shrink UP instead
+     CRASHED   a screen change, then skipTransition(), then a shrink
+     CRASHED   300ms later          survived  2000ms later
+
+   IT IS THE HARNESS, NOT THE APP. The owner checked the real device: open a
+   question, go back, rotate the iPad immediately — it does not crash. So this
+   is Playwright's WebKit, not iPadOS Safari, and the fix belongs here rather
+   than in the app. Disabling the app's screen animation on the strength of a
+   headless browser would have cost the target device a real feature for a bug
+   it does not have. Worth saying plainly, because that was the change about to
+   be made before anybody asked the device.
+
+   A PRECONDITION, NOT A PROPOSITION — the rule at the top of this file. The
+   suite is not asserting anything about transitions here; it is arranging for
+   the page to be in a state where a resize means what the suite thinks it
+   means. skipTransition() is deliberately not used: it skips the ANIMATION and
+   the transition still settles afterwards, so the snapshot is still coming
+   down when the resize lands. Measured, above.
+
+   The watch is an init script so it survives the reloads several suites do. It
+   wraps rather than replaces, so the page still goes through
+   document.startViewTransition exactly as failsafe-patch wrote it. */
+async function watchTransitions(page) {
+  await page.addInitScript(() => {
+    const orig = Document.prototype.startViewTransition;
+    if (!orig) return;
+    Document.prototype.startViewTransition = function (cb) {
+      const vt = orig.call(this, cb);
+      try {
+        window.__vtLive = vt;
+        const clear = () => { if (window.__vtLive === vt) window.__vtLive = null; };
+        if (vt && vt.finished) vt.finished.then(clear, clear);
+      } catch (_) {}
+      return vt;
+    };
+  });
+}
+
+/* Resize, but never into a live transition. Falls back to a bounded settle
+   when the watch is not installed, so a suite that forgets watchTransitions()
+   is slower rather than broken — and says so, rather than crashing on WebKit
+   with nothing in the log. */
+async function resized(page, width, height, opts = {}) {
+  const watched = await page.evaluate(() => typeof window.__vtLive !== 'undefined');
+  if (watched) {
+    await page.evaluate(() => (window.__vtLive && window.__vtLive.finished
+      ? window.__vtLive.finished.catch(() => {}) : null));
+  } else if (!opts.quiet) {
+    await page.waitForTimeout(2000);   /* measured above: 300ms is not enough */
+  }
+  await page.setViewportSize({ width, height });
+}
+
 module.exports = { booted, settled, onScreen, quiet, afterRender,
+                   watchTransitions, resized,
                    BOOT_TIMEOUT, SETTLE_TIMEOUT, QUIET_FRAMES };

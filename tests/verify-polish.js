@@ -8,6 +8,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
 
 const target = process.argv[2];
@@ -21,12 +22,15 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
-  const errors = [];
+  const errors = [], events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
+  const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'main');
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
@@ -368,7 +372,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('haptics respect reduced motion and missing-API feature detection');
   {
-    const reducedPage = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+    const reducedPage = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'reduced-motion');
     await reducedPage.emulateMedia({ reducedMotion: 'reduce' });
     await reducedPage.goto(URL, { waitUntil: 'load', timeout: 200000 });
     await booted(reducedPage);
@@ -382,7 +386,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     ok('no vibration is requested under prefers-reduced-motion', underReduced === 0, String(underReduced));
     await reducedPage.close();
 
-    const noVibratePage = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+    const noVibratePage = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'no-vibrate');
     await noVibratePage.addInitScript(() => {
       Object.defineProperty(window.navigator, 'vibrate', { value: undefined, configurable: true });
     });
@@ -611,22 +615,73 @@ const head = t => console.log('\n── ' + t + ' ──');
      is there or not), and the handler needs now-lastTap to be BOTH <350 and
      >0, so two dispatches in the same millisecond never trigger it. */
   {
-    const touchPage = await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true });
+    const touchPage = watch(await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true }), events, 'touch');
     await touchPage.goto(URL, { waitUntil: 'load', timeout: 250000 });
     await booted(touchPage, { timeout: 150000 });
     const touch = await touchPage.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
-      const doubleTap = async (el) => {
+      /* WATCH THE CALL, NOT THE FLAG. This read `second.defaultPrevented`,
+         which is only true if the browser HONOURS preventDefault() on a
+         synthetic TouchEvent — and the two checks below cannot tell that apart
+         from the app not suppressing: the first expects false and passes
+         either way, the second expects true. A check that cannot separate
+         "the app did not suppress" from "this browser will not let us see it"
+         is measuring the harness.
+
+         I GUESSED WHICH IT WAS AND GUESSED WRONG. The commit that made this
+         change said WebKit "appears not to" honour cancelable. It does:
+         measured on the served build, cancelable came back TRUE and `asked`
+         came back FALSE. So the browser was willing and the app never asked,
+         which is the opposite of what I wrote. The new reading is still the
+         right one — it separates the two — but it did not find what I said it
+         would.
+
+         Wrapping the instance's own preventDefault records whether the APP
+         called it, which is the app's side of the contract and is the same on
+         every engine. cancelable and defaultPrevented are reported alongside
+         so the browser's half is visible rather than assumed. */
+      /* RE-RESOLVED BETWEEN TAPS, because the first tap changes the DOM.
+         Measured: connected came back FALSE for the option — selecting it
+         re-renders the card, the original row leaves the document, and an
+         event dispatched at a node that is no longer in the tree never
+         reaches the document-level listener the app installs. The handler was
+         not failing to suppress; it was never being asked, because the test
+         was tapping a node that no longer existed.
+
+         Taking a getter rather than an element is what makes the second tap
+         land on whatever is on screen NOW, which is what a finger does. */
+      const doubleTap = async (get) => {
+        const at = () => (typeof get === 'function' ? get() : get);
         const mk = () => new TouchEvent('touchend', { bubbles: true, cancelable: true });
-        el.dispatchEvent(mk());
+        const first = at();
+        if (!first) return { asked: false, honoured: false, cancelable: null, connected: null, missing: true };
+        first.dispatchEvent(mk());
         await wait(60);
+        const el = at() || first;
         const second = mk();
+        let asked = false;
+        const orig = second.preventDefault;
+        second.preventDefault = function () { asked = true; try { return orig.call(this); } catch (_) {} };
+        /* CONNECTED, BECAUSE A DETACHED NODE HAS NO PATH TO THE DOCUMENT. The
+           app's handler is a single document-level touchend listener. An event
+           dispatched on a node that is no longer in the tree does not bubble
+           to the document at all, so the handler never runs — which is
+           indistinguishable, from `asked` alone, from a handler that ran and
+           returned early. The first tap can cause a render that replaces the
+           option row, and then the second tap is fired at a corpse.
+
+           Reported rather than worked around: if this comes back false, the
+           check is measuring a stale reference and the fix is to re-resolve
+           the element between taps, not to change what the app does. */
+        const connected = el.isConnected;
         el.dispatchEvent(second);
-        return second.defaultPrevented;
+        return { asked, honoured: second.defaultPrevented,
+                 cancelable: second.cancelable, connected };
       };
       goHome(); render();
       const loose = document.createElement('div');
       document.body.appendChild(loose);
+      /* A plain div nothing re-renders, so the element itself is stable. */
       const onPlainSurface = await doubleTap(loose);
       loose.remove();
 
@@ -635,14 +690,20 @@ const head = t => console.log('\n── ' + t + ' ──');
       startQuiz(CHAPTERS[0], 'all');
       for (let i = 0; i < 60 && !document.querySelector('.opt'); i++) await wait(50);
       const optEl = document.querySelector('.opt');
-      const onOption = optEl ? await doubleTap(optEl) : null;
+      /* By selector, so the second tap finds the row the re-render left. */
+      const onOption = optEl ? await doubleTap(() => document.querySelector('.opt')) : null;
       return { onPlainSurface, onOption, foundOption: !!optEl };
     });
     await touchPage.close();
     ok('a rapid double tap on a plain surface is no longer swallowed',
-       touch.onPlainSurface === false, JSON.stringify(touch));
-    ok('but it is still suppressed on a quiz option, where it misfires',
-       touch.onOption === true, JSON.stringify(touch));
+       touch.onPlainSurface.asked === false, JSON.stringify(touch.onPlainSurface));
+    /* "asks to suppress", not "is suppressed": whether the browser acts on it
+       is the browser's half, and a synthetic event cannot answer for a real
+       finger. The app's half is exactly this call, and it is what the scoping
+       in curate-patch changed. */
+    ok('but the app still asks to suppress it on a quiz option, where it misfires',
+       touch.foundOption === true && touch.onOption && touch.onOption.asked === true,
+       JSON.stringify(touch));
   }
 
   head('perf: the hero rotation stops while the page is hidden');

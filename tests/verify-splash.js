@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { launch, cpuThrottle, isEngineNoise } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
 
 const target = process.argv[2];
@@ -27,7 +28,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   head('document order: the splash must not be waiting on the script it hides');
@@ -59,10 +61,18 @@ const head = t => console.log('\n── ' + t + ' ──');
      !/id="splash"[\s\S]{0,900}Heart3D/.test(raw));
 
   const browser = await launch();
+  /* Six pages, one per section, each closed before the next opens — so "the
+     page closed" on its own says nothing and every event carries the section
+     that owned it. The last block keeps its own array because it asserts on
+     them; the rest route through watch()'s fourth argument. See
+     tests/_deathnote.js. */
+  const errors = [], events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
 
   head('the splash covers the blank window before the app renders');
   {
-    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
+    const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'splash covers blank', errors);
     /* Throttling widens the gap this section is trying to observe; it does
        not create it. Where the engine cannot throttle, the ordering claim is
        still the claim — just measured through a narrower window, which the
@@ -121,7 +131,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('the rhythm trace waits for the heart to settle, instead of sweeping in parallel with it');
   {
-    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
+    const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'rhythm trace', errors);
     page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
     await page.waitForSelector('#splash', { timeout: 30000 });
     const delays = await page.evaluate(() => {
@@ -146,7 +156,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('the heart has its own keyframes, not the word/subtitle\'s later-declared spRise');
   {
-    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
+    const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'heart keyframes', errors);
     page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
     await page.waitForSelector('#splash', { timeout: 30000 });
     const heart = await page.evaluate(() => {
@@ -175,7 +185,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('the delay does not leak into the reduced-motion override');
   {
-    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
+    const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'reduced motion', errors);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
     await page.waitForSelector('#splash', { timeout: 30000 });
@@ -190,7 +200,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('theme handover: no flash of the wrong theme');
   {
-    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
+    const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'theme handover', errors);
     await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —
@@ -210,10 +220,14 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('the beating hero layer');
   {
-    const page = await browser.newPage({ viewport: { width: 834, height: 1112 } });
-    const errors = [];
-    page.on('pageerror', e => errors.push(e.message));
-    page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
+    const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'beating hero');
+    /* Its own array, because this section asserts on it and must not see the
+       five that ran before it. Both are fed: the assertion reads `seen`, the
+       note reads the suite's. */
+    const seen = [];
+    const note = m => { seen.push(m); errors.push('beating hero: ' + m); };
+    page.on('pageerror', e => note(e.message));
+    page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) note(m.text()); });
     await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   /* The Stage 1 build injects app.js only after its content fetch resolves,
      so 'load' no longer implies the app has booted. Wait for it explicitly —
@@ -247,7 +261,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     });
     ok('no ambient background animation behind the question stem',
        quiet.bad && quiet.bad.length === 0, JSON.stringify(quiet.bad || quiet));
-    ok('no console or page errors across the run', errors.length === 0, errors.join(' | '));
+    ok('no console or page errors across the run', seen.length === 0, seen.join(' | '));
     await page.close();
   }
 

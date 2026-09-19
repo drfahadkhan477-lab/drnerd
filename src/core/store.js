@@ -29,6 +29,13 @@
    is worth it for a store that cannot grow. The handful of preference flags
    stay for the same reason.
 
+   AND IT IS COPIED HERE ANYWAY. That paragraph settles the QUOTA question and
+   says nothing about the other one: localStorage and IndexedDB do not have the
+   same lifetime, and iOS evicts the first after seven days without a visit. So
+   accsap12.v2 keeps its synchronous home and gets a copy in the database,
+   restored if the original is ever found missing. See MIRRORED below; it is a
+   backup, not a second store, and it changes nothing about boot.
+
    THE ORDER OF EVENTS AT BOOT, which is the only genuinely tricky part:
 
      1. The app evaluates `let INK = loadJSON(INK_KEY, {})`. Nothing is
@@ -67,6 +74,43 @@ const VERSION = 1;
    exactly as before — this module is not a general storage layer and should
    not become one. */
 const MANAGED = ['accsap12.ink', 'accsap12.notes', 'accsap12.chat', 'accsap12.log'];
+
+/* ── the key that does NOT move, and gets a copy kept anyway ────────────────
+   accsap12.v2 holds the FSRS cards, the chapter statistics and the review
+   streak. The header above explains why it cannot join MANAGED, and that
+   reasoning still stands: load() is `JSON.parse(localStorage.getItem(KEY))`,
+   called synchronously at boot to build S before the first paint, and no
+   database answers synchronously. Moving it would mean gating the app on a
+   database or painting the wrong due count.
+
+   BUT THAT ARGUMENT IS ABOUT SIZE, AND THE RISK HERE IS NOT SIZE. The header
+   says the blob "cannot grow", which is true and settles the quota question
+   completely. It does not touch the other one: localStorage and IndexedDB do
+   not have the same LIFETIME. iOS and iPadOS evict a site's localStorage after
+   seven days without a visit, and this app is opened in Safari over http as
+   well as from the Home Screen — docs/IPAD.md exists because the iPad cannot
+   open a local file at all. So the four keys that moved are protected from
+   eviction and the one that stayed is not, and it is the only one a fellow
+   cannot rebuild: notes can be rewritten and figures re-imported, a year of
+   spaced repetition cannot.
+
+   So the key stays exactly where it is and a COPY is kept in the database.
+   Nothing on the synchronous boot path changes — the app still reads and
+   writes localStorage and still awaits nothing — and if localStorage is ever
+   emptied underneath it, the copy is put back.
+
+   ONE WAY ONLY. localStorage is authoritative whenever it holds anything at
+   all, and the copy is read in exactly one circumstance: when there is nothing
+   to be authoritative. That is what keeps this from reproducing the bug
+   migrate() had, where two live copies meant guessing which was newer. Here
+   there is never a second live copy to weigh. */
+const MIRRORED = ['accsap12.v2'];
+
+/* Namespaced, so a mirrored key and a MANAGED key can never collide in the one
+   object store. They hold different kinds of thing — a MANAGED key IS the
+   data, a mirrored key is a copy of something that lives elsewhere — and one
+   name space for both would let a key added to both lists overwrite itself. */
+const MIRROR_PREFIX = 'mirror:';
 
 /* How to fold an early write into the value that was already stored. The two
    shapes this app uses are a map keyed by question and an append-only array. */
@@ -189,12 +233,116 @@ function idbPut(d, key, value) {
 
 /* localStorage, read and written exactly the way the app always did — this is
    both the pre-migration source and the fallback when there is no database. */
+/* The stored TEXT, not the parsed value: mirror() compares against what it
+   last copied, and comparing strings avoids re-serialising the blob on every
+   check. */
+function lsRaw(key) {
+  try { return localStorage.getItem(key); } catch (_) { return null; }
+}
 function lsGet(key) {
   try { const raw = localStorage.getItem(key); return raw == null ? undefined : JSON.parse(raw); }
   catch (_) { return undefined; }
 }
 function lsSet(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (_) { return false; }
+}
+
+/* ── the mirror ─────────────────────────────────────────────────────────────
+
+   WHAT EACH MIRRORED KEY HELD WHEN THIS FILE WAS EVALUATED, captured before
+   any application code has had a chance to run. This is the most important
+   line in the mirror and it is not an optimisation.
+
+   Without it the restore pass would read localStorage when the database
+   answers, a hundred milliseconds later — by which time the app has booted on
+   an empty store and may already have called save(), which writes a COMPLETE
+   blob of empty defaults. The pass would find a value, conclude localStorage
+   was authoritative, and copy that empty blob over the only surviving copy.
+   The backup would be destroyed by the very boot it exists to rescue, and the
+   failure would look exactly like success.
+
+   Reading at load time removes the window instead of narrowing it: `absent`
+   here means absent before the app existed, which is the only question the
+   restore pass actually wants answered. */
+const atLoad = Object.create(null);
+for (const key of MIRRORED) atLoad[key] = lsGet(key);
+
+/* Nothing is copied until the restore pass has decided what to do — the same
+   hazard from the other side. An app booting on an evicted store calls save()
+   long before ready() resolves, and an unarmed mirror is what stops that save
+   from overwriting the copy it is about to be rescued by. */
+let mirrorArmed = false;
+let mirrorBusy = Object.create(null);
+let mirrorAgain = Object.create(null);
+/* The exact text last copied, so an unchanged blob costs nothing. Cleared on a
+   failed write, never set from a value that was not stored. */
+let mirrorLast = Object.create(null);
+
+/* Called by the app straight after it writes localStorage. Never awaited: the
+   caller's write has already succeeded synchronously and the copy is allowed
+   to land late.
+
+   COALESCED, NOT DEBOUNCED. save() can fire several times in a second, and a
+   trailing timer would make the last write of a session the one most likely to
+   be dropped — which is the write most worth keeping. A write already in
+   flight sets a flag instead, and exactly one more follows it with whatever
+   localStorage holds by then. */
+function mirror(key) {
+  if (!mirrorArmed || MIRRORED.indexOf(key) < 0) return false;
+  if (mirrorBusy[key]) { mirrorAgain[key] = 1; return true; }
+  const raw = lsRaw(key);
+  if (raw == null) return false;                    // nothing to copy
+  /* CHEAP TO CALL, so the caller does not have to know when the value changed.
+     The alternative was hooking save() itself, and save()'s last line is the
+     anchor scripts/resume-patch.js matches on — editing it would have broken
+     the build with `expected exactly 1 match, found 0`. A caller that mirrors
+     on a timer and on page-hide is worth more than one that is exactly timely,
+     and this is what makes that caller free: an unchanged blob costs one
+     string comparison and no transaction. */
+  if (raw === mirrorLast[key]) return false;
+  const value = lsGet(key);
+  if (value === undefined) return false;
+  mirrorBusy[key] = 1;
+  mirrorLast[key] = raw;
+  open().then(d => (d ? idbPut(d, MIRROR_PREFIX + key, value) : false))
+    .catch(() => false)
+    .then(wrote => {
+      /* A refused write must not be remembered as copied, or the skip above
+         would make the failure permanent for the rest of the session. */
+      if (!wrote) delete mirrorLast[key];
+      delete mirrorBusy[key];
+      if (mirrorAgain[key]) { delete mirrorAgain[key]; mirror(key); }
+    });
+  return true;
+}
+
+/* Refresh the copy, or put it back. Runs once per session, inside ready().
+
+   Three cases, exhaustive, none of them a judgement call:
+     · localStorage held something at load    → it is authoritative; refresh
+                                                the copy from what it holds now
+     · it did not, and there is no copy       → a first run; nothing to do
+     · it did not, and there is a copy        → restore it
+
+   THE ONE THING THIS CAN COST is a question answered in the window between an
+   evicted boot and this pass: written to the empty store, then overwritten by
+   the restore. That is a few seconds of work against however many months the
+   copy holds, and it is the right way round. Said out loud rather than left
+   for someone to discover. */
+async function remirror(d) {
+  const restored = [];
+  for (const key of MIRRORED) {
+    if (atLoad[key] !== undefined) {
+      const now = lsGet(key);
+      await idbPut(d, MIRROR_PREFIX + key, now === undefined ? atLoad[key] : now);
+      continue;
+    }
+    const kept = await idbGet(d, MIRROR_PREFIX + key);
+    if (kept === undefined) continue;
+    if (!lsSet(key, kept)) continue;                // quota: leave the copy be
+    restored.push(key);
+  }
+  return restored;
 }
 
 /* Copy → verify → delete. Never delete → copy, and never delete without
@@ -245,7 +393,11 @@ function ready() {
   readyPromise = open().then(async d => {
     if (!d) {                       // no database: localStorage, as before
       hydrated = true;
-      return { available: false, migrated: [] };
+      /* mirrorArmed stays false. With no database there is nowhere to keep a
+         copy, and arming would turn every save() into a promise chain that
+         resolves to nothing. health() reports this rather than leaving the app
+         to look protected when it is not. */
+      return { available: false, migrated: [], restored: [] };
     }
     const migrated = await migrate(d);
     for (const key of MANAGED) {
@@ -259,8 +411,16 @@ function ready() {
     const pending = Object.keys(dirty);
     dirty = Object.create(null);
     for (const key of pending) await idbPut(d, key, mem[key]);
-    return { available: true, migrated };
-  }).catch(() => { hydrated = true; usable = false; return { available: false, migrated: [] }; });
+    /* LAST, and only then armed. Everything above is about the four keys the
+       database owns; this is about the one it only keeps a copy of, and the
+       copy must not be writable until it has been read. */
+    const restored = await remirror(d);
+    mirrorArmed = true;
+    return { available: true, migrated, restored };
+  }).catch(() => {
+    hydrated = true; usable = false;
+    return { available: false, migrated: [], restored: [] };
+  });
   return readyPromise;
 }
 
@@ -338,10 +498,10 @@ function bytes() {
    perfectly healthy while running on the fallback. Named as what it is: keys
    that FELL BACK, which is a fact about where the bytes are, not a diagnosis. */
 function health() {
-  return { usable: usable === true, hydrated, fellBack: fellBack() };
+  return { usable: usable === true, hydrated, fellBack: fellBack(), mirroring: mirrorArmed };
 }
 
-root.Store = { ready, get, set, available, isHydrated, bytes, merge, health,
-               MANAGED, DB_NAME, STORE, FALLBACK_KEY };
+root.Store = { ready, get, set, available, isHydrated, bytes, merge, health, mirror,
+               MANAGED, MIRRORED, MIRROR_PREFIX, DB_NAME, STORE, FALLBACK_KEY };
 
 })(typeof window !== 'undefined' ? window : this);

@@ -387,5 +387,253 @@ head('a suite pointed at a URL either runs whole or does not run');
      /urlIncapable/.test(v) && /cannot take a URL/.test(v));
 }
 
+head('no suite waits inside a page that may not survive the wait');
+{
+  /* TWICE IN ONE EVENING, in two suites, from the same shape:
+
+         const settle = ms => page.evaluate(m => new Promise(r => setTimeout(r, m)), ms);
+         await page.evaluate(() => new Promise(r => setTimeout(r, 500)));
+
+     An evaluate whose entire body is a timer holds an execution context open
+     in the page for the whole pause. If anything navigates or the page goes
+     away in that window — and on the served build the app can navigate on its
+     own, since the service worker reloads when a new one takes over — the
+     wait fails, and the failure is reported as a failure OF THE WAIT:
+
+         verify-resume      Execution context was destroyed, most likely
+                            because of a navigation
+         verify-heartreuse  Target page, context or browser has been closed
+                            at settle (verify-heartreuse.js:84)
+
+     Neither described what happened. One pointed at a navigation that was
+     incidental and the other named the sleep as the victim. Both are
+     page.waitForTimeout now, which runs in the driver, cannot be destroyed by
+     anything the page does, and reports the page's death as the page's death.
+
+     SCOPED TO SLEEP-ONLY EVALUATES on purpose. An evaluate that does real work
+     AND waits has to run in the page — the work does — and moving it is not
+     possible, only splitting it is. Those are left alone. What this refuses is
+     the case where the evaluate exists ONLY to pass time, which never needs to
+     be in the page and has now cost two debugging sessions. */
+  /* THE RESOLVER PASSED STRAIGHT TO setTimeout, and nothing else — a
+     backreference, so `new Promise(r => setTimeout(r, 800))` matches and
+     `new Promise(r => setTimeout(() => r({ … }), 1200))` does not. The second
+     is a wait that then READS something, which has to be in the page because
+     the reading does. The first version of this check lacked the
+     backreference and called verify-pwa:138 a violation on that basis — a
+     check whose comment said "with nothing else to do" flagging something
+     that had plenty. Narrowed to what it claims. */
+  const SLEEP_ONLY = /\.evaluate\(\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>\s*new Promise\(\s*(\w+)\s*=>\s*setTimeout\(\s*\1\s*,/;
+  const suites = fs.readdirSync(TESTS).filter(n => /^verify-.+\.js$/.test(n));
+  const sleeping = [];
+  let evaluates = 0;
+  for (const f of suites) {
+    const src = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8'));
+    evaluates += (src.match(/\.evaluate\(/g) || []).length;
+    /* Newlines collapsed, because the two real instances were written across
+       one line and across two, and a line-by-line scan found only one. */
+    const flat = src.replace(/\s+/g, ' ');
+    if (SLEEP_ONLY.test(flat)) sleeping.push(f);
+  }
+  /* Vacuity guard: "count the sleeping evaluates and expect none" is also what
+     a scan that found no evaluates at all returns. */
+  ok('there are evaluates to check', evaluates > 200, `${evaluates} across ${suites.length} suites`);
+  ok('and none of them is a sleep with nothing else to do',
+     sleeping.length === 0, sleeping.join(', ') || 'none');
+}
+
+head('a reload is not a boot, and the split build is why');
+{
+  /* WHAT THIS CATCHES, found in verify-theme and not by reading it.
+     page.reload() resolves on a navigation event — `load`, or worse
+     `domcontentloaded`. In the SINGLE FILE that is close enough to "the app is
+     running", because every line of it is inline and has executed by then. In
+     the SPLIT BUILD it is not: index.html's loader fetches
+     content/questions.json and only THEN injects app.js, so both events fire
+     long before a single application symbol exists.
+
+     verify-theme reloaded with `domcontentloaded`, read the pre-paint
+     attributes — which is the point of that section and correct — and then
+     carried straight on into a section that needs the app. Against the single
+     file it passed for years. Against the served build it died with
+
+         page.evaluate: ReferenceError: Can't find variable: setTheme
+
+     which reads like a missing function and is a missing WAIT. That is the
+     same shape as the four races tests/_render.js was written for.
+
+     THE RULE IS "WAIT FOR SOMETHING", deliberately loose. Every other reload in
+     the repository already does: booted(), a waitForFunction naming an app
+     global, a waitForSelector, or a poll on `typeof S`. Requiring booted()
+     specifically would have flagged five suites that are already correct —
+     verify-splash reloads with `commit` precisely to catch the page BEFORE the
+     app, and being made to wait for it would destroy the check. So the guard
+     asks only that something between the reload and the next read is capable
+     of being false before the app is up. It has no exemption list because it
+     needs none. */
+  const RELOAD = /await\s+page\.reload\s*\(/;
+  const WAITS = /booted\s*\(|waitFor[A-Za-z]*\s*\(|typeof\s+[A-Za-z_$]/;
+  const suites = fs.readdirSync(TESTS).filter(n => /^verify-.+\.js$/.test(n));
+  let reloads = 0;
+  const blind = [];
+  for (const f of suites) {
+    const lines = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8')).split('\n');
+    lines.forEach((l, i) => {
+      if (!RELOAD.test(l)) return;
+      reloads++;
+      /* AS FAR AS THE NEXT SECTION, not a fixed handful of lines. A reload
+         may legitimately be followed by reads that must happen BEFORE the app
+         is back — verify-theme reads the pre-paint attributes, verify-splash
+         catches the splash — and the wait then comes after those. A six-line
+         window called verify-theme's own fix a violation. The section is the
+         real boundary: whatever a reload sets up, it sets up for the checks
+         under the same heading. */
+      let end = i + 1;
+      while (end < lines.length && !/^\s*head\s*\(/.test(lines[end]) && end - i < 60) end++;
+      if (!WAITS.test(lines.slice(i + 1, end).join('\n'))) blind.push(`${f}:${i + 1}`);
+    });
+  }
+  /* Vacuity guard: "count the blind reloads and expect none" is also what a
+     scan that found no reloads at all returns. */
+  ok('there are reloads to check', reloads >= 8, `${reloads} across ${suites.length} suites`);
+  ok('and every one of them waits for something afterwards',
+     blind.length === 0, blind.join(', ') || 'none');
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * A SUITE THAT DIES MUST BE ABLE TO SAY SO.
+ *
+ * tests/_deathnote.js prints what the page said before a suite died. It is
+ * two lines to install and it is the only evidence there is when a browser
+ * takes a page down — "Target page, context or browser has been closed" names
+ * the survivor, never the cause. All 46 browser suites now carry one, and
+ * this keeps the forty-seventh from being written without one.
+ *
+ * The other two checks here are both mistakes I made during the rollout, and
+ * neither is visible to `node --check`:
+ *
+ *   · LISTENERS ABOVE THE PAGE. verify-type.js creates a page per viewport
+ *     inside a loop; my listeners went on above the loop, naming a `page`
+ *     that did not exist yet. That is a ReferenceError thrown from inside the
+ *     handler for the crash you were trying to diagnose — the diagnostic
+ *     fails exactly when it is needed. The cure is shape, not vigilance:
+ *     watch() RETURNS the page, so `watch(await browser.newPage(…), events)`
+ *     has no way to be written out of order. So the rule checked is that the
+ *     creation and the watch are the same expression.
+ *
+ *   · A CATCH THAT SWALLOWS THE NOTE. Four suites ended with
+ *     `})().catch(e => { console.error(e); process.exit(1); })`. A catch
+ *     HANDLES the rejection, so process.on('unhandledRejection') never fires
+ *     and the note never prints — a suite that looks instrumented and is not.
+ *     They now pass the note's own emitter, which also moves the exception
+ *     off stderr; scripts/verify.js concatenates the two pipes in no
+ *     guaranteed order, and that has already cut one note in half.
+ */
+{
+  head('every browser suite can say how it died');
+  const suites = fs.readdirSync(TESTS).filter(f => /^verify-.*\.js$/.test(f)).sort();
+  const browserSuites = [], noNote = [], splitWatch = [], swallowed = [];
+  let watches = 0;
+  for (const f of suites) {
+    const code = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8'));
+    /* The same test _engine.js's own guard uses, and for the same reason:
+       this file discusses launch() in prose, so the scan is anchored to a
+       line with no quote before the call. */
+    if (!/^[^'"`\n]*\blaunch\(/m.test(code)) continue;
+    browserSuites.push(f);
+    if (!/require\(\s*'\.\/_deathnote(?:\.js)?'\s*\)/.test(code) || !/\bonDeath\s*\(/.test(code)) {
+      noNote.push(f);
+      continue;
+    }
+    /* Every watch() must wrap the creation. `watch(await X.newPage(…), …)` is
+       the only form in which the listeners cannot precede the page. */
+    for (const m of code.matchAll(/\bwatch\s*\(/g)) {
+      watches++;
+      const line = code.slice(code.lastIndexOf('\n', m.index) + 1,
+                             (code.indexOf('\n', m.index) + 1 || code.length) - 1);
+      /* The context may be awaited inside the page's own creation —
+         `watch(await (await browser.newContext()).newPage(), …)` — which is
+         still ONE expression and still cannot be written out of order. The
+         first version of this required newPage() to follow the await
+         directly and failed four honest call sites. What is actually being
+         asserted is that the creation is an ARGUMENT to watch(), so that is
+         what is matched. */
+      if (!/\bwatch\s*\(\s*await\s[^;]*\bnewPage\s*\(/.test(line)) {
+        splitWatch.push(`${f}: ${line.trim().slice(0, 60)}`);
+      }
+    }
+    /* The tail. A handler that is not the emitter returned by onDeath() eats
+       the rejection before the process ever sees it. */
+    const tail = /\}\)\(\)\s*\.catch\s*\(([^\n]*)\)\s*;?\s*$/m.exec(code);
+    if (tail && !/^\s*\w+\s*$/.test(tail[1])) swallowed.push(`${f}: .catch(${tail[1].trim().slice(0, 40)})`);
+  }
+  /* Vacuity guards, both directions. "No suite is missing a note" is also
+     what a scan that found no suites returns, and "no watch() is split" is
+     what a scan that found no watch() calls returns. */
+  ok('there are browser suites to check', browserSuites.length >= 40, `${browserSuites.length} found`);
+  ok('and watch() calls among them', watches >= 40, `${watches} found`);
+  ok('every browser suite installs a death note',
+     noNote.length === 0, noNote.join(', ') || 'none');
+  ok('every watch() wraps the page creation, so no listener can precede its page',
+     splitWatch.length === 0, splitWatch.join(' | ') || 'none');
+  ok('no suite ends with a catch that would swallow the note',
+     swallowed.length === 0, swallowed.join(' | ') || 'none');
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * NO SUITE SPAWNS npm BY ITS BARE NAME.
+ *
+ * On Windows npm, npx, yarn and pnpm are .cmd shims, not executables. Since
+ * Node 20.12 (CVE-2024-27980) spawnSync/execFileSync REFUSE to launch a .cmd
+ * without shell:true — status null, no output, no error most callers look at.
+ * On Linux and macOS the same call resolves a shell script and works.
+ *
+ * So this is a defect that cannot fail on the machine most of this was
+ * written on, and it shipped: tests/verify-release.js spawned 'npm' whenever
+ * npm_execpath was unset, which is every run of
+ *
+ *     node scripts/verify.js build/systole.html
+ *
+ * since nothing sets that variable outside an `npm run`. It passed here and
+ * failed on the owner's laptop, inside a 22-minute full run, for a reason
+ * that had nothing to do with the release gate it was checking.
+ *
+ * The cure is to run npm's own JavaScript entry point with process.execPath:
+ * no shell, no .cmd, no PATH lookup, and the same two lines on both
+ * platforms.
+ *
+ * NOT A BAN ON SPAWNING. git is spawned by name in several places and stays
+ * that way — git.exe is a real executable and Node launches it fine. Only the
+ * npm family are shims, so only they are named here.
+ */
+{
+  head('no suite spawns a tool Windows only has as a .cmd shim');
+  const suites = fs.readdirSync(TESTS).filter(f => /^verify-.*\.js$/.test(f)).sort();
+  const SHIMS = /\b(?:spawnSync|spawn|execFileSync|execFile)\s*\(\s*['"](npm|npx|yarn|pnpm)['"]/;
+  const bare = [];
+  let spawns = 0;
+  for (const f of suites) {
+    const code = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8'));
+    for (const line of code.split('\n')) {
+      if (/\b(?:spawnSync|spawn|execFileSync|execFile)\s*\(/.test(line)) spawns++;
+      const m = SHIMS.exec(line);
+      if (m) bare.push(`${f}: ${m[1]}`);
+    }
+  }
+  /* Vacuity guard: "no suite spawns npm by name" is also what a scan that
+     found no spawns at all returns. */
+  ok('there are spawns to check', spawns >= 5, `${spawns} across ${suites.length} suites`);
+  ok('and none of them names npm, npx, yarn or pnpm directly',
+     bare.length === 0, bare.join(', ') || 'none');
+  /* The other half: the suite that DOES drive npm must resolve its JS entry
+     point rather than trusting PATH. Checked by name because there is exactly
+     one, and if a second appears this line is where it will be noticed. */
+  const rel = blankComments(fs.readFileSync(path.join(TESTS, 'verify-release.js'), 'utf8'));
+  ok('the one suite that drives npm runs its entry point with this node',
+     /spawnSync\(process\.execPath, \[npmCli, 'run'/.test(rel));
+  ok('and says so rather than comparing two nulls when it cannot find it',
+     /!!npmCli, npmCli \|\| 'not found/.test(rel));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

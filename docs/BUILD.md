@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 2146 + 125 checks
+node scripts/verify.js --pwa                           # → 2453 + 125 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -188,6 +188,46 @@ node scripts/build.js --keep --from theme # only steps 14-20 rerun
 
 ## Verifying
 
+### The whole release, as one command
+
+```bash
+npm run release -- path/to/ACCSAP_export.html          # or: npm run release-check
+npm run release -- path/to/export.html --skip webkit   # costs you the certificate
+npm run release -- --dry-run                           # exercise the gate itself
+```
+
+`scripts/release-check.js` runs the sequence a release actually needs, in
+order: the export is readable → nothing licensed is staged → the patch chain
+applies → every figure decodes → the split build assembles → the full suite on
+Chromium → the full suite against `dist/` over http → the full suite on WebKit.
+
+**It does not deploy.** It certifies, or it refuses to, and there are three
+outcomes rather than two:
+
+| | |
+|---|---|
+| `CERTIFIED` | every step ran and every step passed — the only exit 0 |
+| `NOT CERTIFIED` | something failed |
+| `INCOMPLETE` | nothing failed, but something was skipped, and each skip is named |
+
+A skip is never folded into a pass. Skipping WebKit — the engine the app is
+actually used on — costs you the certificate rather than passing quietly.
+
+It writes `build/release-report.md`: the commit, the source digest, a SHA-256
+of the single file and a content-addressed root over every file in `dist/`, so
+two deployments can be compared without either being opened. Counts and
+digests only, and that is enforced rather than intended — a step reports
+itself through `safeDetail()`, which rebuilds each line from facts it could
+parse and emits nothing it could not.
+
+`release` and `release-check` are the same command; the first delegates to the
+second so there is one spelling of the path to the gate.
+`tests/verify-release.js` holds it to that, and to forwarding the exit code —
+a wrapper that swallowed a `NOT CERTIFIED` would be the overclaim the gate
+exists to prevent, arriving through the convenience alias.
+
+### The suites on their own
+
 ```bash
 node scripts/verify.js                       # everything, ~4 min
 node scripts/verify.js --only physio,theme   # just these
@@ -195,7 +235,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 68 suites, 2146 checks, plus 125 more on the split build. Those numbers are
+Across 74 suites, 2453 checks, plus 125 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
@@ -432,10 +472,18 @@ whole time; nothing ran them.
 The steps by hand, if you need them:
 
 ```bash
-node scripts/build-pwa.js build/systole.html    # → dist/, icons included
+node scripts/extract-content.js build/systole.html  # → content/
+node scripts/build-pwa.js build/systole.html        # → dist/, icons included
 node scripts/serve.js 8080 dist &
 node tests/verify-pwa.js http://localhost:8080
 ```
+
+The extract is not optional on a rebuild. `content/` surviving from the last
+build is what makes it look optional, and a split build whose shell and bank
+came from different extractions is silent — its three build stamps are written
+in the same run and agree with each other. `build-pwa.js` compares
+`content/manifest.json`'s `sourceDigest` against the file it is splitting and
+refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 
 ---
 

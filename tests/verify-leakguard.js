@@ -55,6 +55,39 @@ head('it refuses the licensed bank, by every route in');
   r = run(['tests/last-run.log']);
   ok('and the run log, whose output quotes question text', r.code === 1 && /PATH/.test(r.out));
 
+  /* 1b. LOG — THE SAME LOG UNDER ANOTHER NAME, which is how this rule came
+     to exist. `node scripts/verify.js > 1.txt` is the obvious thing to type,
+     and what it writes is byte-for-byte what last-run.log holds. One sat
+     untracked in the owner's checkout for eight days: not in a licensed
+     directory, not an ACCSAP filename, and a failing run's log is under both
+     the 1 MB cap and the 200 KB floor the payload rules need before they
+     will look at anything. Every rule in the file walked past it.
+
+     The body here is the real header and nothing else — a fixture that
+     quoted question text to prove a guard against quoting question text
+     would be its own kind of joke. The header is what is recognised. */
+  const LOGHEAD = '# systole verify \u2014 2026-09-11T07:45:02.389Z\n'
+                + '# checkout  claude/x @ 99f7a13\n# engine    webkit\n';
+  r = run([write('1.txt', LOGHEAD)]);
+  ok('a verify log saved as 1.txt is refused', r.code === 1 && /LOG/.test(r.out),
+     r.out.match(/LOG.*/)?.[0] || r.out.slice(0, 60));
+  r = run([write('notes.md', LOGHEAD)]);
+  ok('and under any other name, since the name is not what is read',
+     r.code === 1 && /LOG/.test(r.out));
+  /* BELOW EVERY SIZE FLOOR IN THE FILE, which is the point: rules 3, 4 and 5
+     would all have declined to look. */
+  ok('even though it is far too small for the payload rules to examine',
+     LOGHEAD.length < 200 * 1024);
+  /* AND IT IS THE HEADER, NOT THE WORD. A file that merely mentions the
+     runner must not be refused, or the rule becomes a nuisance and gets
+     turned off — which is what this file's header says about guards. */
+  r = run([write('about-verify.md', 'Notes on systole verify and what it writes.\n')]);
+  ok('while prose that merely mentions the runner is not refused', r.code === 0,
+     r.out.trim().slice(0, 60));
+  r = run([write('later-line.md', 'intro\n# systole verify \u2014 2026-01-01T00:00:00.000Z\n')]);
+  ok('and the header only counts on the first line, where verify.js writes it',
+     r.code === 0, r.out.trim().slice(0, 60));
+
   /* 2. NAME — the export dragged somewhere unignored. */
   r = run(['assets/ACCSAP_12_super_v12.html']);
   ok('an ACCSAP export is refused wherever it has been moved to',

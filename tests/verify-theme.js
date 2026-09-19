@@ -26,6 +26,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-theme.js <patched.html|url>'); process.exit(1); }
@@ -36,12 +37,25 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 460, height: 900 }, deviceScaleFactor: 2 });
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* A crash and a close are different diagnoses; Playwright reports both
+     as "Target page, context or browser has been closed" on the next call,
+     so only the event says which. See tests/_deathnote.js. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
@@ -194,6 +208,20 @@ const head = t => console.log('\n── ' + t + ' ──');
   }));
   ok('a cold load restores the saved palette from localStorage, attributes and all',
      early.theme === 'dark' && early.palette === 'cathlab' && early.savedFromStorage === 'cathlab', JSON.stringify(early));
+
+  /* AND NOW LET THE APP COME BACK, which this did not do. The read above is
+     deliberately early — the whole point is the pre-paint script, before the
+     app exists — but everything after this section needs the app, and
+     `domcontentloaded` does not mean the app is there.
+
+     In the single file it nearly does: every line is inline and has run by
+     then. In the split build index.html fetches content/questions.json and
+     only THEN injects app.js, so the event fires long before a single
+     application symbol exists. The next section's first evaluate died with
+     "ReferenceError: Can't find variable: setTheme" — which reads like a
+     missing function and was a missing wait. verify-engine.js now refuses any
+     reload that waits for nothing. */
+  await booted(page);
 
   head('no painted surface is blind to the palette');
   /* The theme checks above assert that the surfaces we tokenised read their

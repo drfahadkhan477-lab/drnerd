@@ -162,6 +162,34 @@ const SUITES = [
      own localStorage fallback reaches the case where it is not, and the newer
      copy was being deleted. */
   ['store-pure',   'the newer copy survives, and a refused write is not lost'],
+  /* The runner's own diagnosis of a dead suite, which is the only thing said
+     about one on a machine the reader does not have. Its first version scanned
+     the output from the wrong end and reported a check's own wrapped detail as
+     the cause of a crash. */
+  ['cause-pure',   'a dead suite is diagnosed by what killed it, not by what it last printed'],
+  /* The one place a model's words become the page's HTML. md() escapes before
+     it transforms, which is right and was asserted nowhere — and the escaper
+     it leans on is not in this repository at all. */
+  ['md-pure',      'nothing a model says can become something the page runs'],
+  /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
+     in three of its checks; what a fellow MEASURES on — a millimetre, a big
+     square, 0.04 s — had nothing on it, and needed a browser to reach. */
+  ['ecg12-pure',   'a big square is 0.2 s, on every canvas the panel is given'],
+  /* The only diagnostic a fellow standing in front of a broken deployment
+     has. It said one sentence for every failure and that sentence was right
+     for one of them; the wrong one cost an evening. */
+  ['loader-pure',  'a splash that cannot load the bank says which failure it was'],
+  /* The split build is assembled from two inputs produced by two different
+     commands, and until now nothing checked they were the same build. A
+     rebuilt single file split against a stale content/ gave a dist/ whose
+     shell was new, whose bank was old, and whose three build stamps all
+     agreed with each other — so every existing guard passed over it. */
+  ['provenance-pure', 'a split build cannot be half of one build and half of another'],
+  /* The five pairings a deploy can leave behind. One of them — a new shell
+     against an app.js too old to carry a stamp — walked straight through the
+     check meant to catch it, because the guard against a ReferenceError had
+     become a guard against the test. */
+  ['swupdate-pure', 'a deploy landing under a running app leaves a pair that is noticed'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -467,30 +495,14 @@ function runSuite(name, claim) {
    suites died loading the 42 MB single file, and reading it took a round trip
    through tests/last-run.log on someone else's machine.
 
-   Skips node's uncaught-rejection boilerplate and the suite's own headings, and
-   returns the first thing that is actually a message. Truncated, because this
-   is a table and the full text is in the log either way. */
-function causeOf(out) {
-  /* node's uncaught-exception furniture, in the two shapes it comes in: the
-     promises boilerplate for a rejection, and a bare `path/to/file.js:12`
-     header with the offending source line and a caret under it for a throw. */
-  const noise = /^(node:internal|\s*triggerUncaughtException|\s*\^|Node\.js v|\s*at\s)/;
-  const filePos = /^([A-Za-z]:\\|\/|\.{0,2}[\\/])\S*:\d+$/;
-  for (const raw of String(out || '').split('\n')) {
-    if (noise.test(raw)) continue;
-    const t = raw.trim();
-    if (!t || /^[─=#]/.test(t) || /^(PASS|FAIL)\s/.test(t)) continue;
-    if (filePos.test(t)) continue;
-    /* The source line node echoes under that header is code, not a message. */
-    if (/^(const|let|var|await|return|throw|function|\}|\{)/.test(t)) continue;
-    return t.slice(0, 96);
-  }
-  return '';
-}
+   The extraction itself lives in scripts/cause.js, with tests/verify-cause-pure.js
+   over it: the first version of it scanned from the wrong end of the output and
+   reported a check's own wrapped detail as the cause of a crash. */
+const { causeOf, noteOf } = require(path.join(ROOT, 'scripts', 'cause.js'));
 
 function report(r) {
   const head = JOBS > 1 ? `  ${r.name.padEnd(14)} ` : '';
-  let said = '';
+  let said = '', note = [];
   if (r.failed === null) {
     /* Checks that ran before the throw are real and are lost from the count,
        so say how many rather than letting the table imply none happened. */
@@ -499,6 +511,12 @@ function report(r) {
     console.log(`${head}did not report  (${r.secs}s)`
       + (ran ? `  — ${ran} had passed first` : '')
       + (said ? `\n      ${said}` : ''));
+    /* AND WHAT THE PAGE SAID, which the filter below cannot show: its lines
+       open with none of FAIL, Error, TypeError or ReferenceError, so the first
+       suite to leave a note had it written to tests/last-run.log and printed
+       nowhere — evidence collected, kept, and still not read. */
+    note = noteOf(r.out);
+    for (const line of note) console.log(`      ${line}`);
   }
   else console.log(`${head}${r.ok ? '✓' : '✗'} ${String(r.passed).padStart(3)} passed`
     + `${r.failed ? `, ${r.failed} FAILED` : ''}   ${r.secs}s`);
@@ -511,6 +529,9 @@ function report(r) {
          prefix the filter below matches the very line already printed above,
          and the table said the same thing twice. */
       if (t && t === said) continue;
+      /* Nor anything the note already showed: the page's errors are error-
+         shaped, so without this every one of them printed twice. */
+      if (t && note.includes(t)) continue;
       if (/^\s*FAIL\s/.test(ln) || /^\s*(Error|TypeError|ReferenceError)/.test(ln)) console.log(`      ${t}`);
     }
     if (flag('--bail')) stopScheduling = true;

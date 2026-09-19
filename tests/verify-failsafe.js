@@ -29,6 +29,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { launch } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
 
 const target = process.argv[2];
@@ -54,20 +55,31 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
+  /* This suite deliberately breaks the build four times over, so its page
+     errors are mostly INJECTED_ and belong in the note as evidence rather
+     than as failures. Tagged with the section that caused them, because
+     "INJECTED_VT_FAILURE" says nothing about which of the four blocks was
+     running; watch()'s fourth argument does the tagging. The clean-boot block
+     keeps its own array as well — that one is asserted on, and an assertion
+     must not see the three sabotaged blocks that follow it. */
+  const errors = [], events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
 
   head('the real build boots clean — no false positives from the breaker itself');
   {
-    const page = await browser.newPage();
-    const errors = [];
-    page.on('pageerror', e => errors.push(e.message));
+    const page = watch(await browser.newPage(), events, 'clean boot', errors);
+    const boot = [];
+    page.on('pageerror', e => boot.push(e.message));
     await page.goto(URL, { waitUntil: 'load', timeout: 60000 });
     await booted(page, { timeout: 60000 });
     const crash = await page.evaluate(crashButton);
-    ok('no page errors on a normal boot', errors.length === 0, errors.slice(0, 3).join(' | '));
+    ok('no page errors on a normal boot', boot.length === 0, boot.slice(0, 3).join(' | '));
     ok('the crash screen never appears on a normal boot', !crash);
     await page.close();
   }
@@ -76,7 +88,7 @@ const head = t => console.log('\n── ' + t + ' ──');
   {
     const url = sabotaged('rendernow-sync', h =>
       h.replace('function renderNow(){\n', 'function renderNow(){\n  throw new Error("INJECTED_TEST_FAILURE");\n'));
-    const page = await browser.newPage();
+    const page = watch(await browser.newPage(), events, 'rendernow-sync', errors);
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
     await page.waitForTimeout(1200);
     const r = await page.evaluate(() => {
@@ -97,7 +109,7 @@ const head = t => console.log('\n── ' + t + ' ──');
       h = h.replace('let lastScreen=null;', 'let lastScreen="__not_a_real_screen__";');
       return h.replace('function renderNow(){\n', 'function renderNow(){\n  throw new Error("INJECTED_VT_FAILURE");\n');
     });
-    const page = await browser.newPage();
+    const page = watch(await browser.newPage(), events, 'rendernow-vt', errors);
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
     await page.waitForTimeout(1200);
     const crash = await page.evaluate(crashButton);
@@ -107,7 +119,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('an uncaught error unrelated to rendering, after a real screen is already up, does not take the screen over');
   {
-    const page = await browser.newPage();
+    const page = watch(await browser.newPage(), events, 'recovered', errors);
     await page.goto(URL, { waitUntil: 'load', timeout: 60000 });
     await booted(page, { timeout: 60000 });
     await page.evaluate(() => {

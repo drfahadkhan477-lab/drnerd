@@ -77,12 +77,19 @@ function makeWeb(opts) {
 /* Loads a module fresh against one fake web. Fresh matters: these modules hold
    their state in closure variables, so a second session has to be a second
    instantiation, the way a reload is. */
-function loadModule(fs, path, relPath, web) {
+function loadModule(fs, path, relPath, web, extra) {
   const src = fs.readFileSync(path.join(__dirname, '..', relPath), 'utf8');
   const root = {};
   const rewritten = src.replace("(typeof window !== 'undefined' ? window : this)", '(root)');
-  new Function('root', 'localStorage', 'indexedDB', rewritten)(
-    root, web.localStorage, web.indexedDB);
+  /* EXTRA GLOBALS, for modules that reach past the two this file fakes.
+     src/ui/ecg12.js reads window.devicePixelRatio inside fit(); with `window`
+     an unbound free variable that is a ReferenceError rather than a test
+     result. Passed as named arguments rather than assigned onto root, because
+     the module's own `root` is its export target and putting the host's
+     globals there would let a typo in the module find them anyway. */
+  const names = Object.keys(extra || {});
+  new Function('root', 'localStorage', 'indexedDB', ...names, rewritten)(
+    root, web.localStorage, web.indexedDB, ...names.map(k => extra[k]));
   return root;
 }
 

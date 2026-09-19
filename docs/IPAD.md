@@ -15,8 +15,17 @@ Build the thing you host:
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
+node scripts/extract-content.js build/systole.html # → content/
 node scripts/build-pwa.js build/systole.html       # → dist/
 ```
+
+**All three, in that order, every time.** The middle one is easy to skip on a
+rebuild — `content/` is already there, so the split appears to work. It does
+not: `dist/index.html` and `dist/app.js` would be the new build and
+`dist/content/` the old one, and nothing on screen would say so. `build-pwa.js`
+now compares the digest `extract-content.js` wrote into `content/manifest.json`
+against the file it is splitting and refuses the pair when they disagree,
+naming both. This sequence is what the refusal is asking for.
 
 `dist/` is a plain static folder, about 23 MB — the bank, 408 figures, the
 shell and the fonts, and nothing else. Nothing in it needs a server that can run
@@ -91,6 +100,65 @@ bank whether or not the machine that served it still exists.
 Free, Access is free for up to 50 users, and the whole thing can be done from
 the iPad: the dashboard's direct upload takes a **zip**, not just a folder, so
 the zipped `dist/` can be picked straight out of Files.
+
+### Making that zip, which is not as obvious as it looks
+
+Two things have to be true, and the obvious Windows command gets the second
+one wrong in a way nothing warns you about.
+
+**The contents of `dist/` go at the root of the zip, not a `dist` folder.**
+Cloudflare looks for `index.html` and `_worker.js` at the top level of what it
+unpacks. Open the finished zip: if the first thing you see is `index.html`
+beside `_worker.js`, it is right. If it is a folder called `dist`, the site
+will 404 and the Worker holding the Gemini key will never be installed.
+
+**The paths inside must use forward slashes.** The zip format requires `/`.
+Windows PowerShell 5.1's `Compress-Archive` writes `\` instead —
+`content\questions.json` — and nothing complains: iOS Files shows tidy
+folders, because its unzipper guesses. Cloudflare's does not. It reads
+`content\questions.json` as one oddly-named file at the root, so no `content/`
+directory is ever created and every figure, font and icon is missing while the
+five root files work perfectly. The app loads, the service worker installs,
+and the splash says **"Could not load the question bank"**, with a second line
+naming which failure it was. When this happened that second line read *"open
+this over http, not as a file"* — the only sentence the loader had, and the
+wrong one, which is why it sent the search in the wrong direction. It now says
+*"content/questions.json is not on the server (404) — if this was just
+deployed, the content folder did not make it into the upload"*, which is the
+sentence that would have ended it in a minute.
+
+This happened. 420 of 425 entries were affected; the five that were not are
+the five at the root.
+
+Either of these writes correct paths:
+
+```powershell
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory("C:\path\to\drnerd\dist", "$HOME\Desktop\systole-dist.zip")
+```
+
+```powershell
+tar.exe -a -c -f "$HOME\Desktop\systole-dist.zip" -C dist .
+```
+
+```bash
+cd dist && zip -r ../systole-dist.zip .        # macOS and Linux
+```
+
+To check a zip before uploading it, on any machine with Python:
+
+```bash
+python3 -c "import zipfile,sys; n=zipfile.ZipFile(sys.argv[1]).namelist(); print(sum('\\' in x for x in n), 'of', len(n), 'entries use backslashes')" systole-dist.zip
+```
+
+Zero is the only acceptable answer.
+
+NOTHING IN THE TEST SUITE CAN CATCH THIS. The build produces a correct
+`dist/`; the damage happens afterwards, in a tool outside the repository, to
+an artefact nobody verifies again. That is exactly why it is written down here
+rather than left to be rediscovered.
+
+### Deploying it
 
 1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
    **Upload assets**. Give it a name, then choose the zip.

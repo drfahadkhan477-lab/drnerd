@@ -32,8 +32,9 @@
  */
 'use strict';
 const path = require('path');
-const { launch, isEngineNoise } = require('./_engine');
-const { booted } = require('./_render.js');
+const { launch, isEngineNoise, routablePage } = require('./_engine');
+const { booted, watchTransitions, resized } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-layout.js <patched.html>'); process.exit(1); }
@@ -44,7 +45,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 /* The frames that exist in the fellow's hands, plus a desktop for the split
    build. Landscape first: it is where the figure viewer broke and the only
@@ -67,12 +69,24 @@ const sse = text => [
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1194, height: 834 } });
+  const page = await routablePage(browser, { viewport: { width: 1194, height: 834 } });
+  await watchTransitions(page);   /* before goto: see _render.js */
   await page.route('**/generativelanguage.googleapis.com/**', route => route.fulfill({
     status: 200, headers: { 'content-type': 'text/event-stream' },
     body: sse('Long answer. '.repeat(80)),
   }));
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* A crash and a close are different diagnoses; Playwright reports both
+     as "Target page, context or browser has been closed" on the next call. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
@@ -182,7 +196,7 @@ const sse = text => [
 
   let totalMedia = 0; const perFrame = [], perFrameN = [];
   for (const [name, w, h] of FRAMES) {
-    await page.setViewportSize({ width: w, height: h });
+    await resized(page, w, h);
     await page.waitForTimeout(240);
     head(`${name} — ${w}x${h}`);
     const r = await sweep(SCREENS);
@@ -218,7 +232,7 @@ const sse = text => [
 
   head('the overlays, which sit above every screen');
   {
-    await page.setViewportSize({ width: 1194, height: 834 });
+    await resized(page, 1194, 834);
     await page.waitForTimeout(240);
     /* The figure viewer with a REAL figure: the exact case that shipped
        broken, held here at the exact frame it shipped broken in. */
@@ -297,7 +311,7 @@ const sse = text => [
     const FLOOR = 100;
     const rows = [];
     for (const [name, w, h] of FRAMES) {
-      await page.setViewportSize({ width: w, height: h });
+      await resized(page, w, h);
       await page.waitForTimeout(240);
       const r = await page.evaluate(async () => {
         const wait = ms => new Promise(r => setTimeout(r, ms));

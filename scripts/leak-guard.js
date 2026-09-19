@@ -24,6 +24,10 @@
  *
  *   1. PATH      anything under content/, build/, dist/ or source/, plus
  *                tests/last-run.log, whose output quotes question text.
+ *   1b. LOG      the same log SAVED UNDER ANOTHER NAME, recognised by the
+ *                header scripts/verify.js writes rather than by its filename.
+ *                `verify.js > 1.txt` produces identical content and rule 1
+ *                only knows the one path.
  *   2. NAME      an ACCSAP export by its filename, wherever it has been moved.
  *   3. SIZE      anything over 1 MB. The largest file this repository legiti-
  *                mately tracks is 168 KB (lottie.min.js), so there is a factor
@@ -60,6 +64,24 @@ const SNIFF_BYTES   = 200 * 1024;
 
 const DIRS  = ['content/', 'build/', 'dist/', 'source/'];
 const FILES = ['tests/last-run.log'];
+/* RULE 1b, AND IT IS HERE BECAUSE OF A FILE CALLED tests/1.txt.
+ *
+ * `node scripts/verify.js > 1.txt` is the obvious thing to type when you want
+ * to keep a run, and what it writes is byte-for-byte what tests/last-run.log
+ * holds — suite output, which quotes question text. FILES above blocks that
+ * log BY NAME, so the identical content under any other name walked past
+ * every rule in this file: not in a licensed directory, not an ACCSAP
+ * filename, and a failing run's log is comfortably under both the 1 MB cap
+ * and the 200 KB sniff floor that rules 4 and 5 need before they will look.
+ *
+ * A real one sat untracked in the owner's checkout for eight days. Nothing
+ * was committed; nothing stops it being, which is the same distinction this
+ * file's header draws about .gitignore — a default is not a boundary.
+ *
+ * So the log is recognised by what it SAYS rather than what it is called.
+ * scripts/verify.js writes this header as the first line of every run, so
+ * there is one spelling of it and the guard moves when the runner does. */
+const LOGHEAD = /^#\s*systole verify\s+—/;
 const NAME  = /ACCSAP|_super_v\d|question-bank|questions\.json$/i;
 const PAYLOAD = /const\s+(ALL_Q\s*=\s*\[|IMGS\s*=\s*\{)/;
 const B64IMG  = /data:image\/(?:webp|jpeg|png|gif);base64,/g;
@@ -98,6 +120,23 @@ function inspect(file) {
   let st;
   try { st = fs.statSync(file); } catch (_) { return null; }   /* staged-then-deleted */
   if (!st.isFile()) return null;
+
+  /* BEFORE THE SIZE RULES, and deliberately. Rules 3, 4 and 5 all have floors
+     — 1 MB, then 200 KB — and a verify log is usually under both of them, so
+     a check that waited for them would never run on the file it is for. One
+     line is enough to recognise it and costs nothing on anything else. */
+  if (st.size > 0) {
+    let head = '';
+    try {
+      const fd = fs.openSync(file, 'r');
+      const buf = Buffer.alloc(Math.min(200, st.size));
+      fs.readSync(fd, buf, 0, buf.length, 0);
+      fs.closeSync(fd);
+      head = buf.toString('utf8').split('\n')[0];
+    } catch (_) { head = ''; }
+    if (LOGHEAD.test(head))
+      return { rule: 'LOG', why: 'a verify run log under another name — suite output quotes question text' };
+  }
 
   if (st.size > MAX_BYTES)
     return { rule: 'SIZE', why: `${(st.size / 1048576).toFixed(1)} MB — nothing here legitimately exceeds 1 MB` };

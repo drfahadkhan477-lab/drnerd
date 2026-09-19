@@ -8,7 +8,8 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, watchTransitions, resized } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-apex.js <patched.html>'); process.exit(1); }
@@ -21,12 +22,26 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 430, height: 900 } });
+  await watchTransitions(page);   /* before goto: see _render.js */
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* A crash and a close are different diagnoses; Playwright reports both
+     as "Target page, context or browser has been closed" on the next call,
+     so only the event says which. See tests/_deathnote.js. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
@@ -263,7 +278,7 @@ const head = t => console.log('\n── ' + t + ' ──');
        are part of the stability key, so a resize landing mid-poll resets the
        count instead of being averaged into it. */
     const open = async (w, h) => {
-      await page.setViewportSize({ width: w, height: h });
+      await resized(page, w, h);
       await page.waitForFunction(
         ([w, h]) => Math.abs(window.innerWidth - w) <= 2 && Math.abs(window.innerHeight - h) <= 2,
         [w, h], { timeout: 8000 });
@@ -309,7 +324,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     /* In a stacked split the document stops scrolling and #app scrolls instead,
        which silently breaks every window.scrollTo(0,0) in the app — you arrive
        at the top of a screen and find yourself halfway down it. */
-    await page.setViewportSize({ width: 834, height: 1194 });
+    await resized(page, 834, 1194);
     await page.waitForTimeout(300);
     const top = await page.evaluate(async () => {
       const app = document.getElementById('app');
@@ -324,7 +339,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     ok('and navigating still arrives at the top of the new screen',
        top.hasHelper && top.moved > 0 && top.after === 0,
        `scrolled to ${top.moved}, landed at ${top.after}`);
-    await page.setViewportSize({ width: 430, height: 900 });
+    await resized(page, 430, 900);
     await page.waitForTimeout(250);
   }
 

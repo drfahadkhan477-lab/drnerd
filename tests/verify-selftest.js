@@ -21,6 +21,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-selftest.js <patched.html>'); process.exit(1); }
@@ -31,7 +32,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
@@ -39,6 +41,17 @@ const head = t => console.log('\n── ' + t + ' ──');
      shape no other suite in this project uses for the viewer. */
   const page = await browser.newPage({ viewport: { width: 1194, height: 834 } });
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* A crash and a close are different diagnoses; Playwright reports both
+     as "Target page, context or browser has been closed" on the next call. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 

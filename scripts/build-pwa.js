@@ -36,6 +36,8 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 
 const SRC = process.argv[2];
 if (!SRC) {
@@ -51,6 +53,87 @@ if (!fs.existsSync(path.join(CONTENT, 'questions.json'))) {
   console.error('content/questions.json is missing — run scripts/extract-content.js first');
   process.exit(1);
 }
+
+/* ── the two halves of a split build must be the same build ─────────────────
+ *
+ * THE WINDOW THIS CLOSES, and it is wider than it looks. This script reads
+ * two things: the single-file build named on the command line, and whatever
+ * happens to be sitting in content/. Until now it checked only that content/
+ * EXISTED. Nothing checked that it came from the file being split.
+ *
+ * So: rebuild build/systole.html — a patch changed, a key was corrected, a
+ * figure was re-cut — and then run
+ *
+ *     node scripts/build-pwa.js build/systole.html
+ *
+ * without re-running extract-content.js in between. dist/index.html and
+ * dist/app.js are the new build. dist/content/questions.json and the 408
+ * figures are the old one. And it is SILENT, because every downstream guard
+ * still agrees with itself: BUILD_ID is computed fresh in this run and
+ * stamped into all three files, so the shell, the app and the worker pass
+ * "all three are the same build" while the bank underneath them is a
+ * different extraction entirely.
+ *
+ * That sequence is not hypothetical — it is the sequence docs/IPAD.md printed,
+ * two commands with no extract step between them, which is correct only on a
+ * clean checkout where content/ does not yet exist.
+ *
+ * The comparison is exact and the failure is loud: the same digest
+ * extract-content.js already writes into content/manifest.json, recomputed
+ * here over the same bytes, and a refusal that names the fix.
+ */
+function staleContent(srcDigest, manifest) {
+  const have = manifest && manifest.sourceDigest;
+  if (!have) {
+    return 'content/manifest.json carries no sourceDigest, so there is no way to tell '
+         + 'which build it was extracted from — re-run scripts/extract-content.js';
+  }
+  if (String(have) !== String(srcDigest)) {
+    return 'content/ was extracted from a DIFFERENT build (content says ' + have
+         + ', this build is ' + srcDigest + ') — re-run scripts/extract-content.js '
+         + 'on this file before splitting it';
+  }
+  return null;
+}
+
+/* Over the file as it is on disk, because extract-content.js hashes it that
+   way and this script is about to start cutting pieces out of `html`. */
+const SRC_DIGEST = crypto.createHash('sha256')
+  .update(fs.readFileSync(SRC)).digest('hex').slice(0, 16);
+const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.json'), 'utf8'));
+{
+  const stale = staleContent(SRC_DIGEST, contentManifest);
+  if (stale) { console.error(stale); process.exit(1); }
+}
+
+/* ── which commit produced this ──────────────────────────────────────────────
+ *
+ * BUILD_ID answers "are these files from the same deploy?" and answers it
+ * well — but it is a digest of bytes, so it cannot answer "which commit do I
+ * open to see what is in this?". Three months after a deployment that is the
+ * question, and until now the only place it was recorded was
+ * build/release-report.md, which is gitignored, never uploaded, and exists
+ * only on the machine that built it.
+ *
+ * So the commit rides along, BESIDE the existing stamps and never folded into
+ * them: BUILD_ID keeps meaning exactly what it meant, and the cache keys
+ * (SHELL_V, CONTENT_V) do not move because a commit message changed.
+ *
+ * A build from a tarball with no .git is a legitimate build, so a missing git
+ * is 'unknown' rather than a failure. A dirty tree is marked, because a
+ * commit id over uncommitted changes is a claim the repository cannot honour.
+ */
+function gitCommit() {
+  try {
+    const at = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'],
+                            { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (!/^[0-9a-f]{7,40}$/.test(at)) return 'unknown';
+    const dirty = execFileSync('git', ['status', '--porcelain'],
+                               { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().length > 0;
+    return dirty ? at + '-dirty' : at;
+  } catch (_) { return 'unknown'; }
+}
+const COMMIT = gitCommit();
 
 let html = fs.readFileSync(SRC, 'utf8');
 const steps = [];
@@ -197,6 +280,13 @@ const LOADER = `<script>
 (async function(){
   /* Replaced at build time; see BUILD_ID in scripts/build-pwa.js. */
   var SHELL_BUILD_ID = '__BUILD_ID__';
+  /* Provenance, not identity: this is never compared against anything and
+     never gates a launch. It is here so that a deployed directory, opened
+     three months later by someone who did not build it, names the commit to
+     go and read. Put on window so it can be asked for from the console of a
+     device that has no other way to say what it is running. */
+  var SHELL_COMMIT = '__COMMIT__';
+  try { window.SYSTOLE_BUILD = { build: SHELL_BUILD_ID, commit: SHELL_COMMIT }; } catch(_){}
   function fail(msg, err){
     console.error(msg, err||'');
     var sp = document.getElementById('splash');
@@ -206,9 +296,41 @@ const LOADER = `<script>
       if(s) s.textContent = msg;
     }
   }
+  /* WHY IT FAILED, RATHER THAN A GUESS AT WHY. This said one sentence for
+     every possible failure — "Open this over http, not as a file" — and that
+     sentence is right for exactly one of them. A deployment whose content
+     folder did not upload prints it too, and so does a sign-in page returned
+     in place of the bank. Both happened; the second cost an evening, because
+     the screen names a cause it has not checked and the obvious next move is
+     to go looking for a file:// problem that is not there.
+
+     The stage variable records how far the load got, which is the only thing
+     that can tell these apart from inside the catch. Kept as a plain function
+     so tests/verify-loader-pure.js can drive every branch without a browser.
+
+     NO BACKTICKS IN HERE. This whole loader is a template literal in
+     scripts/build-pwa.js, and one in a comment ends the string — which is how
+     the first version of this paragraph broke the build script rather than
+     the build. */
+  function whyContentFailed(stage, status, proto){
+    if(proto === 'file:')
+      return 'Open this over http, not as a file — it needs to fetch its content.';
+    if(stage === 'network')
+      return 'Could not reach the server for content/questions.json.';
+    if(stage === 'status')
+      return status === 404
+        ? 'content/questions.json is not on the server (404). If this was just deployed, the content folder did not make it into the upload.'
+        : 'The server answered ' + status + ' for content/questions.json.';
+    if(stage === 'parse')
+      return 'content/questions.json loaded but is not the question bank — a sign-in page or an error page in its place will do this.';
+    return 'Could not load content/questions.json.';
+  }
+  var res = null, stage = 'network';
   try{
-    var res = await fetch('content/questions.json', {cache:'no-cache'});
+    res = await fetch('content/questions.json', {cache:'no-cache'});
+    stage = 'status';
     if(!res.ok) throw new Error('HTTP '+res.status);
+    stage = 'parse';
     var qs = await res.json();
     window.ALL_Q = qs;
     /* id → array of figure URLs. Same shape the app already expected, so
@@ -224,7 +346,7 @@ const LOADER = `<script>
        already in memory, and a button offering to fetch them would be a lie. */
     window.SPLIT_BUILD = true;
   }catch(err){
-    return fail('Open this over http, not as a file — it needs to fetch its content.', err);
+    return fail(whyContentFailed(stage, res && res.status, location.protocol), err);
   }
   /* STOPS HERE WHEN app.js DOES NOT LOAD. It used to be a trailing
      .catch(function(err){ fail(...) }) with nothing else, so the splash showed
@@ -264,12 +386,51 @@ const LOADER = `<script>
      sessionStorage rather than a variable, for the same reason the update
      reload below uses it — the reload discards variables. Second time through,
      the fellow is told rather than spun. */
+  /* THE DECISION ITSELF, lifted out of the branch it used to live in, so that
+     tests/verify-swupdate-pure.js can drive every pairing without a browser
+     and without a build. Same move, and the same reason, as
+     whyContentFailed() below: the mechanics around it (sessionStorage,
+     location.reload) need a page, but WHICH of the three answers is right for
+     a given pair is arithmetic, and arithmetic should not need a service
+     worker and a served directory to check. */
+  function pairVerdict(shellId, appId, alreadyTried){
+    /* BOTH HAVE TO BE PRESENT before equality means anything. Written as a
+       a bare appId === shellId comparison this answered 'run' to two absent
+       stamps (NO BACKTICKS IN HERE: this block is inside the LOADER template
+       literal, and a backtick in a comment ends it — see CLAUDE.md),
+       which is this repository's most-repeated defect wearing a new hat: a
+       comparison that passes hardest when nothing is there to compare. It is
+       unreachable from the shipped loader — build-pwa.js throws if the
+       shell's placeholder was not substituted, and appId is normalised to
+       null — but an unreachable branch that answers 'run' is the wrong
+       unreachable branch to have. */
+    if(!shellId || !appId) return alreadyTried ? 'tell' : 'reload';
+    if(appId === shellId) return 'run';
+    return alreadyTried ? 'tell' : 'reload';
+  }
   try{
-    if(typeof APP_BUILD_ID !== 'undefined' && APP_BUILD_ID !== SHELL_BUILD_ID){
-      if(sessionStorage.getItem('accsap-mixed-build')){
-        return fail('This app updated while it was opening. Close it completely and open it again.',
-                    new Error('build mismatch: shell ' + SHELL_BUILD_ID + ', app ' + APP_BUILD_ID));
-      }
+    /* AN UNSTAMPED app.js IS A MISMATCH, and it used to be a free pass. The
+       condition here was
+
+           typeof APP_BUILD_ID !== 'undefined' && APP_BUILD_ID !== SHELL_BUILD_ID
+
+       so an app.js carrying no stamp at all skipped the check entirely. That
+       is not a hypothetical shape: it is precisely what a cached app.js from
+       a build older than the stamp looks like, which is the worst case of the
+       pairing this whole block exists to catch — a new shell running old
+       code. The check that was meant to catch it was the one thing that let
+       it through, because the guard against a ReferenceError had quietly
+       become a guard against the test.
+
+       null rather than undefined so the comparison below is a comparison and
+       not a typeof, and so nothing can ever equal it by being absent too. */
+    var appId = (typeof APP_BUILD_ID === 'undefined') ? null : APP_BUILD_ID;
+    var verdict = pairVerdict(SHELL_BUILD_ID, appId, !!sessionStorage.getItem('accsap-mixed-build'));
+    if(verdict === 'tell'){
+      return fail('This app updated while it was opening. Close it completely and open it again.',
+                  new Error('build mismatch: shell ' + SHELL_BUILD_ID + ', app ' + appId));
+    }
+    if(verdict === 'reload'){
       sessionStorage.setItem('accsap-mixed-build','1');
       location.reload();
       return;
@@ -512,10 +673,9 @@ step('correct the head for a build that has a network', () => {
 /* ── 4. write it all out ─────────────────────────────────────────────────── */
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'icons'), { recursive: true });
-/* Read here rather than beside the service worker, because the build stamp
-   below needs the content digest and is computed before either file is
-   written. */
-const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.json'), 'utf8'));
+/* contentManifest and SRC_DIGEST are read at the top of this file, where the
+   freshness check needs them; the build stamp below needs the same digest and
+   is computed before either file is written. */
 
 /* ── the build stamp ─────────────────────────────────────────────────────────
    Computed over the shell and the content TOGETHER, so it moves when either
@@ -523,17 +683,30 @@ const contentManifest = JSON.parse(fs.readFileSync(path.join(CONTENT, 'manifest.
    deploy?", which neither digest answers alone. Taken over the UNSTAMPED bytes,
    because stamping changes them; deterministic either way, since the
    placeholder is a constant. */
-const shellDigest = require('crypto').createHash('sha256')
+const shellDigest = crypto.createHash('sha256')
   .update(html).update(appCode).digest('hex').slice(0, 16);
-const BUILD_ID = require('crypto').createHash('sha256')
+const BUILD_ID = crypto.createHash('sha256')
   .update(shellDigest).update(String(contentManifest.sourceDigest)).digest('hex').slice(0, 16);
 
 if (html.indexOf('__BUILD_ID__') < 0) throw new Error('the loader lost its build-stamp placeholder');
 html = html.replace('__BUILD_ID__', BUILD_ID);
 if (html.indexOf('__BUILD_ID__') >= 0) throw new Error('more than one build-stamp placeholder in the loader');
+/* The same both-directions check as the stamp above, and for the same reason:
+   a placeholder that silently fails to substitute ships the literal
+   __COMMIT__ to the device, and a second copy means one of them is stale. */
+if (html.indexOf('__COMMIT__') < 0) throw new Error('the loader lost its commit placeholder');
+html = html.replace('__COMMIT__', COMMIT);
+if (html.indexOf('__COMMIT__') >= 0) throw new Error('more than one commit placeholder in the loader');
 /* A var at the top level of a classic script is a global, which is what the
    loader's typeof check reads. */
-appCode = `var APP_BUILD_ID='${BUILD_ID}';\n` + appCode;
+appCode = `var APP_BUILD_ID='${BUILD_ID}';\nvar APP_COMMIT='${COMMIT}';\n` + appCode;
+/* SYMMETRIC WITH THE SHELL'S TWO PLACEHOLDER CHECKS ABOVE, and newly load-
+   bearing: the loader now treats an unstamped app.js as a mismatched pair, so
+   a build that failed to stamp one would ship an app that refuses to start.
+   Cheap to assert, and the failure belongs here rather than on a tablet. */
+if (!/^var APP_BUILD_ID='[0-9a-f]{16}';\n/.test(appCode)) {
+  throw new Error('app.js did not receive its build stamp');
+}
 
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 fs.writeFileSync(path.join(DIST, 'app.js'), appCode);
@@ -724,6 +897,10 @@ const SHELL_V   = '${shellDigest}';
 /* The same stamp index.html and app.js carry, so the three can be compared
    from the outside — by a test, or by anyone reading a deployed directory. */
 const BUILD_ID  = '${BUILD_ID}';
+/* And the commit they were built from. Deliberately NOT part of any cache
+   key: rekeying the shell on a commit id would evict the caches for a change
+   that did not alter a byte the browser runs. */
+const COMMIT    = '${COMMIT}';
 const SHELL   = 'accsap-shell-'   + SHELL_V;
 /* EVERYTHING UNDER /content/ LIVES HERE, not just the figures, and the name
    changed with the scope. It used to be FIGS and only /content/figures/ was
@@ -900,6 +1077,7 @@ console.log(`  shell total          ${kb(shellBytes)}   (was ${mb(fs.statSync(SR
 console.log(`  shell transferred    ${kb(shellWire)} gzipped   (the budget: 280 KB)`);
 console.log(`  content/             ${mb(contentManifest.figureBytes)} of figures + questions.json`);
 console.log(`  content/splash-heart ${splashAssets.map(([n,b])=>`${n} ${(b.length/1024).toFixed(0)}KB`).join(', ')}`);
+console.log(`  build                ${BUILD_ID}   from commit ${COMMIT}`);
 console.log(`\n  written to           ${DIST}`);
 /* Icons are drawn by a headless browser, which lives in the global node_modules
    here. Resolving that ourselves means `node scripts/build-pwa.js` produces a

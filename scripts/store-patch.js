@@ -85,7 +85,27 @@ render();
    of a working one — so the app starts from whatever localStorage still held
    and picks the real stores up here. On every device I can measure this lands
    inside the splash, so there is nothing to see. */
-Store.ready().then(()=>{
+Store.ready().then(r=>{
+  /* THE PROGRESS BLOB CAME BACK. accsap12.v2 is not one of the four keys this
+     store owns — it stays in localStorage because load() reads it
+     synchronously at boot — but the store keeps a copy of it, and if
+     localStorage was emptied underneath the app (seven days without a visit,
+     on iOS) the copy has just been put back.
+
+     S was built from an empty store several hundred milliseconds ago, so every
+     count on screen is wrong and rebuilding them in place would mean
+     re-deriving a dozen fields that load() already derives. A reload runs
+     load() again, against the restored data, which is the same code path as
+     any other launch.
+
+     IT CANNOT LOOP. The restore only fires when localStorage held nothing when
+     store.js was evaluated; it now holds the restored blob, so the next boot
+     takes the ordinary path. */
+  if(r&&r.restored&&r.restored.length){
+    try{ toast('Your progress was restored from this device.'); }catch(_){}
+    setTimeout(()=>{ try{ location.reload(); }catch(_){} },1400);
+    return;
+  }
   /* Re-render only if the database actually held something the app did not
      already have. On a first launch, and on every launch where the migration
      has nothing left to do, this changes nothing — and an unconditional
@@ -102,7 +122,41 @@ Store.ready().then(()=>{
   if(mark()===was) return;
   try{ render(); }catch(_){}
   try{ if(document.getElementById('shell').classList.contains('ai-open')) buildAI(); }catch(_){}
-}).catch(()=>{});`);
+}).catch(()=>{});
+
+/* ── keeping the progress blob copied ──────────────────────────────────────
+   accsap12.v2 stays in localStorage — load() reads it synchronously at boot —
+   and the store keeps a copy of it in the database so that seven quiet days on
+   an iPad cannot take the cards with them. See src/core/store.js.
+
+   DRIVEN FROM HERE RATHER THAN FROM save(). The obvious place is the end of
+   save() itself, and it is the wrong place: save()'s last line is the anchor
+   scripts/resume-patch.js matches on, and appending to it breaks the build
+   with "expected exactly 1 match, found 0". The patch chain's exact-match rule
+   is the whole safety model, so the call moved instead of the anchor.
+
+   Nothing is lost by that. Store.mirror() compares the stored text against
+   what it last copied, so a call with nothing to do is one string comparison —
+   which is what makes a timer and a page-hide handler an honest substitute for
+   a hook on every write. The copy is at most one interval behind, and
+   localStorage still holds the truth until the day it is evicted. */
+(function(){
+  var V2='accsap12.v2';
+  var tick=function(){ try{ if(window.Store&&Store.mirror) Store.mirror(V2); }catch(_){} };
+  /* Once the restore pass has armed it, for the copy a brand-new install has
+     never had. */
+  Store.ready().then(tick).catch(function(){});
+  /* The two moments the iPad actually gives us: switching away, and the tab
+     going into the background. pagehide fires where unload does not on iOS. */
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='hidden') tick();
+  });
+  window.addEventListener('pagehide',tick);
+  /* And a floor, so a session left open all evening is not one write behind
+     all evening. Forty-five seconds against a blob of a few hundred KB, only
+     when it has changed. */
+  setInterval(tick,45000);
+})();`);
 
 /* ── 4. the store that failed most quietly ───────────────────────────────── */
 patch('store: say when the scheduling could not be written',

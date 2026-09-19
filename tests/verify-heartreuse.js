@@ -26,6 +26,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-heartreuse.js <patched.html>'); process.exit(1); }
@@ -36,12 +37,28 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1100, height: 950 } });
+  /* Hoisted so the death note can read them — this suite dies on WebKit
+     against the served build, and the check that reports console errors is
+     the one check a death never reaches. See tests/_deathnote.js. */
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* Installed once the arrays exist. A crash and a close are different
+     diagnoses and Playwright reports both as "Target page, context or
+     browser has been closed" on the next call; only the event says which. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   let capWarnings = 0;
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => {
@@ -64,7 +81,13 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   await booted(page);
-  const settle = ms => page.evaluate(m => new Promise(r => setTimeout(r, m)), ms);
+  /* DRIVER-SIDE. This was page.evaluate(m => new Promise(r => setTimeout(r, m))),
+     which holds an execution context open for the whole pause — and this suite
+     crashed inside it, at settle() on line 84, during the navigation loop. An
+     in-page sleep turns "the page went away" into an error about the sleep,
+     and it is the same shape that took verify-resume down. Nothing about
+     waiting needs to happen in the page. */
+  const settle = ms => page.waitForTimeout(ms);
   await settle(800);
 
   head('the markup hands over a place, not a canvas');
@@ -131,7 +154,32 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   /* Pixels, because "an instance exists" is not "something is on screen". */
   const painted = await page.evaluate(async () => {
-    const cv = document.getElementById('heroHeart3d');
+    /* WAITED FOR, NOT ASSUMED. This read the canvas straight out of the
+       document and dereferenced it:
+
+           const cv = document.getElementById('heroHeart3d');
+           off.width = cv.width;
+
+       and on WebKit cv came back null — "TypeError: null is not an object
+       (evaluating 'cv.width')" — which threw out of the evaluate and took the
+       whole suite with it, four checks from the end. Not a crash: the page
+       events said none and nothing was logged.
+
+       It is a race, and the four checks directly above prove it: they measured
+       that same canvas and found a live instance, an intact mesh and a real
+       box. So it was there a moment earlier and gone a moment later, which is
+       a render landing between two evaluates — the exact hazard
+       tests/_render.js was written for, twenty navigations in.
+
+       A precondition, not a proposition: the canvas has to be in the document
+       before its pixels mean anything. And if it never arrives, that is a
+       finding to report rather than an exception to die of. */
+    let cv = null;
+    for (let i = 0; i < 90 && !cv; i++) {
+      cv = document.getElementById('heroHeart3d');
+      if (!cv) await new Promise(r => requestAnimationFrame(r));
+    }
+    if (!cv) return { lit: 0, total: 0, absent: true };
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     const off = document.createElement('canvas');
     off.width = cv.width; off.height = cv.height;
@@ -142,7 +190,9 @@ const head = t => console.log('\n── ' + t + ' ──');
     return { lit, total: (d.length / 4) };
   });
   ok('and it is actually drawing after the twentieth visit',
-     painted.lit > 500, `${painted.lit} lit pixels of ${painted.total}`);
+     painted.lit > 500,
+     painted.absent ? 'the canvas never came back into the document'
+                    : `${painted.lit} lit pixels of ${painted.total}`);
 
   head('leaving costs nothing but the frames');
   const paused = await page.evaluate(async () => {

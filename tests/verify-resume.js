@@ -21,6 +21,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { booted } = require('./_render.js');
+const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-resume.js <patched.html>'); process.exit(1); }
@@ -31,12 +32,24 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1100, height: 950 } });
   const errors = [];
+  const events = [];
+  page.on('crash', () => events.push('the browser CRASHED the page'));
+  page.on('close', () => events.push('the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+  });
+  /* A crash and a close are different diagnoses; Playwright reports both
+     as "Target page, context or browser has been closed" on the next call. */
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
@@ -196,7 +209,18 @@ const head = t => console.log('\n── ' + t + ' ──');
      uncommitted.opts > 1 && uncommitted.selected === 1, `${uncommitted.opts} options`);
   /* The store write is not synchronous, and reloading on top of it would be
      testing the race rather than the record. */
-  await page.evaluate(() => new Promise(r => setTimeout(r, 500)));
+  /* WAITED FROM THE DRIVER, NOT INSIDE THE PAGE. This was
+     `page.evaluate(() => new Promise(r => setTimeout(r, 500)))`, which holds an
+     execution context open for half a second — and any navigation in that
+     window destroys it. On the served build the app can navigate on its own:
+     the service worker calls clients.claim() on activate, and index.html
+     reloads when a worker takes over from a previous one. The suite then dies
+     with "Execution context was destroyed, most likely because of a
+     navigation", which describes the harness rather than the app.
+
+     The wait exists to let an asynchronous store write land before reloading
+     on top of it. Nothing about that needs to run in the page. */
+  await page.waitForTimeout(500);
   await page.reload({ waitUntil: 'load', timeout: 200000 });
   await booted(page);
   const kept = await page.evaluate((ch) => {
