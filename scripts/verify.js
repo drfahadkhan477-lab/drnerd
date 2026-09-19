@@ -179,6 +179,12 @@ const SUITES = [
      has. It said one sentence for every failure and that sentence was right
      for one of them; the wrong one cost an evening. */
   ['loader-pure',  'a splash that cannot load the bank says which failure it was'],
+  /* The split build is assembled from two inputs produced by two different
+     commands, and until now nothing checked they were the same build. A
+     rebuilt single file split against a stale content/ gave a dist/ whose
+     shell was new, whose bank was old, and whose three build stamps all
+     agreed with each other — so every existing guard passed over it. */
+  ['provenance-pure', 'a split build cannot be half of one build and half of another'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -224,7 +230,7 @@ const SUITES = [
    while the only machine that could run the full thing was not being run. The
    first full green run wrote all fourteen at once. If this fills up again, that
    is the same gap reopening. */
-const PENDING_RECORD = ['loader-pure'];
+const PENDING_RECORD = ['loader-pure', 'provenance-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

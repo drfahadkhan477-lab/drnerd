@@ -432,10 +432,18 @@ whole time; nothing ran them.
 The steps by hand, if you need them:
 
 ```bash
-node scripts/build-pwa.js build/systole.html    # → dist/, icons included
+node scripts/extract-content.js build/systole.html  # → content/
+node scripts/build-pwa.js build/systole.html        # → dist/, icons included
 node scripts/serve.js 8080 dist &
 node tests/verify-pwa.js http://localhost:8080
 ```
+
+The extract is not optional on a rebuild. `content/` surviving from the last
+build is what makes it look optional, and a split build whose shell and bank
+came from different extractions is silent — its three build stamps are written
+in the same run and agree with each other. `build-pwa.js` compares
+`content/manifest.json`'s `sourceDigest` against the file it is splitting and
+refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 
 ---
 

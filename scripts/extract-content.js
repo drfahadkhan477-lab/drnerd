@@ -132,10 +132,32 @@ const out = questions.map(q => {
 
 fs.writeFileSync(path.join(OUT_DIR, 'questions.json'), JSON.stringify(out));
 
+/* Which commit did the extracting. sourceDigest already says which BUILD the
+   content came from — that is what build-pwa.js compares against — but a
+   digest is not something anyone can look up. This is, and it costs nothing:
+   it is not hashed into sourceDigest, so it cannot move a cache key or make
+   two identical extractions compare unequal. A tarball with no .git is a
+   legitimate place to build from, so a missing git is 'unknown', not a
+   failure; a dirty tree is marked, because a commit id over uncommitted
+   changes is a claim the repository cannot honour. */
+const commit = (() => {
+  try {
+    const at = require('child_process').execFileSync(
+      'git', ['rev-parse', '--short=12', 'HEAD'],
+      { cwd: path.join(__dirname, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (!/^[0-9a-f]{7,40}$/.test(at)) return 'unknown';
+    const dirty = require('child_process').execFileSync(
+      'git', ['status', '--porcelain'],
+      { cwd: path.join(__dirname, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().length > 0;
+    return dirty ? at + '-dirty' : at;
+  } catch (_) { return 'unknown'; }
+})();
+
 const manifest = {
   generated: new Date().toISOString(),
   source: path.basename(SRC),
   sourceDigest,
+  commit,
   questions: out.length,
   questionsWithFigures: Object.keys(figuresByQ).filter(k => figuresByQ[k].length).length,
   figures: figCount,

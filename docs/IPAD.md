@@ -15,8 +15,17 @@ Build the thing you host:
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
+node scripts/extract-content.js build/systole.html # → content/
 node scripts/build-pwa.js build/systole.html       # → dist/
 ```
+
+**All three, in that order, every time.** The middle one is easy to skip on a
+rebuild — `content/` is already there, so the split appears to work. It does
+not: `dist/index.html` and `dist/app.js` would be the new build and
+`dist/content/` the old one, and nothing on screen would say so. `build-pwa.js`
+now compares the digest `extract-content.js` wrote into `content/manifest.json`
+against the file it is splitting and refuses the pair when they disagree,
+naming both. This sequence is what the refusal is asking for.
 
 `dist/` is a plain static folder, about 23 MB — the bank, 408 figures, the
 shell and the fonts, and nothing else. Nothing in it needs a server that can run
