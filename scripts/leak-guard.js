@@ -68,10 +68,21 @@ const DIRS  = ['content/', 'build/', 'dist/', 'source/'];
  *
  * graphify-out/ is where `graphify` writes a knowledge graph — graph.json, a
  * GRAPH_REPORT.md and a graph.html — over whatever folder it was pointed at.
- * Pointed at this repository it walks source/, build/, content/ and dist/, so
- * its graph.json carries node labels and excerpts lifted from the licensed
- * question text. The directory name says nothing about that, which is the
- * whole problem: every other rule in this file looked straight past it.
+ *
+ * IT DOES NOT REACH THE CORPUS BY DEFAULT, and the first version of this
+ * comment claimed it did. graphify's own walker takes `gitignore=True` by
+ * default, and content/, build/, dist/ and source/ are every one of them
+ * gitignored, so a default run skips all four. Measured, not read: detect()
+ * over a fixture with a gitignored content/ returned 1 file and listed
+ * content/ under `ignored`; the same call with gitignore=False returned 2 and
+ * indexed content/secret.py.
+ *
+ * What this rule is for is the opt-out, which is one flag wide. `--no-gitignore`
+ * turns the walker loose on the ignored directories, and a .graphifyignore is
+ * loaded regardless of it and can re-include a path on its own. Either route
+ * puts node labels and excerpts of the licensed question text into graph.json,
+ * under a directory name that says nothing about it — and every other rule in
+ * this file looks straight past that file.
  *
  * Rule 3 is not the backstop it appears to be. It is a cap, not a floor: a
  * graph over the full bank would exceed 1 MB and be refused, but a graph of one

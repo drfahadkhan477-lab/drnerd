@@ -29,10 +29,12 @@ __pycache__/
 tests/last-run.log
 
 # Knowledge graphs written by `graphify` — graph.json, GRAPH_REPORT.md,
-# graph.html. Pointed at this repository it indexes source/, build/, content/
-# and dist/, so the graph carries excerpts of the licensed question text under
-# a name that suggests nothing of the kind. leak-guard refuses this prefix too;
-# a .gitignore entry is a default, and only the guard is a boundary.
+# graph.html. Its walker respects .gitignore by default, so a default run skips
+# content/, build/, dist/ and source/ — every one of them ignored above. But
+# `--no-gitignore` is one flag, and a .graphifyignore can re-include a path on
+# its own; either way the graph then carries excerpts of the licensed question
+# text under a name that suggests nothing of the kind. leak-guard refuses this
+# prefix too: a .gitignore entry is a default, and only the guard is a boundary.
 graphify-out/
 
 # Local artifacts from running the suite by hand. None of these belongs in the

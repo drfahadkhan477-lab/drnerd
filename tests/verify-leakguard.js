@@ -57,11 +57,15 @@ head('it refuses the licensed bank, by every route in');
   r = run(['tests/last-run.log']);
   ok('and the run log, whose output quotes question text', r.code === 1 && /PATH/.test(r.out));
 
-  /* AND graphify-out/, WHICH IS NOT THE CORPUS BUT IS MADE OF IT. `graphify`
-     writes a knowledge graph there over whatever it indexed; pointed at this
-     repository that means node labels and excerpts out of the licensed
-     question text, under a name that advertises none of it. Every rule in the
-     guard used to look past it: not a licensed path, no verify header, the
+  /* AND graphify-out/, WHICH CAN BE MADE OF THE CORPUS. `graphify` writes a
+     knowledge graph there over whatever it indexed. Its walker respects
+     .gitignore by default, so a default run over this repository skips
+     content/, build/, dist/ and source/ — an earlier version of this comment
+     said otherwise and was wrong. The exposure is the opt-out: `--no-gitignore`
+     is one flag, and a .graphifyignore is read regardless of it and can
+     re-include a path by itself. Either route puts node labels and excerpts of
+     the licensed question text under a name that advertises none of it. Every
+     rule in the guard used to look past it: not a licensed path, no verify header, the
      NAME regex does not match `graph.json`, and a graph of one subdirectory
      sits under rule 3's 1 MB cap and under the 200 KB floor rules 4 and 5
      need before they look. Proven before the rule existed — the guard printed
