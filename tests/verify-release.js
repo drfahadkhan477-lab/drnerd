@@ -259,11 +259,42 @@ head('there is one command, whatever you call it');
      this whole file exists to prevent — arriving through the convenience alias
      rather than through the gate. Driven for real, both ways, because "npm
      forwards exit codes" is an assumption and this file does not hold those. */
+  /* NEVER THE BARE NAME `npm`, and this is the whole reason this helper is
+     more than one line. The first version spawned 'npm' directly whenever
+     npm_execpath was unset — which is every run of
+
+         node scripts/verify.js build/systole.html
+
+     since nothing sets that variable outside an `npm run`. On Linux the bare
+     name resolves and it passed. On WINDOWS npm is npm.cmd, and since Node
+     20.12 (CVE-2024-27980) spawning a .cmd without shell:true is refused
+     outright: status null, no output, and two checks failing on the owner's
+     laptop for a reason that had nothing to do with the thing under test.
+     A portability bug in a test, shipped because it could not fail here.
+
+     So npm's own JavaScript entry point is resolved and run with this node.
+     No shell, no .cmd, no PATH lookup, identical on both platforms. */
+  const npmCli = (() => {
+    const fromEnv = process.env.npm_execpath;
+    if (fromEnv && /\.c?js$/.test(fromEnv) && fs.existsSync(fromEnv)) return fromEnv;
+    const bin = path.dirname(fs.realpathSync(process.execPath));
+    for (const rel of [['node_modules', 'npm', 'bin', 'npm-cli.js'],
+                       ['..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js']]) {
+      const at = path.join(bin, ...rel);
+      if (fs.existsSync(at)) return at;
+    }
+    return null;
+  })();
+  /* NOT VACUOUS. If npm cannot be found the three checks below would compare
+     null against null and could be made to pass, so the finding is stated
+     rather than absorbed: this names the cause instead of leaving an
+     exit-code mismatch to be puzzled over. */
+  ok("npm's own entry point was found, so the two below mean something",
+     !!npmCli, npmCli || 'not found near ' + process.execPath);
   const viaNpm = name => {
-    const r = spawnSync(process.env.npm_execpath ? process.execPath : 'npm',
-      process.env.npm_execpath ? [process.env.npm_execpath, 'run', '--silent', name, '--', '--dry-run']
-                               : ['run', '--silent', name, '--', '--dry-run'],
-      { cwd: ROOT, encoding: 'utf8' });
+    if (!npmCli) return { code: null, out: '' };
+    const r = spawnSync(process.execPath, [npmCli, 'run', '--silent', name, '--', '--dry-run'],
+                        { cwd: ROOT, encoding: 'utf8' });
     return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
   };
   const viaAlias = viaNpm('release');
@@ -271,7 +302,8 @@ head('there is one command, whatever you call it');
      (viaAlias.out.match(/DRY RUN.*|CERTIFIED/) || [''])[0]);
   ok('and a non-zero verdict survives the alias', viaAlias.code === 1, String(viaAlias.code));
   const viaReal = viaNpm('release-check');
-  ok('the name it delegates to behaves identically', viaReal.code === viaAlias.code,
+  ok('the name it delegates to behaves identically',
+     viaAlias.code !== null && viaReal.code === viaAlias.code,
      `release ${viaAlias.code}, release-check ${viaReal.code}`);
 }
 

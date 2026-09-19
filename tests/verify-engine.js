@@ -580,5 +580,60 @@ head('a reload is not a boot, and the split build is why');
      swallowed.length === 0, swallowed.join(' | ') || 'none');
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * NO SUITE SPAWNS npm BY ITS BARE NAME.
+ *
+ * On Windows npm, npx, yarn and pnpm are .cmd shims, not executables. Since
+ * Node 20.12 (CVE-2024-27980) spawnSync/execFileSync REFUSE to launch a .cmd
+ * without shell:true — status null, no output, no error most callers look at.
+ * On Linux and macOS the same call resolves a shell script and works.
+ *
+ * So this is a defect that cannot fail on the machine most of this was
+ * written on, and it shipped: tests/verify-release.js spawned 'npm' whenever
+ * npm_execpath was unset, which is every run of
+ *
+ *     node scripts/verify.js build/systole.html
+ *
+ * since nothing sets that variable outside an `npm run`. It passed here and
+ * failed on the owner's laptop, inside a 22-minute full run, for a reason
+ * that had nothing to do with the release gate it was checking.
+ *
+ * The cure is to run npm's own JavaScript entry point with process.execPath:
+ * no shell, no .cmd, no PATH lookup, and the same two lines on both
+ * platforms.
+ *
+ * NOT A BAN ON SPAWNING. git is spawned by name in several places and stays
+ * that way — git.exe is a real executable and Node launches it fine. Only the
+ * npm family are shims, so only they are named here.
+ */
+{
+  head('no suite spawns a tool Windows only has as a .cmd shim');
+  const suites = fs.readdirSync(TESTS).filter(f => /^verify-.*\.js$/.test(f)).sort();
+  const SHIMS = /\b(?:spawnSync|spawn|execFileSync|execFile)\s*\(\s*['"](npm|npx|yarn|pnpm)['"]/;
+  const bare = [];
+  let spawns = 0;
+  for (const f of suites) {
+    const code = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8'));
+    for (const line of code.split('\n')) {
+      if (/\b(?:spawnSync|spawn|execFileSync|execFile)\s*\(/.test(line)) spawns++;
+      const m = SHIMS.exec(line);
+      if (m) bare.push(`${f}: ${m[1]}`);
+    }
+  }
+  /* Vacuity guard: "no suite spawns npm by name" is also what a scan that
+     found no spawns at all returns. */
+  ok('there are spawns to check', spawns >= 5, `${spawns} across ${suites.length} suites`);
+  ok('and none of them names npm, npx, yarn or pnpm directly',
+     bare.length === 0, bare.join(', ') || 'none');
+  /* The other half: the suite that DOES drive npm must resolve its JS entry
+     point rather than trusting PATH. Checked by name because there is exactly
+     one, and if a second appears this line is where it will be noticed. */
+  const rel = blankComments(fs.readFileSync(path.join(TESTS, 'verify-release.js'), 'utf8'));
+  ok('the one suite that drives npm runs its entry point with this node',
+     /spawnSync\(process\.execPath, \[npmCli, 'run'/.test(rel));
+  ok('and says so rather than comparing two nulls when it cannot find it',
+     /!!npmCli, npmCli \|\| 'not found/.test(rel));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
