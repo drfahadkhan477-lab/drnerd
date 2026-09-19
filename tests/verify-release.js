@@ -221,5 +221,59 @@ head('the steps are the ones a release actually needs');
      !/SKIP\.add\('webkit'\)/.test(src) && /--skip/.test(src));
 }
 
+head('there is one command, whatever you call it');
+{
+  /* WHY AN ALIAS IS ALLOWED TO EXIST AT ALL. `npm run release` is the name
+     people reach for; `npm run release-check` is the name the gate has had.
+     Two names for one thing is how they stop being one thing — so the alias
+     DELEGATES rather than repeating the command:
+
+         "release-check": "node scripts/release-check.js",
+         "release":       "npm run release-check --"
+
+     There is exactly one spelling of the path to the gate. Change it and both
+     names follow. That is the property checked here; a second literal
+     `node scripts/release-check.js` would pass a naive "both exist" check and
+     is precisely what must not be written.
+
+     THE TRAILING `--` IS LOAD-BEARING: it forwards arguments, so
+     `npm run release -- export.html --skip webkit` still reaches the gate.
+     Without it the source file is silently dropped and the gate refuses for a
+     reason that has nothing to do with the build. */
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const scripts = pkg.scripts || {};
+  ok('npm run release-check invokes the gate', scripts['release-check'] === 'node scripts/release-check.js',
+     String(scripts['release-check']));
+  ok('npm run release exists', typeof scripts.release === 'string', String(scripts.release));
+  ok('and it delegates rather than repeating the path',
+     scripts.release === 'npm run release-check --', String(scripts.release));
+  /* The check that makes the delegation mean something: the gate's path is
+     written down ONCE across the whole scripts block. */
+  const spellings = Object.entries(scripts)
+    .filter(([, v]) => /release-check\.js/.test(v)).map(([k]) => k);
+  ok('the path to the gate appears in exactly one script', spellings.length === 1,
+     spellings.join(', ') || 'none');
+
+  /* AND IT MUST NOT LAUNDER THE VERDICT. A wrapper that swallowed the exit
+     code would turn NOT CERTIFIED into a shell success, which is the overclaim
+     this whole file exists to prevent — arriving through the convenience alias
+     rather than through the gate. Driven for real, both ways, because "npm
+     forwards exit codes" is an assumption and this file does not hold those. */
+  const viaNpm = name => {
+    const r = spawnSync(process.env.npm_execpath ? process.execPath : 'npm',
+      process.env.npm_execpath ? [process.env.npm_execpath, 'run', '--silent', name, '--', '--dry-run']
+                               : ['run', '--silent', name, '--', '--dry-run'],
+      { cwd: ROOT, encoding: 'utf8' });
+    return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
+  };
+  const viaAlias = viaNpm('release');
+  ok('npm run release reaches the gate', /nothing was measured/.test(viaAlias.out),
+     (viaAlias.out.match(/DRY RUN.*|CERTIFIED/) || [''])[0]);
+  ok('and a non-zero verdict survives the alias', viaAlias.code === 1, String(viaAlias.code));
+  const viaReal = viaNpm('release-check');
+  ok('the name it delegates to behaves identically', viaReal.code === viaAlias.code,
+     `release ${viaAlias.code}, release-check ${viaReal.code}`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -188,6 +188,46 @@ node scripts/build.js --keep --from theme # only steps 14-20 rerun
 
 ## Verifying
 
+### The whole release, as one command
+
+```bash
+npm run release -- path/to/ACCSAP_export.html          # or: npm run release-check
+npm run release -- path/to/export.html --skip webkit   # costs you the certificate
+npm run release -- --dry-run                           # exercise the gate itself
+```
+
+`scripts/release-check.js` runs the sequence a release actually needs, in
+order: the export is readable → nothing licensed is staged → the patch chain
+applies → every figure decodes → the split build assembles → the full suite on
+Chromium → the full suite against `dist/` over http → the full suite on WebKit.
+
+**It does not deploy.** It certifies, or it refuses to, and there are three
+outcomes rather than two:
+
+| | |
+|---|---|
+| `CERTIFIED` | every step ran and every step passed — the only exit 0 |
+| `NOT CERTIFIED` | something failed |
+| `INCOMPLETE` | nothing failed, but something was skipped, and each skip is named |
+
+A skip is never folded into a pass. Skipping WebKit — the engine the app is
+actually used on — costs you the certificate rather than passing quietly.
+
+It writes `build/release-report.md`: the commit, the source digest, a SHA-256
+of the single file and a content-addressed root over every file in `dist/`, so
+two deployments can be compared without either being opened. Counts and
+digests only, and that is enforced rather than intended — a step reports
+itself through `safeDetail()`, which rebuilds each line from facts it could
+parse and emits nothing it could not.
+
+`release` and `release-check` are the same command; the first delegates to the
+second so there is one spelling of the path to the gate.
+`tests/verify-release.js` holds it to that, and to forwarding the exit code —
+a wrapper that swallowed a `NOT CERTIFIED` would be the overclaim the gate
+exists to prevent, arriving through the convenience alias.
+
+### The suites on their own
+
 ```bash
 node scripts/verify.js                       # everything, ~4 min
 node scripts/verify.js --only physio,theme   # just these
