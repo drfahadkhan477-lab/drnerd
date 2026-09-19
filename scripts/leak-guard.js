@@ -23,7 +23,8 @@
  * inconvenient:
  *
  *   1. PATH      anything under content/, build/, dist/ or source/, plus
- *                tests/last-run.log, whose output quotes question text.
+ *                tests/last-run.log, whose output quotes question text, plus
+ *                graphify-out/, which is not the corpus but is built from it.
  *   1b. LOG      the same log SAVED UNDER ANOTHER NAME, recognised by the
  *                header scripts/verify.js writes rather than by its filename.
  *                `verify.js > 1.txt` produces identical content and rule 1
@@ -63,6 +64,29 @@ const SNIFF_BYTES   = 200 * 1024;
    rule 3 already refuses that before these rules are reached. */
 
 const DIRS  = ['content/', 'build/', 'dist/', 'source/'];
+/* RULE 1, SECOND HALF: A DIRECTORY THAT IS NOT THE CORPUS BUT IS MADE OF IT.
+ *
+ * graphify-out/ is where `graphify` writes a knowledge graph — graph.json, a
+ * GRAPH_REPORT.md and a graph.html — over whatever folder it was pointed at.
+ * Pointed at this repository it walks source/, build/, content/ and dist/, so
+ * its graph.json carries node labels and excerpts lifted from the licensed
+ * question text. The directory name says nothing about that, which is the
+ * whole problem: every other rule in this file looked straight past it.
+ *
+ * Rule 3 is not the backstop it appears to be. It is a cap, not a floor: a
+ * graph over the full bank would exceed 1 MB and be refused, but a graph of one
+ * subdirectory sits under the cap and is waved through. Below it, rule 4's
+ * markers (`const ALL_Q=[`, `const IMGS={`) are JavaScript and absent from a
+ * JSON graph, and rule 5 wants eight base64 images a graph does not embed —
+ * and both need 200 KB before they look at all. So a small graph.json walked
+ * past all five.
+ * Verified before this list existed: `node scripts/leak-guard.js
+ * graphify-out/graph.json` printed "nothing licensed" and exited 0.
+ *
+ * Kept separate from DIRS so the refusal says what is true of it. These are
+ * not licensed content; they are built from it, and a guard that mislabels
+ * what it caught is the kind that gets argued with. */
+const DERIVED = ['graphify-out/'];
 const FILES = ['tests/last-run.log'];
 /* RULE 1b, AND IT IS HERE BECAUSE OF A FILE CALLED tests/1.txt.
  *
@@ -112,6 +136,8 @@ function inspect(file) {
 
   if (DIRS.some(d => p.startsWith(d)))
     return { rule: 'PATH', why: `${p.split('/')[0]}/ is licensed content and is never committed` };
+  if (DERIVED.some(d => p.startsWith(d)))
+    return { rule: 'PATH', why: `${p.split('/')[0]}/ is built from the licensed corpus and is never committed` };
   if (FILES.includes(p))
     return { rule: 'PATH', why: 'its output quotes question text' };
   if (NAME.test(path.basename(p)))

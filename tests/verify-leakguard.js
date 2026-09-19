@@ -11,8 +11,10 @@
  * WHY BOTH HALVES MATTER, and the second one more. A guard that refuses
  * everything is as useless as no guard, and worse than no guard, because it
  * gets switched off. So the last block runs the guard over every file git
- * actually tracks — 211 of them — and asserts it refuses none. That is a
- * check against reality rather than against fixtures, and it is what keeps
+ * actually tracks — it said 211 here while the number was 240 — and asserts it
+ * refuses none. No count on purpose now: it moves with every file added, and
+ * an unguarded number in a comment is the thing CLAUDE.md says not to write.
+ * That is a check against reality rather than against fixtures, and it keeps
  * rule 4 honest: eight tracked source files contain `const ALL_Q=` on purpose,
  * being the patch scripts that search for it, and a marker-only rule would
  * have refused all eight.
@@ -54,6 +56,26 @@ head('it refuses the licensed bank, by every route in');
   ok('and so is one under dist/', r.code === 1 && /PATH/.test(r.out));
   r = run(['tests/last-run.log']);
   ok('and the run log, whose output quotes question text', r.code === 1 && /PATH/.test(r.out));
+
+  /* AND graphify-out/, WHICH IS NOT THE CORPUS BUT IS MADE OF IT. `graphify`
+     writes a knowledge graph there over whatever it indexed; pointed at this
+     repository that means node labels and excerpts out of the licensed
+     question text, under a name that advertises none of it. Every rule in the
+     guard used to look past it: not a licensed path, no verify header, the
+     NAME regex does not match `graph.json`, and a graph of one subdirectory
+     sits under rule 3's 1 MB cap and under the 200 KB floor rules 4 and 5
+     need before they look. Proven before the rule existed — the guard printed
+     "nothing licensed" and exited 0.
+
+     The second assertion is why DERIVED carries a trailing slash. Without it
+     the prefix test matches any name merely beginning "graphify", and a file
+     called graphify-outline.md would be refused for no reason — a guard that
+     over-refuses is the kind that gets switched off. Proven by setting DERIVED
+     to ['graphify']: that assertion went red and the one above stayed green. */
+  r = run(['graphify-out/graph.json']);
+  ok('and a graphify graph, which is built from the corpus', r.code === 1 && /PATH/.test(r.out), r.out.match(/PATH.*/)?.[0] || r.out.slice(0, 60));
+  r = run(['graphify-outline.md']);
+  ok('but not a file that merely starts with the same letters', r.code === 0);
 
   /* 1b. LOG — THE SAME LOG UNDER ANOTHER NAME, which is how this rule came
      to exist. `node scripts/verify.js > 1.txt` is the obvious thing to type,
