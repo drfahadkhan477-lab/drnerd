@@ -386,12 +386,51 @@ const LOADER = `<script>
      sessionStorage rather than a variable, for the same reason the update
      reload below uses it — the reload discards variables. Second time through,
      the fellow is told rather than spun. */
+  /* THE DECISION ITSELF, lifted out of the branch it used to live in, so that
+     tests/verify-swupdate-pure.js can drive every pairing without a browser
+     and without a build. Same move, and the same reason, as
+     whyContentFailed() below: the mechanics around it (sessionStorage,
+     location.reload) need a page, but WHICH of the three answers is right for
+     a given pair is arithmetic, and arithmetic should not need a service
+     worker and a served directory to check. */
+  function pairVerdict(shellId, appId, alreadyTried){
+    /* BOTH HAVE TO BE PRESENT before equality means anything. Written as a
+       a bare appId === shellId comparison this answered 'run' to two absent
+       stamps (NO BACKTICKS IN HERE: this block is inside the LOADER template
+       literal, and a backtick in a comment ends it — see CLAUDE.md),
+       which is this repository's most-repeated defect wearing a new hat: a
+       comparison that passes hardest when nothing is there to compare. It is
+       unreachable from the shipped loader — build-pwa.js throws if the
+       shell's placeholder was not substituted, and appId is normalised to
+       null — but an unreachable branch that answers 'run' is the wrong
+       unreachable branch to have. */
+    if(!shellId || !appId) return alreadyTried ? 'tell' : 'reload';
+    if(appId === shellId) return 'run';
+    return alreadyTried ? 'tell' : 'reload';
+  }
   try{
-    if(typeof APP_BUILD_ID !== 'undefined' && APP_BUILD_ID !== SHELL_BUILD_ID){
-      if(sessionStorage.getItem('accsap-mixed-build')){
-        return fail('This app updated while it was opening. Close it completely and open it again.',
-                    new Error('build mismatch: shell ' + SHELL_BUILD_ID + ', app ' + APP_BUILD_ID));
-      }
+    /* AN UNSTAMPED app.js IS A MISMATCH, and it used to be a free pass. The
+       condition here was
+
+           typeof APP_BUILD_ID !== 'undefined' && APP_BUILD_ID !== SHELL_BUILD_ID
+
+       so an app.js carrying no stamp at all skipped the check entirely. That
+       is not a hypothetical shape: it is precisely what a cached app.js from
+       a build older than the stamp looks like, which is the worst case of the
+       pairing this whole block exists to catch — a new shell running old
+       code. The check that was meant to catch it was the one thing that let
+       it through, because the guard against a ReferenceError had quietly
+       become a guard against the test.
+
+       null rather than undefined so the comparison below is a comparison and
+       not a typeof, and so nothing can ever equal it by being absent too. */
+    var appId = (typeof APP_BUILD_ID === 'undefined') ? null : APP_BUILD_ID;
+    var verdict = pairVerdict(SHELL_BUILD_ID, appId, !!sessionStorage.getItem('accsap-mixed-build'));
+    if(verdict === 'tell'){
+      return fail('This app updated while it was opening. Close it completely and open it again.',
+                  new Error('build mismatch: shell ' + SHELL_BUILD_ID + ', app ' + appId));
+    }
+    if(verdict === 'reload'){
       sessionStorage.setItem('accsap-mixed-build','1');
       location.reload();
       return;
@@ -661,6 +700,13 @@ if (html.indexOf('__COMMIT__') >= 0) throw new Error('more than one commit place
 /* A var at the top level of a classic script is a global, which is what the
    loader's typeof check reads. */
 appCode = `var APP_BUILD_ID='${BUILD_ID}';\nvar APP_COMMIT='${COMMIT}';\n` + appCode;
+/* SYMMETRIC WITH THE SHELL'S TWO PLACEHOLDER CHECKS ABOVE, and newly load-
+   bearing: the loader now treats an unstamped app.js as a mismatched pair, so
+   a build that failed to stamp one would ship an app that refuses to start.
+   Cheap to assert, and the failure belongs here rather than on a tablet. */
+if (!/^var APP_BUILD_ID='[0-9a-f]{16}';\n/.test(appCode)) {
+  throw new Error('app.js did not receive its build stamp');
+}
 
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 fs.writeFileSync(path.join(DIST, 'app.js'), appCode);

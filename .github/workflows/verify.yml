@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 26 suites that are pure Node with no Playwright and no
+#   logic        the 27 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -181,6 +181,8 @@ jobs:
         run: node tests/verify-loader-pure.js
       - name: a split build cannot be half of one build and half of another (29 checks)
         run: node tests/verify-provenance-pure.js
+      - name: a deploy landing under a running app leaves a pair that is noticed (49 checks)
+        run: node tests/verify-swupdate-pure.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

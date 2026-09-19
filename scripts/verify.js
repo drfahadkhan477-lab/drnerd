@@ -185,6 +185,11 @@ const SUITES = [
      shell was new, whose bank was old, and whose three build stamps all
      agreed with each other — so every existing guard passed over it. */
   ['provenance-pure', 'a split build cannot be half of one build and half of another'],
+  /* The five pairings a deploy can leave behind. One of them — a new shell
+     against an app.js too old to carry a stamp — walked straight through the
+     check meant to catch it, because the guard against a ReferenceError had
+     become a guard against the test. */
+  ['swupdate-pure', 'a deploy landing under a running app leaves a pair that is noticed'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -230,7 +235,7 @@ const SUITES = [
    while the only machine that could run the full thing was not being run. The
    first full green run wrote all fourteen at once. If this fills up again, that
    is the same gap reopening. */
-const PENDING_RECORD = ['loader-pure', 'provenance-pure'];
+const PENDING_RECORD = ['loader-pure', 'provenance-pure', 'swupdate-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
