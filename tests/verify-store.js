@@ -25,6 +25,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-store.js <patched.html|url>'); process.exit(1); }
@@ -35,7 +36,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 const boot = async page => {
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
@@ -61,8 +63,10 @@ const RAW = `key => new Promise(resolve => {
 (async () => {
   const browser = await launch();
   const ctx = await browser.newContext();
-  const page = await ctx.newPage();
-  const errors = [];
+  const errors = [], events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
+  const page = watch(await ctx.newPage(), events, 'main');
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => {
     if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text());
@@ -238,7 +242,7 @@ const RAW = `key => new Promise(resolve => {
 
   head('with no database at all');
   {
-    const p2 = await ctx.newPage();
+    const p2 = watch(await ctx.newPage(), events, 'no-indexeddb');
     const errs2 = [];
     p2.on('pageerror', e => errs2.push(e.message));
     /* Private mode, a locked-down profile, some file:// builds: the app has to

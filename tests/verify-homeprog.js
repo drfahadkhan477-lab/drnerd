@@ -7,6 +7,7 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
 
 const target = process.argv[2];
@@ -18,12 +19,15 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 430, height: 1000 } });
-  const errors = [];
+  const errors = [], events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
+  const page = watch(await browser.newPage({ viewport: { width: 430, height: 1000 } }), events, 'main');
   page.on('pageerror', e => errors.push(e.message));
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
@@ -103,7 +107,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('reduced motion shows the number, not a frozen zero');
   {
-    const page2 = await browser.newPage({ viewport: { width: 430, height: 1000 } });
+    const page2 = watch(await browser.newPage({ viewport: { width: 430, height: 1000 } }), events, 'reduced-motion');
     await page2.emulateMedia({ reducedMotion: 'reduce' });
     await page2.goto(URL, { waitUntil: 'load', timeout: 200000 });
     await booted(page2);

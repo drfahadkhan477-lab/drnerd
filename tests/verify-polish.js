@@ -8,6 +8,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
 
 const target = process.argv[2];
@@ -21,12 +22,15 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
-  const errors = [];
+  const errors = [], events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
+  const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'main');
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
@@ -368,7 +372,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
   head('haptics respect reduced motion and missing-API feature detection');
   {
-    const reducedPage = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+    const reducedPage = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'reduced-motion');
     await reducedPage.emulateMedia({ reducedMotion: 'reduce' });
     await reducedPage.goto(URL, { waitUntil: 'load', timeout: 200000 });
     await booted(reducedPage);
@@ -382,7 +386,7 @@ const head = t => console.log('\n── ' + t + ' ──');
     ok('no vibration is requested under prefers-reduced-motion', underReduced === 0, String(underReduced));
     await reducedPage.close();
 
-    const noVibratePage = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+    const noVibratePage = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'no-vibrate');
     await noVibratePage.addInitScript(() => {
       Object.defineProperty(window.navigator, 'vibrate', { value: undefined, configurable: true });
     });
@@ -611,7 +615,7 @@ const head = t => console.log('\n── ' + t + ' ──');
      is there or not), and the handler needs now-lastTap to be BOTH <350 and
      >0, so two dispatches in the same millisecond never trigger it. */
   {
-    const touchPage = await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true });
+    const touchPage = watch(await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true }), events, 'touch');
     await touchPage.goto(URL, { waitUntil: 'load', timeout: 250000 });
     await booted(touchPage, { timeout: 150000 });
     const touch = await touchPage.evaluate(async () => {

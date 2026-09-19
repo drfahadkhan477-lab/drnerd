@@ -16,6 +16,7 @@
 'use strict';
 const path = require('path');
 const { launch, heapUsedBytes, engineName } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
 
 const target = process.argv[2];
@@ -41,7 +42,8 @@ const unmeasurable = (label, why) => {
   unmeasured++;
   console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 const kb = b => (b / 1024).toFixed(0) + ' KB';
 const mb = b => (b / 1048576).toFixed(1) + ' MB';
 
@@ -58,6 +60,15 @@ async function heapAfterBoot(page, url) {
 
 (async () => {
   const browser = await launch({ args: ['--enable-precise-memory-info'] });
+  /* Twelve pages across nine contexts, and the ones that matter most when this
+     suite dies are the offline and update sections — where "Target page,
+     context or browser has been closed" is exactly what a deliberate close
+     and a crash both look like. Each page is tagged with the section that
+     opened it, because "the page closed" twelve times over says nothing. See
+     tests/_deathnote.js. */
+  const errors = [], events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
 
   head('the shell no longer carries the content');
   {
@@ -132,7 +143,7 @@ async function heapAfterBoot(page, url) {
      paint happens without it. That silently cost the home screen its pearl —
      the card was absent, and nothing asked for it again. */
   {
-  const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+  const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'late library', errors);
   await page.goto(target, { waitUntil: 'load', timeout: 200000 });
   await booted(page);
   const late = await page.evaluate(() => new Promise(r => setTimeout(() => r({
@@ -391,7 +402,7 @@ async function heapAfterBoot(page, url) {
 
   head('figures load by URL, on demand — not all of them, up front');
   {
-    const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+    const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'figures on demand', errors);
     const figReqs = [];
     page.on('request', r => { if (r.url().includes('/content/figures/')) figReqs.push(r.url()); });
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
@@ -424,7 +435,7 @@ async function heapAfterBoot(page, url) {
 
   head('the AI path still gets real base64, resolved at send time');
   {
-    const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+    const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'AI base64', errors);
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
     const resolved = await page.evaluate(async () => {
@@ -449,7 +460,7 @@ async function heapAfterBoot(page, url) {
   head('offline, once installed');
   {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
-    const page = await ctx.newPage();
+    const page = watch(await ctx.newPage(), events, 'offline', errors);
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
     const swReady = await page.evaluate(() =>
@@ -496,7 +507,7 @@ async function heapAfterBoot(page, url) {
      not already met is a broken image, discovered at the worst moment. */
   {
     const ctx = await browser.newContext({ viewport: { width: 430, height: 932 } });
-    const page = await ctx.newPage();
+    const page = watch(await ctx.newPage(), events, 'download the rest', errors);
     let figReqs = 0;
     page.on('request', r => { if (r.url().includes('/content/figures/')) figReqs++; });
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
@@ -612,14 +623,14 @@ async function heapAfterBoot(page, url) {
 
   head('memory: the whole bank is no longer resident');
   {
-    const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+    const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'memory', errors);
     const pwaHeap = await heapAfterBoot(page, target);
     await page.close();
     if (pwaHeap === null) {
       unmeasurable('the shell\'s heap after boot',
                    `${engineName()} has no heap profiler — run this section on chromium`);
     } else if (baseline) {
-      const p2 = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+      const p2 = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'memory/second page', errors);
       const baseHeap = await heapAfterBoot(p2, 'file://' + path.resolve(baseline));
       await p2.close();
       ok('heap is materially lower than the single-file build',
@@ -644,7 +655,7 @@ async function heapAfterBoot(page, url) {
      registrations are per-origin and every other section here installs one. */
   {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
-    const page = await ctx.newPage();
+    const page = watch(await ctx.newPage(), events, 'bootloader', errors);
     await page.route('**/app.js', r => r.abort());
     await page.goto(ORIGIN + '/index.html', { waitUntil: 'load', timeout: 120000 });
     const shown = await page.waitForFunction(
@@ -667,7 +678,7 @@ async function heapAfterBoot(page, url) {
       /* THE HALF THAT STOPS A BROKEN REGISTRATION PASSING. Zero is also what a
          build that never registers anything would score, so the same context
          loads the page without the block and has to reach one. */
-      const healthy = await ctx.newPage();
+      const healthy = watch(await ctx.newPage(), events, 'bootloader/healthy', errors);
       await healthy.goto(ORIGIN + '/index.html', { waitUntil: 'load', timeout: 120000 });
       await healthy.waitForFunction(() => typeof S !== 'undefined', null, { timeout: 120000 });
       const after = await healthy.evaluate(async () => {
@@ -697,7 +708,7 @@ async function heapAfterBoot(page, url) {
      cover an agent loop sending the same figures several times in a row. */
   {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
-    const page = await ctx.newPage();
+    const page = watch(await ctx.newPage(), events, 'figure cache lid', errors);
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
     await page.evaluate(() => navigator.serviceWorker.ready);
@@ -777,7 +788,7 @@ async function heapAfterBoot(page, url) {
      browser would have been handed. */
   {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
-    const page = await ctx.newPage();
+    const page = watch(await ctx.newPage(), events, 'mismatched builds', errors);
     let loads = 0;
     page.on('framenavigated', f => { if (f === page.mainFrame()) loads++; });
     /* One character different is a different build. */
@@ -842,7 +853,7 @@ async function heapAfterBoot(page, url) {
      Progress (step 82) took the rest. */
   {
     const ctx = await browser.newContext({ viewport: { width: 1194, height: 834 } });
-    const page = await ctx.newPage();
+    const page = watch(await ctx.newPage(), events, 'narrow screen', errors);
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
     await page.evaluate(() => { goHome(); render(); });

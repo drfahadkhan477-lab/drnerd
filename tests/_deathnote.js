@@ -108,4 +108,49 @@ function onDeath(collect) {
   return emit;
 }
 
-module.exports = { deathNote, onDeath, HEADING };
+/* ── attaching the listeners ───────────────────────────────────────────────
+ *
+ * The note above reads two arrays. `errors` each suite fills its own way —
+ * some push e.message, some String(e), some filter engine noise first — and
+ * that is theirs to keep. `events` is the same four lines everywhere, and the
+ * suites that need them most are the ones with the most pages to put them on:
+ * verify-pwa.js opens twelve. Twelve hand-written copies of four listeners is
+ * how one of them ends up subtly different from the other eleven, which is the
+ * failure this repo keeps producing in other disguises.
+ *
+ * WHY IT RETURNS THE PAGE. So the call wraps the creation rather than
+ * following it:
+ *
+ *     const page = watch(await browser.newPage(), events, 'offline');
+ *
+ * There is no way to write that with the listeners going on before the page
+ * exists. The version that takes the page on the next line has one — I wrote
+ * it, in verify-type.js, where the page is created inside a loop and my
+ * listeners landed above the loop referring to a `page` that did not yet
+ * exist. `node --check` cannot see that; it is a runtime ReferenceError in the
+ * handler for the crash you were trying to diagnose. tests/verify-engine.js
+ * now asserts the ordering, and this shape makes the assertion trivially true.
+ *
+ * PAGE ERRORS ARE OPTIONAL, and the fourth argument is how. A suite that
+ * already has its own pageerror listener has decided what counts as one —
+ * verify-heroart.js filters engine noise, verify-figreview.js keeps the whole
+ * String(e), verify-splash-heart.js collects console errors alongside — and a
+ * helper that pushed them too would double every message or overrule that
+ * decision. Those suites pass three arguments. A suite that collects nothing
+ * of its own passes its array as the fourth and gets the messages tagged the
+ * same way the events are, which is the point: "INJECTED_VT_FAILURE" does not
+ * say which of verify-failsafe.js's four sabotaged builds produced it.
+ */
+function watch(page, events, tag = '', errors = null) {
+  const at = tag ? tag + ': ' : '';
+  page.on('crash', () => events.push(at + 'the browser CRASHED the page'));
+  page.on('close', () => events.push(at + 'the page closed'));
+  page.on('requestfailed', r => {
+    const why = (r.failure() || {}).errorText || '';
+    if (why) events.push(at + 'request failed ' + String(r.url()).slice(-40) + ' — ' + why);
+  });
+  if (errors) page.on('pageerror', e => errors.push(at + e.message));
+  return page;
+}
+
+module.exports = { deathNote, onDeath, watch, HEADING };

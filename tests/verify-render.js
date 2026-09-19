@@ -25,6 +25,7 @@
  */
 'use strict';
 const { launch, engineName } = require('./_engine.js');
+const { onDeath, watch } = require('./_deathnote.js');
 const R = require('./_render.js');
 const fs = require('fs');
 const path = require('path');
@@ -35,7 +36,15 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
+
+/* Out here because the tail is `})().catch(…)`, which handles the rejection —
+   nothing is ever unhandled, so a note installed inside the IIFE would never
+   fire. The catch takes the emitter instead. See tests/_deathnote.js. */
+const errors = [], events = [];
+const died = onDeath(() => ({ section, checks: passed + failed, errors,
+                              events: events.length ? events.join(', ') : 'none' }));
 
 /* A page whose only job is to swap one screen for another the way the app
    does: state changes synchronously, markup changes in the transition's async
@@ -147,7 +156,8 @@ head('no wait passes its options where the argument goes');
 
 (async () => {
   const browser = await launch();
-  const page = await (await browser.newContext()).newPage();
+  const page = watch(await (await browser.newContext()).newPage(), events, 'fixture');
+  page.on('pageerror', e => errors.push(e.message));
   await page.setContent(FIXTURE);
   console.log(`  engine: ${engineName()}`);
 
@@ -226,7 +236,7 @@ head('no wait passes its options where the argument goes');
       promise.then(() => 'resolved', () => 'rejected'),
       new Promise(r => setTimeout(() => r('still waiting'), ms)),
     ]);
-    const blank = await (await browser.newContext()).newPage();
+    const blank = watch(await (await browser.newContext()).newPage(), events, 'blank/waitForFunction');
     await blank.setContent('<!doctype html><html><body>nothing</body></html>');
 
     const right = await race(
@@ -255,7 +265,7 @@ head('no wait passes its options where the argument goes');
      /previous one/.test(msg));
 
   head('booted() is a real wait, not an immediate true');
-  const blank = await (await browser.newContext()).newPage();
+  const blank = watch(await (await browser.newContext()).newPage(), events, 'blank/booted');
   await blank.setContent('<!doctype html><html><body><p>nothing here</p></body></html>');
   let bootMsg = '';
   try { await R.booted(blank, { timeout: 700 }); } catch (e) { bootMsg = e.message; }
@@ -264,4 +274,4 @@ head('no wait passes its options where the argument goes');
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
-})().catch(e => { console.error(e); process.exit(1); });
+})().catch(died);

@@ -500,5 +500,85 @@ head('a reload is not a boot, and the split build is why');
      blind.length === 0, blind.join(', ') || 'none');
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * A SUITE THAT DIES MUST BE ABLE TO SAY SO.
+ *
+ * tests/_deathnote.js prints what the page said before a suite died. It is
+ * two lines to install and it is the only evidence there is when a browser
+ * takes a page down — "Target page, context or browser has been closed" names
+ * the survivor, never the cause. All 46 browser suites now carry one, and
+ * this keeps the forty-seventh from being written without one.
+ *
+ * The other two checks here are both mistakes I made during the rollout, and
+ * neither is visible to `node --check`:
+ *
+ *   · LISTENERS ABOVE THE PAGE. verify-type.js creates a page per viewport
+ *     inside a loop; my listeners went on above the loop, naming a `page`
+ *     that did not exist yet. That is a ReferenceError thrown from inside the
+ *     handler for the crash you were trying to diagnose — the diagnostic
+ *     fails exactly when it is needed. The cure is shape, not vigilance:
+ *     watch() RETURNS the page, so `watch(await browser.newPage(…), events)`
+ *     has no way to be written out of order. So the rule checked is that the
+ *     creation and the watch are the same expression.
+ *
+ *   · A CATCH THAT SWALLOWS THE NOTE. Four suites ended with
+ *     `})().catch(e => { console.error(e); process.exit(1); })`. A catch
+ *     HANDLES the rejection, so process.on('unhandledRejection') never fires
+ *     and the note never prints — a suite that looks instrumented and is not.
+ *     They now pass the note's own emitter, which also moves the exception
+ *     off stderr; scripts/verify.js concatenates the two pipes in no
+ *     guaranteed order, and that has already cut one note in half.
+ */
+{
+  head('every browser suite can say how it died');
+  const suites = fs.readdirSync(TESTS).filter(f => /^verify-.*\.js$/.test(f)).sort();
+  const browserSuites = [], noNote = [], splitWatch = [], swallowed = [];
+  let watches = 0;
+  for (const f of suites) {
+    const code = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8'));
+    /* The same test _engine.js's own guard uses, and for the same reason:
+       this file discusses launch() in prose, so the scan is anchored to a
+       line with no quote before the call. */
+    if (!/^[^'"`\n]*\blaunch\(/m.test(code)) continue;
+    browserSuites.push(f);
+    if (!/require\(\s*'\.\/_deathnote(?:\.js)?'\s*\)/.test(code) || !/\bonDeath\s*\(/.test(code)) {
+      noNote.push(f);
+      continue;
+    }
+    /* Every watch() must wrap the creation. `watch(await X.newPage(…), …)` is
+       the only form in which the listeners cannot precede the page. */
+    for (const m of code.matchAll(/\bwatch\s*\(/g)) {
+      watches++;
+      const line = code.slice(code.lastIndexOf('\n', m.index) + 1,
+                             (code.indexOf('\n', m.index) + 1 || code.length) - 1);
+      /* The context may be awaited inside the page's own creation —
+         `watch(await (await browser.newContext()).newPage(), …)` — which is
+         still ONE expression and still cannot be written out of order. The
+         first version of this required newPage() to follow the await
+         directly and failed four honest call sites. What is actually being
+         asserted is that the creation is an ARGUMENT to watch(), so that is
+         what is matched. */
+      if (!/\bwatch\s*\(\s*await\s[^;]*\bnewPage\s*\(/.test(line)) {
+        splitWatch.push(`${f}: ${line.trim().slice(0, 60)}`);
+      }
+    }
+    /* The tail. A handler that is not the emitter returned by onDeath() eats
+       the rejection before the process ever sees it. */
+    const tail = /\}\)\(\)\s*\.catch\s*\(([^\n]*)\)\s*;?\s*$/m.exec(code);
+    if (tail && !/^\s*\w+\s*$/.test(tail[1])) swallowed.push(`${f}: .catch(${tail[1].trim().slice(0, 40)})`);
+  }
+  /* Vacuity guards, both directions. "No suite is missing a note" is also
+     what a scan that found no suites returns, and "no watch() is split" is
+     what a scan that found no watch() calls returns. */
+  ok('there are browser suites to check', browserSuites.length >= 40, `${browserSuites.length} found`);
+  ok('and watch() calls among them', watches >= 40, `${watches} found`);
+  ok('every browser suite installs a death note',
+     noNote.length === 0, noNote.join(', ') || 'none');
+  ok('every watch() wraps the page creation, so no listener can precede its page',
+     splitWatch.length === 0, splitWatch.join(' | ') || 'none');
+  ok('no suite ends with a catch that would swallow the note',
+     swallowed.length === 0, swallowed.join(' | ') || 'none');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

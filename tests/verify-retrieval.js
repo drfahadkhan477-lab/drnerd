@@ -87,20 +87,30 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
+
+/* Out here because the tail is `})().catch(…)`, which handles the rejection —
+   nothing is ever unhandled, so a note installed inside the IIFE would never
+   fire. The catch takes the emitter instead. See tests/_deathnote.js. */
+const errors = [], events = [];
+const died = onDeath(() => ({ section, checks: passed + failed, errors,
+                              events: events.length ? events.join(', ') : 'none' }));
 const pct = x => (x * 100).toFixed(1) + '%';
 
 const TARGET = process.argv[2] || path.join(__dirname, '..', 'build', 'systole.html');
 
 (async () => {
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+  const page = watch(await browser.newPage({ viewport: { width: 1200, height: 900 } }), events);
+  page.on('pageerror', e => errors.push(e.message));
   await page.goto('file://' + path.resolve(TARGET));
   await page.waitForFunction(
     () => typeof S !== 'undefined' && typeof search === 'function' && typeof REF !== 'undefined', null,
@@ -305,4 +315,4 @@ const TARGET = process.argv[2] || path.join(__dirname, '..', 'build', 'systole.h
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
-})().catch(e => { console.error(e); process.exit(1); });
+})().catch(died);

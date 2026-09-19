@@ -29,6 +29,7 @@
 const fs = require('fs');
 const path = require('path');
 const { launch, cpuThrottle, isEngineNoise } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-splash-heart.js <patched.html>'); process.exit(1); }
@@ -40,7 +41,8 @@ const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+let section = '';
+const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 (async () => {
   head('the single-file build carries it inline, before the app script');
@@ -92,13 +94,15 @@ const head = t => console.log('\n── ' + t + ' ──');
      trick the splash's own screenshot check uses, so the window to look is
      comfortably wide instead of a coin flip. */
   const browser = await launch();
-  const page = await browser.newPage({ viewport: { width: 440, height: 900 }, deviceScaleFactor: 2 });
+  const errors = [], events = [];
+  onDeath(() => ({ section, checks: passed + failed, errors,
+                   events: events.length ? events.join(', ') : 'none' }));
+  const page = watch(await browser.newPage({ viewport: { width: 440, height: 900 }, deviceScaleFactor: 2 }), events, 'main');
   /* See _engine.js: false on any engine without CDP. The section below
      already treats "the splash went before both samples" as inconclusive
      rather than as a failure, which is exactly the case an unthrottled run
      makes more likely, so nothing here needs to change shape. */
   const throttled = await cpuThrottle(page, 4);
-  const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
   await page.goto(URL, { waitUntil: 'commit', timeout: 250000 });
@@ -153,7 +157,7 @@ const head = t => console.log('\n── ' + t + ' ──');
                                : (a === b ? 'identical' : `${a} → ${b}`));
 
   head('reduced motion actually stops it');
-  const rmPage = await browser.newPage({ viewport: { width: 440, height: 900 }, deviceScaleFactor: 2, reducedMotion: 'reduce' });
+  const rmPage = watch(await browser.newPage({ viewport: { width: 440, height: 900 }, deviceScaleFactor: 2, reducedMotion: 'reduce' }), events, 'reduced-motion');
   await cpuThrottle(rmPage, 4);
   await rmPage.goto(URL, { waitUntil: 'commit', timeout: 250000 });
   await rmPage.waitForFunction(() => {
