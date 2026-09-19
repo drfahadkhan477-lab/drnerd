@@ -151,6 +151,36 @@ head('the digest compared is the digest extract-content writes');
   ok('a digest of the same bytes matches itself', staleContent(d1, { sourceDigest: d1 }) === null, d1);
 }
 
+head('the one-command split build runs the extract it depends on');
+{
+  /* THE GATE ABOVE MADE THIS VISIBLE. `npm run pwa` was
+   *
+   *     node scripts/build-pwa.js build/systole.html
+   *
+   * with no extract step — the same two-command sequence docs/IPAD.md used
+   * to print, and the one staleContent() now refuses. Since the refusal is
+   * loud, the script no longer produces a mixed dist/; what it still did was
+   * TEACH the wrong sequence, from package.json, which is the first place
+   * anyone looks for how to build. The docs were corrected and this was not.
+   *
+   * Order is the whole property: build-pwa reads content/ at its very first
+   * lines, so an extract that ran afterwards would be a rebuild of the thing
+   * already consumed. */
+  const pkg = JSON.parse(require('fs').readFileSync(require('path').join(ROOT, 'package.json'), 'utf8'));
+  const pwa = (pkg.scripts || {}).pwa || '';
+  ok('npm run pwa exists', !!pwa, pwa || 'absent');
+  ok('it extracts the content', /scripts\/extract-content\.js/.test(pwa), pwa);
+  ok('and it splits the build', /scripts\/build-pwa\.js/.test(pwa), pwa);
+  ok('in that order, since build-pwa reads content/ before it does anything else',
+     pwa.indexOf('extract-content.js') >= 0
+     && pwa.indexOf('extract-content.js') < pwa.indexOf('build-pwa.js'), pwa);
+  /* Both halves read the SAME file, or the freshness check is being handed
+     two different builds on purpose. */
+  const args = [...pwa.matchAll(/scripts\/(?:extract-content|build-pwa)\.js\s+(\S+)/g)].map(m => m[1]);
+  ok('both halves are given the same build to work from',
+     args.length === 2 && args[0] === args[1], args.join(' vs ') || 'not found');
+}
+
 head('the artifact names the commit that produced it');
 {
   /* Three files carry BUILD_ID. All three now carry the commit beside it. */

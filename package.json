@@ -13,7 +13,7 @@
     "test": "node scripts/verify.js",
     "steps": "node scripts/build.js --list",
     "suites": "node scripts/verify.js --list",
-    "pwa": "node scripts/build-pwa.js build/systole.html",
+    "pwa": "node scripts/extract-content.js build/systole.html && node scripts/build-pwa.js build/systole.html",
     "serve": "node scripts/serve.js 8080 dist",
     "leak-guard": "node scripts/leak-guard.js --all-tracked",
     "hooks": "git config core.hooksPath .githooks && echo \"hooks on: .githooks\"",

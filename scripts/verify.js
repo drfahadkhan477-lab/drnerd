@@ -190,6 +190,10 @@ const SUITES = [
      check meant to catch it, because the guard against a ReferenceError had
      become a guard against the test. */
   ['swupdate-pure', 'a deploy landing under a running app leaves a pair that is noticed'],
+  /* Two facts that were true when an audit looked and had nothing holding
+     them that way: four native dialogs, all deliberate, and no icon-only
+     button without an accessible name. Written down where they fail. */
+  ['ui-pure',      'no native dialog arrives unmeant, and an icon is not a name'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
