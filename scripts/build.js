@@ -476,22 +476,41 @@ function gitCommit() {
   } catch (_) { return 'unknown'; }
 }
 {
-  const built = fs.readFileSync(input, 'utf8');
+  /* BYTES, NOT A STRING, and this is the whole of it.
+   *
+   * The line this replaced was fs.copyFileSync(input, OUT) — byte-exact by
+   * definition. The first version of the stamp read the document with
+   * encoding 'utf8', spliced a string, and wrote it back, which is NOT
+   * byte-exact: any byte sequence that is not valid UTF-8 comes back as
+   * U+FFFD. A lone 0x92 — the Windows-1252 curly apostrophe, exactly the
+   * kind of thing an exported HTML corpus carries — went in as one byte and
+   * came out as three, silently, in a 42 MB file nobody reads by eye.
+   *
+   * It would also have moved the digest apart from the one
+   * scripts/extract-content.js writes, and the freshness check in
+   * build-pwa.js compares those two: a build that corrupted itself would
+   * then be refused for looking stale, which is a true refusal for entirely
+   * the wrong reason.
+   *
+   * So the document is a Buffer from end to end and the splice is a
+   * concat. </head> is the anchor build-pwa.js already holds to exactly one
+   * occurrence — a boundary this repository has checked rather than a new
+   * guess — and it is checked here in both directions, because a stamp going
+   * in twice is as wrong as one not going in, and appending blindly to a
+   * document with no head is worse than refusing. */
+  const built = fs.readFileSync(input);
   const digest = crypto.createHash('sha256').update(built).digest('hex').slice(0, 16);
   const commit = gitCommit();
-  /* </head> is the anchor scripts/build-pwa.js already holds to exactly one
-     occurrence, so it is a boundary this repository has checked rather than a
-     new guess. Asserted here too: the stamp going in twice is as wrong as it
-     not going in, and silently appending to a document that has no head is
-     worse than refusing. */
-  if (built.split('</head>').length - 1 !== 1) {
+  const HEAD = Buffer.from('</head>');
+  const at = built.indexOf(HEAD);
+  if (at < 0 || at !== built.lastIndexOf(HEAD)) {
     console.error('the built document does not have exactly one </head>, so there is nowhere to stamp it');
     process.exit(1);
   }
-  /* No "--" inside: a hex digest, a hex commit with an optional -dirty, and a
-     middle dot. Nothing here can close the comment early. */
-  const stamp = `<!-- systole-build ${digest} commit ${commit} -->\n`;
-  fs.writeFileSync(OUT, built.replace('</head>', stamp + '</head>'));
+  /* No "--" inside: a hex digest and a hex commit with an optional -dirty.
+     Nothing here can close the comment early. */
+  const stamp = Buffer.from(`<!-- systole-build ${digest} commit ${commit} -->\n`);
+  fs.writeFileSync(OUT, Buffer.concat([built.subarray(0, at), stamp, built.subarray(at)]));
   console.log(`\n  build ${digest}   from commit ${commit}`);
 }
 if (!KEEP) for (const s of CHAIN) { const f = stepFile(s); if (f !== OUT && fs.existsSync(f)) fs.unlinkSync(f); }

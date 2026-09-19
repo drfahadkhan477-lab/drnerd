@@ -249,21 +249,36 @@ head('the single file says which commit made it, too');
 
   /* A COMMENT, NOT A SCRIPT: nothing to execute, so no CSP question and no
      new inline script for verify-csp or verify-stage0 to account for. */
-  ok('the stamp is an HTML comment', /const stamp = `<!-- systole-build/.test(BUILD));
+  ok('the stamp is an HTML comment',
+     /const stamp = Buffer\.from\(`<!-- systole-build/.test(BUILD));
 
   /* </head> is the boundary build-pwa.js already holds to exactly one
      occurrence, so this reuses a checked anchor rather than guessing a new
      one — and refuses rather than appending blindly when it is not there. */
+  /* BYTE-EXACT, and this is the check that would have caught what the first
+     version of this stamp did. The line it replaced was copyFileSync, which
+     is byte-exact by definition; reading with encoding 'utf8' and writing the
+     string back is not. A lone 0x92 — the Windows-1252 apostrophe an exported
+     HTML corpus carries — goes in as one byte and comes out as three, in a
+     42 MB file nobody reads by eye. It would also have moved the digest apart
+     from the one extract-content.js writes, so build-pwa's freshness check
+     would then refuse the build for looking stale: a true refusal for
+     entirely the wrong reason. */
+  ok('the document is read as bytes, not decoded to a string',
+     /const built = fs\.readFileSync\(input\);/.test(BUILD)
+     && !/fs\.readFileSync\(input, 'utf8'\)/.test(BUILD));
+  ok('and spliced as bytes, so nothing is re-encoded on the way out',
+     /Buffer\.concat\(\[built\.subarray\(0, at\), stamp, built\.subarray\(at\)\]\)/.test(BUILD));
   ok('it is placed at the one anchor this repo already checks',
-     /built\.split\('<\/head>'\)\.length - 1 !== 1/.test(BUILD)
-     && /built\.replace\('<\/head>', stamp \+ '<\/head>'\)/.test(BUILD));
+     /const at = built\.indexOf\(HEAD\);/.test(BUILD)
+     && /at < 0 \|\| at !== built\.lastIndexOf\(HEAD\)/.test(BUILD));
   ok('and a document without exactly one </head> is refused, not stamped',
      /process\.exit\(1\)/.test(BUILD.slice(BUILD.indexOf('nowhere to stamp it'), BUILD.indexOf('nowhere to stamp it') + 120)));
 
   /* Over the UNSTAMPED bytes, because stamping changes them — the same move
      BUILD_ID makes in build-pwa.js, for the same reason. */
-  ok('the digest is taken before the stamp goes in',
-     /const built = fs\.readFileSync\(input, 'utf8'\);[\s\S]{0,120}?createHash\('sha256'\)\.update\(built\)/.test(BUILD));
+  ok('the digest is taken before the stamp goes in, over those same bytes',
+     /const built = fs\.readFileSync\(input\);[\s\S]{0,120}?createHash\('sha256'\)\.update\(built\)/.test(BUILD));
 
   /* NO CLOCK. The same export at the same commit must produce the same
      bytes; a timestamp in the artifact would end that for nothing. */
