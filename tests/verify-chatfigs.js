@@ -80,7 +80,18 @@ const sse = text => [
       AI.gemini = { key: 'test-gemini-key', model: 'gemini-2.5-flash' };
       AI_GROUNDED = grounded;
       const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
-      if (!note) return { err: 'no reference notes cite a figure' };
+      /* The SHAPE matters, not just the flag. A bare { err } made the checks
+         below read .caption.length off undefined and the suite died at check
+         three instead of reporting five honest failures — the same death,
+         three checks later. So the refusal carries every field the real
+         return does.
+         noteTitle is a sentinel rather than '', because the attribution check
+         asks whether caption.includes(noteTitle.slice(0, 18)) and '' contains
+         '' — two empty strings would make it PASS while measuring nothing,
+         which is the failure this project is named after. */
+      if (!note) return { err: 'no reference notes cite a figure',
+                          noteTitle: '(no note cites a figure)',
+                          figs: 0, src: '', caption: '', label: '' };
       const sh = document.getElementById('shell');
       if (!sh.classList.contains('ai-open')) toggleAI();
       buildAI();
