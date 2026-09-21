@@ -54,7 +54,7 @@ const SUITES = [
   ['braunwald',    'grounded mode answers only from your references'],
   ['leads',        'the 12-lead morphology falls out of one dipole'],
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
-  ['theme',        'eight palettes, two axes, unthemed semantics'],
+  ['theme',        'nine palettes, two axes, unthemed semantics'],
   ['home',         'the welcome bar, the progress bar, three layouts'],
   ['splash-heart', 'the photographed heart paints before the app parses'],
   ['crisp',        'every canvas backs itself at high device-pixel density'],

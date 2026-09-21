@@ -349,5 +349,61 @@ head('no assertion is incapable of failing');
      !probe('list.length === 0') && !probe('found !== null'));
 }
 
+/* ── a number in a suite claim, held to the chain that builds it ──────────────
+
+   scripts/verify.js describes each suite in one line. The theme suite's line
+   said "eight palettes" from the day it was written until well after the ninth
+   arrived: highcontrast-patch.js appends Contrast to THEMES fifty-odd steps
+   into the chain, verify-theme.js was updated to assert nine, and the sentence
+   describing the suite was not. Nothing connected the two, so nothing said so.
+
+   It is the shape CLAUDE.md refuses — a sentence with a number in it and no
+   check under it — and it is worse than usual here, because every other number
+   in that file's neighbourhood IS guarded, so the surrounding green read as
+   coverage of this line too.
+
+   The count is derived, never typed: a tenth preset moves it on its own.
+
+   NARROW ON PURPOSE, and said here rather than left for the reader to assume.
+   It counts DISTINCT THEMES ids appearing in any *-patch.js, which is correct
+   while every such entry is an addition — no step removes a theme today. A
+   step that did would make this overcount, and would have to be taught here.
+   It also holds one claim, not every claim in SUITES: the others quote counts
+   ("two axes", "three layouts") whose sources are not one array, and a sweep
+   that guessed at them would be the kind of lint that gets ignored. */
+head('the palette count in a suite claim is the count the chain builds');
+{
+  const WORD = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+                 seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+
+  const ids = new Set();
+  for (const name of fs.readdirSync(path.join(ROOT, 'scripts'))) {
+    if (!name.endsWith('-patch.js')) continue;
+    const src = blankComments(read(path.join('scripts', name)));
+    const re = /\{\s*id:\s*'([a-z0-9]+)'\s*,\s*name:\s*'[^']*'\s*,\s*group:\s*'(?:light|dark)'/g;
+    let m;
+    while ((m = re.exec(src))) ids.add(m[1]);
+  }
+
+  const claim = (blankComments(read('scripts/verify.js'))
+                  .match(/\['theme',\s*'([^']*)'\]/) || [])[1] || '';
+  const named = (claim.match(/\b([a-z]+|\d+)\s+palettes\b/) || [])[1];
+  const count = named === undefined ? NaN : (WORD[named] !== undefined ? WORD[named] : Number(named));
+  const asserted = (blankComments(read('tests/verify-theme.js'))
+                     .match(/presets\.n\s*===\s*(\d+)/) || [])[1];
+
+  /* Three reads that can each come back empty, checked before anything is
+     compared. An empty read compares equal to nothing in particular — which is
+     also exactly what this section would look like if it had never run. */
+  ok('the theme suite has a claim to read', claim.length > 0, claim || '(none)');
+  ok('that claim names a palette count', Number.isFinite(count), String(named));
+  ok('the chain defines themes to count', ids.size > 0, `${ids.size} ids`);
+
+  ok('the claim names as many palettes as the chain defines',
+     count === ids.size, `claim says ${count}, chain builds ${ids.size}`);
+  ok('verify-theme.js asserts that same number, so suite and claim cannot drift',
+     Number(asserted) === ids.size, `verify-theme says ${asserted}, chain builds ${ids.size}`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
