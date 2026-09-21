@@ -112,6 +112,10 @@ const SUITES = [
      rather than after it, the way heroRhythm.js and pencil.js went unheld
      for one build cycle each before this became the house style. */
   ['livingdiagram-pure', 'ambient mode is scoped as tightly as Focus Mode, and the view-cycling never repeats'],
+  /* Pure sequencing over real activation times captured from Heart3D's own
+     activationAt() — not a second, invented account of cardiac conduction
+     timing. Part of the Living Diagram's family, built the same session. */
+  ['conductionwave-pure', 'the conduction pathway fires in the right order, against real timing this app already computed'],
   /* Written the day a first build from the documented starting point died 63
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
@@ -277,11 +281,11 @@ const SUITES = [
 
    And it has names in it again, for the ordinary reason rather than the bad
    one: 'focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure',
-   'refimg-pure', 'shellanchor-pure', 'pencil-pure' and 'livingdiagram-pure'
-   were all added after the last full green run, so the record has not seen
-   their counts yet. The next full green run writes them and this goes back
-   to empty. */
-const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'pencil-pure', 'livingdiagram-pure'];
+   'refimg-pure', 'shellanchor-pure', 'pencil-pure', 'livingdiagram-pure' and
+   'conductionwave-pure' were all added after the last full green run, so the
+   record has not seen their counts yet. The next full green run writes them
+   and this goes back to empty. */
+const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'pencil-pure', 'livingdiagram-pure', 'conductionwave-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
