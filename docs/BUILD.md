@@ -104,7 +104,7 @@ The cost is that order matters, and the dependencies are real:
 | 21 | `review` | fixes from the full code review |
 | 22 | `refs` | the reference-note store, and the seeded library that ships with it |
 | 23 | `read` | the reading view those notes are read in |
-| 24 | `ref-images` | `refimg://`, so a note can cite a figure |
+| 24 | `ref-images` | `refimg://`, so a note can cite a figure — the renderer is injected whether or not the corpus cites one, because `assets` anchors on it and because the same code resolves figures imported at runtime. A figure-free corpus used to skip it and kill the build at step 63; `verify-refimg-pure` holds that now |
 | 25 | `gemini` | a third provider, with its own wire shape and model discovery |
 | 26 | `memory` | what Apex keeps about you between sessions |
 | 27 | `assets` | an imported chapter brings its figures — rewrites the importer, the renderer and the vision path, so it must follow all three |

@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 31 suites that are pure Node with no Playwright and no
+#   logic        the 32 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -151,6 +151,8 @@ jobs:
         run: node tests/verify-palette-pure.js
       - name: the home strip's rotation never repeats and excludes vfib (32 checks)
         run: node tests/verify-herorhythm-pure.js
+      - name: a corpus with no figures in it still builds (15 checks)
+        run: node tests/verify-refimg-pure.js
       - name: the engine is a flag, not thirty-four hardcoded copies of one (78 checks)
         run: node tests/verify-engine.js
       - name: the licensed question bank cannot be committed (22 checks)

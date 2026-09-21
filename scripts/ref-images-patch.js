@@ -59,27 +59,32 @@ if (!SRC || !OUT) {
   process.exit(1);
 }
 
-const REFS_DIR = path.join(__dirname, '..', 'content', 'refs');
-const IMAGES_DIR = path.join(__dirname, '..', 'content', 'refs-images');
+/* Overridable so a test can point this at a fixture corpus instead of the
+   licensed one. Unset in every real build, where the defaults are the only
+   thing build.js ever uses. */
+const REFS_DIR = process.env.SYSTOLE_REFS_DIR || path.join(__dirname, '..', 'content', 'refs');
+const IMAGES_DIR = process.env.SYSTOLE_REF_IMAGES_DIR || path.join(__dirname, '..', 'content', 'refs-images');
 
 /* ── find every refimg:// key actually cited in the corpus ────────────────── */
-if (!fs.existsSync(REFS_DIR)) {
-  console.error(`ref-images: ${path.relative(process.cwd(), REFS_DIR)} does not exist — nothing to do.`);
-  process.exit(0);
-}
-const mdFiles = fs.readdirSync(REFS_DIR).filter(f => f.endsWith('.md'));
+/* THE CODE BELOW IS INJECTED WHETHER OR NOT ANYTHING IS CITED. Only the DATA
+   is conditional. This used to bail out early — copy the input through and
+   exit — whenever the corpus cited no figures, and that was wrong twice over:
+   the assets step immediately after anchors on the md() renderer this injects
+   and dies "expected exactly 1 match, found 0" on a corpus without figures,
+   which is every corpus the shipped worked examples produce; and the renderer
+   is also the half of refimg:// that resolves figures imported at RUNTIME, so
+   skipping it silently killed a feature that has nothing to do with whether
+   the build-time corpus happened to have pictures in it. An empty REF_IMGS is
+   the honest representation of "no figures baked in" — not an absent one. */
+const mdFiles = fs.existsSync(REFS_DIR)
+  ? fs.readdirSync(REFS_DIR).filter(f => f.endsWith('.md'))
+  : [];
 const keys = new Set();
 for (const f of mdFiles) {
   const raw = fs.readFileSync(path.join(REFS_DIR, f), 'utf8');
   const re = /!\[[^\]]*\]\(refimg:\/\/([^)\s]+)\)/g;
   let m;
   while ((m = re.exec(raw))) keys.add(m[1]);
-}
-
-if (!keys.size) {
-  console.log('ref-images: no refimg:// citations in content/refs — skipping, nothing to embed.');
-  fs.copyFileSync(SRC, OUT);
-  process.exit(0);
 }
 
 const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
