@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 34 suites that are pure Node with no Playwright and no
+#   logic        the 35 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -197,6 +197,8 @@ jobs:
         run: node tests/verify-ui-pure.js
       - name: the corpus checker holds every floor it claims (16 checks)
         run: node tests/verify-refscheck-pure.js
+      - name: the echo tables and the echo arithmetic (53 checks)
+        run: node tests/verify-echo-pure.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source
