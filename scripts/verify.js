@@ -14,7 +14,7 @@
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 75 suites and roughly 2481 checks, and they
+ * WHY THIS EXISTS. There are 75 suites and roughly 2499 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.

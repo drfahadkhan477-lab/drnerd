@@ -277,6 +277,13 @@ head('the prose agrees with the record');
        held to the suite that owns them rather than to whoever remembers —
        lower either threshold and the paragraph telling people what a green
        run needs goes stale in the same commit. */
+    /* verify.js describes ITSELF in its header, and that sentence has gone
+       stale twice: it said 18 suites and 418 checks long after there were 75,
+       was corrected by hand to 75 and 2481, and was stale again at the next
+       record. Correcting a number without guarding it buys one commit. */
+    ['scripts/verify.js', 'the header describing the suite count and total',
+     /There are (\d+) suites and roughly (\d+) checks/,
+     r => [+r[1] === stats.suiteCount, +r[2] === stats.total]],
     ['docs/BUILD.md', 'the corpus floors quoted in the prerequisite',
      /more than (\d+) notes, and an index over (\d+) documents/,
      r => {
