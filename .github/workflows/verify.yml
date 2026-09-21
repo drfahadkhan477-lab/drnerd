@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 29 suites that are pure Node with no Playwright and no
+#   logic        the 30 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -147,6 +147,8 @@ jobs:
         run: node tests/verify-figzoom-pure.js
       - name: a figure that fails to load must still appear (14 checks)
         run: node tests/verify-figfade-pure.js
+      - name: the palette patches' quoted contrast figures are real (19 checks)
+        run: node tests/verify-palette-pure.js
       - name: the engine is a flag, not thirty-four hardcoded copies of one (78 checks)
         run: node tests/verify-engine.js
       - name: the licensed question bank cannot be committed (22 checks)

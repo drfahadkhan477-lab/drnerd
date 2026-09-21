@@ -92,6 +92,10 @@ const SUITES = [
      then thrown away. Hidden-by-default is the obvious way to write that
      feature and it makes every failure invisible. */
   ['figfade-pure',  'a figure that fails to load still appears, rather than being silently blank'],
+  /* Written because two patch headers quoted luminances and contrast ratios to
+     justify every colour they picked, and nothing checked a single one of them
+     — the rule in CLAUDE.md that says guard a number or do not write it. */
+  ['palette-pure',  'the contrast figures quoted in the palette patches are the figures those palettes produce'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
@@ -247,10 +251,10 @@ const SUITES = [
    is the same gap reopening.
 
    And it has names in it again, for the ordinary reason rather than the bad
-   one: 'focus' and 'figfade-pure' were both added after the last full green
-   run, so the record has not seen their counts yet. The next full green run
+   one: 'focus', 'figfade-pure' and 'palette-pure' were all added after the last
+   full green run, so the record has not seen their counts yet. The next full green run
    writes them and this goes back to empty. */
-const PENDING_RECORD = ['focus', 'figfade-pure'];
+const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
