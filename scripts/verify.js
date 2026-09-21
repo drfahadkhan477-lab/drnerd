@@ -88,6 +88,7 @@ const SUITES = [
   ['calibrate',    'confidence is an option not a gate, and a tagged miss updates one row'],
   ['figzoom-pure', 'the point under your fingers does not move, over any number of pinches'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
+  ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
   ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
@@ -238,8 +239,13 @@ const SUITES = [
    EMPTY, AND THAT IS NEWS. It held fourteen names for weeks — every suite added
    while the only machine that could run the full thing was not being run. The
    first full green run wrote all fourteen at once. If this fills up again, that
-   is the same gap reopening. */
-const PENDING_RECORD = [];
+   is the same gap reopening.
+
+   And it has one name in it again, for the ordinary reason rather than the
+   bad one: 'focus' was added after the last full green run, so the record has
+   not seen its count yet. The next full green run writes it and this goes
+   back to empty. */
+const PENDING_RECORD = ['focus'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
