@@ -524,7 +524,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
 scripts/      build · verify · 86 *-patch · build-pwa · serve · shots
-tests/        75 suites · 33 need no browser · + pwa
+tests/        75 suites · 34 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

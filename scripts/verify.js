@@ -218,6 +218,7 @@ const SUITES = [
      them that way: four native dialogs, all deliberate, and no icon-only
      button without an accessible name. Written down where they fail. */
   ['ui-pure',      'no native dialog arrives unmeant, and an icon is not a name'],
+  ['refscheck-pure','the corpus checker holds every floor it claims, and reads before reporting'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -269,7 +270,7 @@ const SUITES = [
    'refimg-pure' and 'shellanchor-pure' were all added after the last full
    green run, so the record has not seen their counts yet. The next full green
    run writes them and this goes back to empty. */
-const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure'];
+const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'refscheck-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
