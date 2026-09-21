@@ -6,10 +6,34 @@
  * default, and the wrong floor for someone who needs the highest legible
  * separation the screen can give — low vision, bright sunlight on an iPad,
  * a borrowed device with the brightness turned down. Contrast is that floor:
- * near-black ground, near-white text, one fully saturated accent, built on
- * the exact palette mechanism the other eight already use (a data-palette
- * block, a THEMES entry, a boot-script mapping) so it costs the app nothing
- * new to maintain.
+ * near-black ground, near-white text, built on the exact palette mechanism
+ * the other eight already use (a data-palette block, a THEMES entry, a
+ * boot-script mapping) so it costs the app nothing new to maintain.
+ *
+ * THE ACCENT IS DELIBERATELY NOT THE BRIGHTEST ONE AVAILABLE, and that is a
+ * measurement rather than a taste. What a high-contrast theme owes the reader
+ * is text against ground — #FAFAFA on #060606 is about 19:1 — and the accent
+ * contributes nothing to that. What the accent DOES do is sit underneath text
+ * in composited places this suite already sweeps for AA: verify-pearl checks
+ * pearl text over the PV-loop trace across every theme and every frame,
+ * verify-home checks the first-run hint, verify-homeprog the legend. Every one
+ * of those sweeps passes today with Monitor as the brightest dark accent in
+ * the set (#2DD4BF, relative luminance .514; its accent-2 #5EEAD4, .660). An
+ * accent brighter than that is a composite this suite has never had to clear.
+ * So #38BDF8 (.440) and #7DD3FC (.580) sit strictly inside the envelope those
+ * checks already hold, while still clearing 9.46:1 against this palette's own
+ * ground. A first draft used #00E5FF (.633) purely because it looked like the
+ * brightest thing available; it would have put every one of those sweeps into
+ * territory nothing had measured, for a contrast the reader never sees.
+ *
+ * THE BORDER LADDER IS MEASURED TOO. The other palettes' three border weights
+ * are tuned for a quiet edge; quiet is the one thing this palette is not for.
+ * Against --card they measure 2.11 / 3.26 / 4.36:1 (--border2 / --border /
+ * --border3), so the weight the app uses to bound an interactive component,
+ * --border, clears the 3:1 WCAG asks of a non-text boundary, and --border3 —
+ * which the progress track's calibration ticks draw in — clears it with room
+ * to spare. The first draft had --border at 2.72:1 against --card, which
+ * looked right and was, by a small margin, not.
  *
  * SCOPE, ON PURPOSE. This patch does NOT also add a blanket
  * `@media(prefers-contrast:more)` rule that reaches into the other eight
@@ -42,7 +66,7 @@ function patch(label, find, replace) {
 }
 
 /* ── 1. the palette block, appended after Monitor, the last of the five ───── */
-patch('highcontrast: the Contrast palette, maximum legible separation',
+patch('highcontrast: the Contrast palette, near-black ground and near-white text',
 `  --aura-1:rgba(45,212,191,.22);--aura-2:rgba(94,234,212,.16);--aura-3:rgba(16,185,129,.14);
   --hero-accent:#5EEAD4;
 }
@@ -52,22 +76,24 @@ patch('highcontrast: the Contrast palette, maximum legible separation',
   --hero-accent:#5EEAD4;
 }
 
-/* Contrast — near-black ground, near-white text, one fully saturated accent.
-   Not another mood; the accessibility floor. Semantic green/red/amber stay
-   exactly as themed everywhere else (verify-theme.js already asserts they
-   never move), so "correct" and "wrong" still mean what they mean elsewhere. */
+/* Contrast — near-black ground, near-white text. Not another mood; the
+   accessibility floor. Semantic green/red/amber stay exactly as themed
+   everywhere else (verify-theme.js already asserts they never move), so
+   "correct" and "wrong" still mean what they mean elsewhere. The accent is
+   held inside the luminance envelope Monitor already clears — see this
+   patch's header for why that is a measurement and not a preference. */
 html[data-theme="dark"][data-palette="contrast"]{
   --bg:#060606;--card:#121212;--white:#121212;
-  --border:#5A5A5A;--border2:#2C2C2C;--border3:#7A7A7A;
+  --border:#666666;--border2:#4A4A4A;--border3:#7A7A7A;
   --text:#FAFAFA;--muted:#D6D6D6;--dim:#9E9E9E;--faint:#3A3A3A;
-  --accent:#00E5FF;--accent-2:#67E8F9;--teal:var(--accent);--teal2:var(--accent-2);
-  --teal3:#0A4A52;--teal4:#052024;
+  --accent:#38BDF8;--accent-2:#7DD3FC;--teal:var(--accent);--teal2:var(--accent-2);
+  --teal3:#0C4A6E;--teal4:#082F49;
   --navy:#141414;--navy2:#1E1E1E;--navy3:#282828;
-  --shadow-glow:0 0 0 3px rgba(0,229,255,.32);
+  --shadow-glow:0 0 0 3px rgba(56,189,248,.32);
   --hero-a:#0A0A0A;--hero-b:#151515;--hero-c:#050505;
-  --hero-edge:rgba(0,229,255,.32);
-  --aura-1:rgba(0,229,255,.22);--aura-2:rgba(103,232,249,.16);--aura-3:rgba(255,255,255,.10);
-  --hero-accent:#67E8F9;
+  --hero-edge:rgba(56,189,248,.32);
+  --aura-1:rgba(56,189,248,.22);--aura-2:rgba(125,211,252,.16);--aura-3:rgba(255,255,255,.10);
+  --hero-accent:#7DD3FC;
 }
 
 .icon-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);color:#fff;`);
@@ -77,7 +103,7 @@ patch('highcontrast: a THEMES entry so the picker and setTheme() both find it',
 `  {id:'monitor',  name:'Monitor',   group:'dark',  mode:'dark',  palette:'monitor',   bg:'#08110D',ac:'#2DD4BF',bar:'#08110D'},
 ];`,
 `  {id:'monitor',  name:'Monitor',   group:'dark',  mode:'dark',  palette:'monitor',   bg:'#08110D',ac:'#2DD4BF',bar:'#08110D'},
-  {id:'contrast', name:'Contrast',  group:'dark',  mode:'dark',  palette:'contrast',  bg:'#060606',ac:'#00E5FF',bar:'#060606'},
+  {id:'contrast', name:'Contrast',  group:'dark',  mode:'dark',  palette:'contrast',  bg:'#060606',ac:'#38BDF8',bar:'#060606'},
 ];`);
 
 /* ── 3. the pre-paint boot script, so Contrast survives a cold load too ────── */
