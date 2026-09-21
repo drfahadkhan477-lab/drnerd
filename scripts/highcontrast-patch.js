@@ -10,6 +10,20 @@
  * the other eight already use (a data-palette block, a THEMES entry, a
  * boot-script mapping) so it costs the app nothing new to maintain.
  *
+ * WHERE THIS RUNS IN THE CHAIN, AND WHY NOT WHERE IT LOOKS LIKE IT SHOULD.
+ * Straight after 'contrastfix' in CHAIN, which reads like a dependency and
+ * is not one — checked directly rather than assumed, by building both a
+ * pre- and a post-'semantictokens' fixture of the Monitor block and running
+ * this patch's own anchor against each: it matches either way. The anchor is
+ * the Monitor block's `--aura-*`/`--hero-accent` tail, and semantictokens
+ * only ever rewrites the `--text`/`--teal*` line earlier in the same block —
+ * a different line, so aliasing it first or after changes nothing this patch
+ * reads. This patch's own new block writes the aliased `--teal:var(--accent)`
+ * form directly (see below), so semantictokens has nothing to do to it
+ * either way. So the CHAIN position here is arbitrary, same as an earlier
+ * audit of this patch found — recorded so the next person does not have to
+ * re-derive it, or worse, invent a dependency that is not there.
+ *
  * THE ACCENT IS DELIBERATELY NOT THE BRIGHTEST ONE AVAILABLE, and that is a
  * measurement rather than a taste. What a high-contrast theme owes the reader
  * is text against ground — #FAFAFA on #060606 is about 19:1 — and the accent
