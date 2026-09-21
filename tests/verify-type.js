@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const { launch } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, onScreen } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -85,7 +85,19 @@ const LADDER = [9, 11, 13, 16, 19, 23, 28, 33, 40, 48, 58];
     await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
     await booted(page, { timeout: 150000 });
     await page.evaluate(() => startQuiz(null));
-    await page.waitForTimeout(900);
+    /* WAS a fixed 900ms sleep. startQuiz sets S.screen='quiz' and calls
+       render(), which on a screen change hands the DOM swap to
+       startViewTransition — the same async gap CLAUDE.md names as having
+       caused four separate suite races (this is a fifth, in a different
+       shape: a SLEEP standing in for the render, not a state read outrunning
+       it). 900ms was enough on whatever this was authored against and not
+       enough on a slower shared vCPU, so it read '.q-card' before the card
+       existed and reported the honest result of that: fs2 === null,
+       'nullpx' — which looked like a font-size regression and was actually
+       a wait that was never a precondition. verify-focus.js already had the
+       fix for this exact marker at two call sites; this was the only place
+       in the tree still using a sleep here instead. */
+    await onScreen(page, 'quiz', { marker: '.q-card' });
     const fs2 = await page.evaluate(() => {
       const c = document.querySelector('.q-card');
       return c ? parseFloat(getComputedStyle(c).fontSize) : null;
