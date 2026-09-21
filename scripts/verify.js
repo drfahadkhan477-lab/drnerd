@@ -116,6 +116,11 @@ const SUITES = [
      activationAt() — not a second, invented account of cardiac conduction
      timing. Part of the Living Diagram's family, built the same session. */
   ['conductionwave-pure', 'the conduction pathway fires in the right order, against real timing this app already computed'],
+  /* Third and last of the Living Diagram family: a branching vessel
+     geometry plus a flow-to-brightness curve, fed by Physio.coronaryFlow —
+     already shipped, already correct — rather than a second account of
+     what coronary flow does across the cycle. */
+  ['coronarytree-pure', 'the branch geometry terminates and diverges correctly, and flow maps to a sane 0..1 glow'],
   /* Written the day a first build from the documented starting point died 63
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
@@ -281,11 +286,11 @@ const SUITES = [
 
    And it has names in it again, for the ordinary reason rather than the bad
    one: 'focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure',
-   'refimg-pure', 'shellanchor-pure', 'pencil-pure', 'livingdiagram-pure' and
-   'conductionwave-pure' were all added after the last full green run, so the
-   record has not seen their counts yet. The next full green run writes them
-   and this goes back to empty. */
-const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'pencil-pure', 'livingdiagram-pure', 'conductionwave-pure'];
+   'refimg-pure', 'shellanchor-pure', 'pencil-pure', 'livingdiagram-pure',
+   'conductionwave-pure' and 'coronarytree-pure' were all added after the
+   last full green run, so the record has not seen their counts yet. The
+   next full green run writes them and this goes back to empty. */
+const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'pencil-pure', 'livingdiagram-pure', 'conductionwave-pure', 'coronarytree-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

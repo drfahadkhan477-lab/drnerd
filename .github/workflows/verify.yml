@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 36 suites that are pure Node with no Playwright and no
+#   logic        the 37 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -161,6 +161,8 @@ jobs:
         run: node tests/verify-livingdiagram-pure.js
       - name: the conduction pathway fires in order, against real timing (25 checks)
         run: node tests/verify-conductionwave-pure.js
+      - name: the coronary tree's branch geometry and flow-glow curve (29 checks)
+        run: node tests/verify-coronarytree-pure.js
       - name: the engine is a flag, not thirty-four hardcoded copies of one (78 checks)
         run: node tests/verify-engine.js
       - name: the licensed question bank cannot be committed (22 checks)
