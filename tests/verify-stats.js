@@ -272,6 +272,19 @@ head('the prose agrees with the record');
     ['docs/BUILD.md', 'the suite counts in the repository sketch',
      /(\d+) suites · (\d+) need no browser/,
      r => [+r[1] === stats.suiteCount, +r[2] === ciSuites.length]],
+    /* The corpus prerequisite quotes the two floors verify-retrieval enforces.
+       They were added the day a run was spent discovering them, so they are
+       held to the suite that owns them rather than to whoever remembers —
+       lower either threshold and the paragraph telling people what a green
+       run needs goes stale in the same commit. */
+    ['docs/BUILD.md', 'the corpus floors quoted in the prerequisite',
+     /more than (\d+) notes, and an index over (\d+) documents/,
+     r => {
+       const rs = blankComments(read('tests/verify-retrieval.js'));
+       const notes = (rs.match(/r\.notes > (\d+)/) || [])[1];
+       const docs = (rs.match(/r\.docs > (\d+)/) || [])[1];
+       return [+r[1] === +notes, +r[2] === +docs, notes !== undefined, docs !== undefined];
+     }],
   ];
   for (const [file, what, re, judge] of claims) {
     const m = read(file).match(re);

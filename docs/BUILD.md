@@ -65,6 +65,31 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   run normally — it is 35 of the 2499 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
+
+- **A reference corpus at `content/refs/`** — `.md` files in the shape
+  `docs/REFERENCE-GUIDE.md` describes. The build REQUIRES it: `refs-patch`
+  exits 1 on a missing or empty directory, so there is no such thing as a
+  build without one.
+
+  **The three files in `docs/reference-examples/` unblock the build and are
+  not a test corpus**, which is worth stating because it is not guessable and
+  because assuming otherwise costs a full run. Copying them in produces 12
+  notes citing no figures, and six suites then fail for want of a corpus
+  rather than for anything wrong with the app:
+
+  | Suite | Needs |
+  |---|---|
+  | `retrieval` | more than 100 notes, and an index over 700 documents; R@1 thresholds calibrated on a real corpus |
+  | `figsharp`, `chatfigs`, `layout` | notes citing `![…](refimg://KEY)`, with the images present in `content/refs-images/` |
+  | `pearl`, `chat` | the same figure citations, reached through an Apex answer |
+
+  They fail rather than skip, and that is correct: each says what was missing
+  ("no reference notes cite a figure", "12 notes"). A suite that passed here
+  would be measuring nothing, which is the failure this project keeps
+  producing. Do not lower a threshold to accommodate a stand-in corpus — the
+  numbers are meaningless on 12 notes either way.
+
+  A full green run therefore needs the real corpus, notes and figures both.
 ---
 
 ## How the build works
