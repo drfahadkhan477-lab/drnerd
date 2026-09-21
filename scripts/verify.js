@@ -87,6 +87,11 @@ const SUITES = [
   ['calib-pure',   'the calibration arithmetic says nothing rather than something wrong'],
   ['calibrate',    'confidence is an option not a gate, and a tagged miss updates one row'],
   ['figzoom-pure', 'the point under your fingers does not move, over any number of pinches'],
+  /* Written because docs/BUILD.md admitted the hole rather than closing it:
+     the figure fade's error path was proven once in a scratch harness that was
+     then thrown away. Hidden-by-default is the obvious way to write that
+     feature and it makes every failure invisible. */
+  ['figfade-pure',  'a figure that fails to load still appears, rather than being silently blank'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
@@ -241,11 +246,11 @@ const SUITES = [
    first full green run wrote all fourteen at once. If this fills up again, that
    is the same gap reopening.
 
-   And it has one name in it again, for the ordinary reason rather than the
-   bad one: 'focus' was added after the last full green run, so the record has
-   not seen its count yet. The next full green run writes it and this goes
-   back to empty. */
-const PENDING_RECORD = ['focus'];
+   And it has names in it again, for the ordinary reason rather than the bad
+   one: 'focus' and 'figfade-pure' were both added after the last full green
+   run, so the record has not seen their counts yet. The next full green run
+   writes them and this goes back to empty. */
+const PENDING_RECORD = ['focus', 'figfade-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
