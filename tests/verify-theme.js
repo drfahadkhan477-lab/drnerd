@@ -70,8 +70,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     modes: THEMES.map(t => t.mode),
     everyHasSwatch: THEMES.every(t => /^#/.test(t.bg) && /^#/.test(t.ac)),
   }));
-  ok('there are eight themes', presets.n === 8, String(presets.n));
-  ok('four are light, four are dark', presets.light.length === 4 && presets.dark.length === 4,
+  ok('there are nine themes', presets.n === 9, String(presets.n));
+  ok('four are light, five are dark', presets.light.length === 4 && presets.dark.length === 5,
      `light ${presets.light.join(',')} | dark ${presets.dark.join(',')}`);
   ok('every theme carries a two-colour swatch', presets.everyHasSwatch);
 
@@ -105,10 +105,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     for (const t of THEMES) { setTheme(t.id); out[t.id] = read(); }
     return out;
   });
-  const bgs = new Set(['daylight', 'slate', 'parchment', 'midnight', 'nocturne', 'cathlab', 'monitor'].map(k => tokens[k].bg));
-  ok('the seven explicit themes have seven distinct backgrounds', bgs.size === 7, `${bgs.size} distinct`);
-  const accents = new Set(['daylight', 'slate', 'parchment', 'nocturne', 'cathlab', 'monitor'].map(k => tokens[k].teal));
-  ok('their accents are distinct too', accents.size === 6, `${accents.size} distinct`);
+  const bgs = new Set(['daylight', 'slate', 'parchment', 'midnight', 'nocturne', 'cathlab', 'monitor', 'contrast'].map(k => tokens[k].bg));
+  ok('the eight explicit themes have eight distinct backgrounds', bgs.size === 8, `${bgs.size} distinct`);
+  const accents = new Set(['daylight', 'slate', 'parchment', 'nocturne', 'cathlab', 'monitor', 'contrast'].map(k => tokens[k].teal));
+  ok('their accents are distinct too', accents.size === 7, `${accents.size} distinct`);
   ok('cath lab is genuinely amber, not the default blue', /f5|fb|d9|b4/i.test(tokens.cathlab.teal), tokens.cathlab.teal);
   ok('monitor accent is minted clear of the "correct" green so they do not collide',
      tokens.monitor.teal.toLowerCase() !== tokens.monitor.green.toLowerCase(), `accent ${tokens.monitor.teal} vs green ${tokens.monitor.green}`);
@@ -150,7 +150,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return { openNow, opts, checked };
   });
   ok('the menu opens', menu.openNow);
-  ok('it lists all eight themes', menu.opts === 8, String(menu.opts));
+  ok('it lists all nine themes', menu.opts === 9, String(menu.opts));
   ok('the active theme is marked', /midnight/i.test(menu.checked || ''), menu.checked);
 
   const picked = await page.evaluate(async () => {

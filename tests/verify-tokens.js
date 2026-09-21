@@ -40,7 +40,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 const ACCENT_BY_THEME = {
   auto: '#0284c7', daylight: '#0284c7', midnight: '#0284c7',
   slate: '#4f5bd5', parchment: '#0e7c86', nocturne: '#a78bfa',
-  cathlab: '#f59e0b', monitor: '#2dd4bf',
+  cathlab: '#f59e0b', monitor: '#2dd4bf', contrast: '#38bdf8',
 };
 
 (async () => {
