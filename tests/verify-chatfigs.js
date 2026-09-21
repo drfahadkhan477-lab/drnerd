@@ -80,6 +80,7 @@ const sse = text => [
       AI.gemini = { key: 'test-gemini-key', model: 'gemini-2.5-flash' };
       AI_GROUNDED = grounded;
       const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
+      if (!note) return { err: 'no reference notes cite a figure' };
       const sh = document.getElementById('shell');
       if (!sh.classList.contains('ai-open')) toggleAI();
       buildAI();
@@ -100,6 +101,13 @@ const sse = text => [
 
   head('open mode — where the figure used to be invisible');
   const open = await ask(false);
+  /* The whole suite pins lastHits to a note that cites a figure, so a corpus
+     with none is not a failure of anything below — it is the absence of the
+     fixture. Said once, here, before the checks that would otherwise report
+     "undefined figure(s)" four times and bury the reason. verify-figsharp.js
+     says the same sentence for the same reason. Without this the suite did
+     not fail at all: it died on note.id at check zero. */
+  ok('a note citing a figure was found to pin the answer to', !open.err, open.err || 'found');
   ok('a figure from the cited note is shown', open.figs >= 1, open.figs + ' figure(s)');
   ok('it is a real decoded image, not a dead reference', /^data:image\//.test(open.src), open.src);
   ok('it is captioned', open.caption.length > 20, open.caption.slice(0, 60));
@@ -124,6 +132,7 @@ const sse = text => [
   head('the model may place one inline, and then it is not shown twice');
   const inline = await page.evaluate(async () => {
     const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
+    if (!note) return { err: 'no reference notes cite a figure' };
     const key = /refimg:\/\/([^)\s]+)/.exec(note.body)[1];
     const q = null;
     CHATS['_general'] = [
@@ -176,6 +185,7 @@ const sse = text => [
      first question's diagram as the evidence for the second. */
   const leak = await page.evaluate(async () => {
     const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
+    if (!note) return { err: 'no reference notes cite a figure' };
     const [a, b] = ALL_Q.filter(x => !x.bad).slice(0, 2);
     /* A conversation exists on B, but the retrieval that produced lastHits
        happened on A. */
@@ -211,6 +221,7 @@ const sse = text => [
        business, and depending on it is how a suite starts failing for reasons
        that have nothing to do with what it tests. */
     const note = REF.find(x => /refimg:\/\//.test(x.body || ''));
+    if (!note) return { err: 'no reference notes cite a figure' };
     const key = /refimg:\/\/([^)\s]+)/.exec(note.body)[1];
     CHATS['_general'] = [
       { role: 'user', content: 'explain' },
