@@ -169,7 +169,24 @@ const FOCUS_BTN = '#navbar [onclick="toggleFocusMode()"]';
     ok('focus mode is on again', onQuiz === '1', String(onQuiz));
 
     await page.evaluate(() => goHome());
-    await onScreen(page, 'home');
+    /* THE MARKER IS NOT DECORATION, AND LEAVING IT OFF COST TWO FALSE
+       FAILURES. onScreen without one waits on S.screen, which goHome sets
+       BEFORE it calls render(); render sees a screen change and hands
+       renderNow to startViewTransition, whose callback the browser runs only
+       after it has captured the old state. So the state flips, this returns
+       at once, and the read below lands in the window before applyFocus has
+       run — reporting data-focus="1" and a hidden bar as app bugs when the
+       app was merely one async tick from doing the right thing.
+
+       .hero-h1 is home markup renderNow writes before it reaches the mount
+       list, and renderNow is synchronous, so nothing here can observe it
+       half-done: the marker being in the document means applyFocus has
+       already run. It is a precondition — the home screen existing — and
+       never the proposition, which stays "the attribute is gone". Waiting on
+       data-focus itself would assert the answer by asking for it. The same
+       call is markered at lines 78 and 193 for the quiz; this one was the
+       only navigation in the file without one. */
+    await onScreen(page, 'home', { marker: '.hero-h1' });
     const home = await page.evaluate(() => ({
       attr: document.documentElement.getAttribute('data-focus'),
       flag: S.focusMode,
