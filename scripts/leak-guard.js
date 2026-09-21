@@ -39,8 +39,13 @@
  *                search for it, and the tests that assert they found it. Size
  *                is what separates a script that mentions the bank from the
  *                bank. This is the rule that catches a renamed export.
- *   5. FIGURES   many base64 image payloads in one file over 200 KB, which is
- *                a figure dump whatever it has been called.
+ *   5. FIGURES   eight or more base64 image payloads in one file, AT ANY SIZE
+ *                — a figure dump whatever it has been called. Unlike PAYLOAD,
+ *                this has no floor: eight embedded images is not something a
+ *                small file produces by coincidence, so there is nothing here
+ *                for a floor to protect against. A figure dump small enough
+ *                to sit under PAYLOAD's 200 KB floor still has to clear this
+ *                one.
  *
  * THE ESCAPE HATCH IS TYPED, ONCE, PER PATH. Same bargain as PENDING_RECORD in
  * scripts/verify.js: a blanket --force would be used the first time rule 3
@@ -52,16 +57,20 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const MAX_BYTES     = 1024 * 1024;
-const SNIFF_BYTES   = 200 * 1024;
-/* Rules 4 and 5 only ever run on files BETWEEN the sniff floor and the size
-   cap, so the most they can read is 1 MB and reading it whole costs nothing.
-   The first version read a 64 KB head instead, on the reasoning that a marker
-   would be near the top — and the test caught that it need not be. A figure
-   dump behind 200 KB of preamble sailed through, and so would an export whose
+const MAX_BYTES          = 1024 * 1024;
+const PAYLOAD_SNIFF_BYTES = 200 * 1024;
+/* PAYLOAD only ever runs on files BETWEEN this floor and the size cap, so the
+   most it can read is 1 MB and reading it whole costs nothing. The first
+   version read a 64 KB head instead, on the reasoning that a marker would be
+   near the top — and the test caught that it need not be. An export whose
    `const ALL_Q=` sits after the embedded fonts, which in the real build it
-   does. The head window was protecting against reading a 40 MB export, and
-   rule 3 already refuses that before these rules are reached. */
+   does, sailed through. The head window was protecting against reading a
+   40 MB export, and rule 3 already refuses that before these rules are
+   reached.
+
+   FIGURES has no floor of its own (see rule 5 above) and reads whatever SIZE
+   already let through — this constant names PAYLOAD's floor specifically,
+   not a shared one, because it no longer is one. */
 
 const DIRS  = ['content/', 'build/', 'dist/', 'source/'];
 /* RULE 1, SECOND HALF: A DIRECTORY THAT IS NOT THE CORPUS BUT IS MADE OF IT.
@@ -177,15 +186,19 @@ function inspect(file) {
 
   if (st.size > MAX_BYTES)
     return { rule: 'SIZE', why: `${(st.size / 1048576).toFixed(1)} MB — nothing here legitimately exceeds 1 MB` };
-  if (st.size <= SNIFF_BYTES) return null;
+  if (st.size === 0) return null;
 
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch (_) { return null; }
 
-  if (PAYLOAD.test(text))
-    return { rule: 'PAYLOAD', why: 'it carries the question bank, not a reference to it' };
+  /* FIGURES first, and unconditionally: it has no floor (rule 5's comment
+     says why), so it runs on every file rule 3 let through, not just the
+     ones over PAYLOAD_SNIFF_BYTES. A small figure dump used to clear every
+     rule in this file; this is the fix. */
   if ((text.match(B64IMG) || []).length >= B64_MANY)
     return { rule: 'FIGURES', why: 'it is a figure dump, whatever it has been called' };
+  if (st.size > PAYLOAD_SNIFF_BYTES && PAYLOAD.test(text))
+    return { rule: 'PAYLOAD', why: 'it carries the question bank, not a reference to it' };
   return null;
 }
 

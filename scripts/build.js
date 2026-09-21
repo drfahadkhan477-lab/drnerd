@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 82 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 85 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -319,10 +319,10 @@ const CHAIN = [
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
-  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
-  'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
+  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'calibrationtrack', 'chapters',
+  'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'highcontrast', 'failsafe',
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
-  'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest', 'answerroom',
+  'curate', 'calibrate', 'figzoom', 'figloadfade', 'schema', 'figfit', 'selftest', 'answerroom',
   'avatarfit',
   'prefixq', 'prefixrank',
   'heroart', 'apexpage', 'resume', 'figsharp', 'heartreuse', 'onetutor', 'flushguard',

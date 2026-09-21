@@ -138,6 +138,29 @@ head('it refuses the licensed bank, by every route in');
   r = run([figs]);
   ok('a file full of base64 figures is refused', r.code === 1 && /FIGURES/.test(r.out));
 
+  /* AND FIGURES HAS NO FLOOR OF ITS OWN, unlike PAYLOAD above it. The fixture
+     above is padded past 201 KB to also clear PAYLOAD's floor, which proved
+     FIGURES works — not that it works WITHOUT that floor. This one is the
+     real case: eight images, no padding, nowhere near 200 KB, in a file whose
+     name gives nothing away. Before FIGURES had its own check ahead of
+     PAYLOAD_SNIFF_BYTES, this returned code 0 — "nothing licensed" — because
+     `st.size <= SNIFF_BYTES` sent it home before either rule looked. */
+  const smallFigs = write('notes.js',
+    Array(8).fill('const x = "data:image/png;base64,' + 'A'.repeat(200) + '";').join('\n'));
+  ok('the small fixture really is under the old shared floor',
+     fs.statSync(smallFigs).size < 200 * 1024, fs.statSync(smallFigs).size + ' bytes');
+  r = run([smallFigs]);
+  ok('a small figure dump is refused too, not just a large one',
+     r.code === 1 && /FIGURES/.test(r.out), r.out.match(/FIGURES.*/)?.[0] || r.out.trim().slice(0, 60));
+
+  /* AND IT STILL TAKES EIGHT. A couple of screenshots pasted into a small
+     note is not a figure dump, and must not become unreviewable because
+     FIGURES lost its floor. */
+  const fewFigs = write('two-shots.js',
+    Array(2).fill('const x = "data:image/png;base64,' + 'A'.repeat(200) + '";').join('\n'));
+  r = run([fewFigs]);
+  ok('but two embedded images in a small file are still fine', r.code === 0, r.out.trim().slice(0, 60));
+
   /* And it says what to do, because a guard that refuses without a remedy is
      a guard somebody deletes. Run fresh rather than reusing `r`: reading the
      previous fixture's output meant this check reported on whatever ran last,
