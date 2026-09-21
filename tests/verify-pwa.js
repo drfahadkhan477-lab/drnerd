@@ -516,7 +516,7 @@ async function heapAfterBoot(page, url) {
     /* IT LIVES ON PROGRESS NOW, not on the home screen. The landscape home grid
        gives its whole one-screen budget to four named areas and appends
        everything else outside it, so this card was 114.5px of guaranteed
-       overflow on an 11-inch iPad held sideways — see chain step 82. The
+       overflow on an 11-inch iPad held sideways — see chain step 85. The
        survey moved with it, so nothing is counted until Progress is open. */
     const onHome = await page.evaluate(() => !!document.getElementById('offlineCard'));
     ok('the home screen no longer carries the card', onHome === false);
@@ -890,8 +890,8 @@ async function heapAfterBoot(page, url) {
 
      1194x834 is an 11-inch iPad in landscape: the widest and shortest shape the
      app is held in, and the one the landscape grid is written for. It measured
-     97px over — the hero's axis (step 81) took 50 of that and moving the card to
-     Progress (step 82) took the rest. */
+     97px over — the hero's axis (step 84) took 50 of that and moving the card to
+     Progress (step 85) took the rest. */
   {
     const ctx = await browser.newContext({ viewport: { width: 1194, height: 834 } });
     const page = watch(await ctx.newPage(), events, 'narrow screen', errors);

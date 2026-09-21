@@ -75,7 +75,7 @@ now. If you write a sentence containing a number, guard it or do not write it.
 
 ## The patch chain
 
-`scripts/build.js` holds `CHAIN`: 82 steps, each a `*-patch.js`. `patch(label,
+`scripts/build.js` holds `CHAIN`: 85 steps, each a `*-patch.js`. `patch(label,
 find, replace)` throws unless `find` matches **exactly once** — that is the
 whole safety model, so keep anchors distinctive and never loosen one to make it
 match. `cut(label, open, close)` removes a span.
@@ -119,3 +119,13 @@ rebuild it.
 After merging, sync the working branch onto the merge commit **and push it** —
 otherwise it sits one commit behind its own remote ref and the stop hook
 catches what you should have.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

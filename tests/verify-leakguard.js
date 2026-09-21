@@ -11,8 +11,10 @@
  * WHY BOTH HALVES MATTER, and the second one more. A guard that refuses
  * everything is as useless as no guard, and worse than no guard, because it
  * gets switched off. So the last block runs the guard over every file git
- * actually tracks — 211 of them — and asserts it refuses none. That is a
- * check against reality rather than against fixtures, and it is what keeps
+ * actually tracks — it said 211 here while the number was 240 — and asserts it
+ * refuses none. No count on purpose now: it moves with every file added, and
+ * an unguarded number in a comment is the thing CLAUDE.md says not to write.
+ * That is a check against reality rather than against fixtures, and it keeps
  * rule 4 honest: eight tracked source files contain `const ALL_Q=` on purpose,
  * being the patch scripts that search for it, and a marker-only rule would
  * have refused all eight.
@@ -54,6 +56,30 @@ head('it refuses the licensed bank, by every route in');
   ok('and so is one under dist/', r.code === 1 && /PATH/.test(r.out));
   r = run(['tests/last-run.log']);
   ok('and the run log, whose output quotes question text', r.code === 1 && /PATH/.test(r.out));
+
+  /* AND graphify-out/, WHICH CAN BE MADE OF THE CORPUS. `graphify` writes a
+     knowledge graph there over whatever it indexed. Its walker respects
+     .gitignore by default, so a default run over this repository skips
+     content/, build/, dist/ and source/ — an earlier version of this comment
+     said otherwise and was wrong. The exposure is the opt-out: `--no-gitignore`
+     is one flag, and a .graphifyignore is read regardless of it and can
+     re-include a path by itself. Either route puts node labels and excerpts of
+     the licensed question text under a name that advertises none of it. Every
+     rule in the guard used to look past it: not a licensed path, no verify header, the
+     NAME regex does not match `graph.json`, and a graph of one subdirectory
+     sits under rule 3's 1 MB cap and under the 200 KB floor rules 4 and 5
+     need before they look. Proven before the rule existed — the guard printed
+     "nothing licensed" and exited 0.
+
+     The second assertion is why DERIVED carries a trailing slash. Without it
+     the prefix test matches any name merely beginning "graphify", and a file
+     called graphify-outline.md would be refused for no reason — a guard that
+     over-refuses is the kind that gets switched off. Proven by setting DERIVED
+     to ['graphify']: that assertion went red and the one above stayed green. */
+  r = run(['graphify-out/graph.json']);
+  ok('and a graphify graph, which is built from the corpus', r.code === 1 && /PATH/.test(r.out), r.out.match(/PATH.*/)?.[0] || r.out.slice(0, 60));
+  r = run(['graphify-outline.md']);
+  ok('but not a file that merely starts with the same letters', r.code === 0);
 
   /* 1b. LOG — THE SAME LOG UNDER ANOTHER NAME, which is how this rule came
      to exist. `node scripts/verify.js > 1.txt` is the obvious thing to type,
@@ -111,6 +137,29 @@ head('it refuses the licensed bank, by every route in');
     'x'.repeat(201 * 1024) + Array(12).fill('data:image/webp;base64,AAAA').join(','));
   r = run([figs]);
   ok('a file full of base64 figures is refused', r.code === 1 && /FIGURES/.test(r.out));
+
+  /* AND FIGURES HAS NO FLOOR OF ITS OWN, unlike PAYLOAD above it. The fixture
+     above is padded past 201 KB to also clear PAYLOAD's floor, which proved
+     FIGURES works — not that it works WITHOUT that floor. This one is the
+     real case: eight images, no padding, nowhere near 200 KB, in a file whose
+     name gives nothing away. Before FIGURES had its own check ahead of
+     PAYLOAD_SNIFF_BYTES, this returned code 0 — "nothing licensed" — because
+     `st.size <= SNIFF_BYTES` sent it home before either rule looked. */
+  const smallFigs = write('notes.js',
+    Array(8).fill('const x = "data:image/png;base64,' + 'A'.repeat(200) + '";').join('\n'));
+  ok('the small fixture really is under the old shared floor',
+     fs.statSync(smallFigs).size < 200 * 1024, fs.statSync(smallFigs).size + ' bytes');
+  r = run([smallFigs]);
+  ok('a small figure dump is refused too, not just a large one',
+     r.code === 1 && /FIGURES/.test(r.out), r.out.match(/FIGURES.*/)?.[0] || r.out.trim().slice(0, 60));
+
+  /* AND IT STILL TAKES EIGHT. A couple of screenshots pasted into a small
+     note is not a figure dump, and must not become unreviewable because
+     FIGURES lost its floor. */
+  const fewFigs = write('two-shots.js',
+    Array(2).fill('const x = "data:image/png;base64,' + 'A'.repeat(200) + '";').join('\n'));
+  r = run([fewFigs]);
+  ok('but two embedded images in a small file are still fine', r.code === 0, r.out.trim().slice(0, 60));
 
   /* And it says what to do, because a guard that refuses without a remedy is
      a guard somebody deletes. Run fresh rather than reusing `r`: reading the

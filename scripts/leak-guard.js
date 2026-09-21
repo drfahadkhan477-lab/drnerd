@@ -23,7 +23,8 @@
  * inconvenient:
  *
  *   1. PATH      anything under content/, build/, dist/ or source/, plus
- *                tests/last-run.log, whose output quotes question text.
+ *                tests/last-run.log, whose output quotes question text, plus
+ *                graphify-out/, which is not the corpus but is built from it.
  *   1b. LOG      the same log SAVED UNDER ANOTHER NAME, recognised by the
  *                header scripts/verify.js writes rather than by its filename.
  *                `verify.js > 1.txt` produces identical content and rule 1
@@ -38,8 +39,13 @@
  *                search for it, and the tests that assert they found it. Size
  *                is what separates a script that mentions the bank from the
  *                bank. This is the rule that catches a renamed export.
- *   5. FIGURES   many base64 image payloads in one file over 200 KB, which is
- *                a figure dump whatever it has been called.
+ *   5. FIGURES   eight or more base64 image payloads in one file, AT ANY SIZE
+ *                — a figure dump whatever it has been called. Unlike PAYLOAD,
+ *                this has no floor: eight embedded images is not something a
+ *                small file produces by coincidence, so there is nothing here
+ *                for a floor to protect against. A figure dump small enough
+ *                to sit under PAYLOAD's 200 KB floor still has to clear this
+ *                one.
  *
  * THE ESCAPE HATCH IS TYPED, ONCE, PER PATH. Same bargain as PENDING_RECORD in
  * scripts/verify.js: a blanket --force would be used the first time rule 3
@@ -51,18 +57,56 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const MAX_BYTES     = 1024 * 1024;
-const SNIFF_BYTES   = 200 * 1024;
-/* Rules 4 and 5 only ever run on files BETWEEN the sniff floor and the size
-   cap, so the most they can read is 1 MB and reading it whole costs nothing.
-   The first version read a 64 KB head instead, on the reasoning that a marker
-   would be near the top — and the test caught that it need not be. A figure
-   dump behind 200 KB of preamble sailed through, and so would an export whose
+const MAX_BYTES          = 1024 * 1024;
+const PAYLOAD_SNIFF_BYTES = 200 * 1024;
+/* PAYLOAD only ever runs on files BETWEEN this floor and the size cap, so the
+   most it can read is 1 MB and reading it whole costs nothing. The first
+   version read a 64 KB head instead, on the reasoning that a marker would be
+   near the top — and the test caught that it need not be. An export whose
    `const ALL_Q=` sits after the embedded fonts, which in the real build it
-   does. The head window was protecting against reading a 40 MB export, and
-   rule 3 already refuses that before these rules are reached. */
+   does, sailed through. The head window was protecting against reading a
+   40 MB export, and rule 3 already refuses that before these rules are
+   reached.
+
+   FIGURES has no floor of its own (see rule 5 above) and reads whatever SIZE
+   already let through — this constant names PAYLOAD's floor specifically,
+   not a shared one, because it no longer is one. */
 
 const DIRS  = ['content/', 'build/', 'dist/', 'source/'];
+/* RULE 1, SECOND HALF: A DIRECTORY THAT IS NOT THE CORPUS BUT IS MADE OF IT.
+ *
+ * graphify-out/ is where `graphify` writes a knowledge graph — graph.json, a
+ * GRAPH_REPORT.md and a graph.html — over whatever folder it was pointed at.
+ *
+ * IT DOES NOT REACH THE CORPUS BY DEFAULT, and the first version of this
+ * comment claimed it did. graphify's own walker takes `gitignore=True` by
+ * default, and content/, build/, dist/ and source/ are every one of them
+ * gitignored, so a default run skips all four. Measured, not read: detect()
+ * over a fixture with a gitignored content/ returned 1 file and listed
+ * content/ under `ignored`; the same call with gitignore=False returned 2 and
+ * indexed content/secret.py.
+ *
+ * What this rule is for is the opt-out, which is one flag wide. `--no-gitignore`
+ * turns the walker loose on the ignored directories, and a .graphifyignore is
+ * loaded regardless of it and can re-include a path on its own. Either route
+ * puts node labels and excerpts of the licensed question text into graph.json,
+ * under a directory name that says nothing about it — and every other rule in
+ * this file looks straight past that file.
+ *
+ * Rule 3 is not the backstop it appears to be. It is a cap, not a floor: a
+ * graph over the full bank would exceed 1 MB and be refused, but a graph of one
+ * subdirectory sits under the cap and is waved through. Below it, rule 4's
+ * markers (`const ALL_Q=[`, `const IMGS={`) are JavaScript and absent from a
+ * JSON graph, and rule 5 wants eight base64 images a graph does not embed —
+ * and both need 200 KB before they look at all. So a small graph.json walked
+ * past all five.
+ * Verified before this list existed: `node scripts/leak-guard.js
+ * graphify-out/graph.json` printed "nothing licensed" and exited 0.
+ *
+ * Kept separate from DIRS so the refusal says what is true of it. These are
+ * not licensed content; they are built from it, and a guard that mislabels
+ * what it caught is the kind that gets argued with. */
+const DERIVED = ['graphify-out/'];
 const FILES = ['tests/last-run.log'];
 /* RULE 1b, AND IT IS HERE BECAUSE OF A FILE CALLED tests/1.txt.
  *
@@ -112,6 +156,8 @@ function inspect(file) {
 
   if (DIRS.some(d => p.startsWith(d)))
     return { rule: 'PATH', why: `${p.split('/')[0]}/ is licensed content and is never committed` };
+  if (DERIVED.some(d => p.startsWith(d)))
+    return { rule: 'PATH', why: `${p.split('/')[0]}/ is built from the licensed corpus and is never committed` };
   if (FILES.includes(p))
     return { rule: 'PATH', why: 'its output quotes question text' };
   if (NAME.test(path.basename(p)))
@@ -140,15 +186,19 @@ function inspect(file) {
 
   if (st.size > MAX_BYTES)
     return { rule: 'SIZE', why: `${(st.size / 1048576).toFixed(1)} MB — nothing here legitimately exceeds 1 MB` };
-  if (st.size <= SNIFF_BYTES) return null;
+  if (st.size === 0) return null;
 
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch (_) { return null; }
 
-  if (PAYLOAD.test(text))
-    return { rule: 'PAYLOAD', why: 'it carries the question bank, not a reference to it' };
+  /* FIGURES first, and unconditionally: it has no floor (rule 5's comment
+     says why), so it runs on every file rule 3 let through, not just the
+     ones over PAYLOAD_SNIFF_BYTES. A small figure dump used to clear every
+     rule in this file; this is the fix. */
   if ((text.match(B64IMG) || []).length >= B64_MANY)
     return { rule: 'FIGURES', why: 'it is a figure dump, whatever it has been called' };
+  if (st.size > PAYLOAD_SNIFF_BYTES && PAYLOAD.test(text))
+    return { rule: 'PAYLOAD', why: 'it carries the question bank, not a reference to it' };
   return null;
 }
 
