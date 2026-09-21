@@ -61,8 +61,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 53
-  run normally — it is 35 of the 1758 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 74
+  run normally — it is 35 of the 2499 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 ---
@@ -184,9 +184,9 @@ It needs those earlier steps to still be on disk, and a normal build cleans them
 up. So the iterating loop is:
 
 ```bash
-node scripts/build.js --keep              # once, keeps all 20 intermediates
+node scripts/build.js --keep              # once, keeps all 85 intermediates
 # ...edit scripts/theme-patch.js...
-node scripts/build.js --keep --from theme # only steps 14-20 rerun
+node scripts/build.js --keep --from theme # only steps 14-85 rerun
 ```
 
 ---
@@ -383,7 +383,7 @@ places, each caught only after the fact:
 - **Mistral's capability filter** checked `capabilities.chat`. A first draft
   of the fixture also guessed `chat`. Mistral's real field is
   `capabilities.completion_chat`; a real key is what exposed it. (The suite
-  that caught it went with the provider in step 79, `onetutor` — the lesson
+  that caught it went with the provider `onetutor` — the lesson
   outlived the code, which is why it is still written down here.)
 - **`Store.merge`'s array path** was tested by handing it a *delta* — `[3]`
   folded onto `[1, 2]` — which is not a shape the app ever produces:
@@ -497,8 +497,8 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 71 *-patch · build-pwa · serve · shots
-tests/        35 Playwright suites (34 single-file + pwa)
+scripts/      build · verify · 85 *-patch · build-pwa · serve · shots
+tests/        75 suites · 28 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

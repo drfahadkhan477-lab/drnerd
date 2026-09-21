@@ -109,8 +109,9 @@ head('every registered suite is in the record');
    said 64, and the chain was 73. Nobody had been careless — the number moves
    whenever a step is added, which is exactly the kind of fact prose loses and
    a derivation keeps. */
-const chainLength = ((read('scripts/build.js').match(/const CHAIN = \[([\s\S]*?)\];/) || [, ''])[1]
-                     .match(/'[^']+'/g) || []).length;
+const chainSteps = ((read('scripts/build.js').match(/const CHAIN = \[([\s\S]*?)\];/) || [, ''])[1]
+                    .match(/'[^']+'/g) || []).map(s => s.slice(1, -1));
+const chainLength = chainSteps.length;
 
 /* The honest CI number, derived rather than quoted: whichever suites the
    workflow actually invokes, summed from what they actually reported. */
@@ -240,6 +241,37 @@ head('the prose agrees with the record');
        its own when it was written. This is that sentence. */
     ['CLAUDE.md', 'the length of the patch chain',
      /holds `CHAIN`: (\d+) steps/, r => [+r[1] === chainLength]],
+    /* FIVE MORE IN docs/BUILD.md, ALL OF THEM STALE WHEN THIS WAS WRITTEN, and
+       every one the same shape as the two CLAUDE.md already names: an
+       unguarded sentence sitting near a guarded one, so the green around it
+       read as coverage of it. They are grouped here because they were found
+       in one sweep, not because they are related.
+
+       The Python paragraph was the clearest case. It said "the other 53 run
+       normally — it is 35 of the 1758 checks", and all three numbers were
+       right the day they were typed: at 76050eb the record held total 1758,
+       suiteCount 54, figreview 35. Two then moved with the suite and one did
+       not have to, so the sentence went half-stale and kept reading as fact. */
+    ['docs/BUILD.md', 'the paragraph on building without Python',
+     /the other (\d+)\s+run normally\s*—\s*it is (\d+) of the (\d+) checks/,
+     r => [+r[1] === stats.suiteCount - 1, +r[2] === stats.suites.figreview, +r[3] === stats.total]],
+    /* The two numbers in the iterate-on-one-step recipe. Both move whenever a
+       step is added anywhere, and the second moves when one is added BEFORE
+       theme, which is how it came to say 14-20 against an 85-step chain. */
+    ['docs/BUILD.md', 'the --keep intermediates count',
+     /--keep\s+#\s*once, keeps all (\d+) intermediates/, r => [+r[1] === chainLength]],
+    ['docs/BUILD.md', 'the step range --from theme reruns',
+     /--from theme\s*#\s*only steps (\d+)-(\d+) rerun/,
+     r => [+r[1] === chainSteps.indexOf('theme') + 1, +r[2] === chainLength]],
+    /* The repository-shape sketch, which reads as a diagram and so gets
+       re-read often and re-checked never. It said 71 patch scripts against 85,
+       and "35 Playwright suites (34 single-file + pwa)" against a registry of
+       75 — a sentence that had been wrong through roughly forty additions. */
+    ['docs/BUILD.md', 'the patch-script count in the repository sketch',
+     /verify · (\d+) \*-patch/, r => [+r[1] === chainLength]],
+    ['docs/BUILD.md', 'the suite counts in the repository sketch',
+     /(\d+) suites · (\d+) need no browser/,
+     r => [+r[1] === stats.suiteCount, +r[2] === ciSuites.length]],
   ];
   for (const [file, what, re, judge] of claims) {
     const m = read(file).match(re);
@@ -257,6 +289,12 @@ head('the chain is as long as the prose says');
   const onDisk = fs.readdirSync(path.join(ROOT, 'scripts')).filter(f => f.endsWith('-patch.js')).length;
   ok('and every step in it has a patch script on disk', chainLength === onDisk,
      `${chainLength} in CHAIN, ${onDisk} scripts`);
+  /* The --from range above is anchored on chainSteps.indexOf('theme'), and a
+     miss there returns -1, which +1 turns into a plausible-looking 0. A step
+     renamed out from under that claim would otherwise leave it comparing a
+     number nobody meant against prose nobody updated. */
+  ok('and theme is one of its steps, so the --from range is not anchored on a miss',
+     chainSteps.includes('theme'), `theme at ${chainSteps.indexOf('theme') + 1}`);
 }
 
 head('the arithmetic in the header is self-consistent');
