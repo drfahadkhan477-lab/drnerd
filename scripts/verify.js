@@ -87,7 +87,31 @@ const SUITES = [
   ['calib-pure',   'the calibration arithmetic says nothing rather than something wrong'],
   ['calibrate',    'confidence is an option not a gate, and a tagged miss updates one row'],
   ['figzoom-pure', 'the point under your fingers does not move, over any number of pinches'],
+  /* Written because docs/BUILD.md admitted the hole rather than closing it:
+     the figure fade's error path was proven once in a scratch harness that was
+     then thrown away. Hidden-by-default is the obvious way to write that
+     feature and it makes every failure invisible. */
+  ['figfade-pure',  'a figure that fails to load still appears, rather than being silently blank'],
+  /* Written because two patch headers quoted luminances and contrast ratios to
+     justify every colour they picked, and nothing checked a single one of them
+     — the rule in CLAUDE.md that says guard a number or do not write it. */
+  ['palette-pure',  'the contrast figures quoted in the palette patches are the figures those palettes produce'],
+  /* Written because heroRhythm.js says in its own header that it is shaped
+     this way — no DOM, no timers — so its rules can be called from a test
+     without a browser, and then nobody wrote that test. The only suite that
+     touched it drives a real build, which CI cannot do. */
+  ['herorhythm-pure', 'the home strip does not repeat itself, and keeps vfib and asystole out of the wallpaper'],
+  /* Written the day a first build from the documented starting point died 63
+     steps in: ref-images skipped its own injection when the corpus cited no
+     figures, and assets anchors on what it skipped. */
+  ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
+  /* Written because focusmode anchored on three lines copied out of
+     fullbleed's source, and two steps in between had rewritten them — which
+     reading the source cannot tell you and a build would have, if a build
+     were something everyone could run. */
+  ['shellanchor-pure', 'every anchor into the shell markup still matches at the step that uses it'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
+  ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
   ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
@@ -238,8 +262,14 @@ const SUITES = [
    EMPTY, AND THAT IS NEWS. It held fourteen names for weeks — every suite added
    while the only machine that could run the full thing was not being run. The
    first full green run wrote all fourteen at once. If this fills up again, that
-   is the same gap reopening. */
-const PENDING_RECORD = [];
+   is the same gap reopening.
+
+   And it has names in it again, for the ordinary reason rather than the bad
+   one: 'focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure',
+   'refimg-pure' and 'shellanchor-pure' were all added after the last full
+   green run, so the record has not seen their counts yet. The next full green
+   run writes them and this goes back to empty. */
+const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
