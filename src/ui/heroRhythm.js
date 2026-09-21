@@ -1,11 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    heroRhythm.js — what the home screen's live strip cycles through.
 
-   Pure selection logic only — no DOM, no timers, so the "never show the same
+   Pure selection logic only — no DOM, no timers, so the "don't show the same
    rhythm twice in a row" and "keep the alarming ones out of ambient rotation"
    rules are each one small function you can call from a test without a
    browser. The app wires this to a canvas and a setInterval; this file
-   doesn't know either exists.
+   doesn't know either exists. tests/verify-herorhythm-pure.js is that test.
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -21,7 +21,7 @@ const HERO_PLAYLIST = [
   'pericarditis', 'hyperk', 'vt', 'chb', 'stemi',
 ];
 
-/* Never repeats the immediately preceding rhythm — a "random" pick that can
+/* Doesn't repeat the immediately preceding rhythm — a "random" pick that can
    land on the same thing twice in a row reads as broken, not random.
 
    Done by stepping off a collision rather than by drawing again. A reroll loop
@@ -29,7 +29,15 @@ const HERO_PLAYLIST = [
    this playlist it terminates on the first retry ~95% of the time, but nothing
    in the code says the list cannot contain the same key twice, and a list that
    did would hang the hero animation for ever with no way to see why. One
-   deterministic step is the same result with no loop to reason about. */
+   deterministic step is the same result with no loop to reason about.
+
+   What the step buys and what it does not: it is bounded for ANY list, which
+   is the hang it was written to avoid, but it only guarantees no-repeat for a
+   list whose entries are unique. One place on from a duplicate is the same key
+   again, so [a,a,b] after "a" can still answer "a". HERO_PLAYLIST is unique
+   and verify-herorhythm-pure proves that exhaustively — and asserts the
+   duplicate case too, so the boundary stays written down rather than implied
+   by a comment that reads as unconditional. */
 function nextInPlaylist(prevKey, playlist, rand) {
   const list = playlist || HERO_PLAYLIST;
   const r = rand || Math.random;
