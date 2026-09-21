@@ -105,6 +105,11 @@ const SUITES = [
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
   ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
+  /* Written because focusmode anchored on three lines copied out of
+     fullbleed's source, and two steps in between had rewritten them — which
+     reading the source cannot tell you and a build would have, if a build
+     were something everyone could run. */
+  ['shellanchor-pure', 'every anchor into the shell markup still matches at the step that uses it'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
@@ -260,11 +265,11 @@ const SUITES = [
    is the same gap reopening.
 
    And it has names in it again, for the ordinary reason rather than the bad
-   one: 'focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure' and
-   'refimg-pure' were all added after the last full green run, so the record
-   has not seen their counts yet. The next full green run writes them and this
-   goes back to empty. */
-const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure'];
+   one: 'focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure',
+   'refimg-pure' and 'shellanchor-pure' were all added after the last full
+   green run, so the record has not seen their counts yet. The next full green
+   run writes them and this goes back to empty. */
+const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

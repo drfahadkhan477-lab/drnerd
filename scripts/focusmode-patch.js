@@ -152,15 +152,28 @@ patch('focus: a way in, on the screen it acts on',
    and cannot be lost to a screen change. The glyph is inlined rather than
    built with icon(): this is plain document markup, not a template literal,
    so ${} would not be interpolated here. The path is i-collapse's, copied
-   from apexpage-patch.js. */
+   from apexpage-patch.js.
+
+   THE ANCHOR IS THE HEADER ALONE, AND THAT IS THE FIX FOR A REAL BREAK. It
+   used to carry the two lines that follow it in fullbleed's output —
+   <div id="shell"> and <div id="app"></div> — for distinctiveness. Neither
+   was load-bearing: the button is inserted directly after the header and has
+   no stake in what comes next. What they did instead was couple this patch
+   to markup two later steps rewrite. disclaimer(64) swaps that div for
+   <main id="app"></main>, the landmark a screen reader needs, and
+   announce(65) puts a live region beside it — both 30 steps after
+   fullbleed(34) wrote the form this anchor was copied from, and both long
+   before this step at 86. So the anchor described markup that had not
+   existed since step 64, and the build died here with "found 0" on the
+   first run that ever reached it.
+
+   fullbleed is the only step that emits <header id="navbar"></header> and
+   nothing else mentions it, so one line is both unique and exactly the
+   insertion point. tests/verify-shellanchor-pure.js holds that. */
 patch('focus: a way out that cannot be rendered away',
+`<header id="navbar"></header>`,
 `<header id="navbar"></header>
-<div id="shell">
-  <div id="app"></div>`,
-`<header id="navbar"></header>
-<button id="focusExit" type="button" onclick="toggleFocusMode()" aria-label="Leave focus mode" title="Leave focus mode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9H9V4.5M19.5 9H15V4.5M4.5 15H9v4.5M19.5 15H15v4.5"/></svg></button>
-<div id="shell">
-  <div id="app"></div>`);
+<button id="focusExit" type="button" onclick="toggleFocusMode()" aria-label="Leave focus mode" title="Leave focus mode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9H9V4.5M19.5 9H15V4.5M4.5 15H9v4.5M19.5 15H15v4.5"/></svg></button>`);
 
 /* ── 5. the two declarations that are the whole feature ───────────────────
    html[data-focus="1"] is (0,1,1) against :root's (0,1,0), so --navh:0px
