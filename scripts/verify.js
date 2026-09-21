@@ -96,6 +96,11 @@ const SUITES = [
      justify every colour they picked, and nothing checked a single one of them
      — the rule in CLAUDE.md that says guard a number or do not write it. */
   ['palette-pure',  'the contrast figures quoted in the palette patches are the figures those palettes produce'],
+  /* Written because heroRhythm.js says in its own header that it is shaped
+     this way — no DOM, no timers — so its rules can be called from a test
+     without a browser, and then nobody wrote that test. The only suite that
+     touched it drives a real build, which CI cannot do. */
+  ['herorhythm-pure', 'the home strip does not repeat itself, and keeps vfib and asystole out of the wallpaper'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
@@ -251,10 +256,10 @@ const SUITES = [
    is the same gap reopening.
 
    And it has names in it again, for the ordinary reason rather than the bad
-   one: 'focus', 'figfade-pure' and 'palette-pure' were all added after the last
-   full green run, so the record has not seen their counts yet. The next full green run
-   writes them and this goes back to empty. */
-const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure'];
+   one: 'focus', 'figfade-pure', 'palette-pure' and 'herorhythm-pure' were all
+   added after the last full green run, so the record has not seen their counts
+   yet. The next full green run writes them and this goes back to empty. */
+const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
