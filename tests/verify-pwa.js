@@ -801,15 +801,31 @@ async function heapAfterBoot(page, url) {
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
     /* It reloads once, finds the same mismatch, and must then STOP and say so
        rather than spin. Waiting on the message, not on a stopwatch. */
+    /* innerText, NOT textContent, and this is the whole fix. textContent
+       includes the source of every inline <script>, and the loader that
+       prints this message is an inline script in the body — so the wait
+       matched the loader's own source code on the FIRST load, before any
+       mismatch had been noticed or any retry made. It passed hardest when
+       the check it guards had not run at all.
+
+       Found by the owner's run: this check passed and the one below reported
+       "1 navigations", which is impossible if the message was real — the app
+       shows it only after the one retry, so a real sighting means at least
+       two. The retry then fired under the next page.evaluate, the execution
+       context went with it, and the suite died without a summary.
+
+       innerText is the rendered text: no script source, nothing hidden. */
     const told = await page.waitForFunction(
-      () => /updated while it was opening/i.test(document.body.textContent || ''),
+      () => /updated while it was opening/i.test(document.body.innerText || ''),
       null, { timeout: 30000 }).then(() => true, () => false);
     ok('a mixed pair is noticed rather than run', told);
     /* The loop guard, which is the half that makes this safe to ship: exactly
        one retry. A reload that does not fix it must never become a reload
-       that never stops. */
+       that never stops. AND IT MUST HAVE HAPPENED: `loads <= 3` alone passed
+       at 1, which is no retry at all, under a label claiming one. The goto is
+       the first navigation, so a retry that happened means at least two. */
     await page.waitForTimeout(2500);
-    ok('and it retries once, not forever', loads <= 3, `${loads} navigations`);
+    ok('and it retries once, not forever', loads >= 2 && loads <= 3, `${loads} navigations`);
     const flagged = await page.evaluate(() => {
       try { return sessionStorage.getItem('accsap-mixed-build'); } catch (_) { return 'unreadable'; }
     });
@@ -837,6 +853,47 @@ async function heapAfterBoot(page, url) {
     const shellV = idOf(sw, /const SHELL_V\s*=\s*'([a-f0-9]+)'/);
     ok('the stamp is not merely the shell digest under another name',
        !!shellV && a !== shellV, `build ${a}, shell ${shellV}`);
+
+    /* ── AND WHICH COMMIT MADE THEM ────────────────────────────────────────
+       BUILD_ID says the three files are from the same deploy. It cannot say
+       which commit to open to read what is in them, and three months after a
+       deployment that is the question. The commit rides beside it in all
+       three files and in content/manifest.json.
+
+       CHECKED HERE, OFF THE SERVED DIRECTORY, because until now nothing did.
+       tests/verify-provenance-pure.js asserts build-pwa.js EMITS these — it
+       reads that script as text and cannot tell whether a stamp survived
+       substitution, the split, the font lift or the minifier. This reads the
+       artifact, which is the only thing that answers it. Same division as
+       every other pair of pure and browser suites here. */
+    const gitish = /^(?:[0-9a-f]{7,40}(?:-dirty)?|unknown)$/;
+    const ca = idOf(shell, /SHELL_COMMIT = '([^']*)'/);
+    const cb = idOf(app, /var APP_COMMIT='([^']*)'/);
+    const cc = idOf(sw, /const COMMIT\s*=\s*'([^']*)'/);
+    ok('index.html names the commit it was built from', !!ca && gitish.test(ca), ca || 'absent');
+    ok('app.js names it too', !!cb && gitish.test(cb), cb || 'absent');
+    ok('and so does the worker', !!cc && gitish.test(cc), cc || 'absent');
+    ok('all three agree on which commit that was', !!ca && ca === cb && cb === cc,
+       `${ca} / ${cb} / ${cc}`);
+    /* THE PLACEHOLDER MUST NOT SURVIVE. build-pwa.js throws if __COMMIT__ is
+       still present after substitution, but that check reads `html` before
+       eight further steps rewrite it. A literal __COMMIT__ reaching a device
+       is a stamp that looks present and says nothing. */
+    ok('no unsubstituted placeholder reached the artifact',
+       !/__COMMIT__|__BUILD_ID__/.test(shell + app + sw));
+    /* AND IT IS NOT THE BUILD ID WEARING A HAT. If someone ever folded the
+       commit into BUILD_ID, or stamped BUILD_ID into both slots, these would
+       read identically and every check above would still pass. */
+    ok('the commit is a commit, not a copy of the build stamp', ca !== a,
+       `commit ${ca}, build ${a}`);
+    /* The content half, which is written by a different script entirely
+       (extract-content.js) and is the one that says which commit the BANK
+       came from — the half the freshness check compares. */
+    const manifest = await (await fetch(new URL('content/manifest.json', target).href)).json();
+    ok('the extracted content records a commit as well',
+       !!manifest.commit && gitish.test(String(manifest.commit)), String(manifest.commit));
+    ok('and a sourceDigest, which is what build-pwa compares against',
+       /^[a-f0-9]{16}$/.test(String(manifest.sourceDigest)), String(manifest.sourceDigest));
   }
 
   head('the split build fits the screen it is held on');
@@ -894,14 +951,55 @@ async function heapAfterBoot(page, url) {
       window.__l2 = k;
       return window.__s2 >= 5;
     }, null, { timeout: 15000, polling: 'raf' });
-    const m = await page.evaluate(() => ({
-      over: document.documentElement.scrollHeight - innerHeight,
-      card: !!document.getElementById('offlineCard'),
-      appW: Math.round(document.getElementById('app').getBoundingClientRect().width),
-      vw: innerWidth,
-    }));
+    const m = await page.evaluate(() => {
+      /* WHAT reaches lowest, not just by how much. This failed once at "9px
+         over" and the number named nothing — the only way on from there was
+         to open the split build by hand and measure, which is what this line
+         is for. Considered: #app's children and grandchildren, which on the
+         landscape home are the four grid areas and what each one holds.
+         Fixed and pointer-events:none elements are skipped, as decoration
+         is everywhere else in these suites.
+
+         IT CARRIES ITS OWN NUMBERS, so a reader can tell a lead from a
+         verdict: the element's bottom edge against the viewport height. If
+         that edge is inside the viewport while the page still scrolls, the
+         overflow is padding or margin below the content, not the content —
+         which is a different fix, and worth knowing before anyone makes the
+         wrong one. The first-run welcome card is gone by the time this runs. */
+      function lowestInApp() {
+        const app = document.getElementById('app');
+        if (!app) return '';
+        let best = null, bottom = -Infinity;
+        for (const el of app.querySelectorAll(':scope > *, :scope > * > *')) {
+          const cs = getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+          if (cs.position === 'fixed' || cs.pointerEvents === 'none') continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 1 || r.height < 1) continue;
+          /* >= so a later element wins a tie: document order puts a child
+             after its parent, and the child is the one worth naming. */
+          if (r.bottom >= bottom - 0.5) { bottom = r.bottom; best = el; }
+        }
+        if (!best) return '';
+        const name = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') +
+          (e.className && typeof e.className === 'string' && e.className.trim()
+            ? '.' + e.className.trim().split(/\s+/)[0] : '');
+        const where = best.parentElement && best.parentElement !== app
+          ? name(best.parentElement) + ' > ' + name(best) : name(best);
+        return ` [lowest: ${where}, ${Math.round(best.getBoundingClientRect().height)}px tall,` +
+          ` ends at ${Math.round(bottom)} of ${innerHeight}]`;
+      }
+      return {
+        over: document.documentElement.scrollHeight - innerHeight,
+        card: !!document.getElementById('offlineCard'),
+        appW: Math.round(document.getElementById('app').getBoundingClientRect().width),
+        vw: innerWidth,
+        lowest: lowestInApp(),
+      };
+    });
     ok('an 11-inch iPad in landscape needs no scrolling on the home screen',
-       m.over <= 0, `${m.over}px over — first run, with the welcome card, was ${firstRun.over}px`);
+       m.over <= 0, `${m.over}px over — first run, with the welcome card, was ${firstRun.over}px` +
+       (m.over > 0 ? m.lowest : ''));
     /* The half that stops this being satisfied by an empty screen: it must still
        be using the width, which is what the landscape layout is for. */
     ok('and it is still filling the width while it does',

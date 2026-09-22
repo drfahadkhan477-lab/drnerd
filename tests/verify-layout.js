@@ -58,7 +58,7 @@ const FRAMES = [
   ['iPhone portrait', 390, 844],
   ['desktop', 1440, 900],
 ];
-const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz'];
+const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz', 'echo'];
 
 /* Enough of a reply to overflow any panel, so "does it scroll" is a real
    question rather than one the fixture answers for us. */
@@ -123,7 +123,67 @@ const sse = text => [
       home: () => goHome(), stats: () => goStats(), lab: () => goLab(), refs: () => goRefs(),
       memory: () => goMemory(), study: () => goStudy(), search: () => openSearch(),
       quiz: () => startQuiz(CHAPTERS[0], 'all'),
+      /* Echo Studio. Its two tabs share one screen and the calculator is the
+         wider of them, but the sweep opens what goEcho() opens, which is the
+         reference tab — so this covers the tab the fellow lands on, not both.
+         Narrower than "the echo screen fits", and said here rather than
+         implied by the screen's name appearing in the list. */
+      echo: () => goEcho(),
     };
+    /* WHAT overflowed, not just by how much. "refs +9px" names a number and
+       nothing else, and the only way to turn it into a cause was to open the
+       build by hand and go looking — which is exactly what a suite is for.
+       This runs only when the page has already failed, so a green run never
+       reaches it.
+
+       IT IS A LEAD, NOT A VERDICT, and it carries its own number so the
+       reader can tell which. When the bracketed figure matches the screen's
+       (`refs +9px [... +9px]`) the named element is the thing overflowing.
+       When it is smaller, something this deliberately ignores — decoration,
+       or a box clipped by an ancestor — is contributing to scrollWidth too,
+       and that mismatch is worth knowing rather than worth hiding.
+
+       Deepest wins a tie, because a parent is only as wide as the content
+       forcing it. The chain skips ancestors with neither id nor class: a bare
+       walk up three parents is often `tbody > tr > td`, which identifies
+       nothing, while the name worth having is usually a class further up. */
+    function widestOverflow() {
+      const doc = document.documentElement;
+      const w = doc.clientWidth;
+      let worst = null, worstBy = 0, worstDepth = -1;
+      for (const el of document.querySelectorAll('body *')) {
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        /* Decoration is not the culprit. This suite's own header names
+           .fc-glow — inset -50% -20% on purpose, pointer-events:none, clipped
+           by its parent — as the reason a naive overflow check was thrown
+           away. Naming it here would resurrect that wolf-crying in the one
+           message somebody reads while already debugging. */
+        if (cs.pointerEvents === 'none') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) continue;
+        /* RIGHT EDGE ONLY. The symptom is scrollWidth, which a left-hand
+           overhang does not grow, and the offLeft check below owns that case.
+           A first draft took max(right - w, -left) and would have named a
+           30px left-hand overhang as the cause of a 9px sideways scroll. */
+        const by = Math.round(r.right - w);
+        if (by < 2) continue;
+        let depth = 0; for (let n = el.parentElement; n; n = n.parentElement) depth++;
+        if (by > worstBy || (by === worstBy && depth > worstDepth)) {
+          worst = el; worstBy = by; worstDepth = depth;
+        }
+      }
+      if (!worst) return '';
+      const name = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') +
+        (e.className && typeof e.className === 'string' && e.className.trim()
+          ? '.' + e.className.trim().split(/\s+/)[0] : '');
+      const chain = [name(worst)];
+      for (let n = worst.parentElement; n && n !== document.body && chain.length < 4; n = n.parentElement) {
+        if (n.id || (n.className && typeof n.className === 'string' && n.className.trim())) chain.push(name(n));
+      }
+      return ' [' + chain.reverse().join(' > ') + ' +' + worstBy + 'px]';
+    }
+
     const sideways = [], clipped = [], offLeft = [];
     let media = 0;
     for (const s of screens) {
@@ -157,7 +217,7 @@ const sse = text => [
 
       const d = document.documentElement;
       const over = Math.round(d.scrollWidth - d.clientWidth);
-      if (over > 1) sideways.push(s + ' +' + over + 'px');
+      if (over > 1) sideways.push(s + ' +' + over + 'px' + widestOverflow());
 
       for (const m of document.querySelectorAll('#app img, #app canvas')) {
         const cs = getComputedStyle(m);

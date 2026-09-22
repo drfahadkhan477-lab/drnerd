@@ -1,18 +1,22 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    wiggers.js — draws what physio.js computes.
 
-   Five views over one model, and one clock behind all of them:
+   Six views over one model, and one clock behind all of them:
 
-     Wiggers   the classic stacked diagram — ECG, pressures, volume, phases
-     PV loop   pressure against volume, with the ESPVR and EDPVR that explain it
-     Flow      aortic and mitral flow, then coronary flow, which is the payoff
-     Right     the right heart against the left, which is where S1 and S2 split
-     Curves    Frank-Starling, and Guyton's two curves and their intersection
+     Wiggers     the classic stacked diagram — ECG, pressures, volume, phases
+     PV loop     pressure against volume, with the ESPVR and EDPVR that explain it
+     Flow        aortic and mitral flow, then coronary flow, which is the payoff
+     Right       the right heart against the left, which is where S1 and S2 split
+     Curves      Frank-Starling, and Guyton's two curves and their intersection
+     Conduction  which of the heart's own real activation points have fired
 
    Nothing here is drawn from memory of a textbook figure. Every point is
    Physio evaluated at a cycle fraction, so if the physiology is edited the
    picture changes with it, and the cursor on the diagram is the same instant
-   as the beating heart beside it.
+   as the beating heart beside it. Conduction is the one exception to
+   "Physio evaluated" specifically — it reads real numbers, but from
+   Heart3D.activationAt, not Physio; see drawConduction's own comment for why
+   that is a real distinction and not a loophole.
 
    Colours come from the page's CSS custom properties where they are structural
    — paper, ink, grid, muted — so the diagram follows whatever theme is active.
@@ -32,6 +36,7 @@ const VIEWS = [
   { id:'flow',    label:'Flow',     hint:'Valve flow, and why the left ventricle is perfused in diastole' },
   { id:'right',   label:'Right heart', hint:'The right side against the left — where S1 and S2 split' },
   { id:'curves',  label:'Curves',   hint:'Frank-Starling, and Guyton at the point they cross' },
+  { id:'conduction', label:'Conduction', hint:'Which of the heart’s real activation points have fired, in order' },
 ];
 
 const TAU = Math.PI * 2;
@@ -679,6 +684,103 @@ function mount(canvas, opts) {
     }
   }
 
+  /* ════════════════════ view: conduction ═══════════════════════════════════
+     A schematic, not the 3D heart's own mesh: heart3d.js already draws the
+     real depolarisation front over real anatomy (chain step heroart's
+     conduction mode). This is not that a second time. It is a flat diagram
+     of the same real firing sequence, for a panel where Wiggers already
+     lives and a WebGL context does not need to.
+
+     "REAL NUMBERS, NOT PHYSIO'S" — the file header flags this as the one
+     exception, and here is why it still holds the module's own rule.
+     Heart3D.activationAt(x,y,z) is real 3D distance math already shipped in
+     src/core/heart3d.js — genuinely what the heart itself is drawn from —
+     and these four points are Heart3D.activationAt sampled at its own
+     anatomy reference coordinates (Heart3D.anatomy.la.c, .ra.c, .lv.apex,
+     .lv.base), captured once rather than called live: wiggers.js does not
+     import heart3d.js, and a live cross-module call would mean this panel's
+     correctness now depends on Heart3D's WebGL machinery even when nothing
+     here needs a GPU. The same four numbers are what
+     tests/verify-conductionwave-pure.js already holds ConductionWave.js to.
+
+     WHY ONLY FOUR POINTS, NOT SIX. LA/RA share one value (6ms — the model
+     does not distinguish which atrium at that resolution), and RV base
+     (32.34ms) and RV apex (162.36ms) are left out rather than invented a
+     label for: RV base sits inside activationAt's atrial-adjacency
+     threshold — a real, documented finding in conductionWave.js's own
+     header, not a typo — and a schematic that plotted it beside "Atria"
+     unexplained would read as a mistake instead of the real anatomy it is.
+     Four honestly-labelled points beat six where two would need a footnote
+     the diagram has no room for. */
+  const CONDUCTION_POINTS = [
+    { label: 'SA node',    ms: 0 },
+    { label: 'Atria',      ms: 6 },
+    { label: 'LV apex',    ms: 155.55 },
+    { label: 'LV base',    ms: 207.7 },
+  ];
+  function drawConduction(p) {
+    /* Looked up here, not captured once at mount() time the way Ph is: every
+       other view needs Physio or nothing draws, but conductionWave.js is
+       used by exactly this one view, so the other five must not go dark for
+       want of a module that has nothing to do with them. */
+    const CW = root.ConductionWave;
+    if (!CW) {
+      text('Conduction view needs conductionWave.js loaded first.', 16, H / 2, p.dim, 11, 500);
+      return;
+    }
+    const L = 54, R = 54, TOP = 28, BOT = 34;
+    const B = box(L, TOP, W - L - R, H - TOP - BOT);
+    const elapsedMs = S.t * secs() * 1000;
+    const fired = new Set(CW.firedBy(CONDUCTION_POINTS, elapsedMs));
+    const next = CW.nextToFire(CONDUCTION_POINTS, elapsedMs);
+
+    text('Conduction', B.x, TOP - 12, p.ink, 11.5, 800);
+    text('the real firing order, not a drawing of one', B.r, TOP - 12, p.dim, 9.5, 500, 'right');
+
+    const n = CONDUCTION_POINTS.length;
+    const stepY = B.h / (n - 1);
+    const xOf = i => B.x + B.w / 2 + (i % 2 === 0 ? -1 : 1) * B.w * 0.22;
+    const yOf = i => B.y + i * stepY;
+
+    /* The connecting line between two points is only ever lit once BOTH
+       ends have fired — a half-lit line would claim the wave is somewhere
+       it has not measurably reached yet. */
+    for (let i = 1; i < n; i++) {
+      const a = CONDUCTION_POINTS[i - 1], b = CONDUCTION_POINTS[i];
+      const lit = fired.has(a.label) && fired.has(b.label);
+      ctx.save();
+      ctx.strokeStyle = lit ? p.cursor : p.grid;
+      ctx.lineWidth = lit ? 2.4 : 1.4;
+      ctx.beginPath();
+      ctx.moveTo(xOf(i - 1), yOf(i - 1));
+      ctx.lineTo(xOf(i), yOf(i));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    CONDUCTION_POINTS.forEach((pt, i) => {
+      const x = xOf(i), y = yOf(i);
+      const isFired = fired.has(pt.label);
+      const isNext = pt.label === next;
+      if (isNext) {
+        /* A ring around what fires next — not animated (nothing here
+           depends on a timer beyond the shared cycle clock every other
+           view already reads S.t from), just a fixed visual difference
+           between "about to" and "already has". */
+        ctx.save();
+        ctx.strokeStyle = p.cursor; ctx.globalAlpha = .5; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      dot(x, y, isFired ? p.cursor : p.dim, isFired ? 5.5 : 4, p);
+      text(pt.label + '  ' + pt.ms + 'ms', x + (i % 2 === 0 ? -14 : 14), y,
+           isFired ? p.ink : p.muted, 10.5, isFired ? 700 : 500, i % 2 === 0 ? 'right' : 'left');
+    });
+
+    text('SA → atria is the P wave. Atria → LV apex is the AV node and His–Purkinje system — the pause that makes the PR interval a pause and not a delay you can see happening.',
+         B.x, H - 14, p.dim, 10, 500);
+  }
+
   /* ── draw ─────────────────────────────────────────────────────────────── */
   function draw() {
     if (!fit()) return;
@@ -690,6 +792,7 @@ function mount(canvas, opts) {
     else if (S.view === 'flow') drawFlow(p);
     else if (S.view === 'right') drawRight(p);
     else if (S.view === 'curves') drawCurves(p);
+    else if (S.view === 'conduction') drawConduction(p);
     else drawWiggers(p);
   }
 

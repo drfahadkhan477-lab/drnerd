@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 2481 + 125 checks
+node scripts/verify.js --pwa                           # → 2821 + 133 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -61,15 +61,40 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 53
-  run normally — it is 35 of the 1758 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 85
+  run normally — it is 35 of the 2821 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
+
+- **A reference corpus at `content/refs/`** — `.md` files in the shape
+  `docs/REFERENCE-GUIDE.md` describes. The build REQUIRES it: `refs-patch`
+  exits 1 on a missing or empty directory, so there is no such thing as a
+  build without one.
+
+  **The three files in `docs/reference-examples/` unblock the build and are
+  not a test corpus**, which is worth stating because it is not guessable and
+  because assuming otherwise costs a full run. Copying them in produces 12
+  notes citing no figures, and six suites then fail for want of a corpus
+  rather than for anything wrong with the app:
+
+  | Suite | Needs |
+  |---|---|
+  | `retrieval` | more than 100 notes, and an index over 700 documents; R@1 thresholds calibrated on a real corpus |
+  | `figsharp`, `chatfigs`, `layout` | notes citing `![…](refimg://KEY)`, with the images present in `content/refs-images/` |
+  | `pearl`, `chat` | the same figure citations, reached through an Apex answer |
+
+  They fail rather than skip, and that is correct: each says what was missing
+  ("no reference notes cite a figure", "12 notes"). A suite that passed here
+  would be measuring nothing, which is the failure this project keeps
+  producing. Do not lower a threshold to accommodate a stand-in corpus — the
+  numbers are meaningless on 12 notes either way.
+
+  A full green run therefore needs the real corpus, notes and figures both.
 ---
 
 ## How the build works
 
-The chain is 86 patch scripts, run in order against the export. Each applies a list of
+The chain is 87 patch scripts, run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -87,12 +112,12 @@ The cost is that order matters, and the dependencies are real:
 | 3 | `flags` | two questions whose lettered answer panels the export never shipped; flagged beside `keys`, for the same reason |
 | 4 | `apex` | embeds `heart3d.js` and `apex.js`; the only place the heart enters |
 | 5–6 | `stage2`, `stage3` | FSRS-5–derived scheduling, then Apex's vision and memory |
-| 7 | `polish` | the rhythm registry the hero and Rhythm Lab both read |
+| 7 | `polish` | the rhythm registry the hero and Rhythm Lab both read. Also now embeds the Living Diagram family (`livingDiagram.js`, `conductionWave.js`, `coronaryTree.js`) beside heroRhythm/pencil, the same way and for the same reason. **The new embed is not yet build-verified**: checked mechanically (not by eye) for collisions against every `find` anchor in every other `*-patch.js` script — none — and the find/replace pair itself is unchanged from the version heroRhythm/pencil already proved, but nothing has actually built it |
 | 8 | `splash` | the pre-paint loading screen |
 | 9 | `braunwald` | the grounded reference library |
 | 10 | `art` | the design pass the later panels sit inside |
 | 11 | `leads` | the 12-lead — needs `art`'s panel styles |
-| 12 | `physio` | the cardiac cycle — anchors on the 12-lead's embed comment |
+| 12 | `physio` | the cardiac cycle — anchors on the 12-lead's embed comment. `PHYSIO_VIEWS` now carries a sixth entry, `conduction`, and `physioNoteHtml()` a matching case, so Lab's chip picker and its teaching note both cover the view `wiggers.js` gained the same session. **Not yet build-verified**: the two edits sit inside the same find/replace pair `lab-patch.js`'s own later anchor already depends on, confirmed unmoved by that anchor still matching against the edited source; no build has run it |
 | 13 | `name` | Systole |
 | 14 | `theme` | palettes — must follow `name`, it restyles the hero wordmark |
 | 15 | `home` | welcome bar, progress bar, layouts |
@@ -167,6 +192,7 @@ The cost is that order matters, and the dependencies are real:
 | 84 | `heroflex` | the hero stops reserving vertical space by how **wide** the screen is. `.hero-ecg{height:clamp(92px,13.5vw,140px)}` and `.hero-live{padding-bottom:clamp(104px,16vw,158px)}` both take their tallest value at 1194px wide — which is an 11-inch iPad in *landscape*, the shortest shape the app is held in. Rotate it to portrait and the hero gets shorter on a screen with 360px more room. Each clamp gains a height term through `min()`, so whichever axis is scarcer decides; the floors are untouched, and a phone renders identically. Measured by `verify-home`: the 11-inch landscape home screen goes from `97px over` to `47px over` |
 | 85 | `offhome` | the offline-download card moves off the home screen and onto Progress. The landscape home grid budgets itself exactly one screen and gives all of it to four named areas, sweeping every other child into implicit rows **beyond** that budget — under a rule whose own comment describes it as a fallback for the story rail and feed that had moved to the Chapters page. The card inherited that fallback and became 114.5px of guaranteed overflow on an 11-inch iPad held sideways. Bringing the tail into the grid and capping the wrap was tested and reaches 0px too, but squashes the hero 268px → 200px and widens the medallion/ECG overlap from 19px to 87px; the owner chose the move. Progress already opens with "Saved locally on this device", which is the same subject, and the cache survey moved with the card so it no longer runs on every visit home. `verify-pwa`: `0px over — first run, with the welcome card, was 43px` |
 | 86 | `focusmode` | the quiz, without the chrome around it. `#navbar` is fixed and outside the reading column, and one variable — `--navh` — is what `.nav`'s height, `#shell`'s `padding-top` and the Apex panel's `top`/`height` all measure from, so the whole feature is hiding the bar and setting that to `0px`: the shell and the tutor reclaim the space themselves. `--sat` is deliberately left alone, being the status bar's reserve rather than the app's chrome. The screen test is in JS and not CSS on purpose — `#navbar` is a *sibling* of `#app`, so scoping it to the quiz in CSS would need `:has()`, which Safari gained in 15.4 against this app's 13.4 floor. Two controls, each rendered only where it can act: the way in sits in the nav and only on the quiz screen (offered on Home it would flip `aria-pressed`, save, re-render and visibly do nothing), and the way out is a fixed 44px button in the shell, outside everything `render()` replaces — quiznav's action row is `reviewing ? '' : ...`, so putting it there would strand a fellow with no chrome and no way back. Keeps the progress bar, and keeps the confidence row, which feeds `calib.js`: hiding that would change what gets recorded, which is a behaviour change wearing a layout change's clothes. **Not yet build-verified**: every anchor was read verbatim from a committed patch script and proven to match exactly once against a fixture, but nothing has built it. `tests/verify-focus.js` ships with it and is listed in `PENDING_RECORD` until a full green run records its count  **Build-verified at last.** The first run that ever reached step 86 died here: the exit button anchored on three lines copied out of `fullbleed`(34), but `disclaimer`(64) had swapped that `<div id="app">` for the `<main>` landmark and `announce`(65) had put a live region beside it, so the anchor described markup gone since step 64 — `found 0`. Reading a patch script is how you get that wrong, and it is all anyone without a build can read. The anchor is now `<header id="navbar"></header>` alone, which is unique and is the insertion point; the other two lines were never load-bearing. `verify-shellanchor-pure` replays the whole shell region through the chain and checks every anchor into it at the step that uses it |
+| 87 | `echo` | Echo Studio: a reference you can browse and a calculator you can drive, as two tabs over one set of tables. The thinking is in `src/core/echo.js` (12 views with window, position, index mark and angle; 14 measurements; 9 severity tables as ordered bands; 9 disease profiles; the continuity, PISA, Bernoulli, Simpson and Devereux arithmetic) and `src/ui/echo.js` (strings in, strings out — no DOM, no timers), so both are held by `verify-echo-pure` and `verify-echoui-pure` without a browser. The calculator's rule is that a derived row appears only when every input it names is a finite number: never defaulted, never guessed, never `NaN`, because a plausible wrong number on a study screen gets memorised while an absent one gets investigated. **Four anchors, and three more deliberately avoided**: Echo's state lives in a closure here rather than on `S`, which drops the state-object anchor, the save-tail anchor and any concern about `SCHEMA_KEYS`; interaction is delegated from `document` once, which drops the mount anchor. Each of the four was replayed through the chain before it was written down — `verify-echoanchor-pure` does that replay as a check, seeding from the step that emits each region and applying every later step that touches it. It carries the focusmode bug as a fixture: `<div id="app">` is emitted by `fullbleed`(34) and destroyed by `disclaimer`(64), and must be reported REWRITTEN rather than merely absent, so a replay that goes blind is caught by its own self-test. **Not yet build-verified**: the replay proves each anchor SURVIVES to step 87, not that it is UNIQUE in the whole document — the rest of that document is the licensed export. `patch()` checks uniqueness at build time and throws loudly, so that failure is delayed rather than silent |
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
 
@@ -185,9 +211,9 @@ It needs those earlier steps to still be on disk, and a normal build cleans them
 up. So the iterating loop is:
 
 ```bash
-node scripts/build.js --keep              # once, keeps all 20 intermediates
+node scripts/build.js --keep              # once, keeps all 87 intermediates
 # ...edit scripts/theme-patch.js...
-node scripts/build.js --keep --from theme # only steps 14-20 rerun
+node scripts/build.js --keep --from theme # only steps 14-87 rerun
 ```
 
 ---
@@ -241,12 +267,54 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 75 suites, 2481 checks, plus 125 more on the split build. Those numbers are
+Across 86 suites, 2821 checks, plus 133 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
+
+### When a screen overflows
+
+Two checks can fail with a bare pixel count, one per axis, and both now name
+a lead beside it.
+
+`verify-layout` sweeps every screen at each device frame it defines and
+fails sideways scrolling like this:
+
+```
+FAIL  no screen scrolls sideways  → refs +9px [section.refs > div.note-body > table.tbl > td +9px]
+```
+
+The bracket is the widest element overflowing the right edge, with decoration
+(`pointer-events:none`) skipped and the deepest element winning a tie, because
+a parent is only ever as wide as the content forcing it.
+
+The `--pwa` phase does **not** run `verify-layout`. Its pixel check is
+vertical, the landscape home screen on an 11-inch iPad, and fails like this:
+
+```
+FAIL  an 11-inch iPad in landscape needs no scrolling on the home screen
+      → 9px over — … [lowest: section.today > div.pearl-card, 433px tall, ends at 843 of 834]
+```
+
+Both are leads rather than verdicts, and both carry their own figures so you
+can tell which. Sideways: when the two numbers match, that element is the
+thing overflowing. Vertical: when the lowest element ends *inside* the
+viewport while the page still scrolls, the overflow is padding or margin
+below the content, which is a different fix.
+
+Each finder runs only when its check has already failed, which is the one
+moment nobody is also checking the diagnostic, so both have a proof that
+needs no build:
+
+```bash
+NODE_PATH=$(npm root -g) node tools/layout-culprit-proof.js
+```
+
+It extracts both functions out of the suites rather than keeping copies,
+and drives them over pages built to give each answer that matters,
+including the ones each first draft got wrong.
 
 ### The one suite that checks us against somebody else
 
@@ -384,7 +452,7 @@ places, each caught only after the fact:
 - **Mistral's capability filter** checked `capabilities.chat`. A first draft
   of the fixture also guessed `chat`. Mistral's real field is
   `capabilities.completion_chat`; a real key is what exposed it. (The suite
-  that caught it went with the provider in step 79, `onetutor` — the lesson
+  that caught it went with the provider `onetutor` — the lesson
   outlived the code, which is why it is still written down here.)
 - **`Store.merge`'s array path** was tested by handing it a *delta* — `[3]`
   folded onto `[1, 2]` — which is not a shape the app ever produces:
@@ -496,10 +564,10 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 ## Repository shape
 
 ```
-src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra
-src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm
-scripts/      build · verify · 71 *-patch · build-pwa · serve · shots
-tests/        35 Playwright suites (34 single-file + pwa)
+src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
+src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
+scripts/      build · verify · 87 *-patch · build-pwa · serve · shots
+tests/        86 suites · 41 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
