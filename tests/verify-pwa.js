@@ -989,17 +989,39 @@ async function heapAfterBoot(page, url) {
         return ` [lowest: ${where}, ${Math.round(best.getBoundingClientRect().height)}px tall,` +
           ` ends at ${Math.round(bottom)} of ${innerHeight}]`;
       }
+      /* AND WHICH ROW. The first run with the lead above named .home-wrap
+         itself — 781px tall, ending at 843 of 834 — which put the overflow in
+         the grid's contents (745px against a 736px budget) but not in any one
+         of them. The landscape home is a grid whose third row is 1fr, so the
+         question left is one number: is that row 0? If so the left column —
+         hero, progress, doors — is too tall on its own and no pearl is
+         involved. If not, a pearl's text is sizing the flexible row, which is
+         a different fix. getComputedStyle resolves grid-template-rows to used
+         pixel sizes, so the browser answers it directly. Each row is labelled
+         by the first area named on it, so a reorder cannot mislabel one. */
+      function gridRows() {
+        const w = document.querySelector('#app .home-wrap');
+        if (!w) return '';
+        const cs = getComputedStyle(w);
+        if (cs.display !== 'grid') return ` [rows: .home-wrap is ${cs.display}, not a grid]`;
+        const sizes = cs.gridTemplateRows.split(/\s+/).filter(Boolean);
+        const names = (cs.gridTemplateAreas.match(/"[^"]*"/g) || [])
+          .map(r => r.replace(/"/g, '').trim().split(/\s+/)[0]);
+        return ' [rows: ' + sizes.map((v, i) => (names[i] || 'row' + (i + 1)) + ' ' +
+          Math.round(parseFloat(v))).join(' · ') + ' px]';
+      }
       return {
         over: document.documentElement.scrollHeight - innerHeight,
         card: !!document.getElementById('offlineCard'),
         appW: Math.round(document.getElementById('app').getBoundingClientRect().width),
         vw: innerWidth,
         lowest: lowestInApp(),
+        rows: gridRows(),
       };
     });
     ok('an 11-inch iPad in landscape needs no scrolling on the home screen',
        m.over <= 0, `${m.over}px over — first run, with the welcome card, was ${firstRun.over}px` +
-       (m.over > 0 ? m.lowest : ''));
+       (m.over > 0 ? m.lowest + m.rows : ''));
     /* The half that stops this being satisfied by an empty screen: it must still
        be using the width, which is what the landscape layout is for. */
     ok('and it is still filling the width while it does',
