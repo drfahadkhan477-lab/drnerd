@@ -274,6 +274,36 @@ header disagrees with it. They used to be maintained from memory in three files,
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
 
+### When a screen scrolls sideways
+
+`verify-layout` sweeps every screen at five device frames and fails with a
+line like
+
+```
+FAIL  no screen scrolls sideways  → refs +9px [section.refs > div.note-body > table.tbl > td +9px]
+```
+
+The bracket is the widest element overflowing the right edge, with decoration
+(`pointer-events:none`) skipped and the deepest element winning a tie, because
+a parent is only ever as wide as the content forcing it. It is a lead rather
+than a verdict, and it carries its own figure so you can tell which: when the
+two numbers match, that element is the thing overflowing; when the bracketed
+one is smaller, something the finder deliberately ignores is also adding to
+`scrollWidth`, and knowing that is the point.
+
+The finder only runs on a screen that has already failed, which is the one
+moment nobody is also checking the diagnostic — so it has its own proof, which
+needs no build and takes about a second:
+
+```bash
+NODE_PATH=$(npm root -g) node tools/layout-culprit-proof.js
+```
+
+It extracts the function out of `tests/verify-layout.js` rather than keeping a
+copy of it, and drives it over four pages: a clean one, a flex row too wide, a
+wide table nested three deep, and a small real overflow hiding behind a
+decorative bleed and a left-hand overhang.
+
 ### The one suite that checks us against somebody else
 
 `verify-oracle` is different in kind from the rest. Every other suite was
