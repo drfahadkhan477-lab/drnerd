@@ -182,11 +182,26 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     hasPanel: !!document.querySelector('.physio-panel'),
     hasCanvas: !!document.getElementById('physioCanvas'),
     view: physio ? physio.view() : null,
-    chipCount: document.querySelectorAll('[data-physio-view]').length,
+    chips: [...document.querySelectorAll('[data-physio-view]')].map(c => c.getAttribute('data-physio-view')),
   }));
   ok('the cardiac-cycle panel is in Rhythm Lab', mounted.hasPanel && mounted.hasCanvas);
   ok('it opens on the Wiggers view', mounted.view === 'wiggers');
-  ok('all five views have a chip', mounted.chipCount === 5, String(mounted.chipCount));
+  /* THE IDS, NOT A COUNT. This asserted `chipCount === 5` until the Conduction
+     Wave landed a sixth view on purpose, and the first full run after that
+     merge failed here with a bare "6" — correct to fail, but the number said
+     that something changed and nothing about what. Swapping 5 for 6 would
+     have left the same blind spot for the next view.
+
+     Pinned here, deliberately, rather than read from PHYSIO_VIEWS: the chips
+     are rendered FROM that list, so comparing the two would only prove the
+     loop ran. Adding or removing a view should be a decision this line has
+     to be told about — which is what just happened, and it worked. Order is
+     ignored, duplicates are not. */
+  const EXPECTED_VIEWS = ['conduction', 'curves', 'flow', 'pv', 'right', 'wiggers'];
+  const chipsSorted = mounted.chips.slice().sort();
+  ok('the six views each have one chip, and there are no others',
+     JSON.stringify(chipsSorted) === JSON.stringify(EXPECTED_VIEWS),
+     mounted.chips.join(', ') || 'no chips');
 
   head('it keeps its own clock, at the rate the rhythm sets');
   /* The diagram used to read its time from the 3D heart beside it. That heart
@@ -293,8 +308,15 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     }
     return out;
   });
-  ok('all five views mounted and sized their canvas', viewSweep.every(v => v.w > 100 && v.h > 100), JSON.stringify(viewSweep.map(v => v.id)));
-  ok('clicking a chip actually switches the view', viewSweep.every(v => v.id === v.view), viewSweep.map(v => `${v.id}:${v.view}`).join(' '));
+  /* The sweep iterates PHYSIO_VIEWS, and every() over an empty list is true —
+     so without the length term this passed hardest when there was nothing to
+     sweep. Held to the same six the chip check pins. */
+  ok('every view mounted and sized its canvas',
+     viewSweep.length === EXPECTED_VIEWS.length && viewSweep.every(v => v.w > 100 && v.h > 100),
+     JSON.stringify(viewSweep.map(v => v.id)));
+  ok('clicking a chip actually switches the view',
+     viewSweep.length === EXPECTED_VIEWS.length && viewSweep.every(v => v.id === v.view),
+     viewSweep.map(v => `${v.id}:${v.view}`).join(' '));
 
   head('the PV loop responds to an intervention, on screen');
   await page.evaluate(() => { document.querySelector('[data-physio-view="pv"]').click(); });
