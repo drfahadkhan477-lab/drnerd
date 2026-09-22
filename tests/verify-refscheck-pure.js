@@ -36,11 +36,13 @@ const ROOT = path.join(__dirname, '..');
 const TOOL = path.join(ROOT, 'tools', 'check-refs.js');
 
 let passed = 0, failed = 0;
+const printed = [];
+const say = line => { printed.push(line); console.log(line); };
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
-  console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
+  say((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
-const head = t => console.log('\n── ' + t + ' ──');
+const head = t => say('\n── ' + t + ' ──');
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'refscheck-'));
 process.on('exit', () => { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) {} });
@@ -95,8 +97,18 @@ const good = run(GOOD);
 
 head('a corpus that clears every floor is reported clean');
 ok('the tool exits 0', good.code === 0, `exit ${good.code}`);
+/* THE DETAIL IS REFORMATTED, AND THAT IS NOT COSMETIC. scripts/verify.js
+   reads a suite's check count with out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/)
+   — no /g, so it takes the FIRST match in the whole of stdout. This suite
+   spawns a tool that prints a summary in exactly that shape, and printing it
+   back verbatim put it three lines into the output, ahead of this file's own
+   summary. The runner counted the TOOL's checks as this suite's: it reported
+   12 where 16 ran, and the record carried 12 for a full green run before
+   anyone noticed. A number that looks right and is not, which is the failure
+   this project is named after, arriving through a detail string.
+   So the tool's numbers are printed in a shape the runner cannot read. */
 ok('and reports no failures', /\n12 passed, 0 failed/.test(good.out),
-   (good.out.match(/\d+ passed, \d+ failed/) || ['(no summary)'])[0]);
+   (good.out.match(/(\d+) passed, (\d+) failed/) || [, '?', '?']).slice(1).join(' clean / ') + ' failing');
 /* NON-VACUITY. Every injection below is judged by the tool reporting a
    failure, and a tool that read nothing would report nothing and appear to
    pass this whole suite. So the clean run has to prove it actually parsed the
@@ -186,6 +198,16 @@ head('it does not overclaim');
 ok('a failing report says retrieval quality is not measured here',
    /Retrieval quality[\s\S]*NOT measured here/.test(smallRun.out));
 ok('and names the suite that does measure it', /verify-retrieval\.js/.test(smallRun.out));
+
+/* AND THE LEAK IS CHECKED FOR, not merely fixed once. Anything this file
+   prints before its own summary that matches the runner's pattern would be
+   counted instead of the summary, silently and in the record. */
+{
+  const mine = printed.join('\n');
+  const foreign = mine.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
+  ok('nothing it prints can be mistaken for its own summary line',
+     foreign === null, foreign ? `"${foreign[0]}" would be read as the count` : 'none');
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

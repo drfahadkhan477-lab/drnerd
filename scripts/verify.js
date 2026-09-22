@@ -14,7 +14,7 @@
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 75 suites and roughly 2499 checks, and they
+ * WHY THIS EXISTS. There are 86 suites and roughly 2821 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -262,24 +262,21 @@ const SUITES = [
 
    Nothing is fabricated to clear it. Writing a measured count here by hand
    would mean also inventing the --pwa figure and the CI subset total, which is
-   exactly the hand-maintained arithmetic that made verify-stats necessary. */
-/* Suites registered since the last full green run, whose counts the record has
-   not seen yet. Checked in BOTH directions, so it self-cleans: a name left here
-   after its suite has recorded fails just as loudly as a suite missing from the
-   record.
+   exactly the hand-maintained arithmetic that made verify-stats necessary.
 
-   EMPTY, AND THAT IS NEWS. It held fourteen names for weeks — every suite added
-   while the only machine that could run the full thing was not being run. The
-   first full green run wrote all fourteen at once. If this fills up again, that
-   is the same gap reopening.
+   EMPTY, which is the state it should normally be in — and it has now been
+   emptied twice, both times by a full green run rather than by anybody
+   deciding it looked untidy. It held fourteen names for weeks, every suite
+   added while the only machine that could run the full thing was not being
+   run; the first full green run wrote all fourteen at once. It then filled
+   again with eleven — focus, figfade-pure, palette-pure, herorhythm-pure,
+   refimg-pure, shellanchor-pure, pencil-pure, refscheck-pure, echo-pure,
+   echoui-pure and echoanchor-pure — which the green run of 2026-09-22
+   measured. If it fills to fourteen again, that is the same gap reopening.
 
-   And it has names in it again, for the ordinary reason rather than the bad
-   one: 'focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure',
-   'refimg-pure', 'shellanchor-pure', 'pencil-pure' and the four added with
-   Echo Studio were all added after the last full green run, so the record has
-   not seen their counts yet. The next full green run writes them and this goes
-   back to empty. */
-const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'pencil-pure', 'refscheck-pure', 'echo-pure', 'echoui-pure', 'echoanchor-pure'];
+   Add a name when you register a suite; empty it AFTER the run that measures
+   it, never before. */
+const PENDING_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
