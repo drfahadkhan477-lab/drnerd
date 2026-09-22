@@ -935,14 +935,55 @@ async function heapAfterBoot(page, url) {
       window.__l2 = k;
       return window.__s2 >= 5;
     }, null, { timeout: 15000, polling: 'raf' });
-    const m = await page.evaluate(() => ({
-      over: document.documentElement.scrollHeight - innerHeight,
-      card: !!document.getElementById('offlineCard'),
-      appW: Math.round(document.getElementById('app').getBoundingClientRect().width),
-      vw: innerWidth,
-    }));
+    const m = await page.evaluate(() => {
+      /* WHAT reaches lowest, not just by how much. This failed once at "9px
+         over" and the number named nothing — the only way on from there was
+         to open the split build by hand and measure, which is what this line
+         is for. Considered: #app's children and grandchildren, which on the
+         landscape home are the four grid areas and what each one holds.
+         Fixed and pointer-events:none elements are skipped, as decoration
+         is everywhere else in these suites.
+
+         IT CARRIES ITS OWN NUMBERS, so a reader can tell a lead from a
+         verdict: the element's bottom edge against the viewport height. If
+         that edge is inside the viewport while the page still scrolls, the
+         overflow is padding or margin below the content, not the content —
+         which is a different fix, and worth knowing before anyone makes the
+         wrong one. The first-run welcome card is gone by the time this runs. */
+      function lowestInApp() {
+        const app = document.getElementById('app');
+        if (!app) return '';
+        let best = null, bottom = -Infinity;
+        for (const el of app.querySelectorAll(':scope > *, :scope > * > *')) {
+          const cs = getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+          if (cs.position === 'fixed' || cs.pointerEvents === 'none') continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 1 || r.height < 1) continue;
+          /* >= so a later element wins a tie: document order puts a child
+             after its parent, and the child is the one worth naming. */
+          if (r.bottom >= bottom - 0.5) { bottom = r.bottom; best = el; }
+        }
+        if (!best) return '';
+        const name = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') +
+          (e.className && typeof e.className === 'string' && e.className.trim()
+            ? '.' + e.className.trim().split(/\s+/)[0] : '');
+        const where = best.parentElement && best.parentElement !== app
+          ? name(best.parentElement) + ' > ' + name(best) : name(best);
+        return ` [lowest: ${where}, ${Math.round(best.getBoundingClientRect().height)}px tall,` +
+          ` ends at ${Math.round(bottom)} of ${innerHeight}]`;
+      }
+      return {
+        over: document.documentElement.scrollHeight - innerHeight,
+        card: !!document.getElementById('offlineCard'),
+        appW: Math.round(document.getElementById('app').getBoundingClientRect().width),
+        vw: innerWidth,
+        lowest: lowestInApp(),
+      };
+    });
     ok('an 11-inch iPad in landscape needs no scrolling on the home screen',
-       m.over <= 0, `${m.over}px over — first run, with the welcome card, was ${firstRun.over}px`);
+       m.over <= 0, `${m.over}px over — first run, with the welcome card, was ${firstRun.over}px` +
+       (m.over > 0 ? m.lowest : ''));
     /* The half that stops this being satisfied by an empty screen: it must still
        be using the width, which is what the landscape layout is for. */
     ok('and it is still filling the width while it does',

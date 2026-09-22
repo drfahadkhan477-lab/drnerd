@@ -274,10 +274,13 @@ header disagrees with it. They used to be maintained from memory in three files,
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
 
-### When a screen scrolls sideways
+### When a screen overflows
 
-`verify-layout` sweeps every screen at five device frames and fails with a
-line like
+Two checks can fail with a bare pixel count, one per axis, and both now name
+a lead beside it.
+
+`verify-layout` sweeps every screen at each device frame it defines and
+fails sideways scrolling like this:
 
 ```
 FAIL  no screen scrolls sideways  → refs +9px [section.refs > div.note-body > table.tbl > td +9px]
@@ -285,24 +288,33 @@ FAIL  no screen scrolls sideways  → refs +9px [section.refs > div.note-body > 
 
 The bracket is the widest element overflowing the right edge, with decoration
 (`pointer-events:none`) skipped and the deepest element winning a tie, because
-a parent is only ever as wide as the content forcing it. It is a lead rather
-than a verdict, and it carries its own figure so you can tell which: when the
-two numbers match, that element is the thing overflowing; when the bracketed
-one is smaller, something the finder deliberately ignores is also adding to
-`scrollWidth`, and knowing that is the point.
+a parent is only ever as wide as the content forcing it.
 
-The finder only runs on a screen that has already failed, which is the one
-moment nobody is also checking the diagnostic — so it has its own proof, which
-needs no build and takes about a second:
+The `--pwa` phase does **not** run `verify-layout`. Its pixel check is
+vertical, the landscape home screen on an 11-inch iPad, and fails like this:
+
+```
+FAIL  an 11-inch iPad in landscape needs no scrolling on the home screen
+      → 9px over — … [lowest: section.today > div.pearl-card, 433px tall, ends at 843 of 834]
+```
+
+Both are leads rather than verdicts, and both carry their own figures so you
+can tell which. Sideways: when the two numbers match, that element is the
+thing overflowing. Vertical: when the lowest element ends *inside* the
+viewport while the page still scrolls, the overflow is padding or margin
+below the content, which is a different fix.
+
+Each finder runs only when its check has already failed, which is the one
+moment nobody is also checking the diagnostic, so both have a proof that
+needs no build:
 
 ```bash
 NODE_PATH=$(npm root -g) node tools/layout-culprit-proof.js
 ```
 
-It extracts the function out of `tests/verify-layout.js` rather than keeping a
-copy of it, and drives it over four pages: a clean one, a flex row too wide, a
-wide table nested three deep, and a small real overflow hiding behind a
-decorative bleed and a left-hand overhang.
+It extracts both functions out of the suites rather than keeping copies,
+and drives them over pages built to give each answer that matters,
+including the ones each first draft got wrong.
 
 ### The one suite that checks us against somebody else
 
