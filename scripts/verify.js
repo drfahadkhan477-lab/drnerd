@@ -106,6 +106,21 @@ const SUITES = [
      Pencil in the room". Nobody had. Only verify-polish touched it, and
      that needs a real build. */
   ['pencil-pure',   'the Pencil width curve only ever broadens with pressure or tilt, and stays in range'],
+  /* The pure logic core for a new feature (the Living Diagram — an ambient
+     home-screen mode composing the heart, the 12-lead and the PV loop when
+     nobody has touched the screen in a while), written alongside the module
+     rather than after it, the way heroRhythm.js and pencil.js went unheld
+     for one build cycle each before this became the house style. */
+  ['livingdiagram-pure', 'ambient mode is scoped as tightly as Focus Mode, and the view-cycling never repeats'],
+  /* Pure sequencing over real activation times captured from Heart3D's own
+     activationAt() — not a second, invented account of cardiac conduction
+     timing. Part of the Living Diagram's family, built the same session. */
+  ['conductionwave-pure', 'the conduction pathway fires in the right order, against real timing this app already computed'],
+  /* Third and last of the Living Diagram family: a branching vessel
+     geometry plus a flow-to-brightness curve, fed by Physio.coronaryFlow —
+     already shipped, already correct — rather than a second account of
+     what coronary flow does across the cycle. */
+  ['coronarytree-pure', 'the branch geometry terminates and diverges correctly, and flow maps to a sane 0..1 glow'],
   /* Written the day a first build from the documented starting point died 63
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
@@ -275,8 +290,16 @@ const SUITES = [
    measured. If it fills to fourteen again, that is the same gap reopening.
 
    Add a name when you register a suite; empty it AFTER the run that measures
-   it, never before. */
-const PENDING_RECORD = [];
+   it, never before.
+
+   THREE NAMES, and they are the ordinary reason rather than the bad one:
+   livingdiagram-pure, conductionwave-pure and coronarytree-pure arrived on
+   the Conduction Wave branch after the 2026-09-22 run, so the record has not
+   seen their counts. The branch also listed the seven above — focus through
+   pencil-pure — which that run has since measured; keeping them would be
+   parking names to silence a guard, and verify-stats fails an entry that IS
+   in the record precisely so that cannot happen quietly. */
+const PENDING_RECORD = ['livingdiagram-pure', 'conductionwave-pure', 'coronarytree-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
