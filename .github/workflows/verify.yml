@@ -21,14 +21,14 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 2821 checks in
-# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 1297.
-# The other 1657 all drive a real build of the app in a real browser
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 2937 checks in
+# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 1387.
+# The other 1683 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 1657 checks here. See docs/BUILD.md and the
+# there is no way to run those 1683 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
@@ -70,7 +70,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                1297 real checks, up
+#                1387 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -83,7 +83,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 1657 checks to this file is possible — GitHub Actions
+# Adding the other 1683 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -203,17 +203,7 @@ jobs:
         run: node tests/verify-swupdate-pure.js
       - name: no native dialog arrives unmeant, and an icon is not a name (18 checks)
         run: node tests/verify-ui-pure.js
-      # 12, AND THE SUITE RUNS 17 TODAY. Not a typo and not stale in the
-      # ordinary way: the record's entry for this suite is a measurement of
-      # the wrong program. verify-refscheck-pure spawns tools/check-refs.js,
-      # which prints its own "12 passed, 0 failed", and scripts/verify.js
-      # reads a suite's count with .match() and no /g — so it took the FIRST
-      # such line in stdout and wrote the child's number into the record. The
-      # leak is fixed in the suite (and guarded there), but the record is
-      # machine-written on green runs only and is never hand-edited, so this
-      # label follows it at 12 until the next full green run re-measures the
-      # suite and this line has to move to 17.
-      - name: the corpus checker holds every floor it claims (12 checks)
+      - name: the corpus checker holds every floor it claims (17 checks)
         run: node tests/verify-refscheck-pure.js
       - name: the echo tables and the echo arithmetic (53 checks)
         run: node tests/verify-echo-pure.js

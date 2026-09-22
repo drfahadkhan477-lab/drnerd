@@ -14,7 +14,7 @@
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 86 suites and roughly 2821 checks, and they
+ * WHY THIS EXISTS. There are 90 suites and roughly 2937 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -285,8 +285,8 @@ const SUITES = [
    would mean also inventing the --pwa figure and the CI subset total, which is
    exactly the hand-maintained arithmetic that made verify-stats necessary.
 
-   EMPTY, which is the state it should normally be in — and it has now been
-   emptied twice, both times by a full green run rather than by anybody
+   EMPTY, which is the state it should normally be in — and every time it
+   has been emptied, it was a full green run that did it rather than anybody
    deciding it looked untidy. It held fourteen names for weeks, every suite
    added while the only machine that could run the full thing was not being
    run; the first full green run wrote all fourteen at once. It then filled
@@ -298,14 +298,11 @@ const SUITES = [
    Add a name when you register a suite; empty it AFTER the run that measures
    it, never before.
 
-   FOUR NAMES, and they are the ordinary reason rather than the bad one:
-   livingdiagram-pure, conductionwave-pure and coronarytree-pure arrived on
-   the Conduction Wave branch after the 2026-09-22 run, and echo was written
-   after it, so the record has not seen their counts. The branch also listed the seven above — focus through
-   pencil-pure — which that run has since measured; keeping them would be
-   parking names to silence a guard, and verify-stats fails an entry that IS
-   in the record precisely so that cannot happen quietly. */
-const PENDING_RECORD = ['livingdiagram-pure', 'conductionwave-pure', 'coronarytree-pure', 'echo'];
+   Emptied a third time by the green run of 2026-09-22 on 28f4e5c, which
+   measured the four that had been waiting — livingdiagram-pure,
+   conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
+   and echo. */
+const PENDING_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
