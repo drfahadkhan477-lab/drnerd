@@ -101,6 +101,11 @@ const SUITES = [
      without a browser, and then nobody wrote that test. The only suite that
      touched it drives a real build, which CI cannot do. */
   ['herorhythm-pure', 'the home strip does not repeat itself, and keeps vfib and asystole out of the wallpaper'],
+  /* Written for the same reason as herorhythm-pure: pencil.js's own header
+     says the width curve "can be unit-tested without a canvas or a real
+     Pencil in the room". Nobody had. Only verify-polish touched it, and
+     that needs a real build. */
+  ['pencil-pure',   'the Pencil width curve only ever broadens with pressure or tilt, and stays in range'],
   /* Written the day a first build from the documented starting point died 63
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
@@ -270,10 +275,11 @@ const SUITES = [
 
    And it has names in it again, for the ordinary reason rather than the bad
    one: 'focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure',
-   'refimg-pure' and 'shellanchor-pure' were all added after the last full
-   green run, so the record has not seen their counts yet. The next full green
-   run writes them and this goes back to empty. */
-const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'refscheck-pure', 'echo-pure', 'echoui-pure', 'echoanchor-pure'];
+   'refimg-pure', 'shellanchor-pure', 'pencil-pure' and the four added with
+   Echo Studio were all added after the last full green run, so the record has
+   not seen their counts yet. The next full green run writes them and this goes
+   back to empty. */
+const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'pencil-pure', 'refscheck-pure', 'echo-pure', 'echoui-pure', 'echoanchor-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
