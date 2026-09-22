@@ -87,12 +87,12 @@ The cost is that order matters, and the dependencies are real:
 | 3 | `flags` | two questions whose lettered answer panels the export never shipped; flagged beside `keys`, for the same reason |
 | 4 | `apex` | embeds `heart3d.js` and `apex.js`; the only place the heart enters |
 | 5–6 | `stage2`, `stage3` | FSRS-5–derived scheduling, then Apex's vision and memory |
-| 7 | `polish` | the rhythm registry the hero and Rhythm Lab both read |
+| 7 | `polish` | the rhythm registry the hero and Rhythm Lab both read. Also now embeds the Living Diagram family (`livingDiagram.js`, `conductionWave.js`, `coronaryTree.js`) beside heroRhythm/pencil, the same way and for the same reason. **The new embed is not yet build-verified**: checked mechanically (not by eye) for collisions against every `find` anchor in every other `*-patch.js` script — none — and the find/replace pair itself is unchanged from the version heroRhythm/pencil already proved, but nothing has actually built it |
 | 8 | `splash` | the pre-paint loading screen |
 | 9 | `braunwald` | the grounded reference library |
 | 10 | `art` | the design pass the later panels sit inside |
 | 11 | `leads` | the 12-lead — needs `art`'s panel styles |
-| 12 | `physio` | the cardiac cycle — anchors on the 12-lead's embed comment |
+| 12 | `physio` | the cardiac cycle — anchors on the 12-lead's embed comment. `PHYSIO_VIEWS` now carries a sixth entry, `conduction`, and `physioNoteHtml()` a matching case, so Lab's chip picker and its teaching note both cover the view `wiggers.js` gained the same session. **Not yet build-verified**: the two edits sit inside the same find/replace pair `lab-patch.js`'s own later anchor already depends on, confirmed unmoved by that anchor still matching against the edited source; no build has run it |
 | 13 | `name` | Systole |
 | 14 | `theme` | palettes — must follow `name`, it restyles the hero wordmark |
 | 15 | `home` | welcome bar, progress bar, layouts |

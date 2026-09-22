@@ -71,6 +71,20 @@ const ROOT = path.join(__dirname, '..');
 const rhythmsExtra = fs.readFileSync(path.join(ROOT, 'src', 'core', 'rhythms-extra.js'), 'utf8');
 const heroRhythm = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'heroRhythm.js'), 'utf8');
 const pencilFx = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'pencil.js'), 'utf8');
+/* The Living Diagram family — pure logic only, same as the three above.
+   livingDiagram.js's eligibility/timing rules and coronaryTree.js's branch
+   geometry are not called from anywhere in the chain yet (no chain step
+   mounts an ambient overlay), so embedding them here means the CODE ships
+   ahead of the FEATURE using it — inert until something calls it, same
+   relationship rhythms-extra had to RHYTHMS before the merge step that
+   follows existed. conductionWave.js IS already called, by
+   wiggers.js's drawConduction (added the same session, see wiggers.js's
+   own header) — looked up lazily via root.ConductionWave inside that one
+   view rather than required at wiggers.js's own load time, so it has no
+   ordering constraint against this embed point either way. */
+const livingDiagram = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'livingDiagram.js'), 'utf8');
+const conductionWave = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'conductionWave.js'), 'utf8');
+const coronaryTree = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'coronaryTree.js'), 'utf8');
 
 /* ────────────────────────────────────────────────────────────────────────────
  * 0. The heart is NOT re-embedded here, and that is deliberate.
@@ -97,14 +111,19 @@ const pencilFx = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'pencil.js'), 'utf
  *    helper) keeps the load order correct without needing a second pass
  *    over the file to find where "early enough" is.
  * ──────────────────────────────────────────────────────────────────────────── */
-patch('embed: rhythms-extra.js, heroRhythm.js, pencil.js — before RHYTHMS is defined',
+patch('embed: rhythms-extra.js, heroRhythm.js, pencil.js, the Living Diagram family — before RHYTHMS is defined',
 `root.Apex = { avatar, IDENTITY, STATES };`,
 `root.Apex = { avatar, IDENTITY, STATES };
 
 /* ═══════════ More arrhythmias, hero rotation, Pencil feel — see src/core/rhythms-extra.js, src/ui/{heroRhythm,pencil}.js ═══════════ */
 ${rhythmsExtra}
 ${heroRhythm}
-${pencilFx}`);
+${pencilFx}
+
+/* ═══════════ Living Diagram, Conduction Wave, Coronary Tree — see src/ui/{livingDiagram,conductionWave,coronaryTree}.js ═══════════ */
+${livingDiagram}
+${conductionWave}
+${coronaryTree}`);
 
 /* ────────────────────────────────────────────────────────────────────────────
  * 2. Rhythm library: merge the new arrhythmias into the registry everything
