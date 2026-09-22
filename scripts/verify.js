@@ -837,6 +837,18 @@ if (flag('--pwa')) {
   const out = (r.stdout || '') + (r.stderr || '');
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
   for (const ln of out.split('\n')) if (/^\s*(PASS|FAIL)\s/.test(ln)) console.log(ln);
+  /* AND WHY IT STOPPED, when it stopped. The filter above prints check lines
+     and nothing else, which is right for a suite that finished and useless
+     for one that died: its exception and its death note are exactly the lines
+     that do not start with PASS or FAIL. The first --pwa death on the owner's
+     laptop printed eighty-eight PASS lines, then "pwa FAILED", and nothing
+     about the cause — the evidence was collected and thrown away at the one
+     moment it was the only thing wanted. Same helpers the suite table uses. */
+  if (!m) {
+    const said = causeOf(out);
+    console.log(`\n  verify-pwa did not report` + (said ? `\n      ${said}` : '  (and printed no cause)'));
+    for (const line of noteOf(out)) console.log(`      ${line}`);
+  }
   done();
   if (!m || +m[2] > 0 || r.status !== 0) {
     console.log(`\n  pwa FAILED\n`);

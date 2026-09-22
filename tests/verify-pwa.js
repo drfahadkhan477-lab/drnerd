@@ -801,15 +801,31 @@ async function heapAfterBoot(page, url) {
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
     /* It reloads once, finds the same mismatch, and must then STOP and say so
        rather than spin. Waiting on the message, not on a stopwatch. */
+    /* innerText, NOT textContent, and this is the whole fix. textContent
+       includes the source of every inline <script>, and the loader that
+       prints this message is an inline script in the body — so the wait
+       matched the loader's own source code on the FIRST load, before any
+       mismatch had been noticed or any retry made. It passed hardest when
+       the check it guards had not run at all.
+
+       Found by the owner's run: this check passed and the one below reported
+       "1 navigations", which is impossible if the message was real — the app
+       shows it only after the one retry, so a real sighting means at least
+       two. The retry then fired under the next page.evaluate, the execution
+       context went with it, and the suite died without a summary.
+
+       innerText is the rendered text: no script source, nothing hidden. */
     const told = await page.waitForFunction(
-      () => /updated while it was opening/i.test(document.body.textContent || ''),
+      () => /updated while it was opening/i.test(document.body.innerText || ''),
       null, { timeout: 30000 }).then(() => true, () => false);
     ok('a mixed pair is noticed rather than run', told);
     /* The loop guard, which is the half that makes this safe to ship: exactly
        one retry. A reload that does not fix it must never become a reload
-       that never stops. */
+       that never stops. AND IT MUST HAVE HAPPENED: `loads <= 3` alone passed
+       at 1, which is no retry at all, under a label claiming one. The goto is
+       the first navigation, so a retry that happened means at least two. */
     await page.waitForTimeout(2500);
-    ok('and it retries once, not forever', loads <= 3, `${loads} navigations`);
+    ok('and it retries once, not forever', loads >= 2 && loads <= 3, `${loads} navigations`);
     const flagged = await page.evaluate(() => {
       try { return sessionStorage.getItem('accsap-mixed-build'); } catch (_) { return 'unreadable'; }
     });
