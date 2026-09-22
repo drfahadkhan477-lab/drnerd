@@ -242,6 +242,12 @@ const SUITES = [
   ['echo-pure',    'the echo tables point at what exists, and the arithmetic is the arithmetic'],
   ['echoui-pure',  'Echo Studio computes only what was measured, and restates no cutoff'],
   ['echoanchor-pure','every anchor echo-patch uses still exists at the step it runs from'],
+  /* The three above stop where strings become a document. This one starts
+     there: it runs echo-patch over a scaffold and drives the result, so the
+     glue, the delegated listeners and the caret are held rather than argued
+     about in a comment. It needs no build — see its header for what that
+     buys and what it costs. */
+  ['echo',         'Echo Studio routes, delegates and keeps the caret where it was'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -292,14 +298,14 @@ const SUITES = [
    Add a name when you register a suite; empty it AFTER the run that measures
    it, never before.
 
-   THREE NAMES, and they are the ordinary reason rather than the bad one:
+   FOUR NAMES, and they are the ordinary reason rather than the bad one:
    livingdiagram-pure, conductionwave-pure and coronarytree-pure arrived on
-   the Conduction Wave branch after the 2026-09-22 run, so the record has not
-   seen their counts. The branch also listed the seven above — focus through
+   the Conduction Wave branch after the 2026-09-22 run, and echo was written
+   after it, so the record has not seen their counts. The branch also listed the seven above — focus through
    pencil-pure — which that run has since measured; keeping them would be
    parking names to silence a guard, and verify-stats fails an entry that IS
    in the record precisely so that cannot happen quietly. */
-const PENDING_RECORD = ['livingdiagram-pure', 'conductionwave-pure', 'coronarytree-pure'];
+const PENDING_RECORD = ['livingdiagram-pure', 'conductionwave-pure', 'coronarytree-pure', 'echo'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

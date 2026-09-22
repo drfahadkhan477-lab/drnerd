@@ -58,7 +58,7 @@ const FRAMES = [
   ['iPhone portrait', 390, 844],
   ['desktop', 1440, 900],
 ];
-const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz'];
+const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz', 'echo'];
 
 /* Enough of a reply to overflow any panel, so "does it scroll" is a real
    question rather than one the fixture answers for us. */
@@ -123,6 +123,12 @@ const sse = text => [
       home: () => goHome(), stats: () => goStats(), lab: () => goLab(), refs: () => goRefs(),
       memory: () => goMemory(), study: () => goStudy(), search: () => openSearch(),
       quiz: () => startQuiz(CHAPTERS[0], 'all'),
+      /* Echo Studio. Its two tabs share one screen and the calculator is the
+         wider of them, but the sweep opens what goEcho() opens, which is the
+         reference tab — so this covers the tab the fellow lands on, not both.
+         Narrower than "the echo screen fits", and said here rather than
+         implied by the screen's name appearing in the list. */
+      echo: () => goEcho(),
     };
     const sideways = [], clipped = [], offLeft = [];
     let media = 0;
