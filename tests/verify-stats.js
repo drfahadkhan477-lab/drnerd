@@ -38,6 +38,27 @@ const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
+/* THE REGISTRY, READ ONCE AND BOUNDED TO THE ARRAY IT LIVES IN.
+   Two blocks below used to read it separately, with different patterns: one
+   bounded to the SUITES array, one scanning the whole of scripts/verify.js.
+   They disagreed by two, and a real run printed both — "86 suites" in one
+   check and "88 suites" in another, which is a guard reporting confidently
+   about a quantity it had got wrong. The whole-file scan matched `['--only',`
+   out of a usage string and counted `focus` and `stage0` twice, because both
+   appear again in PENDING_RECORD and SERIAL.
+
+   Nothing failed because of it — runsInCI() happens to call a name with no
+   suite file not-able — so it passed while feeding a polluted list to the
+   check whose whole job is noticing a browser-free suite missing from the
+   workflow. One read now, and the check below proves it is clean rather than
+   trusting the pattern. */
+function registrySuites() {
+  const v = read('scripts/verify.js');
+  const open = v.indexOf('const SUITES = [');
+  const block = v.slice(open, v.indexOf('\n];', open));
+  return [...block.matchAll(/^\s*\['([a-z0-9-]+)',/gm)].map(m => m[1]);
+}
+
 let found = null;
 try { found = JSON.parse(read('tests/test-stats.json')); } catch (_) {}
 
@@ -75,10 +96,15 @@ head('every registered suite is in the record');
 {
   /* Read out of the runner's own registry, so adding a suite and forgetting to
      regenerate is caught here rather than by a number quietly being too low. */
-  const v = read('scripts/verify.js');
-  const block = v.slice(v.indexOf('const SUITES = ['), v.indexOf('\n];', v.indexOf('const SUITES = [')));
-  const registered = [...block.matchAll(/^\s*\['([a-z0-9-]+)',/gm)].map(m => m[1]);
+  const registered = registrySuites();
   ok('the registry was found and is not empty', registered.length > 30, `${registered.length} suites`);
+  /* THE READ ITSELF IS CHECKED, not just its size. Every registered name must
+     have a suite file on disk — which is what a name scraped out of a flag or
+     a second array cannot have, and is how `--only` would be caught now. */
+  const noFile = registered.filter(n => !fs.existsSync(path.join(ROOT, 'tests', `verify-${n}.js`)));
+  ok('and every name in it has a suite file on disk', noFile.length === 0, noFile.join(', ') || 'none');
+  ok('and none is registered twice', new Set(registered).size === registered.length,
+     `${new Set(registered).size} distinct of ${registered.length}`);
   /* A suite registered since the last full green run is absent from the record
      for a legitimate reason, and scripts/verify.js says which ones those are.
      The declaration is the point: an undeclared absence is still the defect
@@ -158,8 +184,7 @@ head('CI runs everything it is capable of running');
      what "capable" means and is conservative in the direction that matters —
      see runsInCI() there. */
   const { runsInCI } = require('./_targets.js');
-  const registered = [...read('scripts/verify.js')
-    .matchAll(/\[\s*'([a-z0-9-]+)',\s*'/g)].map(m => m[1]);
+  const registered = registrySuites();
   ok('the registry was read', registered.length > 40, `${registered.length} suites`);
   const able = registered.filter(n => runsInCI(n).able);
   ok('and some of them need no browser at all', able.length > 5, `${able.length} of ${registered.length}`);

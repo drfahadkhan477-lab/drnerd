@@ -754,7 +754,21 @@ const blockers = results.filter(r => !r.ok && r.name !== 'stats');
 const total = results.reduce((n, r) => n + r.checks, 0);
 const bad = results.filter(r => !r.ok);
 console.log(`\n  ${total} checks across ${results.length} suites in ${((Date.now() - t0) / 60000).toFixed(1)} min`);
-if (!blockers.length && !flag('--pwa')) writeStats();
+/* WRITTEN WHENEVER THE RUN IS GREEN, even with --pwa pending. It used to be
+   skipped here under --pwa so the record could be written once, below, with a
+   real split-build count in it — which is right when the split build works and
+   throws away a true measurement when it does not. A full green run of 86
+   suites was lost exactly that way: every suite passed, then the split build
+   refused because content/ had been extracted from an earlier build, and
+   process.exit(1) came before the only line that writes the record. Twenty-
+   three minutes of true numbers discarded over a staleness in a directory the
+   suites had nothing to say about.
+   Writing here carries the previous pwa figure forward, which is what
+   writeStats already does for a run without --pwa and for the same stated
+   reason: the alternative is deleting a true number because this run did not
+   measure it. If the split build then succeeds, the call below rewrites the
+   file with the real figure and supersedes this one. */
+if (!blockers.length) writeStats();
 if (bad.length) {
   console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}`);
   console.log(`  full output of those suites: ${path.relative(process.cwd(), writeFailLog())}`);
