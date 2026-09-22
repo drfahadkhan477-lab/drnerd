@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 36 suites that are pure Node with no Playwright and no
+#   logic        the 37 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -201,6 +201,8 @@ jobs:
         run: node tests/verify-echo-pure.js
       - name: Echo Studio computes only what was measured (55 checks)
         run: node tests/verify-echoui-pure.js
+      - name: echo-patch's anchors still exist where it runs (13 checks)
+        run: node tests/verify-echoanchor-pure.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

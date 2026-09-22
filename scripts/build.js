@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 86 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 87 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -331,6 +331,7 @@ const CHAIN = [
   /* Last on purpose: its anchors come from home, theme, fullbleed, quiznav,
      chapters and resume, and resume is the final rewrite of SCHEMA_KEYS. */
   'focusmode',
+  'echo',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

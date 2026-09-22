@@ -221,6 +221,7 @@ const SUITES = [
   ['refscheck-pure','the corpus checker holds every floor it claims, and reads before reporting'],
   ['echo-pure',    'the echo tables point at what exists, and the arithmetic is the arithmetic'],
   ['echoui-pure',  'Echo Studio computes only what was measured, and restates no cutoff'],
+  ['echoanchor-pure','every anchor echo-patch uses still exists at the step it runs from'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -272,7 +273,7 @@ const SUITES = [
    'refimg-pure' and 'shellanchor-pure' were all added after the last full
    green run, so the record has not seen their counts yet. The next full green
    run writes them and this goes back to empty. */
-const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'refscheck-pure', 'echo-pure', 'echoui-pure'];
+const PENDING_RECORD = ['focus', 'figfade-pure', 'palette-pure', 'herorhythm-pure', 'refimg-pure', 'shellanchor-pure', 'refscheck-pure', 'echo-pure', 'echoui-pure', 'echoanchor-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
