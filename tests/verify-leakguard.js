@@ -200,6 +200,44 @@ head('and it does not refuse this repository');
   ok('and it actually looked at them — not an empty list', n > 100, `${n} files`);
 }
 
+head('the knowledge graph cannot read what leak-guard refuses');
+{
+  /* graphify reads .gitignore and then .graphifyignore — and under
+     `--no-gitignore` it reads .graphifyignore ALONE. So .gitignore listing
+     the corpus protects the default run and nothing else; the flag that
+     would walk the licensed export into a graph is precisely the case where
+     only this file counts.
+
+     Derived from leak-guard's OWN lists rather than retyped, so a directory
+     added to the guard is a directory this file must name, and the two
+     cannot drift apart. */
+  const GUARD_SRC = fs.readFileSync(GUARD, 'utf8');
+  const listOf = name => {
+    const m = new RegExp('const ' + name + '\\s*=\\s*\\[([^\\]]*)\\]').exec(GUARD_SRC);
+    return m ? [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]) : null;
+  };
+  const required = [].concat(listOf('DIRS') || [], listOf('DERIVED') || [], listOf('FILES') || []);
+  /* Vacuity guard: an empty required list would make "all present" true. */
+  ok('leak-guard\'s path lists were found and are not empty',
+     required.length >= 5 && required.includes('content/'), required.join(' '));
+  const giPath = path.join(ROOT, '.graphifyignore');
+  const gi = fs.existsSync(giPath) ? fs.readFileSync(giPath, 'utf8') : '';
+  ok('.graphifyignore exists', gi.length > 0);
+  /* Lines that are live patterns, with comments and blanks dropped the way
+     graphify's own parser drops them. */
+  const live = gi.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  const missing = required.filter(p => !live.includes(p));
+  ok('it names every path leak-guard refuses, so --no-gitignore stays safe',
+     missing.length === 0, missing.join(', ') || `${required.length} paths`);
+  /* And it re-includes none of them. A `!content/` line would undo the entry
+     above it by last-match-wins — the one way this file could make things
+     worse than having no file at all. */
+  const reincluded = live.filter(l => l.startsWith('!') &&
+    required.some(p => l.slice(1).replace(/^\//, '').startsWith(p.replace(/\/$/, ''))));
+  ok('and none of them is re-included by a negation', reincluded.length === 0,
+     reincluded.join(', ') || 'none');
+}
+
 head('the hook is wired the way the README says');
 {
   const hook = path.join(ROOT, '.githooks', 'pre-commit');

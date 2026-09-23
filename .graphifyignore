@@ -1,0 +1,30 @@
+# What graphify must never read — including when it is told to ignore
+# .gitignore.
+#
+# WHY THIS FILE EXISTS WHEN .gitignore ALREADY LISTS ALL OF IT. graphify reads
+# .gitignore and then this file by default, and with `--no-gitignore` it reads
+# THIS FILE ALONE (graphify/detect.py, the per-directory loader). So the one
+# flag that would walk the licensed export into a knowledge graph is exactly
+# the case in which .gitignore stops counting. Listing the corpus here is what
+# keeps it out under that flag too. tests/verify-leakguard.js holds this file
+# to leak-guard's own list, so the two cannot drift apart.
+
+# The licensed corpus, and every directory made of it — the same four that
+# scripts/leak-guard.js refuses by path (rule 1, DIRS).
+source/
+build/
+content/
+dist/
+
+# graphify's own output, and the run log whose lines quote question text
+# (leak-guard's DERIVED and FILES).
+graphify-out/
+tests/last-run.log
+
+# Vendored and minified. Its single-letter names (u, p, h, r, s, l) collide
+# with real functions of the same names in src/core/heart3d.js, and graphify
+# resolves by name — so it fabricated edges between the two files, supplied
+# five of the ten "god nodes" in a report, and headed that report's suggested
+# questions with "why does u() connect heart3d.js to lottie.min.js?". It does
+# not; nothing here is anyone's code to read.
+assets/splash-heart/lottie.min.js
