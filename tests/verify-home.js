@@ -446,6 +446,32 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     ok('an 11-inch iPad in landscape fits too',
        air.over <= 0 && air.appW / air.vw > 0.9, `${air.appW}/${air.vw}, ${air.over}px over`);
 
+    /* THE CHECK ABOVE MEASURES WHICHEVER PEARL WAS DRAWN, and the pearl is one
+       of a few hundred picked at random. A tall one opened the grid's 1fr row
+       and pushed this exact screen 9px past the viewport — on 1 launch in 4 on
+       the owner's laptop, so 3 runs in 4 of the check above never met the
+       case it exists for. It passed a full green run that way. That is a
+       check passing without measuring, and the fix for it is not to run it
+       more often: it is to stop depending on the draw.
+
+       So the tall case is manufactured. The drawn pearl's text is repeated
+       until it is far taller than any in the library, and the screen must
+       still fit — the pearl scrolls inside its own card (homewide-patch,
+       .pearl-card contain:size) rather than growing the row. The height floor
+       is the precondition: without it, a pearl that failed to get taller
+       would pass this by being short, which is the check above's problem
+       again. Reading scrollHeight forces layout, so no wait is needed. */
+    const tall = await page.evaluate(() => {
+      const pb = document.getElementById('pearlBody');
+      if (!pb) return null;
+      pb.textContent = (pb.textContent.trim() + ' ').repeat(8);
+      return { over: document.documentElement.scrollHeight - innerHeight,
+               h: Math.round(pb.getBoundingClientRect().height) };
+    });
+    ok('and a pearl far taller than any in the library still does not push it',
+       !!tall && tall.h > 600 && tall.over <= 0,
+       tall ? `${tall.over}px over, with a ${tall.h}px pearl` : 'no pearl on screen');
+
     /* PORTRAIT MUST NOT MOVE. It already fitted, and a second layout for it
        would be change for its own sake. */
     const port = await at(1024, 1366);

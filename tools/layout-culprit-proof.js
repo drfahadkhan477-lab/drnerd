@@ -122,6 +122,46 @@ const MIXED = page_(`.glow{position:absolute;left:-20%;right:-20%;top:0;height:8
                 'page over ' + String(over).padStart(4) + 'px   →' + (got || ' (nothing)'));
   }
 
+  /* ── and which row of the landscape grid ────────────────────────────────
+     The lead above named .home-wrap itself on the owner's machine, so the
+     overflow is in the grid's contents but no one element. gridRows() reports
+     the used size of each row. The two fixtures are the two answers that lead
+     to different fixes: the 1fr row at 0 (the left column alone is too tall)
+     and the 1fr row opened by a long pearl. Same CSS shape as homewide-patch:
+     auto auto 1fr auto, areas hero/prog/gap/doors with the pearl spanning. */
+  const gs = pwa.indexOf('function gridRows() {');
+  const ge = pwa.indexOf('\n      }\n', pwa.indexOf("' px]';")) + 8;
+  if (gs < 0 || ge < 8) { console.error('could not extract gridRows'); process.exit(1); }
+  const ROWS = pwa.slice(gs, ge);
+  console.log('\nextracted ' + ROWS.split('\n').length + ' lines of gridRows() from tests/verify-pwa.js\n');
+
+  const home = (heroH, pearlH) => `<!doctype html><style>body{margin:0}
+    #app .home-wrap{display:grid;grid-template-columns:1fr 1fr;
+      grid-template-rows:auto auto 1fr auto;
+      grid-template-areas:"hero pearl" "prog pearl" "gap pearl" "doors doors";
+      min-height:calc(100vh - 62px - 40px);padding:16px 0 20px;margin-top:62px}
+    .hero-live{grid-area:hero;height:${heroH}px}
+    .home-progress{grid-area:prog;height:60px;margin-top:14px}
+    .pearl-card{grid-area:pearl}.pearl-main{height:${pearlH}px}
+    .door-row{grid-area:doors;height:120px;margin-top:18px}</style>
+    <body><main id="app"><div class="home-wrap">
+      <div class="hero-live"></div><div class="home-progress"></div>
+      <div class="pearl-card"><div class="pearl-main"></div></div>
+      <div class="door-row"></div></div></main></body>`;
+  for (const [name, html, want] of [
+    ['a left column too tall leaves the 1fr row at 0', home(560, 200), / gap 0 /],
+    ['a long pearl opens the 1fr row instead', home(300, 700), / gap [1-9]\d* /],
+    ['a wrap that is not a grid says so', home(300, 200).replace('display:grid;', 'display:block;'), /is block, not a grid/],
+  ]) {
+    await page.setContent(html);
+    const over = await page.evaluate('document.documentElement.scrollHeight - innerHeight');
+    const got = await page.evaluate(`(() => { ${ROWS} return gridRows(); })()`);
+    const pass = want.test(String(got));
+    if (!pass) bad++;
+    console.log((pass ? '  PASS  ' : '  FAIL  ') + name.padEnd(52) +
+                'page over ' + String(over).padStart(4) + 'px   →' + (got || ' (nothing)'));
+  }
+
   await browser.close();
   process.exit(bad ? 1 : 0);
 })();
