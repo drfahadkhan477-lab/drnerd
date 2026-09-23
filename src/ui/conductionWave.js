@@ -14,13 +14,24 @@
    caught the reason not to: sampled at heart3d.js's own anatomy reference
    points, RV.base returns 32ms — inside the atrial range, not the
    150ms+ ventricular one — because that point sits within the function's
-   own 2.4-unit atrial-adjacency threshold of the right atrium. That is not
-   a bug; the ventricular base genuinely sits against the atria in real
-   anatomy. But it means "the six named conduction structures, each with
-   its own invented millisecond range" would have been six numbers I made
-   up, one of which would already have been wrong. Treating activationAt as
-   the single oracle and this module as pure sequencing over its output
-   avoids inventing a second, competing account of cardiac conduction.
+   own 2.4-unit atrial-adjacency threshold of the right atrium.
+
+   THAT IS A MODEL ARTEFACT, NOT PHYSIOLOGY — and an earlier version of this
+   comment said the opposite, so it is worth being exact. activationAt times
+   anything within 2.4 units of an atrial centre as atrium; it has no
+   fibrous skeleton and no AV node. In a real heart the atria and ventricles
+   are anatomically adjacent and ELECTRICALLY INSULATED: the annuli are the
+   insulator, the AV node is the only way through, and the ventricular base
+   is among the LAST myocardium to depolarise, not the first (Durrer's
+   isolated-heart maps: the posterobasal LV and the pulmonary conus close
+   the QRS). Ventricular muscle firing with the atria is what an accessory
+   pathway does — pre-excitation — so this value, drawn as fact, would
+   teach WPW as the normal heart.
+
+   The design decision still holds for the reason it was made: one oracle,
+   not a second account of conduction timing. It just holds a known error,
+   which is why nothing that teaches from it may plot RV base. See
+   wiggers.js's drawConduction, which leaves it out.
 
    Usage (once the DOM side exists): sample activationAt at a handful of
    points on the real mesh, feed the {label, ms} list here every frame with

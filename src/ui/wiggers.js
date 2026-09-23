@@ -706,12 +706,22 @@ function mount(canvas, opts) {
      WHY ONLY FOUR POINTS, NOT SIX. LA/RA share one value (6ms — the model
      does not distinguish which atrium at that resolution), and RV base
      (32.34ms) and RV apex (162.36ms) are left out rather than invented a
-     label for: RV base sits inside activationAt's atrial-adjacency
-     threshold — a real, documented finding in conductionWave.js's own
-     header, not a typo — and a schematic that plotted it beside "Atria"
-     unexplained would read as a mistake instead of the real anatomy it is.
-     Four honestly-labelled points beat six where two would need a footnote
-     the diagram has no room for. */
+     label for. RV base sits inside activationAt's atrial-adjacency
+     threshold, and a schematic that plotted it beside "Atria" WOULD be a
+     mistake: that is a model artefact, not anatomy. The atrioventricular
+     junction is electrically insulated, the AV node is the only path, and
+     the ventricular base depolarises last — ventricular muscle firing with
+     the atria is pre-excitation. (An earlier version of this comment called
+     it "the real anatomy it is"; conductionWave.js's header now says why
+     that was backwards.) Leaving it out is right, for that reason.
+
+     What this diagram also does not show, and a board question would ask
+     about: the AV node, His bundle, bundle branches and Purkinje network —
+     the ~150ms between "Atria" and "LV apex" below is the AV nodal delay
+     plus His-Purkinje conduction, i.e. most of the PR interval — and the
+     left mid-septum, which is the FIRST ventricular muscle to depolarise
+     (hence septal q waves), ahead of the apex. So "the real firing order"
+     here is the order of these four points, not of conduction as a whole. */
   const CONDUCTION_POINTS = [
     { label: 'SA node',    ms: 0 },
     { label: 'Atria',      ms: 6 },
