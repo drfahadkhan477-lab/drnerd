@@ -302,5 +302,52 @@ head('bad input returns null rather than NaN');
   ok('and the guard list is not empty', nulls.length > 8, `${nulls.length} cases`);
 }
 
+head('every number traces to its source, including the ones no sweep reaches');
+{
+  /* FOUND BY READING THE SOURCES, not by any check here: every suite in
+     this file was green with all three of these defects in place. The
+     sweeps above prove the bands are total and ordered and that each CITED
+     cutoff lands where its source puts it. None of them could see a band
+     the source never had, a range that was only half there, or prose that
+     contradicted the table beside it. */
+
+  /* 1. ACC/AHA 2020 defines very severe AS by velocity and gradient only —
+     "Very severe AS is an aortic Vmax ≥5 m/s or mean ΔP ≥60 mm Hg" — and
+     its area line, "AVA typically is ≤1.0 cm2 (or AVAi 0.6 cm2/m2)", is for
+     SEVERE. The table had graded AVA < 0.6 very severe: the indexed number,
+     in cm2/m2, promoted to an absolute area and a grade of its own. */
+  const tiny = [0.1, 0.3, 0.5, 0.59, 0.6, 0.8, 1.0].map(v => [v, (E.grade('as-ava', v) || {}).grade]);
+  ok('no valve area grades very severe AS, which ACC/AHA defines by velocity and gradient only',
+     tiny.every(([, g]) => g === 'severe'),
+     tiny.filter(([, g]) => g !== 'severe').map(([v, g]) => `${v} → ${g}`).join(', ') || 'all severe');
+
+  /* 2. ASE 2015 (Lang et al.) gives these four by sex. The table held the
+     men's only, so a normal woman's value read as abnormal. Pinned to the
+     guideline's own table, men's and women's, so neither can drift. */
+  const ASE_2015 = { lvidd: [[4.2, 5.8], [3.8, 5.2]], lvids: [[2.5, 4.0], [2.2, 3.5]],
+                     ivsd: [[0.6, 1.0], [0.6, 0.9]], lvef: [[52, 72], [54, 74]] };
+  const sexWrong = Object.entries(ASE_2015).filter(([id, [m, f]]) => {
+    const x = E.MEASUREMENTS.find(q => q.id === id);
+    return !x || JSON.stringify(x.normal) !== JSON.stringify(m) || JSON.stringify(x.normalF) !== JSON.stringify(f);
+  }).map(([id]) => id);
+  ok('the four sex-specific ranges carry both the men\'s and the women\'s, as ASE 2015 gives them',
+     sexWrong.length === 0, sexWrong.join(', ') || 'lvidd, lvids, ivsd, lvef');
+  const badF = E.MEASUREMENTS.filter(m => m.normalF !== undefined &&
+    !(Array.isArray(m.normalF) && m.normalF.length === 2 && m.normalF[0] < m.normalF[1])).map(m => m.id);
+  ok('and every women\'s range is an ordered pair', badF.length === 0, badF.join(', ') || 'none malformed');
+
+  /* 3. The AS profile said severe was "valve area under 1.0 cm2" while the
+     table beside it — correctly, per ACC/AHA — grades 1.0 itself severe.
+     One screen, two answers to the most-tested number in valve disease.
+     NARROW BY DESIGN: this reads the one sentence that disagreed. It is not
+     a general prose-versus-table check, and does not pretend to be. */
+  const as = E.DISEASES.find(d => d.id === 'as');
+  const sevLine = as ? as.quantitative.find(q => /^Severe:/.test(q)) || '' : '';
+  const atCut = (E.grade('as-ava', 1.0) || {}).grade;
+  ok('the aortic stenosis profile agrees with the table at exactly 1.0 cm2',
+     atCut === 'severe' && /1\.0 cm2 or less/.test(sevLine) && !/under 1\.0/.test(sevLine),
+     `table: 1.0 → ${atCut}; profile: "${sevLine.slice(0, 90)}"`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

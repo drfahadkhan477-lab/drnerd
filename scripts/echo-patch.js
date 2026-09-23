@@ -187,6 +187,8 @@ patch('echo: css — two tabs, a list, a table of results',
   text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
 .echo-value{font-variant-numeric:tabular-nums}
 .echo-ref{color:var(--muted);font-size:.85em}
+.echo-note{color:var(--muted);font-size:.82em;margin-top:2px}
+.echo-sex{color:var(--muted);font-size:.8em}
 .echo-grade{text-transform:capitalize}
 .echo-grade[data-grade="severe"],.echo-grade[data-grade="very severe"]{color:var(--accent);font-weight:600}
 .echo-empty,.echo-missing{color:var(--muted)}
