@@ -161,10 +161,78 @@ head('severity grading is total and ordered');
      object. 4.0 m/s is severe aortic stenosis, not moderate. */
   ok('a value exactly on a cutoff takes the more severe band, not the milder',
      E.grade('as-vmax', 4.0).grade === 'severe', E.grade('as-vmax', 4.0).grade);
-  ok('and the same on the way down: a 1.0 cm2 valve area is not yet severe',
-     E.grade('as-ava', 1.0).grade === 'moderate', E.grade('as-ava', 1.0).grade);
-  ok('a 1.5 cm2 mitral area is severe, the ACC/AHA cutoff this table follows',
-     E.grade('ms-mva', 1.49).grade === 'severe', E.grade('ms-mva', 1.49).grade);
+  /* THE SAME RULE ON THE WAY DOWN, and these two checks used to assert the
+     opposite of it. The first read
+
+         ok('a 1.0 cm2 valve area is not yet severe', grade('as-ava', 1.0) === 'moderate')
+
+     which contradicts the principle stated three lines above it AND the
+     guideline this table cites: ACC/AHA 2020 grades severe AS as AVA <= 1.0.
+     The second was labelled "a 1.5 cm2 mitral area is severe" and tested
+     1.49 — the one value that dodges the boundary it names. At 1.5 exactly
+     the table answered "progressive". A check narrower than its own label,
+     in a suite that exists to hold a teaching table, on the two numbers a
+     board question is most likely to put on the line. */
+  ok('and the same on the way down: a 1.0 cm2 aortic valve area is severe (ACC/AHA: <= 1.0)',
+     E.grade('as-ava', 1.0).grade === 'severe', E.grade('as-ava', 1.0).grade);
+  ok('a 1.5 cm2 mitral area is severe, the ACC/AHA cutoff this table follows (<= 1.5)',
+     E.grade('ms-mva', 1.5).grade === 'severe', E.grade('ms-mva', 1.5).grade);
+  /* EVERY GUIDELINE THRESHOLD, EXACTLY ON THE LINE. The sweep above proves
+     the bands are total and ordered; it cannot prove a single one of them
+     is RIGHT, because a table that is consistently wrong is still total and
+     ordered. This is the other half: each cutoff the cited source actually
+     writes down, fed in exactly, with the grade that source assigns — and
+     the inclusivity written the way the source writes it, since that is
+     where this table went wrong. "Severe AS: AVA <= 1.0" and "severe AR:
+     PHT < 200" are different kinds of line, and both are here. */
+  const LINE = [
+    /* ACC/AHA 2020, Stages of valvular AS */
+    ['as-vmax', 1.99, 'none or sclerosis', 'Stage A, Vmax < 2.0'],
+    ['as-vmax', 2.0,  'mild',              'mild AS, Vmax 2.0-2.9'],
+    ['as-vmax', 3.0,  'moderate',          'moderate AS, Vmax 3.0-3.9'],
+    ['as-vmax', 4.0,  'severe',            'severe AS, Vmax >= 4'],
+    ['as-vmax', 5.0,  'very severe',       'very severe AS, Vmax >= 5'],
+    ['as-mean', 20,   'moderate',          'moderate AS, mean 20-39'],
+    ['as-mean', 40,   'severe',            'severe AS, mean >= 40'],
+    ['as-mean', 60,   'very severe',       'very severe AS, mean >= 60'],
+    ['as-ava',  1.0,  'severe',            'severe AS, AVA <= 1.0'],
+    ['as-ava',  1.5,  'moderate',          'moderate AS, AVA 1.0-1.5'],
+    ['as-ava',  1.51, 'mild',              'mild AS, AVA > 1.5'],
+    /* ACC/AHA staging, MS */
+    ['ms-mva',  1.0,  'very severe',       'very severe MS, MVA <= 1.0'],
+    ['ms-mva',  1.5,  'severe',            'severe MS, MVA <= 1.5'],
+    ['ms-mva',  1.51, 'progressive',       'progressive MS, MVA > 1.5'],
+    /* ASE 2017 */
+    ['mr-ero',  0.20, 'moderate',          'MR EROA 0.20-0.39'],
+    ['mr-ero',  0.40, 'severe',            'MR EROA >= 0.40'],
+    ['mr-rvol', 30,   'moderate',          'MR RVol 30-59'],
+    ['mr-rvol', 60,   'severe',            'MR RVol >= 60'],
+    ['ar-ero',  0.10, 'moderate',          'AR EROA 0.10-0.29'],
+    ['ar-ero',  0.30, 'severe',            'AR EROA >= 0.30'],
+    ['ar-pht',  199,  'severe',            'AR PHT < 200'],
+    ['ar-pht',  200,  'moderate',          'AR PHT 200-500'],
+    ['ar-pht',  500,  'moderate',          'AR PHT 200-500'],
+    ['ar-pht',  501,  'mild',              'AR PHT > 500'],
+    ['tr-vc',   7,    'severe',            'TR vena contracta >= 7 mm'],
+  ];
+  const offLine = LINE.filter(([id, v, want]) => {
+    const g = E.grade(id, v);
+    return !g || g.grade !== want;
+  }).map(([id, v, want, why]) => `${id} ${v} → ${(E.grade(id, v) || {}).grade} (want ${want}: ${why})`);
+  ok('every guideline cutoff, fed in exactly, gets the grade its source assigns',
+     offLine.length === 0, offLine.join(' | ') || `${LINE.length} cutoffs`);
+  /* And the direction this broke in is the one that matters: a value on a
+     "smaller is worse" line must never come out MILDER than the source says.
+     Held separately so that a future table that gets one band wrong the
+     severe way is still told apart from one that under-calls. */
+  const RANK = { 'none or sclerosis': 0, mild: 1, progressive: 1, moderate: 2, severe: 3, 'very severe': 4 };
+  const underCalled = LINE.filter(([id, v, want]) => {
+    const g = E.grade(id, v);
+    return g && RANK[g.grade] < RANK[want];
+  }).map(([id, v]) => `${id} ${v}`);
+  ok('and none of them is under-called — graded milder than the guideline',
+     underCalled.length === 0, underCalled.join(', ') || 'none');
+
   ok('an unknown lesion grades to null, not to a default band', E.grade('not-a-lesion', 1) === null);
   ok('a non-number grades to null rather than the mildest band', E.grade('as-vmax', undefined) === null);
   ok('and so does a string that looks like a number', E.grade('as-vmax', '4.0') === null);
