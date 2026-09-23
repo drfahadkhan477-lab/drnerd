@@ -20,9 +20,17 @@
  *
  * RV base landing inside the atrial range rather than after LV apex is not
  * a typo — it is activationAt's own behaviour (that point sits within its
- * 2.4-unit atrial-adjacency threshold of the right atrium), and exactly why
- * this suite uses captured real numbers instead of a tidy invented ladder:
- * a made-up schedule would have "fixed" that surprise into something wrong.
+ * 2.4-unit atrial-adjacency threshold of the right atrium). It IS, though, a
+ * model artefact rather than physiology: in a real heart the base activates
+ * LAST, and ventricular muscle firing with the atria is pre-excitation. An
+ * earlier version of this header said an invented schedule "would have
+ * 'fixed' that surprise into something wrong" — the reverse is true.
+ *
+ * The numbers stay exactly as captured. This suite holds SEQUENCING — that
+ * firedBy and nextToFire order whatever times they are handed — and it holds
+ * it against what activationAt really outputs, artefact included, so that
+ * the day activationAt is corrected this fixture is visibly out of date
+ * rather than silently agreeing with a heart that does not exist.
  */
 'use strict';
 const fs = require('fs');

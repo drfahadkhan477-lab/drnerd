@@ -21,14 +21,14 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 2937 checks in
-# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 1387.
-# The other 1683 all drive a real build of the app in a real browser
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 2944 checks in
+# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 1393.
+# The other 1684 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 1683 checks here. See docs/BUILD.md and the
+# there is no way to run those 1684 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
@@ -70,7 +70,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                1387 real checks, up
+#                1393 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -83,7 +83,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 1683 checks to this file is possible — GitHub Actions
+# Adding the other 1684 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -165,7 +165,7 @@ jobs:
         run: node tests/verify-coronarytree-pure.js
       - name: the engine is a flag, not thirty-four hardcoded copies of one (79 checks)
         run: node tests/verify-engine.js
-      - name: the licensed question bank cannot be committed (27 checks)
+      - name: the licensed question bank cannot be committed (31 checks)
         run: node tests/verify-leakguard.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js
@@ -205,7 +205,7 @@ jobs:
         run: node tests/verify-ui-pure.js
       - name: the corpus checker holds every floor it claims (17 checks)
         run: node tests/verify-refscheck-pure.js
-      - name: the echo tables and the echo arithmetic (53 checks)
+      - name: the echo tables and the echo arithmetic (55 checks)
         run: node tests/verify-echo-pure.js
       - name: Echo Studio computes only what was measured (55 checks)
         run: node tests/verify-echoui-pure.js

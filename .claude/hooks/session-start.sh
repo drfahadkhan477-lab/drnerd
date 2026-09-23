@@ -52,8 +52,9 @@ else
   exit 0
 fi
 
-# AST only: no API key, no LLM call, no cost. ~6s for this repository's 228
-# files from a cold cache. Idempotent — a second run re-extracts and rewrites
+# AST only: no API key, no LLM call, no cost. Seconds from a cold cache — no
+# file count here on purpose: it was 228 when written and the tree is past 270,
+# and CLAUDE.md's rule is to guard a number or not write it. Idempotent — a second run re-extracts and rewrites
 # the same graph rather than erroring.
 #
 # Output is checked rather than assumed: `graphify update` exits 0 in cases
