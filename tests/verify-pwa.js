@@ -1010,6 +1010,14 @@ async function heapAfterBoot(page, url) {
         return ' [rows: ' + sizes.map((v, i) => (names[i] || 'row' + (i + 1)) + ' ' +
           Math.round(parseFloat(v))).join(' · ') + ' px]';
       }
+      /* WHICH PEARL. The same build overflowed by 9px, then 9px, then fitted —
+         nothing in the app changed between those runs, so what differs is
+         what the home screen chose to show, and the pearl is chosen at random
+         from a few hundred. Its length and rendered height, printed beside the
+         rows, let a passing run and a failing run be compared directly. */
+      const pb = document.getElementById('pearlBody');
+      const pearl = pb ? ` [pearl: ${pb.textContent.trim().length} chars,` +
+        ` ${Math.round(pb.getBoundingClientRect().height)}px]` : ' [pearl: none on screen]';
       return {
         over: document.documentElement.scrollHeight - innerHeight,
         card: !!document.getElementById('offlineCard'),
@@ -1017,11 +1025,16 @@ async function heapAfterBoot(page, url) {
         vw: innerWidth,
         lowest: lowestInApp(),
         rows: gridRows(),
+        pearl,
       };
     });
     ok('an 11-inch iPad in landscape needs no scrolling on the home screen',
        m.over <= 0, `${m.over}px over — first run, with the welcome card, was ${firstRun.over}px` +
-       (m.over > 0 ? m.lowest + m.rows : ''));
+       /* On EVERY run, not only a failing one. The overflow is intermittent
+          — 9, 9, then 0 on one build — and a passing run that says nothing
+          about how close it came is half the comparison thrown away. A pass
+          that ends at 833 of 834 is a warning; one at 790 is a margin. */
+       m.lowest + m.rows + m.pearl);
     /* The half that stops this being satisfied by an empty screen: it must still
        be using the width, which is what the landscape layout is for. */
     ok('and it is still filling the width while it does',
