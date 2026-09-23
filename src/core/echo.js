@@ -278,15 +278,31 @@
   }
 
   /* ── severity bands ─────────────────────────────────────────────────────
-     Ordered, closed at the lower end and open at the upper, so every finite
-     value falls in exactly one band. `dir` says which way severity runs:
-     'up' means a larger number is worse (a velocity), 'down' means smaller
-     is worse (a valve area). The suite checks totality and ordering rather
-     than trusting that the table was typed carefully. */
+     Ordered, so every finite value falls in exactly one band. `dir` says
+     which way severity runs: 'up' means a larger number is worse (a
+     velocity), 'down' means smaller is worse (a valve area).
+
+     A band's upper edge is OPEN unless it carries `le: true`, and `le` is
+     set exactly where the cited source writes <=. That is the whole reason
+     it exists. Guidelines write the two directions differently — "severe
+     AS: Vmax >= 4" puts 4.0 in the band ABOVE the line, "severe AS: AVA <=
+     1.0" puts 1.0 in the band BELOW it — and one rule for both got every
+     "smaller is worse" threshold one grade too mild: a 1.0 cm2 aortic valve
+     read as moderate, a 1.5 cm2 mitral valve as progressive. It is per band
+     rather than per `dir` because the sources are not uniform even within a
+     direction: ASE writes severe AR as PHT < 200 but moderate as 200-500, so
+     200 is moderate and 500 is too.
+
+     The suite holds both halves: totality and ordering over a sweep, and
+     every cited threshold fed in exactly with the grade its source gives. */
   var LESIONS = [
     { id: 'as-vmax', lesion: 'Aortic stenosis', metric: 'Peak velocity', units: 'm/s', dir: 'up',
       ref: 'ACC/AHA 2020',
-      bands: [ { upTo: 2.6, grade: 'none or sclerosis' }, { upTo: 3.0, grade: 'mild' },
+      /* Mild starts at 2.0, which is ACC/AHA 2020's line (Stage B, Vmax
+         2.0-2.9). It read 2.6 — ASE/EACVI's sclerosis cutoff — under a `ref`
+         naming ACC/AHA, so a 2.3 m/s jet graded as no stenosis on a screen
+         whose source calls it mild. */
+      bands: [ { upTo: 2.0, grade: 'none or sclerosis' }, { upTo: 3.0, grade: 'mild' },
                { upTo: 4.0, grade: 'moderate' }, { upTo: 5.0, grade: 'severe' },
                { upTo: Infinity, grade: 'very severe' } ] },
 
@@ -297,12 +313,12 @@
 
     { id: 'as-ava', lesion: 'Aortic stenosis', metric: 'Valve area', units: 'cm2', dir: 'down',
       ref: 'ACC/AHA 2020',
-      bands: [ { upTo: 0.6, grade: 'very severe' }, { upTo: 1.0, grade: 'severe' },
-               { upTo: 1.5, grade: 'moderate' }, { upTo: Infinity, grade: 'mild' } ] },
+      bands: [ { upTo: 0.6, grade: 'very severe' }, { upTo: 1.0, le: true, grade: 'severe' },
+               { upTo: 1.5, le: true, grade: 'moderate' }, { upTo: Infinity, grade: 'mild' } ] },
 
     { id: 'ms-mva', lesion: 'Mitral stenosis', metric: 'Valve area', units: 'cm2', dir: 'down',
       ref: 'ACC/AHA 2020 staging',
-      bands: [ { upTo: 1.0, grade: 'very severe' }, { upTo: 1.5, grade: 'severe' },
+      bands: [ { upTo: 1.0, le: true, grade: 'very severe' }, { upTo: 1.5, le: true, grade: 'severe' },
                { upTo: Infinity, grade: 'progressive' } ] },
 
     { id: 'mr-ero', lesion: 'Mitral regurgitation', metric: 'Effective regurgitant orifice', units: 'cm2', dir: 'up',
@@ -322,7 +338,7 @@
 
     { id: 'ar-pht', lesion: 'Aortic regurgitation', metric: 'Pressure half-time', units: 'ms', dir: 'down',
       ref: 'ASE 2017',
-      bands: [ { upTo: 200, grade: 'severe' }, { upTo: 500, grade: 'moderate' },
+      bands: [ { upTo: 200, grade: 'severe' }, { upTo: 500, le: true, grade: 'moderate' },
                { upTo: Infinity, grade: 'mild' } ] },
 
     { id: 'tr-vc', lesion: 'Tricuspid regurgitation', metric: 'Vena contracta', units: 'mm', dir: 'up',
@@ -341,7 +357,8 @@
     for (i = 0; i < LESIONS.length; i++) { if (LESIONS[i].id === lesionId) { L = LESIONS[i]; break; } }
     if (!L) return null;
     for (i = 0; i < L.bands.length; i++) {
-      if (value < L.bands[i].upTo) {
+      var b = L.bands[i];
+      if (b.le ? value <= b.upTo : value < b.upTo) {
         return { grade: L.bands[i].grade, lesion: L.lesion, metric: L.metric, units: L.units, ref: L.ref };
       }
     }
