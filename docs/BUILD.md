@@ -579,6 +579,26 @@ Modules are plain IIFEs that export onto `window`, so they can be required and
 tested in bare Node without a bundler or a browser. That is not an accident of
 style; it is what makes the numeric verification above possible.
 
+## Security scanning
+
+`.github/workflows/codeql.yml` runs GitHub's CodeQL over the code this
+repository holds: the JavaScript in `src/`, the patch chain, the suites and
+`tools/`; the Python in `tools/`; and the workflow files themselves. It runs
+on every pull request, on pushes to `master`, and weekly, with the
+`security-extended` query suite. Findings appear under the repository's
+Security tab and as a check on the pull request.
+
+It cannot scan the built app. The licensed export is never committed, so
+nothing it contributes to `build/systole.html` is visible to CodeQL — only
+the code this repository patches in.
+
+**The `github-advanced-security` check is not a security review of this
+code.** It is a separate GitHub service whose file exclusions skip `*.js`,
+`*.json`, `*.yml`, `*.html` and `*.py` — every language here. On a pull
+request that changes only those files it reports success having read
+nothing; on one that also changes Markdown it has crashed at startup. Read
+its green as "did not run", and CodeQL's as the scan.
+
 ## The laptop as a CI runner (optional)
 
 CI runs the honest subset because GitHub's runners cannot build the app — the
