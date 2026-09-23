@@ -200,5 +200,48 @@ head('the view layer restates no clinical cutoff');
      copied.join(', ') || 'none');
 }
 
+head('what the core holds, the screen shows');
+{
+  /* Both FOUND BY READING, with this suite green: a measurement's `note` was
+     rendered nowhere — fourteen of them, declared and never read, the same
+     shape as the `dir` field the grading fix found — and so two women's
+     ranges that lived only in a note never reached a screen either. */
+
+  /* Every note, on the screen of every disease that measures it. */
+  const missing = [];
+  for (const d of E.DISEASES) {
+    const html = U.diseaseHtml(d.id);
+    for (const id of d.measures) {
+      const m = E.MEASUREMENTS.find(q => q.id === id);
+      if (m && m.note && html.indexOf(U.esc(m.note)) === -1) missing.push(`${d.id}/${id}`);
+    }
+  }
+  const measured = E.DISEASES.reduce((n, d) => n + d.measures.length, 0);
+  ok('every measurement\'s note is on the screen that lists it',
+     measured > 0 && missing.length === 0,
+     missing.length ? missing.slice(0, 4).join(', ') + (missing.length > 4 ? ` +${missing.length - 4}` : '') + ' not shown'
+                    : `${measured} rows, every note shown`);
+
+  /* Both ranges, labelled, where the core has both; one where it has one.
+     Read through the disease screen rather than a helper, so this holds
+     for what is rendered, not for a function nothing calls. */
+  const hcm = U.diseaseHtml('hcm');
+  const lvef = E.MEASUREMENTS.find(m => m.id === 'lvef');
+  const both = !!lvef && !!lvef.normalF &&
+    hcm.indexOf(lvef.normal[0] + '–' + lvef.normal[1]) !== -1 &&
+    hcm.indexOf(lvef.normalF[0] + '–' + lvef.normalF[1]) !== -1 && /women/.test(hcm);
+  const as = U.diseaseHtml('as');
+  const lvot = E.MEASUREMENTS.find(m => m.id === 'lvot-d');
+  const one = !!lvot && !lvot.normalF && as.indexOf(lvot.normal[0] + '–' + lvot.normal[1]) !== -1;
+  ok('a sex-specific range shows both, labelled, and a single range shows one',
+     both && one, `lvef both: ${both}; lvot-d single: ${one}`);
+
+  /* Both ends at one precision: the men's septal range printed "0.6–1 cm"
+     because 1.0 is 1 to JavaScript. Read off the rendered HCM screen. */
+  const septum = (hcm.match(/0\.6–1(?:\.0)?(?= cm)/) || [''])[0];
+  ok('a range prints both ends to the same precision, 0.6–1.0 not 0.6–1',
+     septum === '0.6–1.0', septum || 'septal range not found');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

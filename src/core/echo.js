@@ -32,13 +32,24 @@
    substitute for the guideline documents, and the module says so rather than
    implying an authority it does not have.
 
-   ── A NOTE ON MITRAL STENOSIS, WHICH IS WHERE SOURCES DISAGREE ────────────
+   ── WHERE SOURCES DISAGREE, THIS FOLLOWS ACC/AHA — AND WHY ─────────────
 
-   The older ASE grading calls an area of 1.0-1.5 cm² moderate and ≤1.0 cm²
-   severe. The 2020 ACC/AHA staging calls ≤1.5 cm² severe (stage C/D) and
-   ≤1.0 cm² very severe. Both are in current use and they conflict, so the
-   bands below follow ACC/AHA and say which they follow. Anything quoting one
-   of these numbers without naming the source is ambiguous by construction.
+   The bank this app is built on is ACCSAP, the ACC's own self-assessment
+   programme, and US boards examine on ACC/AHA. So where a society writes a
+   cutoff differently, the ACC/AHA line is the one used, and the band says so.
+
+   Aortic valve area: ACC/AHA 2020 writes severe as AVA ≤1.0 cm²; ESC 2021
+   and ASE/EACVI write < 1.0. At exactly 1.0 they disagree. This follows
+   ACC/AHA, so 1.0 is severe here.
+
+   Mitral valve area: the older ASE grading calls 1.0-1.5 cm² moderate and
+   ≤1.0 severe. ACC/AHA 2020 stages ≤1.5 cm² as severe (stage C/D). The
+   label "very severe MS, MVA ≤1.0 cm²" is from the 2014 ACC/AHA staging;
+   the 2020 documents checked keep < 1.0 as its own tier — annual imaging,
+   against every 1-2 years for 1.0-1.5 — without, in them, that label. So
+   the band is kept and its source says 2014, which is where it comes from.
+   Anything quoting one of these numbers without naming the source is
+   ambiguous by construction.
 
    Wiring: everything is exported on root.Echo. The UI layer reads the tables
    and calls the formulas; it does not restate a single number of its own.
@@ -118,11 +129,11 @@
      must exist in VIEWS above — checked, not assumed, by the suite. */
   var MEASUREMENTS = [
     { id: 'lvidd', name: 'LV internal diameter, diastole', view: 'plax', units: 'cm',
-      normal: [4.2, 5.8], note: 'Sex-specific: 4.2-5.8 cm men, 3.8-5.2 cm women', ref: 'ASE 2015' },
+      normal: [4.2, 5.8], normalF: [3.8, 5.2], note: 'Above the upper limit is LV dilatation', ref: 'ASE 2015' },
     { id: 'lvids', name: 'LV internal diameter, systole', view: 'plax', units: 'cm',
-      normal: [2.5, 4.0], note: 'Used for fractional shortening', ref: 'ASE 2015' },
+      normal: [2.5, 4.0], normalF: [2.2, 3.5], note: 'Used for fractional shortening', ref: 'ASE 2015' },
     { id: 'ivsd', name: 'Interventricular septum, diastole', view: 'plax', units: 'cm',
-      normal: [0.6, 1.0], note: 'Above 1.1 cm is hypertrophy in men', ref: 'ASE 2015' },
+      normal: [0.6, 1.0], normalF: [0.6, 0.9], note: 'Above the upper limit is hypertrophy', ref: 'ASE 2015' },
     { id: 'lvot-d', name: 'LVOT diameter', view: 'plax', units: 'cm',
       normal: [1.8, 2.2], note: 'Squared in the continuity equation, so a 10% error becomes 21%', ref: 'ASE 2017' },
     { id: 'lvot-vti', name: 'LVOT velocity time integral', view: 'a5c', units: 'cm',
@@ -130,7 +141,7 @@
     { id: 'av-vmax', name: 'Aortic peak velocity', view: 'a5c', units: 'm/s',
       normal: [1.0, 1.7], note: 'Continuous wave, interrogate from multiple windows', ref: 'ACC/AHA 2020' },
     { id: 'lvef', name: 'LV ejection fraction', view: 'a4c', units: '%',
-      normal: [52, 72], note: 'Biplane Simpson; 52-72% men, 54-74% women', ref: 'ASE 2015' },
+      normal: [52, 72], normalF: [54, 74], note: 'Biplane Simpson', ref: 'ASE 2015' },
     { id: 'lavi', name: 'LA volume index', view: 'a4c', units: 'mL/m2',
       normal: [16, 34], note: 'Above 34 is a marker of chronically raised filling pressure', ref: 'ASE 2015' },
     { id: 'e-vel', name: 'Mitral E velocity', view: 'a4c', units: 'm/s',
@@ -313,11 +324,20 @@
 
     { id: 'as-ava', lesion: 'Aortic stenosis', metric: 'Valve area', units: 'cm2', dir: 'down',
       ref: 'ACC/AHA 2020',
-      bands: [ { upTo: 0.6, grade: 'very severe' }, { upTo: 1.0, le: true, grade: 'severe' },
+      /* NO "VERY SEVERE" BAND, and there used to be one: AVA < 0.6. ACC/AHA
+         2020 has no such category. Its staging reads "AVA typically is ≤1.0
+         cm2 (or AVAi 0.6 cm2/m2)" for SEVERE, and "Very severe AS is an
+         aortic Vmax ≥5 m/s or mean ΔP ≥60 mm Hg" — by velocity and gradient
+         only, which as-vmax and as-mean already carry. The 0.6 was the
+         INDEXED area, cm2/m2, relabelled as an absolute area and promoted a
+         grade. A number without a source, on a board-review screen. */
+      bands: [ { upTo: 1.0, le: true, grade: 'severe' },
                { upTo: 1.5, le: true, grade: 'moderate' }, { upTo: Infinity, grade: 'mild' } ] },
 
     { id: 'ms-mva', lesion: 'Mitral stenosis', metric: 'Valve area', units: 'cm2', dir: 'down',
-      ref: 'ACC/AHA 2020 staging',
+      /* Severe ≤1.5 is ACC/AHA 2020. The very-severe label at ≤1.0 is the
+         2014 staging's; see the header note for what 2020 keeps of it. */
+      ref: 'ACC/AHA 2020; very severe, ACC/AHA 2014',
       bands: [ { upTo: 1.0, le: true, grade: 'very severe' }, { upTo: 1.5, le: true, grade: 'severe' },
                { upTo: Infinity, grade: 'progressive' } ] },
 
@@ -377,7 +397,8 @@
         'Concentric LV hypertrophy from chronic pressure overload',
         'Post-stenotic dilatation of the ascending aorta' ],
       quantitative: [
-        'Severe: peak velocity 4.0 m/s or more, mean gradient 40 mmHg or more, valve area under 1.0 cm2',
+        'Severe: peak velocity 4.0 m/s or more, mean gradient 40 mmHg or more, valve area 1.0 cm2 or less (0.6 cm2/m2 or less indexed)',
+        'Very severe: peak velocity 5.0 m/s or more, or mean gradient 60 mmHg or more',
         'Dimensionless index under 0.25 supports severity when the LVOT cannot be measured',
         'Low-flow low-gradient disease needs dobutamine stress to separate true from pseudo-severe' ] },
 
@@ -401,7 +422,7 @@
         'Fish-mouth orifice on short axis planimetry',
         'Left atrial enlargement with spontaneous echo contrast' ],
       quantitative: [
-        'Severe by ACC/AHA staging: valve area 1.5 cm2 or less; very severe 1.0 cm2 or less',
+        'Severe by ACC/AHA 2020 staging: valve area 1.5 cm2 or less; 1.0 cm2 or less is very severe in the 2014 staging',
         'Pressure half-time gives area as 220 divided by the half-time',
         'Mean gradient rises with heart rate and is supportive rather than defining' ] },
 
