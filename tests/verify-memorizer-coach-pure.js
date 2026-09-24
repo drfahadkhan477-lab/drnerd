@@ -475,7 +475,36 @@ head('the robot explains the question in front of you');
   const TB = { index: 9, title: 'Values', pageStart: 3, pageEnd: 3, text: '', segments: [{ page: 3, heading: false, text: 'Measure Normal Unit LVEDP < 12 mmHg Stroke volume 60-100 mL Ejection fraction 55 percent Heart rate 50-90 bpm',
     table: [['Measure', 'Normal', 'Unit'], ['LVEDP', '< 12', 'mmHg'], ['Stroke volume', '60-100', 'mL'], ['Ejection fraction', '55', 'percent'], ['Heart rate', '50-90', 'bpm']] }] };
   TB.text = TB.segments[0].text;
-  const cands = [].concat(...U2.concat([TB]).map(c => K.candidates(c, K.pools(U2.concat([TB])))));
+  /* A board question: "what is first-line", "which is contraindicated" —
+     the answer the book's own subject, the options the unit's other drugs. */
+  const DR = withText({ index: 10, title: 'Angina drugs', pageStart: 4, pageEnd: 4, segments: [seg(4,
+    'Beta-blockers are the first-line therapy for stable angina. Nitrates are contraindicated with sildenafil. ' +
+    'Calcium channel blockers relieve coronary spasm. Ranolazine reduces the late sodium current. Ivabradine slows the sinus node alone. ' +
+    'Aspirin prevents platelet aggregation in the coronary arteries.')] });
+  const U3 = U2.concat([TB, DR]);
+  const cands = [].concat(...U3.map(c => K.candidates(c, K.pools(U3))));
+  const board = K.candidates(DR, K.pools(U3));
+  const fl = board.find(q => q.kind === 'choice'), ci = board.find(q => q.kind === 'avoid');
+  ok('board stems: "What is the first-line therapy for …?" and "Which is contraindicated with …?", the book’s answer among the unit’s other terms',
+     fl && fl.question === 'What is the first-line therapy for stable angina?' && fl.options[fl.answer] === 'Beta-blockers' && fl.options.length === 4 &&
+     ci && ci.question === 'Which is contraindicated with sildenafil?' && ci.options[ci.answer] === 'Nitrates' && ci.options.length === 4 &&
+     /* every option a drug, not a cause or a word from the sentence */
+     fl.options.concat(ci.options).every(o => K.family(o) === 'drug' && /^[A-Z]/.test(o)) &&
+     /* and none a fragment of another ("Blockers" of "Beta-blockers") */
+     [fl, ci].every(q => q.options.every(o => q.options.every(x => x === o || x.toLowerCase().indexOf(o.toLowerCase()) === -1))),
+     JSON.stringify([fl && [fl.question, fl.options], ci && [ci.question, ci.options]]));
+  /* Within each kind, the questions from high-yield sentences come first —
+     a drill takes the first of each kind. Held for every section, and it
+     has to matter somewhere: some kind must hold both. */
+  const ordered = U3.map(c => K.candidates(c, K.pools(U3)));
+  const hyOf = q => K.yieldOf(q.src || '').length;
+  const unsorted = ordered.filter(cs => [...new Set(cs.map(q => q.kind))].some(k => { const h = cs.filter(q => q.kind === k).map(hyOf); return h.some((v, i) => i && v > h[i - 1]); }));
+  const mixed = ordered.some(cs => [...new Set(cs.map(q => q.kind))].some(k => { const h = cs.filter(q => q.kind === k).map(hyOf); return h.some(v => v > 0) && h.some(v => v === 0); }));
+  ok('within each kind, a question from a high-yield sentence is offered first', unsorted.length === 0 && mixed, `${unsorted.length} out of order; mixed: ${mixed}`);
+  const kin = K.kinOf('Nitrates', K.pools(U3)).map(t => t.toLowerCase());
+  ok('the options a drug is offered against are the unit’s other drugs — whole names, not "first-line" or a fragment',
+     kin.indexOf('ivabradine') !== -1 && kin.indexOf('ranolazine') !== -1 && kin.every(t => K.family(t) === 'drug') &&
+     !kin.some(t => t === 'first-line' || t === 'blockers') && K.family('first-line') === '', JSON.stringify(kin));
   const misread = cands.filter(q => K.questionKind(q) !== q.kind);
   ok('every kind of question is read back from its wording — for all the section’s candidates, not just those drilled',
      new Set(cands.map(q => q.kind)).size >= 10 && misread.length === 0 && Object.keys(K.KIND_SAYS).every(k => cands.some(q => q.kind === k)),

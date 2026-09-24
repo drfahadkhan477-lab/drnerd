@@ -365,7 +365,7 @@ var PER_KIND = 2;
 var QUIZ_SIZE = 8;
 /* Reasoning first — how one thing leads to another, the value that
    defines a grade — then recognition, and a missing word last. */
-var KIND_ORDER = ['mechanism', 'threshold', 'most', 'except', 'define-back', 'member', 'table', 'true', 'define', 'number', 'term', 'source'];
+var KIND_ORDER = ['mechanism', 'threshold', 'most', 'choice', 'avoid', 'except', 'define-back', 'member', 'table', 'true', 'define', 'number', 'term', 'source'];
 
 /* A number from a string, the same every time: options are shuffled with it,
    so the right answer is not always first and a test can reproduce a drill. */
@@ -422,18 +422,21 @@ function norm(s) { return String(s).toLowerCase().replace(/[^a-z0-9%.]+/g, ' ').
    drug against drugs, a test against tests — "hypertrophy" against
    "fibrosis" and "dilatation", never against "echocardiography". */
 var FAMILY = [
-  ['drug', /(?:olol|pril|sartan|statin|mab|nib|azole|mycin|cillin|parin|ban|gatran|ide|ides|ine|ines)$/],
+  ['drug', /(?:olol|pril|sartan|statin|mab|nib|azole|mycin|cillin|parin|ban|gatran|ide|ides|ine|ines|blockers?|inhibitors?|antagonists?|agonists?|nitrates?|diuretics?|anticoagulants?|aspirin|warfarin|digoxin|amiodarone)$/],
   ['test', /(?:gram|graphy|scopy|echocardiogra\w*)$/],
   ['condition', /(?:itis|osis|oses|emia|aemia|pathy|megaly|trophy|trophies|plasia|stenosis|sclerosis|syndrome|disease|failure|regurgitation|atresia|anomal\w*|infarct\w*|ischaemi\w*|ischemi\w*|dilatation|dilation|carcino\w*|malignan\w*|endocarditis|thrombo\w*|cardia)$/],
   ['procedure', /(?:ectomy|otomy|ostomy|plasty)$/],
 ];
+/* Words that end like a drug and are not one: "first-line" was offered
+   against "Beta-blockers". */
+var NOT_DRUG = /(?:line|^(?:medicine|urine|routine|examine|determine|combine|define|decline|fine|mine|nine|spine|machine|intestine|genuine|feminine|masculine|marine|uterine|online))$/;
 function family(w) {
   var b = bare(String(w).split(/\s+/).pop());
   /* a place is a noun ("valve", "annulus") or an adjective ("atrial",
      "pulmonary"), and a blank takes one or the other: "a bicuspid _____"
      offered "valve / atrial / ventricular / pulmonary" */
   if (PLACE.test(b)) return /(?:al|ar|ic|ary)$/.test(b) ? 'site-adj' : 'site';
-  for (var i = 0; i < FAMILY.length; i++) if (FAMILY[i][1].test(b)) return FAMILY[i][0];
+  for (var i = 0; i < FAMILY.length; i++) if (FAMILY[i][1].test(b) && !(FAMILY[i][0] === 'drug' && NOT_DRUG.test(b))) return FAMILY[i][0];
   return '';
 }
 
@@ -453,7 +456,7 @@ function pools(clusters) {
     });
     patternQuestions(c).forEach(function (q) {
       if (q.kind === 'define') { defs.push({ term: q.term, def: q.answer, page: q.page, ci: c.index }); addPhrase(q.term, c.index); }
-      if (q.kind === 'most') addPhrase(q.answer, c.index);
+      if (q.kind === 'most' || q.kind === 'choice' || q.kind === 'avoid') addPhrase(q.answer, c.index);
     });
     lists(c).forEach(function (l) { l.items.forEach(function (i) { items.push({ text: i.label, list: l.list + ':' + l.title, ci: c.index }); addPhrase(i.label, c.index); }); });
     /* "rheumatic heart disease (RHD)": a named thing, by the section's own say-so */
@@ -670,6 +673,20 @@ function blankOut(text, word) {
   return String(text).replace(new RegExp('(^|[^A-Za-z0-9])' + esc + '(?![A-Za-z0-9])', 'i'), function (all, pre) { return pre + '_____'; });
 }
 
+/* The unit's terms of the answer's family — drugs for a drug — and none a
+   fragment of another or of the answer: "Blockers" out of "Calcium channel
+   blockers" and "Beta-blockers". */
+function kinOf(answer, P) {
+  var fam = family(answer);
+  if (!fam) return [];
+  var kin = P.terms.map(function (t) { return t.text; }).concat(P.phrases.map(function (p) { return p.text; }), P.items.map(function (i) { return i.text; }))
+    .filter(function (t) { return family(t) === fam && norm(t) !== norm(answer); });
+  return kin.filter(function (t) {
+    var n = norm(t);
+    return [answer].concat(kin).every(function (o) { var m = norm(o); return m === n || m.indexOf(n) === -1; });
+  });
+}
+
 /* Every question the section can support, best kinds first. */
 function candidates(cluster, P) {
   var out = [], ci = cluster.index;
@@ -698,10 +715,18 @@ function candidates(cluster, P) {
       var otherDefs = P.defs.filter(function (d) { return norm(d.term) !== norm(q.term); }).map(function (d) { return d.def; });
       var wd = distractors(q.answer, otherDefs, OPTIONS - 1, q.term, q.answer);
       if (wd) out.push(mcq('define', 'Which best describes ' + q.term.replace(/^[A-Z][a-z]/, function (x) { return x.toLowerCase(); }) + '?', '', q.answer, wd, src, q.page));
-    } else if (q.kind === 'most') {
+    } else if (q.kind === 'most' || q.kind === 'choice' || q.kind === 'avoid') {
       var itemTexts = P.items.map(function (i) { return i.text; });
-      var wm = distractors(q.answer, itemTexts, OPTIONS - 1, q.question, q.question) || pickTerms(q.answer, otherTerms, q.question, q.question, P.phrases);
-      if (wm) out.push(mcq('most', q.question, '', q.answer, wm, src, q.page));
+      /* A first-line drug against other drugs, a test against tests: the
+         first version offered "Rheumatic" and "Pacemaker lead injury"
+         against "Beta-blockers" — options no student would weigh. */
+      var fam = q.kind === 'most' ? '' : family(q.answer);
+      var kin = fam ? kinOf(q.answer, P) : [];
+      var wm = (fam && distractors(q.answer, kin, OPTIONS - 1, q.question, q.question)) ||
+               distractors(q.answer, itemTexts, OPTIONS - 1, q.question, q.question) || pickTerms(q.answer, otherTerms, q.question, q.question, P.phrases);
+      /* options set as the answer is: "Beta-blockers", "Ivabradine" */
+      if (wm && /^[A-Z]/.test(q.answer)) wm = wm.map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); });
+      if (wm) out.push(mcq(q.kind, q.question, '', q.answer, wm, src, q.page));
     }
   });
 
@@ -841,7 +866,12 @@ function candidates(cluster, P) {
   });
 
   out.forEach(function (q) { q.cluster = ci; });
-  return out;
+  /* Within each kind, a question from a high-yield sentence comes first
+     (choose() takes the first of each kind): a missing word from "X is the
+     first-line therapy" before one from a sentence that only restates the
+     topic. Stable, so the order among equals is as it was. */
+  return out.map(function (q, i) { return { q: q, i: i, hy: yieldOf(q.src || '').length }; })
+    .sort(function (a, b) { return b.hy - a.hy || a.i - b.i; }).map(function (x) { return x.q; });
 }
 
 /* A drill: up to `size` questions, the kinds in KIND_ORDER, at most
@@ -1095,6 +1125,19 @@ function patternQuestions(cluster) {
       out.push({ question: 'What is the most ' + m[2].toLowerCase() + ' ' + m[3].trim() + '?', answer: m[1].trim(), page: s.page, kind: 'most' });
       return;
     }
+    /* What a board asks: "What is the first-line therapy for stable
+       angina?", "Which is contraindicated in …?" — the book's own answer,
+       the options the unit's other terms of the same kind. */
+    var ch = /^(.{3,70}?)\s+(?:is|are|remains?)\s+(?:the\s+)?(first[- ]line (?:therapy|treatment|agent|drug|test|investigation)|treatment of choice|drug of choice|test of choice|investigation of choice|gold standard(?: test)?|mainstay of (?:therapy|treatment))\s+(?:for|in|of)\s+([^,.;]{3,80})/i.exec(t);
+    if (ch && ch[1].split(/\s+/).length <= 8) {
+      out.push({ question: 'What is the ' + ch[2].toLowerCase() + ' for ' + ch[3].trim() + '?', answer: ch[1].trim(), page: s.page, kind: 'choice' });
+      return;
+    }
+    var av = /^(.{3,60}?)\s+(?:is|are)\s+(?:absolutely\s+|relatively\s+)?contraindicated\s+(in|with|for|after)\s+([^,.;]{3,80})/i.exec(t);
+    if (av && av[1].split(/\s+/).length <= 6) {
+      out.push({ question: 'Which is contraindicated ' + av[2].toLowerCase() + ' ' + av[3].trim() + '?', answer: av[1].trim(), page: s.page, kind: 'avoid' });
+      return;
+    }
     var d = /^((?:[A-Za-z][\w\-]*\s+){0,4}[A-Za-z][\w\-]*(?:\s+\([A-Z]{2,6}\))?)\s+(?:is|are|refers to|is defined as|are defined as|means)\s+(.{12,160}?)(?:[.;]|,\s+(?:which|and|but)\s|$)/.exec(t);
     if (d && !/^(?:this|that|it|there|these|those|which|the\s+(?:most|first|only))\b/i.test(d[1]) && !MOST.test(t) &&
         /^(?:a|an|the)\s/i.test(d[2])) {
@@ -1140,6 +1183,8 @@ var KIND_SAYS = {
   mechanism: 'A mechanism question: follow your book’s cause and effect one step along.',
   threshold: 'A threshold question: the value your book uses to define it, and which side of the cut-off.',
   most: 'A “most common” question: the one your book ranks first.',
+  choice: 'A first-choice question: what your book says to use first — the drug, the test, the treatment.',
+  avoid: 'A contraindication question: what your book says must not be used here.',
   except: 'An EXCEPT question: three options are on your book’s list; find the one that is not.',
   'define-back': 'A definition question: the term your book defines in these words.',
   define: 'A definition question: the words your book defines it with.',
@@ -1157,7 +1202,8 @@ var ASK_SOMETHING = 'A question on this section: one option is what your book sa
    candidate's real kind in the coach suite. */
 var KIND_SHAPES = [
   ['mechanism', /^Follow the mechanism in your book: /], ['threshold', /^In your book, what .+ defines .+\?$/],
-  ['most', /^What is the most /], ['except', / EXCEPT:$/], ['define-back', /^Which term is defined as /],
+  ['most', /^What is the most /], ['choice', /^What is the (?:first[- ]line|treatment of choice|drug of choice|test of choice|investigation of choice|gold standard|mainstay of) /],
+  ['avoid', /^Which is contraindicated /], ['except', / EXCEPT:$/], ['define-back', /^Which term is defined as /],
   ['define', /^Which best describes /], ['member', /^Which of the following is one of the /], ['table', /^In the table, what is the /],
   ['number', /^Which value completes this statement from your book\?$/], ['term', /^Which term completes this statement from your book\?$/],
   ['true', /^Which statement about .+ is correct\?$/], ['source', /^Which of these statements is from /],
@@ -1325,7 +1371,7 @@ var MemCoach = {
   OPTIONS: OPTIONS, PER_KIND: PER_KIND, QUIZ_SIZE: QUIZ_SIZE, KIND_ORDER: KIND_ORDER, family: family, FLIP: FLIP, keyTermOf: keyTermOf,
   sentences: sentences, keySentences: keySentences, yieldOf: yieldOf, YIELD: YIELD, lists: lists, patternQuestions: patternQuestions, defined: defined, toks: toks,
   rankedTerms: rankedTerms, frequencies: frequencies, bare: bare, numberFacts: numberFacts, mnemonicsOf: mnemonicsOf,
-  pools: pools, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
+  pools: pools, kinOf: kinOf, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
   lesson: lesson, quiz: quiz, exam: exam, flow: flow, paths: paths, tree: tree,
   reteach: reteach, sentenceAbout: sentenceAbout,
   recallCards: recallCards, KIND_SAYS: KIND_SAYS, questionKind: questionKind, explainQuestion: explainQuestion, explainSection: explainSection,
