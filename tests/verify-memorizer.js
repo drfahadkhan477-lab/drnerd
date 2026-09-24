@@ -1077,6 +1077,26 @@ function kindOf(user) {
     await page.locator('#agent-weak-items').waitFor(T);
     ok('asked where you are weak, the Coach names the items still weak with their type and misses, and offers their round',
        /Weak: .*Type E · 3 misses/.test(await text(page, '#agent-weak-items')) && /Review round:/.test(await text(page, '#agent-weak-items')), await text(page, '#agent-weak-items'));
+    /* The new tools, by the rules (no model here). */
+    const sayP = async m => { const n = await page.locator('.turn').count(); await page.fill('#ask-q', m); await page.locator('#ask-go').click();
+      await page.waitForFunction(k => document.querySelectorAll('.turn').length > k, n, T); };
+    await sayP('why did I get that wrong?');
+    const mist = await text(page, '#agent-latest');
+    const want = await page.evaluate(() => MemAgent.mistakes(Memorizer.ui.docs, Memorizer.ui.sessions, 3));
+    ok('"why did I get that wrong?": each miss still open, by its type, what the type means and its fix', await page.locator('.turn').last().getAttribute('data-tool') === 'mistake' &&
+       want.length > 0 && await page.locator('#agent-mistakes li').count() === want.length &&
+       want.every(m => mist.indexOf(m.label) !== -1 && mist.indexOf('Type ' + m.type + ' · ' + m.name) !== -1 && mist.indexOf(m.means) !== -1 && mist.indexOf('Fix: ' + m.fix) !== -1),
+       mist.slice(0, 240));
+    await sayP('what is due this week');
+    const week = await page.$$eval('#agent-week li', ls => ls.map(l => l.getAttribute('data-n')));
+    const dueToday = await page.evaluate(() => MemSession.dueCards(Memorizer.ui.cards, FSRS.todayISO()).length);
+    ok('"what is due this week": seven days, today counting every card due now', week.length === 7 && +week[0] === dueToday && /Today/.test(await text(page, '#agent-week')),
+       JSON.stringify(week) + ' today ' + dueToday);
+    const roundN = await page.evaluate(() => MemAgent.weakItems(Memorizer.ui.docs, Memorizer.ui.sessions, 3).filter(w => w.review > 0)[0].review);
+    await sayP('start a review round');
+    await page.waitForFunction(() => Memorizer.ui.state && Memorizer.ui.state.review && Memorizer.ui.view === 'session', null, T).catch(() => {});
+    ok('"start a review round": the unit opens, its round begun, every weak item a round can ask in it', await page.evaluate(n => Memorizer.ui.state.phase === 'review' &&
+       Memorizer.ui.state.review.queue.length === n, roundN), await page.evaluate(() => Memorizer.ui.state && Memorizer.ui.state.phase));
     /* A returning user: their session was saved by the version before the
        weak list. It must carry on, not start again from nothing. */
     const kept = await page.evaluate(async snap => {
@@ -1415,11 +1435,27 @@ function kindOf(user) {
        dl2.suggestedFilename());
     await p2.locator('.figure-view').getByRole('button', { name: 'Close' }).click();
 
+    head('what the coach remembers: section titles and tools, on this iPad, until forgotten');
+    await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
+    await p2.locator('#coach-memory').waitFor(T).catch(() => {});
+    const memNow = await p2.locator('#coach-memory').count() ? await text(p2, '#coach-memory') : '';
+    ok('it remembers the sections the tools landed on', memNow.indexOf(afterTitle) !== -1 && /Section One Preload/.test(memNow), memNow);
+    const memRec = await p2.evaluate(() => MemStore.get('meta', 'coach-profile').then(r => JSON.stringify(r)));
+    ok('and never what was typed: no message, no search, not the topic the book lacked', !/zebra|what reduces|quiz me|explain/i.test(memRec.replace(/"explain":\d+/g, '')) && /"quiz":\d/.test(memRec), memRec.slice(0, 200));
+    await p2.reload();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
+    await p2.locator('#coach-memory').waitFor(T).catch(() => {});
+    ok('it is kept across a reload', await p2.locator('#coach-memory').count() === 1 && (await text(p2, '#coach-memory')).indexOf(afterTitle) !== -1);
+    await p2.locator('#coach-forget').click();
+    await p2.locator('#coach-memory').waitFor({ state: 'detached', timeout: 60000 }).catch(() => {});
+    ok('and Forget forgets it, on screen and on the device', await p2.locator('#coach-memory').count() === 0 && await p2.evaluate(() => MemStore.get('meta', 'coach-profile')) == null);
+
     head('the on-device AI tutor: everything it writes checked against the book');
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#ai-card').waitFor(T);
-    ok('Settings offers it, off, with two Qwen3 models, both Apache-2.0', (await p2.locator('#ai-toggle').innerText()) === 'Turn on' &&
-       JSON.stringify(await p2.$$eval('#ai-model option', os => os.map(o => /^Qwen3 /.test(o.textContent) && /Apache-2\.0/.test(o.textContent)))) === '[true,true]');
+    ok('Settings offers it, off, with three Qwen3 models — 0.6B, 1.7B and 4B — all Apache-2.0', (await p2.locator('#ai-toggle').innerText()) === 'Turn on' &&
+       JSON.stringify(await p2.$$eval('#ai-model option', os => os.map(o => /^Qwen3 /.test(o.textContent) && /Apache-2\.0/.test(o.textContent)))) === '[true,true,true]' &&
+       /^Qwen3 4B/.test(await p2.locator('#ai-model option').nth(2).innerText()));
     ok('the real AI engine downloads, passes its integrity check, and loads from a local file', await p2.evaluate(() => MemLLM.loadLib().then(m => typeof m.CreateMLCEngine, e => 'failed: ' + e.message)) === 'function');
     const known = await p2.evaluate(() => MemLLM.loadLib().then(m => MemLLM.MODELS.map(x => x.id).concat([MemLLM.EMBED.id]).filter(id => !m.prebuiltAppConfig.model_list.some(r => r.model_id === id))));
     ok('every model offered is one the pinned engine knows', known.length === 0, JSON.stringify(known));
@@ -1432,7 +1468,15 @@ function kindOf(user) {
         const u = req.messages[1].content; window.__ai.push(u);
         window.__thinkOn = window.__thinkOn || !(req.extra_body && req.extra_body.enable_thinking === false);
         let out = '';
-        if (/You route a student/.test(u)) out = /get ready on preload/.test(u) ? '{"tool":"quiz","topic":"preload","topics":[]}' : '{"tool":"prescribe","topic":"x"}';
+        if (/You are the coach in a study app/.test(u)) {
+          const tool = (t, topic) => JSON.stringify({ action: 'tool', tool: t, topic, topics: [] });
+          if (/Message: help me get ready on preload/.test(u)) out = /Result \[1\]/.test(u) ? '{"action":"shout"}' : tool('quiz', 'preload');
+          else if (/Message: what lowers preload, and a mnemonic for it/.test(u)) {
+            if (!/Result \[1\]/.test(u)) out = tool('search', 'what reduces preload');
+            else if (!/Result \[2\]/.test(u)) out = tool('explain', 'preload');
+            else out = JSON.stringify({ action: 'answer', answer: 'Diuretics reduce preload by lowering circulating volume [1]. Furosemide 40 mg is the dose [1]. It works well.' });
+          } else out = JSON.stringify({ action: 'tool', tool: 'prescribe', topic: 'x' });
+        }
         else if (/Answer the question in 2 to 4/.test(u)) {
           const k = (u.split('\n').find(l => /Diuretics reduce preload/.test(l)) || '[1]').match(/^\[(\d+)\]/)[1];
           out = `<think>The passage says 99 mmHg, so I will say that [${k}].</think>Diuretics reduce preload by lowering circulating volume [${k}]. Diuretics reduce preload by 75 percent [${k}]. Nitrates reduce preload too [${k}]. It works well.`;
@@ -1454,17 +1498,28 @@ function kindOf(user) {
     ok('its summary keeps the sentence that says what the book says, with its citation', /Diuretics reduce preload by lowering circulating volume\. \[\d\]/.test(sumText), sumText.slice(0, 160));
     ok('and drops a made-up number, a drug the passage never names, and a sentence citing nothing — and says so', !/75|Nitrates|works well/.test(sumText) &&
        /3 sentences dropped/.test(sumText), sumText.slice(0, 200));
-    /* With the AI on, it reads the message first; its choice is used only when it names a real tool. */
+    /* With the AI on, the Coach is the model's loop: it names each next tool, sees what it found, and answers;
+       a step is used only when it names a real tool, and its answer only as it holds to what the tools found. */
     const say2 = async m => { const n = await p2.locator('.turn').count(); await p2.fill('#ask-q', m); await p2.locator('#ask-go').click();
       await p2.waitForFunction(k => document.querySelectorAll('.turn').length > k, n, T); };
     await say2('help me get ready on preload');
     ok('with the AI on, it reads the message: a request the rules would search is understood as a quiz, and says so', await p2.locator('.turn').last().getAttribute('data-tool') === 'quiz' &&
        /^✨/.test(await text(p2, '#agent-latest .agent-steps')) && /Preload/i.test(await text(p2, '#agent-latest .agent-steps')) &&
        await p2.evaluate(() => MemAgent.plan('help me get ready on preload', {}).tool) === 'search');
+    const turnsBefore = await p2.locator('.turn').count();
+    await p2.fill('#ask-q', 'what lowers preload, and a mnemonic for it'); await p2.locator('#ask-go').click();
+    await p2.locator('.turn[data-tool="answer"]').waitFor(T).catch(() => {});
+    const loopTurns = await p2.$$eval('.turn', (ts, k) => ts.slice(k).map(t => t.getAttribute('data-tool') + ':' + (t.querySelector('.agent-steps') || {}).textContent), turnsBefore);
+    ok('it uses two tools in turn — a search, then the section explained — each numbered as a step', loopTurns.length === 3 && /^search:Step 1 · ✨ Searched your book/.test(loopTurns[0]) &&
+       /^explain:Step 2 · ✨ Used: explain · .*Preload$/.test(loopTurns[1]) && /^answer:/.test(loopTurns[2]), JSON.stringify(loopTurns));
+    const loopAns = (await p2.locator('#agent-answer').count()) ? await text(p2, '#agent-latest') : '';
+    ok('its answer keeps the sentence the search found, cited to its step, and drops a dose and a claim resting on nothing — and says so',
+       /Diuretics reduce preload by lowering circulating volume\. \[1\]/.test(loopAns) && !/40|works well/.test(loopAns) && /2 sentences dropped/.test(loopAns), loopAns.slice(0, 220));
+    ok('and only the first step shows the question: the rest continue the same turn', await p2.$$eval('.turn', (ts, k) => ts.slice(k).map(t => t.querySelectorAll('.bubble.mine').length).join(), turnsBefore) === '1,0,0');
     await say2('what causes pulmonary oedema');
     ok('and a tool it makes up is thrown away: the rules decide, and the book answers', await p2.locator('.turn').last().getAttribute('data-tool') === 'search' &&
        /^🧭/.test(await p2.locator('.turn').last().locator('.agent-steps').innerText()) && await p2.locator('#answer, #not-found').count() === 1,
-       await p2.locator('.turn').last().locator('.agent-steps').innerText());
+       await p2.locator('.turn').last().locator('.agent-steps').innerText() + ' | ' + JSON.stringify(await p2.$$eval('.turn', ts => ts.slice(-5).map(t => t.getAttribute('data-tool')))));
     await p2.locator('#read-more li button').first().click();
     await p2.locator('#big-idea').waitFor(T);
     ok('the AI tutor is not in the lesson’s flow any more', await p2.locator('main #ai-lesson').count() === 0);
@@ -1491,7 +1546,7 @@ function kindOf(user) {
     await p2.locator('.option[data-i="' + qz[0].answer + '"]').click();
     ok('and the explanation shown is the book\u2019s sentence with its page, not the model\u2019s', /Why: Diuretics reduce preload by lowering circulating volume\./.test(await p2.locator('.why').innerText()) &&
        (await p2.locator('.why .pg').innerText()) === 'p.1');
-    ok('and none of it went over the network', stub.requests.length === aiNet && await p2.evaluate(() => window.__ai.filter(u => !/You route a student/.test(u)).length) === 4,
+    ok('and none of it went over the network', stub.requests.length === aiNet && await p2.evaluate(() => window.__ai.filter(u => !/You are the coach in a study app/.test(u)).length) === 4,
        String(await p2.evaluate(() => window.__ai.length)));
     ok('every request asks Qwen3 not to reason aloud; its <think> is removed before checking', await p2.evaluate(() => window.__thinkOn) === false && !/99|think/i.test(sumText));
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();

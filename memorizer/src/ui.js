@@ -74,13 +74,14 @@ function builtin() { return !Provider.needsKey(cfg()); }
 function docsChanged() { ui.docsStale = true; ui.pearlCache = null; }
 function refresh() {
   return Promise.all([ui.docsStale ? Store.all('docs') : Promise.resolve(null), Store.all('cards'), Store.all('sessions'),
-                      Store.all('books'), Store.get('meta', 'days')]).then(function (r) {
+                      Store.all('books'), Store.get('meta', 'days'), Store.get('meta', 'coach-profile')]).then(function (r) {
     if (r[0]) { ui.docs = r[0].sort(function (a, b) { return b.addedAt - a.addedAt; }); ui.docsStale = false; }
     ui.cards = r[1];
     ui.sessions = {}; ui.at = {};
     r[2].forEach(function (x) { ui.sessions[x.id] = x.state; ui.at[x.id] = x.at || 0; });
     ui.books = r[3].sort(function (a, b) { return b.addedAt - a.addedAt; });
     ui.days = r[4] && Array.isArray(r[4].days) ? r[4].days : legacyDays();
+    ui.profile = r[5] && r[5].profile || null;
   });
 }
 /* The session and the cards it made are stored in one transaction
@@ -1692,42 +1693,90 @@ function byMeaning(idx, q) {
    A message is read (by the on-device model when it is on, else by the
    rules), a tool is chosen and used on the book, and the answer joins the
    conversation; the topic is remembered for "quiz me on that". */
-function planFor(q) {
-  if (!(aiOn() && LLM.ready())) return Promise.resolve(Agent.plan(q, ui.memory || {}));
-  return LLM.chat('You route messages for a study app. Reply only with JSON.', Agent.planPrompt(q, ui.memory || {}), Agent.PLAN_SCHEMA, 80)
-    .then(function (t) { return Agent.parsePlan(t); }, function () { return null; })
-    .then(function (p) { return p || Agent.plan(q, ui.memory || {}); });
-}
-/* THE LOOP (agent.js clauses / afterStep): a message is split into its
-   steps; each is planned when its turn comes, with the memory the step
-   before left; after each, what it found decides whether to act again.
-   Every step is a turn in the conversation, numbered when there is more
-   than one. */
 function askNow(q) {
   ui.askQ = q;
   if (!q.trim()) { ui.askR = null; render(); return; }
   ui.turns = ui.turns || []; ui.memory = ui.memory || {};
   return askIndex().then(function (idx) {
-    var queue = Agent.clauses(q).map(function (c) { return { clause: c }; });
-    var multi = queue.length > 1, n = 0, mine = [];
-    function step() {
-      if (!queue.length || n >= Agent.MAX_STEPS + 2) { render(); return; }
-      var item = queue.shift(); n++;
-      return (item.plan ? Promise.resolve(item.plan) : planFor(item.clause)).then(function (p) {
-        var turn = { q: n === 1 ? q : null, plan: p, step: n, multi: multi || !!p.recovered };
-        /* a recovery makes a one-step message several: number the steps already shown */
-        if (p.recovered) { multi = true; mine.forEach(function (t) { t.multi = true; }); }
-        mine.push(turn);
-        return (p.tool === 'search' ? searchStep(idx, p, item.clause || p.topic, turn) : Promise.resolve(toolStep(idx, p, turn))).then(function (obs) {
-          ui.turns.push(turn); render();
-          var nx = Agent.afterStep(p, obs);
-          if (nx) queue.unshift({ plan: nx });
-          return step();
-        });
-      });
-    }
-    return step();
+    return aiOn() && LLM.ready() ? modelLoop(idx, q) : clauseLoop(idx, q);
   });
+}
+/* The rules' loop (agent.js clauses / afterStep): the message as steps,
+   each planned when its turn comes, with what the last one found. */
+function clauseLoop(idx, q) {
+  var queue = Agent.clauses(q).map(function (c) { return { clause: c }; });
+  var multi = queue.length > 1, n = 0, mine = [];
+  function step() {
+    if (!queue.length || n >= Agent.MAX_STEPS + 2) { render(); return; }
+    var item = queue.shift(); n++;
+    var p = item.plan || Agent.plan(item.clause, ui.memory);
+    var turn = { q: n === 1 ? q : null, plan: p, step: n, multi: multi || !!p.recovered };
+    /* a recovery makes a one-step message several: number the steps already shown */
+    if (p.recovered) { multi = true; mine.forEach(function (t) { t.multi = true; }); }
+    mine.push(turn);
+    return (p.tool === 'search' ? searchStep(idx, p, item.clause || p.topic, turn) : Promise.resolve(toolStep(idx, p, turn))).then(function (obs) {
+      ui.turns.push(turn); recordTurn(p.tool, titlesOf(turn)); render();
+      var nx = Agent.afterStep(p, obs);
+      if (nx) queue.unshift({ plan: nx });
+      return step();
+    });
+  }
+  return step();
+}
+/* The on-device model's loop (agent.js run): it names each next tool
+   having seen what the last ones found, then answers — and its answer is
+   shown only as far as it holds to those results (ground.js). A first
+   reply that is not a usable step hands the message to the rules' loop. */
+function modelLoop(idx, q) {
+  var n = 0, mine = [];
+  return Agent.run(q, { memory: ui.memory, profile: coachProfileLine(),
+    think: function (prompt) {
+      ui.askBusy = true; ui.askBusyText = 'Thinking…'; render();
+      return LLM.chat('You are the coach in a study app. Reply only with JSON.', prompt, Agent.LOOP_SCHEMA, 240)
+        .then(function (t) { ui.askBusy = false; return t; }, function (e) { ui.askBusy = false; throw e; });
+    },
+    act: function (p) {
+      n++;
+      var turn = { q: n === 1 ? q : null, plan: p, step: n, multi: n > 1 };
+      if (n === 2) mine[0].multi = true;
+      mine.push(turn);
+      return (p.tool === 'search' ? searchStep(idx, p, n === 1 ? q : p.topic || q, turn) : Promise.resolve(toolStep(idx, p, turn))).then(function () {
+        ui.turns.push(turn); recordTurn(p.tool, titlesOf(turn)); render();
+        return { observation: Agent.observe(p.tool, obsData(turn)), turn: turn };
+      });
+    },
+    check: function (text, obs) { return Ground.summary(text, obs.map(function (o) { return { text: o }; })); },
+    rules: function () { return clauseLoop(idx, q); },
+  }).then(function (res) {
+    if (res.answer) ui.turns.push({ q: null, plan: { tool: 'answer', by: 'ai' }, answer: res.answer });
+    render();
+  });
+}
+/* What a step's turn tells the model (agent.js observe). */
+function obsData(t) {
+  var title = t.at ? t.at.sec.title : '';
+  switch (t.plan.tool) {
+    case 'explain': return t.at ? { explain: t.explain, title: title } : {};
+    case 'quiz': return t.at ? { quiz: t.quiz, title: title } : {};
+    case 'mnemonic': return t.at ? { mnemonics: t.at.L.mnemonics || [], title: title } : {};
+    case 'numbers': return t.at ? { sheet: t.sheet, title: title } : {};
+    case 'open': return { title: title };
+    case 'compare': return { rows: (t.rows || []).map(function (r) { return { title: r.sec.title, bigIdea: Sheet.sheetOf(r.L).bigIdea }; }) };
+    default: return t;
+  }
+}
+function titlesOf(t) {
+  return t.found ? [t.found] : t.at ? [t.at.sec.title] : t.rows ? t.rows.map(function (r) { return r.sec.title; }) : [];
+}
+/* What the coach remembers (agent.js remember): the tools used and the
+   book's section titles they landed on — never what was typed. */
+function recordTurn(tool, titles) {
+  ui.profile = Agent.remember(ui.profile, tool, titles);
+  Store.put('meta', { id: 'coach-profile', profile: ui.profile });
+}
+function coachProfileLine() {
+  var w = Agent.weakItems(ui.docs, ui.sessions || {}, 3)[0];
+  return Agent.profileLine(ui.profile, w ? w.line : '');
 }
 /* A search step: the reader's own words (unless it only follows on), or,
    recovering, the topic by meaning alone. What it found is the observation. */
@@ -1738,6 +1787,7 @@ function searchStep(idx, p, clause, turn) {
     ui.askR = r; turn.r = r;
     var title = r.found && r.sections.length ? idx.sections[r.sections[0]].title : '';
     if (title) ui.memory.topic = title;
+    turn.found = title;
     return { section: title, missing: !title, meaning: meaningOn() };
   };
   if (!meaningOn()) return Promise.resolve(done(p.meaningOnly ? { found: false, groups: [], sections: [], question: query } : Ask.ask(idx, query)));
@@ -1764,7 +1814,7 @@ function toolStep(idx, p, turn) {
 }
 /* A tool used on the book: what it found, kept with the turn. */
 function lessonFor(docRec, ci) {
-  var st = ui.sessions && ui.sessions[docRec.id] && ui.sessions[docRec.id].state;
+  var st = ui.sessions && ui.sessions[docRec.id];
   return st && st.per && st.per[ci] && st.per[ci].lesson || Coach.lesson(docRec.clusters[ci]);
 }
 function sectionOf(idx, topic) {
@@ -1790,9 +1840,31 @@ function agentTurn(idx, p, q) {
     if (p.tool === 'numbers') t.sheet = Sheet.sheetOf(t.at.L);
     if (p.tool === 'open') setTimeout(function () { openDoc(t.at.doc.id, t.at.ci); }, 600);
   }
+  var day = today();
+  if (p.tool === 'weak') { t.items = Agent.weakItems(ui.docs, ui.sessions || {}, 3); t.spots = Home.weakSpots(ui.docs, ui.sessions || {}, ui.cards, Session.mastery, 3); }
+  if (p.tool === 'mistake') t.mistakes = Agent.mistakes(ui.docs, ui.sessions || {}, 3);
+  if (p.tool === 'schedule') t.week = Agent.schedule(ui.cards, day);
+  if (p.tool === 'review') t.due = Session.dueCards(ui.cards, day).length;
+  if (p.tool === 'plan') t.planText = planText();
+  if (p.tool === 'round') {
+    /* the unit with the most a round can ask; it opens there, the round begun */
+    var w = Agent.weakItems(ui.docs, ui.sessions || {}, 3).filter(function (x) { return x.review > 0; })[0];
+    t.round = w ? { started: true, n: w.review, name: w.name, docId: w.docId } : { started: false };
+    if (w) setTimeout(function () { openDoc(w.docId).then(function () { return go({ type: 'toReview' }); }).then(null, function (e) { ui.error = (e && e.message) || String(e); render(); }); }, 600);
+  }
   return t;
 }
+/* The plan in words, for the model: the same three steps coachActions shows. */
+function planText() {
+  var spots = Home.weakSpots(ui.docs, ui.sessions || {}, ui.cards, Session.mastery, 1);
+  var due = Session.dueCards(ui.cards, today()).length;
+  var cur = Home.current(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), ui.sessions || {});
+  return [cur ? 'Carry on with ' + cur.doc.name + (cur.next ? ' (next: ' + cur.next + ')' : '') + '.' : '',
+    spots[0] ? 'Relearn the weakest section: ' + spots[0].title + ' (' + spots[0].pct + '%).' : '',
+    due ? 'Review ' + due + ' due card' + (due === 1 ? '' : 's') + '.' : ''].filter(Boolean).join(' ') || 'Add a chapter and start its first section.';
+}
 function turnView(t, idx, latest) {
+  if (t.plan.tool === 'answer') return answerView(t, latest);
   var p = t.plan, title = t.at ? t.at.sec.title : t.rows && t.rows.length ? t.rows.map(function (r) { return r.sec.title; }).join('” and “') : '';
   var body = [];
   var steps = h('p.agent-steps', t.multi ? 'Step ' + t.step + ' · ' : '', p.by === 'ai' ? '✨ ' : '🧭 ',
@@ -1802,6 +1874,14 @@ function turnView(t, idx, latest) {
   var missing = (t.at === null || (t.rows && !t.rows.length)) && p.tool !== 'search';
   if (missing) body.push(h('p', 'I couldn’t find “' + (p.topic || (p.topics || []).join(', ')) + '” in your book. Try the name of the condition, test or drug.'));
   else if (p.tool === 'help' || p.tool === 'weak' || p.tool === 'plan' || p.tool === 'review') body.push(coachActions(p.tool));
+  else if (p.tool === 'mistake') body.push(t.mistakes.length ? h('ul.agent-mistakes', { id: latest ? 'agent-mistakes' : null }, t.mistakes.map(function (m) {
+      return h('li', h('p', h('strong', m.label), ' ', h('span.type-badge', 'Type ' + m.type + ' · ' + m.name), m.confusedWith ? ' — confused with ' + m.confusedWith : ''),
+        h('p.muted', m.means + ' ', h('strong', 'Fix: '), m.fix));
+    })) : h('p', 'No misses yet: drill a section and I’ll tell you why any go wrong.'));
+  else if (p.tool === 'schedule') body.push(h('ol.agent-week', { id: latest ? 'agent-week' : null }, t.week.map(function (d) {
+      return h('li', { 'data-n': String(d.n) }, h('span.week-day', d.label), h('span.week-bar', h('i', { style: 'width:' + Math.min(100, d.n * 10) + '%' })), h('strong', String(d.n)));
+    })));
+  else if (p.tool === 'round') body.push(t.round.started ? h('p.muted', 'Opening ' + t.round.name + ' for a round of ' + t.round.n + '…') : h('p', 'Nothing is on the weak list: drill a section first.'));
   else if (p.tool === 'explain') {
     var e = t.explain;
     body.push(e.gist ? h('p', h('strong', 'In one line: '), marked(e.gist)) : null, e.chain ? h('p', h('strong', 'How it works: '), e.chain) : null,
@@ -1839,6 +1919,19 @@ function turnView(t, idx, latest) {
     t.q ? h('div.you', h('div.bubble.mine', t.q)) : null,
     p.tool === 'search' ? steps : h('div.coach-says', h('div.coach-avatar.small', mascot()),
       h('div.bubble.agent' + (latest ? '.latest' : ''), { id: latest ? 'agent-latest' : null }, steps, h('p', Agent.say(p, title)), body)));
+}
+/* The model's answer: each sentence it wrote that held to the step results
+   it cites (ground.js), with their step numbers; the rest dropped, and
+   counted. */
+function answerView(t, latest) {
+  var a = t.answer;
+  return h('div.turn', { 'data-tool': 'answer' }, h('div.coach-says', h('div.coach-avatar.small', mascot()),
+    h('div.bubble.agent.agent-answer' + (latest ? '.latest' : ''), { id: latest ? 'agent-latest' : null },
+      h('p.agent-steps', '✨ Answer, from the steps above'),
+      a.kept.length ? h('p', { id: latest ? 'agent-answer' : null }, a.kept.map(function (k) { return [k.text, ' ', h('sup.cite', k.cites.map(function (n) { return '[' + n + ']'; }).join(''))]; })
+        .reduce(function (x, y) { return x.concat([' '], y); }))
+        : h('p.muted', 'Nothing it wrote could be checked against what the steps found, so nothing is shown.'),
+      aiNote(a.kept, a.dropped.length))));
 }
 function coachActions(tool) {
   var spots = Home.weakSpots(ui.docs, ui.sessions || {}, ui.cards, Session.mastery, 3);
@@ -1936,6 +2029,8 @@ function viewAsk() {
       h('div.bubble', h('p', h('strong', 'I’m your coach. '), 'Ask me anything about your book, or tell me what to do — “explain preload”, “quiz me on heart failure”, “compare aortic stenosis and regurgitation”, “what should I study?”. I answer from your book, with the page, or say it isn’t there. ' +
         (ai ? 'My on-device AI can summarise and explain, and everything it says is checked against the book.' : 'Turn on the on-device AI in Settings and I can also summarise and explain.')),
         h('p.muted', 'Search: ' + (meaning ? 'by words and by meaning.' : 'by words. Turn on search by meaning in Settings to find ideas phrased differently.')),
+        ui.profile && ui.profile.turns ? h('p.muted', { id: 'coach-memory' }, 'What I remember, on this iPad only: ' + (Agent.profileLine(ui.profile, '') || 'nothing yet') + ' ',
+          button('Forget', function () { ui.profile = null; Store.del('meta', 'coach-profile').then(function () { render(); }); }, 'quiet', { id: 'coach-forget' })) : null,
         h('div.chips.suggest', suggest))),
     h('div.card.ask-card', h('div.row.ask-row', input, button('Ask', function () { askNow(doc.getElementById('ask-q').value); }, 'primary', { id: 'ask-go' })),
       h('p.muted', 'Found on this device, never sent anywhere.')),
@@ -2037,7 +2132,7 @@ function aiSettingsCard() {
     return h('option', { value: m.id, selected: m.id === c.model }, m.label + ' — about ' + (m.mb >= 1000 ? (m.mb / 1000).toFixed(1) + ' GB' : m.mb + ' MB') + ' · ' + m.licence);
   }));
   return h('div.card.settings.ai-card', { id: 'ai-card' }, h('h2', '✨ On-device AI tutor'),
-    h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. It needs no key and, once downloaded, no connection.'),
+    h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. It also runs your Coach as an agent: it can use several of the Coach’s tools on your book before it answers, and what it says is checked against what they found. It needs no key and, once downloaded, no connection.'),
     h('p', h('strong', 'It is not a source of facts. '), 'Every sentence it writes is checked against your book before you see it: no number and no disease, test or drug the book passage does not have, and a question is kept only when your book states its answer — and the book\u2019s own sentence is shown as the explanation. What fails the check is dropped and counted.'),
     h('label', 'Model', model),
     h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr; the model itself comes from Hugging Face through that engine, which does not check it against a hash, and is kept in this browser\u2019s cache.'),

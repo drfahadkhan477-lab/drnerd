@@ -84,7 +84,6 @@ head('the model’s plan, used only when it names a real tool');
   ok('a comparison without its two topics is thrown away', G.parsePlan('{"tool":"compare","topic":"x","topics":["a"]}') === null &&
      JSON.stringify(G.parsePlan('{"tool":"compare","topics":["a","b"]}').topics) === '["a","b"]');
   ok('a topic is cut to 80 characters', G.parsePlan(JSON.stringify({ tool: 'search', topic: 'x'.repeat(300) })).topic.length === 80);
-  ok('the prompt lists every tool and the remembered topic', G.TOOLS.every(t => G.planPrompt('hi', { topic: 'preload' }).indexOf(t) !== -1) && /last topic was: preload/.test(G.planPrompt('hi', { topic: 'preload' })));
 }
 
 head('a topic finds its section');
@@ -155,5 +154,158 @@ head('the loop: a message of several steps, each decided by what the last found'
      G.afterStep({ tool: 'search', topic: 'q' }, { section: 'Syncope' }) === null && G.afterStep({ tool: 'weak', topic: '' }, {}) === null);
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+head('the new tools: why I missed it, a review round, the week ahead');
+{
+  const CASES = [
+    ['why did I get that wrong?', 'mistake'], ['explain my mistakes', 'mistake'], ['why do I keep missing preload', 'mistake'],
+    ['start a review round', 'round'], ['drill my weak items', 'round'], ['retest my weak points', 'round'],
+    ['what is due this week', 'schedule'], ['what cards do I have tomorrow', 'schedule'], ['show my review schedule', 'schedule'],
+    ['what do I get wrong', 'weak'], ['review my cards', 'review'], ['where am I weakest?', 'weak'],
+  ];
+  const wrong = CASES.filter(([m, t]) => G.plan(m, {}).tool !== t).map(([m, t]) => m + ' → ' + G.plan(m, {}).tool + ' (not ' + t + ')');
+  ok(`each of ${CASES.length} messages reaches its tool, and the old ones still reach theirs`, wrong.length === 0, wrong.join(' | '));
+  ok('every tool has a line the model is told', G.TOOLS.every(t => typeof G.DESCRIBE[t] === 'string' && G.DESCRIBE[t].length > 10) && G.TOOLS.length === 14);
+  ok('and something to say', ['mistake', 'round', 'schedule'].every(t => G.say({ tool: t }, '') !== G.say({ tool: 'search' }, '')));
+
+  const W = (id, types, hits, extra) => Object.assign({ id, cluster: 0, source: 'drill', label: 'item ' + id, misses: types.length, hits, types, confusedWith: '', order: +id.slice(1) }, extra || {});
+  const docs = [{ id: 'u1', name: 'Valves' }, { id: 'u2', name: 'Failure' }];
+  const sessions = { u1: { weak: { w1: W('w1', ['N'], []), w2: W('w2', ['R'], [2, 5]), w4: W('w4', ['E', 'C'], [], { confusedWith: 'mitral' }) } },
+                     u2: { weak: { w3: W('w3', ['C', 'E'], [], { confusedWith: 'digoxin' }) } } };
+  const m = G.mistakes(docs, sessions, 5);
+  ok('why I missed it: the misses still open, latest first, graduated ones not', m.map(x => x.label).join() === 'item w4,item w3,item w1', m.map(x => x.label).join());
+  ok('each by its LATEST type, with what the type means and its fix (skill.js)', m[0].type === 'C' && m[0].name === 'Confusion' && /different item/.test(m[0].means) && /side by side/.test(m[0].fix) &&
+     m[1].type === 'E' && m[1].name === 'Encoding' && m[2].type === 'N', m.map(x => x.type).join());
+  ok('and what it was confused with, only when the type is C', m[0].confusedWith === 'mitral' && m[1].confusedWith === '');
+  ok('at most the number asked for', G.mistakes(docs, sessions, 2).length === 2 && G.mistakes(docs, {}, 3).length === 0);
+
+  /* Measured east of UTC: in UTC itself (as CI runs) a local-time date
+     would pass by coincidence — local midnight is UTC midnight. */
+  const tzWas = process.env.TZ; process.env.TZ = 'Asia/Karachi';
+  ok('days step in UTC across a month, a year and a clock change', new Date(2026, 0, 1).getTimezoneOffset() === -300 && G.addDays('2026-01-31', 1) === '2026-02-01' && G.addDays('2026-12-31', 1) === '2027-01-01' &&
+     G.addDays('2026-03-28', 2) === '2026-03-30' && G.addDays('2026-10-24', 7) === '2026-10-31');
+  const cards = [{ srs: null }, { srs: { due: '2026-09-20' } }, { srs: { due: '2026-09-24' } }, { srs: { due: '2026-09-25' } }, { srs: { due: '2026-09-30' } }, { srs: { due: '2026-10-01' } }];
+  const wk = G.schedule(cards, '2026-09-24');
+  ok('the week ahead: new, overdue and due-today cards all count as today', wk[0].n === 3 && wk[0].label === 'Today' && wk[1].n === 1 && wk[1].label === 'Tomorrow', JSON.stringify(wk.map(d => d.n)));
+  ok('a card due a week out is not in the week; one on its last day is', wk.length === 7 && wk[6].day === '2026-09-30' && wk[6].n === 1 && wk.reduce((a, d) => a + d.n, 0) === 5);
+  if (tzWas === undefined) delete process.env.TZ; else process.env.TZ = tzWas;
+}
+
+head('the agent loop: several tools, then an answer held to the book');
+{
+  const Ground = require(path.join(ROOT, 'memorizer', 'src', 'ground.js'));
+  const check = (text, obs) => Ground.summary(text, obs.map(o => ({ text: o })));
+  const OBS = { 'search|aortic stenosis': 'Calcific degeneration is the most common cause of aortic stenosis in older adults (p.1).',
+                'explain|aortic stenosis': 'Aortic Stenosis: a narrowing of the aortic valve.', 'open|syncope': 'Opened Syncope.' };
+  const mk = (replies, extra) => {
+    const prompts = [], acted = [];
+    const o = Object.assign({ memory: {}, profile: '',
+      think: p => { prompts.push(p); const r = replies[prompts.length - 1]; return r instanceof Error ? Promise.reject(r) : Promise.resolve(r === undefined ? '' : r); },
+      act: p => { acted.push(p); return Promise.resolve({ observation: OBS[p.tool + '|' + (p.topic || '').toLowerCase()] || 'Not found in the book.', turn: { tool: p.tool } }); },
+      check }, extra || {});
+    return { o, prompts, acted };
+  };
+  const T = (tool, topic) => JSON.stringify({ action: 'tool', tool, topic, topics: [] });
+  const A2 = t => JSON.stringify({ action: 'answer', answer: t });
+  const runs = [];
+
+  {
+    const x = mk([T('search', 'aortic stenosis'), T('explain', 'aortic stenosis'),
+      A2('Calcific degeneration is the most common cause of aortic stenosis in older adults [1]. It narrows the aortic valve [2]. Surgery cures 95 percent [1].')]);
+    runs.push(G.run('what causes aortic stenosis?', x.o).then(r => {
+      ok('it uses two tools in turn, then answers', r.by === 'ai' && r.steps.length === 2 && x.acted.map(p => p.tool).join() === 'search,explain' && r.why === 'answered', r.why + ' ' + r.steps.length);
+      ok('each step sees the results so far, numbered as it must cite them', /Result \[1\]: Calcific degeneration/.test(x.prompts[1]) && /Result \[2\]: Aortic Stenosis: a narrowing/.test(x.prompts[2]) &&
+         !/Result \[/.test(x.prompts[0]));
+      ok('its answer is kept sentence by sentence as it holds to the results it cites; a made-up number is dropped',
+         r.answer.kept.length === 2 && r.answer.dropped.length === 1 && /95/.test(r.answer.dropped[0].text), JSON.stringify(r.answer.dropped.map(d => d.why)));
+      ok('the model’s steps are marked as its own', r.steps.every(s => s.plan.by === 'ai'));
+    }));
+  }
+  {
+    const x = mk(['I would search the book.']);
+    runs.push(G.run('how is aortic stenosis treated?', x.o).then(r => ok('a first reply that is not a step: the rules decide, one tool, no answer',
+      r.by === 'rules' && r.steps.length === 1 && x.acted[0].tool === 'search' && r.answer === null && x.prompts.length === 1, r.by + ' ' + r.why)));
+  }
+  {
+    const x = mk([T('prescribe', 'x')]);
+    runs.push(G.run('quiz me on preload', x.o).then(r => ok('a made-up tool: the rules decide', r.by === 'rules' && x.acted[0].tool === 'quiz', x.acted.map(p => p.tool).join())));
+  }
+  {
+    const x = mk([A2('Aortic stenosis is common [1].')]);
+    runs.push(G.run('tell me about aortic stenosis', x.o).then(r => ok('an answer before any tool rests on nothing: the rules decide', r.by === 'rules' && r.answer === null && r.why === 'answered without the book', r.why)));
+  }
+  {
+    const x = mk([new Error('GPU lost')]);
+    runs.push(G.run('explain preload', x.o).then(r => ok('a model that throws: the rules decide', r.by === 'rules' && x.acted[0].tool === 'explain')));
+  }
+  {
+    const x = mk([T('search', 'aortic stenosis'), 'not json']);
+    runs.push(G.run('x', x.o).then(r => ok('a bad reply later ends the loop, the tools’ results standing', r.by === 'ai' && r.steps.length === 1 && r.answer === null && r.why === 'unusable reply', r.why)));
+  }
+  {
+    const x = mk([T('search', 'aortic stenosis'), T('search', 'Aortic Stenosis')]);
+    runs.push(G.run('x', x.o).then(r => ok('the same tool on the same topic twice ends it, used once', x.acted.length === 1 && r.why === 'repeated a tool', r.why)));
+  }
+  {
+    const x = mk([T('open', 'syncope'), T('search', 'more')]);
+    runs.push(G.run('teach me syncope', x.o).then(r => ok('a tool that hands the student to a screen ends the turn', r.steps.length === 1 && x.prompts.length === 1 && r.why === 'ended by open', r.why)));
+  }
+  {
+    const x = mk([T('search', 'a1'), T('search', 'a2'), T('search', 'a3'), T('search', 'a4'), T('search', 'a5')]);
+    runs.push(G.run('x', x.o).then(r => ok('at most ' + G.MODEL_STEPS + ' tools; then only an answer is taken', x.acted.length === G.MODEL_STEPS && x.prompts.length === G.MODEL_STEPS + 1 &&
+      /You may use no more tools/.test(x.prompts[G.MODEL_STEPS]) && !/"action":"tool"/.test(x.prompts[G.MODEL_STEPS]) && /"action":"tool"/.test(x.prompts[0]) && r.answer === null, x.acted.length + ' tools')));
+  }
+  {
+    const x = mk([], { think: null });
+    runs.push(G.run('where am I weakest?', x.o).then(r => ok('with no model, the rules, as before', r.by === 'rules' && r.why === 'no model' && x.acted[0].tool === 'weak')));
+  }
+  {
+    const long = 'Word '.repeat(400);
+    const x = mk([T('search', 'long'), A2('x')], { act: () => Promise.resolve({ observation: long, turn: {} }) });
+    runs.push(G.run('x', x.o).then(r => ok('a result is cut short before the model sees it', r.steps[0].observation.length === 600 && x.prompts[1].length < 4000, String(r.steps[0].observation.length))));
+  }
+  {
+    let handed = null;
+    const x = mk(['not a step'], { rules: why => { handed = why; } });
+    runs.push(G.run('explain preload and quiz me on it', x.o).then(r => ok('given its own rules loop, an unusable first reply hands the whole message to it, and acts on nothing itself',
+      handed === 'unusable reply' && x.acted.length === 0 && r.by === 'rules' && r.steps.length === 0, String(handed))));
+  }
+  ok('a step is a real tool or an answer, nothing else', G.parseStep('{"action":"answer","answer":"  "}') === null && G.parseStep('{"action":"shout"}') === null && G.parseStep('[]') === null &&
+     G.parseStep('{"action":"tool","tool":"compare","topics":["a"]}') === null && G.parseStep(T('quiz', 'preload')).plan.tool === 'quiz' && G.parseStep(A2('Yes [1].')).text === 'Yes [1].');
+  ok('the prompt carries every tool, what it knows of the student and the last topic', G.TOOLS.every(t => G.loopPrompt('hi', {}, '', []).indexOf('- ' + t + ':') !== -1) &&
+     /About the student: likes quizzes\./.test(G.loopPrompt('hi', { topic: 'Preload' }, 'likes quizzes.', [])) && /last topic was: Preload/.test(G.loopPrompt('hi', { topic: 'Preload' }, '', [])));
+  global.__agentRuns = runs;
+}
+
+head('what a tool shows the model: short, and from the book');
+{
+  const r = { found: true, groups: [{ items: [{ text: 'A.', page: 1 }, { text: 'B.', page: 2 }] }, { items: [{ text: 'C.', page: 3 }, { text: 'D.', page: 4 }] }] };
+  ok('a search: its first three sentences, with their pages', G.observe('search', { r }) === 'A. (p.1) B. (p.2) C. (p.3)', G.observe('search', { r }));
+  ok('nothing found says so, for every section tool', ['search', 'explain', 'quiz', 'mnemonic', 'numbers', 'compare', 'open'].every(t => G.observe(t, {}) === 'Not found in the book.'));
+  ok('why I missed it: the type, what it means and the fix', /item: Type C \(Confusion\) — You picked .* Fix: Learn the difference/.test(
+     G.observe('mistake', { mistakes: [{ label: 'item', type: 'C', name: 'Confusion', means: 'You picked a different item from this material.', fix: 'Learn the difference: the two side by side.' }] })));
+  ok('the week ahead, day by day', G.observe('schedule', { week: [{ label: 'Today', n: 2 }, { label: 'Tomorrow', n: 0 }] }) === 'Today 2, Tomorrow 0.');
+  ok('the weak list and the weakest sections', G.observe('weak', { items: [{ name: 'Valves', line: 'Weak: x (Type E · 2 misses)' }], spots: [{ title: 'Syncope', pct: 40 }] }) ===
+     'Valves: Weak: x (Type E · 2 misses) Weakest sections: Syncope 40%.');
+}
+
+head('what the coach remembers: section titles and tools, never what was typed');
+{
+  let pr = null;
+  pr = G.remember(pr, 'quiz', ['Preload']);
+  pr = G.remember(pr, 'quiz', ['Afterload']);
+  pr = G.remember(pr, 'explain', ['Preload']);
+  ok('the titles it landed on, newest first, each once', pr.topics.join() === 'Preload,Afterload' && pr.turns === 3 && pr.tools.quiz === 2 && pr.tools.explain === 1);
+  for (let i = 0; i < 7; i++) pr = G.remember(pr, 'search', ['S' + i]);
+  ok('at most ' + G.PROFILE_TOPICS + ' titles', pr.topics.length === G.PROFILE_TOPICS && pr.topics[0] === 'S6');
+  ok('a tool that is not one is not counted', !('shout' in G.remember(pr, 'shout', []).tools));
+  ok('the model is told the titles, what the student likes (twice or more), and what is still weak',
+     G.profileLine(pr, 'Weak: preload (Type E · 2 misses)') === 'recently asked about S6, S5, S4, S3, S2; likes being quizzed; still weak on preload (Type E · 2 misses).',
+     G.profileLine(pr, 'Weak: preload (Type E · 2 misses)'));
+  ok('a tool used once is not a liking; nothing known, nothing said', !/likes/.test(G.profileLine(G.remember(null, 'quiz', []), '')) && G.profileLine(null, '') === '');
+  ok('the record is not changed in place', (() => { const a = G.remember(null, 'quiz', ['X']); const b = G.remember(a, 'quiz', ['Y']); return a.topics.join() === 'X' && b.topics.join() === 'Y,X'; })());
+}
+
+Promise.all(global.__agentRuns || []).then(() => {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+});

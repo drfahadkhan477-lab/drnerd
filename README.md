@@ -173,7 +173,7 @@ their synonyms ("NT-proBNP", "TAVI", a drug by its suffix), and the indexes
 can be browsed too. Nothing is sent anywhere.
 
 **An on-device AI tutor, optional.** Turned on in Settings, a small language
-model (Qwen3 0.6B or 1.7B, Apache-2.0, through WebLLM on WebGPU) is downloaded
+model (Qwen3 0.6B, 1.7B or 4B, Apache-2.0, through WebLLM on WebGPU) is downloaded
 once and runs on the iPad with no key and no connection. It explains a
 section in plain words, suggests an analogy, summarises what the book says in
 answer to a question, and writes harder questions. It is not a source of
@@ -183,6 +183,18 @@ not have is dropped; a summary sentence must cite the passage it comes from
 and mostly use its words; and a question is asked only when a sentence of
 the section states its answer — that sentence, with its page, is the
 explanation shown, not the model's. What is dropped is counted on screen.
+With it on, the model also runs the Coach as an agent: it names a tool, sees
+what the tool found in your book, names the next, and then answers; each
+sentence of its answer must cite the step it rests on and pass the same
+checks, or it is dropped. A reply that names no real tool hands the message
+back to the Coach's rules.
+
+**The Coach's own tools** also say why your misses happened — each by its
+error type, what that type means and its fix — show the cards due each day
+this week, and start a review round of what you still get wrong. It
+remembers, on the device only, which of its tools you use and the book's
+section titles they landed on, never what you typed; the Coach screen shows
+what it remembers, with a button to forget it.
 
 Every missed answer becomes a review card — the same multiple-choice question
 — scheduled with the same FSRS scheduler Systole uses (`src/core/fsrs.js`,

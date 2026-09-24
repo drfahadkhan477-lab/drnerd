@@ -250,7 +250,7 @@ jobs:
         run: node tests/verify-memorizer-sheet-pure.js
       - name: Memorizer — figures made from the book, every word the lesson's (17 checks)
         run: node tests/verify-memorizer-figure-pure.js
-      - name: Memorizer — the Coach as an agent — it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, names what is still weak, and runs a message as steps, each decided by what the last found (37 checks)
+      - name: Memorizer — the Coach as an agent — it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, names what is still weak, and runs a message as steps, each decided by what the last found — and, with the on-device model, a loop whose answer holds to what its tools found, the new tools, and what it remembers (74 checks)
         run: node tests/verify-memorizer-agent-pure.js
       - name: Memorizer — where a unit came from — a real SHA-256 of its bytes, a duplicate recognised, an import report that counts what happened (31 checks)
         run: node tests/verify-memorizer-provenance-pure.js
@@ -288,7 +288,7 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (278 checks)
+      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (288 checks)
         run: node tests/verify-memorizer.js
       - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
