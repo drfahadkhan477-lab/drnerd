@@ -556,23 +556,61 @@ function kindOf(user) {
   await page.locator('#robot-panel .rb-close').click();
   ok('and closes', await page.locator('#robot-panel').count() === 0);
 
-  head('the lesson step by step, one card at a time');
+  head('Play this section: slides, one card at a time, animated');
   await page.locator('#step-mode').click();
   await page.locator('#lesson-steps').waitFor(T);
-  const N = +(/of (\d+)/.exec(await text(page, '#lesson-steps .step-count')) || [])[1];
-  const MARKS = ['#big-idea', '#points', '#numbers', '.hook', '#quick', '#visuals'];
-  const seen = [];
+  const N = +(/\/(\d+)/.exec(await text(page, '#lesson-steps .step-count')) || [])[1];
+  const MARKS = ['#big-idea', '#pathway-play', '#glance', '#points', '#numbers', '.hook', '#quick', '#visuals'];
+  const MUST = ['#big-idea', '#pathway-play', '#points', '#numbers', '.hook', '#quick', '#visuals'];
+  /* what is showing, by opacity (and clip, for an unfolding word), with the composition held at time t */
+  const at = (sel, t) => page.evaluate(([sel, t]) => {
+    const comp = document.querySelector(sel); Memorizer.motion.seek(comp, t === 'end' ? Memorizer.motion.total(comp) : t);
+    const vis = el => { const cs = getComputedStyle(el); return +cs.opacity > 0.95 && (cs.clipPath === 'none' || /^inset\((?:0(?:px|%)?\s*)+\)$/.test(cs.clipPath)) && !/matrix\(0|scale\(0/.test(cs.transform); };
+    return [...comp.querySelectorAll('[data-start]')].map(el => ({ c: el.className, on: vis(el), t: el.textContent }));
+  }, [sel, t]);
+  const seen = [], motion = {};
   for (let i = 0; i < N; i++) {
-    if (i) { await page.locator('#step-next').click(); await page.waitForFunction(k => new RegExp('^Step ' + k + ' of').test(document.querySelector('#lesson-steps .step-count').textContent), i + 1, T); }
-    seen.push(await page.evaluate(ms => ms.filter(m => document.querySelector('main ' + m)), MARKS));
+    if (i) { await page.locator('#step-next').click(); await page.waitForFunction(k => new RegExp('^Slide ' + k + '/').test(document.querySelector('#lesson-steps .step-count').textContent), i + 1, T); }
+    const here = await page.evaluate(ms => ms.filter(m => document.querySelector('main ' + m)), MARKS);
+    seen.push(here);
+    if (here[0] === '#pathway-play') motion.path = { start: await at('#pathway-play', 0.6), end: await at('#pathway-play', 'end'),
+      running: await page.evaluate(() => document.querySelector('#pathway-play').getAnimations({ subtree: true }).length) };
+    if (here[0] === '.hook') motion.hook = { letters: await at('.hook', 0.36 * (await page.locator('.hook .hs-letter').count())), end: await at('.hook', 'end') };
+    if (here[0] === '#numbers') motion.nums = { early: await at('#numbers', 0.2), end: await at('#numbers', 'end'), text: await page.$$eval('#numbers .tile-value', ts => ts.map(t => t.textContent)) };
   }
-  ok('each step shows one thing — the idea, a heading’s points, the numbers, the mnemonic, a check, then the figures — in that order, the drill at the end',
-     N >= 6 && seen.every(x => x.length === 1) && JSON.stringify(seen.map(x => x[0]).filter((m, i, a) => a.indexOf(m) === i)) === JSON.stringify(MARKS) &&
+  const order = seen.map(x => x[0]).filter((m, i, a) => a.indexOf(m) === i);
+  ok('each slide shows one thing, in order — the idea, how it works, each heading’s points, the numbers, the mnemonic, a check, the figures — the drill at the end',
+     N >= 7 && seen.every(x => x.length === 1) && MUST.every(m => order.includes(m)) && JSON.stringify(order) === JSON.stringify(MARKS.filter(m => order.includes(m))) &&
      await page.locator('#to-drill').count() === 1 && await page.locator('#step-next').count() === 0, JSON.stringify(seen));
+  const P = motion.path || { start: [], end: [] }, steps = x => x.filter(p => /pp-step/.test(p.c));
+  ok('the pathway: its steps appear in turn — at 0.6 s the first is there and the next is not', steps(P.start).length >= 3 && steps(P.start)[0].on && !steps(P.start)[1].on && P.running > 0,
+     JSON.stringify(steps(P.start).map(p => p.on)));
+  ok('and by the end every step is there, each arrow drawn, the book’s verbs on them in order', P.end.length > 0 && P.end.every(p => p.on) &&
+     JSON.stringify(P.end.filter(p => /pp-verb/.test(p.c)).map(p => p.t)) === '["reduce","raises","leads to"]', JSON.stringify(P.end.map(p => p.t)));
+  const Hk = motion.hook || { letters: [], end: [] };
+  ok('the mnemonic: every letter out first, while each word is still folded', Hk.letters.filter(p => /hs-letter/.test(p.c)).every(p => p.on) &&
+     Hk.letters.filter(p => /word/.test(p.c)).length === 3 && Hk.letters.filter(p => /word/.test(p.c)).every(p => !p.on), JSON.stringify(Hk.letters.map(p => p.on)));
+  ok('then each word unfolds', Hk.end.length > 0 && Hk.end.every(p => p.on), JSON.stringify(Hk.end.map(p => p.on)));
+  const Nm = motion.nums || { early: [], end: [], text: [] };
+  ok('numbers build up: the sign before its value, the value before its label', Nm.early.length > 0 && Nm.early.find(p => /tv-sign/.test(p.c)) &&
+     Nm.early.find(p => /tv-sign/.test(p.c)).t === '>' && !Nm.early.find(p => /tv-num/.test(p.c)).on && !Nm.early.find(p => /tile-label/.test(p.c)).on, JSON.stringify(Nm.early.slice(0, 3)));
+  ok('and end as the same tiles as the page shows', Nm.end.every(p => p.on) && Nm.text.includes('> 18 mmHg'), JSON.stringify(Nm.text));
   await page.locator('#step-back').click();
-  ok('Back goes one step back, and the drill button waits for the last', await page.locator('#to-drill').count() === 0 &&
-     new RegExp('^Step ' + (N - 1) + ' of').test(await text(page, '#lesson-steps .step-count')));
+  ok('Back goes one slide back, and the drill button waits for the last', await page.locator('#to-drill').count() === 0 &&
+     new RegExp('^Slide ' + (N - 1) + '/').test(await text(page, '#lesson-steps .step-count')));
   ok('the choice is remembered on this device', await page.evaluate(() => localStorage.getItem('memorizer.stepmode.v1')) === '1');
+  /* a slide drawn again shows its animation finished, not replayed */
+  while (!(await page.locator('main .hook').count())) await page.locator('#step-back').click();
+  await page.evaluate(() => { document.querySelector('.hook').__old = true; Memorizer.render(); });
+  await page.waitForFunction(() => { const x = document.querySelector('main .hook'); return x && !x.__old; }, null, T);
+  ok('a slide drawn again is shown finished, not played over', await page.evaluate(() => { const c = document.querySelector('main .hook');
+    return c.getAnimations({ subtree: true }).length > 0 && c.getAnimations({ subtree: true }).every(a => a.currentTime >= Memorizer.motion.total(c) * 1000 - 1); }));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => { document.querySelector('.hook').__old = true; Memorizer.render(); });
+  await page.waitForFunction(() => { const x = document.querySelector('main .hook'); return x && !x.__old; }, null, T);
+  ok('with reduced motion asked for, nothing moves and everything is there', await page.evaluate(() => { const c = document.querySelector('main .hook');
+    return c.getAnimations({ subtree: true }).length === 0 && [...c.querySelectorAll('[data-start]')].every(el => getComputedStyle(el).opacity === '1'); }));
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.locator('#whole-page').click();
   await page.locator('#step-mode').waitFor(T);
   ok('and the whole lesson is one tap away again', await page.locator('main #points').count() === 1 && await page.locator('main #numbers').count() === 1 &&
@@ -606,6 +644,14 @@ function kindOf(user) {
   ok('but nothing is recorded until Next', await page.evaluate(() => Memorizer.ui.state.per[0].answers.length === 0));
   await page.locator('#next').click();
   await page.waitForFunction(() => /Question 2 of 2/.test(document.querySelector('.mcq-meta').innerText), null, T);
+  await page.locator('#prev-q').click();
+  await page.locator('#fwd-q').waitFor(T);
+  ok('Previous goes back to the question before, as it was answered — read-only, nothing recorded again', /Looking back · answer 1 of 1/.test(await meta(page)) &&
+     await page.locator('.option.right[data-i="0"]').count() === 1 && await page.locator('.option:not([disabled])').count() === 0 &&
+     await page.locator('#next').count() === 0 && await page.evaluate(() => Memorizer.ui.state.per[0].answers.length === 1 && Memorizer.ui.state.per[0].pos === 1));
+  await page.locator('#fwd-q').click();
+  await page.waitForFunction(() => /Question 2 of 2/.test(document.querySelector('.mcq-meta').innerText), null, T);
+  ok('and forward again to the current question, still unanswered', await page.locator('.option:not([disabled])').count() === 4 && await page.locator('#prev-q').count() === 1);
   ok('a sentence from the book with a gap shows the gap', (await page.locator('blockquote.quote .gap').innerText()) === '_____');
   await page.locator('.option[data-i="0"]').click();
   ok('a wrong choice turns red, and the right one green', await page.locator('.option.wrong[data-i="0"]').count() === 1 && await page.locator('.option.right[data-i="1"]').count() === 1 &&
@@ -756,6 +802,13 @@ function kindOf(user) {
   await page.locator('.option[data-i="2"]').click();
   ok('and does, once it is', /From “Section One Preload”/.test(await page.locator('.why').innerText()), await text(page, '.why'));
   await page.locator('#next').click();
+  await page.locator('#prev-q').click();
+  await page.locator('#fwd-q').waitFor(T);
+  ok('the exam goes back too: the answered question, its section named, read-only', /From “Section One Preload”/.test(await text(page, '.why')) &&
+     await page.locator('.option.wrong[data-i="2"], .option.right[data-i="2"]').count() === 1 && await page.locator('.option:not([disabled])').count() === 0 &&
+     await page.evaluate(() => Memorizer.ui.state.exam.results.length === 1));
+  await page.locator('#fwd-q').click();
+  await page.waitForFunction(() => /^Question 2 of/.test(document.querySelector('.mcq-meta').innerText), null, T);
   await page.waitForFunction(() => /Question 2 of 2/.test(document.querySelector('.mcq-meta').innerText), null, T);
   ok('an exam miss is not asked again: the exam moves on', (await page.locator('#mcq h2.q').innerText()) === 'In the exam: which does a diuretic lower?');
   await answer(page, 1);

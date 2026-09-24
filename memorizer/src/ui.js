@@ -359,7 +359,7 @@ function openDoc(id, section) {
   }).then(function () { render(); root.scrollTo(0, 0); });
 }
 function go(event) {
-  ui.choice = null; ui.error = '';
+  ui.choice = null; ui.error = ''; ui.back = 0;
   return dispatch(event).then(function () { render(); root.scrollTo(0, 0); });
 }
 
@@ -875,10 +875,11 @@ function withKey(text, key) {
   return [marked(text.slice(0, at)), h('strong.key', text.slice(at, at + key.length)), marked(text.slice(at + key.length))];
 }
 /* The section at a glance: key facts, its pathway, its lists (sheet.js). */
-function glanceCard(c, L) {
+function glanceCard(c, L, noPath) {
   /* a list with a mnemonic of its own is shown there, not twice */
   var g = Sheet.glance(c, (L.mnemonics || []).map(function (m) { return m.title; }));
-  if (!g) return null;
+  if (g && noPath) g = { facts: g.facts, pathway: [], lists: g.lists };
+  if (!g || !g.facts.length && !g.pathway.length && !g.lists.length) return null;
   return h('div.card.glance', { id: 'glance' }, h('span.eyebrow', 'At a glance'),
     g.facts.length ? h('div.gl-facts', g.facts.map(function (f) { return h('div.gl-fact', h('strong', f.title), h('span', f.sub)); })) : null,
     g.pathway.length ? [h('p.gl-caption', 'The mechanism, as your book tells it'), h('div.gl-path', g.pathway.map(function (st, i) {
@@ -956,13 +957,22 @@ function sourceLine(d, c) {
 /* Clinical headings, each with a small mark so the eye finds its place. */
 var HEAD_MARK = { 'Definition': '◆', 'Causes and risk factors': '⚑', 'Mechanism': '⚙', 'Presentation': '☺', 'Diagnosis': '⌕', 'Treatment': '✚',
                   'Complications and prognosis': '⚠', 'Also know': '•' };
-function numbersCard(sh) {
+function numbersCard(sh, play) {
   if (!sh.numbers.length) return null;
-  return h('div.card', { id: 'numbers' }, h('span.eyebrow', 'Numbers to know'),
+  var at = 0;
+  return h('div.card', { id: 'numbers', 'data-comp': play ? 'numbers:' + ui.docId + ':' + ui.state.section : null }, h('span.eyebrow', 'Numbers to know'),
     sh.numbers.map(function (n) {
       return h('div.fact', n.subject ? h('p.fact-subject', n.subject, ' ', page(n.page)) : null,
         h('div.tiles', n.tiles.map(function (t) {
-          return h('div.tile', h('span.tile-value', t.value), h('span.tile-label', t.label));
+          if (!play) return h('div.tile', h('span.tile-value', t.value), h('span.tile-label', t.label));
+          /* NUMBERS BUILDING UP: the comparison sign first, then the value
+             rises into place beside it, then what it measures. */
+          var m = /^([≥≤<>])\s(.*)$/.exec(t.value), t0 = at;
+          at += 0.9;
+          return h('div.tile', h('span.tile-value', m ? [h('span.tv-sign', { 'data-start': t0, 'data-duration': 0.3, 'data-anim': 'pop' }, m[1]), ' ',
+              h('span.tv-num', { 'data-start': t0 + 0.25, 'data-duration': 0.45, 'data-anim': 'rise' }, m[2])]
+              : h('span.tv-num', { 'data-start': t0, 'data-duration': 0.45, 'data-anim': 'rise' }, t.value)),
+            h('span.tile-label', { 'data-start': t0 + 0.55, 'data-duration': 0.35, 'data-anim': 'fade' }, t.label));
         })),
         n.subject ? null : h('p.muted.fact-src', 'p.' + n.page),
         h('details.context', h('summary', 'The sentence'), h('p', marked(n.text), ' ', page(n.page))));
@@ -1007,13 +1017,17 @@ function viewLesson() {
     /* STEP BY STEP — one card at a time, like the owner's reference: the
        idea, then each heading's points, the numbers, each mnemonic, a check,
        then what else the section has; the drill at the end. */
-    var parts = [{ label: 'The big idea', nodes: [bigIdea, glanceCard(c, L), analogies.length ? analogyCard(analogies[0], true) : null] }];
+    var parts = [{ label: 'The big idea', nodes: [bigIdea, analogies.length ? analogyCard(analogies[0], true) : null] }];
+    var gl = Sheet.glance(c, (L.mnemonics || []).map(function (m) { return m.title; }));
+    if (gl && gl.pathway.length >= 2) parts.push({ label: 'How it works', nodes: [pathwayPlay(gl.pathway)] });
+    var facts = glanceCard(c, L, true);
+    if (facts) parts.push({ label: 'At a glance', nodes: [facts] });
     sh.groups.forEach(function (g) {
       parts.push({ label: g.heading, nodes: [h('div.card', { id: 'points' }, h('div.card-head', h('h2', 'Key points'), tools), group(g))] });
     });
-    var nums = numbersCard(sh);
+    var nums = numbersCard(sh, true);
     if (nums) parts.push({ label: 'Numbers to know', nodes: [nums] });
-    mnemonics.forEach(function (m, i) { parts.push({ label: 'Remember it: ' + L.mnemonics[i].title, nodes: [m] }); });
+    (L.mnemonics || []).forEach(function (m) { parts.push({ label: 'Remember it: ' + m.title, nodes: [mnemonicPlay(m)] }); });
     var qc = quickCheck(c, L);
     if (qc) parts.push({ label: 'Check yourself', nodes: [qc] });
     parts.push({ label: 'Also in this section', nodes: [moreAnalogies, flowCard, tablesCard(c), visualsCard(c), full] });
@@ -1024,7 +1038,8 @@ function viewLesson() {
     return [
       sectionBar('teach'),
       h('div.step-head', { id: 'lesson-steps' },
-        h('div.step-count', h('strong', 'Step ' + (i + 1) + ' of ' + parts.length), h('span', ' · ' + parts[i].label)),
+        h('div.step-count', h('strong', 'Slide ' + (i + 1) + '/' + parts.length), h('span', ' · ' + parts[i].label)),
+        button('↻ Replay', function () { replay(); }, 'quiet', { id: 'replay' }),
         button('Show the whole lesson', function () { setStepMode(false); render(); }, 'quiet', { id: 'whole-page' })),
       h('div.bar.step-bar', h('i', { style: 'width:' + Math.round(100 * (i + 1) / parts.length) + '%' })),
       parts[i].nodes,
@@ -1034,7 +1049,7 @@ function viewLesson() {
   }
   return [
     sectionBar('teach'),
-    h('div.row.lesson-mode', button('▶ Learn it step by step', function () { setStepMode(true); ui.step = null; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'step-mode' })),
+    h('div.row.lesson-mode', button('▶ Play this section', function () { setStepMode(true); ui.step = null; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'step-mode' })),
     bigIdea,
     glanceCard(c, L),
     analogies.length ? analogyCard(analogies[0], true) : null,
@@ -1097,16 +1112,24 @@ var LETTERS = 'ABCDEFGH';
 /* One question: options as big buttons; once one is chosen, the right one
    turns green, a wrong choice red, and the book's reason is shown. The
    answer is recorded on Next, not on the tap. */
-function mcqCard(q, meta, onNext, reveal) {
-  var chosen = ui.choice;
+/* `nav` (drill and exam): { hist, back } — the answers given so far and how
+   far back the reader is looking. Looking back shows an answered question
+   as it was answered, read-only: answers are recorded on Next, and changing
+   one afterwards would change a score and a review card already made. */
+function mcqCard(q, meta, onNext, reveal, nav) {
+  var past = nav && nav.back > 0 ? nav.hist[nav.hist.length - nav.back] : null;
+  var chosen = past ? past.choice : ui.choice;
   var answered = chosen != null;
+  var canPrev = nav && nav.hist.length - nav.back > 0;
+  var prev = canPrev ? button('← Previous', function () { ui.back = nav.back + 1; render(); }, 'quiet', { id: 'prev-q' }) : null;
+  var fwd = past ? button(nav.back === 1 ? 'Back to the current question →' : 'Forward →', function () { ui.back = nav.back - 1; render(); }, 'primary big', { id: 'fwd-q' }) : null;
   var quote = q.quote ? h('blockquote.quote', q.quote.split('_____').map(function (part, i, all) {
     return [part, i < all.length - 1 ? h('span.gap', answered ? q.options[q.answer] : '_____') : null];
   })) : null;
   var opts = h('div.options', { role: 'group', 'aria-label': 'Options' }, q.options.map(function (o, i) {
     var cls = '';
     if (answered) cls = i === q.answer ? '.right' : i === chosen ? '.wrong' : '.dim';
-    return h('button.option' + cls, { type: 'button', disabled: answered ? true : null, 'data-i': String(i),
+    return h('button.option' + cls, { type: 'button', disabled: answered || past ? true : null, 'data-i': String(i),
         onclick: function () { ui.choice = i; render(); } },
       h('span.opt-letter', LETTERS[i]), h('span.opt-text', o));
   }));
@@ -1120,19 +1143,30 @@ function mcqCard(q, meta, onNext, reveal) {
       h('strong', right ? '✓ Correct' : '✗ The answer is ' + LETTERS[q.answer] + ': ' + q.options[q.answer]),
       reveal ? h('p.muted', reveal) : null,
       h('p', h('span.why-label', 'Why: '), marked(q.explain), q.page ? [' ', page(q.page)] : null),
-      right ? null : h('p.muted', 'This one is now a review card, and it comes back at the end of this drill.'),
-      h('div.row', button('Next →', onNext, 'primary big', { id: 'next' }))) : null);
+      right || past ? null : h('p.muted', 'This one is now a review card, and it comes back at the end of this drill.'),
+      past ? null : h('div.row.mcq-nav', prev, button('Next →', onNext, 'primary big', { id: 'next' }))) : null,
+    past ? h('div.row.mcq-nav', prev, fwd) : !answered && prev ? h('div.row.mcq-nav', prev) : null);
+}
+function navOf(hist) {
+  hist = hist || [];
+  ui.back = Math.max(0, Math.min(ui.back || 0, hist.length));
+  return { hist: hist, back: ui.back };
 }
 function viewDrill() {
   var s = ui.state, c = s.per[s.section];
   if (!c.quiz) return [sectionBar('drill'), ui.error ? errorCard(pump) : busyCard()];
   var qi = c.order[c.pos], q = c.quiz.questions[qi];
+  var nav = navOf(c.answers);
+  if (nav.back) {
+    var rec = nav.hist[nav.hist.length - nav.back];
+    return [sectionBar('drill'), mcqCard(c.quiz.questions[rec.q], [h('span.looking-back', 'Looking back · answer ' + (nav.hist.length - nav.back + 1) + ' of ' + nav.hist.length)], null, null, nav)];
+  }
   var retry = c.order.indexOf(qi) !== c.pos;
   var firsts = c.quiz.questions.length;
   var meta = [h('span', retry ? 'Again — you missed this one' : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
     q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · its answer checked against your book') : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
-  return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice }); })];
+  return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice }); }, null, nav)];
 }
 function viewResult() {
   var s = ui.state, c = s.per[s.section], d = ui.docRec;
@@ -1171,11 +1205,17 @@ function viewExam() {
   var s = ui.state, g = s.exam;
   var bar = backBar('Final exam', function () { go({ type: 'toUnit' }); });
   if (!g.questions) return [bar, ui.error ? errorCard(pump) : busyCard()];
+  var nav = navOf(g.results);
+  if (nav.back) {
+    var rec = nav.hist[nav.hist.length - nav.back], pq = g.questions[rec.q];
+    var pfrom = pq.cluster != null && ui.docRec.clusters[pq.cluster] ? ui.docRec.clusters[pq.cluster].title : '';
+    return [bar, mcqCard(pq, [h('span.looking-back', 'Looking back · answer ' + (nav.hist.length - nav.back + 1) + ' of ' + nav.hist.length)], null, pfrom ? 'From “' + pfrom + '”' : '', nav)];
+  }
   var qi = g.order[g.pos], q = g.questions[qi];
   /* The section is named only once answered: its title is often the answer. */
   var from = q.cluster != null && ui.docRec.clusters[q.cluster] ? ui.docRec.clusters[q.cluster].title : '';
   var meta = [h('span', 'Question ' + (g.pos + 1) + ' of ' + g.order.length), h('div.bar', h('i', { style: 'width:' + Math.round(100 * g.pos / g.order.length) + '%' }))];
-  return [bar, mcqCard(q, meta, function () { go({ type: 'examAnswered', choice: ui.choice }); }, from ? 'From “' + from + '”' : '')];
+  return [bar, mcqCard(q, meta, function () { go({ type: 'examAnswered', choice: ui.choice }); }, from ? 'From “' + from + '”' : '', nav)];
 }
 function viewDone() {
   var s = ui.state, g = s.exam, d = ui.docRec;
@@ -1571,6 +1611,79 @@ function nav() {
     tab('settings', '⚙', 'Settings', function () { leave('settings'); }));
 }
 
+/* ── motion: HyperFrames' composition model, played live ───────────────────
+   HyperFrames (HeyGen, Apache-2.0) describes a video as HTML whose pieces
+   carry data-start and data-duration on one timeline, which a player can
+   seek to any instant. The same model here, played in the app with the
+   browser's Web Animations — no video file, nothing downloaded:
+     · a composition is any element with data-comp="<key>";
+     · each piece inside has data-start / data-duration (seconds) and
+       data-anim (rise, fade, pop, draw, unfold);
+     · play() starts it when the slide is drawn; a slide drawn again
+       (another tap on the page) shows it finished instead of replaying;
+     · seek(t) sets every piece to time t — deterministic, as in HyperFrames
+       — which is also how the browser suite checks what is visible when.
+   With reduced motion asked for, nothing moves: every piece is simply there. */
+var ANIMS = {
+  rise: [{ opacity: 0, transform: 'translateY(.75rem)' }, { opacity: 1, transform: 'none' }],
+  fade: [{ opacity: 0 }, { opacity: 1 }],
+  pop: [{ opacity: 0, transform: 'scale(.4)' }, { opacity: 1, transform: 'scale(1.15)', offset: .7 }, { opacity: 1, transform: 'none' }],
+  draw: [{ transform: 'scaleY(0)', opacity: 1 }, { transform: 'scaleY(1)', opacity: 1 }],
+  unfold: [{ clipPath: 'inset(0 100% 0 0)', opacity: 1 }, { clipPath: 'inset(0 0 0 0)', opacity: 1 }],
+};
+function reducedMotion() { return !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+function pieces(comp) { return Array.prototype.slice.call(comp.querySelectorAll('[data-start]')); }
+function total(comp) { return pieces(comp).reduce(function (m, el) { return Math.max(m, +el.getAttribute('data-start') + (+el.getAttribute('data-duration') || 0.5)); }, 0); }
+function play(comp) {
+  if (reducedMotion() || !comp.animate) return;
+  ui.played = ui.played || {};
+  var key = comp.getAttribute('data-comp'), done = ui.played[key];
+  comp.__anims = pieces(comp).map(function (el) {
+    return el.animate(ANIMS[el.getAttribute('data-anim')] || ANIMS.fade,
+      { delay: +el.getAttribute('data-start') * 1000, duration: (+el.getAttribute('data-duration') || 0.5) * 1000, fill: 'both', easing: 'cubic-bezier(.2,.7,.2,1)' });
+  });
+  if (done) seek(comp, total(comp));
+  ui.played[key] = true;
+}
+function seek(comp, t) { (comp.__anims || []).forEach(function (a) { a.pause(); a.currentTime = t * 1000; }); }
+function replay() {
+  Array.prototype.forEach.call(doc.querySelectorAll('[data-comp]'), function (comp) {
+    (comp.__anims || []).forEach(function (a) { a.cancel(); });
+    delete (ui.played || {})[comp.getAttribute('data-comp')];
+    play(comp);
+  });
+}
+/* 1. THE PATHWAY, animated: each step of the book's chain appears in turn,
+   and the arrow to the next draws itself, the book's verb riding on it. */
+var STEP_GAP = 1.1;
+function pathwayPlay(path) {
+  return h('div.card.pathway', { id: 'pathway-play', 'data-comp': 'path:' + ui.docId + ':' + ui.state.section },
+    h('span.eyebrow', 'How it works — your book’s cause and effect'),
+    h('ol.pp', path.map(function (st, i) {
+      var t = i * STEP_GAP;
+      return h('li.pp-item', i ? h('div.pp-arrow', { 'aria-hidden': 'true' },
+          h('span.pp-line', { 'data-start': t - 0.55, 'data-duration': 0.5, 'data-anim': 'draw' }),
+          h('span.pp-verb', { 'data-start': t - 0.35, 'data-duration': 0.35, 'data-anim': 'fade' }, st.verb)) : null,
+        h('span.pp-step', { 'data-start': t, 'data-duration': 0.45, 'data-anim': 'rise' }, i ? h('span.sr-only', st.verb + ' ') : null, st.label));
+    })),
+    h('p.muted', 'Say each step aloud as it appears.'));
+}
+/* 3. THE MNEMONIC, revealed: the letters appear one by one, then each word
+   unfolds from its letter. */
+function mnemonicPlay(m) {
+  var n = m.words.length, lt = 0.35, wt = 0.5, wordsAt = n * lt + 0.3;
+  return h('div.card.hook', { 'data-comp': 'hook:' + ui.docId + ':' + ui.state.section + ':' + m.title },
+    h('span.eyebrow', 'Remember it'), h('h3', m.title),
+    h('p.hook-script', m.letters.split('').map(function (ch, i) {
+      return [i ? ' · ' : '', h('span.hs-letter', { 'data-start': i * lt, 'data-duration': 0.3, 'data-anim': 'pop' }, ch)];
+    })),
+    h('ul.acrostic', m.words.map(function (w, i) {
+      return h('li', h('span.letter', w.charAt(0).toUpperCase()),
+        h('span.word', { 'data-start': wordsAt + i * wt, 'data-duration': 0.45, 'data-anim': 'unfold' }, w));
+    })),
+    h('p.muted', 'Say the letters, then name each one.'));
+}
+
 /* ── the robot: the coach, on the right, explaining what is on screen ──────
    A small robot at the foot of the screen, on the right, during a lesson,
    a drill or the exam. Tapped, it opens a small window: for a question,
@@ -1586,11 +1699,14 @@ function robotContext() {
   if (s.phase === 'teach') return s.per[s.section].lesson ? { type: 'lesson', c: cluster(), L: s.per[s.section].lesson } : null;
   if (s.phase === 'drill') {
     var p = s.per[s.section];
-    return p.quiz && p.quiz.questions.length ? { type: 'question', c: cluster(), q: p.quiz.questions[p.order[p.pos]] } : null;
+    if (!p.quiz || !p.quiz.questions.length) return null;
+    var pr = ui.back > 0 && p.answers[p.answers.length - ui.back];
+    return pr ? { type: 'question', c: cluster(), q: p.quiz.questions[pr.q], chosen: pr.choice } : { type: 'question', c: cluster(), q: p.quiz.questions[p.order[p.pos]] };
   }
   if (s.phase === 'exam' && s.exam.questions) {
-    var q = s.exam.questions[s.exam.order[s.exam.pos]];
-    return q ? { type: 'question', exam: true, c: ui.docRec.clusters[q.cluster] || cluster(), q: q } : null;
+    var er = ui.back > 0 && s.exam.results[s.exam.results.length - ui.back];
+    var q = er ? s.exam.questions[er.q] : s.exam.questions[s.exam.order[s.exam.pos]];
+    return q ? { type: 'question', exam: true, c: ui.docRec.clusters[q.cluster] || cluster(), q: q, chosen: er ? er.choice : undefined } : null;
   }
   return null;
 }
@@ -1617,7 +1733,7 @@ function robotBody(ctx) {
       aiLessonCard(ctx.c, ctx.L),
     ];
   }
-  var q = ctx.q, chosen = ui.choice;
+  var q = ctx.q, chosen = ctx.chosen != null ? ctx.chosen : ui.choice;
   var x = Coach.explainQuestion(ctx.c, q, chosen);
   if (chosen == null) {
     return [robotLine('What it asks', x.kind),
@@ -1660,6 +1776,7 @@ function render() {
   app.appendChild(nav());
   var rb = robot();
   if (rb) app.appendChild(rb);
+  Array.prototype.forEach.call(app.querySelectorAll('[data-comp]'), play);
   if (ui.view === 'session') pump();
 }
 
@@ -1669,6 +1786,6 @@ function start() {
   });
 }
 
-root.Memorizer = { ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc };
+root.Memorizer = { motion: { seek: seek, total: total, replay: replay }, ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc };
 if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(window);

@@ -153,6 +153,10 @@ table.data tbody tr:last-child td { border-bottom: 0; }
     linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
   background-size: .5rem .5rem, .5rem .5rem, 2.5rem 2.5rem, 2.5rem 2.5rem; }
 :root[data-contrast="high"] .pearl { background-image: none; }
+/* Systole's pearl drifts and its rungs arrive one at a time; here the home
+   screen stays still, at the owner's request (the browser suite holds it). */
+.mcq-nav { justify-content: space-between; align-items: center; gap: var(--s-3); margin-top: var(--s-3); }
+.looking-back { font-weight: 700; color: var(--accent); }
 .pearl-steps { list-style: none; counter-reset: step; margin: var(--s-2) 0 var(--s-3); padding: 0; font-size: var(--t-lead); line-height: 1.45; }
 .pearl-steps li { counter-increment: step; position: relative; padding: var(--s-2) 0 var(--s-2) 2.25rem; }
 .pearl-steps li + li { border-top: 1px dashed var(--line); }
@@ -463,3 +467,21 @@ summary.fold-head:hover .fold-btn { color: var(--accent); border-color: currentC
 .step-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin: var(--s-5) 0 var(--s-8); }
 .step-nav .end-cta { flex: 1; margin: 0; }
 .step-nav #step-next { flex: 1; }
+
+/* ── Play this section: animated slides (ui.js motion) ─────────────────── */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pathway .pp { list-style: none; margin: var(--s-4) 0 var(--s-3); padding: 0; display: flex; flex-direction: column; align-items: center; }
+.pp-item { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.pp-step { display: block; width: min(100%, 26rem); text-align: center; font-size: var(--t-lead); font-weight: 700; padding: var(--s-3) var(--s-4);
+  border-radius: 1rem; background: var(--accent-soft); color: var(--ink); border: 2px solid var(--accent); }
+.pp-item:first-child .pp-step { background: var(--accent); color: var(--accent-ink); }
+.pp-arrow { position: relative; height: 3.5rem; width: 100%; display: flex; justify-content: center; }
+.pp-line { display: block; width: 3px; height: 100%; background: var(--accent); transform-origin: top; position: relative; }
+.pp-line::after { content: ''; position: absolute; left: 50%; bottom: -2px; transform: translateX(-50%); border: .45rem solid transparent; border-top: .6rem solid var(--accent); border-bottom: 0; }
+.pp-verb { position: absolute; left: calc(50% + var(--s-4)); top: 50%; transform: translateY(-50%); font-size: var(--t-meta); font-weight: 800;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--accent); white-space: nowrap; }
+.hs-letter { display: inline-block; }
+.acrostic .word { display: inline-block; }
+.tv-sign, .tv-num { display: inline-block; }
+.tile-label { display: block; }
+.step-head .btn#replay { margin-left: auto; }
