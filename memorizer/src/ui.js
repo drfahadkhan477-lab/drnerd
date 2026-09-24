@@ -18,7 +18,7 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -842,13 +842,30 @@ function drawFlowCard(c, lessonV) {
       h('span.muted', fromModel ? 'drawn by Claude from this section' : 'from this section’s cause-and-effect sentences')),
     drawFlow(f));
 }
+/* Clinical headings, each with a small mark so the eye finds its place. */
+var HEAD_MARK = { 'Definition': '◆', 'Causes and risk factors': '⚑', 'Mechanism': '⚙', 'Presentation': '☺', 'Diagnosis': '⌕', 'Treatment': '✚',
+                  'Complications and prognosis': '⚠', 'Also know': '•' };
+function numbersCard(sh) {
+  if (!sh.numbers.length) return null;
+  return h('div.card', { id: 'numbers' }, h('span.eyebrow', 'Numbers to know'),
+    sh.numbers.map(function (n) {
+      return h('div.fact', n.subject ? h('p.fact-subject', n.subject, ' ', page(n.page)) : null,
+        h('div.tiles', n.tiles.map(function (t) {
+          return h('div.tile', h('span.tile-value', t.value), h('span.tile-label', t.label));
+        })),
+        n.subject ? null : h('p.muted.fact-src', 'p.' + n.page),
+        h('details.context', h('summary', 'The sentence'), h('p', marked(n.text), ' ', page(n.page))));
+    }));
+}
+function analogyCard(a, first) {
+  return h('div.card.analogy' + (first ? '' : '.more'), h('span.eyebrow', 'Think of it like…'), h('h3', a.title), h('p.analogy-text', a.text),
+    h('p.muted.label', a.source === 'Claude' ? 'Analogy written by Claude — not from your book.' : 'Analogy — Memorizer’s, not your book’s. Your book is the authority.'));
+}
 function viewLesson() {
   var s = ui.state, c = cluster(), L = s.per[s.section].lesson;
   if (!L) return [sectionBar('teach'), ui.error ? errorCard(pump) : busyCard()];
-  var analogies = (L.analogies || []).map(function (a) {
-    return h('div.card.analogy', h('span.eyebrow', 'Think of it like…'), h('h3', a.title), h('p.analogy-text', a.text),
-      h('p.muted.label', a.source === 'Claude' ? 'Analogy written by Claude — not from your book.' : 'Analogy — Memorizer’s, not your book’s. Your book is the authority.'));
-  });
+  var sh = Sheet.sheetOf(L);
+  var analogies = L.analogies || [];
   var mnemonics = (L.mnemonics || []).map(function (m) {
     return h('div.card.hook', h('span.eyebrow', 'Remember it'), h('h3', m.title),
       h('p.hook-script', m.letters.split('').join(' · ')),
@@ -861,22 +878,28 @@ function viewLesson() {
       if (seg.heading) return h('h3', seg.text);
       return h(seg.item ? 'p.item' : 'p', marked(seg.text), ' ', page(seg.page));
     }));
+  var n = 0;
+  var all = [{ text: sh.bigIdea }].concat(sh.groups.reduce(function (a, g) { return a.concat(g.points); }, []));
   return [
     sectionBar('teach'),
-    h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(L.overview || (L.points[0] && L.points[0].text) || ''))),
-    analogies,
+    h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(sh.bigIdea))),
+    analogies.length ? analogyCard(analogies[0], true) : null,
     h('div.card', { id: 'points' },
-      h('div.card-head', h('h2', 'Key points'), button('🔊 Listen', function () { speak([L.overview].concat(L.points.map(function (p) { return p.text; })).join('. ')); }, 'quiet')),
-      h('ol.points', L.points.map(function (p, i) { return pointCard(c, p, i); }))),
-    aiLessonCard(c, L),
-    L.numbers && L.numbers.length ? h('div.card', { id: 'numbers' }, h('span.eyebrow', 'Numbers to know'),
-      h('ul.numbers', L.numbers.map(function (n) { return h('li', marked(n.text), ' ', page(n.page)); }))) : null,
+      h('div.card-head', h('h2', 'Key points'), button('🔊 Listen', function () { speak(all.map(function (p) { return p.text; }).join('. ')); }, 'quiet')),
+      sh.groups.map(function (g) {
+        return h('section.point-group', h('h3.group-head', h('span.group-mark', { 'aria-hidden': 'true' }, HEAD_MARK[g.heading] || '•'), g.heading),
+          h('ol.points', { start: String(n + 1) }, g.points.map(function (p) { return pointCard(c, p, n++); })));
+      }),
+      h('p.muted.arranged-note', 'Headings arranged by Memorizer; the points are your book’s.')),
+    numbersCard(sh),
     mnemonics,
+    analogies.length > 1 ? h('details.card.more-analogies', h('summary', 'More analogies (' + (analogies.length - 1) + ')'), analogies.slice(1).map(function (a) { return analogyCard(a, false); })) : null,
+    aiLessonCard(c, L),
     drawFlowCard(c, L),
     tablesCard(c),
     visualsCard(c),
     full,
-    h('div.sticky-cta', button('I’ve got it — start the drill', function () { go({ type: 'toDrill' }); }, 'primary big', { id: 'to-drill' })),
+    h('div.end-cta', button('I’ve got it — start the drill', function () { go({ type: 'toDrill' }); }, 'primary big', { id: 'to-drill' })),
   ];
 }
 
@@ -1243,10 +1266,30 @@ function viewAsk() {
       })),
       list.length ? h('ul.index-list', list) : h('p.muted', 'Nothing of this kind is named in your units.'));
   }
+  /* The coach speaks first: what it can do, and the next best step. */
+  var spots = Home.weakSpots(ui.docs, ui.sessions || {}, ui.cards, Session.mastery, 1);
+  var due = Session.dueCards(ui.cards, today()).length;
+  var cur = Home.current(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), ui.sessions || {});
+  var suggest = [
+    spots[0] ? button('Teach me my weakest section: ' + spots[0].title, function () { openDoc(spots[0].docId, spots[0].cluster); }, 'chip', { id: 'coach-weak' }) : null,
+    cur ? button('Carry on with ' + cur.doc.name, function () { openDoc(cur.doc.id); }, 'chip', { id: 'coach-continue' }) : null,
+    due ? button('Review my ' + due + ' due card' + (due === 1 ? '' : 's'), function () { startReview(); }, 'chip', { id: 'coach-review' }) : null,
+    ui.askR ? null : ['How is aortic stenosis treated?', 'What causes heart failure?'].map(function (q) {
+      return button(q, function () { askNow(q); }, 'chip quiet');
+    }),
+  ];
+  var ai = aiOn(), meaning = meaningOn();
   return h('main.wrap.ask',
-    backBar('Ask your book', function () { leave('library'); }),
-    h('div.card', h('div.row.ask-row', input, button('Ask', function () { askNow(doc.getElementById('ask-q').value); }, 'primary', { id: 'ask-go' })),
-      h('p.muted', 'Answers are your book’s own sentences, each with its page — found on this device, never sent anywhere.')),
+    backBar('Your coach', function () { leave('library'); }),
+    h('div.coach-intro',
+      h('div.coach-avatar', mascot()),
+      h('div.bubble', h('p', h('strong', 'I’m your coach. '), 'Ask me anything about your book and I’ll answer in its own words, with the page — or tell you it isn’t there. ' +
+        (ai ? 'My on-device AI can summarise and explain, and everything it says is checked against the book.' : 'Turn on the on-device AI in Settings and I can also summarise and explain.')),
+        h('p.muted', 'Search: ' + (meaning ? 'by words and by meaning.' : 'by words. Turn on search by meaning in Settings to find ideas phrased differently.')),
+        h('div.chips.suggest', suggest))),
+    h('div.card.ask-card', h('div.row.ask-row', input, button('Ask', function () { askNow(doc.getElementById('ask-q').value); }, 'primary', { id: 'ask-go' })),
+      h('p.muted', 'Found on this device, never sent anywhere.')),
+    r ? h('div.you', h('div.bubble.mine', r.question)) : null,
     ui.askBusy ? h('div.card.busy', { role: 'status' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', ui.askBusyText || 'Indexing your book (once)…')) : null,
     ui.ai.error && ui.view === 'ask' ? h('p.warn', ui.ai.error) : null,
     !ui.docs.length ? h('div.card.empty', h('p', 'Add a chapter or a book first; then ask it anything.')) : null,
@@ -1359,7 +1402,7 @@ function nav() {
   }
   return h('nav.dock', { 'aria-label': 'Main' },
     tab('library', '⌂', 'Home', function () { leave('library'); }),
-    tab('ask', '🔎', 'Ask', function () { ui.view = 'ask'; ui.error = ''; refresh().then(function () { render(); if (ui.docs.length) askIndex().then(render); }); }),
+    tab('ask', '🎓', 'Coach', function () { ui.view = 'ask'; ui.error = ''; refresh().then(function () { render(); if (ui.docs.length) askIndex().then(render); }); }),
     tab('review', '↻', 'Review', function () { startReview(); }, due),
     tab('settings', '⚙', 'Settings', function () { leave('settings'); }));
 }

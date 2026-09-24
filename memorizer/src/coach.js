@@ -267,7 +267,10 @@ function numberFacts(cluster, limit) {
     var at = -1;
     for (var i = 0; i < ws.length; i++) if (isFactNumber(ws, i)) { at = i; break; }
     if (at === -1 || out.length >= (limit || 8)) return;
-    var text = ws.length <= 28 ? s.text : (at > 10 ? '… ' : '') + ws.slice(Math.max(0, at - 10), at + 12).join(' ') + (at + 12 < ws.length ? ' …' : '');
+    /* The whole sentence: the lesson shows its values as tiles (sheet.js),
+       every one of them, and a window around the first cut off the rest
+       ("… whereas a normal …" lost "8 to 12 mmHg"). */
+    var text = s.text;
     if (!seen[text]) { seen[text] = true; out.push({ text: text, page: s.page }); }
   });
   return out;

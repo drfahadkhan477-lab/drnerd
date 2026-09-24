@@ -484,7 +484,7 @@ function kindOf(user) {
   ok('with the grounding prohibition as its system prompt, and the analogy fence in the task', /NOT_IN_PDF/.test(les[0].body.system) &&
      les[0].user.indexOf('The ONLY thing you may write that is not from the excerpt is an analogy') !== -1);
   ok('and the browser-access header Anthropic requires', les[0].headers['anthropic-dangerous-direct-browser-access'] === 'true');
-  ok('the step says Learn', (await page.locator('.stepper li.now').innerText()) === 'Learn');
+  ok('the step says Learn', (await page.locator('.stepper li.now').textContent()) === 'Learn');
   ok('the big idea comes first', (await text(page, '#big-idea .big')) === 'Preload is how full the ventricle is before it squeezes.' &&
      await page.evaluate(() => document.querySelector('#big-idea').compareDocumentPosition(document.querySelector('#points')) & Node.DOCUMENT_POSITION_FOLLOWING));
   const pointText = await page.locator('ol.points > li').first().innerText();
@@ -496,10 +496,16 @@ function kindOf(user) {
   ok('an analogy from Claude is shown, and labelled as not from the book',
      /A balloon/.test(await page.locator('.analogy h3').innerText()) && /written by Claude — not from your book/.test(await page.locator('.analogy .label').innerText()),
      await text(page, '.analogy'));
-  ok('the numbers to know are listed, their values marked', /18 mmHg/.test(await page.locator('#numbers mark').first().innerText()));
+  ok('the numbers to know are value tiles: the value large, what it measures under it', (await page.locator('#numbers .tile-value').first().textContent()) === '> 18 mmHg' &&
+     (await page.locator('#numbers .tile-label').first().textContent()) === 'LVEDP', await text(page, '#numbers .tiles'));
   ok('the mnemonic is big letters, each named', (await text(page, '.hook .hook-script')) === 'V · V · C' &&
      JSON.stringify(await page.$$eval('.hook .acrostic .word', ws => ws.map(w => w.textContent))) === '["Venous return","Volume","Compliance"]');
   ok('and the whole section is one tap away', /s1wab/.test(await page.locator('details.source').textContent()));
+  /* The owner's screenshots showed the drill button floating over the key
+     points. It is the lesson's last thing now, in the flow of the page. */
+  ok('the drill button comes last, in the page, covering nothing', await page.evaluate(() => {
+    const b = document.querySelector('#to-drill'), wrap = b.parentElement;
+    return getComputedStyle(wrap).position === 'static' && wrap === wrap.parentElement.lastElementChild; }));
   /* The picture found at import is drawn from the stored PDF, cropped. */
   await page.waitForFunction(() => { const i = document.querySelector('#visuals .figs img'); return i && /^data:image\/png/.test(i.src) && i.naturalWidth > 0; }, null, T);
   const fig = await page.evaluate(() => { const i = document.querySelector('#visuals .figs img'); return { w: i.naturalWidth, h: i.naturalHeight }; });
@@ -525,7 +531,7 @@ function kindOf(user) {
   const qz = stub.requests.filter(r => r.kind === 'quiz');
   ok('one drill request, carrying the lesson’s key points and section 1 only', qz.length === 1 && /1\. Preload — end-diastolic stretch/.test(qz[0].user) &&
      !/s[23]w[a-z]/.test(qz[0].user), qz.map(r => r.user.length).join());
-  ok('the step says Drill, with Learn done', (await page.locator('.stepper li.now').innerText()) === 'Drill' && (await page.locator('.stepper li.done').innerText()) === 'Learn');
+  ok('the step says Drill, with Learn done', (await page.locator('.stepper li.now').textContent()) === 'Drill' && (await page.locator('.stepper li.done').textContent()) === 'Learn');
   ok('four options, lettered A to D, and nothing to type', JSON.stringify(await page.$$eval('#mcq .opt-letter', es => es.map(e => e.textContent))) === '["A","B","C","D"]' &&
      await page.locator('textarea, input[type="text"]').count() === 0);
   ok('the question counts where it is', /Question 1 of 2/.test(await meta(page)));
@@ -757,8 +763,8 @@ function kindOf(user) {
     ok('a section on preload gets the preload analogy, labelled as Memorizer’s and not the book’s',
        L.analogies.some(a => /preload/i.test(a.title) && a.source === 'Memorizer') &&
        /Memorizer’s, not your book’s/.test(await p2.locator('.analogy .label').first().innerText()), JSON.stringify(L.analogies.map(a => a.title)));
-    ok('the numbers to know are the section’s own', L.numbers.some(n => /18 mmHg/.test(n.text)) && await p2.locator('#numbers li').count() === L.numbers.length,
-       JSON.stringify(L.numbers.map(n => n.text.slice(0, 40))));
+    const tv = await p2.$$eval('#numbers .tile-value', ts => ts.map(t => t.textContent));
+    ok('the numbers to know are the section’s own, as tiles', L.numbers.some(n => /18 mmHg/.test(n.text)) && tv.indexOf('> 18 mmHg') !== -1 && tv.indexOf('8–12 mmHg') !== -1, JSON.stringify(tv));
     await p2.locator('#flow').waitFor(T);
     const flowText = (await p2.locator('#flow').innerText()).replace(/\s+/g, ' ');
     ok('section 1 shows a flowchart built from its cause-and-effect sentences', /Diuretics/.test(flowText) && /reduce/.test(flowText) && /preload/.test(flowText) &&
@@ -897,9 +903,11 @@ function kindOf(user) {
 
     head('ask your book: its own sentences, with their pages, on the device');
     const askBefore = stub.requests.length;
-    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await p2.locator('#ask-q').waitFor(T);
     await p2.locator('#browse').waitFor(T);
+    ok('the coach introduces itself and offers the next step', /I’m your coach/.test(await p2.locator('.coach-intro').innerText()) &&
+       await p2.locator('.coach-intro #coach-continue').count() === 1, (await p2.locator('.coach-intro').innerText()).slice(0, 120));
     /* The screen redraws when the index is built; a question typed before
        that must survive it. Forced here, not left to timing. */
     await p2.fill('#ask-q', 'What reduces preload?');
@@ -966,7 +974,7 @@ function kindOf(user) {
       } } } }, 'stub');
     });
     const aiNet = stub.requests.length;
-    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await p2.fill('#ask-q', 'What reduces preload?');
     await p2.locator('#ask-go').click();
     await p2.locator('#ai-summarise').click();
@@ -1000,7 +1008,7 @@ function kindOf(user) {
     ok('and none of it went over the network', stub.requests.length === aiNet && await p2.evaluate(() => window.__ai.length) === 4);
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#ai-toggle').click();
-    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await p2.locator('#ask-go').click();
     await p2.locator('#answer').waitFor(T);
     ok('turned off, it offers nothing', await p2.locator('#ai-answer').count() === 0);
@@ -1014,14 +1022,14 @@ function kindOf(user) {
     });
     await p2.evaluate(() => Memorizer.importText('Syncope notes', 'Syncope\n\nExertional syncope is a classic symptom of severe aortic stenosis.\nIt calls for prompt valve assessment.'));
     await p2.locator('h1.bar-title', { hasText: 'Syncope notes' }).waitFor(T);
-    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await p2.fill('#ask-q', 'why do people pass out');
     await p2.locator('#ask-go').click();
     await p2.locator('#not-found').waitFor(T);
     ok('by words alone, a question sharing no word with the book is not found', await p2.locator('#answer').count() === 0);
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#meaning-toggle').click();
-    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await p2.fill('#ask-q', 'why do people pass out');
     await p2.locator('#ask-go').click();
     await p2.locator('#answer').waitFor(T);
@@ -1040,7 +1048,7 @@ function kindOf(user) {
     ok('a second question embeds only itself', await p2.evaluate(b => window.__emb - b, before) === 1, String(await p2.evaluate(b => window.__emb - b, before)));
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#meaning-toggle').click();
-    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await p2.fill('#ask-q', 'why do people pass out');
     await p2.locator('#ask-go').click();
     await p2.locator('#not-found').waitFor(T);

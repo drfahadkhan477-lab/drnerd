@@ -286,6 +286,7 @@ const SUITES = [
   ['memorizer-ask-pure',    'asking your book: its own sentences with their pages, from the right section, or nothing found'],
   ['memorizer-ground-pure', 'the on-device AI says nothing the book does not: no new number or name, cited, answers found in the section'],
   ['memorizer-vec-pure',    'search by meaning: similarity, a measured floor, and the merge with search by words'],
+  ['memorizer-sheet-pure',  'a lesson laid out to be remembered: points under clinical headings, numbers as tiles, nothing twice'],
   ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
 ];
 
@@ -326,7 +327,7 @@ const SUITES = [
    conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
    and echo. */
 const PENDING_RECORD = ['coronaryview', 'ambient',
-  'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer-coach-pure', 'memorizer-appearance-pure', 'memorizer-home-pure', 'memorizer-book-pure', 'memorizer-ask-pure', 'memorizer-ground-pure', 'memorizer-vec-pure', 'memorizer'];
+  'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer-coach-pure', 'memorizer-appearance-pure', 'memorizer-home-pure', 'memorizer-book-pure', 'memorizer-ask-pure', 'memorizer-ground-pure', 'memorizer-vec-pure', 'memorizer-sheet-pure', 'memorizer'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

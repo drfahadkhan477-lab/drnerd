@@ -153,6 +153,9 @@ head('the lesson: the book’s own words, in teaching order');
   ok('a reference to a table or figure is not a number to know', !T.numbers.some(n => /Table 17\.1/.test(n.text)), JSON.stringify(T.numbers));
   const long = { index: 0, title: 'Severity', pageStart: 1, pageEnd: 1, segments: [seg(1,
     'In the echocardiographic assessment of aortic valve disease the peak transvalvular velocity of at least 4 m/s and a mean gradient of 40 mmHg together with a small valve area define the severe stage of the disease in most adults examined.')] };
+  const two = K.numberFacts({ title: 't', segments: [{ page: 4, heading: false, text:
+    'A left ventricular end-diastolic pressure greater than 18 mmHg should prompt a search for volume overload in the patient who is breathless, whereas a normal pressure of 8 to 12 mmHg does not exclude a stiff ventricle.' }] }, 8);
+  ok('a number fact keeps its whole sentence, so every value in it becomes a tile', two.length === 1 && /18 mmHg/.test(two[0].text) && /8 to 12 mmHg/.test(two[0].text), JSON.stringify(two));
   ok('a value keeps its unit as the book wrote it ("m/s", not "m s")', K.lesson(long).numbers.some(n => /4 m\/s/.test(n.text)), JSON.stringify(K.lesson(long).numbers));
   const acq = T.mnemonics.find(m => /Acquired causes of TS/.test(m.title));
   ok('every list of three to nine gets a mnemonic, its letters the items’ first letters', acq && acq.letters === 'RICMW' &&

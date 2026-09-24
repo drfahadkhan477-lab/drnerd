@@ -208,7 +208,7 @@ function build(docs) {
 var HEADINGS = [
   /* A definition names its term first: "Aortic stenosis is a narrowing…",
      not "This is a common cause…". */
-  ['Definition', /^(?!(?:This|That|It|There|These|Those|Which|Such|One|Each)\b)[A-Z][\w\-\/(),' ]{0,60}?\s(?:is|are)\s(?:a|an|defined as|characteri[sz]ed by)\b|\brefers to\b|\bis defined as\b/],
+  ['Definition', /^(?!(?:This|That|It|There|These|Those|Which|Such|One|Each)\b)[A-Z][\w\-\/(),' ]{0,60}?\s(?:is|are)\s(?:a|an|defined (?:as|by)|characteri[sz]ed by)\b|\brefers to\b|\bis defined as\b/],
   ['Causes and risk factors', /\b(?:caus(?:e|es|ed)\b|due to\b|etiolog\w*|aetiolog\w*|risk factors?\b|predispos\w*|associated with\b|secondary to\b|results from\b)/i],
   ['Mechanism', /\b(?:leads? to\b|results? in\b|mechanism\w*|pathophysiolog\w*|because\b|increases?\b|decreases?\b|reduces?\b|raises?\b|impairs?\b)/i],
   ['Presentation', /\b(?:present(?:s|ing|ation)?\b|symptom\w*|signs?\b|examination\b|murmurs?\b|complain\w*|history\b)/i],

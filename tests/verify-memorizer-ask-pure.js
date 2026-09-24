@@ -158,6 +158,7 @@ head('arranged under headings, not rewritten');
   const h = t => A.headingOf(t);
   ok('a sentence that opens with its term and "is a" is a definition', h('Aortic stenosis is a narrowing of the aortic valve opening that obstructs left ventricular outflow.') === 'Definition');
   ok('"This is a …" is not', h('This is a common cause of syncope.') !== 'Definition', h('This is a common cause of syncope.'));
+  ok('"X is defined by …" is', h('Severe stenosis is defined by a mean gradient of at least 40 mmHg.') === 'Definition');
   ok('causes, presentation, diagnosis and complications by their words', h('The commonest cause in older adults is calcific degeneration of a trileaflet valve.') === 'Causes and risk factors' &&
      h('Exertional syncope, angina and dyspnea are the classic symptoms.') === 'Presentation' &&
      h('Echocardiography confirms the diagnosis and grades severity by gradient and valve area.') === 'Diagnosis' &&
