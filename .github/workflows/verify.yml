@@ -239,13 +239,13 @@ jobs:
         run: node tests/verify-memorizer-ground-pure.js
       - name: Memorizer — search by meaning, its measured floor, and its merge with search by words (14 checks)
         run: node tests/verify-memorizer-vec-pure.js
-      - name: Memorizer — a lesson laid out to be remembered: clinical headings, number tiles, the section at a glance, nothing twice (21 checks)
+      - name: Memorizer — a lesson laid out to be remembered — clinical headings, number tiles, the section at a glance, nothing twice (21 checks)
         run: node tests/verify-memorizer-sheet-pure.js
       - name: Memorizer — figures made from the book, every word the lesson's (17 checks)
         run: node tests/verify-memorizer-figure-pure.js
-      - name: Memorizer — the Coach as an agent: it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, and names what is still weak (30 checks)
+      - name: Memorizer — the Coach as an agent — it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, and names what is still weak (30 checks)
         run: node tests/verify-memorizer-agent-pure.js
-      - name: Memorizer — where a unit came from: a real SHA-256 of its bytes, a duplicate recognised, an import report that counts what happened (31 checks)
+      - name: Memorizer — where a unit came from — a real SHA-256 of its bytes, a duplicate recognised, an import report that counts what happened (31 checks)
         run: node tests/verify-memorizer-provenance-pure.js
 
   # ── Memorizer in a real browser ────────────────────────────────────────────

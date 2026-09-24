@@ -166,6 +166,22 @@ const launches = n => {
 };
 const pureCI = ciSuites.filter(n => !launches(n));
 
+head('the workflow is one GitHub can read');
+{
+  /* A step name with ": " in it is a YAML mapping inside a plain scalar,
+     and GitHub rejects the WHOLE FILE: the run is created and fails in the
+     same second with no jobs at all. Two Memorizer step names did that, and
+     for as long as they were there no suite in this file ran on any push —
+     while every check here, which reads the file as text, stayed green.
+     Narrow on purpose: this catches that one shape in step and job names,
+     not YAML errors in general (there is no YAML parser in the tests). */
+  const names = [...yml.matchAll(/^\s*(?:-\s+)?name:\s+(.*)$/gm)].map(m => m[1]);
+  ok('the workflow has names to check', names.length > 40, `${names.length} names`);
+  const colon = names.filter(v => !/^['"]/.test(v) && /:\s/.test(v));
+  ok('and no unquoted name holds ": ", which makes GitHub reject the file', colon.length === 0,
+     colon.map(v => v.slice(0, 60)).join(' | ') || 'none');
+}
+
 head('CI runs what the workflow says it runs');
 {
   ok('the workflow invokes some suites directly', ciSuites.length > 0, ciSuites.join(', '));
