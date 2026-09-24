@@ -84,7 +84,7 @@ function makeDoc(seed, opts = {}) {
   });
   const headingEnds = [];
   for (let i = 0; i < words.length - 1; i++) if (kinds[i] && !kinds[i + 1]) headingEnds.push(i);
-  return { blocks, words, headingEnds, rowOf };
+  return { blocks, words, headingEnds, rowOf, kinds };
 }
 
 /* The invariants, as data rather than PASS lines, so one check can summarise
@@ -98,9 +98,19 @@ function violations(doc, clusters) {
     const at = got.findIndex((w, i) => w !== doc.words[i]);
     out.push(`coverage: ${got.length} words out, ${doc.words.length} in, first difference at ${at}`);
   }
+  /* Where each cluster starts, as a global word index, and which words open
+     a heading. A cluster under MIN is in bounds only when the next one opens
+     with a topic heading and it holds at least TOPIC_MIN words: sections
+     follow the book's topics (the owner's reference is a deck split into
+     Etiology, Diagnosis, Therapy…), so a short topic is its own section.
+     makeDoc's headings are all size-set, so all are topics. */
+  const starts = []; let acc = 0;
+  clusters.forEach(c => { starts.push(acc); acc += c.text.split(/\s+/).filter(Boolean).length; });
+  const opensHeading = i => doc.kinds && doc.kinds[i] && !doc.kinds[i - 1];
   clusters.forEach((c, i) => {
     if (c.words > MAX) out.push(`bounds: cluster ${i} has ${c.words} > ${MAX}`);
-    if (i < clusters.length - 1 && c.words < MIN) out.push(`bounds: cluster ${i} of ${clusters.length} has ${c.words} < ${MIN}`);
+    const topicBreak = i < clusters.length - 1 && opensHeading(starts[i + 1]) && c.words >= C.TOPIC_MIN;
+    if (i < clusters.length - 1 && c.words < MIN && !topicBreak) out.push(`bounds: cluster ${i} of ${clusters.length} has ${c.words} < ${MIN}, and the next does not open a topic`);
     if (c.words !== c.text.split(/\s+/).filter(Boolean).length) out.push(`count: cluster ${i} says ${c.words} words`);
   });
   if (!out.some(v => v.startsWith('coverage'))) {
@@ -228,12 +238,37 @@ head('what a cluster says about itself');
   ok('its segments carry each page, so a prompt can mark [p.N]',
      cs.every(c => c.segments.every(s => typeof s.page === 'number')) && cs[0].segments[0].heading === true);
   ok('its gist is the start of its first sentence, not its heading', /^a0 a1/.test(cs[0].gist), cs[0].gist.slice(0, 20));
-  const tail = C.clusterBlocks([
+  const tailBlocks = minor => C.clusterBlocks([
     { text: Array.from({ length: MIN + 50 }, (_, i) => 'c' + i).join(' ') + '.', page: 1, heading: false },
-    { text: 'Short', page: 1, heading: true },
+    { text: 'Short', page: 1, heading: true, minor },
     { text: 'd0 d1 d2 d3 d4.', page: 1, heading: false },
   ]);
-  ok('a short tail folds into the cluster before it when there is room', tail.length === 1, `${tail.length} clusters`);
+  ok('a short tail under an outline heading folds into the cluster before it when there is room', tailBlocks(true).length === 1, `${tailBlocks(true).length} clusters`);
+  ok('but a short tail that opens a new topic is a section of its own', tailBlocks(false).length === 2, `${tailBlocks(false).length} clusters`);
+  /* Three short topics, each a heading in a bigger font over a paragraph:
+     three sections, not one — what the first version of the topic rule
+     fixed, measured on a generated chapter of three valve lesions. */
+  const topicBlocks = [];
+  ['Aortic Stenosis', 'Aortic Regurgitation', 'Mitral Stenosis'].forEach((t, k) => {
+    topicBlocks.push({ text: t, page: 1, heading: true });
+    topicBlocks.push({ text: Array.from({ length: 90 }, (_, i) => 't' + k + 'w' + i).join(' ') + '.', page: 1, heading: false });
+  });
+  const tc = C.clusterBlocks(topicBlocks);
+  ok('short topics are sections of their own, each titled by its heading', tc.map(c => c.title).join(' | ') === 'Aortic Stenosis | Aortic Regurgitation | Mitral Stenosis',
+     tc.map(c => c.title + ' (' + c.words + ')').join(' | '));
+  /* A chapter, a section and a subsection heading one after another: the
+     run stays together, over its body — the first topic rule split it and
+     left two headings with no text under them. */
+  const run = C.clusterBlocks([
+    { text: Array.from({ length: 70 }, (_, i) => 'r' + i).join(' ') + '.', page: 1, heading: false },
+    { text: 'Chapter Twelve', page: 1, heading: true }, { text: 'Valve Disease', page: 1, heading: true }, { text: 'Stenosis', page: 1, heading: true },
+    { text: Array.from({ length: 90 }, (_, i) => 'b' + i).join(' ') + '.', page: 1, heading: false }]);
+  const runOwner = {}; run.forEach((c, ci) => c.text.split(/\s+/).forEach(w => { runOwner[w] = ci; }));
+  ok('a run of headings is never split from itself or from its text', runOwner.Chapter === runOwner.Stenosis && runOwner.Stenosis === runOwner.b0,
+     run.map(c => c.title + ' (' + c.words + ')').join(' | '));
+  const tiny = C.clusterBlocks([{ text: 'Overview', page: 1, heading: true }, { text: 'One short line.', page: 1, heading: false },
+    { text: 'Details', page: 1, heading: true }, { text: Array.from({ length: 80 }, (_, i) => 'z' + i).join(' ') + '.', page: 1, heading: false }]);
+  ok(`a topic with less than ${C.TOPIC_MIN} words before the next heading does not stand alone`, tiny.length === 1, tiny.map(c => c.title + ' (' + c.words + ')').join(' | '));
   ok('an empty document makes no clusters, rather than one empty one', C.clusterBlocks([]).length === 0);
 }
 
@@ -441,6 +476,23 @@ head('two columns written line by line are read column by column');
   ok('pairs whose second cells do not line up are not columns', C.columnsOf(skew) === skew);
 }
 
+head('pasted text: given the shape of a page');
+{
+  const pg = C.pagesFromText('Preload\n\nPreload is the stretch on the ventricle at end diastole. It rises\nwith volume.\n\nAfterload\n\nAfterload is the wall stress during ejection.\n\nThis line ends with a stop.');
+  const bl = C.blocksFromPages(pg).blocks;
+  ok('a short line alone becomes a heading, a paragraph stays one', bl.map(b => (b.heading ? 'H:' : 'P:') + b.text).join(' | ') ===
+     'H:Preload | P:Preload is the stretch on the ventricle at end diastole. It rises with volume. | H:Afterload | P:Afterload is the wall stress during ejection. | P:This line ends with a stop.',
+     bl.map(b => (b.heading ? 'H:' : 'P:') + b.text).join(' | '));
+  ok('and pasted topics become sections of their own', C.clusterBlocks(bl).length >= 1 && C.clusterBlocks(C.blocksFromPages(C.pagesFromText(
+    ['Preload', 'Afterload'].map(t => t + '\n\n' + Array.from({ length: 80 }, (_, i) => t.toLowerCase() + i).join(' ') + '.').join('\n\n'))).blocks).map(c => c.title).join() === 'Preload,Afterload');
+  const long = C.pagesFromText(Array.from({ length: 100 }, (_, i) => 'Line number ' + i + ' of the notes.').join('\n'));
+  ok(`a page every ${C.PASTE_PAGE_LINES} lines`, long.length === Math.ceil(100 / C.PASTE_PAGE_LINES) && long[1].lines[0].text === 'Line number ' + C.PASTE_PAGE_LINES + ' of the notes.');
+  const words = t => t.split(/\s+/).filter(Boolean);
+  const src = 'Heading One\n\nFirst para has words.\nAnd more words here.\n\nSecond one.';
+  ok('every word pasted is in a page, in order', JSON.stringify(words(C.pagesFromText(src).map(p => p.lines.map(l => l.text).join(' ')).join(' '))) === JSON.stringify(words(src)));
+  ok('nothing pasted, no pages', C.pagesFromText('   \n\n  ').length === 0);
+}
+
 head('outline headings: found by their number, not their font');
 {
   const L = (text, y, size = 11) => ({ text, size, y, cells: [{ x: 72, text }] });
@@ -484,6 +536,18 @@ head('outline headings: found by their number, not their font');
     { text: 'Tricuspid Regurgitation', page: 2, heading: true },
     { text: 'A. Etiology.', page: 2, heading: true, minor: true }, para(300),
   ]);
+  const k = { i: 0 };
+  const few = m => ({ text: Array.from({ length: m }, () => 'r' + k.i++).join(' ') + '.', page: 1, heading: false });
+  const sub = C.clusterBlocks([
+    { text: 'Mitral Stenosis', page: 1, heading: true },
+    { text: 'A. Etiology.', page: 1, heading: true, minor: true }, few(C.TOPIC_MIN + 20),
+    { text: 'B. Pathophysiology', page: 1, heading: true, minor: true }, few(C.TOPIC_MIN + 20),
+    { text: 'Mitral Regurgitation', page: 2, heading: true }, few(C.TOPIC_MIN + 20),
+  ]);
+  /* Followed by a topic, so a wrong split at "B." would be a middle
+     section — the tail fold cannot hide it. */
+  ok('a lettered sub-heading after a topic-sized stretch stays inside its topic', sub.map(c => c.title).join() === 'Mitral Stenosis,Mitral Regurgitation',
+     sub.map(c => c.title).join(' | '));
   const titles = cs.map(c => c.title);
   ok('a section opening at an outline heading is titled under the heading above it',
      titles[1] === 'Tricuspid Stenosis: Pathophysiology', titles.join(' | '));
@@ -580,7 +644,7 @@ head('figures drawn as lines, not pictures');
   /* pdf.js 3.11's own numbers for these operators (src/shared/util.js OPS). */
   const OPS = { save: 10, restore: 11, transform: 12, moveTo: 13, lineTo: 14, curveTo: 15, curveTo2: 16, curveTo3: 17, closePath: 18, rectangle: 19,
                 stroke: 20, closeStroke: 21, fill: 22, eoFill: 23, fillStroke: 24,
-                endPath: 28, clip: 29, paintImageXObject: 85, paintFormXObjectBegin: 74, paintFormXObjectEnd: 75, constructPath: 91 };
+                endPath: 28, clip: 29, paintImageXObject: 85, paintFormXObjectBegin: 74, paintFormXObjectEnd: 75, beginAnnotation: 80, endAnnotation: 81, constructPath: 91 };
   const view = [0, 0, 612, 792];
   const ops = list => ({ fnArray: list.map(x => x[0]), argsArray: list.map(x => x[1] || null) });
   /* A painted path as pdf.js lists it: [ops, their numbers, the bounds pdf.js
@@ -592,6 +656,18 @@ head('figures drawn as lines, not pictures');
     ...[0, 1, 2, 3, 4, 5, 6, 7].map(i => bar(110 + i * 36, 300, 24, 40 + i * 20)));
   const found = Pdf.figureBoxes(ops(chart), OPS, view, []);
   ok('a chart drawn as lines and bars is a figure, boxed where it was drawn', JSON.stringify(found) === '[[100,300,400,500]]', JSON.stringify(found));
+  /* A reader's highlights: eight marker strokes down a paragraph, each an
+     annotation as pdf.js 3.11 lists it — [id, rect, transform, matrix, own
+     canvas] — with its appearance drawn inside. Unwrapped, the same strokes
+     are a "figure" (the fixture is one the rules would otherwise take). */
+  const marks = [0, 1, 2, 3, 4, 5, 6, 7].map(i => bar(80, 600 - i * 14, 300, 12));
+  const annotated = [].concat(...marks.map((m, i) => [[80, ['a' + i, [80, 600 - i * 14, 380, 612 - i * 14], [1, 0, 0, 1, 0, 0], [1, 0, 0, 1, 0, 0], false]]].concat(m, [[81]])));
+  ok(`a crop has a ${Pdf.CROP_MARGIN}-unit margin, never past the page`, JSON.stringify(Pdf.padBox([100, 300, 400, 500], view)) === JSON.stringify([100 - Pdf.CROP_MARGIN, 300 - Pdf.CROP_MARGIN, 400 + Pdf.CROP_MARGIN, 500 + Pdf.CROP_MARGIN]) &&
+     JSON.stringify(Pdf.padBox([2, 3, 610, 790], view)) === '[0,0,612,792]', JSON.stringify(Pdf.padBox([2, 3, 610, 790], view)));
+  ok('a reader\u2019s highlights are annotations, never a figure — and a chart beside them still is',
+     Pdf.figureBoxes(ops([].concat(...marks)), OPS, view, []).length === 1 &&
+     JSON.stringify(Pdf.figureBoxes(ops(annotated.concat(chart)), OPS, view, [])) === '[[100,300,400,500]]',
+     JSON.stringify(Pdf.figureBoxes(ops(annotated.concat(chart)), OPS, view, [])));
   ok(`fewer than ${Pdf.VECTOR_MIN_PATHS} paths — a frame, a box round a callout — is not`,
      Pdf.figureBoxes(ops([].concat(line(100, 300, 400, 300), line(100, 300, 100, 500), bar(120, 300, 200, 150))), OPS, view, []).length === 0);
   /* Painted axes, and eight bars that are only clipping paths: counted, the
@@ -738,6 +814,71 @@ head('figures: captions, and the sections that name them');
   ok('a figure printed off the section’s pages is shown where it is named, panel letter or not', got[2].length === 1 && got[2][0] === E, JSON.stringify(got[2]));
   const many = Array.from({ length: 9 }, () => ({ page: 1 }));
   ok(`no section shows more than ${C.FIGURES_PER_SECTION}`, C.assignFigures([cl(0, 1, 1, 'x')], many)[0].length === C.FIGURES_PER_SECTION);
+}
+
+head('scanned pages: text recognition, in the shape pdf.js gives text');
+{
+  const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
+  const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+  /* Tesseract's output, as its blocks → paragraphs → lines → words give it:
+     canvas pixels, y down, drawn at SCALE. A page 792 units high. */
+  const S = O.SCALE, H = 792;
+  const word = (text, x0, x1, conf = 95) => ({ text, confidence: conf, bbox: { x0: x0 * S, x1: x1 * S, y0: 0, y1: 0 } });
+  /* A line's box runs from its tallest letter to its lowest descender, so it
+     is taller than its row and reaches below its baseline: the fixture makes
+     it so, or reading the box in place of the baseline or row height would
+     pass unnoticed. */
+  const tline = (base, rowH, words) => ({ bbox: { y0: (base - rowH * 1.3) * S, y1: (base + 3) * S }, baseline: { y0: base * S, y1: base * S }, rowAttributes: { row_height: rowH * S }, words });
+  const blocks = [{ paragraphs: [{ lines: [
+    tline(100, 20, [word('Scanned', 72, 150), word('Heading', 158, 230)]),
+    tline(140, 12, [word('Preload', 72, 110), word('is', 113, 122), word('the', 125, 141), word('stretch.', 144, 185)]),
+    tline(154, 12, [word('Venous', 72, 108), word('~~', 111, 118, 12), word('return', 121, 150)]),
+    tline(180, 12, [word('LVEDP', 72, 105), word('12', 240, 252), word('mmHg', 380, 410)]),
+  ] }] }];
+  const items = O.ocrItems(blocks, S, H);
+  const lines = Pdf.linesOf(items, H);
+  ok('recognised words become lines, with their spaces', lines.map(l => l.text).join(' | ') === 'Scanned Heading | Preload is the stretch. | Venous return | LVEDP 12 mmHg',
+     lines.map(l => l.text).join(' | '));
+  ok('each at its line’s height down the page, in PDF units', lines.map(l => Math.round(l.y)).join() === '100,140,154,180', lines.map(l => l.y).join());
+  ok('and its line’s size, so a heading still stands out', lines[0].size === 20 && lines[1].size === 12, lines.map(l => l.size).join());
+  ok(`a word read with less than ${O.MIN_CONFIDENCE}% confidence is left out`, !/~~/.test(lines[2].text));
+  ok('words far apart are still cells, so a scanned table is still a table', lines[3].cells.length === 3 && lines[3].cells[1].x === 240, JSON.stringify(lines[3].cells));
+  const bl = C.blocksFromPages([{ page: 1, lines }]).blocks;
+  ok('and the chunker reads a heading and a paragraph from them', bl[0].heading && bl[0].text === 'Scanned Heading' && bl.some(b => !b.heading && /^Preload is the stretch\. Venous return /.test(b.text)),
+     bl.map(b => (b.heading ? 'H:' : 'P:') + b.text).join(' | '));
+  /* Without a baseline, the bottom of the line's box stands in for it. */
+  /* A line of ordinary length, every gap a word gap: the shape that read as
+     letter-spaced and lost every space on the first real scanned page. */
+  const long = Pdf.linesOf(O.ocrItems([{ paragraphs: [{ lines: [tline(300, 12, ['Venous', 'return', 'is', 'the', 'main', 'determinant', 'of', 'preload.']
+    .reduce((acc, w) => { const x0 = acc.x; acc.ws.push(word(w, x0, x0 + w.length * 6)); acc.x = x0 + w.length * 6 + 3; return acc; }, { x: 72, ws: [] }).ws)] }] }], S, H), H);
+  ok('a full line of recognised words keeps every space', long[0].text === 'Venous return is the main determinant of preload.', long[0].text);
+  const noBase = O.ocrItems([{ paragraphs: [{ lines: [{ bbox: { y0: 88 * S, y1: 100 * S }, words: [word('x', 72, 80)] }] }] }], S, H);
+  ok('a line with no baseline or row height uses its box', noBase.length === 1 && noBase[0].transform[5] === H - 100 && noBase[0].transform[0] === 12, JSON.stringify(noBase[0]));
+
+  /* The one correction made to tesseract.js 5.1.1's worker before it runs. */
+  const src = 'x;a.map((function(t){' + O.WORKER_FIX.find + ';y';
+  ok('the worker fix replaces its anchor', O.fixWorker(src) === 'x;a.map((function(t){' + O.WORKER_FIX.replace + ';y');
+  let none = '', twice = '';
+  try { O.fixWorker('nothing to fix'); } catch (e) { none = e.message; }
+  try { O.fixWorker(src + src); } catch (e) { twice = e.message; }
+  ok('and throws, rather than guess, when the anchor is missing or doubled', /found 0 times/.test(none) && /found 2 times/.test(twice), none + ' / ' + twice);
+
+  /* Every file the text reader fetches is one the service worker keeps. */
+  const { build } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
+  const out = fs.mkdtempSync(path.join(require('os').tmpdir(), 'memsw-'));
+  build(out);
+  const sw = fs.readFileSync(path.join(out, 'sw.js'), 'utf8');
+  fs.rmSync(out, { recursive: true, force: true });
+  const m = /var pinnedCdn = (.*);/.exec(sw);
+  const pinned = new Function('u', 'return ' + m[1]);
+  const urls = Object.keys(O.TESS).map(k => O.TESS[k].url).concat([Pdf.LIB.url]);
+  ok('the service worker keeps every file the text reader fetches, for offline use', urls.every(u => pinned(new URL(u))),
+     urls.filter(u => !pinned(new URL(u))).join(', ') || urls.length + ' files');
+  ok('and not an unpinned one', !pinned(new URL('https://cdn.jsdelivr.net/npm/tesseract.js/dist/worker.min.js')));
+  /* The on-device AI's engine, the same way. */
+  const L = require(path.join(ROOT, 'memorizer', 'src', 'llm.js'));
+  ok('the AI engine is pinned to a version, integrity-checked, and kept for offline use', /@mlc-ai\/web-llm@\d+\.\d+\.\d+\//.test(L.WEBLLM.url) &&
+     /^sha384-[A-Za-z0-9+/]{64}$/.test(L.WEBLLM.sri) && pinned(new URL(L.WEBLLM.url)) && !pinned(new URL('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/lib/index.js')));
 }
 
 head('scanned pages are named, not skipped silently');

@@ -10,6 +10,22 @@
      sessions  { id: docId, state }        — the MemSession state, saved every step
      cards     { id, docId, …, srs }       — the review deck
      files     { id: docId, bytes }         — the PDF itself, for its pages and figures
+   and, from v3, for whole books:
+     books     { id, name, addedAt, pages, parts:[{ fileId, name, first, last }],
+                 method, chapters:[{ n, title, pageStart, pageEnd, docId }] }
+     bookpages { id: bookId + ':' + part, pages:[{ page, lines }] }
+                                            — the book's text as read, so its
+                                              chapters can be cut again without
+                                              reading 1,500 pages a second time
+     meta      { id, … }                    — small records: the days studied
+   and, from v4:
+     vectors   { id: docId, model, vecs:[[…] per section] }
+                                            — each section's meaning, for search
+                                              by meaning (vec.js); remade if the
+                                              model changes
+
+   A chapter of a book is a doc like any other, with bookId and the book's
+   parts (its figures and pages are drawn from whichever part holds them).
 
    When IndexedDB cannot be opened (some private-browsing modes refuse it),
    everything still works for this visit from memory, and `persistent` says
@@ -20,12 +36,13 @@
 'use strict';
 
 var DB_NAME = 'memorizer';
-var DB_VERSION = 2;
+var DB_VERSION = 4;
 /* v2 adds `files`: the PDF's own bytes, kept on this device so its pages and
-   figures can be drawn while studying. Upgrading keeps the other three. */
-var STORES = ['docs', 'sessions', 'cards', 'files'];
+   figures can be drawn while studying. v3 adds `books`, `bookpages` and
+   `meta`; v4, `vectors`. Upgrading keeps every store already there. */
+var STORES = ['docs', 'sessions', 'cards', 'files', 'books', 'bookpages', 'meta', 'vectors'];
 
-var mem = { docs: {}, sessions: {}, cards: {}, files: {} };
+var mem = { docs: {}, sessions: {}, cards: {}, files: {}, books: {}, bookpages: {}, meta: {}, vectors: {} };
 var dbp = null;
 var api = { persistent: false };
 
@@ -88,7 +105,18 @@ function del(store, id) {
 function deleteDoc(id) {
   return all('cards').then(function (cards) {
     return Promise.all(cards.filter(function (c) { return c.docId === id; }).map(function (c) { return del('cards', c.id); }));
-  }).then(function () { return del('sessions', id); }).then(function () { return del('files', id); }).then(function () { return del('docs', id); });
+  }).then(function () { return del('sessions', id); }).then(function () { return del('files', id); }).then(function () { return del('vectors', id); }).then(function () { return del('docs', id); });
+}
+
+/* Removing a book removes its chapters (and everything from them), its
+   parts' bytes, its stored text and itself. */
+function deleteBook(id) {
+  return get('books', id).then(function (b) {
+    if (!b) return null;
+    return b.chapters.reduce(function (p, c) { return p.then(function () { return c.docId ? deleteDoc(c.docId) : null; }); }, Promise.resolve())
+      .then(function () { return Promise.all(b.parts.map(function (pt, i) { return Promise.all([del('files', pt.fileId), del('bookpages', id + ':' + i)]); })); })
+      .then(function () { return del('books', id); });
+  });
 }
 
 /* Cards from a session are merged in, never overwritten: a card already in
@@ -102,6 +130,6 @@ function mergeCards(cards) {
 }
 
 api.open = open; api.put = put; api.get = get; api.all = all; api.del = del;
-api.deleteDoc = deleteDoc; api.mergeCards = mergeCards;
+api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards;
 root.MemStore = api;
 })(typeof window !== 'undefined' ? window : this);

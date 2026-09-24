@@ -21,6 +21,10 @@ var PREAMBLE = /^(?:it is (?:important|worth|useful) (?:to note|noting|rememberi
 var CITE = /\s*\[\s*\d+(?:\s*[,–\-]\s*\d+)*\s*\]/g;
 var XREF = /\s*\((?:see\s+)?(?:fig(?:ure)?|table|chapter|section|page|p)\.?\s*[^)]{0,20}\)/gi;
 var DEFINE = /^((?:\S+\s+){0,5}?\S+)\s+(?:is|are|refers to|is defined as|are defined as|means)\s+(.+)$/i;
+/* "Preload — the stretch on …" or "Causes: …": the form the lesson prompt
+   asks Claude for. Only the dash or colon is dropped. A colon needs a space
+   after it, so "12:00" is not a lead. */
+var LEAD = /^([^\u2014\u2013:;]+?)\s*(?:[\u2014\u2013]|:)\s+(.+)$/;
 
 function tidy(t) {
   var s = String(t || '').replace(CITE, '').replace(XREF, '').replace(/\s+/g, ' ').trim();
@@ -34,7 +38,11 @@ function bullet(text) {
   var parts = s.split(/\s*;\s*/).filter(Boolean);
   var main = parts[0], subs = parts.slice(1);
   var lead = '', body = main;
-  var m = DEFINE.exec(main);
+  /* Whichever splits earlier: "Causes of AS: calcific disease is …" leads
+     with "Causes of AS", "Aortic stenosis is a narrowing — …" with
+     "Aortic stenosis". */
+  var dl = LEAD.exec(main), df = DEFINE.exec(main);
+  var m = dl && (!df || dl[1].length <= df[1].length) ? dl : df;
   /* Only a short subject is a term worth leading with; "The finding that
      most patients…" is not a definition. */
   if (m && m[1].split(/\s+/).length <= 5 && !/^(?:this|that|it|there|these|those|which)\b/i.test(m[1])) {

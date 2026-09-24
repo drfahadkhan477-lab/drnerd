@@ -1,45 +1,41 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   coach.js — the built-in coach: the whole protocol with no AI, no key and no
-   network.
+   coach.js — the built-in coach: a lesson, then a drill of multiple-choice
+   questions, with no AI, no key and no network.
 
-   Written because the keyed providers failed a real user on first contact —
-   Gemini "high demand", Groq rejecting the key — and a study app that cannot
-   start a session until a third-party account works is not one you can rely
-   on the night before an exam. This is the default now; Claude is an
-   optional upgrade.
+   PURE. Three steps with the same arguments as the prompt builders in
+   prompts.js — lesson, quiz, exam — each returning an object in the SAME
+   schema the model is held to (MemPrompts.SCHEMAS), so the session, the store
+   and the screens cannot tell which coach produced a step.
+   tests/verify-memorizer-coach-pure.js checks every output against them.
 
-   PURE. The same five functions, with the same arguments, as the prompt
-   builders in prompts.js — encode, recall, gradeRecall, gradeExplain,
-   gauntlet — and each returns an object in the SAME schema the model is held
-   to (MemPrompts.SCHEMAS). The session, the store and the screens cannot tell
-   which coach produced a step. tests/verify-memorizer-coach-pure.js checks
-   every output against those schemas.
+   THE LESSON teaches a section the way a good teacher would walk through it:
+   the big idea first (the section's own definition), then the key points in
+   the book's order, the numbers worth knowing, a mnemonic for every list,
+   the cause-and-effect chain as a flowchart (drawn by the screen from
+   flow()), and an everyday analogy. Everything but the analogy is the
+   PDF's own words, with pages; the analogies come from analogies.js, were
+   written for Memorizer, and the screen labels them so.
 
-   WHAT IT DOES, AND WHAT IT CANNOT:
-     · encode   picks the section's key sentences — VERBATIM, with their pages.
-                It invents nothing, so it can never teach you something your
-                PDF does not say. The memory hook is the first letters of each
-                point's key term. No flowchart: drawing one needs to understand
-                the text, which this does not.
-     · recall   fill-in-the-blank on each key sentence, hiding its key term —
-                a number when there is one, since numbers are what exams test.
-     · grading  by matching words: exact, a typo in a long word, or a plural
-                or tense away. A synonym is marked wrong; the screen offers
-                "count it as correct" for exactly that.
-     · teach-back  scored by how many key points your explanation touches,
-                judged by their key terms. It cannot tell a right explanation
-                from a wrong one that uses the same words.
-     · gauntlet the harder questions recall did not ask — definitions
-                backwards (the meaning given, the term wanted), the other
-                lists, the other "most common" facts — taking turns with
-                fill-in-the-blank on sentences recall did not use and on
-                different words of the ones it did, weighted to your weakest
-                sections.
+   THE DRILL is multiple choice — single best answer, the format exams use —
+   and every question is built from the book: the right answer and the
+   explanation are its sentences, and the wrong options are real terms,
+   items, definitions and numbers from elsewhere in the same unit, chosen to
+   be the plausible confusions (another cause from a neighbouring list,
+   another definition, a value from the next paragraph). Kinds, hardest
+   first: a definition asked backwards, "the most common…", "all of the
+   following EXCEPT", which of these belongs to a list, a table cell, a
+   value, which statement is true, the missing term, and a definition asked
+   forwards. At most two of each kind per section, so a drill is mixed.
+
+   THE EXAM draws on every section with the same kinds, never repeating a
+   drill question, and at least half on the weakest sections.
 
    Same syntax floor as src/: nothing Safari on iPadOS 13.4 cannot parse.
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
 'use strict';
+
+var Analogies = root.MemAnalogies || (typeof require === 'function' ? require('./analogies.js') : null);
 
 var STOP = {};
 ('a about above after again against all also am an and any are as at be because been before being below ' +
@@ -72,13 +68,14 @@ var GENERIC = {};
 ('list lists listed accounting account accounts consider considered revealed reveal reveals connected connecting ' +
  'remainder following shown show shows known noted seen found given based related relative associated importance important ' +
  'commonly usually typically generally often rarely frequently patients patient cases case studies study recent recently ' +
+ 'cause causes caused causing ' +
  'result results resulting approximately especially particularly respectively however therefore various several certain ' +
  'present presents presented occur occurs occurring involve involves involved include includes included approach term terms ' +
  'number numbers level levels degree type types form forms part parts setting settings process processes people ' +
  'somewhat compared comparison described describe describes discussed discuss later earlier above below').split(' ')
   .forEach(function (w) { GENERIC[w] = true; });
 /* Endings that mark a technical term: a disease, a procedure, a drug class. */
-var TECH = /(?:itis|osis|oses|emia|aemia|pathy|ectomy|otomy|ostomy|plasty|gram|graphy|scopy|algia|megaly|trophy|plasia|genic|lytic|ase|ases|ine|ines|ide|ides|olol|pril|sartan|statin|mab|nib|azole|mycin|cillin|cardia|stenosis|sclerosis|thrombo\w*|valv\w*|atrial|ventricul\w*|arterial|venous|pulmonary|coronary|aortic|mitral|tricuspid|annul\w*|syndrome|disease|anomal\w*|atresia|failure|infarct\w*|ischaemi\w*|ischemi\w*|regurgitation|dilat\w*|hypertroph\w*|carcino\w*|malignan\w*|endocarditis|echocardiogra\w*)$/;
+var TECH = /(?:itis|osis|oses|emia|aemia|pathy|ectomy|otomy|ostomy|plasty|gram|graphy|scopy|algia|megaly|trophy|plasia|genic|lytic|[^e]ases?|ine|ines|ide|ides|olol|pril|sartan|statin|mab|nib|azole|mycin|cillin|cardia|stenosis|sclerosis|thrombo\w*|valv\w*|atrial|ventricul\w*|arterial|venous|pulmonary|coronary|aortic|mitral|tricuspid|annul\w*|syndrome|disease|anomal\w*|atresia|failure|infarct\w*|ischaemi\w*|ischemi\w*|regurgitation|dilat(?:ation|ion)s?|hypertroph(?:y|ies)|carcino\w*|malignan\w*|endocarditis|echocardiogra\w*)$/;
 
 /* Terms a section defines as abbreviations — "rheumatic heart disease
    (RHD)" — and the words of their expansions. Both are terms by the
@@ -241,63 +238,622 @@ function keySentences(cluster) {
   return picked.sort(function (a, b) { return a.index - b.index; });
 }
 
-function encode(cluster) {
-  var freq = frequencies(cluster), title = titleStems(cluster), terms = defined(cluster);
+/* ── the lesson ──────────────────────────────────────────────────────────── */
+
+/* The section's first definition, else its highest-scoring sentence: the
+   one line a student should be able to say first. */
+function overviewOf(cluster, picked) {
+  var all = sentences(cluster);
+  var def = all.filter(function (s) { var n = s.text.split(/\s+/).length; return DEFINITION.test(s.text) && n >= 6 && n <= 45; })[0];
+  if (def) return def;
+  return picked[0] || all[0] || null;
+}
+
+/* Sentences that state a value — a threshold, a percentage, a dose, a
+   duration — each as the student should remember it: the whole sentence
+   when it is short, else the words around the number. */
+/* "Table 17.1", "Fig. 3", "p. 214": a number that names a place in the book
+   is not a fact to learn. */
+var REF_WORD = /^(?:table|tables|fig|figs|figure|figures|chapter|section|page|pages|p|pp|ref|refs|box|eq|equation|panel)\.?$/i;
+function isFactNumber(ws, i) { return NUM.test(bare(ws[i])) && !(i > 0 && REF_WORD.test(ws[i - 1].replace(/[^A-Za-z.]/g, ''))); }
+var UNIT_WORD = /^(?:%|mmhg|mm|cm|ms|mg|mcg|g|kg|ml|l|min|mins|minutes?|hours?|h|days?|weeks?|months?|years?|bpm|beats|mv|mmol|meq|cm2|m2)$/i;
+function numberFacts(cluster, limit) {
+  var out = [], seen = {};
+  sentences(cluster, true).forEach(function (s) {
+    /* split on spaces only: the window is shown, and "m/s" or "2–4" must
+       come back as the book wrote them (toks() splits on slashes and dashes,
+       and the first version showed "4 m s") */
+    var ws = s.text.split(/\s+/);
+    var at = -1;
+    for (var i = 0; i < ws.length; i++) if (isFactNumber(ws, i)) { at = i; break; }
+    if (at === -1 || out.length >= (limit || 8)) return;
+    /* The whole sentence: the lesson shows its values as tiles (sheet.js),
+       every one of them, and a window around the first cut off the rest
+       ("… whereas a normal …" lost "8 to 12 mmHg"). */
+    var text = s.text;
+    if (!seen[text]) { seen[text] = true; out.push({ text: text, page: s.page }); }
+  });
+  return out;
+}
+
+/* A mnemonic for every list of three to nine items — first letters, the
+   items in order — and one over the key points' key terms. */
+function mnemonicsOf(cluster, picked) {
+  var out = [];
+  lists(cluster).filter(function (l) { return l.items.length >= 3 && l.items.length <= 9; }).forEach(function (l) {
+    var words = l.items.map(function (i) { return i.label.replace(/\./g, ''); });
+    out.push({ title: l.title || 'The list', letters: words.map(function (w) { return w.charAt(0).toUpperCase(); }).join(''), words: words });
+  });
+  var freq = frequencies(cluster), title = titleStems(cluster), terms = defined(cluster), used = {};
+  var hooks = picked.map(function (s) { var t = freshTerm(rankedTerms(s.text, freq, title, terms), used, true); return t ? displayForm(s.text, t.word) : ''; }).filter(Boolean);
+  if (!out.length && hooks.length >= 3) out.push({ title: 'The key points, in order', letters: hooks.map(function (w) { return w.charAt(0).toUpperCase(); }).join(''), words: hooks });
+  return out;
+}
+
+function lesson(cluster) {
   var picked = keySentences(cluster);
-  var used = {};
-  var hooks = picked.map(function (s) {
-    var t = freshTerm(rankedTerms(s.text, freq, title, terms), used, true);
-    return t ? t.word : '';
-  }).filter(Boolean);
-  var letters = hooks.map(function (w) { return w[0].toUpperCase(); }).join('');
-  /* A list is what an acrostic is FOR: when the section has one of three to
-     nine items, the hook is its items' first letters — "Acquired causes of
-     TS: R·I·N·P·C…" — rather than one word from each point. */
-  var list = lists(cluster).filter(function (l) { return l.items.length >= 3 && l.items.length <= 9; })
-    .sort(function (a, b) { return b.items.length - a.items.length; })[0];
-  var mnemonic = '';
-  if (list) {
-    var labels = list.items.map(function (i) { return i.label.replace(/\./g, ''); });
-    mnemonic = 'First letters of ' + list.title + ': ' + labels.map(function (w) { return w.charAt(0).toUpperCase(); }).join('') +
-      ' \u2014 ' + labels.join(' \u00B7 ') + '. Say the letters, then name each one.';
-  } else if (hooks.length >= 2) {
-    mnemonic = 'First letters: ' + letters + ' \u2014 ' + hooks.join(' \u00B7 ') + '. Say the letters, then say what each word stands for in this section.';
-  }
+  var ov = overviewOf(cluster, picked);
   return {
+    overview: ov ? ov.text : '',
     points: picked.map(function (s) { return { text: s.text, page: s.page }; }),
-    mnemonic: mnemonic,
+    numbers: numberFacts(cluster, 8),
+    mnemonics: mnemonicsOf(cluster, picked),
+    analogies: Analogies ? Analogies.forSection(cluster, 2) : [],
     flowchart: '',
   };
 }
 
-/* ── tables ────────────────────────────────────────────────────────────────
-   A table asks itself questions: given the row's label and the column's
-   header, what is in the cell? Numbers first — a table of values is where a
-   section keeps them. Needs a header row and at least one data row. */
-function tableQuestions(cluster, limit) {
-  var out = [];
-  (cluster.segments || []).forEach(function (seg) {
-    if (!seg.table || out.length >= limit) return;
-    var header = seg.tableHeader || seg.table[0];
-    var rows = seg.tableHeader ? seg.table : seg.table.slice(1);
-    var cells = [];
-    rows.forEach(function (row) {
-      for (var ci = 1; ci < row.length; ci++) {
-        var cell = String(row[ci] || '').trim();
-        if (!cell || !row[0] || !header[ci]) continue;
-        var toks = cell.split(/\s+/).map(bare).filter(Boolean);
-        var num = toks.filter(function (t) { return NUM.test(t); })[0];
-        var word = num || toks.filter(isContent)[0];
-        if (word) cells.push({ row: row[0], col: header[ci], cell: cell, word: word, num: !!num });
+/* ── multiple choice ───────────────────────────────────────────────────────
+   Every question is { question, quote, options, answer, explain, page, kind }:
+   `quote` is the book's sentence with a gap when the question completes one
+   (else ''), `answer` the index of the right option, `explain` the book's
+   sentence that settles it. */
+var OPTIONS = 4;
+var PER_KIND = 2;
+var QUIZ_SIZE = 8;
+/* Reasoning first — how one thing leads to another, the value that
+   defines a grade — then recognition, and a missing word last. */
+var KIND_ORDER = ['mechanism', 'threshold', 'most', 'except', 'define-back', 'member', 'table', 'true', 'define', 'number', 'term', 'source'];
+
+/* A number from a string, the same every time: options are shuffled with it,
+   so the right answer is not always first and a test can reproduce a drill. */
+function hash(str) {
+  var h = 2166136261;
+  for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h;
+}
+function shuffled(list, seed) {
+  var a = list.slice(), s = hash(seed) || 1;
+  for (var i = a.length - 1; i > 0; i--) {
+    s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    var j = s % (i + 1), t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* A word as the text writes it (capital kept for a name, punctuation off). */
+function displayForm(text, word) {
+  var ws = toks(text);
+  for (var i = 0; i < ws.length; i++) {
+    if (bare(ws[i]) === word) {
+      var w = ws[i].replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9%]+$/g, '');
+      return i > 0 && /^[A-Z][a-z]/.test(w) && !/[.!?:]$/.test(ws[i - 1]) ? w : (/^[A-Z]{2,}/.test(w) ? w : w.toLowerCase());
+    }
+  }
+  return word;
+}
+/* "increases" is not an enzyme and "dilate" is not a finding: TECH once
+   read both as clinical nouns, and a drill offered "dilate / increases"
+   against "hypertrophy". A clinical noun ends like one; the enzyme ending
+   is -ase after anything but e; dilat- and hypertroph- only as nouns. */
+/* What kind of word it is, so a wrong option is the same kind as the right
+   one: a disease is offered against diseases, a drug against drugs. */
+/* Two technical kinds are enough and plausible: a place (aortic, mitral,
+   atrial, pulmonary…) and a thing that happens or is done (stenosis,
+   hypertrophy, endocarditis, a drug, a test). The first version split them
+   by suffix, found no second "-ophy", and fell back to any word — which is
+   how "increases" and "produces" were offered against "hypertrophy". */
+var PLACE = /^(?:atrial|ventricul\w*|arterial|venous|pulmonary|coronary|aortic|mitral|tricuspid|valv\w*|annul\w*|septal|apical|basal|anterior|posterior|inferior|lateral|systolic|diastolic|cardiac|myocardial|pericardial|endocardial|intracardiac|left|right)$/;
+function kindOf(w) {
+  var b = bare(w);
+  if (/\s/.test(String(w).trim())) return 'phrase';
+  if (PLACE.test(b)) return 'place';
+  /* "hypertrophied", "dilating": a verb's form, not a thing's name */
+  if (/(?:ed|ing)$/.test(b) && !/(?:disease|syndrome)$/.test(b)) return 'plain';
+  if (TECH.test(b)) return 'thing';
+  if (/^[A-Z]{2,}$/.test(w)) return 'abbr';
+  if (/^[A-Z]/.test(w)) return 'name';
+  return 'plain';
+}
+function norm(s) { return String(s).toLowerCase().replace(/[^a-z0-9%.]+/g, ' ').trim(); }
+/* Within "thing", a family: a condition is offered against conditions, a
+   drug against drugs, a test against tests — "hypertrophy" against
+   "fibrosis" and "dilatation", never against "echocardiography". */
+var FAMILY = [
+  ['drug', /(?:olol|pril|sartan|statin|mab|nib|azole|mycin|cillin|parin|ban|gatran|ide|ides|ine|ines)$/],
+  ['test', /(?:gram|graphy|scopy|echocardiogra\w*)$/],
+  ['condition', /(?:itis|osis|oses|emia|aemia|pathy|megaly|trophy|trophies|plasia|stenosis|sclerosis|syndrome|disease|failure|regurgitation|atresia|anomal\w*|infarct\w*|ischaemi\w*|ischemi\w*|dilatation|dilation|carcino\w*|malignan\w*|endocarditis|thrombo\w*|cardia)$/],
+  ['procedure', /(?:ectomy|otomy|ostomy|plasty)$/],
+];
+function family(w) {
+  var b = bare(String(w).split(/\s+/).pop());
+  /* a place is a noun ("valve", "annulus") or an adjective ("atrial",
+     "pulmonary"), and a blank takes one or the other: "a bicuspid _____"
+     offered "valve / atrial / ventricular / pulmonary" */
+  if (PLACE.test(b)) return /(?:al|ar|ic|ary)$/.test(b) ? 'site-adj' : 'site';
+  for (var i = 0; i < FAMILY.length; i++) if (FAMILY[i][1].test(b)) return FAMILY[i][0];
+  return '';
+}
+
+/* The unit's material for wrong options, gathered once per quiz. */
+function pools(clusters) {
+  var terms = [], defs = [], items = [], nums = [], phrases = [], sents = [], seenT = {}, seenP = {};
+  var addPhrase = function (t, ci) { t = String(t).trim(); if (t.split(/\s+/).length >= 2 && !seenP[norm(t)]) { seenP[norm(t)] = true; phrases.push({ text: t, kind: 'phrase', ci: ci }); } };
+  (clusters || []).forEach(function (c) {
+    var freq = frequencies(c), title = titleStems(c), terms0 = defined(c);
+    sentences(c).forEach(function (s) {
+      var len = s.text.split(/\s+/).length;
+      if (len >= 6 && len <= 30) sents.push({ text: s.text, ci: c.index });
+      rankedTerms(s.text, freq, title, terms0).filter(function (t) { return !t.num && t.word.length >= 5 && !GENERIC[t.word] && !GENERIC[stem(t.word)]; }).slice(0, 2).forEach(function (t) {
+        var d = displayForm(s.text, t.word);
+        if (!seenT[norm(d)]) { seenT[norm(d)] = true; terms.push({ text: d, kind: kindOf(d), ci: c.index }); }
+      });
+    });
+    patternQuestions(c).forEach(function (q) {
+      if (q.kind === 'define') { defs.push({ term: q.term, def: q.answer, page: q.page, ci: c.index }); addPhrase(q.term, c.index); }
+      if (q.kind === 'most') addPhrase(q.answer, c.index);
+    });
+    lists(c).forEach(function (l) { l.items.forEach(function (i) { items.push({ text: i.label, list: l.list + ':' + l.title, ci: c.index }); addPhrase(i.label, c.index); }); });
+    /* "rheumatic heart disease (RHD)": a named thing, by the section's own say-so */
+    (c.segments || []).forEach(function (seg) {
+      var re = /((?:[A-Za-z][A-Za-z\-]+\s+){1,4})\(([A-Z]{2,6})\)/g, m;
+      while ((m = re.exec(seg.text))) {
+        /* the fewest words ending at the bracket whose first letter is the
+           abbreviation's: "…revealed transesophageal echocardiogram (TEE)"
+           is "transesophageal echocardiogram", not the word before it */
+        var ws2 = m[1].trim().split(/\s+/), k = 2;
+        while (k <= ws2.length && ws2[ws2.length - k].charAt(0).toUpperCase() !== m[2].charAt(0)) k++;
+        if (k <= ws2.length) addPhrase(ws2.slice(-k).join(' ') + ' (' + m[2] + ')', c.index);
       }
     });
-    cells.sort(function (a, b) { return (b.num ? 1 : 0) - (a.num ? 1 : 0); });
-    cells.slice(0, limit - out.length).forEach(function (c) {
-      out.push({ question: 'From the table: ' + c.row + ' \u2014 ' + c.col + ': ' + cloze(c.cell, c.word),
-                 answer: c.word, page: seg.page });
+    sentences(c, true).forEach(function (s) {
+      var ws = toks(s.text);
+      ws.forEach(function (w, k) {
+        var b = bare(w);
+        if (isFactNumber(ws, k)) nums.push({ value: b, unit: /%$/.test(b) ? '%' : (bare(ws[k + 1] || '').match(UNIT_WORD) ? bare(ws[k + 1]) : ''), ci: c.index });
+      });
+    });
+  });
+  /* Every step of every mechanism in the unit, and every value tile. */
+  var steps = [], tiles = [];
+  var Sheet = sheetMod();
+  (clusters || []).forEach(function (c) {
+    flow(c).nodes.forEach(function (n) { steps.push({ text: n.label, ci: c.index }); });
+    if (Sheet) sentences(c, true).forEach(function (s) { Sheet.numberTiles(s.text).tiles.forEach(function (t) { tiles.push({ value: t.value, label: t.label, ci: c.index }); }); });
+  });
+  return { terms: terms, defs: defs, items: items, nums: nums, phrases: phrases, sents: sents, steps: steps, tiles: tiles };
+}
+/* sheet.js needs ask.js, which needs this file: reached for when a quiz is
+   made, by which time all three are loaded. */
+function sheetMod() { return root.MemSheet || (typeof require === 'function' ? require('./sheet.js') : null); }
+
+/* A sentence's key term, as it is written in it: what a lesson sets in
+   bold so the eye finds the point. '' when it has none. */
+/* A sentence's subject: the words before its main verb, when they open it
+   and are few ("Rheumatic heart disease is …", "Diuretics reduce …",
+   "Excessive preload raises …"). */
+var SUBJECT_VERB = /^((?:[A-Za-z0-9][\w\-.]*(?:\s+\([A-Z]{2,6}\))?\s+){0,5}?[A-Za-z][\w\-]*(?:\s+\([A-Z]{2,6}\))?)\s+(?:is|are|was|were|has|have|may|can|should|must|causes?|leads?|raises?|reduces?|lowers?|increases?|decreases?|results?|occurs?|accounts?|presents?|develops?|requires?|affects?|produces?|remains?|becomes?|shows?|includes?|involves?|defines?|indicates?|suggests?|predicts?|confirms?|excludes?)\b/;
+var NOT_SUBJECT = /^(?:this|that|it|there|these|those|which|such|one|each|in|on|at|for|with|after|before|when|if|although|because|during|without|once|as|by)\b/i;
+function keyTermOf(cluster, text) {
+  var t0 = String(text).trim();
+  /* "In older adults, calcific degeneration is common": the subject comes
+     after the opening clause. */
+  var tries = [t0].concat(NOT_SUBJECT.test(t0) && t0.indexOf(',') > 0 ? [t0.slice(t0.indexOf(',') + 1).trim()] : []);
+  for (var i = 0; i < tries.length; i++) {
+    var sm = SUBJECT_VERB.exec(tries[i]);
+    if (sm && !NOT_SUBJECT.test(sm[1])) return sm[1].replace(/^(?:a|an|the)\s+(?=\S)/i, '');
+  }
+  /* Else, of the sentence's four strongest terms, the one it names first: what
+     the sentence is about ("Diuretics reduce preload…"), not its rarest
+     word ("circulating", which the first version chose). A verb's form is
+     not a term. */
+  var lower = String(text).toLowerCase();
+  var top = rankedTerms(text, frequencies(cluster), titleStems(cluster), defined(cluster))
+    .filter(function (x) { return !x.num && !GENERIC[x.word] && !/(?:ing|ed)$/.test(x.word); }).slice(0, 4)
+    /* only a clearly clinical term: bolding "common" or "adults" is worse
+       than bolding nothing */
+    .filter(function (x) { var k = kindOf(displayForm(text, x.word)); return k === 'thing' || k === 'abbr'; });
+  top.sort(function (a, b) { return lower.indexOf(a.word) - lower.indexOf(b.word); });
+  return top[0] ? displayForm(text, top[0].word) : '';
+}
+
+/* ── mechanism: the book's own cause-and-effect chains ─────────────────── */
+function mechanismQuestions(cluster, P) {
+  var f = flow(cluster), out = [];
+  var sents = sentences(cluster);
+  var reach = function (from, forward) {
+    var seen = {}, stack = [from];
+    while (stack.length) {
+      var x = stack.pop();
+      f.edges.forEach(function (e) { var nx = forward ? (e.from === x ? e.to : -1) : (e.to === x ? e.from : -1); if (nx >= 0 && !seen[nx]) { seen[nx] = true; stack.push(nx); } });
+    }
+    return seen;
+  };
+  var byId = {};
+  f.nodes.forEach(function (n) { byId[n.id] = n; });
+  var label = function (id) { return byId[id].label; };
+  f.edges.forEach(function (e) {
+    var from = label(e.from), to = label(e.to);
+    var src = sents.filter(function (s) { var t = s.text.toLowerCase(); return t.indexOf(from.toLowerCase()) !== -1 && t.indexOf(to.toLowerCase()) !== -1; })[0];
+    if (!src) return;
+    [true, false].forEach(function (forward) {
+      /* a step that follows (or leads to) the one asked, however far, is not
+         wrong: it is on the same chain */
+      var chain = reach(forward ? e.from : e.to, forward);
+      chain[forward ? e.from : e.to] = true;
+      var avoid = f.nodes.filter(function (n) { return chain[n.id]; }).map(function (n) { return n.label; });
+      var right = forward ? to : from;
+      var pool = P.steps.map(function (x) { return x.text; }).concat(P.phrases.map(function (x) { return x.text; }))
+        .filter(function (t) { return avoid.map(norm).indexOf(norm(t)) === -1; });
+      var w = distractors(right, pool, OPTIONS - 1, forward ? from : to, from + e.verb + to + forward);
+      if (!w) return;
+      var q = forward ? 'Follow the mechanism in your book: ' + from + ' → ' + e.verb + ' → ?' : 'Follow the mechanism in your book: ? → ' + e.verb + ' → ' + to;
+      out.push(mcq('mechanism', q, '', right, w, src.text, src.page));
     });
   });
   return out;
+}
+
+/* ── threshold: the value that defines a grade ─────────────────────────── */
+var FLIP = { '≥': '<', '>': '≤', '≤': '>', '<': '≥' };
+function thresholdQuestions(cluster, P) {
+  var Sheet = sheetMod(), out = [];
+  if (!Sheet) return out;
+  sentences(cluster, true).forEach(function (s) {
+    var nt = Sheet.numberTiles(s.text);
+    nt.tiles.forEach(function (t) {
+      var m = /^([≥≤<>]) (\d+(?:\.\d+)?)(%| .+)?$/.exec(t.value);
+      /* only where the sentence defines something ("severe stenosis is
+         defined by …"): "more than 90% of cases" asked as "the value for
+         cases?" is not a threshold, and it took its sentence from a far
+         better "most common cause" question */
+      if (!m || !nt.subject || !t.label || t.label === nt.subject) return;
+      var unit = m[3] || '';
+      var wrong = [m[1] === '≥' || m[1] === '>' || m[1] === '≤' || m[1] === '<' ? FLIP[m[1]] + ' ' + m[2] + unit : null];
+      /* other values of the unit, same unit and same comparison, then
+         values near the right one */
+      P.tiles.filter(function (x) { return x.value !== t.value && x.value.indexOf(m[1] + ' ') === 0 && (x.value.slice(-unit.length) === unit || !unit); })
+        .map(function (x) { return x.value; }).concat((numberOptions(m[2], unit === '%' ? '%' : '', [], t.value) || { wrong: [] }).wrong.map(function (v) {
+          return m[1] + ' ' + String(v).replace('%', '') + unit;
+        })).forEach(function (v) { if (wrong.length < OPTIONS - 1 && wrong.indexOf(v) === -1 && v !== t.value) wrong.push(v); });
+      if (wrong.length < OPTIONS - 1) return;
+      var q = 'In your book, what ' + t.label + ' defines ' + midTitle(nt.subject) + '?';
+      /* one question per sentence, whichever kind asks it (choose() keys on src) */
+      out.push(mcq('threshold', q, '', t.value, wrong, s.text, s.page, s.text));
+    });
+  });
+  return out;
+}
+
+/* Pick `n` wrong options: none equal to the answer or to each other, none
+   the answer's own stem, none already said in the question (it would give
+   the answer away), the closest kind first. */
+function distractors(answer, candidates, n, avoidText, seed) {
+  var an = norm(answer), astem = stem(bare(answer.split(/\s+/)[0] || ''));
+  var avoid = norm(avoidText || '');
+  var out = [], seen = {};
+  shuffled(candidates, seed).forEach(function (c) {
+    var t = String(c).trim(), k = norm(t);
+    if (!t || seen[k] || out.length >= n) return;
+    if (k.indexOf(an) !== -1 || an.indexOf(k) !== -1) return;
+    if (t.split(/\s+/).length === 1 && (stem(bare(t)) === astem || sameRoot(bare(t), bare(answer)))) return;
+    if (avoid && k.length > 3 && (' ' + avoid + ' ').indexOf(' ' + k + ' ') !== -1) return;
+    seen[k] = true; out.push(t);
+  });
+  return out.length === n ? out : null;
+}
+/* "hypertrophy" and "hypertrophied": one word in two forms, so not a wrong
+   option for the other. Six shared letters make a root. */
+function sameRoot(a, b) {
+  if (a.length < 6 || b.length < 6) return false;
+  return a.slice(0, 6) === b.slice(0, 6);
+}
+function byKind(pool, like) {
+  var k = kindOf(like);
+  var same = pool.filter(function (t) { return t.kind === k; }).map(function (t) { return t.text; });
+  var rest = pool.filter(function (t) { return t.kind !== k; }).map(function (t) { return t.text; });
+  return { same: same, rest: rest };
+}
+/* Same-kind options first; others only to make up the number. */
+function pickTerms(answer, pool, avoidText, seed, phrases) {
+  if (phrases && String(answer).trim().split(/\s+/).length >= 2) {
+    var n = String(answer).trim().split(/\s+/).length;
+    var near = phrases.filter(function (p) { return Math.abs(p.text.split(/\s+/).length - n) <= 2; }).map(function (p) { return p.text; });
+    var ph = distractors(answer, near, OPTIONS - 1, avoidText, seed);
+    if (ph) return ph;
+  }
+  var b = byKind(pool, answer);
+  var first = distractors(answer, b.same, Math.min(OPTIONS - 1, b.same.length), avoidText, seed) || [];
+  if (first.length === OPTIONS - 1) return first;
+  var rest = distractors(answer, b.rest.filter(function (t) { return first.indexOf(t) === -1; }), OPTIONS - 1 - first.length, avoidText + ' ' + first.join(' '), seed + '+');
+  return rest ? first.concat(rest) : null;
+}
+
+/* Values for a number question: the unit's other values with the same unit
+   first, then values near the right one — never the right one, never
+   negative, never a percentage over 100. */
+function numberOptions(value, unit, pool, seed) {
+  var v = parseFloat(String(value).replace(',', '.')), dec = (String(value).split(/[.,]/)[1] || '').replace('%', '').length;
+  var fmt = function (x) { return (dec ? x.toFixed(dec) : String(Math.round(x))) + (unit === '%' ? '%' : ''); };
+  var right = fmt(v);
+  /* A bare number ("4 m/s" reads as bare: the slash splits it) is offered
+     only nearby values: another bare number from the unit may be a
+     percentage written out ("55 percent"), and 55 for a velocity is no
+     confusion anyone makes. */
+  var same = pool.filter(function (n) { return unit && n.unit === unit; }).map(function (n) { var x = parseFloat(n.value.replace(',', '.')); return fmt(x); });
+  var near = [v * 2, v / 2, v * 1.5, v + (v >= 10 ? 10 : 1), v - (v >= 10 ? 10 : 1), v * 3].map(fmt);
+  var out = [], seen = {};
+  seen[right] = true;
+  shuffled(same, seed).concat(near).forEach(function (o) {
+    var x = parseFloat(o);
+    if (seen[o] || out.length >= OPTIONS - 1 || !(x > 0) || (unit === '%' && x > 100)) return;
+    seen[o] = true; out.push(o);
+  });
+  return out.length === OPTIONS - 1 ? { right: right, wrong: out } : null;
+}
+
+/* A title inside a sentence: its first letter lowered, unless it is an
+   abbreviation or a name ("Causes of TS" → "causes of TS"; "TR" stays). */
+function midTitle(t) { return /^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t; }
+/* `src` is the book's text the question rests on, when the explanation
+   says more than it (the true-statement kind adds a sentence of its own):
+   choose() allows one question per source, and keyed on the explanation it
+   let a sentence be asked twice. */
+function mcq(kind, question, quote, right, wrong, explain, page, src) {
+  var opts = shuffled([right].concat(wrong), question + '|' + quote);
+  return { question: question, quote: quote, options: opts, answer: opts.indexOf(right), explain: explain, page: page, kind: kind, src: src || explain };
+}
+function blankOut(text, word) {
+  var esc = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(text).replace(new RegExp('(^|[^A-Za-z0-9])' + esc + '(?![A-Za-z0-9])', 'i'), function (all, pre) { return pre + '_____'; });
+}
+
+/* Every question the section can support, best kinds first. */
+function candidates(cluster, P) {
+  var out = [], ci = cluster.index;
+  var title = String(cluster.title || '').replace(/\s*\(cont\.\)$/, '');
+  var sents = sentences(cluster);
+  var findSentence = function (frag) { return (sents.filter(function (s) { return s.text.indexOf(frag) !== -1; })[0] || {}).text || frag; };
+  var otherTerms = P.terms;
+
+  mechanismQuestions(cluster, P).forEach(function (q) { out.push(q); });
+  thresholdQuestions(cluster, P).forEach(function (q) { out.push(q); });
+
+  patternQuestions(cluster).forEach(function (q) {
+    var src = findSentence(q.answer.slice(0, 30));
+    if (q.kind === 'define') {
+      var ts = Object.keys(stemsOf(q.term)), said = stemsOf(q.answer);
+      if (ts.length && !ts.every(function (k) { return said[k]; })) {
+        var defTerms = P.defs.filter(function (d) { return norm(d.term) !== norm(q.term); }).map(function (d) { return d.term; });
+        var w = distractors(q.term, defTerms, Math.min(OPTIONS - 1, defTerms.length), q.answer, q.term) || [];
+        if (w.length < OPTIONS - 1) {
+          var more = pickTerms(q.term, otherTerms.filter(function (t) { return w.indexOf(t.text) === -1; }),
+            q.answer + ' ' + w.join(' '), q.term + '#', P.phrases.filter(function (p) { return w.indexOf(p.text) === -1; }));
+          w = more ? w.concat(more).slice(0, OPTIONS - 1) : null;
+        }
+        if (w && w.length === OPTIONS - 1) out.push(mcq('define-back', 'Which term is defined as “' + q.answer + '”?', '', q.term, w, src, q.page));
+      }
+      var otherDefs = P.defs.filter(function (d) { return norm(d.term) !== norm(q.term); }).map(function (d) { return d.def; });
+      var wd = distractors(q.answer, otherDefs, OPTIONS - 1, q.term, q.answer);
+      if (wd) out.push(mcq('define', 'Which best describes ' + q.term.replace(/^[A-Z][a-z]/, function (x) { return x.toLowerCase(); }) + '?', '', q.answer, wd, src, q.page));
+    } else if (q.kind === 'most') {
+      var itemTexts = P.items.map(function (i) { return i.text; });
+      var wm = distractors(q.answer, itemTexts, OPTIONS - 1, q.question, q.question) || pickTerms(q.answer, otherTerms, q.question, q.question, P.phrases);
+      if (wm) out.push(mcq('most', q.question, '', q.answer, wm, src, q.page));
+    }
+  });
+
+  lists(cluster).forEach(function (l) {
+    var mine = l.items.map(function (i) { return i.label; });
+    /* Any item of the unit may be the odd one out — the same lesion's other
+       list included ("acquired causes EXCEPT Ebstein anomaly") — and the
+       list's own items are kept out by distractors(), which is given them
+       as the text an option may not repeat. */
+    var outsiders = P.items.map(function (i) { return i.text; });
+    var why = 'The ' + l.title + ': ' + mine.join(' · ') + '.';
+    if (mine.length >= 3) {
+      var out1 = distractors(mine[0], outsiders, 1, mine.join(' '), l.title + '!') ||
+                 /* not the list's own subject: "causes of mitral stenosis EXCEPT
+                    mitral stenosis" asks nothing */
+                 distractors(mine[0], P.phrases.map(function (p) { return p.text; }).filter(function (t) { return mine.map(norm).indexOf(norm(t)) === -1 && !sameThing(t, l.title); }), 1, mine.join(' '), l.title + '!');
+      if (out1) {
+        var three = shuffled(mine, l.title).slice(0, OPTIONS - 1);
+        out.push(mcq('except', 'All of the following are ' + midTitle(l.title) + ' EXCEPT:', '', out1[0], three, why, l.page));
+      }
+    }
+    if (mine.length >= 1 && outsiders.length >= OPTIONS - 1) {
+      var right = shuffled(mine, l.title + '?')[0];
+      var wi = distractors(right, outsiders, OPTIONS - 1, mine.join(' '), l.title + '?');
+      if (wi) out.push(mcq('member', 'Which of the following is one of the ' + midTitle(l.title) + '?', '', right, wi, why, l.page));
+    }
+  });
+
+  (cluster.segments || []).forEach(function (seg) {
+    if (!seg.table) return;
+    var header = seg.tableHeader || seg.table[0], rows = seg.tableHeader ? seg.table : seg.table.slice(1);
+    for (var col = 1; col < header.length; col++) {
+      var colVals = rows.map(function (r) { return String(r[col] || '').trim(); }).filter(Boolean);
+      rows.forEach(function (r) {
+        var cell = String(r[col] || '').trim();
+        if (!cell || !r[0] || !header[col]) return;
+        var wt = distractors(cell, colVals, OPTIONS - 1, r[0] + ' ' + header[col], r[0] + header[col]);
+        if (wt) out.push(mcq('table', 'In the table, what is the ' + header[col] + ' for ' + r[0] + '?', '', cell, wt, r.join(' — '), seg.page));
+      });
+    }
+  });
+
+  var picked = keySentences(cluster);
+  var freq = frequencies(cluster), tstems = titleStems(cluster), terms0 = defined(cluster);
+  /* Values and missing terms from the key points first, then from every
+     other sentence long enough to stand alone, so a short section still
+     gets a full drill; choose() keeps no two questions on one sentence. */
+  var usable = picked.concat(sents.filter(function (s) {
+    var n = s.text.split(/\s+/).length;
+    return picked.indexOf(s) === -1 && picked.every(function (p) { return p.text !== s.text; }) && n >= 8 && n <= 45;
+  }));
+  usable.forEach(function (s) {
+    var ws = toks(s.text);
+    for (var i = 0; i < ws.length; i++) {
+      var b = bare(ws[i]);
+      if (!isFactNumber(ws, i)) continue;
+      var unit = /%$/.test(b) ? '%' : (bare(ws[i + 1] || '').match(UNIT_WORD) ? bare(ws[i + 1]) : '');
+      var no = numberOptions(b, unit, P.nums.filter(function (n) { return n.value !== b; }), s.text);
+      if (no) out.push(mcq('number', 'Which value completes this statement from your book?', blankOut(s.text, b), no.right, no.wrong, s.text, s.page));
+      break;
+    }
+    /* The missing word is a term — a place, a condition, a drug, a name —
+       and every wrong option is the same kind of term, or the question is
+       not asked: a verb among nouns gives the answer away by grammar. */
+    var t = rankedTerms(s.text, freq, tstems, terms0).filter(function (x) {
+      if (x.num) return false;
+      var k = kindOf(displayForm(s.text, x.word));
+      return k === 'thing' || k === 'place' || k === 'name' || k === 'abbr';
+    })[0];
+    if (t) {
+      var shown = displayForm(s.text, t.word);
+      var fam = family(shown);
+      var wt2 = distractors(shown, byKind(otherTerms, shown).same.filter(function (x) { return family(x) === fam; }), OPTIONS - 1, s.text, s.text);
+      if (wt2) out.push(mcq('term', 'Which term completes this statement from your book?', blankOut(s.text, t.word), shown, wt2, s.text, s.page));
+    }
+  });
+
+  /* Which statement is true: one key sentence as written, three others
+     each made false by one change — a term swapped for another of its kind,
+     or a value for another value. A falsified line that happens to be a
+     sentence of the book is not used. */
+  var bookText = norm(sentences(cluster, true).map(function (s) { return s.text; }).join(' | '));
+  var falsify = function (s, seed) {
+    var ws = toks(s.text);
+    for (var i = 0; i < ws.length; i++) {
+      var b = bare(ws[i]);
+      if (isFactNumber(ws, i)) {
+        var unit = /%$/.test(b) ? '%' : '';
+        var no = numberOptions(b, unit, [], seed);
+        if (no) return s.text.replace(ws[i], ws[i].replace(b.replace('%', ''), no.wrong[0].replace('%', '')));
+      }
+    }
+    var t = rankedTerms(s.text, freq, tstems, terms0).filter(function (x) {
+      if (x.num) return false;
+      var k = kindOf(displayForm(s.text, x.word));
+      return k === 'thing' || k === 'place' || k === 'name' || k === 'abbr';
+    })[0];
+    if (!t) return null;
+    /* A swap is only plausible within a kind: "stenosis" for "regurgitation",
+       never "echocardiogram" for "stenosis". */
+    var shown = displayForm(s.text, t.word);
+    /* not a word inside a named abbreviation — "Tricuspid disease (TS)"
+       gives itself away by the letters */
+    var esc = t.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(esc + '\\s*\\([A-Z]{2,6}\\)', 'i').test(s.text)) return null;
+    var same = byKind(otherTerms, shown).same;
+    var sw = distractors(shown, same, 1, s.text, seed);
+    if (!sw) return null;
+    var out = blankOut(s.text, t.word);
+    /* keep the sentence's capital when the swapped word opened it */
+    var rep = out.indexOf('_____') === 0 ? sw[0].charAt(0).toUpperCase() + sw[0].slice(1) : sw[0];
+    return out.replace('_____', rep);
+  };
+  /* The right statement is a key point; the wrong ones are the section's
+     other sentences, each falsified — so a section with three key points
+     still has enough to build from. */
+  var short = function (x) { var n = x.text.split(/\s+/).length; return n >= 6 && n <= 32 && !REF_WORD.test(x.text.split(/\s+/)[0].replace(/[^A-Za-z.]/g, '')); };
+  var shortOnes = picked.filter(short);
+  shortOnes.forEach(function (s, k) {
+    var others = sents.filter(function (x) { return short(x) && x.text !== s.text; });
+    var wrong = [];
+    others.forEach(function (o, j) {
+      if (wrong.length >= OPTIONS - 1) return;
+      var f = falsify(o, s.text + j);
+      if (f && f !== o.text && bookText.indexOf(norm(f)) === -1 && wrong.indexOf(f) === -1) wrong.push(f);
+    });
+    if (wrong.length === OPTIONS - 1) out.push(mcq('true', 'Which statement about ' + title + ' is correct?', '', s.text, wrong, s.text + ' The others each change one detail.', s.page, s.text));
+  });
+
+  /* The last resort, for a section with nothing else to ask: which of these
+     statements is from this section — the others from the rest of the unit. */
+  var elsewhere = P.sents.filter(function (x) { return x.ci !== ci; }).map(function (x) { return x.text; });
+  picked.forEach(function (s) {
+    if (s.text.split(/\s+/).length > 30) return;
+    var w = distractors(s.text, elsewhere, OPTIONS - 1, '', s.text);
+    if (w) out.push(mcq('source', 'Which of these statements is from \u201C' + title + '\u201D?', '', s.text, w, s.text, s.page));
+  });
+
+  out.forEach(function (q) { q.cluster = ci; });
+  return out;
+}
+
+/* A drill: up to `size` questions, the kinds in KIND_ORDER, at most
+   PER_KIND of each, no two from one sentence of the book, none in `skip`. */
+function choose(cands, size, skip) {
+  var out = [], perKind = {}, usedSrc = {};
+  var skipSet = {};
+  (skip || []).forEach(function (q) { skipSet[q] = true; });
+  for (var round = 0; round < PER_KIND; round++) {
+    KIND_ORDER.forEach(function (k) {
+      if (out.length >= size) return;
+      var q = cands.filter(function (c) { return c.kind === k && !skipSet[c.question + c.quote] && !usedSrc[c.src] && out.indexOf(c) === -1; })[0];
+      if (q && (perKind[k] || 0) <= round) { out.push(q); perKind[k] = (perKind[k] || 0) + 1; usedSrc[q.src] = true; }
+    });
+  }
+  return out;
+}
+
+function strip(q, withCluster) {
+  var o = { question: q.question, quote: q.quote, options: q.options, answer: q.answer, explain: q.explain, page: q.page };
+  if (withCluster) o.cluster = q.cluster;
+  return o;
+}
+
+/* The section's drill. `clusters` is the whole unit: wrong options come from
+   all of it, so a section with little of its own still gets four choices. */
+function quiz(cluster, lessonValue, clusters) {
+  var P = pools(clusters && clusters.length ? clusters : [cluster]);
+  return { questions: choose(candidates(cluster, P), QUIZ_SIZE).map(function (q) { return strip(q, false); }) };
+}
+
+/* The final exam: `n` questions across the unit, at least half from `focus`
+   (the weakest sections), taken in turn so no one section fills it. A
+   question a drill asked (`asked`: their question+quote strings) comes only
+   once nothing new is left: short sections give their drills every
+   question they have, and the first version then set an empty exam, which
+   the schema refuses — the unit could never be finished. */
+function exam(clusters, asked, focus, n) {
+  var P = pools(clusters);
+  var want = Math.max(1, n || 10);
+  var inFocus = function (g) { return (focus || []).indexOf(g.ci) !== -1; };
+  var groups = function (skip) { return (clusters || []).map(function (c) { return { ci: c.index, qs: choose(candidates(c, P), 40, skip) }; }); };
+  var fresh = groups(asked), again = groups(null);
+  var got = [], taken = {}, half = Math.ceil(want / 2);
+  var weakN = function () { return got.filter(function (q) { return (focus || []).indexOf(q.cluster) !== -1; }).length; };
+  function fill(gs, more) {
+    for (var round = 0; more(); round++) {
+      var any = false;
+      gs.forEach(function (g) {
+        var q = g.qs[round], k = q && q.question + '|' + q.quote;
+        if (q) any = true;
+        if (q && more() && !taken[k]) { got.push(q); taken[k] = true; }
+      });
+      if (!any) break;
+    }
+  }
+  /* New questions first; then, if the exam is still short, drill ones —
+     each pass half on the weakest, then the rest, then the weakest again. */
+  [fresh, again].forEach(function (gs) {
+    fill(gs.filter(inFocus), function () { return got.length < want && weakN() < half; });
+    fill(gs.filter(function (g) { return !inFocus(g); }), function () { return got.length < want; });
+    fill(gs.filter(inFocus), function () { return got.length < want; });
+  });
+  return { questions: got.map(function (q) { return strip(q, true); }) };
 }
 
 /* ── flow ──────────────────────────────────────────────────────────────────
@@ -458,7 +1014,13 @@ function lists(cluster) {
     }
     var topic = topicOf(intro) || String(cluster.title || '').replace(/\s*\(cont\.\)$/, '');
     if (seg.sub) {
-      cur = { title: label(seg.text) + ' ' + topic.replace(/^the\s+/i, ''), items: [], page: seg.page, list: seg.list };
+      /* "Congenital" + "causes of TS" → "Congenital causes of TS"; a
+         sub-heading that already names its kind ("Causes of aortic
+         stenosis") is its own title — the first version appended the
+         section's title to it again. */
+      var lab = label(seg.text);
+      var named = /\b(?:causes?|features?|signs?|symptoms?|types?|indications?|contraindications?|complications?|findings?|risk factors?|treatments?|options?|criteria|agents?|drugs?|classes?)\b/i.test(lab);
+      cur = { title: named ? lab : lab + ' ' + topic.replace(/^the\s+/i, ''), items: [], page: seg.page, list: seg.list };
       out.push(cur);
       return;
     }
@@ -494,252 +1056,6 @@ function patternQuestions(cluster) {
   return out;
 }
 
-function recall(cluster, points) {
-  var freq = frequencies(cluster), title = titleStems(cluster), terms = defined(cluster);
-  var out = [], used = {}, usedSent = {};
-  /* Asked questions first — "what is the most common …", "what is …" —
-     then the section's biggest list, then blanks. Six at most. */
-  patternQuestions(cluster).slice(0, 2).forEach(function (q) { out.push({ question: q.question, answer: q.answer, page: q.page }); });
-  var big = lists(cluster).sort(function (a, b) { return b.items.length - a.items.length; })[0];
-  if (big && big.items.length >= 3) out.push(listQuestion(big));
-  (points || []).forEach(function (p) {
-    if (out.length >= 6) return;
-    if (out.some(function (q) { return p.text.indexOf(q.answer) !== -1 && q.answer.split(' ').length > 1; })) return;
-    var t = freshTerm(rankedTerms(p.text, freq, title, terms), used, false);
-    if (!t) return;
-    out.push({ question: (/^\d/.test(t.word) ? 'Fill in the number: ' : 'Fill in the blank: ') + cloze(p.text, t.word), answer: t.word, page: p.page });
-  });
-  tableQuestions(cluster, 2).forEach(function (q) { if (out.length < 7 && !used[stem(q.answer)]) { used[stem(q.answer)] = true; out.push(q); } });
-  /* A section that is all table and no sentence still gets asked something. */
-  return { prompts: out };
-}
-
-function listQuestion(l) {
-  return { question: 'Name the ' + l.title + ' (' + l.items.length + ').', answer: l.items.map(function (i) { return i.label; }).join('; '), page: l.page };
-}
-
-/* ── the gauntlet's harder questions ───────────────────────────────────────
-   Recall asks a definition forwards ("What is preload?"); the gauntlet asks
-   it backwards — the definition, and you name the term — which is the
-   harder direction and the one an examiner uses. It also asks the section's
-   other "most common" questions and names its other lists: whatever recall
-   did not ask. Every answer is still the section's own words.
-
-   A definition that already says its term ("Mitral stenosis is a narrowing
-   of the mitral valve…" gives away "mitral") is still asked, but only when
-   some word of the term is left to find. */
-function hardQuestions(cluster, points) {
-  var asked = {};
-  recall(cluster, points).prompts.forEach(function (q) { asked[q.question] = true; });
-  var out = [];
-  patternQuestions(cluster).forEach(function (q) {
-    if (q.kind === 'define') {
-      var said = stemsOf(q.answer), ts = Object.keys(stemsOf(q.term));
-      if (ts.length && !ts.every(function (k) { return said[k]; })) {
-        out.push({ question: 'Which term is defined as \u201C' + q.answer + '\u201D?', answer: q.term, page: q.page });
-      }
-    } else if (!asked[q.question]) out.push({ question: q.question, answer: q.answer, page: q.page });
-  });
-  lists(cluster).forEach(function (l) {
-    var lq = listQuestion(l);
-    if (!asked[lq.question]) out.push(lq);
-  });
-  return out;
-}
-
-function lev(a, b) {
-  var m = a.length, n = b.length, d = [];
-  for (var i = 0; i <= m; i++) { d[i] = [i]; }
-  for (var j = 1; j <= n; j++) d[0][j] = j;
-  for (i = 1; i <= m; i++) for (j = 1; j <= n; j++) {
-    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-  }
-  return d[m][n];
-}
-
-/* Does the answer contain the word? Numbers must be exactly equal — 5 is not
-   50. A word matches exactly, by stem (a plural or tense away), or within
-   one typo when it is at least five letters long (two at nine or more). */
-function matches(answer, word) {
-  var target = bare(word);
-  var toks = String(answer || '').split(/\s+/).map(bare).filter(Boolean);
-  if (!target) return false;
-  if (NUM.test(target)) {
-    var tv = parseFloat(target.replace(',', '.'));
-    return toks.some(function (t) { return NUM.test(t) && parseFloat(t.replace(',', '.')) === tv; });
-  }
-  return toks.some(function (t) {
-    if (t === target) return true;
-    if (target.length >= 4 && stem(t) === stem(target)) return true;
-    if (target.length >= 5) return lev(t, target) <= (target.length >= 9 ? 2 : 1);
-    return false;
-  });
-}
-
-/* A phrase answer ("rheumatic heart disease (RHD)", "the stretch on
-   ventricular myocytes at the end of diastole") is right when the answer
-   carries most of its substance: its abbreviation alone, or three in five of
-   its content words (all of them if it has two or fewer), with any number
-   in it exact. */
-function phraseMatch(answer, target) {
-  var abbr = /\(([A-Z]{2,6})\)/.exec(target);
-  if (abbr && new RegExp('\\b' + abbr[1] + '\\b').test(String(answer || ''))) return true;
-  var core = target.replace(/\([^)]*\)/g, ' ');
-  var words = [], seen = {};
-  toks(core).forEach(function (w) { var b = bare(w); if ((isContent(b) || NUM.test(b)) && !seen[stem(b)]) { seen[stem(b)] = true; words.push(b); } });
-  if (!words.length) return matches(answer, target);
-  var nums = words.filter(function (w) { return NUM.test(w); });
-  if (!nums.every(function (n) { return matches(answer, n); })) return false;
-  var hit = words.filter(function (w) { return matches(answer, w); }).length;
-  return words.length <= 2 ? hit === words.length : hit / words.length >= 0.6;
-}
-/* A list item is named when any of its SPECIFIC words is: "carcinoid" names
-   "Carcinoid syndrome", "Whipple" names "Whipple disease". The generic head
-   noun alone ("disease", "syndrome") names nothing. */
-var HEADS = { disease: 1, syndrome: 1, failure: 1, anomaly: 1, disorder: 1, infection: 1, lesion: 1, condition: 1, therapy: 1, treatment: 1 };
-function itemMatch(answer, item) {
-  var ws = toks(item).map(bare).filter(function (b) { return (isContent(b) || NUM.test(b)) && !HEADS[b]; });
-  if (!ws.length) return phraseMatch(answer, item);
-  return ws.some(function (w) { return matches(answer, w); });
-}
-function gradeRecall(cluster, prompt, answer) {
-  var said = String(answer || '').trim();
-  var target = String(prompt.answer || '');
-  /* A list: "a; b; c". Right when three in five items are named. */
-  if (target.indexOf('; ') !== -1) {
-    var items = target.split('; ');
-    var named = items.filter(function (it) { return itemMatch(said, it); });
-    var missing = items.filter(function (it) { return named.indexOf(it) === -1; });
-    var okL = named.length / items.length >= 0.6;
-    return { correct: okL, missing: missing, misconception: '',
-      feedback: !said ? 'No answer given.' : 'You named ' + named.length + ' of ' + items.length + '.' +
-        (missing.length ? ' Missing: ' + missing.join(', ') + '.' : ' All of them.') };
-  }
-  var ok = target.split(/\s+/).length > 1 ? phraseMatch(said, target) : matches(said, target);
-  return {
-    correct: ok,
-    missing: ok ? [] : [target],
-    misconception: '',
-    feedback: ok ? 'Right.' : (said
-      ? 'The answer was \u201C' + target + '\u201D. If you said the same thing in other words, count it as correct.'
-      : 'No answer given \u2014 the answer was \u201C' + target + '\u201D.'),
-  };
-}
-
-/* A point is covered when the explanation uses most of its key terms. */
-function pointTerms(p, freq, title, terms) {
-  return rankedTerms(p.text, freq, title, terms).slice(0, 3).map(function (t) { return t.word; });
-}
-function gradeExplain(cluster, points, explanation) {
-  var freq = frequencies(cluster), title = titleStems(cluster), terms = defined(cluster);
-  var gaps = [];
-  var covered = 0;
-  (points || []).forEach(function (p) {
-    var pt = pointTerms(p, freq, title, terms);
-    var hit = pt.filter(function (t) { return matches(explanation, t); }).length;
-    if (pt.length && hit >= Math.min(2, pt.length)) covered++;
-    else gaps.push({ point: p.text, page: p.page });
-  });
-  var n = (points || []).length;
-  var score = n ? Math.round(100 * covered / n) : 0;
-  return {
-    score: score,
-    gaps: gaps,
-    misconceptions: numberSlips(cluster, explanation),
-    feedback: score >= 80 ? 'You touched nearly every key point. Now say it again, faster.'
-      : score >= 50 ? 'About half the key points came through. Re-read the ones listed, then explain it once more.'
-      : 'Most key points were missing. Go back to Encode, read the points aloud, then try again from memory.',
-  };
-}
-
-/* The one misconception words can catch: a wrong number. For each thing
-   the student said that has a number in it, find the section sentence that
-   shares the most of its words; if that sentence has numbers and none is
-   theirs, it is said back to them with the page. */
-function numberSlips(cluster, explanation) {
-  var src = sentences(cluster, true).map(function (s) {
-    var st = {}, nums = [];
-    toks(s.text).forEach(function (w) { var b = bare(w); if (NUM.test(b)) nums.push(parseFloat(b)); else if (isContent(b)) st[stem(b)] = true; });
-    return { s: s, st: st, nums: nums };
-  });
-  var out = [];
-  String(explanation || '').split(/(?:[.;!?]\s+|\n+)/).forEach(function (said) {
-    var mine = [], st = [];
-    toks(said).forEach(function (w) { var b = bare(w); if (NUM.test(b)) mine.push(parseFloat(b)); else if (isContent(b)) st.push(stem(b)); });
-    if (!mine.length || out.length >= 3) return;
-    var best = null, bestN = 0;
-    src.forEach(function (x) {
-      var n = st.filter(function (k) { return x.st[k]; }).length;
-      if (x.nums.length && n > bestN) { bestN = n; best = x; }
-    });
-    if (best && bestN >= 2 && !mine.some(function (v) { return best.nums.indexOf(v) !== -1; })) {
-      out.push('You said ' + mine.join(', ') + '; the PDF says: \u201C' + best.s.text + '\u201D (p.' + best.s.page + ')');
-    }
-  });
-  return out;
-}
-
-function gauntlet(clusters, pointsByCluster, focus, n) {
-  var want = Math.max(1, n || 5);
-  var fromFocus = [], fromRest = [];
-  (clusters || []).forEach(function (c) {
-    var freq = frequencies(c), title = titleStems(c), terms = defined(c);
-    var points = pointsByCluster[c.index] || [];
-    var used = {};
-    points.forEach(function (p) { used[p.text] = true; });
-    var isFocus = focus.indexOf(c.index) !== -1;
-    /* Sentences recall never showed, then the recall sentences again with a
-       DIFFERENT word blanked, so the gauntlet is never a repeat. */
-    var fresh = sentences(c).filter(function (s) {
-      var len = s.text.split(/\s+/).length;
-      return !used[s.text] && len >= 6 && len <= 60;
-    }).sort(function (a, b) { return scoreSentence(b, freq) - scoreSentence(a, freq) || a.index - b.index; })
-      .map(function (s) { var t = rankedTerms(s.text, freq, title, terms)[0]; return t && { s: s, word: t.word }; });
-    var second = points.map(function (p) { var t = rankedTerms(p.text, freq, title, terms)[1]; return t && { s: p, word: t.word }; });
-    var blanks = fresh.concat(second).filter(Boolean).map(function (x) {
-      return { question: 'Gauntlet — fill in the blank: ' + cloze(x.s.text, x.word), answer: x.word, cluster: c.index, page: x.s.page };
-    });
-    /* A harder question, then a blank, in turn: the hard ones lead, and a
-       section with many of them still gets blanks. */
-    var hard = hardQuestions(c, points).map(function (q) { return { question: q.question, answer: q.answer, cluster: c.index, page: q.page }; });
-    var qs = [];
-    for (var qi = 0; qi < Math.max(hard.length, blanks.length); qi++) {
-      if (hard[qi]) qs.push(hard[qi]);
-      if (blanks[qi]) qs.push(blanks[qi]);
-    }
-    (isFocus ? fromFocus : fromRest).push(qs);
-  });
-  /* Take round-robin across sections, focus first, so no one section fills
-     the gauntlet: at least half from the weakest, while there are any. */
-  function drain(groups, k) {
-    var out = [];
-    for (var round = 0; out.length < k; round++) {
-      var any = false;
-      for (var i = 0; i < groups.length && out.length < k; i++) {
-        if (groups[i][round]) { out.push(groups[i][round]); any = true; }
-      }
-      if (!any) break;
-    }
-    return out;
-  }
-  var a = drain(fromFocus, Math.ceil(want / 2));
-  var b = drain(fromRest, want - a.length);
-  var c2 = a.length + b.length < want ? drain(fromFocus, want - b.length).slice(a.length) : [];
-  var all = a.concat(b, c2);
-  if (!all.length) {
-    /* A unit with nothing left to ask still gets a gauntlet: its own points,
-       first word, so the protocol can finish. */
-    (clusters || []).forEach(function (c) {
-      var freq = frequencies(c), title = titleStems(c), terms = defined(c);
-      (pointsByCluster[c.index] || []).forEach(function (p) {
-        var t = rankedTerms(p.text, freq, title, terms)[0];
-        if (t && all.length < want) all.push({ question: 'Gauntlet — fill in the blank: ' + cloze(p.text, t.word), answer: t.word, cluster: c.index, page: p.page });
-      });
-    });
-  }
-  return { questions: all };
-}
-
 /* The flow as a tree for drawing: each box once, its arrows out as
    branches beneath it. Paths repeated the shared start of every branch —
    the first screenshot drew "Diuretics → preload" twice. A box reached
@@ -758,10 +1074,209 @@ function tree(f) {
   return roots.map(grow);
 }
 
+/* ── the robot: the coach explains what is in front of you ────────────────
+   Tapped during a question, it says what KIND of question it is, where in
+   the section to look, and — before an answer — the book's sentence with
+   the answer blanked, when the answer is in it verbatim (never the answer
+   itself). After an answer: why the right one is right (the book's
+   sentence), and for each wrong option, where the book mentions it, so a
+   near-miss is learnt as a distinction. Tapped during a lesson, it gives
+   the section in one line, its cause and effect as one sentence, what is
+   asked most, and its mnemonics. Every word is the book's, except the
+   joining "which" and the labels. */
+var KIND_SAYS = {
+  mechanism: 'A mechanism question: follow your book’s cause and effect one step along.',
+  threshold: 'A threshold question: the value your book uses to define it, and which side of the cut-off.',
+  most: 'A “most common” question: the one your book ranks first.',
+  except: 'An EXCEPT question: three options are on your book’s list; find the one that is not.',
+  'define-back': 'A definition question: the term your book defines in these words.',
+  define: 'A definition question: the words your book defines it with.',
+  member: 'A list question: which one is on your book’s list.',
+  table: 'A table question: read across the row of your book’s table.',
+  'true': 'A true-statement question: only one option is what your book says.',
+  number: 'A numbers question: the value your book gives.',
+  term: 'A missing-word question: the word your book uses in this sentence.',
+  source: 'A which-section question: one statement is from this section; the others are from the rest of the unit.',
+};
+var ASK_SOMETHING = 'A question on this section: one option is what your book says.';
+/* The kind, read back from the question's own wording: a stored drill
+   carries no kind (its shape is the prompts' schema, shared with Claude's
+   replies), and one made by an AI has none. Checked against every
+   candidate's real kind in the coach suite. */
+var KIND_SHAPES = [
+  ['mechanism', /^Follow the mechanism in your book: /], ['threshold', /^In your book, what .+ defines .+\?$/],
+  ['most', /^What is the most /], ['except', / EXCEPT:$/], ['define-back', /^Which term is defined as /],
+  ['define', /^Which best describes /], ['member', /^Which of the following is one of the /], ['table', /^In the table, what is the /],
+  ['number', /^Which value completes this statement from your book\?$/], ['term', /^Which term completes this statement from your book\?$/],
+  ['true', /^Which statement about .+ is correct\?$/], ['source', /^Which of these statements is from /],
+];
+function questionKind(q) {
+  var t = String(q && q.question || '');
+  for (var i = 0; i < KIND_SHAPES.length; i++) if (KIND_SHAPES[i][1].test(t)) return KIND_SHAPES[i][0];
+  return '';
+}
+function askMod() { return root.MemAsk || (typeof require === 'function' ? require('./ask.js') : null); }
+function mentions(cluster, phrase, not) {
+  var p = String(phrase || '').trim().toLowerCase();
+  if (p.length < 3) return null;
+  var re = new RegExp('(?:^|[^a-z0-9])' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z0-9])', 'i');
+  return sentences(cluster, true).filter(function (s) { return s.text !== not && re.test(s.text); })[0] || null;
+}
+function explainQuestion(cluster, q, chosen) {
+  var A = askMod(), src = String(q.explain || ''), ans = String(q.options[q.answer] || '');
+  var heading = src ? A.headingOf(src) : A.OTHER;
+  var out = { kind: KIND_SAYS[questionKind(q)] || ASK_SOMETHING, where: heading && heading !== A.OTHER ? heading : '', page: q.page || 0,
+              hint: '', why: '', options: [] };
+  if (chosen == null) {
+    var at = ans ? src.toLowerCase().indexOf(ans.toLowerCase()) : -1;
+    if (!q.quote && at !== -1) out.hint = src.slice(0, at) + '_____' + src.slice(at + ans.length);
+    return out;
+  }
+  out.why = src;
+  out.options = q.options.map(function (o, i) {
+    var said = i === q.answer ? null : mentions(cluster, o, src);
+    return { text: o, right: i === q.answer, chosen: i === chosen, said: said ? said.text : '', page: said ? said.page : 0 };
+  });
+  return out;
+}
+function explainSection(cluster, lessonValue) {
+  var L = lessonValue || {}, hooks = L.mnemonics || [];
+  var g = sheetMod().glance(cluster, hooks.map(function (m) { return m.title; })) || { facts: [], pathway: [] };
+  var chain = g.pathway.length >= 2 ? g.pathway.map(function (st, i) {
+    return i === 0 ? st.label : (i === 1 ? ' ' : ', which ') + st.verb + ' ' + st.label;
+  }).join('') : '';
+  if (chain) chain = chain.charAt(0).toUpperCase() + chain.slice(1) + '.';
+  return { gist: String(L.overview || (L.points && L.points[0] && L.points[0].text) || ''), chain: chain,
+           facts: g.facts.map(function (f) { return f.title + ' — ' + f.sub; }),
+           hooks: hooks.map(function (m) { return { title: m.title, letters: m.letters, words: m.words }; }) };
+}
+
+/* ── memorising: the cards gone through before the drill ─────────────────
+   Active recall, not re-reading: each card hides one thing the section
+   says and the reader tries to bring it back before it is shown.
+     · each key point, its key term blanked (keyTermOf) — or, with no term
+       to blank, its opening words to finish;
+     · the big idea, when it is not already a point;
+     · each number tile: what it measures, to recall the value and its sign;
+     · each mnemonic: the letters, to recall the words;
+     · the chain of cause and effect: its two ends, to walk between them.
+   Every answer is the lesson's own words. session.js runs the cards. */
+var OPENING_WORDS = 6;
+function recallCards(cluster, lessonValue) {
+  var L = lessonValue || {}, out = [];
+  var norm = function (t) { return String(t).replace(/\s+/g, ' ').replace(/[.\s]+$/, '').toLowerCase(); };
+  var points = (L.points || []).map(function (p) { return p.text; });
+  if (L.overview && points.map(norm).indexOf(norm(L.overview)) === -1) {
+    out.push({ kind: 'idea', prompt: 'In one line, what is this section about?', answer: L.overview, full: L.overview, page: 0 });
+  }
+  (L.points || []).forEach(function (p) {
+    var key = keyTermOf(cluster, p.text), at = key ? p.text.toLowerCase().indexOf(key.toLowerCase()) : -1;
+    if (at !== -1) out.push({ kind: 'point', prompt: p.text.slice(0, at) + '_____' + p.text.slice(at + key.length), answer: p.text.slice(at, at + key.length), full: p.text, page: p.page });
+    else {
+      var ws = p.text.split(/\s+/);
+      out.push({ kind: 'point', prompt: 'Finish it: “' + ws.slice(0, Math.min(OPENING_WORDS, Math.ceil(ws.length / 2))).join(' ') + ' …”', answer: p.text, full: p.text, page: p.page });
+    }
+  });
+  (sheetMod().sheetOf(L).numbers || []).forEach(function (n) {
+    n.tiles.forEach(function (t) {
+      out.push({ kind: 'number', prompt: (n.subject && n.subject !== t.label ? n.subject + ' — ' : '') + t.label + ': what value?', answer: t.value, full: n.text, page: n.page });
+    });
+  });
+  (L.mnemonics || []).forEach(function (m) {
+    out.push({ kind: 'mnemonic', prompt: m.title + ': ' + m.letters.split('').join(' · '), answer: m.words.join(', '), full: m.words.join(', '), page: 0 });
+  });
+  var e = explainSection(cluster, L), g = sheetMod().glance(cluster, (L.mnemonics || []).map(function (m) { return m.title; }));
+  if (e.chain && g && g.pathway.length >= 3) {
+    var P = g.pathway;
+    out.push({ kind: 'chain', prompt: 'Walk the chain: ' + P[0].label + ' → … → ' + P[P.length - 1].label, answer: e.chain, full: e.chain, page: 0 });
+  }
+  return out;
+}
+
+/* ── re-teach: the Supreme Memorizer fix for a miss (skill.js) ──────────
+   A second miss on the same item (a review round) is re-taught, and how
+   depends on the kind of miss, because the skill's point is that the
+   wrong fix wastes the time: a confusion is shown side by side, a hook
+   that did not take is replaced by a different KIND of hook, a retrieval
+   miss gets more retrieval and no new hook, a blank gets a short re-teach
+   from the page. Every line is the section's own sentence, or its own
+   chain of steps; only the labels are the app's. */
+function coverage(text, sentence) {
+  var want = Object.keys(stemsOf(text));
+  if (!want.length) return 0;
+  var have = stemsOf(sentence);
+  return want.filter(function (k) { return have[k]; }).length / want.length;
+}
+/* The section's sentence that says the most about `text`: every content
+   word of it, or failing that most of them — never one that merely shares
+   a word. */
+function sentenceAbout(cluster, text, not) {
+  var best = null, bestC = 0;
+  sentences(cluster, true).forEach(function (st) {
+    if (not && st.text === not) return;
+    var c = coverage(text, st.text);
+    if (c > bestC) { best = st; bestC = c; }
+  });
+  return bestC >= 0.6 ? best : null;
+}
+function reteach(item, cluster) {
+  var Skill = root.MemSkill || (typeof require === 'function' ? require('./skill.js') : null);
+  var q = item.q, right = q.options[q.answer];
+  var type = item.types[item.types.length - 1];
+  var info = Skill.ERRORS[type] || Skill.ERRORS.E;
+  var rs = sentenceAbout(cluster, right) || (q.explain ? { text: q.explain, page: q.page } : null);
+  var out = { type: type, name: info.name, fix: info.fix, hookType: '', title: right, lines: [] };
+  var line = function (label, st) { if (st) out.lines.push({ label: label, text: st.text, page: st.page }); };
+  if (type === 'C') {
+    var picked = item.confusedWith;
+    out.hookType = 'contrast';
+    out.title = right + ' — not ' + picked;
+    line('Right: ' + right, rs);
+    var ps = picked ? sentenceAbout(cluster, picked, rs && rs.text) : null;
+    if (ps) line('What you picked: ' + picked, ps);
+    else out.lines.push({ label: 'What you picked: ' + picked, text: 'This section does not say that about it.', page: null, app: true });
+  } else if (type === 'E') {
+    /* The lesson's hooks are first letters; a different kind is the step
+       the fact sits in, drawn from the section's own cause-and-effect
+       chain, or failing that the book's sentence to say aloud. */
+    var f = flow(cluster), at = -1;
+    f.nodes.forEach(function (n, i) { if (at === -1 && sameThing(n.label, right)) at = i; });
+    if (at !== -1) {
+      var into = f.edges.filter(function (e) { return e.to === f.nodes[at].id; })[0];
+      var outof = f.edges.filter(function (e) { return e.from === f.nodes[at].id; })[0];
+      var byId = function (id) { return f.nodes.filter(function (n) { return n.id === id; })[0]; };
+      var steps = [];
+      if (into) steps.push(byId(into.from).label, into.verb);
+      steps.push(f.nodes[at].label);
+      if (outof) steps.push(outof.verb, byId(outof.to).label);
+      if (steps.length > 1) {
+        out.hookType = 'chain';
+        out.lines.push({ label: 'Where it sits in the chain', text: steps.join(' → '), page: f.nodes[at].page, chain: steps });
+      }
+    }
+    if (!out.hookType) { out.hookType = 'sentence'; line('Say it aloud twice, then cover it and say it again', rs); }
+    else line('The book', rs);
+  } else if (type === 'R') {
+    line('The book', rs);
+  } else {
+    out.hookType = 'teach';
+    var all = sentences(cluster, true), k = -1;
+    if (rs) all.forEach(function (st, i) { if (k === -1 && st.text === rs.text) k = i; });
+    if (k > 0) line('Before it', all[k - 1]);
+    line('The book', rs);
+    if (k !== -1 && k + 1 < all.length) line('After it', all[k + 1]);
+  }
+  return out;
+}
+
 var MemCoach = {
-  sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, hardQuestions: hardQuestions, phraseMatch: phraseMatch, itemMatch: itemMatch, numberSlips: numberSlips, defined: defined, toks: toks, rankedTerms: rankedTerms, matches: matches, cloze: cloze,
-  encode: encode, recall: recall, flow: flow, paths: paths, tree: tree, tableQuestions: tableQuestions, gradeRecall: gradeRecall, gradeExplain: gradeExplain, gauntlet: gauntlet,
-  bare: bare, frequencies: frequencies,
+  OPTIONS: OPTIONS, PER_KIND: PER_KIND, QUIZ_SIZE: QUIZ_SIZE, KIND_ORDER: KIND_ORDER, family: family, FLIP: FLIP, keyTermOf: keyTermOf,
+  sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, defined: defined, toks: toks,
+  rankedTerms: rankedTerms, frequencies: frequencies, bare: bare, numberFacts: numberFacts, mnemonicsOf: mnemonicsOf,
+  pools: pools, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
+  lesson: lesson, quiz: quiz, exam: exam, flow: flow, paths: paths, tree: tree,
+  reteach: reteach, sentenceAbout: sentenceAbout,
+  recallCards: recallCards, KIND_SAYS: KIND_SAYS, questionKind: questionKind, explainQuestion: explainQuestion, explainSection: explainSection,
 };
 root.MemCoach = MemCoach;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemCoach;

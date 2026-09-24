@@ -36,13 +36,25 @@ function greeting(hour) {
   return 'Studying late';
 }
 
-/* Sections finished in one unit: the whole unit once it reaches the
-   gauntlet, otherwise the section it is on (which is not finished yet). */
+/* Sections finished in one unit: taught and drilled. A version-1 session
+   (the old protocol) is not resumed, so it counts none. */
 function studiedOf(doc, state) {
   var n = (doc.clusters || []).length;
-  if (!state) return 0;
-  if (state.phase === 'done' || state.phase === 'gauntlet') return n;
-  return Math.max(0, Math.min(n, state.cluster || 0));
+  if (!drillState(state)) return 0;
+  var k = 0;
+  for (var i = 0; i < n; i++) if (state.per[i] && state.per[i].done) k++;
+  return k;
+}
+/* A session on the drill protocol: version 2, or 3 (with the weak list). */
+function drillState(st) { return !!st && (st.v === 2 || st.v === 3); }
+function unitPct(doc, state) {
+  var n = (doc.clusters || []).length;
+  return n ? Math.round(100 * studiedOf(doc, state) / n) : 0;
+}
+/* A section's badge: its best drill score, or null before its first drill. */
+function sectionPct(state, i) {
+  var c = drillState(state) && state.per[i];
+  return c && c.best != null ? Math.round(100 * c.best) : null;
 }
 
 function isHeld(card, today, FSRS) {
@@ -65,15 +77,61 @@ function progress(docs, sessions, cards, today, FSRS) {
   return out;
 }
 
+/* Started: a version-2 session with any section taught. */
+/* A unit whose final exam has been scored. */
+function examined(state) {
+  return !!(drillState(state) && state.exam && state.exam.score != null);
+}
+function started(state) {
+  if (!drillState(state)) return false;
+  return Object.keys(state.per).some(function (k) { return state.per[k].lesson || state.per[k].done; });
+}
 /* The unit to carry on with: one under way, else one not begun, newest
-   first in both cases; never one already mastered while another is open. */
+   first in both cases; never one whose exam is done while another is open. */
 function current(docs, sessions) {
   var list = (docs || []).slice().sort(function (a, b) { return (b.addedAt || 0) - (a.addedAt || 0); });
-  var open = list.filter(function (d) { var s = sessions[d.id]; return s && s.phase !== 'done'; })[0];
+  var open = list.filter(function (d) { var s = sessions[d.id]; return started(s) && !examined(s); })[0];
   if (open) return { doc: open, state: sessions[open.id], started: true };
-  var fresh = list.filter(function (d) { return !sessions[d.id]; })[0];
-  if (fresh) return { doc: fresh, state: null, started: false };
+  var fresh = list.filter(function (d) { return !started(sessions[d.id]); })[0];
+  if (fresh) return { doc: fresh, state: sessions[fresh.id] || null, started: false };
   return list.length ? { doc: list[0], state: sessions[list[0].id], started: true } : null;
+}
+/* "Jump back in": units studied, most recently first (`at`: docId → time of
+   the last step), then units not begun, newest first; `n` at most. */
+function recent(docs, sessions, at, n) {
+  var list = (docs || []).slice();
+  list.sort(function (a, b) {
+    var ta = (at && at[a.id]) || 0, tb = (at && at[b.id]) || 0;
+    return tb - ta || (b.addedAt || 0) - (a.addedAt || 0);
+  });
+  return list.slice(0, n || 3).map(function (d) {
+    var st = sessions[d.id];
+    return { doc: d, state: st || null, pct: unitPct(d, st), next: nextTitle(d, st) };
+  });
+}
+/* What "continue" would open: the exam when every section is drilled, else
+   the first section not yet drilled after the one last studied; once the
+   exam is done, its score. */
+function nextTitle(d, st) {
+  var n = (d.clusters || []).length;
+  if (!n) return '';
+  if (!drillState(st)) return d.clusters[0].title;
+  if (examined(st)) return 'Final exam · ' + Math.round(100 * st.exam.score) + '%';
+  for (var k = 0; k <= n; k++) {
+    var i = ((st.section || 0) + k) % n;
+    if (!st.per[i].done) return d.clusters[i].title;
+  }
+  return 'Final exam';
+}
+/* Days in a row with study, ending today or yesterday. `days`: ISO dates. */
+function streak(days, today, FSRS) {
+  var set = {};
+  (days || []).forEach(function (d) { set[d] = true; });
+  var prev = function (iso) { var t = FSRS.isoToLocalDate(iso); t.setDate(t.getDate() - 1); return FSRS.localDateToISO(t); };
+  var n = 0, d = today;
+  if (!set[d]) d = prev(d);
+  while (set[d]) { n++; d = prev(d); }
+  return n;
 }
 
 /* A section as one of pearl.js's notes: its prose, a paragraph per block. */
@@ -134,8 +192,8 @@ function headingOf(cluster, text) {
 }
 
 /* WEAK SPOTS. The sections taught and held least well, across every unit:
-   mastery is the session's own measure (session.js — half recall accuracy,
-   half the teach-back score), and a section not yet taught has none, so it
+   mastery is the session's own measure (session.js — the section drill's
+   first-pass score), and a section not yet drilled has none, so it
    is never called weak. Under WEAK is weak. Weakest first; between two
    equally weak, the one with more review cards waiting, since that is where
    a drill has the most to work on. `mastery` is MemSession.mastery, passed
@@ -186,7 +244,8 @@ function marks(text) {
   return out;
 }
 
-var MemHome = { HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
+var MemHome = { unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
+  HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
   notesOf: notesOf, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath };
 root.MemHome = MemHome;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemHome;

@@ -21,12 +21,12 @@ var WORKER = { url: BASE + 'pdf.worker.min.js', sri: 'sha384-sS8B4COeBqzQV9DaPpp
 
 var loading = null;
 
-function loadScript(src, sri) {
+function loadScript(src, sri, failure) {
   return new Promise(function (resolve, reject) {
     var s = document.createElement('script');
     s.src = src; s.integrity = sri; s.crossOrigin = 'anonymous';
     s.onload = resolve;
-    s.onerror = function () { reject(new Error('could not load the PDF reader — are you offline?')); };
+    s.onerror = function () { reject(new Error(failure || 'could not load the PDF reader — are you offline?')); };
     document.head.appendChild(s);
   });
 }
@@ -193,8 +193,18 @@ function drawn(opList, OPS) {
     });
     return [Math.min.apply(null, xs), Math.min.apply(null, ys), Math.max.apply(null, xs), Math.max.apply(null, ys)];
   }
+  /* ANNOTATIONS are not the page. pdf.js puts each one's appearance —
+     a reader's highlight, underline or note — into the operator list
+     between begin/endAnnotation, drawn under a matrix of its own that the
+     transform tracking here does not follow. A highlighted textbook's
+     marks came out as "figures" of prose cropped from the wrong place. A
+     highlight is never a figure, so annotations are skipped whole. */
+  var inAnnot = 0;
   for (var i = 0; i < opList.fnArray.length; i++) {
     var fn = opList.fnArray[i], args = opList.argsArray[i];
+    if (OPS.beginAnnotation != null && fn === OPS.beginAnnotation) { inAnnot++; continue; }
+    if (OPS.endAnnotation != null && fn === OPS.endAnnotation) { inAnnot = Math.max(0, inAnnot - 1); continue; }
+    if (inAnnot) continue;
     if (fn === OPS.save) stack.push(ctm.slice());
     else if (fn === OPS.restore) ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
     else if (fn === OPS.transform) ctm = mul(ctm, args);
@@ -346,9 +356,14 @@ function textBoxesOf(items) {
   });
 }
 
-/* ArrayBuffer → { pages: [{ page, lines }], wordCounts: [n per page], figures: [{ page, box }] } */
-function read(buffer, onProgress) {
-  var Lib;
+/* ArrayBuffer → { pages: [{ page, lines }], wordCounts: [n per page], figures: [{ page, box }],
+   ocr: [pages read by text recognition], ocrError, outline: [{ title, page, depth }] }.
+   onProgress(n, total, 'ocr' for the scanned-page pass); onStatus(message).
+   opts.figures === false skips looking for figures: a whole book looks for
+   them one chapter at a time, when the chapter is opened (figuresOn). */
+function wordsIn(lines) { return lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0); }
+function read(buffer, onProgress, onStatus, opts) {
+  var Lib, withFigures = !(opts && opts.figures === false);
   return lib().then(function (L) {
     Lib = L;
     /* pdf.js may take ownership of the buffer it is given, so it gets a copy:
@@ -364,7 +379,8 @@ function read(buffer, onProgress) {
           return page.getTextContent().then(function (tc) {
             var lines = linesOf(tc.items, h);
             pages.push({ page: n, lines: lines });
-            counts.push(lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0));
+            counts.push(wordsIn(lines));
+            if (!withFigures) return null;
             return page.getOperatorList().then(function (ops) {
               figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
                 var f = { page: n, box: b }, cap = captionFor(b, lines, h);
@@ -376,14 +392,102 @@ function read(buffer, onProgress) {
         });
       })(i);
     }
-    return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures }; });
+    /* Pages with (almost) no text layer are scans: each is drawn and read
+       by text recognition (ocr.js), and its lines take the place of the
+       empty ones. A page recognition cannot read either stays empty, and
+       is still named to the user as scanned; if the reader cannot load at
+       all (offline), every scanned page is named, as before. */
+    var ocr = [], ocrError = '';
+    /* Which pages are scans is known only once the text pass is done: the
+       list is taken inside the chain, not while it is being built. (The
+       first version took it outside, before any page had been read, found
+       none, and recognised nothing.) */
+    chain = chain.then(function () {
+      var scanned = root.MemOcr ? root.MemChunk.scannedPages(counts) : [];
+      var ocrChain = Promise.resolve();
+      scanned.forEach(function (n, k) {
+        ocrChain = ocrChain.then(function () { if (onProgress) onProgress(k + 1, scanned.length, 'ocr'); return doc.getPage(n); })
+          .then(function (page) { return root.MemOcr.readPage(page, onStatus).then(function (items) { return linesOf(items, page.getViewport({ scale: 1 }).height); }); })
+          .then(function (lines) {
+            var wc = wordsIn(lines);
+            if (!root.MemChunk.scannedPages([wc]).length) { pages[n - 1].lines = lines; counts[n - 1] = wc; ocr.push(n); }
+          });
+      });
+      return ocrChain.catch(function (e) { ocrError = (e && e.message) || String(e); });
+    });
+    var outline = [];
+    chain = chain.then(function () { return outlineOf(doc); }).then(function (o) { outline = o; });
+    return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures, ocr: ocr, ocrError: ocrError, outline: outline }; });
   });
+}
+
+/* The PDF's own bookmarks, flattened: [{ title, page, depth }], depth 0 at
+   the top. An entry whose destination cannot be resolved to a page is left
+   out; a PDF without bookmarks gives []. Never throws: a broken outline is
+   no outline. */
+function outlineOf(doc) {
+  var out = [];
+  function pageOf(dest) {
+    var d = typeof dest === 'string' ? doc.getDestination(dest) : Promise.resolve(dest);
+    return d.then(function (arr) {
+      if (!arr || !arr[0]) return null;
+      return typeof arr[0] === 'object' ? doc.getPageIndex(arr[0]).then(function (i) { return i + 1; }) : (typeof arr[0] === 'number' ? arr[0] + 1 : null);
+    });
+  }
+  function walk(items, depth) {
+    return (items || []).reduce(function (p, it) {
+      return p.then(function () {
+        return (it.dest ? pageOf(it.dest) : Promise.resolve(null)).catch(function () { return null; });
+      }).then(function (pg) {
+        var title = String(it.title || '').replace(/\s+/g, ' ').trim();
+        if (pg && title) out.push({ title: title, page: pg, depth: depth });
+        return walk(it.items, depth + 1);
+      });
+    }, Promise.resolve());
+  }
+  return doc.getOutline().then(function (items) { return walk(items, 0); }).then(function () { return out; }, function () { return out; });
+}
+
+/* Figures on some pages of a stored PDF, found as read() finds them —
+   for a book, a chapter at a time. pageNos are this file's own page
+   numbers; each figure found is returned with that page. */
+function figuresOn(key, buffer, pageNos) {
+  var figures = [];
+  return Promise.all([lib(), openStored(key, buffer)]).then(function (r) {
+    var L = r[0], doc = r[1];
+    return pageNos.reduce(function (p, n) {
+      return p.then(function () { return doc.getPage(n); }).then(function (page) {
+        var h = page.getViewport({ scale: 1 }).height;
+        return page.getTextContent().then(function (tc) {
+          var lines = linesOf(tc.items, h);
+          return page.getOperatorList().then(function (ops) {
+            figureBoxes(ops, L.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
+              var f = { page: n, box: b }, cap = captionFor(b, lines, h);
+              if (cap) { f.number = cap.number; f.label = cap.label; f.caption = cap.text; }
+              figures.push(f);
+            });
+          }, function () {});
+        });
+      });
+    }, Promise.resolve());
+  }).then(function () { return figures; });
 }
 
 /* Draw part of a page — a figure's box, or the whole page — to a PNG data
    URL, at `scale` device pixels per PDF unit. Opened afresh each time from
    the stored bytes; a study session draws a handful, so nothing is kept
    open between them. */
+/* A figure's box with a margin round it, kept on the page: a crop cut
+   exactly at the drawing's edge clips a title bar's letters and a frame's
+   outer line. */
+var CROP_MARGIN = 8;
+/* The finder's version, stored with the figures it found. 2: annotations
+   skipped. */
+var FIGURES_V = 2;
+function padBox(box, view, m) {
+  m = m == null ? CROP_MARGIN : m;
+  return [Math.max(view[0], box[0] - m), Math.max(view[1], box[1] - m), Math.min(view[2], box[2] + m), Math.min(view[3], box[3] + m)];
+}
 var docCache = { key: null, doc: null };
 function openStored(key, buffer) {
   if (docCache.key === key && docCache.doc) return Promise.resolve(docCache.doc);
@@ -399,7 +503,7 @@ function renderBox(key, buffer, pageNo, box, scale) {
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
     return page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise.then(function () {
       if (!box) return canvas.toDataURL('image/png');
-      var r = vp.convertToViewportRectangle(box);
+      var r = vp.convertToViewportRectangle(padBox(box, page.view));
       var x = Math.max(0, Math.floor(Math.min(r[0], r[2]))), y = Math.max(0, Math.floor(Math.min(r[1], r[3])));
       var w = Math.min(canvas.width - x, Math.ceil(Math.abs(r[2] - r[0]))), hh = Math.min(canvas.height - y, Math.ceil(Math.abs(r[3] - r[1])));
       var out = document.createElement('canvas');
@@ -410,6 +514,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

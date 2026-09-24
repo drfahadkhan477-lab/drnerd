@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 47 suites that need neither a browser nor a build all stay
+present, and the 54 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -109,45 +109,97 @@ brew install tesseract                    # macOS
 
 ## Memorizer — master any PDF
 
-A second, standalone app in [`memorizer/`](memorizer/). Upload a PDF — any
-subject — and it is read **in your browser** with pdf.js, split into sections
-at its headings (including the ones set in body type and marked only by their
-number, "A. Etiology." or "17.2 Clinical features", which are titled under the
-heading above them, and pages of two columns read column by column however
-the PDF wrote them), and taught one section at a time:
+A second, standalone app in [`memorizer/`](memorizer/). Add a chapter — a PDF,
+photos of its pages, or pasted notes — and it is read **in your browser** and
+split into sections first: at its topic headings, so each topic is a section
+of its own, and at the headings set in body type and marked only by their
+number ("A. Etiology.", "17.2 Clinical features"), which stay inside their
+topic. Pages of two columns are read column by column however the PDF wrote
+them, and scanned pages and photos — pictures of text — are read by text
+recognition, on the device. The unit then opens as a grid of its sections,
+each with its state and its best score, and a final exam that unlocks when
+every section is done. Each section is:
 
-1. **Encode** — the key points, each citing its page; one mnemonic; a
-   flowchart when the section describes a process.
-2. **Recall** — free-recall questions, answered from memory and graded.
-3. **Teach back** — explain the section aloud (dictation where the browser
-   has it) as if to a colleague; scored, with the gaps named.
-4. **Gauntlet** — after the last section, hostile examiner questions leaning
-   on your weakest sections.
+1. **Taught** — the big idea first, then the key points as numbered cards
+   (the key term bold, each citing its page, the paragraph it came from one
+   tap away), the numbers to know with their values marked, a mnemonic for
+   every list, everyday analogies for the mechanisms, a flowchart drawn from
+   its cause-and-effect sentences, its tables as tables and its figures cut
+   from the page under their own captions.
+2. **Drilled** — single-best-answer multiple-choice questions, four options,
+   never a blank to type into: the right option turns green, a wrong choice
+   red, and the book's own sentence says why. A question missed on the first
+   try is asked again at the end of the drill, and only first tries count
+   toward the score.
+3. **Examined** — after the last section, a final exam across the unit,
+   weighted to your weakest sections, that does not name the section a
+   question is from until you have answered it.
 
-Every missed answer and every gap becomes a review card, scheduled with the
-same FSRS scheduler Systole uses (`src/core/fsrs.js`, shared, not copied).
+**The owner's Supreme Memorizer skill is built into the coach**
+([`memorizer/src/skill.js`](memorizer/src/skill.js)). Every miss is typed by
+what happened, and the type decides the fix:
+- **Confusion:** a wrong option picked. It is shown side by side with the right one.
+- **Never encountered:** "Not sure". It is re-taught from the page.
+- **Retrieval:** missed, then right when asked again. It gets more retrieval and no new hook.
+- **Encoding:** missed twice. It is re-taught with a different kind of hook.
 
-Sections are short, and the study page shows each one as a handful of
-bullets with the key term first, the memory hook in a handwritten face beside
-them — built from the section's own lists where it has one — a flowchart drawn
-from its cause-and-effect sentences, its tables as tables, its figures cut
-from the page — pictures, and charts drawn as lines or curves, but not a
-highlight band behind text or the rules of a table — under their own
-captions, and the pages themselves. A numbered figure is
-shown with the section whose text names it ("see Fig. 17.3"), wherever it was
-printed; one that nothing names is shown with the section on its page.
+Each fix is built from the book's own sentences. A missed item stays on a
+weak list until it is right in two rounds far enough apart. Mixed review
+rounds are offered as you go and run before the exam, and the exam result
+carries the skill's closing sheet: three pillars, the mnemonics, and a
+weak-area report. Asked where you are weak, the Coach names the items still
+weak, with their types. With Claude, the same protocol is sent as a cached system
+prompt, after the rule that it may teach only from your PDF.
 
-The home screen is laid out as Systole's, and holds still: a hero band with
-where you are and a two-layer progress bar (sections studied; review cards
-FSRS says you still hold today), a pearl of the day — a sentence from your
-own PDF, found and broken into steps by Systole's `src/core/pearl.js`, shared
-rather than copied — doors to continue, review, add a PDF or change
-settings, and your weak spots: the sections your sessions say you hold least
-well, each with a drill of its review cards, due or not. The look is Systole's too: its themes, colour for colour, and its
-type scale, with text size, reading width, line spacing, font, contrast and
-brightness to choose. Contrast and brightness are computed from the theme you
-pick, and every theme at every setting is tested to keep its text at WCAG AA
-or better, with form controls outlined to WCAG's floor for controls.
+**A whole textbook** can be added as one book, in as many PDFs as it came
+in: the parts are put in order by the numbers in their names and their pages
+numbered straight through, so a page reference means the same page wherever
+the split fell. The book is cut into chapters three independent ways — the
+PDF's own bookmarks, its "Chapter N" headings and running headers, and the
+heading size that opens chapters — and the one that fits best is used; the
+book's page shows the others, and any chapter can be joined to the one before
+it. A chapter whose pages do not change keeps its progress. Each chapter is a
+unit like any other, and its figures are found the first time it is opened.
+
+**Ask your book.** Type a question and the built-in coach answers with the
+book's own sentences, word for word, each labelled with where it was printed,
+arranged under clinical headings (definition, causes, mechanism,
+presentation, diagnosis, treatment, complications) that are marked as
+Memorizer's arrangement, not the book's; when nothing matches it says "Not
+found in your book" rather than guess. It finds sentences through five
+indexes — chapters, diseases, clinical scenarios, diagnostic tests and
+treatments — built on the device from a vocabulary of cardiology terms and
+their synonyms ("NT-proBNP", "TAVI", a drug by its suffix), and the indexes
+can be browsed too. Nothing is sent anywhere.
+
+**An on-device AI tutor, optional.** Turned on in Settings, a small language
+model (Qwen3 0.6B or 1.7B, Apache-2.0, through WebLLM on WebGPU) is downloaded
+once and runs on the iPad with no key and no connection. It explains a
+section in plain words, suggests an analogy, summarises what the book says in
+answer to a question, and writes harder questions. It is not a source of
+facts, and nothing it writes is shown unchecked (`memorizer/src/ground.js`):
+a sentence with a number or a disease, test or drug its book passage does
+not have is dropped; a summary sentence must cite the passage it comes from
+and mostly use its words; and a question is asked only when a sentence of
+the section states its answer — that sentence, with its page, is the
+explanation shown, not the model's. What is dropped is counted on screen.
+
+Every missed answer becomes a review card — the same multiple-choice question
+— scheduled with the same FSRS scheduler Systole uses (`src/core/fsrs.js`,
+shared, not copied).
+
+The home screen asks what you want to learn: a big box to add a chapter, with
+chips for a PDF, photos or pasted notes; your streak and the cards due; "jump
+back in" cards with a progress ring and the section up next; the sections
+that need work, each with a drill of its review cards, due or not; a pearl of
+the day — a sentence from your own PDF, found and broken into steps by
+Systole's `src/core/pearl.js`, shared rather than copied — and your units,
+each with its progress. Nothing on it moves. The look is Systole's too: its
+themes, colour for colour, and its type scale, with text size, reading width,
+line spacing, font, contrast and brightness to choose. Contrast and
+brightness are computed from the theme you pick, and every theme at every
+setting is tested to keep its text at WCAG AA or better, with form controls
+outlined to WCAG's floor for controls.
 
 ```bash
 npm run memorizer          # → dist-memorizer/index.html, one self-contained file
@@ -155,16 +207,26 @@ npm run memorizer:serve    # the same, served on :8081 so it installs as an app
 ```
 
 **It needs no API key.** The default is a built-in coach that runs the whole
-protocol on the device: key points are the PDF's own sentences, verbatim;
-recall asks the section's definitions, its "most common" facts and its
-longest list, then fill-in-the-blank; the gauntlet asks definitions
-backwards (the meaning given, the term wanted), names the lists recall did
-not, and blanks sentences recall never showed; grading matches words, and a
-synonym can be counted as correct by you. Nothing leaves the device. For
-deeper questions and grading that understands answers in your own words, add
-a Claude key in Settings — then each step sends only the text of the section
-being studied, and every prompt forbids the model from adding anything that
-is not in your PDF. Either way the PDF is never uploaded; it is kept only on
-your device, so its pages and figures can be shown.
+protocol on the device. Its lessons are the book's own sentences, verbatim.
+Its analogies come from a bank written for common cardiology mechanisms —
+preload, afterload, stenosis, re-entry, tamponade and more — matched to the
+section, and each is labelled as Memorizer's, not the book's: the book is the
+authority. Its questions are built from the book: the right option and its
+explanation are the book's words, and the wrong options are real terms,
+causes, list items and values from elsewhere in the same unit — "which is
+most common", "all of the following EXCEPT", table values, a sentence with
+one term or number to choose. Nothing leaves the device. For deeper lessons,
+analogies for any topic and clinical-vignette questions, add a Claude key in
+Settings — then each lesson and drill sends only the text of the section
+being studied, the exam sends the key points of every section and the full
+text of only your weakest, and every prompt forbids the model from adding
+anything that is not in your PDF; the one thing it may write itself is an
+analogy, labelled as Claude's and barred from carrying a fact. Either way the
+PDF is never uploaded; it is kept only on your device, so its pages and
+figures can be shown. Scanned pages and photos are read by Tesseract,
+fetched from jsDelivr the first time it is needed — pinned and
+integrity-checked like the PDF reader, and kept for offline use after that —
+and your units name every page read that way, so you know which text came
+from recognition rather than the PDF itself.
 Memorizer carries no content of its own, so unlike Systole it builds
 anywhere, CI included.
