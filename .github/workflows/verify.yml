@@ -99,6 +99,13 @@ on:
   push:
   pull_request:
 
+# Read-only, for every job. Nothing here writes to the repository, comments,
+# or publishes; each job checks out and runs Node. Without this block the jobs
+# get the repository's default token, which may be read-write — and nothing
+# could notice that while GitHub was unable to parse this file at all.
+permissions:
+  contents: read
+
 jobs:
   syntax:
     name: syntax — every file parses, both listings work
