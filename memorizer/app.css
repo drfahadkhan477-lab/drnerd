@@ -334,3 +334,9 @@ ul.quotes li { padding: var(--s-2) 0; border-bottom: 1px solid var(--line); }
 h3.arranged, .arranged { font-style: italic; }
 .btn.link { width: 100%; text-align: left; display: block; }
 ul.index-list summary { cursor: pointer; padding: var(--s-2) 0; }
+
+/* ── on-device AI ── */
+.ai-card { border-left: 4px solid hsl(270 70% 60%); }
+.ai-label, .ai-tag { font-size: var(--t-meta); }
+.ai-tag { margin-left: var(--s-2); }
+sup.cite { font-size: .7em; color: var(--accent); }

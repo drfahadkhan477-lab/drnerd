@@ -102,7 +102,7 @@ self.addEventListener('fetch', function (e) {
   var r = e.request;
   if (r.method !== 'GET') return;
   var u = new URL(r.url);
-  var pinnedCdn = u.hostname === 'cdn.jsdelivr.net' && /\\/npm\\/(pdfjs-dist|mermaid|tesseract\\.js|tesseract\\.js-core|@tesseract\\.js-data\\/eng)@\\d/.test(u.pathname);
+  var pinnedCdn = u.hostname === 'cdn.jsdelivr.net' && /\\/npm\\/(pdfjs-dist|mermaid|tesseract\\.js|tesseract\\.js-core|@tesseract\\.js-data\\/eng|@mlc-ai\\/web-llm)@\\d/.test(u.pathname);
   if (u.origin !== location.origin && !pinnedCdn) return;
   e.respondWith(caches.match(r).then(function (hit) {
     return hit || fetch(r).then(function (res) {

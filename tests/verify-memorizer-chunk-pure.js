@@ -863,6 +863,10 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
   ok('the service worker keeps every file the text reader fetches, for offline use', urls.every(u => pinned(new URL(u))),
      urls.filter(u => !pinned(new URL(u))).join(', ') || urls.length + ' files');
   ok('and not an unpinned one', !pinned(new URL('https://cdn.jsdelivr.net/npm/tesseract.js/dist/worker.min.js')));
+  /* The on-device AI's engine, the same way. */
+  const L = require(path.join(ROOT, 'memorizer', 'src', 'llm.js'));
+  ok('the AI engine is pinned to a version, integrity-checked, and kept for offline use', /@mlc-ai\/web-llm@\d+\.\d+\.\d+\//.test(L.WEBLLM.url) &&
+     /^sha384-[A-Za-z0-9+/]{64}$/.test(L.WEBLLM.sri) && pinned(new URL(L.WEBLLM.url)) && !pinned(new URL('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/lib/index.js')));
 }
 
 head('scanned pages are named, not skipped silently');

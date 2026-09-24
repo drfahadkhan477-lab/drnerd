@@ -18,7 +18,7 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -26,6 +26,7 @@ var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.m
 var ui = {
   view: 'library',      /* library | book | session | ask | review | settings */
   askIdx: null, askFor: null, askQ: '', askR: null, askKind: 'chapters', askBusy: false,
+  ai: { status: '', busy: '', summary: null, lesson: {} },
   docs: [], cards: [], sessions: {}, at: {}, pearlSkip: 0, books: [], days: [], bookId: null,
   docsStale: true, pearlCache: null,
   docId: null, docRec: null, state: null,
@@ -151,6 +152,16 @@ function pump() {
       .then(render, function () {});
   } else if (s.phase === 'drill' && !c.quiz) {
     ask('Writing your questions…', 'quiz', [cluster(), c.lesson, ui.docRec.clusters], [cluster(), c.lesson])
+      .then(function (v) {
+        if (!builtin() || !aiOn() || !v.questions.length) return v;
+        ui.busy = 'Writing harder questions with the on-device AI…'; render();
+        return aiQuestions(cluster()).then(function (ai) {
+          ui.busy = '';
+          var seen = {};
+          var all = ai.concat(v.questions).filter(function (q) { var k = q.question + '|' + q.quote; if (seen[k]) return false; seen[k] = true; return true; });
+          return { questions: all.slice(0, Coach.QUIZ_SIZE + ai.length) };
+        });
+      })
       .then(function (v) { return dispatch({ type: 'quizReady', value: v }); })
       .then(render, function () {});
   } else if (s.phase === 'exam' && !s.exam.questions) {
@@ -857,6 +868,7 @@ function viewLesson() {
     h('div.card', { id: 'points' },
       h('div.card-head', h('h2', 'Key points'), button('🔊 Listen', function () { speak([L.overview].concat(L.points.map(function (p) { return p.text; })).join('. ')); }, 'quiet')),
       h('ol.points', L.points.map(function (p, i) { return pointCard(c, p, i); }))),
+    aiLessonCard(c, L),
     L.numbers && L.numbers.length ? h('div.card', { id: 'numbers' }, h('span.eyebrow', 'Numbers to know'),
       h('ul.numbers', L.numbers.map(function (n) { return h('li', marked(n.text), ' ', page(n.page)); }))) : null,
     mnemonics,
@@ -866,6 +878,31 @@ function viewLesson() {
     full,
     h('div.sticky-cta', button('I’ve got it — start the drill', function () { go({ type: 'toDrill' }); }, 'primary big', { id: 'to-drill' })),
   ];
+}
+
+/* The lesson's AI card: plain words and an analogy, on request. */
+function aiLessonCard(c, L) {
+  if (!aiOn()) return null;
+  var key = ui.docId + ':' + ui.state.section, got = ui.ai.lesson[key] || {};
+  var text = c.segments.map(function (s) { return s.text; }).join(' ');
+  var points = L.points.map(function (p) { return p.text; });
+  return h('div.card.ai-card', { id: 'ai-lesson' }, h('span.eyebrow', '✨ On-device AI tutor'),
+    got.plain ? [h('h3', 'In plain words'), got.plain.kept.length ? h('p', { id: 'ai-plain-text' }, got.plain.kept.join(' ')) : h('p.muted', 'Nothing it wrote could be checked against the section, so nothing is shown.'),
+      aiNote(got.plain.kept, got.plain.dropped.length)] : null,
+    got.analogy ? [h('h3', 'Think of it like…'), got.analogy.ok ? h('p', { id: 'ai-analogy-text' }, got.analogy.text) : h('p.muted', 'Its analogy was dropped: ' + got.analogy.why + '.'),
+      h('p.muted.ai-label', '✨ Analogy by the on-device AI — not from your book; checked to carry no number and no name the section does not.')] : null,
+    ui.ai.busy ? h('p.muted', { role: 'status' }, ui.ai.busy) : null,
+    ui.ai.status && !LLM.ready() ? h('p.muted', ui.ai.status) : null,
+    ui.ai.error ? h('p.warn', 'The on-device AI could not run: ' + ui.ai.error) : null,
+    h('div.row', button('Explain in plain words', function () {
+      aiJob('Explaining…', function () { return LLM.chat(LLM.SYSTEM, LLM.plainPrompt(c.title, points), null, 220); }).then(function (t) {
+        if (t == null) return; got.plain = Ground.plain(t, text); ui.ai.lesson[key] = got; render();
+      });
+    }, 'quiet', { id: 'ai-plain' }), button('An analogy', function () {
+      aiJob('Thinking of an analogy…', function () { return LLM.chat(LLM.SYSTEM, LLM.analogyPrompt(c.title, points), null, 120); }).then(function (t) {
+        if (t == null) return; var why = Ground.analogyError(t, text); got.analogy = { text: t.trim(), ok: !why, why: why }; ui.ai.lesson[key] = got; render();
+      });
+    }, 'quiet', { id: 'ai-analogy' })));
 }
 
 /* ── DRILL and EXAM: multiple choice ─────────────────────────────────────── */
@@ -906,6 +943,7 @@ function viewDrill() {
   var retry = c.order.indexOf(qi) !== c.pos;
   var firsts = c.quiz.questions.length;
   var meta = [h('span', retry ? 'Again — you missed this one' : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
+    q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · its answer checked against your book') : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
   return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice }); })];
 }
@@ -1045,6 +1083,40 @@ function viewReview() {
         : button('Show answer', function () { ui.reviewShown = true; render(); }, 'primary big', { id: 'show-answer' })));
 }
 
+/* ── ON-DEVICE AI (llm.js), every word it writes checked by ground.js ───── */
+function aiOn() { return LLM.loadConfig().on; }
+function aiEnsure() {
+  if (LLM.ready()) return Promise.resolve();
+  var c = LLM.loadConfig();
+  return LLM.supported().then(function (s) {
+    if (!s.ok) throw new Error(s.why);
+    return LLM.start(c.model, function (p, text) { ui.ai.status = 'Starting the on-device AI: ' + Math.round(100 * p) + '%' + (text ? ' — ' + text : ''); render(); });
+  }).then(function () { ui.ai.status = 'Ready: running on this device.'; });
+}
+/* Run one AI job with a busy line, and never let its failure stop the app. */
+function aiJob(label, fn) {
+  ui.ai.busy = label; ui.ai.error = ''; render();
+  return aiEnsure().then(fn).then(function (v) { ui.ai.busy = ''; render(); return v; }, function (e) {
+    ui.ai.busy = ''; ui.ai.error = (e && e.message) || String(e); render(); return null;
+  });
+}
+function aiNote(kept, dropped) {
+  return h('p.muted.ai-label', '✨ On-device AI, checked against your book' + (dropped ? ' — ' + dropped + ' sentence' + (dropped === 1 ? '' : 's') + ' dropped for saying what the book does not' : ''));
+}
+/* A drill's harder questions: the model's, each kept only when its answer
+   is in the section — explained by the book's sentence, not the model's. */
+var AI_QUESTIONS_MS = 120000;
+function aiQuestions(c) {
+  var sents = Coach.sentences(c);
+  if (sents.length < 3) return Promise.resolve([]);
+  var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(''); }, AI_QUESTIONS_MS); });
+  return aiEnsure().then(function () {
+    return Promise.race([LLM.chat(LLM.SYSTEM, LLM.questionsPrompt(c.title, sents), LLM.QUESTIONS_SCHEMA, 700), timeout]);
+  }).then(function (text) {
+    return LLM.parseQuestions(text || '').map(function (q) { return Ground.question(q, sents).q; }).filter(Boolean).slice(0, 4);
+  }, function () { return []; });
+}
+
 /* ── ASK YOUR BOOK ───────────────────────────────────────────────────────── */
 /* Built once per set of units: over a whole book it reads every sentence. */
 function askIndex() {
@@ -1073,6 +1145,18 @@ function viewAsk() {
     onkeydown: function (e) { if (e.key === 'Enter') askNow(input.value); } });
   var answer = null;
   if (r && idx) {
+    var sum = ui.ai.summary && ui.ai.summary.q === r.question ? ui.ai.summary : null;
+    var aiBox = r.found && aiOn() ? h('div.card.ai-card', { id: 'ai-answer' },
+      sum ? [sum.kept.length ? h('p', sum.kept.map(function (k) { return [k.text, ' ', h('sup.cite', k.cites.map(function (n) { return '[' + n + ']'; }).join(''))]; }).reduce(function (a, b) { return a.concat([' '], b); }))
+                             : h('p.muted', 'Nothing it wrote could be checked against the quotes, so nothing is shown.'), aiNote(sum.kept, sum.dropped.length)]
+        : h('div.row', button('✨ Summarise with the on-device AI', function () {
+            var items = r.groups.reduce(function (a, g) { return a.concat(g.items); }, []).sort(function (a, b) { return b.score - a.score; }).slice(0, 6);
+            aiJob('Summarising your book\u2019s answer…', function () { return LLM.chat(LLM.SYSTEM, LLM.summaryPrompt(r.question, items), null, 260); }).then(function (t) {
+              if (t == null) return; var g = Ground.summary(t, items); ui.ai.summary = { q: r.question, kept: g.kept, dropped: g.dropped, items: items }; render();
+            });
+          }, 'quiet', { id: 'ai-summarise' })),
+      ui.ai.busy ? h('p.muted', { role: 'status' }, ui.ai.busy) : null,
+      ui.ai.error ? h('p.warn', 'The on-device AI could not run: ' + ui.ai.error) : null) : null;
     answer = r.found ? h('div.card', { id: 'answer' },
       h('p.muted.legend', h('span.src', 'Book · p.'), ' your book’s own words, where it printed them · ', h('span.arranged', 'Headings'), ' arranged by Memorizer, not the book'),
       r.groups.map(function (g) {
@@ -1106,7 +1190,7 @@ function viewAsk() {
       h('p.muted', 'Answers are your book’s own sentences, each with its page — found on this device, never sent anywhere.')),
     ui.askBusy ? h('div.card.busy', { role: 'status' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', 'Indexing your book (once)…')) : null,
     !ui.docs.length ? h('div.card.empty', h('p', 'Add a chapter or a book first; then ask it anything.')) : null,
-    answer, browse);
+    typeof aiBox !== 'undefined' ? aiBox : null, answer, browse);
 }
 
 /* ── SETTINGS ────────────────────────────────────────────────────────────── */
@@ -1175,9 +1259,28 @@ function viewSettings() {
         var ok = Provider.saveConfig({ provider: prov.value, model: model.value, key: P.noKey ? '' : key.value.trim() });
         saved.textContent = ok ? 'Saved on this device.' : 'This browser refused to save it (private mode?).';
       }, 'primary', { id: 'save-settings' }), saved)),
+    aiSettingsCard(),
     h('div.card', h('h2', 'What leaves this device'),
       h('p', 'Your PDF, photos and notes are read here, in the browser, and never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages and photos, the first time it is needed; they are read on this device too.'),
       h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')));
+}
+
+function aiSettingsCard() {
+  var c = LLM.loadConfig();
+  var model = h('select', { id: 'ai-model' }, LLM.MODELS.map(function (m) {
+    return h('option', { value: m.id, selected: m.id === c.model }, m.label + ' — about ' + (m.mb >= 1000 ? (m.mb / 1000).toFixed(1) + ' GB' : m.mb + ' MB') + ' · ' + m.licence);
+  }));
+  return h('div.card.settings.ai-card', { id: 'ai-card' }, h('h2', '✨ On-device AI tutor'),
+    h('p', 'Optional. A small language model, downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. It needs no key and, once downloaded, no connection.'),
+    h('p', h('strong', 'It is not a source of facts. '), 'Every sentence it writes is checked against your book before you see it: no number and no disease, test or drug the book passage does not have, and a question is kept only when your book states its answer — and the book\u2019s own sentence is shown as the explanation. What fails the check is dropped and counted.'),
+    h('label', 'Model', model),
+    h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr; the model itself comes from Hugging Face through that engine, which does not check it against a hash, and is kept in this browser\u2019s cache.'),
+    h('div.row', button(c.on ? 'Turn off' : 'Turn on', function () {
+      var on = !c.on;
+      LLM.saveConfig({ on: on, model: model.value });
+      if (on) aiJob('Downloading and starting the model (once)…', function () { return true; }); else render();
+    }, c.on ? 'quiet' : 'primary', { id: 'ai-toggle' }), h('span.muted', { id: 'ai-status', role: 'status' }, ui.ai.busy || ui.ai.status || (c.on ? (LLM.ready() ? 'Ready.' : 'On — starts when first used.') : 'Off.'))),
+    ui.ai.error ? h('p.warn', { id: 'ai-error' }, 'The on-device AI could not run: ' + ui.ai.error) : null);
 }
 
 /* ── frame: a floating bar at the foot of the screen ─────────────────────── */

@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 49 suites that need neither a browser nor a build all stay
+present, and the 50 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -155,6 +155,18 @@ indexes — chapters, diseases, clinical scenarios, diagnostic tests and
 treatments — built on the device from a vocabulary of cardiology terms and
 their synonyms ("NT-proBNP", "TAVI", a drug by its suffix), and the indexes
 can be browsed too. Nothing is sent anywhere.
+
+**An on-device AI tutor, optional.** Turned on in Settings, a small language
+model (Llama 3.2 1B or Gemma 3 1B, through WebLLM on WebGPU) is downloaded
+once and runs on the iPad with no key and no connection. It explains a
+section in plain words, suggests an analogy, summarises what the book says in
+answer to a question, and writes harder questions. It is not a source of
+facts, and nothing it writes is shown unchecked (`memorizer/src/ground.js`):
+a sentence with a number or a disease, test or drug its book passage does
+not have is dropped; a summary sentence must cite the passage it comes from
+and mostly use its words; and a question is asked only when a sentence of
+the section states its answer — that sentence, with its page, is the
+explanation shown, not the model's. What is dropped is counted on screen.
 
 Every missed answer becomes a review card — the same multiple-choice question
 — scheduled with the same FSRS scheduler Systole uses (`src/core/fsrs.js`,

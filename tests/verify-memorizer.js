@@ -935,6 +935,71 @@ function kindOf(user) {
     await p2.locator('#read-more li button').first().click();
     await p2.locator('#big-idea').waitFor(T);
     ok('read more opens that section\u2019s lesson', await p2.evaluate(() => Memorizer.ui.state.phase === 'teach' && Memorizer.ui.docRec.name === 'unit' && Memorizer.ui.state.section === 0));
+
+    head('the on-device AI tutor: everything it writes checked against the book');
+    await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await p2.locator('#ai-card').waitFor(T);
+    ok('Settings offers it, off, with two small models and their licences', (await p2.locator('#ai-toggle').innerText()) === 'Turn on' &&
+       JSON.stringify(await p2.$$eval('#ai-model option', os => os.map(o => /Llama|Gemma/.test(o.textContent) && /License|Terms/.test(o.textContent)))) === '[true,true]');
+    ok('the real AI engine downloads, passes its integrity check, and loads from a local file', await p2.evaluate(() => MemLLM.loadLib().then(m => typeof m.CreateMLCEngine, e => 'failed: ' + e.message)) === 'function');
+    /* A stand-in for the model, answering each job with faithful sentences
+       and made-up ones, the way a small model does. */
+    await p2.evaluate(() => {
+      window.__ai = [];
+      MemLLM.saveConfig({ on: true, model: 'stub' });
+      MemLLM.useEngine({ chat: { completions: { create: async req => {
+        const u = req.messages[1].content; window.__ai.push(u);
+        let out = '';
+        if (/Answer the question in 2 to 4/.test(u)) {
+          const k = (u.split('\n').find(l => /Diuretics reduce preload/.test(l)) || '[1]').match(/^\[(\d+)\]/)[1];
+          out = `Diuretics reduce preload by lowering circulating volume [${k}]. Diuretics reduce preload by 75 percent [${k}]. Nitrates reduce preload too [${k}]. It works well.`;
+        } else if (/Explain this section/.test(u)) out = 'Preload is how much the ventricle is stretched before it contracts. Doctors give 40 mg of furosemide.';
+        else if (/ONE everyday analogy/.test(u)) out = 'Like filling a water balloon: the more you fill it, the harder it pushes back.';
+        else if (/multiple-choice/.test(u)) out = JSON.stringify({ questions: [
+          { question: 'What do diuretics reduce by lowering circulating volume?', options: ['Preload', 'Afterload', 'Contractility', 'Heart rate'], answer: 0 },
+          { question: 'Which drug is first-line for acute pulmonary edema?', options: ['Morphine', 'Digoxin', 'Aspirin', 'Heparin'], answer: 0 }] });
+        return { choices: [{ message: { content: out } }] };
+      } } } }, 'stub');
+    });
+    const aiNet = stub.requests.length;
+    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.fill('#ask-q', 'What reduces preload?');
+    await p2.locator('#ask-go').click();
+    await p2.locator('#ai-summarise').click();
+    await p2.locator('#ai-answer .ai-label').waitFor(T);
+    const sumText = (await p2.locator('#ai-answer').innerText()).replace(/\s+/g, ' ');
+    ok('its summary keeps the sentence that says what the book says, with its citation', /Diuretics reduce preload by lowering circulating volume\. \[\d\]/.test(sumText), sumText.slice(0, 160));
+    ok('and drops a made-up number, a drug the passage never names, and a sentence citing nothing — and says so', !/75|Nitrates|works well/.test(sumText) &&
+       /3 sentences dropped/.test(sumText), sumText.slice(0, 200));
+    await p2.locator('#read-more li button').first().click();
+    await p2.locator('#ai-lesson').waitFor(T);
+    await p2.locator('#ai-plain').click();
+    await p2.locator('#ai-plain-text').waitFor(T);
+    ok('in plain words: its own words are kept when they add nothing the section lacks', (await p2.locator('#ai-plain-text').innerText()) === 'Preload is how much the ventricle is stretched before it contracts.' &&
+       /1 sentence dropped/.test(await p2.locator('#ai-lesson').innerText()));
+    await p2.locator('#ai-analogy').click();
+    await p2.locator('#ai-analogy-text').waitFor(T);
+    ok('an analogy is shown, labelled as the AI\u2019s and not the book\u2019s', /water balloon/.test(await p2.locator('#ai-analogy-text').innerText()) &&
+       /Analogy by the on-device AI — not from your book/.test(await p2.locator('#ai-lesson').innerText()));
+    /* A fresh drill of that section, so its questions are written now. */
+    const unitId = await p2.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'unit').id));
+    await p2.evaluate(id => MemStore.del('sessions', id).then(() => Memorizer.openDoc(id, 0)), unitId);
+    await p2.locator('#to-drill').click();
+    await p2.locator('#mcq .option').first().waitFor(T);
+    const qz = await p2.evaluate(() => Memorizer.ui.state.per[0].quiz.questions);
+    ok('its question whose answer the section states is asked, first, and marked', qz[0].by === 'ai' && qz[0].question === 'What do diuretics reduce by lowering circulating volume?' &&
+       await p2.locator('.ai-tag').count() === 1, JSON.stringify(qz.map(q => q.by || 'built-in')));
+    ok('its question whose answer the section does not state is not', !qz.some(q => /pulmonary edema/.test(q.question)) && qz.filter(q => q.by === 'ai').length === 1);
+    await p2.locator('.option[data-i="' + qz[0].answer + '"]').click();
+    ok('and the explanation shown is the book\u2019s sentence with its page, not the model\u2019s', /Why: Diuretics reduce preload by lowering circulating volume\./.test(await p2.locator('.why').innerText()) &&
+       (await p2.locator('.why .pg').innerText()) === 'p.1');
+    ok('and none of it went over the network', stub.requests.length === aiNet && await p2.evaluate(() => window.__ai.length) === 4);
+    await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await p2.locator('#ai-toggle').click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.locator('#ask-go').click();
+    await p2.locator('#answer').waitFor(T);
+    ok('turned off, it offers nothing', await p2.locator('#ai-answer').count() === 0);
   }
 
   head('a whole book: its PDFs as one, cut into chapters');
