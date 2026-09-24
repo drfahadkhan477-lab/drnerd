@@ -879,7 +879,9 @@ function kindOf(user) {
     head('pasted notes: split into sections the same way');
     await p2.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await p2.locator('#chip-paste').click();
-    const body = t => Array.from({ length: 16 }, (_, i) => `${t} note ${i} says what ${t.toLowerCase()} does to the heart.`).join(' ');
+    /* One sentence a line, long enough to run past a page: Afterload's
+       last notes are printed on page 2 of the pasted text. */
+    const body = t => Array.from({ length: 25 }, (_, i) => `${t} note ${i} says what ${t.toLowerCase()} does to the heart.`).join('\n');
     await p2.fill('#paste-name', 'My notes');
     await p2.fill('#paste-text', `Preload\n\n${body('Preload')}\n\nAfterload\n\n${body('Afterload')}`);
     await p2.locator('#paste-go').click();
@@ -887,7 +889,7 @@ function kindOf(user) {
     ok('each short line on its own becomes a section', JSON.stringify(await p2.$$eval('#sections .section-title', es => es.map(e => e.textContent))) === '["Preload","Afterload"]',
        JSON.stringify(await p2.$$eval('#sections .section-title', es => es.map(e => e.textContent))));
     const prec = await p2.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'My notes')));
-    ok('stored as text, every word kept, with no PDF to draw from', prec.source === 'text' && !prec.hasFile && prec.clusters.reduce((n, c) => n + c.words, 0) === 2 + 2 * 16 * 10,
+    ok('stored as text, every word kept, with no PDF to draw from', prec.source === 'text' && !prec.hasFile && prec.clusters.reduce((n, c) => n + c.words, 0) === 2 + 2 * 25 * 10,
        `${prec.source} ${prec.clusters.reduce((n, c) => n + c.words, 0)} words`);
     await p2.locator('#learn-unit').click();
     await p2.locator('ol.points > li').first().waitFor(T);
@@ -906,6 +908,19 @@ function kindOf(user) {
     ok('the answer is the book\u2019s own sentence, with where it was printed', quotes.some(q => q.text === pdf.causal[0] && q.src === 'unit · p. 1'), JSON.stringify(quotes.slice(0, 3)));
     ok('and every line of it is word for word in one of your units', quotes.length > 0 && quotes.every(q => allText.indexOf(q.text) !== -1),
        JSON.stringify(quotes.filter(q => allText.indexOf(q.text) === -1)));
+    /* A sentence printed on the second page of its section: labelled with
+       its own page, not its section's first. */
+    await p2.fill('#ask-q', 'afterload note 24');
+    await p2.locator('#ask-go').click();
+    await p2.waitForFunction(() => /Afterload note 24/.test((document.querySelector('#answer') || {}).textContent || ''), null, T);
+    const late = await p2.$$eval('#answer ul.quotes li', ls => ls.map(l => ({ text: l.querySelector('.quote-text').textContent, src: l.querySelector('.src').textContent })));
+    const n24 = late.find(q => /^Afterload note 24 /.test(q.text));
+    ok('each line is labelled with its own page, not its section\u2019s first', n24 && n24.src === 'My notes · p. 2' &&
+       await p2.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'My notes').clusters.find(c => /Afterload note 24/.test(c.text)).pageStart)) === 1,
+       JSON.stringify(n24));
+    await p2.fill('#ask-q', 'What reduces preload?');
+    await p2.locator('#ask-go').click();
+    await p2.waitForFunction(() => /Diuretics/.test((document.querySelector('#answer') || {}).textContent || ''), null, T);
     ok('under a heading marked as Memorizer\u2019s arrangement', await p2.locator('#answer h3.arranged').count() >= 1 && /arranged by Memorizer, not the book/.test(await p2.locator('#answer .legend').innerText()));
     ok('and nothing was sent anywhere to find it', stub.requests.length === askBefore, `${stub.requests.length - askBefore} requests`);
     await p2.fill('#ask-q', 'tax law for accountants');
