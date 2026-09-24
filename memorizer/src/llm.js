@@ -77,8 +77,8 @@ function useEmbedder(fn) { embedder = fn; }
 function embedReady() { return !!embedder; }
 function startEmbed(onProgress) {
   if (embedder) return Promise.resolve();
-  return loadLib().then(function (lib) {
-    return lib.CreateMLCEngine(EMBED.id, { initProgressCallback: function (p) { if (onProgress) onProgress(p.progress || 0, p.text || ''); } });
+  return persist().then(loadLib).then(function (lib) {
+    return create(lib, EMBED.id, onProgress);
   }).then(function (e) {
     embedder = function (texts) { return e.embeddings.create({ input: texts }).then(function (r) { return r.data.map(function (d) { return d.embedding; }); }); };
   });
@@ -99,15 +99,128 @@ function embed(texts, onBatch) {
   return chain.then(function () { return out; });
 }
 
+/* ── getting the model onto the iPad ─────────────────────────────────────
+   The owner reported the model "not downloading properly". What goes wrong
+   on an iPad, and what is done about each:
+     · 16-BIT GPU MATHS. The q4f16 builds need WebGPU's "shader-f16"; where
+       the adapter lacks it, WebLLM refuses. The same model's q4f32 build
+       (in the pinned engine's own list) is used instead, and said so.
+     · STORAGE. Hundreds of megabytes go into the browser's storage; Safari
+       may refuse or evict it. Persistent storage is asked for first, and a
+       refusal is explained (free space; install to the Home Screen).
+     · THE CACHE. WebLLM keeps the files in the Cache API by default; where
+       that store fails, the download is tried once more into IndexedDB (a
+       backend the pinned engine supports), and the store that worked is
+       remembered, so the next start finds the files where they are.
+     · AN INTERRUPTED DOWNLOAD. Retried, twice: the parts already fetched
+       are kept in the store, so a retry continues rather than restarts.
+     · GPU MEMORY. A model too big for the iPad loses the GPU device; that is
+       explained as "choose a smaller model", not as a raw error.
+   A half-downloaded model can be deleted from Settings (clearModel). The
+   decisions — variantFor, classify, nextTry — are pure, and the start loop
+   is tested against a stand-in engine (useLib / useGpu). */
+var BACKEND_KEY = 'memorizer.llm.backend';
+var RETRIES = 2;
+var WAIT = { ms: 1500 };   /* before a retry, times the attempt number; tests set it to 0 */
+function variantFor(id, f16) { return f16 === false ? String(id).replace('-q4f16_1-', '-q4f32_1-') : id; }
+var KINDS = [
+  ['f16', /shader-f16/i],
+  ['memory', /device (?:was |is )?lost|out of memory|\boom\b|allocation|maxStorageBuffer|buffer size|exceeds? the (?:limit|maximum)/i],
+  ['quota', /quota|QuotaExceeded|storage (?:is )?full|not enough (?:space|storage)/i],
+  ['cache', /\bcaches?\b|cache\.(?:add|put)|indexeddb/i],
+  ['network', /failed to fetch|networkerror|load failed|network|timed? ?out|aborted|status (?:5\d\d|0)\b|\b50[234]\b/i],
+];
+function classify(err) {
+  var m = String(err && err.message || err || '');
+  for (var i = 0; i < KINDS.length; i++) if (KINDS[i][1].test(m)) return KINDS[i][0];
+  return 'other';
+}
+var SAYS = {
+  f16: 'this browser lacks the 16-bit GPU maths the model was built for',
+  memory: 'this iPad ran out of GPU memory for this model — choose a smaller one (Qwen3 0.6B) in Settings',
+  quota: 'the browser would not store the model — free some space on the iPad, add Memorizer to the Home Screen (an installed app is given more room), and turn it on again; the parts already downloaded are kept',
+  cache: 'the browser\u2019s storage refused the model files — try again; if it keeps failing, delete the downloaded model in Settings and start over',
+  network: 'the download was interrupted — check the connection and turn it on again; the parts already downloaded are kept',
+};
+function explain(err) {
+  var k = classify(err), raw = String(err && err.message || err || 'unknown error');
+  return SAYS[k] ? SAYS[k] + ' (' + raw.slice(0, 160) + ')' : raw;
+}
+/* After failed attempt n (0-based) on `backend`: the next try, or null. */
+function nextTry(err, n, backend) {
+  var k = classify(err);
+  if (k === 'network' && n < RETRIES) return { backend: backend, wait: WAIT.ms * (n + 1) };
+  /* Safari reports a failed cache write as a bare "Load failed", the same
+     words as a dropped connection: once the retries are spent on the Cache
+     API, the other store is the last thing to try. */
+  if ((k === 'cache' || k === 'quota' || k === 'network') && backend === 'cache') return { backend: 'indexeddb', wait: 0 };
+  return null;
+}
+/* root.localStorage in a page; a global one where a test provides it */
+function ls() { return root.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null); }
+function savedBackend() { try { return ls().getItem(BACKEND_KEY) === 'indexeddb' ? 'indexeddb' : 'cache'; } catch (_) { return 'cache'; } }
+function saveBackend(b) { try { ls().setItem(BACKEND_KEY, b); } catch (_) {} }
+function persist() {
+  var st = root.navigator && root.navigator.storage;
+  return st && st.persist ? st.persist().then(function (v) { return !!v; }, function () { return false; }) : Promise.resolve(false);
+}
+var gpuProbe = null;
+/* Tests hand in a stand-in engine library and GPU. */
+function useLib(lib) { libP = lib ? Promise.resolve(lib) : null; }
+function useGpu(fn) { gpuProbe = fn; }
+function gpu() {
+  if (gpuProbe) return Promise.resolve(gpuProbe());
+  if (!root.navigator || !root.navigator.gpu) return Promise.resolve({ ok: false, f16: false });
+  return root.navigator.gpu.requestAdapter().then(function (a) {
+    return a ? { ok: true, f16: !!(a.features && a.features.has && a.features.has('shader-f16')) } : { ok: false, f16: false };
+  }, function () { return { ok: false, f16: false }; });
+}
+/* One engine, tried and retried by the rules above. */
+function create(lib, id, onProgress) {
+  var backend = savedBackend();
+  function attempt(n) {
+    var appConfig = Object.assign({}, lib.prebuiltAppConfig || {}, { cacheBackend: backend });
+    return lib.CreateMLCEngine(id, { appConfig: appConfig, initProgressCallback: function (p) { if (onProgress) onProgress(p.progress || 0, p.text || ''); } })
+      .then(function (e) { saveBackend(backend); return e; }, function (err) {
+        var next = nextTry(err, n, backend);
+        if (!next) throw new Error(explain(err));
+        if (onProgress) onProgress(0, next.backend !== backend ? 'the browser cache refused the files; trying its other store' : 'the download was interrupted; trying again (' + (n + 2) + ' of ' + (RETRIES + 1) + ')');
+        backend = next.backend;
+        return new Promise(function (r) { setTimeout(r, next.wait); }).then(function () { return attempt(n + 1); });
+      });
+  }
+  return attempt(0);
+}
+
 var engine = null, engineModel = null;
 /* Tests hand in a stand-in with the same chat.completions.create(). */
 function useEngine(e, model) { engine = e; engineModel = model || 'stub'; }
 function ready() { return !!engine; }
 function start(model, onProgress) {
   if (engine && engineModel === model) return Promise.resolve(engine);
+  var id = model;
+  return persist().then(gpu).then(function (g) {
+    id = variantFor(model, g.f16);
+    if (id !== model && onProgress) onProgress(0, 'this browser has no 16-bit GPU maths, so the 32-bit build of the same model is used');
+    return loadLib();
+  }).then(function (lib) { return create(lib, id, onProgress); })
+    .then(function (e) { engine = e; engineModel = model; return e; });
+}
+/* Delete a model's downloaded files — both builds, both stores — so a
+   broken download starts clean. */
+function clearModel(model) {
   return loadLib().then(function (lib) {
-    return lib.CreateMLCEngine(model, { initProgressCallback: function (p) { if (onProgress) onProgress(p.progress || 0, p.text || ''); } });
-  }).then(function (e) { engine = e; engineModel = model; return e; });
+    var jobs = [];
+    [model, variantFor(model, false)].forEach(function (id) {
+      ['cache', 'indexeddb'].forEach(function (b) {
+        jobs.push(Promise.resolve().then(function () {
+          return lib.deleteModelAllInfoInCache(id, Object.assign({}, lib.prebuiltAppConfig || {}, { cacheBackend: b }));
+        }).catch(function () {}));
+      });
+    });
+    engine = null; engineModel = null;
+    return Promise.all(jobs).then(function () { return true; });
+  });
 }
 
 function stripThinking(t) { return String(t).replace(/<think>[\s\S]*?(?:<\/think>|$)/g, '').trim(); }
@@ -156,7 +269,7 @@ function parseQuestions(text) {
   } catch (_) { return []; }
 }
 
-var MemLLM = { EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
+var MemLLM = { WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
                loadLib: loadLib, useEngine: useEngine, ready: ready, start: start, chat: chat, SYSTEM: SYSTEM,
                summaryPrompt: summaryPrompt, plainPrompt: plainPrompt, analogyPrompt: analogyPrompt, questionsPrompt: questionsPrompt,
                QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions, stripThinking: stripThinking };

@@ -2608,7 +2608,12 @@ function aiSettingsCard() {
     h('div.row', button(c.meaning ? 'Turn off' : 'Turn on', function () {
       LLM.saveConfig({ on: c.on, model: c.model, meaning: !c.meaning }); render();
     }, c.meaning ? 'quiet' : 'primary', { id: 'meaning-toggle' }), h('span.muted', c.meaning ? 'On.' : 'Off.')),
-    ui.ai.error ? h('p.warn', { id: 'ai-error' }, 'The on-device AI could not run: ' + ui.ai.error) : null);
+    ui.ai.error ? h('p.warn', { id: 'ai-error' }, 'The on-device AI could not run: ' + ui.ai.error) : null,
+    h('div.row', button('Delete the downloaded model', function () {
+      ui.ai.busy = 'Deleting the downloaded model…'; ui.ai.error = ''; render();
+      LLM.clearModel(model.value).then(function () { ui.ai.busy = ''; ui.ai.status = 'Deleted. Turn it on to download it again, from the start.'; render(); },
+        function (e) { ui.ai.busy = ''; ui.ai.error = (e && e.message) || String(e); render(); });
+    }, 'quiet', { id: 'ai-clear' }), h('span.muted', 'If a download broke part-way and keeps failing, this starts it clean.')));
 }
 
 /* ── frame: a floating bar at the foot of the screen ─────────────────────── */

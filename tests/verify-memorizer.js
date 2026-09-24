@@ -1788,8 +1788,11 @@ function kindOf(user) {
        JSON.stringify(await p2.$$eval('#ai-model option', os => os.map(o => /^Qwen3 /.test(o.textContent) && /Apache-2\.0/.test(o.textContent)))) === '[true,true,true]' &&
        /^Qwen3 4B/.test(await p2.locator('#ai-model option').nth(2).innerText()));
     ok('the real AI engine downloads, passes its integrity check, and loads from a local file', await p2.evaluate(() => MemLLM.loadLib().then(m => typeof m.CreateMLCEngine, e => 'failed: ' + e.message)) === 'function');
-    const known = await p2.evaluate(() => MemLLM.loadLib().then(m => MemLLM.MODELS.map(x => x.id).concat([MemLLM.EMBED.id]).filter(id => !m.prebuiltAppConfig.model_list.some(r => r.model_id === id))));
-    ok('every model offered is one the pinned engine knows', known.length === 0, JSON.stringify(known));
+    const known = await p2.evaluate(() => MemLLM.loadLib().then(m => MemLLM.MODELS.map(x => x.id).concat(MemLLM.MODELS.map(x => MemLLM.variantFor(x.id, false)), [MemLLM.EMBED.id])
+      .filter(id => !m.prebuiltAppConfig.model_list.some(r => r.model_id === id))));
+    ok('every model offered is one the pinned engine knows — and so is its 32-bit build, the fallback without 16-bit GPU maths', known.length === 0, JSON.stringify(known));
+    ok('and it has what "Delete the downloaded model" calls, and a Cache API default the loader can switch from', await p2.evaluate(() => MemLLM.loadLib().then(m =>
+       typeof m.deleteModelAllInfoInCache === 'function' && m.prebuiltAppConfig.cacheBackend === 'cache')));
     /* A stand-in for the model, answering each job with faithful sentences
        and made-up ones, the way a small model does. */
     await p2.evaluate(() => {
