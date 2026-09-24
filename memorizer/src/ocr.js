@@ -167,6 +167,38 @@ function readPage(page, onStatus) {
   });
 }
 
-root.MemOcr = { START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd };
+/* A photo of a page: drawn to a canvas no wider than PHOTO_MAX_WIDTH (big
+   phone photos gain nothing past it and take far longer), recognised, and
+   handed back as items in the photo's own pixels — one pixel as one unit,
+   which is all linesOf() and chunk.js need, since they compare sizes and
+   gaps with each other, never with a real point size. */
+var PHOTO_MAX_WIDTH = 2400;
+function imageCanvas(blob) {
+  return new Promise(function (resolve, reject) {
+    var url = URL.createObjectURL(blob), img = new Image();
+    img.onload = function () {
+      var k = Math.min(1, PHOTO_MAX_WIDTH / img.naturalWidth);
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      var ctx = c.getContext('2d');
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('that image could not be opened')); };
+    img.src = url;
+  });
+}
+function readImage(blob, onStatus) {
+  var canvas;
+  return imageCanvas(blob).then(function (c) { canvas = c; return engine(onStatus); }).then(function (worker) {
+    return worker.recognize(canvas, {}, { text: false, blocks: true, hocr: false, tsv: false });
+  }).then(function (res) {
+    return { items: ocrItems(res.data.blocks, 1, canvas.height), height: canvas.height };
+  });
+}
+
+root.MemOcr = { readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemOcr;
 })(typeof window !== 'undefined' ? window : this);

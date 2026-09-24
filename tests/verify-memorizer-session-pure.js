@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /*
- * Memorizer's protocol: no phase is skipped, every miss becomes exactly one
- * review card, and the gauntlet comes last.
+ * Memorizer's protocol: a section is taught before it is drilled, a miss
+ * comes back once before the drill ends, every miss becomes exactly one
+ * review card, and the final exam comes last.
  *
  *   node tests/verify-memorizer-session-pure.js
  *
  * Pure Node. memorizer/src/session.js is a reducer — next(state, event) — so
- * the protocol can be driven here event by event, with no model and no page,
+ * the protocol can be driven here event by event, with no coach and no page,
  * and every promise its header makes can be tested by trying to break it: by
  * dispatching the event that would skip ahead, and seeing it refused.
  *
@@ -33,147 +34,124 @@ new Function('module', 'exports', fs.readFileSync(path.join(ROOT, 'src', 'core',
 const FSRS = mod.FSRS;
 
 const TITLES = ['Preload', 'Afterload', 'Contractility'];
-const encoded = { points: [{ text: 'Preload stretches the sarcomere', page: 2 }], mnemonic: 'PAC', flowchart: '' };
-const prompts = n => ({ prompts: Array.from({ length: n }, (_, i) => ({ question: 'Q' + i, answer: 'A' + i, page: 2 + i })) });
-const grade = correct => ({ correct, missing: correct ? [] : ['x'], misconception: '', feedback: '' });
-const teach = (score, gaps) => ({ score, gaps: gaps.map((g, i) => ({ point: g, page: 5 + i })), misconceptions: [], feedback: '' });
-
-/* Try an event; → [state, ''] or [original state, error message]. */
-const tryNext = (s, e) => { try { return [S.next(s, e), '']; } catch (err) { return [s, err.message]; } };
-const refused = (s, e) => tryNext(s, e)[1];
-
-/* One cluster through its whole round, with the given recall results and
-   teach-back gaps. */
-function round(s, results, gaps, score) {
-  s = S.next(s, { type: 'encoded', value: encoded });
-  s = S.next(s, { type: 'toRecall' });
-  s = S.next(s, { type: 'recallPrompts', value: prompts(results.length) });
-  results.forEach(r => { s = S.next(s, { type: 'recallGraded', value: grade(r), answer: r ? 'right' : 'wrong' }); });
-  return S.next(s, { type: 'explainGraded', value: teach(score == null ? 70 : score, gaps), explanation: 'I said things' });
+const lesson = { overview: 'o', points: [{ text: 'Preload stretches the sarcomere', page: 2 }], numbers: [], mnemonics: [], analogies: [], flowchart: '' };
+/* n questions; question k's right answer is option k % 4 */
+const quiz = (n, tag) => ({ questions: Array.from({ length: n }, (_, k) => ({ question: (tag || 'Q') + k, quote: '', options: ['a', 'b', 'c', 'd'], answer: k % 4, explain: 'e' + k, page: 2 + k })) });
+const refused = (s, e) => { try { S.next(s, e); return ''; } catch (err) { return err.message; } };
+const go = (s, ...events) => events.reduce((st, e) => S.next(st, e), s);
+/* Answer the current question right or wrong. */
+const answer = (s, right) => {
+  const c = s.per[s.section], q = c.quiz.questions[c.order[c.pos]];
+  return S.next(s, { type: 'answered', choice: right ? q.answer : (q.answer + 1) % 4 });
+};
+/* Teach and drill section i, getting first-pass answers `pattern` (true =
+   right), and any retries right. */
+function drill(s, i, n, pattern) {
+  s = go(s, { type: 'open', section: i }, { type: 'taught', value: lesson }, { type: 'toDrill' }, { type: 'quizReady', value: quiz(n, 'S' + i + 'Q') });
+  for (let k = 0; k < n; k++) s = answer(s, pattern[k]);
+  while (s.phase === 'drill') s = answer(s, true);
+  return s;
 }
 
-head('a session starts where the protocol starts');
+head('a new session');
 {
   const s = S.init('doc1', TITLES);
-  ok('at the first cluster, in encode', s.cluster === 0 && s.phase === 'encode');
-  ok('with no cards', s.cards.length === 0);
-  ok('and is plain JSON, so it can be saved and resumed', JSON.stringify(JSON.parse(JSON.stringify(s))) === JSON.stringify(s));
-  ok('a document with no clusters cannot start one', /at least one/.test((() => { try { S.init('d', []); return ''; } catch (e) { return e.message; } })()));
+  ok('starts on the unit page, section 0, nothing taught', s.phase === 'unit' && s.section === 0 && s.v === S.VERSION && !s.per[0].lesson);
+  ok('refuses a unit with no sections', (() => { try { S.init('d', []); return false; } catch (_) { return true; } })());
+  ok('is plain JSON, so it can be saved and resumed', JSON.stringify(JSON.parse(JSON.stringify(s))) === JSON.stringify(s));
 }
 
-head('no phase is skipped');
+head('teach, then drill');
 {
-  let s = S.init('doc1', TITLES);
-  ok('recall cannot begin before encode has returned points', !!refused(s, { type: 'toRecall' }));
-  ok('recall prompts cannot arrive during encode', !!refused(s, { type: 'recallPrompts', value: prompts(2) }));
-  ok('a teach-back cannot be graded during encode', !!refused(s, { type: 'explainGraded', value: teach(90, []) }));
-  ok('the gauntlet cannot start during encode', !!refused(s, { type: 'gauntletReady', value: { questions: [{ question: 'q', answer: 'a', cluster: 0, page: 1 }] } }));
-  ok('an encode with no points is refused, not accepted as empty', !!refused(s, { type: 'encoded', value: { points: [], mnemonic: '', flowchart: '' } }));
-  s = S.next(s, { type: 'encoded', value: encoded });
-  ok('encoding does not by itself move on — the student says when they are ready', s.phase === 'encode');
-  s = S.next(s, { type: 'toRecall' });
-  ok('then recall', s.phase === 'recall');
-  ok('a recall grade before the prompts exist is refused', !!refused(s, { type: 'recallGraded', value: grade(true) }));
-  s = S.next(s, { type: 'recallPrompts', value: prompts(3) });
-  ok('prompts cannot be replaced once set — that would silently re-ask', !!refused(s, { type: 'recallPrompts', value: prompts(1) }));
-  ok('entering recall twice is refused', !!refused(s, { type: 'toRecall' }));
-  ok('a teach-back cannot be graded until every recall prompt is', !!refused(s, { type: 'explainGraded', value: teach(90, []) }));
-  s = S.next(s, { type: 'recallGraded', value: grade(true) });
-  s = S.next(s, { type: 'recallGraded', value: grade(true) });
-  ok('two of three graded: still recall', s.phase === 'recall' && s.per[0].recallIdx === 2);
-  ok('a grade without a boolean "correct" is refused, never read as a pass',
-     !!refused(s, { type: 'recallGraded', value: { missing: [], misconception: '', feedback: '' } }) &&
-     !!refused(s, { type: 'recallGraded', value: { correct: 'true' } }));
-  s = S.next(s, { type: 'recallGraded', value: grade(false) });
-  ok('the third graded: explain', s.phase === 'explain');
-  ok('recall is over — another recall grade is refused', !!refused(s, { type: 'recallGraded', value: grade(true) }));
-  ok('and recall cannot be re-entered from the teach-back', !!refused(s, { type: 'toRecall' }));
-  ok('a teach-back grade without a score is refused', !!refused(s, { type: 'explainGraded', value: { gaps: [] } }));
-  s = S.next(s, { type: 'explainGraded', value: teach(80, []) });
-  ok('after the teach-back: the next cluster, back at encode', s.cluster === 1 && s.phase === 'encode' && !s.per[1].points);
-  ok('an unknown event is refused', !!refused(s, { type: 'skipToEnd' }));
-  const msg = refused(s, { type: 'toRecall' });
-  /* The phase as the phase field, not the word: the reason text for this
-     refusal ("recall follows encode") contains "encode" too, and the first
-     version of this check matched that instead. */
-  ok('a refusal names the event and the phase, so a UI bug is diagnosable', /"toRecall"/.test(msg) && /phase "encode"/.test(msg), msg);
+  const s0 = S.init('doc1', TITLES);
+  const opened = go(s0, { type: 'open', section: 1 });
+  ok('opening a section goes to its lesson', opened.phase === 'teach' && opened.section === 1);
+  ok('the drill cannot start before the lesson has been given', /not been taught/.test(refused(opened, { type: 'toDrill' })), refused(opened, { type: 'toDrill' }));
+  ok('a lesson with no points is refused', /no points/.test(refused(opened, { type: 'taught', value: { points: [] } })));
+  ok('answers are refused outside a drill', /needs the drill/.test(refused(opened, { type: 'answered', choice: 0 })));
+  const taught = go(opened, { type: 'taught', value: lesson });
+  const drilling = go(taught, { type: 'toDrill' });
+  ok('after the lesson, the drill', drilling.phase === 'drill');
+  ok('questions arrive once', /already has its questions/.test(refused(go(drilling, { type: 'quizReady', value: quiz(3) }), { type: 'quizReady', value: quiz(3) })));
+  ok('a drill whose answers point at no option is refused', /no usable questions/.test(refused(drilling, { type: 'quizReady', value: { questions: [{ question: 'q', quote: '', options: ['a', 'b'], answer: 5, explain: '', page: 1 }] } })));
+  ok('the state it was given is never changed', !S.init('doc1', TITLES).per[1].lesson && taught.phase === 'teach');
 }
 
-head('the gauntlet comes last');
+head('the drill: graded by the option chosen, and a miss comes back');
 {
-  let s = S.init('doc1', TITLES);
-  s = round(s, [true], []);
-  s = round(s, [true], []);
-  ok('with one cluster still to go, it is not the gauntlet', s.phase === 'encode' && s.cluster === 2);
-  ok('and the gauntlet cannot be started early', !!refused(s, { type: 'gauntletReady', value: { questions: [{ question: 'q', answer: 'a', cluster: 0, page: 1 }] } }));
-  s = round(s, [true], []);
-  ok('after the last cluster’s teach-back: the gauntlet', s.phase === 'gauntlet' && s.cluster === 2);
-  ok('a gauntlet grade before its questions is refused', !!refused(s, { type: 'gauntletGraded', value: grade(true) }));
-  ok('a gauntlet with no questions is refused', !!refused(s, { type: 'gauntletReady', value: { questions: [] } }));
-  s = S.next(s, { type: 'gauntletReady', value: { questions: [
-    { question: 'G0', answer: 'a0', cluster: 1, page: 3 },
-    { question: 'G1', answer: 'a1', cluster: 9, page: 4 },
-    { question: 'G2', answer: 'a2', cluster: 0, page: 5 },
-  ] } });
-  ok('a question naming a cluster that does not exist is kept, with no cluster', s.gauntlet.questions[1].cluster === null);
-  ok('the gauntlet’s questions cannot be replaced mid-way', !!refused(s, { type: 'gauntletReady', value: { questions: [{ question: 'x', answer: 'y', cluster: 0, page: 1 }] } }));
-  s = S.next(s, { type: 'gauntletGraded', value: grade(true) });
-  s = S.next(s, { type: 'gauntletGraded', value: grade(false) });
-  ok('two of three: still the gauntlet', s.phase === 'gauntlet');
-  s = S.next(s, { type: 'gauntletGraded', value: grade(false) });
-  ok('three of three: done', s.phase === 'done');
-  ok('and nothing is accepted after done', !!refused(s, { type: 'gauntletGraded', value: grade(true) }) && !!refused(s, { type: 'encoded', value: encoded }));
-  const orphan = s.cards.find(c => c.source === 'gauntlet' && c.front === 'G1');
-  ok('the orphan question’s miss is filed under a real cluster (the weakest)', orphan && orphan.cluster >= 0 && orphan.cluster < TITLES.length,
-     orphan && String(orphan.cluster));
+  let s = go(S.init('doc1', TITLES), { type: 'open', section: 0 }, { type: 'taught', value: lesson }, { type: 'toDrill' }, { type: 'quizReady', value: quiz(4) });
+  s = answer(s, true);            /* Q0 right */
+  s = answer(s, false);           /* Q1 wrong */
+  ok('a right answer is recorded right, a wrong one wrong', s.per[0].answers[0].correct === true && s.per[0].answers[1].correct === false);
+  ok('a miss becomes a review card, with the question, its options and the right answer', s.cards.length === 1 &&
+     s.cards[0].front === 'Q1' && s.cards[0].options.length === 4 && s.cards[0].answer === 1 && s.cards[0].back === 'b' && s.cards[0].explain === 'e1');
+  ok('and is asked again at the end of the same drill', s.per[0].order.join(',') === '0,1,2,3,1', s.per[0].order.join(','));
+  s = answer(s, true); s = answer(s, true);   /* Q2, Q3 */
+  ok('the drill is not over until the missed question comes back', s.phase === 'drill' && s.per[0].order[s.per[0].pos] === 1);
+  const again = answer(s, false);
+  ok('missed again on the retry: no second card and no third ask', again.cards.length === 1 && again.phase === 'result' && again.per[0].order.length === 5);
+  s = answer(s, true);
+  ok('then the result', s.phase === 'result' && s.per[0].done === true);
+  ok('the score counts first answers only: 3 of 4', s.per[0].score === 0.75, String(s.per[0].score));
+  ok('a retry answered right does not change it', s.per[0].answers.filter(a => !a.first).length === 1 && s.per[0].score === 0.75);
+  const re = go(s, { type: 'redrill' });
+  ok('a drill can be taken again from its result', re.phase === 'drill' && re.per[0].pos === 0 && re.per[0].answers.length === 0 && re.per[0].order.join(',') === '0,1,2,3');
+  let r2 = re; for (let k = 0; k < 4; k++) r2 = answer(r2, k !== 1 && k !== 2);
+  while (r2.phase === 'drill') r2 = answer(r2, true);
+  ok('missing the same question again makes no second card', r2.cards.filter(c => c.front === 'Q1').length === 1, String(r2.cards.length));
+  ok('a worse retake is scored as it went, and the best score is kept', r2.per[0].score === 0.5 && r2.per[0].best === 0.75 && r2.per[0].attempts === 2,
+     r2.per[0].score + ' / ' + r2.per[0].best);
+  ok('an answer that is not an option index is refused', /index of an option/.test(refused(re, { type: 'answered', choice: 'b' })));
+  ok('back to the lesson from the result starts the drill from the top next time', go(s, { type: 'open', section: 0 }, { type: 'toDrill' }).per[0].pos === 0);
 }
 
-head('every miss becomes exactly one card');
+head('a section with nothing to drill');
 {
-  let s = S.init('doc1', TITLES);
-  s = round(s, [true, false, false], ['gap one about contractility', 'gap two'], 40);
-  s = round(s, [false], [], 90);
-  s = round(s, [true, true], ['gap three'], 60);
-  const bySource = src => s.cards.filter(c => c.source === src).length;
-  ok('three missed recall prompts → three recall cards', bySource('recall') === 3, String(bySource('recall')));
-  ok('three teach-back gaps → three explain cards', bySource('explain') === 3, String(bySource('explain')));
-  ok('a correct answer makes no card', !s.cards.some(c => c.source === 'recall' && c.front === 'Q0' && c.cluster === 0));
-  ok('each card has a unique id', new Set(s.cards.map(c => c.id)).size === s.cards.length);
-  ok('each card knows its document, cluster, title and page',
-     s.cards.every(c => c.docId === 'doc1' && TITLES[c.cluster] === c.title && typeof c.page === 'number'));
-  const miss = s.cards.find(c => c.source === 'recall' && c.cluster === 0 && c.front === 'Q1');
-  ok('a recall card asks the question and answers with the model answer', miss && miss.back === 'A1' && miss.page === 3);
-  const gap = s.cards.find(c => c.source === 'explain' && c.back === 'gap one about contractility');
-  ok('a teach-back card is a cloze of the gap, with the gap as its answer', gap && /_____/.test(gap.front) && gap.front !== gap.back, gap && gap.front);
-  ok('new cards are due at once', S.dueCards(s.cards, '2026-01-01').length === s.cards.length);
-  /* Replaying the same grade is what a double-tap or a resumed save does. The
-     reducer refuses it (the phase has moved on), and even applied to a state
-     that already has the card, the id is stable, so it cannot double. */
-  const before = s.cards.length;
-  let t = S.init('doc1', TITLES);
-  t = S.next(t, { type: 'encoded', value: encoded });
-  t = S.next(t, { type: 'toRecall' });
-  t = S.next(t, { type: 'recallPrompts', value: prompts(2) });
-  t = S.next(t, { type: 'recallGraded', value: grade(false) });
-  const replay = Object.assign({}, t, { per: JSON.parse(JSON.stringify(t.per)) });
-  replay.per[0].recallIdx = 0; replay.per[0].recall = [];
-  const again = S.next(replay, { type: 'recallGraded', value: grade(false) });
-  ok('grading the same prompt twice still leaves one card for it', again.cards.filter(c => c.front === 'Q0').length === 1,
-     String(again.cards.filter(c => c.front === 'Q0').length));
-  ok('(and the full session above still has its six)', before === 6, String(before));
+  const s = go(S.init('doc1', TITLES), { type: 'open', section: 2 }, { type: 'taught', value: lesson }, { type: 'toDrill' }, { type: 'quizReady', value: { questions: [] } });
+  ok('is done, with no score, and does not block the unit', s.phase === 'result' && s.per[2].done && s.per[2].score === null && S.mastery(s, 2) === null);
+  ok('and cannot be drilled again', /nothing to drill/.test(refused(s, { type: 'redrill' })));
 }
 
-head('mastery and the gauntlet’s focus');
+head('the final exam comes last');
 {
   let s = S.init('doc1', TITLES);
-  s = round(s, [true, true], [], 100);     // cluster 0: 1.0
-  s = round(s, [false, false], [], 20);    // cluster 1: 0.1
-  s = round(s, [true, false], [], 50);     // cluster 2: 0.5
-  ok('mastery is half recall, half teach-back', Math.abs(S.mastery(s, 0) - 1) < 1e-9 && Math.abs(S.mastery(s, 1) - 0.1) < 1e-9 && Math.abs(S.mastery(s, 2) - 0.5) < 1e-9,
-     [0, 1, 2].map(i => S.mastery(s, i)).join(', '));
-  ok('a cluster not reached yet has no mastery — not zero', S.mastery(S.init('d', TITLES), 0) === null);
-  ok('the gauntlet leans on the weakest clusters first', JSON.stringify(S.weakest(s, 2)) === '[1,2]', JSON.stringify(S.weakest(s, 2)));
-  ok('gauntlet size: 5 for a tiny unit, 10 at most', S.gauntletSize(S.init('d', ['x'])) === 5 && S.gauntletSize(S.init('d', new Array(30).fill('x'))) === 10);
+  s = drill(s, 0, 4, [true, true, true, true]);
+  ok('the exam is refused while a section is undrilled', /after every section/.test(refused(s, { type: 'toExam' })));
+  s = drill(s, 1, 4, [false, false, true, true]);
+  s = drill(s, 2, 4, [true, false, true, true]);
+  ok('every section drilled: the exam opens', S.allDone(s) && go(s, { type: 'toExam' }).phase === 'exam');
+  ok('the weakest sections lead it: Afterload (50%), then Contractility (75%)', S.weakest(s, 2).join(',') === '1,2', S.weakest(s, 2).join(','));
+  ok('the exam avoids what the drills asked', S.asked(s).length === 12 && S.asked(s).indexOf('S1Q2') !== -1);
+  let e = go(s, { type: 'toExam' });
+  ok('a section cannot be opened during the exam', /exam first/.test(refused(e, { type: 'open', section: 0 })));
+  const exq = { questions: [0, 1, 2].map(k => ({ question: 'E' + k, quote: '', options: ['a', 'b', 'c', 'd'], answer: 0, explain: 'x', page: 1, cluster: k === 2 ? 99 : k })) };
+  e = go(e, { type: 'examReady', value: exq });
+  ok('an exam question that names no real section is kept, unassigned', e.exam.questions[2].cluster === null);
+  const before = e.cards.length;
+  e = go(e, { type: 'examAnswered', choice: 0 }, { type: 'examAnswered', choice: 3 });
+  ok('a wrong exam answer is a card', e.cards.length === before + 1 && e.cards[e.cards.length - 1].source === 'exam');
+  const left = go(e, { type: 'toUnit' });
+  ok('leaving the exam part-way and coming back resumes it', go(left, { type: 'toExam' }).exam.pos === 2 && go(left, { type: 'toExam' }).exam.questions.length === 3);
+  e = go(e, { type: 'examAnswered', choice: 3 });
+  ok('an unassigned miss is filed under the weakest section', e.cards[e.cards.length - 1].cluster === 1, String(e.cards[e.cards.length - 1].cluster));
+  ok('then done, with its score', e.phase === 'done' && Math.abs(e.exam.score - 1 / 3) < 1e-9);
+  ok('and from its result, back to the sections, the score kept', go(e, { type: 'toUnit' }).phase === 'unit' && go(e, { type: 'toUnit' }).exam.score === e.exam.score);
+  ok('the exam can be retaken, with new questions', go(e, { type: 'toExam' }).exam.questions === null && go(e, { type: 'toExam' }).phase === 'exam');
+  ok('the exam is sized by the unit', S.examSize(s) === 6 && S.examSize(S.init('d', Array(9).fill('t'))) === 12 && S.examSize(S.init('d', ['a'])) === 6);
+}
+
+head('where to go next');
+{
+  let s = S.init('doc1', TITLES);
+  s = drill(s, 0, 2, [true, true]);
+  ok('after a section, the next undrilled one', S.nextSection(s) === 1);
+  s = drill(s, 2, 2, [true, true]);
+  ok('wrapping round to one skipped', S.nextSection(s) === 1);
+  s = drill(s, 1, 2, [true, true]);
+  ok('none when all are drilled — the exam is next', S.nextSection(s) === null);
+  const open1 = go(S.init('d', TITLES), { type: 'open', section: 1 });
+  ok('the next section is after the one open, not the one open', S.nextSection(open1) === 2, String(S.nextSection(open1)));
+  ok('mastery is the drill’s first-pass score, null before it', S.mastery(s, 0) === 1 && S.mastery(S.init('d', TITLES), 0) === null);
 }
 
 head('review runs on the real scheduler');

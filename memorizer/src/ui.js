@@ -1,21 +1,22 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   ui.js — the screens. Library, Session, Review, Settings.
+   ui.js — the screens: Home, a unit's sections, a section's lesson, its
+   multiple-choice drill and result, the final exam, Review and Settings.
 
-   Everything a model says reaches the page as TEXT (textContent), never as
-   markup. The one exception is a Mermaid flowchart, which is rendered by
-   Mermaid itself under securityLevel "strict" — Mermaid sanitises its own
-   output — and falls back to the diagram source shown as plain text.
+   Everything a coach says reaches the page as TEXT (textContent), never as
+   markup. The exceptions are the mascot and progress rings, which are this
+   file's own SVG, and a Mermaid flowchart, rendered by Mermaid under
+   securityLevel "strict" and falling back to its source as plain text.
 
    The protocol lives in session.js; this file dispatches events to it and
-   draws whatever state comes back. It keeps exactly one thing of its own:
-   `ui.feedback`, the grade card shown after an answer, which is a view of a
-   step already taken rather than part of the protocol.
+   draws whatever state comes back. It keeps one thing of its own while a
+   question is open: `ui.choice`, the option tapped, which is recorded on
+   Next — the reason is read before the answer is filed.
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
 'use strict';
 
 var doc = root.document;
-var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession;
+var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
 var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl;
 
@@ -24,10 +25,10 @@ var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.m
 
 var ui = {
   view: 'library',      /* library | session | review | settings */
-  docs: [], cards: [], sessions: {}, pearlSkip: 0,
+  docs: [], cards: [], sessions: {}, at: {}, pearlSkip: 0,
   docId: null, docRec: null, state: null,
-  busy: '', error: '', feedback: null,
-  importing: '', draft: '', reviewIdx: 0, reviewShown: false, reviewDone: 0,
+  busy: '', error: '', choice: null, pasting: false,
+  importing: '', reviewShown: false, reviewDone: 0, drill: null,
 };
 
 /* ── tiny DOM helper: h('div.cls', {attrs}, children…) ─────────────────── */
@@ -55,6 +56,7 @@ function h(sel, attrs) {
   return el;
 }
 
+
 function today() { return FSRS.todayISO(); }
 function cfg() { return Provider.loadConfig(); }
 function hasKey() { return Provider.ready(cfg()); }
@@ -65,40 +67,55 @@ function refresh() {
   return Promise.all([Store.all('docs'), Store.all('cards'), Store.all('sessions')]).then(function (r) {
     ui.docs = r[0].sort(function (a, b) { return b.addedAt - a.addedAt; });
     ui.cards = r[1];
-    ui.sessions = {};
-    r[2].forEach(function (x) { ui.sessions[x.id] = x.state; });
+    ui.sessions = {}; ui.at = {};
+    r[2].forEach(function (x) { ui.sessions[x.id] = x.state; ui.at[x.id] = x.at || 0; });
   });
 }
 function save() {
   if (!ui.state) return Promise.resolve();
-  return Store.put('sessions', { id: ui.docId, state: ui.state })
+  var at = Date.now();
+  ui.sessions[ui.docId] = ui.state; ui.at[ui.docId] = at;
+  return Store.put('sessions', { id: ui.docId, state: ui.state, at: at })
     .then(function () { return Store.mergeCards(ui.state.cards); })
     .then(function () { return Store.all('cards'); })
     .then(function (c) { ui.cards = c; });
 }
 
+/* Days studied, for the streak: this device's own record, kept in local
+   storage because it is a convenience — losing it loses a number, not work. */
+var DAYS_KEY = 'memorizer.days.v1';
+function studyDays() { try { return JSON.parse(root.localStorage.getItem(DAYS_KEY) || '[]'); } catch (_) { return []; } }
+function markStudied() {
+  try {
+    var d = studyDays(), t = today();
+    if (d.indexOf(t) === -1) { d.push(t); root.localStorage.setItem(DAYS_KEY, JSON.stringify(d.slice(-400))); }
+  } catch (_) { /* private mode: no streak, nothing else lost */ }
+}
+
 function dispatch(event) {
   ui.state = Session.next(ui.state, event);
-  ui.draft = '';
+  if (event.type === 'answered' || event.type === 'examAnswered') markStudied();
   return save();
 }
 
 /* ── the step runner: one place that shows busy, error and retry ────────── */
-/* kind names the step; args are the same for either coach — prompts.js
-   builds a request for Claude from them, coach.js answers from them
-   directly. The built-in coach's answer is held to the same schema the
-   model's is, so a bug there is an error on screen, never a bad grade. */
-function ask(label, kind, args) {
+/* kind is lesson | quiz | exam. The built-in coach answers from `local`
+   arguments, Claude from `remote` ones (prompts.js); either answer is held to
+   the same schema and rules (Prompts.validate), so a bug in the built-in
+   coach is an error on screen, never a bad drill. */
+function ask(label, kind, local, remote) {
   ui.busy = label; ui.error = ''; render();
   var c = cfg();
   var step = !Provider.needsKey(c)
     ? new Promise(function (resolve) {
-        var v = Coach[kind].apply(null, args);
-        var err = Prompts.check(Prompts.SCHEMAS[kind], v);
+        var v = Coach[kind].apply(null, local);
+        /* the built-in coach may find nothing to drill in a tiny section;
+           the session files that as done, with no score */
+        var err = kind === 'quiz' && v && v.questions && !v.questions.length ? '' : Prompts.validate(kind, v);
         if (err) throw new Error('the built-in coach produced a malformed ' + kind + ': ' + err);
         resolve(v);
       })
-    : Provider.call(c, Prompts[kind].apply(null, args), kind);
+    : Provider.call(c, Prompts[kind].apply(null, remote), kind);
   return step.then(function (v) {
     ui.busy = ''; return v;
   }, function (e) {
@@ -107,32 +124,117 @@ function ask(label, kind, args) {
   });
 }
 
-function cluster(i) { return ui.docRec.clusters[i == null ? ui.state.cluster : i]; }
+function cluster(i) { return ui.docRec.clusters[i == null ? ui.state.section : i]; }
 
-/* Advance whatever the current phase needs from the model, if anything. */
+/* Advance whatever the current phase needs from a coach, if anything. */
 function pump() {
   var s = ui.state;
-  if (!s || ui.busy || ui.error || ui.feedback) return;
-  var c = s.per[s.cluster];
-  if (s.phase === 'encode' && !c.points) {
-    ask('Reading this section and building your memory hooks…', 'encode', [cluster()])
-      .then(function (v) { return dispatch({ type: 'encoded', value: v }); })
+  if (!s || ui.busy || ui.error) return;
+  var c = s.per[s.section];
+  if (s.phase === 'teach' && !c.lesson) {
+    ask('Preparing the lesson…', 'lesson', [cluster()], [cluster()])
+      .then(function (v) { return dispatch({ type: 'taught', value: v }); })
       .then(render, function () {});
-  } else if (s.phase === 'recall' && !c.prompts) {
-    ask('Writing your recall questions…', 'recall', [cluster(), c.points])
-      .then(function (v) { return dispatch({ type: 'recallPrompts', value: v }); })
+  } else if (s.phase === 'drill' && !c.quiz) {
+    ask('Writing your questions…', 'quiz', [cluster(), c.lesson, ui.docRec.clusters], [cluster(), c.lesson])
+      .then(function (v) { return dispatch({ type: 'quizReady', value: v }); })
       .then(render, function () {});
-  } else if (s.phase === 'gauntlet' && !s.gauntlet.questions) {
-    var points = {};
-    ui.docRec.clusters.forEach(function (_, i) { points[i] = s.per[i].points || []; });
-    ask('Preparing the gauntlet — hostile questions on your weakest sections…',
-        'gauntlet', [ui.docRec.clusters, points, Session.weakest(s, 2), Session.gauntletSize(s)])
-      .then(function (v) { return dispatch({ type: 'gauntletReady', value: v }); })
+  } else if (s.phase === 'exam' && !s.exam.questions) {
+    var weak = Session.weakest(s, 2), n = Session.examSize(s), lessons = {};
+    ui.docRec.clusters.forEach(function (_, i) { lessons[i] = s.per[i].lesson; });
+    ask('Setting your final exam…', 'exam', [ui.docRec.clusters, Session.asked(s), weak, n], [ui.docRec.clusters, lessons, weak, n])
+      .then(function (v) { return dispatch({ type: 'examReady', value: v }); })
       .then(render, function () {});
   }
 }
 
-/* ── import ──────────────────────────────────────────────────────────────── */
+/* ── adding material ─────────────────────────────────────────────────────── */
+function newId() { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+/* One place that turns pages into a unit and stores it. */
+function saveUnit(name, source, pages, extra) {
+  var blocks = Chunk.blocksFromPages(pages).blocks;
+  var clusters = Chunk.clusterBlocks(blocks);
+  if (!clusters.length) throw new Error(extra && extra.emptyMessage || 'No readable text was found.');
+  var rec = { id: newId(), name: name, addedAt: Date.now(), pages: pages.length, source: source, clusters: clusters,
+              scanned: (extra && extra.scanned) || [], figures: (extra && extra.figures) || [], hasFile: !!(extra && extra.bytes),
+              ocr: (extra && extra.ocr) || [], ocrError: (extra && extra.ocrError) || '' };
+  var first = extra && extra.bytes ? Store.put('files', { id: rec.id, bytes: extra.bytes }) : Promise.resolve();
+  return first.then(function () { return Store.put('docs', rec); }).then(function () { return rec; });
+}
+function finishImport(p) {
+  return p.then(function (rec) {
+    ui.importing = ''; return refresh().then(function () { return openDoc(rec.id); });
+  }, function (e) {
+    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+  });
+}
+function importFile(file) {
+  if (!file) return;
+  ui.importing = 'Opening ' + file.name + '…'; ui.error = ''; render();
+  var bytes = null;
+  finishImport(readBuffer(file).then(function (buf) {
+    bytes = buf;
+    return Pdf.read(buf, function (n, total, pass) {
+      ui.importing = pass === 'ocr' ? 'Reading scanned page ' + n + ' of ' + total + ' with text recognition…' : 'Reading page ' + n + ' of ' + total + '…';
+      render();
+    }, function (msg) { ui.importing = msg; render(); });
+  }).then(function (r) {
+    ui.importing = 'Splitting into sections…'; render();
+    return saveUnit(file.name.replace(/\.pdf$/i, ''), 'pdf', r.pages, {
+      bytes: bytes, figures: r.figures || [], scanned: Chunk.scannedPages(r.wordCounts), ocr: r.ocr, ocrError: r.ocrError,
+      emptyMessage: r.ocrError
+        ? 'No readable text in this PDF. It looks like a scan (pictures of pages), and the text reader for scans could not run: ' + r.ocrError
+        : 'No readable text in this PDF, even with text recognition. If it is a scan, it may be too faint or too small to read.',
+    });
+  }));
+}
+/* Photos of pages, in the order chosen: each read by text recognition. */
+function importPhotos(files) {
+  var list = Array.prototype.slice.call(files || []);
+  if (!list.length) return;
+  ui.error = '';
+  var pages = [], chain = Promise.resolve();
+  list.forEach(function (f, i) {
+    chain = chain.then(function () { ui.importing = 'Reading photo ' + (i + 1) + ' of ' + list.length + '…'; render(); return Ocr.readImage(f, function (m) { ui.importing = m; render(); }); })
+      .then(function (r) { pages.push({ page: i + 1, lines: Pdf.linesOf(r.items, r.height) }); });
+  });
+  finishImport(chain.then(function () {
+    return saveUnit('Photos ' + new Date().toLocaleDateString(), 'photo', pages,
+      { ocr: pages.map(function (p) { return p.page; }), emptyMessage: 'No text could be read from those photos. Try a sharper, well-lit photo of the page.' });
+  }));
+}
+function importText(name, text) {
+  ui.importing = 'Splitting into sections…'; ui.error = ''; render();
+  finishImport(new Promise(function (resolve) { resolve(saveUnit(name || 'Pasted notes', 'text', Chunk.pagesFromText(text), { emptyMessage: 'There was no text to learn from.' })); }));
+}
+
+function openDoc(id, section) {
+  return Promise.all([Store.get('docs', id), Store.get('sessions', id)]).then(function (r) {
+    ui.docRec = r[0];
+    ui.docId = id;
+    var st = r[1] && r[1].state;
+    ui.state = st && st.v === Session.VERSION ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }));
+    ui.state = Session.next(ui.state, { type: 'toUnit' });
+    if (typeof section === 'number') ui.state = Session.next(ui.state, { type: 'open', section: section });
+    ui.view = 'session'; ui.error = ''; ui.choice = null;
+    return save();
+  }).then(function () { render(); root.scrollTo(0, 0); });
+}
+function go(event) {
+  ui.choice = null; ui.error = '';
+  return dispatch(event).then(function () { render(); root.scrollTo(0, 0); });
+}
+
+/* ── speech: the lesson can be listened to ───────────────────────────────── */
+function speak(text) {
+  if (!root.speechSynthesis) return;
+  root.speechSynthesis.cancel();
+  var u = new root.SpeechSynthesisUtterance(text);
+  u.rate = 0.95;
+  root.speechSynthesis.speak(u);
+}
+
+/* Blob.arrayBuffer() fallback, Mermaid and the flow drawing, as before. */
 /* Blob.arrayBuffer() is Safari 14; FileReader is everywhere. */
 function readBuffer(file) {
   if (file.arrayBuffer) return file.arrayBuffer();
@@ -143,73 +245,6 @@ function readBuffer(file) {
     r.readAsArrayBuffer(file);
   });
 }
-function importFile(file) {
-  if (!file) return;
-  ui.importing = 'Opening ' + file.name + '…'; ui.error = ''; render();
-  var bytes = null;
-  readBuffer(file).then(function (buf) {
-    bytes = buf;
-    return Pdf.read(buf, function (n, total, pass) {
-      ui.importing = pass === 'ocr' ? 'Reading scanned page ' + n + ' of ' + total + ' with text recognition…' : 'Reading page ' + n + ' of ' + total + '…';
-      render();
-    }, function (msg) { ui.importing = msg; render(); });
-  }).then(function (r) {
-    var blocks = Chunk.blocksFromPages(r.pages).blocks;
-    var clusters = Chunk.clusterBlocks(blocks);
-    if (!clusters.length) throw new Error(r.ocrError
-      ? 'No readable text in this PDF. It looks like a scan (pictures of pages), and the text reader for scans could not run: ' + r.ocrError
-      : 'No readable text in this PDF, even with text recognition. If it is a scan, it may be too faint or too small to read.');
-    var rec = {
-      id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      name: file.name.replace(/\.pdf$/i, ''), addedAt: Date.now(), pages: r.numPages,
-      scanned: Chunk.scannedPages(r.wordCounts), clusters: clusters, figures: r.figures || [], hasFile: true,
-      ocr: r.ocr || [], ocrError: r.ocrError || '',
-    };
-    return Store.put('files', { id: rec.id, bytes: bytes }).then(function () { return Store.put('docs', rec); });
-  }).then(function () {
-    ui.importing = ''; return refresh();
-  }).then(render, function (e) {
-    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
-  });
-}
-
-function openDoc(id) {
-  return Promise.all([Store.get('docs', id), Store.get('sessions', id)]).then(function (r) {
-    ui.docRec = r[0];
-    ui.docId = id;
-    ui.state = r[1] ? r[1].state : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }));
-    ui.view = 'session'; ui.error = ''; ui.feedback = null;
-    return save();
-  }).then(function () { render(); root.scrollTo(0, 0); });
-}
-
-/* ── speech ──────────────────────────────────────────────────────────────── */
-var Recognition = root.SpeechRecognition || root.webkitSpeechRecognition;
-var listening = null;
-function dictate(textarea, button) {
-  if (listening) { listening.stop(); return; }
-  var rec = new Recognition();
-  rec.continuous = true; rec.interimResults = true; rec.lang = doc.documentElement.lang || 'en-US';
-  var base = textarea.value ? textarea.value.replace(/\s*$/, ' ') : '';
-  rec.onresult = function (ev) {
-    var said = '';
-    for (var i = 0; i < ev.results.length; i++) said += ev.results[i][0].transcript;
-    textarea.value = base + said;
-  };
-  rec.onend = function () { listening = null; button.textContent = '🎙 Speak'; button.classList.remove('live'); };
-  rec.onerror = rec.onend;
-  listening = rec;
-  button.textContent = '■ Stop'; button.classList.add('live');
-  rec.start();
-}
-function speak(text) {
-  if (!root.speechSynthesis) return;
-  root.speechSynthesis.cancel();
-  var u = new root.SpeechSynthesisUtterance(text);
-  u.rate = 0.95;
-  root.speechSynthesis.speak(u);
-}
-
 /* ── mermaid, loaded only when a flowchart is first shown ────────────────── */
 var mermaidP = null;
 function mermaid() {
@@ -237,205 +272,6 @@ function flowchart(code) {
     });
   }).catch(fallback);
   return box;
-}
-
-/* ── shared pieces ───────────────────────────────────────────────────────── */
-function page(n) { return h('span.pg', 'p.' + n); }
-function button(label, onclick, cls, attrs) {
-  var a = attrs || {};
-  a.onclick = onclick; a.type = 'button';
-  return h('button.btn' + (cls ? '.' + cls : ''), a, label);
-}
-function busyCard() {
-  return h('div.card.busy', { role: 'status', 'aria-live': 'polite' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', ui.busy));
-}
-function errorCard(retry) {
-  return h('div.card.error', { role: 'alert' },
-    h('strong', 'That step did not work.'), h('p', ui.error),
-    h('div.row', retry ? button('Try again', function () { ui.error = ''; retry(); }, 'primary') : null,
-      !hasKey() ? button('Open Settings', function () { ui.view = 'settings'; ui.error = ''; render(); }) : null));
-}
-
-/* ── LIBRARY ─────────────────────────────────────────────────────────────── */
-/* The home screen, laid out as Systole's: a hero band with the greeting and
-   where you are, progress in two layers, today's pearl beside it, then the
-   doors, then the units. Nothing on it moves (src/home.js says why). */
-function viewLibrary() {
-  var input = h('input', { type: 'file', accept: 'application/pdf,.pdf', id: 'pdf-input', class: 'visually-hidden',
-    onchange: function (e) { importFile(e.target.files[0]); e.target.value = ''; } });
-  var sessions = ui.sessions || {};
-  var day = today();
-  var prog = Home.progress(ui.docs, sessions, ui.cards, day, FSRS);
-  var cur = Home.current(ui.docs, sessions);
-  var due = Session.dueCards(ui.cards, day).length;
-
-  function where(d, st) {
-    var n = d.clusters.length;
-    if (!st) return 'Not started';
-    if (st.phase === 'done') return 'Mastered — run it again any time';
-    if (st.phase === 'gauntlet') return 'Gauntlet next';
-    return 'Section ' + (st.cluster + 1) + ' of ' + n;
-  }
-
-  /* ── hero ── */
-  var meter = h('div.meter', { role: 'img', id: 'home-meter',
-      'aria-label': prog.studied + ' of ' + prog.sections + ' sections studied; ' + prog.held + ' of ' + prog.cards + ' review cards held' },
-    h('i.studied', { style: 'width:' + prog.studiedPct + '%' }), h('i.held', { style: 'width:' + prog.heldPct + '%' }));
-  var trace = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  trace.setAttribute('class', 'hero-trace'); trace.setAttribute('viewBox', '0 0 600 48');
-  trace.setAttribute('preserveAspectRatio', 'none'); trace.setAttribute('aria-hidden', 'true');
-  var tp = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
-  tp.setAttribute('d', Home.tracePath(600, 4));
-  trace.appendChild(tp);
-  var hero = h('section.home-hero', { 'aria-labelledby': 'home-title' }, trace,
-    h('span.hero-greet', Home.greeting(new Date().getHours())),
-    h('h1', { id: 'home-title' }, cur ? cur.doc.name : 'Master a whole unit.'),
-    h('p.hero-sub', cur ? where(cur.doc, cur.state) + ' · ' + Home.count(cur.doc.clusters.length, 'section') + ' · ' + Home.count(cur.doc.pages, 'page')
-      : 'Add a PDF. Each section goes through encode → recall → teach-back, then a hostile gauntlet; everything you miss comes back as a review card until it sticks.'),
-    ui.docs.length ? [meter,
-      h('div.meter-key',
-        h('span', h('b.k-studied', { 'aria-hidden': 'true' }), prog.studied + ' of ' + Home.count(prog.sections, 'section') + ' studied'),
-        h('span', h('b.k-held', { 'aria-hidden': 'true' }), prog.cards ? prog.held + ' of ' + Home.count(prog.cards, 'card') + ' held today' : 'No review cards yet'))] : null);
-
-  /* ── the pearl ── */
-  var pk = ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0) : null;
-  var pearl;
-  if (pk) {
-    pearl = h('aside.pearl.card', { id: 'pearl', 'aria-labelledby': 'pearl-label' },
-      h('span.eyebrow', { id: 'pearl-label' }, 'Today’s pearl'),
-      h('ol.pearl-steps', pk.steps.map(function (st) {
-        return h('li', st.lead ? h('span.pearl-lead', st.lead) : null,
-          Home.marks(st.text).map(function (r) { return r.num ? h('mark', r.text) : r.text; }));
-      })),
-      h('p.pearl-src', pk.pearl.heading, pk.pearl.page ? page(pk.pearl.page) : null, ui.docs.length > 1 ? ' · ' + pk.pearl.docName : ''),
-      h('div.row',
-        pk.of > 1 ? button('Another', function () { ui.pearlSkip = (ui.pearlSkip || 0) + 1; render(); }, '', { id: 'pearl-next' }) : null,
-        button('Open the unit', function () { openDoc(pk.pearl.docId); }, 'quiet')));
-  } else {
-    pearl = h('aside.pearl.card', { id: 'pearl' },
-      h('span.eyebrow', 'How it works'),
-      h('ol.pearl-steps',
-        h('li', h('span.pearl-lead', 'encode'), 'Read the section’s key points and its memory hook'),
-        h('li', h('span.pearl-lead', 'recall'), 'Answer from memory, then check'),
-        h('li', h('span.pearl-lead', 'teach'), 'Explain it back in your own words'),
-        h('li', h('span.pearl-lead', 'gauntlet'), 'Hard questions across the unit, aimed at your weakest sections')),
-      h('p.pearl-src', ui.docs.length ? 'A pearl appears here once a section has a sentence worth one.' : 'A pearl from your own PDF appears here once you add one.'));
-  }
-
-  /* ── doors ── */
-  function door(id, icon, title, sub, go, extra) {
-    return h('button.door', Object.assign({ type: 'button', id: id, onclick: go }, extra || {}),
-      h('span.door-icon', { 'aria-hidden': 'true' }, icon), h('span.door-title', title), h('span.door-sub', sub));
-  }
-  var addDoor = h('label.door.drop', { for: 'pdf-input', id: 'door-add',
-      ondragover: function (e) { e.preventDefault(); addDoor.classList.add('over'); },
-      ondragleave: function () { addDoor.classList.remove('over'); },
-      ondrop: function (e) { e.preventDefault(); addDoor.classList.remove('over'); importFile(e.dataTransfer.files[0]); } },
-    h('span.door-icon', { 'aria-hidden': 'true' }, '+'),
-    h('span.door-title', ui.importing ? 'Reading…' : 'Add a PDF'),
-    h('span.door-sub', ui.importing || 'Tap to choose, or drop it here. Read on this device.'));
-  var doors = h('nav.doors', { 'aria-label': 'Start here' },
-    cur ? door('door-continue', '▶', cur.started ? 'Continue' : 'Start', cur.doc.name + ' · ' + where(cur.doc, cur.state), function () { openDoc(cur.doc.id); }) : addDoor,
-    door('door-review', '↻', due ? 'Review · ' + due : 'Review', due ? due + ' card' + (due === 1 ? '' : 's') + ' due today' : ui.cards.length ? 'Nothing due today' : 'Misses become cards here',
-      function () { startReview(); }),
-    cur ? addDoor : null,
-    door('door-settings', '⚙', 'Settings', 'Theme, text size, coach', function () { leave('settings'); }));
-
-  /* ── weak spots: where the sessions say you are shakiest ── */
-  var spots = Home.weakSpots(ui.docs, sessions, ui.cards, Session.mastery, 3);
-  var weak = spots.length ? h('section.card.weak', { id: 'weak', 'aria-labelledby': 'weak-label' },
-    h('span.eyebrow', { id: 'weak-label' }, 'Weak spots'),
-    h('ul.weak-list', spots.map(function (w) {
-      return h('li',
-        h('div.weak-what', h('strong', w.title), h('span.muted', (ui.docs.length > 1 ? w.docName + ' · ' : '') + w.pct + '% mastered')),
-        w.cards ? button('Drill · ' + w.cards, function () { startDrill(w); }, '', { 'aria-label': 'Drill the ' + w.cards + ' card' + (w.cards === 1 ? '' : 's') + ' from ' + w.title })
-          : h('span.muted', 'No cards'));
-    }))) : null;
-
-  /* ── units ── */
-  var list = ui.docs.map(function (d) {
-    var st = sessions[d.id];
-    var n = d.clusters.length;
-    var pct = Math.round(100 * Home.studiedOf(d, st) / Math.max(1, n));
-    return h('li.card.doc',
-      h('div.doc-head', h('strong.doc-name', d.name),
-        h('span.muted', Home.count(d.pages, 'page') + ' · ' + Home.count(n, 'section'))),
-      h('div.bar', h('i', { style: 'width:' + pct + '%' })), h('span.muted', where(d, st)),
-      d.ocr && d.ocr.length ? h('p.muted.ocr-note', 'Scanned pages read by text recognition: ' + d.ocr.slice(0, 12).join(', ') + (d.ocr.length > 12 ? '…' : '') + '. Check anything surprising against the page itself.') : null,
-      d.scanned && d.scanned.length ? h('p.warn', 'Pages with no readable text (scanned?): ' + d.scanned.slice(0, 12).join(', ') + (d.scanned.length > 12 ? '…' : '') + '. They are not in any section' +
-        (d.ocrError ? ' — the text reader could not run (' + d.ocrError + ').' : '.')) : null,
-      h('div.row', button(!st ? 'Start' : st.phase === 'done' ? 'Review session' : 'Continue', function () { openDoc(d.id); }, 'primary'),
-        button('Restart', function () {
-          if (!root.confirm('Start "' + d.name + '" from the beginning? Your review cards are kept.')) return;
-          Store.del('sessions', d.id).then(function () { openDoc(d.id); });
-        }),
-        button('Delete', function () {
-          if (!root.confirm('Delete "' + d.name + '" and its review cards from this device?')) return;
-          Store.deleteDoc(d.id).then(refresh).then(render);
-        }, 'quiet')));
-  });
-
-  return h('main.wrap.home',
-    h('div.home-top', hero, pearl),
-    input, doors, weak,
-    !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
-      button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null,
-    hasKey() && builtin() ? h('p.muted.coach-line', 'Using the built-in coach: free, no key, nothing leaves this device. For smarter questions and grading, add a Claude key in Settings.') : null,
-    ui.error ? errorCard(null) : null,
-    ui.docs.length ? h('h2', 'Your units') : null,
-    h('ul.docs', list),
-    !Store.persistent ? h('p.warn', 'This browser would not open local storage (private mode?). Your work will not survive a reload.') : null);
-}
-
-/* ── SESSION ─────────────────────────────────────────────────────────────── */
-var PHASES = [['encode', 'Encode'], ['recall', 'Recall'], ['explain', 'Teach back'], ['gauntlet', 'Gauntlet']];
-
-function stepper(s) {
-  var order = { encode: 0, recall: 1, explain: 2, gauntlet: 3, done: 4 };
-  return h('ol.stepper', { 'aria-label': 'Protocol step' }, PHASES.map(function (p, i) {
-    var state = i < order[s.phase] ? 'done' : i === order[s.phase] ? 'now' : '';
-    return h('li' + (state ? '.' + state : ''), { 'aria-current': state === 'now' ? 'step' : null }, p[1]);
-  }));
-}
-
-function sessionHeader() {
-  var s = ui.state, n = ui.docRec.clusters.length;
-  var c = s.phase === 'gauntlet' || s.phase === 'done' ? null : cluster();
-  return h('header.session-head',
-    h('div.crumbs', button('← Library', function () { leave('library'); }, 'quiet'),
-      h('span.muted', ui.docRec.name)),
-    c ? h('div.where', h('span.count', 'Section ' + (s.cluster + 1) + ' of ' + n), h('h1', c.title),
-          h('span.muted', (c.pageEnd !== c.pageStart ? 'pages ' + c.pageStart + '–' + c.pageEnd : 'page ' + c.pageStart) + ' · ' + c.words + ' words'))
-      : h('div.where', h('h1', s.phase === 'done' ? 'Unit complete' : 'The gauntlet')),
-    h('div.bar', h('i', { style: 'width:' + Math.round(100 * (s.phase === 'gauntlet' || s.phase === 'done' ? n : s.cluster) / n) + '%' })),
-    s.phase !== 'done' ? stepper(s) : null);
-}
-
-/* ── the study page's pieces ─────────────────────────────────────────────── */
-
-/* A point as a bullet: its key term bold, its sub-points below. format.js
-   only removes words, so this is still the PDF talking. */
-function bulletItem(p) {
-  var b = Format.bullet(p.text);
-  return h('li',
-    b.lead ? h('span.lead', b.lead) : null, b.body, page(p.page),
-    b.subs.length ? h('ul.subs', b.subs.map(function (x) { return h('li', x); })) : null);
-}
-
-/* The built-in hook is "First letters: CECCC — a · b · c. …": drawn as an
-   acrostic. Anything else (Claude's) is shown as written, in the script face. */
-function hookCard(per) {
-  if (!per.mnemonic) return null;
-  var m = /^First letters(?: of ([^:]+))?: ([A-Z]+) \u2014 (.+?)\. Say/.exec(per.mnemonic);
-  var body = m
-    ? [m[1] ? h('p.muted', { style: 'margin:.25rem 0 0' }, m[1]) : null,
-       h('p.hook-script', m[2].split('').join(' \u00B7 ')),
-       h('ul.acrostic', m[3].split(' \u00B7 ').map(function (w) {
-         return h('li', h('span.letter', w.charAt(0).toUpperCase()), h('span.word', w));
-       })),
-       h('p.muted', m[1] ? 'Say the letters, then name each one.' : 'Say the letters, then what each stands for.')]
-    : [h('p.hook-script', per.mnemonic)];
-  return h('div.card.hook', { id: 'hook' }, h('span.eyebrow', 'Memory hook'), body);
 }
 
 /* A flowchart as boxes and arrows, drawn as HTML so it works offline and in
@@ -467,19 +303,6 @@ function parseMermaid(code) {
   var ids = Object.keys(labels);
   return { nodes: ids.map(function (id) { return { id: id, label: labels[id] }; }), edges: edges };
 }
-function flowCard(c, per) {
-  var f = null, fromModel = false;
-  if (per.flowchart && per.flowchart.trim()) {
-    var parsed = parseMermaid(per.flowchart);
-    if (parsed.edges.length) { f = parsed; fromModel = true; }
-    else return h('div.card', h('span.eyebrow', 'Flow'), flowchart(per.flowchart));
-  }
-  if (!f) { f = Coach.flow(c); if (f.edges.length < 2) return null; }
-  return h('div.card', { id: 'flow' }, h('div.card-head', h('span.eyebrow', 'Flow'),
-      h('span.muted', fromModel ? 'drawn by Claude from this section' : 'from this section’s cause-and-effect sentences')),
-    drawFlow(f));
-}
-
 function tablesCard(c) {
   var segs = c.segments.filter(function (g) { return g.table; });
   if (!segs.length) return null;
@@ -524,6 +347,8 @@ function figuresOf(c) {
 function visualsCard(c) {
   var d = ui.docRec;
   if (!d.hasFile) {
+    /* photos and pasted text have no PDF pages to show */
+    if (d.source && d.source !== 'pdf') return null;
     return h('div.card', h('span.eyebrow', 'Figures and pages'),
       h('p.muted', 'This PDF was added before figures and pages could be shown. Delete it and add it again to see them here.'));
   }
@@ -545,184 +370,403 @@ function visualsCard(c) {
     })));
 }
 
-function glanceCard(c, per) {
-  var figs = figuresOf(c).length;
-  var tables = c.segments.filter(function (g) { return g.table; }).length;
-  return h('div.card.glance', h('span.eyebrow', 'At a glance'), h('dl',
-    h('dt', 'Pages'), h('dd', c.pageStart + (c.pageEnd !== c.pageStart ? '–' + c.pageEnd : '')),
-    h('dt', 'Key points'), h('dd', String(per.points.length)),
-    h('dt', 'Words'), h('dd', String(c.words)),
-    tables ? [h('dt', 'Tables'), h('dd', String(tables))] : null,
-    figs ? [h('dt', 'Figures'), h('dd', String(figs))] : null));
+
+/* ── shared pieces ───────────────────────────────────────────────────────── */
+function page(n) { return h('span.pg', 'p.' + n); }
+function button(label, onclick, cls, attrs) {
+  var a = attrs || {};
+  a.onclick = onclick; a.type = 'button';
+  return h('button.btn' + (cls ? '.' + cls : ''), a, label);
+}
+function busyCard() {
+  return h('div.card.busy', { role: 'status', 'aria-live': 'polite' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', ui.busy));
+}
+function errorCard(retry) {
+  return h('div.card.error', { role: 'alert' },
+    h('strong', 'That step did not work.'), h('p', ui.error),
+    h('div.row', retry ? button('Try again', function () { ui.error = ''; retry(); }, 'primary') : null,
+      !hasKey() ? button('Open Settings', function () { ui.view = 'settings'; ui.error = ''; render(); }) : null));
+}
+/* A progress ring: `pct` 0..100, drawn still. */
+function ring(pct, size) {
+  var r = 16, c = 2 * Math.PI * r, p = Math.max(0, Math.min(100, pct || 0));
+  var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 40 40'); svg.setAttribute('class', 'ring' + (size ? ' ring-' + size : '')); svg.setAttribute('aria-hidden', 'true');
+  [['track', c], ['fill', c * (1 - p / 100)]].forEach(function (x) {
+    var e = doc.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    e.setAttribute('cx', '20'); e.setAttribute('cy', '20'); e.setAttribute('r', String(r)); e.setAttribute('class', x[0]);
+    if (x[0] === 'fill') { e.setAttribute('stroke-dasharray', c.toFixed(2)); e.setAttribute('stroke-dashoffset', x[1].toFixed(2)); }
+    svg.appendChild(e);
+  });
+  return h('span.ring-wrap', svg, h('span.ring-pct', Math.round(p) + '%'));
+}
+/* Text with the numbers that carry units marked, so values stand out. */
+function marked(text) {
+  return Home.marks(text).map(function (r) { return r.num ? h('mark', r.text) : r.text; });
+}
+var HUES = [190, 150, 260, 30, 330, 210, 100, 0, 280, 50];
+function hue(i) { return HUES[i % HUES.length]; }
+function mascot() {
+  var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 64 64'); svg.setAttribute('class', 'mascot'); svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = '<defs><linearGradient id="mg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6FA8"/><stop offset="1" stop-color="#7A5CFF"/></linearGradient></defs>' +
+    '<path d="M32 56 C12 42 4 32 4 21 C4 12 11 6 19 6 C25 6 29 9 32 13 C35 9 39 6 45 6 C53 6 60 12 60 21 C60 32 52 42 32 56Z" fill="url(#mg)"/>' +
+    '<circle cx="23" cy="24" r="3.2" fill="#1B1330"/><circle cx="41" cy="24" r="3.2" fill="#1B1330"/>' +
+    '<path d="M25 33 Q32 39 39 33" stroke="#1B1330" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
+    '<path d="M6 30 h9 l3 -6 l4 12 l3 -6 h9" stroke="#FFFFFF" stroke-opacity=".85" stroke-width="2" fill="none" stroke-linejoin="round"/>';
+  return svg;
 }
 
-var wide = root.matchMedia ? root.matchMedia('(min-width: 62rem)') : null;
-if (wide && wide.addEventListener) wide.addEventListener('change', function () { if (ui.view === 'session') render(); });
-function hookBeside() { return Look.load().hook === 'side' && !!(wide && wide.matches); }
+/* ── HOME ────────────────────────────────────────────────────────────────── */
+function viewHome() {
+  var sessions = ui.sessions || {};
+  var day = today();
+  var due = Session.dueCards(ui.cards, day).length;
+  var streak = Home.streak(studyDays(), day, FSRS);
 
-function viewEncode(c, per) {
-  var src = h('details.source', h('summary', 'Show the PDF text for this section'),
-    c.segments.map(function (seg) { return seg.table ? null : h(seg.heading ? 'h3' : 'p', page(seg.page), ' ', seg.text); }));
-  var points = h('div.card', { id: 'points' },
-    h('div.card-head', h('h2', 'Key points'), button('🔊 Listen', function () { speak(per.points.map(function (p) { return p.text; }).join('. ')); }, 'quiet')),
-    h('ul.bullets', per.points.map(bulletItem)));
-  var hook = hookCard(per);
-  var side = hookBeside();
-  var main = h('div.study-main', points, side ? null : hook, flowCard(c, per), tablesCard(c), visualsCard(c), src);
-  var aside = side ? h('aside.study-aside', { 'aria-label': 'Memory hook and summary' }, hook, glanceCard(c, per)) : null;
-  return [
-    h('div.study-grid', main, aside),
-    h('div.card.cta',
-      h('p', 'Read the points twice, say the hook out loud, then close your eyes and replay them. Ready?'),
-      button('I’m ready — test me', function () { dispatch({ type: 'toRecall' }).then(render); }, 'primary big', { id: 'to-recall' })),
-  ];
+  var pdfIn = h('input', { type: 'file', accept: 'application/pdf,.pdf', id: 'pdf-input', class: 'visually-hidden',
+    onchange: function (e) { importFile(e.target.files[0]); e.target.value = ''; } });
+  var photoIn = h('input', { type: 'file', accept: 'image/*', multiple: true, id: 'photo-input', class: 'visually-hidden',
+    onchange: function (e) { importPhotos(e.target.files); e.target.value = ''; } });
+
+  var top = h('header.home-top',
+    h('div.home-brand', mascot(), h('div', h('span.hello', Home.greeting(new Date().getHours()) + ' · what shall we'), h('h1.learn', 'Learn?'))),
+    h('div.pills',
+      h('span.pill', { id: 'streak', title: 'Days in a row' }, h('span', { 'aria-hidden': 'true' }, '🔥'), ' ' + streak),
+      h('button.pill', { type: 'button', id: 'pill-due', onclick: function () { startReview(); } }, h('span', { 'aria-hidden': 'true' }, '↻'), ' ' + due + ' due')));
+
+  var drop = h('label.learn-box', { for: 'pdf-input', id: 'door-add',
+      ondragover: function (e) { e.preventDefault(); drop.classList.add('over'); },
+      ondragleave: function () { drop.classList.remove('over'); },
+      ondrop: function (e) { e.preventDefault(); drop.classList.remove('over'); importFile(e.dataTransfer.files[0]); } },
+    h('span.learn-prompt', ui.importing || 'I want to learn… add a chapter of your book'),
+    h('span.learn-plus', { 'aria-hidden': 'true' }, ui.importing ? '…' : '+'));
+  var chips = h('div.chips',
+    h('label.chip', { for: 'pdf-input' }, h('span', { 'aria-hidden': 'true' }, '⬆'), ' Upload PDF'),
+    h('label.chip', { for: 'photo-input' }, h('span', { 'aria-hidden': 'true' }, '📷'), ' Photo'),
+    button([h('span', { 'aria-hidden': 'true' }, '📋'), ' Paste'], function () { ui.pasting = true; render(); }, 'chip', { id: 'chip-paste' }));
+
+  var paste = ui.pasting ? h('div.card.paste', { id: 'paste' },
+    h('h2', 'Paste your notes'),
+    h('input', { id: 'paste-name', placeholder: 'Name, e.g. Aortic stenosis notes', 'aria-label': 'Name' }),
+    h('textarea', { id: 'paste-text', rows: 8, placeholder: 'Paste text here. A short line on its own becomes a section heading.', 'aria-label': 'Text' }),
+    h('div.row', button('Split into sections', function () {
+      var t = doc.getElementById('paste-text').value, n = doc.getElementById('paste-name').value.trim();
+      ui.pasting = false; importText(n, t);
+    }, 'primary', { id: 'paste-go' }), button('Cancel', function () { ui.pasting = false; render(); }, 'quiet'))) : null;
+
+  var recent = Home.recent(ui.docs, sessions, ui.at, 6);
+  var jump = recent.length ? [h('div.section-head', h('h2', 'Jump back in')),
+    h('div.jump', { id: 'jump' }, recent.map(function (r) {
+      return h('button.jump-card', { type: 'button', onclick: function () { openDoc(r.doc.id); } },
+        ring(r.pct), h('span.jump-text', h('strong', r.doc.name), h('span.muted', r.next)));
+    }))] : null;
+
+  var spots = Home.weakSpots(ui.docs, sessions, ui.cards, Session.mastery, 3);
+  var weak = spots.length ? [h('div.section-head', h('h2', 'Needs work')),
+    h('ul.weak-list.card', { id: 'weak' }, spots.map(function (w) {
+      return h('li',
+        h('div.weak-what', h('strong', w.title), h('span.muted', (ui.docs.length > 1 ? w.docName + ' · ' : '') + w.pct + '% on the drill')),
+        h('div.row', button('Relearn', function () { openDoc(w.docId, w.cluster); }, 'quiet'),
+          w.cards ? button('Drill · ' + w.cards, function () { startDrill(w); }, '', { 'aria-label': 'Drill the ' + w.cards + ' card' + (w.cards === 1 ? '' : 's') + ' from ' + w.title }) : null));
+    }))] : null;
+
+  var pk = ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0) : null;
+  var pearl = pk ? h('aside.pearl.card', { id: 'pearl', 'aria-labelledby': 'pearl-label' },
+    h('span.eyebrow', { id: 'pearl-label' }, 'Pearl of the day'),
+    h('ol.pearl-steps', pk.steps.map(function (st) {
+      return h('li', st.lead ? h('span.pearl-lead', st.lead) : null, marked(st.text));
+    })),
+    h('p.pearl-src', pk.pearl.heading, pk.pearl.page ? page(pk.pearl.page) : null, ui.docs.length > 1 ? ' · ' + pk.pearl.docName : ''),
+    pk.of > 1 ? h('div.row', button('Another', function () { ui.pearlSkip = (ui.pearlSkip || 0) + 1; render(); }, 'quiet', { id: 'pearl-next' })) : null) : null;
+
+  var units = ui.docs.map(function (d, i) {
+    var st = sessions[d.id], pct = Home.unitPct(d, st);
+    return h('li.unit-row', { style: '--hue:' + hue(i) },
+      h('button.unit-open', { type: 'button', onclick: function () { openDoc(d.id); } },
+        h('strong.doc-name', d.name),
+        h('span.muted', Home.count(d.clusters.length, 'section') + ' · ' + Home.count(d.pages, 'page'))),
+      pct ? h('span.badge', pct + '%') : null,
+      h('details.menu', h('summary', { 'aria-label': 'More for ' + d.name }, '⋮'),
+        h('div.menu-list',
+          button('Start over', function () {
+            if (!root.confirm('Start "' + d.name + '" from the beginning? Your review cards are kept.')) return;
+            Store.del('sessions', d.id).then(function () { return openDoc(d.id); });
+          }, 'quiet'),
+          button('Delete', function () {
+            if (!root.confirm('Delete "' + d.name + '" and its review cards from this device?')) return;
+            Store.deleteDoc(d.id).then(refresh).then(render);
+          }, 'quiet danger'))),
+      d.ocr && d.ocr.length ? h('p.muted.ocr-note', 'Read by text recognition: ' + (d.source === 'photo' ? 'every photo' : 'pages ' + d.ocr.slice(0, 12).join(', ') + (d.ocr.length > 12 ? '…' : '')) + '. Check anything surprising against the page.') : null,
+      d.scanned && d.scanned.length ? h('p.warn', 'Pages with no readable text: ' + d.scanned.slice(0, 12).join(', ') + (d.scanned.length > 12 ? '…' : '') + '. They are not in any section' +
+        (d.ocrError ? ' — the text reader could not run (' + d.ocrError + ').' : '.')) : null);
+  });
+
+  return h('main.wrap.home',
+    top, pdfIn, photoIn, drop, chips, paste,
+    ui.error ? errorCard(null) : null,
+    !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
+      button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null,
+    jump, weak, pearl,
+    ui.docs.length ? h('div.section-head', h('h2', 'My units'), h('label.plus', { for: 'pdf-input', 'aria-label': 'Add a PDF' }, '+')) : null,
+    ui.docs.length ? h('ul.units', { id: 'units' }, units) : h('div.card.empty', h('h2', 'Start with a chapter'),
+      h('p', 'Upload a chapter of your book as a PDF, take photos of its pages, or paste your notes. Memorizer splits it into sections, teaches each one — key points, numbers to know, mnemonics and analogies — then drills you with multiple-choice questions. Everything you miss comes back as a review card until it sticks.')),
+    !Store.persistent ? h('p.warn', 'This browser would not open local storage (private mode?). Your work will not survive a reload.') : null);
 }
 
-function answerBox(placeholder, onSubmit, withMic) {
-  var ta = h('textarea.answer', { rows: withMic ? 8 : 4, placeholder: placeholder, 'aria-label': 'Your answer',
-    onkeydown: function (e) { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); } } });
-  if (ui.draft) ta.value = ui.draft;
-  /* The draft survives a failed grading call, so Try again does not cost the
-     answer you just wrote. It is cleared once a grade lands. */
-  function go() { ui.draft = ta.value; onSubmit(ta.value); }
-  var mic = withMic && Recognition ? button('🎙 Speak', function () { dictate(ta, mic); }, 'mic') : null;
-  setTimeout(function () { try { ta.focus(); } catch (_) {} }, 0);
-  return h('div.answer-wrap', ta, h('div.row', mic, button(withMic ? 'Grade my teach-back' : 'Check', go, 'primary', { id: 'submit-answer' }),
-    withMic && !Recognition ? h('span.muted', 'Dictation is not available in this browser — type it, or use the keyboard’s mic.') : null));
+/* ── UNIT: the sections as cards ─────────────────────────────────────────── */
+/* What "Learn unit" opens: the current section if it is not drilled yet,
+   else the next one that is not. */
+function upNext(s) {
+  var n = s.titles.length;
+  for (var k = 0; k < n; k++) { var i = (s.section + k) % n; if (!s.per[i].done) return i; }
+  return 0;
+}
+function backBar(title, onBack, extra) {
+  return h('header.topbar', button('‹', onBack, 'round', { 'aria-label': 'Back' }), h('h1.bar-title', title), extra || null);
+}
+function viewUnit() {
+  var s = ui.state, d = ui.docRec, n = d.clusters.length;
+  var doneN = d.clusters.filter(function (_, i) { return s.per[i].done; }).length;
+  var nxt = upNext(s);
+  var allDone = Session.allDone(s);
+  var cards = d.clusters.map(function (c, i) {
+    var p = s.per[i], pct = Home.sectionPct(s, i);
+    var state = p.done ? 'Drilled' : p.lesson ? 'Taught' : 'New';
+    return h('button.section-card', { type: 'button', style: '--hue:' + hue(i), 'data-state': state.toLowerCase(),
+        onclick: function () { go({ type: 'open', section: i }); } },
+      h('span.band', h('span.band-n', String(i + 1))),
+      h('span.section-body',
+        h('strong.section-title', c.title),
+        h('span.muted', (c.pageEnd !== c.pageStart ? 'pp. ' + c.pageStart + '–' + c.pageEnd : 'p. ' + c.pageStart) + ' · ' + state)),
+      pct != null ? h('span.badge', pct + '%') : null);
+  });
+  var examCard = h('div.card.exam-card' + (allDone ? '' : '.locked'), { id: 'exam-card' },
+    h('div', h('strong', 'Final exam'),
+      h('p.muted', allDone ? (s.exam.score != null ? 'Last score ' + Math.round(100 * s.exam.score) + '%. Take it again any time.' : 'Mixed questions across the unit, weighted to your weakest sections.')
+        : 'Unlocks when every section has been drilled (' + doneN + ' of ' + n + ').')),
+    allDone ? button(s.exam.score != null ? 'Retake' : 'Start', function () { go({ type: 'toExam' }); }, 'primary', { id: 'to-exam' }) : h('span.lock', { 'aria-hidden': 'true' }, '🔒'));
+  return h('main.wrap.unit',
+    backBar(d.name, function () { leave('library'); }),
+    h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
+    h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
+    h('h2.grid-title', 'Sections (' + n + ')'),
+    h('div.sections', { id: 'sections' }, cards),
+    examCard,
+    h('div.sticky-cta', allDone
+      ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
+      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })));
 }
 
-function viewRecall(c, per) {
-  var i = per.recallIdx, q = per.prompts[i];
-  return [
-    h('div.card',
-      h('span.count', 'Question ' + (i + 1) + ' of ' + per.prompts.length),
-      h('h2.q', q.question),
-      h('p.muted', 'From memory — no peeking. Write what you would say in the exam.'),
-      answerBox('Your answer…', function (a) {
-        ask('Grading your answer…', 'gradeRecall', [cluster(), q, a]).then(function (v) {
-          ui.feedback = { kind: 'recall', grade: v, q: q, answer: a, event: { type: 'recallGraded', value: v, answer: a } };
-        }).then(render, function () {});
-      })),
-  ];
+/* ── LESSON ──────────────────────────────────────────────────────────────── */
+function steps(which) {
+  return h('ol.stepper', { 'aria-label': 'Step' }, [['teach', 'Learn'], ['drill', 'Drill']].map(function (p) {
+    var now = p[0] === which, done = which === 'drill' && p[0] === 'teach';
+    return h('li' + (now ? '.now' : done ? '.done' : ''), { 'aria-current': now ? 'step' : null }, p[1]);
+  }));
 }
-
-function viewExplain(c, per) {
-  return [
-    h('div.card',
-      h('h2', 'Teach it back'),
-      h('p', 'Explain “' + c.title + '” out loud as if you were teaching a colleague who has never seen it. Cover the why, not just the what. No notes.'),
-      answerBox('Your explanation (tap Speak to dictate)…', function (a) {
-        ask('Listening like an examiner…', 'gradeExplain', [cluster(), per.points, a]).then(function (v) {
-          ui.feedback = { kind: 'explain', grade: v, title: c.title, event: { type: 'explainGraded', value: v, explanation: a } };
-        }).then(render, function () {});
-      }, true)),
-  ];
+function sectionBar(which) {
+  var s = ui.state, c = cluster(), n = ui.docRec.clusters.length;
+  return [backBar(c.title, function () { go({ type: 'toUnit' }); }),
+    h('p.muted.unit-meta', 'Section ' + (s.section + 1) + ' of ' + n + ' · ' + (c.pageEnd !== c.pageStart ? 'pp. ' + c.pageStart + '–' + c.pageEnd : 'p. ' + c.pageStart) +
+      ' · about ' + Math.max(1, Math.round(c.words / 200)) + ' min read'),
+    steps(which)];
 }
-
-function viewGauntlet() {
-  var g = ui.state.gauntlet, q = g.questions[g.idx];
-  var ci = q.cluster == null ? Session.gauntletCluster(ui.state, g.idx) : q.cluster;
-  /* The section is named only once the question is answered: "Which term
-     is defined as …" under a header reading "· Afterload" asks nothing. */
-  var from = (ui.docRec.clusters[ci] || {}).title;
-  return [
-    h('div.card.gauntlet',
-      h('span.count', 'Gauntlet ' + (g.idx + 1) + ' of ' + g.questions.length),
-      h('h2.q', q.question),
-      answerBox('Defend your answer…', function (a) {
-        ask('The examiner is reading your answer…', 'gradeRecall', [ui.docRec.clusters[ci], q, a]).then(function (v) {
-          ui.feedback = { kind: 'gauntlet', grade: v, q: q, answer: a, from: from, event: { type: 'gauntletGraded', value: v, answer: a } };
-        }).then(render, function () {});
-      })),
-  ];
+/* A point as a card: its key term bold, its sub-points below, and the
+   paragraph it came from one tap away. */
+function paragraphOf(c, text) {
+  var head = String(text).slice(0, 40);
+  return (c.segments || []).filter(function (s) { return !s.heading && !s.table && String(s.text).indexOf(head) !== -1; })[0];
 }
-
-/* A grade is shown before it is recorded, so the one thing a grader cannot
-   know — that "fibre" and "fiber", or a synonym, were right — can be put
-   right by the one person who does. The step is dispatched on Continue, or
-   when leaving the screen: settle() is the only way a shown grade is lost
-   to nothing, and nothing calls it without dispatching. */
-function settle() {
-  var f = ui.feedback;
-  ui.feedback = null;
-  return f && f.event ? dispatch(f.event) : Promise.resolve();
+function pointCard(c, p, i) {
+  var b = Format.bullet(p.text), para = paragraphOf(c, p.text);
+  return h('li.point',
+    h('span.point-n', String(i + 1)),
+    h('div.point-body',
+      h('p.point-text', b.lead ? h('strong.lead', b.lead) : null, marked(b.body), ' ', page(p.page)),
+      b.subs.length ? h('ul.subs', b.subs.map(function (x) { return h('li', marked(x)); })) : null,
+      para && para.text.length > p.text.length + 20 ? h('details.context', h('summary', 'In the book'),
+        h('p', marked(para.text))) : null));
 }
-function leave(view) {
-  ui.drill = null;
-  settle().then(function () { ui.view = view; ui.error = ''; return refresh(); }).then(render);
-}
-function viewFeedback() {
-  var f = ui.feedback, g = f.grade;
-  var next = button('Continue', function () { settle().then(function () { render(); root.scrollTo(0, 0); }); }, 'primary big', { id: 'continue' });
-  var overrule = f.kind !== 'explain' && !g.correct
-    ? button('I had it right \u2014 count it as correct', function () {
-        var fixed = { correct: true, missing: [], misconception: '', feedback: 'Counted as correct by you.' };
-        f.grade = fixed; f.event.value = fixed; render();
-      }, 'quiet', { id: 'overrule' })
-    : null;
-  if (f.kind === 'explain') {
-    return h('div.card.feedback' + (g.score >= 80 ? '.good' : g.score >= 50 ? '.mid' : '.bad'), { role: 'status' },
-      h('div.score', h('strong', String(g.score)), h('span', '/ 100')),
-      h('h2', 'Teach-back: ' + f.title),
-      h('p', g.feedback),
-      g.gaps.length ? [h('h3', 'What you left out — now review cards'), h('ul', g.gaps.map(function (x) { return h('li', x.point, ' ', page(x.page)); }))] : h('p', 'Nothing left out. 🎉'),
-      g.misconceptions.length ? [h('h3', 'Said, but the PDF says otherwise'), h('ul', g.misconceptions.map(function (x) { return h('li', x); }))] : null,
-      next);
+function drawFlowCard(c, lessonV) {
+  var f = null, fromModel = false;
+  if (lessonV.flowchart && lessonV.flowchart.trim()) {
+    var parsed = parseMermaid(lessonV.flowchart);
+    if (parsed.edges.length) { f = parsed; fromModel = true; }
+    else return h('div.card', h('span.eyebrow', 'How it works'), flowchart(lessonV.flowchart));
   }
-  return h('div.card.feedback' + (g.correct ? '.good' : '.bad'), { role: 'status' },
-    h('h2', g.correct ? '✓ Correct' : '✗ Not quite — this is now a review card'),
-    h('p', g.feedback),
-    g.missing.length && !(g.missing.length === 1 && g.missing[0] === f.q.answer)
-      ? [h('h3', 'Missing'), h('ul', g.missing.map(function (x) { return h('li', x); }))] : null,
-    g.misconception ? [h('h3', 'Misconception'), h('p', g.misconception)] : null,
-    h('h3', 'Model answer'), h('p', f.q.answer, ' ', page(f.q.page)),
-    f.from ? h('p.muted', { id: 'from' }, 'From \u201C' + f.from + '\u201D') : null,
-    /* A fill-in-the-blank question, shown whole: the word alone, without its
-       sentence, is not much to learn from. */
-    /_____/.test(f.q.question)
-      ? h('p.muted', { id: 'filled' }, f.q.question.replace(/^[^:]*blank:\s*/, '').replace('_____', '\u00AB' + f.q.answer + '\u00BB')) : null,
-    h('div.row', next, overrule));
+  if (!f) { f = Coach.flow(c); if (f.edges.length < 2) return null; }
+  return h('div.card', { id: 'flow' }, h('div.card-head', h('span.eyebrow', 'How it works'),
+      h('span.muted', fromModel ? 'drawn by Claude from this section' : 'from this section’s cause-and-effect sentences')),
+    drawFlow(f));
 }
-
-function viewDone() {
-  var s = ui.state;
-  var mine = ui.cards.filter(function (c) { return c.docId === ui.docId; });
-  var right = s.gauntlet.results.filter(function (r) { return r.correct; }).length;
+function viewLesson() {
+  var s = ui.state, c = cluster(), L = s.per[s.section].lesson;
+  if (!L) return [sectionBar('teach'), ui.error ? errorCard(pump) : busyCard()];
+  var analogies = (L.analogies || []).map(function (a) {
+    return h('div.card.analogy', h('span.eyebrow', 'Think of it like…'), h('h3', a.title), h('p.analogy-text', a.text),
+      h('p.muted.label', a.source === 'Claude' ? 'Analogy written by Claude — not from your book.' : 'Analogy — Memorizer’s, not your book’s. Your book is the authority.'));
+  });
+  var mnemonics = (L.mnemonics || []).map(function (m) {
+    return h('div.card.hook', h('span.eyebrow', 'Remember it'), h('h3', m.title),
+      h('p.hook-script', m.letters.split('').join(' · ')),
+      h('ul.acrostic', m.words.map(function (w) { return h('li', h('span.letter', w.charAt(0).toUpperCase()), h('span.word', w)); })),
+      h('p.muted', 'Say the letters, then name each one.'));
+  });
+  var full = h('details.source', h('summary', 'Read the whole section'),
+    c.segments.map(function (seg) {
+      if (seg.table) return null;
+      if (seg.heading) return h('h3', seg.text);
+      return h(seg.item ? 'p.item' : 'p', marked(seg.text), ' ', page(seg.page));
+    }));
   return [
-    h('div.card',
-      h('h2', 'Gauntlet: ' + right + ' of ' + s.gauntlet.results.length + ' defended'),
-      h('p', mine.length + ' review card' + (mine.length === 1 ? '' : 's') + ' from this unit. They come back on a spaced schedule (FSRS) — tomorrow for the ones you just missed, then further apart each time you get them.'),
-      h('div.row', button('Review cards now', function () { startReview(); }, 'primary big'))),
-    h('div.card', h('h2', 'Mastery by section'),
-      h('ul.mastery', ui.docRec.clusters.map(function (c, i) {
-        var m = Session.mastery(s, i) || 0;
-        return h('li', h('span', c.title), h('div.bar', h('i', { style: 'width:' + Math.round(m * 100) + '%' })), h('span.muted', Math.round(m * 100) + '%'));
-      }))),
+    sectionBar('teach'),
+    h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(L.overview || (L.points[0] && L.points[0].text) || ''))),
+    analogies,
+    h('div.card', { id: 'points' },
+      h('div.card-head', h('h2', 'Key points'), button('🔊 Listen', function () { speak([L.overview].concat(L.points.map(function (p) { return p.text; })).join('. ')); }, 'quiet')),
+      h('ol.points', L.points.map(function (p, i) { return pointCard(c, p, i); }))),
+    L.numbers && L.numbers.length ? h('div.card', { id: 'numbers' }, h('span.eyebrow', 'Numbers to know'),
+      h('ul.numbers', L.numbers.map(function (n) { return h('li', marked(n.text), ' ', page(n.page)); }))) : null,
+    mnemonics,
+    drawFlowCard(c, L),
+    tablesCard(c),
+    visualsCard(c),
+    full,
+    h('div.sticky-cta', button('I’ve got it — start the drill', function () { go({ type: 'toDrill' }); }, 'primary big', { id: 'to-drill' })),
   ];
 }
 
+/* ── DRILL and EXAM: multiple choice ─────────────────────────────────────── */
+var LETTERS = 'ABCDEFGH';
+/* One question: options as big buttons; once one is chosen, the right one
+   turns green, a wrong choice red, and the book's reason is shown. The
+   answer is recorded on Next, not on the tap. */
+function mcqCard(q, meta, onNext, reveal) {
+  var chosen = ui.choice;
+  var answered = chosen != null;
+  var quote = q.quote ? h('blockquote.quote', q.quote.split('_____').map(function (part, i, all) {
+    return [part, i < all.length - 1 ? h('span.gap', answered ? q.options[q.answer] : '_____') : null];
+  })) : null;
+  var opts = h('div.options', { role: 'group', 'aria-label': 'Options' }, q.options.map(function (o, i) {
+    var cls = '';
+    if (answered) cls = i === q.answer ? '.right' : i === chosen ? '.wrong' : '.dim';
+    return h('button.option' + cls, { type: 'button', disabled: answered ? true : null, 'data-i': String(i),
+        onclick: function () { ui.choice = i; render(); } },
+      h('span.opt-letter', LETTERS[i]), h('span.opt-text', o));
+  }));
+  var right = answered && chosen === q.answer;
+  return h('div.card.mcq', { id: 'mcq' },
+    h('div.mcq-meta', meta),
+    quote,
+    h('h2.q', q.question),
+    opts,
+    answered ? h('div.why' + (right ? '.good' : '.bad'), { role: 'status' },
+      h('strong', right ? '✓ Correct' : '✗ The answer is ' + LETTERS[q.answer] + ': ' + q.options[q.answer]),
+      reveal ? h('p.muted', reveal) : null,
+      h('p', h('span.why-label', 'Why: '), marked(q.explain), q.page ? [' ', page(q.page)] : null),
+      right ? null : h('p.muted', 'This one is now a review card, and it comes back at the end of this drill.'),
+      h('div.row', button('Next →', onNext, 'primary big', { id: 'next' }))) : null);
+}
+function viewDrill() {
+  var s = ui.state, c = s.per[s.section];
+  if (!c.quiz) return [sectionBar('drill'), ui.error ? errorCard(pump) : busyCard()];
+  var qi = c.order[c.pos], q = c.quiz.questions[qi];
+  var retry = c.order.indexOf(qi) !== c.pos;
+  var firsts = c.quiz.questions.length;
+  var meta = [h('span', retry ? 'Again — you missed this one' : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
+    h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
+  return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice }); })];
+}
+function viewResult() {
+  var s = ui.state, c = s.per[s.section], d = ui.docRec;
+  var qs = c.quiz.questions, firsts = c.answers.filter(function (a) { return a.first; });
+  if (!qs.length) {
+    var nx = Session.nextSection(s);
+    return [backBar(cluster().title, function () { go({ type: 'toUnit' }); }),
+      h('div.card.result', { id: 'result' }, h('h2', 'Nothing here to drill'),
+        h('p', 'This section is too short to ask good questions of. It counts as done; its lesson is always here to re-read.')),
+      h('div.row.result-actions', nx != null ? button('Next section: ' + d.clusters[nx].title, function () { go({ type: 'open', section: nx }); }, 'primary big', { id: 'next-section' })
+        : button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'to-exam' }),
+        button('Back to sections', function () { go({ type: 'toUnit' }); }))];
+  }
+  var right = firsts.filter(function (a) { return a.correct; }).length;
+  var missed = firsts.filter(function (a) { return !a.correct; }).map(function (a) { return qs[a.q]; });
+  var nxt = Session.nextSection(s);
+  var pct = Math.round(100 * c.score);
+  return [
+    backBar(cluster().title, function () { go({ type: 'toUnit' }); }),
+    h('div.card.result', { id: 'result' }, ring(pct, 'big'),
+      h('h2', right + ' of ' + firsts.length + ' right first time'),
+      h('p', pct >= 90 ? 'Excellent — this section is yours. Review cards will keep it that way.'
+        : pct >= 70 ? 'Good. Look over the ones you missed, then move on; they come back as review cards.'
+        : 'Worth another pass: re-read the key points, then drill again before moving on.')),
+    missed.length ? h('div.card', h('h2', 'What you missed'), h('ul.missed', missed.map(function (q) {
+      return h('li', h('strong', q.question), h('p', '→ ', q.options[q.answer], ' ', q.page ? page(q.page) : null));
+    }))) : null,
+    h('div.row.result-actions',
+      nxt != null ? button('Next section: ' + d.clusters[nxt].title, function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'next-section' })
+        : button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'to-exam' }),
+      button('Drill again', function () { go({ type: 'redrill' }); }, '', { id: 'redrill' }),
+      button('Back to the lesson', function () { go({ type: 'open', section: s.section }); }, 'quiet')),
+  ];
+}
+function viewExam() {
+  var s = ui.state, g = s.exam;
+  var bar = backBar('Final exam', function () { go({ type: 'toUnit' }); });
+  if (!g.questions) return [bar, ui.error ? errorCard(pump) : busyCard()];
+  var qi = g.order[g.pos], q = g.questions[qi];
+  /* The section is named only once answered: its title is often the answer. */
+  var from = q.cluster != null && ui.docRec.clusters[q.cluster] ? ui.docRec.clusters[q.cluster].title : '';
+  var meta = [h('span', 'Question ' + (g.pos + 1) + ' of ' + g.order.length), h('div.bar', h('i', { style: 'width:' + Math.round(100 * g.pos / g.order.length) + '%' }))];
+  return [bar, mcqCard(q, meta, function () { go({ type: 'examAnswered', choice: ui.choice }); }, from ? 'From “' + from + '”' : '')];
+}
+function viewDone() {
+  var s = ui.state, g = s.exam, d = ui.docRec;
+  var by = {};
+  g.results.forEach(function (r) {
+    var q = g.questions[r.q], k = q.cluster == null ? -1 : q.cluster;
+    by[k] = by[k] || { right: 0, n: 0 }; by[k].n++; if (r.correct) by[k].right++;
+  });
+  var pct = Math.round(100 * (g.score || 0));
+  return [
+    backBar(d.name, function () { go({ type: 'toUnit' }); }),
+    h('div.card.result', { id: 'result' }, ring(pct, 'big'), h('h2', 'Final exam: ' + pct + '%'),
+      h('p', pct >= 85 ? 'Unit mastered. Keep up the review cards and it stays mastered.' : 'Review the sections below the line, then retake the exam.')),
+    h('div.card', h('h2', 'By section'), h('ul.by-section', Object.keys(by).map(function (k) {
+      var t = +k >= 0 ? d.clusters[+k].title : 'Across the unit', b = by[k];
+      return h('li', h('span', t), h('span.badge', b.right + '/' + b.n));
+    }))),
+    h('div.row', button('Retake the exam', function () { go({ type: 'toExam' }); }, 'primary', { id: 'retake' }),
+      button('Back to sections', function () { go({ type: 'toUnit' }); })),
+  ];
+}
 function viewSession() {
-  var s = ui.state, per = s.per[s.cluster], body;
-  if (ui.feedback) body = viewFeedback();
-  else if (ui.error) body = errorCard(function () { render(); pump(); });
-  else if (ui.busy) body = busyCard();
+  var s = ui.state, body;
+  if (s.phase === 'teach') body = viewLesson();
+  else if (s.phase === 'drill') body = viewDrill();
+  else if (s.phase === 'result') body = viewResult();
+  else if (s.phase === 'exam') body = viewExam();
   else if (s.phase === 'done') body = viewDone();
-  else if (s.phase === 'gauntlet') body = s.gauntlet.questions ? viewGauntlet() : busyCard();
-  else if (s.phase === 'encode') body = per.points ? viewEncode(cluster(), per) : busyCard();
-  else if (s.phase === 'recall') body = per.prompts ? viewRecall(cluster(), per) : busyCard();
-  else body = viewExplain(cluster(), per);
-  return h('main.wrap.study', sessionHeader(), h('div.phase', { 'data-phase': s.phase }, body));
+  else return viewUnit();
+  return h('main.wrap.study', body);
+}
+
+function leave(view) {
+  ui.drill = null; ui.choice = null;
+  ui.view = view; ui.error = '';
+  refresh().then(render);
 }
 
 /* ── REVIEW ──────────────────────────────────────────────────────────────── */
 function startReview() {
-  ui.view = 'review'; ui.reviewIdx = 0; ui.reviewShown = false; ui.reviewDone = 0; ui.drill = null;
+  ui.view = 'review'; ui.reviewShown = false; ui.reviewDone = 0; ui.drill = null; ui.choice = null;
   refresh().then(render);
 }
 /* A drill: every card from one weak section, due or not, each once. Rating
    one early is still a review — FSRS reads how long it has been. */
 function startDrill(w) {
-  ui.view = 'review'; ui.reviewIdx = 0; ui.reviewShown = false; ui.reviewDone = 0;
+  ui.view = 'review'; ui.reviewShown = false; ui.reviewDone = 0; ui.choice = null;
   ui.drill = { docId: w.docId, cluster: w.cluster, title: w.title, done: {} };
   refresh().then(render);
 }
@@ -732,24 +776,34 @@ function viewReview() {
     : Session.dueCards(ui.cards, today());
   var names = {};
   ui.docs.forEach(function (d) { names[d.id] = d.name; });
+  var back = backBar(dr ? 'Drill · ' + dr.title : 'Review', function () { leave('library'); });
   if (!due.length) {
     if (dr) {
-      return h('main.wrap', h('div.card', h('h1', 'Drill done.'),
-        h('p', ui.reviewDone + ' card' + (ui.reviewDone === 1 ? '' : 's') + ' from \u201C' + dr.title + '\u201D, each rated once.'),
-        button('Back to library', function () { ui.drill = null; ui.view = 'library'; render(); }, 'primary')));
+      return h('main.wrap', back, h('div.card', h('h1', 'Drill done.'),
+        h('p', ui.reviewDone + ' card' + (ui.reviewDone === 1 ? '' : 's') + ' from “' + dr.title + '”, each rated once.'),
+        button('Back home', function () { leave('library'); }, 'primary')));
     }
-    return h('main.wrap', h('div.card', h('h1', ui.reviewDone ? 'Done for today.' : 'Nothing due.'),
-      h('p', ui.reviewDone ? ui.reviewDone + ' card' + (ui.reviewDone === 1 ? '' : 's') + ' reviewed. Come back tomorrow.' : 'Cards appear here when you miss something in a session, and again when they are due.'),
-      button('Back to library', function () { ui.view = 'library'; render(); }, 'primary')));
+    return h('main.wrap', back, h('div.card', h('h1', ui.reviewDone ? 'Done for today.' : 'Nothing due.'),
+      h('p', ui.reviewDone ? ui.reviewDone + ' card' + (ui.reviewDone === 1 ? '' : 's') + ' reviewed. Come back tomorrow.' : 'Cards appear here when you miss something in a drill, and again when they are due.'),
+      button('Back home', function () { leave('library'); }, 'primary')));
   }
   var card = due[0];
   var rate = function (r) {
     var upd = Session.review(card, r, today(), FSRS);
     if (dr) dr.done[card.id] = true;
-    Store.put('cards', upd).then(refresh).then(function () { ui.reviewShown = false; ui.reviewDone++; render(); });
+    markStudied();
+    Store.put('cards', upd).then(refresh).then(function () { ui.reviewShown = false; ui.choice = null; ui.reviewDone++; render(); });
   };
-  return h('main.wrap',
-    h('div.review-head', h('span.count', dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'), h('span.muted', (names[card.docId] || '') + ' · ' + card.title)),
+  var head = h('div.review-head', h('span.count', dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'), h('span.muted', (names[card.docId] || '') + ' · ' + card.title));
+  if (card.options && card.options.length) {
+    /* A multiple-choice card grades itself: right is Good, wrong is Again. */
+    var q = { question: card.front, quote: card.quote || '', options: card.options, answer: card.answer, explain: card.explain || card.back, page: card.page };
+    return h('main.wrap', back, head, mcqCard(q, [h('span.tag', card.source === 'exam' ? 'from the exam' : 'from a drill')], function () {
+      rate(ui.choice === card.answer ? 3 : 1);
+    }));
+  }
+  /* A card from before multiple choice: shown, then rated by you. */
+  return h('main.wrap', back, head,
     h('div.card.flash',
       h('span.tag', card.source === 'explain' ? 'teach-back gap' : card.source),
       h('h2.q', card.front),
@@ -761,8 +815,6 @@ function viewReview() {
 }
 
 /* ── SETTINGS ────────────────────────────────────────────────────────────── */
-/* Appearance: Systole's themes, text size and layout. Every choice applies at
-   once and is saved at once — there is nothing to confirm. */
 function appearanceCard() {
   var look = Look.load();
   function set(k, v) { look[k] = v; Look.apply(look); Look.save(look); render(); }
@@ -790,7 +842,7 @@ function appearanceCard() {
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' }, themes('dark')),
     seg('size', 'Text size'), seg('width', 'Reading width'), seg('spacing', 'Line spacing'),
     seg('contrast', 'Contrast'), seg('bright', 'Brightness'),
-    seg('font', 'Font'), seg('hook', 'Memory hook'),
+    seg('font', 'Font'),
     h('div.preview', h('span.count', 'Preview'), h('p', { style: 'margin:0' },
       h('strong', 'Preload'), ' — the stretch on ventricular myocytes at the end of diastole.', page(4))));
 }
@@ -804,9 +856,10 @@ function viewSettings() {
   var hint = h('p.muted');
   var keyed = h('div', h('label', 'Model', model), h('label', 'API key', key), hint);
   var about = h('div.card.note', { id: 'builtin-about' },
-    h('strong', 'The built-in coach '), 'teaches from your PDF\u2019s own sentences \u2014 it never invents anything \u2014 ',
-    'quizzes you with fill-in-the-blank questions, and grades by matching your words (a synonym can be counted as correct by you). ',
-    'It needs no key and no account, and nothing leaves this device. Claude writes deeper questions and understands answers in your own words.');
+    h('strong', 'The built-in coach '), 'teaches from your book’s own sentences — the big idea, key points, numbers to know and a mnemonic for every list — ',
+    'adds everyday analogies for common cardiology ideas (labelled as Memorizer’s, not your book’s), and drills you with multiple-choice questions built from the book: ',
+    'the right answer and its explanation are the book’s words, and the wrong options are real terms, causes and values from elsewhere in the same unit. ',
+    'It needs no key and no account, and nothing leaves this device. Claude writes deeper lessons, analogies for any topic and clinical-vignette questions.');
   function fillModels() {
     var P = Provider.PROVIDERS[prov.value];
     model.textContent = '';
@@ -818,7 +871,7 @@ function viewSettings() {
   fillModels();
   var saved = h('span.muted', { role: 'status' });
   return h('main.wrap',
-    h('h1', { style: 'margin-top:1rem' }, 'Settings'),
+    backBar('Settings', function () { leave('library'); }),
     appearanceCard(),
     h('div.card.settings', h('h2', 'Coach'),
       h('label', 'Coach', prov), about, keyed,
@@ -828,32 +881,32 @@ function viewSettings() {
         saved.textContent = ok ? 'Saved on this device.' : 'This browser refused to save it (private mode?).';
       }, 'primary', { id: 'save-settings' }), saved)),
     h('div.card', h('h2', 'What leaves this device'),
-      h('p', 'Your PDF is read here, in the browser, and is never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages, the first time a PDF has one; scanned pages are read on this device too.'),
-      h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each step sends only the text of the section you are studying \u2014 plus your answer \u2014 to Anthropic, with your key; the gauntlet sends the key points of every section and the full text of your two weakest. Your key is kept in this browser\u2019s storage and sent only to Anthropic.')));
+      h('p', 'Your PDF, photos and notes are read here, in the browser, and never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages and photos, the first time it is needed; they are read on this device too.'),
+      h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')));
 }
 
-/* ── frame ───────────────────────────────────────────────────────────────── */
+/* ── frame: a floating bar at the foot of the screen ─────────────────────── */
 function nav() {
   var due = Session.dueCards(ui.cards, today()).length;
-  function tab(v, label, go) {
-    return h('button.tab', { type: 'button', 'aria-current': ui.view === v ? 'page' : null, onclick: go }, label);
+  var here = ui.view === 'session' ? 'library' : ui.view;
+  function tab(v, icon, label, go2, badge) {
+    return h('button.nav-btn', { type: 'button', 'aria-current': here === v ? 'page' : null, onclick: go2, 'aria-label': label + (badge ? ', ' + badge + ' due' : '') },
+      h('span.nav-icon', { 'aria-hidden': 'true' }, icon), h('span.nav-label', label), badge ? h('span.nav-badge', String(badge)) : null);
   }
-  return h('nav.top', { 'aria-label': 'Main' },
-    h('span.brand', h('span.logo', { 'aria-hidden': 'true' }, '◆'), 'Memorizer'),
-    h('div.tabs',
-      tab('library', 'Library', function () { leave('library'); }),
-      tab('review', due ? 'Review · ' + due : 'Review', function () { settle().then(startReview); }),
-      tab('settings', 'Settings', function () { leave('settings'); })));
+  return h('nav.dock', { 'aria-label': 'Main' },
+    tab('library', '⌂', 'Home', function () { leave('library'); }),
+    tab('review', '↻', 'Review', function () { startReview(); }, due),
+    tab('settings', '⚙', 'Settings', function () { leave('settings'); }));
 }
 
 function render() {
   var app = doc.getElementById('app');
   var view = ui.view === 'session' && ui.state ? viewSession()
     : ui.view === 'review' ? viewReview()
-    : ui.view === 'settings' ? viewSettings() : viewLibrary();
+    : ui.view === 'settings' ? viewSettings() : viewHome();
   app.textContent = '';
-  app.appendChild(nav());
   app.appendChild(view);
+  app.appendChild(nav());
   if (ui.view === 'session') pump();
 }
 
@@ -863,6 +916,6 @@ function start() {
   });
 }
 
-root.Memorizer = { ui: ui, render: render, start: start, importFile: importFile, openDoc: openDoc };
+root.Memorizer = { ui: ui, render: render, start: start, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc };
 if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(window);

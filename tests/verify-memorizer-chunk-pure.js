@@ -84,7 +84,7 @@ function makeDoc(seed, opts = {}) {
   });
   const headingEnds = [];
   for (let i = 0; i < words.length - 1; i++) if (kinds[i] && !kinds[i + 1]) headingEnds.push(i);
-  return { blocks, words, headingEnds, rowOf };
+  return { blocks, words, headingEnds, rowOf, kinds };
 }
 
 /* The invariants, as data rather than PASS lines, so one check can summarise
@@ -98,9 +98,19 @@ function violations(doc, clusters) {
     const at = got.findIndex((w, i) => w !== doc.words[i]);
     out.push(`coverage: ${got.length} words out, ${doc.words.length} in, first difference at ${at}`);
   }
+  /* Where each cluster starts, as a global word index, and which words open
+     a heading. A cluster under MIN is in bounds only when the next one opens
+     with a topic heading and it holds at least TOPIC_MIN words: sections
+     follow the book's topics (the owner's reference is a deck split into
+     Etiology, Diagnosis, Therapy…), so a short topic is its own section.
+     makeDoc's headings are all size-set, so all are topics. */
+  const starts = []; let acc = 0;
+  clusters.forEach(c => { starts.push(acc); acc += c.text.split(/\s+/).filter(Boolean).length; });
+  const opensHeading = i => doc.kinds && doc.kinds[i] && !doc.kinds[i - 1];
   clusters.forEach((c, i) => {
     if (c.words > MAX) out.push(`bounds: cluster ${i} has ${c.words} > ${MAX}`);
-    if (i < clusters.length - 1 && c.words < MIN) out.push(`bounds: cluster ${i} of ${clusters.length} has ${c.words} < ${MIN}`);
+    const topicBreak = i < clusters.length - 1 && opensHeading(starts[i + 1]) && c.words >= C.TOPIC_MIN;
+    if (i < clusters.length - 1 && c.words < MIN && !topicBreak) out.push(`bounds: cluster ${i} of ${clusters.length} has ${c.words} < ${MIN}, and the next does not open a topic`);
     if (c.words !== c.text.split(/\s+/).filter(Boolean).length) out.push(`count: cluster ${i} says ${c.words} words`);
   });
   if (!out.some(v => v.startsWith('coverage'))) {
@@ -228,12 +238,37 @@ head('what a cluster says about itself');
   ok('its segments carry each page, so a prompt can mark [p.N]',
      cs.every(c => c.segments.every(s => typeof s.page === 'number')) && cs[0].segments[0].heading === true);
   ok('its gist is the start of its first sentence, not its heading', /^a0 a1/.test(cs[0].gist), cs[0].gist.slice(0, 20));
-  const tail = C.clusterBlocks([
+  const tailBlocks = minor => C.clusterBlocks([
     { text: Array.from({ length: MIN + 50 }, (_, i) => 'c' + i).join(' ') + '.', page: 1, heading: false },
-    { text: 'Short', page: 1, heading: true },
+    { text: 'Short', page: 1, heading: true, minor },
     { text: 'd0 d1 d2 d3 d4.', page: 1, heading: false },
   ]);
-  ok('a short tail folds into the cluster before it when there is room', tail.length === 1, `${tail.length} clusters`);
+  ok('a short tail under an outline heading folds into the cluster before it when there is room', tailBlocks(true).length === 1, `${tailBlocks(true).length} clusters`);
+  ok('but a short tail that opens a new topic is a section of its own', tailBlocks(false).length === 2, `${tailBlocks(false).length} clusters`);
+  /* Three short topics, each a heading in a bigger font over a paragraph:
+     three sections, not one — what the first version of the topic rule
+     fixed, measured on a generated chapter of three valve lesions. */
+  const topicBlocks = [];
+  ['Aortic Stenosis', 'Aortic Regurgitation', 'Mitral Stenosis'].forEach((t, k) => {
+    topicBlocks.push({ text: t, page: 1, heading: true });
+    topicBlocks.push({ text: Array.from({ length: 90 }, (_, i) => 't' + k + 'w' + i).join(' ') + '.', page: 1, heading: false });
+  });
+  const tc = C.clusterBlocks(topicBlocks);
+  ok('short topics are sections of their own, each titled by its heading', tc.map(c => c.title).join(' | ') === 'Aortic Stenosis | Aortic Regurgitation | Mitral Stenosis',
+     tc.map(c => c.title + ' (' + c.words + ')').join(' | '));
+  /* A chapter, a section and a subsection heading one after another: the
+     run stays together, over its body — the first topic rule split it and
+     left two headings with no text under them. */
+  const run = C.clusterBlocks([
+    { text: Array.from({ length: 70 }, (_, i) => 'r' + i).join(' ') + '.', page: 1, heading: false },
+    { text: 'Chapter Twelve', page: 1, heading: true }, { text: 'Valve Disease', page: 1, heading: true }, { text: 'Stenosis', page: 1, heading: true },
+    { text: Array.from({ length: 90 }, (_, i) => 'b' + i).join(' ') + '.', page: 1, heading: false }]);
+  const runOwner = {}; run.forEach((c, ci) => c.text.split(/\s+/).forEach(w => { runOwner[w] = ci; }));
+  ok('a run of headings is never split from itself or from its text', runOwner.Chapter === runOwner.Stenosis && runOwner.Stenosis === runOwner.b0,
+     run.map(c => c.title + ' (' + c.words + ')').join(' | '));
+  const tiny = C.clusterBlocks([{ text: 'Overview', page: 1, heading: true }, { text: 'One short line.', page: 1, heading: false },
+    { text: 'Details', page: 1, heading: true }, { text: Array.from({ length: 80 }, (_, i) => 'z' + i).join(' ') + '.', page: 1, heading: false }]);
+  ok(`a topic with less than ${C.TOPIC_MIN} words before the next heading does not stand alone`, tiny.length === 1, tiny.map(c => c.title + ' (' + c.words + ')').join(' | '));
   ok('an empty document makes no clusters, rather than one empty one', C.clusterBlocks([]).length === 0);
 }
 
@@ -441,6 +476,23 @@ head('two columns written line by line are read column by column');
   ok('pairs whose second cells do not line up are not columns', C.columnsOf(skew) === skew);
 }
 
+head('pasted text: given the shape of a page');
+{
+  const pg = C.pagesFromText('Preload\n\nPreload is the stretch on the ventricle at end diastole. It rises\nwith volume.\n\nAfterload\n\nAfterload is the wall stress during ejection.\n\nThis line ends with a stop.');
+  const bl = C.blocksFromPages(pg).blocks;
+  ok('a short line alone becomes a heading, a paragraph stays one', bl.map(b => (b.heading ? 'H:' : 'P:') + b.text).join(' | ') ===
+     'H:Preload | P:Preload is the stretch on the ventricle at end diastole. It rises with volume. | H:Afterload | P:Afterload is the wall stress during ejection. | P:This line ends with a stop.',
+     bl.map(b => (b.heading ? 'H:' : 'P:') + b.text).join(' | '));
+  ok('and pasted topics become sections of their own', C.clusterBlocks(bl).length >= 1 && C.clusterBlocks(C.blocksFromPages(C.pagesFromText(
+    ['Preload', 'Afterload'].map(t => t + '\n\n' + Array.from({ length: 80 }, (_, i) => t.toLowerCase() + i).join(' ') + '.').join('\n\n'))).blocks).map(c => c.title).join() === 'Preload,Afterload');
+  const long = C.pagesFromText(Array.from({ length: 100 }, (_, i) => 'Line number ' + i + ' of the notes.').join('\n'));
+  ok(`a page every ${C.PASTE_PAGE_LINES} lines`, long.length === Math.ceil(100 / C.PASTE_PAGE_LINES) && long[1].lines[0].text === 'Line number ' + C.PASTE_PAGE_LINES + ' of the notes.');
+  const words = t => t.split(/\s+/).filter(Boolean);
+  const src = 'Heading One\n\nFirst para has words.\nAnd more words here.\n\nSecond one.';
+  ok('every word pasted is in a page, in order', JSON.stringify(words(C.pagesFromText(src).map(p => p.lines.map(l => l.text).join(' ')).join(' '))) === JSON.stringify(words(src)));
+  ok('nothing pasted, no pages', C.pagesFromText('   \n\n  ').length === 0);
+}
+
 head('outline headings: found by their number, not their font');
 {
   const L = (text, y, size = 11) => ({ text, size, y, cells: [{ x: 72, text }] });
@@ -484,6 +536,18 @@ head('outline headings: found by their number, not their font');
     { text: 'Tricuspid Regurgitation', page: 2, heading: true },
     { text: 'A. Etiology.', page: 2, heading: true, minor: true }, para(300),
   ]);
+  const k = { i: 0 };
+  const few = m => ({ text: Array.from({ length: m }, () => 'r' + k.i++).join(' ') + '.', page: 1, heading: false });
+  const sub = C.clusterBlocks([
+    { text: 'Mitral Stenosis', page: 1, heading: true },
+    { text: 'A. Etiology.', page: 1, heading: true, minor: true }, few(C.TOPIC_MIN + 20),
+    { text: 'B. Pathophysiology', page: 1, heading: true, minor: true }, few(C.TOPIC_MIN + 20),
+    { text: 'Mitral Regurgitation', page: 2, heading: true }, few(C.TOPIC_MIN + 20),
+  ]);
+  /* Followed by a topic, so a wrong split at "B." would be a middle
+     section — the tail fold cannot hide it. */
+  ok('a lettered sub-heading after a topic-sized stretch stays inside its topic', sub.map(c => c.title).join() === 'Mitral Stenosis,Mitral Regurgitation',
+     sub.map(c => c.title).join(' | '));
   const titles = cs.map(c => c.title);
   ok('a section opening at an outline heading is titled under the heading above it',
      titles[1] === 'Tricuspid Stenosis: Pathophysiology', titles.join(' | '));

@@ -80,7 +80,7 @@ function build(out) {
   const manifest = JSON.stringify({
     name: 'Memorizer', short_name: 'Memorizer', start_url: './', scope: './', display: 'standalone',
     background_color: '#f6f4ef', theme_color: '#2f5bd3',
-    description: 'Upload a PDF and master the whole unit: encode, recall, teach-back, gauntlet, spaced review.',
+    description: 'Add a chapter and master it: split into sections, taught with mnemonics and analogies, drilled with multiple choice, a final exam and spaced review.',
     icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
   }, null, 2) + '\n';
   const sw = `/* Memorizer service worker, build ${stamp}.

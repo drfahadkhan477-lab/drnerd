@@ -270,17 +270,19 @@ const SUITES = [
   ['figsharp',     'no figure is drawn wider than the pixels it has'],
   ['heartreuse',   'navigating the app does not spend WebGL contexts'],
   ['flushguard',   'a reply can be stopped, and the last chunk is painted however the stream ends'],
-  /* Memorizer — a second, standalone app in memorizer/: upload any PDF, and
-     each section goes through encode, recall and teach-back, then a
-     gauntlet, with every miss becoming an FSRS card. It carries no licensed
+  /* Memorizer — a second, standalone app in memorizer/: upload a PDF (or
+     photos, or pasted notes), it is split into sections, and each is taught
+     — key points, numbers, mnemonics, analogies — then drilled with
+     multiple-choice questions; a final exam closes the unit, and every miss
+     becomes an FSRS card. It carries no licensed
      content, so none of these needs a build; the -pure ones run in CI. */
   ['memorizer-chunk-pure',   'every word of the PDF is taught once, in sections of a teachable size, headings kept with their body'],
   ['memorizer-prompts-pure', 'the model is held to your PDF, only the section being studied goes out, and a bad reply is never a pass'],
   ['memorizer-session-pure', 'no phase of the protocol is skipped, and every miss becomes exactly one card'],
-  ['memorizer-coach-pure',   'the built-in coach needs no key, invents nothing, and grades honestly'],
+  ['memorizer-coach-pure',   'the built-in coach needs no key, invents nothing, and asks fair multiple-choice questions'],
   ['memorizer-appearance-pure', 'the themes are Systole\u2019s, colour for colour, and readable at every contrast and brightness'],
   ['memorizer-home-pure',    'the home screen\u2019s progress counts what happened, and its pearl is your PDF\u2019s own sentence'],
-  ['memorizer',              'a real PDF becomes its sections, and one goes through encode, recall and teach-back in a browser'],
+  ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
 ];
 
 /* ── suites registered since the last full green run ──────────────────────────

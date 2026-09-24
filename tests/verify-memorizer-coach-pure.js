@@ -1,26 +1,28 @@
 #!/usr/bin/env node
 /*
- * Memorizer's built-in coach: the whole protocol with no AI and no key —
- * and still nothing taught that the PDF does not say.
+ * Memorizer's built-in coach: a lesson, then a drill of multiple-choice
+ * questions — and nothing taught that the book does not say.
  *
  *   node tests/verify-memorizer-coach-pure.js
  *
- * Pure Node. memorizer/src/coach.js answers the same five steps the model
- * does, from the same arguments. What is proven here:
+ * Pure Node. memorizer/src/coach.js answers the three steps the model does,
+ * from the same arguments. What is proven here:
  *
- *   · SAME SHAPE. Every output passes the schema the model's replies are
- *     held to (MemPrompts.check), over many generated sections — so the
- *     session and the screens cannot tell the coaches apart.
- *   · NOTHING INVENTED. Every key point is a sentence of the section,
- *     verbatim, on the page it came from. Every blank's answer is a word
- *     that was in its sentence.
- *   · HONEST GRADING. Right answers pass, including a typo in a long word or
- *     a plural away; wrong ones fail, and 5 is never 50. A teach-back that
- *     says nothing scores 0 and one that says everything scores 100.
- *   · A GAUNTLET THAT IS NOT A REPEAT, weighted to the weakest sections.
+ *   · SAME SHAPE. Every lesson, drill and exam passes the schema and the
+ *     multiple-choice rules the model's replies are held to
+ *     (MemPrompts.validate), over many generated sections.
+ *   · THE BOOK'S WORDS. The lesson's overview and points are sentences of the
+ *     section, verbatim, with their pages; every question's right answer and
+ *     explanation come from the book. Only the analogies are Memorizer's own,
+ *     and they carry no numbers.
+ *   · FAIR QUESTIONS. Four different options, one right; wrong options of the
+ *     same kind as the right one and never sharing its root; nothing in the
+ *     question that gives the answer away; list items never treated as
+ *     sentences; a mixed drill, no kind more than twice, no sentence twice.
+ *   · AN EXAM THAT IS NOT A REPEAT, weighted to the weakest sections.
  *
- * The section text below is written for this test — plain physiology, no
- * one's licensed material.
+ * The section texts below are written for this test — plain physiology and
+ * valve disease, no one's licensed material.
  */
 'use strict';
 const path = require('path');
@@ -35,6 +37,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
 const K = require(path.join(ROOT, 'memorizer', 'src', 'coach.js'));
 const P = require(path.join(ROOT, 'memorizer', 'src', 'prompts.js'));
+const A = require(path.join(ROOT, 'memorizer', 'src', 'analogies.js'));
 const Chunk = require(path.join(ROOT, 'memorizer', 'src', 'chunk.js'));
 
 const PRELOAD = {
@@ -79,171 +82,269 @@ const CONTRACT = {
 };
 const text = c => c.segments.filter(s => !s.heading).map(s => s.text).join(' ');
 
-head('encode: the section’s own sentences, nothing else');
+const withText = c => Object.assign(c, { text: c.segments.map(s => s.text).join('\n\n') });
+[PRELOAD, AFTERLOAD, CONTRACT].forEach(withText);
+const norm = s => String(s).toLowerCase().replace(/\s+/g, ' ');
+
+/* A unit of three valve lesions, shaped as chunk.js marks them: lists with
+   sub-headings, definitions, "most common" facts and values with units. */
+const seg = (page, text, extra) => Object.assign({ page, heading: false, text }, extra || {});
+const TS = withText({ index: 0, title: 'Tricuspid stenosis', pageStart: 2, pageEnd: 2, segments: [
+  seg(2, 'Table 17.1 lists the causes of TS.'),
+  seg(2, 'Congenital', { item: true, sub: true, list: 'L1' }),
+  seg(2, 'Tricuspid atresia', { item: true, list: 'L1' }),
+  seg(2, 'Atypical Ebstein anomaly (more likely to cause TR)', { item: true, list: 'L1' }),
+  seg(2, 'Acquired', { item: true, sub: true, list: 'L1' }),
+  seg(2, 'Rheumatic', { item: true, list: 'L1' }),
+  seg(2, 'Infective endocarditis', { item: true, list: 'L1' }),
+  seg(2, 'Carcinoid syndrome', { item: true, list: 'L1' }),
+  seg(2, 'Malignancy (eg, myxoma and metastases)', { item: true, list: 'L1' }),
+  seg(2, 'Whipple disease', { item: true, list: 'L1' }),
+  seg(2, 'Rheumatic heart disease (RHD) is the most common cause of TS, accounting for more than 90% of cases. ' +
+    'Tricuspid stenosis (TS) is a narrowing of the tricuspid valve orifice that obstructs right atrial emptying. ' +
+    'The mean gradient across the valve is usually above 5 mmHg in severe stenosis. ' +
+    'Right atrial enlargement follows, and hepatic congestion causes abdominal discomfort.'),
+] });
+const TR = withText({ index: 1, title: 'Tricuspid regurgitation', pageStart: 3, pageEnd: 3, segments: [
+  seg(3, 'Tricuspid regurgitation (TR) is a backward flow across the tricuspid valve during systole. ' +
+    'Pulmonary hypertension is the most common cause of functional TR. ' +
+    'Severe regurgitation raises right atrial pressure above 15 mmHg and causes hepatic congestion. ' +
+    'Annular dilatation and right ventricular enlargement pull the leaflets apart.'),
+  seg(3, 'Causes of primary TR', { item: true, sub: true, list: 'L2' }),
+  seg(3, 'Infective endocarditis', { item: true, list: 'L2' }),
+  seg(3, 'Carcinoid heart disease', { item: true, list: 'L2' }),
+  seg(3, 'Pacemaker lead injury', { item: true, list: 'L2' }),
+  seg(3, 'Chest trauma', { item: true, list: 'L2' }),
+] });
+const AS = withText({ index: 2, title: 'Aortic stenosis', pageStart: 4, pageEnd: 4, segments: [
+  seg(4, 'Aortic stenosis is a narrowing of the aortic valve orifice that obstructs left ventricular outflow. ' +
+    'Calcific degeneration is the most common cause of aortic stenosis in older adults. ' +
+    'The narrowed valve raises afterload, and the ventricle responds with concentric hypertrophy. ' +
+    'Severe stenosis is defined by a mean gradient of at least 40 mmHg or a valve area below 1.0 cm2. ' +
+    'Angina, syncope and heart failure are the classic symptoms of severe aortic stenosis.'),
+  seg(4, 'A bicuspid aortic valve is a congenital anomaly with two leaflets instead of three. ' +
+    'Syncope is a transient loss of consciousness caused by cerebral hypoperfusion. ' +
+    'The hypertrophied ventricle becomes stiff and depends on atrial contraction to fill. ' +
+    'Without valve replacement, average survival after the onset of angina is about 5 years.'),
+] });
+const UNIT = [TS, TR, AS];
+const unitText = norm(UNIT.map(c => c.text).join(' '));
+
+head('the lesson: the book’s own words, in teaching order');
 {
-  const e = K.encode(PRELOAD);
-  ok('matches the schema the model is held to', P.check(P.SCHEMAS.encode, e) === '', P.check(P.SCHEMAS.encode, e));
-  /* 3..7 since the owner asked for smaller, more digestible sections (was
-     5..9). A product change, made in coach.js and here together. */
-  ok('picks between 3 and 7 key points', e.points.length >= 3 && e.points.length <= 7, String(e.points.length));
-  const pageOf = {};
-  PRELOAD.segments.forEach(s => K.sentences({ segments: [s] }).forEach(x => { pageOf[x.text] = s.page; }));
-  ok('every point is a sentence of the section, verbatim', e.points.every(p => text(PRELOAD).indexOf(p.text) !== -1),
-     e.points.filter(p => text(PRELOAD).indexOf(p.text) === -1).map(p => p.text).join(' | ') || 'all verbatim');
-  ok('and carries the page it is on', e.points.every(p => pageOf[p.text] === p.page));
-  ok('in the order the section gives them', e.points.every((p, i) => i === 0 || text(PRELOAD).indexOf(p.text) > text(PRELOAD).indexOf(e.points[i - 1].text)));
-  /* A heading long enough to pass for a sentence: a one-word heading is
-     never picked anyway, and the first version of this check could not
-     fail. */
-  /* A long heading over a single sentence: were headings eligible, this one
-     would be picked — so the check can fail. Beside ten scored sentences it
-     never was, and the first two versions of this check could not. */
-  const titled = { index: 0, title: 'x', pageStart: 1, pageEnd: 1, segments: [
-    { page: 1, heading: true, text: 'How the ventricle responds to more filling volume' },
-    { page: 1, heading: false, text: 'Filling stretches the muscle and raises the force of the next beat.' }] };
-  const tp = K.encode(titled).points;
-  ok('a heading, however long, is not taught as a point', tp.length === 1 && /^Filling stretches/.test(tp[0].text), tp.map(p => p.text).join(' | '));
-  ok('the sentence with a number in it is a key point', e.points.some(p => /12 mmHg/.test(p.text)));
-  /* A long section, so the cap is what limits it — at ten sentences the
-     count is five whatever the cap says, and a cap of 90 passed. */
-  const long = { index: 0, title: 'x', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false,
-    text: Array.from({ length: 60 }, (_, i) => 'Factor ' + i + ' raises cardiac output through pathway ' + 'abcdefghij'[i % 10] + ' today.').join(' ') }] };
-  ok('a long section is capped at 7 points', K.encode(long).points.length === 7, String(K.encode(long).points.length));
-  /* In order even when the picks are made out of order — a long section of
-     numbered sentences is picked by score, not by position. */
-  const lp = K.encode(long).points.map(p => text(long).indexOf(p.text));
-  ok('a long section\u2019s points are still in page order', lp.every((v, i) => i === 0 || v > lp[i - 1]), lp.join(','));
-  /* The long section's picks came out in order anyway. This one cannot:
-     the number is taken first (last sentence), the definition is put in
-     front of it, and the best-scoring rest (second sentence) comes after. */
-  const mixed = { index: 0, title: 'Preload', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text:
-    'Preload is the stretch on ventricular myocytes at the end of diastole. Venous return raises preload and preload raises stroke volume through venous return. ' +
-    'The weather outside the hospital was mild that week. A wedge pressure above 18 mmHg marks raised preload.' }] };
-  const mp = K.encode(mixed).points.map(p => text(mixed).indexOf(p.text));
-  ok('points picked out of order are shown in page order', mp.length === 3 && mp.every((v, i) => i === 0 || v > mp[i - 1]), mp.join(','));
-  ok('and so is the section\u2019s definition', e.points.some(p => /^Preload is the stretch/.test(p.text)), e.points.map(p => p.text.slice(0, 30)).join(' | '));
-  ok('the memory hook is built from the points’ own words',
-     /^First letters: [A-Z]+ /.test(e.mnemonic) && e.mnemonic.split(' — ')[1].split('.')[0].split(' · ').every(w => text(PRELOAD).toLowerCase().indexOf(w) !== -1),
-     e.mnemonic.slice(0, 90));
-  ok('it draws no flowchart it cannot understand', e.flowchart === '');
-  ok('the same section always gives the same points', JSON.stringify(K.encode(PRELOAD)) === JSON.stringify(e));
-  const tiny = { index: 0, title: 'x', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text: 'Only one short sentence here.' }] };
-  const t = K.encode(tiny);
-  ok('a one-sentence section still gives a point, not an empty encode the session would refuse', t.points.length === 1, JSON.stringify(t.points));
+  const L = K.lesson(PRELOAD);
+  ok('matches the schema and the rules', P.validate('lesson', L) === '', P.validate('lesson', L));
+  ok('the big idea is the section’s own definition', L.overview === 'Preload is the stretch on ventricular myocytes at the end of diastole.', L.overview);
+  /* …even when a key point comes before it: here a sentence with a number
+     is picked first, and it is not the big idea. */
+  const later = withText({ index: 0, title: 'Preload', pageStart: 1, pageEnd: 1, segments: [seg(1,
+    'During exercise venous return and heart rate rise together by about 30 percent in healthy adults. ' +
+    'Preload is the stretch on ventricular myocytes at the end of diastole. ' +
+    'Diuretics reduce preload by lowering circulating volume.')] });
+  const LL = K.lesson(later);
+  ok('the definition is the big idea even when a key point comes before it', /^During exercise/.test(LL.points[0].text) && LL.overview === 'Preload is the stretch on ventricular myocytes at the end of diastole.',
+     LL.points[0].text.slice(0, 30) + ' / ' + LL.overview.slice(0, 30));
+  ok('every key point is a sentence of the section, verbatim, on its own page',
+     L.points.length >= 3 && L.points.every(p => PRELOAD.segments.some(s => s.page === p.page && s.text.indexOf(p.text) !== -1)), L.points.map(p => p.text.slice(0, 30)).join(' | '));
+  ok('in the book’s order', L.points.every((p, i) => i === 0 || PRELOAD.text.indexOf(p.text) > PRELOAD.text.indexOf(L.points[i - 1].text)));
+  ok('the numbers to know are the section’s values', L.numbers.length >= 1 && L.numbers.every(n => /\d/.test(n.text)) && L.numbers.some(n => /12 mmHg/.test(n.text)),
+     JSON.stringify(L.numbers));
+  const T = K.lesson(TS);
+  ok('a reference to a table or figure is not a number to know', !T.numbers.some(n => /Table 17\.1/.test(n.text)), JSON.stringify(T.numbers));
+  const long = { index: 0, title: 'Severity', pageStart: 1, pageEnd: 1, segments: [seg(1,
+    'In the echocardiographic assessment of aortic valve disease the peak transvalvular velocity of at least 4 m/s and a mean gradient of 40 mmHg together with a small valve area define the severe stage of the disease in most adults examined.')] };
+  ok('a value keeps its unit as the book wrote it ("m/s", not "m s")', K.lesson(long).numbers.some(n => /4 m\/s/.test(n.text)), JSON.stringify(K.lesson(long).numbers));
+  const acq = T.mnemonics.find(m => /Acquired causes of TS/.test(m.title));
+  ok('every list of three to nine gets a mnemonic, its letters the items’ first letters', acq && acq.letters === 'RICMW' &&
+     acq.words.join('|') === 'Rheumatic|Infective endocarditis|Carcinoid syndrome|Malignancy|Whipple disease', JSON.stringify(T.mnemonics));
+  ok('a section with lists gets their mnemonics, not one over its key points as well', !T.mnemonics.some(m => /key points/.test(m.title)), T.mnemonics.map(m => m.title).join(', '));
+  ok('a section with no list gets one over its key points instead', L.mnemonics.length === 1 && L.mnemonics[0].letters.length === L.mnemonics[0].words.length &&
+     L.mnemonics[0].words.every(w => norm(PRELOAD.text).indexOf(w.toLowerCase()) !== -1), JSON.stringify(L.mnemonics));
+  ok('an analogy that fits is chosen, and marked as Memorizer’s', L.analogies.length >= 1 && L.analogies[0].title === 'Preload' && L.analogies.every(a => a.source === 'Memorizer'),
+     L.analogies.map(a => a.title).join(', '));
+  const kidney = withText({ index: 0, title: 'The nephron', pageStart: 1, pageEnd: 1, segments: [seg(1, 'The glomerulus filters plasma. The tubule reabsorbs sodium and water. The collecting duct concentrates urine.')] });
+  ok('and none is forced on a section it does not fit', K.lesson(kidney).analogies.length === 0);
 }
 
-head('recall: a blank in each key sentence');
+head('the analogy bank');
 {
-  const e = K.encode(PRELOAD);
-  const r = K.recall(PRELOAD, e.points);
-  ok('matches the schema', P.check(P.SCHEMAS.recall, r) === '');
-  ok('asks 3 to 5 questions', r.prompts.length >= 3 && r.prompts.length <= 5, String(r.prompts.length));
-  /* A blank, or a question actually asked ("What is …?", "Name the …"). */
-  ok('each question has a blank or asks something', r.prompts.every(q => /_____/.test(q.question) || /\?$|^Name the /.test(q.question)));
-  const blanks = r.prompts.filter(q => /_____/.test(q.question));
-  /* Read off the question itself. The first version compared it with
-     cloze() run again — the function under test checking itself — and
-     passed with the answer left in. */
-  const word = w => new RegExp('(^|[^a-z0-9])' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9])', 'i');
-  ok('and its answer is gone from the question', r.prompts.every(q => !word(q.answer).test(q.question)),
-     r.prompts.filter(q => word(q.answer).test(q.question)).map(q => q.answer).join(', ') || 'none left in');
-  ok('no two questions blank the same word', new Set(blanks.map(q => q.answer)).size === blanks.length);
-  const same = { index: 0, title: 'x', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false,
-    text: 'Sarcomere tension is up now. Sarcomere tension is low now. Sarcomere tension is odd now.' }] };
-  const sr = K.recall(same, K.sentences(same).map(x => ({ text: x.text, page: 1 })));
-  ok('even when every sentence\u2019s best word is the same one', new Set(sr.prompts.map(q => q.answer)).size === sr.prompts.length,
-     sr.prompts.map(q => q.answer).join(', '));
-  ok('every answer is the section’s own words', r.prompts.every(q => text(PRELOAD).toLowerCase().indexOf(q.answer.toLowerCase()) !== -1));
-  ok('a run of filler words offers nothing to blank', K.rankedTerms('there which would these those about', {}, {}).length === 0,
-     K.rankedTerms('there which would these those about', {}, {}).map(t => t.word).join(', '));
-  ok('no answer is a filler word', blanks.every(q => !/^(the|and|with|that|this|from|which|there)$/.test(q.answer)), blanks.map(q => q.answer).join(', '));
-  const numQ = blanks.find(q => /mmHg/.test(q.question));
-  ok('a sentence with a number blanks the number', numQ && numQ.answer === '12', numQ && numQ.question);
+  ok('every analogy is free of numbers — values come from the book, not from here', A.BANK.every(e => !/\d/.test(e.text)),
+     A.BANK.filter(e => /\d/.test(e.text)).map(e => e.id).join(', ') || A.BANK.length + ' analogies');
+  ok('every entry has patterns to be found by', A.BANK.every(e => e.match.length >= 1 && e.text.length > 40));
+  ok('the ids are unique', new Set(A.BANK.map(e => e.id)).size === A.BANK.length);
+  const one = withText({ index: 0, title: 'x', segments: [seg(1, 'Afterload was mentioned once.')] });
+  ok(`a single passing mention is not enough (under ${A.MIN_SCORE})`, A.forSection(one).length === 0);
+  const titled = withText({ index: 0, title: 'Afterload', segments: [seg(1, 'Nothing else here.')] });
+  ok('a section titled by the idea is enough on its own', A.forSection(titled).some(a => a.title === 'Afterload'));
+  /* Afterload is later in the bank than Preload, so order by bank position
+     would put Preload first; the stronger match must lead. */
+  const both = withText({ index: 0, title: 'Loading', segments: [seg(1, 'Afterload and afterload and afterload. Preload and preload.')] });
+  ok('the strongest match comes first, wherever it sits in the bank', A.forSection(both)[0].title === 'Afterload', A.forSection(both).map(a => a.title).join(', '));
 }
 
-head('grading by matching words');
+head('the drill: multiple choice from the book');
 {
-  const q = { question: 'Fill in the blank: _____ is the main determinant', answer: 'venous', page: 4 };
-  const g = a => K.gradeRecall(PRELOAD, q, a);
-  ok('matches the schema', P.check(P.SCHEMAS.gradeRecall, g('venous')) === '');
-  ok('the word itself is correct', g('venous').correct === true);
-  ok('in a sentence, in capitals, with punctuation — still correct', g('It is VENOUS return.').correct === true);
-  ok('one typo in a long word is correct', K.gradeRecall(PRELOAD, { answer: 'contraction' }, 'contracton').correct === true);
-  ok('a plural away is correct', K.gradeRecall(PRELOAD, { answer: 'myocytes' }, 'myocyte').correct === true);
-  /* Three edits apart, so only the stem rule can accept it — the plural
-     above is one edit, and passes on the typo rule alone. */
-  ok('another form of the same word is correct (filled for filling)', K.gradeRecall(PRELOAD, { answer: 'filling' }, 'filled').correct === true);
-  ok('a different word is wrong', g('arterial').correct === false);
-  ok('an empty answer is wrong, and says so', g('').correct === false && /No answer/.test(g('').feedback));
-  const n = a => K.gradeRecall(PRELOAD, { answer: '12' }, a).correct;
-  ok('the right number is correct', n('12 mmHg') === true);
-  ok('a different number is wrong — 120 is not 12, nor is 1', n('120') === false && n('1') === false && n('2') === false);
-  ok('a short word must be exact: no typo allowance under five letters', K.gradeRecall(PRELOAD, { answer: 'vein' }, 'vain').correct === false);
-  ok('a wrong answer names the answer, and offers counting other words for it', /“venous”/.test(g('arterial').feedback) && /count it as correct/.test(g('arterial').feedback));
+  const quizzes = UNIT.map(c => K.quiz(c, K.lesson(c), UNIT));
+  const all = quizzes.map((q, i) => q.questions.map(x => Object.assign({ ci: i }, x))).flat();
+  ok('every drill matches the schema and the multiple-choice rules', quizzes.every(q => P.validate('quiz', q) === ''), quizzes.map(q => P.validate('quiz', q)).filter(Boolean).join(' | '));
+  ok('every section of the unit gets a drill', quizzes.every(q => q.questions.length >= 4), quizzes.map(q => q.questions.length).join(', '));
+  ok(`no drill is longer than ${K.QUIZ_SIZE}`, quizzes.every(q => q.questions.length <= K.QUIZ_SIZE));
+  const rightText = q => q.options[q.answer];
+  ok('every right answer is the book’s: its words are in the unit', all.every(q => unitText.indexOf(norm(rightText(q)).replace(/%$/, '')) !== -1 ||
+     norm(q.quote).length && q.explain && unitText.indexOf(norm(q.explain).slice(0, 40)) !== -1),
+     all.filter(q => unitText.indexOf(norm(rightText(q))) === -1).map(q => rightText(q)).join(' | '));
+  ok('and so is every explanation', all.every(q => unitText.indexOf(norm(q.explain).slice(0, 40)) !== -1 || /^The .+: /.test(q.explain) || /—/.test(q.explain)),
+     all.filter(q => unitText.indexOf(norm(q.explain).slice(0, 40)) === -1).map(q => q.explain.slice(0, 50)).join(' | '));
+  ok('the right option is not always in the same place', new Set(all.map(q => q.answer)).size >= 3, all.map(q => q.answer).join(''));
+  const find = re => all.find(q => re.test(q.question));
+  const back = find(/^Which term is defined as “a narrowing of the tricuspid/);
+  ok('a definition is asked backwards: the meaning given, the term wanted', back && rightText(back) === 'Tricuspid stenosis (TS)', back && back.options.join(' / '));
+  const named = K.pools(UNIT);
+  const namedSet = new Set(named.defs.map(d => norm(d.term)).concat(named.phrases.map(p => norm(p.text))));
+  ok('its wrong options are terms the unit itself defines or names, not stray words', back && back.options.every(o => namedSet.has(norm(o))), back && back.options.join(' / '));
+  ok('and none of them is already in the definition', back && back.options.every((o, i) => i === back.answer || norm(back.question).indexOf(norm(o)) === -1));
+  const most = find(/^What is the most common cause of TS\?/);
+  ok('"the most common…" asks for it, with the other causes as the wrong options', most && rightText(most) === 'Rheumatic heart disease (RHD)' &&
+     most.options.filter((o, i) => i !== most.answer).every(o => /Infective|Carcinoid|Malignancy|Whipple|Tricuspid atresia|Ebstein|Pacemaker|Chest|Rheumatic$/.test(o)), most && most.options.join(' / '));
+  const exc = find(/EXCEPT/);
+  /* The odd one out may come from the same lesion's other list — "acquired
+     causes EXCEPT Ebstein anomaly", which is congenital — the confusion an
+     examiner reaches for. What it may not be is one of the list's own. */
+  const acquired = ['Rheumatic', 'Infective endocarditis', 'Carcinoid syndrome', 'Malignancy', 'Whipple disease'];
+  ok('"all of the following EXCEPT": three from the list, the odd one out not of it', exc && /acquired causes of TS/.test(exc.question) &&
+     exc.options.filter((o, i) => i !== exc.answer).every(o => acquired.indexOf(o) !== -1) && acquired.indexOf(rightText(exc)) === -1,
+     exc && exc.question + ' ' + exc.options.join(' / ') + ' → ' + rightText(exc));
+  ok('a list title reads as part of the sentence', exc && /are acquired causes of TS EXCEPT|are congenital causes of TS EXCEPT|are causes of primary TR EXCEPT/.test(exc.question), exc && exc.question);
+  const num = all.find(q => /Which value/.test(q.question) && /5 mmHg|15 mmHg|40 mmHg/.test(q.quote.replace('_____', rightText(q))));
+  ok('a value question offers the unit’s other values with the same unit first', num && num.options.some((o, i) => i !== num.answer && ['5', '15', '40'].indexOf(o) !== -1),
+     num && num.quote + ' — ' + num.options.join(' / '));
+  /* From every question the unit could ask: the "more than 90%" question is
+     not always chosen for a drill (its sentence also carries "the most
+     common cause"), and near 100 is where a wrong value could overshoot. */
+  const numsAll = UNIT.map(c => K.candidates(c, K.pools(UNIT))).flat().filter(q => q.kind === 'number');
+  ok('a value question never offers the right value twice, nor a percentage over 100', numsAll.some(q => /%$/.test(q.options[q.answer])) &&
+     numsAll.every(q => new Set(q.options).size === 4 && q.options.every(o => !/%$/.test(o) || parseFloat(o) <= 100)),
+     numsAll.map(q => q.options.join('/')).join(' | '));
+  const terms = all.filter(q => /Which term completes/.test(q.question));
+  ok('a missing term is offered against terms of its own kind', terms.length >= 1 && terms.every(q => new Set(q.options.map(o => K.kindOf(o))).size === 1),
+     terms.map(q => q.options.map(o => o + ':' + K.kindOf(o)).join('/')).join(' | '));
+  ok('never against another form of the same word', terms.every(q => q.options.every((o, i) => i === q.answer || o.slice(0, 6).toLowerCase() !== rightText(q).slice(0, 6).toLowerCase())));
+  const itemTexts = UNIT.map(c => c.segments.filter(s => s.item).map(s => s.text)).flat();
+  ok('a list item is never treated as a sentence to complete', all.filter(q => q.quote).every(q => itemTexts.every(t => q.quote.replace('_____', rightText(q)) !== t)));
+  const kindOfQ = q => /^Which term is defined/.test(q.question) ? 'define-back' : /most common/.test(q.question) ? 'most' : /EXCEPT/.test(q.question) ? 'except'
+    : /is one of the/.test(q.question) ? 'member' : /Which value/.test(q.question) ? 'number' : /statement about/.test(q.question) ? 'true'
+    : /Which term completes/.test(q.question) ? 'term' : /best describes/.test(q.question) ? 'define' : /statements is from/.test(q.question) ? 'source' : 'table';
+  /* A literal 2, not K.PER_KIND: a check sized by the constant it tests
+     passes whatever the constant says. */
+  ok('a drill is mixed: no kind of question more than twice', quizzes.every(q => {
+    const n = {}; q.questions.forEach(x => { n[kindOfQ(x)] = (n[kindOfQ(x)] || 0) + 1; });
+    return Object.values(n).every(v => v <= 2);
+  }), quizzes.map(q => q.questions.map(kindOfQ).join(',')).join(' | '));
+  /* Not "no two explanations are equal": an explanation may add to its
+     sentence, and equality let one sentence be asked twice — the browser
+     suite caught it. One explanation containing another is the same
+     sentence. */
+  const twice = quizzes.map(q => q.questions.map(x => x.explain)).map(es => es.filter((e, i) => es.some((f, j) => j !== i && f.indexOf(e) !== -1))).flat();
+  ok('and no two questions rest on one sentence of the book', twice.length === 0, twice.slice(0, 2).join(' | '));
+  ok('the same section gives the same drill every time', JSON.stringify(K.quiz(TS, null, UNIT)) === JSON.stringify(quizzes[0]));
+  /* The kinds a drill does not always pick: from every question each
+     section could ask, so these are held whether or not a drill chose them. */
+  const cands = UNIT.map(c => K.candidates(c, K.pools(UNIT))).flat();
+  const trues = cands.filter(q => q.kind === 'true');
+  ok('"which statement is true": the right one is the book’s sentence, the others each changed from one', trues.length >= 1 &&
+     trues.every(q => unitText.indexOf(norm(rightText(q))) !== -1 && q.options.filter((o, i) => i !== q.answer).every(o => unitText.indexOf(norm(o)) === -1)),
+     trues.length + ' — ' + (trues[0] ? trues[0].options.join(' / ') : 'none'));
+  ok('and a changed statement swaps a real term or a value, never a plain word, a reference or a named abbreviation’s word', trues.every(q => q.options.every(o => !/^Table|^Fig/.test(o) &&
+     !/\b\w+ \((?:TS|TR|RHD)\)/.test(o.replace(/Tricuspid stenosis \(TS\)|Tricuspid regurgitation \(TR\)|Rheumatic heart disease \(RHD\)/g, '')) && /^[A-Z]/.test(o))),
+     trues.map(q => q.options.join(' / ')).join(' | '));
+  const fwd = cands.filter(q => q.kind === 'define');
+  ok('a definition asked forwards offers the unit’s other definitions as the wrong meanings', fwd.length >= 1 &&
+     fwd.every(q => q.options.every(o => UNIT.some(c => c.text.indexOf(o) !== -1))), fwd.length + ' — ' + (fwd[0] ? fwd[0].question + ' ' + fwd[0].options.join(' / ') : 'none'));
+  const allTerms = cands.filter(q => q.kind === 'term');
+  ok('no missing-term question offers another form of the same word (hypertrophy, hypertrophied)', allTerms.length >= 3 &&
+     allTerms.every(q => q.options.every((o, i) => i === q.answer || o.slice(0, 6).toLowerCase() !== rightText(q).slice(0, 6).toLowerCase())),
+     allTerms.map(q => q.options.join('/')).join(' | '));
+  /* Two sentences the same but for one term: changing one into the other
+     gives a sentence of the book — true, so it may not be a wrong option. */
+  const PAR = withText({ index: 0, title: 'Loading', pageStart: 1, pageEnd: 1, segments: [seg(1,
+    'Aortic stenosis raises left ventricular afterload in most adults. Aortic regurgitation raises left ventricular afterload in most adults. ' +
+    'Mitral regurgitation lowers left ventricular afterload in most adults. Endocarditis damages the valve leaflets in some adults.')] });
+  const PT = PAR.segments[0].text;
+  const parTrue = K.candidates(PAR, K.pools([PAR])).filter(q => q.kind === 'true');
+  ok('a changed statement that happens to be another sentence of the book is never a wrong option', parTrue.length >= 1 &&
+     parTrue.every(q => q.options.filter((o, i) => i !== q.answer).every(o => PT.indexOf(o) === -1)), parTrue.map(q => q.options.join(' / ')).join(' | ') || 'none');
+  /* The rules for a wrong option, one by one. */
+  /* Exactly three candidates, one forbidden: the rule must leave the
+     question unfilled (null) rather than use it. With spare candidates a
+     broken rule could pass by not happening to pick the forbidden one. */
+  ok('a wrong option is never the answer itself', K.distractors('stenosis', ['Stenosis', 'atresia', 'failure'], 3, '', 's') === null);
+  ok('nor a word the question already says', K.distractors('stenosis', ['valve', 'atresia', 'failure'], 3, 'the narrowed valve obstructs flow', 's') === null);
+  ok('nor another form of the answer', K.distractors('hypertrophy', ['hypertrophied', 'atresia', 'failure'], 3, '', 's') === null);
+  ok('and with three good ones, all three are used', (K.distractors('hypertrophy', ['dilatation', 'atresia', 'failure'], 3, '', 's') || []).length === 3);
+  const ownItem = UNIT.map(c => K.candidates(c, K.pools(UNIT))).flat().filter(q => /EXCEPT/.test(q.question));
+  ok('the odd one out in an EXCEPT question is never one of the list’s own items', ownItem.length >= 2 &&
+    ownItem.every(q => q.explain.indexOf(q.options[q.answer] + ' ·') === -1 && q.explain.indexOf(' ' + q.options[q.answer] + '.') === -1),
+    ownItem.map(q => q.options[q.answer] + ' vs ' + q.explain).join(' | '));
+  /* One list in the whole unit: every item-based candidate is the list's own,
+     so only the rule can keep them out — no shuffle can pass it by luck. */
+  const ONE = withText({ index: 0, title: 'Mitral stenosis', pageStart: 1, pageEnd: 1, segments: [
+    seg(1, 'Mitral stenosis (MS) is a narrowing of the mitral valve orifice. Left atrial pressure (LAP) rises as the orifice narrows.'),
+    seg(1, 'Causes of mitral stenosis', { item: true, sub: true, list: 'L7' }),
+    seg(1, 'Rheumatic fever', { item: true, list: 'L7' }), seg(1, 'Mitral annular calcification', { item: true, list: 'L7' }),
+    seg(1, 'Congenital parachute valve', { item: true, list: 'L7' }), seg(1, 'Carcinoid disease', { item: true, list: 'L7' })] });
+  const oneExc = K.candidates(ONE, K.pools([ONE])).filter(q => /EXCEPT/.test(q.question));
+  const oneItems = ['Rheumatic fever', 'Mitral annular calcification', 'Congenital parachute valve', 'Carcinoid disease'];
+  ok('with a single list in the unit, the odd one out still comes from outside it — and is not the list’s own subject', oneExc.length === 1 &&
+     oneItems.indexOf(oneExc[0].options[oneExc[0].answer]) === -1 && !/mitral stenosis/i.test(oneExc[0].options[oneExc[0].answer]),
+     oneExc.map(q => q.options.join(' / ') + ' → ' + q.options[q.answer]).join(' | ') || 'none');
+  /* A section of many terms, each in its own sentence: plenty of one kind. */
+  const MANY = withText({ index: 0, title: 'Lesions', pageStart: 1, pageEnd: 1, segments: [seg(1,
+    ['stenosis', 'regurgitation', 'endocarditis', 'myocarditis', 'pericarditis', 'cardiomyopathy', 'atresia', 'thrombosis', 'sclerosis', 'dilatation']
+      .map((t, i) => 'In adult patients the ' + t + ' is usually found on the left side of the heart ' + ['early', 'late', 'rarely', 'often', 'first', 'last', 'again', 'twice', 'once', 'seldom'][i] + '.').join(' '))] });
+  const mq = K.quiz(MANY, null, [MANY]).questions;
+  ok('a section full of one kind of question still gets at most two of it', mq.length >= 2 && mq.filter(q => /Which term completes/.test(q.question)).length <= 2,
+     mq.map(q => q.question.slice(0, 20)).join(' | '));
+  ok('a verb’s form is not a thing’s name', K.kindOf('hypertrophied') === 'plain' && K.kindOf('hypertrophy') === 'thing' && K.kindOf('aortic') === 'place' && K.kindOf('Whipple disease') === 'phrase');
+  /* A definition that already says its whole term is not asked backwards. */
+  const give = withText({ index: 0, title: 'Valves', pageStart: 1, pageEnd: 1, segments: [seg(1, 'Aortic stenosis is a stenosis of the aortic valve that obstructs left ventricular outflow in adults.')] });
+  ok('a definition that already contains its whole term is not asked backwards', !K.candidates(give, K.pools(UNIT.concat([give]))).some(q => q.kind === 'define-back'));
+  /* A table asks itself: the cell, against the column's other cells. */
+  const TAB = withText({ index: 0, title: 'Values', pageStart: 3, pageEnd: 3, segments: [
+    seg(3, 'Normal values are listed below.'),
+    seg(3, 'Measure Normal Unit LVEDP < 12 mmHg Stroke volume 60-100 mL Ejection fraction 55 percent Heart rate 60-100 bpm',
+      { table: [['Measure', 'Normal', 'Unit'], ['LVEDP', '< 12', 'mmHg'], ['Stroke volume', '60-100', 'mL'], ['Ejection fraction', '55', 'percent'], ['Heart rate', '60-100', 'bpm']] })] });
+  const tq = K.quiz(TAB, null, [TAB]).questions.find(q => /In the table/.test(q.question));
+  ok('a table cell is asked for by its row and column, against the column’s other cells', tq && /what is the (Normal|Unit) for (LVEDP|Stroke volume|Ejection fraction|Heart rate)\?/.test(tq.question) &&
+     tq.options.every(o => ['< 12', '60-100', '55', 'mmHg', 'mL', 'percent', 'bpm'].indexOf(o) !== -1), tq && tq.question + ' ' + tq.options.join(' / '));
+  /* A section too thin for anything else still gets asked which statement is its own. */
+  const thin = withText({ index: 3, title: 'Pulmonic valve', pageStart: 5, pageEnd: 5, segments: [seg(5, 'It is rarely a problem in adults and it seldom needs any attention at all.')] });
+  const tqz = K.quiz(thin, null, UNIT.concat([thin]));
+  ok('a section with nothing else to ask is asked which statement is its own', tqz.questions.length >= 1 && /statements is from “Pulmonic valve”/.test(tqz.questions[0].question) &&
+     P.validate('quiz', tqz) === '', JSON.stringify(tqz.questions.map(q => q.question)));
+  ok('and a section with nothing at all to ask gives an empty drill, not a broken one', JSON.stringify(K.quiz(withText({ index: 0, title: 't', segments: [seg(1, 'It is here.')] }), null, [])) === '{"questions":[]}');
 }
 
-head('teach-back: how many key points you touched');
+head('the final exam');
 {
-  const e = K.encode(PRELOAD);
-  const all = e.points.map(p => p.text).join(' ');
-  const full = K.gradeExplain(PRELOAD, e.points, all);
-  ok('matches the schema', P.check(P.SCHEMAS.gradeExplain, full) === '');
-  ok('saying every point scores 100, with no gaps', full.score === 100 && full.gaps.length === 0, `${full.score}, ${full.gaps.length} gaps`);
-  const none = K.gradeExplain(PRELOAD, e.points, '');
-  ok('saying nothing scores 0, and every point is a gap', none.score === 0 && none.gaps.length === e.points.length);
-  const half = K.gradeExplain(PRELOAD, e.points, e.points.slice(0, Math.ceil(e.points.length / 2)).map(p => p.text).join(' '));
-  ok('saying the first half scores about half', half.score >= 40 && half.score <= 70, String(half.score));
-  ok('and the gaps are exactly the points left out',
-     JSON.stringify(half.gaps.map(g => g.point)) === JSON.stringify(e.points.slice(Math.ceil(e.points.length / 2)).map(p => p.text)));
-  ok('each gap keeps its page', half.gaps.every(g => e.points.some(p => p.text === g.point && p.page === g.page)));
-  /* One key word per point is a word list, not an explanation. */
-  const freq = K.frequencies(PRELOAD);
-  const oneEach = e.points.map(p => K.rankedTerms(p.text, freq, {})[0].word).join(' ');
-  const listed = K.gradeExplain(PRELOAD, e.points, oneEach);
-  ok('naming one key word per point is not covering it', listed.score < 50, `${listed.score} for "${oneEach}"`);
-  const offTopic = K.gradeExplain(PRELOAD, e.points, 'The kidney filters blood and makes urine every day.');
-  ok('an explanation of something else scores 0', offTopic.score === 0, String(offTopic.score));
-}
-
-head('gauntlet: new blanks, weighted to the weakest');
-{
-  /* Three sections: with two, taking turns already gives the weak one half,
-     and the weighting was deleted with nothing noticing. */
-  const clusters = [PRELOAD, AFTERLOAD, CONTRACT];
-  const pts = { 0: K.encode(PRELOAD).points, 1: K.encode(AFTERLOAD).points, 2: K.encode(CONTRACT).points };
-  const recallQs = [0, 1, 2].map(i => K.recall(clusters[i], pts[i]).prompts.map(q => q.question.replace(/^Fill in the blank: /, ''))).flat();
-  const g = K.gauntlet(clusters, pts, [1], 6);
-  ok('matches the schema', P.check(P.SCHEMAS.gauntlet, g) === '');
-  ok('asks the number it was given', g.questions.length === 6, String(g.questions.length));
-  ok('at least half on the weakest section', g.questions.filter(q => q.cluster === 1).length >= 3,
-     g.questions.map(q => q.cluster).join(','));
-  ok('every cluster number is a real section', g.questions.every(q => q.cluster >= 0 && q.cluster <= 2));
-  ok('no gauntlet blank repeats a recall blank', !g.questions.some(q => recallQs.indexOf(q.question.replace(/^Gauntlet — fill in the blank: /, '')) !== -1));
-  ok('no question is asked twice', new Set(g.questions.map(q => q.question)).size === g.questions.length);
-  /* Every sentence is a point here, so the gauntlet has nothing fresh and
-     must re-blank the points — the case where repeating recall is possible.
-     (Above, fresh sentences filled all six and the second-word path never
-     ran.) */
-  const all3 = { index: 0, title: 'Afterload', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text:
-    'Afterload is the wall stress the ventricle overcomes during ejection. Aortic stenosis raises afterload and thickens the ventricular wall. ' +
-    'Vasodilators lower afterload and improve forward flow.' }] };
-  const p3 = K.encode(all3).points;
-  const r3 = K.recall(all3, p3).prompts.map(q => q.question.replace(/^Fill in the (?:blank|number): /, ''));
-  const g3 = K.gauntlet([all3], { 0: p3 }, [0], 5).questions.map(q => q.question.replace(/^Gauntlet — fill in the blank: /, ''));
-  ok('a section with no unused sentences still gets a gauntlet that repeats no recall blank',
-     p3.length === 3 && g3.length >= 2 && !g3.some(q => r3.indexOf(q) !== -1), g3.join(' | '));
-  /* A blank's answer is a bare lower-case word; a reversed definition's is
-     the term as printed ("Afterload"), and a list's is its items joined by
-     "; " — each still words of the section, compared without case. */
-  ok('every answer is words of its own section', g.questions.every(q => q.answer.split('; ').every(a => text(clusters[q.cluster]).toLowerCase().indexOf(a.toLowerCase()) !== -1)),
-     g.questions.filter(q => !q.answer.split('; ').every(a => text(clusters[q.cluster]).toLowerCase().indexOf(a.toLowerCase()) !== -1)).map(q => q.answer).join(' | '));
-  ok('the harder questions are in it: a definition asked backwards', g.questions.some(q => q.question === 'Which term is defined as \u201Cthe wall stress the ventricle must overcome to eject blood\u201D?' && q.answer === 'Afterload'),
-     g.questions.map(q => q.question.slice(0, 50)).join(' | '));
-  /* One sentence, one word worth blanking: nothing fresh to ask and no
-     second word — the case the fallback exists for. */
-  const bare1 = { index: 0, title: 't', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text: 'It is in the cell now.' }] };
-  const lone = K.gauntlet([bare1], { 0: K.encode(bare1).points }, [0], 5);
-  ok('a unit with almost nothing to ask still gets a gauntlet, so the session can finish', lone.questions.length >= 1, String(lone.questions.length));
+  const drills = UNIT.map(c => K.quiz(c, null, UNIT));
+  const asked = drills.map(q => q.questions.map(x => x.question + x.quote)).flat();
+  const ex = K.exam(UNIT, asked, [2], 6);
+  ok('matches the schema and the rules', P.validate('exam', ex) === '', P.validate('exam', ex));
+  ok('asks the number it was given', ex.questions.length === 6, String(ex.questions.length));
+  ok('never repeats a drill question while it has new ones', !ex.questions.some(q => asked.indexOf(q.question + q.quote) !== -1));
+  ok('at least half on the weakest section, while it has questions left', ex.questions.filter(q => q.cluster === 2).length >= 3 ||
+     ex.questions.filter(q => q.cluster === 2).length === K.candidates(AS, K.pools(UNIT)).filter(q => asked.indexOf(q.question + q.quote) === -1).length,
+     ex.questions.map(q => q.cluster).join(','));
+  ok('every question names a real section', ex.questions.every(q => q.cluster >= 0 && q.cluster < UNIT.length));
+  /* Every question the unit has, already asked: the exam asks them again
+     rather than setting none. */
+  const all = UNIT.map(c => K.candidates(c, K.pools(UNIT)).map(x => x.question + x.quote)).flat();
+  const again = K.exam(UNIT, all, [2], 6);
+  ok('when the drills asked everything, the exam asks them again, weakest first, rather than nothing', again.questions.length === 6 &&
+     P.validate('exam', again) === '' && again.questions.filter(q => q.cluster === 2).length >= 3, again.questions.map(q => q.cluster).join(','));
+  ok('and still across the unit', again.questions.some(q => q.cluster !== 2), again.questions.map(q => q.cluster).join(','));
+  ok('and a question is never asked twice in one exam', new Set(again.questions.map(q => q.question + q.quote)).size === 6 &&
+     new Set(K.exam(UNIT, asked, [2], 40).questions.map(q => q.question + q.quote)).size === K.exam(UNIT, asked, [2], 40).questions.length);
 }
 
 head('flowcharts from the section\u2019s own cause-and-effect');
@@ -309,138 +410,6 @@ head('flowcharts: clean boxes, connected pieces only');
      labels.every(l => !/[()\u2014]|\b(?:can|usually)$/i.test(l)) && labels.indexOf('Rheumatic fever') !== -1 && labels.indexOf('commissural fusion') !== -1, labels.join(' | '));
 }
 
-head('the coach asks, lists and checks numbers');
-{
-  /* A section shaped like the owner's Table 17.1 page, as chunk.js marks it. */
-  const TS = { index: 0, title: 'Tricuspid stenosis', pageStart: 2, pageEnd: 2, segments: [
-    { page: 2, heading: false, text: 'A. Etiology. Table 17.1 lists the causes of TS.' },
-    { page: 2, heading: false, text: 'Congenital', item: true, sub: true, list: 'L1' },
-    { page: 2, heading: false, text: 'Tricuspid atresia', item: true, list: 'L1' },
-    { page: 2, heading: false, text: 'Atypical Ebstein anomaly (more likely to cause TR)', item: true, list: 'L1' },
-    { page: 2, heading: false, text: 'Acquired', item: true, sub: true, list: 'L1' },
-    { page: 2, heading: false, text: 'Rheumatic', item: true, list: 'L1' },
-    { page: 2, heading: false, text: 'Infective endocarditis', item: true, list: 'L1' },
-    { page: 2, heading: false, text: 'Carcinoid syndrome', item: true, list: 'L1' },
-    { page: 2, heading: false, text: 'Malignancy (eg, myxoma and metastases)\u2014Usually cause functional TS', item: true, list: 'L1' },
-    { page: 2, heading: false, text: 'Whipple disease', item: true, list: 'L1' },
-    { page: 2, heading: false, text: 'Rheumatic heart disease (RHD) is the most common cause of TS, accounting for >90% of cases. ' +
-      'Recent transesophageal echocardiogram (TEE) studies have revealed that only 54% of patients have three valve leaflets. ' +
-      'Tricuspid stenosis (TS) is a narrowing of the tricuspid valve orifice that obstructs right atrial emptying.' },
-  ] };
-  const ls = K.lists(TS);
-  ok('a list is split at its sub-headings and titled from its introduction',
-     JSON.stringify(ls.map(l => l.title)) === JSON.stringify(['Congenital causes of TS', 'Acquired causes of TS']), JSON.stringify(ls.map(l => l.title)));
-  ok('items are labelled without their asides', ls[1].items.map(i => i.label).join('|') === 'Rheumatic|Infective endocarditis|Carcinoid syndrome|Malignancy|Whipple disease',
-     ls[1].items.map(i => i.label).join('|'));
-  const e = K.encode(TS);
-  ok('the hook is the list\u2019s first letters, titled', /^First letters of Acquired causes of TS: RICMW \u2014 Rheumatic \u00B7 Infective endocarditis/.test(e.mnemonic), e.mnemonic);
-  const pq = K.patternQuestions(TS);
-  const most = pq.find(q => q.kind === 'most');
-  ok('"X is the most common cause of Y" asks for X', most && most.question === 'What is the most common cause of TS?' && most.answer === 'Rheumatic heart disease (RHD)',
-     JSON.stringify(most));
-  const def = pq.find(q => q.kind === 'define');
-  ok('a definition asks for its meaning', def && def.question === 'What is tricuspid stenosis (TS)?' && /^a narrowing of the tricuspid valve orifice/.test(def.answer), JSON.stringify(def));
-  const r = K.recall(TS, e.points);
-  ok('recall asks those, and names the list', r.prompts.some(q => /most common cause of TS/.test(q.question)) &&
-     r.prompts.some(q => /^Name the Acquired causes of TS \(5\)\.$/.test(q.question)), r.prompts.map(q => q.question).join(' | '));
-  ok('and still matches the schema', P.check(P.SCHEMAS.recall, r) === '');
-  const listQ = r.prompts.find(q => /^Name the /.test(q.question));
-  const gl = a => K.gradeRecall(TS, listQ, a);
-  ok('naming three of five is enough, and says which are missing', gl('rheumatic, carcinoid, whipple').correct === true &&
-     /3 of 5/.test(gl('rheumatic, carcinoid, whipple').feedback) && gl('rheumatic, carcinoid, whipple').missing.length === 2, gl('rheumatic, carcinoid, whipple').feedback);
-  ok('two of five is not', gl('rheumatic and whipple').correct === false && /2 of 5/.test(gl('rheumatic and whipple').feedback));
-  const mq = { question: most.question, answer: most.answer, page: 2 };
-  ok('a phrase answer: the abbreviation alone is right', K.gradeRecall(TS, mq, 'RHD').correct === true);
-  ok('so are most of its words', K.gradeRecall(TS, mq, 'rheumatic heart disease').correct === true);
-  ok('one word of three is not', K.gradeRecall(TS, mq, 'heart').correct === false);
-  ok('a definition in the student\u2019s own order still counts', K.gradeRecall(TS, { answer: def.answer }, 'narrowing of the tricuspid orifice, obstructing atrial emptying').correct === true);
-  const slips = K.numberSlips(TS, 'Rheumatic heart disease causes about 50% of cases of TS. Only 54% of patients have three leaflets.');
-  ok('a wrong number in a teach-back is said back, with the source and its page', slips.length === 1 && /50/.test(slips[0]) && />90%/.test(slips[0]) && /p\.2/.test(slips[0]), JSON.stringify(slips));
-  ok('the right number is not', !slips.some(x => /54%/.test(x.split('says')[0])));
-  const x = K.gradeExplain(TS, e.points, 'Rheumatic heart disease causes about 50% of cases of TS.');
-  ok('and teach-back grading reports it as a misconception', x.misconceptions.length === 1 && P.check(P.SCHEMAS.gradeExplain, x) === '');
-  const hk = K.rankedTerms('Recent studies have revealed that only lists accounting for the tricuspid anomaly', {}, {}, K.defined(TS)).map(t => t.word);
-  ok('generic words rank below the terms', hk.indexOf('tricuspid') < hk.indexOf('lists') && hk.indexOf('anomaly') < hk.indexOf('revealed') && hk.indexOf('anomaly') < hk.indexOf('accounting'), hk.join(', '));
-  /* Each rule alone: with nothing else between them, a generic word loses to
-     a shorter ordinary one, and a technical ending beats a longer ordinary word. */
-  ok('a word the section repeats ranks below one it uses once (distinctive, not frequent)',
-     K.rankedTerms('chordae papillary', { chordae: 5, papillary: 1 }, {})[0].word === 'papillary');
-  ok('a generic word loses even to a shorter ordinary one', K.rankedTerms('accounting for chordae', {}, {})[0].word === 'chordae',
-     K.rankedTerms('accounting for chordae', {}, {}).map(t => t.word).join(', '));
-  ok('a technical term beats a longer ordinary word', K.rankedTerms('measurement of stenosis', {}, {})[0].word === 'stenosis',
-     K.rankedTerms('measurement of stenosis', {}, {}).map(t => t.word).join(', '));
-  ok('a word joined by a dash is two words', K.toks('leaflets\u2014septal, anterior').length === 3);
-  const dt = K.defined(TS);
-  ok('a section\u2019s defined abbreviations, and their expansions, are terms', dt.rhd === true && dt.tee === true && Object.keys(dt).some(k => /^rheumat/.test(k)),
-     Object.keys(dt).join(', '));
-  ok('the generic head of an item does not name it', K.itemMatch('some disease', 'Whipple disease') === false && K.itemMatch('whipple', 'Whipple disease') === true);
-
-  /* The gauntlet's harder questions, on the same section. */
-  const hq = K.hardQuestions(TS, e.points);
-  const back = hq.find(q => /^Which term is defined as/.test(q.question));
-  ok('the gauntlet asks the definition backwards: the meaning given, the term wanted',
-     back && back.question === 'Which term is defined as \u201Ca narrowing of the tricuspid valve orifice that obstructs right atrial emptying\u201D?' &&
-     back.answer === 'Tricuspid stenosis (TS)', JSON.stringify(back));
-  const gb = a => K.gradeRecall(TS, back, a).correct;
-  ok('and grades the term: its abbreviation or its words are right, a neighbouring lesion is not', gb('TS') && gb('tricuspid stenosis') && !gb('tricuspid regurgitation'));
-  ok('it names the list recall did not ask', hq.some(q => q.question === 'Name the Congenital causes of TS (2).' && q.answer === 'Tricuspid atresia; Atypical Ebstein anomaly'),
-     hq.map(q => q.question).join(' | '));
-  const askedR = r.prompts.map(q => q.question);
-  ok('and repeats nothing recall asked', !hq.some(q => askedR.indexOf(q.question) !== -1), hq.filter(q => askedR.indexOf(q.question) !== -1).map(q => q.question).join(' | '));
-  const giveaway = { index: 0, title: 'Valves', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text:
-    'Aortic stenosis is a stenosis of the aortic valve that obstructs left ventricular outflow. It is common in the elderly and rare in the young.' }] };
-  ok('a definition that already says its whole term is not asked backwards',
-     !K.hardQuestions(giveaway, K.encode(giveaway).points).some(q => /^Which term/.test(q.question)), JSON.stringify(K.hardQuestions(giveaway, K.encode(giveaway).points)));
-  const gts = K.gauntlet([TS], { 0: e.points }, [0], 5).questions;
-  ok('in the gauntlet the harder questions lead, with blanks between them', !/_____/.test(gts[0].question) && /_____/.test(gts[1].question),
-     gts.map(q => q.question.slice(0, 40)).join(' | '));
-  ok('and it still matches the schema', P.check(P.SCHEMAS.gauntlet, { questions: gts }) === '');
-
-  /* A list item is not a sentence: it is taught by the hook and "Name the …",
-     never blanked, never a key point. The first gauntlet on this section
-     blanked "_____ (eg, myxoma and metastases)" and "Atypical _____ anomaly". */
-  const itemTexts = TS.segments.filter(g => g.item).map(g => g.text);
-  const filled = q => q.question.replace(/^[^:]*blank:\s*/, '').replace('_____', q.answer);
-  const gAll = K.gauntlet([TS], { 0: e.points }, [0], 10).questions;
-  const blanked = gAll.filter(q => /_____/.test(q.question));
-  ok('the gauntlet never blanks a list item', blanked.length >= 1 && !blanked.some(q => itemTexts.some(t => t.toLowerCase() === filled(q).toLowerCase())),
-     blanked.map(q => q.question.slice(0, 50)).join(' | '));
-  ok('and no key point is one', !e.points.some(p => itemTexts.indexOf(p.text) !== -1), e.points.map(p => p.text.slice(0, 30)).join(' | '));
-  ok('but its words still count toward what the section is about', (K.frequencies(TS).whipple || 0) >= 1, JSON.stringify(K.frequencies(TS).whipple));
-  const DOSE = { index: 0, title: 'Digoxin', pageStart: 3, pageEnd: 3, segments: [
-    { page: 3, heading: false, text: 'Digoxin is given as follows.' },
-    { page: 3, heading: false, text: 'Loading dose 0.5 mg digoxin orally', item: true, list: 'L9' },
-    { page: 3, heading: false, text: 'Maintenance dose 0.125 mg digoxin daily', item: true, list: 'L9' },
-    { page: 3, heading: false, text: 'Lower maintenance doses in renal failure', item: true, list: 'L9' },
-  ] };
-  const ds = K.numberSlips(DOSE, 'The maintenance dose of digoxin is 0.25 mg daily.');
-  ok('and a wrong number set against a list item is still caught', ds.length === 1 && /0\.125 mg/.test(ds[0]), JSON.stringify(ds));
-}
-
-head('questions from tables');
-{
-  const T = { index: 0, title: 'Values', pageStart: 3, pageEnd: 3, segments: [
-    { page: 3, heading: false, text: 'Normal values are listed below.' },
-    /* text is the rows' words, as the chunker gives it — the first version
-       had a placeholder here, and the check that tables are not read as
-       sentences could not fail against it. */
-    { page: 3, heading: false, text: 'Measure Normal Unit LVEDP < 12 mmHg. Stroke volume 60-100 mL Ejection fraction 55 percent.',
-      table: [['Measure', 'Normal', 'Unit'], ['LVEDP', '< 12', 'mmHg'], ['Stroke volume', '60-100', 'mL'], ['Ejection fraction', '55', 'percent']] }] };
-  const qs = K.tableQuestions(T, 2);
-  ok('a table gives questions, numbers first', qs.length === 2 && qs.every(q => /^\d/.test(q.answer)), JSON.stringify(qs));
-  ok('each names its row and its column, and blanks the cell', qs.every(q => /From the table: .+ \u2014 .+: .*_____/.test(q.question)), qs.map(q => q.question).join(' | '));
-  ok('and its answer is gone from the question', qs.every(q => q.question.indexOf(q.answer) === -1));
-  const many = K.tableQuestions(T, 20);
-  ok('the header row is never asked about, however many are asked for', many.length >= 3 && !many.some(q => /^(measure|normal|unit)$/.test(q.answer)),
-     many.map(q => q.answer).join(', '));
-  const r = K.recall(T, [{ text: 'Normal values are listed below.', page: 3 }]);
-  ok('recall includes the table\u2019s questions', r.prompts.some(q => /From the table/.test(q.question)) && P.check(P.SCHEMAS.recall, r) === '');
-  ok('a table is not mistaken for sentences', !K.sentences(T).some(s => /LVEDP/.test(s.text)));
-  ok('a table split across clusters asks with its repeated header',
-     K.tableQuestions({ segments: [{ page: 4, table: [['Ejection fraction', '55', 'percent']], tableHeader: ['Measure', 'Normal', 'Unit'] }] }, 2)
-      .some(q => /Ejection fraction \u2014 Normal/.test(q.question)));
-}
-
 head('bullets: shorter, the key term first, nothing added');
 {
   const F = require(path.join(ROOT, 'memorizer', 'src', 'format.js'));
@@ -451,9 +420,17 @@ head('bullets: shorter, the key term first, nothing added');
   const semi = F.bullet('Afterload rises with hypertension; it falls with vasodilators; stenosis raises it.');
   ok('a long point splits at its semicolons into sub-bullets', semi.body === 'Afterload rises with hypertension' && semi.subs.length === 2, JSON.stringify(semi));
   ok('"This …" is not taken as a term to lead with', F.bullet('This relationship is the Frank-Starling mechanism.').lead === '');
+  /* The lesson prompt asks Claude for "Term — explanation" points. */
+  const dash = F.bullet('Preload \u2014 the stretch on myocytes at end-diastole.');
+  ok('a point written "Term — …" leads with its term', dash.lead === 'Preload' && dash.body === 'the stretch on myocytes at end-diastole', JSON.stringify(dash));
+  ok('so does "Term: …", and "…is…" later in it does not steal the lead', F.bullet('Causes of AS: calcific disease is the most common.').lead === 'Causes of AS');
+  ok('a long run of words before a dash is not a term', F.bullet('The pressure in the left atrium rises steadily \u2014 and then the lungs congest.').lead === '');
+  ok('the colon in a time is not a lead', F.bullet('Dose at 12:00 daily.').lead === '');
+  ok('and a dash later than a definition does not steal its lead', F.bullet('Aortic stenosis is a narrowing \u2014 often calcific.').lead === 'Aortic stenosis');
   /* The rule the formatter lives by, over every sentence this suite has. */
   const all = [PRELOAD, AFTERLOAD, CONTRACT].map(c => K.sentences(c).map(x => x.text)).flat().concat([
-    'However, it is important to note that diuretics reduce preload [12] (see Figure 3).', 'Afterload rises with hypertension; it falls with vasodilators.']);
+    'However, it is important to note that diuretics reduce preload [12] (see Figure 3).', 'Afterload rises with hypertension; it falls with vasodilators.',
+    'Preload \u2014 the stretch on myocytes at end-diastole.', 'Causes of AS: calcific disease is the most common.']);
   const norm = w => w.toLowerCase().replace(/[^a-z0-9\-]/g, '');
   const added = all.map(t => {
     const src = t.split(/\s+/).map(norm);
@@ -467,12 +444,13 @@ head('bullets: shorter, the key term first, nothing added');
 head('same shape over many generated sections');
 {
   /* Random sections from the chunker's own pipeline: every coach output for
-     each must pass its schema, and every point must be verbatim. */
+     each must pass its schema and rules, and every point must be verbatim. */
   let a = 7;
   const rnd = () => { a = (a * 1103515245 + 12345) % 2147483648; return a / 2147483648; };
   const VOCAB = ('pressure volume flow resistance cardiac output stroke heart rate ventricle atrium valve oxygen demand supply ' +
-    'contraction relaxation filling ejection murmur pulse artery vein capillary tissue perfusion 10 25 60 120 1.5').split(' ');
+    'contraction relaxation filling ejection murmur pulse artery vein capillary tissue perfusion stenosis regurgitation hypertrophy 10 25 60 120 1.5').split(' ');
   const bad = [];
+  let questions = 0;
   for (let n = 0; n < 60; n++) {
     const blocks = [{ text: 'Topic ' + n, page: 1, heading: true }];
     for (let b = 0; b < 3 + Math.floor(rnd() * 6); b++) {
@@ -485,20 +463,16 @@ head('same shape over many generated sections');
     }
     const cs = Chunk.clusterBlocks(blocks, { min: 60, max: 200 });
     cs.forEach(c => {
-      const e = K.encode(c);
-      const r = K.recall(c, e.points);
-      const x = K.gradeExplain(c, e.points, 'pressure volume');
-      const gr = K.gradeRecall(c, r.prompts[0] || { answer: 'x' }, 'pressure');
-      const g = K.gauntlet(cs, { [c.index]: e.points }, [c.index], 5);
-      const errs = [['encode', e], ['recall', r], ['gradeExplain', x], ['gradeRecall', gr], ['gauntlet', g]]
-        .map(([k, v]) => { const m = P.check(P.SCHEMAS[k], v); return m && k + ': ' + m; }).filter(Boolean);
-      if (!e.points.length) errs.push('encode: no points');
-      if (!e.points.every(p => c.text.indexOf(p.text) !== -1)) errs.push('encode: a point is not verbatim');
-      if (!g.questions.length) errs.push('gauntlet: empty');
+      const l = K.lesson(c), q = K.quiz(c, l, cs), ex = K.exam(cs, [], [c.index], 5);
+      questions += q.questions.length;
+      const errs = [['lesson', l], ['exam', ex]].map(([k, v]) => { const m = P.validate(k, v); return m && k + ': ' + m; }).filter(Boolean);
+      if (q.questions.length && P.validate('quiz', q)) errs.push('quiz: ' + P.validate('quiz', q));
+      if (!l.points.every(p => c.text.indexOf(p.text) !== -1)) errs.push('lesson: a point is not verbatim');
       if (errs.length) bad.push(`doc ${n} cluster ${c.index}: ${errs[0]}`);
     });
   }
-  ok('every output of every step passes its schema, points verbatim, never empty', bad.length === 0, bad[0] || '60 documents');
+  ok('every lesson, drill and exam passes its schema and rules, points verbatim', bad.length === 0, bad[0] || '60 documents');
+  ok('and the drills are not empty', questions > 100, questions + ' questions');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

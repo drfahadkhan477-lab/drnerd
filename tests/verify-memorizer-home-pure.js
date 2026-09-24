@@ -39,6 +39,33 @@ const load = rel => {
 const FSRS = load('src/core/fsrs.js').FSRS;
 const Pearl = load('src/core/pearl.js').Pearl;
 const DAY = '2026-03-10';
+const S = require(path.join(ROOT, 'memorizer', 'src', 'session.js'));
+/* A real session, driven through its reducer. `marks[i]` is null for a
+   section never drilled, or [right, of] for its drill's first pass. */
+const LESSON = { overview: 'o', points: [{ text: 'p', page: 1 }], numbers: [], mnemonics: [], analogies: [], flowchart: '' };
+function studied(id, titles, marks) {
+  let st = S.init(id, titles);
+  marks.forEach((m, i) => {
+    if (!m) return;
+    st = S.next(st, { type: 'open', section: i });
+    st = S.next(st, { type: 'taught', value: LESSON });
+    st = S.next(st, { type: 'toDrill' });
+    st = S.next(st, { type: 'quizReady', value: { questions: Array.from({ length: m[1] }, (_, k) => ({ question: id + i + 'q' + k, quote: '', options: ['a', 'b', 'c', 'd'], answer: 0, explain: '', page: 1 })) } });
+    for (let k = 0; k < m[1]; k++) st = S.next(st, { type: 'answered', choice: k < m[0] ? 0 : 1 });
+    while (st.phase === 'drill') st = S.next(st, { type: 'answered', choice: 0 });
+  });
+  return st;
+}
+const allDrilled = (id, titles) => studied(id, titles, titles.map(() => [1, 1]));
+/* Every section drilled, then the exam taken — k of two right — and the
+   unit's page returned to, as the app does. */
+const examined = (id, titles, k) => {
+  let s = S.next(allDrilled(id, titles), { type: 'toExam' });
+  s = S.next(s, { type: 'examReady', value: { questions: [0, 1].map(j => ({ question: 'E' + j, quote: '', options: ['a', 'b', 'c', 'd'], answer: 0, explain: 'x', page: 1, cluster: 0 })) } });
+  s = S.next(s, { type: 'examAnswered', choice: 0 });
+  s = S.next(s, { type: 'examAnswered', choice: k > 1 ? 0 : 1 });
+  return S.next(s, { type: 'toUnit' });
+};
 
 /* Synthetic prose, written for this suite. "greater than", never "above":
    pearl.js refuses a sentence containing "above" or "below" as pointing
@@ -63,8 +90,9 @@ head('progress counts what happened');
   const d1 = doc('a', 1, [cl(0, 'x', ['a']), cl(1, 'y', ['b']), cl(2, 'z', ['c']), cl(3, 'w', ['d'])]);
   const d2 = doc('b', 2, [cl(0, 'x', ['a']), cl(1, 'y', ['b'])]);
   const d3 = doc('c', 3, [cl(0, 'x', ['a']), cl(1, 'y', ['b']), cl(2, 'z', ['c'])]);
-  ok('a unit on its third section has studied two', H.studiedOf(d1, { phase: 'recall', cluster: 2 }) === 2);
-  ok('a unit at the gauntlet, or done, has studied all of them', H.studiedOf(d1, { phase: 'gauntlet', cluster: 3 }) === 4 && H.studiedOf(d1, { phase: 'done', cluster: 3 }) === 4);
+  ok('a unit with two sections drilled has studied two, whichever two', H.studiedOf(d1, studied('a', ['x', 'y', 'z', 'w'], [[1, 1], null, [0, 2], null])) === 2);
+  ok('a section taught but not drilled is not studied', H.studiedOf(d1, S.next(S.next(S.init('a', ['x', 'y', 'z', 'w']), { type: 'open', section: 0 }), { type: 'taught', value: LESSON })) === 0);
+  ok('a session from the old protocol counts none: it is not resumed', H.studiedOf(d1, { phase: 'done', cluster: 3 }) === 0);
   ok('a unit not begun has studied none', H.studiedOf(d1, null) === 0);
 
   const good = FSRS.update(null, 3, DAY);             /* reviewed today: recall is 100% */
@@ -85,7 +113,7 @@ head('progress counts what happened');
   ok('a day before recall falls to 90% it is held, a day after it is not', H.isHeld(day('2026-03-01'), DAY, FSRS) && !H.isHeld(day('2026-02-27'), DAY, FSRS) &&
      r9 > 0.9 && r11 < 0.9 && r11 > 0.88, `${(r9 * 100).toFixed(1)}% / ${(r11 * 100).toFixed(1)}%`);
 
-  const p = H.progress([d1, d2, d3], { a: { phase: 'recall', cluster: 2 }, b: { phase: 'done', cluster: 1 } }, cards, DAY, FSRS);
+  const p = H.progress([d1, d2, d3], { a: studied('a', ['x', 'y', 'z', 'w'], [[1, 1], [1, 2], null, null]), b: allDrilled('b', ['x', 'y']) }, cards, DAY, FSRS);
   ok('sections are summed across units, studied from each one’s session', p.sections === 9 && p.studied === 4 && p.studiedPct === 44, JSON.stringify(p));
   ok('cards held out of all cards', p.cards === 4 && p.held === 1 && p.heldPct === 25);
   const none = H.progress([], {}, [], DAY, FSRS);
@@ -95,11 +123,52 @@ head('progress counts what happened');
 head('the unit offered to continue');
 {
   const a = doc('a', 1, [cl(0, 'x', ['a'])]), b = doc('b', 2, [cl(0, 'x', ['a'])]), c = doc('c', 3, [cl(0, 'x', ['a'])]);
-  ok('one under way beats a newer one not begun', H.current([a, b, c], { a: { phase: 'recall', cluster: 0 } }).doc.id === 'a');
-  ok('among those under way, the newest', H.current([a, b, c], { a: { phase: 'recall', cluster: 0 }, b: { phase: 'encode', cluster: 0 } }).doc.id === 'b');
-  ok('a mastered one is passed over for one not begun', H.current([a, b], { b: { phase: 'done' } }).doc.id === 'a' && H.current([a, b], { b: { phase: 'done' } }).started === false);
-  ok('and offered only when nothing else is open', H.current([a], { a: { phase: 'done' } }).doc.id === 'a');
+  const a2 = doc('a', 1, [cl(0, 'x', ['a']), cl(1, 'y', ['b'])]), b2 = doc('b', 2, [cl(0, 'x', ['a']), cl(1, 'y', ['b'])]), c2 = doc('c', 3, [cl(0, 'x', ['a'])]);
+  const under = id => studied(id, ['x', 'y'], [[1, 1], null]);
+  const mastered = id => examined(id, ['x', 'y'], 2);
+  ok('one under way beats a newer one not begun', H.current([a2, b2, c2], { a: under('a') }).doc.id === 'a');
+  ok('among those under way, the newest', H.current([a2, b2, c2], { a: under('a'), b: under('b') }).doc.id === 'b');
+  ok('a session opened but never taught is not under way', H.current([a2, b2], { b: S.init('b', ['x', 'y']) }).started === false);
+  ok('a mastered one is passed over for one not begun', H.current([a2, b2], { b: mastered('b') }).doc.id === 'a' && H.current([a2, b2], { b: mastered('b') }).started === false);
+  ok('and offered only when nothing else is open', H.current([a2], { a: mastered('a') }).doc.id === 'a');
   ok('no units, nothing offered', H.current([], {}) === null);
+}
+
+head('jump back in, and what continue opens');
+{
+  const a = doc('a', 1, [cl(0, 'Preload', ['a']), cl(1, 'Afterload', ['b']), cl(2, 'Contractility', ['c'])]);
+  const b = doc('b', 2, [cl(0, 'Stenosis', ['a'])]), c = doc('c', 3, [cl(0, 'Shunts', ['a'])]);
+  const sa = studied('a', ['Preload', 'Afterload', 'Contractility'], [[1, 1], null, null]);
+  const r = H.recent([a, b, c], { a: sa }, { a: 500, b: 100 }, 3);
+  ok('the unit studied most recently first, then by when each was added', r.map(x => x.doc.id).join() === 'a,b,c', r.map(x => x.doc.id).join());
+  ok('with its share of sections drilled, rounded', r[0].pct === 33 && r[1].pct === 0, r.map(x => x.pct).join());
+  ok('and the section continue would open: the next one not drilled', r[0].next === 'Afterload' && r[1].next === 'Stenosis', r.map(x => x.next).join(' | '));
+  ok('a unit with every section drilled offers its final exam', H.nextTitle(a, allDrilled('a', ['Preload', 'Afterload', 'Contractility'])) === 'Final exam');
+  ok('and one whose exam is done gives its score, back on the unit’s page or not', H.nextTitle(a, examined('a', ['Preload', 'Afterload', 'Contractility'], 1)) === 'Final exam · 50%',
+     H.nextTitle(a, examined('a', ['Preload', 'Afterload', 'Contractility'], 1)));
+  ok('n at most', H.recent([a, b, c], {}, {}, 2).length === 2);
+  const sp = studied('a', ['x', 'y', 'z'], [[3, 4], null, [1, 2]]);
+  ok('a section\u2019s badge is its best drill score, and none before a drill', H.sectionPct(sp, 0) === 75 && H.sectionPct(sp, 1) === null && H.sectionPct(sp, 2) === 50);
+  /* Drilled at 3/4, then again at 1/4: the badge keeps the better. */
+  let rd = S.next(studied('r', ['x'], [[3, 4]]), { type: 'redrill' });
+  for (let k = 0; k < 4; k++) rd = S.next(rd, { type: 'answered', choice: k < 1 ? 0 : 1 });
+  while (rd.phase === 'drill') rd = S.next(rd, { type: 'answered', choice: 0 });
+  ok('after a worse retake the badge still shows the best drill', rd.per[0].score === 0.25 && H.sectionPct(rd, 0) === 75, rd.per[0].score + ' / ' + H.sectionPct(rd, 0));
+  /* Section 2 of 3 drilled, section 1 not: continue goes on from where you
+     were (section 3), not back to the start. */
+  const mid = studied('a', ['Preload', 'Afterload', 'Contractility'], [null, [1, 1], null]);
+  ok('continue goes on from the section last studied, not from the start', H.nextTitle(a, mid) === 'Contractility', H.nextTitle(a, mid));
+  ok('a unit\u2019s percentage is its sections drilled', H.unitPct(doc('z', 1, [cl(0, 'x', ['a']), cl(1, 'y', ['b']), cl(2, 'z', ['c'])]), sp) === 67);
+}
+
+head('the streak');
+{
+  ok('three days in a row ending today is three', H.streak(['2026-03-08', '2026-03-09', '2026-03-10'], '2026-03-10', FSRS) === 3);
+  ok('ending yesterday still counts — today is not over', H.streak(['2026-03-08', '2026-03-09'], '2026-03-10', FSRS) === 2);
+  ok('a gap breaks it', H.streak(['2026-03-06', '2026-03-08', '2026-03-09', '2026-03-10'], '2026-03-10', FSRS) === 3);
+  ok('nothing since the day before yesterday is none', H.streak(['2026-03-07', '2026-03-08'], '2026-03-10', FSRS) === 0);
+  ok('across a month\u2019s end', H.streak(['2026-02-27', '2026-02-28', '2026-03-01'], '2026-03-01', FSRS) === 3);
+  ok('the order the days were saved in does not matter', H.streak(['2026-03-10', '2026-03-08', '2026-03-09'], '2026-03-10', FSRS) === 3);
 }
 
 head('the pearl is the PDF’s own sentence');
@@ -149,26 +218,11 @@ head('the numbers in a pearl are marked');
 
 head('weak spots: where the sessions say you are shakiest');
 {
-  const S = require(path.join(ROOT, 'memorizer', 'src', 'session.js'));
-  /* A real session, driven through its reducer: each section taught with
-     `right` of two recall answers correct and a teach-back scored `score`.
-     Mastery is half recall, half teach-back — so 2/2 and 60 is exactly 0.8. */
-  const taught = (id, titles, marks) => {
-    let s = S.init(id, titles);
-    marks.forEach(([right, score]) => {
-      s = S.next(s, { type: 'encoded', value: { points: [{ text: 'p', page: 1 }] } });
-      s = S.next(s, { type: 'toRecall' });
-      s = S.next(s, { type: 'recallPrompts', value: { prompts: [{ question: 'a', answer: 'x', page: 1 }, { question: 'b', answer: 'y', page: 1 }] } });
-      s = S.next(s, { type: 'recallGraded', value: { correct: right >= 1 } });
-      s = S.next(s, { type: 'recallGraded', value: { correct: right >= 2 } });
-      s = S.next(s, { type: 'explainGraded', value: { score, gaps: [] } });
-    });
-    return s;
-  };
   const u = doc('u', 1, [cl(0, 'Preload', ['a']), cl(1, 'Afterload', ['b']), cl(2, 'Contractility', ['c']), cl(3, 'Untaught', ['d'])]);
   const v = doc('v', 2, [cl(0, 'Stenosis', ['e']), cl(1, 'Regurgitation', ['f'])]);
-  const sessions = { u: taught('u', ['Preload', 'Afterload', 'Contractility', 'Untaught'], [[2, 60], [2, 58], [0, 10]]),
-                     v: taught('v', ['Stenosis', 'Regurgitation'], [[1, 30], [1, 30]]) };
+  /* Drill scores, first pass: 4/5 is exactly 80%, 79/100 is 79%. */
+  const sessions = { u: studied('u', ['Preload', 'Afterload', 'Contractility', 'Untaught'], [[4, 5], [79, 100], [1, 20], null]),
+                     v: studied('v', ['Stenosis', 'Regurgitation'], [[2, 5], [2, 5]]) };
   const cards = [{ docId: 'v', cluster: 1 }, { docId: 'v', cluster: 1 }, { docId: 'v', cluster: 0 }, { docId: 'u', cluster: 1 }, { docId: 'v', cluster: 3 }];
   const all = H.weakSpots([u, v], sessions, cards, S.mastery, 10);
   const names = all.map(w => w.title + ':' + w.pct + ':' + w.cards);

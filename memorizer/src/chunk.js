@@ -38,6 +38,9 @@
    much to take in at once — "change it to smaller chunks". */
 var CLUSTER_MIN = 250;
 var CLUSTER_MAX = 450;
+/* A topic heading (a bigger font) opens a new section once the current one
+   has this many words — about a paragraph — even under CLUSTER_MIN. */
+var TOPIC_MIN = 60;
 /* A "heading" longer than this is a sentence set in a big font — a pull
    quote, a callout — and is taught as body text. */
 var HEADING_MAX_WORDS = 20;
@@ -169,7 +172,10 @@ function blocksFromPages(pages) {
          caption set between body lines is not part of the paragraph above. */
       var prevSize = j > 0 ? (+lines[j - 1].size || 0) : 0;
       var sizeJump = prevSize > 0 && Math.abs((+l.size || 0) - prevSize) > prevSize * 0.15;
-      var newPara = !cur || cur.heading || sizeJump || (lineGap > 0 && gap > lineGap * 1.6);
+      /* Pasted text says where its paragraphs start (l.para); geometry
+         cannot, when most paragraphs are one line and the median gap is
+         therefore the paragraph gap. A PDF line never carries it. */
+      var newPara = !cur || cur.heading || sizeJump || l.para === true || (lineGap > 0 && gap > lineGap * 1.6);
       if (newPara) {
         close();
         cur = { text: t, page: p.page, heading: false };
@@ -504,8 +510,17 @@ function clusterBlocks(blocks, opts) {
     var n = u.words.length;
     if (u.heading) {
       /* Start a new cluster at a heading when this one is already big enough,
-         or when the heading plus one word of its body would not fit. */
-      if (curN >= MIN || curN + n + 1 > MAX) flush();
+         or when the heading plus one word of its body would not fit — or,
+         for a heading set in a bigger font (a TOPIC), as soon as this
+         cluster holds a paragraph's worth. The owner's reference is a deck
+         split by topic (Etiology, Diagnosis, Therapy…), and the first
+         version packed three short topics into one 250-word section. */
+      /* …but never inside a run of headings (chapter, section, subsection
+         one after another): breaking there strands the ones above with no
+         body. Measured: the first version left "H3 H7" at the end of a
+         section and put their text in the next. */
+      var topic = !u.minor && curN >= TOPIC_MIN && !endsWithHeading();
+      if (curN >= MIN || curN + n + 1 > MAX || topic) flush();
       cur.push(u); curN += n;
       continue;
     }
@@ -540,7 +555,8 @@ function clusterBlocks(blocks, opts) {
     var last = groups[groups.length - 1];
     var prev = groups[groups.length - 2];
     var count = function (g) { return g.reduce(function (s, x) { return s + x.words.length; }, 0); };
-    if (count(last) < MIN && count(prev) + count(last) <= MAX) {
+    var startsTopic = last[0] && last[0].heading && !last[0].minor;
+    if (count(last) < MIN && count(prev) + count(last) <= MAX && !startsTopic) {
       groups.splice(groups.length - 2, 2, prev.concat(last));
     }
   }
@@ -600,9 +616,37 @@ function assignFigures(clusters, figures) {
   });
 }
 
+/* ── pasted text ───────────────────────────────────────────────────────────
+   Text pasted in has no fonts or positions, so it is given the shape a PDF
+   page would have: a line that stands alone as its own paragraph — short,
+   capitalised, with no closing punctuation — is set a size up, as a
+   heading; everything else is body, one paragraph per blank-line block.
+   Pages of PASTE_PAGE_LINES lines, so page numbers still mean something. */
+var PASTE_PAGE_LINES = 45;
+function pagesFromText(text) {
+  var paras = String(text || '').replace(/\r\n?/g, '\n').split(/\n\s*\n/);
+  var lines = [];
+  paras.forEach(function (para) {
+    var ls = para.split('\n').map(function (l) { return l.replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+    if (!ls.length) return;
+    var head = ls.length === 1 && words(ls[0]).length <= 10 && /^[A-Z0-9]/.test(ls[0]) && !/[.,;:!?]$/.test(ls[0]);
+    ls.forEach(function (l) { lines.push({ text: l, size: head ? 14 : 11, gapBefore: lines.length && l === ls[0] }); });
+  });
+  var pages = [];
+  lines.forEach(function (l, i) {
+    var pn = Math.floor(i / PASTE_PAGE_LINES);
+    if (!pages[pn]) pages[pn] = { page: pn + 1, lines: [], y: 60 };
+    var pg = pages[pn];
+    pg.y += 14;
+    pg.lines.push({ text: l.text, size: l.size, y: pg.y, para: !!l.gapBefore, cells: [{ x: 72, text: l.text }] });
+  });
+  return pages.map(function (p) { return { page: p.page, lines: p.lines }; });
+}
+
 var MemChunk = {
+  PASTE_PAGE_LINES: PASTE_PAGE_LINES, pagesFromText: pagesFromText,
   FIGURES_PER_SECTION: FIGURES_PER_SECTION, figureRefs: figureRefs, assignFigures: assignFigures,
-  COLUMN_MIN_ROWS: COLUMN_MIN_ROWS, COLUMN_MIN_WORDS: COLUMN_MIN_WORDS, columnsOf: columnsOf, OUTLINE_MAX_WORDS: OUTLINE_MAX_WORDS, runIn: runIn, CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
+  TOPIC_MIN: TOPIC_MIN, COLUMN_MIN_ROWS: COLUMN_MIN_ROWS, COLUMN_MIN_WORDS: COLUMN_MIN_WORDS, columnsOf: columnsOf, OUTLINE_MAX_WORDS: OUTLINE_MAX_WORDS, runIn: runIn, CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
   words: words, blocksFromPages: blocksFromPages, scannedPages: scannedPages,
   unitsFromBlocks: unitsFromBlocks, clusterBlocks: clusterBlocks,
 };
