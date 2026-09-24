@@ -43,7 +43,8 @@
  *
  * ── WHERE IT SITS IN THE CHAIN ───────────────────────────────────────────
  *
- * Last. Its anchors come from assets(27), homeflow(30) and focusmode(86),
+ * After focusmode, and followed only by notesearch(88), whose anchors are
+ * this step's own output. Its anchors come from assets(27), homeflow(30) and focusmode(86),
  * and focusmode is the last step to rewrite the nav's button row — so
  * anything earlier than 87 would be reading text a later step still
  * rewrites. Same reasoning focusmode itself gives for being at the end.

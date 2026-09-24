@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 87 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 88 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -313,6 +313,14 @@ const ROOT = path.join(__dirname, '..');
                    makes the medallion overlap the ECG by 87px where it used to
                    overlap by 19. The survey goes with the card, so four
                    hundred cache lookups stop running on every visit home
+
+     notesearch    the notes get a search of their own. "sotalol" in the
+                   top-bar search found nothing with 530 notes on the shelf:
+                   that search is the export's, answers from questions only,
+                   and is not code this repository reads. A book button beside
+                   Echo opens a field over search()'s own index, notes titled
+                   with every word typed first, a tap opening the whole note
+                   with its figures. After echo, on echo's own output
    ────────────────────────────────────────────────────────────────────────── */
 const CHAIN = [
   'stage0', 'keys', 'flags', 'apex', 'stage2', 'stage3', 'polish', 'splash', 'braunwald',
@@ -332,6 +340,8 @@ const CHAIN = [
      chapters and resume, and resume is the final rewrite of SCHEMA_KEYS. */
   'focusmode',
   'echo',
+  /* After echo, on text echo emits — see notesearch-patch.js. */
+  'notesearch',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

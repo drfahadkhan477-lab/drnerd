@@ -189,11 +189,23 @@ head('the replay can tell the three cases apart');
 head('echo-patch is where it says it is');
 {
   ok('echo is a step in the chain', CHAIN.indexOf('echo') !== -1, CHAIN.indexOf('echo') + 1 || 'absent');
-  /* Its header argues it must be last, because focusmode(86) is the final
-     step to rewrite the nav's button row. If it ever stops being last, that
-     argument needs re-making rather than silently not applying. */
-  ok('and it is the last one, as its header argues it must be',
-     CHAIN[CHAIN.length - 1] === 'echo', CHAIN[CHAIN.length - 1]);
+  /* Its header argued it must be LAST, because focusmode(86) is the final
+     step to rewrite the nav's button row. When notesearch(88) was added after
+     it, this check went red and asked for the argument to be re-made, and it
+     was: what echo needs is to come after focusmode — no step can change what
+     echo reads once echo has run — and anything after echo must be a step
+     built on echo's own output, whose anchors are echo's emitted text
+     (verify-notesearch-pure holds that for notesearch). So both halves are
+     asserted, and a new step appended after echo fails here until it is
+     either moved before focusmode's successors or added to AFTER_ECHO with
+     the same argument made for it. */
+  const AFTER_ECHO = ['notesearch'];
+  ok('and it runs after focusmode, the last step to rewrite the nav',
+     CHAIN.indexOf('focusmode') > -1 && CHAIN.indexOf('echo') > CHAIN.indexOf('focusmode'),
+     `focusmode at ${CHAIN.indexOf('focusmode') + 1}, echo at ${CHAIN.indexOf('echo') + 1}`);
+  const after = CHAIN.slice(CHAIN.indexOf('echo') + 1);
+  ok('and every step after it is one built on its output',
+     after.every(s => AFTER_ECHO.includes(s)), after.join(', ') || 'none — echo is last');
   ok('its patch script is on disk', fs.existsSync(path.join(SCRIPTS, 'echo-patch.js')));
 }
 

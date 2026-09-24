@@ -248,6 +248,11 @@ const SUITES = [
      about in a comment. It needs no build — see its header for what that
      buys and what it costs. */
   ['echo',         'Echo Studio routes, delegates and keeps the caret where it was'],
+  /* Search your notes: the ranking, quoting and markup in pure Node (with the
+     proof that its four anchors are echo's own output), then the patched
+     screen driven in a browser over a scaffold, the way echo is. */
+  ['notesearch-pure','a note titled with the words is found first, quoted and escaped'],
+  ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -302,7 +307,7 @@ const SUITES = [
    measured the four that had been waiting — livingdiagram-pure,
    conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
    and echo. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['notesearch-pure', 'notesearch'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
