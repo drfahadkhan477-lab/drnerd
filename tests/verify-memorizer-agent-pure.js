@@ -127,5 +127,33 @@ head('where am I weak: the items still weak, with their types (Supreme Memorizer
   ok('no sessions, nothing weak', G.weakItems(docs, {}).length === 0 && G.weakItems([], null).length === 0);
 }
 
+head('the loop: a message of several steps, each decided by what the last found');
+{
+  const C = [
+    ['explain aortic stenosis and quiz me on it', ['explain aortic stenosis', 'quiz me on it']],
+    ['explain preload, then give me the mnemonics; quiz me', ['explain preload', 'give me the mnemonics', 'quiz me']],
+    ['explain preload and the numbers', ['explain preload', 'the numbers']],
+    ['compare aortic stenosis and aortic regurgitation', ['compare aortic stenosis and aortic regurgitation']],
+    ['What reduces preload and afterload?', ['What reduces preload and afterload?']],
+    ['a, then b, then c, then d', ['a', 'b', 'c']],
+  ];
+  const bad = C.filter(([m, w]) => JSON.stringify(G.clauses(m)) !== JSON.stringify(w)).map(([m]) => m + ' → ' + JSON.stringify(G.clauses(m)));
+  ok(`a message splits at "then", ";" and an "and" that starts a request of its own — never inside "compare X and Y" — at most ${G.MAX_STEPS} steps`, bad.length === 0, bad.join(' | '));
+  const mem = { topic: 'Aortic Stenosis' };
+  ok('each step is planned with the memory the last left: "quiz me on it", "the numbers", "give me the mnemonics"',
+     G.plan('quiz me on it', mem).topic === 'Aortic Stenosis' && G.plan('the numbers', mem).tool === 'numbers' && G.plan('the numbers', mem).topic === 'Aortic Stenosis' &&
+     JSON.stringify(G.plan('give me the mnemonics', mem)) === JSON.stringify({ tool: 'mnemonic', topic: 'Aortic Stenosis' }));
+  const miss = G.afterStep({ tool: 'explain', topic: 'fainting on effort' }, { missing: true, meaning: true });
+  ok('a topic not found by its words, with meaning on: search by meaning, then the same tool', miss && miss.tool === 'search' && miss.meaningOnly && miss.then === 'explain' && miss.topic === 'fainting on effort');
+  ok('and when meaning finds a section, the tool runs on it — once', JSON.stringify(G.afterStep(miss, { section: 'Syncope' })) === JSON.stringify({ tool: 'explain', topic: 'Syncope', recovered: true, because: 'found by meaning' }) &&
+     G.afterStep(miss, { section: '' }) === null && G.afterStep(G.afterStep(miss, { section: 'Syncope' }), { missing: true, meaning: true }) === null);
+  ok('with meaning off, a missing topic is simply said to be missing', G.afterStep({ tool: 'explain', topic: 'x' }, { missing: true, meaning: false }) === null);
+  const empty = ['quiz', 'numbers', 'mnemonic'].map(tool => G.afterStep({ tool, topic: 'Syncope' }, { empty: true, section: 'Syncope' }));
+  ok('a quiz, numbers or mnemonic with nothing in it explains the section instead, saying why', empty.every(e => e && e.tool === 'explain' && e.topic === 'Syncope' && e.recovered) &&
+     JSON.stringify(empty.map(e => e.because)) === '["no questions in it","no numbers in it","no mnemonic in it"]');
+  ok('a step that found what it looked for ends the loop', G.afterStep({ tool: 'explain', topic: 'Syncope' }, { section: 'Syncope' }) === null &&
+     G.afterStep({ tool: 'search', topic: 'q' }, { section: 'Syncope' }) === null && G.afterStep({ tool: 'weak', topic: '' }, {}) === null);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
