@@ -13,10 +13,11 @@
 <!-- Themes, text size and layout: applied here, before the body is drawn,
      so the page is never painted in the wrong theme first. -->
 <script src="src/appearance.js" data-inline></script>
-<!-- The memory hook's handwriting. Offline, the device's own script face
-     (Bradley Hand on iPad and Mac, Segoe Print on Windows) is used instead. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap">
+<!-- The memory hook's handwriting is the device's own script face (Bradley
+     Hand on iPad and Mac, Segoe Print on Windows; Caveat if installed) — see
+     --script in app.css. It was fetched from Google Fonts, which made every
+     launch a request to a third party and the first offline launch look
+     different from the rest. Nothing is fetched to draw the page now. -->
 <link rel="stylesheet" href="app.css" data-inline>
 </head>
 <body>
@@ -50,6 +51,8 @@
 <script src="src/store.js" data-inline></script>
 <script src="src/pdf.js" data-inline></script>
 <script src="src/ocr.js" data-inline></script>
+<script src="src/provenance.js" data-inline></script>
+<script src="src/dialog.js" data-inline></script>
 <script src="src/ui.js" data-inline></script>
 </body>
 </html>

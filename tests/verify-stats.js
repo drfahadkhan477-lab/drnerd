@@ -144,6 +144,43 @@ const chainLength = chainSteps.length;
 const yml = read('.github/workflows/verify.yml');
 const ciSuites = [...yml.matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1]);
 const ciTotal = ciSuites.reduce((n, s) => n + (stats.suites[s] || 0), 0);
+/* THE ONES OF THOSE THAT NEED NO BROWSER, which is what three sentences
+   below actually count ("pure Node", "need neither a browser nor a build",
+   "need no browser"). They were compared against every suite the workflow
+   invokes, which was the same number while every suite it invoked was pure.
+   The memorizer-browser job made it two more, and the guard then demanded
+   that the prose call two browser suites pure Node — a guard insisting on a
+   false sentence.
+
+   "Uses a browser" is decided exactly as verify-engine decides it for its
+   own rule that every browser suite goes through tests/_engine.js: a
+   launch( call in statement position, or require('playwright'), in the
+   comment-blanked source. Two shorter tests were tried first and both were
+   wrong about verify-engine, which is pure Node: tests/_targets.js's
+   runsInCI() (it answers "can CI run this" and says no, because
+   verify-engine reads _engine.js), and "requires _engine" (it does, to test
+   it, and never launches anything). The check below caught both. */
+const launches = n => {
+  const code = blankComments(fs.readFileSync(path.join(__dirname, `verify-${n}.js`), 'utf8'));
+  return /^[^'"`\n]*require\(\s*'playwright'\s*\)/m.test(code) || /^[^'"`\n]*\blaunch\(/m.test(code);
+};
+const pureCI = ciSuites.filter(n => !launches(n));
+
+head('the workflow is one GitHub can read');
+{
+  /* A step name with ": " in it is a YAML mapping inside a plain scalar,
+     and GitHub rejects the WHOLE FILE: the run is created and fails in the
+     same second with no jobs at all. Two Memorizer step names did that, and
+     for as long as they were there no suite in this file ran on any push —
+     while every check here, which reads the file as text, stayed green.
+     Narrow on purpose: this catches that one shape in step and job names,
+     not YAML errors in general (there is no YAML parser in the tests). */
+  const names = [...yml.matchAll(/^\s*(?:-\s+)?name:\s+(.*)$/gm)].map(m => m[1]);
+  ok('the workflow has names to check', names.length > 40, `${names.length} names`);
+  const colon = names.filter(v => !/^['"]/.test(v) && /:\s/.test(v));
+  ok('and no unquoted name holds ": ", which makes GitHub reject the file', colon.length === 0,
+     colon.map(v => v.slice(0, 60)).join(' | ') || 'none');
+}
 
 head('CI runs what the workflow says it runs');
 {
@@ -166,6 +203,19 @@ head('CI runs what the workflow says it runs');
   const wrong = labels.filter(m => !PENDING.includes(m[3]) && stats.suites[m[3]] !== +m[2])
                       .map(m => `${m[3]}: says ${m[2]}, is ${stats.suites[m[3]]}`);
   ok('and each label is the count that suite reported', wrong.length === 0, wrong.join('; ') || 'none');
+}
+
+head('the browser-free count is not every suite CI runs');
+{
+  /* Vacuity guards for pureCI, both ways: it must be a real subset (the
+     classifier found something), and the browser suites the workflow runs
+     must be the ones it left out — so a classifier that called everything
+     pure, or nothing, fails here rather than moving the prose. */
+  ok('some suites CI runs need no browser', pureCI.length > 20, `${pureCI.length} of ${ciSuites.length}`);
+  const browserInCI = ciSuites.filter(n => !pureCI.includes(n));
+  ok('and the ones left out are the workflow\u2019s browser job, and nothing else',
+     JSON.stringify(browserInCI) === JSON.stringify([...yml.slice(yml.indexOf('\n  memorizer-browser:')).matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1])),
+     browserInCI.join(', ') || 'none');
 }
 
 head('CI runs everything it is capable of running');
@@ -239,7 +289,7 @@ head('the prose agrees with the record');
        the next time one is added. */
     ['README.md', 'the size of what CI can run',
      /the (\d+) suites that need neither a browser nor a build/,
-     r => [+r[1] === ciSuites.length]],
+     r => [+r[1] === pureCI.length]],
     ['README.md', 'the count of what CI cannot run',
      /why the other (\d+) checks can't run here/,
      r => [+r[1] === stats.total + stats.pwa - ciTotal]],
@@ -254,7 +304,7 @@ head('the prose agrees with the record');
        it is compared against the suites the file actually invokes — which
        means it is true today rather than after the next full run. */
     ['.github/workflows/verify.yml', 'the size of the logic job',
-     /the (\d+) suites that are pure Node/, r => [+r[1] === ciSuites.length]],
+     /the (\d+) suites that are pure Node/, r => [+r[1] === pureCI.length]],
     ['docs/BUILD.md', 'the length of the patch chain',
      /The chain is (\d+) patch scripts/, r => [+r[1] === chainLength]],
     ['scripts/build.js', 'the length of the patch chain',
@@ -296,7 +346,7 @@ head('the prose agrees with the record');
      /verify · (\d+) \*-patch/, r => [+r[1] === chainLength]],
     ['docs/BUILD.md', 'the suite counts in the repository sketch',
      /(\d+) suites · (\d+) need no browser/,
-     r => [+r[1] === stats.suiteCount, +r[2] === ciSuites.length]],
+     r => [+r[1] === stats.suiteCount, +r[2] === pureCI.length]],
     /* The corpus prerequisite quotes the two floors verify-retrieval enforces.
        They were added the day a run was spent discovering them, so they are
        held to the suite that owns them rather than to whoever remembers —
