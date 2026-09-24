@@ -198,6 +198,48 @@ function makeTwoColumnPdf() {
   return { buffer: Buffer.from(out, 'latin1'), left: L.join(' '), right: R.join(' ') };
 }
 
+/* A two-page PDF: page 1 has a text layer, page 2 is a SCAN — one JPEG of
+   a page of text, drawn by the browser (makeScanJpeg below), no text at
+   all — so only text recognition can read it. */
+function makeScanPdf(jpeg, w, h) {
+  const text = ['BT /F1 18 Tf 72 740 Td (Text Layer Page) Tj ET',
+    'BT /F1 11 Tf 72 700 Td (This first page carries real text that pdf.js reads directly.) Tj ET'].join('\n');
+  const scan = 'q 612 0 0 792 0 0 cm /Im1 Do Q';
+  const parts = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im1 7 0 R >> >> /Contents 8 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
+    null,
+    `<< /Length ${scan.length} >>\nstream\n${scan}\nendstream`,
+  ];
+  let out = Buffer.from('%PDF-1.4\n', 'latin1');
+  const off = [];
+  parts.forEach((o, i) => {
+    off.push(out.length);
+    const body = o === null
+      ? Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`, 'latin1'), jpeg, Buffer.from('\nendstream', 'latin1')])
+      : Buffer.from(o, 'latin1');
+    out = Buffer.concat([out, Buffer.from(`${i + 1} 0 obj\n`, 'latin1'), body, Buffer.from('\nendobj\n', 'latin1')]);
+  });
+  const x = out.length;
+  const tail = `xref\n0 ${parts.length + 1}\n0000000000 65535 f \n` + off.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('') +
+    `trailer\n<< /Size ${parts.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
+  return Buffer.concat([out, Buffer.from(tail, 'latin1')]);
+}
+const SCAN_LINES = ['Venous return is the main determinant of preload', 'in a healthy heart, and preload rises with volume.'];
+/* In the page: a 1224 x 1584 canvas (twice 612 x 792) of black text on white, as JPEG. */
+const makeScanJpeg = (lines) => {
+  const c = document.createElement('canvas'); c.width = 1224; c.height = 1584;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.fillStyle = '#000';
+  x.font = 'bold 44px Helvetica, Arial, sans-serif'; x.fillText('Scanned Page Heading', 144, 200);
+  x.font = '26px Helvetica, Arial, sans-serif';
+  lines.forEach((t, i) => x.fillText(t, 144, 300 + i * 40));
+  return c.toDataURL('image/jpeg', 0.92).split(',')[1];
+};
+
 /* ── the model, stubbed at the network ────────────────────────────────── */
 const EVIL = '<img src=x onerror="window.__pwned=1">';
 const stub = {
@@ -651,6 +693,45 @@ function kindOf(user) {
     const gq = await p2.evaluate(() => Memorizer.ui.state.gauntlet.questions[0]);
     ok('the feedback does, once it is answered', (await p2.locator('#from').innerText()).indexOf(titles[gq.cluster]) !== -1,
        await p2.locator('#from').innerText());
+  }
+
+  head('scanned pages: read by text recognition, on the device');
+  {
+    /* Fresh profiles again: one online, one where the text reader's
+       download fails, as it would offline. */
+    const fresh = async (tag, blockOcr) => {
+      const p = watch(await (await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' })).newPage(), events, tag, errors);
+      await wire(p);
+      /* After wire(): Playwright tries the most recently added route first,
+         so added before it, this block was shadowed by the CDN route and
+         the "offline" run downloaded the reader and read the page. */
+      if (blockOcr) await p.route(/tesseract/, route => route.abort());
+      await p.goto(URL);
+      await p.locator('.drop').waitFor(T);
+      return p;
+    };
+    const p3 = await fresh('ocr', false);
+    const jpeg = Buffer.from(await p3.evaluate(makeScanJpeg, SCAN_LINES), 'base64');
+    const scanPdf = makeScanPdf(jpeg, 1224, 1584);
+    await p3.setInputFiles('#pdf-input', { name: 'scan.pdf', mimeType: 'application/pdf', buffer: scanPdf });
+    await p3.locator('li.doc').waitFor({ timeout: 120000 });
+    const srec = await p3.evaluate(() => MemStore.all('docs').then(d => d[0]));
+    const stext = srec.clusters.map(c => c.text).join(' ');
+    ok('the scanned page is read by text recognition, and named as such', JSON.stringify(srec.ocr) === '[2]' && srec.scanned.length === 0,
+       JSON.stringify({ ocr: srec.ocr, scanned: srec.scanned, err: srec.ocrError }));
+    ok('its words reach the sections, as sentences', /Venous return is the main determinant of preload in a healthy heart, and preload rises with volume\./.test(stext), stext.slice(0, 160));
+    ok('its heading is found by its size, as a real one would be', srec.clusters.some(c => c.headings.indexOf('Scanned Page Heading') !== -1),
+       JSON.stringify(srec.clusters.map(c => c.headings)));
+    ok('and the page with a text layer is read as before', /This first page carries real text/.test(stext));
+    ok('the library says which pages were recognised', /read by text recognition: 2\./.test(await p3.locator('li.doc').innerText()));
+
+    const p4 = await fresh('ocr-offline', true);
+    await p4.setInputFiles('#pdf-input', { name: 'scan.pdf', mimeType: 'application/pdf', buffer: scanPdf });
+    await p4.locator('li.doc').waitFor({ timeout: 60000 });
+    const orec = await p4.evaluate(() => MemStore.all('docs').then(d => d[0]));
+    ok('when the text reader cannot load, the scanned page is still named, with the reason', JSON.stringify(orec.scanned) === '[2]' && orec.ocr.length === 0 &&
+       /text reader could not run/.test(await p4.locator('li.doc').innerText()), JSON.stringify({ scanned: orec.scanned, err: orec.ocrError }));
+    ok('and the rest of the PDF is imported all the same', orec.clusters.some(c => /This first page carries real text/.test(c.text)));
   }
 
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));

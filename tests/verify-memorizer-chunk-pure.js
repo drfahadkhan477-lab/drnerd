@@ -740,6 +740,67 @@ head('figures: captions, and the sections that name them');
   ok(`no section shows more than ${C.FIGURES_PER_SECTION}`, C.assignFigures([cl(0, 1, 1, 'x')], many)[0].length === C.FIGURES_PER_SECTION);
 }
 
+head('scanned pages: text recognition, in the shape pdf.js gives text');
+{
+  const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
+  const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+  /* Tesseract's output, as its blocks → paragraphs → lines → words give it:
+     canvas pixels, y down, drawn at SCALE. A page 792 units high. */
+  const S = O.SCALE, H = 792;
+  const word = (text, x0, x1, conf = 95) => ({ text, confidence: conf, bbox: { x0: x0 * S, x1: x1 * S, y0: 0, y1: 0 } });
+  /* A line's box runs from its tallest letter to its lowest descender, so it
+     is taller than its row and reaches below its baseline: the fixture makes
+     it so, or reading the box in place of the baseline or row height would
+     pass unnoticed. */
+  const tline = (base, rowH, words) => ({ bbox: { y0: (base - rowH * 1.3) * S, y1: (base + 3) * S }, baseline: { y0: base * S, y1: base * S }, rowAttributes: { row_height: rowH * S }, words });
+  const blocks = [{ paragraphs: [{ lines: [
+    tline(100, 20, [word('Scanned', 72, 150), word('Heading', 158, 230)]),
+    tline(140, 12, [word('Preload', 72, 110), word('is', 113, 122), word('the', 125, 141), word('stretch.', 144, 185)]),
+    tline(154, 12, [word('Venous', 72, 108), word('~~', 111, 118, 12), word('return', 121, 150)]),
+    tline(180, 12, [word('LVEDP', 72, 105), word('12', 240, 252), word('mmHg', 380, 410)]),
+  ] }] }];
+  const items = O.ocrItems(blocks, S, H);
+  const lines = Pdf.linesOf(items, H);
+  ok('recognised words become lines, with their spaces', lines.map(l => l.text).join(' | ') === 'Scanned Heading | Preload is the stretch. | Venous return | LVEDP 12 mmHg',
+     lines.map(l => l.text).join(' | '));
+  ok('each at its line’s height down the page, in PDF units', lines.map(l => Math.round(l.y)).join() === '100,140,154,180', lines.map(l => l.y).join());
+  ok('and its line’s size, so a heading still stands out', lines[0].size === 20 && lines[1].size === 12, lines.map(l => l.size).join());
+  ok(`a word read with less than ${O.MIN_CONFIDENCE}% confidence is left out`, !/~~/.test(lines[2].text));
+  ok('words far apart are still cells, so a scanned table is still a table', lines[3].cells.length === 3 && lines[3].cells[1].x === 240, JSON.stringify(lines[3].cells));
+  const bl = C.blocksFromPages([{ page: 1, lines }]).blocks;
+  ok('and the chunker reads a heading and a paragraph from them', bl[0].heading && bl[0].text === 'Scanned Heading' && bl.some(b => !b.heading && /^Preload is the stretch\. Venous return /.test(b.text)),
+     bl.map(b => (b.heading ? 'H:' : 'P:') + b.text).join(' | '));
+  /* Without a baseline, the bottom of the line's box stands in for it. */
+  /* A line of ordinary length, every gap a word gap: the shape that read as
+     letter-spaced and lost every space on the first real scanned page. */
+  const long = Pdf.linesOf(O.ocrItems([{ paragraphs: [{ lines: [tline(300, 12, ['Venous', 'return', 'is', 'the', 'main', 'determinant', 'of', 'preload.']
+    .reduce((acc, w) => { const x0 = acc.x; acc.ws.push(word(w, x0, x0 + w.length * 6)); acc.x = x0 + w.length * 6 + 3; return acc; }, { x: 72, ws: [] }).ws)] }] }], S, H), H);
+  ok('a full line of recognised words keeps every space', long[0].text === 'Venous return is the main determinant of preload.', long[0].text);
+  const noBase = O.ocrItems([{ paragraphs: [{ lines: [{ bbox: { y0: 88 * S, y1: 100 * S }, words: [word('x', 72, 80)] }] }] }], S, H);
+  ok('a line with no baseline or row height uses its box', noBase.length === 1 && noBase[0].transform[5] === H - 100 && noBase[0].transform[0] === 12, JSON.stringify(noBase[0]));
+
+  /* The one correction made to tesseract.js 5.1.1's worker before it runs. */
+  const src = 'x;a.map((function(t){' + O.WORKER_FIX.find + ';y';
+  ok('the worker fix replaces its anchor', O.fixWorker(src) === 'x;a.map((function(t){' + O.WORKER_FIX.replace + ';y');
+  let none = '', twice = '';
+  try { O.fixWorker('nothing to fix'); } catch (e) { none = e.message; }
+  try { O.fixWorker(src + src); } catch (e) { twice = e.message; }
+  ok('and throws, rather than guess, when the anchor is missing or doubled', /found 0 times/.test(none) && /found 2 times/.test(twice), none + ' / ' + twice);
+
+  /* Every file the text reader fetches is one the service worker keeps. */
+  const { build } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
+  const out = fs.mkdtempSync(path.join(require('os').tmpdir(), 'memsw-'));
+  build(out);
+  const sw = fs.readFileSync(path.join(out, 'sw.js'), 'utf8');
+  fs.rmSync(out, { recursive: true, force: true });
+  const m = /var pinnedCdn = (.*);/.exec(sw);
+  const pinned = new Function('u', 'return ' + m[1]);
+  const urls = Object.keys(O.TESS).map(k => O.TESS[k].url).concat([Pdf.LIB.url]);
+  ok('the service worker keeps every file the text reader fetches, for offline use', urls.every(u => pinned(new URL(u))),
+     urls.filter(u => !pinned(new URL(u))).join(', ') || urls.length + ' files');
+  ok('and not an unpinned one', !pinned(new URL('https://cdn.jsdelivr.net/npm/tesseract.js/dist/worker.min.js')));
+}
+
 head('scanned pages are named, not skipped silently');
 {
   ok('pages with almost no text are reported by number', JSON.stringify(C.scannedPages([120, 0, 3, 88])) === '[2,3]',

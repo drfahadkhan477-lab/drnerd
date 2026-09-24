@@ -113,8 +113,9 @@ A second, standalone app in [`memorizer/`](memorizer/). Upload a PDF — any
 subject — and it is read **in your browser** with pdf.js, split into sections
 at its headings (including the ones set in body type and marked only by their
 number, "A. Etiology." or "17.2 Clinical features", which are titled under the
-heading above them, and pages of two columns read column by column however
-the PDF wrote them), and taught one section at a time:
+heading above them, pages of two columns read column by column however the
+PDF wrote them, and scanned pages — pictures of text — read by text
+recognition, on the device), and taught one section at a time:
 
 1. **Encode** — the key points, each citing its page; one mnemonic; a
    flowchart when the section describes a process.
@@ -165,6 +166,10 @@ deeper questions and grading that understands answers in your own words, add
 a Claude key in Settings — then each step sends only the text of the section
 being studied, and every prompt forbids the model from adding anything that
 is not in your PDF. Either way the PDF is never uploaded; it is kept only on
-your device, so its pages and figures can be shown.
+your device, so its pages and figures can be shown. Scanned pages are read
+by Tesseract, fetched from jsDelivr the first time a PDF needs it — pinned
+and integrity-checked like the PDF reader, and kept for offline use after
+that — and the library names every page it read that way, so you know which
+text came from recognition rather than the PDF itself.
 Memorizer carries no content of its own, so unlike Systole it builds
 anywhere, CI included.

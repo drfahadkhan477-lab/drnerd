@@ -21,12 +21,12 @@ var WORKER = { url: BASE + 'pdf.worker.min.js', sri: 'sha384-sS8B4COeBqzQV9DaPpp
 
 var loading = null;
 
-function loadScript(src, sri) {
+function loadScript(src, sri, failure) {
   return new Promise(function (resolve, reject) {
     var s = document.createElement('script');
     s.src = src; s.integrity = sri; s.crossOrigin = 'anonymous';
     s.onload = resolve;
-    s.onerror = function () { reject(new Error('could not load the PDF reader — are you offline?')); };
+    s.onerror = function () { reject(new Error(failure || 'could not load the PDF reader — are you offline?')); };
     document.head.appendChild(s);
   });
 }
@@ -346,8 +346,11 @@ function textBoxesOf(items) {
   });
 }
 
-/* ArrayBuffer → { pages: [{ page, lines }], wordCounts: [n per page], figures: [{ page, box }] } */
-function read(buffer, onProgress) {
+/* ArrayBuffer → { pages: [{ page, lines }], wordCounts: [n per page], figures: [{ page, box }],
+   ocr: [pages read by text recognition], ocrError }.
+   onProgress(n, total, 'ocr' for the scanned-page pass); onStatus(message). */
+function wordsIn(lines) { return lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0); }
+function read(buffer, onProgress, onStatus) {
   var Lib;
   return lib().then(function (L) {
     Lib = L;
@@ -364,7 +367,7 @@ function read(buffer, onProgress) {
           return page.getTextContent().then(function (tc) {
             var lines = linesOf(tc.items, h);
             pages.push({ page: n, lines: lines });
-            counts.push(lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0));
+            counts.push(wordsIn(lines));
             return page.getOperatorList().then(function (ops) {
               figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
                 var f = { page: n, box: b }, cap = captionFor(b, lines, h);
@@ -376,7 +379,30 @@ function read(buffer, onProgress) {
         });
       })(i);
     }
-    return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures }; });
+    /* Pages with (almost) no text layer are scans: each is drawn and read
+       by text recognition (ocr.js), and its lines take the place of the
+       empty ones. A page recognition cannot read either stays empty, and
+       is still named to the user as scanned; if the reader cannot load at
+       all (offline), every scanned page is named, as before. */
+    var ocr = [], ocrError = '';
+    /* Which pages are scans is known only once the text pass is done: the
+       list is taken inside the chain, not while it is being built. (The
+       first version took it outside, before any page had been read, found
+       none, and recognised nothing.) */
+    chain = chain.then(function () {
+      var scanned = root.MemOcr ? root.MemChunk.scannedPages(counts) : [];
+      var ocrChain = Promise.resolve();
+      scanned.forEach(function (n, k) {
+        ocrChain = ocrChain.then(function () { if (onProgress) onProgress(k + 1, scanned.length, 'ocr'); return doc.getPage(n); })
+          .then(function (page) { return root.MemOcr.readPage(page, onStatus).then(function (items) { return linesOf(items, page.getViewport({ scale: 1 }).height); }); })
+          .then(function (lines) {
+            var wc = wordsIn(lines);
+            if (!root.MemChunk.scannedPages([wc]).length) { pages[n - 1].lines = lines; counts[n - 1] = wc; ocr.push(n); }
+          });
+      });
+      return ocrChain.catch(function (e) { ocrError = (e && e.message) || String(e); });
+    });
+    return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures, ocr: ocr, ocrError: ocrError }; });
   });
 }
 
@@ -410,6 +436,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

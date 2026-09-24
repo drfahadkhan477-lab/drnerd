@@ -84,8 +84,9 @@ function build(out) {
     icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
   }, null, 2) + '\n';
   const sw = `/* Memorizer service worker, build ${stamp}.
-   The shell is cached at install; the PDF reader and Mermaid (pinned CDN
-   versions) are cached the first time they are fetched. Nothing else is
+   The shell is cached at install; the PDF reader, Mermaid and the text
+   reader for scanned pages (pinned CDN versions) are cached the first time
+   they are fetched. Nothing else is
    touched — AI calls are POSTs to the provider and pass straight through. */
 var CACHE = 'memorizer-${stamp}';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg'];
@@ -101,7 +102,7 @@ self.addEventListener('fetch', function (e) {
   var r = e.request;
   if (r.method !== 'GET') return;
   var u = new URL(r.url);
-  var pinnedCdn = u.hostname === 'cdn.jsdelivr.net' && /\\/npm\\/(pdfjs-dist|mermaid)@\\d/.test(u.pathname);
+  var pinnedCdn = u.hostname === 'cdn.jsdelivr.net' && /\\/npm\\/(pdfjs-dist|mermaid|tesseract\\.js|tesseract\\.js-core|@tesseract\\.js-data\\/eng)@\\d/.test(u.pathname);
   if (u.origin !== location.origin && !pinnedCdn) return;
   e.respondWith(caches.match(r).then(function (hit) {
     return hit || fetch(r).then(function (res) {

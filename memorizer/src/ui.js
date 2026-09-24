@@ -149,15 +149,21 @@ function importFile(file) {
   var bytes = null;
   readBuffer(file).then(function (buf) {
     bytes = buf;
-    return Pdf.read(buf, function (n, total) { ui.importing = 'Reading page ' + n + ' of ' + total + '…'; render(); });
+    return Pdf.read(buf, function (n, total, pass) {
+      ui.importing = pass === 'ocr' ? 'Reading scanned page ' + n + ' of ' + total + ' with text recognition…' : 'Reading page ' + n + ' of ' + total + '…';
+      render();
+    }, function (msg) { ui.importing = msg; render(); });
   }).then(function (r) {
     var blocks = Chunk.blocksFromPages(r.pages).blocks;
     var clusters = Chunk.clusterBlocks(blocks);
-    if (!clusters.length) throw new Error('No readable text in this PDF. It looks like a scan (pictures of pages) — this version cannot read those yet.');
+    if (!clusters.length) throw new Error(r.ocrError
+      ? 'No readable text in this PDF. It looks like a scan (pictures of pages), and the text reader for scans could not run: ' + r.ocrError
+      : 'No readable text in this PDF, even with text recognition. If it is a scan, it may be too faint or too small to read.');
     var rec = {
       id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       name: file.name.replace(/\.pdf$/i, ''), addedAt: Date.now(), pages: r.numPages,
       scanned: Chunk.scannedPages(r.wordCounts), clusters: clusters, figures: r.figures || [], hasFile: true,
+      ocr: r.ocr || [], ocrError: r.ocrError || '',
     };
     return Store.put('files', { id: rec.id, bytes: bytes }).then(function () { return Store.put('docs', rec); });
   }).then(function () {
@@ -355,7 +361,9 @@ function viewLibrary() {
       h('div.doc-head', h('strong.doc-name', d.name),
         h('span.muted', Home.count(d.pages, 'page') + ' · ' + Home.count(n, 'section'))),
       h('div.bar', h('i', { style: 'width:' + pct + '%' })), h('span.muted', where(d, st)),
-      d.scanned && d.scanned.length ? h('p.warn', 'Pages with no readable text (scanned?): ' + d.scanned.slice(0, 12).join(', ') + (d.scanned.length > 12 ? '…' : '') + '. They are not in any section.') : null,
+      d.ocr && d.ocr.length ? h('p.muted.ocr-note', 'Scanned pages read by text recognition: ' + d.ocr.slice(0, 12).join(', ') + (d.ocr.length > 12 ? '…' : '') + '. Check anything surprising against the page itself.') : null,
+      d.scanned && d.scanned.length ? h('p.warn', 'Pages with no readable text (scanned?): ' + d.scanned.slice(0, 12).join(', ') + (d.scanned.length > 12 ? '…' : '') + '. They are not in any section' +
+        (d.ocrError ? ' — the text reader could not run (' + d.ocrError + ').' : '.')) : null,
       h('div.row', button(!st ? 'Start' : st.phase === 'done' ? 'Review session' : 'Continue', function () { openDoc(d.id); }, 'primary'),
         button('Restart', function () {
           if (!root.confirm('Start "' + d.name + '" from the beginning? Your review cards are kept.')) return;
@@ -820,7 +828,7 @@ function viewSettings() {
         saved.textContent = ok ? 'Saved on this device.' : 'This browser refused to save it (private mode?).';
       }, 'primary', { id: 'save-settings' }), saved)),
     h('div.card', h('h2', 'What leaves this device'),
-      h('p', 'Your PDF is read here, in the browser, and is never uploaded. The PDF reader itself is downloaded once from jsDelivr.'),
+      h('p', 'Your PDF is read here, in the browser, and is never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages, the first time a PDF has one; scanned pages are read on this device too.'),
       h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each step sends only the text of the section you are studying \u2014 plus your answer \u2014 to Anthropic, with your key; the gauntlet sends the key points of every section and the full text of your two weakest. Your key is kept in this browser\u2019s storage and sent only to Anthropic.')));
 }
 
