@@ -757,13 +757,19 @@ function kindOf(user) {
      JSON.stringify(await page.$$eval('#pearl mark', ms => ms.map(m => m.textContent.trim()))));
   ok('credited to where it was printed', /Section One Preload/.test(await page.locator('#pearl .pearl-src').innerText()) &&
      /p\.1/.test(await page.locator('#pearl .pearl-src').innerText()), await page.locator('#pearl .pearl-src').innerText());
-  /* The owner asked for no animation. Every element on the home screen, as
-     the browser computes it — not as the stylesheet says. */
-  const moving = await page.evaluate(() => [...document.querySelectorAll('main.home, main.home *, nav.dock, nav.dock *')].filter(el => {
+  /* The owner first asked for a still home screen, then for animation.
+     Every element on the home screen, as the browser computes it: it moves
+     now — and with reduced motion asked for, nothing does. */
+  const movingNow = () => page.evaluate(() => [...document.querySelectorAll('main.home, main.home *, nav.dock, nav.dock *')].filter(el => {
     const cs = getComputedStyle(el);
     return cs.animationName !== 'none' || cs.transitionDuration.split(',').some(d => parseFloat(d) > 0);
   }).map(el => el.tagName + '.' + el.className));
-  ok('nothing on the home screen animates or transitions', moving.length === 0, moving.slice(0, 5).join(', ') || 'still');
+  const moving = await movingNow();
+  ok('the home screen moves: its cards rise in and the pearl\u2019s rungs arrive', moving.some(m => /pearl/.test(m)) && moving.some(m => /^LI\./.test(m)), moving.slice(0, 5).join(', ') || 'still');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const stillNow = await movingNow();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  ok('and with reduced motion asked for, nothing on it animates or transitions', stillNow.length === 0, stillNow.slice(0, 5).join(', ') || 'still');
   const dock = await page.evaluate(() => { const r = document.querySelector('nav.dock').getBoundingClientRect(); return { pos: getComputedStyle(document.querySelector('nav.dock')).position, gap: innerHeight - r.bottom, w: r.width }; });
   ok('the tabs float at the foot of the screen', dock.pos === 'fixed' && dock.gap > 0 && dock.w < 820, JSON.stringify(dock));
   /* Section 1 scored 1 of 2 on its drill: 50%, and its one miss is its card. */

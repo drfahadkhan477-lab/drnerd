@@ -153,8 +153,16 @@ table.data tbody tr:last-child td { border-bottom: 0; }
     linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
   background-size: .5rem .5rem, .5rem .5rem, 2.5rem 2.5rem, 2.5rem 2.5rem; }
 :root[data-contrast="high"] .pearl { background-image: none; }
-/* Systole's pearl drifts and its rungs arrive one at a time; here the home
-   screen stays still, at the owner's request (the browser suite holds it). */
+/* As in Systole (pearlcard-patch): the paper drifts slowly and the rungs
+   arrive one at a time, 70 ms apart — a sequence, not a wait. The owner
+   first asked for a still home screen, then for animation; reduced motion
+   still stops all of it (the browser suite holds that). */
+.pearl { animation: pearl-paper 28s linear infinite; }
+@keyframes pearl-paper { from { background-position: 0 0, 0 0, 0 0, 0 0; } to { background-position: 0 .5rem, .5rem 0, 0 2.5rem, 2.5rem 0; } }
+.pearl-steps li { animation: pearl-rung .5s ease-out both; }
+.pearl-steps li:nth-child(2) { animation-delay: .07s; } .pearl-steps li:nth-child(3) { animation-delay: .14s; }
+.pearl-steps li:nth-child(4) { animation-delay: .21s; } .pearl-steps li:nth-child(n+5) { animation-delay: .28s; }
+@keyframes pearl-rung { from { opacity: 0; transform: translateX(-.5rem); } to { opacity: 1; transform: none; } }
 .mcq-nav { justify-content: space-between; align-items: center; gap: var(--s-3); margin-top: var(--s-3); }
 .looking-back { font-weight: 700; color: var(--accent); }
 .pearl-steps { list-style: none; counter-reset: step; margin: var(--s-2) 0 var(--s-3); padding: 0; font-size: var(--t-lead); line-height: 1.45; }
@@ -507,3 +515,27 @@ summary.fold-head:hover .fold-btn { color: var(--accent); border-color: currentC
 .cmp-num { margin: .125rem 0; }
 .agent-hook { margin: var(--s-2) 0; }
 .card.earlier { opacity: .85; }
+
+/* ── motion where it helps, and nowhere under reduced motion ─────────────
+   Home cards and section cards rise in, a little apart, so the eye reads
+   them in order; the progress rings draw; a right answer pulses and a wrong
+   one shakes, so the outcome registers before the words are read; a
+   revealed recall answer rises into place. All short (under half a second)
+   so nothing waits on them. */
+main.home > .card, main.home > section > .card, main.home .hero { animation: rise-in .45s cubic-bezier(.2,.7,.2,1) both; }
+main.home > :nth-child(2) { animation-delay: .06s; } main.home > :nth-child(3) { animation-delay: .12s; }
+main.home > :nth-child(4) { animation-delay: .18s; } main.home > :nth-child(n+5) { animation-delay: .24s; }
+.ring-wrap svg { animation: ring-in .6s cubic-bezier(.2,.7,.2,1) both; transform-origin: center; }
+.section-card { animation: rise-in .4s cubic-bezier(.2,.7,.2,1) both; }
+.section-card:nth-child(2) { animation-delay: .05s; } .section-card:nth-child(3) { animation-delay: .1s; }
+.section-card:nth-child(4) { animation-delay: .15s; } .section-card:nth-child(n+5) { animation-delay: .2s; }
+.option.right { animation: right-pulse .45s ease-out; }
+.option.wrong { animation: wrong-shake .4s ease-in-out; }
+.recall-answer { animation: rise-in .35s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(.75rem); } to { opacity: 1; transform: none; } }
+@keyframes ring-in { from { opacity: 0; transform: rotate(-90deg) scale(.8); } to { opacity: 1; transform: none; } }
+@keyframes right-pulse { 0% { transform: scale(1); } 40% { transform: scale(1.03); } 100% { transform: scale(1); } }
+@keyframes wrong-shake { 0%, 100% { transform: none; } 20%, 60% { transform: translateX(-.375rem); } 40%, 80% { transform: translateX(.375rem); } }
+@media (prefers-reduced-motion: reduce) {
+  .pearl, .pearl-steps li, main.home *, .section-card, .option.right, .option.wrong, .recall-answer { animation: none !important; }
+}
