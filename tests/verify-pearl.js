@@ -140,6 +140,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   ok('weak chapters are identified from the score history', weighting.words.length > 0,
      weighting.words.join(', '));
+  /* Arrhythmias is 28/30 here — the strong chapter. It used to be aimed at
+     anyway, because the weak list was the bottom three by rank and there are
+     only two chapters; that went unnoticed until the shelf had arrhythmia
+     notes for it to boost. Guarded on a non-empty list, so a weakWords that
+     returned nothing at all fails the check above rather than passing this. */
+  ok('a chapter scoring above the fellow\'s average is not aimed at',
+     weighting.words.length > 0 && !weighting.words.includes('arrhythmias'),
+     weighting.words.join(', '));
   /* The guard on the bug itself. Every source on this shelf carries the book's
      name, so a chapter word that also appears in it matches everything. */
   ok('a word that matches the whole shelf is not used to aim',
