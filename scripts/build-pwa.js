@@ -1056,6 +1056,46 @@ function keepable(req, res) {
 `;
 fs.writeFileSync(path.join(DIST, 'sw.js'), SW);
 
+/* ── NO FILE THE HOST WILL REFUSE ─────────────────────────────────────────────
+   Cloudflare Pages will not serve a single asset over 25 MiB. Nothing here
+   knew that, and docs/IPAD.md's "5.4 MB for the largest against 25 MB" had
+   gone stale by a factor of four: an arrhythmias unit took refs-images.json
+   to 25.7 MiB, the build printed its usual green, and the deployed app opened
+   on "Could not load the question bank — the application code failed to
+   load." The splash is right that app.js did not arrive and silent on why,
+   and nothing on the laptop had said a word.
+
+   So the finished tree is measured, every file in it, after the last write —
+   and a file over the ceiling fails the build here, naming itself, instead of
+   failing the deploy somewhere nobody is looking. Kept as a plain function of
+   (path, bytes) pairs so tests/verify-loader-pure.js can drive it without a
+   build. The warning line is not a second limit: it only says how close the
+   largest file is, because the refs-images.json that tripped this grows with
+   every unit and the next one should be seen coming. */
+const PAGES_FILE_LIMIT = 25 * 1024 * 1024;
+function pagesLimitReport(files, limit) {
+  const over = files.filter(f => f.bytes > limit)
+    .map(f => f.rel + ' is ' + (f.bytes / 1048576).toFixed(1) + ' MiB');
+  let largest = null;
+  for (const f of files) if (!largest || f.bytes > largest.bytes) largest = f;
+  return { over, largest };
+}
+const distFiles = [];
+(function walk(dir) {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name);
+    if (ent.isDirectory()) walk(p);
+    else distFiles.push({ rel: path.relative(DIST, p).split(path.sep).join('/'), bytes: fs.statSync(p).size });
+  }
+})(DIST);
+const hostCheck = pagesLimitReport(distFiles, PAGES_FILE_LIMIT);
+if (hostCheck.over.length) {
+  console.error('\n  build-pwa: Cloudflare Pages refuses any file over 25 MiB, and this dist/ has '
+    + hostCheck.over.join('; ') + '.\n  Nothing in dist/ is safe to deploy. For refs-images.json, re-run '
+    + 'tools/add-unit.py with a lower --quality or --max-width, or crop the figures.');
+  process.exit(1);
+}
+
 const mb = b => (b / 1048576).toFixed(2) + ' MB';
 const kb = b => (b / 1024).toFixed(0) + ' KB';
 const shellBytes = fs.statSync(path.join(DIST, 'index.html')).size
@@ -1077,6 +1117,7 @@ console.log(`  shell total          ${kb(shellBytes)}   (was ${mb(fs.statSync(SR
 console.log(`  shell transferred    ${kb(shellWire)} gzipped   (the budget: 280 KB)`);
 console.log(`  content/             ${mb(contentManifest.figureBytes)} of figures + questions.json`);
 console.log(`  content/splash-heart ${splashAssets.map(([n,b])=>`${n} ${(b.length/1024).toFixed(0)}KB`).join(', ')}`);
+console.log(`  largest file         ${hostCheck.largest.rel} ${(hostCheck.largest.bytes / 1048576).toFixed(1)} MiB   (the host's ceiling: 25 MiB)`);
 console.log(`  build                ${BUILD_ID}   from commit ${COMMIT}`);
 console.log(`\n  written to           ${DIST}`);
 /* Icons are drawn by a headless browser, which lives in the global node_modules

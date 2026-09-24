@@ -147,5 +147,50 @@ head('the file case still wins wherever it applies');
   }
 }
 
+/* ── the build refuses a file the host will not serve ─────────────────────────
+   Belongs here because this is how that failure LOOKS: a 25.7 MiB
+   refs-images.json deployed without complaint and the app opened on this
+   splash's "the application code failed to load" — accurate, and no help. The
+   fix is upstream of the splash, in build-pwa.js, and this drives it: the
+   function is lifted out of the build script's source, not copied, so a copy
+   cannot keep passing after the real one changes. */
+head('build-pwa refuses a dist/ with a file Cloudflare Pages will not serve');
+{
+  const at = SRC.indexOf('function pagesLimitReport(');
+  let report = null, limit = null;
+  if (at > -1) {
+    let depth = 0, end = -1;
+    for (let k = SRC.indexOf('{', at); k < SRC.length; k++) {
+      if (SRC[k] === '{') depth++;
+      else if (SRC[k] === '}') { depth--; if (!depth) { end = k + 1; break; } }
+    }
+    if (end > 0) report = new Function(`${SRC.slice(at, end)}\nreturn pagesLimitReport;`)();
+  }
+  const lim = /const PAGES_FILE_LIMIT = ([^;]+);/.exec(SRC);
+  if (lim) limit = new Function(`return ${lim[1]};`)();
+  ok('pagesLimitReport was lifted out of build-pwa.js', typeof report === 'function');
+  ok('the ceiling is Cloudflare Pages\' 25 MiB, in bytes', limit === 25 * 1024 * 1024, String(limit));
+  /* The file that actually broke a deploy, at the size it actually was. */
+  const MiB = 1048576;
+  const dist = [{ rel: 'app.js', bytes: 682 * 1024 }, { rel: 'content/questions.json', bytes: 1.65 * MiB },
+                { rel: 'content/refs-images.json', bytes: Math.round(25.7 * MiB) }];
+  const r = report ? report(dist, limit) : { over: [], largest: null };
+  ok('the 25.7 MiB refs-images.json that broke a deploy is refused',
+     r.over.length === 1 && /^content\/refs-images\.json is 25\.7 MiB$/.test(r.over[0]), r.over.join('; '));
+  ok('and the files under the ceiling are not named', !r.over.some(x => /app\.js|questions/.test(x)));
+  ok('the largest file is reported, so the margin is visible on a green build',
+     !!r.largest && r.largest.rel === 'content/refs-images.json');
+  /* Its rebuilt size, which deployed. The boundary is inclusive of the limit. */
+  const fixed = report ? report([{ rel: 'content/refs-images.json', bytes: Math.round(23.9 * MiB) },
+                                 { rel: 'edge', bytes: limit }], limit) : { over: ['n/a'] };
+  ok('the 23.9 MiB rebuild passes, and so does a file of exactly 25 MiB', fixed.over.length === 0, fixed.over.join('; '));
+  ok('one byte over is refused', report ? report([{ rel: 'x', bytes: limit + 1 }], limit).over.length === 1 : false);
+  /* The check is only worth anything if the build acts on it. */
+  ok('the build exits non-zero when anything is over',
+     /if \(hostCheck\.over\.length\) \{[\s\S]{0,400}process\.exit\(1\)/.test(SRC));
+  ok('and it measures the finished tree, after sw.js — the last file written before icons',
+     SRC.indexOf("const hostCheck = pagesLimitReport(distFiles") > SRC.indexOf("fs.writeFileSync(path.join(DIST, 'sw.js'), SW)"));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

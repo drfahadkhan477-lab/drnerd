@@ -187,8 +187,13 @@ one. The per-minute limiter is **best-effort** — a Worker isolate has no share
 counter, so it is a speed bump against a runaway loop rather than a quota. If
 you ever share this URL with someone else, put a KV-backed limiter in first.
 
-Well within the platform limits — 430 files against a ceiling of 20,000, and
-5.4 MB for the largest against 25 MB.
+The platform limit that binds is Cloudflare Pages' **25 MiB per file**, and the
+file that approaches it is `content/refs-images.json`, which grows with every
+unit of note figures. `build-pwa.js` refuses a `dist/` with any file over the
+ceiling and prints the largest file on every build, so the margin is on screen
+before a deploy rather than discovered after one. (This sentence used to quote
+the largest file's size; that number went stale by a factor of four and a
+deploy broke under it.)
 
 Fully offline afterwards, and reachable from a hospital wifi. The trade is that
 `dist/content/` — the bank and 408 figures — sits on Cloudflare's storage.
