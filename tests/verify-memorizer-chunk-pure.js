@@ -874,10 +874,27 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
   ok('and throws, rather than guess, when the anchor is missing or doubled', /found 0 times/.test(none) && /found 2 times/.test(twice), none + ' / ' + twice);
 
   /* Every file the text reader fetches is one the service worker keeps. */
-  const { build } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
+  const { build, zipOf, ZIP_FILES } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
   const out = fs.mkdtempSync(path.join(require('os').tmpdir(), 'memsw-'));
   build(out);
   const sw = fs.readFileSync(path.join(out, 'sw.js'), 'utf8');
+  /* The Cloudflare Pages upload, read back by the central directory — the
+     way unzip and Pages read it — not by trusting the writer. */
+  const zip = zipOf(out), zlib = require('zlib');
+  const eocd = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const entries = [];
+  for (let k = 0, o = zip.readUInt32LE(eocd + 16); k < zip.readUInt16LE(eocd + 10); k++) {
+    const name = zip.slice(o + 46, o + 46 + zip.readUInt16LE(o + 28)).toString('utf8'), lo = zip.readUInt32LE(o + 42);
+    const body = zip.slice(lo + 30 + zip.readUInt16LE(lo + 26) + zip.readUInt16LE(lo + 28), lo + 30 + zip.readUInt16LE(lo + 26) + zip.readUInt16LE(lo + 28) + zip.readUInt32LE(o + 20));
+    const data = zip.readUInt16LE(o + 10) === 8 ? zlib.inflateRawSync(body) : body;
+    entries.push({ name, same: data.equals(fs.readFileSync(path.join(out, name))), crc: (zlib.crc32(data) >>> 0) === zip.readUInt32LE(o + 16) && zip.readUInt32LE(lo + 14) === zip.readUInt32LE(o + 16) });
+    o += 46 + zip.readUInt16LE(o + 28) + zip.readUInt16LE(o + 30) + zip.readUInt16LE(o + 32);
+  }
+  ok('the Cloudflare upload holds the four files at its root, each byte for byte, its checksum right', eocd > 0 &&
+     JSON.stringify(entries.map(e => e.name)) === JSON.stringify(['index.html', 'sw.js', 'icon.svg', 'manifest.webmanifest']) && entries.every(e => e.same && e.crc),
+     JSON.stringify(entries));
+  ok('with no backslash in any name (docs/IPAD.md: a hand-made zip with them served nothing), and the same build zips to the same bytes',
+     entries.every(e => e.name.indexOf('\\') === -1) && zipOf(out).equals(zip) && (() => { fs.writeFileSync(path.join(out, 'a\\b.html'), 'x'); try { zipOf(out, ['a\\b.html']); return false; } catch (e) { return /not a bare relative name/.test(e.message); } })());
   fs.rmSync(out, { recursive: true, force: true });
   const m = /var pinnedCdn = (.*);/.exec(sw);
   const pinned = new Function('u', 'return ' + m[1]);
