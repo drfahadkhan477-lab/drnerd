@@ -15,6 +15,8 @@
     "suites": "node scripts/verify.js --list",
     "pwa": "node scripts/extract-content.js build/systole.html && node scripts/build-pwa.js build/systole.html",
     "serve": "node scripts/serve.js 8080 dist",
+    "memorizer": "node scripts/build-memorizer.js",
+    "memorizer:serve": "node scripts/build-memorizer.js && node scripts/serve.js 8081 dist-memorizer",
     "leak-guard": "node scripts/leak-guard.js --all-tracked",
     "hooks": "git config core.hooksPath .githooks && echo \"hooks on: .githooks\"",
     "release-check": "node scripts/release-check.js",

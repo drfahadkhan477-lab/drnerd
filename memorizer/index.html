@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141619" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Memorizer">
+<title>Memorizer</title>
+<!-- @pwa -->
+<!-- Themes, text size and layout: applied here, before the body is drawn,
+     so the page is never painted in the wrong theme first. -->
+<script src="src/appearance.js" data-inline></script>
+<!-- The memory hook's handwriting. Offline, the device's own script face
+     (Bradley Hand on iPad and Mac, Segoe Print on Windows) is used instead. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap">
+<link rel="stylesheet" href="app.css" data-inline>
+</head>
+<body>
+<div id="app"><noscript>Memorizer needs JavaScript.</noscript></div>
+<!--
+  Order matters: fsrs.js is Systole's scheduler and pearl.js its pearl
+  finder, both shared rather than copied (src/core/); ui.js reads every module before it at load.
+  scripts/build-memorizer.js inlines each tag marked data-inline, so the
+  built app is one file. Served from the repository root, this page also
+  runs as-is: http://localhost:8080/memorizer/
+-->
+<script src="../src/core/fsrs.js" data-inline></script>
+<script src="src/chunk.js" data-inline></script>
+<script src="src/prompts.js" data-inline></script>
+<script src="src/session.js" data-inline></script>
+<script src="src/provider.js" data-inline></script>
+<script src="src/coach.js" data-inline></script>
+<script src="src/format.js" data-inline></script>
+<script src="../src/core/pearl.js" data-inline></script>
+<script src="src/home.js" data-inline></script>
+<script src="src/store.js" data-inline></script>
+<script src="src/pdf.js" data-inline></script>
+<script src="src/ui.js" data-inline></script>
+</body>
+</html>

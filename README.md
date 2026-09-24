@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 41 suites that need neither a browser nor a build all stay
+present, and the 47 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -106,3 +106,65 @@ brew install tesseract                    # macOS
 ```
 
 ---
+
+## Memorizer — master any PDF
+
+A second, standalone app in [`memorizer/`](memorizer/). Upload a PDF — any
+subject — and it is read **in your browser** with pdf.js, split into sections
+at its headings (including the ones set in body type and marked only by their
+number, "A. Etiology." or "17.2 Clinical features", which are titled under the
+heading above them, and pages of two columns read column by column however
+the PDF wrote them), and taught one section at a time:
+
+1. **Encode** — the key points, each citing its page; one mnemonic; a
+   flowchart when the section describes a process.
+2. **Recall** — free-recall questions, answered from memory and graded.
+3. **Teach back** — explain the section aloud (dictation where the browser
+   has it) as if to a colleague; scored, with the gaps named.
+4. **Gauntlet** — after the last section, hostile examiner questions leaning
+   on your weakest sections.
+
+Every missed answer and every gap becomes a review card, scheduled with the
+same FSRS scheduler Systole uses (`src/core/fsrs.js`, shared, not copied).
+
+Sections are short, and the study page shows each one as a handful of
+bullets with the key term first, the memory hook in a handwritten face beside
+them — built from the section's own lists where it has one — a flowchart drawn
+from its cause-and-effect sentences, its tables as tables, its figures cut
+from the page — pictures, and charts drawn as lines or curves, but not a
+highlight band behind text or the rules of a table — under their own
+captions, and the pages themselves. A numbered figure is
+shown with the section whose text names it ("see Fig. 17.3"), wherever it was
+printed; one that nothing names is shown with the section on its page.
+
+The home screen is laid out as Systole's, and holds still: a hero band with
+where you are and a two-layer progress bar (sections studied; review cards
+FSRS says you still hold today), a pearl of the day — a sentence from your
+own PDF, found and broken into steps by Systole's `src/core/pearl.js`, shared
+rather than copied — doors to continue, review, add a PDF or change
+settings, and your weak spots: the sections your sessions say you hold least
+well, each with a drill of its review cards, due or not. The look is Systole's too: its themes, colour for colour, and its
+type scale, with text size, reading width, line spacing, font, contrast and
+brightness to choose. Contrast and brightness are computed from the theme you
+pick, and every theme at every setting is tested to keep its text at WCAG AA
+or better, with form controls outlined to WCAG's floor for controls.
+
+```bash
+npm run memorizer          # → dist-memorizer/index.html, one self-contained file
+npm run memorizer:serve    # the same, served on :8081 so it installs as an app
+```
+
+**It needs no API key.** The default is a built-in coach that runs the whole
+protocol on the device: key points are the PDF's own sentences, verbatim;
+recall asks the section's definitions, its "most common" facts and its
+longest list, then fill-in-the-blank; the gauntlet asks definitions
+backwards (the meaning given, the term wanted), names the lists recall did
+not, and blanks sentences recall never showed; grading matches words, and a
+synonym can be counted as correct by you. Nothing leaves the device. For
+deeper questions and grading that understands answers in your own words, add
+a Claude key in Settings — then each step sends only the text of the section
+being studied, and every prompt forbids the model from adding anything that
+is not in your PDF. Either way the PDF is never uploaded; it is kept only on
+your device, so its pages and figures can be shown.
+Memorizer carries no content of its own, so unlike Systole it builds
+anywhere, CI included.
