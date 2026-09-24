@@ -324,6 +324,41 @@ onDeath(() => ({ section, checks: passed + failed, errors,
 
   head('the home screen fills the iPad it is on');
   {
+    /* Named so the message below quotes the cap it actually waited for
+       rather than a number typed beside it. */
+    const SETTLE_MS = 15000;
+    /* Read back only when the wait has already failed, so it costs a healthy
+       run nothing. Serialised into the page by page.evaluate, which is why it
+       is a plain declaration and reads nothing from this scope. */
+    async function stillMoving() {
+      const read = () => {
+        const a = document.getElementById('app');
+        const r = a ? a.getBoundingClientRect() : { width: 0, height: 0 };
+        return [innerWidth, innerHeight, Math.round(r.width), Math.round(r.height),
+                document.documentElement.scrollHeight].join(',');
+      };
+      /* TWO SAMPLES, A FRAME APART, and this is the whole point of the read.
+         One sample and the counter is all there is, and the two together can
+         look self-contradictory: a first version reported "0/5 frames" beside
+         a key identical to the last one the predicate saw, which reads as
+         "nothing was moving, and it never settled". Two samples answer the
+         actual question — is it STILL moving, right now — rather than leaving
+         it to be inferred. Not a sleep: the frame is what is being measured
+         over, and a value is read on the other side of it. */
+      const before = read();
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const after = read();
+      const anims = document.getAnimations()
+        .filter(x => x.playState === 'running'
+                  && Number.isFinite(x.effect && x.effect.getTiming().iterations))
+        .map(x => {
+          const t = x.effect && x.effect.target;
+          const who = x.animationName || (t && t.className && String(t.className).split(' ')[0]) || 'anim';
+          return who + '@' + Math.round(Number(x.currentTime) || 0) + 'ms';
+        })
+        .slice(0, 6);
+      return { frames: window.__s || 0, before, after, moved: before !== after, anims };
+    }
     /* MEASURED BEFORE THIS WAS BUILT, on 1366x1024: #app was capped at 960px —
        406px of dead space down the sides — and the four stacked blocks ran to
        1142px against a 1024px viewport, so it scrolled by 118px. Both numbers
@@ -351,7 +386,30 @@ onDeath(() => ({ section, checks: passed + failed, errors,
         window.__s = (window.__l === k && !busy) ? (window.__s || 0) + 1 : 0;
         window.__l = k;
         return window.__s >= 5;
-      }, null, { timeout: 15000, polling: 'raf' });
+      }, null, { timeout: SETTLE_MS, polling: 'raf' }).catch(async e => {
+        /* WHAT WAS STILL MOVING. The wait above is unchanged — same key, same
+           five frames, same animation test, same cap. Only its failure speaks
+           now.
+
+           It had to, because this suite fails intermittently under sustained
+           load and passes cold, and a Playwright timeout says "waiting for
+           function failed" and nothing else. The death note added for this
+           suite names the section and then reports that the page logged
+           nothing at all — true, and exactly as unhelpful as home's original
+           failure was before it had one.
+
+           Geometry, frame count and animation names only: no page text, so
+           the line is safe to paste out of a run. */
+        const d = await page.evaluate(stillMoving).catch(() => null);
+        throw new Error('settle() never held still' + (d
+          ? ` — ${d.frames}/5 frames; ` + (d.moved
+              ? `still moving: [${d.before}] → [${d.after}] one frame later`
+              : `not moving now: [${d.after}]`)
+            + (d.anims.length ? `; running: ${d.anims.join(' ')}`
+                              : '; no finite animation running')
+          : ' — and the page could not be read afterwards')
+          + ` (gave up after ${SETTLE_MS}ms)`);
+      });
     };
     const at = async (w, h) => {
       await resized(page, w, h);
@@ -387,6 +445,32 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const air = await at(1194, 834);
     ok('an 11-inch iPad in landscape fits too',
        air.over <= 0 && air.appW / air.vw > 0.9, `${air.appW}/${air.vw}, ${air.over}px over`);
+
+    /* THE CHECK ABOVE MEASURES WHICHEVER PEARL WAS DRAWN, and the pearl is one
+       of a few hundred picked at random. A tall one opened the grid's 1fr row
+       and pushed this exact screen 9px past the viewport — on 1 launch in 4 on
+       the owner's laptop, so 3 runs in 4 of the check above never met the
+       case it exists for. It passed a full green run that way. That is a
+       check passing without measuring, and the fix for it is not to run it
+       more often: it is to stop depending on the draw.
+
+       So the tall case is manufactured. The drawn pearl's text is repeated
+       until it is far taller than any in the library, and the screen must
+       still fit — the pearl scrolls inside its own card (homewide-patch,
+       .pearl-card contain:size) rather than growing the row. The height floor
+       is the precondition: without it, a pearl that failed to get taller
+       would pass this by being short, which is the check above's problem
+       again. Reading scrollHeight forces layout, so no wait is needed. */
+    const tall = await page.evaluate(() => {
+      const pb = document.getElementById('pearlBody');
+      if (!pb) return null;
+      pb.textContent = (pb.textContent.trim() + ' ').repeat(8);
+      return { over: document.documentElement.scrollHeight - innerHeight,
+               h: Math.round(pb.getBoundingClientRect().height) };
+    });
+    ok('and a pearl far taller than any in the library still does not push it',
+       !!tall && tall.h > 600 && tall.over <= 0,
+       tall ? `${tall.over}px over, with a ${tall.h}px pearl` : 'no pearl on screen');
 
     /* PORTRAIT MUST NOT MOVE. It already fitted, and a second layout for it
        would be change for its own sake. */

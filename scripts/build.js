@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 82 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 88 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -27,6 +27,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
@@ -319,14 +320,22 @@ const CHAIN = [
   'refs', 'read', 'ref-images', 'gemini', 'memory', 'assets', 'chatfigs', 'pearl', 'homeflow',
   'pearlcard', 'offline', 'pvloop', 'fullbleed', 'figview', 'slowcycle', 'hosted',
   'split', 'boundary', 'toolfence', 'chatfix', 'autotheme', 'store',
-  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'chapters',
-  'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'failsafe',
+  'homewide', 'pearlrich', 'apexroom', 'mistral', 'guards', 'chipfix', 'quiznav', 'homeprog', 'calibrationtrack', 'chapters',
+  'studyflow', 'welcome', 'streamthrottle', 'contrastfix', 'highcontrast', 'failsafe',
   'semantictokens', 'splashtiming', 'haptics', 'designfollowup', 'disclaimer', 'announce',
-  'curate', 'calibrate', 'figzoom', 'schema', 'figfit', 'selftest', 'answerroom',
+  'curate', 'calibrate', 'figzoom', 'figloadfade', 'schema', 'figfit', 'selftest', 'answerroom',
   'avatarfit',
   'prefixq', 'prefixrank',
   'heroart', 'apexpage', 'resume', 'figsharp', 'heartreuse', 'onetutor', 'flushguard',
   'heroflex', 'offhome',
+  /* Last on purpose: its anchors come from home, theme, fullbleed, quiznav,
+     chapters and resume, and resume is the final rewrite of SCHEMA_KEYS. */
+  'focusmode',
+  /* After focusmode, whose S.focusMode it reads; before echo, which stays last
+     for its own reasons. Its one anchor is the Durable memory banner, which
+     it re-emits, so echo still finds it exactly once. */
+  'ambient',
+  'echo',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */
@@ -436,7 +445,82 @@ for (const step of CHAIN) {
   input = out;
 }
 
-fs.copyFileSync(input, OUT);
+/* ── the stamp ───────────────────────────────────────────────────────────────
+ *
+ * WHAT THE SINGLE FILE COULD NOT SAY. The split build has carried a BUILD_ID
+ * and, since the provenance pass, the commit that produced it — in
+ * index.html, app.js, sw.js and content/manifest.json. systole.html carried
+ * neither. It is the artifact that actually travels: the one dropped into
+ * Files and opened on a tablet, away from the repository that made it, and
+ * the one that comes back months later as "is this the build with the fix?".
+ * Nothing in it answered that.
+ *
+ * AFTER THE CHAIN, NOT INSIDE IT. A stamping step would be an 83rd link whose
+ * output every later anchor would have to tolerate, for a change that has
+ * nothing to do with the app. This runs once the 82 are done, on the finished
+ * document, so no patch() anchor can see it and the chain is untouched.
+ *
+ * A COMMENT, NOT A SCRIPT. It executes nothing, so there is no CSP question
+ * and no new inline script to account for; and `grep systole-build` on the
+ * build machine is how this actually gets read. The split build's window
+ * global exists because a deployed site can be opened in a console; a 42 MB
+ * file on an iPad cannot, so the global would be decoration there.
+ *
+ * NO TIMESTAMP, deliberately. The same export at the same commit produces the
+ * same bytes, and a clock in the artifact would end that for nothing — the
+ * digest already distinguishes two builds, and the commit already dates one.
+ *
+ * THE DIGEST IS OVER THE UNSTAMPED DOCUMENT, because stamping changes it.
+ * Same move, same reason, as BUILD_ID in scripts/build-pwa.js.
+ */
+function gitCommit() {
+  try {
+    const at = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'],
+                            { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (!/^[0-9a-f]{7,40}$/.test(at)) return 'unknown';
+    const dirty = execFileSync('git', ['status', '--porcelain'],
+                               { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().length > 0;
+    return dirty ? at + '-dirty' : at;
+  } catch (_) { return 'unknown'; }
+}
+{
+  /* BYTES, NOT A STRING, and this is the whole of it.
+   *
+   * The line this replaced was fs.copyFileSync(input, OUT) — byte-exact by
+   * definition. The first version of the stamp read the document with
+   * encoding 'utf8', spliced a string, and wrote it back, which is NOT
+   * byte-exact: any byte sequence that is not valid UTF-8 comes back as
+   * U+FFFD. A lone 0x92 — the Windows-1252 curly apostrophe, exactly the
+   * kind of thing an exported HTML corpus carries — went in as one byte and
+   * came out as three, silently, in a 42 MB file nobody reads by eye.
+   *
+   * It would also have moved the digest apart from the one
+   * scripts/extract-content.js writes, and the freshness check in
+   * build-pwa.js compares those two: a build that corrupted itself would
+   * then be refused for looking stale, which is a true refusal for entirely
+   * the wrong reason.
+   *
+   * So the document is a Buffer from end to end and the splice is a
+   * concat. </head> is the anchor build-pwa.js already holds to exactly one
+   * occurrence — a boundary this repository has checked rather than a new
+   * guess — and it is checked here in both directions, because a stamp going
+   * in twice is as wrong as one not going in, and appending blindly to a
+   * document with no head is worse than refusing. */
+  const built = fs.readFileSync(input);
+  const digest = crypto.createHash('sha256').update(built).digest('hex').slice(0, 16);
+  const commit = gitCommit();
+  const HEAD = Buffer.from('</head>');
+  const at = built.indexOf(HEAD);
+  if (at < 0 || at !== built.lastIndexOf(HEAD)) {
+    console.error('the built document does not have exactly one </head>, so there is nowhere to stamp it');
+    process.exit(1);
+  }
+  /* No "--" inside: a hex digest and a hex commit with an optional -dirty.
+     Nothing here can close the comment early. */
+  const stamp = Buffer.from(`<!-- systole-build ${digest} commit ${commit} -->\n`);
+  fs.writeFileSync(OUT, Buffer.concat([built.subarray(0, at), stamp, built.subarray(at)]));
+  console.log(`\n  build ${digest}   from commit ${commit}`);
+}
 if (!KEEP) for (const s of CHAIN) { const f = stepFile(s); if (f !== OUT && fs.existsSync(f)) fs.unlinkSync(f); }
 
 const totalEdits = report.reduce((n, r) => n + (+r.edits || 0), 0);

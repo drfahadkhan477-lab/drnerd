@@ -1,18 +1,22 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    wiggers.js — draws what physio.js computes.
 
-   Five views over one model, and one clock behind all of them:
+   Six views over one model, and one clock behind all of them:
 
-     Wiggers   the classic stacked diagram — ECG, pressures, volume, phases
-     PV loop   pressure against volume, with the ESPVR and EDPVR that explain it
-     Flow      aortic and mitral flow, then coronary flow, which is the payoff
-     Right     the right heart against the left, which is where S1 and S2 split
-     Curves    Frank-Starling, and Guyton's two curves and their intersection
+     Wiggers     the classic stacked diagram — ECG, pressures, volume, phases
+     PV loop     pressure against volume, with the ESPVR and EDPVR that explain it
+     Flow        aortic and mitral flow, then coronary flow, which is the payoff
+     Right       the right heart against the left, which is where S1 and S2 split
+     Curves      Frank-Starling, and Guyton's two curves and their intersection
+     Conduction  which of the heart's own real activation points have fired
 
    Nothing here is drawn from memory of a textbook figure. Every point is
    Physio evaluated at a cycle fraction, so if the physiology is edited the
    picture changes with it, and the cursor on the diagram is the same instant
-   as the beating heart beside it.
+   as the beating heart beside it. Conduction is the one exception to
+   "Physio evaluated" specifically — it reads real numbers, but from
+   Heart3D.activationAt, not Physio; see drawConduction's own comment for why
+   that is a real distinction and not a loophole.
 
    Colours come from the page's CSS custom properties where they are structural
    — paper, ink, grid, muted — so the diagram follows whatever theme is active.
@@ -32,6 +36,8 @@ const VIEWS = [
   { id:'flow',    label:'Flow',     hint:'Valve flow, and why the left ventricle is perfused in diastole' },
   { id:'right',   label:'Right heart', hint:'The right side against the left — where S1 and S2 split' },
   { id:'curves',  label:'Curves',   hint:'Frank-Starling, and Guyton at the point they cross' },
+  { id:'conduction', label:'Conduction', hint:'Which of the heart’s real activation points have fired, in order' },
+  { id:'coronary', label:'Coronary', hint:'Why the left ventricle is perfused in diastole — it squeezes its own arteries shut' },
 ];
 
 const TAU = Math.PI * 2;
@@ -81,6 +87,7 @@ function mount(canvas, opts) {
     wiggers: { L: 40, R: 12 },
     flow:    { L: 44, R: 14 },
     right:   { L: 40, R: 14 },
+    coronary: { L: 44, R: 14 },
   };
 
   /* ── palette ──────────────────────────────────────────────────────────────
@@ -679,6 +686,193 @@ function mount(canvas, opts) {
     }
   }
 
+  /* ════════════════════ view: conduction ═══════════════════════════════════
+     A schematic, not the 3D heart's own mesh: heart3d.js already draws the
+     real depolarisation front over real anatomy (chain step heroart's
+     conduction mode). This is not that a second time. It is a flat diagram
+     of the same real firing sequence, for a panel where Wiggers already
+     lives and a WebGL context does not need to.
+
+     "REAL NUMBERS, NOT PHYSIO'S" — the file header flags this as the one
+     exception, and here is why it still holds the module's own rule.
+     Heart3D.activationAt(x,y,z) is real 3D distance math already shipped in
+     src/core/heart3d.js — genuinely what the heart itself is drawn from —
+     and these four points are Heart3D.activationAt sampled at its own
+     anatomy reference coordinates (Heart3D.anatomy.la.c, .ra.c, .lv.apex,
+     .lv.base), captured once rather than called live: wiggers.js does not
+     import heart3d.js, and a live cross-module call would mean this panel's
+     correctness now depends on Heart3D's WebGL machinery even when nothing
+     here needs a GPU. The same four numbers are what
+     tests/verify-conductionwave-pure.js already holds ConductionWave.js to.
+
+     WHY ONLY FOUR POINTS, NOT SIX. LA/RA share one value (6ms — the model
+     does not distinguish which atrium at that resolution), and RV base
+     (32.34ms) and RV apex (162.36ms) are left out rather than invented a
+     label for. RV base sits inside activationAt's atrial-adjacency
+     threshold, and a schematic that plotted it beside "Atria" WOULD be a
+     mistake: that is a model artefact, not anatomy. The atrioventricular
+     junction is electrically insulated, the AV node is the only path, and
+     the ventricular base depolarises last — ventricular muscle firing with
+     the atria is pre-excitation. (An earlier version of this comment called
+     it "the real anatomy it is"; conductionWave.js's header now says why
+     that was backwards.) Leaving it out is right, for that reason.
+
+     What this diagram also does not show, and a board question would ask
+     about: the AV node, His bundle, bundle branches and Purkinje network —
+     the ~150ms between "Atria" and "LV apex" below is the AV nodal delay
+     plus His-Purkinje conduction, i.e. most of the PR interval — and the
+     left mid-septum, which is the FIRST ventricular muscle to depolarise
+     (hence septal q waves), ahead of the apex. So "the real firing order"
+     here is the order of these four points, not of conduction as a whole. */
+  const CONDUCTION_POINTS = [
+    { label: 'SA node',    ms: 0 },
+    { label: 'Atria',      ms: 6 },
+    { label: 'LV apex',    ms: 155.55 },
+    { label: 'LV base',    ms: 207.7 },
+  ];
+  function drawConduction(p) {
+    /* Looked up here, not captured once at mount() time the way Ph is: every
+       other view needs Physio or nothing draws, but conductionWave.js is
+       used by exactly this one view, so the other five must not go dark for
+       want of a module that has nothing to do with them. */
+    const CW = root.ConductionWave;
+    if (!CW) {
+      text('Conduction view needs conductionWave.js loaded first.', 16, H / 2, p.dim, 11, 500);
+      return;
+    }
+    const L = 54, R = 54, TOP = 28, BOT = 34;
+    const B = box(L, TOP, W - L - R, H - TOP - BOT);
+    const elapsedMs = S.t * secs() * 1000;
+    const fired = new Set(CW.firedBy(CONDUCTION_POINTS, elapsedMs));
+    const next = CW.nextToFire(CONDUCTION_POINTS, elapsedMs);
+
+    text('Conduction', B.x, TOP - 12, p.ink, 11.5, 800);
+    text('the real firing order, not a drawing of one', B.r, TOP - 12, p.dim, 9.5, 500, 'right');
+
+    const n = CONDUCTION_POINTS.length;
+    const stepY = B.h / (n - 1);
+    const xOf = i => B.x + B.w / 2 + (i % 2 === 0 ? -1 : 1) * B.w * 0.22;
+    const yOf = i => B.y + i * stepY;
+
+    /* The connecting line between two points is only ever lit once BOTH
+       ends have fired — a half-lit line would claim the wave is somewhere
+       it has not measurably reached yet. */
+    for (let i = 1; i < n; i++) {
+      const a = CONDUCTION_POINTS[i - 1], b = CONDUCTION_POINTS[i];
+      const lit = fired.has(a.label) && fired.has(b.label);
+      ctx.save();
+      ctx.strokeStyle = lit ? p.cursor : p.grid;
+      ctx.lineWidth = lit ? 2.4 : 1.4;
+      ctx.beginPath();
+      ctx.moveTo(xOf(i - 1), yOf(i - 1));
+      ctx.lineTo(xOf(i), yOf(i));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    CONDUCTION_POINTS.forEach((pt, i) => {
+      const x = xOf(i), y = yOf(i);
+      const isFired = fired.has(pt.label);
+      const isNext = pt.label === next;
+      if (isNext) {
+        /* A ring around what fires next — not animated (nothing here
+           depends on a timer beyond the shared cycle clock every other
+           view already reads S.t from), just a fixed visual difference
+           between "about to" and "already has". */
+        ctx.save();
+        ctx.strokeStyle = p.cursor; ctx.globalAlpha = .5; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      dot(x, y, isFired ? p.cursor : p.dim, isFired ? 5.5 : 4, p);
+      text(pt.label + '  ' + pt.ms + 'ms', x + (i % 2 === 0 ? -14 : 14), y,
+           isFired ? p.ink : p.muted, 10.5, isFired ? 700 : 500, i % 2 === 0 ? 'right' : 'left');
+    });
+
+    text('SA → atria is the P wave. Atria → LV apex is the AV node and His–Purkinje system — the pause that makes the PR interval a pause and not a delay you can see happening.',
+         B.x, H - 14, p.dim, 10, 500);
+  }
+
+  /* ════════════════════ view: coronary ══════════════════════════════════════
+     Two vessel trees that glow with the flow Physio.coronaryFlow gives for this
+     instant, over the same two flow traces the Flow view draws. The point is
+     one board fact made visible: the left ventricle compresses its own
+     arteries in systole, so left coronary flow arrives in diastole — and the
+     right, perfusing a thin low-pressure ventricle, keeps flowing through it.
+
+     BOTH TREES SHARE ONE SCALE. Normalising each side to its own range would
+     make the right coronary's small swing look as dramatic as the left's
+     collapse, which teaches the opposite of the physiology. So brightness is
+     flow over the larger of the two peaks, and the right tree's steadiness is
+     what the eye sees.
+
+     The branching is coronaryTree.js's, and its own header says it is not
+     anatomy: a vessel-like structure for the pulse to travel across. It is
+     looked up here, not captured at mount(), for the reason drawConduction
+     gives — six other views must not go dark for want of it. */
+  let corPeak = null;
+  function coronaryPeak() {
+    if (corPeak != null) return corPeak;
+    let m = 0;
+    for (let i = 0; i < 400; i++) {
+      const t = i / 400;
+      m = Math.max(m, Ph.coronaryFlow(t, 'left'), Ph.coronaryFlow(t, 'right'));
+    }
+    return (corPeak = m);
+  }
+  function drawCoronary(p) {
+    const CT = root.CoronaryTree;
+    if (!CT) {
+      text('Coronary view needs coronaryTree.js loaded first.', 16, H / 2, p.dim, 11, 500);
+      return;
+    }
+    const { L, R } = MARGINS.coronary;
+    const TOP = 28, stripH = Math.max(70, Math.min(120, H * 0.26)), BOT = 34;
+    const Bs = box(L, H - BOT - stripH, W - L - R, stripH);
+    const Bt = box(L, TOP + 8, W - L - R, Bs.y - TOP - 30);
+    const peak = coronaryPeak();
+
+    text('Coronary flow', L, TOP - 12, p.ink, 11.5, 800);
+    text('brightness is the flow at this instant, on one scale for both', W - R, TOP - 12, p.dim, 9.5, 500, 'right');
+
+    const sides = [
+      { side: 'left',  label: 'Left coronary',  col: p.cor, cx: Bt.x + Bt.w * 0.27 },
+      { side: 'right', label: 'Right coronary', col: p.rv,  cx: Bt.x + Bt.w * 0.73 },
+    ];
+    for (const sd of sides) {
+      const I = CT.intensity(Ph.coronaryFlow(S.t, sd.side), 0, peak);
+      const segs = CT.tree({ x: sd.cx, y: Bt.b - 18, angle: -Math.PI / 2,
+                             length: Bt.h * 0.26, maxDepth: 5, spread: 0.42 });
+      ctx.save();
+      ctx.beginPath(); ctx.rect(Bt.x, Bt.y, Bt.w, Bt.h); ctx.clip();
+      ctx.lineCap = 'round'; ctx.strokeStyle = sd.col;
+      ctx.shadowColor = sd.col; ctx.shadowBlur = 14 * I;
+      for (const g of segs) {
+        ctx.globalAlpha = 0.16 + 0.84 * I;
+        ctx.lineWidth = Math.max(0.9, 4.4 - g.depth * 0.7);
+        ctx.beginPath(); ctx.moveTo(g.x1, g.y1); ctx.lineTo(g.x2, g.y2); ctx.stroke();
+      }
+      ctx.restore();
+      text(sd.label, sd.cx, Bt.b - 4, sd.col, 10.5, 700, 'center');
+      text(Math.round(I * 100) + '% of peak', sd.cx, Bt.b + 10, p.muted, 9.5, 600, 'center', true);
+    }
+
+    /* The same traces the Flow view draws, on the same scale as the glow. */
+    ctx.save();
+    ctx.fillStyle = p.ink; ctx.globalAlpha = .05;
+    ctx.fillRect(xAt(Bs, Ph.T.mc), Bs.y, (Ph.T.ac - Ph.T.mc) * Bs.w, Bs.h);
+    ctx.restore();
+    text('systole', xAt(Bs, (Ph.T.mc + Ph.T.ac) / 2), Bs.b - 9, p.dim, 9.5, 600, 'center');
+    trace(Bs, t => Ph.coronaryFlow(t, 'left'), 0, peak, p.cor, 2.2, { fill: .14 });
+    trace(Bs, t => Ph.coronaryFlow(t, 'right'), 0, peak, p.rv, 1.9, { dash: [5, 3] });
+    cursor(Bs, p);
+
+    const d = Ph.derived(secs());
+    text((d.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole. ' +
+         'A faster rate shortens diastole, and with it the left ventricle\'s perfusion time.',
+         L, H - 14, p.dim, 10, 500);
+  }
+
   /* ── draw ─────────────────────────────────────────────────────────────── */
   function draw() {
     if (!fit()) return;
@@ -690,6 +884,8 @@ function mount(canvas, opts) {
     else if (S.view === 'flow') drawFlow(p);
     else if (S.view === 'right') drawRight(p);
     else if (S.view === 'curves') drawCurves(p);
+    else if (S.view === 'conduction') drawConduction(p);
+    else if (S.view === 'coronary') drawCoronary(p);
     else drawWiggers(p);
   }
 

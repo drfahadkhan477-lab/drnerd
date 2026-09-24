@@ -138,6 +138,29 @@ head('it refuses the licensed bank, by every route in');
   r = run([figs]);
   ok('a file full of base64 figures is refused', r.code === 1 && /FIGURES/.test(r.out));
 
+  /* AND FIGURES HAS NO FLOOR OF ITS OWN, unlike PAYLOAD above it. The fixture
+     above is padded past 201 KB to also clear PAYLOAD's floor, which proved
+     FIGURES works — not that it works WITHOUT that floor. This one is the
+     real case: eight images, no padding, nowhere near 200 KB, in a file whose
+     name gives nothing away. Before FIGURES had its own check ahead of
+     PAYLOAD_SNIFF_BYTES, this returned code 0 — "nothing licensed" — because
+     `st.size <= SNIFF_BYTES` sent it home before either rule looked. */
+  const smallFigs = write('notes.js',
+    Array(8).fill('const x = "data:image/png;base64,' + 'A'.repeat(200) + '";').join('\n'));
+  ok('the small fixture really is under the old shared floor',
+     fs.statSync(smallFigs).size < 200 * 1024, fs.statSync(smallFigs).size + ' bytes');
+  r = run([smallFigs]);
+  ok('a small figure dump is refused too, not just a large one',
+     r.code === 1 && /FIGURES/.test(r.out), r.out.match(/FIGURES.*/)?.[0] || r.out.trim().slice(0, 60));
+
+  /* AND IT STILL TAKES EIGHT. A couple of screenshots pasted into a small
+     note is not a figure dump, and must not become unreviewable because
+     FIGURES lost its floor. */
+  const fewFigs = write('two-shots.js',
+    Array(2).fill('const x = "data:image/png;base64,' + 'A'.repeat(200) + '";').join('\n'));
+  r = run([fewFigs]);
+  ok('but two embedded images in a small file are still fine', r.code === 0, r.out.trim().slice(0, 60));
+
   /* And it says what to do, because a guard that refuses without a remedy is
      a guard somebody deletes. Run fresh rather than reusing `r`: reading the
      previous fixture's output meant this check reported on whatever ran last,
@@ -175,6 +198,44 @@ head('and it does not refuse this repository');
   ok('every tracked file passes', r.code === 0, r.out.trim().slice(0, 70));
   const n = +(r.out.match(/(\d+) file\(s\) checked/) || [, 0])[1];
   ok('and it actually looked at them — not an empty list', n > 100, `${n} files`);
+}
+
+head('the knowledge graph cannot read what leak-guard refuses');
+{
+  /* graphify reads .gitignore and then .graphifyignore — and under
+     `--no-gitignore` it reads .graphifyignore ALONE. So .gitignore listing
+     the corpus protects the default run and nothing else; the flag that
+     would walk the licensed export into a graph is precisely the case where
+     only this file counts.
+
+     Derived from leak-guard's OWN lists rather than retyped, so a directory
+     added to the guard is a directory this file must name, and the two
+     cannot drift apart. */
+  const GUARD_SRC = fs.readFileSync(GUARD, 'utf8');
+  const listOf = name => {
+    const m = new RegExp('const ' + name + '\\s*=\\s*\\[([^\\]]*)\\]').exec(GUARD_SRC);
+    return m ? [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]) : null;
+  };
+  const required = [].concat(listOf('DIRS') || [], listOf('DERIVED') || [], listOf('FILES') || []);
+  /* Vacuity guard: an empty required list would make "all present" true. */
+  ok('leak-guard\'s path lists were found and are not empty',
+     required.length >= 5 && required.includes('content/'), required.join(' '));
+  const giPath = path.join(ROOT, '.graphifyignore');
+  const gi = fs.existsSync(giPath) ? fs.readFileSync(giPath, 'utf8') : '';
+  ok('.graphifyignore exists', gi.length > 0);
+  /* Lines that are live patterns, with comments and blanks dropped the way
+     graphify's own parser drops them. */
+  const live = gi.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  const missing = required.filter(p => !live.includes(p));
+  ok('it names every path leak-guard refuses, so --no-gitignore stays safe',
+     missing.length === 0, missing.join(', ') || `${required.length} paths`);
+  /* And it re-includes none of them. A `!content/` line would undo the entry
+     above it by last-match-wins — the one way this file could make things
+     worse than having no file at all. */
+  const reincluded = live.filter(l => l.startsWith('!') &&
+    required.some(p => l.slice(1).replace(/^\//, '').startsWith(p.replace(/\/$/, ''))));
+  ok('and none of them is re-included by a negation', reincluded.length === 0,
+     reincluded.join(', ') || 'none');
 }
 
 head('the hook is wired the way the README says');

@@ -1,0 +1,72 @@
+# codeql — a security scanner that reads this repository's code
+#
+# WHY THIS EXISTS. Until now the only security check on a pull request was
+# the repository's `github-advanced-security` check, and it has never
+# examined a line of this code. On #56, #57 and #58 it crashed at startup
+# ("CAPIError: 400 The requested model is not supported"). On #59 it
+# reported success, and its log shows why: no prompt was built and no model
+# was called, because its FileExclusionPatterns skip *.js, *.json, *.yml,
+# *.html and *.py, and #59 changed only .js files. A scanner that excludes
+# every language this repository is written in, reading green, is the
+# failure CLAUDE.md names first: a check that passes without measuring
+# anything. So it is not counted as a security review, and this is.
+#
+# WHAT IT SCANS. Three languages, each with no build step to run:
+#   javascript-typescript  src/, scripts/ (the patch chain), tests/, tools/
+#   python                 tools/*.py, the figure tooling
+#   actions                these workflow files themselves — expression
+#                          injection and over-broad permissions are the
+#                          classic ways a workflow gets someone else's code
+#                          run with this repository's token
+# `security-extended` rather than the default suite: it adds the
+# lower-precision security queries, and a board-review app that renders
+# stored text into the page is exactly where those earn their keep.
+#
+# WHAT IT CANNOT SCAN, and never will: the built app. The licensed ACCSAP
+# export is never committed (CLAUDE.md, scripts/leak-guard.js), so nothing
+# the export contributes to build/systole.html is visible here — only the
+# code this repository holds and patches in. That is most of the app's
+# logic, and none of its question bank, which is the correct side of that
+# line to be on.
+#
+# PINNED BY COMMIT, like every action in verify.yml. The tag is annotated,
+# so the pin is the commit the tag points at (`v4.38.1^{}`), not the tag
+# object: 1c5b675653bb5c22dbe9b12b556ec555138e09fd, checked to contain both
+# init/action.yml and analyze/action.yml before it was written here.
+
+name: codeql
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # Weekly, so new queries reach unchanged code: a rule CodeQL learns next
+    # month applies to what is already on master, not only to new diffs.
+    - cron: '23 5 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: codeql — ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # to upload results to code scanning
+      actions: read            # required on a private fork; harmless here
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, python, actions]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          category: /language:${{ matrix.language }}

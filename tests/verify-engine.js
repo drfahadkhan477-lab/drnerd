@@ -120,6 +120,29 @@ head('every browser suite goes through the helper, none launches an engine itsel
   ok('no suite calls chromium.launch() / webkit.launch() directly',
      direct.length === 0, direct.join(', ') || 'none');
 
+  /* THE THIRD SHARED THING, AND THE ONE THAT COSTS A BROWSER RUN TO FIND.
+     onScreen(page, 'home') with no marker waits on S.screen — which the
+     navigation helpers set BEFORE calling render(). render hands renderNow to
+     startViewTransition on a screen change, and the browser runs that
+     callback only after capturing the old state, so the state flips and the
+     wait returns while the render has not happened. Whatever the test reads
+     next is the PREVIOUS screen's, and it reports that as an app bug.
+
+     verify-focus did exactly this and blamed focus mode for two failures the
+     app did not have. Every other call site in the tree already passed a
+     marker, so this costs nothing to keep and would have turned a 20-minute
+     browser run into a parse. If a call ever genuinely needs no marker, this
+     going red is the place to say why. */
+  const unmarked = [];
+  for (const f of suites) {
+    const code = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8'));
+    /* Two arguments and a closing paren: a third would be the opts object
+       that carries the marker. */
+    if (/\bonScreen\(\s*[A-Za-z_$][\w$]*\s*,\s*(['"])[^'"]*\1\s*\)/.test(code)) unmarked.push(f);
+  }
+  ok('every onScreen() names a marker, so the wait is the render and not S.screen',
+     unmarked.length === 0, unmarked.join(', ') || 'none');
+
   /* THE SAME RULE, ABOUT A DIFFERENT SHARED THING. Reading this repository's
      source as text requires blanking its comments first, because the files
      explain themselves at length and those explanations QUOTE the patterns
@@ -564,7 +587,13 @@ head('a reload is not a boot, and the split build is why');
     }
     /* The tail. A handler that is not the emitter returned by onDeath() eats
        the rejection before the process ever sees it. */
-    const tail = /\}\)\(\)\s*\.catch\s*\(([^\n]*)\)\s*;?\s*$/m.exec(code);
+    /* The WHOLE tail, not one line of it. The first version matched a
+       .catch whose argument fit on one line, so a handler written across
+       four — `.catch(e => {\n console.error(...); process.exit(1);\n})` —
+       swallowed the note just as surely and passed: verify-echo did exactly
+       that for a day. Anchored to the end of the file, not the end of a line,
+       and the argument may span lines. */
+    const tail = /\}\)\(\)\s*\.catch\s*\(([\s\S]*)\)\s*;?\s*$/.exec(code);
     if (tail && !/^\s*\w+\s*$/.test(tail[1])) swallowed.push(`${f}: .catch(${tail[1].trim().slice(0, 40)})`);
   }
   /* Vacuity guards, both directions. "No suite is missing a note" is also

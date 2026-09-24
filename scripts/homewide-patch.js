@@ -99,14 +99,31 @@ patch('homewide: landscape gets two columns and a footer',
     row-gap:0;
     align-content:start;
     /* One screen: the viewport, less the fixed nav, the status-bar strip and
-       the wrap's own padding. min-height rather than height so a very long
-       pearl can still push past it and scroll rather than being cut off. */
+       the wrap's own padding. min-height rather than height so a left column
+       taller than a short screen can still push past it and scroll rather
+       than being cut off. A long PEARL does not push: it scrolls inside its
+       own card, which the rule on .pearl-card below is what enforces. */
     min-height:calc(100dvh - var(--navh) - var(--sat) - 40px);
     padding:16px 0 20px}
   #app[data-screen="home"] .hero-live{grid-area:hero;margin:0}
   #app[data-screen="home"] .home-progress{grid-area:prog;margin:14px 2px 0}
+  /* SIZED BY THE GRID, NOT BY ITS TEXT. min-height:0 here and on
+     .pearl-main below only remove the card's MINIMUM contribution. The grid
+     has a min-height, not a height, so its block size is indefinite, and in
+     an indefinite grid a 1fr row is sized to the max-content of the items
+     spanning it: a tall pearl opened the gap row and pushed the page. It did
+     so on 1 run in 4 on the owner's laptop, with an 11-inch iPad in
+     landscape: rows hero 268, prog 136, gap 96 instead of 47, doors 245, a
+     367px pearl, and the page 9px taller than the screen. The left column
+     was identical in every run; only the pearl moved.
+
+     contain:size makes the card lay out as if empty for sizing purposes,
+     so it takes the area the rows give it and .pearl-main scrolls within
+     that, which is what the comment on .pearl-main always said happened.
+     Safari has had it since 15.4; an older one ignores the property and
+     keeps the old behaviour, which is a long pearl scrolling the page. */
   #app[data-screen="home"] .pearl-card{
-    grid-area:pearl;margin:0;height:100%;min-height:0}
+    grid-area:pearl;margin:0;height:100%;min-height:0;contain:size}
   #app[data-screen="home"] .door-row{grid-area:doors;margin-top:18px}
   /* The pearl's own column has to be able to shrink inside the grid row, or
      its content sets the row height and the footer is pushed off screen. */

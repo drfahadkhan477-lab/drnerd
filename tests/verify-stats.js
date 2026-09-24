@@ -38,6 +38,27 @@ const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
+/* THE REGISTRY, READ ONCE AND BOUNDED TO THE ARRAY IT LIVES IN.
+   Two blocks below used to read it separately, with different patterns: one
+   bounded to the SUITES array, one scanning the whole of scripts/verify.js.
+   They disagreed by two, and a real run printed both — "86 suites" in one
+   check and "88 suites" in another, which is a guard reporting confidently
+   about a quantity it had got wrong. The whole-file scan matched `['--only',`
+   out of a usage string and counted `focus` and `stage0` twice, because both
+   appear again in PENDING_RECORD and SERIAL.
+
+   Nothing failed because of it — runsInCI() happens to call a name with no
+   suite file not-able — so it passed while feeding a polluted list to the
+   check whose whole job is noticing a browser-free suite missing from the
+   workflow. One read now, and the check below proves it is clean rather than
+   trusting the pattern. */
+function registrySuites() {
+  const v = read('scripts/verify.js');
+  const open = v.indexOf('const SUITES = [');
+  const block = v.slice(open, v.indexOf('\n];', open));
+  return [...block.matchAll(/^\s*\['([a-z0-9-]+)',/gm)].map(m => m[1]);
+}
+
 let found = null;
 try { found = JSON.parse(read('tests/test-stats.json')); } catch (_) {}
 
@@ -75,10 +96,15 @@ head('every registered suite is in the record');
 {
   /* Read out of the runner's own registry, so adding a suite and forgetting to
      regenerate is caught here rather than by a number quietly being too low. */
-  const v = read('scripts/verify.js');
-  const block = v.slice(v.indexOf('const SUITES = ['), v.indexOf('\n];', v.indexOf('const SUITES = [')));
-  const registered = [...block.matchAll(/^\s*\['([a-z0-9-]+)',/gm)].map(m => m[1]);
+  const registered = registrySuites();
   ok('the registry was found and is not empty', registered.length > 30, `${registered.length} suites`);
+  /* THE READ ITSELF IS CHECKED, not just its size. Every registered name must
+     have a suite file on disk — which is what a name scraped out of a flag or
+     a second array cannot have, and is how `--only` would be caught now. */
+  const noFile = registered.filter(n => !fs.existsSync(path.join(ROOT, 'tests', `verify-${n}.js`)));
+  ok('and every name in it has a suite file on disk', noFile.length === 0, noFile.join(', ') || 'none');
+  ok('and none is registered twice', new Set(registered).size === registered.length,
+     `${new Set(registered).size} distinct of ${registered.length}`);
   /* A suite registered since the last full green run is absent from the record
      for a legitimate reason, and scripts/verify.js says which ones those are.
      The declaration is the point: an undeclared absence is still the defect
@@ -109,8 +135,9 @@ head('every registered suite is in the record');
    said 64, and the chain was 73. Nobody had been careless — the number moves
    whenever a step is added, which is exactly the kind of fact prose loses and
    a derivation keeps. */
-const chainLength = ((read('scripts/build.js').match(/const CHAIN = \[([\s\S]*?)\];/) || [, ''])[1]
-                     .match(/'[^']+'/g) || []).length;
+const chainSteps = ((read('scripts/build.js').match(/const CHAIN = \[([\s\S]*?)\];/) || [, ''])[1]
+                    .match(/'[^']+'/g) || []).map(s => s.slice(1, -1));
+const chainLength = chainSteps.length;
 
 /* The honest CI number, derived rather than quoted: whichever suites the
    workflow actually invokes, summed from what they actually reported. */
@@ -157,8 +184,7 @@ head('CI runs everything it is capable of running');
      what "capable" means and is conservative in the direction that matters —
      see runsInCI() there. */
   const { runsInCI } = require('./_targets.js');
-  const registered = [...read('scripts/verify.js')
-    .matchAll(/\[\s*'([a-z0-9-]+)',\s*'/g)].map(m => m[1]);
+  const registered = registrySuites();
   ok('the registry was read', registered.length > 40, `${registered.length} suites`);
   const able = registered.filter(n => runsInCI(n).able);
   ok('and some of them need no browser at all', able.length > 5, `${able.length} of ${registered.length}`);
@@ -240,6 +266,57 @@ head('the prose agrees with the record');
        its own when it was written. This is that sentence. */
     ['CLAUDE.md', 'the length of the patch chain',
      /holds `CHAIN`: (\d+) steps/, r => [+r[1] === chainLength]],
+    /* FIVE MORE IN docs/BUILD.md, ALL OF THEM STALE WHEN THIS WAS WRITTEN, and
+       every one the same shape as the two CLAUDE.md already names: an
+       unguarded sentence sitting near a guarded one, so the green around it
+       read as coverage of it. They are grouped here because they were found
+       in one sweep, not because they are related.
+
+       The Python paragraph was the clearest case. It said "the other 53 run
+       normally — it is 35 of the 1758 checks", and all three numbers were
+       right the day they were typed: at 76050eb the record held total 1758,
+       suiteCount 54, figreview 35. Two then moved with the suite and one did
+       not have to, so the sentence went half-stale and kept reading as fact. */
+    ['docs/BUILD.md', 'the paragraph on building without Python',
+     /the other (\d+)\s+run normally\s*—\s*it is (\d+) of the (\d+) checks/,
+     r => [+r[1] === stats.suiteCount - 1, +r[2] === stats.suites.figreview, +r[3] === stats.total]],
+    /* The two numbers in the iterate-on-one-step recipe. Both move whenever a
+       step is added anywhere, and the second moves when one is added BEFORE
+       theme, which is how it came to say 14-20 against an 85-step chain. */
+    ['docs/BUILD.md', 'the --keep intermediates count',
+     /--keep\s+#\s*once, keeps all (\d+) intermediates/, r => [+r[1] === chainLength]],
+    ['docs/BUILD.md', 'the step range --from theme reruns',
+     /--from theme\s*#\s*only steps (\d+)-(\d+) rerun/,
+     r => [+r[1] === chainSteps.indexOf('theme') + 1, +r[2] === chainLength]],
+    /* The repository-shape sketch, which reads as a diagram and so gets
+       re-read often and re-checked never. It said 71 patch scripts against 85,
+       and "35 Playwright suites (34 single-file + pwa)" against a registry of
+       75 — a sentence that had been wrong through roughly forty additions. */
+    ['docs/BUILD.md', 'the patch-script count in the repository sketch',
+     /verify · (\d+) \*-patch/, r => [+r[1] === chainLength]],
+    ['docs/BUILD.md', 'the suite counts in the repository sketch',
+     /(\d+) suites · (\d+) need no browser/,
+     r => [+r[1] === stats.suiteCount, +r[2] === ciSuites.length]],
+    /* The corpus prerequisite quotes the two floors verify-retrieval enforces.
+       They were added the day a run was spent discovering them, so they are
+       held to the suite that owns them rather than to whoever remembers —
+       lower either threshold and the paragraph telling people what a green
+       run needs goes stale in the same commit. */
+    /* verify.js describes ITSELF in its header, and that sentence has gone
+       stale twice: it said 18 suites and 418 checks long after there were 75,
+       was corrected by hand to 75 and 2481, and was stale again at the next
+       record. Correcting a number without guarding it buys one commit. */
+    ['scripts/verify.js', 'the header describing the suite count and total',
+     /There are (\d+) suites and roughly (\d+) checks/,
+     r => [+r[1] === stats.suiteCount, +r[2] === stats.total]],
+    ['docs/BUILD.md', 'the corpus floors quoted in the prerequisite',
+     /more than (\d+) notes, and an index over (\d+) documents/,
+     r => {
+       const rs = blankComments(read('tests/verify-retrieval.js'));
+       const notes = (rs.match(/r\.notes > (\d+)/) || [])[1];
+       const docs = (rs.match(/r\.docs > (\d+)/) || [])[1];
+       return [+r[1] === +notes, +r[2] === +docs, notes !== undefined, docs !== undefined];
+     }],
   ];
   for (const [file, what, re, judge] of claims) {
     const m = read(file).match(re);
@@ -257,6 +334,12 @@ head('the chain is as long as the prose says');
   const onDisk = fs.readdirSync(path.join(ROOT, 'scripts')).filter(f => f.endsWith('-patch.js')).length;
   ok('and every step in it has a patch script on disk', chainLength === onDisk,
      `${chainLength} in CHAIN, ${onDisk} scripts`);
+  /* The --from range above is anchored on chainSteps.indexOf('theme'), and a
+     miss there returns -1, which +1 turns into a plausible-looking 0. A step
+     renamed out from under that claim would otherwise leave it comparing a
+     number nobody meant against prose nobody updated. */
+  ok('and theme is one of its steps, so the --from range is not anchored on a miss',
+     chainSteps.includes('theme'), `theme at ${chainSteps.indexOf('theme') + 1}`);
 }
 
 head('the arithmetic in the header is self-consistent');
@@ -347,6 +430,62 @@ head('no assertion is incapable of failing');
   ok('and it recognises the shapes it is looking for',
      probe(' true ') && probe('x.length >= 0') && probe(' 1 ') && !probe('a === b') &&
      !probe('list.length === 0') && !probe('found !== null'));
+}
+
+/* ── a number in a suite claim, held to the chain that builds it ──────────────
+
+   scripts/verify.js describes each suite in one line. The theme suite's line
+   said "eight palettes" from the day it was written until well after the ninth
+   arrived: highcontrast-patch.js appends Contrast to THEMES fifty-odd steps
+   into the chain, verify-theme.js was updated to assert nine, and the sentence
+   describing the suite was not. Nothing connected the two, so nothing said so.
+
+   It is the shape CLAUDE.md refuses — a sentence with a number in it and no
+   check under it — and it is worse than usual here, because every other number
+   in that file's neighbourhood IS guarded, so the surrounding green read as
+   coverage of this line too.
+
+   The count is derived, never typed: a tenth preset moves it on its own.
+
+   NARROW ON PURPOSE, and said here rather than left for the reader to assume.
+   It counts DISTINCT THEMES ids appearing in any *-patch.js, which is correct
+   while every such entry is an addition — no step removes a theme today. A
+   step that did would make this overcount, and would have to be taught here.
+   It also holds one claim, not every claim in SUITES: the others quote counts
+   ("two axes", "three layouts") whose sources are not one array, and a sweep
+   that guessed at them would be the kind of lint that gets ignored. */
+head('the palette count in a suite claim is the count the chain builds');
+{
+  const WORD = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+                 seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+
+  const ids = new Set();
+  for (const name of fs.readdirSync(path.join(ROOT, 'scripts'))) {
+    if (!name.endsWith('-patch.js')) continue;
+    const src = blankComments(read(path.join('scripts', name)));
+    const re = /\{\s*id:\s*'([a-z0-9]+)'\s*,\s*name:\s*'[^']*'\s*,\s*group:\s*'(?:light|dark)'/g;
+    let m;
+    while ((m = re.exec(src))) ids.add(m[1]);
+  }
+
+  const claim = (blankComments(read('scripts/verify.js'))
+                  .match(/\['theme',\s*'([^']*)'\]/) || [])[1] || '';
+  const named = (claim.match(/\b([a-z]+|\d+)\s+palettes\b/) || [])[1];
+  const count = named === undefined ? NaN : (WORD[named] !== undefined ? WORD[named] : Number(named));
+  const asserted = (blankComments(read('tests/verify-theme.js'))
+                     .match(/presets\.n\s*===\s*(\d+)/) || [])[1];
+
+  /* Three reads that can each come back empty, checked before anything is
+     compared. An empty read compares equal to nothing in particular — which is
+     also exactly what this section would look like if it had never run. */
+  ok('the theme suite has a claim to read', claim.length > 0, claim || '(none)');
+  ok('that claim names a palette count', Number.isFinite(count), String(named));
+  ok('the chain defines themes to count', ids.size > 0, `${ids.size} ids`);
+
+  ok('the claim names as many palettes as the chain defines',
+     count === ids.size, `claim says ${count}, chain builds ${ids.size}`);
+  ok('verify-theme.js asserts that same number, so suite and claim cannot drift',
+     Number(asserted) === ids.size, `verify-theme says ${asserted}, chain builds ${ids.size}`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

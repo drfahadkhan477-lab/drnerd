@@ -14,7 +14,7 @@
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are eighteen suites and roughly 418 checks, and they
+ * WHY THIS EXISTS. There are 90 suites and roughly 2944 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -54,7 +54,7 @@ const SUITES = [
   ['braunwald',    'grounded mode answers only from your references'],
   ['leads',        'the 12-lead morphology falls out of one dipole'],
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
-  ['theme',        'eight palettes, two axes, unthemed semantics'],
+  ['theme',        'nine palettes, two axes, unthemed semantics'],
   ['home',         'the welcome bar, the progress bar, three layouts'],
   ['splash-heart', 'the photographed heart paints before the app parses'],
   ['crisp',        'every canvas backs itself at high device-pixel density'],
@@ -87,7 +87,51 @@ const SUITES = [
   ['calib-pure',   'the calibration arithmetic says nothing rather than something wrong'],
   ['calibrate',    'confidence is an option not a gate, and a tagged miss updates one row'],
   ['figzoom-pure', 'the point under your fingers does not move, over any number of pinches'],
+  /* Written because docs/BUILD.md admitted the hole rather than closing it:
+     the figure fade's error path was proven once in a scratch harness that was
+     then thrown away. Hidden-by-default is the obvious way to write that
+     feature and it makes every failure invisible. */
+  ['figfade-pure',  'a figure that fails to load still appears, rather than being silently blank'],
+  /* Written because two patch headers quoted luminances and contrast ratios to
+     justify every colour they picked, and nothing checked a single one of them
+     — the rule in CLAUDE.md that says guard a number or do not write it. */
+  ['palette-pure',  'the contrast figures quoted in the palette patches are the figures those palettes produce'],
+  /* Written because heroRhythm.js says in its own header that it is shaped
+     this way — no DOM, no timers — so its rules can be called from a test
+     without a browser, and then nobody wrote that test. The only suite that
+     touched it drives a real build, which CI cannot do. */
+  ['herorhythm-pure', 'the home strip does not repeat itself, and keeps vfib and asystole out of the wallpaper'],
+  /* Written for the same reason as herorhythm-pure: pencil.js's own header
+     says the width curve "can be unit-tested without a canvas or a real
+     Pencil in the room". Nobody had. Only verify-polish touched it, and
+     that needs a real build. */
+  ['pencil-pure',   'the Pencil width curve only ever broadens with pressure or tilt, and stays in range'],
+  /* The pure logic core for a new feature (the Living Diagram — an ambient
+     home-screen mode composing the heart, the 12-lead and the PV loop when
+     nobody has touched the screen in a while), written alongside the module
+     rather than after it, the way heroRhythm.js and pencil.js went unheld
+     for one build cycle each before this became the house style. */
+  ['livingdiagram-pure', 'ambient mode is scoped as tightly as Focus Mode, and the view-cycling never repeats'],
+  /* Pure sequencing over real activation times captured from Heart3D's own
+     activationAt() — not a second, invented account of cardiac conduction
+     timing. Part of the Living Diagram's family, built the same session. */
+  ['conductionwave-pure', 'the conduction pathway fires in the right order, against real timing this app already computed'],
+  /* Third and last of the Living Diagram family: a branching vessel
+     geometry plus a flow-to-brightness curve, fed by Physio.coronaryFlow —
+     already shipped, already correct — rather than a second account of
+     what coronary flow does across the cycle. */
+  ['coronarytree-pure', 'the branch geometry terminates and diverges correctly, and flow maps to a sane 0..1 glow'],
+  /* Written the day a first build from the documented starting point died 63
+     steps in: ref-images skipped its own injection when the corpus cited no
+     figures, and assets anchors on what it skipped. */
+  ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
+  /* Written because focusmode anchored on three lines copied out of
+     fullbleed's source, and two steps in between had rewritten them — which
+     reading the source cannot tell you and a build would have, if a build
+     were something everyone could run. */
+  ['shellanchor-pure', 'every anchor into the shell markup still matches at the step that uses it'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
+  ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
   ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
@@ -194,6 +238,22 @@ const SUITES = [
      them that way: four native dialogs, all deliberate, and no icon-only
      button without an accessible name. Written down where they fail. */
   ['ui-pure',      'no native dialog arrives unmeant, and an icon is not a name'],
+  ['refscheck-pure','the corpus checker holds every floor it claims, and reads before reporting'],
+  ['echo-pure',    'the echo tables point at what exists, and the arithmetic is the arithmetic'],
+  ['echoui-pure',  'Echo Studio computes only what was measured, and restates no cutoff'],
+  ['echoanchor-pure','every anchor echo-patch uses still exists at the step it runs from'],
+  /* The three above stop where strings become a document. This one starts
+     there: it runs echo-patch over a scaffold and drives the result, so the
+     glue, the delegated listeners and the caret are held rather than argued
+     about in a comment. It needs no build — see its header for what that
+     buys and what it costs. */
+  ['echo',         'Echo Studio routes, delegates and keeps the caret where it was'],
+  /* Needs no build: the repository's own physio, coronaryTree and wiggers in
+     a real browser, measured for the physiology the view is there to show. */
+  ['coronaryview', 'the Coronary view draws the left bed collapsing in systole, on one scale'],
+  /* Needs no build: the shipped ambient-patch over a scaffold, with the
+     repository's own Heart3D, ECG12, Wiggers and LivingDiagram. */
+  ['ambient',      'the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -229,17 +289,26 @@ const SUITES = [
 
    Nothing is fabricated to clear it. Writing a measured count here by hand
    would mean also inventing the --pwa figure and the CI subset total, which is
-   exactly the hand-maintained arithmetic that made verify-stats necessary. */
-/* Suites registered since the last full green run, whose counts the record has
-   not seen yet. Checked in BOTH directions, so it self-cleans: a name left here
-   after its suite has recorded fails just as loudly as a suite missing from the
-   record.
+   exactly the hand-maintained arithmetic that made verify-stats necessary.
 
-   EMPTY, AND THAT IS NEWS. It held fourteen names for weeks — every suite added
-   while the only machine that could run the full thing was not being run. The
-   first full green run wrote all fourteen at once. If this fills up again, that
-   is the same gap reopening. */
-const PENDING_RECORD = [];
+   EMPTY, which is the state it should normally be in — and every time it
+   has been emptied, it was a full green run that did it rather than anybody
+   deciding it looked untidy. It held fourteen names for weeks, every suite
+   added while the only machine that could run the full thing was not being
+   run; the first full green run wrote all fourteen at once. It then filled
+   again with eleven — focus, figfade-pure, palette-pure, herorhythm-pure,
+   refimg-pure, shellanchor-pure, pencil-pure, refscheck-pure, echo-pure,
+   echoui-pure and echoanchor-pure — which the green run of 2026-09-22
+   measured. If it fills to fourteen again, that is the same gap reopening.
+
+   Add a name when you register a suite; empty it AFTER the run that measures
+   it, never before.
+
+   Emptied a third time by the green run of 2026-09-22 on 28f4e5c, which
+   measured the four that had been waiting — livingdiagram-pure,
+   conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
+   and echo. */
+const PENDING_RECORD = ['coronaryview', 'ambient'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -714,7 +783,21 @@ const blockers = results.filter(r => !r.ok && r.name !== 'stats');
 const total = results.reduce((n, r) => n + r.checks, 0);
 const bad = results.filter(r => !r.ok);
 console.log(`\n  ${total} checks across ${results.length} suites in ${((Date.now() - t0) / 60000).toFixed(1)} min`);
-if (!blockers.length && !flag('--pwa')) writeStats();
+/* WRITTEN WHENEVER THE RUN IS GREEN, even with --pwa pending. It used to be
+   skipped here under --pwa so the record could be written once, below, with a
+   real split-build count in it — which is right when the split build works and
+   throws away a true measurement when it does not. A full green run of 86
+   suites was lost exactly that way: every suite passed, then the split build
+   refused because content/ had been extracted from an earlier build, and
+   process.exit(1) came before the only line that writes the record. Twenty-
+   three minutes of true numbers discarded over a staleness in a directory the
+   suites had nothing to say about.
+   Writing here carries the previous pwa figure forward, which is what
+   writeStats already does for a run without --pwa and for the same stated
+   reason: the alternative is deleting a true number because this run did not
+   measure it. If the split build then succeeds, the call below rewrites the
+   file with the real figure and supersedes this one. */
+if (!blockers.length) writeStats();
 if (bad.length) {
   console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}`);
   console.log(`  full output of those suites: ${path.relative(process.cwd(), writeFailLog())}`);
@@ -757,6 +840,18 @@ if (flag('--pwa')) {
   const out = (r.stdout || '') + (r.stderr || '');
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
   for (const ln of out.split('\n')) if (/^\s*(PASS|FAIL)\s/.test(ln)) console.log(ln);
+  /* AND WHY IT STOPPED, when it stopped. The filter above prints check lines
+     and nothing else, which is right for a suite that finished and useless
+     for one that died: its exception and its death note are exactly the lines
+     that do not start with PASS or FAIL. The first --pwa death on the owner's
+     laptop printed eighty-eight PASS lines, then "pwa FAILED", and nothing
+     about the cause — the evidence was collected and thrown away at the one
+     moment it was the only thing wanted. Same helpers the suite table uses. */
+  if (!m) {
+    const said = causeOf(out);
+    console.log(`\n  verify-pwa did not report` + (said ? `\n      ${said}` : '  (and printed no cause)'));
+    for (const line of noteOf(out)) console.log(`      ${line}`);
+  }
   done();
   if (!m || +m[2] > 0 || r.status !== 0) {
     console.log(`\n  pwa FAILED\n`);

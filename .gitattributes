@@ -1,0 +1,19 @@
+# Normalize all text files to LF line endings on checkout, regardless of
+# each contributor's local core.autocrlf setting.
+#
+# WHY IT IS HERE. A Windows checkout with core.autocrlf=true rewrites every
+# source file to CRLF, and scripts/build.js matches its anchors EXACTLY —
+# patch() throws unless its find matches once. A line ending is invisible in
+# a diff and fatal to an anchor, so the failure arrives eighty steps into a
+# build somebody waited half an hour for, saying nothing about line endings.
+# That happened once. Nothing in the repository was CRLF when this landed, so
+# it changes no existing file; it only stops the next one.
+* text=auto eol=lf
+
+# Binary assets are DECLARED, not detected. git's auto-detection reads the
+# first few KB for NUL bytes and gets these right today — checked by cloning
+# the repo and comparing hashes, all identical — but a file whose header
+# happens to look textual would be normalized and silently corrupted, and a
+# corrupted font or image is not something a test suite would catch.
+*.woff2 binary
+*.webp binary

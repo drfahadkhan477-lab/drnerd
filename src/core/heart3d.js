@@ -1442,9 +1442,21 @@ function create(canvas, opts) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return t;
   }
+  /* fetchOk: the one thing every call site here needs and none of them had.
+     fetch() only rejects on a network failure — a 404 or a captive-portal
+     login page resolves normally, and the caller that skips this check gets
+     to find out three lines later, as a RangeError from a typed-array view
+     built on a manifest that no longer matches the payload it describes.
+     That error is real but it is about the wrong thing: the fetch, not the
+     arithmetic. */
+  async function fetchOk(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`heart3d: loadScan could not fetch ${url} (${r.status})`);
+    return r;
+  }
   async function loadScan(src) {
     const man = typeof src.manifest === 'string' ? JSON.parse(src.manifest) : src.manifest;
-    const bin = await (await fetch(src.bin)).arrayBuffer();
+    const bin = await (await fetchOk(src.bin)).arrayBuffer();
     const L = man.layout;
     const pos = new Float32Array(bin, L.pos.byteOffset, L.pos.byteLength / 4);
     const nrm = new Int8Array(bin, L.nrm.byteOffset, L.nrm.byteLength);
@@ -1456,13 +1468,24 @@ function create(canvas, opts) {
       : new Uint32Array(bin, L.idx.byteOffset, L.idx.byteLength / 4);
 
     const imgs = await Promise.all(['base', 'normal', 'mr'].map(async k => {
-      const blob = await (await fetch(src[k])).blob();
+      const blob = await (await fetchOk(src[k])).blob();
       /* No flip. glTF puts UV (0,0) at the image's top-left, and an unflipped
          upload puts the top row at t=0 — they already agree. Flipping mirrors
          the atlas vertically, which sends the mesh to sample the unused padding
          regions and covers it in coloured shards. */
       return createImageBitmap(blob);
     }));
+
+    /* Four awaits sit above this line, and destroy() (WEBGL_lose_context) can
+       run at any point during any of them — the panel closing while a scan is
+       still loading, say. The context is dead but every gl.* call below is a
+       spec-defined silent no-op on a lost context, not a throw, so without
+       this the promise would still resolve with a credit string as if the
+       load had succeeded, and scan/hasScan() would report a model that will
+       never render. Checked once, here, rather than after every await: this
+       is the last point before any GPU object is created, so it is the only
+       place that has to catch it. */
+    if (S.dead || S.lost) return null;
 
     scanProg = program(gl, SCAN_VERT, SCAN_FRAG);
     uScan = {};
