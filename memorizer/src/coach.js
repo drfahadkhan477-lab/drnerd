@@ -1074,12 +1074,90 @@ function tree(f) {
   return roots.map(grow);
 }
 
+/* ── the robot: the coach explains what is in front of you ────────────────
+   Tapped during a question, it says what KIND of question it is, where in
+   the section to look, and — before an answer — the book's sentence with
+   the answer blanked, when the answer is in it verbatim (never the answer
+   itself). After an answer: why the right one is right (the book's
+   sentence), and for each wrong option, where the book mentions it, so a
+   near-miss is learnt as a distinction. Tapped during a lesson, it gives
+   the section in one line, its cause and effect as one sentence, what is
+   asked most, and its mnemonics. Every word is the book's, except the
+   joining "which" and the labels. */
+var KIND_SAYS = {
+  mechanism: 'A mechanism question: follow your book’s cause and effect one step along.',
+  threshold: 'A threshold question: the value your book uses to define it, and which side of the cut-off.',
+  most: 'A “most common” question: the one your book ranks first.',
+  except: 'An EXCEPT question: three options are on your book’s list; find the one that is not.',
+  'define-back': 'A definition question: the term your book defines in these words.',
+  define: 'A definition question: the words your book defines it with.',
+  member: 'A list question: which one is on your book’s list.',
+  table: 'A table question: read across the row of your book’s table.',
+  'true': 'A true-statement question: only one option is what your book says.',
+  number: 'A numbers question: the value your book gives.',
+  term: 'A missing-word question: the word your book uses in this sentence.',
+  source: 'A which-section question: one statement is from this section; the others are from the rest of the unit.',
+};
+var ASK_SOMETHING = 'A question on this section: one option is what your book says.';
+/* The kind, read back from the question's own wording: a stored drill
+   carries no kind (its shape is the prompts' schema, shared with Claude's
+   replies), and one made by an AI has none. Checked against every
+   candidate's real kind in the coach suite. */
+var KIND_SHAPES = [
+  ['mechanism', /^Follow the mechanism in your book: /], ['threshold', /^In your book, what .+ defines .+\?$/],
+  ['most', /^What is the most /], ['except', / EXCEPT:$/], ['define-back', /^Which term is defined as /],
+  ['define', /^Which best describes /], ['member', /^Which of the following is one of the /], ['table', /^In the table, what is the /],
+  ['number', /^Which value completes this statement from your book\?$/], ['term', /^Which term completes this statement from your book\?$/],
+  ['true', /^Which statement about .+ is correct\?$/], ['source', /^Which of these statements is from /],
+];
+function questionKind(q) {
+  var t = String(q && q.question || '');
+  for (var i = 0; i < KIND_SHAPES.length; i++) if (KIND_SHAPES[i][1].test(t)) return KIND_SHAPES[i][0];
+  return '';
+}
+function askMod() { return root.MemAsk || (typeof require === 'function' ? require('./ask.js') : null); }
+function mentions(cluster, phrase, not) {
+  var p = String(phrase || '').trim().toLowerCase();
+  if (p.length < 3) return null;
+  var re = new RegExp('(?:^|[^a-z0-9])' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z0-9])', 'i');
+  return sentences(cluster, true).filter(function (s) { return s.text !== not && re.test(s.text); })[0] || null;
+}
+function explainQuestion(cluster, q, chosen) {
+  var A = askMod(), src = String(q.explain || ''), ans = String(q.options[q.answer] || '');
+  var heading = src ? A.headingOf(src) : A.OTHER;
+  var out = { kind: KIND_SAYS[questionKind(q)] || ASK_SOMETHING, where: heading && heading !== A.OTHER ? heading : '', page: q.page || 0,
+              hint: '', why: '', options: [] };
+  if (chosen == null) {
+    var at = ans ? src.toLowerCase().indexOf(ans.toLowerCase()) : -1;
+    if (!q.quote && at !== -1) out.hint = src.slice(0, at) + '_____' + src.slice(at + ans.length);
+    return out;
+  }
+  out.why = src;
+  out.options = q.options.map(function (o, i) {
+    var said = i === q.answer ? null : mentions(cluster, o, src);
+    return { text: o, right: i === q.answer, chosen: i === chosen, said: said ? said.text : '', page: said ? said.page : 0 };
+  });
+  return out;
+}
+function explainSection(cluster, lessonValue) {
+  var L = lessonValue || {}, hooks = L.mnemonics || [];
+  var g = sheetMod().glance(cluster, hooks.map(function (m) { return m.title; })) || { facts: [], pathway: [] };
+  var chain = g.pathway.length >= 2 ? g.pathway.map(function (st, i) {
+    return i === 0 ? st.label : (i === 1 ? ' ' : ', which ') + st.verb + ' ' + st.label;
+  }).join('') : '';
+  if (chain) chain = chain.charAt(0).toUpperCase() + chain.slice(1) + '.';
+  return { gist: String(L.overview || (L.points && L.points[0] && L.points[0].text) || ''), chain: chain,
+           facts: g.facts.map(function (f) { return f.title + ' — ' + f.sub; }),
+           hooks: hooks.map(function (m) { return { title: m.title, letters: m.letters, words: m.words }; }) };
+}
+
 var MemCoach = {
   OPTIONS: OPTIONS, PER_KIND: PER_KIND, QUIZ_SIZE: QUIZ_SIZE, KIND_ORDER: KIND_ORDER, family: family, FLIP: FLIP, keyTermOf: keyTermOf,
   sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, defined: defined, toks: toks,
   rankedTerms: rankedTerms, frequencies: frequencies, bare: bare, numberFacts: numberFacts, mnemonicsOf: mnemonicsOf,
   pools: pools, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
   lesson: lesson, quiz: quiz, exam: exam, flow: flow, paths: paths, tree: tree,
+  KIND_SAYS: KIND_SAYS, questionKind: questionKind, explainQuestion: explainQuestion, explainSection: explainSection,
 };
 root.MemCoach = MemCoach;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemCoach;

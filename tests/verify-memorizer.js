@@ -509,7 +509,8 @@ function kindOf(user) {
   /* The picture found at import is drawn from the stored PDF, cropped. */
   await page.waitForFunction(() => { const i = document.querySelector('#visuals .figs img'); return i && /^data:image\/png/.test(i.src) && i.naturalWidth > 0; }, null, T);
   const fig = await page.evaluate(() => { const i = document.querySelector('#visuals .figs img'); return { w: i.naturalWidth, h: i.naturalHeight }; });
-  ok('the figure on page 1 is shown, cut from the page at its own shape', Math.abs(fig.w / fig.h - 2) < 0.1, `${fig.w}×${fig.h}`);
+  const M = await page.evaluate(() => MemPdf.CROP_MARGIN), B = pdf.IMG_BOX, shape = (B[2] - B[0] + 2 * M) / (B[3] - B[1] + 2 * M);
+  ok('the figure on page 1 is shown, cut from the page at its own shape, with its margin', M > 0 && Math.abs(fig.w / fig.h - shape) < 0.03, `${fig.w}×${fig.h}, expected ${shape.toFixed(3)}`);
   const figCap = await page.locator('#visuals .figs figcaption').first().innerText();
   ok('under its own caption, and named by it to a screen reader', figCap.indexOf(pdf.CAPTION) === 0 &&
      await page.locator('#visuals .figs button[aria-label="Enlarge Figure 4"]').count() === 1, figCap);
@@ -522,6 +523,16 @@ function kindOf(user) {
   ok('a page opens large', await page.locator('.lightbox').count() === 1);
   await page.keyboard.press('Escape');
   ok('and Escape closes it', await page.locator('.lightbox').count() === 0);
+  await page.locator('#fold-pages > summary').click();
+  const shut = await page.evaluate(() => !document.querySelector('#fold-pages').open && !document.querySelector('#visuals .pages').checkVisibility());
+  /* precondition: the lesson has been drawn again — a new #fold-pages, not the old one */
+  await page.evaluate(() => { document.querySelector('#fold-pages').__old = true; Memorizer.render(); });
+  await page.waitForFunction(() => { const f = document.querySelector('#fold-pages'); return f && !f.__old; }, null, T);
+  ok('the pages minimise with their button, and stay minimised when the lesson is drawn again', shut &&
+     await page.evaluate(() => !document.querySelector('#fold-pages').open && document.querySelector('#fold-figures').open),
+     JSON.stringify({ shut, now: await page.evaluate(() => ({ pages: document.querySelector('#fold-pages').open, figs: !!document.querySelector('#fold-figures') && document.querySelector('#fold-figures').open, folds: Memorizer.ui.folds })) }));
+  await page.locator('#fold-pages > summary').click();
+  ok('and open again', await page.evaluate(() => document.querySelector('#fold-pages').open && document.querySelector('#visuals .pages').checkVisibility()));
   await page.locator('#glance .gl-path').waitFor(T);
   ok('at a glance: the cause-and-effect sentences as a pathway, the book\u2019s verbs on the arrows', /^Diuretics reduce → preload raises → venous pressure/.test(await text(page, '#glance .gl-path')) &&
      await page.locator('#flow').count() === 0, await text(page, '#glance .gl-path'));
@@ -531,6 +542,41 @@ function kindOf(user) {
   await page.locator('#quick .option').first().click();
   ok('answered, it shows right or wrong and why — and is not recorded', await page.locator('#quick .why').count() === 1 &&
      await page.evaluate(() => Memorizer.ui.state.per[0].answers.length === 0 && Memorizer.ui.state.cards.length === 0 && Memorizer.ui.state.phase === 'teach'));
+
+  head('the robot coach, on the right');
+  const rb = await page.evaluate(() => { const r = document.querySelector('#robot').getBoundingClientRect();
+    return { cx: r.left + r.width / 2, right: innerWidth - r.right, w: innerWidth, pos: getComputedStyle(document.querySelector('#robot-dock')).position }; });
+  ok('a robot waits at the right of the screen, fixed, during a lesson', rb.pos === 'fixed' && rb.cx > rb.w * 0.8 && rb.right >= 0 && rb.right < 40, JSON.stringify(rb));
+  ok('with no window open until it is tapped', await page.locator('#robot-panel').count() === 0);
+  await page.locator('#robot').click();
+  await page.locator('#robot-panel').waitFor(T);
+  const rp = await text(page, '#robot-panel');
+  ok('tapped, it explains the section: in one line, and its cause and effect as one sentence', /In one line/i.test(rp) &&
+     /Diuretics reduce preload, which raises venous pressure, which leads to oedema of the lungs\./.test(rp), rp.slice(0, 240));
+  await page.locator('#robot-panel .rb-close').click();
+  ok('and closes', await page.locator('#robot-panel').count() === 0);
+
+  head('the lesson step by step, one card at a time');
+  await page.locator('#step-mode').click();
+  await page.locator('#lesson-steps').waitFor(T);
+  const N = +(/of (\d+)/.exec(await text(page, '#lesson-steps .step-count')) || [])[1];
+  const MARKS = ['#big-idea', '#points', '#numbers', '.hook', '#quick', '#visuals'];
+  const seen = [];
+  for (let i = 0; i < N; i++) {
+    if (i) { await page.locator('#step-next').click(); await page.waitForFunction(k => new RegExp('^Step ' + k + ' of').test(document.querySelector('#lesson-steps .step-count').textContent), i + 1, T); }
+    seen.push(await page.evaluate(ms => ms.filter(m => document.querySelector('main ' + m)), MARKS));
+  }
+  ok('each step shows one thing — the idea, a heading’s points, the numbers, the mnemonic, a check, then the figures — in that order, the drill at the end',
+     N >= 6 && seen.every(x => x.length === 1) && JSON.stringify(seen.map(x => x[0]).filter((m, i, a) => a.indexOf(m) === i)) === JSON.stringify(MARKS) &&
+     await page.locator('#to-drill').count() === 1 && await page.locator('#step-next').count() === 0, JSON.stringify(seen));
+  await page.locator('#step-back').click();
+  ok('Back goes one step back, and the drill button waits for the last', await page.locator('#to-drill').count() === 0 &&
+     new RegExp('^Step ' + (N - 1) + ' of').test(await text(page, '#lesson-steps .step-count')));
+  ok('the choice is remembered on this device', await page.evaluate(() => localStorage.getItem('memorizer.stepmode.v1')) === '1');
+  await page.locator('#whole-page').click();
+  await page.locator('#step-mode').waitFor(T);
+  ok('and the whole lesson is one tap away again', await page.locator('main #points').count() === 1 && await page.locator('main #numbers').count() === 1 &&
+     await page.locator('main .hook').count() >= 1 && await page.locator('#to-drill').count() === 1 && await page.locator('#lesson-steps').count() === 0);
 
   head('the drill: multiple choice, and a miss comes back');
   await page.locator('#to-drill').click();
@@ -542,7 +588,17 @@ function kindOf(user) {
   ok('four options, lettered A to D, and nothing to type', JSON.stringify(await page.$$eval('#mcq .opt-letter', es => es.map(e => e.textContent))) === '["A","B","C","D"]' &&
      await page.locator('textarea, input[type="text"]').count() === 0);
   ok('the question counts where it is', /Question 1 of 2/.test(await meta(page)));
+  await page.locator('#robot').click();
+  await page.locator('#robot-panel').waitFor(T);
+  const q1 = await page.evaluate(() => { const c = Memorizer.ui.state.per[0]; const q = c.quiz.questions[c.order[c.pos]]; return q.options[q.answer]; });
+  const rq = await text(page, '#robot-panel');
+  ok('the robot, before an answer: what the question asks — never the answer', /What it asks/i.test(rq) && !/\bWhy\b/i.test(rq) &&
+     rq.toLowerCase().indexOf(q1.toLowerCase()) === -1 && await page.locator('#robot-panel .rb-options').count() === 0, rq.slice(0, 200));
   await page.locator('.option[data-i="0"]').click();
+  ok('and once answered, why — every option explained, the answer marked', /\bWhy\b/i.test(await text(page, '#robot-panel')) &&
+     await page.locator('#robot-panel .rb-options li').count() === 4 && await page.locator('#robot-panel .rb-options li.right').count() === 1 &&
+     /stretch at end-diastole/.test(await text(page, '#robot-panel')));
+  await page.locator('#robot-panel .rb-close').click();
   ok('a right choice turns green, with the book’s reason and page', await page.locator('.option.right[data-i="0"]').count() === 1 &&
      /Correct/.test(await page.locator('.why.good strong').innerText()) && /stretch at end-diastole/.test(await page.locator('.why').innerText()) &&
      await page.locator('.why .pg').count() === 1);
@@ -691,6 +747,12 @@ function kindOf(user) {
   ok('and nothing of section 3 but its key points', !/s3w[a-z]/.test(ex[0].user) && /"Section Three Contractility" \(key points\)/.test(ex[0].user));
   const examMeta = await meta(page);
   ok('the exam does not name the section a question is from, before it is answered', /^Question 1 of 2/.test(examMeta) && !pdf.titles.some(t => examMeta.indexOf(t) !== -1), examMeta);
+  await page.locator('#robot').click();
+  await page.locator('#robot-panel').waitFor(T);
+  const exLabels = await page.$$eval('#robot-panel .rb-label', ls => ls.map(l => l.textContent));
+  ok('in the exam the robot gives no hint and no place to look before an answer', /no hints/.test(await text(page, '#robot-panel')) &&
+     exLabels.length >= 1 && !exLabels.some(l => /Where to look|Your book says/.test(l)), JSON.stringify(exLabels));
+  await page.locator('#robot-panel .rb-close').click();
   await page.locator('.option[data-i="2"]').click();
   ok('and does, once it is', /From “Section One Preload”/.test(await page.locator('.why').innerText()), await text(page, '.why'));
   await page.locator('#next').click();
@@ -1031,7 +1093,10 @@ function kindOf(user) {
     ok('and drops a made-up number, a drug the passage never names, and a sentence citing nothing — and says so', !/75|Nitrates|works well/.test(sumText) &&
        /3 sentences dropped/.test(sumText), sumText.slice(0, 200));
     await p2.locator('#read-more li button').first().click();
-    await p2.locator('#ai-lesson').waitFor(T);
+    await p2.locator('#big-idea').waitFor(T);
+    ok('the AI tutor is not in the lesson’s flow any more', await p2.locator('main #ai-lesson').count() === 0);
+    await p2.locator('#robot').click();
+    await p2.locator('#robot-panel #ai-lesson').waitFor(T);
     await p2.locator('#ai-plain').click();
     await p2.locator('#ai-plain-text').waitFor(T);
     ok('in plain words: its own words are kept when they add nothing the section lacks', (await p2.locator('#ai-plain-text').innerText()) === 'Preload is how much the ventricle is stretched before it contracts.' &&
@@ -1101,6 +1166,17 @@ function kindOf(user) {
     await p2.locator('#ask-go').click();
     await p2.locator('#not-found').waitFor(T);
     ok('turned off, it is words again', await p2.locator('#answer').count() === 0);
+    /* Figures stored by an older finder are found again when the unit is
+       opened: the owner's highlighted PDF kept its wrong crops otherwise. */
+    const stale = await p2.evaluate(() => MemStore.all('docs').then(ds => {
+      const d = ds.find(x => x.hasFile && !x.bookId && x.figures && x.figures.length), was = JSON.stringify(d.figures);
+      d.figuresV = 1; d.figures = [{ page: 1, box: [0, 0, 100, 100] }];
+      return MemStore.put('docs', d).then(() => ({ id: d.id, was }));
+    }));
+    await p2.evaluate(id => Memorizer.openDoc(id), stale.id);
+    await p2.waitForFunction(id => Memorizer.ui.docRec && Memorizer.ui.docRec.id === id && Memorizer.ui.docRec.figuresV === MemPdf.FIGURES_V, stale.id, T);
+    const refound = await p2.evaluate(id => MemStore.get('docs', id).then(d => JSON.stringify(d.figures)), stale.id);
+    ok('figures stored by an older finder are found again, and kept', refound === stale.was, refound.slice(0, 120));
   }
 
   head('a whole book: its PDFs as one, cut into chapters');

@@ -398,6 +398,53 @@ head('questions that test reasoning: mechanisms and thresholds');
   ok('reasoning comes first in a drill: mechanism, then threshold', K.KIND_ORDER[0] === 'mechanism' && K.KIND_ORDER[1] === 'threshold');
 }
 
+head('the robot explains the question in front of you');
+{
+  const CH = { index: 3, title: 'Congestion', pageStart: 9, pageEnd: 9, text: '', segments: [{ page: 9, heading: false, text:
+    'Diuretics reduce preload by lowering circulating volume. Excessive preload raises pulmonary venous pressure and causes pulmonary congestion. ' +
+    'Raised pulmonary venous pressure leads to oedema of the lungs.' }] };
+  CH.text = CH.segments[0].text;
+  const U2 = UNIT.concat([CH]);
+  const all = [].concat(...U2.map(c => K.quiz(c, K.lesson(c), U2).questions.map(q => ({ c, q }))));
+  const before = all.map(({ c, q }) => ({ q, e: K.explainQuestion(c, q, null) }));
+  const TB = { index: 9, title: 'Values', pageStart: 3, pageEnd: 3, text: '', segments: [{ page: 3, heading: false, text: 'Measure Normal Unit LVEDP < 12 mmHg Stroke volume 60-100 mL Ejection fraction 55 percent Heart rate 50-90 bpm',
+    table: [['Measure', 'Normal', 'Unit'], ['LVEDP', '< 12', 'mmHg'], ['Stroke volume', '60-100', 'mL'], ['Ejection fraction', '55', 'percent'], ['Heart rate', '50-90', 'bpm']] }] };
+  TB.text = TB.segments[0].text;
+  const cands = [].concat(...U2.concat([TB]).map(c => K.candidates(c, K.pools(U2.concat([TB])))));
+  const misread = cands.filter(q => K.questionKind(q) !== q.kind);
+  ok('every kind of question is read back from its wording — for all the section’s candidates, not just those drilled',
+     new Set(cands.map(q => q.kind)).size >= 10 && misread.length === 0 && Object.keys(K.KIND_SAYS).every(k => cands.some(q => q.kind === k)),
+     JSON.stringify(misread.slice(0, 3).map(q => [q.kind, q.question])) + ' ' + JSON.stringify([...new Set(cands.map(q => q.kind))]));
+  ok('before an answer: what kind of question it is, said for every question drilled', all.length >= 10 &&
+     before.every(({ q, e }) => e.kind === K.KIND_SAYS[K.questionKind(q)] && e.kind), JSON.stringify(before.filter(({ e }) => !e.kind).length));
+  const hinted = before.filter(({ e }) => e.hint);
+  ok('a hint is the book’s sentence with the answer blanked — and never contains the answer', hinted.length >= 2 &&
+     hinted.every(({ q, e }) => /_____/.test(e.hint) && e.hint.toLowerCase().indexOf(q.options[q.answer].toLowerCase()) === -1 &&
+       e.hint.replace('_____', q.options[q.answer]).toLowerCase() === q.explain.toLowerCase()) &&
+     before.every(({ q, e }) => !e.why && !e.options.length && (!q.quote || !e.hint)), `${hinted.length} hints`);
+  const fwd = K.candidates(CH, K.pools(U2)).find(q => q.kind === 'mechanism' && /Diuretics → reduce → \?$/.test(q.question));
+  const wrong = fwd.options.findIndex((o, i) => i !== fwd.answer);
+  const after = K.explainQuestion(CH, fwd, wrong);
+  ok('after an answer: the book’s sentence says why, your choice and the right one marked', after.why === fwd.explain &&
+     after.options.length === 4 && after.options.filter(o => o.right).length === 1 && after.options[fwd.answer].right &&
+     after.options[wrong].chosen && after.options.filter(o => o.chosen).length === 1, JSON.stringify(after.options));
+  const said = all.map(({ c, q }) => ({ q, e: K.explainQuestion(c, q, (q.answer + 1) % 4) }))
+    .reduce((a, { q, e }) => a.concat(e.options.filter(o => !o.right && o.said).map(o => ({ q, o }))), []);
+  ok('and each wrong option the book mentions elsewhere, with its sentence — so a near-miss is learnt as a distinction', said.length >= 3 &&
+     said.every(({ q, o }) => o.said !== q.explain && o.said.toLowerCase().indexOf(o.text.toLowerCase()) !== -1 && o.page > 0 &&
+       U2.some(c => c.text.indexOf(o.said) !== -1)), `${said.length} mentioned`);
+  const tiny = { segments: [{ page: 1, text: 'Diuretics reduce preload, unlike inotropes. Shockwave therapy was tried. Inotropes raise contractility.' }] };
+  const tq = { question: 'x', options: ['preload', 'shock', 'inotropes', 'afterload'], answer: 0, explain: 'Diuretics reduce preload, unlike inotropes.', page: 1 };
+  const te = K.explainQuestion(tiny, tq, 1);
+  ok('a wrong option inside a longer word is not "mentioned" ("shock" is not in "Shockwave")', te.options[1].said === '', te.options[1].said);
+  ok('and where the book mentions it is another sentence than the one that answers the question', te.options[2].said === 'Inotropes raise contractility.', te.options[2].said);
+  ok('the one line is the lesson’s big idea, else its first point', K.explainSection(CH, { overview: 'Big.', points: [{ text: 'First.' }] }).gist === 'Big.' &&
+     K.explainSection(CH, { overview: '', points: [{ text: 'First.' }] }).gist === 'First.');
+  const sec = K.explainSection(CH, K.lesson(CH));
+  ok('during a lesson: the section in one line, and its cause and effect as one sentence in the book’s words',
+     sec.gist === K.lesson(CH).overview && sec.chain === 'Diuretics reduce preload, which raises pulmonary venous pressure, which leads to oedema of the lungs.', JSON.stringify(sec));
+}
+
 head('the key term of a point, set in bold');
 {
   const c = { index: 0, title: 'X', segments: [{ page: 3, heading: false, text: 'Rheumatic heart disease is the most common cause of tricuspid stenosis. Diuretics reduce preload by lowering circulating volume.' }] };

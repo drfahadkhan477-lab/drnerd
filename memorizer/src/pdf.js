@@ -193,8 +193,18 @@ function drawn(opList, OPS) {
     });
     return [Math.min.apply(null, xs), Math.min.apply(null, ys), Math.max.apply(null, xs), Math.max.apply(null, ys)];
   }
+  /* ANNOTATIONS are not the page. pdf.js puts each one's appearance —
+     a reader's highlight, underline or note — into the operator list
+     between begin/endAnnotation, drawn under a matrix of its own that the
+     transform tracking here does not follow. A highlighted textbook's
+     marks came out as "figures" of prose cropped from the wrong place. A
+     highlight is never a figure, so annotations are skipped whole. */
+  var inAnnot = 0;
   for (var i = 0; i < opList.fnArray.length; i++) {
     var fn = opList.fnArray[i], args = opList.argsArray[i];
+    if (OPS.beginAnnotation != null && fn === OPS.beginAnnotation) { inAnnot++; continue; }
+    if (OPS.endAnnotation != null && fn === OPS.endAnnotation) { inAnnot = Math.max(0, inAnnot - 1); continue; }
+    if (inAnnot) continue;
     if (fn === OPS.save) stack.push(ctm.slice());
     else if (fn === OPS.restore) ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
     else if (fn === OPS.transform) ctm = mul(ctm, args);
@@ -467,6 +477,17 @@ function figuresOn(key, buffer, pageNos) {
    URL, at `scale` device pixels per PDF unit. Opened afresh each time from
    the stored bytes; a study session draws a handful, so nothing is kept
    open between them. */
+/* A figure's box with a margin round it, kept on the page: a crop cut
+   exactly at the drawing's edge clips a title bar's letters and a frame's
+   outer line. */
+var CROP_MARGIN = 8;
+/* The finder's version, stored with the figures it found. 2: annotations
+   skipped. */
+var FIGURES_V = 2;
+function padBox(box, view, m) {
+  m = m == null ? CROP_MARGIN : m;
+  return [Math.max(view[0], box[0] - m), Math.max(view[1], box[1] - m), Math.min(view[2], box[2] + m), Math.min(view[3], box[3] + m)];
+}
 var docCache = { key: null, doc: null };
 function openStored(key, buffer) {
   if (docCache.key === key && docCache.doc) return Promise.resolve(docCache.doc);
@@ -482,7 +503,7 @@ function renderBox(key, buffer, pageNo, box, scale) {
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
     return page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise.then(function () {
       if (!box) return canvas.toDataURL('image/png');
-      var r = vp.convertToViewportRectangle(box);
+      var r = vp.convertToViewportRectangle(padBox(box, page.view));
       var x = Math.max(0, Math.floor(Math.min(r[0], r[2]))), y = Math.max(0, Math.floor(Math.min(r[1], r[3])));
       var w = Math.min(canvas.width - x, Math.ceil(Math.abs(r[2] - r[0]))), hh = Math.min(canvas.height - y, Math.ceil(Math.abs(r[3] - r[1])));
       var out = document.createElement('canvas');
@@ -493,6 +514,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

@@ -644,7 +644,7 @@ head('figures drawn as lines, not pictures');
   /* pdf.js 3.11's own numbers for these operators (src/shared/util.js OPS). */
   const OPS = { save: 10, restore: 11, transform: 12, moveTo: 13, lineTo: 14, curveTo: 15, curveTo2: 16, curveTo3: 17, closePath: 18, rectangle: 19,
                 stroke: 20, closeStroke: 21, fill: 22, eoFill: 23, fillStroke: 24,
-                endPath: 28, clip: 29, paintImageXObject: 85, paintFormXObjectBegin: 74, paintFormXObjectEnd: 75, constructPath: 91 };
+                endPath: 28, clip: 29, paintImageXObject: 85, paintFormXObjectBegin: 74, paintFormXObjectEnd: 75, beginAnnotation: 80, endAnnotation: 81, constructPath: 91 };
   const view = [0, 0, 612, 792];
   const ops = list => ({ fnArray: list.map(x => x[0]), argsArray: list.map(x => x[1] || null) });
   /* A painted path as pdf.js lists it: [ops, their numbers, the bounds pdf.js
@@ -656,6 +656,18 @@ head('figures drawn as lines, not pictures');
     ...[0, 1, 2, 3, 4, 5, 6, 7].map(i => bar(110 + i * 36, 300, 24, 40 + i * 20)));
   const found = Pdf.figureBoxes(ops(chart), OPS, view, []);
   ok('a chart drawn as lines and bars is a figure, boxed where it was drawn', JSON.stringify(found) === '[[100,300,400,500]]', JSON.stringify(found));
+  /* A reader's highlights: eight marker strokes down a paragraph, each an
+     annotation as pdf.js 3.11 lists it — [id, rect, transform, matrix, own
+     canvas] — with its appearance drawn inside. Unwrapped, the same strokes
+     are a "figure" (the fixture is one the rules would otherwise take). */
+  const marks = [0, 1, 2, 3, 4, 5, 6, 7].map(i => bar(80, 600 - i * 14, 300, 12));
+  const annotated = [].concat(...marks.map((m, i) => [[80, ['a' + i, [80, 600 - i * 14, 380, 612 - i * 14], [1, 0, 0, 1, 0, 0], [1, 0, 0, 1, 0, 0], false]]].concat(m, [[81]])));
+  ok(`a crop has a ${Pdf.CROP_MARGIN}-unit margin, never past the page`, JSON.stringify(Pdf.padBox([100, 300, 400, 500], view)) === JSON.stringify([100 - Pdf.CROP_MARGIN, 300 - Pdf.CROP_MARGIN, 400 + Pdf.CROP_MARGIN, 500 + Pdf.CROP_MARGIN]) &&
+     JSON.stringify(Pdf.padBox([2, 3, 610, 790], view)) === '[0,0,612,792]', JSON.stringify(Pdf.padBox([2, 3, 610, 790], view)));
+  ok('a reader\u2019s highlights are annotations, never a figure — and a chart beside them still is',
+     Pdf.figureBoxes(ops([].concat(...marks)), OPS, view, []).length === 1 &&
+     JSON.stringify(Pdf.figureBoxes(ops(annotated.concat(chart)), OPS, view, [])) === '[[100,300,400,500]]',
+     JSON.stringify(Pdf.figureBoxes(ops(annotated.concat(chart)), OPS, view, [])));
   ok(`fewer than ${Pdf.VECTOR_MIN_PATHS} paths — a frame, a box round a callout — is not`,
      Pdf.figureBoxes(ops([].concat(line(100, 300, 400, 300), line(100, 300, 100, 500), bar(120, 300, 200, 150))), OPS, view, []).length === 0);
   /* Painted axes, and eight bars that are only clipping paths: counted, the

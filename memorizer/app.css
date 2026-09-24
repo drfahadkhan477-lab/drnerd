@@ -5,7 +5,8 @@
    The layout follows the owner's reference screens: rounded cards on the
    page's own ground, pill chips, progress rings, section cards with a band
    of colour, and a floating dock at the foot. Nothing animates but the
-   busy spinner. */
+   busy spinner and the robot coach (which stands still under reduced
+   motion). */
 :root {
   --bg: #EFF3F8; --surface: #FFFFFF; --surface-2: #E6ECF3; --ink: #0F1E33; --muted: #4A5A70; --line: #D3DCE7;
   --accent: #0369A1; --accent-soft: #E3F0FA; --accent-ink: #FFFFFF; --edge: #818C9B;
@@ -401,3 +402,64 @@ details.more-analogies > summary { cursor: pointer; font-weight: 600; }
 strong.key { color: var(--accent); }
 .quick { border-left: 4px solid hsl(45 90% 55%); }
 .quick .q { font-weight: 700; margin: var(--s-2) 0; }
+
+/* minimisable parts of a card: figures, pages */
+details.fold + details.fold { margin-top: var(--s-5); }
+details.fold > summary.fold-head { list-style: none; display: flex; align-items: center; justify-content: space-between; cursor: pointer; gap: var(--s-3); }
+details.fold > summary.fold-head::-webkit-details-marker { display: none; }
+details.fold > summary .eyebrow { margin: 0; }
+.fold-btn { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--line); color: var(--muted); font-size: var(--t-lead); line-height: 1; }
+.fold-btn::after { content: '−'; }
+details.fold:not([open]) .fold-btn::after { content: '+'; }
+details.fold[open] > summary.fold-head { margin-bottom: var(--s-3); }
+summary.fold-head:hover .fold-btn { color: var(--accent); border-color: currentColor; }
+
+/* ── the robot coach: bottom right, above the dock ─────────────────────────
+   It moves — a slow float, a blink, its antenna glowing — so it reads as
+   something to tap; with reduced motion asked for, it stands still. */
+.robot-dock { position: fixed; z-index: 11; right: var(--s-4); bottom: calc(5.5rem + env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: flex-end; gap: var(--s-3); pointer-events: none; }
+.robot-dock > * { pointer-events: auto; }
+.robot { width: 4rem; height: 4rem; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); cursor: pointer; padding: .375rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25); display: grid; place-items: center; }
+.robot.on { outline: 3px solid var(--accent); outline-offset: 2px; }
+.robot-svg { width: 100%; height: 100%; overflow: visible; animation: rb-float 3.2s ease-in-out infinite; }
+.robot-svg .rb-head { fill: var(--accent); }
+.rb-ear, .rb-neck { fill: var(--accent); opacity: .75; }
+.rb-visor { fill: var(--hero-a); }
+.rb-eyes circle { fill: var(--hero-accent); }
+.rb-eyes { transform-box: fill-box; transform-origin: center; animation: rb-blink 4.5s infinite; }
+.rb-smile { fill: none; stroke: var(--accent-ink); stroke-width: 2.4; stroke-linecap: round; }
+.rb-stalk { stroke: var(--accent); stroke-width: 2.4; }
+.rb-bulb { fill: var(--hero-accent); animation: rb-glow 1.8s ease-in-out infinite; }
+@keyframes rb-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes rb-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes rb-glow { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .robot-svg, .rb-eyes, .rb-bulb { animation: none; } }
+.robot-panel { width: min(22rem, calc(100vw - 2rem)); max-height: min(62vh, 34rem); overflow: auto; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 1.25rem; box-shadow: 0 16px 40px rgba(0,0,0,.3); padding: var(--s-4); animation: rb-pop .18s ease-out; transform-origin: bottom right; }
+@keyframes rb-pop { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .robot-panel { animation: none; } }
+.robot-panel .rb-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin-bottom: var(--s-3); }
+.rb-close { font: inherit; font-size: var(--t-lead); line-height: 1; width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); cursor: pointer; }
+.rb-line { margin: 0 0 var(--s-3); }
+.rb-line p, .rb-line ul { margin: .125rem 0 0; }
+.rb-label { display: block; font-size: var(--t-tiny); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.rb-letters { color: var(--accent); letter-spacing: .08em; }
+.rb-options { list-style: none; margin: var(--s-2) 0 0; padding: 0; display: grid; gap: var(--s-2); }
+.rb-options li { display: flex; gap: var(--s-2); align-items: flex-start; padding: var(--s-2); border-radius: .75rem; background: var(--surface-2); }
+.rb-options li.right { background: var(--good-soft); }
+.rb-options li.wrong { background: var(--bad-soft); }
+.rb-options p { margin: .125rem 0 0; font-size: var(--t-meta); }
+.rb-tag { font-size: var(--t-meta); font-weight: 700; }
+.robot-panel .ai-card { margin: var(--s-3) 0 0; }
+
+/* step by step: one card at a time, a bar of progress, Back and Next */
+.lesson-mode { justify-content: flex-end; margin: 0 0 var(--s-3); }
+.step-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; margin: var(--s-2) 0; }
+.step-count { font-size: var(--t-meta); color: var(--muted); }
+.step-count strong { color: var(--ink); }
+.step-bar { margin: 0 0 var(--s-4); }
+.step-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin: var(--s-5) 0 var(--s-8); }
+.step-nav .end-cta { flex: 1; margin: 0; }
+.step-nav #step-next { flex: 1; }

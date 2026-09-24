@@ -181,7 +181,7 @@ function saveUnit(name, source, pages, extra) {
   var clusters = Chunk.clusterBlocks(blocks);
   if (!clusters.length) throw new Error(extra && extra.emptyMessage || 'No readable text was found.');
   var rec = { id: newId(), name: name, addedAt: Date.now(), pages: pages.length, source: source, clusters: clusters,
-              scanned: (extra && extra.scanned) || [], figures: (extra && extra.figures) || [], hasFile: !!(extra && extra.bytes),
+              scanned: (extra && extra.scanned) || [], figures: (extra && extra.figures) || [], figuresV: Pdf.FIGURES_V, hasFile: !!(extra && extra.bytes),
               ocr: (extra && extra.ocr) || [], ocrError: (extra && extra.ocrError) || '' };
   var first = extra && extra.bytes ? Store.put('files', { id: rec.id, bytes: extra.bytes }) : Promise.resolve();
   return first.then(function () { return Store.put('docs', rec); }).then(function () { return rec; });
@@ -474,23 +474,26 @@ function lazyImage(alt, pageNo, box, scale) {
   return img;
 }
 /* A book's chapter finds its figures the first time it is opened: looking
-   through 1,500 pages at import would take far longer than the text. */
+   through 1,500 pages at import would take far longer than the text. And
+   any PDF whose figures were found by an older finder (figuresV behind
+   Pdf.FIGURES_V) looks again, so a fix to the finder reaches what is
+   already on the device. */
 function ensureFigures(d) {
-  if (!d || !d.bookId || d.figures) return;
+  if (!d || !d.hasFile || (d.figures && d.figuresV === Pdf.FIGURES_V) || ui.figuresBusy === d.id) return;
   var byFile = {};
-  for (var pn = d.pageStart; pn <= d.pageEnd; pn++) {
+  for (var pn = d.bookId ? d.pageStart : 1, last = d.bookId ? d.pageEnd : d.pages; pn <= last; pn++) {
     var at = where(d, pn);
     if (at) (byFile[at.fileId] = byFile[at.fileId] || []).push(at.page);
   }
   var found = [];
   ui.figuresBusy = d.id;
   Object.keys(byFile).reduce(function (p, fileId) {
-    var first = d.parts.filter(function (pt) { return pt.fileId === fileId; })[0].first;
+    var first = d.parts ? d.parts.filter(function (pt) { return pt.fileId === fileId; })[0].first : 1;
     return p.then(function () { return withBytes(fileId); }).then(function (bytes) {
       return bytes ? Pdf.figuresOn(fileId, bytes, byFile[fileId]) : [];
     }).then(function (fs) { fs.forEach(function (f) { f.page = f.page + first - 1; found.push(f); }); });
   }, Promise.resolve()).then(function () {
-    d.figures = found;
+    d.figures = found; d.figuresV = Pdf.FIGURES_V;
     return Store.put('docs', d);
   }).then(function () {
     ui.figuresBusy = null; ui.figsFor = null;
@@ -527,18 +530,41 @@ function visualsCard(c) {
   var pages = [];
   for (var pn = c.pageStart; pn <= c.pageEnd && pages.length < 6; pn++) pages.push(pn);
   return h('div.card', { id: 'visuals' },
-    figs.length ? [h('span.eyebrow', 'Figures'), h('div.figs', figs.map(function (f, i) {
+    figs.length ? fold('figures', 'Figures', figs.length, h('div.figs', figs.map(function (f, i) {
       var name = f.label || 'Figure ' + (i + 1);
       return h('figure.fig', h('button', { type: 'button', 'aria-label': 'Enlarge ' + name, onclick: function () { lightbox(f.page, f.box, name); } },
         lazyImage(f.caption || name + ', page ' + f.page, f.page, f.box, 2)),
         h('figcaption', f.caption ? h('span.fig-cap', f.caption) : name, ' ', page(f.page)));
-    }))] : null,
-    h('span.eyebrow', 'The pages'),
-    h('p.muted', 'Everything as printed — tables, charts and diagrams included. Tap to enlarge.'),
-    h('div.pages', pages.map(function (pn) {
-      return h('figure.fig', h('button', { type: 'button', 'aria-label': 'Open page ' + pn, onclick: function () { lightbox(pn, null); } },
-        lazyImage('Page ' + pn, pn, null, 0.5)), h('figcaption', 'Page ' + pn));
-    })));
+    }))) : null,
+    fold('pages', 'The pages', pages.length, [
+      h('p.muted', 'Everything as printed — tables, charts and diagrams included. Tap to enlarge.'),
+      h('div.pages', pages.map(function (pn) {
+        return h('figure.fig', h('button', { type: 'button', 'aria-label': 'Open page ' + pn, onclick: function () { lightbox(pn, null); } },
+          lazyImage('Page ' + pn, pn, null, 0.5)), h('figcaption', 'Page ' + pn));
+      }))]));
+}
+/* A part of a card the reader can minimise — figures, pages — with a − / +
+   button in its head. Minimised stays minimised, for every section, and
+   across visits on this device (a convenience: lost storage just opens it). */
+var FOLD_KEY = 'memorizer.folds.v1';
+function folds() {
+  if (!ui.folds) { try { ui.folds = JSON.parse(root.localStorage.getItem(FOLD_KEY) || '{}') || {}; } catch (_) { ui.folds = {}; } }
+  return ui.folds;
+}
+function fold(key, title, n, body) {
+  var shut = folds()[key] === false;
+  /* The tap sets both the element and the remembered state at once; the
+     browser's own 'toggle' event comes later, after a redraw may already
+     have read the old state. */
+  var el = h('details.fold', { id: 'fold-' + key, open: shut ? null : true },
+    h('summary.fold-head', { onclick: function (e) {
+      e.preventDefault();
+      el.open = !el.open;
+      folds()[key] = el.open;
+      try { root.localStorage.setItem(FOLD_KEY, JSON.stringify(ui.folds)); } catch (_) {}
+    } }, h('span.eyebrow', title + ' (' + n + ')'), h('span.fold-btn', { 'aria-hidden': 'true' })),
+    body);
+  return el;
 }
 
 
@@ -965,34 +991,80 @@ function viewLesson() {
     }));
   var n = 0;
   var all = [{ text: sh.bigIdea }].concat(sh.groups.reduce(function (a, g) { return a.concat(g.points); }, []));
+  var tools = h('div.row',
+    button('🖼 Study card', function () { showFigure(Figure.studyCard(c.title, sh, L.mnemonics || [], sourceLine(ui.docRec, c)), c.title + ' study card'); }, 'quiet', { id: 'make-card' }),
+    button('🔊 Listen', function () { speak(all.map(function (p) { return p.text; }).join('. ')); }, 'quiet'));
+  var group = function (g) {
+    return h('section.point-group', h('h3.group-head', h('span.group-mark', { 'aria-hidden': 'true' }, HEAD_MARK[g.heading] || '•'), g.heading),
+      h('ol.points', { start: String(n + 1) }, g.points.map(function (p) { return pointCard(c, p, n++); })));
+  };
+  var bigIdea = h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(sh.bigIdea)));
+  var moreAnalogies = analogies.length > 1 ? h('details.card.more-analogies', h('summary', 'More analogies (' + (analogies.length - 1) + ')'), analogies.slice(1).map(function (a) { return analogyCard(a, false); })) : null;
+  /* the built-in pathway is on the glance card; a model's flowchart is its own */
+  var flowCard = L.flowchart && L.flowchart.trim() || !(Sheet.glance(c) || {}).pathway || !Sheet.glance(c).pathway.length ? drawFlowCard(c, L) : null;
+  var drill = h('div.end-cta', button('I’ve got it — start the drill', function () { go({ type: 'toDrill' }); }, 'primary big', { id: 'to-drill' }));
+  if (stepMode()) {
+    /* STEP BY STEP — one card at a time, like the owner's reference: the
+       idea, then each heading's points, the numbers, each mnemonic, a check,
+       then what else the section has; the drill at the end. */
+    var parts = [{ label: 'The big idea', nodes: [bigIdea, glanceCard(c, L), analogies.length ? analogyCard(analogies[0], true) : null] }];
+    sh.groups.forEach(function (g) {
+      parts.push({ label: g.heading, nodes: [h('div.card', { id: 'points' }, h('div.card-head', h('h2', 'Key points'), tools), group(g))] });
+    });
+    var nums = numbersCard(sh);
+    if (nums) parts.push({ label: 'Numbers to know', nodes: [nums] });
+    mnemonics.forEach(function (m, i) { parts.push({ label: 'Remember it: ' + L.mnemonics[i].title, nodes: [m] }); });
+    var qc = quickCheck(c, L);
+    if (qc) parts.push({ label: 'Check yourself', nodes: [qc] });
+    parts.push({ label: 'Also in this section', nodes: [moreAnalogies, flowCard, tablesCard(c), visualsCard(c), full] });
+    var key = ui.docId + ':' + s.section;
+    if (!ui.step || ui.step.key !== key) ui.step = { key: key, i: 0 };
+    var i = Math.min(ui.step.i, parts.length - 1), last = i === parts.length - 1;
+    var move = function (d) { ui.step.i = Math.max(0, Math.min(parts.length - 1, i + d)); render(); root.scrollTo(0, 0); };
+    return [
+      sectionBar('teach'),
+      h('div.step-head', { id: 'lesson-steps' },
+        h('div.step-count', h('strong', 'Step ' + (i + 1) + ' of ' + parts.length), h('span', ' · ' + parts[i].label)),
+        button('Show the whole lesson', function () { setStepMode(false); render(); }, 'quiet', { id: 'whole-page' })),
+      h('div.bar.step-bar', h('i', { style: 'width:' + Math.round(100 * (i + 1) / parts.length) + '%' })),
+      parts[i].nodes,
+      h('div.step-nav', button('← Back', function () { move(-1); }, 'quiet', { id: 'step-back', disabled: i === 0 ? true : null }),
+        last ? drill : button('Next →', function () { move(1); }, 'primary big', { id: 'step-next' })),
+    ];
+  }
   return [
     sectionBar('teach'),
-    h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(sh.bigIdea))),
+    h('div.row.lesson-mode', button('▶ Learn it step by step', function () { setStepMode(true); ui.step = null; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'step-mode' })),
+    bigIdea,
     glanceCard(c, L),
     analogies.length ? analogyCard(analogies[0], true) : null,
     h('div.card', { id: 'points' },
-      h('div.card-head', h('h2', 'Key points'), h('div.row',
-        button('🖼 Study card', function () { showFigure(Figure.studyCard(c.title, sh, L.mnemonics || [], sourceLine(ui.docRec, c)), c.title + ' study card'); }, 'quiet', { id: 'make-card' }),
-        button('🔊 Listen', function () { speak(all.map(function (p) { return p.text; }).join('. ')); }, 'quiet'))),
-      sh.groups.map(function (g) {
-        return h('section.point-group', h('h3.group-head', h('span.group-mark', { 'aria-hidden': 'true' }, HEAD_MARK[g.heading] || '•'), g.heading),
-          h('ol.points', { start: String(n + 1) }, g.points.map(function (p) { return pointCard(c, p, n++); })));
-      }),
+      h('div.card-head', h('h2', 'Key points'), tools),
+      sh.groups.map(group),
       h('p.muted.arranged-note', 'Headings arranged by Memorizer; the points are your book’s.')),
     numbersCard(sh),
     mnemonics,
     /* after everything has been read: recall, not a look at the next card */
     quickCheck(c, L),
-    analogies.length > 1 ? h('details.card.more-analogies', h('summary', 'More analogies (' + (analogies.length - 1) + ')'), analogies.slice(1).map(function (a) { return analogyCard(a, false); })) : null,
-    aiLessonCard(c, L),
-    /* the built-in pathway is on the glance card; a model's flowchart is
-       its own */
-    L.flowchart && L.flowchart.trim() || !(Sheet.glance(c) || {}).pathway || !Sheet.glance(c).pathway.length ? drawFlowCard(c, L) : null,
+    moreAnalogies,
+    /* the on-device AI tutor is in the robot's window now (robot()) */
+    flowCard,
     tablesCard(c),
     visualsCard(c),
     full,
-    h('div.end-cta', button('I’ve got it — start the drill', function () { go({ type: 'toDrill' }); }, 'primary big', { id: 'to-drill' })),
+    drill,
   ];
+}
+/* Step by step or the whole page: the reader's choice, remembered on this
+   device (a convenience — lost storage means the whole page). */
+var STEP_KEY = 'memorizer.stepmode.v1';
+function stepMode() {
+  if (ui.stepMode == null) { try { ui.stepMode = root.localStorage.getItem(STEP_KEY) === '1'; } catch (_) { ui.stepMode = false; } }
+  return ui.stepMode;
+}
+function setStepMode(on) {
+  ui.stepMode = !!on;
+  try { root.localStorage.setItem(STEP_KEY, on ? '1' : '0'); } catch (_) {}
 }
 
 /* The lesson's AI card: plain words and an analogy, on request. */
@@ -1499,6 +1571,83 @@ function nav() {
     tab('settings', '⚙', 'Settings', function () { leave('settings'); }));
 }
 
+/* ── the robot: the coach, on the right, explaining what is on screen ──────
+   A small robot at the foot of the screen, on the right, during a lesson,
+   a drill or the exam. Tapped, it opens a small window: for a question,
+   what kind it is, where to look and a hint (never in the exam, and never
+   the answer); once answered, why, and where the book mentions each wrong
+   option. For a lesson, the section in one line, its cause and effect, what
+   is asked most, its mnemonics — and the on-device AI tutor, when it is on,
+   lives here now rather than in the lesson. coach.js writes the words
+   (explainQuestion, explainSection); this only lays them out. */
+function robotContext() {
+  if (ui.view !== 'session' || !ui.state) return null;
+  var s = ui.state;
+  if (s.phase === 'teach') return s.per[s.section].lesson ? { type: 'lesson', c: cluster(), L: s.per[s.section].lesson } : null;
+  if (s.phase === 'drill') {
+    var p = s.per[s.section];
+    return p.quiz && p.quiz.questions.length ? { type: 'question', c: cluster(), q: p.quiz.questions[p.order[p.pos]] } : null;
+  }
+  if (s.phase === 'exam' && s.exam.questions) {
+    var q = s.exam.questions[s.exam.order[s.exam.pos]];
+    return q ? { type: 'question', exam: true, c: ui.docRec.clusters[q.cluster] || cluster(), q: q } : null;
+  }
+  return null;
+}
+function robotFace() {
+  var ns = 'http://www.w3.org/2000/svg';
+  var svg = doc.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 64 64'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('class', 'robot-svg');
+  svg.innerHTML = '<line class="rb-stalk" x1="32" y1="6" x2="32" y2="15"/><circle class="rb-bulb" cx="32" cy="6" r="4"/>' +
+    '<rect class="rb-ear" x="5" y="26" width="6" height="14" rx="3"/><rect class="rb-ear" x="53" y="26" width="6" height="14" rx="3"/>' +
+    '<rect class="rb-head" x="10" y="15" width="44" height="36" rx="12"/><rect class="rb-visor" x="16" y="22" width="32" height="18" rx="9"/>' +
+    '<g class="rb-eyes"><circle cx="25" cy="31" r="3.6"/><circle cx="39" cy="31" r="3.6"/></g>' +
+    '<path class="rb-smile" d="M26 45 Q32 49 38 45"/><rect class="rb-neck" x="26" y="51" width="12" height="5" rx="2"/>';
+  return svg;
+}
+function robotLine(label, body) { return h('div.rb-line', h('span.rb-label', label), h('p', body)); }
+function robotBody(ctx) {
+  if (ctx.type === 'lesson') {
+    var e = Coach.explainSection(ctx.c, ctx.L);
+    return [
+      e.gist ? robotLine('In one line', marked(e.gist)) : null,
+      e.chain ? robotLine('How it works', e.chain) : null,
+      e.facts.length ? h('div.rb-line', h('span.rb-label', 'Asked most'), h('ul', e.facts.map(function (f) { return h('li', f); }))) : null,
+      e.hooks.map(function (m) { return robotLine('Remember: ' + m.title, [h('strong.rb-letters', m.letters.split('').join(' · ')), ' — ' + m.words.join(', ')]); }),
+      aiLessonCard(ctx.c, ctx.L),
+    ];
+  }
+  var q = ctx.q, chosen = ui.choice;
+  var x = Coach.explainQuestion(ctx.c, q, chosen);
+  if (chosen == null) {
+    return [robotLine('What it asks', x.kind),
+      ctx.exam ? h('p.muted', 'This is the exam, so no hints — answer, and I’ll explain every option.') : [
+        x.where ? robotLine('Where to look', ['Under “' + x.where + '” in this section’s key points', x.page ? [' ', page(x.page)] : null, '.']) : null,
+        x.hint ? robotLine('Your book says', ['“' + x.hint + '”']) : null,
+        !x.where && !x.hint ? h('p.muted', 'Read the question twice, rule out what you are sure is wrong, then choose.') : null]];
+  }
+  return [robotLine('What it asked', x.kind),
+    robotLine('Why', [marked(x.why), x.page ? [' ', page(x.page)] : null]),
+    h('ol.rb-options', x.options.map(function (o, i) {
+      return h('li' + (o.right ? '.right' : o.chosen ? '.wrong' : ''),
+        h('span.opt-letter', LETTERS[i]), h('div', h('strong', o.text), o.right ? h('span.rb-tag', ' ✓ the answer') : o.chosen ? h('span.rb-tag', ' ✗ your choice') : null,
+          o.right ? null : h('p.muted', o.said ? ['In your book: “', o.said, '” ', page(o.page)] : 'Not what your book says here.')));
+    }))];
+}
+function robot() {
+  var ctx = robotContext();
+  if (!ctx) { ui.robotOpen = false; return null; }
+  var open = !!ui.robotOpen;
+  var toggle = function () { ui.robotOpen = !ui.robotOpen; render(); };
+  return h('div.robot-dock', { id: 'robot-dock' },
+    open ? h('section.robot-panel', { id: 'robot-panel', role: 'dialog', 'aria-label': 'Coach explains' },
+      h('div.rb-head', h('strong', ctx.type === 'lesson' ? 'This section, explained' : 'This question, explained'),
+        h('button.rb-close', { type: 'button', 'aria-label': 'Close', onclick: toggle }, '×')),
+      h('div.rb-body', robotBody(ctx))) : null,
+    h('button.robot' + (open ? '.on' : ''), { id: 'robot', type: 'button', 'aria-expanded': open ? 'true' : 'false',
+      'aria-label': ctx.type === 'lesson' ? 'Coach: explain this section' : 'Coach: explain this question', onclick: toggle }, robotFace()));
+}
+
 function render() {
   var app = doc.getElementById('app');
   var view = ui.view === 'session' && ui.state ? viewSession()
@@ -1509,6 +1658,8 @@ function render() {
   app.textContent = '';
   app.appendChild(view);
   app.appendChild(nav());
+  var rb = robot();
+  if (rb) app.appendChild(rb);
   if (ui.view === 'session') pump();
 }
 
