@@ -567,10 +567,24 @@ function kindOf(user) {
   ok('the step says Learn', (await page.locator('.stepper li.now').textContent()) === 'Learn');
   ok('the big idea comes first', (await text(page, '#big-idea .big')) === 'Preload is how full the ventricle is before it squeezes.' &&
      await page.evaluate(() => document.querySelector('#big-idea').compareDocumentPosition(document.querySelector('#points')) & Node.DOCUMENT_POSITION_FOLLOWING));
+  /* The glass's sheen is a background image; laid over every card it took
+     the big idea's dark band away and left its light text on light glass. */
+  const band = await page.evaluate(() => { const p = document.createElement('div'); p.style.backgroundImage = 'linear-gradient(145deg, var(--hero-a), var(--hero-b))';
+    document.body.appendChild(p); const want = getComputedStyle(p).backgroundImage; p.remove();
+    return { want: want, got: getComputedStyle(document.querySelector('#big-idea')).backgroundImage }; });
+  ok('the big idea keeps its dark band, so its light text reads', /gradient/.test(band.want) && band.got === band.want, JSON.stringify(band));
   const pointText = await page.locator('ol.points > li').first().innerText();
   ok('the key points are numbered cards, a definition leading with its term',
      await page.locator('ol.points > li').count() === 2 && (await page.locator('ol.points > li .lead').first().innerText()) === 'Preload' &&
      (await page.locator('ol.points > li .point-n').first().innerText()) === '1', pointText.replace(/\s+/g, ' '));
+  /* The ☆ that marks a point made it a third item in a two-column grid, and
+     the text fell into the 2.25rem number column, a word to a line. Widths
+     as laid out: the text has the room, the star sits at the end, all on
+     one row. */
+  const pointBox = await page.evaluate(() => { const li = document.querySelector('ol.points > li'), w = q => li.querySelector(q).getBoundingClientRect();
+    const n = w('.point-n'), b = w('.point-body'), m = li.querySelector('.mark-btn') ? w('.mark-btn') : null;
+    return { n: Math.round(n.width), body: Math.round(b.width), star: !!m, row: !!m && Math.abs(m.top - b.top) < 12 && m.left >= b.right - 1 }; });
+  ok('each point’s text has the width, with its star beside it on the same row', pointBox.star && pointBox.body > 6 * pointBox.n && pointBox.row, JSON.stringify(pointBox));
   ok('model text is shown as text — the tag is visible, not run', pointText.indexOf('<img') !== -1 &&
      await page.locator('ol.points img').count() === 0 && await page.evaluate(() => window.__pwned) === undefined);
   ok('an analogy from Claude is shown, and labelled as not from the book',
@@ -902,6 +916,42 @@ function kindOf(user) {
   const glassHigh = await glassOf();
   await page.evaluate(l => MemLook.apply(l), lookBefore);
   ok('and at High contrast, solid: no translucency, no blur', glassHigh.every(g => g.alpha === 1 && !/blur\((?!0px)/.test(g.blur)), JSON.stringify(glassHigh));
+  /* As an iPad's glass: clearer panes than the 0.72 they were, under a
+     stronger blur, with a sheen — and the accent solid, where it used to
+     run into a second colour. */
+  const pane = await page.evaluate(() => { const cs = getComputedStyle(document.querySelector('.jump-card'));
+    const a = (cs.backgroundColor.match(/rgba\(([^)]+)\)/) || ['', ''])[1].split(',').map(Number)[3];
+    return { alpha: a, blur: parseFloat(((cs.backdropFilter || cs.webkitBackdropFilter || '').match(/blur\(([\d.]+)px/) || [])[1]), sheen: /linear-gradient/.test(cs.backgroundImage) }; });
+  ok('and the glass is clear: most of the page shows through, under a heavy blur, with a sheen', pane.alpha <= 0.6 && pane.blur >= 24 && pane.sheen, JSON.stringify(pane));
+  /* High contrast was just put back, and the tab fades its colour: the
+     read waits for running transitions to end (a precondition — the colour
+     they end on is the check). */
+  await page.evaluate(() => Promise.all(document.getAnimations().filter(a => a instanceof CSSTransition).map(a => a.finished.catch(() => {}))));
+  const paper = await page.evaluate(() => getComputedStyle(document.querySelector('#pearl')).backgroundImage);
+  ok('and the pearl keeps its ECG paper under it', (paper.match(/linear-gradient/g) || []).length === 4 && !/radial/.test(paper), paper.slice(0, 120));
+  const calm = await page.evaluate(() => [...document.querySelectorAll('main .btn.primary, nav.dock .nav-btn[aria-current="page"], main .learn-plus')].map(e => {
+    const cs = getComputedStyle(e); return { q: e.className, img: cs.backgroundImage, bg: cs.backgroundColor }; }));
+  const accentNow = await page.evaluate(() => { const p = document.createElement('i'); p.style.color = 'var(--accent)'; document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c; });
+  ok('the primary buttons, the current tab and the add button are the accent, solid — no gradient', calm.length >= 3 && calm.every(c => c.img === 'none' && c.bg === accentNow), JSON.stringify(calm.slice(0, 4)) + ' ' + accentNow);
+  /* The light follows the pointer across a pane, and goes when it leaves;
+     with reduced motion there is none. */
+  await page.locator('.jump-card').first().scrollIntoViewIfNeeded();
+  const jc = await page.locator('.jump-card').first().boundingBox();
+  await page.mouse.move(jc.x + 30, jc.y + 12);
+  const litOn = await page.evaluate(() => { const e = document.querySelector('.jump-card'); return { lit: e.hasAttribute('data-lit'), px: e.style.getPropertyValue('--px'), py: e.style.getPropertyValue('--py'),
+    light: getComputedStyle(e).getPropertyValue('--lit').trim() }; });
+  await page.mouse.move(jc.x + 90, jc.y + 20);
+  const litMoved = await page.evaluate(() => document.querySelector('.jump-card').style.getPropertyValue('--px'));
+  await page.mouse.move(2, 2);
+  const litOff = await page.evaluate(() => document.querySelectorAll('[data-lit]').length);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.mouse.move(jc.x + 30, jc.y + 12);
+  const litStill = await page.evaluate(() => document.querySelectorAll('[data-lit]').length);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.mouse.move(2, 2);
+  ok('a light follows the pointer across the glass, and goes when it leaves', litOn.lit && litOn.px === '30px' && litOn.py === '12px' && /rgba\(255,\s*255,\s*255,\s*0?\.38\)/.test(litOn.light) && litMoved === '90px' && litOff === 0,
+     JSON.stringify({ litOn, litMoved, litOff }));
+  ok('and with reduced motion asked for, there is no light to follow', litStill === 0, String(litStill));
   const hero = await page.evaluate(() => { const e = document.querySelector('#home-hero'); const cs = getComputedStyle(e);
     return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('svg.hero-trace path[d^="M0"]'), held: (document.querySelector('#stat-held') || {}).textContent || '',
       inHero: !!e.querySelector('#streak') && !!e.querySelector('#pill-due') }; });
@@ -925,6 +975,10 @@ function kindOf(user) {
      await page.evaluate(() => Memorizer.ui.view === 'session' && Memorizer.ui.state.phase === 'teach' && Memorizer.ui.state.section === 0), await page.evaluate(() => Memorizer.ui.view + ' ' + (Memorizer.ui.state && Memorizer.ui.state.phase + ' ' + Memorizer.ui.state.section)));
   await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
   await page.locator('#weak').waitFor(T);
+  /* A new screen settles in; a redraw of the same one does not. */
+  const entered = await page.evaluate(() => { const a = document.querySelector('main').hasAttribute('data-enter') && getComputedStyle(document.querySelector('main')).animationName;
+    Memorizer.render(); return { a: a, redraw: document.querySelector('main').hasAttribute('data-enter') }; });
+  ok('a new screen settles in, and a redraw of the same screen does not', entered.a === 'screen-in' && entered.redraw === false, JSON.stringify(entered));
   /* The drill rates the card; the review checks below expect it unreviewed,
      so it is put back as it was before leaving. It is reviewed Easy first,
      so it is not due: plain review would offer nothing, the drill must
@@ -1788,8 +1842,11 @@ function kindOf(user) {
        JSON.stringify(await p2.$$eval('#ai-model option', os => os.map(o => /^Qwen3 /.test(o.textContent) && /Apache-2\.0/.test(o.textContent)))) === '[true,true,true]' &&
        /^Qwen3 4B/.test(await p2.locator('#ai-model option').nth(2).innerText()));
     ok('the real AI engine downloads, passes its integrity check, and loads from a local file', await p2.evaluate(() => MemLLM.loadLib().then(m => typeof m.CreateMLCEngine, e => 'failed: ' + e.message)) === 'function');
-    const known = await p2.evaluate(() => MemLLM.loadLib().then(m => MemLLM.MODELS.map(x => x.id).concat([MemLLM.EMBED.id]).filter(id => !m.prebuiltAppConfig.model_list.some(r => r.model_id === id))));
-    ok('every model offered is one the pinned engine knows', known.length === 0, JSON.stringify(known));
+    const known = await p2.evaluate(() => MemLLM.loadLib().then(m => MemLLM.MODELS.map(x => x.id).concat(MemLLM.MODELS.map(x => MemLLM.variantFor(x.id, false)), [MemLLM.EMBED.id])
+      .filter(id => !m.prebuiltAppConfig.model_list.some(r => r.model_id === id))));
+    ok('every model offered is one the pinned engine knows — and so is its 32-bit build, the fallback without 16-bit GPU maths', known.length === 0, JSON.stringify(known));
+    ok('and it has what "Delete the downloaded model" calls, and a Cache API default the loader can switch from', await p2.evaluate(() => MemLLM.loadLib().then(m =>
+       typeof m.deleteModelAllInfoInCache === 'function' && m.prebuiltAppConfig.cacheBackend === 'cache')));
     /* A stand-in for the model, answering each job with faithful sentences
        and made-up ones, the way a small model does. */
     await p2.evaluate(() => {

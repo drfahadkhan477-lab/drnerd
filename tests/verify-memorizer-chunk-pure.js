@@ -941,5 +941,58 @@ head('memorizer/ parses on the device it is for');
   }
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+/* ── getting the model onto the iPad: the start loop, against a stand-in
+   engine and GPU (no WebGPU here). Async, so the summary waits for it. */
+async function startLoop() {
+  head('the on-device model: 32-bit where 16-bit maths is missing, retried, and explained');
+  const L = require(path.join(ROOT, 'memorizer', 'src', 'llm.js'));
+  const store = {};
+  global.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
+  L.WAIT.ms = 0;
+  /* a stand-in engine library: fails with the given errors in turn, then works */
+  const lib = errs => { const calls = [], deleted = []; return { calls, deleted, prebuiltAppConfig: { model_list: [], cacheBackend: 'cache' },
+    CreateMLCEngine: async (id, o) => { calls.push({ id, backend: o.appConfig.cacheBackend }); o.initProgressCallback({ progress: 1, text: 'done' });
+      const e = errs.shift(); if (e) throw new Error(e); return { chat: {} }; },
+    deleteModelAllInfoInCache: async (id, cfg) => { deleted.push(id + '@' + cfg.cacheBackend); } }; };
+  const run = async (errs, f16, model = 'Qwen3-0.6B-q4f16_1-MLC') => {
+    const lb = lib(errs); L.useLib(lb); L.useGpu(() => ({ ok: true, f16 })); L.useEngine(null, null);
+    const said = []; let err = null;
+    try { await L.start(model, (p, t) => said.push(t)); } catch (e) { err = e.message; }
+    return { calls: lb.calls, said, err, lb };
+  };
+  let r = await run([], false);
+  ok('without 16-bit GPU maths, the same model\u2019s 32-bit build is downloaded, and it says so', r.calls.length === 1 && r.calls[0].id === 'Qwen3-0.6B-q4f32_1-MLC' &&
+     r.said.some(t => /32-bit build/.test(t)) && !r.err, JSON.stringify(r.calls));
+  r = await run([], true);
+  ok('with it, the 16-bit build as chosen', r.calls[0].id === 'Qwen3-0.6B-q4f16_1-MLC' && !r.said.some(t => /32-bit/.test(t)));
+  delete store[L.BACKEND_KEY];
+  r = await run(['TypeError: Failed to fetch', 'TypeError: Failed to fetch'], true);
+  ok(`an interrupted download is tried again, into the same store, up to ${L.RETRIES} more times`, r.calls.length === 3 && r.calls.every(c => c.backend === 'cache') && !r.err &&
+     r.said.filter(t => /trying again/.test(t)).length === 2, JSON.stringify(r.calls));
+  delete store[L.BACKEND_KEY];
+  r = await run(['Failed to execute \'add\' on \'Cache\''], true);
+  ok('a cache that refuses the files: the other store, IndexedDB — and it is remembered for the next start', r.calls.length === 2 && r.calls[1].backend === 'indexeddb' && !r.err &&
+     store[L.BACKEND_KEY] === 'indexeddb', JSON.stringify(r.calls));
+  r = await run([], true);
+  ok('so the next start looks in IndexedDB first', r.calls[0].backend === 'indexeddb');
+  delete store[L.BACKEND_KEY];
+  r = await run(['Load failed', 'Load failed', 'Load failed'], true);
+  ok('Safari\u2019s bare "Load failed", every retry spent: IndexedDB is the last thing tried', r.calls.length === 4 && r.calls[3].backend === 'indexeddb', JSON.stringify(r.calls));
+  delete store[L.BACKEND_KEY];
+  r = await run(['GPUDevice was lost: out of memory'], true, 'Qwen3-4B-q4f16_1-MLC');
+  ok('a model too big for the GPU is not retried, and says: choose a smaller one', r.calls.length === 1 && /choose a smaller one \(Qwen3 0\.6B\)/.test(r.err || ''), r.err);
+  r = await run(['QuotaExceededError', 'QuotaExceededError'], true);
+  ok('storage refused in both stores: explained — free space, add to the Home Screen', r.calls.length === 2 && /add Memorizer to the Home Screen/.test(r.err || ''), r.err);
+  r = await run(['some other failure'], true);
+  ok('an error it cannot name is shown as it came, not retried', r.calls.length === 1 && r.err === 'some other failure', r.err);
+  const lb = lib([]); L.useLib(lb);
+  await L.clearModel('Qwen3-1.7B-q4f16_1-MLC');
+  ok('Delete the downloaded model: both builds, from both stores', JSON.stringify(lb.deleted.sort()) === JSON.stringify(['Qwen3-1.7B-q4f16_1-MLC@cache', 'Qwen3-1.7B-q4f16_1-MLC@indexeddb', 'Qwen3-1.7B-q4f32_1-MLC@cache', 'Qwen3-1.7B-q4f32_1-MLC@indexeddb']), JSON.stringify(lb.deleted));
+  ok('every model offered has a 32-bit build in the list the app carries', L.MODELS.every(m => /-q4f16_1-MLC$/.test(m.id) && L.variantFor(m.id, false) !== m.id));
+  L.useLib(null); L.useGpu(null); L.useEngine(null, null); delete global.localStorage;
+}
+
+startLoop().then(() => {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+}, e => { console.error(e); process.exit(1); });

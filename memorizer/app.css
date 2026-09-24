@@ -74,7 +74,7 @@ li { margin: .25em 0; }
 
 .pg { display: inline-block; font-size: var(--t-tiny); font-weight: 600; color: var(--muted); background: var(--surface-2); border-radius: .375rem; padding: 0 .375rem; vertical-align: .0625rem; white-space: nowrap; margin-left: .25rem; }
 
-.hook { background: var(--mid-soft); border-color: transparent; }
+.hook { background: var(--surface-2); border-color: var(--line); }
 .hook-script { font-family: var(--script); font-size: var(--t-h4); line-height: 1.35; margin: var(--s-2) 0 0; }
 .acrostic { list-style: none; padding: 0; margin: var(--s-3) 0 var(--s-2); }
 .acrostic li { display: flex; align-items: baseline; gap: var(--s-3); margin: .125rem 0; }
@@ -223,7 +223,7 @@ table.data tbody tr:last-child td { border-bottom: 0; }
 .unit-row { position: relative; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: var(--s-2);
   background: var(--surface); border: 1px solid var(--line); border-radius: 1.25rem; padding: var(--s-3) var(--s-3) var(--s-3) calc(var(--s-5) + .5rem);
   box-shadow: var(--shadow); overflow: hidden; }
-.unit-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: .75rem; background: hsl(var(--hue) 80% 72%); }
+.unit-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: .375rem; background: hsl(var(--hue) 38% 66%); }
 .unit-row > p { grid-column: 1 / -1; margin: 0; }
 .unit-open { font: inherit; color: var(--ink); text-align: left; background: none; border: 0; padding: var(--s-2) 0; display: flex; flex-direction: column; cursor: pointer; min-width: 0; }
 .doc-name { font-size: var(--t-lead); overflow-wrap: anywhere; }
@@ -260,12 +260,12 @@ details.menu summary::-webkit-details-marker { display: none; }
 .sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--s-4); }
 .section-card { position: relative; font: inherit; color: var(--ink); text-align: left; padding: 0; cursor: pointer; overflow: hidden;
   display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 1.5rem; box-shadow: var(--shadow); min-height: 9rem; }
-.band { display: flex; align-items: center; justify-content: flex-end; height: 3.25rem; background: hsl(var(--hue) 85% 70%); padding: 0 var(--s-4); }
+.band { display: flex; align-items: center; justify-content: flex-end; height: 3.25rem; background: hsl(var(--hue) 34% 76%); padding: 0 var(--s-4); }
 .band-n { font-weight: 800; color: #0B1020; background: rgba(255,255,255,.55); border-radius: 999px; min-width: 2rem; height: 2rem; display: grid; place-items: center; }
 .section-body { display: flex; flex-direction: column; gap: .125rem; padding: var(--s-4) var(--s-4) var(--s-5); }
 .section-title { font-size: var(--t-lead); line-height: 1.3; overflow-wrap: anywhere; }
 .section-card .badge { position: absolute; right: var(--s-3); bottom: var(--s-3); }
-.section-card[data-state="drilled"] .band { background: hsl(var(--hue) 70% 58%); }
+.section-card[data-state="drilled"] .band { background: hsl(var(--hue) 30% 62%); }
 .exam-card { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-top: var(--s-5); }
 .exam-card p { margin: 0; }
 .exam-card.locked { opacity: .8; }
@@ -284,7 +284,11 @@ details.menu summary::-webkit-details-marker { display: none; }
 .analogy-text { font-size: var(--t-lead); line-height: 1.55; }
 .analogy .label { margin: 0; font-style: italic; }
 ol.points { list-style: none; padding: 0; margin: var(--s-3) 0 0; counter-reset: none; }
-.point { display: grid; grid-template-columns: 2.25rem 1fr; gap: var(--s-3); padding: var(--s-3) 0; border-top: 1px solid var(--line); margin: 0; }
+/* number | the point | its ☆ marker. Two columns once held three children:
+   the marker took the text's place and the text fell into the number's
+   2.25rem column on a row of its own, one word to a line. */
+.point { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) auto; gap: var(--s-3); padding: var(--s-3) 0; border-top: 1px solid var(--line); margin: 0; align-items: start; }
+.point > .point-n { grid-column: 1; } .point > .point-body { grid-column: 2; grid-row: 1; } .point > .mark-btn { grid-column: 3; grid-row: 1; }
 .point:first-child { border-top: 0; }
 .point-n { width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 800; display: grid; place-items: center; }
 .point-text { font-size: var(--t-lead); line-height: 1.55; margin: 0; }
@@ -341,7 +345,7 @@ blockquote.quote { margin: var(--s-3) 0; padding: var(--s-3) var(--s-4); border-
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 
 /* ── a whole book ── */
-.chapter-n { display: inline-block; min-width: 2.2em; font-variant-numeric: tabular-nums; color: hsl(var(--hue) 70% 60%); }
+.chapter-n { display: inline-block; min-width: 2.2em; font-variant-numeric: tabular-nums; color: hsl(var(--hue) 36% 52%); }
 .chapter-row.front { opacity: .7; }
 .book-of { margin: 0 0 var(--s-1); }
 
@@ -357,7 +361,7 @@ h3.arranged, .arranged { font-style: italic; }
 ul.index-list summary { cursor: pointer; padding: var(--s-2) 0; }
 
 /* ── on-device AI ── */
-.ai-card { border-left: 4px solid hsl(270 70% 60%); }
+.ai-card { border-left: 4px solid var(--accent); }
 .ai-label, .ai-tag { font-size: var(--t-meta); }
 .ai-tag { margin-left: var(--s-2); }
 sup.cite { font-size: .7em; color: var(--accent); }
@@ -406,12 +410,12 @@ details.more-analogies > summary { cursor: pointer; font-weight: 600; }
 .glance { display: flex; flex-direction: column; gap: var(--s-3); }
 .gl-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--s-2); }
 .gl-fact { display: flex; flex-direction: column; gap: .125rem; padding: var(--s-3) var(--s-4); border-radius: .75rem; text-align: center;
-  background: hsl(32 80% 50% / .16); border: 1px solid hsl(32 80% 50% / .55); }
-.gl-fact strong { color: hsl(32 90% 62%); font-size: var(--t-lead); }
-.gl-fact span { color: hsl(32 60% 70%); font-size: var(--t-meta); }
+  background: var(--surface); border: 1px solid var(--line); }
+.gl-fact strong { color: var(--accent); font-size: var(--t-lead); }
+.gl-fact span { color: var(--muted); font-size: var(--t-meta); }
 .gl-caption { margin: 0; font-size: var(--t-meta); color: var(--muted); }
 .gl-path { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
-.gl-step { padding: var(--s-2) var(--s-3); border-radius: .625rem; background: hsl(215 70% 45% / .28); border: 1px solid hsl(215 70% 60% / .6);
+.gl-step { padding: var(--s-2) var(--s-3); border-radius: .625rem; background: var(--accent-soft); border: 1px solid var(--line);
   color: var(--ink); font-weight: 600; font-size: var(--t-meta); text-align: center; }
 .gl-arrow { display: inline-flex; flex-direction: column; align-items: center; color: var(--muted); font-size: var(--t-tiny); line-height: 1.1; }
 .gl-verb { font-style: italic; }
@@ -419,7 +423,7 @@ details.more-analogies > summary { cursor: pointer; font-weight: 600; }
 .gl-list { display: flex; flex-direction: column; gap: .125rem; padding: var(--s-3); border-radius: .75rem; background: var(--surface-2); border: 1px solid var(--line); }
 .gl-list span { font-size: var(--t-meta); color: var(--muted); }
 strong.key { color: var(--accent); }
-.quick { border-left: 4px solid hsl(45 90% 55%); }
+.quick { border-left: 4px solid var(--muted); }
 .quick .q { font-weight: 700; margin: var(--s-2) 0; }
 
 /* minimisable parts of a card: figures, pages */
@@ -575,9 +579,13 @@ main.home > :nth-child(4) { animation-delay: .18s; } main.home > :nth-child(n+5)
    actually composites over the page and each aurora pool — so the finish
    cannot cost contrast). High contrast and the Contrast theme get opaque
    glass and no blur from the same tokens; a browser without backdrop-filter,
-   or a person who asks for less transparency, gets the solid surface. */
-:root { --accent-2: #0B7DB1; --glass: rgba(255,255,255,.72); --glass-strong: rgba(255,255,255,.86); --glass-2: rgba(230,236,243,.72);
-  --glass-edge: rgba(255,255,255,.65); --glass-blur: 22px;
+   or a person who asks for less transparency, gets the solid surface.
+   After the owner asked for an iPad's glass and fewer colours: clearer
+   panes under a stronger blur, a bright rim, a sheen from the top-left and a
+   light that follows the finger (--px/--py, set by ui.js) — and the accent
+   solid, where it used to run into a second colour. */
+:root { --accent-2: #0B7DB1; --glass: rgba(255,255,255,.52); --glass-strong: rgba(255,255,255,.74); --glass-2: rgba(230,236,243,.52);
+  --glass-edge: rgba(255,255,255,.75); --glass-blur: 28px; --glass-rim: rgba(255,255,255,.55); --glass-sheen: rgba(255,255,255,.30); --glass-light: rgba(255,255,255,.38);
   --aura-1: rgba(94,234,212,.20); --aura-2: rgba(56,189,248,.18); --aura-3: rgba(129,140,248,.15);
   --ease-out: cubic-bezier(.2,.7,.2,1); --lift: 0 2px 4px rgba(0,0,0,.06), 0 18px 40px -12px rgba(0,0,0,.22); }
 body { position: relative; min-height: 100vh; }
@@ -585,41 +593,59 @@ body::before { content: ""; position: fixed; inset: -20vmax; z-index: -1; pointe
   background: radial-gradient(38vmax 30vmax at 12% 8%, var(--aura-1), transparent 70%),
     radial-gradient(34vmax 28vmax at 88% 18%, var(--aura-2), transparent 70%),
     radial-gradient(40vmax 34vmax at 60% 92%, var(--aura-3), transparent 72%);
-  animation: aura-drift 40s ease-in-out infinite alternate; }
+  opacity: .75; animation: aura-drift 40s ease-in-out infinite alternate; }
 @keyframes aura-drift { from { transform: translate3d(0,0,0) rotate(0deg); } to { transform: translate3d(-3vmax,2vmax,0) rotate(8deg); } }
 
 .card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list {
   background-color: var(--glass);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6); backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3); backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
   border-color: var(--line);
-  box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow); }
-.dock, .menu-list { background-color: var(--glass-strong); box-shadow: inset 0 1px 0 var(--glass-edge), 0 12px 40px -8px rgba(0,0,0,.35); }
+  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-rim), var(--shadow); }
+.dock, .menu-list { background-color: var(--glass-strong); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-rim), 0 12px 40px -8px rgba(0,0,0,.35); }
+.card, .jump-card, .unit-row, .section-card, .pearl, .learn-box { border-radius: 1.25rem; }
+/* The sheen and the light, on every pane but those with a ground of their
+   own: the big idea's dark band and the pearl's ECG paper keep theirs. */
+:where(.card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list):not(.big-idea):not(.pearl) {
+  background-image: radial-gradient(16rem circle at var(--px, 50%) var(--py, -40%), var(--lit, transparent), transparent 70%),
+    linear-gradient(155deg, var(--glass-sheen), transparent 42%); }
+[data-lit] { --lit: var(--glass-light); }
 .card.note { background-color: var(--accent-soft); }
 .card.error { background-color: var(--bad-soft); }
-.hook { background-color: var(--mid-soft); }
+.hook { background-color: var(--glass-2); border-color: var(--line); }
 .option.right { background-color: var(--good-soft); }
 .option.wrong { background-color: var(--bad-soft); }
-.nav-btn[aria-current="page"] { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); box-shadow: 0 6px 18px -6px var(--accent); }
+.nav-btn[aria-current="page"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 12px -6px var(--accent); }
 .nav-btn { transition: background-color .2s, color .2s, transform .2s var(--ease-out); }
 .nav-btn:active { transform: scale(.94); }
 
-/* Primary buttons: the accent run into its partner, with a sheen that
-   crosses on hover. accent-ink is fitted against both ends. */
+/* Primary buttons: the accent, solid, with a sheen that crosses on
+   hover. */
 .btn { transition: transform .18s var(--ease-out), box-shadow .18s, border-color .18s; }
 .btn.primary { position: relative; overflow: hidden; border-color: transparent;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 8px 22px -10px var(--accent); }
+  background: var(--accent); color: var(--accent-ink);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 6px 16px -10px var(--accent); }
 .btn.primary::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; pointer-events: none;
   background: linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent); transform: skewX(-18deg); transition: left .6s var(--ease-out); }
 .btn.primary:hover::after { left: 120%; }
 .btn:hover:not([disabled]) { transform: translateY(-1px); }
 .btn:active:not([disabled]) { transform: translateY(0) scale(.98); }
-.bar i { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
-.stepper li.now { border-image: linear-gradient(90deg, var(--accent), var(--accent-2)) 1; }
+.bar i { position: relative; overflow: hidden; background: var(--accent); }
+.bar i::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); transform: translateX(-100%); animation: bar-shine 2.8s ease-in-out infinite; }
+@keyframes bar-shine { to { transform: translateX(100%); } }
+.stepper li.now { border-color: var(--accent); }
 
 /* Lift on hover, for the things that open something. */
 .jump-card, .unit-row, .section-card, .learn-box, .option:not([disabled]) { transition: transform .25s var(--ease-out), box-shadow .25s, border-color .25s; }
-.jump-card:hover, .unit-row:hover, .section-card:hover, .learn-box:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--glass-edge), var(--lift); border-color: var(--accent); }
+.jump-card:hover, .unit-row:hover, .section-card:hover, .learn-box:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-rim), var(--lift); border-color: var(--accent); }
+/* Pressed, it gives under the finger. */
+.jump-card:active, .unit-row:active, .section-card:active, .learn-box:active, .option:not([disabled]):active { transform: scale(.975); transition-duration: .08s; }
+
+/* A new screen settles in: a short fade up when the view changes (render()
+   marks it), never on a redraw of the same screen. `backwards`, so no
+   transform is left behind to trap a fixed overlay inside the page. */
+main[data-enter] { animation: screen-in .32s var(--ease-out) backwards; }
+@keyframes screen-in { from { opacity: 0; transform: translateY(10px) scale(.992); } }
 
 /* ── the home, as a dashboard ─────────────────────────────────────────── */
 .wrap.home { max-width: 74rem; }
@@ -627,16 +653,12 @@ body::before { content: ""; position: fixed; inset: -20vmax; z-index: -1; pointe
   margin: var(--s-3) 0 var(--s-5); padding: var(--s-6) var(--s-6) calc(var(--s-6) + 1.5rem); border-radius: 2rem;
   color: var(--hero-ink); border: 1px solid var(--hero-edge);
   background: radial-gradient(60% 120% at 100% 0%, var(--hero-edge), transparent 60%),
-    radial-gradient(50% 90% at 0% 100%, rgba(255,255,255,.06), transparent 70%),
+    radial-gradient(50% 90% at 0% 100%, rgba(255,255,255,.04), transparent 70%),
     linear-gradient(135deg, var(--hero-a), var(--hero-b) 55%, var(--hero-c));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 24px 60px -24px rgba(0,0,0,.55); }
-.home-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .5;
-  background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
-  background-size: 1.5rem 1.5rem;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 40%, #000 70%, transparent); mask-image: linear-gradient(90deg, transparent, #000 40%, #000 70%, transparent); }
 .home-hero::after { content: ""; position: absolute; z-index: -1; width: 26rem; height: 26rem; right: -8rem; top: -12rem; border-radius: 50%; pointer-events: none;
   background: radial-gradient(circle, var(--hero-accent), transparent 65%); opacity: .18; animation: hero-glow 9s ease-in-out infinite alternate; }
-@keyframes hero-glow { from { transform: scale(.9); opacity: .12; } to { transform: scale(1.1); opacity: .24; } }
+@keyframes hero-glow { from { transform: scale(.9); opacity: .08; } to { transform: scale(1.1); opacity: .16; } }
 .home-hero .hello { color: var(--hero-muted); }
 .home-hero .learn { color: var(--hero-ink); font-size: 3.25rem;
   background: linear-gradient(120deg, var(--hero-ink) 30%, var(--hero-accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
@@ -678,25 +700,23 @@ body::before { content: ""; position: fixed; inset: -20vmax; z-index: -1; pointe
 .learn-box::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
   background: radial-gradient(40% 120% at 100% 50%, var(--aura-2), transparent 70%); }
 .learn-plus { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 50%; color: var(--accent-ink);
-  background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 8px 20px -8px var(--accent); position: relative; }
+  background: var(--accent); box-shadow: 0 6px 16px -8px var(--accent); position: relative; }
 .chip:hover { border-color: var(--accent); }
 
 /* ── the pearl, the feature of the page ───────────────────────────────── */
 .pearl { position: relative; overflow: hidden; padding: var(--s-6) var(--s-6) var(--s-5); border-radius: 1.75rem; min-height: 22rem;
   background-color: var(--glass); border-color: var(--line); }
-.pearl::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 4px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--hero-accent)); }
 .pearl.with-visual { flex-direction: row; flex-wrap: wrap; gap: var(--s-5); align-items: stretch; }
 .pearl-main { flex: 1 1 20rem; min-width: 0; display: flex; flex-direction: column; }
 .pearl .eyebrow { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--accent); font-size: var(--t-meta); }
 .pearl-gem { width: 1.125rem; height: 1.125rem; border-radius: 50%; flex: none;
-  background: radial-gradient(circle at 30% 30%, #FFFFFF, var(--accent-2) 45%, var(--accent) 80%);
-  box-shadow: 0 0 0 3px var(--accent-soft), 0 0 14px var(--accent-2); animation: gem-shine 3.6s ease-in-out infinite; }
+  background: radial-gradient(circle at 30% 30%, #FFFFFF, var(--accent) 70%);
+  box-shadow: 0 0 0 3px var(--accent-soft); animation: gem-shine 3.6s ease-in-out infinite; }
 @keyframes gem-shine { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
 .pearl-steps { font-size: 1.3125rem; line-height: 1.5; margin: var(--s-3) 0 var(--s-4); }
 .pearl-steps li { padding: var(--s-3) 0 var(--s-3) 2.75rem; }
 .pearl-steps li::before { top: var(--s-3); width: 1.875rem; height: 1.875rem; line-height: 1.875rem;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 12px -4px var(--accent); }
+  background: var(--accent); box-shadow: none; }
 .pearl-actions { margin-top: var(--s-4); }
 .pearl-visual { flex: 1 1 15rem; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: var(--s-2);
   border-radius: 1.25rem; padding: var(--s-2); background: var(--glass-strong); border: 1px solid var(--line);
@@ -732,6 +752,7 @@ main.home > .section-head, main.home > .units { animation-delay: .22s; }
 @media (prefers-reduced-transparency: reduce) {
   .card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list, .pearl, .pearl-visual {
     background-color: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  :where(.card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list):not(.big-idea):not(.pearl) { background-image: none; }
   body::before { display: none; }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -743,9 +764,12 @@ main.home > .section-head, main.home > .units { animation-delay: .22s; }
 :root[data-contrast="high"] .home-hero .learn { -webkit-text-fill-color: currentColor; background: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  body::before, .home-hero::after, .hero-dot, .hero-trace path, .pearl-gem, .pearl-visual { animation: none !important; }
+  body::before, .home-hero::after, .hero-dot, .hero-trace path, .pearl-gem, .pearl-visual, .bar i::after, main[data-enter] { animation: none !important; }
   main.home, main.home *, nav.dock, nav.dock *, .btn, .btn::after, .section-card, .option { transition: none !important; animation: none !important; }
-  .jump-card:hover, .unit-row:hover, .section-card:hover, .learn-box:hover, .btn:hover:not([disabled]), .pearl-fig:hover img { transform: none; }
+  .jump-card:hover, .unit-row:hover, .section-card:hover, .learn-box:hover, .btn:hover:not([disabled]), .pearl-fig:hover img,
+  .jump-card:active, .unit-row:active, .section-card:active, .learn-box:active, .option:active { transform: none; }
+  .jump-card, .unit-row, .learn-box { transition: none !important; }
+  [data-lit] { --lit: transparent; }
 }
 
 /* ── where a unit came from (provenance.js) ── */
@@ -769,7 +793,7 @@ main.home > .section-head, main.home > .units { animation-delay: .22s; }
 .agent-week { list-style: none; padding: 0; margin: var(--s-2) 0; display: grid; gap: var(--s-1); }
 .agent-week li { display: grid; grid-template-columns: 6.5rem 1fr 2rem; align-items: center; gap: var(--s-2); margin: 0; font-size: var(--t-meta); }
 .week-bar { height: .5rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
-.week-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.week-bar i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
 .agent-week strong { text-align: right; }
 .agent-answer { border-color: var(--accent); }
 #coach-memory .btn { min-height: 2rem; padding: .25rem .625rem; }
@@ -791,7 +815,7 @@ main.home > .section-head, main.home > .units { animation-delay: .22s; }
 .check-what { min-width: 0; overflow-wrap: anywhere; }
 .practice-clock { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--accent); font-size: var(--t-lead); }
 .trend { display: flex; align-items: flex-end; gap: .25rem; height: 2.5rem; margin: var(--s-2) 0; }
-.trend i { flex: 1 1 0; max-width: 1.25rem; border-radius: .25rem .25rem 0 0; background: linear-gradient(180deg, var(--accent-2), var(--accent)); }
+.trend i { flex: 1 1 0; max-width: 1.25rem; border-radius: .25rem .25rem 0 0; background: var(--accent); }
 .hazard-lead { font-weight: 800; }
 
 /* the exam plan, teach-back, and where an answer came from */

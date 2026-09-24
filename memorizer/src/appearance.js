@@ -120,8 +120,15 @@ var GLOW = {
    aurora. The suite composites it over every aurora colour, at every
    setting, and holds text on it to the same floors as text on a card.
    At High contrast, and in the Contrast theme, surfaces are opaque. */
-var GLASS = { light: { card: 0.72, strong: 0.86, edge: 'rgba(255,255,255,.65)' },
-              dark:  { card: 0.64, strong: 0.84, edge: 'rgba(255,255,255,.08)' } };
+/* Clearer than it was (0.72 / 0.64), at the owner's request that it look
+   like an iPad's glass: more of the page shows through, under a stronger
+   blur, with a bright hairline RIM, a SHEEN falling from the top-left, and
+   a soft LIGHT that follows the finger (ui.js sets where). The sheen and
+   the light lie under the text, so they are composited into what the text
+   is fitted against, below. On a dark page any white under the text costs
+   the accent its floor, so there the glass keeps its rim and nothing else. */
+var GLASS = { light: { card: 0.52, strong: 0.74, edge: 'rgba(255,255,255,.75)', rim: 'rgba(255,255,255,.55)', sheen: 'rgba(255,255,255,.30)', light: 'rgba(255,255,255,.38)', blur: '28px' },
+              dark:  { card: 0.48, strong: 0.70, edge: 'rgba(255,255,255,.10)', rim: 'rgba(255,255,255,.12)', sheen: 'rgba(255,255,255,0)', light: 'rgba(255,255,255,0)', blur: '28px' } };
 
 /* Auto follows the device: Daylight by day, Midnight at night. */
 var AUTO = { id: 'auto', name: 'Auto', light: 'daylight', dark: 'midnight' };
@@ -229,11 +236,20 @@ function variant(theme, contrast, bright) {
        colour, with the frosted surface over it. */
     var gl = glassOf(theme, contrast, t);
     var backs = [t.bg].concat(g.aura.map(function (a) { return over(a, t.bg); }));
-    var onGlass = [];
-    backs.forEach(function (bk) { onGlass.push(over(gl.glass, bk), over(gl['glass-2'], bk)); });
+    /* each glass over each ground — bare, and under the sheen and the
+       finger's light at their brightest. The accent is fitted on the
+       cards alone, as before. */
+    var onCard = [], onGlass = [];
+    backs.forEach(function (bk) {
+      [gl.glass, gl['glass-2']].forEach(function (g2, i) {
+        var base = over(g2, bk), lit = over(gl['glass-light'], over(gl['glass-sheen'], base));
+        onGlass.push(base, lit);
+        if (!i) onCard.push(base, lit);
+      });
+    });
     t.ink = fit(t.ink, onGlass, f.text, far);
     t.muted = fit(t.muted, onGlass, f.muted, far);
-    t.accent = fit(t.accent, onGlass.filter(function (_, i) { return i % 2 === 0; }), f.accent, far);
+    t.accent = fit(t.accent, onCard, f.accent, far);
     t['accent-ink'] = fit(t['accent-ink'], [t.accent], f.accent, near);
     t['accent-2'] = fit(t['accent-2'], [t['accent-ink']], f.accent, far);
   }
@@ -248,7 +264,9 @@ function glassOf(theme, contrast, t) {
   var opaque = contrast === 'high' || theme.id === 'contrast', G = GLASS[theme.mode];
   return { glass: rgba(t.surface, opaque ? 1 : G.card), 'glass-strong': rgba(t.surface, opaque ? 1 : G.strong),
            'glass-2': rgba(t['surface-2'], opaque ? 1 : G.card), 'glass-edge': opaque ? 'rgba(255,255,255,0)' : G.edge,
-           'glass-blur': opaque ? '0px' : '22px' };
+           'glass-blur': opaque ? '0px' : G.blur,
+           'glass-rim': opaque ? 'rgba(255,255,255,0)' : G.rim, 'glass-sheen': opaque ? 'rgba(255,255,255,0)' : G.sheen,
+           'glass-light': opaque ? 'rgba(255,255,255,0)' : G.light };
 }
 function semanticOf(mode, contrast) { return (contrast === 'high' ? SEMANTIC_HIGH : SEMANTIC)[mode]; }
 

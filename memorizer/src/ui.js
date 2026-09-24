@@ -2608,7 +2608,12 @@ function aiSettingsCard() {
     h('div.row', button(c.meaning ? 'Turn off' : 'Turn on', function () {
       LLM.saveConfig({ on: c.on, model: c.model, meaning: !c.meaning }); render();
     }, c.meaning ? 'quiet' : 'primary', { id: 'meaning-toggle' }), h('span.muted', c.meaning ? 'On.' : 'Off.')),
-    ui.ai.error ? h('p.warn', { id: 'ai-error' }, 'The on-device AI could not run: ' + ui.ai.error) : null);
+    ui.ai.error ? h('p.warn', { id: 'ai-error' }, 'The on-device AI could not run: ' + ui.ai.error) : null,
+    h('div.row', button('Delete the downloaded model', function () {
+      ui.ai.busy = 'Deleting the downloaded model…'; ui.ai.error = ''; render();
+      LLM.clearModel(model.value).then(function () { ui.ai.busy = ''; ui.ai.status = 'Deleted. Turn it on to download it again, from the start.'; render(); },
+        function (e) { ui.ai.busy = ''; ui.ai.error = (e && e.message) || String(e); render(); });
+    }, 'quiet', { id: 'ai-clear' }), h('span.muted', 'If a download broke part-way and keeps failing, this starts it clean.')));
 }
 
 /* ── frame: a floating bar at the foot of the screen ─────────────────────── */
@@ -2807,6 +2812,29 @@ function storageBanner() {
   return null;
 }
 
+/* The light on the glass follows the finger, or the pointer: the pane
+   under it is marked lit, with the light's place as --px / --py (app.css
+   draws it; appearance.js fits text against it at its brightest). A
+   finger lifted takes it away; with reduced motion there is none. */
+var GLASSY = '.card:not(.big-idea):not(.pearl), .jump-card, .unit-row, .section-card, .option, .learn-box, details.source';
+var lit = null, lastView = null;
+function unlight() { if (lit) lit.removeAttribute('data-lit'); lit = null; }
+function light(e) {
+  var el = !reducedMotion() && e.target && e.target.closest ? e.target.closest(GLASSY) : null;
+  if (lit !== el) unlight();
+  if (!el) return;
+  var r = el.getBoundingClientRect();
+  el.style.setProperty('--px', Math.round(e.clientX - r.left) + 'px');
+  el.style.setProperty('--py', Math.round(e.clientY - r.top) + 'px');
+  el.setAttribute('data-lit', '');
+  lit = el;
+}
+doc.addEventListener('pointermove', light, { passive: true });
+doc.addEventListener('pointerdown', light, { passive: true });
+doc.addEventListener('pointerup', function (e) { if (e.pointerType !== 'mouse') unlight(); }, { passive: true });
+doc.addEventListener('pointercancel', unlight, { passive: true });
+doc.addEventListener('pointerout', function (e) { if (!e.relatedTarget) unlight(); }, { passive: true });
+
 function render() {
   releaseStale();
   var app = doc.getElementById('app');
@@ -2817,6 +2845,9 @@ function render() {
     : ui.view === 'check' ? viewCheck()
     : ui.view === 'practice' ? viewPractice()
     : ui.view === 'settings' ? viewSettings() : viewHome();
+  /* A new screen settles in (app.css, main[data-enter]); a redraw of the
+     same screen does not. */
+  if (ui.view !== lastView) { view.setAttribute('data-enter', ''); lastView = ui.view; }
   app.textContent = '';
   var banner = storageBanner();
   if (banner) view.insertBefore(banner, view.firstChild && view.firstChild.nextSibling);
