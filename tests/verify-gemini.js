@@ -206,12 +206,12 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
          the next connect starts from a settled DOM rather than racing a
          pending re-render. */
       const settled = t => t && !/Asking Google/i.test(t);
-      let msg = '';
+      let msg = '', readFrom = null;
       const until = Date.now() + 8000;
       while (Date.now() < until) {
         const el = document.getElementById('keyMsg');
         const t = el ? el.textContent : '';
-        if (settled(t)) { msg = t; break; }
+        if (settled(t)) { msg = t; readFrom = el; break; }
         await new Promise(r => setTimeout(r, 40));
       }
       /* Nothing settled in eight seconds. Reporting what IS there is not enough
@@ -228,7 +228,25 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
           : `(no message after 8s: #keyMsg ${el ? 'present but empty' : 'is not in the document'}`
             + `, panel ${document.getElementById('ai') ? 'open' : 'gone'})`;
       }
-      await new Promise(r => setTimeout(r, 500));
+      /* LET THE DEFERRED RE-RENDER LAND BEFORE THE NEXT CONNECT STARTS — by
+         waiting for it, not for a stopwatch. This was a flat 500ms, written
+         when the success path deferred buildAI() by 450ms; mistral-patch later
+         moved that timer to 700ms, so the "wait past that timer" stopped being
+         one. The next connect then began inside the window, the old panel's
+         re-render landed on top of it, and on the owner's laptop under a full
+         run the starved-key check read "#keyMsg present but empty" for eight
+         seconds — both of its message checks failing on a DOM the previous
+         connect had torn down, not on anything the starved path did.
+
+         Only the success path schedules a re-render. There, the #keyMsg read
+         above is detached when buildAI() replaces the panel, so that is the
+         precondition waited on. Capped, because a re-render that never
+         detaches the element must not hang the suite: after the cap the
+         700ms timer has long since fired either way. */
+      if (/Connected/i.test(msg) && readFrom) {
+        const cap = Date.now() + 4000;
+        while (readFrom.isConnected && Date.now() < cap) await new Promise(r => setTimeout(r, 40));
+      }
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem('accsap12.gemini.models') || 'null'); } catch (_) {}
       return { msg, models: (MODELS.gemini || []).map(m => m[0]),
