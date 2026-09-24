@@ -46,9 +46,14 @@ head('the nine themes are Systole’s nine');
   ok('eight palettes plus Auto', ids.length === 8 && L.AUTO && L.AUTO.light === 'daylight' && L.AUTO.dark === 'midnight', ids.join(', '));
   /* Systole's THEMES list, read from its own source. */
   const tp = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
-  const systole = [...tp.matchAll(/\{id:'([a-z]+)',\s*name:'([^']+)'/g)].map(m => m[1]);
-  ok('the same ids, and names, as Systole’s theme picker', ['auto'].concat(ids).every(id => systole.indexOf(id) !== -1) &&
-     L.THEMES.every(t => new RegExp("\\{id:'" + t.id + "',\\s*name:'" + t.name.replace(' ', ' ') + "'").test(tp)), systole.join(', '));
+  /* id → name, read as pairs and compared as strings. The first version
+     built a regex from each name with a no-op replace(' ', ' ') where an
+     escape belonged — CodeQL flagged it (alert 18). */
+  const systole = {};
+  for (const m of tp.matchAll(/\{id:'([a-z]+)',\s*name:'([^']+)'/g)) systole[m[1]] = m[2];
+  const mismatch = L.THEMES.filter(t => systole[t.id] !== t.name).map(t => `${t.id}: "${t.name}" vs Systole "${systole[t.id]}"`);
+  ok('the same ids, and names, as Systole’s theme picker', 'auto' in systole && mismatch.length === 0,
+     mismatch.join('; ') || Object.keys(systole).join(', '));
   ok('each swatch is the one Systole’s picker shows', L.THEMES.every(t => new RegExp("id:'" + t.id + "'[^}]*bg:'" + t.swatch[0] + "',ac:'" + t.swatch[1] + "'", 'i').test(tp)),
      L.THEMES.filter(t => !new RegExp("id:'" + t.id + "'[^}]*bg:'" + t.swatch[0] + "',ac:'" + t.swatch[1] + "'", 'i').test(tp)).map(t => t.id).join(', ') || 'all match');
 }
