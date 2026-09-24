@@ -839,8 +839,9 @@ function compareButton(s, d) {
 
 /* ── LESSON ──────────────────────────────────────────────────────────────── */
 function steps(which) {
-  return h('ol.stepper', { 'aria-label': 'Step' }, [['teach', 'Learn'], ['drill', 'Drill']].map(function (p) {
-    var now = p[0] === which, done = which === 'drill' && p[0] === 'teach';
+  var PH = [['teach', 'Learn'], ['memorize', 'Memorize'], ['drill', 'Drill']], at = PH.map(function (p) { return p[0]; }).indexOf(which);
+  return h('ol.stepper', { 'aria-label': 'Step' }, PH.map(function (p, k) {
+    var now = p[0] === which, done = k < at;
     return h('li' + (now ? '.now' : done ? '.done' : ''), { 'aria-current': now ? 'step' : null }, p[1]);
   }));
 }
@@ -1012,7 +1013,10 @@ function viewLesson() {
   var moreAnalogies = analogies.length > 1 ? h('details.card.more-analogies', h('summary', 'More analogies (' + (analogies.length - 1) + ')'), analogies.slice(1).map(function (a) { return analogyCard(a, false); })) : null;
   /* the built-in pathway is on the glance card; a model's flowchart is its own */
   var flowCard = L.flowchart && L.flowchart.trim() || !(Sheet.glance(c) || {}).pathway || !Sheet.glance(c).pathway.length ? drawFlowCard(c, L) : null;
-  var drill = h('div.end-cta', button('I’ve got it — start the drill', function () { go({ type: 'toDrill' }); }, 'primary big', { id: 'to-drill' }));
+  /* the drill opens only once the section is memorised (session.js) */
+  var drill = h('div.end-cta', s.per[s.section].memorized
+    ? button('Start the drill', function () { go({ type: 'toDrill' }); }, 'primary big', { id: 'to-drill' })
+    : button('I’ve got it — now memorise it', function () { go({ type: 'toMemorize', value: { cards: Coach.recallCards(c, L).length } }); }, 'primary big', { id: 'to-drill' }));
   if (stepMode()) {
     /* STEP BY STEP — one card at a time, like the owner's reference: the
        idea, then each heading's points, the numbers, each mnemonic, a check,
@@ -1152,6 +1156,30 @@ function navOf(hist) {
   ui.back = Math.max(0, Math.min(ui.back || 0, hist.length));
   return { hist: hist, back: ui.back };
 }
+/* MEMORIZE: active recall, one card at a time. Try to bring it back, then
+   look, then say honestly whether you knew it; one not known comes back at
+   the end. The drill opens when every card has been known once. */
+var RECALL_LABEL = { idea: 'The big idea', point: 'Key point', number: 'Number to know', mnemonic: 'Mnemonic', chain: 'The chain' };
+function viewMemorize() {
+  var s = ui.state, c = cluster(), p = s.per[s.section], m = p.memo;
+  var cards = Coach.recallCards(c, p.lesson), card = cards[m.order[m.pos]];
+  if (!card) return [sectionBar('memorize'), h('div.card', h('p', 'This section’s cards have changed.'), button('Back to the lesson', function () { go({ type: 'open', section: s.section }); }, 'primary'))];
+  var shown = ui.recallShown === m.pos;
+  var rate = function (knew) { ui.recallShown = null; go({ type: 'recalled', knew: knew }); };
+  return [sectionBar('memorize'),
+    h('div.card.recall', { id: 'recall' },
+      h('div.mcq-meta', h('span', 'Card ' + (m.pos + 1) + ' of ' + m.order.length + (m.pos >= cards.length ? ' · again' : '')),
+        h('div.bar', h('i', { style: 'width:' + Math.round(100 * m.pos / m.order.length) + '%' }))),
+      h('span.eyebrow', RECALL_LABEL[card.kind] || 'Recall'),
+      h('p.recall-prompt', card.prompt),
+      shown ? h('div.recall-answer', { id: 'recall-answer' }, h('strong', card.answer),
+        card.full && card.full !== card.answer ? h('p.muted', card.full, card.page ? [' ', page(card.page)] : null) : null) : null,
+      shown ? h('div.row.recall-rate', button('✗ Not yet', function () { rate(false); }, 'quiet', { id: 'recall-notyet' }),
+          button('✓ I knew it', function () { rate(true); }, 'primary big', { id: 'recall-knew' }))
+        : h('div.row', button('Show the answer', function () { ui.recallShown = m.pos; render(); }, 'primary big', { id: 'recall-show' })),
+      h('p.muted', 'Say it first — aloud or in your head — then look. The drill opens when every card has been known once.')),
+    h('div.row', button('← Back to the lesson', function () { go({ type: 'open', section: s.section }); }, 'quiet', { id: 'recall-lesson' }))];
+}
 function viewDrill() {
   var s = ui.state, c = s.per[s.section];
   if (!c.quiz) return [sectionBar('drill'), ui.error ? errorCard(pump) : busyCard()];
@@ -1240,6 +1268,7 @@ function viewDone() {
 function viewSession() {
   var s = ui.state, body;
   if (s.phase === 'teach') body = viewLesson();
+  else if (s.phase === 'memorize') body = viewMemorize();
   else if (s.phase === 'drill') body = viewDrill();
   else if (s.phase === 'result') body = viewResult();
   else if (s.phase === 'exam') body = viewExam();

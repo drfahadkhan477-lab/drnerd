@@ -411,6 +411,17 @@ function kindOf(user) {
   const URL = 'file://' + path.join(dir, 'index.html');
   const T = { timeout: 60000 };
   const text = async (p, sel) => (await p.locator(sel).innerText()).replace(/\s+/g, ' ').trim();
+  /* Go through the memorise cards, each known, until the drill opens. A
+     precondition for the flows that test the drill, not a proposition. */
+  const memorize = async p => {
+    await p.locator('#recall').waitFor(T);
+    while (await p.evaluate(() => Memorizer.ui.state.phase === 'memorize')) {
+      const at = await p.evaluate(() => { const s = Memorizer.ui.state; return s.per[s.section].memo.pos; });
+      await p.locator('#recall-show').click();
+      await p.locator('#recall-knew').click();
+      await p.waitForFunction(k => !document.querySelector('#recall') || new RegExp('^Card ' + (k + 2) + ' of').test(document.querySelector('#recall .mcq-meta').textContent), at, T);
+    }
+  };
   const meta = p => p.locator('.mcq-meta').innerText();
   /* Choose option i, then Next; waits for the next question (or the end)
      by the progress line changing, not by time. */
@@ -566,7 +577,7 @@ function kindOf(user) {
   const at = (sel, t) => page.evaluate(([sel, t]) => {
     const comp = document.querySelector(sel); Memorizer.motion.seek(comp, t === 'end' ? Memorizer.motion.total(comp) : t);
     const vis = el => { const cs = getComputedStyle(el); return +cs.opacity > 0.95 && (cs.clipPath === 'none' || /^inset\((?:0(?:px|%)?\s*)+\)$/.test(cs.clipPath)) && !/matrix\(0|scale\(0/.test(cs.transform); };
-    return [...comp.querySelectorAll('[data-start]')].map(el => ({ c: el.className, on: vis(el), t: el.textContent }));
+    return [...comp.querySelectorAll('[data-start]')].map(el => ({ c: el.className, on: vis(el), t: el.textContent, tf: getComputedStyle(el).transform }));
   }, [sel, t]);
   const seen = [], motion = {};
   for (let i = 0; i < N; i++) {
@@ -576,7 +587,7 @@ function kindOf(user) {
     if (here[0] === '#pathway-play') motion.path = { start: await at('#pathway-play', 0.6), end: await at('#pathway-play', 'end'),
       running: await page.evaluate(() => document.querySelector('#pathway-play').getAnimations({ subtree: true }).length) };
     if (here[0] === '.hook') motion.hook = { letters: await at('.hook', 0.36 * (await page.locator('.hook .hs-letter').count())), end: await at('.hook', 'end') };
-    if (here[0] === '#numbers') motion.nums = { early: await at('#numbers', 0.2), end: await at('#numbers', 'end'), text: await page.$$eval('#numbers .tile-value', ts => ts.map(t => t.textContent)) };
+    if (here[0] === '#numbers') motion.nums = { early: await at('#numbers', 0.35), end: await at('#numbers', 'end'), text: await page.$$eval('#numbers .tile-value', ts => ts.map(t => t.textContent)) };
   }
   const order = seen.map(x => x[0]).filter((m, i, a) => a.indexOf(m) === i);
   ok('each slide shows one thing, in order — the idea, how it works, each heading’s points, the numbers, the mnemonic, a check, the figures — the drill at the end',
@@ -585,6 +596,8 @@ function kindOf(user) {
   const P = motion.path || { start: [], end: [] }, steps = x => x.filter(p => /pp-step/.test(p.c));
   ok('the pathway: its steps appear in turn — at 0.6 s the first is there and the next is not', steps(P.start).length >= 3 && steps(P.start)[0].on && !steps(P.start)[1].on && P.running > 0,
      JSON.stringify(steps(P.start).map(p => p.on)));
+  const line1 = (P.start || []).find(p => /pp-line/.test(p.c)), sc = line1 && /^matrix\(1, 0, 0, ([\d.]+)/.exec(line1.tf);
+  ok('the arrow draws itself: just after it starts, it is part-way down', sc && +sc[1] > 0.05 && +sc[1] < 0.95, line1 && line1.tf);
   ok('and by the end every step is there, each arrow drawn, the book’s verbs on them in order', P.end.length > 0 && P.end.every(p => p.on) &&
      JSON.stringify(P.end.filter(p => /pp-verb/.test(p.c)).map(p => p.t)) === '["reduce","raises","leads to"]', JSON.stringify(P.end.map(p => p.t)));
   const Hk = motion.hook || { letters: [], end: [] };
@@ -593,7 +606,7 @@ function kindOf(user) {
   ok('then each word unfolds', Hk.end.length > 0 && Hk.end.every(p => p.on), JSON.stringify(Hk.end.map(p => p.on)));
   const Nm = motion.nums || { early: [], end: [], text: [] };
   ok('numbers build up: the sign before its value, the value before its label', Nm.early.length > 0 && Nm.early.find(p => /tv-sign/.test(p.c)) &&
-     Nm.early.find(p => /tv-sign/.test(p.c)).t === '>' && !Nm.early.find(p => /tv-num/.test(p.c)).on && !Nm.early.find(p => /tile-label/.test(p.c)).on, JSON.stringify(Nm.early.slice(0, 3)));
+     Nm.early.find(p => /tv-sign/.test(p.c)).t === '>' && Nm.early.find(p => /tv-sign/.test(p.c)).on && !Nm.early.find(p => /tv-num/.test(p.c)).on && !Nm.early.find(p => /tile-label/.test(p.c)).on, JSON.stringify(Nm.early.slice(0, 3)));
   ok('and end as the same tiles as the page shows', Nm.end.every(p => p.on) && Nm.text.includes('> 18 mmHg'), JSON.stringify(Nm.text));
   await page.locator('#step-back').click();
   ok('Back goes one slide back, and the drill button waits for the last', await page.locator('#to-drill').count() === 0 &&
@@ -616,13 +629,41 @@ function kindOf(user) {
   ok('and the whole lesson is one tap away again', await page.locator('main #points').count() === 1 && await page.locator('main #numbers').count() === 1 &&
      await page.locator('main .hook').count() >= 1 && await page.locator('#to-drill').count() === 1 && await page.locator('#lesson-steps').count() === 0);
 
-  head('the drill: multiple choice, and a miss comes back');
+  head('memorise it before the drill');
   await page.locator('#to-drill').click();
+  await page.locator('#recall').waitFor(T);
+  const nCards = await page.evaluate(() => Memorizer.ui.state.per[0].memo.order.length);
+  ok('the lesson leads to memorising, not the drill: a card at a time, its answer hidden', nCards >= 3 && await page.locator('#mcq').count() === 0 &&
+     await page.locator('#recall-answer').count() === 0 && (await page.locator('.stepper li.now').textContent()) === 'Memorize' &&
+     await page.evaluate(() => Memorizer.ui.state.phase === 'memorize'), String(nCards));
+  const firstPrompt = await text(page, '#recall .recall-prompt');
+  await page.locator('#recall-show').click();
+  ok('Show the answer, then say whether you knew it', await page.locator('#recall-answer').count() === 1 && await page.locator('#recall-knew').count() === 1 &&
+     await page.locator('#recall-notyet').count() === 1);
+  await page.locator('#recall-notyet').click();
+  await page.waitForFunction(() => /^Card 2 of/.test(document.querySelector('#recall .mcq-meta').textContent), null, T);
+  ok('a card not known comes back at the end', await page.evaluate(n => Memorizer.ui.state.per[0].memo.order.length === n + 1, nCards) &&
+     /of \d+/.test(await meta(page)) && new RegExp('of ' + (nCards + 1)).test(await meta(page)),
+     JSON.stringify({ nCards, memo: await page.evaluate(() => Memorizer.ui.state.per[0].memo), meta: await meta(page) }));
+  ok('and the drill is still shut: going to it straight is refused', await page.evaluate(() => { try { MemSession.next(Object.assign({}, Memorizer.ui.state, { phase: 'teach' }), { type: 'toDrill' }); return false; } catch (e) { return /memorise/.test(e.message); } }));
+  const prompts = [];
+  while (await page.evaluate(() => Memorizer.ui.state.phase === 'memorize')) {
+    prompts.push(await text(page, '#recall .recall-prompt'));
+    const k = await page.evaluate(() => Memorizer.ui.state.per[0].memo.pos);
+    await page.locator('#recall-show').click();
+    await page.locator('#recall-knew').click();
+    await page.waitForFunction(k => !document.querySelector('#recall') || new RegExp('^Card ' + (k + 2) + ' of').test(document.querySelector('#recall .mcq-meta').textContent), k, T);
+  }
+  ok('every card known once — the missed one again, last — and the drill opens by itself', prompts.length === nCards && prompts[prompts.length - 1] === firstPrompt &&
+     await page.evaluate(() => Memorizer.ui.state.phase === 'drill' && Memorizer.ui.state.per[0].memorized === true), JSON.stringify(prompts.map(x => x.slice(0, 30))));
+
+  head('the drill: multiple choice, and a miss comes back');
   await page.locator('#mcq .option').first().waitFor(T);
   const qz = stub.requests.filter(r => r.kind === 'quiz');
   ok('one drill request, carrying the lesson’s key points and section 1 only', qz.length === 1 && /1\. Preload — end-diastolic stretch/.test(qz[0].user) &&
      !/s[23]w[a-z]/.test(qz[0].user), qz.map(r => r.user.length).join());
-  ok('the step says Drill, with Learn done', (await page.locator('.stepper li.now').textContent()) === 'Drill' && (await page.locator('.stepper li.done').textContent()) === 'Learn');
+  ok('the step says Drill, with Learn and Memorize done', (await page.locator('.stepper li.now').textContent()) === 'Drill' &&
+     JSON.stringify(await page.$$eval('.stepper li.done', ls => ls.map(l => l.textContent))) === '["Learn","Memorize"]');
   ok('four options, lettered A to D, and nothing to type', JSON.stringify(await page.$$eval('#mcq .opt-letter', es => es.map(e => e.textContent))) === '["A","B","C","D"]' &&
      await page.locator('textarea, input[type="text"]').count() === 0);
   ok('the question counts where it is', /Question 1 of 2/.test(await meta(page)));
@@ -775,6 +816,7 @@ function kindOf(user) {
     for (const i of [1, 2]) {
       s = MemSession.next(s, { type: 'open', section: i });
       if (!s.per[i].lesson) s = MemSession.next(s, { type: 'taught', value: Object.assign({}, L, { points: [{ text: 'Afterload is wall stress', page: 3 }] }) });
+      s = MemSession.next(s, { type: 'toMemorize', value: { cards: 0 } });
       s = MemSession.next(s, { type: 'toDrill' });
       s = MemSession.next(s, { type: 'quizReady', value: { questions: [{ question: 'q' + i, quote: '', options: ['a', 'b', 'c', 'd'], answer: 0, explain: 'e', page: 1 }] } });
       s = MemSession.next(s, { type: 'answered', choice: 0 });
@@ -918,6 +960,7 @@ function kindOf(user) {
     ok('each point sets its key term in bold, the sentence unchanged', keys.length >= 1 && keys.every(k => sec1.indexOf(k) !== -1) && changed.length === 0,
        JSON.stringify({ keys, changed }));
     await p2.locator('#to-drill').click();
+    await memorize(p2);
     await p2.locator('#mcq .option').first().waitFor(T);
     const qs = await p2.evaluate(() => Memorizer.ui.state.per[0].quiz.questions);
     ok('the drill is multiple choice: four different options to every question', qs.length >= 3 &&
@@ -1010,6 +1053,7 @@ function kindOf(user) {
       d.clusters.forEach((c, i) => {
         s = MemSession.next(s, { type: 'open', section: i });
         s = MemSession.next(s, { type: 'taught', value: MemCoach.lesson(c) });
+        s = MemSession.next(s, { type: 'toMemorize', value: { cards: 0 } });
         s = MemSession.next(s, { type: 'toDrill' });
         s = MemSession.next(s, { type: 'quizReady', value: MemCoach.quiz(c, s.per[i].lesson, d.clusters) });
         while (s.phase === 'drill') { const k = s.per[i]; s = MemSession.next(s, { type: 'answered', choice: k.quiz.questions[k.order[k.pos]].answer }); }
@@ -1162,6 +1206,7 @@ function kindOf(user) {
     const unitId = await p2.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'unit').id));
     await p2.evaluate(id => MemStore.del('sessions', id).then(() => Memorizer.openDoc(id, 0)), unitId);
     await p2.locator('#to-drill').click();
+    await memorize(p2);
     await p2.locator('#mcq .option').first().waitFor(T);
     const qz = await p2.evaluate(() => Memorizer.ui.state.per[0].quiz.questions);
     ok('its question whose answer the section states is asked, first, and marked', qz[0].by === 'ai' && qz[0].question === 'What do diuretics reduce by lowering circulating volume?' &&

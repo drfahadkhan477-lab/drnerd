@@ -442,7 +442,7 @@ function sheetMod() { return root.MemSheet || (typeof require === 'function' ? r
 /* A sentence's subject: the words before its main verb, when they open it
    and are few ("Rheumatic heart disease is …", "Diuretics reduce …",
    "Excessive preload raises …"). */
-var SUBJECT_VERB = /^((?:[A-Za-z][\w\-]*(?:\s+\([A-Z]{2,6}\))?\s+){0,5}?[A-Za-z][\w\-]*(?:\s+\([A-Z]{2,6}\))?)\s+(?:is|are|was|were|has|have|may|can|should|must|causes?|leads?|raises?|reduces?|lowers?|increases?|decreases?|results?|occurs?|accounts?|presents?|develops?|requires?|affects?|produces?|remains?|becomes?|shows?|includes?|involves?)\b/;
+var SUBJECT_VERB = /^((?:[A-Za-z0-9][\w\-.]*(?:\s+\([A-Z]{2,6}\))?\s+){0,5}?[A-Za-z][\w\-]*(?:\s+\([A-Z]{2,6}\))?)\s+(?:is|are|was|were|has|have|may|can|should|must|causes?|leads?|raises?|reduces?|lowers?|increases?|decreases?|results?|occurs?|accounts?|presents?|develops?|requires?|affects?|produces?|remains?|becomes?|shows?|includes?|involves?|defines?|indicates?|suggests?|predicts?|confirms?|excludes?)\b/;
 var NOT_SUBJECT = /^(?:this|that|it|there|these|those|which|such|one|each|in|on|at|for|with|after|before|when|if|although|because|during|without|once|as|by)\b/i;
 function keyTermOf(cluster, text) {
   var t0 = String(text).trim();
@@ -451,7 +451,7 @@ function keyTermOf(cluster, text) {
   var tries = [t0].concat(NOT_SUBJECT.test(t0) && t0.indexOf(',') > 0 ? [t0.slice(t0.indexOf(',') + 1).trim()] : []);
   for (var i = 0; i < tries.length; i++) {
     var sm = SUBJECT_VERB.exec(tries[i]);
-    if (sm && !NOT_SUBJECT.test(sm[1])) return sm[1];
+    if (sm && !NOT_SUBJECT.test(sm[1])) return sm[1].replace(/^(?:a|an|the)\s+(?=\S)/i, '');
   }
   /* Else, of the sentence's four strongest terms, the one it names first: what
      the sentence is about ("Diuretics reduce preload…"), not its rarest
@@ -1151,13 +1151,55 @@ function explainSection(cluster, lessonValue) {
            hooks: hooks.map(function (m) { return { title: m.title, letters: m.letters, words: m.words }; }) };
 }
 
+/* ── memorising: the cards gone through before the drill ─────────────────
+   Active recall, not re-reading: each card hides one thing the section
+   says and the reader tries to bring it back before it is shown.
+     · each key point, its key term blanked (keyTermOf) — or, with no term
+       to blank, its opening words to finish;
+     · the big idea, when it is not already a point;
+     · each number tile: what it measures, to recall the value and its sign;
+     · each mnemonic: the letters, to recall the words;
+     · the chain of cause and effect: its two ends, to walk between them.
+   Every answer is the lesson's own words. session.js runs the cards. */
+var OPENING_WORDS = 6;
+function recallCards(cluster, lessonValue) {
+  var L = lessonValue || {}, out = [];
+  var norm = function (t) { return String(t).replace(/\s+/g, ' ').replace(/[.\s]+$/, '').toLowerCase(); };
+  var points = (L.points || []).map(function (p) { return p.text; });
+  if (L.overview && points.map(norm).indexOf(norm(L.overview)) === -1) {
+    out.push({ kind: 'idea', prompt: 'In one line, what is this section about?', answer: L.overview, full: L.overview, page: 0 });
+  }
+  (L.points || []).forEach(function (p) {
+    var key = keyTermOf(cluster, p.text), at = key ? p.text.toLowerCase().indexOf(key.toLowerCase()) : -1;
+    if (at !== -1) out.push({ kind: 'point', prompt: p.text.slice(0, at) + '_____' + p.text.slice(at + key.length), answer: p.text.slice(at, at + key.length), full: p.text, page: p.page });
+    else {
+      var ws = p.text.split(/\s+/);
+      out.push({ kind: 'point', prompt: 'Finish it: “' + ws.slice(0, Math.min(OPENING_WORDS, Math.ceil(ws.length / 2))).join(' ') + ' …”', answer: p.text, full: p.text, page: p.page });
+    }
+  });
+  (sheetMod().sheetOf(L).numbers || []).forEach(function (n) {
+    n.tiles.forEach(function (t) {
+      out.push({ kind: 'number', prompt: (n.subject && n.subject !== t.label ? n.subject + ' — ' : '') + t.label + ': what value?', answer: t.value, full: n.text, page: n.page });
+    });
+  });
+  (L.mnemonics || []).forEach(function (m) {
+    out.push({ kind: 'mnemonic', prompt: m.title + ': ' + m.letters.split('').join(' · '), answer: m.words.join(', '), full: m.words.join(', '), page: 0 });
+  });
+  var e = explainSection(cluster, L), g = sheetMod().glance(cluster, (L.mnemonics || []).map(function (m) { return m.title; }));
+  if (e.chain && g && g.pathway.length >= 3) {
+    var P = g.pathway;
+    out.push({ kind: 'chain', prompt: 'Walk the chain: ' + P[0].label + ' → … → ' + P[P.length - 1].label, answer: e.chain, full: e.chain, page: 0 });
+  }
+  return out;
+}
+
 var MemCoach = {
   OPTIONS: OPTIONS, PER_KIND: PER_KIND, QUIZ_SIZE: QUIZ_SIZE, KIND_ORDER: KIND_ORDER, family: family, FLIP: FLIP, keyTermOf: keyTermOf,
   sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, defined: defined, toks: toks,
   rankedTerms: rankedTerms, frequencies: frequencies, bare: bare, numberFacts: numberFacts, mnemonicsOf: mnemonicsOf,
   pools: pools, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
   lesson: lesson, quiz: quiz, exam: exam, flow: flow, paths: paths, tree: tree,
-  KIND_SAYS: KIND_SAYS, questionKind: questionKind, explainQuestion: explainQuestion, explainSection: explainSection,
+  recallCards: recallCards, KIND_SAYS: KIND_SAYS, questionKind: questionKind, explainQuestion: explainQuestion, explainSection: explainSection,
 };
 root.MemCoach = MemCoach;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemCoach;

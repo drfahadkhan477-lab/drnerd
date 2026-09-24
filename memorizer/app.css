@@ -485,3 +485,9 @@ summary.fold-head:hover .fold-btn { color: var(--accent); border-color: currentC
 .tv-sign, .tv-num { display: inline-block; }
 .tile-label { display: block; }
 .step-head .btn#replay { margin-left: auto; }
+
+/* memorize: one recall card at a time */
+.recall-prompt { font-size: var(--t-h4); font-weight: 700; line-height: 1.35; margin: var(--s-2) 0 var(--s-4); }
+.recall-answer { border-radius: 1rem; background: var(--good-soft); padding: var(--s-3) var(--s-4); margin: 0 0 var(--s-4); }
+.recall-answer strong { display: block; font-size: var(--t-lead); color: var(--good); }
+.recall-rate { justify-content: space-between; }

@@ -114,9 +114,37 @@ function next(state, event) {
       c.lesson = v;
       return s;
 
+    /* MEMORIZE, between the lesson and the drill, at the owner's request:
+       "make sure I have learnt and memorised it before the drill". The
+       section's recall cards (coach.js recallCards: each point with its
+       key term hidden, each number, each mnemonic, the chain) are gone
+       through with the answer hidden; the reader says whether they knew
+       it, and one not known comes back at the end, until every card has
+       been known once. Only then does the drill open. A section memorised
+       once is not gated again. `value.cards` is how many there are; none
+       means there is nothing to hold back. */
+    case 'toMemorize':
+      if (s.phase !== 'teach') refuse(s, event, 'memorising follows the lesson');
+      if (!c.lesson) refuse(s, event, 'this section has not been taught yet');
+      var n = v && typeof v.cards === 'number' && v.cards >= 0 ? Math.floor(v.cards) : -1;
+      if (n < 0) refuse(s, event, 'how many cards there are to memorise');
+      if (!n) { c.memorized = true; return s; }
+      s.phase = 'memorize';
+      c.memo = { order: Array.apply(null, Array(n)).map(function (_, k) { return k; }), pos: 0, misses: 0 };
+      return s;
+
+    case 'recalled':
+      if (s.phase !== 'memorize') refuse(s, event, 'a card is recalled while memorising');
+      if (typeof event.knew !== 'boolean') refuse(s, event, 'knew it, or not yet');
+      if (!event.knew) { c.memo.order.push(c.memo.order[c.memo.pos]); c.memo.misses++; }
+      c.memo.pos++;
+      if (c.memo.pos >= c.memo.order.length) { c.memorized = true; s.phase = 'teach'; return next(s, { type: 'toDrill' }); }
+      return s;
+
     case 'toDrill':
       if (s.phase !== 'teach') refuse(s, event, 'the drill follows the lesson');
       if (!c.lesson) refuse(s, event, 'this section has not been taught yet');
+      if (!c.memorized) refuse(s, event, 'memorise the section before its drill');
       s.phase = 'drill';
       c.order = c.quiz ? c.quiz.questions.map(function (_, k) { return k; }) : [];
       c.pos = 0; c.answers = [];

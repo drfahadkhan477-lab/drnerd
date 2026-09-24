@@ -221,9 +221,9 @@ jobs:
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass (82 checks)
         run: node tests/verify-memorizer-prompts-pure.js
-      - name: Memorizer — teach before drill, a miss asked again, every miss one card (50 checks)
+      - name: Memorizer — teach, memorise, then drill, a miss asked again, every miss one card (59 checks)
         run: node tests/verify-memorizer-session-pure.js
-      - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, and explains them (120 checks)
+      - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, and makes the cards to memorise (127 checks)
         run: node tests/verify-memorizer-coach-pure.js
       - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness (36 checks)
         run: node tests/verify-memorizer-appearance-pure.js

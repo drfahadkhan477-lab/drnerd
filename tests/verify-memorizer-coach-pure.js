@@ -445,6 +445,31 @@ head('the robot explains the question in front of you');
      sec.gist === K.lesson(CH).overview && sec.chain === 'Diuretics reduce preload, which raises pulmonary venous pressure, which leads to oedema of the lungs.', JSON.stringify(sec));
 }
 
+head('memorising: the cards gone through before the drill');
+{
+  const CH = { index: 3, title: 'Congestion', pageStart: 9, pageEnd: 9, text: '', segments: [{ page: 9, heading: false, text:
+    'Diuretics reduce preload by lowering circulating volume. Excessive preload raises pulmonary venous pressure and causes pulmonary congestion. ' +
+    'Raised pulmonary venous pressure leads to oedema of the lungs. A wedge pressure above 18 mmHg defines congestion.' }] };
+  CH.text = CH.segments[0].text;
+  const L = K.lesson(CH), cards = K.recallCards(CH, L), pts = cards.filter(c => c.kind === 'point');
+  ok('a card for every key point, the key term hidden — and put back, it is the point', pts.length === L.points.length &&
+     pts.every(c => /_____/.test(c.prompt) && c.prompt.replace('_____', c.answer) === c.full && L.points.some(p => p.text === c.full)), JSON.stringify(pts.map(c => c.prompt)));
+  ok('a verb is never the hidden word: a subject with a number in it is still the subject', K.keyTermOf(CH, 'A wedge pressure above 18 mmHg defines congestion.') === 'wedge pressure above 18 mmHg',
+     K.keyTermOf(CH, 'A wedge pressure above 18 mmHg defines congestion.'));
+  const nums = cards.filter(c => c.kind === 'number');
+  ok('a card for every number tile: what it measures, to recall the value with its sign', nums.length === 1 && nums[0].answer === '> 18 mmHg' && /wedge pressure/.test(nums[0].prompt) && nums[0].prompt.indexOf('18') === -1,
+     JSON.stringify(nums));
+  const mn = cards.filter(c => c.kind === 'mnemonic');
+  ok('a card for every mnemonic: its letters, to recall the words', mn.length === L.mnemonics.length && mn.every((c, i) => c.answer === L.mnemonics[i].words.join(', ') &&
+     c.prompt.indexOf(L.mnemonics[i].letters.split('').join(' · ')) !== -1));
+  ok('and the chain: its two ends, to walk between', cards.some(c => c.kind === 'chain' && c.prompt === 'Walk the chain: Diuretics → … → oedema of the lungs' &&
+     c.answer === K.explainSection(CH, L).chain));
+  const own = K.recallCards(CH, { overview: 'The big idea here.', points: [{ text: 'Plain words with nothing to blank at all here today.', page: 2 }], mnemonics: [], numbers: [] });
+  ok('the big idea gets its card when it is not a point; a point with no term to hide is finished from its opening words', own[0].kind === 'idea' && own[0].answer === 'The big idea here.' &&
+     own[1].kind === 'point' && /^Finish it: “Plain words with nothing to …”$/.test(own[1].prompt) && own[1].answer === own[1].full, JSON.stringify(own));
+  ok('no card when the big idea is already a point', !K.recallCards(CH, L).some(c => c.kind === 'idea') && L.points.some(p => p.text === L.overview));
+}
+
 head('the key term of a point, set in bold');
 {
   const c = { index: 0, title: 'X', segments: [{ page: 3, heading: false, text: 'Rheumatic heart disease is the most common cause of tricuspid stenosis. Diuretics reduce preload by lowering circulating volume.' }] };

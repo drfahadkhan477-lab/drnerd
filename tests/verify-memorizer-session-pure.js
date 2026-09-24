@@ -47,7 +47,7 @@ const answer = (s, right) => {
 /* Teach and drill section i, getting first-pass answers `pattern` (true =
    right), and any retries right. */
 function drill(s, i, n, pattern) {
-  s = go(s, { type: 'open', section: i }, { type: 'taught', value: lesson }, { type: 'toDrill' }, { type: 'quizReady', value: quiz(n, 'S' + i + 'Q') });
+  s = go(s, { type: 'open', section: i }, { type: 'taught', value: lesson }, { type: 'toMemorize', value: { cards: 0 } }, { type: 'toDrill' }, { type: 'quizReady', value: quiz(n, 'S' + i + 'Q') });
   for (let k = 0; k < n; k++) s = answer(s, pattern[k]);
   while (s.phase === 'drill') s = answer(s, true);
   return s;
@@ -70,16 +70,36 @@ head('teach, then drill');
   ok('a lesson with no points is refused', /no points/.test(refused(opened, { type: 'taught', value: { points: [] } })));
   ok('answers are refused outside a drill', /needs the drill/.test(refused(opened, { type: 'answered', choice: 0 })));
   const taught = go(opened, { type: 'taught', value: lesson });
-  const drilling = go(taught, { type: 'toDrill' });
+  const drilling = go(taught, { type: 'toMemorize', value: { cards: 0 } }, { type: 'toDrill' });
   ok('after the lesson, the drill', drilling.phase === 'drill');
   ok('questions arrive once', /already has its questions/.test(refused(go(drilling, { type: 'quizReady', value: quiz(3) }), { type: 'quizReady', value: quiz(3) })));
   ok('a drill whose answers point at no option is refused', /no usable questions/.test(refused(drilling, { type: 'quizReady', value: { questions: [{ question: 'q', quote: '', options: ['a', 'b'], answer: 5, explain: '', page: 1 }] } })));
   ok('the state it was given is never changed', !S.init('doc1', TITLES).per[1].lesson && taught.phase === 'teach');
 }
 
+head('memorise before the drill');
+{
+  const taught = go(S.init('doc1', TITLES), { type: 'open', section: 1 }, { type: 'taught', value: lesson });
+  ok('the drill is refused until the section is memorised', /memorise the section before its drill/.test(refused(taught, { type: 'toDrill' })), refused(taught, { type: 'toDrill' }));
+  ok('memorising needs to know how many cards there are', /how many cards/.test(refused(taught, { type: 'toMemorize' })));
+  const m = go(taught, { type: 'toMemorize', value: { cards: 3 } });
+  ok('memorising goes through the cards in order', m.phase === 'memorize' && JSON.stringify(m.per[1].memo.order) === '[0,1,2]' && m.per[1].memo.pos === 0);
+  ok('a card is recalled only while memorising, and as known or not', /while memorising/.test(refused(taught, { type: 'recalled', knew: true })) &&
+     /knew it, or not yet/.test(refused(m, { type: 'recalled' })));
+  const missed = go(m, { type: 'recalled', knew: true }, { type: 'recalled', knew: false });
+  ok('a card not known comes back at the end', JSON.stringify(missed.per[1].memo.order) === '[0,1,2,1]' && missed.per[1].memo.pos === 2 && missed.per[1].memo.misses === 1 && missed.phase === 'memorize');
+  const almost = go(missed, { type: 'recalled', knew: true });
+  ok('the drill waits until every card has been known once', almost.phase === 'memorize' && !almost.per[1].memorized);
+  const done = go(almost, { type: 'recalled', knew: true });
+  ok('then the drill opens by itself', done.phase === 'drill' && done.per[1].memorized === true && done.per[1].pos === 0);
+  const again = go(done, { type: 'quizReady', value: quiz(2) }, { type: 'toUnit' }, { type: 'open', section: 1 });
+  ok('a section memorised once goes straight to its drill next time', go(again, { type: 'toDrill' }).phase === 'drill');
+  ok('a section with no cards has nothing to hold back', go(taught, { type: 'toMemorize', value: { cards: 0 } }, { type: 'toDrill' }).phase === 'drill' && go(taught, { type: 'toMemorize', value: { cards: 0 } }).phase === 'teach');
+}
+
 head('the drill: graded by the option chosen, and a miss comes back');
 {
-  let s = go(S.init('doc1', TITLES), { type: 'open', section: 0 }, { type: 'taught', value: lesson }, { type: 'toDrill' }, { type: 'quizReady', value: quiz(4) });
+  let s = go(S.init('doc1', TITLES), { type: 'open', section: 0 }, { type: 'taught', value: lesson }, { type: 'toMemorize', value: { cards: 0 } }, { type: 'toDrill' }, { type: 'quizReady', value: quiz(4) });
   s = answer(s, true);            /* Q0 right */
   s = answer(s, false);           /* Q1 wrong */
   ok('a right answer is recorded right, a wrong one wrong', s.per[0].answers[0].correct === true && s.per[0].answers[1].correct === false);
@@ -107,7 +127,7 @@ head('the drill: graded by the option chosen, and a miss comes back');
 
 head('a section with nothing to drill');
 {
-  const s = go(S.init('doc1', TITLES), { type: 'open', section: 2 }, { type: 'taught', value: lesson }, { type: 'toDrill' }, { type: 'quizReady', value: { questions: [] } });
+  const s = go(S.init('doc1', TITLES), { type: 'open', section: 2 }, { type: 'taught', value: lesson }, { type: 'toMemorize', value: { cards: 0 } }, { type: 'toDrill' }, { type: 'quizReady', value: { questions: [] } });
   ok('is done, with no score, and does not block the unit', s.phase === 'result' && s.per[2].done && s.per[2].score === null && S.mastery(s, 2) === null);
   ok('and cannot be drilled again', /nothing to drill/.test(refused(s, { type: 'redrill' })));
 }

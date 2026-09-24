@@ -49,6 +49,7 @@ function studied(id, titles, marks) {
     if (!m) return;
     st = S.next(st, { type: 'open', section: i });
     st = S.next(st, { type: 'taught', value: LESSON });
+    st = S.next(st, { type: 'toMemorize', value: { cards: 0 } });
     st = S.next(st, { type: 'toDrill' });
     st = S.next(st, { type: 'quizReady', value: { questions: Array.from({ length: m[1] }, (_, k) => ({ question: id + i + 'q' + k, quote: '', options: ['a', 'b', 'c', 'd'], answer: 0, explain: '', page: 1 })) } });
     for (let k = 0; k < m[1]; k++) st = S.next(st, { type: 'answered', choice: k < m[0] ? 0 : 1 });
