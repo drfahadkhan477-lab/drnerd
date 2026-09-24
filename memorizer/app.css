@@ -598,13 +598,16 @@ body::before { content: ""; position: fixed; inset: -20vmax; z-index: -1; pointe
 
 .card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list {
   background-color: var(--glass);
-  background-image: radial-gradient(16rem circle at var(--px, 50%) var(--py, -40%), var(--lit, transparent), transparent 70%),
-    linear-gradient(155deg, var(--glass-sheen), transparent 42%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3); backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
   border-color: var(--line);
   box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-rim), var(--shadow); }
 .dock, .menu-list { background-color: var(--glass-strong); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-rim), 0 12px 40px -8px rgba(0,0,0,.35); }
 .card, .jump-card, .unit-row, .section-card, .pearl, .learn-box { border-radius: 1.25rem; }
+/* The sheen and the light, on every pane but those with a ground of their
+   own: the big idea's dark band and the pearl's ECG paper keep theirs. */
+:where(.card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list):not(.big-idea):not(.pearl) {
+  background-image: radial-gradient(16rem circle at var(--px, 50%) var(--py, -40%), var(--lit, transparent), transparent 70%),
+    linear-gradient(155deg, var(--glass-sheen), transparent 42%); }
 [data-lit] { --lit: var(--glass-light); }
 .card.note { background-color: var(--accent-soft); }
 .card.error { background-color: var(--bad-soft); }
@@ -748,7 +751,8 @@ main.home > .section-head, main.home > .units { animation-delay: .22s; }
    backdrop-filter to frost with. */
 @media (prefers-reduced-transparency: reduce) {
   .card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list, .pearl, .pearl-visual {
-    background-color: var(--surface); background-image: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+    background-color: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  :where(.card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list):not(.big-idea):not(.pearl) { background-image: none; }
   body::before { display: none; }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {

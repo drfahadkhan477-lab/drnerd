@@ -567,6 +567,12 @@ function kindOf(user) {
   ok('the step says Learn', (await page.locator('.stepper li.now').textContent()) === 'Learn');
   ok('the big idea comes first', (await text(page, '#big-idea .big')) === 'Preload is how full the ventricle is before it squeezes.' &&
      await page.evaluate(() => document.querySelector('#big-idea').compareDocumentPosition(document.querySelector('#points')) & Node.DOCUMENT_POSITION_FOLLOWING));
+  /* The glass's sheen is a background image; laid over every card it took
+     the big idea's dark band away and left its light text on light glass. */
+  const band = await page.evaluate(() => { const p = document.createElement('div'); p.style.backgroundImage = 'linear-gradient(145deg, var(--hero-a), var(--hero-b))';
+    document.body.appendChild(p); const want = getComputedStyle(p).backgroundImage; p.remove();
+    return { want: want, got: getComputedStyle(document.querySelector('#big-idea')).backgroundImage }; });
+  ok('the big idea keeps its dark band, so its light text reads', /gradient/.test(band.want) && band.got === band.want, JSON.stringify(band));
   const pointText = await page.locator('ol.points > li').first().innerText();
   ok('the key points are numbered cards, a definition leading with its term',
      await page.locator('ol.points > li').count() === 2 && (await page.locator('ol.points > li .lead').first().innerText()) === 'Preload' &&
@@ -921,6 +927,8 @@ function kindOf(user) {
      read waits for running transitions to end (a precondition — the colour
      they end on is the check). */
   await page.evaluate(() => Promise.all(document.getAnimations().filter(a => a instanceof CSSTransition).map(a => a.finished.catch(() => {}))));
+  const paper = await page.evaluate(() => getComputedStyle(document.querySelector('#pearl')).backgroundImage);
+  ok('and the pearl keeps its ECG paper under it', (paper.match(/linear-gradient/g) || []).length === 4 && !/radial/.test(paper), paper.slice(0, 120));
   const calm = await page.evaluate(() => [...document.querySelectorAll('main .btn.primary, nav.dock .nav-btn[aria-current="page"], main .learn-plus')].map(e => {
     const cs = getComputedStyle(e); return { q: e.className, img: cs.backgroundImage, bg: cs.backgroundColor }; }));
   const accentNow = await page.evaluate(() => { const p = document.createElement('i'); p.style.color = 'var(--accent)'; document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c; });

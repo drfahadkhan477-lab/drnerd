@@ -2816,7 +2816,7 @@ function storageBanner() {
    under it is marked lit, with the light's place as --px / --py (app.css
    draws it; appearance.js fits text against it at its brightest). A
    finger lifted takes it away; with reduced motion there is none. */
-var GLASSY = '.card, .jump-card, .unit-row, .section-card, .option, .learn-box, .pearl, details.source';
+var GLASSY = '.card:not(.big-idea):not(.pearl), .jump-card, .unit-row, .section-card, .option, .learn-box, details.source';
 var lit = null, lastView = null;
 function unlight() { if (lit) lit.removeAttribute('data-lit'); lit = null; }
 function light(e) {
