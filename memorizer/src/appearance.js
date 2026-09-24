@@ -25,46 +25,78 @@
    Standard 16, Large 18, Extra large 20. Everything is in rem, so the whole
    page scales together and the ladder's proportions hold.
 
+   CONTRAST AND BRIGHTNESS are computed from each palette, not stored as
+   48 more palettes. variant() moves the grounds (brightness) and the ink
+   (contrast), then FITS every text colour to a floor: a colour below its
+   floor on any ground it is drawn on is mixed toward the far end, a step at
+   a time, until it clears. At Standard/Standard every ported colour already
+   clears its floor, so Systole's values come through untouched but one:
+   Parchment's accent is 4.2:1 on its own ground and is fitted to 4.6 there.
+   The suite checks both. One token is new at every setting: --edge, the outline
+   of a control (button, field, swatch). Systole's --border is a hairline,
+   about 1.4:1 on a card, and a field drawn with it is hard to find; --edge
+   is fitted to 3:1 (4.5:1 at High), WCAG's floor for a control's boundary.
+
+   THE HERO is Systole's too: the dark band at the top of the home screen,
+   its gradient and accent per palette from theme-patch.js.
+
    PURE except apply(), which touches only the document element it is given
    and one <style> element.
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
 'use strict';
 
-/* Semantic colours: by mode only, never by palette (Systole's rule). */
+/* Semantic colours: by mode only, never by palette (Systole's rule). The
+   light set is a step darker than it was, so it holds 4.5:1 on Dim's
+   greyed cards too (Parchment's Dim card took the old green to 4.36). */
 var SEMANTIC = {
-  light: { good: '#1F7A4A', 'good-soft': '#E1F2E8', mid: '#8A5A00', 'mid-soft': '#FBF0D6', bad: '#B3261E', 'bad-soft': '#F9E3E1' },
+  light: { good: '#1A6B40', 'good-soft': '#E1F2E8', mid: '#7A5000', 'mid-soft': '#FBF0D6', bad: '#A3221B', 'bad-soft': '#F9E3E1' },
   dark:  { good: '#6FD39B', 'good-soft': '#17301F', mid: '#F0C060', 'mid-soft': '#33290F', bad: '#FF8A80', 'bad-soft': '#3A1B19' },
+};
+/* At High contrast the meaning colours are stronger — still by mode only. */
+var SEMANTIC_HIGH = {
+  light: { good: '#0F4D2C', 'good-soft': '#E1F2E8', mid: '#5C3B00', 'mid-soft': '#FBF0D6', bad: '#7A1812', 'bad-soft': '#F9E3E1' },
+  dark:  { good: '#94EBBB', 'good-soft': '#17301F', mid: '#F7D98F', 'mid-soft': '#33290F', bad: '#FFB3AB', 'bad-soft': '#3A1B19' },
 };
 
 /* source: which Systole block the colours come from, for the drift test.
+   hero: Systole's hero band — the palette's own block, or for Daylight and
+   Midnight the defaults theme-patch.js sets for light and dark.
    Tokens: bg, surface (Systole --card), surface-2, ink (--text), muted,
    line (--border), accent (--teal), accent-soft (--teal4), accent-ink. */
 var THEMES = [
   { id: 'daylight', name: 'Daylight', mode: 'light', swatch: ['#EFF3F8', '#0284C7'], source: null,
     t: { bg: '#EFF3F8', surface: '#FFFFFF', 'surface-2': '#E6ECF3', ink: '#0F1E33', muted: '#4A5A70', line: '#D3DCE7',
-         accent: '#0369A1', 'accent-soft': '#E3F0FA', 'accent-ink': '#FFFFFF' } },
+         accent: '#0369A1', 'accent-soft': '#E3F0FA', 'accent-ink': '#FFFFFF' },
+    hero: { 'hero-a': '#12243F', 'hero-b': '#173A5E', 'hero-c': '#0F1E3D', 'hero-accent': '#5EEAD4', 'hero-edge': 'rgba(94,234,212,.16)' } },
   { id: 'slate', name: 'Slate', mode: 'light', swatch: ['#EDF0F6', '#6366F1'], source: 'slate',
     t: { bg: '#EDF0F6', surface: '#FFFFFF', 'surface-2': '#E7EBF3', ink: '#1E2536', muted: '#4B5568', line: '#D3D9E6',
-         accent: '#4F5BD5', 'accent-soft': '#EDEFFD', 'accent-ink': '#FFFFFF' } },
+         accent: '#4F5BD5', 'accent-soft': '#EDEFFD', 'accent-ink': '#FFFFFF' },
+    hero: { 'hero-a': '#232056', 'hero-b': '#312E81', 'hero-c': '#1B1840', 'hero-accent': '#A5B4FC', 'hero-edge': 'rgba(129,140,248,.22)' } },
   { id: 'parchment', name: 'Parchment', mode: 'light', swatch: ['#F3ECDD', '#0E7C86'], source: 'parchment',
     t: { bg: '#F3ECDD', surface: '#FBF6EC', 'surface-2': '#EFE7D6', ink: '#372E20', muted: '#6A5B45', line: '#E2D7C2',
-         accent: '#0E7C86', 'accent-soft': '#E6F2EF', 'accent-ink': '#FFFFFF' } },
+         accent: '#0E7C86', 'accent-soft': '#E6F2EF', 'accent-ink': '#FFFFFF' },
+    hero: { 'hero-a': '#2B2419', 'hero-b': '#3A3121', 'hero-c': '#241E14', 'hero-accent': '#63D6C8', 'hero-edge': 'rgba(18,145,155,.22)' } },
   { id: 'midnight', name: 'Midnight', mode: 'dark', swatch: ['#0A1628', '#0EA5E9'], source: null,
     t: { bg: '#0A1628', surface: '#11213A', 'surface-2': '#172A47', ink: '#E6EDF7', muted: '#9FB0C8', line: '#22385A',
-         accent: '#0EA5E9', 'accent-soft': '#0E2A45', 'accent-ink': '#06121F' } },
+         accent: '#0EA5E9', 'accent-soft': '#0E2A45', 'accent-ink': '#06121F' },
+    hero: { 'hero-a': '#0B1B33', 'hero-b': '#0E2947', 'hero-c': '#0A1628', 'hero-accent': '#5EEAD4', 'hero-edge': 'rgba(94,234,212,.16)' } },
   { id: 'nocturne', name: 'Nocturne', mode: 'dark', swatch: ['#0E0B1A', '#A78BFA'], source: 'nocturne',
     t: { bg: '#0E0B1A', surface: '#17132B', 'surface-2': '#231D3E', ink: '#EDE9F7', muted: '#A79FC4', line: '#2A2348',
-         accent: '#A78BFA', 'accent-soft': '#221B40', 'accent-ink': '#0E0B1A' } },
+         accent: '#A78BFA', 'accent-soft': '#221B40', 'accent-ink': '#0E0B1A' },
+    hero: { 'hero-a': '#1A1533', 'hero-b': '#2A2160', 'hero-c': '#130E28', 'hero-accent': '#C4B5FD', 'hero-edge': 'rgba(167,139,250,.22)' } },
   { id: 'cathlab', name: 'Cath Lab', mode: 'dark', swatch: ['#120C07', '#F59E0B'], source: 'cathlab',
     t: { bg: '#120C07', surface: '#1D140B', 'surface-2': '#2C1F12', ink: '#F5EDE1', muted: '#C6AF93', line: '#3A2A18',
-         accent: '#F59E0B', 'accent-soft': '#2A1E08', 'accent-ink': '#120C07' } },
+         accent: '#F59E0B', 'accent-soft': '#2A1E08', 'accent-ink': '#120C07' },
+    hero: { 'hero-a': '#241708', 'hero-b': '#3A2610', 'hero-c': '#190F05', 'hero-accent': '#FBBF24', 'hero-edge': 'rgba(245,158,11,.22)' } },
   { id: 'monitor', name: 'Monitor', mode: 'dark', swatch: ['#08110D', '#2DD4BF'], source: 'monitor',
     t: { bg: '#08110D', surface: '#0F1A15', 'surface-2': '#16271E', ink: '#E6F4EC', muted: '#93B7A4', line: '#1E3328',
-         accent: '#2DD4BF', 'accent-soft': '#082820', 'accent-ink': '#08110D' } },
+         accent: '#2DD4BF', 'accent-soft': '#082820', 'accent-ink': '#08110D' },
+    hero: { 'hero-a': '#0A1F16', 'hero-b': '#103828', 'hero-c': '#07160F', 'hero-accent': '#5EEAD4', 'hero-edge': 'rgba(45,212,191,.22)' } },
   { id: 'contrast', name: 'Contrast', mode: 'dark', swatch: ['#060606', '#38BDF8'], source: 'contrast',
     t: { bg: '#060606', surface: '#121212', 'surface-2': '#1E1E1E', ink: '#FAFAFA', muted: '#D6D6D6', line: '#666666',
-         accent: '#38BDF8', 'accent-soft': '#082F49', 'accent-ink': '#060606' } },
+         accent: '#38BDF8', 'accent-soft': '#082F49', 'accent-ink': '#060606' },
+    hero: { 'hero-a': '#0A0A0A', 'hero-b': '#151515', 'hero-c': '#050505', 'hero-accent': '#7DD3FC', 'hero-edge': 'rgba(56,189,248,.32)' } },
 ];
 /* Auto follows the device: Daylight by day, Midnight at night. */
 var AUTO = { id: 'auto', name: 'Auto', light: 'daylight', dark: 'midnight' };
@@ -75,13 +107,20 @@ var OPTIONS = {
   spacing: [['compact', 'Compact', 1.4], ['standard', 'Standard', 1.6], ['relaxed', 'Relaxed', 1.8]],
   font:    [['sans', 'Sans'], ['serif', 'Serif'], ['readable', 'Readable']],
   hook:    [['side', 'Beside the points'], ['below', 'Below the points']],
+  contrast: [['standard', 'Standard'], ['high', 'High']],
+  bright:  [['dim', 'Dim'], ['standard', 'Standard'], ['bright', 'Bright']],
+};
+/* The floors every text colour is fitted to, per contrast setting. */
+var FLOORS = {
+  standard: { text: 7, muted: 4.5, accent: 4.5, edge: 3 },
+  high:     { text: 10, muted: 7, accent: 7, edge: 4.5 },
 };
 var FONTS = {
   sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   serif: '"Iowan Old Style", "Charter", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif',
   readable: 'Verdana, "Atkinson Hyperlegible", Tahoma, "Trebuchet MS", sans-serif',
 };
-var DEFAULT = { theme: 'auto', size: 'm', width: 'standard', spacing: 'standard', font: 'sans', hook: 'side' };
+var DEFAULT = { theme: 'auto', size: 'm', width: 'standard', spacing: 'standard', font: 'sans', hook: 'side', contrast: 'standard', bright: 'standard' };
 var KEY = 'memorizer.look.v1';
 
 function byId(id) { for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i]; return null; }
@@ -110,21 +149,83 @@ function save(look, storage) {
   try { st.setItem(KEY, JSON.stringify(normalise(look))); return true; } catch (_) { return false; }
 }
 
-function block(sel, theme) {
-  var t = theme.t, sem = SEMANTIC[theme.mode];
+/* ── colour arithmetic (sRGB hex; no color-mix, which iPadOS 13 lacks) ── */
+function rgb(hex) { var c = hex.replace('#', ''); return [0, 2, 4].map(function (i) { return parseInt(c.slice(i, i + 2), 16); }); }
+function hexOf(v) { return '#' + v.map(function (x) { var s = Math.round(Math.max(0, Math.min(255, x))).toString(16); return s.length < 2 ? '0' + s : s; }).join('').toUpperCase(); }
+/* a moved toward b by t (0 = a, 1 = b). */
+function mix(a, b, t) { var x = rgb(a), y = rgb(b); return hexOf(x.map(function (v, i) { return v + (y[i] - v) * t; })); }
+function luminance(hex) {
+  var v = rgb(hex).map(function (x) { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+  return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+}
+function ratio(a, b) { var x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+/* fg, moved toward `toward` in small steps until it clears min on every
+   ground — or unchanged, if it already does. */
+function fit(fg, grounds, min, toward) {
+  for (var i = 0; i <= 50; i++) {
+    var c = i ? mix(fg, toward, i / 50) : fg;
+    if (grounds.every(function (g) { return ratio(c, g) >= min; })) return c;
+  }
+  return toward;
+}
+
+/* The tokens a theme gets at a contrast and brightness setting. */
+function variant(theme, contrast, bright) {
+  var t = {}, k;
+  for (k in theme.t) t[k] = theme.t[k];
+  var dark = theme.mode === 'dark';
+  var far = dark ? '#FFFFFF' : '#000000', near = dark ? '#000000' : '#FFFFFF';
+  var grounds = ['bg', 'surface', 'surface-2', 'accent-soft'];
+  /* Brightness moves the grounds, never the text: Dim takes the glare off a
+     light page and sinks a dark one toward black; Bright lifts a dark page
+     off black and whitens a light one. */
+  if (bright === 'dim') grounds.forEach(function (g) { t[g] = dark ? mix(t[g], '#000000', 0.45) : mix(t[g], t.ink, 0.07); });
+  if (bright === 'bright') grounds.forEach(function (g) { t[g] = dark ? mix(t[g], t.ink, 0.07) : mix(t[g], '#FFFFFF', 0.6); });
+  if (contrast === 'high') {
+    t.ink = mix(t.ink, far, 0.6);
+    t.muted = mix(t.muted, t.ink, 0.45);
+    t.line = mix(t.line, t.muted, 0.35);
+  }
+  var f = FLOORS[contrast] || FLOORS.standard;
+  var on = [t.bg, t.surface, t['surface-2'], t['accent-soft']];
+  t.ink = fit(t.ink, on, f.text, far);
+  t.muted = fit(t.muted, [t.bg, t.surface, t['surface-2']], f.muted, far);
+  t.accent = fit(t.accent, [t.bg, t.surface], f.accent, far);
+  t['accent-ink'] = fit(t['accent-ink'], [t.accent], f.accent, near);
+  t.edge = fit(t.line, [t.bg, t.surface], f.edge, t.ink);
+  return t;
+}
+function semanticOf(mode, contrast) { return (contrast === 'high' ? SEMANTIC_HIGH : SEMANTIC)[mode]; }
+
+var SHADOW = {
+  light: '0 1px 2px rgba(15,30,51,.07), 0 4px 16px rgba(15,30,51,.08)',
+  dark: '0 1px 2px rgba(0,0,0,.45), 0 6px 20px rgba(0,0,0,.35)',
+};
+
+function block(sel, theme, look) {
+  var contrast = (look && look.contrast) || 'standard', bright = (look && look.bright) || 'standard';
+  var t = variant(theme, contrast, bright), sem = semanticOf(theme.mode, contrast), hero = theme.hero || {};
   var decl = Object.keys(t).map(function (k) { return '--' + k + ':' + t[k]; })
     .concat(Object.keys(sem).map(function (k) { return '--' + k + ':' + sem[k]; }))
-    .concat(['color-scheme:' + theme.mode]);
+    .concat(Object.keys(hero).map(function (k) { return '--' + k + ':' + hero[k]; }))
+    .concat(['--hero-ink:' + HERO_INK, '--hero-muted:' + heroMuted(theme)])
+    .concat(['--shadow:' + (contrast === 'high' ? 'none' : SHADOW[theme.mode]), 'color-scheme:' + theme.mode]);
   return sel + '{' + decl.join(';') + '}';
 }
+/* The hero band is dark in every theme (Systole's), so its text is light. */
+var HERO_INK = '#F4F7FB';
+function heroMuted(theme) { return theme.hero ? mix(HERO_INK, theme.hero['hero-b'], 0.25) : HERO_INK; }
+
 /* The stylesheet every theme needs, generated from the table above so the
-   colours exist in exactly one place. */
-function css() {
+   colours exist in exactly one place — at the contrast and brightness the
+   look asks for (apply() rewrites it when they change). */
+function css(look) {
+  look = normalise(look);
   var out = [];
-  out.push(block(':root', byId(AUTO.light)));
-  THEMES.forEach(function (th) { out.push(block(':root[data-look="' + th.id + '"]', th)); });
-  out.push(block(':root[data-look="auto"]', byId(AUTO.light)));
-  out.push('@media (prefers-color-scheme: dark){' + block(':root[data-look="auto"]', byId(AUTO.dark)) + '}');
+  out.push(block(':root', byId(AUTO.light), look));
+  THEMES.forEach(function (th) { out.push(block(':root[data-look="' + th.id + '"]', th, look)); });
+  out.push(block(':root[data-look="auto"]', byId(AUTO.light), look));
+  out.push('@media (prefers-color-scheme: dark){' + block(':root[data-look="auto"]', byId(AUTO.dark), look) + '}');
   OPTIONS.size.forEach(function (o) { out.push(':root[data-size="' + o[0] + '"]{font-size:' + o[2] + 'px}'); });
   OPTIONS.width.forEach(function (o) { out.push(':root[data-width="' + o[0] + '"]{--measure:' + o[2] + 'rem}'); });
   OPTIONS.spacing.forEach(function (o) { out.push(':root[data-spacing="' + o[0] + '"]{--leading:' + o[2] + '}'); });
@@ -149,17 +250,21 @@ function apply(look, docEl, doc) {
   el.setAttribute('data-spacing', look.spacing);
   el.setAttribute('data-font', look.font);
   el.setAttribute('data-hook', look.hook);
-  if (d && d.getElementById && !d.getElementById('look-css')) {
-    var s = d.createElement('style');
-    s.id = 'look-css';
-    s.textContent = css();
-    (d.head || el).appendChild(s);
+  el.setAttribute('data-contrast', look.contrast);
+  el.setAttribute('data-bright', look.bright);
+  if (d && d.getElementById) {
+    var s = d.getElementById('look-css');
+    if (!s) { s = d.createElement('style'); s.id = 'look-css'; (d.head || el).appendChild(s); }
+    var text = css(look);
+    if (s.textContent !== text) s.textContent = text;
   }
 }
 
 var MemLook = {
-  THEMES: THEMES, AUTO: AUTO, SEMANTIC: SEMANTIC, OPTIONS: OPTIONS, FONTS: FONTS, DEFAULT: DEFAULT, KEY: KEY,
+  THEMES: THEMES, AUTO: AUTO, SEMANTIC: SEMANTIC, SEMANTIC_HIGH: SEMANTIC_HIGH, OPTIONS: OPTIONS, FONTS: FONTS, DEFAULT: DEFAULT, KEY: KEY,
+  FLOORS: FLOORS, HERO_INK: HERO_INK,
   byId: byId, optValue: optValue, normalise: normalise, load: load, save: save, css: css, isDark: isDark, apply: apply,
+  variant: variant, semanticOf: semanticOf, heroMuted: heroMuted, mix: mix, ratio: ratio, fit: fit,
 };
 root.MemLook = MemLook;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemLook;

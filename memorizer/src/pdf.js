@@ -60,27 +60,47 @@ function linesOf(items, pageHeight) {
   var runs = items.filter(function (it) { return it.str && it.str.trim(); }).map(function (it) {
     var t = it.transform;
     var size = Math.sqrt(t[2] * t[2] + t[3] * t[3]) || Math.abs(t[3]) || 10;
-    return { str: it.str, x: t[4], w: +it.width || 0, y: pageHeight - t[5], size: size, eol: !!it.hasEOL };
+    return { str: it.str, x: t[4], w: +it.width || 0, y: pageHeight - t[5], size: size };
   });
-  var lines = [];
+  var groups = [];
   runs.forEach(function (r) {
-    var l = lines[lines.length - 1];
-    if (l && Math.abs(l.y - r.y) < Math.max(l.size, r.size) * 0.5) {
-      var sep = /\s$/.test(l.text) || /^\s/.test(r.str) ? '' : ' ';
-      l.text += sep + r.str; l.size = Math.max(l.size, r.size);
-      /* A wide gap between runs on one line starts a new CELL. chunk.js
-         reads cells to find tables; prose lines end up with one cell. */
-      var c = l.cells[l.cells.length - 1];
-      if (r.x - c.end > Math.max(l.size, r.size) * 1.5) l.cells.push({ x: r.x, text: r.str, end: r.x + r.w });
-      else { c.text += sep + r.str; c.end = Math.max(c.end, r.x + r.w); }
-    } else {
-      lines.push({ text: r.str, y: r.y, size: r.size, cells: [{ x: r.x, text: r.str, end: r.x + r.w }] });
-    }
+    var g = groups[groups.length - 1];
+    if (g && Math.abs(g.y - r.y) < Math.max(g.size, r.size) * 0.5) { g.runs.push(r); g.size = Math.max(g.size, r.size); }
+    else groups.push({ y: r.y, size: r.size, runs: [r] });
   });
-  return lines.map(function (l) {
-    return { text: l.text.replace(/\s+/g, ' ').trim(), y: l.y, size: Math.round(l.size * 10) / 10,
-             cells: l.cells.map(function (c) { return { x: Math.round(c.x), text: c.text.replace(/\s+/g, ' ').trim() }; })
-                           .filter(function (c) { return c.text; }) };
+  return groups.map(function (g) {
+    /* WHERE A SPACE GOES IS DECIDED BY THE GAP, not by there being two runs.
+       PDFs often store a word in pieces — kerned "T" + "ricuspid", a justified
+       "regur" + "gitation", a tracked heading one letter per run — and the
+       first version put a space between every pair, which is how a real
+       chapter came out as "C H A P T E R 1 7" and "regur gitation". A gap
+       wider than a fraction of the font size is a space; tracked (letter-
+       spaced) lines get a threshold scaled to their own letter gap. */
+    var gaps = [];
+    for (var i = 1; i < g.runs.length; i++) {
+      var p = g.runs[i - 1];
+      if (p.w > 0) gaps.push(g.runs[i].x - (p.x + p.w));
+    }
+    var small = gaps.filter(function (x) { return x >= 0 && x < g.size * 0.6; }).sort(function (a, b) { return a - b; });
+    var tracked = small.length >= 4 && small[Math.floor(small.length / 2)] > g.size * 0.05;
+    var thr = tracked ? Math.max(g.size * 0.15, small[Math.floor(small.length / 2)] * 1.8) : g.size * 0.15;
+    var text = '', cells = [];
+    g.runs.forEach(function (r, i) {
+      var prev = g.runs[i - 1];
+      var gap = prev && prev.w > 0 ? r.x - (prev.x + prev.w) : null;
+      /* A doubled space (a run that ends in one, then a gap) is folded by the
+         whitespace normalisation below, so no special case is needed here. */
+      var sep = !prev ? '' : (gap == null || gap > thr) ? ' ' : '';
+      text += sep + r.str;
+      /* A wide gap starts a new CELL. chunk.js reads cells to find tables;
+         prose lines end up with one cell. */
+      var c = cells[cells.length - 1];
+      if (!c || (gap != null && gap > g.size * 1.5)) cells.push({ x: r.x, text: r.str, end: r.x + r.w });
+      else { c.text += sep + r.str; c.end = Math.max(c.end, r.x + r.w); }
+    });
+    return { text: text.replace(/\s+/g, ' ').trim(), y: g.y, size: Math.round(g.size * 10) / 10,
+             cells: cells.map(function (c) { return { x: Math.round(c.x), text: c.text.replace(/\s+/g, ' ').trim() }; })
+                         .filter(function (c) { return c.text; }) };
   });
 }
 
@@ -94,7 +114,11 @@ function mul(m, n) {
   return [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3],
           m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
 }
-function figureBoxes(opList, OPS, view) {
+/* A picture's box in PDF units, from the transform in force when it is
+   painted. Form XObjects carry their own matrix — begin/end pairs in the
+   operator list — and the first version ignored it, which is how figures on
+   a real textbook page were cropped from the wrong place. */
+function imageBoxes(opList, OPS) {
   var ctm = [1, 0, 0, 1, 0, 0], stack = [], boxes = [];
   var paint = {};
   [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageXObjectRepeat, OPS.paintJpegXObject]
@@ -104,17 +128,64 @@ function figureBoxes(opList, OPS, view) {
     if (fn === OPS.save) stack.push(ctm.slice());
     else if (fn === OPS.restore) ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
     else if (fn === OPS.transform) ctm = mul(ctm, args);
+    else if (OPS.paintFormXObjectBegin != null && fn === OPS.paintFormXObjectBegin) {
+      stack.push(ctm.slice());
+      if (args && args[0] && args[0].length === 6) ctm = mul(ctm, args[0]);
+    } else if (OPS.paintFormXObjectEnd != null && fn === OPS.paintFormXObjectEnd) ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
     else if (paint[fn]) {
       var xs = [], ys = [];
       [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(function (p) {
         xs.push(ctm[0] * p[0] + ctm[2] * p[1] + ctm[4]); ys.push(ctm[1] * p[0] + ctm[3] * p[1] + ctm[5]);
       });
-      var b = [Math.min.apply(null, xs), Math.min.apply(null, ys), Math.max.apply(null, xs), Math.max.apply(null, ys)];
-      var w = b[2] - b[0], h = b[3] - b[1];
-      if (w >= 60 && h >= 40 && w * h >= 0.02 * view[2] * view[3]) boxes.push(b.map(function (v) { return Math.round(v); }));
+      boxes.push([Math.min.apply(null, xs), Math.min.apply(null, ys), Math.max.apply(null, xs), Math.max.apply(null, ys)]);
     }
   }
   return boxes;
+}
+function area(b) { return Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]); }
+function overlap(a, b) { return area([Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])]); }
+
+/* Which of those boxes are FIGURES. Rejected, each for a reason seen in a
+   real PDF:
+     · tiny — a logo, a bullet, a rule;
+     · a strip — a highlight or a coloured bar (one side over 12× the other);
+     · nearly the whole page — a scan or a page background;
+     · mostly text — an image laid over or under prose: highlighter marks, a
+       shaded box, a scanned column. A diagram has labels, not paragraphs;
+       over a quarter of its area covered by text lines is not a figure.
+   Overlapping or touching boxes are merged first, so a figure built from
+   several tiles, or a multi-panel figure, is one figure. */
+function figureBoxes(opList, OPS, view, textBoxes) {
+  var raw = imageBoxes(opList, OPS);
+  var merged = [];
+  raw.forEach(function (b) {
+    var g = [b[0] - 6, b[1] - 6, b[2] + 6, b[3] + 6];
+    for (var i = 0; i < merged.length; i++) {
+      var m = merged[i];
+      if (overlap(g, m) > 0) {
+        merged[i] = [Math.min(m[0], b[0]), Math.min(m[1], b[1]), Math.max(m[2], b[2]), Math.max(m[3], b[3])];
+        return;
+      }
+    }
+    merged.push(b.slice());
+  });
+  var pageArea = (view[2] - view[0]) * (view[3] - view[1]);
+  return merged.filter(function (b) {
+    var w = b[2] - b[0], h = b[3] - b[1];
+    if (w < 60 || h < 40 || w * h < 0.02 * pageArea) return false;
+    if (w / h > 12 || h / w > 12) return false;
+    if (w * h > 0.8 * pageArea) return false;
+    var covered = (textBoxes || []).reduce(function (s, t) { return s + overlap(b, t); }, 0);
+    return covered / (w * h) <= 0.25;
+  }).map(function (b) { return b.map(function (v) { return Math.round(v); }); });
+}
+
+/* Text runs as boxes in PDF units, for the text-cover test above. */
+function textBoxesOf(items) {
+  return items.filter(function (it) { return it.str && it.str.trim() && it.width > 0; }).map(function (it) {
+    var t = it.transform, size = Math.sqrt(t[2] * t[2] + t[3] * t[3]) || Math.abs(t[3]) || 10;
+    return [t[4], t[5] - size * 0.25, t[4] + it.width, t[5] + size * 0.85];
+  });
 }
 
 /* ArrayBuffer → { pages: [{ page, lines }], wordCounts: [n per page], figures: [{ page, box }] } */
@@ -137,7 +208,7 @@ function read(buffer, onProgress) {
             pages.push({ page: n, lines: lines });
             counts.push(lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0));
             return page.getOperatorList().then(function (ops) {
-              figureBoxes(ops, Lib.OPS, page.view).forEach(function (b) { figures.push({ page: n, box: b }); });
+              figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items)).forEach(function (b) { figures.push({ page: n, box: b }); });
             }, function () { /* a page whose drawing cannot be listed still has its text */ });
           }).then(function () { if (onProgress) onProgress(n, doc.numPages); });
         });
@@ -177,6 +248,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { read: read, linesOf: linesOf, figureBoxes: figureBoxes, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { read: read, linesOf: linesOf, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

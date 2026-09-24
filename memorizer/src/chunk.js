@@ -115,6 +115,14 @@ function blocksFromPages(pages) {
     function close() { if (cur && cur.text) blocks.push(cur); cur = null; }
 
     for (var j = 0; j < lines.length; j++) {
+      var ls = listAt(lines, j, bodySize);
+      if (ls) {
+        close();
+        var gid = 'L' + p.page + ':' + j;
+        ls.items.forEach(function (it) { blocks.push({ text: it.text, page: p.page, heading: false, item: true, sub: it.sub, list: gid }); });
+        j += ls.count - 1;
+        continue;
+      }
       var tb = tableAt(lines, j);
       if (tb) {
         close();
@@ -202,6 +210,61 @@ function tableAt(lines, j) {
   return { rows: rows, count: n };
 }
 
+/* ── lists ─────────────────────────────────────────────────────────────────
+   A list is a run of short lines, each a thing of its own: three or more
+   lines of at most LIST_MAX_WORDS words that start with a bullet, a number
+   or a capital and do not end mid-clause. That is what a textbook's "causes
+   of", "features of" and "treatment of" look like, bullets or not — the
+   owner's first PDF drew its bullets as graphics, so no glyph reached the
+   text and the list could only be seen by its shape.
+   Inside a list, a line set further left than the items is a sub-heading
+   ("Congenital", "Acquired"), and a line starting in lower case is the
+   previous item wrapped. The bullet glyph itself is dropped; every other
+   word is kept, so coverage holds. */
+var LIST_MAX_WORDS = 9;
+var BULLET = /^(?:[\u2022\u25CF\u25AA\u25E6\u2023\u2219\u00B7\u25A0\u25A1\u2013\u2014*\-])\s+/;
+var NUMBERED = /^(?:\(?\d{1,2}[.)]|\(?[a-h][.)])\s+/;
+function listLine(l, bodySize) {
+  var t = String(l.text || '').trim();
+  if (!t || (+l.size || 0) >= bodySize * 1.15 || cellsOf(l)) return null;
+  var bullet = BULLET.test(t) || NUMBERED.test(t);
+  var body = t.replace(BULLET, '');
+  var n = words(body).length;
+  if (n > LIST_MAX_WORDS) return null;
+  if (/[,;]$/.test(t)) return null;
+  /* A full sentence is prose, not an item: two sentences on a line ("A.
+     Etiology. Table 17.1 lists …"), or six or more words closed by a stop. */
+  if (/[.!?]\s+\S/.test(body.replace(NUMBERED, '')) || (n >= 6 && /[.!?]$/.test(body))) return null;
+  if (!bullet && !/^[A-Z0-9(]/.test(body)) return null;
+  return { text: body, bullet: bullet, x: (l.cells && l.cells[0] ? +l.cells[0].x : 0) };
+}
+function listAt(lines, j, bodySize) {
+  var first = listLine(lines[j], bodySize);
+  if (!first) return null;
+  var run = [first], n = 1;
+  while (j + n < lines.length) {
+    var l = lines[j + n], t = String(l.text || '').trim();
+    var li = listLine(l, bodySize);
+    var x = l.cells && l.cells[0] ? +l.cells[0].x : 0;
+    /* a wrapped item: lower case, indented at least as far as an item */
+    if (!li && /^[a-z(]/.test(t) && words(t).length <= 14 && run.length && x >= run[run.length - 1].x - 1) {
+      run[run.length - 1] = { text: run[run.length - 1].text + ' ' + t, bullet: run[run.length - 1].bullet, x: run[run.length - 1].x, wrapped: true };
+      n++;
+      continue;
+    }
+    if (!li) break;
+    run.push(li); n++;
+  }
+  var bullets = run.filter(function (r) { return r.bullet; }).length;
+  if (run.length < 3 || (!bullets && run.length < 4)) return null;
+  var xs = run.map(function (r) { return r.x; }).sort(function (a, b) { return a - b; });
+  var itemX = bullets ? Math.min.apply(null, run.filter(function (r) { return r.bullet; }).map(function (r) { return r.x; }))
+                      : xs[Math.floor(xs.length / 2)];
+  var items = run.map(function (r) { return { text: r.text, sub: !r.bullet && r.x < itemX - 3 }; });
+  if (items.filter(function (i) { return !i.sub; }).length < 3) return null;
+  return { items: items, count: n };
+}
+
 /* Pages with almost no extractable text are scans: an image of a page with no
    text layer. pdf.js cannot read them and v1 does no OCR, so they are named
    to the user rather than silently skipped. */
@@ -271,6 +334,8 @@ function buildCluster(units, index, lastHeading, tables) {
   });
   segments = segments.map(function (s) {
     var out = { page: s.page, heading: s.heading, text: s.words.join(' ') };
+    var li = tables && tables['item' + s.para];
+    if (li) { out.item = true; out.list = li.list; if (li.sub) out.sub = true; }
     var tb = tables && tables[s.para];
     if (tb && s.rows.length) {
       out.table = s.rows.map(function (r) { return tb[r]; });
@@ -309,7 +374,10 @@ function clusterBlocks(blocks, opts) {
   var MAX = opts.max || CLUSTER_MAX;
   var units = unitsFromBlocks(blocks, MAX);
   var tables = {};
-  (blocks || []).forEach(function (b, bi) { if (b.table) tables[bi] = b.table; });
+  (blocks || []).forEach(function (b, bi) {
+    if (b.table) tables[bi] = b.table;
+    if (b.item) tables['item' + bi] = { list: b.list, sub: !!b.sub };
+  });
   var groups = [];
   var cur = [];
   var curN = 0;
@@ -373,7 +441,7 @@ function clusterBlocks(blocks, opts) {
 }
 
 var MemChunk = {
-  CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt,
+  CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
   words: words, blocksFromPages: blocksFromPages, scannedPages: scannedPages,
   unitsFromBlocks: unitsFromBlocks, clusterBlocks: clusterBlocks,
 };

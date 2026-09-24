@@ -359,6 +359,44 @@ head('tables: found by their columns, kept whole');
   ok('without counting the header\u2019s words twice', big.reduce((n, c) => n + c.words, 0) === longRows.reduce((n, r) => n + r.join(' ').split(' ').length, 0));
 }
 
+head('lists: found by their shape, bullets or not');
+{
+  const L = (text, x, y) => ({ text, size: 11, y, cells: [{ x, text }] });
+  /* Table 17.1 of the owner's PDF, as its lines arrived: bullets drawn as
+     graphics (so no glyph), sub-headings set left of the items. */
+  const page = { page: 2, lines: [
+    L('A. Etiology. Table 17.1 lists the causes of TS.', 72, 60),
+    L('Congenital', 80, 80),
+    L('Tricuspid atresia', 90, 94),
+    L('Atypical Ebstein anomaly (more likely to cause TR)', 90, 108),
+    L('Acquired', 80, 122),
+    L('Rheumatic', 90, 136),
+    L('Infective endocarditis', 90, 150),
+    L('Malignancy (eg, myxoma and metastases)\u2014Usually cause', 90, 164),
+    L('functional TS', 92, 178),
+    L('Whipple disease', 90, 192),
+    L('1. Rheumatic heart disease (RHD) is the most common cause of TS, accounting for more than ninety percent of cases.', 72, 220),
+  ] };
+  const bl = C.blocksFromPages([page]).blocks;
+  const items = bl.filter(b => b.item);
+  ok('a bullet-less list is found by its shape', items.length === 8, items.map(b => (b.sub ? '[' + b.text + ']' : b.text)).join(' | '));
+  ok('lines set left of the items are its sub-headings', items.filter(b => b.sub).map(b => b.text).join() === 'Congenital,Acquired');
+  ok('a wrapped item is rejoined', items.some(b => b.text === 'Malignancy (eg, myxoma and metastases)\u2014Usually cause functional TS'));
+  ok('the prose before and after is not taken into it', !items.some(b => /Etiology|most common/.test(b.text)));
+  ok('all its items share a list id', new Set(items.map(b => b.list)).size === 1);
+  const glyphs = { page: 1, lines: [L('\u2022 Dyspnoea', 90, 80), L('\u2022 Oedema', 90, 94), L('\u2022 Fatigue', 90, 108)] };
+  const gb = C.blocksFromPages([glyphs]).blocks;
+  ok('a bulleted list of three is found, and the bullet glyph dropped', gb.length === 3 && gb.every(b => b.item) && gb[0].text === 'Dyspnoea', gb.map(b => b.text).join(' | '));
+  const prose = { page: 1, lines: [L('The tricuspid valve apparatus is generally considered to consist', 72, 80),
+    L('of three leaflets along with the annulus and the chordae tendineae', 72, 94), L('Short line.', 72, 108), L('Another', 72, 122)] };
+  ok('ordinary prose is not a list', !C.blocksFromPages([prose]).blocks.some(b => b.item));
+  const two = { page: 1, lines: [L('\u2022 One thing', 90, 80), L('\u2022 Another thing', 90, 94), L('Then the prose resumes here and goes on for a good many words.', 72, 108)] };
+  ok('two bullets are not yet a list', !C.blocksFromPages([two]).blocks.some(b => b.item));
+  const cs = C.clusterBlocks(bl);
+  const segs = cs[0].segments.filter(g => g.item);
+  ok('a cluster\u2019s segments say which are list items, and which sub-headings', segs.length === 8 && segs.filter(g => g.sub).length === 2);
+}
+
 head('the pdf.js adapter: cells and figure boxes');
 {
   /* memorizer/src/pdf.js is the one file that talks to pdf.js, and these two
@@ -385,6 +423,52 @@ head('the pdf.js adapter: cells and figure boxes');
   ok('transforms compose, and restore undoes one', nested.length === 1 && JSON.stringify(nested[0]) === '[50,50,350,200]', JSON.stringify(nested));
   const small = Pdf.figureBoxes(ops([[12, [20, 0, 0, 20, 10, 10]], [85, ['logo']]]), OPS, view);
   ok('a tiny picture (a logo, a bullet) is not a figure', small.length === 0, JSON.stringify(small));
+}
+
+head('text from a real PDF: spaces where the page has them, and nowhere else');
+{
+  const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
+  const item = (str, x, y, size, width) => ({ str, transform: [size, 0, 0, size, x, y], width });
+  const line = items => Pdf.linesOf(items, 792)[0].text;
+  /* The owner's first real PDF came out as "C H A P T E R 1 7 T r i c u s p i d"
+     and "regur gitation": runs were joined with a space regardless of the gap. */
+  const tracked = [];
+  let x = 72;
+  /* Tracked wide: a 2.5pt gap between letters is over the plain threshold
+     (0.15 × 11pt), so only the line's own letter gap tells letters from words. */
+  'CHAPTER'.split('').forEach(ch => { tracked.push(item(ch, x, 700, 11, 7)); x += 9.5; });
+  x += 8;
+  '17'.split('').forEach(ch => { tracked.push(item(ch, x, 700, 11, 7)); x += 9.5; });
+  ok('a letter-spaced heading reads as words, not letters', line(tracked) === 'CHAPTER 17', line(tracked));
+  ok('a kerned capital joins its word ("T" + "ricuspid")', line([item('T', 72, 700, 11, 6), item('ricuspid', 77.6, 700, 11, 40)]) === 'Tricuspid');
+  ok('a word stored in two pieces is one word ("regur" + "gitation")', line([item('regur', 72, 700, 11, 26), item('gitation', 98.3, 700, 11, 38)]) === 'regurgitation');
+  ok('a real space between words is kept', line([item('valve', 72, 700, 11, 26), item('disease', 101, 700, 11, 36)]) === 'valve disease');
+  ok('and a run that carries its own space gets no second one', line([item('valve ', 72, 700, 11, 29), item('disease', 101, 700, 11, 36)]) === 'valve disease');
+}
+
+head('figures: pictures, not highlighted text');
+{
+  const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
+  const OPS = { save: 10, restore: 11, transform: 12, paintImageXObject: 85, paintInlineImageXObject: 86, paintFormXObjectBegin: 74, paintFormXObjectEnd: 75 };
+  const view = [0, 0, 612, 792];
+  const ops = list => ({ fnArray: list.map(x => x[0]), argsArray: list.map(x => x[1] || null) });
+  const img = (a, b, c, d) => [[10], [12, [c - a, 0, 0, d - b, a, b]], [85, ['i']], [11]];
+  /* A form XObject's own matrix moves everything painted inside it. */
+  const inForm = Pdf.figureBoxes(ops([[74, [[1, 0, 0, 1, 100, 200], [0, 0, 1, 1]]]].concat(img(0, 0, 200, 120), [[75]])), OPS, view, []);
+  ok('a picture inside a form is placed by the form\u2019s matrix', JSON.stringify(inForm) === '[[100,200,300,320]]', JSON.stringify(inForm));
+  const textBox = (x0, y0, x1, y1, step) => { const out = []; for (let y = y0; y < y1; y += step) out.push([x0, y, x1, y + 10]); return out; };
+  const underText = Pdf.figureBoxes(ops(img(72, 400, 400, 520)), OPS, view, textBox(72, 400, 400, 520, 13));
+  ok('an image under a column of text (a highlight, a shaded box) is not a figure', underText.length === 0, JSON.stringify(underText));
+  const labelled = Pdf.figureBoxes(ops(img(72, 400, 400, 620)), OPS, view, [[80, 410, 140, 420], [300, 600, 360, 610]]);
+  ok('a picture with a couple of labels on it still is', labelled.length === 1, JSON.stringify(labelled));
+  /* Tall enough and big enough to pass the size rule, so only its shape rejects it. */
+  ok('a strip (a coloured bar) is not a figure', Pdf.figureBoxes(ops(img(20, 400, 590, 440)), OPS, view, []).length === 0);
+  ok('a page-sized image (a scan, a background) is not a figure', Pdf.figureBoxes(ops(img(0, 0, 612, 792)), OPS, view, []).length === 0);
+  const tiles = Pdf.figureBoxes(ops(img(72, 400, 200, 500).concat(img(200, 400, 330, 500), img(72, 500, 330, 580))), OPS, view, []);
+  ok('touching tiles of one picture are one figure', tiles.length === 1 && JSON.stringify(tiles[0]) === '[72,400,330,580]', JSON.stringify(tiles));
+  ok('two separate pictures stay two', Pdf.figureBoxes(ops(img(72, 100, 250, 250).concat(img(320, 500, 540, 700))), OPS, view, []).length === 2);
+  const tb = Pdf.textBoxesOf([{ str: 'Hello', width: 30, transform: [10, 0, 0, 10, 72, 700] }, { str: ' ', width: 3, transform: [10, 0, 0, 10, 102, 700] }]);
+  ok('text boxes come from runs with text, in PDF units', tb.length === 1 && tb[0][0] === 72 && tb[0][2] === 102 && tb[0][1] < 700 && tb[0][3] > 700);
 }
 
 head('scanned pages are named, not skipped silently');

@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 46 suites that need neither a browser nor a build all stay
+present, and the 47 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -124,13 +124,23 @@ at its headings, and taught one section at a time:
 Every missed answer and every gap becomes a review card, scheduled with the
 same FSRS scheduler Systole uses (`src/core/fsrs.js`, shared, not copied).
 
-Sections are short (about 250–450 words), and the study page shows each one
-as 3–7 bullets with the key term first, the memory hook in a handwritten face
-beside them, a flowchart drawn from the section's own cause-and-effect
-sentences, its tables as tables, its figures cut from the page, and the
-pages themselves. The look is Systole's: the same nine themes, colour for
-colour, and its type scale, with text size, reading width, line spacing and
-font to choose.
+Sections are short, and the study page shows each one as a handful of
+bullets with the key term first, the memory hook in a handwritten face beside
+them — built from the section's own lists where it has one — a flowchart drawn
+from its cause-and-effect sentences, its tables as tables, its figures cut
+from the page (pictures only: a highlight band behind text is not taken for
+one), and the pages themselves.
+
+The home screen is laid out as Systole's, and holds still: a hero band with
+where you are and a two-layer progress bar (sections studied; review cards
+FSRS says you still hold today), a pearl of the day — a sentence from your
+own PDF, found and broken into steps by Systole's `src/core/pearl.js`, shared
+rather than copied — and doors to continue, review, add a PDF or change
+settings. The look is Systole's too: its themes, colour for colour, and its
+type scale, with text size, reading width, line spacing, font, contrast and
+brightness to choose. Contrast and brightness are computed from the theme you
+pick, and every theme at every setting is tested to keep its text at WCAG AA
+or better, with form controls outlined to WCAG's floor for controls.
 
 ```bash
 npm run memorizer          # → dist-memorizer/index.html, one self-contained file

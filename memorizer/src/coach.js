@@ -53,6 +53,44 @@ var SENTENCE_END = /[.!?]["'”’)\]]*$/;
 var CAUSAL = /\b(is|are|means|defined|refers|causes?|leads?|results?|because|therefore|due|increases?|decreases?|reduces?|occurs?|requires?|indicates?)\b/i;
 var NUM = /^\d+(?:[.,]\d+)?%?$/;
 var DEFINITION = /^(?:\S+\s+){0,5}(?:is|are|refers to|means|is defined as)\s/i;
+/* "X is the most common cause of Y": the single highest-yield sentence shape
+   in a clinical text, and a question in its own right. */
+var MOST = /\b(?:is|are|remains?|represents?)\s+(?:by far\s+)?the\s+most\s+(?:common|frequent|important)\s+/i;
+
+/* Words: split on spaces, dashes and slashes, so "leaflets—septal" is two
+   words (the owner's hook once offered "leaflets—septal" as one). */
+function toks(text) { return String(text || '').split(/[\s\u2014\u2013\/]+/).filter(Boolean); }
+
+/* Words that are almost never the thing being taught — the connective
+   tissue of academic prose. Seen in the owner's first hook: "lists",
+   "accounting". A penalty, not a ban: a sentence with nothing else still
+   gets a blank. */
+var GENERIC = {};
+('list lists listed accounting account accounts consider considered revealed reveal reveals connected connecting ' +
+ 'remainder following shown show shows known noted seen found given based related relative associated importance important ' +
+ 'commonly usually typically generally often rarely frequently patients patient cases case studies study recent recently ' +
+ 'result results resulting approximately especially particularly respectively however therefore various several certain ' +
+ 'present presents presented occur occurs occurring involve involves involved include includes included approach term terms ' +
+ 'number numbers level levels degree type types form forms part parts setting settings process processes people ' +
+ 'somewhat compared comparison described describe describes discussed discuss later earlier above below').split(' ')
+  .forEach(function (w) { GENERIC[w] = true; });
+/* Endings that mark a technical term: a disease, a procedure, a drug class. */
+var TECH = /(?:itis|osis|oses|emia|aemia|pathy|ectomy|otomy|ostomy|plasty|gram|graphy|scopy|algia|megaly|trophy|plasia|genic|lytic|ase|ases|ine|ines|ide|ides|olol|pril|sartan|statin|mab|nib|azole|mycin|cillin|cardia|stenosis|sclerosis|thrombo\w*|valv\w*|atrial|ventricul\w*|arterial|venous|pulmonary|coronary|aortic|mitral|tricuspid|annul\w*|syndrome|disease|anomal\w*|atresia|failure|infarct\w*|ischaemi\w*|ischemi\w*|regurgitation|dilat\w*|hypertroph\w*|carcino\w*|malignan\w*|endocarditis|echocardiogra\w*)$/;
+
+/* Terms a section defines as abbreviations — "rheumatic heart disease
+   (RHD)" — and the words of their expansions. Both are terms by the
+   section's own say-so. */
+function defined(cluster) {
+  var out = {};
+  (cluster.segments || []).forEach(function (seg) {
+    var re = /((?:[A-Za-z][A-Za-z\-]+\s+){1,5})\(([A-Z]{2,6})\)/g, m;
+    while ((m = re.exec(seg.text))) {
+      out[m[2].toLowerCase()] = true;
+      toks(m[1]).slice(-m[2].length).forEach(function (w) { var b = bare(w); if (isContent(b)) out[stem(b)] = true; });
+    }
+  });
+  return out;
+}
 
 function bare(w) { return String(w).toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9%]+$/g, ''); }
 function isContent(b) { return b.length >= 4 && !STOP[b] && /[a-z]/.test(b); }
@@ -80,7 +118,7 @@ function sentences(cluster) {
 function frequencies(cluster) {
   var f = {};
   sentences(cluster).forEach(function (s) {
-    s.text.split(/\s+/).forEach(function (w) {
+    toks(s.text).forEach(function (w) {
       var b = bare(w);
       if (isContent(b)) f[stem(b)] = (f[stem(b)] || 0) + 1;
     });
@@ -105,16 +143,27 @@ function titleStems(cluster) {
    "stretch, stretches, volume, volume, preload", and a teach-back of half
    the points scored 80, because every point's key words were the same few
    the whole section repeats. */
-function rankedTerms(text, freq, title) {
+/* On top of that, TERMNESS — whether a word names the thing being taught:
+   a technical ending, a term the section defines (with its abbreviation),
+   a capitalised word mid-sentence (Ebstein, Whipple, Fabry) all count up;
+   the connective words of academic prose, and -ly adverbs, count down. */
+function rankedTerms(text, freq, title, terms) {
   var seen = {}, out = [];
-  text.split(/\s+/).forEach(function (w, pos) {
+  var ws = toks(text);
+  ws.forEach(function (w, pos) {
     var b = bare(w);
     if (!b || seen[b]) return;
     if (NUM.test(b)) { seen[b] = true; out.push({ word: b, score: 1000 + b.length, pos: pos, num: true }); return; }
     if (!isContent(b)) return;
     seen[b] = true;
     var s = (1 / (freq[stem(b)] || 1)) * (title[stem(b)] ? 0.5 : 1);
-    out.push({ word: b, score: s + b.length / 40, pos: pos, num: false });
+    var bonus = 0;
+    if (TECH.test(b)) bonus += 1.5;
+    if (terms && (terms[b] || terms[stem(b)])) bonus += 1.5;
+    if (pos > 0 && /^[A-Z][a-z]{3,}/.test(w.replace(/^[^A-Za-z]+/, '')) && !/[.!?:]$/.test(ws[pos - 1])) bonus += 1;
+    if (GENERIC[b] || GENERIC[stem(b)]) bonus -= 2;
+    else if (/ly$/.test(b) && !TECH.test(b)) bonus -= 1;
+    out.push({ word: b, score: s + bonus + b.length / 40, pos: pos, num: false });
   });
   out.sort(function (a, b) { return b.score - a.score || a.pos - b.pos; });
   return out;
@@ -132,25 +181,24 @@ function freshTerm(ranked, used, noNumbers) {
 }
 
 function scoreSentence(s, freq) {
-  var ws = s.text.split(/\s+/);
+  var ws = toks(s.text);
   var sum = 0;
   ws.forEach(function (w) { var b = bare(w); if (isContent(b)) sum += freq[stem(b)] || 0; });
   /* Multipliers, not additions: a flat bonus was small beside the frequency
      sum and a sentence stating a threshold ("below 12 mmHg") lost to
      sentences that merely repeated the topic. */
-  var mult = (ws.some(function (w) { return NUM.test(bare(w)); }) ? 1.6 : 1) * (CAUSAL.test(s.text) ? 1.2 : 1);
+  var mult = (ws.some(function (w) { return NUM.test(bare(w)); }) ? 1.6 : 1) * (CAUSAL.test(s.text) ? 1.2 : 1) *
+             (MOST.test(s.text) ? 1.8 : 1);
   return (sum / Math.sqrt(ws.length)) * mult;
 }
 
 /* The sentence with one word replaced by a blank, and that word. */
+/* The first whole-word occurrence of term, blanked — found by pattern, so a
+   term inside "leaflets—septal" or "(RHD)" is found too. */
 function cloze(text, term) {
-  var done = false;
-  var q = text.split(/\s+/).map(function (w) {
-    if (done || bare(w) !== term) return w;
-    done = true;
-    return w.replace(/[A-Za-z0-9][A-Za-z0-9.,%'\-]*[A-Za-z0-9%]|[A-Za-z0-9]/, '_____');
-  }).join(' ');
-  return q;
+  var esc = String(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var re = new RegExp('(^|[^A-Za-z0-9])' + esc + '(?![A-Za-z0-9])', 'i');
+  return String(text).replace(re, function (all, pre) { return pre + '_____'; });
 }
 
 /* ── the five steps ──────────────────────────────────────────────────────── */
@@ -184,19 +232,30 @@ function keySentences(cluster) {
 }
 
 function encode(cluster) {
-  var freq = frequencies(cluster), title = titleStems(cluster);
+  var freq = frequencies(cluster), title = titleStems(cluster), terms = defined(cluster);
   var picked = keySentences(cluster);
   var used = {};
   var hooks = picked.map(function (s) {
-    var t = freshTerm(rankedTerms(s.text, freq, title), used, true);
+    var t = freshTerm(rankedTerms(s.text, freq, title, terms), used, true);
     return t ? t.word : '';
   }).filter(Boolean);
   var letters = hooks.map(function (w) { return w[0].toUpperCase(); }).join('');
+  /* A list is what an acrostic is FOR: when the section has one of three to
+     nine items, the hook is its items' first letters — "Acquired causes of
+     TS: R·I·N·P·C…" — rather than one word from each point. */
+  var list = lists(cluster).filter(function (l) { return l.items.length >= 3 && l.items.length <= 9; })
+    .sort(function (a, b) { return b.items.length - a.items.length; })[0];
+  var mnemonic = '';
+  if (list) {
+    var labels = list.items.map(function (i) { return i.label.replace(/\./g, ''); });
+    mnemonic = 'First letters of ' + list.title + ': ' + labels.map(function (w) { return w.charAt(0).toUpperCase(); }).join('') +
+      ' \u2014 ' + labels.join(' \u00B7 ') + '. Say the letters, then name each one.';
+  } else if (hooks.length >= 2) {
+    mnemonic = 'First letters: ' + letters + ' \u2014 ' + hooks.join(' \u00B7 ') + '. Say the letters, then say what each word stands for in this section.';
+  }
   return {
     points: picked.map(function (s) { return { text: s.text, page: s.page }; }),
-    mnemonic: hooks.length >= 2
-      ? 'First letters: ' + letters + ' — ' + hooks.join(' · ') + '. Say the letters, then say what each word stands for in this section.'
-      : '',
+    mnemonic: mnemonic,
     flowchart: '',
   };
 }
@@ -241,12 +300,30 @@ function tableQuestions(cluster, limit) {
 var CAUSE = /\b(leads? to|lead to|results? in|causes?|triggers?|produces?|increases?|decreases?|raises?|lowers?|reduces?|activates?|inhibits?|stimulates?|promotes?|impairs?|worsens?|improves?|leading to|resulting in|causing|triggering|producing)\b/i;
 var CLAUSE_END = /[,;:.]|\s(?:and|but|while|whereas|because|since|which|who|when|by|through|via|so|although|unless|in order)\s/i;
 var LEADING = /^(?:the|a|an|this|these|that|those|its|their|such)\s+/i;
+/* A box label from a stretch of sentence. The owner's first real flowchart
+   had "(TS) and tricuspid regur gitation (TR) can" and "myxoma and
+   metastases)—Usually" as boxes: parentheses cut in half, a dash, a modal
+   verb left on the end. So: asides in brackets go whole, a label is cut at a
+   dash or a stray bracket, and modal verbs, adverbs and conjunctions are
+   trimmed from its ends. A label that is still long, or has no content word,
+   is no label — the arrow is not drawn. */
+var MODAL_END = /\s+(?:can|may|might|could|will|would|should|must|often|usually|typically|commonly|also|then|generally|frequently|rarely|further|thus|therefore|which|that|who)$/i;
+var CONJ_START = /^(?:and|or|but|both|either|neither|which|that|who|whereas|while|then|also|usually|often|typically)\s+/i;
 function phrase(text, fromEnd, max) {
-  var ws = String(text).replace(/^[\s,;:]+|[\s,;:.]+$/g, '').split(/\s+/).filter(Boolean);
+  var t = String(text).replace(/\([^()]*\)/g, ' ').replace(/\[[^\[\]]*\]/g, ' ');
+  /* whatever lies across a dash or a stray bracket from the verb is another clause */
+  var parts = t.split(/\s*[\u2014\u2013()\[\]]\s*|\s-\s/);
+  t = fromEnd ? parts[parts.length - 1] : parts[0];
+  var ws = t.replace(/^[\s,;:]+|[\s,;:.]+$/g, '').split(/\s+/).filter(Boolean);
   ws = fromEnd ? ws.slice(-max) : ws.slice(0, max);
   var out = ws.join(' ');
-  while (LEADING.test(out)) out = out.replace(LEADING, '');
-  return out.replace(/[.,;:]+$/, '');
+  var guard = 0;
+  while (guard++ < 6 && (LEADING.test(out) || CONJ_START.test(out) || MODAL_END.test(out))) {
+    out = out.replace(LEADING, '').replace(CONJ_START, '').replace(MODAL_END, '');
+  }
+  out = out.replace(/[.,;:]+$/, '').trim();
+  if (out.split(/\s+/).length > 6) return '';
+  return out;
 }
 function stemsOf(label) {
   var out = {};
@@ -307,6 +384,16 @@ function flow(cluster) {
       }
     }
   });
+  /* Only CONNECTED pieces are a flow. Two unrelated "A causes B" pairs side
+     by side — what the owner's first flowchart was — teach less than the
+     sentences did. A piece is kept when it links at least three boxes. */
+  var parent = {};
+  var find = function (x) { while (parent[x] !== undefined && parent[x] !== x) x = parent[x]; return x; };
+  edges.forEach(function (e) { parent[e.from] = parent[e.from] === undefined ? e.from : parent[e.from]; parent[e.to] = parent[e.to] === undefined ? e.to : parent[e.to]; });
+  edges.forEach(function (e) { var a = find(e.from), b = find(e.to); if (a !== b) parent[a] = b; });
+  var size = {};
+  Object.keys(parent).forEach(function (k) { var r = find(+k); size[r] = (size[r] || 0) + 1; });
+  edges = edges.filter(function (e) { return size[find(e.from)] >= 3; });
   var used = {};
   edges.forEach(function (e) { used[e.from] = true; used[e.to] = true; });
   return { nodes: nodes.filter(function (n) { return used[n.id]; }), edges: edges };
@@ -333,16 +420,88 @@ function paths(f) {
   return res.slice(0, 6);
 }
 
-function recall(cluster, points) {
-  var freq = frequencies(cluster), title = titleStems(cluster);
-  var out = [], used = {};
-  (points || []).forEach(function (p) {
-    if (out.length >= 4) return;
-    var t = freshTerm(rankedTerms(p.text, freq, title), used, false);
-    if (!t) return;
-    out.push({ question: 'Fill in the blank: ' + cloze(p.text, t.word), answer: t.word, page: p.page });
+/* ── lists ─────────────────────────────────────────────────────────────────
+   The section's lists (chunk.js marks their items), each split at its
+   sub-headings, titled from the sentence that introduces it: "Table 17.1
+   lists the causes of TS" + sub-heading "Acquired" → "Acquired causes of
+   TS". Every word of a title is a word of the section. */
+function label(text) {
+  var t = String(text).split(/\s*(?:\(|\u2014|\u2013|,|;|:|\s-\s)/)[0].trim();
+  var ws = t.split(/\s+/);
+  return ws.slice(0, 5).join(' ').replace(/[.]+$/, '');
+}
+function topicOf(sentence) {
+  var m = /\b(?:lists?|shows?|summari[sz]es?|includes?|are|is)\s+(?:the\s+)?((?:main\s+|major\s+|common\s+)?(?:causes?|features?|signs?|symptoms?|types?|indications?|contraindications?|complications?|findings?|risk factors?|treatments?|options?|criteria|agents?|drugs?|classes?)\b[^.:;]*)/i.exec(sentence || '');
+  return m ? m[1].replace(/\s+(?:below|as follows)$/i, '').trim() : '';
+}
+function lists(cluster) {
+  var segs = cluster.segments || [], out = [];
+  var cur = null, intro = '';
+  segs.forEach(function (seg, i) {
+    if (!seg.item) {
+      if (!seg.heading && !seg.table) {
+        var ss = sentences({ segments: [seg] });
+        intro = ss.length ? ss[ss.length - 1].text : intro;
+      }
+      cur = null;
+      return;
+    }
+    var topic = topicOf(intro) || String(cluster.title || '').replace(/\s*\(cont\.\)$/, '');
+    if (seg.sub) {
+      cur = { title: label(seg.text) + ' ' + topic.replace(/^the\s+/i, ''), items: [], page: seg.page, list: seg.list };
+      out.push(cur);
+      return;
+    }
+    if (!cur || cur.list !== seg.list) { cur = { title: topic, items: [], page: seg.page, list: seg.list }; out.push(cur); }
+    cur.items.push({ text: seg.text, label: label(seg.text), page: seg.page });
   });
-  tableQuestions(cluster, 2).forEach(function (q) { if (!used[stem(q.answer)]) { used[stem(q.answer)] = true; out.push(q); } });
+  return out.filter(function (l) { return l.items.length >= 2; });
+}
+
+/* ── questions that ask, rather than blank ─────────────────────────────────
+   "Rheumatic heart disease (RHD) is the most common cause of TS" →
+   "What is the most common cause of TS?" and "Preload is the stretch on …"
+   → "What is preload?". The answer is the section's own words. */
+function patternQuestions(cluster) {
+  var out = [];
+  sentences(cluster).forEach(function (s) {
+    var t = s.text.replace(/^(?:\(?\d{1,2}[.)]|[IVX]+\.|[A-H]\.)\s+/, '');
+    var m = /^(.{3,90}?)\s+(?:is|are|remains?|represents?)\s+(?:by far\s+)?the\s+most\s+(common|frequent|important)\s+([^,.;]{3,80})/i.exec(t);
+    if (m && m[1].split(/\s+/).length <= 10) {
+      out.push({ question: 'What is the most ' + m[2].toLowerCase() + ' ' + m[3].trim() + '?', answer: m[1].trim(), page: s.page, kind: 'most' });
+      return;
+    }
+    var d = /^((?:[A-Za-z][\w\-]*\s+){0,4}[A-Za-z][\w\-]*(?:\s+\([A-Z]{2,6}\))?)\s+(?:is|are|refers to|is defined as|are defined as|means)\s+(.{12,160}?)(?:[.;]|,\s+(?:which|and|but)\s|$)/.exec(t);
+    if (d && !/^(?:this|that|it|there|these|those|which|the\s+(?:most|first|only))\b/i.test(d[1]) && !MOST.test(t) &&
+        /^(?:a|an|the)\s/i.test(d[2])) {
+      var term = d[1].replace(/^(?:the|a|an)\s+/i, '');
+      /* "Preload" opens its sentence with a capital; the question reads it as
+         a term. An abbreviation or a name (second letter a capital) is kept. */
+      if (/^[A-Z][a-z]/.test(term)) term = term.charAt(0).toLowerCase() + term.slice(1);
+      out.push({ question: 'What is ' + term + '?', answer: d[2].trim(), page: s.page, kind: 'define' });
+    }
+  });
+  return out;
+}
+
+function recall(cluster, points) {
+  var freq = frequencies(cluster), title = titleStems(cluster), terms = defined(cluster);
+  var out = [], used = {}, usedSent = {};
+  /* Asked questions first — "what is the most common …", "what is …" —
+     then the section's biggest list, then blanks. Six at most. */
+  patternQuestions(cluster).slice(0, 2).forEach(function (q) { out.push({ question: q.question, answer: q.answer, page: q.page }); });
+  var big = lists(cluster).sort(function (a, b) { return b.items.length - a.items.length; })[0];
+  if (big && big.items.length >= 3) {
+    out.push({ question: 'Name the ' + big.title + ' (' + big.items.length + ').', answer: big.items.map(function (i) { return i.label; }).join('; '), page: big.page });
+  }
+  (points || []).forEach(function (p) {
+    if (out.length >= 6) return;
+    if (out.some(function (q) { return p.text.indexOf(q.answer) !== -1 && q.answer.split(' ').length > 1; })) return;
+    var t = freshTerm(rankedTerms(p.text, freq, title, terms), used, false);
+    if (!t) return;
+    out.push({ question: (/^\d/.test(t.word) ? 'Fill in the number: ' : 'Fill in the blank: ') + cloze(p.text, t.word), answer: t.word, page: p.page });
+  });
+  tableQuestions(cluster, 2).forEach(function (q) { if (out.length < 7 && !used[stem(q.answer)]) { used[stem(q.answer)] = true; out.push(q); } });
   /* A section that is all table and no sentence still gets asked something. */
   return { prompts: out };
 }
@@ -376,30 +535,68 @@ function matches(answer, word) {
   });
 }
 
+/* A phrase answer ("rheumatic heart disease (RHD)", "the stretch on
+   ventricular myocytes at the end of diastole") is right when the answer
+   carries most of its substance: its abbreviation alone, or three in five of
+   its content words (all of them if it has two or fewer), with any number
+   in it exact. */
+function phraseMatch(answer, target) {
+  var abbr = /\(([A-Z]{2,6})\)/.exec(target);
+  if (abbr && new RegExp('\\b' + abbr[1] + '\\b').test(String(answer || ''))) return true;
+  var core = target.replace(/\([^)]*\)/g, ' ');
+  var words = [], seen = {};
+  toks(core).forEach(function (w) { var b = bare(w); if ((isContent(b) || NUM.test(b)) && !seen[stem(b)]) { seen[stem(b)] = true; words.push(b); } });
+  if (!words.length) return matches(answer, target);
+  var nums = words.filter(function (w) { return NUM.test(w); });
+  if (!nums.every(function (n) { return matches(answer, n); })) return false;
+  var hit = words.filter(function (w) { return matches(answer, w); }).length;
+  return words.length <= 2 ? hit === words.length : hit / words.length >= 0.6;
+}
+/* A list item is named when any of its SPECIFIC words is: "carcinoid" names
+   "Carcinoid syndrome", "Whipple" names "Whipple disease". The generic head
+   noun alone ("disease", "syndrome") names nothing. */
+var HEADS = { disease: 1, syndrome: 1, failure: 1, anomaly: 1, disorder: 1, infection: 1, lesion: 1, condition: 1, therapy: 1, treatment: 1 };
+function itemMatch(answer, item) {
+  var ws = toks(item).map(bare).filter(function (b) { return (isContent(b) || NUM.test(b)) && !HEADS[b]; });
+  if (!ws.length) return phraseMatch(answer, item);
+  return ws.some(function (w) { return matches(answer, w); });
+}
 function gradeRecall(cluster, prompt, answer) {
-  var ok = matches(answer, prompt.answer);
+  var said = String(answer || '').trim();
+  var target = String(prompt.answer || '');
+  /* A list: "a; b; c". Right when three in five items are named. */
+  if (target.indexOf('; ') !== -1) {
+    var items = target.split('; ');
+    var named = items.filter(function (it) { return itemMatch(said, it); });
+    var missing = items.filter(function (it) { return named.indexOf(it) === -1; });
+    var okL = named.length / items.length >= 0.6;
+    return { correct: okL, missing: missing, misconception: '',
+      feedback: !said ? 'No answer given.' : 'You named ' + named.length + ' of ' + items.length + '.' +
+        (missing.length ? ' Missing: ' + missing.join(', ') + '.' : ' All of them.') };
+  }
+  var ok = target.split(/\s+/).length > 1 ? phraseMatch(said, target) : matches(said, target);
   return {
     correct: ok,
-    missing: ok ? [] : [prompt.answer],
+    missing: ok ? [] : [target],
     misconception: '',
-    feedback: ok ? 'Right.' : (String(answer || '').trim()
-      ? 'The word was “' + prompt.answer + '”. If you wrote a synonym, count it as correct.'
-      : 'No answer given — the word was “' + prompt.answer + '”.'),
+    feedback: ok ? 'Right.' : (said
+      ? 'The answer was \u201C' + target + '\u201D. If you said the same thing in other words, count it as correct.'
+      : 'No answer given \u2014 the answer was \u201C' + target + '\u201D.'),
   };
 }
 
 /* A point is covered when the explanation uses most of its key terms. */
-function pointTerms(p, freq, title) {
-  return rankedTerms(p.text, freq, title).slice(0, 3).map(function (t) { return t.word; });
+function pointTerms(p, freq, title, terms) {
+  return rankedTerms(p.text, freq, title, terms).slice(0, 3).map(function (t) { return t.word; });
 }
 function gradeExplain(cluster, points, explanation) {
-  var freq = frequencies(cluster), title = titleStems(cluster);
+  var freq = frequencies(cluster), title = titleStems(cluster), terms = defined(cluster);
   var gaps = [];
   var covered = 0;
   (points || []).forEach(function (p) {
-    var terms = pointTerms(p, freq, title);
-    var hit = terms.filter(function (t) { return matches(explanation, t); }).length;
-    if (terms.length && hit >= Math.min(2, terms.length)) covered++;
+    var pt = pointTerms(p, freq, title, terms);
+    var hit = pt.filter(function (t) { return matches(explanation, t); }).length;
+    if (pt.length && hit >= Math.min(2, pt.length)) covered++;
     else gaps.push({ point: p.text, page: p.page });
   });
   var n = (points || []).length;
@@ -407,18 +604,45 @@ function gradeExplain(cluster, points, explanation) {
   return {
     score: score,
     gaps: gaps,
-    misconceptions: [],
+    misconceptions: numberSlips(cluster, explanation),
     feedback: score >= 80 ? 'You touched nearly every key point. Now say it again, faster.'
       : score >= 50 ? 'About half the key points came through. Re-read the ones listed, then explain it once more.'
       : 'Most key points were missing. Go back to Encode, read the points aloud, then try again from memory.',
   };
 }
 
+/* The one misconception words can catch: a wrong number. For each thing
+   the student said that has a number in it, find the section sentence that
+   shares the most of its words; if that sentence has numbers and none is
+   theirs, it is said back to them with the page. */
+function numberSlips(cluster, explanation) {
+  var src = sentences(cluster).map(function (s) {
+    var st = {}, nums = [];
+    toks(s.text).forEach(function (w) { var b = bare(w); if (NUM.test(b)) nums.push(parseFloat(b)); else if (isContent(b)) st[stem(b)] = true; });
+    return { s: s, st: st, nums: nums };
+  });
+  var out = [];
+  String(explanation || '').split(/(?:[.;!?]\s+|\n+)/).forEach(function (said) {
+    var mine = [], st = [];
+    toks(said).forEach(function (w) { var b = bare(w); if (NUM.test(b)) mine.push(parseFloat(b)); else if (isContent(b)) st.push(stem(b)); });
+    if (!mine.length || out.length >= 3) return;
+    var best = null, bestN = 0;
+    src.forEach(function (x) {
+      var n = st.filter(function (k) { return x.st[k]; }).length;
+      if (x.nums.length && n > bestN) { bestN = n; best = x; }
+    });
+    if (best && bestN >= 2 && !mine.some(function (v) { return best.nums.indexOf(v) !== -1; })) {
+      out.push('You said ' + mine.join(', ') + '; the PDF says: \u201C' + best.s.text + '\u201D (p.' + best.s.page + ')');
+    }
+  });
+  return out;
+}
+
 function gauntlet(clusters, pointsByCluster, focus, n) {
   var want = Math.max(1, n || 5);
   var fromFocus = [], fromRest = [];
   (clusters || []).forEach(function (c) {
-    var freq = frequencies(c), title = titleStems(c);
+    var freq = frequencies(c), title = titleStems(c), terms = defined(c);
     var points = pointsByCluster[c.index] || [];
     var used = {};
     points.forEach(function (p) { used[p.text] = true; });
@@ -429,8 +653,8 @@ function gauntlet(clusters, pointsByCluster, focus, n) {
       var len = s.text.split(/\s+/).length;
       return !used[s.text] && len >= 6 && len <= 60;
     }).sort(function (a, b) { return scoreSentence(b, freq) - scoreSentence(a, freq) || a.index - b.index; })
-      .map(function (s) { var t = rankedTerms(s.text, freq, title)[0]; return t && { s: s, word: t.word }; });
-    var second = points.map(function (p) { var t = rankedTerms(p.text, freq, title)[1]; return t && { s: p, word: t.word }; });
+      .map(function (s) { var t = rankedTerms(s.text, freq, title, terms)[0]; return t && { s: s, word: t.word }; });
+    var second = points.map(function (p) { var t = rankedTerms(p.text, freq, title, terms)[1]; return t && { s: p, word: t.word }; });
     var qs = fresh.concat(second).filter(Boolean).map(function (x) {
       return { question: 'Gauntlet — fill in the blank: ' + cloze(x.s.text, x.word), answer: x.word, cluster: c.index, page: x.s.page };
     });
@@ -457,9 +681,9 @@ function gauntlet(clusters, pointsByCluster, focus, n) {
     /* A unit with nothing left to ask still gets a gauntlet: its own points,
        first word, so the protocol can finish. */
     (clusters || []).forEach(function (c) {
-      var freq = frequencies(c), title = titleStems(c);
+      var freq = frequencies(c), title = titleStems(c), terms = defined(c);
       (pointsByCluster[c.index] || []).forEach(function (p) {
-        var t = rankedTerms(p.text, freq, title)[0];
+        var t = rankedTerms(p.text, freq, title, terms)[0];
         if (t && all.length < want) all.push({ question: 'Gauntlet — fill in the blank: ' + cloze(p.text, t.word), answer: t.word, cluster: c.index, page: p.page });
       });
     });
@@ -486,7 +710,7 @@ function tree(f) {
 }
 
 var MemCoach = {
-  sentences: sentences, keySentences: keySentences, rankedTerms: rankedTerms, matches: matches, cloze: cloze,
+  sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, phraseMatch: phraseMatch, itemMatch: itemMatch, numberSlips: numberSlips, defined: defined, toks: toks, rankedTerms: rankedTerms, matches: matches, cloze: cloze,
   encode: encode, recall: recall, flow: flow, paths: paths, tree: tree, tableQuestions: tableQuestions, gradeRecall: gradeRecall, gradeExplain: gradeExplain, gauntlet: gauntlet,
   bare: bare, frequencies: frequencies,
 };

@@ -22,8 +22,8 @@
 <body>
 <div id="app"><noscript>Memorizer needs JavaScript.</noscript></div>
 <!--
-  Order matters: fsrs.js is Systole's scheduler, shared rather than copied
-  (src/core/fsrs.js); ui.js reads every module before it at load.
+  Order matters: fsrs.js is Systole's scheduler and pearl.js its pearl
+  finder, both shared rather than copied (src/core/); ui.js reads every module before it at load.
   scripts/build-memorizer.js inlines each tag marked data-inline, so the
   built app is one file. Served from the repository root, this page also
   runs as-is: http://localhost:8080/memorizer/
@@ -35,6 +35,8 @@
 <script src="src/provider.js" data-inline></script>
 <script src="src/coach.js" data-inline></script>
 <script src="src/format.js" data-inline></script>
+<script src="../src/core/pearl.js" data-inline></script>
+<script src="src/home.js" data-inline></script>
 <script src="src/store.js" data-inline></script>
 <script src="src/pdf.js" data-inline></script>
 <script src="src/ui.js" data-inline></script>

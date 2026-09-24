@@ -43,6 +43,7 @@ const die = onDeath(() => ({ section, checks: passed + failed, errors, events })
 
 const ROOT = path.join(__dirname, '..');
 const { build } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
+const MemLookNode = require(path.join(ROOT, 'memorizer', 'src', 'appearance.js'));
 
 /* ── a real PDF, written by hand ──────────────────────────────────────────
    Three sections, each a 20pt heading over ~650 words of 11pt body, a 9pt
@@ -70,6 +71,12 @@ function makePdf() {
   const causal = ['Diuretics reduce preload by lowering circulating volume.',
     'Excessive preload raises venous pressure and causes pulmonary congestion.',
     'Rising venous pressure leads to oedema of the lungs.'];
+  /* One sentence worth a pearl — a threshold and a rule — printed over two
+     lines, the way a paragraph wraps. The filler words cannot be one. It
+     says "greater than", not "above": pearl.js refuses any sentence with
+     "above" or "below" in it, as a pointer to text outside the pearl. */
+  const pearlLines = ['A left ventricular end-diastolic pressure greater than 18 mmHg should prompt a search for volume',
+    'overload, whereas a normal pressure of 8 to 12 mmHg does not exclude a stiff ventricle.'];
   const table = [['Measure', 'Normal', 'Unit'], ['LVEDP', '12', 'mmHg'], ['Stroke volume', '70', 'mL'], ['Heart rate', '72', 'bpm']];
   /* Letter-coded (s1wab …), not numbered: a body line of numbered words
      normalises to the same text on every page, which is what a running
@@ -77,11 +84,15 @@ function makePdf() {
   const code = i => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(i / 26) % 26] + 'abcdefghijklmnopqrstuvwxyz'[i % 26];
   const PER = 320;
   let bodyWords = 0;
+  let IMG_BOX = null;
   titles.forEach((t, si) => {
     if (si) y -= 20;
     line(t, 20); bodyWords += t.split(' ').length;
     if (si === 0) causal.forEach(c => { line(c, 11); bodyWords += c.split(' ').length; });
+    if (si === 0) { y -= 8; pearlLines.forEach(c => { line(c, 11); bodyWords += c.split(' ').length; }); }
     if (si === 0) y -= 12;
+    /* A gap in section 1 for the picture, the way a book leaves one. */
+    if (si === 0) { IMG_BOX = [300, y - 105, 500, y - 5]; y -= 115; }
     const words = [];
     for (let i = 1; i <= PER; i++) words.push(`s${si + 1}w${code(i)}` + (i % 10 === 0 ? '.' : ''));
     for (let i = 0; i < words.length; i += 12) line(words.slice(i, i + 12).join(' '), 11);
@@ -94,8 +105,10 @@ function makePdf() {
   });
   newPage();
 
-  /* One picture, on page 1: a 2×2 RGB image drawn 200×100 at (300, 450). */
-  const IMG_BOX = [300, 450, 500, 550];
+  /* Two pictures on page 1, both a 2×2 RGB image: one 200×100 in the gap
+     left for it, and one drawn UNDER a block of body text — a highlight
+     band, which is what the first figure finder cropped as a "figure". */
+  const UNDER_BOX = [100, 250, 400, 350];
   const objs = [];
   const add = s => { objs.push(s); return objs.length; };
   const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
@@ -111,7 +124,7 @@ function makePdf() {
       else ops.push(`BT /F1 ${l.size} Tf 72 ${l.y} Td (${esc(l.text)}) Tj ET`);
     });
     ops.push(`BT /F1 9 Tf 300 30 Td (${pi + 1}) Tj ET`);
-    if (pi === 0) ops.push(`q ${IMG_BOX[2] - IMG_BOX[0]} 0 0 ${IMG_BOX[3] - IMG_BOX[1]} ${IMG_BOX[0]} ${IMG_BOX[1]} cm /Im1 Do Q`);
+    if (pi === 0) [IMG_BOX, UNDER_BOX].forEach(B => ops.unshift(`q ${B[2] - B[0]} 0 0 ${B[3] - B[1]} ${B[0]} ${B[1]} cm /Im1 Do Q`));
     const stream = ops.join('\n');
     const content = add(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
     const xo = pi === 0 ? ` /XObject << /Im1 ${image} 0 R >>` : '';
@@ -126,7 +139,7 @@ function makePdf() {
   const xref = Buffer.byteLength(out, 'latin1');
   out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
   out += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return { buffer: Buffer.from(out, 'latin1'), pages: pages.length, titles, bodyWords, table, causal, IMG_BOX,
+  return { buffer: Buffer.from(out, 'latin1'), pages: pages.length, titles, bodyWords, table, causal, IMG_BOX, pearl: pearlLines.join(' '),
            firstCode: code(1), lastCode: code(PER) };
 }
 
@@ -237,8 +250,8 @@ function kindOf(user) {
   ok('no page is reported as scanned', rec.scanned.length === 0, JSON.stringify(rec.scanned));
   const tbl = rec.clusters[1].segments.find(g => g.table);
   ok('the table in section 2 is found, cell for cell', !!tbl && JSON.stringify(tbl.table) === JSON.stringify(pdf.table), tbl && JSON.stringify(tbl.table));
-  ok('the picture on page 1 is found where it was drawn', rec.figures.length === 1 && rec.figures[0].page === 1 &&
-     rec.figures[0].box.every((v, i) => Math.abs(v - pdf.IMG_BOX[i]) <= 1), JSON.stringify(rec.figures));
+  ok('the picture on page 1 is found where it was drawn, and the band under the text is not a figure', rec.figures.length === 1 && rec.figures[0].page === 1 &&
+     rec.figures[0].box.every((v, i) => Math.abs(v - pdf.IMG_BOX[i]) <= 1), JSON.stringify(rec.figures) + ' want ' + JSON.stringify(pdf.IMG_BOX));
   ok('and the PDF itself is kept on the device, to draw them from', await page.evaluate(id => MemStore.get('files', id).then(f => !!f && f.bytes.byteLength > 1000), rec.id));
   ok('pdf.js and its worker came from the pinned CDN', cdnHits >= 2, `${cdnHits} requests`);
 
@@ -331,6 +344,36 @@ function kindOf(user) {
   await page.reload();
   await page.locator('li.doc').waitFor(T);
   ok('the library shows where the unit is', /Section 2 of 3/.test(await page.locator('li.doc').innerText()));
+
+  head('home: Systole’s layout, drawn still');
+  ok('the hero names the unit to carry on with', (await page.locator('.home-hero h1').innerText()) === 'unit');
+  ok('its progress counts one section studied of three, and no card held yet — neither card has been reviewed',
+     (await page.locator('#home-meter').getAttribute('aria-label')) === '1 of 3 sections studied; 0 of 2 review cards held',
+     await page.locator('#home-meter').getAttribute('aria-label'));
+  ok('the doors: Continue where you are, Review with what is due, Add a PDF, Settings',
+     /^▶\s*Continue\s*unit · Section 2 of 3$/.test((await page.locator('#door-continue').innerText()).trim()) &&
+     /Review · 2/.test(await page.locator('#door-review').innerText()) &&
+     await page.locator('#door-add[for="pdf-input"]').count() === 1 && await page.locator('#door-settings').count() === 1,
+     (await page.locator('.doors').innerText()).replace(/\s+/g, ' '));
+  const pearlText = (await page.locator('#pearl .pearl-steps').innerText()).replace(/\s+/g, ' ');
+  ok('today’s pearl is the PDF’s own sentence, broken into steps', /Today’s pearl/i.test(await page.locator('#pearl .eyebrow').innerText()) &&
+     await page.locator('#pearl .pearl-steps li').count() >= 2 && /end-diastolic pressure greater than 18 mmHg/.test(pearlText) && /stiff ventricle/.test(pearlText), pearlText);
+  ok('with its thresholds marked', JSON.stringify(await page.$$eval('#pearl mark', ms => ms.map(m => m.textContent.trim()))) === '["18 mmHg","8","12 mmHg"]',
+     JSON.stringify(await page.$$eval('#pearl mark', ms => ms.map(m => m.textContent.trim()))));
+  ok('credited to where it was printed', /Section One Preload/.test(await page.locator('#pearl .pearl-src').innerText()) &&
+     /p\.1/.test(await page.locator('#pearl .pearl-src').innerText()), await page.locator('#pearl .pearl-src').innerText());
+  /* The owner asked for no animation. Every element on the home screen, as
+     the browser computes it — not as the stylesheet says. */
+  const moving = await page.evaluate(() => [...document.querySelectorAll('main.home, main.home *')].filter(el => {
+    const cs = getComputedStyle(el);
+    return cs.animationName !== 'none' || cs.transitionDuration.split(',').some(d => parseFloat(d) > 0);
+  }).map(el => el.tagName + '.' + el.className));
+  ok('nothing on the home screen animates or transitions', moving.length === 0, moving.slice(0, 5).join(', ') || 'still');
+  await page.setViewportSize({ width: 1180, height: 820 });   /* an iPad Air, landscape */
+  const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.home-top')).gridTemplateColumns.split(' ').length);
+  ok('landscape: the hero and the pearl side by side', cols === 2, String(cols));
+  await page.setViewportSize({ width: 820, height: 1100 });
+  ok('and stacked in portrait', await page.evaluate(() => getComputedStyle(document.querySelector('.home-top')).gridTemplateColumns.split(' ').length) === 1);
   const before = stub.requests.length;
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.locator('ul.bullets > li').first().waitFor(T);
@@ -355,6 +398,8 @@ function kindOf(user) {
   await page.locator('li.doc').waitFor(T);
   const over = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
   ok('no horizontal scroll at 375 px', over <= 0, `${over}px over`);
+  ok('and the card just reviewed Good is now counted as held', /1 of 2 review cards held/.test(await page.locator('#home-meter').getAttribute('aria-label')),
+     await page.locator('#home-meter').getAttribute('aria-label'));
 
   head('the built-in coach: no key, no AI, nothing sent');
   {
@@ -434,6 +479,17 @@ function kindOf(user) {
     await p2.locator('#appearance .swatch[data-theme-id="nocturne"]').click();
     const bg = await p2.evaluate(() => getComputedStyle(document.body).backgroundColor);
     ok('picking Nocturne recolours the page with Systole\u2019s Nocturne ground', bg === 'rgb(14, 11, 26)', bg);
+    /* Contrast and brightness: the page gets the colours appearance.js
+       computes for that setting, read back from what the browser drew. */
+    const rgbOf = hex => 'rgb(' + [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(', ') + ')';
+    await p2.locator('#appearance .seg button[data-contrast="high"]').click();
+    const hiWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('nocturne'), 'high', 'standard'));
+    const hiGot = await p2.evaluate(() => ({ ink: getComputedStyle(document.body).color, edge: getComputedStyle(document.querySelector('#appearance .seg button[data-contrast="high"]').closest('.card').querySelector('.swatch')).borderTopColor }));
+    ok('High contrast draws the text and the control outlines in the fitted colours', hiGot.ink === rgbOf(hiWant.ink) && hiGot.edge === rgbOf(hiWant.edge) &&
+       hiWant.ink !== MemLookNode.byId('nocturne').t.ink, JSON.stringify(hiGot) + ' want ' + rgbOf(hiWant.ink) + ' / ' + rgbOf(hiWant.edge));
+    await p2.locator('#appearance .seg button[data-bright="dim"]').click();
+    const dimWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('nocturne'), 'high', 'dim').bg);
+    ok('and Dim sinks the ground', await p2.evaluate(() => getComputedStyle(document.body).backgroundColor) === rgbOf(dimWant) && rgbOf(dimWant) !== 'rgb(14, 11, 26)', rgbOf(dimWant));
     await p2.locator('#appearance .seg button[data-size="xl"]').click();
     ok('Extra large text makes the body 20px', await p2.evaluate(() => getComputedStyle(document.body).fontSize) === '20px');
     await p2.locator('#appearance .seg button[data-font="serif"]').click();
@@ -441,6 +497,7 @@ function kindOf(user) {
     await p2.locator('.drop').waitFor(T);
     ok('and all of it survives a reload, applied before the page draws', await p2.evaluate(() =>
       document.documentElement.getAttribute('data-look') === 'nocturne' && getComputedStyle(document.body).fontSize === '20px' &&
+      document.documentElement.getAttribute('data-contrast') === 'high' && document.documentElement.getAttribute('data-bright') === 'dim' &&
       /Iowan|Charter|Georgia/.test(getComputedStyle(document.body).fontFamily)));
     await p2.locator('nav.top').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#provider').waitFor(T);

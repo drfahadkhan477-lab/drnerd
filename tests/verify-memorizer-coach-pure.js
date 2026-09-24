@@ -109,6 +109,18 @@ head('encode: the section’s own sentences, nothing else');
   const long = { index: 0, title: 'x', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false,
     text: Array.from({ length: 60 }, (_, i) => 'Factor ' + i + ' raises cardiac output through pathway ' + 'abcdefghij'[i % 10] + ' today.').join(' ') }] };
   ok('a long section is capped at 7 points', K.encode(long).points.length === 7, String(K.encode(long).points.length));
+  /* In order even when the picks are made out of order — a long section of
+     numbered sentences is picked by score, not by position. */
+  const lp = K.encode(long).points.map(p => text(long).indexOf(p.text));
+  ok('a long section\u2019s points are still in page order', lp.every((v, i) => i === 0 || v > lp[i - 1]), lp.join(','));
+  /* The long section's picks came out in order anyway. This one cannot:
+     the number is taken first (last sentence), the definition is put in
+     front of it, and the best-scoring rest (second sentence) comes after. */
+  const mixed = { index: 0, title: 'Preload', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text:
+    'Preload is the stretch on ventricular myocytes at the end of diastole. Venous return raises preload and preload raises stroke volume through venous return. ' +
+    'The weather outside the hospital was mild that week. A wedge pressure above 18 mmHg marks raised preload.' }] };
+  const mp = K.encode(mixed).points.map(p => text(mixed).indexOf(p.text));
+  ok('points picked out of order are shown in page order', mp.length === 3 && mp.every((v, i) => i === 0 || v > mp[i - 1]), mp.join(','));
   ok('and so is the section\u2019s definition', e.points.some(p => /^Preload is the stretch/.test(p.text)), e.points.map(p => p.text.slice(0, 30)).join(' | '));
   ok('the memory hook is built from the points’ own words',
      /^First letters: [A-Z]+ /.test(e.mnemonic) && e.mnemonic.split(' — ')[1].split('.')[0].split(' · ').every(w => text(PRELOAD).toLowerCase().indexOf(w) !== -1),
@@ -126,24 +138,26 @@ head('recall: a blank in each key sentence');
   const r = K.recall(PRELOAD, e.points);
   ok('matches the schema', P.check(P.SCHEMAS.recall, r) === '');
   ok('asks 3 to 5 questions', r.prompts.length >= 3 && r.prompts.length <= 5, String(r.prompts.length));
-  ok('each question has a blank', r.prompts.every(q => /_____/.test(q.question)));
+  /* A blank, or a question actually asked ("What is …?", "Name the …"). */
+  ok('each question has a blank or asks something', r.prompts.every(q => /_____/.test(q.question) || /\?$|^Name the /.test(q.question)));
+  const blanks = r.prompts.filter(q => /_____/.test(q.question));
   /* Read off the question itself. The first version compared it with
      cloze() run again — the function under test checking itself — and
      passed with the answer left in. */
   const word = w => new RegExp('(^|[^a-z0-9])' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9])', 'i');
   ok('and its answer is gone from the question', r.prompts.every(q => !word(q.answer).test(q.question)),
      r.prompts.filter(q => word(q.answer).test(q.question)).map(q => q.answer).join(', ') || 'none left in');
-  ok('no two questions blank the same word', new Set(r.prompts.map(q => q.answer)).size === r.prompts.length);
+  ok('no two questions blank the same word', new Set(blanks.map(q => q.answer)).size === blanks.length);
   const same = { index: 0, title: 'x', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false,
     text: 'Sarcomere tension is up now. Sarcomere tension is low now. Sarcomere tension is odd now.' }] };
   const sr = K.recall(same, K.sentences(same).map(x => ({ text: x.text, page: 1 })));
   ok('even when every sentence\u2019s best word is the same one', new Set(sr.prompts.map(q => q.answer)).size === sr.prompts.length,
      sr.prompts.map(q => q.answer).join(', '));
-  ok('every answer is a word from its own sentence', r.prompts.every(q => text(PRELOAD).toLowerCase().indexOf(q.answer) !== -1));
+  ok('every answer is the section’s own words', r.prompts.every(q => text(PRELOAD).toLowerCase().indexOf(q.answer.toLowerCase()) !== -1));
   ok('a run of filler words offers nothing to blank', K.rankedTerms('there which would these those about', {}, {}).length === 0,
      K.rankedTerms('there which would these those about', {}, {}).map(t => t.word).join(', '));
-  ok('no answer is a filler word', r.prompts.every(q => !/^(the|and|with|that|this|from|which|there)$/.test(q.answer)), r.prompts.map(q => q.answer).join(', '));
-  const numQ = r.prompts.find(q => /mmHg/.test(q.question));
+  ok('no answer is a filler word', blanks.every(q => !/^(the|and|with|that|this|from|which|there)$/.test(q.answer)), blanks.map(q => q.answer).join(', '));
+  const numQ = blanks.find(q => /mmHg/.test(q.question));
   ok('a sentence with a number blanks the number', numQ && numQ.answer === '12', numQ && numQ.question);
 }
 
@@ -165,7 +179,7 @@ head('grading by matching words');
   ok('the right number is correct', n('12 mmHg') === true);
   ok('a different number is wrong — 120 is not 12, nor is 1', n('120') === false && n('1') === false && n('2') === false);
   ok('a short word must be exact: no typo allowance under five letters', K.gradeRecall(PRELOAD, { answer: 'vein' }, 'vain').correct === false);
-  ok('a wrong answer names the word, and offers counting a synonym', /“venous”/.test(g('arterial').feedback) && /synonym/.test(g('arterial').feedback));
+  ok('a wrong answer names the answer, and offers counting other words for it', /“venous”/.test(g('arterial').feedback) && /count it as correct/.test(g('arterial').feedback));
 }
 
 head('teach-back: how many key points you touched');
@@ -206,6 +220,18 @@ head('gauntlet: new blanks, weighted to the weakest');
   ok('every cluster number is a real section', g.questions.every(q => q.cluster >= 0 && q.cluster <= 2));
   ok('no gauntlet blank repeats a recall blank', !g.questions.some(q => recallQs.indexOf(q.question.replace(/^Gauntlet — fill in the blank: /, '')) !== -1));
   ok('no question is asked twice', new Set(g.questions.map(q => q.question)).size === g.questions.length);
+  /* Every sentence is a point here, so the gauntlet has nothing fresh and
+     must re-blank the points — the case where repeating recall is possible.
+     (Above, fresh sentences filled all six and the second-word path never
+     ran.) */
+  const all3 = { index: 0, title: 'Afterload', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text:
+    'Afterload is the wall stress the ventricle overcomes during ejection. Aortic stenosis raises afterload and thickens the ventricular wall. ' +
+    'Vasodilators lower afterload and improve forward flow.' }] };
+  const p3 = K.encode(all3).points;
+  const r3 = K.recall(all3, p3).prompts.map(q => q.question.replace(/^Fill in the (?:blank|number): /, ''));
+  const g3 = K.gauntlet([all3], { 0: p3 }, [0], 5).questions.map(q => q.question.replace(/^Gauntlet — fill in the blank: /, ''));
+  ok('a section with no unused sentences still gets a gauntlet that repeats no recall blank',
+     p3.length === 3 && g3.length >= 2 && !g3.some(q => r3.indexOf(q) !== -1), g3.join(' | '));
   ok('every answer is a word of its own section', g.questions.every(q => text(clusters[q.cluster]).toLowerCase().indexOf(q.answer) !== -1));
   /* One sentence, one word worth blanking: nothing fresh to ask and no
      second word — the case the fallback exists for. */
@@ -238,7 +264,7 @@ head('flowcharts from the section\u2019s own cause-and-effect');
   const ps = K.paths(f);
   ok('the paths start where nothing points in, and follow the arrows', ps.length >= 1 &&
      ps.some(p => /Diuretics/.test(lab(p[0].start)) && p.length >= 3), JSON.stringify(ps));
-  const two = K.flow({ segments: [{ page: 1, heading: false, text: 'Diuretics reduce preload. Hypertension raises afterload. Afterload increases wall stress.' }] });
+  const two = K.flow({ segments: [{ page: 1, heading: false, text: 'Diuretics reduce preload. Preload raises wall stress. Hypertension raises afterload. Afterload increases wall stress.' }] });
   const tp = K.paths(two);
   const tl = id => two.nodes.find(n => n.id === id).label;
   ok('every box nothing points into starts a path', ['Diuretics', 'Hypertension'].every(r => tp.some(p => tl(p[0].start) === r)),
@@ -252,7 +278,96 @@ head('flowcharts from the section\u2019s own cause-and-effect');
      tr[0].next.length === 1 && tr[0].next[0].node.next.length === 2, JSON.stringify(count));
   const loop = K.tree({ nodes: [{ id: 0, label: 'a' }, { id: 1, label: 'b' }], edges: [{ from: 0, to: 1, verb: 'raises' }, { from: 1, to: 0, verb: 'lowers' }] });
   ok('a cycle ends at a reference back, not in an endless tree', loop.length === 1 && loop[0].next[0].node.next[0].node.again === true);
+  /* Sentences that share words but state no cause: were any verb taken as a
+     cause, they would chain, and the connection rule would keep them. */
+  ok('sentences with no cause-and-effect verb make no flow, even when they share words',
+     K.flow({ segments: [{ page: 1, heading: false, text: 'Preload is the stretch. The stretch is greatest in diastole. Diastole is ventricular filling.' }] }).edges.length === 0);
   ok('a section with no such sentences has no flow', K.flow({ segments: [{ page: 1, text: 'The heart has four chambers. It sits in the chest.' }] }).edges.length === 0);
+}
+
+head('flowcharts: clean boxes, connected pieces only');
+{
+  /* The owner's first real flowchart, sentence for sentence. */
+  const USER = { segments: [{ page: 1, heading: false, text:
+    'Both tricuspid stenosis (TS) and tricuspid regurgitation (TR) can produce typical symptoms of right-sided congestive heart failure in their advanced stages. ' +
+    'Malignancy (eg, myxoma and metastases)\u2014Usually cause functional TS.' }] };
+  ok('the owner\u2019s fragment boxes are gone', K.flow(USER).edges.length === 0, JSON.stringify(K.flow(USER).edges));
+  /* Clean boxes, but two pairs with nothing between them — the connection
+     rule on its own (above, the label cleaning already empties the owner's). */
+  const pairs = K.flow({ segments: [{ page: 1, heading: false, text: 'Diuretics reduce preload. Hypertension raises afterload.' }] });
+  ok('two unconnected pairs are not a flowchart', pairs.edges.length === 0, JSON.stringify(pairs.edges));
+  const f = K.flow({ segments: [{ page: 1, heading: false, text: 'Rheumatic fever (RF) usually causes valve scarring. Valve scarring can lead to commissural fusion \u2014 the hallmark.' }] });
+  const labels = f.nodes.map(n => n.label);
+  ok('a chain of three is kept', f.edges.length === 2, labels.join(' | '));
+  ok('boxes lose their brackets, dashes, modal verbs and adverbs',
+     labels.every(l => !/[()\u2014]|\b(?:can|usually)$/i.test(l)) && labels.indexOf('Rheumatic fever') !== -1 && labels.indexOf('commissural fusion') !== -1, labels.join(' | '));
+}
+
+head('the coach asks, lists and checks numbers');
+{
+  /* A section shaped like the owner's Table 17.1 page, as chunk.js marks it. */
+  const TS = { index: 0, title: 'Tricuspid stenosis', pageStart: 2, pageEnd: 2, segments: [
+    { page: 2, heading: false, text: 'A. Etiology. Table 17.1 lists the causes of TS.' },
+    { page: 2, heading: false, text: 'Congenital', item: true, sub: true, list: 'L1' },
+    { page: 2, heading: false, text: 'Tricuspid atresia', item: true, list: 'L1' },
+    { page: 2, heading: false, text: 'Atypical Ebstein anomaly (more likely to cause TR)', item: true, list: 'L1' },
+    { page: 2, heading: false, text: 'Acquired', item: true, sub: true, list: 'L1' },
+    { page: 2, heading: false, text: 'Rheumatic', item: true, list: 'L1' },
+    { page: 2, heading: false, text: 'Infective endocarditis', item: true, list: 'L1' },
+    { page: 2, heading: false, text: 'Carcinoid syndrome', item: true, list: 'L1' },
+    { page: 2, heading: false, text: 'Malignancy (eg, myxoma and metastases)\u2014Usually cause functional TS', item: true, list: 'L1' },
+    { page: 2, heading: false, text: 'Whipple disease', item: true, list: 'L1' },
+    { page: 2, heading: false, text: 'Rheumatic heart disease (RHD) is the most common cause of TS, accounting for >90% of cases. ' +
+      'Recent transesophageal echocardiogram (TEE) studies have revealed that only 54% of patients have three valve leaflets. ' +
+      'Tricuspid stenosis (TS) is a narrowing of the tricuspid valve orifice that obstructs right atrial emptying.' },
+  ] };
+  const ls = K.lists(TS);
+  ok('a list is split at its sub-headings and titled from its introduction',
+     JSON.stringify(ls.map(l => l.title)) === JSON.stringify(['Congenital causes of TS', 'Acquired causes of TS']), JSON.stringify(ls.map(l => l.title)));
+  ok('items are labelled without their asides', ls[1].items.map(i => i.label).join('|') === 'Rheumatic|Infective endocarditis|Carcinoid syndrome|Malignancy|Whipple disease',
+     ls[1].items.map(i => i.label).join('|'));
+  const e = K.encode(TS);
+  ok('the hook is the list\u2019s first letters, titled', /^First letters of Acquired causes of TS: RICMW \u2014 Rheumatic \u00B7 Infective endocarditis/.test(e.mnemonic), e.mnemonic);
+  const pq = K.patternQuestions(TS);
+  const most = pq.find(q => q.kind === 'most');
+  ok('"X is the most common cause of Y" asks for X', most && most.question === 'What is the most common cause of TS?' && most.answer === 'Rheumatic heart disease (RHD)',
+     JSON.stringify(most));
+  const def = pq.find(q => q.kind === 'define');
+  ok('a definition asks for its meaning', def && def.question === 'What is tricuspid stenosis (TS)?' && /^a narrowing of the tricuspid valve orifice/.test(def.answer), JSON.stringify(def));
+  const r = K.recall(TS, e.points);
+  ok('recall asks those, and names the list', r.prompts.some(q => /most common cause of TS/.test(q.question)) &&
+     r.prompts.some(q => /^Name the Acquired causes of TS \(5\)\.$/.test(q.question)), r.prompts.map(q => q.question).join(' | '));
+  ok('and still matches the schema', P.check(P.SCHEMAS.recall, r) === '');
+  const listQ = r.prompts.find(q => /^Name the /.test(q.question));
+  const gl = a => K.gradeRecall(TS, listQ, a);
+  ok('naming three of five is enough, and says which are missing', gl('rheumatic, carcinoid, whipple').correct === true &&
+     /3 of 5/.test(gl('rheumatic, carcinoid, whipple').feedback) && gl('rheumatic, carcinoid, whipple').missing.length === 2, gl('rheumatic, carcinoid, whipple').feedback);
+  ok('two of five is not', gl('rheumatic and whipple').correct === false && /2 of 5/.test(gl('rheumatic and whipple').feedback));
+  const mq = { question: most.question, answer: most.answer, page: 2 };
+  ok('a phrase answer: the abbreviation alone is right', K.gradeRecall(TS, mq, 'RHD').correct === true);
+  ok('so are most of its words', K.gradeRecall(TS, mq, 'rheumatic heart disease').correct === true);
+  ok('one word of three is not', K.gradeRecall(TS, mq, 'heart').correct === false);
+  ok('a definition in the student\u2019s own order still counts', K.gradeRecall(TS, { answer: def.answer }, 'narrowing of the tricuspid orifice, obstructing atrial emptying').correct === true);
+  const slips = K.numberSlips(TS, 'Rheumatic heart disease causes about 50% of cases of TS. Only 54% of patients have three leaflets.');
+  ok('a wrong number in a teach-back is said back, with the source and its page', slips.length === 1 && /50/.test(slips[0]) && />90%/.test(slips[0]) && /p\.2/.test(slips[0]), JSON.stringify(slips));
+  ok('the right number is not', !slips.some(x => /54%/.test(x.split('says')[0])));
+  const x = K.gradeExplain(TS, e.points, 'Rheumatic heart disease causes about 50% of cases of TS.');
+  ok('and teach-back grading reports it as a misconception', x.misconceptions.length === 1 && P.check(P.SCHEMAS.gradeExplain, x) === '');
+  const hk = K.rankedTerms('Recent studies have revealed that only lists accounting for the tricuspid anomaly', {}, {}, K.defined(TS)).map(t => t.word);
+  ok('generic words rank below the terms', hk.indexOf('tricuspid') < hk.indexOf('lists') && hk.indexOf('anomaly') < hk.indexOf('revealed') && hk.indexOf('anomaly') < hk.indexOf('accounting'), hk.join(', '));
+  /* Each rule alone: with nothing else between them, a generic word loses to
+     a shorter ordinary one, and a technical ending beats a longer ordinary word. */
+  ok('a word the section repeats ranks below one it uses once (distinctive, not frequent)',
+     K.rankedTerms('chordae papillary', { chordae: 5, papillary: 1 }, {})[0].word === 'papillary');
+  ok('a generic word loses even to a shorter ordinary one', K.rankedTerms('accounting for chordae', {}, {})[0].word === 'chordae',
+     K.rankedTerms('accounting for chordae', {}, {}).map(t => t.word).join(', '));
+  ok('a technical term beats a longer ordinary word', K.rankedTerms('measurement of stenosis', {}, {})[0].word === 'stenosis',
+     K.rankedTerms('measurement of stenosis', {}, {}).map(t => t.word).join(', '));
+  ok('a word joined by a dash is two words', K.toks('leaflets\u2014septal, anterior').length === 3);
+  const dt = K.defined(TS);
+  ok('a section\u2019s defined abbreviations, and their expansions, are terms', dt.rhd === true && dt.tee === true && Object.keys(dt).some(k => /^rheumat/.test(k)),
+     Object.keys(dt).join(', '));
+  ok('the generic head of an item does not name it', K.itemMatch('some disease', 'Whipple disease') === false && K.itemMatch('whipple', 'Whipple disease') === true);
 }
 
 head('questions from tables');

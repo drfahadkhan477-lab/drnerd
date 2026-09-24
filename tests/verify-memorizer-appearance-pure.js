@@ -121,6 +121,95 @@ head('every theme is readable');
      L.THEMES.map(t => t.id + ':' + goodOf(t.id)).join(' '));
 }
 
+head('contrast and brightness, computed, and readable at every setting');
+{
+  /* The floors, written here as numbers rather than read from FLOORS: a
+     floor lowered in appearance.js must fail this suite, not move it. */
+  const FLOOR = { standard: { text: 7, muted: 4.5, accent: 4.5, edge: 3, meaning: 4.5 }, high: { text: 10, muted: 7, accent: 7, edge: 4.5, meaning: 7 } };
+  const bad = [];
+  let n = 0;
+  L.THEMES.forEach(th => ['standard', 'high'].forEach(c => ['dim', 'standard', 'bright'].forEach(b => {
+    n++;
+    const t = L.variant(th, c, b), s = L.semanticOf(th.mode, c), f = FLOOR[c], id = `${th.id}/${c}/${b}`;
+    const need = (what, fg, bgs, min) => bgs.forEach(g => { const r = ratio(fg, t[g]); if (r < min) bad.push(`${id}: ${what} on ${g} ${r.toFixed(2)} < ${min}`); });
+    need('text', t.ink, ['bg', 'surface', 'surface-2', 'accent-soft'], f.text);
+    need('secondary text', t.muted, ['bg', 'surface', 'surface-2'], f.muted);
+    need('accent text', t.accent, ['bg', 'surface'], f.accent);
+    const bi = ratio(t['accent-ink'], t.accent); if (bi < f.accent) bad.push(`${id}: button text ${bi.toFixed(2)}`);
+    need('control outline', t.edge, ['bg', 'surface'], f.edge);
+    ['good', 'mid', 'bad'].forEach(k => {
+      need(k, s[k], ['surface'], f.meaning);
+      const r = ratio(t.ink, s[k + '-soft']); if (r < 4.5) bad.push(`${id}: text on ${k} tint ${r.toFixed(2)}`);
+    });
+  })));
+  ok('every theme, at every contrast and brightness, clears its floors for every pairing', n === 48 && bad.length === 0, bad.slice(0, 6).join('; ') || `${n} variants`);
+
+  /* No palette today needs its ink, secondary text or button text fitted —
+     only accents are moved — so those fits are a net for a palette added
+     later, and are proven on a made-up one that needs all four. */
+  const weak = { id: 'weak', mode: 'light', t: { bg: '#F2F2F2', surface: '#FFFFFF', 'surface-2': '#E8E8E8', ink: '#777777', muted: '#AAAAAA',
+    line: '#EEEEEE', accent: '#66AAFF', 'accent-soft': '#EEF4FF', 'accent-ink': '#BBDDFF' } };
+  const wv = L.variant(weak, 'standard', 'standard');
+  ok('a palette too faint to read is fitted up to every floor, not drawn as given',
+     ['bg', 'surface', 'surface-2', 'accent-soft'].every(g => ratio(wv.ink, wv[g]) >= 7) && ['bg', 'surface', 'surface-2'].every(g => ratio(wv.muted, wv[g]) >= 4.5) &&
+     ratio(wv.accent, wv.surface) >= 4.5 && ratio(wv['accent-ink'], wv.accent) >= 4.5 && ratio(wv.edge, wv.surface) >= 3,
+     ['ink', 'muted', 'accent', 'accent-ink', 'edge'].map(k => k + ' ' + wv[k]).join(' '));
+  /* Standard/Standard is Systole, untouched — with the one colour that did
+     not clear its floor, named, and shown to need it. */
+  const moved = [];
+  L.THEMES.forEach(th => { const v = L.variant(th, 'standard', 'standard'); Object.keys(th.t).forEach(k => { if (v[k] !== th.t[k]) moved.push(th.id + ' ' + k); }); });
+  ok('at Standard contrast and brightness every ported colour comes through unchanged but one', moved.join() === 'parchment accent', moved.join(', ') || 'none moved');
+  const pa = L.byId('parchment').t;
+  ok('and that one — Parchment’s accent on its own ground — was under 4.5:1 as Systole has it',
+     ratio(pa.accent, pa.bg) < 4.5 && ratio(L.variant(L.byId('parchment'), 'standard', 'standard').accent, pa.bg) >= 4.5,
+     `${ratio(pa.accent, pa.bg).toFixed(2)} → ${ratio(L.variant(L.byId('parchment'), 'standard', 'standard').accent, pa.bg).toFixed(2)}`);
+  /* Contrast is the exception: its rules are drawn at 3:1 already. */
+  ok('a control’s outline is darker than Systole’s hairline, which is under 3:1 in every theme but Contrast',
+     L.THEMES.every(th => (ratio(th.t.line, th.t.surface) < 3) === (th.id !== 'contrast') &&
+       (th.id === 'contrast' || L.variant(th, 'standard', 'standard').edge !== th.t.line)), L.THEMES.map(th => th.id + ' ' + ratio(th.t.line, th.t.surface).toFixed(2)).join(' '));
+
+  /* The settings do something, and the thing they say. */
+  const lumOf = (th, b) => lum(L.variant(th, 'standard', b).bg);
+  ok('Dim darkens the ground and Bright lightens it, in every theme',
+     L.THEMES.every(th => lumOf(th, 'dim') < lumOf(th, 'standard') && lumOf(th, 'standard') < lumOf(th, 'bright')),
+     L.THEMES.filter(th => !(lumOf(th, 'dim') < lumOf(th, 'standard') && lumOf(th, 'standard') < lumOf(th, 'bright'))).map(t => t.id).join(', ') || 'all');
+  ok('brightness moves the grounds, not the text, at Standard contrast',
+     L.THEMES.every(th => ['dim', 'bright'].every(b => L.variant(th, 'standard', b).ink === th.t.ink)));
+  const gain = (th, k) => ratio(L.variant(th, 'high', 'standard')[k], th.t.bg) - ratio(L.variant(th, 'standard', 'standard')[k], th.t.bg);
+  ok('High contrast raises the text and the secondary text against the ground, in every theme',
+     L.THEMES.every(th => gain(th, 'ink') > 0.2 && gain(th, 'muted') > 0.5), L.THEMES.map(th => `${th.id} +${gain(th, 'ink').toFixed(1)}/+${gain(th, 'muted').toFixed(1)}`).join(' '));
+  const hi = L.css({ contrast: 'high' }), dim = L.css({ bright: 'dim' });
+  ok('and the stylesheet the page gets is the one for the setting', hi !== L.css() && dim !== L.css() &&
+     hi.indexOf('--ink:' + L.variant(L.byId('slate'), 'high', 'standard').ink) !== -1 && dim.indexOf('--bg:' + L.variant(L.byId('monitor'), 'standard', 'dim').bg) !== -1);
+  ok('High contrast drops the soft shadows for outlines', /--shadow:none/.test(hi) && !/--shadow:none/.test(L.css()));
+  ok('the meaning colours are by mode only at High contrast too',
+     L.THEMES.every(th => (hi.match(new RegExp(':root\\[data-look="' + th.id + '"\\]\\{[^}]*--good:(#[0-9A-F]{6})', 'i')) || [])[1] === L.SEMANTIC_HIGH[th.mode].good));
+}
+
+head('the hero band is Systole’s');
+{
+  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
+  const blockOf = re => { const m = src.match(re); const t = {}; if (m) for (const x of m[1].matchAll(/--([a-z0-9-]+):([^;]+);/g)) t[x[1]] = x[2].trim(); return t; };
+  const rootDefaults = blockOf(/\n:root\{([\s\S]*?)\n\}/);
+  const lightDefaults = Object.assign({}, rootDefaults, blockOf(/\nhtml\[data-theme="light"\]\{([\s\S]*?)\n\}/));
+  const KEYS = ['hero-a', 'hero-b', 'hero-c', 'hero-accent', 'hero-edge'];
+  const drift = [];
+  let compared = 0;
+  L.THEMES.forEach(th => {
+    const s = th.source ? blockOf(new RegExp('data-palette="' + th.source + '"\\]\\{([\\s\\S]*?)\\n\\}')) : {};
+    const want = Object.assign({}, th.mode === 'light' ? lightDefaults : rootDefaults, s);
+    KEYS.forEach(k => { compared++; if (!th.hero || (want[k] || '').toUpperCase() !== String(th.hero[k]).toUpperCase()) drift.push(`${th.id} ${k}: ${th.hero && th.hero[k]} vs ${want[k]}`); });
+  });
+  ok('every hero colour is Systole’s, palette by palette (Daylight and Midnight from its light and dark defaults)', compared === 40 && drift.length === 0, drift.join('; ') || `${compared} compared`);
+  const weak = [];
+  L.THEMES.forEach(th => ['hero-a', 'hero-b', 'hero-c'].forEach(g => {
+    if (ratio(L.HERO_INK, th.hero[g]) < 7) weak.push(`${th.id} ink on ${g}`);
+    if (ratio(th.hero['hero-accent'], th.hero[g]) < 4.5) weak.push(`${th.id} accent on ${g}`);
+    if (ratio(L.heroMuted(th), th.hero[g]) < 4.5) weak.push(`${th.id} muted on ${g}`);
+  }));
+  ok('the hero’s text, accent and secondary text are readable across its whole gradient', weak.length === 0, weak.join('; ') || 'all clear');
+}
+
 head('the stylesheet covers every setting');
 {
   const css = L.css();
@@ -135,9 +224,9 @@ head('the stylesheet covers every setting');
   ok('app.css uses Systole’s type ladder tokens', /--t-body:\s*1rem/.test(appcss) && /--t-lead:\s*1\.1875rem/.test(appcss) && /--t-h4:\s*1\.4375rem/.test(appcss));
   ok('and every var() it uses for colour is one the themes define', (() => {
     const used = [...new Set([...appcss.matchAll(/var\(--([a-z0-9-]+)\)/g)].map(m => m[1]))];
-    const defined = Object.keys(L.THEMES[0].t).concat(Object.keys(L.SEMANTIC.light), ['measure', 'leading', 'font'],
-      [...appcss.matchAll(/--([a-z0-9-]+):/g)].map(m => m[1]));
-    return used.every(u => defined.indexOf(u) !== -1);
+    const defined = [...L.css().matchAll(/--([a-z0-9-]+):/g)].map(m => m[1]).concat([...appcss.matchAll(/--([a-z0-9-]+):/g)].map(m => m[1]));
+    const missing = used.filter(u => defined.indexOf(u) === -1);
+    return missing.length === 0 || (console.log('    undefined: ' + missing.join(', ')), false);
   })());
 }
 
@@ -152,7 +241,16 @@ head('settings come back as known values');
   const el = { setAttribute: (k, v) => { attrs[k] = v; } };
   L.apply({ theme: 'cathlab', size: 'xl' }, el, { getElementById: () => ({}) });
   ok('apply sets one attribute per setting, normalised', attrs['data-look'] === 'cathlab' && attrs['data-size'] === 'xl' && attrs['data-width'] === 'standard' &&
-     attrs['data-hook'] === 'side', JSON.stringify(attrs));
+     attrs['data-hook'] === 'side' && attrs['data-contrast'] === 'standard' && attrs['data-bright'] === 'standard', JSON.stringify(attrs));
+  /* A style element that already exists is rewritten when the setting
+     changes — the first version wrote it once and never again. */
+  const style = { textContent: '' };
+  const d = { getElementById: () => style };
+  L.apply({ theme: 'slate' }, el, d);
+  const first = style.textContent;
+  L.apply({ theme: 'slate', contrast: 'high', bright: 'dim' }, el, d);
+  ok('changing contrast or brightness rewrites the stylesheet in place', first === L.css({}) && style.textContent === L.css({ contrast: 'high', bright: 'dim' }) &&
+     attrs['data-contrast'] === 'high' && attrs['data-bright'] === 'dim');
   ok('isDark follows the theme, and the device under Auto', L.isDark({ theme: 'monitor' }) && !L.isDark({ theme: 'parchment' }) &&
      L.isDark({ theme: 'auto' }, true) && !L.isDark({ theme: 'auto' }, false));
 }
