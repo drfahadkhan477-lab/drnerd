@@ -1143,9 +1143,12 @@ function kindOf(user) {
     const ex = await text(p2, '#agent-latest');
     ok('"explain what reduces preload": the section in one line, and its cause and effect as one sentence', await p2.locator('.turn').last().getAttribute('data-tool') === 'explain' &&
        /Section One Preload/.test(ex) && /In one line/.test(ex) && /Diuretics reduce preload, which raises venous pressure, which leads to oedema of the lungs\./.test(ex), ex.slice(0, 260));
+    await say('explain afterload');
+    const afterTitle = (await p2.locator('.turn').last().locator('.agent-steps').textContent()).replace(/^.*· /, '');
     await say('quiz me on that');
-    ok('"quiz me on that": questions on the same section, answered in the conversation', await p2.locator('.turn').last().getAttribute('data-tool') === 'quiz' &&
-       /Section One Preload/i.test(await text(p2, '#agent-latest .agent-steps')) && await last('.agent-q').count() >= 1 && await last('.agent-q').count() <= 3);
+    ok('"quiz me on that": questions on the section just explained, not the one before, answered in the conversation', await p2.locator('.turn').last().getAttribute('data-tool') === 'quiz' &&
+       /Afterload/.test(afterTitle) && (await p2.locator('.turn').last().locator('.agent-steps').textContent()).endsWith('· ' + afterTitle) &&
+       await last('.agent-q').count() >= 1 && await last('.agent-q').count() <= 3, afterTitle);
     await last('.agent-q').first().locator('.option').first().click();
     ok('an answer there is marked, with the book’s reason', await last('.agent-q').first().locator('.why').count() === 1 && await last('.agent-q').first().locator('.option.right').count() === 1);
     await say('compare preload and afterload');
