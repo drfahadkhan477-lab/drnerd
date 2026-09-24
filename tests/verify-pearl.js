@@ -569,9 +569,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        head was — so the verdict depended on which frames a loaded machine
        happened to sample, and Parchment read 4.48:1 in a 177 s run and passed
        in quieter ones. A frame-independent peak is what makes 42 samples
-       stand for all of them. The .05 sits between the .011 a single-stroke
-       tail measures and the .157 the per-segment one did, over one full
-       cycle of a stand-in waveform. */
+       stand for all of them. Measured on a real build with the per-segment
+       tail restored, every theme failed this: light themes .69-.84, dark
+       .41-.57, a drift of .13 to .15. The single-stroke tail measured .011
+       over a full cycle of a stand-in waveform. The .05 sits between. */
     const drift = contrast.filter(c => !(c.samples > 0 && c.peakHi - c.peakLo < 0.05));
     ok('the trace\'s brightest ink is the same in every frame, so the sample speaks for the cycle',
        drift.length === 0,
