@@ -1626,15 +1626,21 @@ function aiQuestions(c) {
 
 /* ── ASK YOUR BOOK ───────────────────────────────────────────────────────── */
 /* Built once per set of units: over a whole book it reads every sentence. */
+/* One build at a time: opening the Coach and asking at once used to start
+   two, each redrawing the screen — a tap landing in a redraw can be lost. */
 function askIndex() {
   if (ui.askIdx && ui.askFor === ui.docs) return Promise.resolve(ui.askIdx);
+  if (ui.askBuild && ui.askBuildFor === ui.docs) return ui.askBuild;
   ui.askBusy = true; ui.askBusyText = ''; render();
-  return new Promise(function (resolve) {
+  var docs = ui.docs;
+  ui.askBuildFor = docs;
+  ui.askBuild = new Promise(function (resolve) {
     setTimeout(function () {                      /* let "Indexing…" paint first */
-      ui.askIdx = Ask.build(ui.docs); ui.askFor = ui.docs; ui.askBusy = false;
+      ui.askIdx = Ask.build(docs); ui.askFor = docs; ui.askBusy = false; ui.askBuild = null;
       resolve(ui.askIdx);
     }, 30);
   });
+  return ui.askBuild;
 }
 function meaningOn() { return !!LLM.loadConfig().meaning; }
 /* Every section's vector, made once and kept (the vectors store), in the

@@ -1484,6 +1484,9 @@ function kindOf(user) {
     await p2.evaluate(() => Memorizer.importText('Syncope notes', 'Syncope\n\nExertional syncope is a classic symptom of severe aortic stenosis.\nIt calls for prompt valve assessment.'));
     await p2.locator('h1.bar-title', { hasText: 'Syncope notes' }).waitFor(T);
     await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
+    /* precondition: the index rebuilt for the new unit — its redraw can
+       otherwise swallow the click below (CI failed here intermittently) */
+    await p2.waitForFunction(() => { const u = Memorizer.ui; return u.view === 'ask' && !u.askBusy && u.askIdx && u.askFor === u.docs; }, null, T);
     await p2.fill('#ask-q', 'why do people pass out');
     await p2.locator('#ask-go').click();
     await p2.locator('#not-found').waitFor(T);
