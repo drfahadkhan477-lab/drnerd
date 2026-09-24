@@ -510,6 +510,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         setTheme(t.id);
         await new Promise(r => setTimeout(r, 450));
         let worst = Infinity, best = -Infinity, lit = 0, samples = 0;
+        let peakLo = Infinity, peakHi = -Infinity;
         for (let k = 0; k < PEARLS; k++) {
           if (k) {                       /* a different pearl, same theme */
             pearlCache = null; goHome(); render();
@@ -529,6 +530,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
             await frame();
             const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
             samples++;
+            let peak = 0;
+            for (let i = 3; i < d.length; i += 4) if (d[i] > peak) peak = d[i];
+            if (peak / 255 < peakLo) peakLo = peak / 255;
+            if (peak / 255 > peakHi) peakHi = peak / 255;
             for (let i = 0; i < d.length; i += 4) {
               const a = (d[i + 3] / 255) * op;
               if (a < 0.02) continue;
@@ -540,7 +545,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
           }
         }
         out.push({ theme: t.id, worst: +worst.toFixed(2),
-                   spread: +(best - worst).toFixed(2), lit, samples });
+                   spread: +(best - worst).toFixed(2), lit, samples,
+                   peakLo: +peakLo.toFixed(3), peakHi: +peakHi.toFixed(3) });
       }
       setTheme('auto');
       return out;
@@ -555,6 +561,21 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('the text clears 4.5:1 over the trace in every theme', under.length === 0,
        under.length ? under.map(c => `${c.theme} ${c.worst}`).join(', ')
                     : `worst ${Math.min(...contrast.map(c => c.worst))}:1`);
+    /* WHY THE SWEEP ABOVE CAN BE BELIEVED. It samples 42 frames of a
+       continuous animation, so its worst is the worst of the whole cycle only
+       if the brightest ink does not depend on the frame. It did: the tail was
+       stroked a segment at a time, overlaps compounded where it folded back
+       on the QRS, and the canvas's peak alpha ran .69 to .84 by where the
+       head was — so the verdict depended on which frames a loaded machine
+       happened to sample, and Parchment read 4.48:1 in a 177 s run and passed
+       in quieter ones. A frame-independent peak is what makes 42 samples
+       stand for all of them. The .05 sits between the .011 a single-stroke
+       tail measures and the .157 the per-segment one did, over one full
+       cycle of a stand-in waveform. */
+    const drift = contrast.filter(c => !(c.samples > 0 && c.peakHi - c.peakLo < 0.05));
+    ok('the trace\'s brightest ink is the same in every frame, so the sample speaks for the cycle',
+       drift.length === 0,
+       (drift.length ? drift : contrast).map(c => `${c.theme} ${c.peakLo}–${c.peakHi}`).join(', '));
     ok('and the trace is visible in every theme, not just legal',
        contrast.every(c => c.lit > 500),
        `least ${Math.min(...contrast.map(c => c.lit))} lit pixels`);

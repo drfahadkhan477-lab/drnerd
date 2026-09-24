@@ -181,15 +181,28 @@ function mountPearlCurrent(){
     const u=((now-t0)%5200)/5200;
     const head=Math.max(1,Math.floor(u*N));
     const trail=Math.max(10,Math.round(N*0.13));
-    ctx.lineWidth=2.1;
-    for(let k=0;k<trail;k++){
-      const i=head-k; if(i<1) break;
-      ctx.globalAlpha=(1-k/trail)*0.30*K;
-      ctx.beginPath();
-      ctx.moveTo(pts[i-1][0],pts[i-1][1]);
-      ctx.lineTo(pts[i][0],pts[i][1]);
-      ctx.stroke();
-    }
+    /* ONE PATH FOR THE TAIL, NOT ONE STROKE PER SEGMENT. Stroked a segment
+       at a time, the round caps overlapped and every overlap compounded: on
+       the QRS, where the tail folds back on itself, three or four segments
+       landed on one pixel and the brightest ink depended on where the head
+       happened to be. Measured over one cycle that moved the canvas's peak
+       alpha from .69 to .84 frame by frame, and Parchment's text contrast
+       with it, to 4.48:1 in a full run. A single stroke paints each pixel
+       once, so the fade comes from a gradient along x instead — the tail
+       runs left to right, so x is the same ordering the index was. */
+    const from=head-trail, s0=Math.max(0,from);
+    const ac=(function(){ ctx.fillStyle=accent; const c=String(ctx.fillStyle);
+      const h=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c);
+      if(h) return [parseInt(h[1],16),parseInt(h[2],16),parseInt(h[3],16)];
+      const m=c.match(/[\d.]+/g); return m&&m.length>=3 ? [+m[0],+m[1],+m[2]] : [2,132,199]; })();
+    const fade=ctx.createLinearGradient(from/N*r.width,0,pts[head][0],0);
+    fade.addColorStop(0,'rgba('+ac.join(',')+',0)');
+    fade.addColorStop(1,'rgba('+ac.join(',')+','+(0.30*K)+')');
+    ctx.globalAlpha=1; ctx.lineWidth=2.1; ctx.strokeStyle=fade;
+    ctx.beginPath(); ctx.moveTo(pts[s0][0],pts[s0][1]);
+    for(let i=s0+1;i<=head;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+    ctx.stroke();
+    ctx.strokeStyle=accent; ctx.fillStyle=accent;
     const hp=pts[head];
     ctx.globalAlpha=.42*K;
     ctx.beginPath(); ctx.arc(hp[0],hp[1],2.2,0,Math.PI*2); ctx.fill();
