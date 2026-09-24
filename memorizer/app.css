@@ -491,3 +491,19 @@ summary.fold-head:hover .fold-btn { color: var(--accent); border-color: currentC
 .recall-answer { border-radius: 1rem; background: var(--good-soft); padding: var(--s-3) var(--s-4); margin: 0 0 var(--s-4); }
 .recall-answer strong { display: block; font-size: var(--t-lead); color: var(--good); }
 .recall-rate { justify-content: space-between; }
+
+/* the Coach as an agent: a conversation */
+.turn { margin: var(--s-4) 0; }
+.coach-says { display: flex; gap: var(--s-3); align-items: flex-start; margin-top: var(--s-2); }
+.coach-avatar.small { width: 2.25rem; height: 2.25rem; flex: none; }
+.bubble.agent ul, .bubble.agent ol { margin: var(--s-2) 0; padding-left: var(--s-5); }
+.agent-steps { font-size: var(--t-tiny); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin: 0 0 var(--s-1); }
+.agent-quiz { list-style: decimal; }
+.agent-q { margin: var(--s-3) 0; }
+.agent-q .q { font-weight: 700; margin: 0 0 var(--s-2); }
+.agent-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--s-3); margin: var(--s-2) 0; }
+.cmp-col { background: var(--surface-2); border-radius: 1rem; padding: var(--s-3); }
+.cmp-col h3 { margin: 0 0 var(--s-2); font-size: var(--t-lead); }
+.cmp-num { margin: .125rem 0; }
+.agent-hook { margin: var(--s-2) 0; }
+.card.earlier { opacity: .85; }

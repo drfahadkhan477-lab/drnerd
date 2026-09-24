@@ -1134,8 +1134,30 @@ function kindOf(user) {
     await p2.locator('#browse [data-kind="treatment"]').click();
     await p2.waitForFunction(() => /Diuretics/.test(document.querySelector('#browse').innerText), null, T);
     ok('the treatment index lists what the book names, with its sections', /Diuretics · 1 section/.test(await p2.locator('#browse').innerText()), (await p2.locator('#browse .index-list').innerText()).slice(0, 120));
-    await p2.fill('#ask-q', 'What reduces preload?');
-    await p2.locator('#ask-go').click();
+    head('the coach as an agent: it picks a tool, uses it on your book, and remembers the topic');
+    const agentBefore = stub.requests.length;
+    const say = async m => { const n = await p2.locator('.turn').count(); await p2.fill('#ask-q', m); await p2.locator('#ask-go').click();
+      await p2.waitForFunction(k => document.querySelectorAll('.turn').length > k, n, T); };
+    const last = sel => p2.locator('.turn').last().locator(sel);
+    await say('explain what reduces preload');
+    const ex = await text(p2, '#agent-latest');
+    ok('"explain what reduces preload": the section in one line, and its cause and effect as one sentence', await p2.locator('.turn').last().getAttribute('data-tool') === 'explain' &&
+       /Section One Preload/.test(ex) && /In one line/.test(ex) && /Diuretics reduce preload, which raises venous pressure, which leads to oedema of the lungs\./.test(ex), ex.slice(0, 260));
+    await say('quiz me on that');
+    ok('"quiz me on that": questions on the same section, answered in the conversation', await p2.locator('.turn').last().getAttribute('data-tool') === 'quiz' &&
+       /Section One Preload/i.test(await text(p2, '#agent-latest .agent-steps')) && await last('.agent-q').count() >= 1 && await last('.agent-q').count() <= 3);
+    await last('.agent-q').first().locator('.option').first().click();
+    ok('an answer there is marked, with the book’s reason', await last('.agent-q').first().locator('.why').count() === 1 && await last('.agent-q').first().locator('.option.right').count() === 1);
+    await say('compare preload and afterload');
+    const cols = await last('.agent-compare .cmp-col h3').allTextContents();
+    ok('"compare preload and afterload": the two sections side by side', cols.length === 2 && /Preload/.test(cols[0]) && /Afterload/.test(cols[1]), JSON.stringify(cols));
+    await say('where am I weakest?');
+    ok('"where am I weakest?" is answered from the sessions', await p2.locator('.turn').last().getAttribute('data-tool') === 'weak');
+    await say('explain zebra migration patterns');
+    ok('a topic the book does not have is said to be missing, not made up', /couldn’t find “zebra migration patterns” in your book/.test(await text(p2, '#agent-latest')));
+    await say('What reduces preload?');
+    ok('and a question is still answered from the book, in the conversation', await p2.locator('.turn').last().getAttribute('data-tool') === 'search' && /Diuretics/.test(await text(p2, '#answer')) &&
+       stub.requests.length === agentBefore, `${stub.requests.length - agentBefore} requests`);
     await p2.locator('#read-more li button').first().click();
     await p2.locator('#big-idea').waitFor(T);
     ok('read more opens that section\u2019s lesson', await p2.evaluate(() => Memorizer.ui.state.phase === 'teach' && Memorizer.ui.docRec.name === 'unit' && Memorizer.ui.state.section === 0));
@@ -1168,7 +1190,8 @@ function kindOf(user) {
         const u = req.messages[1].content; window.__ai.push(u);
         window.__thinkOn = window.__thinkOn || !(req.extra_body && req.extra_body.enable_thinking === false);
         let out = '';
-        if (/Answer the question in 2 to 4/.test(u)) {
+        if (/You route a student/.test(u)) out = /get ready on preload/.test(u) ? '{"tool":"quiz","topic":"preload","topics":[]}' : '{"tool":"prescribe","topic":"x"}';
+        else if (/Answer the question in 2 to 4/.test(u)) {
           const k = (u.split('\n').find(l => /Diuretics reduce preload/.test(l)) || '[1]').match(/^\[(\d+)\]/)[1];
           out = `<think>The passage says 99 mmHg, so I will say that [${k}].</think>Diuretics reduce preload by lowering circulating volume [${k}]. Diuretics reduce preload by 75 percent [${k}]. Nitrates reduce preload too [${k}]. It works well.`;
         } else if (/Explain this section/.test(u)) out = 'Preload is how much the ventricle is stretched before it contracts. Doctors give 40 mg of furosemide.';
@@ -1189,6 +1212,17 @@ function kindOf(user) {
     ok('its summary keeps the sentence that says what the book says, with its citation', /Diuretics reduce preload by lowering circulating volume\. \[\d\]/.test(sumText), sumText.slice(0, 160));
     ok('and drops a made-up number, a drug the passage never names, and a sentence citing nothing — and says so', !/75|Nitrates|works well/.test(sumText) &&
        /3 sentences dropped/.test(sumText), sumText.slice(0, 200));
+    /* With the AI on, it reads the message first; its choice is used only when it names a real tool. */
+    const say2 = async m => { const n = await p2.locator('.turn').count(); await p2.fill('#ask-q', m); await p2.locator('#ask-go').click();
+      await p2.waitForFunction(k => document.querySelectorAll('.turn').length > k, n, T); };
+    await say2('help me get ready on preload');
+    ok('with the AI on, it reads the message: a request the rules would search is understood as a quiz, and says so', await p2.locator('.turn').last().getAttribute('data-tool') === 'quiz' &&
+       /^✨/.test(await text(p2, '#agent-latest .agent-steps')) && /Preload/i.test(await text(p2, '#agent-latest .agent-steps')) &&
+       await p2.evaluate(() => MemAgent.plan('help me get ready on preload', {}).tool) === 'search');
+    await say2('what causes pulmonary oedema');
+    ok('and a tool it makes up is thrown away: the rules decide, and the book answers', await p2.locator('.turn').last().getAttribute('data-tool') === 'search' &&
+       /^🧭/.test(await p2.locator('.turn').last().locator('.agent-steps').innerText()) && await p2.locator('#answer, #not-found').count() === 1,
+       await p2.locator('.turn').last().locator('.agent-steps').innerText());
     await p2.locator('#read-more li button').first().click();
     await p2.locator('#big-idea').waitFor(T);
     ok('the AI tutor is not in the lesson’s flow any more', await p2.locator('main #ai-lesson').count() === 0);
@@ -1215,7 +1249,8 @@ function kindOf(user) {
     await p2.locator('.option[data-i="' + qz[0].answer + '"]').click();
     ok('and the explanation shown is the book\u2019s sentence with its page, not the model\u2019s', /Why: Diuretics reduce preload by lowering circulating volume\./.test(await p2.locator('.why').innerText()) &&
        (await p2.locator('.why .pg').innerText()) === 'p.1');
-    ok('and none of it went over the network', stub.requests.length === aiNet && await p2.evaluate(() => window.__ai.length) === 4);
+    ok('and none of it went over the network', stub.requests.length === aiNet && await p2.evaluate(() => window.__ai.filter(u => !/You route a student/.test(u)).length) === 4,
+       String(await p2.evaluate(() => window.__ai.length)));
     ok('every request asks Qwen3 not to reason aloud; its <think> is removed before checking', await p2.evaluate(() => window.__thinkOn) === false && !/99|think/i.test(sumText));
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#ai-toggle').click();

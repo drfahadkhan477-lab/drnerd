@@ -18,7 +18,7 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -1431,18 +1431,130 @@ function byMeaning(idx, q) {
       });
     });
 }
+/* ── the Coach as an agent (agent.js) ───────────────────────────────────
+   A message is read (by the on-device model when it is on, else by the
+   rules), a tool is chosen and used on the book, and the answer joins the
+   conversation; the topic is remembered for "quiz me on that". */
+function planFor(q) {
+  if (!(aiOn() && LLM.ready())) return Promise.resolve(Agent.plan(q, ui.memory || {}));
+  return LLM.chat('You route messages for a study app. Reply only with JSON.', Agent.planPrompt(q, ui.memory || {}), Agent.PLAN_SCHEMA, 80)
+    .then(function (t) { return Agent.parsePlan(t); }, function () { return null; })
+    .then(function (p) { return p || Agent.plan(q, ui.memory || {}); });
+}
 function askNow(q) {
   ui.askQ = q;
   if (!q.trim()) { ui.askR = null; render(); return; }
+  ui.turns = ui.turns || []; ui.memory = ui.memory || {};
   askIndex().then(function (idx) {
-    if (!meaningOn()) { ui.askR = Ask.ask(idx, q); render(); return; }
-    ui.askBusy = true; ui.askBusyText = 'Searching by meaning…'; render();
-    return byMeaning(idx, q).then(function (m) {
-      ui.askBusy = false; ui.askR = Ask.ask(idx, q, m); render();
-    }, function (e) {
-      ui.askBusy = false; ui.ai.error = 'search by meaning could not run (' + ((e && e.message) || e) + '); searched by words'; ui.askR = Ask.ask(idx, q); render();
+    return planFor(q).then(function (p) {
+      if (p.tool !== 'search') { ui.turns.push(agentTurn(idx, p, q)); render(); return; }
+      /* a search is the reader's own words, unless it only follows on */
+      var query = Agent.plan(q, ui.memory).tool === 'search' ? Agent.plan(q, ui.memory).topic : q;
+      var turn = { q: q, plan: p, query: query };
+      var done = function (r) {
+        ui.askR = r; turn.r = r; ui.turns.push(turn);
+        if (r.found && r.sections.length) ui.memory.topic = idx.sections[r.sections[0]].title;
+        render();
+      };
+      if (!meaningOn()) { done(Ask.ask(idx, query)); return; }
+      ui.askBusy = true; ui.askBusyText = 'Searching by meaning…'; render();
+      return byMeaning(idx, query).then(function (m) {
+        ui.askBusy = false; done(Ask.ask(idx, query, m));
+      }, function (e) {
+        ui.askBusy = false; ui.ai.error = 'search by meaning could not run (' + ((e && e.message) || e) + '); searched by words'; done(Ask.ask(idx, query));
+      });
     });
   });
+}
+/* A tool used on the book: what it found, kept with the turn. */
+function lessonFor(docRec, ci) {
+  var st = ui.sessions && ui.sessions[docRec.id] && ui.sessions[docRec.id].state;
+  return st && st.per && st.per[ci] && st.per[ci].lesson || Coach.lesson(docRec.clusters[ci]);
+}
+function sectionOf(idx, topic) {
+  var i = Agent.findSection(idx, topic);
+  if (i < 0) return null;
+  var sec = idx.sections[i], d = ui.docs.filter(function (x) { return x.id === sec.docId; })[0];
+  return d && d.clusters[sec.ci] ? { sec: sec, doc: d, ci: sec.ci, c: d.clusters[sec.ci], L: lessonFor(d, sec.ci) } : null;
+}
+function agentTurn(idx, p, q) {
+  var t = { q: q, plan: p };
+  if (p.tool === 'compare') {
+    t.rows = (p.topics || []).map(function (x) { return sectionOf(idx, x); }).filter(Boolean);
+    if (t.rows.length === 2 && t.rows[0].sec === t.rows[1].sec) t.rows = t.rows.slice(0, 1);
+    if (t.rows.length) ui.memory.topic = t.rows[t.rows.length - 1].sec.title;
+    return t;
+  }
+  if (/^(?:explain|quiz|mnemonic|numbers|open)$/.test(p.tool)) {
+    t.at = sectionOf(idx, p.topic);
+    if (!t.at) return t;
+    ui.memory.topic = t.at.sec.title;
+    if (p.tool === 'explain') t.explain = Coach.explainSection(t.at.c, t.at.L);
+    if (p.tool === 'quiz') t.quiz = Coach.quiz(t.at.c, t.at.L, t.at.doc.clusters).questions.slice(0, 3).map(function (x) { return { q: x, choice: null }; });
+    if (p.tool === 'numbers') t.sheet = Sheet.sheetOf(t.at.L);
+    if (p.tool === 'open') setTimeout(function () { openDoc(t.at.doc.id, t.at.ci); }, 600);
+  }
+  return t;
+}
+function turnView(t, idx, latest) {
+  var p = t.plan, title = t.at ? t.at.sec.title : t.rows && t.rows.length ? t.rows.map(function (r) { return r.sec.title; }).join('” and “') : '';
+  var body = [];
+  var steps = h('p.agent-steps', p.by === 'ai' ? '✨ ' : '🧭 ', p.tool === 'search' ? 'Searched your book' : 'Used: ' + p.tool, title ? ' · ' + title : '');
+  var open = t.at ? button('Open this section', function () { openDoc(t.at.doc.id, t.at.ci); }, 'chip quiet') : null;
+  var missing = (t.at === null || (t.rows && !t.rows.length)) && p.tool !== 'search';
+  if (missing) body.push(h('p', 'I couldn’t find “' + (p.topic || (p.topics || []).join(', ')) + '” in your book. Try the name of the condition, test or drug.'));
+  else if (p.tool === 'help' || p.tool === 'weak' || p.tool === 'plan' || p.tool === 'review') body.push(coachActions(p.tool));
+  else if (p.tool === 'explain') {
+    var e = t.explain;
+    body.push(e.gist ? h('p', h('strong', 'In one line: '), marked(e.gist)) : null, e.chain ? h('p', h('strong', 'How it works: '), e.chain) : null,
+      e.facts.length ? h('ul', e.facts.map(function (f) { return h('li', f); })) : null,
+      e.hooks.map(function (m) { return h('p', h('strong', 'Remember: '), m.letters.split('').join(' · ') + ' — ' + m.words.join(', ')); }),
+      h('div.chips', open, button('Quiz me on this', function () { askNow('quiz me on that'); }, 'chip quiet'), button('Mnemonics', function () { askNow('mnemonics'); }, 'chip quiet')));
+  } else if (p.tool === 'quiz') {
+    body.push(t.quiz.length ? h('ol.agent-quiz', t.quiz.map(function (x, k) {
+      var q = x.q, answered = x.choice != null;
+      return h('li.agent-q', { 'data-k': String(k) }, q.quote ? h('blockquote.quote', q.quote) : null, h('p.q', q.question),
+        h('div.options', q.options.map(function (o, i) {
+          return h('button.option' + (answered ? (i === q.answer ? '.right' : i === x.choice ? '.wrong' : '.dim') : ''), { type: 'button', disabled: answered ? true : null, 'data-i': String(i),
+            onclick: function () { x.choice = i; render(); } }, h('span.opt-letter', LETTERS[i]), h('span.opt-text', o));
+        })),
+        answered ? h('p.why' + (x.choice === q.answer ? '.good' : '.bad'), h('strong', x.choice === q.answer ? '✓ Right. ' : '✗ It is ' + q.options[q.answer] + '. '), marked(q.explain), ' ', page(q.page)) : null);
+    })) : h('p', 'This section is too short to ask good questions of.'), h('div.chips', open));
+  } else if (p.tool === 'mnemonic') {
+    var ms = t.at.L.mnemonics || [];
+    body.push(ms.length ? ms.map(function (m) { return h('div.agent-hook', h('strong', m.title), h('p.hook-script', m.letters.split('').join(' · ')), h('p', m.words.join(', '))); })
+      : h('p', 'This section has no list to make a mnemonic of.'), h('div.chips', open));
+  } else if (p.tool === 'numbers') {
+    body.push(t.sheet.numbers.length ? numbersCard(t.sheet) : h('p', 'This section gives no numbers to learn.'), h('div.chips', open));
+  } else if (p.tool === 'compare') {
+    body.push(h('div.agent-compare', t.rows.map(function (r) {
+      var sh = Sheet.sheetOf(r.L), m = (r.L.mnemonics || [])[0];
+      return h('div.cmp-col', h('h3', r.sec.title), h('p', marked(sh.bigIdea)),
+        [].concat.apply([], sh.numbers.map(function (n) { return n.tiles.map(function (x) { return h('p.cmp-num', h('strong', x.value), ' ' + x.label); }); })),
+        m ? h('p.muted', m.title + ': ' + m.letters.split('').join(' · ')) : null,
+        button('Open', function () { openDoc(r.doc.id, r.ci); }, 'chip quiet'));
+    })), t.rows.length === 2 ? h('div.chips', button('🖼 As a chart', function () {
+      showFigure(Figure.compareChart('Compare', t.rows.map(function (r) { return { title: r.sec.title, sheet: Sheet.sheetOf(r.L), mnemonic: (r.L.mnemonics || [])[0] }; })), 'Comparison chart');
+    }, 'chip quiet')) : null);
+  } else if (p.tool === 'open') body.push(h('p.muted', 'Opening it now…'));
+  return h('div.turn', { 'data-tool': p.tool },
+    h('div.you', h('div.bubble.mine', t.q)),
+    p.tool === 'search' ? steps : h('div.coach-says', h('div.coach-avatar.small', mascot()),
+      h('div.bubble.agent' + (latest ? '.latest' : ''), { id: latest ? 'agent-latest' : null }, steps, h('p', Agent.say(p, title)), body)));
+}
+function coachActions(tool) {
+  var spots = Home.weakSpots(ui.docs, ui.sessions || {}, ui.cards, Session.mastery, 3);
+  var due = Session.dueCards(ui.cards, today()).length;
+  var cur = Home.current(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), ui.sessions || {});
+  if (tool === 'help') return h('div.chips', ['Explain preload', 'Quiz me on heart failure', 'Compare aortic stenosis and aortic regurgitation', 'What should I study today?', 'Where am I weakest?']
+    .map(function (x) { return button(x, function () { askNow(x); }, 'chip quiet'); }));
+  if (tool === 'review') return due ? button('Review my ' + due + ' due card' + (due === 1 ? '' : 's'), function () { startReview(); }, 'chip', { id: 'agent-review' }) : h('p', 'No cards are due today.');
+  if (tool === 'weak') return spots.length ? h('ul', spots.map(function (w) { return h('li', button(w.title, function () { openDoc(w.docId, w.cluster); }, 'chip quiet')); }))
+    : h('p', 'Nothing yet: drill a section or two and I’ll know where you are shaky.');
+  return h('ol', [cur ? h('li', button('Carry on with ' + cur.doc.name, function () { openDoc(cur.doc.id); }, 'chip quiet')) : null,
+    spots[0] ? h('li', button('Relearn your weakest: ' + spots[0].title, function () { openDoc(spots[0].docId, spots[0].cluster); }, 'chip quiet')) : null,
+    due ? h('li', button('Review ' + due + ' due card' + (due === 1 ? '' : 's'), function () { startReview(); }, 'chip quiet')) : null].filter(Boolean).concat(
+    !cur && !spots[0] && !due ? [h('li', 'Add a chapter and start its first section.')] : []));
 }
 function sectionLink(idx, secId, extra) {
   var sec = idx.sections[secId];
@@ -1516,17 +1628,23 @@ function viewAsk() {
     backBar('Your coach', function () { leave('library'); }),
     h('div.coach-intro',
       h('div.coach-avatar', mascot()),
-      h('div.bubble', h('p', h('strong', 'I’m your coach. '), 'Ask me anything about your book and I’ll answer in its own words, with the page — or tell you it isn’t there. ' +
+      h('div.bubble', h('p', h('strong', 'I’m your coach. '), 'Ask me anything about your book, or tell me what to do — “explain preload”, “quiz me on heart failure”, “compare aortic stenosis and regurgitation”, “what should I study?”. I answer from your book, with the page, or say it isn’t there. ' +
         (ai ? 'My on-device AI can summarise and explain, and everything it says is checked against the book.' : 'Turn on the on-device AI in Settings and I can also summarise and explain.')),
         h('p.muted', 'Search: ' + (meaning ? 'by words and by meaning.' : 'by words. Turn on search by meaning in Settings to find ideas phrased differently.')),
         h('div.chips.suggest', suggest))),
     h('div.card.ask-card', h('div.row.ask-row', input, button('Ask', function () { askNow(doc.getElementById('ask-q').value); }, 'primary', { id: 'ask-go' })),
       h('p.muted', 'Found on this device, never sent anywhere.')),
-    r ? h('div.you', h('div.bubble.mine', r.question)) : null,
+    (ui.turns || []).map(function (t, k, all) {
+      var latest = k === all.length - 1;
+      /* the latest search shows its answer in full; an earlier one, its first lines */
+      if (t.plan.tool === 'search' && t.r !== ui.askR) return [turnView(t, idx, false), h('div.card.earlier', h('p.muted', t.r.found ? 'From your book: ' : 'Not found in your book.'),
+        t.r.found ? h('ul.quotes', t.r.groups.reduce(function (a, g) { return a.concat(g.items); }, []).slice(0, 2).map(function (it) { return h('li', marked(it.text), ' ', page(it.page)); })) : null)];
+      return t.plan.tool === 'search' ? [turnView(t, idx, latest), typeof aiBox !== 'undefined' ? aiBox : null, answer] : turnView(t, idx, latest);
+    }),
     ui.askBusy ? h('div.card.busy', { role: 'status' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', ui.askBusyText || 'Indexing your book (once)…')) : null,
     ui.ai.error && ui.view === 'ask' ? h('p.warn', ui.ai.error) : null,
     !ui.docs.length ? h('div.card.empty', h('p', 'Add a chapter or a book first; then ask it anything.')) : null,
-    typeof aiBox !== 'undefined' ? aiBox : null, answer, browse);
+    browse);
 }
 
 /* ── SETTINGS ────────────────────────────────────────────────────────────── */
