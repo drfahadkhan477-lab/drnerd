@@ -37,6 +37,7 @@ const VIEWS = [
   { id:'right',   label:'Right heart', hint:'The right side against the left — where S1 and S2 split' },
   { id:'curves',  label:'Curves',   hint:'Frank-Starling, and Guyton at the point they cross' },
   { id:'conduction', label:'Conduction', hint:'Which of the heart’s real activation points have fired, in order' },
+  { id:'coronary', label:'Coronary', hint:'Why the left ventricle is perfused in diastole — it squeezes its own arteries shut' },
 ];
 
 const TAU = Math.PI * 2;
@@ -86,6 +87,7 @@ function mount(canvas, opts) {
     wiggers: { L: 40, R: 12 },
     flow:    { L: 44, R: 14 },
     right:   { L: 40, R: 14 },
+    coronary: { L: 44, R: 14 },
   };
 
   /* ── palette ──────────────────────────────────────────────────────────────
@@ -791,6 +793,86 @@ function mount(canvas, opts) {
          B.x, H - 14, p.dim, 10, 500);
   }
 
+  /* ════════════════════ view: coronary ══════════════════════════════════════
+     Two vessel trees that glow with the flow Physio.coronaryFlow gives for this
+     instant, over the same two flow traces the Flow view draws. The point is
+     one board fact made visible: the left ventricle compresses its own
+     arteries in systole, so left coronary flow arrives in diastole — and the
+     right, perfusing a thin low-pressure ventricle, keeps flowing through it.
+
+     BOTH TREES SHARE ONE SCALE. Normalising each side to its own range would
+     make the right coronary's small swing look as dramatic as the left's
+     collapse, which teaches the opposite of the physiology. So brightness is
+     flow over the larger of the two peaks, and the right tree's steadiness is
+     what the eye sees.
+
+     The branching is coronaryTree.js's, and its own header says it is not
+     anatomy: a vessel-like structure for the pulse to travel across. It is
+     looked up here, not captured at mount(), for the reason drawConduction
+     gives — six other views must not go dark for want of it. */
+  let corPeak = null;
+  function coronaryPeak() {
+    if (corPeak != null) return corPeak;
+    let m = 0;
+    for (let i = 0; i < 400; i++) {
+      const t = i / 400;
+      m = Math.max(m, Ph.coronaryFlow(t, 'left'), Ph.coronaryFlow(t, 'right'));
+    }
+    return (corPeak = m);
+  }
+  function drawCoronary(p) {
+    const CT = root.CoronaryTree;
+    if (!CT) {
+      text('Coronary view needs coronaryTree.js loaded first.', 16, H / 2, p.dim, 11, 500);
+      return;
+    }
+    const { L, R } = MARGINS.coronary;
+    const TOP = 28, stripH = Math.max(70, Math.min(120, H * 0.26)), BOT = 34;
+    const Bs = box(L, H - BOT - stripH, W - L - R, stripH);
+    const Bt = box(L, TOP + 8, W - L - R, Bs.y - TOP - 30);
+    const peak = coronaryPeak();
+
+    text('Coronary flow', L, TOP - 12, p.ink, 11.5, 800);
+    text('brightness is the flow at this instant, on one scale for both', W - R, TOP - 12, p.dim, 9.5, 500, 'right');
+
+    const sides = [
+      { side: 'left',  label: 'Left coronary',  col: p.cor, cx: Bt.x + Bt.w * 0.27 },
+      { side: 'right', label: 'Right coronary', col: p.rv,  cx: Bt.x + Bt.w * 0.73 },
+    ];
+    for (const sd of sides) {
+      const I = CT.intensity(Ph.coronaryFlow(S.t, sd.side), 0, peak);
+      const segs = CT.tree({ x: sd.cx, y: Bt.b - 18, angle: -Math.PI / 2,
+                             length: Bt.h * 0.26, maxDepth: 5, spread: 0.42 });
+      ctx.save();
+      ctx.beginPath(); ctx.rect(Bt.x, Bt.y, Bt.w, Bt.h); ctx.clip();
+      ctx.lineCap = 'round'; ctx.strokeStyle = sd.col;
+      ctx.shadowColor = sd.col; ctx.shadowBlur = 14 * I;
+      for (const g of segs) {
+        ctx.globalAlpha = 0.16 + 0.84 * I;
+        ctx.lineWidth = Math.max(0.9, 4.4 - g.depth * 0.7);
+        ctx.beginPath(); ctx.moveTo(g.x1, g.y1); ctx.lineTo(g.x2, g.y2); ctx.stroke();
+      }
+      ctx.restore();
+      text(sd.label, sd.cx, Bt.b - 4, sd.col, 10.5, 700, 'center');
+      text(Math.round(I * 100) + '% of peak', sd.cx, Bt.b + 10, p.muted, 9.5, 600, 'center', true);
+    }
+
+    /* The same traces the Flow view draws, on the same scale as the glow. */
+    ctx.save();
+    ctx.fillStyle = p.ink; ctx.globalAlpha = .05;
+    ctx.fillRect(xAt(Bs, Ph.T.mc), Bs.y, (Ph.T.ac - Ph.T.mc) * Bs.w, Bs.h);
+    ctx.restore();
+    text('systole', xAt(Bs, (Ph.T.mc + Ph.T.ac) / 2), Bs.b - 9, p.dim, 9.5, 600, 'center');
+    trace(Bs, t => Ph.coronaryFlow(t, 'left'), 0, peak, p.cor, 2.2, { fill: .14 });
+    trace(Bs, t => Ph.coronaryFlow(t, 'right'), 0, peak, p.rv, 1.9, { dash: [5, 3] });
+    cursor(Bs, p);
+
+    const d = Ph.derived(secs());
+    text((d.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole. ' +
+         'A faster rate shortens diastole, and with it the left ventricle\'s perfusion time.',
+         L, H - 14, p.dim, 10, 500);
+  }
+
   /* ── draw ─────────────────────────────────────────────────────────────── */
   function draw() {
     if (!fit()) return;
@@ -803,6 +885,7 @@ function mount(canvas, opts) {
     else if (S.view === 'right') drawRight(p);
     else if (S.view === 'curves') drawCurves(p);
     else if (S.view === 'conduction') drawConduction(p);
+    else if (S.view === 'coronary') drawCoronary(p);
     else drawWiggers(p);
   }
 

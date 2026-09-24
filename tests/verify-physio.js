@@ -197,9 +197,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      loop ran. Adding or removing a view should be a decision this line has
      to be told about — which is what just happened, and it worked. Order is
      ignored, duplicates are not. */
-  const EXPECTED_VIEWS = ['conduction', 'curves', 'flow', 'pv', 'right', 'wiggers'];
+  /* Seven since Coronary joined — told here on purpose, which is what pinning
+     the ids is for: a view added without this line moving fails loudly. */
+  const EXPECTED_VIEWS = ['conduction', 'coronary', 'curves', 'flow', 'pv', 'right', 'wiggers'];
   const chipsSorted = mounted.chips.slice().sort();
-  ok('the six views each have one chip, and there are no others',
+  ok('the seven views each have one chip, and there are no others',
      JSON.stringify(chipsSorted) === JSON.stringify(EXPECTED_VIEWS),
      mounted.chips.join(', ') || 'no chips');
 

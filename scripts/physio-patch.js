@@ -64,7 +64,8 @@ patch('lab: build it',
 `/* The cardiac cycle. Remembered across sessions like every other lab choice,
    because someone working through the PV loop comes back to the PV loop. */
 const PHYSIO_VIEWS=[['wiggers','Wiggers'],['pv','PV loop'],['flow','Flow'],
-                    ['right','Right heart'],['curves','Curves'],['conduction','Conduction']];
+                    ['right','Right heart'],['curves','Curves'],['conduction','Conduction'],
+                    ['coronary','Coronary']];
 let physio=null;
 let physioView=(()=>{try{const v=localStorage.getItem('accsap12.physioview');
   return PHYSIO_VIEWS.some(x=>x[0]===v)?v:'wiggers';}catch(_){return 'wiggers';}})();
@@ -104,6 +105,12 @@ function physioNoteHtml(){
       ventricle is not: the AV node deliberately slows conduction so the atria finish emptying
       into the ventricles before they contract, which is what the isoelectric PR segment actually
       is. Lose that delay (WPW's accessory pathway) and you lose the coordination it buys.\`;
+  if(physioView==='coronary')
+    return \`<b>The left ventricle squeezes its own arteries.</b> Intramyocardial pressure in
+      systole compresses the left coronary bed, so most left coronary flow arrives in diastole — and
+      the subendocardium, where that compression is greatest, is where ischaemia shows first. The
+      right coronary keeps flowing through systole because RV pressure stays low. Tachycardia
+      shortens diastole, and with it the left ventricle's perfusion time.\`;
   const ph=Physio.phaseAt(physio?physio.time():0);
   return \`<b>\${e(ph.name)}.</b> \${e(ph.blurb)}\`;
 }
