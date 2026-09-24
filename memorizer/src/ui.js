@@ -18,7 +18,7 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -1121,7 +1121,7 @@ function aiQuestions(c) {
 /* Built once per set of units: over a whole book it reads every sentence. */
 function askIndex() {
   if (ui.askIdx && ui.askFor === ui.docs) return Promise.resolve(ui.askIdx);
-  ui.askBusy = true; render();
+  ui.askBusy = true; ui.askBusyText = ''; render();
   return new Promise(function (resolve) {
     setTimeout(function () {                      /* let "Indexing…" paint first */
       ui.askIdx = Ask.build(ui.docs); ui.askFor = ui.docs; ui.askBusy = false;
@@ -1129,10 +1129,64 @@ function askIndex() {
     }, 30);
   });
 }
+function meaningOn() { return !!LLM.loadConfig().meaning; }
+/* Every section's vector, made once and kept (the vectors store), in the
+   order of idx.sections. */
+function sectionVectors(idx) {
+  if (ui.secVecs && ui.secVecsFor === idx) return Promise.resolve(ui.secVecs);
+  var byDoc = {}, need = [];
+  return Promise.all(ui.docs.map(function (d) { return Store.get('vectors', d.id); })).then(function (recs) {
+    ui.docs.forEach(function (d, k) {
+      var r = recs[k];
+      if (r && r.model === LLM.EMBED.id && r.vecs.length === d.clusters.length) byDoc[d.id] = r.vecs;
+      else need.push(d);
+    });
+    var total = need.reduce(function (n, d) { return n + d.clusters.length; }, 0), done = 0;
+    return need.reduce(function (p, d) {
+      return p.then(function () {
+        return LLM.embed(d.clusters.map(function (c) { return c.title + '. ' + c.text; }), function (n) {
+          ui.askBusyText = 'Reading your units for meaning (once): ' + (done + n) + ' of ' + total + ' sections…'; render();
+        });
+      }).then(function (vecs) {
+        done += vecs.length; byDoc[d.id] = vecs;
+        return Store.put('vectors', { id: d.id, model: LLM.EMBED.id, vecs: vecs });
+      });
+    }, Promise.resolve());
+  }).then(function () {
+    ui.secVecs = idx.sections.map(function (s) { return (byDoc[s.docId] || [])[s.ci] || null; });
+    ui.secVecsFor = idx; ui.sentVecs = {};
+    return ui.secVecs;
+  });
+}
+/* Sentences found by meaning: the best sections' sentences, embedded now
+   (and remembered), kept above vec.js's floor. */
+function byMeaning(idx, q) {
+  var qv;
+  return LLM.startEmbed(function (p) { ui.askBusyText = 'Starting search by meaning: ' + Math.round(100 * p) + '%'; render(); })
+    .then(function () { return sectionVectors(idx); })
+    .then(function (secVecs) { return LLM.embed([Vec.QUERY_PREFIX + q]).then(function (v) { qv = v[0]; return secVecs; }); })
+    .then(function (secVecs) {
+      var ids = [];
+      Vec.top(qv, secVecs, Vec.TOP_SECTIONS).forEach(function (t) { for (var i = idx.sections[t.i].first; i < idx.sections[t.i].last; i++) ids.push(i); });
+      var missing = ids.filter(function (i) { return !ui.sentVecs[i]; });
+      return LLM.embed(missing.map(function (i) { return idx.sents[i].text; })).then(function (vs) {
+        missing.forEach(function (i, k) { ui.sentVecs[i] = vs[k]; });
+        return Vec.keep(ids.map(function (i) { return { key: i, i: i, cos: Vec.cosine(qv, ui.sentVecs[i]) }; }));
+      });
+    });
+}
 function askNow(q) {
   ui.askQ = q;
   if (!q.trim()) { ui.askR = null; render(); return; }
-  askIndex().then(function (idx) { ui.askR = Ask.ask(idx, q); render(); });
+  askIndex().then(function (idx) {
+    if (!meaningOn()) { ui.askR = Ask.ask(idx, q); render(); return; }
+    ui.askBusy = true; ui.askBusyText = 'Searching by meaning…'; render();
+    return byMeaning(idx, q).then(function (m) {
+      ui.askBusy = false; ui.askR = Ask.ask(idx, q, m); render();
+    }, function (e) {
+      ui.askBusy = false; ui.ai.error = 'search by meaning could not run (' + ((e && e.message) || e) + '); searched by words'; ui.askR = Ask.ask(idx, q); render();
+    });
+  });
 }
 function sectionLink(idx, secId, extra) {
   var sec = idx.sections[secId];
@@ -1141,7 +1195,11 @@ function sectionLink(idx, secId, extra) {
 }
 function viewAsk() {
   var idx = ui.askIdx, r = ui.askR;
+  /* What is typed is kept as it is typed: the screen is redrawn when the
+     index finishes building, and the first version lost a question typed
+     before that (the browser suite caught it once a unit was added). */
   var input = h('input', { id: 'ask-q', type: 'search', value: ui.askQ, placeholder: 'e.g. How is aortic stenosis treated?', 'aria-label': 'Your question',
+    oninput: function () { ui.askQ = input.value; },
     onkeydown: function (e) { if (e.key === 'Enter') askNow(input.value); } });
   var answer = null;
   if (r && idx) {
@@ -1162,7 +1220,8 @@ function viewAsk() {
       r.groups.map(function (g) {
         return [h('h3.arranged', g.heading), h('ul.quotes', g.items.map(function (it) {
           var sec = idx.sections[it.sec];
-          return h('li', h('p.quote-text', marked(it.text)), h('span.src', (sec.book || sec.chapter) + ' · p. ' + it.page));
+          return h('li', h('p.quote-text', marked(it.text)), h('span.src', (sec.book || sec.chapter) + ' · p. ' + it.page),
+            it.by === 'meaning' ? h('span.tag.meaning-tag', ' found by meaning') : null);
         }))];
       }),
       h('h3', 'Read more'), h('ul.read-more', { id: 'read-more' }, r.sections.map(function (s) { return sectionLink(idx, s); })))
@@ -1186,9 +1245,10 @@ function viewAsk() {
   }
   return h('main.wrap.ask',
     backBar('Ask your book', function () { leave('library'); }),
-    h('div.card', h('div.row.ask-row', input, button('Ask', function () { askNow(input.value); }, 'primary', { id: 'ask-go' })),
+    h('div.card', h('div.row.ask-row', input, button('Ask', function () { askNow(doc.getElementById('ask-q').value); }, 'primary', { id: 'ask-go' })),
       h('p.muted', 'Answers are your book’s own sentences, each with its page — found on this device, never sent anywhere.')),
-    ui.askBusy ? h('div.card.busy', { role: 'status' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', 'Indexing your book (once)…')) : null,
+    ui.askBusy ? h('div.card.busy', { role: 'status' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', ui.askBusyText || 'Indexing your book (once)…')) : null,
+    ui.ai.error && ui.view === 'ask' ? h('p.warn', ui.ai.error) : null,
     !ui.docs.length ? h('div.card.empty', h('p', 'Add a chapter or a book first; then ask it anything.')) : null,
     typeof aiBox !== 'undefined' ? aiBox : null, answer, browse);
 }
@@ -1277,9 +1337,15 @@ function aiSettingsCard() {
     h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr; the model itself comes from Hugging Face through that engine, which does not check it against a hash, and is kept in this browser\u2019s cache.'),
     h('div.row', button(c.on ? 'Turn off' : 'Turn on', function () {
       var on = !c.on;
-      LLM.saveConfig({ on: on, model: model.value });
+      LLM.saveConfig({ on: on, model: model.value, meaning: c.meaning });
       if (on) aiJob('Downloading and starting the model (once)…', function () { return true; }); else render();
     }, c.on ? 'quiet' : 'primary', { id: 'ai-toggle' }), h('span.muted', { id: 'ai-status', role: 'status' }, ui.ai.busy || ui.ai.status || (c.on ? (LLM.ready() ? 'Ready.' : 'On — starts when first used.') : 'Off.'))),
+    h('h3', 'Search by meaning'),
+    h('p', 'Ask finds your book\u2019s sentences by their words; this finds them by what they mean too — "why do people pass out" finds "exertional syncope". A small model (' + LLM.EMBED.label + ', about ' + LLM.EMBED.mb + ' MB, ' + LLM.EMBED.licence +
+      ') reads each section once, on this device. The answers are still your book\u2019s own sentences with their pages.'),
+    h('div.row', button(c.meaning ? 'Turn off' : 'Turn on', function () {
+      LLM.saveConfig({ on: c.on, model: c.model, meaning: !c.meaning }); render();
+    }, c.meaning ? 'quiet' : 'primary', { id: 'meaning-toggle' }), h('span.muted', c.meaning ? 'On.' : 'Off.')),
     ui.ai.error ? h('p.warn', { id: 'ai-error' }, 'The on-device AI could not run: ' + ui.ai.error) : null);
 }
 

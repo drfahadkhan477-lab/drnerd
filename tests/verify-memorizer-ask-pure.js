@@ -135,6 +135,24 @@ head('what kind of answer is wanted');
      sym.groups.map(g => g.heading).join());
 }
 
+head('merged with search by meaning');
+{
+  const syn = idx.sents.findIndex(s => /^Exertional syncope/.test(s.text));
+  const q = 'why do people pass out';
+  ok('a question sharing no word with the book finds nothing by words', A.ask(idx, q).found === false);
+  const m = A.ask(idx, q, [{ i: syn, cos: 0.6 }]);
+  const it = m.groups.flatMap(g => g.items);
+  ok('found by meaning, it is the book\u2019s sentence with its page, marked as found by meaning', m.found && it.length === 1 && it[0].text === idx.sents[syn].text &&
+     it[0].page === idx.sents[syn].page && it[0].by === 'meaning', JSON.stringify(it));
+  const plain = A.ask(idx, 'How is aortic stenosis treated?');
+  ok('with nothing found by meaning, the answer is exactly the word search\u2019s', JSON.stringify(A.ask(idx, 'How is aortic stenosis treated?', [])) === JSON.stringify(plain));
+  const valve = idx.sents.findIndex(s => /^Valve replacement/.test(s.text));
+  const both = A.ask(idx, 'How is aortic stenosis treated?', [{ i: syn, cos: 0.62 }, { i: valve, cos: 0.6 }]).groups.flatMap(g => g.items);
+  ok('a sentence found both ways ranks first, and one found by meaning alone joins the answer', both.slice().sort((a, b) => b.score - a.score)[0].text === idx.sents[valve].text &&
+     both.some(x => x.text === idx.sents[syn].text && x.by === 'meaning') && both.filter(x => x.by === 'words').length === plain.groups.flatMap(g => g.items).length,
+     JSON.stringify(both.map(x => [x.text.slice(0, 20), x.by, x.score])));
+}
+
 head('arranged under headings, not rewritten');
 {
   const h = t => A.headingOf(t);

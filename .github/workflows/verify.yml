@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 50 suites that are pure Node with no Playwright and no
+#   logic        the 51 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -231,10 +231,12 @@ jobs:
         run: node tests/verify-memorizer-home-pure.js
       - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (32 checks)
         run: node tests/verify-memorizer-book-pure.js
-      - name: Memorizer — asking your book answers in its own sentences, with pages, or says nothing was found (33 checks)
+      - name: Memorizer — asking your book answers in its own sentences, with pages, or says nothing was found (37 checks)
         run: node tests/verify-memorizer-ask-pure.js
       - name: Memorizer — the on-device AI says nothing the book does not (24 checks)
         run: node tests/verify-memorizer-ground-pure.js
+      - name: Memorizer — search by meaning, its measured floor, and its merge with search by words (14 checks)
+        run: node tests/verify-memorizer-vec-pure.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

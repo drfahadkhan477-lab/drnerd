@@ -32,6 +32,10 @@ var MODELS = [
   { id: 'gemma3-1b-it-q4f16_1-MLC', label: 'Gemma 3 1B (smaller)', mb: 711, licence: 'Gemma Terms of Use' },
 ];
 var CFG_KEY = 'memorizer.llm.v1';
+/* Search by meaning: Snowflake's arctic-embed-s (Apache-2.0, 384
+   dimensions), about 130 MB, through the same checked engine. The -b4 build
+   takes four texts at a time and needs the least GPU memory. */
+var EMBED = { id: 'snowflake-arctic-embed-s-q0f32-MLC-b4', label: 'arctic-embed-s', mb: 130, licence: 'Apache-2.0', batch: 4, words: 300 };
 
 function loadConfig() {
   try { var c = JSON.parse(root.localStorage.getItem(CFG_KEY) || 'null'); if (c && c.model) return c; } catch (_) {}
@@ -60,6 +64,34 @@ function loadLib() {
   });
   libP.catch(function () { libP = null; });
   return libP;
+}
+
+var embedder = null;
+/* Tests hand in a function from texts to vectors. */
+function useEmbedder(fn) { embedder = fn; }
+function embedReady() { return !!embedder; }
+function startEmbed(onProgress) {
+  if (embedder) return Promise.resolve();
+  return loadLib().then(function (lib) {
+    return lib.CreateMLCEngine(EMBED.id, { initProgressCallback: function (p) { if (onProgress) onProgress(p.progress || 0, p.text || ''); } });
+  }).then(function (e) {
+    embedder = function (texts) { return e.embeddings.create({ input: texts }).then(function (r) { return r.data.map(function (d) { return d.embedding; }); }); };
+  });
+}
+/* Texts → vectors, a batch at a time, each text cut to the model's reach. */
+function embed(texts, onBatch) {
+  if (!embedder) return Promise.reject(new Error('search by meaning is not running'));
+  var out = [], cut = texts.map(function (t) { return String(t).split(/\s+/).slice(0, EMBED.words).join(' '); });
+  var chain = Promise.resolve();
+  for (var i = 0; i < cut.length; i += EMBED.batch) {
+    (function (k) {
+      chain = chain.then(function () { return embedder(cut.slice(k, k + EMBED.batch)); }).then(function (v) {
+        v.forEach(function (x) { out.push(Array.prototype.slice.call(x)); });
+        if (onBatch) onBatch(out.length, cut.length);
+      });
+    })(i);
+  }
+  return chain.then(function () { return out; });
 }
 
 var engine = null, engineModel = null;
@@ -115,7 +147,7 @@ function parseQuestions(text) {
   } catch (_) { return []; }
 }
 
-var MemLLM = { WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
+var MemLLM = { EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
                loadLib: loadLib, useEngine: useEngine, ready: ready, start: start, chat: chat, SYSTEM: SYSTEM,
                summaryPrompt: summaryPrompt, plainPrompt: plainPrompt, analogyPrompt: analogyPrompt, questionsPrompt: questionsPrompt,
                QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions };

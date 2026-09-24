@@ -900,7 +900,11 @@ function kindOf(user) {
     await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
     await p2.locator('#ask-q').waitFor(T);
     await p2.locator('#browse').waitFor(T);
+    /* The screen redraws when the index is built; a question typed before
+       that must survive it. Forced here, not left to timing. */
     await p2.fill('#ask-q', 'What reduces preload?');
+    await p2.evaluate(() => Memorizer.render());
+    ok('a question typed survives the screen being redrawn', (await p2.locator('#ask-q').inputValue()) === 'What reduces preload?');
     await p2.locator('#ask-go').click();
     await p2.locator('#answer, #not-found').first().waitFor(T);
     const quotes = await p2.$$eval('#answer ul.quotes li', ls => ls.map(l => ({ text: l.querySelector('.quote-text').textContent, src: l.querySelector('.src').textContent })));
@@ -1000,6 +1004,47 @@ function kindOf(user) {
     await p2.locator('#ask-go').click();
     await p2.locator('#answer').waitFor(T);
     ok('turned off, it offers nothing', await p2.locator('#ai-answer').count() === 0);
+
+    head('search by meaning: the right sentence with none of the question\u2019s words');
+    /* A stand-in for the embedding model: a vector per concept. */
+    await p2.evaluate(() => {
+      const C = [/faint|syncope|pass out/i, /preload|stretch/i, /diuretic/i];
+      window.__emb = 0; window.__batch = 0;
+      MemLLM.useEmbedder(async texts => { window.__emb += texts.length; window.__batch = Math.max(window.__batch, texts.length); return texts.map(t => C.map(r => (r.test(t) ? 1 : 0)).concat([0.2])); });
+    });
+    await p2.evaluate(() => Memorizer.importText('Syncope notes', 'Syncope\n\nExertional syncope is a classic symptom of severe aortic stenosis.\nIt calls for prompt valve assessment.'));
+    await p2.locator('h1.bar-title', { hasText: 'Syncope notes' }).waitFor(T);
+    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.fill('#ask-q', 'why do people pass out');
+    await p2.locator('#ask-go').click();
+    await p2.locator('#not-found').waitFor(T);
+    ok('by words alone, a question sharing no word with the book is not found', await p2.locator('#answer').count() === 0);
+    await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await p2.locator('#meaning-toggle').click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.fill('#ask-q', 'why do people pass out');
+    await p2.locator('#ask-go').click();
+    await p2.locator('#answer').waitFor(T);
+    const mq = await p2.$$eval('#answer ul.quotes li', ls => ls.map(l => l.textContent));
+    ok('by meaning, the book\u2019s sentence is found, with its page, marked as found by meaning', mq.length === 1 &&
+       /^Exertional syncope is a classic symptom of severe aortic stenosis\.Syncope notes · p\. 1 found by meaning$/.test(mq[0]), JSON.stringify(mq));
+    const vecs = await p2.evaluate(() => Promise.all([MemStore.all('vectors'), MemStore.all('docs')]).then(([v, d]) =>
+      v.length === d.length && v.every(r => r.model === MemLLM.EMBED.id && r.vecs.length === d.find(x => x.id === r.id).clusters.length)));
+    ok('each unit\u2019s sections are read for meaning once, and kept', vecs);
+    ok('texts go to the model four at a time, the most its small build takes', await p2.evaluate(() => window.__batch) === 4, String(await p2.evaluate(() => window.__batch)));
+    const before = await p2.evaluate(() => window.__emb);
+    await p2.fill('#ask-q', 'what makes people pass out');
+    await p2.locator('#ask-go').click();
+    await p2.waitForFunction(b => window.__emb > b, before, T);
+    await p2.locator('#answer').waitFor(T);
+    ok('a second question embeds only itself', await p2.evaluate(b => window.__emb - b, before) === 1, String(await p2.evaluate(b => window.__emb - b, before)));
+    await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await p2.locator('#meaning-toggle').click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.fill('#ask-q', 'why do people pass out');
+    await p2.locator('#ask-go').click();
+    await p2.locator('#not-found').waitFor(T);
+    ok('turned off, it is words again', await p2.locator('#answer').count() === 0);
   }
 
   head('a whole book: its PDFs as one, cut into chapters');

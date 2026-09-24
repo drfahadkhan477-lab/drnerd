@@ -18,6 +18,11 @@
                                               chapters can be cut again without
                                               reading 1,500 pages a second time
      meta      { id, … }                    — small records: the days studied
+   and, from v4:
+     vectors   { id: docId, model, vecs:[[…] per section] }
+                                            — each section's meaning, for search
+                                              by meaning (vec.js); remade if the
+                                              model changes
 
    A chapter of a book is a doc like any other, with bookId and the book's
    parts (its figures and pages are drawn from whichever part holds them).
@@ -31,13 +36,13 @@
 'use strict';
 
 var DB_NAME = 'memorizer';
-var DB_VERSION = 3;
+var DB_VERSION = 4;
 /* v2 adds `files`: the PDF's own bytes, kept on this device so its pages and
    figures can be drawn while studying. v3 adds `books`, `bookpages` and
-   `meta`. Upgrading keeps every store already there. */
-var STORES = ['docs', 'sessions', 'cards', 'files', 'books', 'bookpages', 'meta'];
+   `meta`; v4, `vectors`. Upgrading keeps every store already there. */
+var STORES = ['docs', 'sessions', 'cards', 'files', 'books', 'bookpages', 'meta', 'vectors'];
 
-var mem = { docs: {}, sessions: {}, cards: {}, files: {}, books: {}, bookpages: {}, meta: {} };
+var mem = { docs: {}, sessions: {}, cards: {}, files: {}, books: {}, bookpages: {}, meta: {}, vectors: {} };
 var dbp = null;
 var api = { persistent: false };
 
@@ -100,7 +105,7 @@ function del(store, id) {
 function deleteDoc(id) {
   return all('cards').then(function (cards) {
     return Promise.all(cards.filter(function (c) { return c.docId === id; }).map(function (c) { return del('cards', c.id); }));
-  }).then(function () { return del('sessions', id); }).then(function () { return del('files', id); }).then(function () { return del('docs', id); });
+  }).then(function () { return del('sessions', id); }).then(function () { return del('files', id); }).then(function () { return del('vectors', id); }).then(function () { return del('docs', id); });
 }
 
 /* Removing a book removes its chapters (and everything from them), its

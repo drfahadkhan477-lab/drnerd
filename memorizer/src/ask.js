@@ -21,6 +21,7 @@
 'use strict';
 
 var Coach = root.MemCoach || (typeof require === 'function' ? require('./coach.js') : null);
+var Vec = root.MemVec || (typeof require === 'function' ? require('./vec.js') : null);
 
 /* ── the vocabulary: [id, label, terms…], terms as regular-expression
    sources matched case-insensitively at word boundaries ─────────────────── */
@@ -248,7 +249,12 @@ var PER_SECTION = 3, MAX_ITEMS = 12, K1 = 1.2, B = 0.75;
    name what the question names) to be an answer at all. */
 var MIN_SHARE = 0.5;
 
-function ask(idx, question) {
+/* `meaning`: sentences found by meaning (vec.js), [{ i: sentence index,
+   cos }], already past its floor. Without it, the word search alone, as
+   before. With it, both rankings are merged by reciprocal rank, and a
+   sentence found by meaning alone is marked so — still the book's sentence,
+   word for word, with its page. */
+function ask(idx, question, meaning) {
   var qEntries = entriesIn(question);
   var qTerms = terms(question).filter(function (w, i, a) { return a.indexOf(w) === i; });
   if (!qTerms.length && !qEntries.length) return { question: question, found: false, groups: [], sections: [], named: [] };
@@ -295,13 +301,19 @@ function ask(idx, question) {
     scored.push({ i: i, score: score + 3 * names + inSec + (fits ? 4 : 0) });
   });
   scored.sort(function (a, b) { return b.score - a.score || a.i - b.i; });
+  if (meaning && meaning.length) {
+    var byWords = {};
+    scored.forEach(function (x) { byWords[x.i] = true; });
+    var order = Vec.fuse([scored.map(function (x) { return String(x.i); }), meaning.map(function (x) { return String(x.i); })]).map(Number);
+    scored = order.map(function (i, r) { return { i: i, score: order.length - r, meaning: !byWords[i] }; });
+  }
   var perSec = {}, items = [];
   scored.forEach(function (x) {
     if (items.length >= MAX_ITEMS) return;
     var s = idx.sents[x.i];
     if ((perSec[s.sec] || 0) >= PER_SECTION) return;
     perSec[s.sec] = (perSec[s.sec] || 0) + 1;
-    items.push({ text: s.text, page: s.page, sec: s.sec, heading: headingOf(s.text), score: x.score });
+    items.push({ text: s.text, page: s.page, sec: s.sec, heading: headingOf(s.text), score: x.score, by: x.meaning ? 'meaning' : 'words' });
   });
   var groups = HEADINGS.map(function (hd) { return hd[0]; }).concat([OTHER]).map(function (name) {
     return { heading: name, items: items.filter(function (it) { return it.heading === name; }) };
