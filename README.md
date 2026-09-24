@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 47 suites that need neither a browser nor a build all stay
+present, and the 48 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -134,6 +134,16 @@ every section is done. Each section is:
 3. **Examined** — after the last section, a final exam across the unit,
    weighted to your weakest sections, that does not name the section a
    question is from until you have answered it.
+
+**A whole textbook** can be added as one book, in as many PDFs as it came
+in: the parts are put in order by the numbers in their names and their pages
+numbered straight through, so a page reference means the same page wherever
+the split fell. The book is cut into chapters three independent ways — the
+PDF's own bookmarks, its "Chapter N" headings and running headers, and the
+heading size that opens chapters — and the one that fits best is used; the
+book's page shows the others, and any chapter can be joined to the one before
+it. A chapter whose pages do not change keeps its progress. Each chapter is a
+unit like any other, and its figures are found the first time it is opened.
 
 Every missed answer becomes a review card — the same multiple-choice question
 — scheduled with the same FSRS scheduler Systole uses (`src/core/fsrs.js`,

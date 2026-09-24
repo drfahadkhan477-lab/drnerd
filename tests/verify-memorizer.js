@@ -235,6 +235,86 @@ function makeScanPdf(jpeg, w, h) {
     `trailer\n<< /Size ${parts.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
   return Buffer.concat([out, Buffer.from(tail, 'latin1')]);
 }
+/* A book in two PDFs, the way a long textbook is split: pages 1–4 and 5–8
+   of one book, each file numbering its own pages from 1. Page 1 is front
+   matter; chapters open with "Chapter N" and their title at 24pt, and every
+   other page carries a running header "CHAPTER N Title". Chapter 2 opens on
+   page 4 and runs on into the second file, where page 5 holds its picture
+   and caption. Each file has bookmarks for its own chapters, titled
+   "1. …" so the chapters they give can be told from the headings'. Every
+   body word is its chapter's own (c1w…, c2w…). */
+function writePdf(pageOps, outline, withImage) {
+  const objs = [];
+  const add = s => { objs.push(s); return objs.length; };
+  const reserve = () => { objs.push(null); return objs.length; };
+  const catalog = reserve(), pagesId = reserve();
+  const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const pixels = Buffer.from([200, 40, 40, 40, 200, 40, 40, 40, 200, 220, 220, 40]).toString('latin1');
+  const image = add(`<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 12 >>\nstream\n${pixels}\nendstream`);
+  const kids = pageOps.map((ops, i) => {
+    const stream = ops.join('\n');
+    const content = add(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
+    const xo = withImage === i ? ` /XObject << /Im1 ${image} 0 R >>` : '';
+    return add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 ${font} 0 R >>${xo} >> /Contents ${content} 0 R >>`);
+  });
+  objs[pagesId - 1] = `<< /Type /Pages /Kids [${kids.map(k => k + ' 0 R').join(' ')}] /Count ${kids.length} >>`;
+  let outlines = '';
+  if (outline.length) {
+    const root = reserve();
+    const items = outline.map(() => reserve());
+    outline.forEach((o, i) => {
+      objs[items[i] - 1] = `<< /Title (${o.title}) /Parent ${root} 0 R /Dest [${kids[o.pageIndex]} 0 R /XYZ 0 842 0]` +
+        (i > 0 ? ` /Prev ${items[i - 1]} 0 R` : '') + (i < items.length - 1 ? ` /Next ${items[i + 1]} 0 R` : '') + ' >>';
+    });
+    objs[root - 1] = `<< /Type /Outlines /First ${items[0]} 0 R /Last ${items[items.length - 1]} 0 R /Count ${items.length} >>`;
+    outlines = ` /Outlines ${root} 0 R`;
+  }
+  objs[catalog - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R${outlines} >>`;
+  let out = '%PDF-1.4\n';
+  const offsets = [];
+  objs.forEach((o, i) => { offsets.push(Buffer.byteLength(out, 'latin1')); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = Buffer.byteLength(out, 'latin1');
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
+  out += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+const BOOK_CHAPTERS = [{ n: 1, title: 'Heart Failure Basics', pages: [2, 3] }, { n: 2, title: 'Valve Disease', pages: [4, 5] }, { n: 3, title: 'Arrhythmias', pages: [6, 7, 8] }];
+const BOOK_FIG = { page: 5, box: [300, 560, 500, 660], caption: 'Figure 2.1 A valve picture.' };
+function makeBook() {
+  const code = i => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(i / 26) % 26] + 'abcdefghijklmnopqrstuvwxyz'[i % 26];
+  const T = (t, size, x, y) => `BT /F1 ${size} Tf ${x} ${y} Td (${t}) Tj ET`;
+  const counters = {};
+  const body = (n, y0, count) => {
+    const ops = [];
+    for (let l = 0; l < count; l++) {
+      const ws = [];
+      for (let k = 0; k < 10; k++) { counters[n] = (counters[n] || 0) + 1; ws.push(`c${n}w${code(counters[n])}` + (counters[n] % 10 === 0 ? '.' : '')); }
+      ops.push(T(ws.join(' '), 11, 72, y0 - l * 16));
+    }
+    return ops;
+  };
+  const pages = [];
+  for (let pg = 1; pg <= 8; pg++) {
+    const ops = [];
+    const ch = BOOK_CHAPTERS.find(c => c.pages.includes(pg));
+    if (!ch) { ops.push(T('Contents', 20, 72, 760)); ops.push(T('This book was written for the test suite only.', 11, 72, 720)); }
+    else if (ch.pages[0] === pg) { ops.push(T('Chapter ' + ch.n, 24, 72, 760)); ops.push(T(ch.title, 24, 72, 728)); ops.push(...body(ch.n, 690, 26)); }
+    else {
+      ops.push(T(`CHAPTER ${ch.n} ${ch.title}`, 9, 72, 800));
+      if (pg === BOOK_FIG.page) {
+        const [x0, y0, x1, y1] = BOOK_FIG.box;
+        ops.push(`q ${x1 - x0} 0 0 ${y1 - y0} ${x0} ${y0} cm /Im1 Do Q`);
+        ops.push(T(BOOK_FIG.caption, 9, 300, y0 - 12));
+        ops.push(...body(ch.n, 520, 22));
+      } else ops.push(...body(ch.n, 770, 30));
+    }
+    ops.push(T(String(pg <= 4 ? pg : pg - 4), 9, 300, 30));
+    pages.push(ops);
+  }
+  const a = writePdf(pages.slice(0, 4), [{ title: '1. Heart Failure Basics', pageIndex: 1 }, { title: '2. Valve Disease', pageIndex: 3 }], -1);
+  const b = writePdf(pages.slice(4), [{ title: '3. Arrhythmias', pageIndex: 1 }], BOOK_FIG.page - 5);
+  return { a, b, words: counters };
+}
 const SCAN_LINES = ['Venous return is the main determinant of preload', 'in a healthy heart, and preload rises with volume.'];
 /* In the page: a 1224 x 1584 canvas (twice 612 x 792) of black text on white, as JPEG. */
 const makeScanJpeg = (lines) => {
@@ -477,8 +557,8 @@ function kindOf(user) {
   ok('the miss is one review card, carrying its options', cards1.length === 1 && cards1[0].source === 'drill' && cards1[0].front === Q_GAP.question &&
      cards1[0].options.length === 4 && cards1[0].answer === 1, cards1.map(c => c.source + ':' + c.front).join(' | '));
   ok('the next step offers section 2', /Section Two Afterload/.test(await page.locator('#next-section').innerText()));
-  const daysNow = await page.evaluate(() => localStorage.getItem('memorizer.days.v1'));
-  ok('answering a drill records today as a study day', daysNow === JSON.stringify([await page.evaluate(() => FSRS.todayISO())]), String(daysNow));
+  const daysNow = await page.evaluate(() => MemStore.get('meta', 'days').then(r => r && JSON.stringify(r.days)));
+  ok('answering a drill records today as a study day, with the units and cards', daysNow === JSON.stringify([await page.evaluate(() => FSRS.todayISO())]), String(daysNow));
 
   head('a failed step says so, and does not advance');
   stub.breakNext = 'lesson';
@@ -505,7 +585,9 @@ function kindOf(user) {
   ok('jump back in names the unit, the section up next and how far it has come',
      /unit/.test(await page.locator('.jump-card strong').first().innerText()) && /Section Two Afterload/.test(await page.locator('.jump-card').first().innerText()) &&
      (await page.locator('.jump-card .ring-pct').first().innerText()) === '33%', await text(page, '.jump-card'));
-  ok('the streak counts today, after a drill was answered', /\b1$/.test(await text(page, '#streak')), await text(page, '#streak') + ' · ' + await page.evaluate(() => localStorage.getItem('memorizer.days.v1') + ' today ' + FSRS.todayISO()));
+  /* The days were in localStorage, which this browser was measured to lose
+     whole across a reload (1 run in 6); IndexedDB, never. */
+  ok('the streak counts today, after a drill was answered, and survives the reload', /\b1$/.test(await text(page, '#streak')), await text(page, '#streak'));
   ok('the due pill and the Review tab both count the one card', /1 due/.test(await page.locator('#pill-due').innerText()) &&
      (await page.locator('nav.dock .nav-badge').innerText()) === '1');
   ok('my units: the unit, its sections and pages, and its progress', /3 sections · \d+ pages/.test(await page.locator('.unit-row').innerText()) &&
@@ -627,8 +709,13 @@ function kindOf(user) {
   await page.waitForFunction(() => /1 due/.test((document.querySelector('.review-head') || {}).textContent || ''), null, T);
   const after = await page.evaluate(() => MemStore.all('cards'));
   const todayInPage = await page.evaluate(() => FSRS.todayISO());
-  ok('a right answer schedules the card into the future with FSRS', after.filter(c => c.srs && c.srs.due > todayInPage).length === 1 &&
-     after.find(c => c.srs).id === card.id, after.map(c => c.srs ? c.srs.due : 'new').join(', '));
+  /* Rated Good, exactly: FSRS schedules an Again into the future too, so
+     "due after today" alone passed with every review rated Again. */
+  const good = await page.evaluate(() => FSRS.update(null, 3, FSRS.todayISO()));
+  const rated = after.find(c => c.srs);
+  ok('a right answer is rated Good, and FSRS schedules the card from that', after.filter(c => c.srs).length === 1 && rated.id === card.id &&
+     rated.srs.due === good.due && rated.srs.stability === good.stability && rated.srs.due > todayInPage,
+     JSON.stringify(rated && rated.srs) + ' want ' + JSON.stringify(good));
   ok('and the Review tab counts one fewer', (await page.locator('nav.dock .nav-badge').innerText()) === '1');
 
   head('fits a phone');
@@ -656,7 +743,7 @@ function kindOf(user) {
     await p2.locator('#door-add').waitFor(T);
     ok('a new user is on the built-in coach, with no key asked for',
        await p2.evaluate(() => MemProvider.loadConfig().provider) === 'builtin' && !/needs your API key/.test(await p2.locator('main').innerText()));
-    ok('and is told what the app does', /splits it into sections, teaches each one/.test(await p2.locator('.card.empty').innerText()));
+    ok('and is told what the app does', /splits it into chapters and sections, teaches each one/.test(await p2.locator('.card.empty').innerText()));
     await p2.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
     await p2.locator('#sections .section-card').first().waitFor(T);
     ok('the PDF is split into its three sections', await p2.locator('#sections .section-card').count() === 3);
@@ -805,6 +892,97 @@ function kindOf(user) {
     await p2.locator('#learn-unit').click();
     await p2.locator('ol.points > li').first().waitFor(T);
     ok('and it is taught like a PDF, without a pages card', await p2.locator('#visuals').count() === 0 && await p2.locator('#big-idea').count() === 1);
+  }
+
+  head('a whole book: its PDFs as one, cut into chapters');
+  {
+    const bk = makeBook();
+    const p5 = watch(await (await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' })).newPage(), events, 'book', errors);
+    await wire(p5);
+    p5.on('dialog', d => d.accept());
+    await p5.goto(URL);
+    await p5.locator('#door-add').waitFor(T);
+    ok('home offers the whole book, taking several PDFs at once', await p5.locator('.chips label.chip[for="book-input"]').count() === 1 &&
+       await p5.locator('#book-input[multiple]').count() === 1);
+    /* Chosen in the wrong order: the second part first. */
+    await p5.setInputFiles('#book-input', [{ name: 'Book_5-8.pdf', mimeType: 'application/pdf', buffer: bk.b }, { name: 'Book_1-4.pdf', mimeType: 'application/pdf', buffer: bk.a }]);
+    await p5.locator('#chapters .chapter-row').first().waitFor(T);
+    const b = await p5.evaluate(() => MemStore.all('books').then(x => x[0]));
+    ok('the parts are put in order and their pages numbered straight through', b.name === 'Book' && b.pages === 8 &&
+       JSON.stringify(b.parts.map(x => [x.name, x.first, x.last])) === '[["Book_1-4.pdf",1,4],["Book_5-8.pdf",5,8]]', JSON.stringify(b.parts.map(x => [x.name, x.first, x.last])));
+    ok('each file’s bookmarks are read, at their book pages', JSON.stringify(b.outline.map(o => [o.title, o.page])) === '[["1. Heart Failure Basics",2],["2. Valve Disease",4],["3. Arrhythmias",6]]',
+       JSON.stringify(b.outline));
+    ok('the bookmarks cover the book, so they cut it', b.method === 'outline' && await p5.locator('#methods [data-method="outline"][aria-checked="true"]').count() === 1, b.method);
+    const titles = () => p5.$$eval('#chapters .chapter-row .doc-name', es => es.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
+    const ranges = () => p5.$$eval('#chapters .chapter-row .muted', es => es.map(e => e.textContent.split(' · ')[0]));
+    ok('one row per chapter, the front matter kept apart', JSON.stringify(await titles()) === '["· Before chapter 1","1 1. Heart Failure Basics","2 2. Valve Disease","3 3. Arrhythmias"]',
+       JSON.stringify(await titles()));
+    ok('each with its book pages', JSON.stringify(await ranges()) === '["pp. 1–1","pp. 2–3","pp. 4–5","pp. 6–8"]', JSON.stringify(await ranges()));
+    const docs = await p5.evaluate(() => MemStore.all('docs'));
+    const ch2 = docs.find(d => d.pageStart === 4);
+    const text2 = ch2.clusters.map(c => c.text).join(' ');
+    ok('a chapter that runs on into the next PDF holds all of its words, and no other chapter’s', text2.split(/\s+/).filter(w => /^c2w/.test(w)).length === bk.words[2] &&
+       !/c[13]w[a-z]/.test(text2), `${text2.split(/\s+/).filter(w => /^c2w/.test(w)).length} of ${bk.words[2]}`);
+    ok('its running header is gone from its text', !/CHAPTER 2/.test(text2) && !docs.some(d => /CHAPTER \d/.test(d.clusters.map(c => c.text).join(' '))));
+    ok('the chapters are not listed as units of their own on the home screen', await p5.evaluate(() => Memorizer.ui.docs.filter(d => !d.bookId).length) === 0);
+
+    head('a chapter of the book: taught, its figure found when opened');
+    await p5.locator('#chapters .chapter-row').nth(2).locator('button.unit-open').click();
+    await p5.locator('#sections .section-card').first().waitFor(T);
+    ok('a chapter opens as a unit, naming its book and pages', /Book · chapter 2 · pp\. 4–5/.test(await p5.locator('.book-of').innerText()), await p5.locator('.book-of').innerText());
+    await p5.waitForFunction(id => MemStore.get('docs', id).then(d => Array.isArray(d.figures)), ch2.id, T);
+    const figs = await p5.evaluate(id => MemStore.get('docs', id).then(d => d.figures), ch2.id);
+    ok('its figure is found the first time it is opened, at its book page, from the second PDF', figs.length === 1 && figs[0].page === BOOK_FIG.page &&
+       figs[0].caption === BOOK_FIG.caption && figs[0].box.every((v, i) => Math.abs(v - BOOK_FIG.box[i]) <= 1), JSON.stringify(figs));
+    await p5.locator('#learn-unit').click();
+    await p5.locator('ol.points > li').first().waitFor(T);
+    await p5.waitForFunction(() => { const i = document.querySelector('#visuals .figs img'); return i && /^data:image\/png/.test(i.src) && i.naturalWidth > 0; }, null, T);
+    await p5.waitForFunction(() => [...document.querySelectorAll('#visuals .pages img')].length === 2 && [...document.querySelectorAll('#visuals .pages img')].every(i => /^data:image\/png/.test(i.src)), null, T);
+    ok('and drawn, with both its pages — one from each PDF', (await p5.locator('#visuals .figs figcaption').first().innerText()).indexOf(BOOK_FIG.caption) === 0 &&
+       JSON.stringify(await p5.$$eval('#visuals .pages figcaption', fs => fs.map(f => f.textContent))) === '["Page 4","Page 5"]');
+    await p5.locator('header.topbar button[aria-label="Back"]').click();
+    await p5.locator('#learn-unit').waitFor(T);
+    await p5.locator('header.topbar button[aria-label="Back"]').click();
+    await p5.locator('#chapters').waitFor(T);
+    ok('back from a chapter is back to its book', await p5.locator('#found-by').count() === 1);
+
+    head('cutting the book again');
+    /* Chapter 1 opened, so it has a session to keep. */
+    await p5.locator('#chapters .chapter-row').nth(1).locator('button.unit-open').click();
+    await p5.locator('#sections').waitFor(T);
+    await p5.locator('header.topbar button[aria-label="Back"]').click();
+    await p5.locator('#chapters').waitFor(T);
+    const keptId = (await p5.evaluate(() => MemStore.all('books').then(x => x[0].chapters))).find(c => c.pageStart === 2).docId;
+    await p5.locator('#chapters .chapter-row').nth(3).locator('details.menu summary').click();
+    await p5.locator('[data-join="3"]').click();
+    await p5.waitForFunction(() => document.querySelectorAll('#chapters .chapter-row').length === 3, null, T);
+    ok('joining a chapter to the one before gives it that chapter’s pages', JSON.stringify(await ranges()) === '["pp. 1–1","pp. 2–3","pp. 4–8"]', JSON.stringify(await ranges()));
+    const after = await p5.evaluate(() => Promise.all([MemStore.all('books'), MemStore.all('docs'), MemStore.all('sessions')]));
+    ok('the chapter left as it was keeps its unit and its progress; the joined ones are rebuilt', after[0][0].chapters.find(c => c.pageStart === 2).docId === keptId &&
+       after[2].some(s => s.id === keptId) && !after[1].some(d => d.id === ch2.id) && !after[2].some(s => s.id === ch2.id) && after[1].length === 3,
+       after[1].map(d => d.id).join(' | '));
+    await p5.evaluate(() => { window.__reads = 0; const r = MemPdf.read; MemPdf.read = function () { window.__reads++; return r.apply(this, arguments); }; });
+    await p5.locator('#methods [data-method="numbered"]').click();
+    await p5.waitForFunction(() => /Valve Disease/.test(document.querySelector('#chapters').innerText) && !/2\. Valve/.test(document.querySelector('#chapters').innerText), null, T);
+    ok('cut by its “Chapter N” headings instead: titled by them, the same pages', JSON.stringify(await titles()) === '["· Before chapter 1","1 Heart Failure Basics","2 Valve Disease","3 Arrhythmias"]' &&
+       JSON.stringify(await ranges()) === '["pp. 1–1","pp. 2–3","pp. 4–5","pp. 6–8"]', JSON.stringify(await titles()));
+    ok('from the book’s stored text, without reading the PDFs again', await p5.evaluate(() => window.__reads) === 0);
+    const again = await p5.evaluate(() => Promise.all([MemStore.all('books'), MemStore.all('sessions')]));
+    ok('renamed chapters on the same pages keep their progress', again[0][0].chapters.find(c => c.pageStart === 2).docId === keptId &&
+       again[1].some(s => s.id === keptId) && await p5.evaluate(id => MemStore.get('docs', id).then(d => d.name), keptId) === 'Heart Failure Basics');
+
+    head('the book on the home screen');
+    await p5.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p5.locator('#books .book-row').waitFor(T);
+    ok('my books: its name, chapters, pages and PDFs', /^Book\s*3 chapters · 8 pages · 2 PDFs/.test((await p5.locator('#books .book-row').innerText()).trim()),
+       await text(p5, '#books .book-row'));
+    ok('a chapter opened joins jump back in; the ones never opened do not', JSON.stringify(await p5.$$eval('.jump-card strong', es => es.map(e => e.textContent))) === '["Heart Failure Basics"]',
+       JSON.stringify(await p5.$$eval('.jump-card strong', es => es.map(e => e.textContent))));
+    await p5.locator('#books .book-row button.unit-open').click();
+    await p5.locator('#delete-book').click();
+    await p5.locator('#door-add').waitFor(T);
+    const left = await p5.evaluate(() => Promise.all(['books', 'docs', 'files', 'bookpages'].map(s => MemStore.all(s).then(x => x.length))));
+    ok('deleting the book deletes its chapters, its PDFs and its text', JSON.stringify(left) === '[0,0,0,0]', JSON.stringify(left));
   }
 
   head('scanned pages and photos: read by text recognition, on the device');

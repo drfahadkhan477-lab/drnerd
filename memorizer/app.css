@@ -318,3 +318,8 @@ blockquote.quote { margin: var(--s-3) 0; padding: var(--s-3) var(--s-4); border-
 .spinner { width: 1.125rem; height: 1.125rem; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+/* ── a whole book ── */
+.chapter-n { display: inline-block; min-width: 2.2em; font-variant-numeric: tabular-nums; color: hsl(var(--hue) 70% 60%); }
+.chapter-row.front { opacity: .7; }
+.book-of { margin: 0 0 var(--s-1); }

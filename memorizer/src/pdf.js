@@ -347,11 +347,13 @@ function textBoxesOf(items) {
 }
 
 /* ArrayBuffer → { pages: [{ page, lines }], wordCounts: [n per page], figures: [{ page, box }],
-   ocr: [pages read by text recognition], ocrError }.
-   onProgress(n, total, 'ocr' for the scanned-page pass); onStatus(message). */
+   ocr: [pages read by text recognition], ocrError, outline: [{ title, page, depth }] }.
+   onProgress(n, total, 'ocr' for the scanned-page pass); onStatus(message).
+   opts.figures === false skips looking for figures: a whole book looks for
+   them one chapter at a time, when the chapter is opened (figuresOn). */
 function wordsIn(lines) { return lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0); }
-function read(buffer, onProgress, onStatus) {
-  var Lib;
+function read(buffer, onProgress, onStatus, opts) {
+  var Lib, withFigures = !(opts && opts.figures === false);
   return lib().then(function (L) {
     Lib = L;
     /* pdf.js may take ownership of the buffer it is given, so it gets a copy:
@@ -368,6 +370,7 @@ function read(buffer, onProgress, onStatus) {
             var lines = linesOf(tc.items, h);
             pages.push({ page: n, lines: lines });
             counts.push(wordsIn(lines));
+            if (!withFigures) return null;
             return page.getOperatorList().then(function (ops) {
               figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
                 var f = { page: n, box: b }, cap = captionFor(b, lines, h);
@@ -402,8 +405,62 @@ function read(buffer, onProgress, onStatus) {
       });
       return ocrChain.catch(function (e) { ocrError = (e && e.message) || String(e); });
     });
-    return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures, ocr: ocr, ocrError: ocrError }; });
+    var outline = [];
+    chain = chain.then(function () { return outlineOf(doc); }).then(function (o) { outline = o; });
+    return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures, ocr: ocr, ocrError: ocrError, outline: outline }; });
   });
+}
+
+/* The PDF's own bookmarks, flattened: [{ title, page, depth }], depth 0 at
+   the top. An entry whose destination cannot be resolved to a page is left
+   out; a PDF without bookmarks gives []. Never throws: a broken outline is
+   no outline. */
+function outlineOf(doc) {
+  var out = [];
+  function pageOf(dest) {
+    var d = typeof dest === 'string' ? doc.getDestination(dest) : Promise.resolve(dest);
+    return d.then(function (arr) {
+      if (!arr || !arr[0]) return null;
+      return typeof arr[0] === 'object' ? doc.getPageIndex(arr[0]).then(function (i) { return i + 1; }) : (typeof arr[0] === 'number' ? arr[0] + 1 : null);
+    });
+  }
+  function walk(items, depth) {
+    return (items || []).reduce(function (p, it) {
+      return p.then(function () {
+        return (it.dest ? pageOf(it.dest) : Promise.resolve(null)).catch(function () { return null; });
+      }).then(function (pg) {
+        var title = String(it.title || '').replace(/\s+/g, ' ').trim();
+        if (pg && title) out.push({ title: title, page: pg, depth: depth });
+        return walk(it.items, depth + 1);
+      });
+    }, Promise.resolve());
+  }
+  return doc.getOutline().then(function (items) { return walk(items, 0); }).then(function () { return out; }, function () { return out; });
+}
+
+/* Figures on some pages of a stored PDF, found as read() finds them —
+   for a book, a chapter at a time. pageNos are this file's own page
+   numbers; each figure found is returned with that page. */
+function figuresOn(key, buffer, pageNos) {
+  var figures = [];
+  return Promise.all([lib(), openStored(key, buffer)]).then(function (r) {
+    var L = r[0], doc = r[1];
+    return pageNos.reduce(function (p, n) {
+      return p.then(function () { return doc.getPage(n); }).then(function (page) {
+        var h = page.getViewport({ scale: 1 }).height;
+        return page.getTextContent().then(function (tc) {
+          var lines = linesOf(tc.items, h);
+          return page.getOperatorList().then(function (ops) {
+            figureBoxes(ops, L.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
+              var f = { page: n, box: b }, cap = captionFor(b, lines, h);
+              if (cap) { f.number = cap.number; f.label = cap.label; f.caption = cap.text; }
+              figures.push(f);
+            });
+          }, function () {});
+        });
+      });
+    }, Promise.resolve());
+  }).then(function () { return figures; });
 }
 
 /* Draw part of a page — a figure's box, or the whole page — to a PNG data
@@ -436,6 +493,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

@@ -18,14 +18,15 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
 
 var ui = {
-  view: 'library',      /* library | session | review | settings */
-  docs: [], cards: [], sessions: {}, at: {}, pearlSkip: 0,
+  view: 'library',      /* library | book | session | review | settings */
+  docs: [], cards: [], sessions: {}, at: {}, pearlSkip: 0, books: [], days: [], bookId: null,
+  docsStale: true, pearlCache: null,
   docId: null, docRec: null, state: null,
   busy: '', error: '', choice: null, pasting: false,
   importing: '', reviewShown: false, reviewDone: 0, drill: null,
@@ -63,12 +64,19 @@ function hasKey() { return Provider.ready(cfg()); }
 function builtin() { return !Provider.needsKey(cfg()); }
 
 /* ── persistence ─────────────────────────────────────────────────────────── */
+/* The units are reloaded only when they have changed (docsChanged()): a
+   whole book is hundreds of them and megabytes of text, and refresh() runs
+   after every review card. */
+function docsChanged() { ui.docsStale = true; ui.pearlCache = null; }
 function refresh() {
-  return Promise.all([Store.all('docs'), Store.all('cards'), Store.all('sessions')]).then(function (r) {
-    ui.docs = r[0].sort(function (a, b) { return b.addedAt - a.addedAt; });
+  return Promise.all([ui.docsStale ? Store.all('docs') : Promise.resolve(null), Store.all('cards'), Store.all('sessions'),
+                      Store.all('books'), Store.get('meta', 'days')]).then(function (r) {
+    if (r[0]) { ui.docs = r[0].sort(function (a, b) { return b.addedAt - a.addedAt; }); ui.docsStale = false; }
     ui.cards = r[1];
     ui.sessions = {}; ui.at = {};
     r[2].forEach(function (x) { ui.sessions[x.id] = x.state; ui.at[x.id] = x.at || 0; });
+    ui.books = r[3].sort(function (a, b) { return b.addedAt - a.addedAt; });
+    ui.days = r[4] && Array.isArray(r[4].days) ? r[4].days : legacyDays();
   });
 }
 function save() {
@@ -81,15 +89,20 @@ function save() {
     .then(function (c) { ui.cards = c; });
 }
 
-/* Days studied, for the streak: this device's own record, kept in local
-   storage because it is a convenience — losing it loses a number, not work. */
+/* Days studied, for the streak, in IndexedDB with the units and cards.
+   They were in localStorage, and the browser suite measured a whole
+   localStorage lost across a reload (1 run in 6, and 1 in 12 reopening in a
+   new page — a key the test itself had just written went with it) while
+   IndexedDB kept everything. Read from localStorage once, to carry over a
+   streak begun before. */
 var DAYS_KEY = 'memorizer.days.v1';
-function studyDays() { try { return JSON.parse(root.localStorage.getItem(DAYS_KEY) || '[]'); } catch (_) { return []; } }
+function legacyDays() { try { return JSON.parse(root.localStorage.getItem(DAYS_KEY) || '[]'); } catch (_) { return []; } }
+function studyDays() { return ui.days || []; }
 function markStudied() {
-  try {
-    var d = studyDays(), t = today();
-    if (d.indexOf(t) === -1) { d.push(t); root.localStorage.setItem(DAYS_KEY, JSON.stringify(d.slice(-400))); }
-  } catch (_) { /* private mode: no streak, nothing else lost */ }
+  var t = today();
+  if (studyDays().indexOf(t) !== -1) return;
+  ui.days = studyDays().concat([t]).slice(-400);
+  Store.put('meta', { id: 'days', days: ui.days });
 }
 
 function dispatch(event) {
@@ -163,7 +176,7 @@ function saveUnit(name, source, pages, extra) {
 }
 function finishImport(p) {
   return p.then(function (rec) {
-    ui.importing = ''; return refresh().then(function () { return openDoc(rec.id); });
+    ui.importing = ''; docsChanged(); return refresh().then(function () { return openDoc(rec.id); });
   }, function (e) {
     ui.importing = ''; ui.error = (e && e.message) || String(e); render();
   });
@@ -208,6 +221,118 @@ function importText(name, text) {
   finishImport(new Promise(function (resolve) { resolve(saveUnit(name || 'Pasted notes', 'text', Chunk.pagesFromText(text), { emptyMessage: 'There was no text to learn from.' })); }));
 }
 
+/* ── a whole book ────────────────────────────────────────────────────────── */
+/* The book's name: what its parts' names share, without the page numbers
+   ("Topol_1-500", "Topol_501-1000" → "Topol"). */
+function bookName(files) {
+  var names = files.map(function (f) { return f.name.replace(/\.pdf$/i, ''); });
+  var pre = names.reduce(function (a, b) { var i = 0; while (i < a.length && a[i] === b[i]) i++; return a.slice(0, i); });
+  pre = pre.replace(/[\s_\-\d.,]+$/, '').trim();
+  return pre.length >= 2 ? pre.replace(/_/g, ' ') : names[0];
+}
+/* Chapters → units. A chapter whose pages are unchanged keeps its unit, and
+   so its progress and cards, whatever it is now called (cutting by another
+   method renames chapters); the others are built from the book's stored
+   text, and units no chapter uses any more are deleted. */
+function applyChapters(book, chapters, pages) {
+  var old = {};
+  (book.chapters || []).forEach(function (c) { if (c.docId) old[c.pageStart + ':' + c.pageEnd] = c.docId; });
+  var keep = {}, now = Date.now(), num = 0;
+  var puts = chapters.map(function (c, i) {
+    var k = c.pageStart + ':' + c.pageEnd, label = c.front ? 0 : ++num;
+    if (old[k]) {
+      keep[old[k]] = true;
+      return Store.get('docs', old[k]).then(function (d) {
+        return d && (d.name !== c.title || d.chapter !== label) ? Store.put('docs', Object.assign(d, { name: c.title, chapter: label })) : null;
+      }).then(function () { return Object.assign({}, c, { docId: old[k] }); });
+    }
+    var mine = pages.filter(function (p) { return p.page >= c.pageStart && p.page <= c.pageEnd; });
+    var clusters = Chunk.clusterBlocks(Chunk.blocksFromPages(Book.stripHeaders(mine)).blocks);
+    if (!clusters.length) return Promise.resolve(Object.assign({}, c, { docId: null, empty: true }));
+    var id = book.id + ':c' + c.pageStart + '-' + c.pageEnd;
+    keep[id] = true;
+    var rec = { id: id, name: c.title, bookId: book.id, bookName: book.name, chapter: label, addedAt: now - i, pages: c.pageEnd - c.pageStart + 1,
+                pageStart: c.pageStart, pageEnd: c.pageEnd, source: 'pdf', clusters: clusters, hasFile: true, parts: book.parts, figures: null,
+                scanned: (book.scanned || []).filter(function (n) { return n >= c.pageStart && n <= c.pageEnd; }),
+                ocr: (book.ocr || []).filter(function (n) { return n >= c.pageStart && n <= c.pageEnd; }), ocrError: book.ocrError || '' };
+    return Store.put('docs', rec).then(function () { return Object.assign({}, c, { docId: id }); });
+  });
+  return Promise.all(puts).then(function (list) {
+    var gone = Object.keys(old).map(function (k) { return old[k]; }).filter(function (id) { return !keep[id]; });
+    return Promise.all(gone.map(function (id) { return Store.deleteDoc(id); })).then(function () {
+      book.chapters = list;
+      docsChanged();
+      return Store.put('books', book);
+    });
+  });
+}
+function bookPages(book) {
+  return Promise.all(book.parts.map(function (_, i) { return Store.get('bookpages', book.id + ':' + i); }))
+    .then(function (r) { return r.reduce(function (all, x) { return all.concat(x ? x.pages : []); }, []); });
+}
+function importBook(fileList) {
+  var files = Array.prototype.slice.call(fileList || []);
+  if (!files.length) return;
+  files = Book.orderParts(files.map(function (f) { return f.name; })).map(function (i) { return files[i]; });
+  var book = { id: 'b' + newId().slice(1), name: bookName(files), addedAt: Date.now(), parts: [], scanned: [], ocr: [], ocrError: '', outline: [] };
+  var all = [], offset = 0;
+  ui.error = '';
+  var chain = Promise.resolve();
+  files.forEach(function (f, k) {
+    var bytes;
+    chain = chain.then(function () {
+      ui.importing = 'Part ' + (k + 1) + ' of ' + files.length + ': opening ' + f.name + '…'; render();
+      return readBuffer(f);
+    }).then(function (buf) {
+      bytes = buf;
+      return Pdf.read(buf, function (n, total, pass) {
+        ui.importing = 'Part ' + (k + 1) + ' of ' + files.length + ': ' + (pass === 'ocr' ? 'text recognition, scanned page ' : 'reading page ') + n + ' of ' + total + '…';
+        render();
+      }, function (msg) { ui.importing = msg; render(); }, { figures: false });
+    }).then(function (r) {
+      var fileId = book.id + ':f' + k;
+      var pages = r.pages.map(function (p) { return { page: p.page + offset, lines: p.lines }; });
+      book.parts.push({ fileId: fileId, name: f.name, first: offset + 1, last: offset + r.numPages });
+      r.outline.forEach(function (e) { book.outline.push({ title: e.title, page: e.page + offset, depth: e.depth }); });
+      Chunk.scannedPages(r.wordCounts).forEach(function (n) { book.scanned.push(n + offset); });
+      r.ocr.forEach(function (n) { book.ocr.push(n + offset); });
+      if (r.ocrError) book.ocrError = r.ocrError;
+      all = all.concat(pages);
+      offset += r.numPages;
+      return Promise.all([Store.put('files', { id: fileId, bytes: bytes }), Store.put('bookpages', { id: book.id + ':' + k, pages: pages })]);
+    });
+  });
+  chain.then(function () {
+    ui.importing = 'Finding the chapters…'; render();
+    book.pages = offset;
+    var c = Book.candidates(all, book.outline, offset);
+    book.method = Book.pick(c, offset);
+    book.found = {};
+    Book.METHODS.forEach(function (m) { book.found[m] = c[m].filter(function (x) { return !x.front; }).length; });
+    ui.importing = 'Splitting ' + c[book.method].length + ' chapters into sections…'; render();
+    return applyChapters(book, c[book.method], all);
+  }).then(function () {
+    ui.importing = ''; return refresh().then(function () { openBook(book.id); });
+  }, function (e) {
+    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+  });
+}
+function openBook(id) {
+  ui.view = 'book'; ui.bookId = id; ui.error = ''; ui.state = null;
+  refresh().then(function () { render(); root.scrollTo(0, 0); });
+}
+/* Cut the book again: by another method, or with one chapter joined to the
+   one before. Chapters left as they were keep their progress. */
+function recut(book, chapters, method) {
+  ui.importing = 'Cutting the chapters again…'; render();
+  return bookPages(book).then(function (pages) {
+    if (method) book.method = method;
+    return applyChapters(book, chapters || Book.candidates(pages, book.outline, book.pages)[book.method], pages);
+  }).then(function () { ui.importing = ''; return refresh(); }).then(render, function (e) {
+    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+  });
+}
+
 function openDoc(id, section) {
   return Promise.all([Store.get('docs', id), Store.get('sessions', id)]).then(function (r) {
     ui.docRec = r[0];
@@ -217,6 +342,7 @@ function openDoc(id, section) {
     ui.state = Session.next(ui.state, { type: 'toUnit' });
     if (typeof section === 'number') ui.state = Session.next(ui.state, { type: 'open', section: section });
     ui.view = 'session'; ui.error = ''; ui.choice = null;
+    ensureFigures(ui.docRec);
     return save();
   }).then(function () { render(); root.scrollTo(0, 0); });
 }
@@ -316,18 +442,49 @@ function tablesCard(c) {
   }));
 }
 
-/* Figures and pages are drawn from the PDF kept on this device. */
-function withBytes() {
-  if (ui.bytesFor === ui.docId) return Promise.resolve(ui.bytes);
-  return Store.get('files', ui.docId).then(function (f) { ui.bytesFor = ui.docId; ui.bytes = f && f.bytes; return ui.bytes; });
+/* Figures and pages are drawn from the PDF kept on this device. A chapter
+   of a book names its book's parts; a page is drawn from the part holding
+   it, at that file's own page number. One file's bytes are kept at a time. */
+function where(d, pageNo) {
+  return d && d.parts ? Book.locate(d.parts, pageNo) : { fileId: d ? d.id : ui.docId, page: pageNo };
+}
+function withBytes(fileId) {
+  if (ui.bytesFor === fileId) return Promise.resolve(ui.bytes);
+  return Store.get('files', fileId).then(function (f) { ui.bytesFor = fileId; ui.bytes = f && f.bytes; return ui.bytes; });
 }
 function lazyImage(alt, pageNo, box, scale) {
   var img = h('img', { alt: alt });
-  withBytes().then(function (bytes) {
+  var at = where(ui.docRec, pageNo);
+  (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
     if (!bytes) throw new Error('no file');
-    return Pdf.renderBox(ui.docId, bytes, pageNo, box, scale);
+    return Pdf.renderBox(at.fileId, bytes, at.page, box, scale);
   }).then(function (url) { img.src = url; }, function () { img.alt = alt + ' (could not be drawn)'; });
   return img;
+}
+/* A book's chapter finds its figures the first time it is opened: looking
+   through 1,500 pages at import would take far longer than the text. */
+function ensureFigures(d) {
+  if (!d || !d.bookId || d.figures) return;
+  var byFile = {};
+  for (var pn = d.pageStart; pn <= d.pageEnd; pn++) {
+    var at = where(d, pn);
+    if (at) (byFile[at.fileId] = byFile[at.fileId] || []).push(at.page);
+  }
+  var found = [];
+  ui.figuresBusy = d.id;
+  Object.keys(byFile).reduce(function (p, fileId) {
+    var first = d.parts.filter(function (pt) { return pt.fileId === fileId; })[0].first;
+    return p.then(function () { return withBytes(fileId); }).then(function (bytes) {
+      return bytes ? Pdf.figuresOn(fileId, bytes, byFile[fileId]) : [];
+    }).then(function (fs) { fs.forEach(function (f) { f.page = f.page + first - 1; found.push(f); }); });
+  }, Promise.resolve()).then(function () {
+    d.figures = found;
+    return Store.put('docs', d);
+  }).then(function () {
+    ui.figuresBusy = null; ui.figsFor = null;
+    ui.docs.forEach(function (x, i) { if (x.id === d.id) ui.docs[i] = d; });
+    if (ui.docRec && ui.docRec.id === d.id) { ui.docRec = d; render(); }
+  }, function () { ui.figuresBusy = null; d.figures = []; });
 }
 function lightbox(pageNo, box, name) {
   var close = function () { if (el.parentNode) el.parentNode.removeChild(el); doc.removeEventListener('keydown', esc); };
@@ -352,6 +509,8 @@ function visualsCard(c) {
     return h('div.card', h('span.eyebrow', 'Figures and pages'),
       h('p.muted', 'This PDF was added before figures and pages could be shown. Delete it and add it again to see them here.'));
   }
+  if (ui.figuresBusy === d.id) return h('div.card', { id: 'visuals' }, h('span.eyebrow', 'Figures and pages'),
+    h('p.muted', { role: 'status' }, 'Finding the figures in this chapter…'));
   var figs = figuresOf(c);
   var pages = [];
   for (var pn = c.pageStart; pn <= c.pageEnd && pages.length < 6; pn++) pages.push(pn);
@@ -428,6 +587,8 @@ function viewHome() {
     onchange: function (e) { importFile(e.target.files[0]); e.target.value = ''; } });
   var photoIn = h('input', { type: 'file', accept: 'image/*', multiple: true, id: 'photo-input', class: 'visually-hidden',
     onchange: function (e) { importPhotos(e.target.files); e.target.value = ''; } });
+  var bookIn = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, id: 'book-input', class: 'visually-hidden',
+    onchange: function (e) { importBook(e.target.files); e.target.value = ''; } });
 
   var top = h('header.home-top',
     h('div.home-brand', mascot(), h('div', h('span.hello', Home.greeting(new Date().getHours()) + ' · what shall we'), h('h1.learn', 'Learn?'))),
@@ -443,6 +604,7 @@ function viewHome() {
     h('span.learn-plus', { 'aria-hidden': 'true' }, ui.importing ? '…' : '+'));
   var chips = h('div.chips',
     h('label.chip', { for: 'pdf-input' }, h('span', { 'aria-hidden': 'true' }, '⬆'), ' Upload PDF'),
+    h('label.chip', { for: 'book-input' }, h('span', { 'aria-hidden': 'true' }, '📚'), ' Whole book'),
     h('label.chip', { for: 'photo-input' }, h('span', { 'aria-hidden': 'true' }, '📷'), ' Photo'),
     button([h('span', { 'aria-hidden': 'true' }, '📋'), ' Paste'], function () { ui.pasting = true; render(); }, 'chip', { id: 'chip-paste' }));
 
@@ -455,7 +617,9 @@ function viewHome() {
       ui.pasting = false; importText(n, t);
     }, 'primary', { id: 'paste-go' }), button('Cancel', function () { ui.pasting = false; render(); }, 'quiet'))) : null;
 
-  var recent = Home.recent(ui.docs, sessions, ui.at, 6);
+  /* A book's chapters join "jump back in" once opened: a new book is not
+     a hundred units begun. */
+  var recent = Home.recent(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), sessions, ui.at, 6);
   var jump = recent.length ? [h('div.section-head', h('h2', 'Jump back in')),
     h('div.jump', { id: 'jump' }, recent.map(function (r) {
       return h('button.jump-card', { type: 'button', onclick: function () { openDoc(r.doc.id); } },
@@ -471,7 +635,11 @@ function viewHome() {
           w.cards ? button('Drill · ' + w.cards, function () { startDrill(w); }, '', { 'aria-label': 'Drill the ' + w.cards + ' card' + (w.cards === 1 ? '' : 's') + ' from ' + w.title }) : null));
     }))] : null;
 
-  var pk = ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0) : null;
+  /* Worked out once per day and per "Another": over a whole book it reads
+     every chapter's prose. */
+  var pkey = day + '|' + (ui.pearlSkip || 0);
+  if (!ui.pearlCache || ui.pearlCache.key !== pkey) ui.pearlCache = { key: pkey, pk: ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0) : null };
+  var pk = ui.pearlCache.pk;
   var pearl = pk ? h('aside.pearl.card', { id: 'pearl', 'aria-labelledby': 'pearl-label' },
     h('span.eyebrow', { id: 'pearl-label' }, 'Pearl of the day'),
     h('ol.pearl-steps', pk.steps.map(function (st) {
@@ -480,7 +648,17 @@ function viewHome() {
     h('p.pearl-src', pk.pearl.heading, pk.pearl.page ? page(pk.pearl.page) : null, ui.docs.length > 1 ? ' · ' + pk.pearl.docName : ''),
     pk.of > 1 ? h('div.row', button('Another', function () { ui.pearlSkip = (ui.pearlSkip || 0) + 1; render(); }, 'quiet', { id: 'pearl-next' })) : null) : null;
 
-  var units = ui.docs.map(function (d, i) {
+  var books = ui.books.map(function (b, i) {
+    var ds = b.chapters.filter(function (c) { return c.docId; }).map(function (c) { return ui.docs.filter(function (d) { return d.id === c.docId; })[0]; }).filter(Boolean);
+    var pct = ds.length ? Math.round(ds.reduce(function (n, d) { return n + Home.unitPct(d, sessions[d.id]); }, 0) / ds.length) : 0;
+    return h('li.unit-row.book-row', { style: '--hue:' + hue(i + 3) },
+      h('button.unit-open', { type: 'button', onclick: function () { openBook(b.id); } },
+        h('strong.doc-name', b.name),
+        h('span.muted', Home.count(b.chapters.filter(function (c) { return !c.front; }).length, 'chapter') + ' · ' + Home.count(b.pages, 'page') +
+          (b.parts.length > 1 ? ' · ' + b.parts.length + ' PDFs' : ''))),
+      pct ? h('span.badge', pct + '%') : null);
+  });
+  var units = ui.docs.filter(function (d) { return !d.bookId; }).map(function (d, i) {
     var st = sessions[d.id], pct = Home.unitPct(d, st);
     return h('li.unit-row', { style: '--hue:' + hue(i) },
       h('button.unit-open', { type: 'button', onclick: function () { openDoc(d.id); } },
@@ -495,7 +673,7 @@ function viewHome() {
           }, 'quiet'),
           button('Delete', function () {
             if (!root.confirm('Delete "' + d.name + '" and its review cards from this device?')) return;
-            Store.deleteDoc(d.id).then(refresh).then(render);
+            docsChanged(); Store.deleteDoc(d.id).then(refresh).then(render);
           }, 'quiet danger'))),
       d.ocr && d.ocr.length ? h('p.muted.ocr-note', 'Read by text recognition: ' + (d.source === 'photo' ? 'every photo' : 'pages ' + d.ocr.slice(0, 12).join(', ') + (d.ocr.length > 12 ? '…' : '')) + '. Check anything surprising against the page.') : null,
       d.scanned && d.scanned.length ? h('p.warn', 'Pages with no readable text: ' + d.scanned.slice(0, 12).join(', ') + (d.scanned.length > 12 ? '…' : '') + '. They are not in any section' +
@@ -503,14 +681,16 @@ function viewHome() {
   });
 
   return h('main.wrap.home',
-    top, pdfIn, photoIn, drop, chips, paste,
+    top, pdfIn, photoIn, bookIn, drop, chips, paste,
     ui.error ? errorCard(null) : null,
     !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
       button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null,
     jump, weak, pearl,
-    ui.docs.length ? h('div.section-head', h('h2', 'My units'), h('label.plus', { for: 'pdf-input', 'aria-label': 'Add a PDF' }, '+')) : null,
-    ui.docs.length ? h('ul.units', { id: 'units' }, units) : h('div.card.empty', h('h2', 'Start with a chapter'),
-      h('p', 'Upload a chapter of your book as a PDF, take photos of its pages, or paste your notes. Memorizer splits it into sections, teaches each one — key points, numbers to know, mnemonics and analogies — then drills you with multiple-choice questions. Everything you miss comes back as a review card until it sticks.')),
+    books.length ? [h('div.section-head', h('h2', 'My books'), h('label.plus', { for: 'book-input', 'aria-label': 'Add a book' }, '+')),
+      h('ul.units', { id: 'books' }, books)] : null,
+    units.length ? h('div.section-head', h('h2', 'My units'), h('label.plus', { for: 'pdf-input', 'aria-label': 'Add a PDF' }, '+')) : null,
+    units.length ? h('ul.units', { id: 'units' }, units) : !books.length ? h('div.card.empty', h('h2', 'Start with a chapter, or the whole book'),
+      h('p', 'Upload a chapter of your book as a PDF, take photos of its pages, or paste your notes — or add the whole textbook, in as many PDFs as it came in. Memorizer splits it into chapters and sections, teaches each one — key points, numbers to know, mnemonics and analogies — then drills you with multiple-choice questions. Everything you miss comes back as a review card until it sticks.')) : null,
     !Store.persistent ? h('p.warn', 'This browser would not open local storage (private mode?). Your work will not survive a reload.') : null);
 }
 
@@ -547,7 +727,8 @@ function viewUnit() {
         : 'Unlocks when every section has been drilled (' + doneN + ' of ' + n + ').')),
     allDone ? button(s.exam.score != null ? 'Retake' : 'Start', function () { go({ type: 'toExam' }); }, 'primary', { id: 'to-exam' }) : h('span.lock', { 'aria-hidden': 'true' }, '🔒'));
   return h('main.wrap.unit',
-    backBar(d.name, function () { leave('library'); }),
+    backBar(d.name, function () { if (d.bookId) openBook(d.bookId); else leave('library'); }),
+    d.bookId ? h('p.muted.book-of', d.bookName + (d.chapter ? ' · chapter ' + d.chapter : ' · front matter') + ' · pp. ' + d.pageStart + '–' + d.pageEnd) : null,
     h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
     h('h2.grid-title', 'Sections (' + n + ')'),
@@ -556,6 +737,55 @@ function viewUnit() {
     h('div.sticky-cta', allDone
       ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
       : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })));
+}
+
+/* ── BOOK: its chapters, and how they were found ─────────────────────────── */
+function viewBook() {
+  var b = ui.books.filter(function (x) { return x.id === ui.bookId; })[0];
+  if (!b) return viewHome();
+  var byId = {};
+  ui.docs.forEach(function (d) { byId[d.id] = d; });
+  var k = 0;
+  var rows = b.chapters.map(function (c, i) {
+    var d = c.docId && byId[c.docId], st = d && ui.sessions[d.id], pct = d ? Home.unitPct(d, st) : 0;
+    var label = c.front ? '·' : String(++k);
+    return h('li.unit-row.chapter-row' + (c.front ? '.front' : ''), { style: '--hue:' + hue(i), 'data-start': String(c.pageStart) },
+      h('button.unit-open', { type: 'button', disabled: d ? null : true, onclick: function () { if (d) openDoc(d.id); } },
+        h('strong.doc-name', h('span.chapter-n', label), ' ', c.title),
+        h('span.muted', 'pp. ' + c.pageStart + '–' + c.pageEnd + ' · ' + (d ? Home.count(d.clusters.length, 'section') : 'no readable text'))),
+      pct ? h('span.badge', pct + '%') : null,
+      i > 0 ? h('details.menu', h('summary', { 'aria-label': 'More for ' + c.title }, '⋮'),
+        h('div.menu-list', button('Join to the chapter before', function () {
+          if (!root.confirm('Join "' + c.title + '" to the chapter before it? Both start again; every other chapter keeps its progress.')) return;
+          recut(b, Book.merge(b.chapters, i));
+        }, 'quiet', { 'data-join': String(i) }))) : null);
+  });
+  var real = b.chapters.filter(function (c) { return !c.front; }).length;
+  var studied = b.chapters.filter(function (c) { var d = c.docId && byId[c.docId]; return d && Home.unitPct(d, ui.sessions[d.id]) === 100; }).length;
+  var methods = h('div.seg', { role: 'radiogroup', 'aria-label': 'Chapters found by', id: 'methods' }, Book.METHODS.map(function (m) {
+    return h('button', { type: 'button', role: 'radio', 'aria-checked': String(m === b.method), 'data-method': m,
+        onclick: function () {
+          if (m === b.method) return;
+          if (!root.confirm('Cut "' + b.name + '" into chapters by ' + Book.LABELS[m].toLowerCase() + '? Chapters that change start again; the others keep their progress.')) return;
+          recut(b, null, m);
+        } }, Book.LABELS[m] + ' · ' + (b.found ? b.found[m] : '?'));
+  }));
+  return h('main.wrap.book',
+    backBar(b.name, function () { leave('library'); }),
+    h('p.muted.unit-meta', Home.count(real, 'chapter') + ' · ' + Home.count(b.pages, 'page') + (b.parts.length > 1 ? ' in ' + b.parts.length + ' PDFs' : '') + ' · ' + studied + ' fully drilled'),
+    h('div.bar', h('i', { style: 'width:' + Math.round(100 * studied / Math.max(1, real)) + '%' })),
+    ui.importing ? h('div.card.busy', { role: 'status' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', ui.importing)) : null,
+    ui.error ? errorCard(null) : null,
+    h('div.card', { id: 'found-by' }, h('h2', 'How the chapters were found'),
+      h('p.muted', 'Each way of finding chapters is tried; the one that fits the book best is used. If the chapters below look wrong, try another — or join a chapter to the one before it. Chapters that stay the same keep your progress.'),
+      methods),
+    h('h2.grid-title', 'Chapters (' + real + ')'),
+    h('ul.units', { id: 'chapters' }, rows),
+    b.scanned.length ? h('p.warn', 'Pages with no readable text: ' + b.scanned.slice(0, 12).join(', ') + (b.scanned.length > 12 ? '…' : '') + '.') : null,
+    h('div.row', button('Delete this book', function () {
+      if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
+      docsChanged(); Store.deleteBook(b.id).then(function () { leave('library'); });
+    }, 'quiet danger', { id: 'delete-book' })));
 }
 
 /* ── LESSON ──────────────────────────────────────────────────────────────── */
@@ -888,7 +1118,7 @@ function viewSettings() {
 /* ── frame: a floating bar at the foot of the screen ─────────────────────── */
 function nav() {
   var due = Session.dueCards(ui.cards, today()).length;
-  var here = ui.view === 'session' ? 'library' : ui.view;
+  var here = ui.view === 'session' || ui.view === 'book' ? 'library' : ui.view;
   function tab(v, icon, label, go2, badge) {
     return h('button.nav-btn', { type: 'button', 'aria-current': here === v ? 'page' : null, onclick: go2, 'aria-label': label + (badge ? ', ' + badge + ' due' : '') },
       h('span.nav-icon', { 'aria-hidden': 'true' }, icon), h('span.nav-label', label), badge ? h('span.nav-badge', String(badge)) : null);
@@ -902,6 +1132,7 @@ function nav() {
 function render() {
   var app = doc.getElementById('app');
   var view = ui.view === 'session' && ui.state ? viewSession()
+    : ui.view === 'book' ? viewBook()
     : ui.view === 'review' ? viewReview()
     : ui.view === 'settings' ? viewSettings() : viewHome();
   app.textContent = '';
@@ -916,6 +1147,6 @@ function start() {
   });
 }
 
-root.Memorizer = { ui: ui, render: render, start: start, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc };
+root.Memorizer = { ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc };
 if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(window);
