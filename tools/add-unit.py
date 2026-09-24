@@ -149,7 +149,9 @@ def main():
 
     crops = {}
     if a.crops:
-        crops = json.load(open(a.crops, encoding='utf-8')).get('crops', {})
+        # utf-8-sig: Notepad on the build laptop writes a byte-order mark, and plain
+        # utf-8 refuses to parse JSON that starts with one.
+        crops = json.load(open(a.crops, encoding='utf-8-sig')).get('crops', {})
 
     # ── encode every image in memory before touching the disk ───────────────
     encoded, cropped = {}, 0
