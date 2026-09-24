@@ -492,7 +492,7 @@ function kindOf(user) {
   ok('one lesson request was made', les.length === 1 && stub.requests.length === 1, stub.requests.map(r => r.kind).join(', '));
   ok('it carries section 1’s words, with their pages', new RegExp('s1w' + pdf.firstCode + '\\b').test(les[0].user) && new RegExp('s1w' + pdf.lastCode + '\\b').test(les[0].user) && /\[p\.1\]/.test(les[0].user));
   ok('and nothing of sections 2 or 3', !/s[23]w[a-z]/.test(les[0].user));
-  ok('with the grounding prohibition as its system prompt, and the analogy fence in the task', /NOT_IN_PDF/.test(les[0].body.system) &&
+  ok('with the grounding prohibition as its system prompt, and the analogy fence in the task', /NOT_IN_PDF/.test(JSON.stringify(les[0].body.system)) && /Supreme Memorizer/.test(JSON.stringify(les[0].body.system)) &&
      les[0].user.indexOf('The ONLY thing you may write that is not from the excerpt is an analogy') !== -1);
   ok('and the browser-access header Anthropic requires', les[0].headers['anthropic-dangerous-direct-browser-access'] === 'true');
   ok('the step says Learn', (await page.locator('.stepper li.now').textContent()) === 'Learn');
@@ -835,6 +835,20 @@ function kindOf(user) {
      (await page.locator('#learn-unit').innerText()) === 'Take the final exam');
   await page.locator('#learn-unit').click();
   await page.locator('#mcq .option').first().waitFor(T);
+  /* Section 1's misses are still on the weak list, so the skill's last
+     cumulative round runs before the exam (Round C). Answered right here;
+     its misses and re-teach are checked on their own below. */
+  ok('the exam opens with a final review round of what is still weak', /^Before the exam · Review round · cold retest · 1 of \d/.test(await meta(page)), await meta(page));
+  const weakBefore = await page.evaluate(() => MemSession.pending(Memorizer.ui.state).length);
+  for (let k = 0; k < 10 && await page.evaluate(() => Memorizer.ui.state.phase === 'review'); k++) {
+    const ans = await page.evaluate(() => MemSession.reviewItem(Memorizer.ui.state).q.answer);
+    await page.locator('.option[data-i="' + ans + '"]').click();
+    await page.locator('#next').click();
+    await page.waitForFunction(() => document.querySelector('#mcq .option:not([disabled])') || document.querySelector('#result'), null, T);
+  }
+  ok('it asks each weak item once when all are right, then the exam', weakBefore >= 1 && await page.evaluate(() => Memorizer.ui.state.phase === 'exam') &&
+     await page.evaluate(() => Memorizer.ui.state.reviews.slice(-1)[0].final && Memorizer.ui.state.reviews.slice(-1)[0].asked) === weakBefore);
+  await page.waitForFunction(() => /^Question 1 of/.test((document.querySelector('.mcq-meta') || {}).innerText || ''), null, T);
   const ex = stub.requests.filter(r => r.kind === 'exam');
   ok('one exam request, with the full text of the two weakest sections', ex.length === 1 && new RegExp('s1w' + pdf.lastCode + '\\b').test(ex[0].user) &&
      new RegExp('s2w' + pdf.lastCode + '\\b').test(ex[0].user) && /sections 0, 1\./.test(ex[0].user));
@@ -868,10 +882,115 @@ function kindOf(user) {
   ok('its miss is a review card from the exam, filed under its section', cards2.length === 2 &&
      cards2.some(c => c.source === 'exam' && c.cluster === 0 && c.front === 'In the exam: what is preload?'), cards2.map(c => c.source + ':' + c.cluster).join(' | '));
   ok('and it can be retaken', await page.locator('#retake').count() === 1);
+  /* The skill's closing deliverable: pillars, mnemonics, weak-area report. */
+  const closing = await text(page, '#closing');
+  const st = await page.evaluate(() => MemSession.closing(Memorizer.ui.state));
+  ok('the exam result carries the sheet for the exam: three pillars from the lessons, and the weak-area report',
+     /Three pillars/.test(closing) && /Weak-area report/.test(closing) && st.pillars.length >= 1 && closing.indexOf(st.pillars[0].text.slice(0, 20)) !== -1 &&
+     await page.locator('ul.weak-report li').count() === st.weak.length && st.weak.length >= 1, closing.slice(0, 160));
+  ok('the exam miss is in the report, typed', st.weak.some(w => w.source === 'exam' && w.types.length === 1 && /^[CN]$/.test(w.types[0])));
+  await page.locator('#copy-sheet').click();
+  await page.waitForFunction(() => /Copied|copy it/.test(document.querySelector('#copy-status').textContent), null, T);
+  ok('and it can be copied', /Copied/.test(await text(page, '#copy-status')), await text(page, '#copy-status'));
   await page.getByRole('button', { name: 'Back to sections' }).click();
   await page.locator('#sections').waitFor(T);
   ok('and Back to sections goes there, the exam card keeping its score', /Last score 50%/.test(await page.locator('#exam-card').innerText()) &&
      (await page.locator('#exam-card #to-exam').innerText()) === 'Retake');
+
+  head('the Supreme Memorizer rules on screen: error types, re-teach, a review round, the weak list');
+  {
+    /* Everything this block writes is put back after it: the checks below
+       it read the unit as the exam left it. */
+    const snap = await page.evaluate(() => { const id = Memorizer.ui.docId;
+      return Promise.all([MemStore.get('sessions', id), MemStore.all('cards')]).then(r => ({ id, session: r[0], cards: r[1].map(c => c.id) })); });
+    /* A fresh session for this unit: section 2 drilled, one miss fixed on its
+       retry (so an earlier section has a weak item), section 1
+       about to be drilled with two questions whose right answers are the
+       book's own words (so the re-teach finds the book's sentences). */
+    await page.evaluate(async () => {
+      const d = Memorizer.ui.docRec;
+      let s = MemSession.init(d.id, d.clusters.map(c => c.title));
+      const L = { overview: 'The big idea.', points: [{ text: 'Diuretics reduce preload', page: 1 }], numbers: [], mnemonics: [], analogies: [], flowchart: '' };
+      const Q = (k, right, wrong) => ({ question: 'Skill question ' + k, quote: '', options: [right, wrong, 'Inotropes ' + k, 'Vasopressors ' + k], answer: 0, explain: 'The book says so.', page: 1 });
+      const step = e => { s = MemSession.next(s, e); };
+      step({ type: 'open', section: 1 }); step({ type: 'taught', value: L }); step({ type: 'toMemorize', value: { cards: 0 } }); step({ type: 'toDrill' });
+      step({ type: 'quizReady', value: { questions: [Q(9, 'Afterload', 'Preload')] } }); step({ type: 'answered', choice: 1 }); step({ type: 'answered', choice: 0 });
+      step({ type: 'open', section: 0 }); step({ type: 'taught', value: L }); step({ type: 'toMemorize', value: { cards: 0 } }); step({ type: 'toDrill' });
+      step({ type: 'quizReady', value: { questions: [Q(1, 'Diuretics', 'Nitrates'), Q(2, 'Excessive preload', 'Afterload')] } });
+      Memorizer.ui.state = s; Memorizer.ui.choice = null; Memorizer.render();
+    });
+    await page.locator('#not-sure').waitFor(T);
+    await page.locator('#not-sure').click();
+    ok('"Not sure" is an answer: the right option shown, filed as never encountered, with its fix',
+       /Not sure — the answer is A: Diuretics/.test(await text(page, '.why')) && (await page.locator('#type-chip').getAttribute('data-type')) === 'N' &&
+       /Type N · Never encountered/.test(await text(page, '#type-chip')) && /re-teach from the page/.test(await text(page, '#type-chip')), await text(page, '#type-chip'));
+    await page.locator('#next').click();
+    await page.locator('.option[data-i="1"]').waitFor(T);
+    await page.locator('.option[data-i="1"]').click();
+    ok('a wrong option is a confusion, naming what was picked', (await page.locator('#type-chip').getAttribute('data-type')) === 'C' &&
+       /You picked “Afterload”/.test(await text(page, '#type-chip')), await text(page, '#type-chip'));
+    await page.locator('#next').click();
+    await page.waitForFunction(() => /Again/.test(document.querySelector('.mcq-meta').innerText), null, T);
+    await page.locator('.option[data-i="2"]').click();
+    ok('missed again on the retry: encoding, and re-taught on the spot with a different kind of hook', (await page.locator('#type-chip').getAttribute('data-type')) === 'E' &&
+       await page.locator('#reteach').count() === 1 && (await page.locator('#reteach').getAttribute('data-hook')) !== 'none' &&
+       /Diuretics reduce preload/.test(await text(page, '#reteach')), await text(page, '#reteach'));
+    await page.locator('#next').click();
+    await page.waitForFunction(() => /Again/.test(document.querySelector('.mcq-meta').innerText), null, T);
+    await page.locator('.option[data-i="0"]').click();
+    ok('right on the retry: retrieval — the memory was there', (await page.locator('#type-chip').getAttribute('data-type')) === 'R');
+    await page.locator('#next').click();
+    await page.locator('#result').waitFor(T);
+    ok('two sections drilled with items still weak: a review round is offered first', /Review round: 3 weak items, mixed/.test(await text(page, '#review-round')) &&
+       (await page.locator('.result-actions button').first().getAttribute('id')) === 'review-round');
+    await page.locator('#review-round').click();
+    await page.waitForFunction(() => /Review round · cold retest · 1 of 3/.test((document.querySelector('.mcq-meta') || {}).innerText || ''), null, T);
+    /* Miss the twice-missed item again: the re-teach; the other, right. */
+    let reteachSeen = false, n = 0;
+    const missedOnce = {};
+    while (n++ < 6 && await page.evaluate(() => Memorizer.ui.state.phase === 'review')) {
+      const it = await page.evaluate(() => { const w = MemSession.reviewItem(Memorizer.ui.state); return { id: w.id, a: w.q.answer, streak: w.streak }; });
+      const wrong = it.streak >= 2 && !missedOnce[it.id];
+      if (wrong) missedOnce[it.id] = true;
+      await page.locator('.option[data-i="' + (wrong ? (it.a + 1) % 4 : it.a) + '"]').click();
+      if (wrong) reteachSeen = reteachSeen || (await page.locator('#reteach').count() === 1 && (await page.locator('#type-chip').getAttribute('data-type')) === 'E');
+      await page.locator('#next').click();
+      await page.waitForFunction(() => document.querySelector('#mcq .option:not([disabled])') || document.querySelector('#result'), null, T);
+    }
+    ok('in the round, a second miss in a row is encoding and is re-taught', reteachSeen);
+    ok('the missed item came back at the end of the round, and the round went back to the result', n === 5 &&
+       await page.evaluate(() => Memorizer.ui.state.phase === 'result' && Memorizer.ui.state.reviews.slice(-1)[0].asked === 4), String(n));
+    await page.locator('header.topbar').getByRole('button', { name: 'Back' }).click();
+    await page.locator('#weak-line').waitFor(T);
+    ok('the unit page shows the weak list in one line, with types and misses, and a review round', /Weak: .*Type E · 3 misses/.test(await text(page, '#weak-line')) &&
+       await page.locator('#unit-review').count() === 1, await text(page, '#weak-line'));
+    /* The Coach names the same items when asked where you are weak. */
+    await page.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
+    await page.locator('#ask-q').waitFor(T);
+    await page.fill('#ask-q', 'where am I weakest?');
+    await page.locator('#ask-go').click();
+    await page.locator('#agent-weak-items').waitFor(T);
+    ok('asked where you are weak, the Coach names the items still weak with their type and misses, and offers their round',
+       /Weak: .*Type E · 3 misses/.test(await text(page, '#agent-weak-items')) && /Review round:/.test(await text(page, '#agent-weak-items')), await text(page, '#agent-weak-items'));
+    /* A returning user: their session was saved by the version before the
+       weak list. It must carry on, not start again from nothing. */
+    const kept = await page.evaluate(async snap => {
+      const old = JSON.parse(JSON.stringify(snap.session)); old.state.v = 2;
+      delete old.state.weak; delete old.state.round; delete old.state.review; delete old.state.reviews; delete old.state.reviewDue;
+      await MemStore.put('sessions', old);
+      await Memorizer.openDoc(snap.id);
+      const st = Memorizer.ui.state;
+      return { v: st.v, drilled: st.titles.filter((_, i) => st.per[i].done).length, was: snap.session.state.titles.filter((_, i) => snap.session.state.per[i].done).length, score: st.exam.score };
+    }, snap);
+    ok('a session saved before the weak list is carried on, its drills and exam score kept', kept.drilled === kept.was && kept.was >= 2 && kept.score != null, JSON.stringify(kept));
+    await page.evaluate(async snap => {
+      await MemStore.put('sessions', snap.session);
+      const keep = {}; snap.cards.forEach(id => { keep[id] = true; });
+      for (const c of await MemStore.all('cards')) if (!keep[c.id]) await MemStore.del('cards', c.id);
+      await Memorizer.openDoc(snap.id);
+    }, snap);
+    await page.locator('#sections').waitFor(T);
+  }
 
   head('figures made from the book: a comparison chart, saved as an image');
   await page.locator('#make-compare').click();

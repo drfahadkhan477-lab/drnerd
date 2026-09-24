@@ -627,5 +627,44 @@ head('same shape over many generated sections');
   ok('and the drills are not empty', questions > 100, questions + ' questions');
 }
 
+head('re-teach: the fix follows the kind of miss (Supreme Memorizer)');
+{
+  /* Synthetic, written for this suite. */
+  const RT = { index: 0, title: 'Preload', pageStart: 3, pageEnd: 3, segments: [{ page: 3, heading: false, text:
+    'Preload is the stretch on ventricular myocytes at the end of diastole. Diuretics reduce preload by lowering circulating volume. ' +
+    'Nitrates dilate the veins and reduce preload. Afterload is the wall stress during ejection. ' +
+    'Excessive preload raises venous pressure and causes pulmonary congestion.' }] };
+  const all = RT.segments[0].text;
+  const q = { question: 'Which reduces preload by lowering circulating volume?', quote: '', options: ['Diuretics', 'Nitrates', 'Afterload', 'Inotropes'], answer: 0, explain: 'the explain', page: 3 };
+  const rt = (t, w) => K.reteach({ q, types: ['C', t], confusedWith: w || '' }, RT);
+  const book = x => x.lines.filter(l => !l.app && !l.chain).every(l => all.indexOf(l.text) !== -1);
+
+  const c = rt('C', 'Nitrates');
+  ok('confusion: the right answer and the option picked, side by side, each in the book’s own sentence',
+     c.hookType === 'contrast' && c.lines.length === 2 && /^Diuretics reduce/.test(c.lines[0].text) && /^Nitrates dilate/.test(c.lines[1].text) && book(c),
+     c.lines.map(l => l.text).join(' | '));
+  const c2 = rt('C', 'Inotropes');
+  ok('and when the section says nothing about what was picked, it says so rather than find a sentence that merely shares a word',
+     c2.lines.length === 2 && c2.lines[1].app && /does not say/.test(c2.lines[1].text), c2.lines.map(l => l.text).join(' | '));
+  const e = rt('E');
+  ok('encoding: a different kind of hook from the lesson’s letters — the step it sits in, from the book’s chain',
+     e.hookType === 'chain' && e.lines[0].chain.join(' ') === 'Diuretics reduce preload' && book(e), JSON.stringify(e.lines[0]));
+  const mid = K.reteach({ q: Object.assign({}, q, { options: ['Venous pressure', 'x', 'y', 'z'] }), types: ['E'], confusedWith: '' }, RT);
+  ok('the chain includes the step that leads to it, not only the one it leads to', mid.hookType === 'chain' && mid.lines[0].chain.join(' ') === 'preload raises venous pressure',
+     JSON.stringify(mid.lines[0]));
+  const same = K.reteach({ q: Object.assign({}, q, { options: ['Diuretics', 'circulating volume', 'y', 'z'] }), types: ['C'], confusedWith: 'circulating volume' }, RT);
+  ok('a contrast never shows the right answer’s sentence twice, as if it were about what was picked', same.lines.length === 2 && same.lines[1].app, JSON.stringify(same.lines[1]));
+  const noChain = K.reteach({ q: Object.assign({}, q, { options: ['Afterload', 'x', 'y', 'z'] }), types: ['E'], confusedWith: '' }, RT);
+  ok('and where it is in no chain, the book’s sentence to say aloud', noChain.hookType === 'sentence' && noChain.lines.length === 1 && /^Afterload is the wall/.test(noChain.lines[0].text) && book(noChain));
+  const r = rt('R');
+  ok('retrieval: no new hook, just the book’s sentence — the memory is there', r.hookType === '' && r.lines.length === 1 && /^Diuretics reduce/.test(r.lines[0].text) && /retrieval/i.test(r.fix));
+  const n = rt('N');
+  ok('never encountered: the sentence with the ones either side of it, in the book’s order',
+     n.hookType === 'teach' && n.lines.map(l => l.label).join() === 'Before it,The book,After it' && /^Preload is/.test(n.lines[0].text) && /^Nitrates/.test(n.lines[2].text) && book(n));
+  ok('every card names its type and the skill’s fix for it', ['C', 'E', 'R', 'N'].every(t => { const x = rt(t, 'Nitrates'); return x.type === t && x.name && x.fix; }));
+  ok('a sentence is about a term only when it carries most of it, not one word', K.sentenceAbout(RT, 'venous congestion kidney failure') === null &&
+     /^Excessive preload/.test(K.sentenceAbout(RT, 'venous pressure').text));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

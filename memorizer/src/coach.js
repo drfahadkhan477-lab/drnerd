@@ -1193,12 +1193,89 @@ function recallCards(cluster, lessonValue) {
   return out;
 }
 
+/* ── re-teach: the Supreme Memorizer fix for a miss (skill.js) ──────────
+   A second miss on the same item (a review round) is re-taught, and how
+   depends on the kind of miss, because the skill's point is that the
+   wrong fix wastes the time: a confusion is shown side by side, a hook
+   that did not take is replaced by a different KIND of hook, a retrieval
+   miss gets more retrieval and no new hook, a blank gets a short re-teach
+   from the page. Every line is the section's own sentence, or its own
+   chain of steps; only the labels are the app's. */
+function coverage(text, sentence) {
+  var want = Object.keys(stemsOf(text));
+  if (!want.length) return 0;
+  var have = stemsOf(sentence);
+  return want.filter(function (k) { return have[k]; }).length / want.length;
+}
+/* The section's sentence that says the most about `text`: every content
+   word of it, or failing that most of them — never one that merely shares
+   a word. */
+function sentenceAbout(cluster, text, not) {
+  var best = null, bestC = 0;
+  sentences(cluster, true).forEach(function (st) {
+    if (not && st.text === not) return;
+    var c = coverage(text, st.text);
+    if (c > bestC) { best = st; bestC = c; }
+  });
+  return bestC >= 0.6 ? best : null;
+}
+function reteach(item, cluster) {
+  var Skill = root.MemSkill || (typeof require === 'function' ? require('./skill.js') : null);
+  var q = item.q, right = q.options[q.answer];
+  var type = item.types[item.types.length - 1];
+  var info = Skill.ERRORS[type] || Skill.ERRORS.E;
+  var rs = sentenceAbout(cluster, right) || (q.explain ? { text: q.explain, page: q.page } : null);
+  var out = { type: type, name: info.name, fix: info.fix, hookType: '', title: right, lines: [] };
+  var line = function (label, st) { if (st) out.lines.push({ label: label, text: st.text, page: st.page }); };
+  if (type === 'C') {
+    var picked = item.confusedWith;
+    out.hookType = 'contrast';
+    out.title = right + ' — not ' + picked;
+    line('Right: ' + right, rs);
+    var ps = picked ? sentenceAbout(cluster, picked, rs && rs.text) : null;
+    if (ps) line('What you picked: ' + picked, ps);
+    else out.lines.push({ label: 'What you picked: ' + picked, text: 'This section does not say that about it.', page: null, app: true });
+  } else if (type === 'E') {
+    /* The lesson's hooks are first letters; a different kind is the step
+       the fact sits in, drawn from the section's own cause-and-effect
+       chain, or failing that the book's sentence to say aloud. */
+    var f = flow(cluster), at = -1;
+    f.nodes.forEach(function (n, i) { if (at === -1 && sameThing(n.label, right)) at = i; });
+    if (at !== -1) {
+      var into = f.edges.filter(function (e) { return e.to === f.nodes[at].id; })[0];
+      var outof = f.edges.filter(function (e) { return e.from === f.nodes[at].id; })[0];
+      var byId = function (id) { return f.nodes.filter(function (n) { return n.id === id; })[0]; };
+      var steps = [];
+      if (into) steps.push(byId(into.from).label, into.verb);
+      steps.push(f.nodes[at].label);
+      if (outof) steps.push(outof.verb, byId(outof.to).label);
+      if (steps.length > 1) {
+        out.hookType = 'chain';
+        out.lines.push({ label: 'Where it sits in the chain', text: steps.join(' → '), page: f.nodes[at].page, chain: steps });
+      }
+    }
+    if (!out.hookType) { out.hookType = 'sentence'; line('Say it aloud twice, then cover it and say it again', rs); }
+    else line('The book', rs);
+  } else if (type === 'R') {
+    line('The book', rs);
+  } else {
+    out.hookType = 'teach';
+    var all = sentences(cluster, true), k = -1;
+    if (rs) all.forEach(function (st, i) { if (k === -1 && st.text === rs.text) k = i; });
+    if (k > 0) line('Before it', all[k - 1]);
+    line('The book', rs);
+    if (k !== -1 && k + 1 < all.length) line('After it', all[k + 1]);
+  }
+  return out;
+}
+
 var MemCoach = {
   OPTIONS: OPTIONS, PER_KIND: PER_KIND, QUIZ_SIZE: QUIZ_SIZE, KIND_ORDER: KIND_ORDER, family: family, FLIP: FLIP, keyTermOf: keyTermOf,
   sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, defined: defined, toks: toks,
   rankedTerms: rankedTerms, frequencies: frequencies, bare: bare, numberFacts: numberFacts, mnemonicsOf: mnemonicsOf,
   pools: pools, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
   lesson: lesson, quiz: quiz, exam: exam, flow: flow, paths: paths, tree: tree,
+  reteach: reteach, sentenceAbout: sentenceAbout,
   recallCards: recallCards, KIND_SAYS: KIND_SAYS, questionKind: questionKind, explainQuestion: explainQuestion, explainSection: explainSection,
 };
 root.MemCoach = MemCoach;

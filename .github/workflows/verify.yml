@@ -219,15 +219,15 @@ jobs:
         run: node tests/verify-echoanchor-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures (161 checks)
         run: node tests/verify-memorizer-chunk-pure.js
-      - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass (82 checks)
+      - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
         run: node tests/verify-memorizer-prompts-pure.js
-      - name: Memorizer — teach, memorise, then drill, a miss asked again, every miss one card (59 checks)
+      - name: Memorizer — teach, memorise, then drill; every miss typed, one card, and kept until it graduates; review rounds interleaved (95 checks)
         run: node tests/verify-memorizer-session-pure.js
-      - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, and makes the cards to memorise (127 checks)
+      - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, makes the cards to memorise, and re-teaches by the kind of miss (137 checks)
         run: node tests/verify-memorizer-coach-pure.js
       - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness (36 checks)
         run: node tests/verify-memorizer-appearance-pure.js
-      - name: Memorizer — the home screen's progress, streak, pearl and weak spots say true things (59 checks)
+      - name: Memorizer — the home screen's progress, streak, pearl and weak spots say true things (60 checks)
         run: node tests/verify-memorizer-home-pure.js
       - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (32 checks)
         run: node tests/verify-memorizer-book-pure.js
@@ -241,7 +241,7 @@ jobs:
         run: node tests/verify-memorizer-sheet-pure.js
       - name: Memorizer — figures made from the book, every word the lesson's (17 checks)
         run: node tests/verify-memorizer-figure-pure.js
-      - name: Memorizer — the Coach as an agent: it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool (24 checks)
+      - name: Memorizer — the Coach as an agent: it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, and names what is still weak (30 checks)
         run: node tests/verify-memorizer-agent-pure.js
 
   build-guard:

@@ -40,18 +40,20 @@ function greeting(hour) {
    (the old protocol) is not resumed, so it counts none. */
 function studiedOf(doc, state) {
   var n = (doc.clusters || []).length;
-  if (!state || state.v !== 2) return 0;
+  if (!drillState(state)) return 0;
   var k = 0;
   for (var i = 0; i < n; i++) if (state.per[i] && state.per[i].done) k++;
   return k;
 }
+/* A session on the drill protocol: version 2, or 3 (with the weak list). */
+function drillState(st) { return !!st && (st.v === 2 || st.v === 3); }
 function unitPct(doc, state) {
   var n = (doc.clusters || []).length;
   return n ? Math.round(100 * studiedOf(doc, state) / n) : 0;
 }
 /* A section's badge: its best drill score, or null before its first drill. */
 function sectionPct(state, i) {
-  var c = state && state.v === 2 && state.per[i];
+  var c = drillState(state) && state.per[i];
   return c && c.best != null ? Math.round(100 * c.best) : null;
 }
 
@@ -78,10 +80,10 @@ function progress(docs, sessions, cards, today, FSRS) {
 /* Started: a version-2 session with any section taught. */
 /* A unit whose final exam has been scored. */
 function examined(state) {
-  return !!(state && state.v === 2 && state.exam && state.exam.score != null);
+  return !!(drillState(state) && state.exam && state.exam.score != null);
 }
 function started(state) {
-  if (!state || state.v !== 2) return false;
+  if (!drillState(state)) return false;
   return Object.keys(state.per).some(function (k) { return state.per[k].lesson || state.per[k].done; });
 }
 /* The unit to carry on with: one under way, else one not begun, newest
@@ -113,7 +115,7 @@ function recent(docs, sessions, at, n) {
 function nextTitle(d, st) {
   var n = (d.clusters || []).length;
   if (!n) return '';
-  if (!st || st.v !== 2) return d.clusters[0].title;
+  if (!drillState(st)) return d.clusters[0].title;
   if (examined(st)) return 'Final exam · ' + Math.round(100 * st.exam.score) + '%';
   for (var k = 0; k <= n; k++) {
     var i = ((st.section || 0) + k) % n;

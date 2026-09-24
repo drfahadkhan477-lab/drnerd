@@ -106,5 +106,26 @@ head('a topic finds its section');
   ok('the coach says what it is doing, naming the section', /“Aortic Stenosis”/.test(G.say({ tool: 'quiz' }, 'Aortic Stenosis')) && /Tell me the topic/.test(G.say({ tool: 'quiz' }, '')));
 }
 
+head('where am I weak: the items still weak, with their types (Supreme Memorizer)');
+{
+  const W = (id, misses, types, hits, extra) => Object.assign({ id, cluster: 0, source: 'drill', q: { question: 'q', options: ['x'], answer: 0, page: 1 }, label: 'item ' + id,
+    misses, streak: 0, hits, types, confusedWith: '', order: +id.slice(1) }, extra || {});
+  const docs = [{ id: 'u1', name: 'Valves' }, { id: 'u2', name: 'Heart failure' }, { id: 'u3', name: 'Rhythm' }];
+  const sessions = {
+    u1: { weak: { w1: W('w1', 2, ['C', 'E'], []), w2: W('w2', 1, ['R'], [2, 5]) } },       /* w2 has graduated */
+    u2: { weak: { w3: W('w3', 1, ['N'], [4]), w4: W('w4', 1, ['C'], [], { source: 'exam', confusedWith: 'digoxin' }), w5: W('w5', 1, ['C'], []) } },
+    u3: { weak: { w6: W('w6', 1, ['R'], [1, 3]) } },                                   /* all graduated */
+  };
+  const got = G.weakItems(docs, sessions);
+  ok('each unit with anything still weak, the most weak first', got.map(w => w.name).join() === 'Heart failure,Valves', got.map(w => w.name + ':' + w.n).join());
+  ok('an item that has graduated is not weak, and a unit with nothing weak is left out',
+     got.find(w => w.name === 'Valves').n === 1 && !/item w2/.test(got.find(w => w.name === 'Valves').line) && !got.some(w => w.name === 'Rhythm'));
+  ok('each line names the item with its latest type and its misses', got.find(w => w.name === 'Valves').line === 'Weak: item w1 (Type E · 2 misses)',
+     got.find(w => w.name === 'Valves').line);
+  ok('and what it was confused with', /item w4 \(Type C — with digoxin · 1 miss\)/.test(got.find(w => w.name === 'Heart failure').line), got.find(w => w.name === 'Heart failure').line);
+  ok('a review round is offered only for what a round can ask (not an exam miss)', got.find(w => w.name === 'Heart failure').review === 2);
+  ok('no sessions, nothing weak', G.weakItems(docs, {}).length === 0 && G.weakItems([], null).length === 0);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

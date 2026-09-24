@@ -95,6 +95,13 @@ head('progress counts what happened');
   ok('a section taught but not drilled is not studied', H.studiedOf(d1, S.next(S.next(S.init('a', ['x', 'y', 'z', 'w']), { type: 'open', section: 0 }), { type: 'taught', value: LESSON })) === 0);
   ok('a session from the old protocol counts none: it is not resumed', H.studiedOf(d1, { phase: 'done', cluster: 3 }) === 0);
   ok('a unit not begun has studied none', H.studiedOf(d1, null) === 0);
+  /* Version 3 added the weak list; a version-2 session saved before it is
+     the same drill protocol and must still count — the first version-3
+     build checked for version 2 exactly, and every session read as new. */
+  const v3 = studied('a', ['x', 'y', 'z', 'w'], [[1, 1], null, [0, 2], null]);
+  const v2 = JSON.parse(JSON.stringify(v3)); v2.v = 2; delete v2.weak;
+  ok('a version-2 and a version-3 session count the same', v3.v === 3 && H.studiedOf(d1, v2) === 2 && H.studiedOf(d1, v3) === 2 &&
+     H.sectionPct(v2, 0) === H.sectionPct(v3, 0) && H.sectionPct(v3, 0) != null);
 
   const good = FSRS.update(null, 3, DAY);             /* reviewed today: recall is 100% */
   const old = FSRS.update(null, 3, '2025-01-01');      /* reviewed fourteen months ago */

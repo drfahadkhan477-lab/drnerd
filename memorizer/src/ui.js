@@ -18,6 +18,7 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
+var Skill = root.MemSkill;
 var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
@@ -350,7 +351,7 @@ function openDoc(id, section) {
     ui.docRec = r[0];
     ui.docId = id;
     var st = r[1] && r[1].state;
-    ui.state = st && st.v === Session.VERSION ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }));
+    ui.state = Session.resumable(st) ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }));
     ui.state = Session.next(ui.state, { type: 'toUnit' });
     if (typeof section === 'number') ui.state = Session.next(ui.state, { type: 'open', section: section });
     ui.view = 'session'; ui.error = ''; ui.choice = null;
@@ -769,6 +770,7 @@ function viewUnit() {
     d.bookId ? h('p.muted.book-of', d.bookName + (d.chapter ? ' · chapter ' + d.chapter : ' · front matter') + ' · pp. ' + d.pageStart + '–' + d.pageEnd) : null,
     h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
+    weakCard(s),
     h('h2.grid-title', 'Sections (' + n + ')'),
     h('div.sections', { id: 'sections' }, cards),
     examCard,
@@ -776,6 +778,15 @@ function viewUnit() {
     h('div.sticky-cta', allDone
       ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
       : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })));
+}
+
+/* The weak list in one line, as the skill shows it, with its round. */
+function weakCard(s) {
+  var line = Skill.weakLine(Object.keys(s.weak || {}).map(function (k) { return s.weak[k]; }).filter(function (w) { return w.source !== 'exam'; }));
+  if (!line) return null;
+  var n = Session.pending(s).length;
+  return h('div.card.weak-line', { id: 'weak-line' }, h('p', h('strong', '\u26A0\uFE0F '), line),
+    button('Review round (' + n + ')', function () { go({ type: 'toReview' }); }, 'quiet', { id: 'unit-review' }));
 }
 
 /* ── BOOK: its chapters, and how they were found ─────────────────────────── */
@@ -1120,10 +1131,11 @@ var LETTERS = 'ABCDEFGH';
    far back the reader is looking. Looking back shows an answered question
    as it was answered, read-only: answers are recorded on Next, and changing
    one afterwards would change a score and a review card already made. */
-function mcqCard(q, meta, onNext, reveal, nav) {
+function mcqCard(q, meta, onNext, reveal, nav, after) {
   var past = nav && nav.back > 0 ? nav.hist[nav.hist.length - nav.back] : null;
   var chosen = past ? past.choice : ui.choice;
   var answered = chosen != null;
+  var unsure = chosen === Session.NOT_SURE;
   var canPrev = nav && nav.hist.length - nav.back > 0;
   var prev = canPrev ? button('← Previous', function () { ui.back = nav.back + 1; render(); }, 'quiet', { id: 'prev-q' }) : null;
   var fwd = past ? button(nav.back === 1 ? 'Back to the current question →' : 'Forward →', function () { ui.back = nav.back - 1; render(); }, 'primary big', { id: 'fwd-q' }) : null;
@@ -1138,16 +1150,20 @@ function mcqCard(q, meta, onNext, reveal, nav) {
       h('span.opt-letter', LETTERS[i]), h('span.opt-text', o));
   }));
   var right = answered && chosen === q.answer;
+  /* "Not sure" is an answer, not a skip: the skill files it as never
+     encountered, and it is re-taught from the page (skill.js). */
+  var notSure = answered || past ? null : h('div.row.not-sure-row', button('Not sure', function () { ui.choice = Session.NOT_SURE; render(); }, 'quiet', { id: 'not-sure' }));
   return h('div.card.mcq', { id: 'mcq' },
     h('div.mcq-meta', meta),
     quote,
     h('h2.q', q.question),
     opts,
+    notSure,
     answered ? h('div.why' + (right ? '.good' : '.bad'), { role: 'status' },
-      h('strong', right ? '✓ Correct' : '✗ The answer is ' + LETTERS[q.answer] + ': ' + q.options[q.answer]),
+      h('strong', right ? '✓ Correct' : (unsure ? '✗ Not sure \u2014 the answer is ' : '✗ The answer is ') + LETTERS[q.answer] + ': ' + q.options[q.answer]),
       reveal ? h('p.muted', reveal) : null,
       h('p', h('span.why-label', 'Why: '), marked(q.explain), q.page ? [' ', page(q.page)] : null),
-      right || past ? null : h('p.muted', 'This one is now a review card, and it comes back at the end of this drill.'),
+      past ? null : after ? after(chosen, right) : right ? null : h('p.muted', 'This one is now a review card, and it comes back at the end of this drill.'),
       past ? null : h('div.row.mcq-nav', prev, button('Next →', onNext, 'primary big', { id: 'next' }))) : null,
     past ? h('div.row.mcq-nav', prev, fwd) : !answered && prev ? h('div.row.mcq-nav', prev) : null);
 }
@@ -1194,8 +1210,85 @@ function viewDrill() {
   var meta = [h('span', retry ? 'Again — you missed this one' : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
     q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · its answer checked against your book') : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
-  return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice }); }, null, nav)];
+  /* The kind of miss, read from what happened (skill.js); a second miss in
+     a row is re-taught on the spot with a different kind of hook. */
+  var after = function (chosen, right) {
+    if (right) return retry ? typeChip('R', '', 'It came back when asked again.') : null;
+    if (retry) return [typeChip('E', ''), reteachCard(Coach.reteach({ q: q, types: ['E'], confusedWith: '' }, cluster()))];
+    var t = chosen === Session.NOT_SURE ? 'N' : 'C';
+    return [typeChip(t, t === 'C' ? q.options[chosen] : ''), h('p.muted', 'Now a review card; it comes back at the end of this drill.')];
+  };
+  return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice }); }, null, nav, after)];
 }
+/* The error type of a miss, and the skill's fix for it. */
+function typeChip(t, confusedWith, lead) {
+  var e = Skill.ERRORS[t];
+  return h('div.type-chip', { 'data-type': t, id: 'type-chip' },
+    h('span.type-badge', 'Type ' + t + ' \u00B7 ' + e.name),
+    h('span', lead ? lead + ' ' : '', t === 'C' && confusedWith ? 'You picked \u201C' + confusedWith + '\u201D. ' : '', e.fix));
+}
+/* A re-teach (Coach.reteach): every line the book's own sentence. */
+function reteachCard(r) {
+  return h('div.reteach', { id: 'reteach', 'data-hook': r.hookType || 'none' },
+    h('span.eyebrow', 'Re-teach \u00B7 ' + (Skill.HOOKS[r.hookType] || 'More retrieval')),
+    h('h3', r.title),
+    r.lines.map(function (l) {
+      return h('div.reteach-line' + (l.app ? '.app' : ''),
+        h('span.reteach-label', l.label),
+        l.chain ? h('p.chain', l.chain.map(function (x, i) { return i % 2 ? h('span.chain-verb', ' ' + x + ' \u2192 ') : h('strong', x); }))
+          : h('p', marked(l.text), l.page ? [' ', page(l.page)] : null));
+    }));
+}
+/* A review round of the weak list: cold retest, interleaved (skill §7). */
+function viewReviewRound() {
+  var s = ui.state, r = s.review, w = Session.reviewItem(s), q = w.q;
+  var n = r.queue.length;
+  var meta = [h('span', (r.final ? 'Before the exam \u00B7 ' : '') + 'Review round \u00B7 cold retest \u00B7 ' + (r.idx + 1) + ' of ' + n),
+    h('div.bar', h('i', { style: 'width:' + Math.round(100 * r.idx / n) + '%' }))];
+  var from = ui.docRec.clusters[w.cluster] ? ui.docRec.clusters[w.cluster].title : '';
+  var after = function (chosen, right) {
+    if (right) return h('p.muted', w.hits.length ? 'Right again, in a later round: that graduates it off the weak list.' : 'Right. One more time in a later round and it graduates.');
+    var t = w.streak >= 1 ? 'E' : chosen === Session.NOT_SURE ? 'N' : 'C';
+    var picked = chosen >= 0 ? q.options[chosen] : '';
+    var item = { q: q, types: w.types.concat([t]), confusedWith: t === 'C' ? picked : w.confusedWith };
+    return [typeChip(t, picked), Session.needsReteach(s) ? reteachCard(Coach.reteach(item, ui.docRec.clusters[w.cluster])) : null,
+      h('p.muted', 'It comes back once more at the end of this round.')];
+  };
+  return [backBar('Review round', function () { go({ type: 'toUnit' }); }),
+    mcqCard(q, meta, function () { go({ type: 'reviewAnswered', choice: ui.choice }); }, from ? 'From \u201C' + from + '\u201D' : '', null, after)];
+}
+/* The skill's closing deliverable, after the exam (skill §16). */
+function closingCard(s) {
+  var c = Session.closing(s), status = h('span.muted', { id: 'copy-status', role: 'status' });
+  var copy = function () {
+    var text = Session.closingText(s);
+    var done = function () { status.textContent = 'Copied.'; };
+    try {
+      if (root.navigator && root.navigator.clipboard && root.navigator.clipboard.writeText) { root.navigator.clipboard.writeText(text).then(done, fallback); return; }
+    } catch (_) {}
+    fallback();
+    function fallback() {
+      var ta = h('textarea', { 'aria-hidden': 'true', style: 'position:fixed;left:-9999px' }); ta.value = text; doc.body.appendChild(ta); ta.select();
+      try { doc.execCommand('copy'); done(); } catch (_) { status.textContent = 'Select and copy it from here.'; }
+      doc.body.removeChild(ta);
+    }
+  };
+  return h('div.card.closing', { id: 'closing' },
+    h('h2', 'Your sheet for the exam'),
+    h('h3', 'Three pillars'), h('ol.pillars', c.pillars.map(function (p) { return h('li', marked(p.text), p.page ? [' ', page(p.page)] : null); })),
+    c.sheet.length ? [h('h3', 'Mnemonic sheet'), h('ul.mnemonic-sheet', c.sheet.map(function (m) {
+      return h('li', h('strong.letters', m.letters), ' ', m.title, h('span.muted', ' \u2014 ' + m.words.join(', ')));
+    }))] : null,
+    h('h3', 'Weak-area report'),
+    c.weak.length ? h('ul.weak-report', c.weak.map(function (w) {
+      return h('li', { 'data-graduated': String(w.graduated) },
+        h('strong', w.answer), ' ', w.page ? page(w.page) : null,
+        h('span.muted', ' \u2014 ' + w.misses + (w.misses === 1 ? ' miss' : ' misses') + ', type ' + w.types.join('/') +
+          (w.confusedWith ? ', confused with \u201C' + w.confusedWith + '\u201D' : '') + (w.graduated ? ' \u00B7 graduated' : ' \u00B7 still weak')));
+    })) : h('p', 'Nothing was missed.'),
+    h('div.row', button('Copy sheet', copy, '', { id: 'copy-sheet' }), status));
+}
+
 function viewResult() {
   var s = ui.state, c = s.per[s.section], d = ui.docRec;
   var qs = c.quiz.questions, firsts = c.answers.filter(function (a) { return a.first; });
@@ -1223,6 +1316,7 @@ function viewResult() {
       return h('li', h('strong', q.question), h('p', '→ ', q.options[q.answer], ' ', q.page ? page(q.page) : null));
     }))) : null,
     h('div.row.result-actions',
+      s.reviewDue ? button('Review round: ' + Session.pending(s).length + ' weak item' + (Session.pending(s).length === 1 ? '' : 's') + ', mixed', function () { go({ type: 'toReview' }); }, 'primary big', { id: 'review-round' }) : null,
       nxt != null ? button('Next section: ' + d.clusters[nxt].title, function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'next-section' })
         : button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'to-exam' }),
       button('Drill again', function () { go({ type: 'redrill' }); }, '', { id: 'redrill' }),
@@ -1261,6 +1355,7 @@ function viewDone() {
       var t = +k >= 0 ? d.clusters[+k].title : 'Across the unit', b = by[k];
       return h('li', h('span', t), h('span.badge', b.right + '/' + b.n));
     }))),
+    closingCard(s),
     h('div.row', button('Retake the exam', function () { go({ type: 'toExam' }); }, 'primary', { id: 'retake' }),
       button('Back to sections', function () { go({ type: 'toUnit' }); })),
   ];
@@ -1273,6 +1368,7 @@ function viewSession() {
   else if (s.phase === 'result') body = viewResult();
   else if (s.phase === 'exam') body = viewExam();
   else if (s.phase === 'done') body = viewDone();
+  else if (s.phase === 'review') body = viewReviewRound();
   else return viewUnit();
   return h('main.wrap.study', body);
 }
@@ -1549,8 +1645,15 @@ function coachActions(tool) {
   if (tool === 'help') return h('div.chips', ['Explain preload', 'Quiz me on heart failure', 'Compare aortic stenosis and aortic regurgitation', 'What should I study today?', 'Where am I weakest?']
     .map(function (x) { return button(x, function () { askNow(x); }, 'chip quiet'); }));
   if (tool === 'review') return due ? button('Review my ' + due + ' due card' + (due === 1 ? '' : 's'), function () { startReview(); }, 'chip', { id: 'agent-review' }) : h('p', 'No cards are due today.');
-  if (tool === 'weak') return spots.length ? h('ul', spots.map(function (w) { return h('li', button(w.title, function () { openDoc(w.docId, w.cluster); }, 'chip quiet')); }))
-    : h('p', 'Nothing yet: drill a section or two and I’ll know where you are shaky.');
+  if (tool === 'weak') {
+    /* The items still weak, by unit (skill.js), then the weakest sections. */
+    var items = Agent.weakItems(ui.docs, ui.sessions || {}, 3);
+    var itemList = items.length ? h('ul.agent-weak-items', { id: 'agent-weak-items' }, items.map(function (w) {
+      return h('li', h('p', h('strong', w.name + ': '), w.line), w.review ? button('Review round: ' + w.name, function () { openDoc(w.docId); }, 'chip quiet') : null);
+    })) : null;
+    if (!spots.length && !itemList) return h('p', 'Nothing yet: drill a section or two and I’ll know where you are shaky.');
+    return [itemList, spots.length ? h('ul', spots.map(function (w) { return h('li', button(w.title, function () { openDoc(w.docId, w.cluster); }, 'chip quiet')); })) : null];
+  }
   return h('ol', [cur ? h('li', button('Carry on with ' + cur.doc.name, function () { openDoc(cur.doc.id); }, 'chip quiet')) : null,
     spots[0] ? h('li', button('Relearn your weakest: ' + spots[0].title, function () { openDoc(spots[0].docId, spots[0].cluster); }, 'chip quiet')) : null,
     due ? h('li', button('Review ' + due + ' due card' + (due === 1 ? '' : 's'), function () { startReview(); }, 'chip quiet')) : null].filter(Boolean).concat(

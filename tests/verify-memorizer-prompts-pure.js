@@ -34,6 +34,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
 const ROOT = path.join(__dirname, '..');
 const P = require(path.join(ROOT, 'memorizer', 'src', 'prompts.js'));
+const Skill = require(path.join(ROOT, 'memorizer', 'src', 'skill.js'));
 const Provider = require(path.join(ROOT, 'memorizer', 'src', 'provider.js'));
 
 /* Three sections whose words cannot collide, so "contains" and "does not
@@ -61,11 +62,23 @@ head('every prompt holds the model to the PDF');
 {
   ok('there are three prompt builders to check', all.length === 3);
   for (const [name, p] of all) {
-    ok(`${name}: the system prompt is the grounding prohibition`, p.system === P.GROUNDING);
-    ok(`${name}: and names the escape hatch instead of letting it fill a gap`, p.system.indexOf(P.NOT_IN_PDF) !== -1 && /Do not add facts/.test(p.system));
+    ok(`${name}: the system prompt opens with the grounding prohibition, as its own block`, Array.isArray(p.system) && p.system[0].text === P.GROUNDING && !p.system[0].cache_control);
+    ok(`${name}: and names the escape hatch instead of letting it fill a gap`, p.system[0].text.indexOf(P.NOT_IN_PDF) !== -1 && /Do not add facts/.test(p.system[0].text));
+    ok(`${name}: then the Supreme Memorizer protocol, marked for prompt caching`, p.system.length === 2 && p.system[1].text === Skill.systemText() &&
+       JSON.stringify(p.system[1].cache_control) === '{"type":"ephemeral"}');
     ok(`${name}: says what kind of reply it wants, so parse knows the schema`, p.kind === name && !!P.SCHEMAS[p.kind]);
   }
   ok('the prohibition says excerpt text is material, not instruction', /never an instruction/.test(P.GROUNDING));
+  /* The protocol is cached, so it must be long enough to be: Opus 5 caches
+     a prefix of 512 tokens or more, and at roughly four characters a token
+     the two blocks together need well over 2,048 characters. */
+  const both = P.systemText(P.system());
+  ok('the cached system prompt is long enough to be cached at all', both.length > 2600, both.length + ' characters');
+  ok('the protocol yields to the grounding rule wherever they disagree', /grounding rule wins/.test(Skill.systemText()) && /teach only from the excerpt/.test(Skill.systemText()));
+  ok('and tells the model what each error type means, so its wrong options make the types true',
+     ['C (confusion)', 'N (never encountered)', 'R (retrieval)', 'E (encoding)'].every(t => Skill.systemText().indexOf(t) !== -1) &&
+     /each wrong option must be a real item/.test(Skill.systemText()));
+  ok('and nothing in it varies between requests, which would break the cache', P.systemText(P.lesson(A).system) === P.systemText(P.exam([A], {}, [0], 6).system));
   /* The two things a teacher adds that a book does not say, each fenced. */
   ok('the lesson allows an analogy, and only an analogy, from outside the book — with no fact in it',
      P.lesson(A).user.indexOf(P.ANALOGY_RULE) !== -1 && /ONLY thing/.test(P.ANALOGY_RULE) && /no medical fact, number, dose/.test(P.ANALOGY_RULE));
@@ -171,7 +184,7 @@ head('the Claude request has the Messages wire shape');
   ok('anthropic: key in x-api-key, with the browser-access header', a.init.headers['x-api-key'] === 'sk-ant-TEST' &&
      a.init.headers['anthropic-dangerous-direct-browser-access'] === 'true' && a.init.headers['anthropic-version'] === '2023-06-01');
   ok('anthropic: system and user go where the Messages API reads them',
-     ab.system === P.GROUNDING && ab.messages.length === 1 && ab.messages[0].role === 'user' && ab.messages[0].content === prompt.user);
+     JSON.stringify(ab.system) === JSON.stringify(P.system()) && ab.messages.length === 1 && ab.messages[0].role === 'user' && ab.messages[0].content === prompt.user);
   ok('anthropic: the phase schema is sent as the output format',
      ab.output_config && ab.output_config.format.type === 'json_schema' &&
      JSON.stringify(ab.output_config.format.schema) === JSON.stringify(P.SCHEMAS.lesson));

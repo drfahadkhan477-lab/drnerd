@@ -142,7 +142,26 @@ function say(p, title) {
   }
 }
 
-var MemAgent = { TOOLS: TOOLS, RULES: RULES, topicOf: topicOf, plan: plan, planPrompt: planPrompt, PLAN_SCHEMA: PLAN_SCHEMA, parsePlan: parsePlan, findSection: findSection, say: say };
+/* The item-level weak list (the Supreme Memorizer rule, skill.js), unit by
+   unit: what "where am I weak" names besides the weakest sections — each
+   item still weak, with its error type and how often it was missed. An
+   item that has graduated is not weak; a unit with nothing weak is left
+   out. */
+function weakItems(docs, sessions, max) {
+  var Skill = root.MemSkill || (typeof require === 'function' ? require('./skill.js') : null);
+  var out = [];
+  (docs || []).forEach(function (d) {
+    var st = sessions && sessions[d.id];
+    var items = st && st.weak ? Object.keys(st.weak).map(function (k) { return st.weak[k]; }) : [];
+    var open = items.filter(function (w) { return !Skill.graduated(w); });
+    if (!open.length) return;
+    out.push({ docId: d.id, name: d.name, line: Skill.weakLine(open, max || 3), n: open.length,
+               review: open.filter(function (w) { return w.source !== 'exam'; }).length });
+  });
+  return out.sort(function (a, b) { return b.n - a.n; });
+}
+
+var MemAgent = { weakItems: weakItems, TOOLS: TOOLS, RULES: RULES, topicOf: topicOf, plan: plan, planPrompt: planPrompt, PLAN_SCHEMA: PLAN_SCHEMA, parsePlan: parsePlan, findSection: findSection, say: say };
 root.MemAgent = MemAgent;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemAgent;
 })(typeof window !== 'undefined' ? window : this);

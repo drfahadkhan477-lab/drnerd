@@ -135,6 +135,22 @@ every section is done. Each section is:
    weighted to your weakest sections, that does not name the section a
    question is from until you have answered it.
 
+**The owner's Supreme Memorizer skill is built into the coach**
+([`memorizer/src/skill.js`](memorizer/src/skill.js)). Every miss is typed by
+what happened, and the type decides the fix:
+- **Confusion:** a wrong option picked. It is shown side by side with the right one.
+- **Never encountered:** "Not sure". It is re-taught from the page.
+- **Retrieval:** missed, then right when asked again. It gets more retrieval and no new hook.
+- **Encoding:** missed twice. It is re-taught with a different kind of hook.
+
+Each fix is built from the book's own sentences. A missed item stays on a
+weak list until it is right in two rounds far enough apart. Mixed review
+rounds are offered as you go and run before the exam, and the exam result
+carries the skill's closing sheet: three pillars, the mnemonics, and a
+weak-area report. Asked where you are weak, the Coach names the items still
+weak, with their types. With Claude, the same protocol is sent as a cached system
+prompt, after the rule that it may teach only from your PDF.
+
 **A whole textbook** can be added as one book, in as many PDFs as it came
 in: the parts are put in order by the numbers in their names and their pages
 numbered straight through, so a page reference means the same page wherever
