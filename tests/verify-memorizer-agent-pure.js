@@ -161,11 +161,16 @@ head('the new tools: why I missed it, a review round, the week ahead');
     ['start a review round', 'round'], ['drill my weak items', 'round'], ['retest my weak points', 'round'],
     ['what is due this week', 'schedule'], ['what cards do I have tomorrow', 'schedule'], ['show my review schedule', 'schedule'],
     ['what do I get wrong', 'weak'], ['review my cards', 'review'], ['where am I weakest?', 'weak'],
+    ['my exam is on 10 October', 'exam'], ['my exam is in 3 weeks', 'exam'], ['exam date 2026-11-02', 'exam'], ['plan for my exam', 'exam'], ['my exam is tomorrow', 'exam'],
+    ['let me explain preload', 'teach'], ['teach it back', 'teach'], ["I'll explain afterload", 'teach'],
+    ['quiz me on the table in aortic stenosis', 'table'], ['table round on heart failure', 'table'], ['quiz me on aortic stenosis', 'quiz'],
   ];
   const wrong = CASES.filter(([m, t]) => G.plan(m, {}).tool !== t).map(([m, t]) => m + ' → ' + G.plan(m, {}).tool + ' (not ' + t + ')');
   ok(`each of ${CASES.length} messages reaches its tool, and the old ones still reach theirs`, wrong.length === 0, wrong.join(' | '));
-  ok('every tool has a line the model is told', G.TOOLS.every(t => typeof G.DESCRIBE[t] === 'string' && G.DESCRIBE[t].length > 10) && G.TOOLS.length === 14);
-  ok('and something to say', ['mistake', 'round', 'schedule'].every(t => G.say({ tool: t }, '') !== G.say({ tool: 'search' }, '')));
+  ok('every tool has a line the model is told', G.TOOLS.every(t => typeof G.DESCRIBE[t] === 'string' && G.DESCRIBE[t].length > 10) && G.TOOLS.length === 17);
+  ok('an exam message keeps its words, for the date in them; a teach-back takes its topic', G.plan('my exam is on 10 October', {}).topic === 'my exam is on 10 October' &&
+     G.plan('let me explain preload', {}).topic === 'preload' && G.plan('teach it back', { topic: 'Afterload' }).topic === 'Afterload');
+  ok('and something to say', ['mistake', 'round', 'schedule', 'exam', 'teach', 'table'].every(t => G.say({ tool: t }, '') !== G.say({ tool: 'search' }, '')));
 
   const W = (id, types, hits, extra) => Object.assign({ id, cluster: 0, source: 'drill', label: 'item ' + id, misses: types.length, hits, types, confusedWith: '', order: +id.slice(1) }, extra || {});
   const docs = [{ id: 'u1', name: 'Valves' }, { id: 'u2', name: 'Failure' }];
@@ -187,6 +192,8 @@ head('the new tools: why I missed it, a review round, the week ahead');
   const wk = G.schedule(cards, '2026-09-24');
   ok('the week ahead: new, overdue and due-today cards all count as today', wk[0].n === 3 && wk[0].label === 'Today' && wk[1].n === 1 && wk[1].label === 'Tomorrow', JSON.stringify(wk.map(d => d.n)));
   ok('a card due a week out is not in the week; one on its last day is', wk.length === 7 && wk[6].day === '2026-09-30' && wk[6].n === 1 && wk.reduce((a, d) => a + d.n, 0) === 5);
+  const later = G.schedule([{ srs: null, dueFrom: '2026-09-25' }, { srs: null }], '2026-09-24');
+  ok('a new card made to start later (a recall card) counts on the day it starts, not today', later[0].n === 1 && later[1].n === 1, JSON.stringify(later.map(d => d.n)));
   if (tzWas === undefined) delete process.env.TZ; else process.env.TZ = tzWas;
 }
 

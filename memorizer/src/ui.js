@@ -19,7 +19,7 @@ var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
 var Skill = root.MemSkill;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance, Study = root.MemStudy;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -74,7 +74,7 @@ function builtin() { return !Provider.needsKey(cfg()); }
 function docsChanged() { ui.docsStale = true; ui.pearlCache = null; }
 function refresh() {
   return Promise.all([ui.docsStale ? Store.all('docs') : Promise.resolve(null), Store.all('cards'), Store.all('sessions'),
-                      Store.all('books'), Store.get('meta', 'days'), Store.get('meta', 'coach-profile')]).then(function (r) {
+                      Store.all('books'), Store.get('meta', 'days'), Store.get('meta', 'coach-profile'), Store.get('meta', 'checks'), Store.get('meta', 'practice'), Store.get('meta', 'plan'), Store.get('meta', 'notes'), Store.get('meta', 'activity')]).then(function (r) {
     if (r[0]) { ui.docs = r[0].sort(function (a, b) { return b.addedAt - a.addedAt; }); ui.docsStale = false; }
     ui.cards = r[1];
     ui.sessions = {}; ui.at = {};
@@ -82,6 +82,11 @@ function refresh() {
     ui.books = r[3].sort(function (a, b) { return b.addedAt - a.addedAt; });
     ui.days = r[4] && Array.isArray(r[4].days) ? r[4].days : legacyDays();
     ui.profile = r[5] && r[5].profile || null;
+    ui.checks = r[6] && r[6].recs || {};
+    ui.practiceLog = r[7] && r[7].history || [];
+    ui.examDate = r[8] && r[8].examDate || '';
+    ui.notes = r[9] && r[9].recs || {};
+    ui.activity = r[10] && r[10].log || null;
   });
 }
 /* The session and the cards it made are stored in one transaction
@@ -112,6 +117,11 @@ function saveFailed(e) {
 var DAYS_KEY = 'memorizer.days.v1';
 function legacyDays() { try { return JSON.parse(root.localStorage.getItem(DAYS_KEY) || '[]'); } catch (_) { return []; } }
 function studyDays() { return ui.days || []; }
+/* The week's log (study.js logActivity): what was done, when. */
+function logActivity(kind, info) {
+  ui.activity = Study.logActivity(ui.activity, today(), kind, Object.assign({ now: Date.now() }, info || {}));
+  Store.put('meta', { id: 'activity', log: ui.activity }).then(null, function () {});
+}
 function markStudied() {
   var t = today();
   if (studyDays().indexOf(t) !== -1) return;
@@ -120,9 +130,41 @@ function markStudied() {
 }
 
 function dispatch(event) {
+  var before = ui.state && ui.state.phase;
   ui.state = Session.next(ui.state, event);
-  if (event.type === 'answered' || event.type === 'examAnswered') markStudied();
+  if (event.type === 'answered' || event.type === 'examAnswered') {
+    markStudied();
+    var sp = ui.state.per[ui.state.section], la = event.type === 'answered' && sp && sp.answers[sp.answers.length - 1];
+    if (la) logActivity('answer', { correct: la.correct, title: ui.state.titles[ui.state.section], source: 'drill' });
+    else if (event.type === 'examAnswered') {
+      var er = ui.state.exam.results[ui.state.exam.results.length - 1], eq = er && ui.state.exam.questions[er.q] || {};
+      if (er) logActivity('answer', { correct: !!er.correct, title: ui.state.titles[eq.cluster] || '', source: 'exam' });
+    }
+  }
+  if (before === 'drill' && ui.state.phase === 'result' && ui.docRec) afterDrill(ui.docRec, ui.state.section);
   return save();
+}
+/* A section drilled (study.js): its checks at 1, 3, 7 and 21 days begin,
+   and its recall cards are made — cloze cards from its sentences and a
+   figure's hidden label — starting tomorrow, so the drill does not end in
+   a second drill of the same sentences. */
+function afterDrill(d, ci) {
+  var key = d.id + ':' + ci;
+  if (!ui.checks[key]) { ui.checks[key] = { start: today(), done: [], scores: [] }; saveChecks(); }
+  return makeStudyCards(d, ci);
+}
+function saveChecks() { return Store.put('meta', { id: 'checks', recs: ui.checks }).then(null, function (e) { saveFailed(e); render(); }); }
+function makeStudyCards(d, ci) {
+  var c = d.clusters[ci];
+  var figs = c && d.figures ? Chunk.assignFigures(d.clusters, d.figures)[ci] || [] : [];
+  var have = {};
+  ui.cards.forEach(function (x) { have[x.id] = true; });
+  var from = Study.addDays(today(), 1);
+  var fresh = Study.clozeCards(d, ci).concat(d.hasFile ? Study.occlusionCards(d, ci, figs) : []).filter(function (x) { return !have[x.id]; });
+  fresh.forEach(function (x) { x.dueFrom = from; });
+  return Promise.all(fresh.map(function (x) { return Store.put('cards', x); })).then(function () {
+    ui.cards = ui.cards.concat(fresh); return fresh;
+  }, function (e) { saveFailed(e); return []; });
 }
 
 /* ── the step runner: one place that shows busy, error and retry ────────── */
@@ -214,7 +256,7 @@ function saveUnit(name, source, pages, extra) {
   if (!clusters.length) throw new Error(extra && extra.emptyMessage || 'No readable text was found.');
   var rec = { id: newId(), name: name, addedAt: Date.now(), pages: pages.length, source: source, clusters: clusters,
               scanned: (extra && extra.scanned) || [], figures: (extra && extra.figures) || [], figuresV: Pdf.FIGURES_V, hasFile: !!(extra && extra.bytes),
-              ocr: (extra && extra.ocr) || [], ocrError: (extra && extra.ocrError) || '',
+              ocr: (extra && extra.ocr) || [], ocrError: (extra && extra.ocrError) || '', ocrConf: (extra && extra.ocrConf) || {},
               fingerprint: (extra && extra.fingerprint) || '', fileName: (extra && extra.fileName) || '', processing: processing() };
   var first = extra && extra.bytes ? Store.put('files', { id: rec.id, bytes: extra.bytes }) : Promise.resolve();
   return first.then(function () { return Store.put('docs', rec); }).then(function () { return rec; });
@@ -262,7 +304,7 @@ function importFile(file) {
   }).then(function (r) {
     ui.importing = 'Splitting into sections…'; render();
     return saveUnit(file.name.replace(/\.pdf$/i, ''), 'pdf', r.pages, {
-      fingerprint: fp, fileName: file.name, bytes: bytes, figures: r.figures || [], scanned: Chunk.scannedPages(r.wordCounts), ocr: r.ocr, ocrError: r.ocrError,
+      fingerprint: fp, fileName: file.name, bytes: bytes, figures: r.figures || [], scanned: Chunk.scannedPages(r.wordCounts), ocr: r.ocr, ocrError: r.ocrError, ocrConf: r.ocrConf || {},
       emptyMessage: r.ocrError
         ? 'No readable text in this PDF. It looks like a scan (pictures of pages), and the text reader for scans could not run: ' + r.ocrError
         : 'No readable text in this PDF, even with text recognition. If it is a scan, it may be too faint or too small to read.',
@@ -274,14 +316,14 @@ function importPhotos(files) {
   var list = Array.prototype.slice.call(files || []);
   if (!list.length) return;
   ui.error = '';
-  var pages = [], chain = Promise.resolve();
+  var pages = [], conf = {}, chain = Promise.resolve();
   list.forEach(function (f, i) {
     chain = chain.then(function () { ui.importing = 'Reading photo ' + (i + 1) + ' of ' + list.length + '…'; render(); return Ocr.readImage(f, function (m) { ui.importing = m; render(); }); })
-      .then(function (r) { pages.push({ page: i + 1, lines: Pdf.linesOf(r.items, r.height) }); });
+      .then(function (r) { if (r.items.confidence) conf[i + 1] = r.items.confidence; pages.push({ page: i + 1, lines: Pdf.linesOf(r.items, r.height) }); });
   });
   finishImport(chain.then(function () {
     return saveUnit('Photos ' + new Date().toLocaleDateString(), 'photo', pages,
-      { ocr: pages.map(function (p) { return p.page; }), emptyMessage: 'No text could be read from those photos. Try a sharper, well-lit photo of the page.' });
+      { ocr: pages.map(function (p) { return p.page; }), ocrConf: conf, emptyMessage: 'No text could be read from those photos. Try a sharper, well-lit photo of the page.' });
   }));
 }
 function importText(name, text) {
@@ -424,7 +466,7 @@ function openDoc(id, section) {
 function go(event) {
   if (ui.moving) return Promise.resolve();
   ui.moving = true;
-  ui.choice = null; ui.error = ''; ui.back = 0; ui.notice = '';
+  ui.choice = null; ui.sure = false; ui.error = ''; ui.back = 0; ui.notice = '';
   var p;
   try { p = dispatch(event); } catch (e) { ui.moving = false; throw e; }
   return p.then(function () { ui.moving = false; render(); root.scrollTo(0, 0); });
@@ -508,6 +550,9 @@ function parseMermaid(code) {
   var ids = Object.keys(labels);
   return { nodes: ids.map(function (id) { return { id: id, label: labels[id] }; }), edges: edges };
 }
+function tableRoundButton(c) {
+  return button('Quiz me on this table', function () { ui.view = 'ask'; render(); askNow('quiz me on the table in ' + c.title); }, 'quiet', { id: 'table-round' });
+}
 function tablesCard(c) {
   var segs = c.segments.filter(function (g) { return g.table; });
   if (!segs.length) return null;
@@ -518,7 +563,7 @@ function tablesCard(c) {
         h('thead', h('tr', headRow.map(function (x) { return h('th', { scope: 'col' }, x); }))),
         h('tbody', body.map(function (r) { return h('tr', r.map(function (x, i) { return i === 0 ? h('th', { scope: 'row' }, x) : h('td', x); })); })))),
       h('p.muted.table-cap', 'Table', page(g.page), g.tableHeader ? ' · continued' : '')];
-  }));
+  }), h('div.row', tableRoundButton(c)));
 }
 
 /* Figures and pages are drawn from the PDF kept on this device. A chapter
@@ -701,7 +746,8 @@ function viewHome() {
   var sessions = ui.sessions || {};
   var day = today();
   var due = Session.dueCards(ui.cards, day).length;
-  var streak = Home.streak(studyDays(), day, FSRS);
+  var sk = Study.streak(studyDays(), day), streak = sk.n;
+  var frozenNow = sk.frozen.filter(function (f) { return Study.weekOf(f) === Study.weekOf(day); });
 
   var pdfIn = h('input', { type: 'file', accept: 'application/pdf,.pdf', id: 'pdf-input', class: 'visually-hidden',
     onchange: function (e) { importFile(e.target.files[0]); e.target.value = ''; } });
@@ -720,7 +766,8 @@ function viewHome() {
     h('div.home-brand', mascot(), h('div', h('span.hello', Home.greeting(new Date().getHours()) + ' · what shall we'), h('h1.learn', 'Learn?'),
       h('p.hero-line', cur ? [h('span.hero-dot', { 'aria-hidden': 'true' }), 'Up next: ', h('strong', cur.doc.name), cur.next ? ' · ' + cur.next : ''] : 'Add a chapter of your book to begin.'))),
     h('div.pills.hero-stats',
-      h('span.pill.stat', { id: 'streak', title: 'Days in a row' }, h('span.stat-label', 'Streak'), h('span', { 'aria-hidden': 'true' }, '🔥'), ' ' + streak),
+      h('span.pill.stat', { id: 'streak', title: 'Days in a row' + (frozenNow.length ? ' — a missed day this week was forgiven (one a week)' : '') }, h('span.stat-label', 'Streak'), h('span', h('span', { 'aria-hidden': 'true' }, '🔥'),
+        frozenNow.length ? h('span.freeze', { id: 'streak-freeze', 'aria-label': 'one missed day forgiven this week' }, '🧊') : null), ' ' + streak),
       h('button.pill.stat', { type: 'button', id: 'pill-due', onclick: function () { startReview(); } }, h('span.stat-label', 'Review'), h('span', { 'aria-hidden': 'true' }, '↻'), ' ' + due + ' due'),
       /* What the ring measures, said where it is shown: the share of review
          cards FSRS expects you to recall today with 90% odds or better. It is
@@ -841,13 +888,15 @@ function viewHome() {
   /* Laid out as a dashboard: the hero; then the pearl as the feature, with
      where to jump back in and what needs work beside it; then adding
      material; then the shelf. On a phone it stacks in that order. */
-  var side = jump || weak ? h('div.home-side', { id: 'home-side' }, jump, weak) : null;
+  var checks = checksCard(), plan = ui.docs.length ? planCard() : null, week = weekCard(), map = masteryCard();
+  var side = jump || weak || checks || plan || week ? h('div.home-side', { id: 'home-side' }, plan, jump, checks, weak, week) : null;
   return h('main.wrap.home',
     top, pdfIn, photoIn, bookIn,
     ui.error ? errorCard(null) : null,
     !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
       button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null,
     pearl || side ? h('div.home-grid' + (pearl && side ? '.two' : ''), { id: 'home-grid' }, pearl, side) : null,
+    map,
     h('section.home-add', { id: 'home-add', 'aria-label': 'Add material' }, drop, chips), paste,
     books.length ? [h('div.section-head', h('h2', 'My books'), h('label.plus', { for: 'book-input', 'aria-label': 'Add a book' }, '+')),
       h('ul.units', { id: 'books' }, books)] : null,
@@ -913,11 +962,21 @@ function sourceCard(d) {
   var from = d.bookId ? d.bookName + ', pp. ' + d.pageStart + '\u2013' + d.pageEnd : d.fileName || d.name;
   return h('details.card.source-card', { id: 'source-card', 'data-verdict': r.verdict, open: r.verdict === 'good' ? null : true },
     h('summary', h('span.eyebrow', 'Source \u00B7 ' + r.label)),
-    h('ul.src-lines', r.lines.map(function (l) { return h('li', { 'data-kind': l.kind }, l.text); })),
+    h('ul.src-lines', r.lines.map(function (l) { return h('li', { 'data-kind': l.kind }, l.text); }), unsureLines(d)),
     h('p.muted.src-meta', 'From ', h('strong', from), when ? ' \u00B7 added ' + when : '',
       d.fingerprint ? [' \u00B7 ', h('span', { title: d.fingerprint }, Prov.shortPrint(d.fingerprint))] : '',
       pr ? ' \u00B7 read by Memorizer ' + pr.build + (d.source === 'pdf' ? ', PDF reader ' + pr.pdfjs : '') : ''),
     h('p.muted', 'Everything Memorizer teaches from this unit is this source\u2019s own text. It is what your book says, as of its edition \u2014 not a check against current guidelines.'));
+}
+
+/* The scanned pages text recognition was least sure of (study.js
+   pageConfidence): where to check the numbers. */
+function unsureLines(d) {
+  var conf = d.ocrConf || {};
+  var low = Object.keys(conf).map(Number).filter(function (n) { return conf[n] && conf[n].mean < Study.LOW_CONFIDENCE; }).sort(function (a, b) { return a - b; });
+  if (!low.length) return null;
+  return h('li', { 'data-kind': 'unsure', id: 'ocr-unsure' }, 'Text recognition was unsure of ' + (low.length === 1 ? 'p. ' : 'pp. ') +
+    low.map(function (n) { return n + ' (' + conf[n].mean + '%)'; }).join(', ') + ': check the numbers there against the page, and correct them in the lesson.');
 }
 
 /* The weak list in one line, as the skill shows it, with its round. */
@@ -1011,8 +1070,10 @@ function paragraphOf(c, text) {
 }
 function pointCard(c, p, i) {
   var b = Format.bullet(p.text), para = paragraphOf(c, p.text);
-  return h('li.point',
+  var rec = ui.state && ui.notes ? notesFor(ui.docId, ui.state.section) : null, marked_ = !!(rec && rec.marks && rec.marks.indexOf(p.text) !== -1);
+  return h('li.point' + (marked_ ? '.marked' : ''),
     h('span.point-n', String(i + 1)),
+    ui.state ? button(marked_ ? '★' : '☆', function () { toggleMark(c, p.text); }, 'quiet mark-btn', { id: 'mark-' + i, 'aria-pressed': String(marked_), 'aria-label': marked_ ? 'Unmark this point' : 'Mark this point to be asked' }) : null,
     h('div.point-body',
       h('p.point-text', b.lead ? [h('strong.lead', b.lead), marked(b.body)] : withKey(b.body, Coach.keyTermOf(c, p.text)), ' ', page(p.page)),
       b.subs.length ? h('ul.subs', b.subs.map(function (x) { return h('li', marked(x)); })) : null,
@@ -1043,6 +1104,112 @@ function glanceCard(c, L, noPath) {
 }
 /* One question from the drill's own pool, asked in the lesson and not
    recorded: active recall while the section is fresh. */
+/* TEACH IT BACK: the section explained in your own words, checked against
+   its key points (study.js teachBack); what was left out can become cards. */
+function teachCard(c, L) {
+  var key = ui.docId + ':' + ui.state.section, got = ui.teach && ui.teach.key === key ? ui.teach : null;
+  var points = Sheet.sheetOf(L).groups.reduce(function (a, g) { return a.concat(g.points); }, []);
+  var area = h('textarea', { id: 'teach-text', rows: '5', 'aria-label': 'Your explanation', placeholder: 'Explain this section as if to a colleague: what it is, why it happens, the numbers.',
+    oninput: function () { ui.teachDraft = area.value; } });
+  area.value = ui.teachDraft || '';
+  var check = function () {
+    var r = Study.teachBack(area.value, points.map(function (p) { return p.text; }), c.text);
+    ui.teach = { key: key, said: area.value, r: r, points: points }; render();
+  };
+  var res = got ? h('div', { id: 'teach-result' },
+    h('p', h('strong', 'You covered ' + got.r.covered.length + ' of ' + (got.r.covered.length + got.r.missed.length) + ' key points.')),
+    got.r.wrong.length ? h('p.warn', { id: 'teach-wrong' }, 'You gave ' + got.r.wrong.join(', ') + ' — this section has no such number. Check it against the page.') : null,
+    got.r.missed.length ? [h('p.muted', 'What you left out, in your book’s words:'), h('ul.teach-missed', got.r.missed.map(function (i) { return h('li', marked(got.points[i].text), ' ', page(got.points[i].page)); })),
+      button('Make cards of what I left out', function () { teachCards(c, got); }, 'quiet', { id: 'teach-cards' })] : h('p', '✓ Everything the section’s key points say.'),
+    ui.teachMade != null ? h('p.muted', { id: 'teach-made' }, ui.teachMade + ' card' + (ui.teachMade === 1 ? '' : 's') + ' made, from tomorrow.') : null) : null;
+  return h('div.card.teach-card', { id: 'teach-back' }, h('span.eyebrow', '🗣 Teach it back'),
+    h('p.muted', 'Explaining it is how you find what you have not got yet. Say it or type it, then check it against the book.'),
+    area, h('div.row', micButton(function (t) { ui.teachDraft = ((ui.teachDraft || '') + ' ' + t).trim(); render(); }, 'teach-mic'),
+      button('Check my explanation', check, 'primary', { id: 'teach-check' })), res);
+}
+function teachCards(c, got) {
+  var d = ui.docRec, ci = ui.state.section, from = Study.addDays(today(), 1), have = {};
+  ui.cards.forEach(function (x) { have[x.id] = true; });
+  var made = got.r.missed.map(function (i) { return Study.clozeOf({ text: got.points[i].text, page: got.points[i].page }, Coach.frequencies(c)); }).filter(Boolean).map(function (x) {
+    return { id: d.id + ':explain:' + ci + ':' + x.sentence.length + ':' + x.answer, docId: d.id, source: 'explain', kind: 'cloze', cluster: ci, title: c.title,
+      front: x.front, back: x.answer, explain: x.sentence, page: x.page, srs: null, dueFrom: from, errorType: '', confusedWith: '' };
+  }).filter(function (x) { return !have[x.id]; });
+  Promise.all(made.map(function (x) { return Store.put('cards', x); })).then(function () { ui.cards = ui.cards.concat(made); ui.teachMade = made.length; render(); }, function (e) { saveFailed(e); render(); });
+}
+/* Speech to text, where the browser has it (Safari's dictation: Apple may
+   process the audio). Nothing is shown where it does not. */
+function micButton(onText, id) {
+  var SR = root.SpeechRecognition || root.webkitSpeechRecognition;
+  if (!SR) return null;
+  var on = ui.listening === id;
+  return button(on ? '■ Stop' : '🎙 Speak', function () {
+    if (on) { if (ui.rec) ui.rec.stop(); return; }
+    var r = new SR();
+    r.lang = (root.navigator && root.navigator.language) || 'en-US'; r.interimResults = false; r.continuous = false;
+    r.onresult = function (e) {
+      var t = Array.prototype.map.call(e.results, function (x) { return x[0].transcript; }).join(' ').trim();
+      if (t) onText(t);
+    };
+    r.onerror = function (e) { ui.voiceError = (e && e.error) || 'it did not work'; };
+    r.onend = function () { ui.listening = null; ui.rec = null; render(); };
+    ui.rec = r; ui.listening = id; ui.voiceError = '';
+    r.start(); render();
+  }, on ? 'chip sure-on' : 'chip quiet', { id: id, 'aria-pressed': String(on), title: 'Speak instead of typing (your device’s dictation)' });
+}
+/* CORRECT THE TEXT: a paragraph of a section read by text recognition,
+   corrected by you (study.js correctSegment) and kept with what it said
+   before; the lesson is taught again from the corrected text. */
+function fixCard(c) {
+  var d = ui.docRec, ci = ui.state.section;
+  if (!(d.source === 'photo' || Prov.ocrPagesIn(d, c).length)) return null;
+  var fixes = (d.corrections || []).filter(function (x) { return x.ci === ci; });
+  return h('details.card.fix-card', { id: 'fix-text', open: ui.fixOpen ? true : null }, h('summary', h('span.eyebrow', '✎ Correct the text'), h('span.muted', ' — if recognition misread a word or number')),
+    c.segments.map(function (seg, si) {
+      if (seg.heading || seg.table) return null;
+      var area = h('textarea', { rows: '3', 'data-si': String(si), 'aria-label': 'Paragraph ' + (si + 1) + ' of the section' });
+      area.value = seg.text;
+      return h('div.fix-row', area, h('div.row', page(seg.page), seg.corrected ? h('span.tag', 'corrected by you') : null,
+        button('Save', function () { saveFix(ci, si, area.value); }, 'quiet', { 'data-fix': String(si) })));
+    }),
+    fixes.length ? h('p.muted', { id: 'fix-log' }, fixes.length + ' correction' + (fixes.length === 1 ? '' : 's') + ' in this section, each kept with what it said before.') : null);
+}
+function saveFix(ci, si, text) {
+  var fixed = Study.correctSegment(ui.docRec, ci, si, text, today());
+  if (!fixed) return;
+  ui.fixOpen = true;
+  Store.put('docs', fixed).then(function () {
+    ui.docRec = fixed; docsChanged();
+    ui.notice = 'Corrected. The lesson is taught again from your text.';
+    if (ui.state.phase !== 'teach') return;
+    return ask('Preparing the lesson…', 'lesson', [fixed.clusters[ci]], [fixed.clusters[ci]]).then(function (v) { return dispatch({ type: 'taught', value: v }); });
+  }).then(function () { return refresh(); }).then(render, function (e) { saveFailed(e); render(); });
+}
+/* YOUR NOTES: kept per section as yours, never mixed with the book's words. */
+function notesFor(docId, ci) { return ui.notes[Study.noteKey(docId, ci)] || null; }
+function saveNotes() { return Store.put('meta', { id: 'notes', recs: ui.notes }).then(null, function (e) { saveFailed(e); render(); }); }
+function noteCard(c) {
+  var key = Study.noteKey(ui.docId, ui.state.section), rec = ui.notes[key] || { text: '', marks: [] };
+  var area = h('textarea', { id: 'note-text', rows: '3', 'aria-label': 'Your note on this section', placeholder: 'Your own words: a link to a case you saw, a way you remember it.' });
+  area.value = rec.text || '';
+  return h('div.card.note-card', { id: 'notes' }, h('span.eyebrow', '📝 Your notes'),
+    h('p.muted', 'Yours, not the book’s — shown with this section’s cards and in the Coach, labelled as yours. Mark a key point with ☆ to have it asked as a card.'),
+    area, h('div.row', button('Save note', function () {
+      ui.notes[key] = { text: area.value.trim(), marks: rec.marks || [] }; saveNotes(); ui.notice = 'Note saved.'; render();
+    }, 'quiet', { id: 'note-save' }), (rec.marks || []).length ? h('span.muted', { id: 'mark-count' }, rec.marks.length + ' point' + (rec.marks.length === 1 ? '' : 's') + ' marked') : null));
+}
+/* A key point marked: kept, and made a cloze card (study.js markCard) from
+   tomorrow; unmarked, its card goes if it was never reviewed. */
+function toggleMark(c, text) {
+  var d = ui.docRec, ci = ui.state.section, key = Study.noteKey(d.id, ci);
+  var rec = Study.toggleMark(ui.notes[key], text), on = rec.marks.indexOf(text) !== -1;
+  ui.notes[key] = rec; saveNotes();
+  var card = Study.markCard(d, ci, text);
+  if (!card) { render(); return; }
+  var have = ui.cards.filter(function (x) { return x.id === card.id; })[0];
+  if (on && !have) { card.dueFrom = Study.addDays(today(), 1); Store.put('cards', card).then(function () { ui.cards.push(card); render(); }); return; }
+  if (!on && have && !have.srs) { Store.del('cards', card.id).then(function () { ui.cards = ui.cards.filter(function (x) { return x.id !== card.id; }); render(); }); return; }
+  render();
+}
 function quickCheck(c, L) {
   var key = ui.docId + ':' + ui.state.section;
   if (!ui.quick || ui.quick.key !== key) {
@@ -1192,7 +1359,8 @@ function viewLesson() {
     (L.mnemonics || []).forEach(function (m) { parts.push({ label: 'Remember it: ' + m.title, nodes: [mnemonicPlay(m)] }); });
     var qc = quickCheck(c, L);
     if (qc) parts.push({ label: 'Check yourself', nodes: [qc] });
-    parts.push({ label: 'Also in this section', nodes: [moreAnalogies, flowCard, tablesCard(c), visualsCard(c), full] });
+    parts.push({ label: 'Teach it back', nodes: [teachCard(c, L)] });
+    parts.push({ label: 'Also in this section', nodes: [moreAnalogies, flowCard, tablesCard(c), visualsCard(c), noteCard(c), fixCard(c), full] });
     var key = ui.docId + ':' + s.section;
     if (!ui.step || ui.step.key !== key) ui.step = { key: key, i: 0 };
     var i = Math.min(ui.step.i, parts.length - 1), last = i === parts.length - 1;
@@ -1225,6 +1393,9 @@ function viewLesson() {
     mnemonics,
     /* after everything has been read: recall, not a look at the next card */
     quickCheck(c, L),
+    teachCard(c, L),
+    noteCard(c),
+    fixCard(c),
     moreAnalogies,
     /* the on-device AI tutor is in the robot's window now (robot()) */
     flowCard,
@@ -1280,7 +1451,8 @@ var LETTERS = 'ABCDEFGH';
    far back the reader is looking. Looking back shows an answered question
    as it was answered, read-only: answers are recorded on Next, and changing
    one afterwards would change a score and a review card already made. */
-function mcqCard(q, meta, onNext, reveal, nav, after) {
+function mcqCard(q, meta, onNext, reveal, nav, after, opts) {
+  var askSure = !!(opts && opts.sure);
   var past = nav && nav.back > 0 ? nav.hist[nav.hist.length - nav.back] : null;
   var chosen = past ? past.choice : ui.choice;
   var answered = chosen != null;
@@ -1301,7 +1473,7 @@ function mcqCard(q, meta, onNext, reveal, nav, after) {
   var right = answered && chosen === q.answer;
   /* "Not sure" is an answer, not a skip: the skill files it as never
      encountered, and it is re-taught from the page (skill.js). */
-  var notSure = answered || past ? null : h('div.row.not-sure-row', button('Not sure', function () { ui.choice = Session.NOT_SURE; render(); }, 'quiet', { id: 'not-sure' }));
+  var notSure = answered || past ? null : h('div.row.not-sure-row', askSure ? sureToggle() : null, button('Not sure', function () { ui.choice = Session.NOT_SURE; render(); }, 'quiet', { id: 'not-sure' }));
   return h('div.card.mcq', { id: 'mcq' },
     h('div.mcq-meta', meta),
     quote,
@@ -1311,10 +1483,19 @@ function mcqCard(q, meta, onNext, reveal, nav, after) {
     answered ? h('div.why' + (right ? '.good' : '.bad'), { role: 'status' },
       h('strong', right ? '✓ Correct' : (unsure ? '✗ Not sure \u2014 the answer is ' : '✗ The answer is ') + LETTERS[q.answer] + ': ' + q.options[q.answer]),
       reveal ? h('p.muted', reveal) : null,
+      askSure && !right && !unsure && ui.sure ? hazardNote() : null,
       h('p', h('span.why-label', 'Why: '), marked(q.explain), q.page ? [' ', page(q.page)] : null),
       past ? null : after ? after(chosen, right) : right ? null : h('p.muted', 'This one is now a review card, and it comes back at the end of this drill.'),
       past ? null : h('div.row.mcq-nav', prev, button('Next →', onNext, 'primary big', { id: 'next' }))) : null,
     past ? h('div.row.mcq-nav', prev, fwd) : !answered && prev ? h('div.row.mcq-nav', prev) : null);
+}
+/* Sure or not, said before answering (study.js rateWith). */
+function sureToggle() {
+  return button(ui.sure ? '✓ I’m sure' : 'I’m sure', function () { ui.sure = !ui.sure; render(); }, ui.sure ? 'chip sure-on' : 'chip quiet',
+    { id: 'sure', 'aria-pressed': String(!!ui.sure), title: 'Say it before you answer: a confident miss is flagged and asked again' });
+}
+function hazardNote() {
+  return h('p.hazard-note', { id: 'hazard-note' }, h('span.hazard-lead', '⚠ You were sure. '), 'A confident miss is the most dangerous kind: it is flagged, and asked again before you finish.');
 }
 function navOf(hist) {
   hist = hist || [];
@@ -1367,7 +1548,7 @@ function viewDrill() {
     var t = chosen === Session.NOT_SURE ? 'N' : 'C';
     return [typeChip(t, t === 'C' ? q.options[chosen] : ''), h('p.muted', 'Now a review card; it comes back at the end of this drill.')];
   };
-  return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice }); }, null, nav, after)];
+  return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice, sure: !!ui.sure }); }, null, nav, after, { sure: true })];
 }
 /* The error type of a miss, and the skill's fix for it. */
 function typeChip(t, confusedWith, lead) {
@@ -1470,7 +1651,37 @@ function viewResult() {
         : button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'to-exam' }),
       button('Drill again', function () { go({ type: 'redrill' }); }, '', { id: 'redrill' }),
       button('Back to the lesson', function () { go({ type: 'open', section: s.section }); }, 'quiet')),
+    aiOn() ? caseCard(d, s.section) : null,
   ];
+}
+/* A case by the on-device model (study.js): kept only if its answer is a
+   sentence of the section (ground.js question) and its story names no
+   number, disease, test or drug the section does not. */
+function aiCase(d, ci) {
+  var c = d.clusters[ci], sents = Coach.sentences(c);
+  if (sents.length < 3) return Promise.resolve({ q: null, why: 'this section is too short for a case' });
+  return aiJob('Writing a case from this section\u2026', function () { return LLM.chat(LLM.SYSTEM, Study.vignettePrompt(c.title, sents), Study.VIGNETTE_SCHEMA, 420); })
+    .then(function (t) {
+      if (t == null) return { q: null, why: 'the on-device AI could not run' };
+      var v = Study.parseVignette(t);
+      if (!v) return { q: null, why: 'its reply was not a case with four options' };
+      var bad = Ground.claimError(v.quote, [c.text], 0);
+      if (bad && !/too little|says nothing|nothing in it/.test(bad)) return { q: null, why: 'the case ' + bad };
+      var g = Ground.question(v, sents);
+      return g.q ? { q: g.q, why: '' } : { q: null, why: g.why };
+    });
+}
+function caseCard(d, ci) {
+  var key = d.id + ':' + ci, got = ui.ai.cases && ui.ai.cases[key];
+  if (!got) return h('div.card.case-card', { id: 'case-card' }, h('span.eyebrow', '✨ A case'),
+    h('p.muted', 'The on-device AI writes a short patient case on this section; it is kept only if its answer is a sentence of your book.'),
+    ui.ai.busy ? h('p.muted', { role: 'status' }, ui.ai.busy) : button('Write a case', function () {
+      aiCase(d, ci).then(function (r) { ui.ai.cases = ui.ai.cases || {}; ui.ai.cases[key] = r; ui.choice = null; render(); });
+    }, 'quiet', { id: 'ai-case' }));
+  if (!got.q) return h('div.card.case-card', { id: 'case-card' }, h('span.eyebrow', '✨ A case'), h('p', { id: 'case-dropped' }, 'Not shown: ' + got.why + '. Your book stays the source.'),
+    button('Try another', function () { delete ui.ai.cases[key]; render(); }, 'quiet'));
+  return h('div', { id: 'case-card' }, mcqCard(got.q, [h('span.tag.ai-tag', '✨ A case by the on-device AI · its answer checked against your book')],
+    function () { delete ui.ai.cases[key]; ui.choice = null; render(); }, null, null, function () { return null; }));
 }
 function viewExam() {
   var s = ui.state, g = s.exam;
@@ -1523,6 +1734,7 @@ function viewSession() {
 }
 
 function leave(view) {
+  stopPractice();
   ui.drill = null; ui.choice = null;
   ui.view = view; ui.error = ''; ui.notice = '';
   refresh().then(render);
@@ -1542,12 +1754,15 @@ function startDrill(w) {
 }
 function viewReview() {
   var dr = ui.drill;
-  var due = dr ? ui.cards.filter(function (c) { return c.docId === dr.docId && c.cluster === dr.cluster && !dr.done[c.id]; })
+  var due = dr ? ui.cards.filter(function (c) { return c.docId === dr.docId && c.cluster === dr.cluster && !c.kind && !dr.done[c.id]; })
     : Session.dueCards(ui.cards, today());
   var names = {};
   ui.docs.forEach(function (d) { names[d.id] = d.name; });
   var back = backBar(dr ? 'Drill · ' + dr.title : 'Review', function () { leave('library'); });
-  if (!due.length) {
+  /* a confident miss is asked again once the due cards are done */
+  ui.againQ = (ui.againQ || []).filter(function (id) { return ui.cards.some(function (c) { return c.id === id; }); });
+  var againCard = !due.length && ui.againQ.length ? ui.cards.filter(function (c) { return c.id === ui.againQ[0]; })[0] : null;
+  if (!due.length && !againCard) {
     if (dr) {
       return h('main.wrap', back, h('div.card', h('h1', 'Drill done.'),
         h('p', ui.reviewDone + ' card' + (ui.reviewDone === 1 ? '' : 's') + ' from “' + dr.title + '”, each rated once.'),
@@ -1555,29 +1770,40 @@ function viewReview() {
     }
     return h('main.wrap', back, h('div.card', h('h1', ui.reviewDone ? 'Done for today.' : 'Nothing due.'),
       h('p', ui.reviewDone ? ui.reviewDone + ' card' + (ui.reviewDone === 1 ? '' : 's') + ' reviewed. Come back tomorrow.' : 'Cards appear here when you miss something in a drill, and again when they are due.'),
-      button('Back home', function () { leave('library'); }, 'primary')));
+      button('Back home', function () { leave('library'); }, 'primary')), practiceCard());
   }
-  var card = due[0];
+  var isAgain = !due.length, card = isAgain ? againCard : due[0];
   /* Rated once, and counted only when stored: a failed write leaves the
-     card due and says so, rather than showing it as reviewed. */
-  var rate = function (r) {
+     card due and says so, rather than showing it as reviewed. A card asked
+     again is not rated again: FSRS already has the miss. */
+  var rate = function (r, how) {
     if (ui.rating) return;
+    var next = function () { ui.rating = false; ui.reviewShown = false; ui.choice = null; ui.sure = false; ui.clozeTyped = ''; ui.clozeVerdict = ''; render(); };
+    if (isAgain) { ui.againQ.shift(); next(); return; }
     ui.rating = true;
     var upd = Session.review(card, r, today(), FSRS);
-    markStudied();
+    if (how && how.hazard) upd.hazard = true;
+    markStudied(); logActivity('review', {});
     Store.put('cards', upd).then(function () {
       if (dr) dr.done[card.id] = true;
+      if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id);
       ui.saveError = ''; ui.reviewDone++;
       return refresh();
-    }, saveFailed).then(function () { ui.rating = false; ui.reviewShown = false; ui.choice = null; render(); });
+    }, saveFailed).then(next);
   };
-  var head = h('div.review-head', h('span.count', dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'), h('span.muted', (names[card.docId] || '') + ' · ' + card.title));
+  var head = h('div.review-head', h('span.count', isAgain ? 'Asked again · ' + ui.againQ.length + ' left' : dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'),
+    h('span.muted', (names[card.docId] || '') + ' · ' + card.title));
+  var tag = isAgain ? h('span.tag.again-tag', '⚠ asked again — you were sure') : h('span.tag', card.source === 'exam' ? 'from the exam' : card.kind === 'occlusion' ? 'a figure, one label hidden' : 'from a drill');
+  var note = notesFor(card.docId, card.cluster), noteEl = note && note.text ? h('p.card-note', { id: 'card-note' }, h('span.note-label', 'Your note, not the book’s: '), note.text) : null;
+  if (card.kind === 'cloze') return h('main.wrap', back, head, clozeCard(card, tag, rate), ui.clozeVerdict ? noteEl : null);
   if (card.options && card.options.length) {
-    /* A multiple-choice card grades itself: right is Good, wrong is Again. */
+    /* A multiple-choice card grades itself: right is Good (Hard if you were
+       not sure), wrong is Again — and asked again if you were sure. */
     var q = { question: card.front, quote: card.quote || '', options: card.options, answer: card.answer, explain: card.explain || card.back, page: card.page };
-    return h('main.wrap', back, head, mcqCard(q, [h('span.tag', card.source === 'exam' ? 'from the exam' : 'from a drill')], function () {
-      rate(ui.choice === card.answer ? 3 : 1);
-    }));
+    return h('main.wrap', back, head, mcqCard(q, [tag, card.kind === 'occlusion' ? occlusionFigure(card) : null], function () {
+      var how = Study.rateWith(ui.choice === card.answer, !!ui.sure);
+      rate(how.rating, how);
+    }, null, null, function () { return null; }, { sure: !isAgain }), ui.choice != null ? noteEl : null, isAgain ? null : practiceCard());
   }
   /* A card from before multiple choice: shown, then rated by you. */
   return h('main.wrap', back, head,
@@ -1589,6 +1815,223 @@ function viewReview() {
           button('Again', function () { rate(1); }, 'g1'), button('Hard', function () { rate(2); }, 'g2'),
           button('Good', function () { rate(3); }, 'g3'), button('Easy', function () { rate(4); }, 'g4'))]
         : button('Show answer', function () { ui.reviewShown = true; render(); }, 'primary big', { id: 'show-answer' })));
+}
+/* A cloze card: the book's sentence with its number or term blanked, the
+   answer typed (study.js checkTyped). */
+function clozeCard(card, tag, rate) {
+  var v = ui.clozeVerdict;
+  var parts = String(card.front).split(Study.BLANK);
+  var input = h('input', { id: 'cloze-input', type: 'text', value: ui.clozeTyped || '', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false',
+    'aria-label': 'The missing word or number', oninput: function () { ui.clozeTyped = input.value; },
+    onkeydown: function (e) { if (e.key === 'Enter') check(); } });
+  var check = function () { ui.clozeTyped = input.value; ui.clozeVerdict = Study.checkTyped(input.value, card.back); render(); };
+  var next = function () {
+    var how = v === 'close' ? { rating: 2, again: false, hazard: false } : Study.rateWith(v === 'right', !!ui.sure);
+    rate(how.rating, how);
+  };
+  return h('div.card.cloze', { id: 'cloze' }, h('div.mcq-meta', tag),
+    h('p.cloze-front', parts.map(function (p, i) { return [p, i < parts.length - 1 ? h('span.gap', v ? card.back : '_____') : null]; })),
+    v ? h('div.why' + (v === 'wrong' ? '.bad' : '.good'), { id: 'cloze-verdict', role: 'status', 'data-verdict': v },
+        h('strong', v === 'right' ? '✓ Right' : v === 'close' ? '≈ Close — the book has “' + card.back + '”' : '✗ The book has “' + card.back + '”'),
+        v === 'wrong' && ui.sure ? hazardNote() : null,
+        h('p', marked(card.explain), ' ', page(card.page)),
+        h('div.row.mcq-nav', button('Next →', next, 'primary big', { id: 'next' })))
+      : [h('div.row.cloze-row', input, button('Check', check, 'primary', { id: 'cloze-check' })), h('div.row', sureToggle())]);
+}
+/* The figure with its label hidden: the image drawn from the stored PDF,
+   and a mask where the label was printed (study.js maskOf). Answered, the
+   mask lifts. */
+function occlusionFigure(card) {
+  var d = ui.docs.filter(function (x) { return x.id === card.docId; })[0];
+  var m = card.mask, pc = function (v) { return (100 * v).toFixed(2) + '%'; };
+  return h('div.occlusion' + (ui.choice != null ? '.revealed' : ''), { id: 'occlusion' },
+    lazyImage('A figure with one label hidden', card.figure.page, card.figure.box, 2, d),
+    h('span.occlusion-mask', { 'aria-hidden': 'true', style: 'left:' + pc(m.left) + ';top:' + pc(m.top) + ';width:' + pc(m.width) + ';height:' + pc(m.height) }));
+}
+
+/* ── THE MASTERY MAP and THE WEEK (study.js) ─────────────────────────────── */
+var MM_LABEL = { new: 'not drilled yet', weak: 'weak', fading: 'fading', solid: 'solid' };
+function masteryCard() {
+  var map = Study.masteryMap(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), ui.sessions || {}, ui.cards, today(), FSRS)
+    .filter(function (u) { return u.sections.length; });
+  if (!map.length) return null;
+  return h('div.card.mastery-card', { id: 'mastery' }, h('span.eyebrow', 'Mastery map'),
+    map.slice(0, 6).map(function (u) {
+      return h('div.mm-unit', h('span.mm-name', u.name), h('div.mm-cells', u.sections.map(function (s) {
+        return h('button.mm-cell', { type: 'button', 'data-state': s.state, 'data-key': u.docId + ':' + s.ci,
+          title: s.title + ' — ' + MM_LABEL[s.state] + (s.recall != null ? ', recall ' + s.recall + '% today' : ''), 'aria-label': s.title + ', ' + MM_LABEL[s.state],
+          onclick: function () { openDoc(u.docId, s.ci); } });
+      })));
+    }),
+    h('p.mm-legend', ['solid', 'fading', 'weak', 'new'].map(function (k) { return h('span', h('i.mm-cell', { 'data-state': k, 'aria-hidden': 'true' }), MM_LABEL[k]); })));
+}
+function weekCard() {
+  var w = Study.weekly(ui.activity, today()), a = w.week, b = w.before;
+  if (!a.answers && !a.reviews && !b.answers && !b.reviews) return null;
+  var vs = function (x, y, unit) { return y ? (x > y ? ' ▲' : x < y ? ' ▼' : ' =') : ''; };
+  return h('div.card.week-card', { id: 'weekly' }, h('span.eyebrow', 'This week'),
+    h('div.week-stats',
+      h('div', h('strong', { 'data-k': 'minutes' }, String(a.minutes)), h('span', ' min' + vs(a.minutes, b.minutes))),
+      h('div', h('strong', { 'data-k': 'answers' }, String(a.answers)), h('span', ' answers' + vs(a.answers, b.answers))),
+      h('div', h('strong', { 'data-k': 'accuracy' }, a.accuracy == null ? '—' : a.accuracy + '%'), h('span', ' right' + (a.accuracy != null && b.accuracy != null ? vs(a.accuracy, b.accuracy) : ''))),
+      h('div', h('strong', { 'data-k': 'reviews' }, String(a.reviews)), h('span', ' reviews')),
+      h('div', h('strong', { 'data-k': 'days' }, String(a.days)), h('span', ' days'))),
+    a.weakest.length ? h('p.muted', { id: 'week-weakest' }, 'Missed most this week: ' + a.weakest.join(', ') + '.') : null,
+    b.answers || b.reviews ? h('p.muted', 'Last week: ' + b.minutes + ' min, ' + b.answers + ' answers' + (b.accuracy != null ? ', ' + b.accuracy + '% right' : '') + '.') : null);
+}
+
+/* ── THE EXAM PLAN (study.js studyPlan) ─────────────────────────────────── */
+function planUnits() {
+  return ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }).slice().sort(function (a, b) { return a.addedAt - b.addedAt; }).map(function (d) {
+    var st = ui.sessions[d.id];
+    return { docId: d.id, name: d.name, sections: d.clusters.map(function (c, i) { return { ci: i, title: c.title, done: !!(st && st.per && st.per[i] && st.per[i].done) }; }) };
+  });
+}
+function examPlan() { return ui.examDate ? Study.studyPlan(planUnits(), today(), ui.examDate) : null; }
+function setExamDate(iso) {
+  ui.examDate = iso || '';
+  return (iso ? Store.put('meta', { id: 'plan', examDate: iso }) : Store.del('meta', 'plan')).then(null, function (e) { saveFailed(e); });
+}
+function planText(p) {
+  if (!p) return '';
+  if (p.past) return 'The exam date has passed.';
+  if (!p.daysLeft) return 'The exam is today: timed practice and your weak items, nothing new.';
+  var t = p.days[0];
+  return 'Exam in ' + p.daysLeft + ' day' + (p.daysLeft === 1 ? '' : 's') + '. ' + (p.todo ? p.todo + ' section' + (p.todo === 1 ? '' : 's') + ' to learn, ' + p.perDay + ' a day. ' : 'Everything is learned: review until then. ') +
+    (t.learn.length ? 'Today: ' + t.learn.map(function (x) { return x.title; }).join(', ') + '.' : 'Today: review — your due cards, weak items and a timed practice.');
+}
+function planCard() {
+  var p = examPlan();
+  var input = h('input', { type: 'date', id: 'exam-date', value: ui.examDate || '', 'aria-label': 'Exam date', min: today() });
+  var set = button(ui.examDate ? 'Change' : 'Set', function () { setExamDate(input.value).then(render); }, 'chip', { id: 'exam-set' });
+  if (!p) return h('div.card.plan-card', { id: 'exam-plan' }, h('span.eyebrow', '📅 Exam plan'),
+    h('p.muted', 'Set your exam date and each day gets its sections, with the last days kept for review.'), h('div.row', input, set));
+  var t = p.days[0];
+  return h('div.card.plan-card', { id: 'exam-plan', 'data-days': String(p.daysLeft) }, h('span.eyebrow', '📅 Exam plan · ' + p.examDate),
+    h('p', { id: 'plan-line' }, planText(p)),
+    !p.fits ? h('p.warn', 'More to learn than days to learn it: about ' + p.perDay + ' sections a day.') : null,
+    t && t.learn.length ? h('div.chips', t.learn.map(function (x) { return button(x.title, function () { openDoc(x.docId, x.ci); }, 'chip', { 'data-plan': x.docId + ':' + x.ci }); }))
+      : t ? h('div.chips', button('Timed practice', function () { startPractice(20); }, 'chip', { id: 'plan-practice' })) : null,
+    h('div.row', input, set, button('Clear', function () { setExamDate('').then(render); }, 'quiet', { id: 'exam-clear' })));
+}
+
+/* ── SECTION CHECKS: 1, 3, 7 and 21 days after a drill (study.js) ────────── */
+function checkItems() {
+  return Study.checksDue(ui.checks, today()).map(function (x) {
+    var at = x.key.lastIndexOf(':'), docId = x.key.slice(0, at), ci = +x.key.slice(at + 1);
+    var d = ui.docs.filter(function (y) { return y.id === docId; })[0];
+    return d && d.clusters[ci] ? { key: x.key, rec: x.rec, doc: d, ci: ci, title: d.clusters[ci].title } : null;
+  }).filter(Boolean);
+}
+function checksCard() {
+  var items = checkItems();
+  if (!items.length) return null;
+  return h('div.card.checks-card', { id: 'checks' }, h('span.eyebrow', 'Section checks due'),
+    h('p.muted', 'Three questions each, days after the drill — so forgetting is caught before it becomes a miss.'),
+    h('ul.check-list', items.slice(0, 4).map(function (x) {
+      return h('li', h('span.check-what', h('strong', x.title), h('span.muted', ' · check ' + ((x.rec.done || []).length + 1) + ' of ' + Study.CHECK_DAYS.length)),
+        button('Check', function () { startCheck(x); }, 'chip', { 'data-key': x.key }));
+    })));
+}
+function startCheck(x) {
+  var st = ui.sessions[x.doc.id], per = st && st.per && st.per[x.ci];
+  var qs = per && per.quiz && per.quiz.questions && per.quiz.questions.length ? per.quiz.questions
+    : Coach.quiz(x.doc.clusters[x.ci], lessonFor(x.doc, x.ci), x.doc.clusters).questions;
+  ui.check = { key: x.key, title: x.title, qs: Study.checkQuestions(qs, (x.rec.done || []).length), pos: 0, right: 0, done: false };
+  ui.view = 'check'; ui.choice = null; render(); root.scrollTo(0, 0);
+}
+function viewCheck() {
+  var k = ui.check, back = backBar('Section check', function () { leave('library'); });
+  if (!k) return h('main.wrap', back);
+  if (k.done) {
+    var rec = ui.checks[k.key], nx = Study.nextCheck(rec);
+    return h('main.wrap', back, h('div.card.result', { id: 'check-result' }, ring(Math.round(100 * k.right / k.qs.length), 'big'),
+      h('h2', k.right + ' of ' + k.qs.length + ' · ' + k.title),
+      h('p', k.right / k.qs.length < 0.5 ? 'This one has faded: its checks start again from tomorrow. Re-read its key points today.'
+        : nx ? 'Holding. The next check is on ' + nx + '.' : 'All four checks done: this section is in long-term memory.')),
+      h('div.row', button('Back home', function () { leave('library'); }, 'primary big')));
+  }
+  var q = k.qs[k.pos];
+  return h('main.wrap', back, mcqCard(q, [h('span', 'Check · ' + (k.pos + 1) + ' of ' + k.qs.length + ' · ' + k.title)], function () {
+    logActivity('answer', { correct: ui.choice === q.answer, title: k.title, source: 'check' });
+    if (ui.choice === q.answer) k.right++;
+    k.pos++; ui.choice = null;
+    if (k.pos >= k.qs.length) {
+      ui.checks[k.key] = Study.checkTaken(ui.checks[k.key], today(), k.right / k.qs.length);
+      k.done = true; markStudied(); saveChecks();
+    }
+    render(); root.scrollTo(0, 0);
+  }, null, null, function () { return null; }));
+}
+
+/* ── TIMED PRACTICE (study.js timedSet) ─────────────────────────────────── */
+function practiceCard() {
+  var tr = Study.practiceTrend(ui.practiceLog);
+  return h('div.card.practice-card', { id: 'practice-start' }, h('span.eyebrow', '⏱ Timed practice'),
+    h('p.muted', 'Due cards, weak items and each unit’s hardest questions, mixed, about one a minute.' +
+      (tr.pct.length ? ' Last: ' + tr.pct[tr.pct.length - 1] + '%' + (tr.dir === 'up' ? ', up.' : tr.dir === 'down' ? ', down.' : tr.dir === 'level' ? ', level.' : '.') : '')),
+    tr.pct.length > 1 ? h('div.trend', { 'aria-label': 'Recent practice scores' }, tr.pct.map(function (p, i) { return h('i', { title: tr.days[i] + ': ' + p + '%', style: 'height:' + Math.max(6, p) + '%' }); })) : null,
+    h('div.chips', [10, 20, 30].map(function (m) { return button(m + ' min', function () { startPractice(m); }, 'chip', { id: 'practice-' + m }); })));
+}
+function cardQ(c) { return { question: c.front, quote: c.quote || '', options: c.options, answer: c.answer, explain: c.explain || c.back, page: c.page }; }
+function practicePool() {
+  var due = Session.dueCards(ui.cards, today()).filter(function (c) { return c.options && c.options.length && c.kind !== 'occlusion'; })
+    .map(function (c) { return { id: c.id, kind: 'due', q: cardQ(c), title: c.title }; });
+  var weak = [], hard = [];
+  ui.docs.forEach(function (d) {
+    var st = ui.sessions[d.id];
+    if (!st || !st.per) return;
+    Session.pending(st).forEach(function (w) { weak.push({ id: w.id, kind: 'weak', q: w.q, title: st.titles[w.cluster] || '' }); });
+    /* the unit's hardest: its lowest-scored drilled section's questions */
+    /* per is keyed by section number, not an array */
+    var drilled = (st.titles || []).map(function (_, i) { return { i: i, p: st.per[i] || {} }; }).filter(function (x) { return x.p.quiz && x.p.quiz.questions && x.p.quiz.questions.length && x.p.score != null; })
+      .sort(function (a, b) { return a.p.score - b.p.score || a.i - b.i; });
+    if (drilled[0]) drilled[0].p.quiz.questions.forEach(function (q, k) { hard.push({ id: d.id + ':hard:' + drilled[0].i + ':' + k, kind: 'hard', q: q, title: st.titles[drilled[0].i] }); });
+  });
+  return { due: due, weak: weak, hard: hard };
+}
+function startPractice(minutes) {
+  stopPractice();
+  ui.practice = { minutes: minutes, qs: Study.timedSet(practicePool(), minutes), pos: 0, right: 0, ends: Date.now() + minutes * 60000, done: false };
+  ui.view = 'practice'; ui.choice = null;
+  if (ui.practice.qs.length) ui.practiceTimer = setInterval(function () {
+    var el = doc.getElementById('practice-clock');
+    if (Date.now() >= ui.practice.ends) { finishPractice(); render(); return; }
+    if (el) el.textContent = clockOf(ui.practice.ends - Date.now());
+  }, 1000);
+  render(); root.scrollTo(0, 0);
+}
+function stopPractice() { if (ui.practiceTimer) { clearInterval(ui.practiceTimer); ui.practiceTimer = null; } }
+function clockOf(ms) { var t = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(t / 60) + ':' + ('0' + t % 60).slice(-2); }
+function finishPractice() {
+  var p = ui.practice;
+  if (!p || p.done) return;
+  stopPractice(); p.done = true;
+  if (!p.pos) return;
+  ui.practiceLog = (ui.practiceLog || []).concat([{ day: today(), right: p.right, asked: p.pos, minutes: p.minutes }]).slice(-60);
+  markStudied();
+  Store.put('meta', { id: 'practice', history: ui.practiceLog }).then(null, function (e) { saveFailed(e); render(); });
+}
+function viewPractice() {
+  var p = ui.practice, back = backBar('Timed practice', function () { stopPractice(); leave('review'); });
+  if (!p || !p.qs.length) return h('main.wrap', back, h('div.card', h('h2', 'Nothing to practise yet'), h('p', 'Drill a section or two first: practice mixes your due cards, weak items and hardest questions.')));
+  if (p.done) {
+    var tr = Study.practiceTrend(ui.practiceLog);
+    return h('main.wrap', back, h('div.card.result', { id: 'practice-result' }, ring(p.pos ? Math.round(100 * p.right / p.pos) : 0, 'big'),
+      h('h2', p.right + ' of ' + p.pos + ' in ' + p.minutes + ' minutes'),
+      h('p', tr.dir === 'up' ? 'Up on last time.' : tr.dir === 'down' ? 'Down on last time: the misses are on your weak list.' : tr.dir === 'level' ? 'Level with last time.' : 'Your first timed practice: the next one is compared with it.')),
+      practiceCard());
+  }
+  var it = p.qs[p.pos];
+  return h('main.wrap', back, mcqCard(it.q, [h('span.practice-clock', { id: 'practice-clock', role: 'timer' }, clockOf(p.ends - Date.now())),
+      h('span', 'Question ' + (p.pos + 1) + ' of ' + p.qs.length + (it.title ? ' · ' + it.title : '')), h('span.tag', it.kind === 'due' ? 'due card' : it.kind === 'weak' ? 'weak item' : 'hardest')],
+    function () {
+      logActivity('answer', { correct: ui.choice === it.q.answer, title: it.title || '', source: 'practice' });
+      if (ui.choice === it.q.answer) p.right++;
+      p.pos++; ui.choice = null;
+      if (p.pos >= p.qs.length) finishPractice();
+      render(); root.scrollTo(0, 0);
+    }, null, null, function () { return null; }));
 }
 
 /* ── ON-DEVICE AI (llm.js), every word it writes checked by ground.js ───── */
@@ -1748,7 +2191,7 @@ function modelLoop(idx, q) {
     check: function (text, obs) { return Ground.summary(text, obs.map(function (o) { return { text: o }; })); },
     rules: function () { return clauseLoop(idx, q); },
   }).then(function (res) {
-    if (res.answer) ui.turns.push({ q: null, plan: { tool: 'answer', by: 'ai' }, answer: res.answer });
+    if (res.answer) ui.turns.push({ q: null, plan: { tool: 'answer', by: 'ai' }, answer: res.answer, sources: Study.claimSources(res.answer.kept, res.steps) });
     render();
   });
 }
@@ -1757,7 +2200,7 @@ function obsData(t) {
   var title = t.at ? t.at.sec.title : '';
   switch (t.plan.tool) {
     case 'explain': return t.at ? { explain: t.explain, title: title } : {};
-    case 'quiz': return t.at ? { quiz: t.quiz, title: title } : {};
+    case 'quiz': case 'table': return t.at ? { quiz: t.quiz, title: title } : {};
     case 'mnemonic': return t.at ? { mnemonics: t.at.L.mnemonics || [], title: title } : {};
     case 'numbers': return t.at ? { sheet: t.sheet, title: title } : {};
     case 'open': return { title: title };
@@ -1831,13 +2274,14 @@ function agentTurn(idx, p, q) {
     if (t.rows.length) ui.memory.topic = t.rows[t.rows.length - 1].sec.title;
     return t;
   }
-  if (/^(?:explain|quiz|mnemonic|numbers|open)$/.test(p.tool)) {
+  if (/^(?:explain|quiz|mnemonic|numbers|open|table)$/.test(p.tool)) {
     t.at = sectionOf(idx, p.topic);
     if (!t.at) return t;
     ui.memory.topic = t.at.sec.title;
     if (p.tool === 'explain') t.explain = Coach.explainSection(t.at.c, t.at.L);
     if (p.tool === 'quiz') t.quiz = Coach.quiz(t.at.c, t.at.L, t.at.doc.clusters).questions.slice(0, 3).map(function (x) { return { q: x, choice: null }; });
     if (p.tool === 'numbers') t.sheet = Sheet.sheetOf(t.at.L);
+    if (p.tool === 'table') t.quiz = Study.tableRound(Coach.candidates(t.at.c, Coach.pools(t.at.doc.clusters))).map(function (x) { return { q: x, choice: null }; });
     if (p.tool === 'open') setTimeout(function () { openDoc(t.at.doc.id, t.at.ci); }, 600);
   }
   var day = today();
@@ -1845,7 +2289,16 @@ function agentTurn(idx, p, q) {
   if (p.tool === 'mistake') t.mistakes = Agent.mistakes(ui.docs, ui.sessions || {}, 3);
   if (p.tool === 'schedule') t.week = Agent.schedule(ui.cards, day);
   if (p.tool === 'review') t.due = Session.dueCards(ui.cards, day).length;
-  if (p.tool === 'plan') t.planText = planText();
+  if (p.tool === 'plan') t.planText = nextSteps();
+  if (p.tool === 'exam') {
+    var when = Study.parseExamDate(p.topic || q || '', day);
+    if (when) setExamDate(when);
+    t.examDate = when || ui.examDate; t.exam = examPlan(); t.planText = t.exam ? planText(t.exam) : '';
+  }
+  if (p.tool === 'teach') {
+    t.at = sectionOf(idx, p.topic);
+    if (t.at) { ui.memory.topic = t.at.sec.title; t.title = t.at.sec.title; ui.teachFocus = true; setTimeout(function () { openDoc(t.at.doc.id, t.at.ci); }, 600); }
+  }
   if (p.tool === 'round') {
     /* the unit with the most a round can ask; it opens there, the round begun */
     var w = Agent.weakItems(ui.docs, ui.sessions || {}, 3).filter(function (x) { return x.review > 0; })[0];
@@ -1855,7 +2308,7 @@ function agentTurn(idx, p, q) {
   return t;
 }
 /* The plan in words, for the model: the same three steps coachActions shows. */
-function planText() {
+function nextSteps() {
   var spots = Home.weakSpots(ui.docs, ui.sessions || {}, ui.cards, Session.mastery, 1);
   var due = Session.dueCards(ui.cards, today()).length;
   var cur = Home.current(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), ui.sessions || {});
@@ -1881,14 +2334,19 @@ function turnView(t, idx, latest) {
   else if (p.tool === 'schedule') body.push(h('ol.agent-week', { id: latest ? 'agent-week' : null }, t.week.map(function (d) {
       return h('li', { 'data-n': String(d.n) }, h('span.week-day', d.label), h('span.week-bar', h('i', { style: 'width:' + Math.min(100, d.n * 10) + '%' })), h('strong', String(d.n)));
     })));
+  else if (p.tool === 'exam') body.push(t.exam ? [h('p', { id: latest ? 'agent-exam' : null }, planText(t.exam)),
+      h('ol.agent-plan', t.exam.days.slice(0, 5).map(function (d) { return h('li', h('strong', d.day), ' ', d.learn.length ? d.learn.map(function (x) { return x.title; }).join(', ') : 'review'); }))]
+    : h('p', 'Tell me the date — “my exam is on 10 October”, or “in 3 weeks”.'));
+  else if (p.tool === 'teach') body.push(h('p.muted', 'Opening it: explain it in your own words at “Teach it back”.'));
   else if (p.tool === 'round') body.push(t.round.started ? h('p.muted', 'Opening ' + t.round.name + ' for a round of ' + t.round.n + '…') : h('p', 'Nothing is on the weak list: drill a section first.'));
   else if (p.tool === 'explain') {
-    var e = t.explain;
-    body.push(e.gist ? h('p', h('strong', 'In one line: '), marked(e.gist)) : null, e.chain ? h('p', h('strong', 'How it works: '), e.chain) : null,
+    var e = t.explain, en = t.at && notesFor(t.at.doc.id, t.at.ci);
+    body.push(en && en.text ? h('p.card-note', { id: latest ? 'agent-note' : null }, h('span.note-label', 'Your note, not the book’s: '), en.text) : null,
+      e.gist ? h('p', h('strong', 'In one line: '), marked(e.gist)) : null, e.chain ? h('p', h('strong', 'How it works: '), e.chain) : null,
       e.facts.length ? h('ul', e.facts.map(function (f) { return h('li', f); })) : null,
       e.hooks.map(function (m) { return h('p', h('strong', 'Remember: '), m.letters.split('').join(' · ') + ' — ' + m.words.join(', ')); }),
       h('div.chips', open, button('Quiz me on this', function () { askNow('quiz me on that'); }, 'chip quiet'), button('Mnemonics', function () { askNow('mnemonics'); }, 'chip quiet')));
-  } else if (p.tool === 'quiz') {
+  } else if (p.tool === 'quiz' || p.tool === 'table') {
     body.push(t.quiz.length ? h('ol.agent-quiz', t.quiz.map(function (x, k) {
       var q = x.q, answered = x.choice != null;
       return h('li.agent-q', { 'data-k': String(k) }, q.quote ? h('blockquote.quote', q.quote) : null, h('p.q', q.question),
@@ -1897,7 +2355,7 @@ function turnView(t, idx, latest) {
             onclick: function () { x.choice = i; render(); } }, h('span.opt-letter', LETTERS[i]), h('span.opt-text', o));
         })),
         answered ? h('p.why' + (x.choice === q.answer ? '.good' : '.bad'), h('strong', x.choice === q.answer ? '✓ Right. ' : '✗ It is ' + q.options[q.answer] + '. '), marked(q.explain), ' ', page(q.page)) : null);
-    })) : h('p', 'This section is too short to ask good questions of.'), h('div.chips', open));
+    })) : h('p', p.tool === 'table' ? 'This section has no table to ask from.' : 'This section is too short to ask good questions of.'), h('div.chips', open));
   } else if (p.tool === 'mnemonic') {
     var ms = t.at.L.mnemonics || [];
     body.push(ms.length ? ms.map(function (m) { return h('div.agent-hook', h('strong', m.title), h('p.hook-script', m.letters.split('').join(' · ')), h('p', m.words.join(', '))); })
@@ -1928,8 +2386,11 @@ function answerView(t, latest) {
   return h('div.turn', { 'data-tool': 'answer' }, h('div.coach-says', h('div.coach-avatar.small', mascot()),
     h('div.bubble.agent.agent-answer' + (latest ? '.latest' : ''), { id: latest ? 'agent-latest' : null },
       h('p.agent-steps', '✨ Answer, from the steps above'),
-      a.kept.length ? h('p', { id: latest ? 'agent-answer' : null }, a.kept.map(function (k) { return [k.text, ' ', h('sup.cite', k.cites.map(function (n) { return '[' + n + ']'; }).join(''))]; })
-        .reduce(function (x, y) { return x.concat([' '], y); }))
+      a.kept.length ? h('p', { id: latest ? 'agent-answer' : null }, a.kept.map(function (k, i) {
+          var src = t.sources && t.sources[i] ? t.sources[i].sources : [];
+          return [k.text, ' ', h('sup.cite', k.cites.map(function (n) { return '[' + n + ']'; }).join('')),
+            src.map(function (x) { return h('span.claim-src', { title: 'Step ' + x.step + ' found this in ' + x.title }, x.title + (x.page ? ' · p.' + x.page : '')); })];
+        }).reduce(function (x, y) { return x.concat([' '], y); }))
         : h('p.muted', 'Nothing it wrote could be checked against what the steps found, so nothing is shown.'),
       aiNote(a.kept, a.dropped.length))));
 }
@@ -2032,7 +2493,7 @@ function viewAsk() {
         ui.profile && ui.profile.turns ? h('p.muted', { id: 'coach-memory' }, 'What I remember, on this iPad only: ' + (Agent.profileLine(ui.profile, '') || 'nothing yet') + ' ',
           button('Forget', function () { ui.profile = null; Store.del('meta', 'coach-profile').then(function () { render(); }); }, 'quiet', { id: 'coach-forget' })) : null,
         h('div.chips.suggest', suggest))),
-    h('div.card.ask-card', h('div.row.ask-row', input, button('Ask', function () { askNow(doc.getElementById('ask-q').value); }, 'primary', { id: 'ask-go' })),
+    h('div.card.ask-card', h('div.row.ask-row', input, micButton(function (t) { ui.askQ = t; askNow(t); }, 'ask-mic'), button('Ask', function () { askNow(doc.getElementById('ask-q').value); }, 'primary', { id: 'ask-go' })),
       h('p.muted', 'Found on this device, never sent anywhere.')),
     (ui.turns || []).map(function (t, k, all) {
       var latest = k === all.length - 1;
@@ -2353,6 +2814,8 @@ function render() {
     : ui.view === 'book' ? viewBook()
     : ui.view === 'ask' ? viewAsk()
     : ui.view === 'review' ? viewReview()
+    : ui.view === 'check' ? viewCheck()
+    : ui.view === 'practice' ? viewPractice()
     : ui.view === 'settings' ? viewSettings() : viewHome();
   app.textContent = '';
   var banner = storageBanner();
@@ -2362,15 +2825,24 @@ function render() {
   var rb = robot();
   if (rb) app.appendChild(rb);
   Array.prototype.forEach.call(app.querySelectorAll('[data-comp]'), play);
-  if (ui.view === 'session') pump();
+  if (ui.view === 'session') { pump(); focusTeach(); }
 }
 
+/* The Coach asked for a teach-back: its card, once the lesson is drawn. */
+function focusTeach() {
+  if (!ui.teachFocus || ui.view !== 'session') return;
+  var el = doc.getElementById('teach-text');
+  if (!el) return;
+  ui.teachFocus = false;
+  if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+  el.focus();
+}
 function start() {
   Store.open().then(refresh).then(render, function (e) {
     ui.error = 'Could not open storage: ' + (e && e.message); render();
   });
 }
 
-root.Memorizer = { motion: { seek: seek, total: total, replay: replay }, ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc };
+root.Memorizer = { makeStudyCards: makeStudyCards, aiCase: aiCase, startPractice: startPractice, motion: { seek: seek, total: total, replay: replay }, ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc };
 if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(window);

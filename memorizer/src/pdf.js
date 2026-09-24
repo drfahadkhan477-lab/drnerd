@@ -373,6 +373,27 @@ function captionFor(box, lines, pageHeight) {
   return { number: best.m[2], label: 'Figure ' + best.m[2], text: text.join(' ').replace(/\s+/g, ' ').trim() };
 }
 
+/* The labels printed inside a figure: each short cell of a line whose
+   baseline lies within the picture, as { text, box } in PDF units — what
+   image occlusion hides (study.js). The caption is not a label, nor a
+   line of prose. A cell's width is not kept by linesOf(), so it is taken
+   from its letters at the line's size (Helvetica's average advance is
+   about half the size); the mask is padded to cover the difference. */
+var LABEL_MAX_WORDS = 4, LABEL_MAX = 12;
+function labelsIn(box, lines, pageHeight) {
+  var top = pageHeight - box[3], bottom = pageHeight - box[1], out = [];
+  (lines || []).forEach(function (l) {
+    if (l.y < top || l.y > bottom || CAPTION.test(String(l.text || ''))) return;
+    var size = +l.size || 10, y = pageHeight - l.y;
+    (l.cells || []).forEach(function (c) {
+      var t = String(c.text || '').trim(), x = +c.x;
+      if (!t || t.split(/\s+/).length > LABEL_MAX_WORDS || x < box[0] || x > box[2] || out.length >= LABEL_MAX) return;
+      out.push({ text: t, box: [x, y - size * 0.25, Math.min(box[2], x + t.length * size * 0.55), y + size * 0.85] });
+    });
+  });
+  return out;
+}
+
 /* Text runs as boxes in PDF units, for the text-cover test above. */
 function textBoxesOf(items) {
   return items.filter(function (it) { return it.str && it.str.trim() && it.width > 0; }).map(function (it) {
@@ -382,7 +403,7 @@ function textBoxesOf(items) {
 }
 
 /* ArrayBuffer → { pages: [{ page, lines }], wordCounts: [n per page], figures: [{ page, box }],
-   ocr: [pages read by text recognition], ocrError, outline: [{ title, page, depth }] }.
+   ocr: [pages read by text recognition], ocrError, ocrConf: { page: study.js pageConfidence }, outline: [{ title, page, depth }] }.
    onProgress(n, total, 'ocr' for the scanned-page pass); onStatus(message).
    opts.figures === false skips looking for figures: a whole book looks for
    them one chapter at a time, when the chapter is opened (figuresOn). */
@@ -410,6 +431,8 @@ function read(buffer, onProgress, onStatus, opts) {
               figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
                 var f = { page: n, box: b }, cap = captionFor(b, lines, h) || tableTitleFor(b, lines, h);
                 if (cap) { if (cap.number) f.number = cap.number; f.label = cap.label; f.caption = cap.text; if (cap.kind) f.kind = cap.kind; }
+                var labs = labelsIn(b, lines, h);
+                if (labs.length) f.labels = labs;
                 figures.push(f);
               });
             }, function () { /* a page whose drawing cannot be listed still has its text */ });
@@ -422,7 +445,7 @@ function read(buffer, onProgress, onStatus, opts) {
        empty ones. A page recognition cannot read either stays empty, and
        is still named to the user as scanned; if the reader cannot load at
        all (offline), every scanned page is named, as before. */
-    var ocr = [], ocrError = '';
+    var ocr = [], ocrError = '', ocrConf = {};
     /* Which pages are scans is known only once the text pass is done: the
        list is taken inside the chain, not while it is being built. (The
        first version took it outside, before any page had been read, found
@@ -432,7 +455,7 @@ function read(buffer, onProgress, onStatus, opts) {
       var ocrChain = Promise.resolve();
       scanned.forEach(function (n, k) {
         ocrChain = ocrChain.then(function () { if (onProgress) onProgress(k + 1, scanned.length, 'ocr'); return doc.getPage(n); })
-          .then(function (page) { return root.MemOcr.readPage(page, onStatus).then(function (items) { return linesOf(items, page.getViewport({ scale: 1 }).height); }); })
+          .then(function (page) { return root.MemOcr.readPage(page, onStatus).then(function (items) { if (items.confidence) ocrConf[n] = items.confidence; return linesOf(items, page.getViewport({ scale: 1 }).height); }); })
           .then(function (lines) {
             var wc = wordsIn(lines);
             if (!root.MemChunk.scannedPages([wc]).length) { pages[n - 1].lines = lines; counts[n - 1] = wc; ocr.push(n); }
@@ -442,7 +465,7 @@ function read(buffer, onProgress, onStatus, opts) {
     });
     var outline = [];
     chain = chain.then(function () { return outlineOf(doc); }).then(function (o) { outline = o; });
-    return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures, ocr: ocr, ocrError: ocrError, outline: outline }; });
+    return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures, ocr: ocr, ocrError: ocrError, ocrConf: ocrConf, outline: outline }; });
   });
 }
 
@@ -489,6 +512,8 @@ function figuresOn(key, buffer, pageNos) {
             figureBoxes(ops, L.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
               var f = { page: n, box: b }, cap = captionFor(b, lines, h) || tableTitleFor(b, lines, h);
               if (cap) { if (cap.number) f.number = cap.number; f.label = cap.label; f.caption = cap.text; if (cap.kind) f.kind = cap.kind; }
+              var labs = labelsIn(b, lines, h);
+              if (labs.length) f.labels = labs;
               figures.push(f);
             });
           }, function () {});
@@ -508,7 +533,7 @@ function figuresOn(key, buffer, pageNos) {
 var CROP_MARGIN = 8;
 /* The finder's version, stored with the figures it found. 2: annotations
    skipped. 3: a table in a box named by its own title. */
-var FIGURES_V = 3;
+var FIGURES_V = 4;
 function padBox(box, view, m) {
   m = m == null ? CROP_MARGIN : m;
   return [Math.max(view[0], box[0] - m), Math.max(view[1], box[1] - m), Math.min(view[2], box[2] + m), Math.min(view[3], box[3] + m)];
@@ -539,6 +564,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { TABLE_TOP: TABLE_TOP, tableTitleFor: tableTitleFor, PDFJS_V: /pdfjs-dist@([\d.]+)/.exec(BASE)[1], FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { labelsIn: labelsIn, LABEL_MAX_WORDS: LABEL_MAX_WORDS, LABEL_MAX: LABEL_MAX, TABLE_TOP: TABLE_TOP, tableTitleFor: tableTitleFor, PDFJS_V: /pdfjs-dist@([\d.]+)/.exec(BASE)[1], FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

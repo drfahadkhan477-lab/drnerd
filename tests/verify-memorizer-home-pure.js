@@ -241,6 +241,9 @@ head('weak spots: where the sessions say you are shakiest');
   ok('its cards are counted from its own unit and section only', all.find(w => w.title === 'Afterload').cards === 1);
   ok('three at most on the home screen', H.weakSpots([u, v], sessions, cards, S.mastery, 3).length === 3);
   ok('a unit with no session has none', H.weakSpots([u], {}, cards, S.mastery, 3).length === 0);
+  const withRecall = cards.concat([{ docId: 'v', cluster: 1, kind: 'cloze' }, { docId: 'v', cluster: 1, kind: 'occlusion' }]);
+  ok('its cards are its misses’: recall cards (cloze, a figure’s label) do not count', H.weakSpots([u, v], sessions, withRecall, S.mastery, 10).find(x => x.title === 'Regurgitation').cards ===
+     all.find(x => x.title === 'Regurgitation').cards);
 }
 
 head('words');

@@ -56,7 +56,7 @@ var START_TIMEOUT_MS = 90000;
    words keep their own x and width, so linesOf() still puts spaces and
    table cells where the gaps are. */
 function ocrItems(blocks, scale, pageHeight) {
-  var out = [];
+  var out = [], all = [];
   (blocks || []).forEach(function (b) {
     (b.paragraphs || []).forEach(function (p) {
       (p.lines || []).forEach(function (l) {
@@ -72,12 +72,17 @@ function ocrItems(blocks, scale, pageHeight) {
            "Preloadisthestretchonventricular…". */
         (l.words || []).forEach(function (w) {
           var t = String(w.text || '').trim();
+          if (t) all.push({ confidence: w.confidence });
           if (!t || !(w.confidence >= MIN_CONFIDENCE) || !w.bbox) return;
           out.push({ str: t + ' ', width: (w.bbox.x1 - w.bbox.x0) / scale, transform: [size, 0, 0, size, w.bbox.x0 / scale, y] });
         });
       });
     });
   });
+  /* how sure it was of the page, words kept or not (study.js), carried on
+     the list so the page's reader can file it */
+  var S = root.MemStudy || (typeof require === 'function' ? require('./study.js') : null);
+  out.confidence = S ? S.pageConfidence(all, MIN_CONFIDENCE) : null;
   return out;
 }
 

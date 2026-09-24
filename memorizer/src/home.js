@@ -207,7 +207,9 @@ function weakSpots(docs, sessions, cards, mastery, n) {
     (d.clusters || []).forEach(function (c, i) {
       var m = mastery(st, i);
       if (m == null || m >= WEAK) return;
-      var k = (cards || []).filter(function (x) { return x.docId === d.id && x.cluster === i; }).length;
+      /* its misses' cards: recall cards (study.js cloze and occlusion, which
+         carry a kind) come through review when due, not through this drill */
+      var k = (cards || []).filter(function (x) { return x.docId === d.id && x.cluster === i && !x.kind; }).length;
       out.push({ docId: d.id, docName: d.name, cluster: i, title: c.title, mastery: m, pct: Math.round(100 * m), cards: k, order: di });
     });
   });

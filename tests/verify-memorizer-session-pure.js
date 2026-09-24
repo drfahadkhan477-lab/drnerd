@@ -321,5 +321,28 @@ head('review runs on the real scheduler');
   ok('repeated Good answers space the card further apart each time', ivls.every((v, i) => i === 0 || v > ivls[i - 1]), ivls.join(' → '));
 }
 
+head('a confident miss, and cards that start later (study.js)');
+{
+  const cur = s => { const c = s.per[s.section]; return c.quiz.questions[c.order[c.pos]]; };
+  const openDrill = (s, i, n) => go(s, { type: 'open', section: i }, { type: 'taught', value: lesson }, { type: 'toMemorize', value: { cards: 0 } }, { type: 'toDrill' }, { type: 'quizReady', value: quiz(n, 'S' + i + 'Q') });
+  let s = openDrill(S.init('dc', ['A', 'B']), 0, 3);
+  const q0 = cur(s);
+  s = S.next(s, { type: 'answered', choice: (q0.answer + 1) % 4, sure: true });      /* sure, and wrong */
+  const q1 = cur(s);
+  s = S.next(s, { type: 'answered', choice: S.NOT_SURE, sure: true });              /* "not sure" cannot be sure */
+  s = S.next(s, { type: 'answered', choice: cur(s).answer, sure: true });           /* sure, and right */
+  const w = Object.values(s.weak);
+  ok('sure and wrong: its weak item and its card are flagged, and the answer says it was sure', w.filter(x => x.hazard).length === 1 &&
+     s.cards.filter(c => c.hazard).length === 1 && s.cards.find(c => c.hazard).front === q0.question && s.per[0].answers[0].sure === true, JSON.stringify(w.map(x => x.hazard)));
+  ok('"not sure" is never a confident miss, and a right answer is never flagged', s.per[0].answers[1].sure === false && !s.cards.some(c => c.hazard && c.front === q1.question) &&
+     s.per[0].answers[2].sure === true && s.per[0].answers[2].correct);
+  const plain = S.next(openDrill(S.init('dp', ['A']), 0, 2), { type: 'answered', choice: 1 });
+  ok('an answer that says nothing about being sure is not sure', plain.per[0].answers[0].sure === false && !plain.cards.some(c => c.hazard));
+  ok('a card never reviewed is due now — unless made to start later', S.isDue({ srs: null }, '2026-09-24') && S.isDue({ srs: null, dueFrom: '2026-09-24' }, '2026-09-24') &&
+     !S.isDue({ srs: null, dueFrom: '2026-09-25' }, '2026-09-24') && S.dueCards([{ srs: null, dueFrom: '2026-09-25' }, { srs: null }], '2026-09-24').length === 1);
+  ok('once reviewed, its schedule decides, not where it started', S.isDue({ srs: { due: '2026-09-20' }, dueFrom: '2026-09-30' }, '2026-09-24') &&
+     !S.isDue({ srs: { due: '2026-09-30' } }, '2026-09-24'));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

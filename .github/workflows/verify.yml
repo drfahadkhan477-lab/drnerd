@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 55 suites that are pure Node with no Playwright and no
+#   logic        the 56 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -230,13 +230,13 @@ jobs:
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
         run: node tests/verify-memorizer-prompts-pure.js
-      - name: Memorizer — teach, memorise, then drill; every miss typed, one card, and kept until it graduates; review rounds interleaved (95 checks)
+      - name: Memorizer — teach, memorise, then drill; every miss typed, one card, and kept until it graduates; review rounds interleaved (100 checks)
         run: node tests/verify-memorizer-session-pure.js
       - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, makes the cards to memorise, and re-teaches by the kind of miss (137 checks)
         run: node tests/verify-memorizer-coach-pure.js
       - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness, on glass and aurora as well as solid (42 checks)
         run: node tests/verify-memorizer-appearance-pure.js
-      - name: Memorizer — the home screen's progress, streak, pearl, the pearl's figure or table, and weak spots say true things (67 checks)
+      - name: Memorizer — the home screen's progress, streak, pearl, the pearl's figure or table, and weak spots say true things (68 checks)
         run: node tests/verify-memorizer-home-pure.js
       - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (32 checks)
         run: node tests/verify-memorizer-book-pure.js
@@ -250,8 +250,10 @@ jobs:
         run: node tests/verify-memorizer-sheet-pure.js
       - name: Memorizer — figures made from the book, every word the lesson's (17 checks)
         run: node tests/verify-memorizer-figure-pure.js
-      - name: Memorizer — the Coach as an agent — it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, names what is still weak, and runs a message as steps, each decided by what the last found — and, with the on-device model, a loop whose answer holds to what its tools found, the new tools, and what it remembers (74 checks)
+      - name: Memorizer — the Coach as an agent — it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, names what is still weak, and runs a message as steps, each decided by what the last found — and, with the on-device model, a loop whose answer holds to what its tools found, the new tools, and what it remembers (76 checks)
         run: node tests/verify-memorizer-agent-pure.js
+      - name: Memorizer — studying beyond the drill — recall and figure cards from the book, section checks days apart, timed practice, confidence, cases, an exam plan, teach-back, corrections, notes, the mastery map, the week and the streak (75 checks)
+        run: node tests/verify-memorizer-study-pure.js
       - name: Memorizer — where a unit came from — a real SHA-256 of its bytes, a duplicate recognised, an import report that counts what happened (31 checks)
         run: node tests/verify-memorizer-provenance-pure.js
 
@@ -288,7 +290,7 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (288 checks)
+      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (345 checks)
         run: node tests/verify-memorizer.js
       - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
