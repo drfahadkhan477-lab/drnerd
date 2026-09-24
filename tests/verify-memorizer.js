@@ -204,6 +204,33 @@ function makeTwoColumnPdf() {
   return { buffer: Buffer.from(out, 'latin1'), left: L.join(' '), right: R.join(' ') };
 }
 
+/* A one-page PDF with a TABLE PRINTED IN A SHADED BOX, as textbooks do:
+   a filled box, a filled header band and six rules — a drawing, to the
+   figure finder — with its title "TABLE 9.1 …" on the box's own top row
+   and single-column items. The owner's book had such tables labelled
+   "Figure 1". */
+function makeBoxedTablePdf() {
+  const T = (t, size, x, y) => `BT /F1 ${size} Tf ${x} ${y} Td (${t}) Tj ET`;
+  const text = [T('Exertional Fainting', 18, 72, 740),
+    T('Exertional fainting is a classic symptom of severe outflow obstruction.', 11, 72, 700),
+    T('Its causes are listed in the table below, and each calls for prompt assessment.', 11, 72, 684),
+    T('TABLE 9.1 Causes of exertional fainting', 9, 78, 506),
+    ...['Severe aortic stenosis', 'Hypertrophic cardiomyopathy', 'Pulmonary hypertension', 'Complete heart block'].map((t, i) => T(t, 9, 90, 470 - i * 20))];
+  const draw = ['0.9 g 72 300 400 220 re f', '0.7 g 72 500 400 20 re f', '0 G 0.5 w',
+    ...[480, 460, 440, 420, 400, 380].map(y => `72 ${y} m 472 ${y} l S`)];
+  const stream = draw.concat(['0 g'], text).join('\n');
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`];
+  let out = '%PDF-1.4\n';
+  const off = [];
+  objs.forEach((o, i) => { off.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + off.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+
 /* A two-page PDF: page 1 has a text layer, page 2 is a SCAN — one JPEG of
    a page of text, drawn by the browser (makeScanJpeg below), no text at
    all — so only text recognition can read it. */
@@ -1510,6 +1537,18 @@ function kindOf(user) {
     await p2.waitForFunction(b => window.__emb > b, before, T);
     await p2.locator('#answer').waitFor(T);
     ok('a second question embeds only itself', await p2.evaluate(b => window.__emb - b, before) === 1, String(await p2.evaluate(b => window.__emb - b, before)));
+    /* THE LOOP'S RECOVERY BY MEANING: a topic no word of which is in the
+       book is searched by meaning, then the same tool runs on what it found */
+    const turns = async (m, n) => { const k0 = await p2.locator('.turn').count(); await p2.fill('#ask-q', m); await p2.locator('#ask-go').click();
+      await p2.waitForFunction(([k, n]) => document.querySelectorAll('.turn').length >= k + n, [k0, n], T);
+      return p2.$$eval('.turn', (ts, k) => ts.slice(k).map(t => ({ tool: t.dataset.tool, steps: t.querySelector('.agent-steps').textContent })), k0); };
+    /* "who pass out": words the stand-in embedder knows. (Its vectors are one
+       per concept; a phrase with none of them — "passing out" — matches every
+       sentence with none equally, which a real model does not.) */
+    const rec = await turns('explain people who pass out', 3);
+    ok('a topic found by no word is searched by meaning, then explained on the section found — each step numbered, the reason given',
+       JSON.stringify(rec.map(r => r.tool)) === '["explain","search","explain"]' && /by meaning/.test(rec[1].steps) &&
+       /Syncope/.test(rec[2].steps) && /found by meaning/.test(rec[2].steps) && rec.every((r, i) => r.steps.indexOf('Step ' + (i + 1) + ' · ') === 0), JSON.stringify(rec));
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#meaning-toggle').click();
     await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
@@ -1517,6 +1556,11 @@ function kindOf(user) {
     await p2.locator('#ask-go').click();
     await p2.locator('#not-found').waitFor(T);
     ok('turned off, it is words again', await p2.locator('#answer').count() === 0);
+    /* THE LOOP'S RECOVERY FROM AN EMPTY STEP: a section with no numbers is
+       explained instead, and the turn says why */
+    const emp = await turns('numbers to know in syncope notes', 2);
+    ok('numbers asked of a section that has none: it explains the section instead, and says why', JSON.stringify(emp.map(r => r.tool)) === '["numbers","explain"]' &&
+       /Syncope/.test(emp[1].steps) && /no numbers in it/.test(emp[1].steps), JSON.stringify(emp));
     /* Figures stored by an older finder are found again when the unit is
        opened: the owner's highlighted PDF kept its wrong crops otherwise. */
     const stale = await p2.evaluate(() => MemStore.all('docs').then(ds => {
@@ -1686,6 +1730,19 @@ function kindOf(user) {
     ok('when the text reader cannot load, the scanned page is still named, with the reason', JSON.stringify(orec.scanned) === '[2]' && orec.ocr.length === 0 &&
        /text reader could not run/.test(await p4.locator('.unit-row').innerText()), JSON.stringify({ scanned: orec.scanned, err: orec.ocrError }));
     ok('and the rest of the PDF is imported all the same', orec.clusters.some(c => /This first page carries real text/.test(c.text)));
+
+    /* A table in a shaded box, found as a drawing, is named by its own title */
+    const p5t = await fresh('boxed-table', true);
+    await p5t.setInputFiles('#pdf-input', { name: 'fainting.pdf', mimeType: 'application/pdf', buffer: makeBoxedTablePdf() });
+    await p5t.locator('#sections .section-card').first().waitFor({ timeout: 60000 });
+    const trec = await p5t.evaluate(() => MemStore.all('docs').then(d => d[0].figures));
+    const tf = trec.find(f => f.kind === 'table');
+    ok('a table printed in a shaded box is named "Table 9.1" by its own title, with no figure number', trec.length === 1 && tf && tf.label === 'Table 9.1' &&
+       tf.number === undefined && /^TABLE 9\.1 Causes of exertional fainting/.test(tf.caption), JSON.stringify(trec));
+    await p5t.locator('#sections .section-card').first().click();
+    await p5t.locator('#visuals .figs figure').first().waitFor(T);
+    ok('and the lesson shows it under that name', await p5t.locator('#visuals .figs button[aria-label="Enlarge Table 9.1"]').count() === 1 &&
+       /TABLE 9\.1/.test(await p5t.locator('#visuals .figs figcaption').first().innerText()), await p5t.locator('#visuals .figs figcaption').first().innerText());
   }
 
   head('opened as a data: URL, the way the iPad\u2019s Files app hands a file to Safari');

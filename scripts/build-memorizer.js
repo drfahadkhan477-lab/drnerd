@@ -11,6 +11,19 @@
  *   dist-memorizer/sw.js                 offline shell + cached PDF reader
  *   dist-memorizer/icon.svg
  *
+ *   node scripts/build-memorizer.js --zip [memorizer-cloudflare.zip]
+ *
+ * also writes those four files as one zip, the upload for Cloudflare Pages
+ * ("Upload assets"; docs/IPAD.md). WHY A HOSTED COPY AT ALL: the iPad's
+ * Files app opens an .html in Safari as a data: URL, which gets no storage —
+ * the app opens, but nothing added is kept. From an https address it keeps
+ * everything, and Add to Home Screen makes it an offline app. The zip is
+ * written here, not by hand, because docs/IPAD.md records what a hand-made
+ * one did: Windows' "Send to compressed folder" wrote backslashes into the
+ * entry names and the deployed site served nothing. Entries here are the
+ * four bare file names, forward slashes by construction, stored at the zip's
+ * root where Pages looks for index.html.
+ *
  * UNLIKE scripts/build.js, THIS NEEDS NO LICENSED SOURCE. Memorizer carries no
  * content of its own: the PDF is the user's, read in their browser, and never
  * stored anywhere but their device. So this builds anywhere — CI included —
@@ -121,14 +134,55 @@ self.addEventListener('fetch', function (e) {
   return { out, inlined, bytes: Buffer.byteLength(html), stamp };
 }
 
+/* ── the zip: four files, deflated, at the root ─────────────────────────────
+   The smallest writer that Cloudflare, Safari's Files app and unzip all read:
+   one local header + data per file, a central directory, its end record. No
+   dates worth keeping (a fixed 1980-01-01, so the same build zips to the same
+   bytes), no extra fields, UTF-8 names. */
+const zlib = require('zlib');
+const ZIP_FILES = ['index.html', 'sw.js', 'icon.svg', 'manifest.webmanifest'];
+function zipOf(dir, names) {
+  const parts = [], central = [];
+  let at = 0;
+  (names || ZIP_FILES).forEach(function (name) {
+    if (/\\|^\/|\.\./.test(name)) throw new Error('refusing a zip entry that is not a bare relative name: ' + name);
+    const data = fs.readFileSync(path.join(dir, name));
+    const packed = zlib.deflateRawSync(data, { level: 9 });
+    const crc = zlib.crc32(data) >>> 0, nm = Buffer.from(name, 'utf8');
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x0800, 6); local.writeUInt16LE(8, 8);
+    local.writeUInt16LE(0, 10); local.writeUInt16LE(0x21, 12);                  /* 00:00, 1980-01-01 */
+    local.writeUInt32LE(crc, 14); local.writeUInt32LE(packed.length, 18); local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nm.length, 26); local.writeUInt16LE(0, 28);
+    const cen = Buffer.alloc(46);
+    cen.writeUInt32LE(0x02014b50, 0); cen.writeUInt16LE(20, 4); cen.writeUInt16LE(20, 6); cen.writeUInt16LE(0x0800, 8); cen.writeUInt16LE(8, 10);
+    cen.writeUInt16LE(0, 12); cen.writeUInt16LE(0x21, 14);
+    cen.writeUInt32LE(crc, 16); cen.writeUInt32LE(packed.length, 20); cen.writeUInt32LE(data.length, 24);
+    cen.writeUInt16LE(nm.length, 28); cen.writeUInt32LE(at, 42);
+    parts.push(local, nm, packed); central.push(cen, nm);
+    at += local.length + nm.length + packed.length;
+  });
+  const cd = Buffer.concat(central), end = Buffer.alloc(22), n = (names || ZIP_FILES).length;
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(n, 8); end.writeUInt16LE(n, 10);
+  end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(at, 16);
+  return Buffer.concat(parts.concat([cd, end]));
+}
+
 if (require.main === module) {
   try {
     const r = build();
     console.log(`Memorizer built → ${path.relative(process.cwd(), r.out) || '.'}/index.html  ` +
                 `(${(r.bytes / 1024).toFixed(0)} KB, ${r.inlined.length} files inlined, build ${r.stamp})`);
+    const z = process.argv.indexOf('--zip');
+    if (z !== -1) {
+      const next = process.argv[z + 1];
+      const file = path.resolve(next && !/^--/.test(next) ? next : path.join(ROOT, 'memorizer-cloudflare.zip'));
+      fs.writeFileSync(file, zipOf(r.out));
+      console.log(`Cloudflare Pages upload → ${path.relative(process.cwd(), file)}  (${ZIP_FILES.join(', ')})`);
+    }
   } catch (e) {
     console.error('build-memorizer: ' + e.message);
     process.exit(1);
   }
 }
-module.exports = { build };
+module.exports = { build, zipOf, ZIP_FILES };

@@ -254,3 +254,31 @@ has to parse before it can draw anything.
 - **Storage is evictable.** iOS may clear a site's data after roughly seven days
   with no visit. Installing to the Home Screen makes this much less likely; your
   progress also rides in the export bundle, so take one before a long break.
+
+## Memorizer on the iPad
+
+Memorizer (`memorizer/`) is a separate app with no licensed content in it, so
+it builds anywhere, and it goes to the iPad by the Cloudflare Pages route above
+with none of Systole's extras (no Worker, no key).
+
+**Not from the Files app.** Tapping `index.html` in Files opens it in Safari as
+a `data:` URL, and a page opened that way gets no storage at all. The app opens
+and says so, but every unit, card and day of progress is gone when the tab
+closes. It needs an `https` address.
+
+1. `node scripts/build-memorizer.js --zip` writes `dist-memorizer/` and
+   `memorizer-cloudflare.zip` next to it: the app's files at the zip's root,
+   forward slashes by construction (the backslash trap above cannot happen),
+   and the same build always zips to the same bytes.
+2. Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
+   **Upload assets**, a name such as `memorizer`, then the zip. A later build
+   goes up the same way, as a new deployment of the same project.
+3. Optionally, **Settings → Access** on the project → require your email.
+4. Open the `*.pages.dev` address in Safari, then **Share → Add to Home
+   Screen**. From there it keeps what you add, and after the first visit it
+   works offline: the service worker keeps the app and, as they are first
+   used, the pinned PDF and text readers.
+
+Each address has its own storage. Units added under one address, or in the
+Files app's own preview, do not appear under another; add the PDFs again once.
+Your book never leaves the iPad: the zip holds only the app.

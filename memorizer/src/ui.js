@@ -1709,13 +1709,15 @@ function askNow(q) {
   ui.turns = ui.turns || []; ui.memory = ui.memory || {};
   return askIndex().then(function (idx) {
     var queue = Agent.clauses(q).map(function (c) { return { clause: c }; });
-    var multi = queue.length > 1, n = 0;
+    var multi = queue.length > 1, n = 0, mine = [];
     function step() {
       if (!queue.length || n >= Agent.MAX_STEPS + 2) { render(); return; }
       var item = queue.shift(); n++;
       return (item.plan ? Promise.resolve(item.plan) : planFor(item.clause)).then(function (p) {
         var turn = { q: n === 1 ? q : null, plan: p, step: n, multi: multi || !!p.recovered };
-        if (p.recovered) multi = true;
+        /* a recovery makes a one-step message several: number the steps already shown */
+        if (p.recovered) { multi = true; mine.forEach(function (t) { t.multi = true; }); }
+        mine.push(turn);
         return (p.tool === 'search' ? searchStep(idx, p, item.clause || p.topic, turn) : Promise.resolve(toolStep(idx, p, turn))).then(function (obs) {
           ui.turns.push(turn); render();
           var nx = Agent.afterStep(p, obs);
