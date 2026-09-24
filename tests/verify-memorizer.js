@@ -974,10 +974,43 @@ function kindOf(user) {
      JSON.stringify({ litOn, litMoved, litOff }));
   ok('and with reduced motion asked for, there is no light to follow', litStill === 0, String(litStill));
   const hero = await page.evaluate(() => { const e = document.querySelector('#home-hero'); const cs = getComputedStyle(e);
-    return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('svg.hero-trace path[d^="M0"]'), held: (document.querySelector('#stat-held') || {}).textContent || '',
+    return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('.hero-monitor canvas'), held: (document.querySelector('#stat-held') || {}).textContent || '',
       inHero: !!e.querySelector('#streak') && !!e.querySelector('#pill-due') }; });
   ok('the hero band carries the streak, what is due and how much is held, over its gradient and trace',
      /gradient/.test(hero.bg) && hero.trace && /\d+%\s*Likely recalled/.test(hero.held) && hero.inHero, JSON.stringify(hero));
+  /* Systole's live strip (monitor.js): drawn, sweeping, a rhythm named in
+     monitor type — the same canvas through a redraw, so a tap does not
+     restart it — and still, but drawn, with reduced motion asked for. The
+     waits are for frames to have been painted; what they painted is the
+     check. */
+  const strip = () => page.evaluate(() => { const m = document.querySelector('.hero-monitor'), c = m.querySelector('canvas');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let ink = 0; const cols = new Set();
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) { ink++; cols.add(((i - 3) / 4) % c.width); }
+    return { x: m.getAttribute('data-x'), still: m.getAttribute('data-still'), ink, cols: cols.size, w: c.width, rhythm: m.getAttribute('data-rhythm'),
+      label: m.querySelector('.hero-monitor-label').textContent, font: getComputedStyle(m.querySelector('.hero-monitor-label')).fontFamily }; });
+  await page.waitForFunction(() => { const m = document.querySelector('.hero-monitor'); return m && +m.getAttribute('data-x') > 0; }, null, T).catch(() => {});
+  const s1 = await strip();
+  /* it moves by itself: no redraw between the two readings (a redraw
+     nudges it one frame, and the first version of this check measured that) */
+  await page.waitForFunction(x => { const m = document.querySelector('.hero-monitor'); return m && m.getAttribute('data-x') !== x; }, s1.x, T).catch(() => {});
+  const s2 = await strip();
+  const sameCanvas = await page.evaluate(() => { const c = document.querySelector('.hero-monitor canvas'); Memorizer.render(); return document.querySelector('.hero-monitor canvas') === c; });
+  const playlist = await page.evaluate(() => MemMonitor.PLAYLIST);
+  ok('Systole’s rhythm strip sweeps across the hero, a rhythm named in monitor type',
+     s1.ink > 0 && s2.x !== s1.x && playlist.indexOf(s1.rhythm) !== -1 && /^II · .+ · \d+ bpm$/.test(s1.label) && /mono|Menlo|Consolas/i.test(s1.font), JSON.stringify({ s1, s2 }));
+  ok('and a redraw keeps the same strip running, rather than starting another', sameCanvas, String(sameCanvas));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => Memorizer.render());
+  await page.waitForFunction(() => document.querySelector('.hero-monitor').getAttribute('data-still') === 'true', null, T).catch(() => {});
+  const r1 = await strip();
+  await page.waitForTimeout(400);
+  const r2 = await strip();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.evaluate(() => Memorizer.render());
+  /* whole: ink in every column — a sweeping strip always has the eraser's
+     blank gap ahead of its pen, and ink left over from the sweep would
+     otherwise pass for a drawing */
+  ok('with reduced motion asked for, the strip is drawn whole and holds still', r1.still === 'true' && r1.cols === r1.w && r2.x === r1.x && r2.ink === r1.ink, JSON.stringify({ r1, r2 }));
   /* Laid out as a dashboard on an iPad held landscape — the pearl, and
      beside it where to jump back in — and stacked in reading order on a
      phone, with nothing wider than the screen. */

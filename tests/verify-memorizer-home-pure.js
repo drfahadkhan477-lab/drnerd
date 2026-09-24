@@ -234,6 +234,24 @@ head('the pearl is the PDF’s own sentence');
   ok('a unit with no sentence worth a pearl has none, rather than a poor one', H.pearlOf([doc('t', 1, [cl(0, 'x', ['It is short.', 'So is this.'])])], Pearl, DAY, 0) === null);
 }
 
+head('Systole’s rhythm strip on the hero (monitor.js)');
+{
+  global.RhythmsExtra = load('src/core/rhythms-extra.js').RhythmsExtra;
+  const M = require(path.join(ROOT, 'memorizer', 'src', 'monitor.js'));
+  ok('every rhythm on the strip is one Systole draws, named with its rate, and nothing alarming',
+     M.PLAYLIST.every(k => M.info(k).name && M.info(k).hr > 0) && M.PLAYLIST.every(k => k === 'sinus' || global.RhythmsExtra.EXTRA[k]) &&
+     !M.PLAYLIST.some(k => ['vt', 'vfib', 'asystole', 'torsades', 'chb', 'stemi'].indexOf(k) !== -1), M.PLAYLIST.join(', '));
+  /* each rhythm drawn for ten seconds: a real strip, with R waves near
+     1 mV at about the rate it names (sinus 72 → about 12 beats) */
+  const peaks = k => { const st = {}; let n = 0, prev = 0, up = false;
+    for (let t = 0; t < 10000; t += 2) { const v = M.sample(k, t, st); if (!up && v > 0.6 && prev <= 0.6) { n++; up = true; } if (v < 0.3) up = false; prev = v; } return n; };
+  ok('sinus draws twelve beats in ten seconds, as 72 a minute', peaks('sinus') === 12, String(peaks('sinus')));
+  ok('and every other rhythm draws beats too, none flat', M.PLAYLIST.every(k => peaks(k) >= 3), JSON.stringify(M.PLAYLIST.map(k => [k, peaks(k)])));
+  const repeats = M.PLAYLIST.filter(prev => Array.from({ length: 50 }, (_, i) => M.next(prev, () => i / 50)).some(k => k === prev));
+  ok('the next rhythm is never the one showing, whatever the draw', repeats.length === 0, repeats.join(', ') || 'none');
+  ok('its label reads as a monitor’s: lead, rhythm, rate', M.label('sinus') === 'II · Sinus Rhythm · 72 bpm', M.label('sinus'));
+}
+
 head('the numbers in a pearl are marked');
 {
   const runs = H.marks('Above 18 mmHg, or 8 to 12, in 40% of patients over 3 days.');

@@ -18,7 +18,7 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Skill = root.MemSkill;
+var Skill = root.MemSkill, Monitor = root.MemMonitor;
 var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance, Study = root.MemStudy;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
@@ -762,7 +762,8 @@ function viewHome() {
   var prog = Home.progress(ui.docs, sessions, ui.cards, day, FSRS);
   var cur = Home.current(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), sessions);
   var top = h('header.home-top.home-hero', { id: 'home-hero' },
-    heroTrace(),
+    /* Systole's live strip (monitor.js); the still trace where it is absent */
+    Monitor ? Monitor.mount(doc, reducedMotion) : heroTrace(),
     h('div.home-brand', mascot(), h('div', h('span.hello', Home.greeting(new Date().getHours()) + ' · what shall we'), h('h1.learn', 'Learn?'),
       h('p.hero-line', cur ? [h('span.hero-dot', { 'aria-hidden': 'true' }), 'Up next: ', h('strong', cur.doc.name), cur.next ? ' · ' + cur.next : ''] : 'Add a chapter of your book to begin.'))),
     h('div.pills.hero-stats',
