@@ -27,12 +27,14 @@ var WEBLLM = { url: 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.85/lib/ind
                sri: 'sha384-rfElDdXnNkSgbLTTGiKHTrsetCVAYzzLZBD96/rZdD9XYvryEyShqz3ph8j+x7HH' };
 /* Qwen3, Apache-2.0, at the owner's request for an Apache-licensed model.
    The GPU memory is WebLLM's own figure for each (its prebuilt config): the
-   0.6B fits more iPads; the 1.7B is stronger and wants a recent one (M-series).
+   0.6B fits more iPads; the 1.7B is stronger and wants a recent one (M-series);
+   the 4B runs the Coach's agent loop best and wants 8 GB (M1 or later).
    Earlier versions offered Llama 3.2 1B and Gemma 3 1B, under their own
    licences. */
 var MODELS = [
   { id: 'Qwen3-0.6B-q4f16_1-MLC', label: 'Qwen3 0.6B', mb: 1403, licence: 'Apache-2.0' },
   { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B (stronger; newer iPads)', mb: 2037, licence: 'Apache-2.0' },
+  { id: 'Qwen3-4B-q4f16_1-MLC', label: 'Qwen3 4B (strongest; iPads with 8 GB, M1 or later)', mb: 3432, licence: 'Apache-2.0' },
 ];
 var CFG_KEY = 'memorizer.llm.v1';
 /* Search by meaning: Snowflake's arctic-embed-s (Apache-2.0, 384

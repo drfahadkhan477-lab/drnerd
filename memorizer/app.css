@@ -760,3 +760,16 @@ main.home > .section-head, main.home > .units { animation-delay: .22s; }
 .src-meta { word-break: break-word; }
 .ocr-lesson { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 3px solid var(--mid); }
 .hero-continue { margin-top: var(--s-2); }
+
+/* the Coach as an agent: why a miss happened, the week ahead, its answer */
+.agent-mistakes { list-style: none; padding: 0; margin: var(--s-2) 0; }
+.agent-mistakes li { border-top: 1px solid var(--line); padding: var(--s-2) 0; margin: 0; }
+.agent-mistakes li:first-child { border-top: 0; }
+.agent-mistakes .type-badge { font-size: var(--t-tiny); }
+.agent-week { list-style: none; padding: 0; margin: var(--s-2) 0; display: grid; gap: var(--s-1); }
+.agent-week li { display: grid; grid-template-columns: 6.5rem 1fr 2rem; align-items: center; gap: var(--s-2); margin: 0; font-size: var(--t-meta); }
+.week-bar { height: .5rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.week-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.agent-week strong { text-align: right; }
+.agent-answer { border-color: var(--accent); }
+#coach-memory .btn { min-height: 2rem; padding: .25rem .625rem; }
