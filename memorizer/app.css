@@ -116,6 +116,13 @@ table.data tbody tr:last-child td { border-bottom: 0; }
 .lightbox { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; padding: var(--s-4); }
 .lightbox img { max-width: 100%; max-height: 100%; background: #FFFFFF; border-radius: .375rem; }
 .lightbox .btn { position: absolute; top: calc(var(--s-4) + env(safe-area-inset-top)); right: var(--s-4); }
+/* Where the enlarged page is from, over the dark backdrop: light on near-
+   black, not the theme's muted ink, which is tuned for the theme's paper. */
+.lightbox .lb-where { position: absolute; left: var(--s-4); bottom: calc(var(--s-4) + env(safe-area-inset-bottom)); margin: 0; color: #E2E8F0; font-size: var(--t-meta); }
+.lightbox:focus { outline: none; }
+/* The storage banner sits under each screen's title bar. */
+.store-banner { margin: var(--s-2) 0; }
+.store-banner.warn { padding: var(--s-2) var(--s-3); border-radius: .75rem; border: 1px solid var(--mid); }
 
 .review-head { display: flex; justify-content: space-between; gap: var(--s-2); flex-wrap: wrap; margin-top: var(--s-2); }
 .flash { min-height: 15rem; }
@@ -740,3 +747,16 @@ main.home > .section-head, main.home > .units { animation-delay: .22s; }
   main.home, main.home *, nav.dock, nav.dock *, .btn, .btn::after, .section-card, .option { transition: none !important; animation: none !important; }
   .jump-card:hover, .unit-row:hover, .section-card:hover, .learn-box:hover, .btn:hover:not([disabled]), .pearl-fig:hover img { transform: none; }
 }
+
+/* ── where a unit came from (provenance.js) ── */
+.source-card { margin-top: var(--s-4); }
+.source-card summary { cursor: pointer; list-style: none; }
+.source-card summary::-webkit-details-marker { display: none; }
+.source-card[data-verdict="good"] .eyebrow { color: var(--accent); }
+.src-lines { margin: var(--s-2) 0; padding-left: 1.1rem; }
+.src-lines li { margin: .25rem 0; }
+.src-lines li[data-kind="check"] { color: var(--mid); }
+.src-lines li[data-kind="bad"] { color: var(--mid); font-weight: 700; }
+.src-meta { word-break: break-word; }
+.ocr-lesson { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 3px solid var(--mid); }
+.hero-continue { margin-top: var(--s-2); }

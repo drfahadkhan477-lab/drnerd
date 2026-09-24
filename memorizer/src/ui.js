@@ -19,7 +19,7 @@ var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
 var Skill = root.MemSkill;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -31,7 +31,8 @@ var ui = {
   docs: [], cards: [], sessions: {}, at: {}, pearlSkip: 0, books: [], days: [], bookId: null,
   docsStale: true, pearlCache: null,
   docId: null, docRec: null, state: null,
-  busy: '', error: '', choice: null, pasting: false,
+  busy: '', busyKey: '', stepSeq: 0, moving: false, rating: false, saveError: '', notice: '',
+  error: '', choice: null, pasting: false,
   importing: '', reviewShown: false, reviewDone: 0, drill: null,
 };
 
@@ -82,14 +83,23 @@ function refresh() {
     ui.days = r[4] && Array.isArray(r[4].days) ? r[4].days : legacyDays();
   });
 }
+/* The session and the cards it made are stored in one transaction
+   (Store.saveStep), and a failure is SAID, never swallowed: ui.saveError
+   puts a banner on every screen until a save succeeds. The step itself
+   stays on screen — the whole session is written each time, so the next
+   save that works stores everything the failed one did not. save() never
+   rejects: a rejected save used to stop go() before it redrew, leaving the
+   old screen up with nothing to say why. */
 function save() {
   if (!ui.state) return Promise.resolve();
   var at = Date.now();
   ui.sessions[ui.docId] = ui.state; ui.at[ui.docId] = at;
-  return Store.put('sessions', { id: ui.docId, state: ui.state, at: at })
-    .then(function () { return Store.mergeCards(ui.state.cards); })
-    .then(function () { return Store.all('cards'); })
-    .then(function (c) { ui.cards = c; });
+  return Store.saveStep({ id: ui.docId, state: ui.state, at: at }, ui.state.cards)
+    .then(function (c) { ui.cards = c; ui.saveError = ''; }, saveFailed);
+}
+function saveFailed(e) {
+  var name = e && e.name, msg = (e && e.message) || String(e || 'unknown error');
+  ui.saveError = name === 'QuotaExceededError' ? 'this device is out of space for Memorizer' : msg;
 }
 
 /* Days studied, for the streak, in IndexedDB with the units and cards.
@@ -105,7 +115,7 @@ function markStudied() {
   var t = today();
   if (studyDays().indexOf(t) !== -1) return;
   ui.days = studyDays().concat([t]).slice(-400);
-  Store.put('meta', { id: 'days', days: ui.days });
+  Store.put('meta', { id: 'days', days: ui.days }).then(null, function (e) { saveFailed(e); render(); });
 }
 
 function dispatch(event) {
@@ -119,8 +129,18 @@ function dispatch(event) {
    arguments, Claude from `remote` ones (prompts.js); either answer is held to
    the same schema and rules (Prompts.validate), so a bug in the built-in
    coach is an error on screen, never a bad drill. */
+/* A step belongs to the screen that asked for it. stepKey() names that
+   screen (unit, section, phase); a reply that arrives after the reader has
+   moved on — Claude takes seconds, and Back is one tap — is dropped, not
+   filed into whatever section is open by then. That was a real bug: section
+   1's lesson, still on its way, arrived as section 2's. `ui.stepSeq` is the
+   ticket; render() cancels a step whose screen is no longer showing, so the
+   new screen can ask for its own. */
+function stepKey() { var s = ui.state; return s ? ui.docId + '|' + s.section + '|' + s.phase : ''; }
+function current(seq, key) { return seq === ui.stepSeq && (key == null || key === stepKey()); }
 function ask(label, kind, local, remote) {
-  ui.busy = label; ui.error = ''; render();
+  var seq = ++ui.stepSeq, key = stepKey();
+  ui.busy = label; ui.busyKey = key; ui.error = ''; render();
   var c = cfg();
   var step = !Provider.needsKey(c)
     ? new Promise(function (resolve) {
@@ -133,11 +153,19 @@ function ask(label, kind, local, remote) {
       })
     : Provider.call(c, Prompts[kind].apply(null, remote), kind);
   return step.then(function (v) {
+    if (!current(seq, key)) throw STALE;
     ui.busy = ''; return v;
   }, function (e) {
+    if (!current(seq, key)) throw STALE;
     ui.busy = ''; ui.error = (e && e.message) || String(e); render();
     throw e;
   });
+}
+var STALE = { stale: true };
+/* Before every redraw: a step still busy for a screen that is not this one
+   is let go — its reply will be dropped — and this screen asks afresh. */
+function releaseStale() {
+  if (ui.busy && ui.busyKey !== stepKey()) { ui.stepSeq++; ui.busy = ''; ui.busyKey = ''; }
 }
 
 function cluster(i) { return ui.docRec.clusters[i == null ? ui.state.section : i]; }
@@ -155,8 +183,10 @@ function pump() {
     ask('Writing your questions…', 'quiz', [cluster(), c.lesson, ui.docRec.clusters], [cluster(), c.lesson])
       .then(function (v) {
         if (!builtin() || !aiOn() || !v.questions.length) return v;
-        ui.busy = 'Writing harder questions with the on-device AI…'; render();
+        var seq = ui.stepSeq;
+        ui.busy = 'Writing harder questions with the on-device AI…'; ui.busyKey = stepKey(); render();
         return aiQuestions(cluster()).then(function (ai) {
+          if (!current(seq)) throw STALE;
           ui.busy = '';
           var seen = {};
           var all = ai.concat(v.questions).filter(function (q) { var k = q.question + '|' + q.quote; if (seen[k]) return false; seen[k] = true; return true; });
@@ -183,31 +213,55 @@ function saveUnit(name, source, pages, extra) {
   if (!clusters.length) throw new Error(extra && extra.emptyMessage || 'No readable text was found.');
   var rec = { id: newId(), name: name, addedAt: Date.now(), pages: pages.length, source: source, clusters: clusters,
               scanned: (extra && extra.scanned) || [], figures: (extra && extra.figures) || [], figuresV: Pdf.FIGURES_V, hasFile: !!(extra && extra.bytes),
-              ocr: (extra && extra.ocr) || [], ocrError: (extra && extra.ocrError) || '' };
+              ocr: (extra && extra.ocr) || [], ocrError: (extra && extra.ocrError) || '',
+              fingerprint: (extra && extra.fingerprint) || '', fileName: (extra && extra.fileName) || '', processing: processing() };
   var first = extra && extra.bytes ? Store.put('files', { id: rec.id, bytes: extra.bytes }) : Promise.resolve();
   return first.then(function () { return Store.put('docs', rec); }).then(function () { return rec; });
 }
+/* What read this unit: the build of Memorizer (its data-build stamp, set
+   by scripts/build-memorizer.js; 'dev' when run from the repository), the
+   PDF reader's version and the figure finder's. Kept with the unit so a
+   later fix can tell what it would change. */
+function processing() {
+  return { build: doc.documentElement.getAttribute('data-build') || 'dev', pdfjs: Pdf.PDFJS_V, figures: Pdf.FIGURES_V };
+}
+/* The same bytes added again open the unit already here, with its
+   progress, rather than starting a second copy of it from nothing. */
+function duplicate(fp) {
+  var dup = Prov.duplicateOf(ui.docs, fp);
+  if (!dup) return false;
+  ui.importing = '';
+  ui.notice = 'You had already added this as \u201C' + dup.name + '\u201D \u2014 here it is, with your progress. (Start over is in its menu on the home screen.)';
+  openDoc(dup.id);
+  return true;
+}
+var DUPLICATE = { duplicate: true };
 function finishImport(p) {
   return p.then(function (rec) {
     ui.importing = ''; docsChanged(); return refresh().then(function () { return openDoc(rec.id); });
   }, function (e) {
+    if (e === DUPLICATE) return;
     ui.importing = ''; ui.error = (e && e.message) || String(e); render();
   });
 }
 function importFile(file) {
   if (!file) return;
   ui.importing = 'Opening ' + file.name + '…'; ui.error = ''; render();
-  var bytes = null;
+  var bytes = null, fp = '';
   finishImport(readBuffer(file).then(function (buf) {
     bytes = buf;
-    return Pdf.read(buf, function (n, total, pass) {
+    return Prov.fingerprint(buf);
+  }).then(function (f) {
+    fp = f;
+    if (duplicate(fp)) throw DUPLICATE;
+    return Pdf.read(bytes, function (n, total, pass) {
       ui.importing = pass === 'ocr' ? 'Reading scanned page ' + n + ' of ' + total + ' with text recognition…' : 'Reading page ' + n + ' of ' + total + '…';
       render();
     }, function (msg) { ui.importing = msg; render(); });
   }).then(function (r) {
     ui.importing = 'Splitting into sections…'; render();
     return saveUnit(file.name.replace(/\.pdf$/i, ''), 'pdf', r.pages, {
-      bytes: bytes, figures: r.figures || [], scanned: Chunk.scannedPages(r.wordCounts), ocr: r.ocr, ocrError: r.ocrError,
+      fingerprint: fp, fileName: file.name, bytes: bytes, figures: r.figures || [], scanned: Chunk.scannedPages(r.wordCounts), ocr: r.ocr, ocrError: r.ocrError,
       emptyMessage: r.ocrError
         ? 'No readable text in this PDF. It looks like a scan (pictures of pages), and the text reader for scans could not run: ' + r.ocrError
         : 'No readable text in this PDF, even with text recognition. If it is a scan, it may be too faint or too small to read.',
@@ -231,7 +285,10 @@ function importPhotos(files) {
 }
 function importText(name, text) {
   ui.importing = 'Splitting into sections…'; ui.error = ''; render();
-  finishImport(new Promise(function (resolve) { resolve(saveUnit(name || 'Pasted notes', 'text', Chunk.pagesFromText(text), { emptyMessage: 'There was no text to learn from.' })); }));
+  finishImport(Prov.fingerprint(String(text || '')).then(function (fp) {
+    if (duplicate(fp)) throw DUPLICATE;
+    return saveUnit(name || 'Pasted notes', 'text', Chunk.pagesFromText(text), { fingerprint: fp, emptyMessage: 'There was no text to learn from.' });
+  }));
 }
 
 /* ── a whole book ────────────────────────────────────────────────────────── */
@@ -359,9 +416,17 @@ function openDoc(id, section) {
     return save();
   }).then(function () { render(); root.scrollTo(0, 0); });
 }
+/* One transition at a time. A second tap before the first has been stored
+   and drawn lands on the OLD screen's button: on "I knew it" that skipped a
+   memorise card, and on Next it filed an answer with no choice. While a
+   step is being stored, taps are ignored. */
 function go(event) {
-  ui.choice = null; ui.error = ''; ui.back = 0;
-  return dispatch(event).then(function () { render(); root.scrollTo(0, 0); });
+  if (ui.moving) return Promise.resolve();
+  ui.moving = true;
+  ui.choice = null; ui.error = ''; ui.back = 0; ui.notice = '';
+  var p;
+  try { p = dispatch(event); } catch (e) { ui.moving = false; throw e; }
+  return p.then(function () { ui.moving = false; render(); root.scrollTo(0, 0); });
 }
 
 /* ── speech: the lesson can be listened to ───────────────────────────────── */
@@ -502,13 +567,17 @@ function ensureFigures(d) {
     if (ui.docRec && ui.docRec.id === d.id) { ui.docRec = d; render(); }
   }, function () { ui.figuresBusy = null; d.figures = []; });
 }
+/* Modal, with focus managed (dialog.js): in on open, kept inside, given
+   back to the button that opened it on close. */
 function lightbox(pageNo, box, name) {
-  var close = function () { if (el.parentNode) el.parentNode.removeChild(el); doc.removeEventListener('keydown', esc); };
-  var esc = function (e) { if (e.key === 'Escape') close(); };
-  var el = h('div.lightbox', { role: 'dialog', 'aria-modal': 'true', 'aria-label': name || 'Page ' + pageNo, onclick: function (e) { if (e.target === el) close(); } },
-    lazyImage('Page ' + pageNo + (box ? ' figure' : ''), pageNo, box, 2.5), button('Close', close, 'primary'));
-  doc.addEventListener('keydown', esc);
-  doc.body.appendChild(el);
+  var close = function () { closeFn(); };
+  var where = (box ? (name || 'Figure') + ' · ' : '') + 'page ' + pageNo + (ui.docRec && ui.docRec.name ? ' of ' + ui.docRec.name : '');
+  var el = h('div.lightbox', { 'aria-label': name || 'Page ' + pageNo },
+    lazyImage('Page ' + pageNo + (box ? ' figure' : ''), pageNo, box, 2.5),
+    h('p.muted.lb-where', { id: 'lb-where' }, where),
+    button('Close', close, 'primary', { 'data-autofocus': true, id: 'lb-close' }));
+  el.setAttribute('aria-describedby', 'lb-where');
+  var closeFn = Dialog.open(el, doc.getElementById('app'));
 }
 /* The figures a section uses: the ones its text names, else the ones on its
    pages (chunk.js's assignFigures). Worked out once per unit opened. */
@@ -652,8 +721,16 @@ function viewHome() {
     h('div.pills.hero-stats',
       h('span.pill.stat', { id: 'streak', title: 'Days in a row' }, h('span.stat-label', 'Streak'), h('span', { 'aria-hidden': 'true' }, '🔥'), ' ' + streak),
       h('button.pill.stat', { type: 'button', id: 'pill-due', onclick: function () { startReview(); } }, h('span.stat-label', 'Review'), h('span', { 'aria-hidden': 'true' }, '↻'), ' ' + due + ' due'),
-      h('span.pill.stat.stat-ring', { id: 'stat-held', title: 'Of the cards you have made, held at 90% or better today' },
-        ring(prog.heldPct), h('span.stat-label', 'Held'))));
+      /* What the ring measures, said where it is shown: the share of review
+         cards FSRS expects you to recall today with 90% odds or better. It is
+         the scheduler's estimate about the cards — not how much of the book
+         you know — and the old one-word "Held" let it read as the latter. */
+      h('span.pill.stat.stat-ring', { id: 'stat-held', role: 'img',
+          'aria-label': prog.heldPct + '% of your ' + prog.cards + ' review card' + (prog.cards === 1 ? '' : 's') + ' likely recalled today (estimated recall of 90% or more)',
+          title: 'Likely recalled: of your ' + prog.cards + ' review card' + (prog.cards === 1 ? '' : 's') + ', the share the scheduler (FSRS) estimates you would recall today with 90% odds or better. An estimate about the cards, not a measure of how much of the book you know.' },
+        ring(prog.heldPct), h('span.stat-label', 'Likely recalled'))),
+    cur ? h('div.row.hero-continue', button([h('span', { 'aria-hidden': 'true' }, '\u25B6 '), cur.started ? 'Continue: ' + cur.doc.name : 'Start: ' + cur.doc.name],
+      function () { openDoc(cur.doc.id); }, 'primary big', { id: 'continue' })) : null);
 
   var drop = h('label.learn-box', { for: 'pdf-input', id: 'door-add',
       ondragover: function (e) { e.preventDefault(); drop.classList.add('over'); },
@@ -775,8 +852,7 @@ function viewHome() {
       h('ul.units', { id: 'books' }, books)] : null,
     units.length ? h('div.section-head', h('h2', 'My units'), h('label.plus', { for: 'pdf-input', 'aria-label': 'Add a PDF' }, '+')) : null,
     units.length ? h('ul.units', { id: 'units' }, units) : !books.length ? h('div.card.empty', h('h2', 'Start with a chapter, or the whole book'),
-      h('p', 'Upload a chapter of your book as a PDF, take photos of its pages, or paste your notes — or add the whole textbook, in as many PDFs as it came in. Memorizer splits it into chapters and sections, teaches each one — key points, numbers to know, mnemonics and analogies — then drills you with multiple-choice questions. Everything you miss comes back as a review card until it sticks.')) : null,
-    !Store.persistent ? h('p.warn', 'This browser would not open local storage (private mode?). Your work will not survive a reload.') : null);
+      h('p', 'Upload a chapter of your book as a PDF, take photos of its pages, or paste your notes — or add the whole textbook, in as many PDFs as it came in. Memorizer splits it into chapters and sections, teaches each one — key points, numbers to know, mnemonics and analogies — then drills you with multiple-choice questions. Everything you miss comes back as a review card until it sticks.')) : null);
 }
 
 /* ── UNIT: the sections as cards ─────────────────────────────────────────── */
@@ -816,14 +892,31 @@ function viewUnit() {
     d.bookId ? h('p.muted.book-of', d.bookName + (d.chapter ? ' · chapter ' + d.chapter : ' · front matter') + ' · pp. ' + d.pageStart + '–' + d.pageEnd) : null,
     h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
+    ui.notice ? h('p.card.note', { id: 'notice', role: 'status' }, ui.notice) : null,
     weakCard(s),
     h('h2.grid-title', 'Sections (' + n + ')'),
     h('div.sections', { id: 'sections' }, cards),
     examCard,
     compareButton(s, d),
+    sourceCard(d),
     h('div.sticky-cta', allDone
       ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
       : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })));
+}
+
+/* Where this unit came from and how well it was read (provenance.js):
+   folded away, and open by itself only when there are pages to check. */
+function sourceCard(d) {
+  var r = Prov.report(d), pr = d.processing;
+  var when = d.addedAt ? new Date(d.addedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+  var from = d.bookId ? d.bookName + ', pp. ' + d.pageStart + '\u2013' + d.pageEnd : d.fileName || d.name;
+  return h('details.card.source-card', { id: 'source-card', 'data-verdict': r.verdict, open: r.verdict === 'good' ? null : true },
+    h('summary', h('span.eyebrow', 'Source \u00B7 ' + r.label)),
+    h('ul.src-lines', r.lines.map(function (l) { return h('li', { 'data-kind': l.kind }, l.text); })),
+    h('p.muted.src-meta', 'From ', h('strong', from), when ? ' \u00B7 added ' + when : '',
+      d.fingerprint ? [' \u00B7 ', h('span', { title: d.fingerprint }, Prov.shortPrint(d.fingerprint))] : '',
+      pr ? ' \u00B7 read by Memorizer ' + pr.build + (d.source === 'pdf' ? ', PDF reader ' + pr.pdfjs : '') : ''),
+    h('p.muted', 'Everything Memorizer teaches from this unit is this source\u2019s own text. It is what your book says, as of its edition \u2014 not a check against current guidelines.'));
 }
 
 /* The weak list in one line, as the skill shows it, with its round. */
@@ -999,14 +1092,12 @@ function savePng(svg, name) {
   img.src = svgUrl(svg);
 }
 function showFigure(svg, name) {
-  var close = function () { if (el.parentNode) el.parentNode.removeChild(el); doc.removeEventListener('keydown', esc); };
-  var esc = function (e) { if (e.key === 'Escape') close(); };
-  var el = h('div.lightbox.figure-view', { role: 'dialog', 'aria-modal': 'true', 'aria-label': name, onclick: function (e) { if (e.target === el) close(); } },
+  var close = function () { closeFn(); };
+  var el = h('div.lightbox.figure-view', { 'aria-label': name },
     h('img', { src: svgUrl(svg), alt: name }),
     h('p.muted.fig-note', 'Every word and number here is your book\u2019s, arranged by Memorizer.'),
-    h('div.row', button('Save image', function () { savePng(svg, name); }, 'primary', { id: 'save-figure' }), button('Close', close)));
-  doc.addEventListener('keydown', esc);
-  doc.body.appendChild(el);
+    h('div.row', button('Save image', function () { savePng(svg, name); }, 'primary', { id: 'save-figure' }), button('Close', close, '', { 'data-autofocus': true, id: 'fig-close' })));
+  var closeFn = Dialog.open(el, doc.getElementById('app'));
 }
 function sourceLine(d, c) {
   return (d.bookName ? d.bookName + ' · ' : '') + d.name + ' · ' + (c.pageEnd !== c.pageStart ? 'pp. ' + c.pageStart + '–' + c.pageEnd : 'p. ' + c.pageStart);
@@ -1039,6 +1130,15 @@ function numbersCard(sh, play) {
 function analogyCard(a, first) {
   return h('div.card.analogy' + (first ? '' : '.more'), h('span.eyebrow', 'Think of it like…'), h('h3', a.title), h('p.analogy-text', a.text),
     h('p.muted.label', a.source === 'Claude' ? 'Analogy written by Claude — not from your book.' : 'Analogy — Memorizer’s, not your book’s. Your book is the authority.'));
+}
+/* Where this section's text came from text recognition, the lesson says so
+   on the section itself — the home screen's note is a long way from here. */
+function ocrNote(c) {
+  var d = ui.docRec, ns = d.source === 'photo' ? [c.pageStart] : Prov.ocrPagesIn(d, c);
+  if (!ns.length) return null;
+  return h('p.warn.ocr-lesson', { id: 'ocr-note' },
+    d.source === 'photo' ? 'This section was read from a photo by text recognition. ' : 'Part of this section was read from a scanned page by text recognition (' + (ns.length === 1 ? 'p. ' : 'pp. ') + Prov.pageList(ns) + '). ',
+    'Recognition can misread a number or a word: check anything surprising against the page.');
 }
 function viewLesson() {
   var s = ui.state, c = cluster(), L = s.per[s.section].lesson;
@@ -1098,6 +1198,7 @@ function viewLesson() {
     var move = function (d) { ui.step.i = Math.max(0, Math.min(parts.length - 1, i + d)); render(); root.scrollTo(0, 0); };
     return [
       sectionBar('teach'),
+      ocrNote(c),
       h('div.step-head', { id: 'lesson-steps' },
         h('div.step-count', h('strong', 'Slide ' + (i + 1) + '/' + parts.length), h('span', ' · ' + parts[i].label)),
         button('↻ Replay', function () { replay(); }, 'quiet', { id: 'replay' }),
@@ -1110,6 +1211,7 @@ function viewLesson() {
   }
   return [
     sectionBar('teach'),
+    ocrNote(c),
     h('div.row.lesson-mode', button('▶ Play this section', function () { setStepMode(true); ui.step = null; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'step-mode' })),
     bigIdea,
     glanceCard(c, L),
@@ -1355,7 +1457,7 @@ function viewResult() {
     backBar(cluster().title, function () { go({ type: 'toUnit' }); }),
     h('div.card.result', { id: 'result' }, ring(pct, 'big'),
       h('h2', right + ' of ' + firsts.length + ' right first time'),
-      h('p', pct >= 90 ? 'Excellent — this section is yours. Review cards will keep it that way.'
+      h('p', pct >= 90 ? 'Excellent — you know this section today. Its review cards over the coming days are what make it last.'
         : pct >= 70 ? 'Good. Look over the ones you missed, then move on; they come back as review cards.'
         : 'Worth another pass: re-read the key points, then drill again before moving on.')),
     missed.length ? h('div.card', h('h2', 'What you missed'), h('ul.missed', missed.map(function (q) {
@@ -1396,7 +1498,7 @@ function viewDone() {
   return [
     backBar(d.name, function () { go({ type: 'toUnit' }); }),
     h('div.card.result', { id: 'result' }, ring(pct, 'big'), h('h2', 'Final exam: ' + pct + '%'),
-      h('p', pct >= 85 ? 'Unit mastered. Keep up the review cards and it stays mastered.' : 'Review the sections below the line, then retake the exam.')),
+      h('p', pct >= 85 ? 'Exam passed. That is today\u2019s recall: keep up the review cards over the coming days to turn it into long-term memory.' : 'Review the sections below the line, then retake the exam.')),
     h('div.card', h('h2', 'By section'), h('ul.by-section', Object.keys(by).map(function (k) {
       var t = +k >= 0 ? d.clusters[+k].title : 'Across the unit', b = by[k];
       return h('li', h('span', t), h('span.badge', b.right + '/' + b.n));
@@ -1421,7 +1523,7 @@ function viewSession() {
 
 function leave(view) {
   ui.drill = null; ui.choice = null;
-  ui.view = view; ui.error = '';
+  ui.view = view; ui.error = ''; ui.notice = '';
   refresh().then(render);
 }
 
@@ -1455,11 +1557,18 @@ function viewReview() {
       button('Back home', function () { leave('library'); }, 'primary')));
   }
   var card = due[0];
+  /* Rated once, and counted only when stored: a failed write leaves the
+     card due and says so, rather than showing it as reviewed. */
   var rate = function (r) {
+    if (ui.rating) return;
+    ui.rating = true;
     var upd = Session.review(card, r, today(), FSRS);
-    if (dr) dr.done[card.id] = true;
     markStudied();
-    Store.put('cards', upd).then(refresh).then(function () { ui.reviewShown = false; ui.choice = null; ui.reviewDone++; render(); });
+    Store.put('cards', upd).then(function () {
+      if (dr) dr.done[card.id] = true;
+      ui.saveError = ''; ui.reviewDone++;
+      return refresh();
+    }, saveFailed).then(function () { ui.rating = false; ui.reviewShown = false; ui.choice = null; render(); });
   };
   var head = h('div.review-head', h('span.count', dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'), h('span.muted', (names[card.docId] || '') + ' · ' + card.title));
   if (card.options && card.options.length) {
@@ -1851,7 +1960,14 @@ function viewSettings() {
     about.style.display = P.noKey ? '' : 'none';
   }
   fillModels();
-  var saved = h('span.muted', { role: 'status' });
+  var saved = h('span.muted', { role: 'status', id: 'settings-status' });
+  var clearKey = c.key ? button('Clear key', function () {
+    var ok = Provider.saveConfig({ provider: c.provider, model: c.model, key: '' });
+    key.value = '';
+    saved.textContent = ok ? 'Key removed from this device.' : 'This browser refused to change it (private mode?).';
+    if (ok) clearKey.remove();
+  }, 'quiet danger', { id: 'clear-key' }) : null;
+  keyed.appendChild(h('p.muted.key-warn', { id: 'key-warn' }, 'Your key is kept in this browser\u2019s storage on this device, unencrypted, and sent only to the provider. Any browser extension or script allowed to run on this page could read it: use a key with a spending limit, and clear it when you stop using Claude here.'));
   return h('main.wrap',
     backBar('Settings', function () { leave('library'); }),
     appearanceCard(),
@@ -1861,7 +1977,7 @@ function viewSettings() {
         var P = Provider.PROVIDERS[prov.value];
         var ok = Provider.saveConfig({ provider: prov.value, model: model.value, key: P.noKey ? '' : key.value.trim() });
         saved.textContent = ok ? 'Saved on this device.' : 'This browser refused to save it (private mode?).';
-      }, 'primary', { id: 'save-settings' }), saved)),
+      }, 'primary', { id: 'save-settings' }), clearKey, saved)),
     aiSettingsCard(),
     h('div.card', h('h2', 'What leaves this device'),
       h('p', 'Your PDF, photos and notes are read here, in the browser, and never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages and photos, the first time it is needed; they are read on this device too.'),
@@ -2060,7 +2176,28 @@ function robot() {
       'aria-label': ctx.type === 'lesson' ? 'Coach: explain this section' : 'Coach: explain this question', onclick: toggle }, robotFace()));
 }
 
+/* Said on every screen, not only Home: work that will not survive a reload,
+   or a step that was not stored, is the one thing the reader must not have
+   to go looking for. */
+function storageBanner() {
+  if (ui.saveError) {
+    return h('div.card.error.store-banner', { id: 'store-banner', role: 'alert' },
+      h('strong', 'Your last step was not saved. '), 'The browser said: ' + ui.saveError + '. ',
+      'It stays on screen and is saved with your next step; if this keeps happening, delete a unit you have finished to free space.',
+      h('div.row', button('Try saving again', function () {
+        (ui.state ? save() : Promise.resolve()).then(render);
+      }, 'primary', { id: 'store-retry' })));
+  }
+  if (!Store.persistent) {
+    return h('p.warn.store-banner', { id: 'store-banner', role: 'status' },
+      h('strong', 'Study data is kept only for this visit. '),
+      'This browser would not open its storage (private browsing does this), so your units, progress and cards will be gone after a reload. Open Memorizer in a normal window to keep them.');
+  }
+  return null;
+}
+
 function render() {
+  releaseStale();
   var app = doc.getElementById('app');
   var view = ui.view === 'session' && ui.state ? viewSession()
     : ui.view === 'book' ? viewBook()
@@ -2068,6 +2205,8 @@ function render() {
     : ui.view === 'review' ? viewReview()
     : ui.view === 'settings' ? viewSettings() : viewHome();
   app.textContent = '';
+  var banner = storageBanner();
+  if (banner) view.insertBefore(banner, view.firstChild && view.firstChild.nextSibling);
   app.appendChild(view);
   app.appendChild(nav());
   var rb = robot();

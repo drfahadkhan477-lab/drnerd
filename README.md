@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 54 suites that need neither a browser nor a build all stay
+present, and the 55 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -238,6 +238,28 @@ figures can be shown. Scanned pages and photos are read by Tesseract,
 fetched from jsDelivr the first time it is needed — pinned and
 integrity-checked like the PDF reader, and kept for offline use after that —
 and your units name every page read that way, so you know which text came
-from recognition rather than the PDF itself.
+from recognition rather than the PDF itself — and so does the lesson of any
+section printed on such a page.
+
+**It keeps where each unit came from.** A unit stores a SHA-256 of the exact
+file (or notes) it was made from, the build of Memorizer and the PDF reader
+that read it, and an import report: pages read from the PDF's own text, by
+recognition, and not at all, with what was found. Adding the same file twice
+opens the unit already there, with its progress. Each unit's Source card says
+all of this, and that the text is what your book says as of its edition — not
+a check against current guidelines.
+
+**It says when something did not work.** A step and the review cards it made
+are stored in one transaction, so they cannot disagree; a save that fails
+(a full disk) puts a banner on every screen until it succeeds, and a browser
+that will not store anything (private browsing) is named on every screen too.
+A second quick tap is ignored rather than skipping a card, a lesson that
+arrives after you have moved to another section is dropped rather than filed
+there, and an enlarged page or figure holds keyboard focus and gives it back
+on close. Nothing is fetched to draw the page: the handwriting face is the
+device's own.
+
 Memorizer carries no content of its own, so unlike Systole it builds
-anywhere, CI included.
+anywhere, CI included — and CI runs it: its pure suites in the logic job, and
+the whole app in Chromium, on a PDF and notes the tests write themselves, in
+the memorizer-browser job.
