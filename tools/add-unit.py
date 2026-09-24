@@ -13,7 +13,7 @@ content/refs-images/ and throws on a key that is not there. Getting from one to
 the other by hand is 11 files of link rewriting and 53 images copied out of a
 folder of 260. Done by hand it goes wrong quietly — the build catches a missing
 image, but nothing catches the 180 MB of full-resolution pages that did get
-copied and now ride inside refs-images.json, which the app fetches whole.
+copied and now ride inside the unit's figure file, which the app fetches whole.
 
 WHAT IT DOES, in order, and it writes nothing until every step has succeeded:
 
@@ -203,7 +203,8 @@ def main():
     print(f'links    {links} figure links -> refimg://{a.unit}/...')
     print(f'images   {len(encoded)} files, {mb:.1f} MB -> {img_dir}'
           + (f'  ({cropped} cropped)' if a.crops else ''))
-    print(f'         adds about {mb * 4 / 3:.1f} MB to refs-images.json, which the app downloads once')
+    print(f'         makes content/refs-images/{a.unit}.json about {mb * 4 / 3:.1f} MB in the split build '
+          f'(one file per unit; the host refuses any file over 25.0 MB)')
     print('next     node tools/check-refs.js   then build as usual')
 
 

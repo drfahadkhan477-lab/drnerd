@@ -188,13 +188,13 @@ counter, so it is a speed bump against a runaway loop rather than a quota. If
 you ever share this URL with someone else, put a KV-backed limiter in first.
 
 The platform limit that binds is Cloudflare Pages' per-file ceiling — labelled
-"25 MiB" but enforced at **25,000,000 bytes** — and the
-file that approaches it is `content/refs-images.json`, which grows with every
-unit of note figures. `build-pwa.js` refuses a `dist/` with any file over the
-ceiling and prints the largest file on every build, so the margin is on screen
-before a deploy rather than discovered after one. (This sentence used to quote
-the largest file's size; that number went stale by a factor of four and a
-deploy broke under it.)
+"25 MiB" but enforced at **25,000,000 bytes**. The note figures are the files
+that approach it, so they ship **one file per unit** (`content/refs-images/<unit>.json`):
+adding a unit adds a file rather than growing a shared one. `build-pwa.js`
+refuses a `dist/` with any file over the ceiling and prints the largest file on
+every build, so the margin is on screen before a deploy rather than discovered
+after one. (This used to be one `refs-images.json` for the whole shelf; it
+reached 25.7 MiB with the arrhythmias unit and a deploy broke under it.)
 
 Fully offline afterwards, and reachable from a hospital wifi. The trade is that
 `dist/content/` — the bank and 408 figures — sits on Cloudflare's storage.

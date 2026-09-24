@@ -198,5 +198,74 @@ head('build-pwa refuses a dist/ with a file Cloudflare Pages will not serve');
      SRC.indexOf("const hostCheck = pagesLimitReport(distFiles") > SRC.indexOf("fs.writeFileSync(path.join(DIST, 'sw.js'), SW)"));
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+/* ── the note figures ship one file per unit ──────────────────────────────────
+   One refs-images.json for the whole shelf is what grew past the host's
+   ceiling. build-pwa now splits the figures by unit folder, and the app
+   fetches every unit and MERGES it in. Both halves are checked: the split,
+   driven as a function lifted from the source, and the runtime code, read as
+   text, because an assignment in place of a merge would leave only whichever
+   unit's file arrived last — every other unit's notes figureless, and no
+   error anywhere. */
+const splitChecks = async () => {
+  head('build-pwa writes one figure file per unit, and the app merges them all');
+  const lift = name => {
+    const at = SRC.indexOf('function ' + name + '(');
+    if (at < 0) return null;
+    let depth = 0, end = -1;
+    for (let k = SRC.indexOf('{', at); k < SRC.length; k++) {
+      if (SRC[k] === '{') depth++;
+      else if (SRC[k] === '}') { depth--; if (!depth) { end = k + 1; break; } }
+    }
+    return end > 0 ? new Function(`${SRC.slice(at, end)}\nreturn ${name};`)() : null;
+  };
+  const split = lift('splitRefImages');
+  ok('splitRefImages was lifted out of build-pwa.js', typeof split === 'function');
+  const parts = split ? split({
+    'hf/049_FIG.56.5_p058.jpg': 'a', 'hf/054_FIG.jpg': 'b',
+    'arrhythmias/page_308.jpg': 'c', 'loose.jpg': 'd', 'Braunwald HF/x.jpg': 'e',
+  }) : {};
+  ok('each unit folder becomes its own file', JSON.stringify(Object.keys(parts).sort())
+     === JSON.stringify(['Braunwald_HF', 'arrhythmias', 'hf', 'loose']), Object.keys(parts).sort().join(', '));
+  ok('and every figure lands in its unit, keyed exactly as the notes cite it',
+     parts.hf && parts.hf['hf/054_FIG.jpg'] === 'b' && parts.arrhythmias && parts.arrhythmias['arrhythmias/page_308.jpg'] === 'c');
+  ok('no figure is lost or duplicated in the split',
+     Object.values(parts).reduce((n, p) => n + Object.keys(p).length, 0) === 5);
+  ok('a folder name that is not URL-safe is made so', !!parts.Braunwald_HF && !parts['Braunwald HF']);
+
+  /* The runtime half, as the build appends it to app.js. */
+  const at = SRC.indexOf('reference figures, fetched one unit at a time');
+  const runtime = at > -1 ? SRC.slice(at, SRC.indexOf('`;', at)) : '';
+  ok('the app fetches every unit file the build wrote', /parts\.forEach\(function\(u\)\{\s*fetch\(u\)/.test(runtime));
+  ok('and merges each into REF_IMGS rather than replacing it',
+     /REF_IMGS\[k\]\s*=\s*imgs\[k\]/.test(runtime) && !/REF_IMGS\s*=\s*imgs/.test(runtime));
+  /* And RUN it, rather than only reading it: the appended code, with the
+     build's placeholder filled in, against a stand-in fetch that delivers the
+     units out of order. Every unit's figures must be there at the end. */
+  const ran = await (async () => {
+    const body = runtime.slice(runtime.indexOf('(function(){'));
+    if (!body.includes('${JSON.stringify(urls)}')) return { err: 'placeholder moved' };
+    const code = body.replace('${JSON.stringify(urls)}',
+      JSON.stringify(['content/refs-images/arrhythmias.json', 'content/refs-images/hf.json']));
+    const files = { 'content/refs-images/arrhythmias.json': { 'arrhythmias/page_308.jpg': 'A' },
+                    'content/refs-images/hf.json': { 'hf/054_FIG.jpg': 'H' } };
+    const REF_IMGS = {}; let paints = 0; const pending = [];
+    const fetch = u => new Promise(res => pending.push(() => res({ json: () => Promise.resolve(files[u]) })));
+    new Function('REF_IMGS', 'fetch', 'refLatePaint', code)(REF_IMGS, fetch, () => { paints++; });
+    for (const go of pending.reverse()) { go(); await new Promise(r => setTimeout(r, 0)); }
+    await new Promise(r => setTimeout(r, 0));
+    return { keys: Object.keys(REF_IMGS).sort(), paints, asked: pending.length };
+  })();
+  ok('run with the units arriving out of order, every unit\'s figures are present',
+     !ran.err && JSON.stringify(ran.keys) === JSON.stringify(['arrhythmias/page_308.jpg', 'hf/054_FIG.jpg']),
+     ran.err || ran.keys.join(', '));
+  ok('and the page is repainted as each unit lands', ran.paints === 2 && ran.asked === 2, `${ran.paints} repaints, ${ran.asked} fetches`);
+  ok('the build writes each part to content/refs-images/<unit>.json',
+     /path\.join\(DIST, 'content', 'refs-images'\)[\s\S]{0,200}unit \+ '\.json'/.test(SRC));
+  ok('and nothing still writes or fetches the single refs-images.json',
+     !/writeFileSync\([^)]*'refs-images\.json'/.test(SRC) && !/fetch\('content\/refs-images\.json'\)/.test(SRC));
+};
+
+splitChecks().catch(e => { failed++; console.log('  FAIL  the split checks threw  → ' + e.message); }).then(() => {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+});
