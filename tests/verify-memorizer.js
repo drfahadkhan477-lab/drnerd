@@ -85,7 +85,7 @@ function makePdf() {
   const code = i => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(i / 26) % 26] + 'abcdefghijklmnopqrstuvwxyz'[i % 26];
   const PER = 320;
   let bodyWords = 0;
-  let IMG_BOX = null, VEC = null;
+  let IMG_BOX = null, VEC = null, TBL = null;
   const VCAP = 'Figure 5 A drawn chart.';
   titles.forEach((t, si) => {
     if (si) y -= 20;
@@ -110,7 +110,13 @@ function makePdf() {
     }
     if (si === 1) {
       y -= 12;
+      /* Ruled, as a book rules a table: a line over and under every row and
+         between the columns. Lines and not a picture, so only its rows of
+         cells can tell it from a chart. */
+      if (y < 70 + 16 * table.length) newPage();
+      const top = y + 13;
       table.forEach(r => { row(r.map((c, ci) => [72 + ci * 150, c])); bodyWords += r.join(' ').split(' ').length; });
+      TBL = { pageIndex: pages.length, box: [66, y + 11, 520, top] };
       y -= 12;
     }
   });
@@ -136,6 +142,13 @@ function makePdf() {
     });
     ops.push(`BT /F1 9 Tf 300 30 Td (${pi + 1}) Tj ET`);
     if (pi === 0) [IMG_BOX, UNDER_BOX].forEach(B => ops.unshift(`q ${B[2] - B[0]} 0 0 ${B[3] - B[1]} ${B[0]} ${B[1]} cm /Im1 Do Q`));
+    if (pi === TBL.pageIndex) {
+      const [x0, y0, x1, y1] = TBL.box;
+      ops.push('q 0.5 w');
+      for (let k = 0; k <= table.length; k++) ops.push(`${x0} ${y1 - k * 16} m ${x1} ${y1 - k * 16} l S`);
+      [x0, 216, 366, x1].forEach(x => ops.push(`${x} ${y0} m ${x} ${y1} l S`));
+      ops.push('Q');
+    }
     if (pi === VEC.pageIndex) {
       const [x0, y0, x1, y1] = VEC.box;
       ops.push(`q 1 w ${x0} ${y0} m ${x1} ${y0} l S ${x0} ${y0} m ${x0} ${y1} l S`);
@@ -156,7 +169,7 @@ function makePdf() {
   const xref = Buffer.byteLength(out, 'latin1');
   out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
   out += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return { buffer: Buffer.from(out, 'latin1'), pages: pages.length, titles, bodyWords, table, causal, IMG_BOX, CAPTION, VEC, VCAP, pearl: pearlLines.join(' '),
+  return { buffer: Buffer.from(out, 'latin1'), pages: pages.length, titles, bodyWords, table, causal, IMG_BOX, CAPTION, VEC, VCAP, TBL, pearl: pearlLines.join(' '),
            firstCode: code(1), lastCode: code(PER) };
 }
 
@@ -273,6 +286,8 @@ function kindOf(user) {
   ok('a chart drawn only with lines and bars is found too, where it was drawn, by the real pdf.js',
      rec.figures.length === 2 && !!vf && vf.box.every((v, i) => Math.abs(v - pdf.VEC.box[i]) <= 2), JSON.stringify(rec.figures.slice(1)) + ' want ' + JSON.stringify(pdf.VEC.box));
   ok('with its own caption', vf && vf.number === '5' && vf.caption === pdf.VCAP, vf && vf.caption);
+  const onTable = rec.figures.filter(f => f.page === pdf.TBL.pageIndex + 1 && f.box[0] < pdf.TBL.box[2] && pdf.TBL.box[0] < f.box[2] && f.box[1] < pdf.TBL.box[3] && pdf.TBL.box[1] < f.box[3]);
+  ok('the ruled table in section 2 is not taken for a drawn figure', onTable.length === 0, JSON.stringify(onTable) + ' table at ' + JSON.stringify(pdf.TBL));
   ok('its caption is read with it, number and all', rec.figures[0] && rec.figures[0].number === '4' && rec.figures[0].caption === pdf.CAPTION,
      JSON.stringify(rec.figures[0]));
   ok('and the PDF itself is kept on the device, to draw them from', await page.evaluate(id => MemStore.get('files', id).then(f => !!f && f.bytes.byteLength > 1000), rec.id));

@@ -120,11 +120,34 @@ function mul(m, n) {
    a real textbook page were cropped from the wrong place.
 
    `images`: each embedded picture's box. `paths`: each PAINTED path's box —
-   a line, a bar, an axis, a curve that is stroked or filled. pdf.js 3.11
-   gives a path's bounds as [minX, maxX, minY, maxY] in the path's own
-   space (evaluator.js buildPath — not the [x0, y0, x1, y1] used for boxes
-   here), and a clipping path is built exactly like a drawn one, so a path
-   counts only when the next operator paints it. */
+   a line, a bar, an axis, a curve that is stroked or filled. A clipping
+   path is built exactly like a drawn one, so a path counts only when the
+   next operator paints it.
+
+   A path's box is worked out here from its own points (pathBounds), not
+   taken from the bounds pdf.js 3.11 attaches: those ([minX, maxX, minY,
+   maxY], evaluator.js buildPath) are updated only by moveTo, lineTo and
+   rectangle, so a curve's extent is lost: a circle drawn as "m c c c c"
+   came out as the single point it starts from, and a pie chart as a few
+   lines from its centre. */
+/* A path's bounds from its operators ([op…]) and their flat numbers: each
+   curve contributes its control points, and a Bézier curve never leaves the
+   hull of those, so the box can be a little large but never too small. */
+function pathBounds(ops, nums, OPS) {
+  var arity = {};
+  arity[OPS.moveTo] = 2; arity[OPS.lineTo] = 2; arity[OPS.curveTo] = 6;
+  arity[OPS.curveTo2] = 4; arity[OPS.curveTo3] = 4; arity[OPS.closePath] = 0; arity[OPS.rectangle] = 4;
+  var b = [Infinity, Infinity, -Infinity, -Infinity], at = 0;
+  function pt(x, y) { b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y); }
+  for (var i = 0; i < (ops || []).length; i++) {
+    var n = arity[ops[i]];
+    if (n == null) return null;
+    if (ops[i] === OPS.rectangle) { pt(nums[at], nums[at + 1]); pt(nums[at] + nums[at + 2], nums[at + 1] + nums[at + 3]); }
+    else for (var k = 0; k < n; k += 2) pt(nums[at + k], nums[at + k + 1]);
+    at += n;
+  }
+  return isFinite(b[0]) && isFinite(b[1]) && isFinite(b[2]) && isFinite(b[3]) ? b : null;
+}
 function drawn(opList, OPS) {
   var ctm = [1, 0, 0, 1, 0, 0], stack = [], images = [], paths = [];
   var paint = {}, ink = {};
@@ -150,10 +173,8 @@ function drawn(opList, OPS) {
     } else if (OPS.paintFormXObjectEnd != null && fn === OPS.paintFormXObjectEnd) ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
     else if (paint[fn]) images.push(place(0, 0, 1, 1));
     else if (OPS.constructPath != null && fn === OPS.constructPath && ink[opList.fnArray[i + 1]]) {
-      /* A path pdf.js could not bound (curves only: its bounds stay at
-         ±Infinity) gets a NaN box, which the page-size filter drops. */
-      var mm = args && args[2];
-      if (mm) paths.push(place(mm[0], mm[2], mm[1], mm[3]));
+      var pb = args && pathBounds(args[0], args[1], OPS);
+      if (pb) paths.push(place(pb[0], pb[1], pb[2], pb[3]));
     }
   }
   return { images: images, paths: paths };
@@ -183,7 +204,21 @@ function touches(a, b) { return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && 
    picture. Fewer is a frame, a box round a callout, an underline. A path
    covering most of the page (a border, a background) is dropped before the
    merge, or everything inside it would become one "figure". A drawing that
-   touches a picture is part of it — axes and labels drawn over a plot. */
+   touches a picture is part of it — axes and labels drawn over a plot.
+
+   A RULED TABLE is lines too, and one with little text in it passes the
+   text-cover rule. What gives it away is its text: TABLE_ROWS or more lines
+   inside the drawing each split into two or more cells (linesOf's wide
+   gaps) is rows of columns — a table, which chunk.js already reads as one.
+   A chart's tick labels are one such line, and its legend at most one more. */
+var TABLE_ROWS = 3;
+function tableInside(b, lines, view) {
+  var H = view[3] - view[1];
+  return (lines || []).filter(function (l) {
+    var base = H - l.y, x = l.cells && l.cells[0] ? l.cells[0].x : -1;
+    return l.cells && l.cells.length >= 2 && base >= b[1] && base <= b[3] && x >= b[0] - 4 && x <= b[2];
+  }).length >= TABLE_ROWS;
+}
 var VECTOR_MIN_PATHS = 6;
 function merge(boxes, pad) {
   var out = [];
@@ -201,13 +236,13 @@ function merge(boxes, pad) {
   /* A merge can bridge two earlier groups; repeat until nothing touches. */
   return out.length < boxes.length ? merge(out, pad) : out;
 }
-function figureBoxes(opList, OPS, view, textBoxes) {
+function figureBoxes(opList, OPS, view, textBoxes, lines) {
   var d = drawn(opList, OPS);
   var pageArea = (view[2] - view[0]) * (view[3] - view[1]);
   var pics = merge(d.images.map(function (b) { return { box: b, n: 1 }; }), 6).map(function (m) { return m.box; });
   var drawings = merge(d.paths.filter(function (b) { return area(b) <= 0.8 * pageArea; })
     .map(function (b) { return { box: b, n: 1 }; }), 6)
-    .filter(function (m) { return m.n >= VECTOR_MIN_PATHS; }).map(function (m) { return m.box; });
+    .filter(function (m) { return m.n >= VECTOR_MIN_PATHS && !tableInside(m.box, lines, view); }).map(function (m) { return m.box; });
   drawings.forEach(function (b) {
     for (var i = 0; i < pics.length; i++) {
       if (touches(b, pics[i])) {
@@ -300,7 +335,7 @@ function read(buffer, onProgress) {
             pages.push({ page: n, lines: lines });
             counts.push(lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0));
             return page.getOperatorList().then(function (ops) {
-              figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items)).forEach(function (b) {
+              figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
                 var f = { page: n, box: b }, cap = captionFor(b, lines, h);
                 if (cap) { f.number = cap.number; f.label = cap.label; f.caption = cap.text; }
                 figures.push(f);
@@ -344,6 +379,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

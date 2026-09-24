@@ -534,11 +534,13 @@ head('figures drawn as lines, not pictures');
 {
   const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
   /* pdf.js 3.11's own numbers for these operators (src/shared/util.js OPS). */
-  const OPS = { save: 10, restore: 11, transform: 12, stroke: 20, closeStroke: 21, fill: 22, eoFill: 23, fillStroke: 24,
+  const OPS = { save: 10, restore: 11, transform: 12, moveTo: 13, lineTo: 14, curveTo: 15, curveTo2: 16, curveTo3: 17, closePath: 18, rectangle: 19,
+                stroke: 20, closeStroke: 21, fill: 22, eoFill: 23, fillStroke: 24,
                 endPath: 28, clip: 29, paintImageXObject: 85, paintFormXObjectBegin: 74, paintFormXObjectEnd: 75, constructPath: 91 };
   const view = [0, 0, 612, 792];
   const ops = list => ({ fnArray: list.map(x => x[0]), argsArray: list.map(x => x[1] || null) });
-  /* A painted path as pdf.js lists it: its bounds are [minX, maxX, minY, maxY]. */
+  /* A painted path as pdf.js lists it: [ops, their numbers, the bounds pdf.js
+     kept — [minX, maxX, minY, maxY], from moveTo, lineTo and rectangle only]. */
   const line = (x0, y0, x1, y1, paint = 20) => [[91, [[13, 14], [x0, y0, x1, y1], [Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1)]]], [paint]];
   const bar = (x, y, w, h) => [[91, [[19], [x, y, w, h], [x, x + w, y, y + h]]], [22]];
   /* A bar chart: two axes and eight bars, from (100,300) to (400,500). */
@@ -562,8 +564,50 @@ head('figures drawn as lines, not pictures');
      Pdf.figureBoxes(ops(chart), OPS, view, textBox(100, 300, 400, 500, 13)).length === 0);
   const withPic = Pdf.figureBoxes(ops([[10], [12, [200, 0, 0, 150, 150, 320]], [85, ['i']], [11]].concat(chart)), OPS, view, []);
   ok('axes drawn over a picture are part of it: one figure', JSON.stringify(withPic) === '[[100,300,400,500]]', JSON.stringify(withPic));
-  const curveOnly = [[91, [[15], [1, 2, 3, 4, 5, 6], [Infinity, -Infinity, Infinity, -Infinity]]], [20]];
-  ok('a path pdf.js could not bound changes nothing', Pdf.figureBoxes(ops(curveOnly.concat(chart)), OPS, view, []).length === 1);
+  /* A pie chart drawn in curves alone: a circle of four Béziers round
+     (300,400), radius 100, and five wedges — centre, a line out, an arc
+     back — whose edges stop short of the circle's top, left and bottom.
+     pdf.js's own bounds give the circle as the one point it starts from, so
+     only the curves' points can reach 200, 300 and 500; every control point
+     of a circle drawn this way lies on its bounding square, so the square is
+     exactly what should come back. */
+  const K = 55.23;
+  const circle = [[91, [[13, 15, 15, 15, 15], [400, 400, 400, 400 + K, 300 + K, 500, 300, 500, 300 - K, 500, 200, 400 + K, 200, 400,
+    200, 400 - K, 300 - K, 300, 300, 300, 300 + K, 300, 400, 400 - K, 400, 400], [400, 400, 400, 400]]], [20]];
+  const pts = [30, 100, 170, 250, 320, 390].map(a => [+(300 + 100 * Math.cos(a * Math.PI / 180)).toFixed(1), +(400 + 100 * Math.sin(a * Math.PI / 180)).toFixed(1)]);
+  const wedges = [0, 1, 2, 3, 4].map(i => [[91, [[13, 14, 15, 18], [300, 400, pts[i][0], pts[i][1], pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], pts[i + 1][0], pts[i + 1][1]],
+    [Math.min(300, pts[i][0]), Math.max(300, pts[i][0]), Math.min(400, pts[i][1]), Math.max(400, pts[i][1])]]], [22]]);
+  const pie = Pdf.figureBoxes(ops([].concat(circle, ...wedges)), OPS, view, []);
+  /* A ruled table: a frame, two column rules and four row rules round
+     (100,520)-(400,720), with sparse text — three short rows of two cells,
+     far under the text-cover limit. linesOf's lines: y DOWN a 792 page, so
+     a row with its baseline at 690 has y 102 — well outside 520..720 if
+     anyone forgets to flip it. */
+  const ruled = [].concat(line(100, 520, 400, 520), line(100, 720, 400, 720), line(100, 520, 100, 720), line(400, 520, 400, 720),
+    line(200, 520, 200, 720), line(300, 520, 300, 720), ...[560, 600, 640, 680].map(y => line(100, y, 400, y)));
+  const cellsAt = (baseline, xs) => ({ text: xs.map(() => 'v').join(' '), y: 792 - baseline, size: 10, cells: xs.map(x => ({ x, text: 'v' })) });
+  const tableLines = [cellsAt(690, [110, 210]), cellsAt(650, [110, 210]), cellsAt(610, [110, 310])];
+  const sparse = tableLines.map(l => [l.cells[0].x, 792 - l.y - 2, l.cells[0].x + 10, 792 - l.y + 8]);
+  ok('the sparse table is under the text-cover limit, so only its rows can tell it from a chart',
+     Pdf.figureBoxes(ops(ruled), OPS, view, sparse).length === 1);
+  ok(`a ruled table — ${Pdf.TABLE_ROWS} or more lines of cells inside the lines — is not a figure`,
+     Pdf.figureBoxes(ops(ruled), OPS, view, sparse, tableLines).length === 0);
+  /* Inside the chart's box: a row of tick labels just over its axis, a
+     two-part legend near its top — two lines of cells, not three — and
+     three y-axis labels. */
+  const ticks = [cellsAt(305, [100, 160, 220, 280, 340, 400]), cellsAt(480, [300, 360]),
+    /* and the y axis's labels: one cell each, so not rows of columns */
+    cellsAt(350, [104]), cellsAt(400, [104]), cellsAt(450, [104])];
+  ok('a chart with a row of tick labels and a two-part legend still is',
+     JSON.stringify(Pdf.figureBoxes(ops(chart), OPS, view, [], ticks)) === '[[100,300,400,500]]', JSON.stringify(Pdf.figureBoxes(ops(chart), OPS, view, [], ticks)));
+  ok('rows of cells elsewhere on the page do not count against it',
+     Pdf.figureBoxes(ops(ruled), OPS, view, sparse, tableLines.map(l => Object.assign({}, l, { y: l.y + 400 }))).length === 1);
+  ok('a pie chart drawn only in curves is found, boxed by its circle', JSON.stringify(pie) === '[[200,300,400,500]]', JSON.stringify(pie));
+  ok('a curve\u2019s box is the hull of its points, control points included',
+     JSON.stringify(Pdf.pathBounds([13, 15], [0, 0, 10, 50, 90, -20, 100, 0], OPS)) === '[0,-20,100,50]');
+  ok('a rectangle\u2019s box is both its corners, whichever way its size runs',
+     JSON.stringify(Pdf.pathBounds([19], [10, 20, 30, -5], OPS)) === '[10,15,40,20]', JSON.stringify(Pdf.pathBounds([19], [10, 20, 30, -5], OPS)));
+  ok('a path with an operator it does not know is left out, not guessed at', Pdf.pathBounds([13, 99], [0, 0, 5], OPS) === null);
 }
 
 head('figures: captions, and the sections that name them');
