@@ -219,7 +219,7 @@ jobs:
         run: node tests/verify-echoanchor-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body (36 checks)
         run: node tests/verify-memorizer-chunk-pure.js
-      - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass (76 checks)
+      - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass (81 checks)
         run: node tests/verify-memorizer-prompts-pure.js
       - name: Memorizer — no protocol phase skipped, every miss one card (55 checks)
         run: node tests/verify-memorizer-session-pure.js

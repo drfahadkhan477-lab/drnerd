@@ -167,9 +167,9 @@ head('each provider gets its own wire shape');
   const s5 = Provider.build({ provider: 'anthropic', model: 'claude-sonnet-5', key: 'k' }, prompt, P.SCHEMAS.encode);
   ok('anthropic: other models do not send fallbacks', !('fallbacks' in JSON.parse(s5.init.body)) && !s5.init.headers['anthropic-beta']);
 
-  const g = Provider.build({ provider: 'gemini', model: 'gemini-2.5-flash', key: 'AIzaTEST' }, prompt, P.SCHEMAS.encode);
+  const g = Provider.build({ provider: 'gemini', model: 'gemini-3.8-flash', key: 'AIzaTEST' }, prompt, P.SCHEMAS.encode);
   const gb = JSON.parse(g.init.body);
-  ok('gemini: generateContent for the chosen model', /\/models\/gemini-2\.5-flash:generateContent$/.test(g.url));
+  ok('gemini: generateContent for the chosen model', /\/models\/gemini-3\.8-flash:generateContent$/.test(g.url));
   ok('gemini: the key is a header, never in the URL where logs and history keep it',
      g.init.headers['x-goog-api-key'] === 'AIzaTEST' && g.url.indexOf('AIzaTEST') === -1);
   ok('gemini: system instruction, user content, JSON mime type',
@@ -225,15 +225,32 @@ head('a call that goes wrong says so');
   const gaveUp = await outcome(Provider.call(cfg, P.encode(A), 'encode', always400));
   ok('and retried only once, not forever', 'e' in gaveUp && loops.length === 2, `${loops.length} requests`);
 
-  const gem = await outcome(Provider.call({ provider: 'gemini', model: 'gemini-2.5-flash', key: 'k' }, P.gradeRecall(A, q, 'x'), 'gradeRecall',
+  const gem = await outcome(Provider.call({ provider: 'gemini', model: 'gemini-3.8-flash', key: 'k' }, P.gradeRecall(A, q, 'x'), 'gradeRecall',
     reply(200, { candidates: [{ content: { parts: [{ text: grade }] } }] })));
   ok('gemini: the reply text is read from its candidates', gem.v && gem.v.correct === true, JSON.stringify(gem));
-  const gemBlock = await outcome(Provider.call({ provider: 'gemini', model: 'gemini-2.5-flash', key: 'k' }, P.encode(A), 'encode',
+  const gemBlock = await outcome(Provider.call({ provider: 'gemini', model: 'gemini-3.8-flash', key: 'k' }, P.encode(A), 'encode',
     reply(200, { promptFeedback: { blockReason: 'SAFETY' } })));
   ok('gemini: a blocked prompt is an error naming the reason', /SAFETY/.test(gemBlock.e || ''), gemBlock.e);
   const groq = await outcome(Provider.call({ provider: 'groq', model: 'openai/gpt-oss-20b', key: 'k' }, P.gradeRecall(A, q, 'x'), 'gradeRecall',
     reply(200, { choices: [{ message: { content: grade } }] })));
   ok('groq: the reply text is read from its choices', groq.v && groq.v.correct === true);
+
+  /* Found by a user: Google closed gemini-2.5-flash to new keys and the app
+     had it as Gemini's only model, so every step 404'd — and the model was
+     saved in Settings, so fixing the list alone would not have reached them. */
+  const retired = await outcome(Provider.call({ provider: 'gemini', model: 'gemini-3.8-flash', key: 'k' }, P.encode(A), 'encode',
+    reply(404, { error: { message: 'This model models/gemini-2.5-flash is no longer available to new users.' } })));
+  ok('a 404 says to choose another model in Settings, and keeps the provider\'s words',
+     /choose another model in Settings/.test(retired.e || '') && /no longer available/.test(retired.e || ''), retired.e);
+  const mem = v => { const m = { v }; return { getItem: () => m.v, setItem: (_, x) => { m.v = x; } }; };
+  const stale = Provider.loadConfig(mem(JSON.stringify({ provider: 'gemini', model: 'gemini-2.5-flash', key: 'AIzaKEEP' })));
+  ok('a saved model the app no longer lists is replaced by that provider\'s first model',
+     stale.provider === 'gemini' && stale.model === Provider.PROVIDERS.gemini.models[0][0], stale.model);
+  ok('and the saved key survives the replacement', stale.key === 'AIzaKEEP');
+  const kept = Provider.loadConfig(mem(JSON.stringify({ provider: 'gemini', model: 'gemini-3.6-flash', key: 'k' })));
+  ok('a saved model that is still listed is kept, not reset', kept.model === 'gemini-3.6-flash', kept.model);
+  ok('no provider lists gemini-2.5-flash any more',
+     !Object.keys(Provider.PROVIDERS).some(k => Provider.PROVIDERS[k].models.some(m => m[0] === 'gemini-2.5-flash')));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

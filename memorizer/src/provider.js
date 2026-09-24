@@ -28,7 +28,13 @@ var PROVIDERS = {
   },
   gemini: {
     label: 'Gemini (Google)',
-    models: [['gemini-2.5-flash', 'Gemini 2.5 Flash']],
+    /* gemini-2.5-flash was the only entry until Google closed it to new keys
+       ("no longer available to new users", a 404 whose message names
+       gemini-3.6-flash as the replacement). IDs from the Gemini API models
+       page, stable section, 2026-09-24. */
+    models: [['gemini-3.8-flash', 'Gemini 3.8 Flash — newest'],
+             ['gemini-3.6-flash', 'Gemini 3.6 Flash'],
+             ['gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite — cheapest']],
     keyHint: 'from aistudio.google.com',
   },
   groq: {
@@ -122,6 +128,9 @@ function errorText(status, data) {
   var m = data && data.error && (data.error.message || data.error.type);
   if (status === 401 || status === 403) return 'the API key was rejected (' + status + '). Check it in Settings.';
   if (status === 429) return 'rate limited (429) — wait a moment and try again.';
+  /* Providers retire models; the one saved in Settings may no longer exist
+     for this key. Say what to do, and keep the provider's own words. */
+  if (status === 404) return 'this model is not available to your key (404) — choose another model in Settings.' + (m ? ' The provider said: ' + m : '');
   return 'the provider returned ' + status + (m ? ': ' + m : '');
 }
 
@@ -155,16 +164,28 @@ function call(cfg, prompt, kind, fetchImpl) {
 }
 
 var CFG_KEY = 'memorizer.ai.v1';
-function loadConfig() {
+/* A saved model that is no longer in its provider's list — one this app has
+   since dropped because the provider retired it — is replaced by that
+   provider's first model, rather than being sent again to fail. Without
+   this, removing a retired model from the list would fix new users and leave
+   everyone who had already saved it stuck on the 404. The key is kept. */
+function loadConfig(storage) {
+  var st = storage || root.localStorage;
   var d = { provider: 'anthropic', model: 'claude-opus-5', key: '' };
   try {
-    var s = JSON.parse(root.localStorage.getItem(CFG_KEY) || 'null');
-    if (s && PROVIDERS[s.provider]) { d.provider = s.provider; d.model = s.model || PROVIDERS[s.provider].models[0][0]; d.key = s.key || ''; }
+    var s = JSON.parse(st.getItem(CFG_KEY) || 'null');
+    if (s && PROVIDERS[s.provider]) {
+      var listed = PROVIDERS[s.provider].models.some(function (m) { return m[0] === s.model; });
+      d.provider = s.provider;
+      d.model = listed ? s.model : PROVIDERS[s.provider].models[0][0];
+      d.key = s.key || '';
+    }
   } catch (_) { /* private mode or blocked storage: defaults */ }
   return d;
 }
-function saveConfig(cfg) {
-  try { root.localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); return true; } catch (_) { return false; }
+function saveConfig(cfg, storage) {
+  var st = storage || root.localStorage;
+  try { st.setItem(CFG_KEY, JSON.stringify(cfg)); return true; } catch (_) { return false; }
 }
 
 var MemProvider = {
