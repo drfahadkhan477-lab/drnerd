@@ -130,20 +130,51 @@ function mul(m, n) {
    rectangle, so a curve's extent is lost: a circle drawn as "m c c c c"
    came out as the single point it starts from, and a pie chart as a few
    lines from its centre. */
-/* A path's bounds from its operators ([op…]) and their flat numbers: each
-   curve contributes its control points, and a Bézier curve never leaves the
-   hull of those, so the box can be a little large but never too small. */
+/* A path's bounds from its operators ([op…]) and their flat numbers. A
+   curve contributes its end point and wherever it turns — the t in (0, 1)
+   where its derivative is zero, per axis — so the box is the curve's own,
+   not the hull of its control points (a wave's controls stand well above
+   its crest). "v" curves take the current point as their first control,
+   "y" curves their end point as their second, so the current point is
+   tracked; closePath returns to the start of the subpath. */
+function cubicRange(p0, p1, p2, p3) {
+  var lo = Math.min(p0, p3), hi = Math.max(p0, p3);
+  var a = -p0 + 3 * p1 - 3 * p2 + p3, b = 2 * (p0 - 2 * p1 + p2), c = p1 - p0;
+  var ts = [];
+  if (Math.abs(a) < 1e-12) { if (Math.abs(b) > 1e-12) ts.push(-c / b); }
+  else {
+    var d = b * b - 4 * a * c;
+    if (d >= 0) { var r = Math.sqrt(d); ts.push((-b + r) / (2 * a), (-b - r) / (2 * a)); }
+  }
+  ts.forEach(function (t) {
+    if (t > 0 && t < 1) {
+      var u = 1 - t, v = u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+      lo = Math.min(lo, v); hi = Math.max(hi, v);
+    }
+  });
+  return [lo, hi];
+}
 function pathBounds(ops, nums, OPS) {
   var arity = {};
   arity[OPS.moveTo] = 2; arity[OPS.lineTo] = 2; arity[OPS.curveTo] = 6;
   arity[OPS.curveTo2] = 4; arity[OPS.curveTo3] = 4; arity[OPS.closePath] = 0; arity[OPS.rectangle] = 4;
-  var b = [Infinity, Infinity, -Infinity, -Infinity], at = 0;
+  var b = [Infinity, Infinity, -Infinity, -Infinity], at = 0, cx = 0, cy = 0, sx = 0, sy = 0;
   function pt(x, y) { b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y); }
+  function curve(x1, y1, x2, y2, x3, y3) {
+    var rx = cubicRange(cx, x1, x2, x3), ry = cubicRange(cy, y1, y2, y3);
+    pt(rx[0], ry[0]); pt(rx[1], ry[1]);
+    cx = x3; cy = y3;
+  }
   for (var i = 0; i < (ops || []).length; i++) {
-    var n = arity[ops[i]];
+    var op = ops[i], n = arity[op], q = nums.slice(at, at + (n || 0));
     if (n == null) return null;
-    if (ops[i] === OPS.rectangle) { pt(nums[at], nums[at + 1]); pt(nums[at] + nums[at + 2], nums[at + 1] + nums[at + 3]); }
-    else for (var k = 0; k < n; k += 2) pt(nums[at + k], nums[at + k + 1]);
+    if (op === OPS.moveTo) { cx = sx = q[0]; cy = sy = q[1]; pt(cx, cy); }
+    else if (op === OPS.lineTo) { cx = q[0]; cy = q[1]; pt(cx, cy); }
+    else if (op === OPS.curveTo) curve(q[0], q[1], q[2], q[3], q[4], q[5]);
+    else if (op === OPS.curveTo2) curve(cx, cy, q[0], q[1], q[2], q[3]);
+    else if (op === OPS.curveTo3) curve(q[0], q[1], q[2], q[3], q[2], q[3]);
+    else if (op === OPS.closePath) { cx = sx; cy = sy; }
+    else if (op === OPS.rectangle) { pt(q[0], q[1]); pt(q[0] + q[2], q[1] + q[3]); cx = sx = q[0]; cy = sy = q[1]; }
     at += n;
   }
   return isFinite(b[0]) && isFinite(b[1]) && isFinite(b[2]) && isFinite(b[3]) ? b : null;

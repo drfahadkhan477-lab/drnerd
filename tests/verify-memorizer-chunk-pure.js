@@ -603,8 +603,36 @@ head('figures drawn as lines, not pictures');
   ok('rows of cells elsewhere on the page do not count against it',
      Pdf.figureBoxes(ops(ruled), OPS, view, sparse, tableLines.map(l => Object.assign({}, l, { y: l.y + 400 }))).length === 1);
   ok('a pie chart drawn only in curves is found, boxed by its circle', JSON.stringify(pie) === '[[200,300,400,500]]', JSON.stringify(pie));
-  ok('a curve\u2019s box is the hull of its points, control points included',
-     JSON.stringify(Pdf.pathBounds([13, 15], [0, 0, 10, 50, 90, -20, 100, 0], OPS)) === '[0,-20,100,50]');
+  /* A curve's box is the curve's own, checked against the curve itself —
+     sampled at 2001 points — not against the formula that computes it. */
+  const bez = (p0, p1, p2, p3) => { const out = []; for (let k = 0; k <= 2000; k++) { const t = k / 2000, u = 1 - t;
+    out.push([0, 1].map(j => u * u * u * p0[j] + 3 * u * u * t * p1[j] + 3 * u * t * t * p2[j] + t * t * t * p3[j])); } return out; };
+  const boxOf = ptsList => [Math.min(...ptsList.map(p => p[0])), Math.min(...ptsList.map(p => p[1])), Math.max(...ptsList.map(p => p[0])), Math.max(...ptsList.map(p => p[1]))];
+  const near = (a, b) => !!a && a.every((v, i) => Math.abs(v - b[i]) < 0.05);
+  /* A wave: controls at y 90 and -60, the curve itself peaks far lower. */
+  const wave = Pdf.pathBounds([13, 15], [0, 0, 30, 90, 70, -60, 100, 0], OPS);
+  const waveTrue = boxOf(bez([0, 0], [30, 90], [70, -60], [100, 0]));
+  ok('a curve’s box is the curve, not the hull of its control points', near(wave, waveTrue) && wave[3] < 60,
+     JSON.stringify(wave) + ' want ' + JSON.stringify(waveTrue.map(v => +v.toFixed(2))));
+  /* "v": the current point is the first control; "y": the end point is the second. */
+  /* The same two points given to "v" and to "y" make different curves —
+     read one as the other and the box moves. */
+  const vForm = Pdf.pathBounds([13, 16], [0, 0, 20, 80, 100, -10], OPS);
+  const yForm = Pdf.pathBounds([13, 17], [0, 0, 20, 80, 100, -10], OPS);
+  const vTrue = boxOf(bez([0, 0], [0, 0], [20, 80], [100, -10])), yTrue = boxOf(bez([0, 0], [20, 80], [100, -10], [100, -10]));
+  ok('the fixture can tell "v" from "y"', !near(vTrue, yTrue), JSON.stringify(vTrue) + ' / ' + JSON.stringify(yTrue));
+  ok('a "v" curve takes the point it starts from as its first control', near(vForm, vTrue), JSON.stringify(vForm));
+  ok('a "y" curve takes its end point as its second control', near(yForm, yTrue), JSON.stringify(yForm));
+  /* Two curves in a row: a straight run to (100,0), then a loop back that
+     swings out past x 100 only because it starts there — started from the
+     path's first point instead, it would stay inside. */
+  const two = Pdf.pathBounds([13, 15, 15], [0, 0, 0, 0, 100, 0, 100, 0, 150, 100, -50, 100, 50, 0], OPS);
+  const twoTrue = boxOf(bez([0, 0], [0, 0], [100, 0], [100, 0]).concat(bez([100, 0], [150, 100], [-50, 100], [50, 0])));
+  ok('each curve starts where the one before it ended', near(two, twoTrue), JSON.stringify(two) + ' want ' + JSON.stringify(twoTrue));
+  /* After closePath the pen is back at the subpath's start, (0,0), so the
+     next curve starts there — not at (50,50) where the line ended. */
+  const closed = Pdf.pathBounds([13, 14, 18, 15], [0, 0, 50, 50, -40, 0, -40, 0, 0, 0], OPS);
+  ok('after closePath a curve starts from where the subpath began', near(closed, [-30, 0, 50, 50]), JSON.stringify(closed));
   ok('a rectangle\u2019s box is both its corners, whichever way its size runs',
      JSON.stringify(Pdf.pathBounds([19], [10, 20, 30, -5], OPS)) === '[10,15,40,20]', JSON.stringify(Pdf.pathBounds([19], [10, 20, 30, -5], OPS)));
   ok('a path with an operator it does not know is left out, not guessed at', Pdf.pathBounds([13, 99], [0, 0, 5], OPS) === null);
