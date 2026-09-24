@@ -244,7 +244,32 @@ function marks(text) {
   return out;
 }
 
-var MemHome = { unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
+/* What goes beside the pearl: its section's own figure — the one on the
+   pearl's page if there is one, else the section's first (the chunker's
+   assignFigures decides which figures are the section's) — or, with no
+   figure, the section's first table, a few rows of it. Nothing from any
+   other section, and nothing at all rather than a picture that is not the
+   section's. Chunk is passed in, so this stays pure. */
+var PEARL_ROWS = 5;
+function pearlVisual(doc, pearl, Chunk) {
+  if (!doc || !pearl) return null;
+  var ci = -1;
+  (doc.clusters || []).forEach(function (c, i) { if (ci === -1 && c.index === pearl.cluster) ci = i; });
+  if (ci === -1) return null;
+  var c = doc.clusters[ci];
+  var figs = doc.hasFile !== false && doc.figures && doc.figures.length ? (Chunk.assignFigures(doc.clusters, doc.figures)[ci] || []) : [];
+  if (figs.length) {
+    var f = figs.filter(function (x) { return x.page === pearl.page; })[0] || figs[0];
+    return { kind: 'figure', page: f.page, box: f.box, caption: f.caption || '', number: f.number || '' };
+  }
+  var t = (c.segments || []).filter(function (s) { return s.table && s.table.length; })[0];
+  if (t) {
+    return { kind: 'table', page: t.page, header: t.tableHeader || null, rows: t.table.slice(0, PEARL_ROWS), more: Math.max(0, t.table.length - PEARL_ROWS) };
+  }
+  return null;
+}
+
+var MemHome = { pearlVisual: pearlVisual, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
   HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
   notesOf: notesOf, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath };
 root.MemHome = MemHome;

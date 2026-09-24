@@ -776,6 +776,60 @@ function kindOf(user) {
   const weakText = (await page.locator('#weak').innerText()).replace(/\s+/g, ' ');
   ok('needs work names the shaky section, with its score and its cards', /Section One Preload/.test(weakText) && /50% on the drill/.test(weakText) &&
      await page.locator('#weak li').count() === 1 && await page.locator('#weak button', { hasText: 'Drill · 1' }).count() === 1, weakText);
+
+  head('home: the pearl as the feature, with its own figure, under glass');
+  /* Section 1 carries the fixture's picture on page 1, the pearl's page, so
+     the pearl is shown beside it — drawn from the stored PDF, not a
+     placeholder. The wait is for the drawing to arrive; what it drew is
+     the check. */
+  await page.waitForFunction(() => { const i = document.querySelector('#pearl-visual img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
+  const pv = await page.evaluate(() => { const f = document.querySelector('#pearl-visual'); const i = f && f.querySelector('img');
+    return f ? { kind: f.getAttribute('data-kind'), src: i ? i.src.slice(0, 15) : '', w: i ? i.naturalWidth : 0, cap: f.querySelector('figcaption').textContent.replace(/\s+/g, ' ').trim(),
+      withVisual: document.querySelector('#pearl').classList.contains('with-visual') } : null; });
+  ok('beside the pearl, its own section’s figure, drawn from the PDF with its caption and page',
+     !!pv && pv.kind === 'figure' && /^data:image\/png/.test(pv.src) && pv.w > 0 && pv.cap.indexOf(pdf.CAPTION.replace(/\.$/, '')) === 0 && /p\.1$/.test(pv.cap) && pv.withVisual, JSON.stringify(pv));
+  await page.locator('#pearl-visual .pearl-fig').click();
+  await page.locator('.lightbox img').waitFor(T).catch(() => {});
+  await page.waitForFunction(() => { const i = document.querySelector('.lightbox img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
+  ok('and it opens full size', await page.evaluate(() => { const i = document.querySelector('.lightbox img'); return !!i && i.naturalWidth > 0; }));
+  await page.locator('.lightbox .btn').click();
+  await page.locator('.lightbox').waitFor({ state: 'detached', timeout: 60000 });
+  /* Surfaces are frosted glass over the aurora: translucent and blurred,
+     as the browser computes them — and opaque, unblurred, at High
+     contrast, where the tokens say alpha 1. */
+  const glassOf = () => page.evaluate(() => ['.jump-card', '#pearl', 'nav.dock', '.unit-row'].map(q => { const cs = getComputedStyle(document.querySelector(q));
+    const m = cs.backgroundColor.match(/rgba?\(([^)]+)\)/); const a = m ? m[1].split(',').map(Number) : [];
+    return { q: q, alpha: a.length === 4 ? a[3] : 1, blur: (cs.backdropFilter || cs.webkitBackdropFilter || '') }; }));
+  const glassNow = await glassOf();
+  ok('the cards, the pearl and the dock are glass: translucent and blurred', glassNow.every(g => g.alpha < 1 && /blur\((?!0px)/.test(g.blur)), JSON.stringify(glassNow));
+  const lookBefore = await page.evaluate(() => MemLook.load());
+  await page.evaluate(() => MemLook.apply(Object.assign(MemLook.load(), { contrast: 'high' })));
+  const glassHigh = await glassOf();
+  await page.evaluate(l => MemLook.apply(l), lookBefore);
+  ok('and at High contrast, solid: no translucency, no blur', glassHigh.every(g => g.alpha === 1 && !/blur\((?!0px)/.test(g.blur)), JSON.stringify(glassHigh));
+  const hero = await page.evaluate(() => { const e = document.querySelector('#home-hero'); const cs = getComputedStyle(e);
+    return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('svg.hero-trace path[d^="M0"]'), held: (document.querySelector('#stat-held') || {}).textContent || '',
+      inHero: !!e.querySelector('#streak') && !!e.querySelector('#pill-due') }; });
+  ok('the hero band carries the streak, what is due and how much is held, over its gradient and trace',
+     /gradient/.test(hero.bg) && hero.trace && /\d+%\s*Held/.test(hero.held) && hero.inHero, JSON.stringify(hero));
+  /* Laid out as a dashboard on an iPad held landscape — the pearl, and
+     beside it where to jump back in — and stacked in reading order on a
+     phone, with nothing wider than the screen. */
+  const placing = () => page.evaluate(() => { const a = document.querySelector('#pearl').getBoundingClientRect(), b = document.querySelector('#home-side').getBoundingClientRect();
+    return { beside: b.left >= a.right - 1 && Math.abs(b.top - a.top) < 4, below: b.top >= a.bottom - 1, wide: document.documentElement.scrollWidth > innerWidth }; });
+  await page.setViewportSize({ width: 1180, height: 820 });
+  const land = await placing();
+  await page.setViewportSize({ width: 375, height: 812 });
+  const phone = await placing();
+  await page.setViewportSize({ width: 820, height: 1100 });
+  ok('landscape: the pearl with where to jump back in beside it', land.beside && !land.wide, JSON.stringify(land));
+  ok('phone: stacked, pearl first, no sideways scroll', phone.below && !phone.wide, JSON.stringify(phone));
+  await page.locator('#pearl-open').click();
+  await page.locator('#big-idea').waitFor(T).catch(() => {});
+  ok('“Open the section” opens the pearl’s own section', /Section One Preload/.test(await page.locator('main').innerText()) &&
+     await page.evaluate(() => Memorizer.ui.view === 'session' && Memorizer.ui.state.phase === 'teach' && Memorizer.ui.state.section === 0), await page.evaluate(() => Memorizer.ui.view + ' ' + (Memorizer.ui.state && Memorizer.ui.state.phase + ' ' + Memorizer.ui.state.section)));
+  await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+  await page.locator('#weak').waitFor(T);
   /* The drill rates the card; the review checks below expect it unreviewed,
      so it is put back as it was before leaving. It is reviewed Easy first,
      so it is not due: plain review would offer nothing, the drill must

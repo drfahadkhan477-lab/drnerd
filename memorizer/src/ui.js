@@ -465,9 +465,9 @@ function withBytes(fileId) {
   if (ui.bytesFor === fileId) return Promise.resolve(ui.bytes);
   return Store.get('files', fileId).then(function (f) { ui.bytesFor = fileId; ui.bytes = f && f.bytes; return ui.bytes; });
 }
-function lazyImage(alt, pageNo, box, scale) {
+function lazyImage(alt, pageNo, box, scale, d) {
   var img = h('img', { alt: alt });
-  var at = where(ui.docRec, pageNo);
+  var at = where(d || ui.docRec, pageNo);
   (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
     if (!bytes) throw new Error('no file');
     return Pdf.renderBox(at.fileId, bytes, at.page, box, scale);
@@ -604,6 +604,17 @@ function marked(text) {
 }
 var HUES = [190, 150, 260, 30, 330, 210, 100, 0, 280, 50];
 function hue(i) { return HUES[i % HUES.length]; }
+/* A still ECG trace across the foot of the hero, drawn by CSS when motion
+   is allowed (stroke-dashoffset), shown whole when it is not. */
+function heroTrace() {
+  var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 600 48'); svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('class', 'hero-trace'); svg.setAttribute('aria-hidden', 'true');
+  var p = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', Home.tracePath(600, 5)); p.setAttribute('pathLength', '1');
+  svg.appendChild(p);
+  return svg;
+}
 function mascot() {
   var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 64 64'); svg.setAttribute('class', 'mascot'); svg.setAttribute('aria-hidden', 'true');
@@ -629,11 +640,20 @@ function viewHome() {
   var bookIn = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, id: 'book-input', class: 'visually-hidden',
     onchange: function (e) { importBook(e.target.files); e.target.value = ''; } });
 
-  var top = h('header.home-top',
-    h('div.home-brand', mascot(), h('div', h('span.hello', Home.greeting(new Date().getHours()) + ' · what shall we'), h('h1.learn', 'Learn?'))),
-    h('div.pills',
-      h('span.pill', { id: 'streak', title: 'Days in a row' }, h('span', { 'aria-hidden': 'true' }, '🔥'), ' ' + streak),
-      h('button.pill', { type: 'button', id: 'pill-due', onclick: function () { startReview(); } }, h('span', { 'aria-hidden': 'true' }, '↻'), ' ' + due + ' due')));
+  /* The hero band: who it is for, today, and three numbers that matter —
+     days in a row, cards due, and how much of what you have studied is held
+     (FSRS says 90% or better today). A trace runs along its foot. */
+  var prog = Home.progress(ui.docs, sessions, ui.cards, day, FSRS);
+  var cur = Home.current(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), sessions);
+  var top = h('header.home-top.home-hero', { id: 'home-hero' },
+    heroTrace(),
+    h('div.home-brand', mascot(), h('div', h('span.hello', Home.greeting(new Date().getHours()) + ' · what shall we'), h('h1.learn', 'Learn?'),
+      h('p.hero-line', cur ? [h('span.hero-dot', { 'aria-hidden': 'true' }), 'Up next: ', h('strong', cur.doc.name), cur.next ? ' · ' + cur.next : ''] : 'Add a chapter of your book to begin.'))),
+    h('div.pills.hero-stats',
+      h('span.pill.stat', { id: 'streak', title: 'Days in a row' }, h('span.stat-label', 'Streak'), h('span', { 'aria-hidden': 'true' }, '🔥'), ' ' + streak),
+      h('button.pill.stat', { type: 'button', id: 'pill-due', onclick: function () { startReview(); } }, h('span.stat-label', 'Review'), h('span', { 'aria-hidden': 'true' }, '↻'), ' ' + due + ' due'),
+      h('span.pill.stat.stat-ring', { id: 'stat-held', title: 'Of the cards you have made, held at 90% or better today' },
+        ring(prog.heldPct), h('span.stat-label', 'Held'))));
 
   var drop = h('label.learn-box', { for: 'pdf-input', id: 'door-add',
       ondragover: function (e) { e.preventDefault(); drop.classList.add('over'); },
@@ -679,13 +699,34 @@ function viewHome() {
   var pkey = day + '|' + (ui.pearlSkip || 0);
   if (!ui.pearlCache || ui.pearlCache.key !== pkey) ui.pearlCache = { key: pkey, pk: ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0) : null };
   var pk = ui.pearlCache.pk;
-  var pearl = pk ? h('aside.pearl.card', { id: 'pearl', 'aria-labelledby': 'pearl-label' },
-    h('span.eyebrow', { id: 'pearl-label' }, 'Pearl of the day'),
-    h('ol.pearl-steps', pk.steps.map(function (st) {
-      return h('li', st.lead ? h('span.pearl-lead', st.lead) : null, marked(st.text));
-    })),
-    h('p.pearl-src', pk.pearl.heading, pk.pearl.page ? page(pk.pearl.page) : null, ui.docs.length > 1 ? ' · ' + pk.pearl.docName : ''),
-    pk.of > 1 ? h('div.row', button('Another', function () { ui.pearlSkip = (ui.pearlSkip || 0) + 1; render(); }, 'quiet', { id: 'pearl-next' })) : null) : null;
+  /* The pearl is the feature of the page: larger, and with its own
+     section's figure or table beside it (Home.pearlVisual), so the fact is
+     seen as well as read. */
+  var pdoc = pk ? ui.docs.filter(function (d) { return d.id === pk.pearl.docId; })[0] : null;
+  var vis = pk && pdoc ? Home.pearlVisual(pdoc, pk.pearl, Chunk) : null;
+  var visual = null;
+  if (vis && vis.kind === 'figure') {
+    visual = h('figure.pearl-visual', { id: 'pearl-visual', 'data-kind': 'figure' },
+      h('button.pearl-fig', { type: 'button', 'aria-label': 'Enlarge the figure', onclick: function () { ui.docRec = pdoc; lightbox(vis.page, vis.box); } },
+        lazyImage(vis.caption || 'Figure, page ' + vis.page, vis.page, vis.box, 2, pdoc)),
+      h('figcaption', vis.caption ? h('span.fig-cap', vis.caption) : (vis.number ? 'Figure ' + vis.number : 'Figure'), ' ', page(vis.page)));
+  } else if (vis && vis.kind === 'table') {
+    visual = h('figure.pearl-visual', { id: 'pearl-visual', 'data-kind': 'table' },
+      h('div.table-wrap', h('table.data', vis.header ? h('thead', h('tr', vis.header.map(function (x) { return h('th', x); }))) : null,
+        h('tbody', vis.rows.map(function (r) { return h('tr', r.map(function (x) { return h('td', x); })); })))),
+      h('figcaption', 'Table', vis.more ? ' \u00B7 ' + vis.more + ' more row' + (vis.more === 1 ? '' : 's') : '', ' ', page(vis.page)));
+  }
+  var pearl = pk ? h('aside.pearl.card' + (visual ? '.with-visual' : ''), { id: 'pearl', 'aria-labelledby': 'pearl-label' },
+    h('div.pearl-main',
+      h('span.eyebrow', { id: 'pearl-label' }, h('span.pearl-gem', { 'aria-hidden': 'true' }), 'Pearl of the day'),
+      h('ol.pearl-steps', pk.steps.map(function (st) {
+        return h('li', st.lead ? h('span.pearl-lead', st.lead) : null, marked(st.text));
+      })),
+      h('p.pearl-src', pk.pearl.heading, pk.pearl.page ? page(pk.pearl.page) : null, ui.docs.length > 1 ? ' · ' + pk.pearl.docName : ''),
+      h('div.row.pearl-actions',
+        pdoc ? button('Open the section', function () { openDoc(pdoc.id, pdoc.clusters.map(function (c) { return c.index; }).indexOf(pk.pearl.cluster)); }, 'primary', { id: 'pearl-open' }) : null,
+        pk.of > 1 ? button('Another', function () { ui.pearlSkip = (ui.pearlSkip || 0) + 1; render(); }, 'quiet', { id: 'pearl-next' }) : null)),
+    visual) : null;
 
   var books = ui.books.map(function (b, i) {
     var ds = b.chapters.filter(function (c) { return c.docId; }).map(function (c) { return ui.docs.filter(function (d) { return d.id === c.docId; })[0]; }).filter(Boolean);
@@ -719,12 +760,17 @@ function viewHome() {
         (d.ocrError ? ' — the text reader could not run (' + d.ocrError + ').' : '.')) : null);
   });
 
+  /* Laid out as a dashboard: the hero; then the pearl as the feature, with
+     where to jump back in and what needs work beside it; then adding
+     material; then the shelf. On a phone it stacks in that order. */
+  var side = jump || weak ? h('div.home-side', { id: 'home-side' }, jump, weak) : null;
   return h('main.wrap.home',
-    top, pdfIn, photoIn, bookIn, drop, chips, paste,
+    top, pdfIn, photoIn, bookIn,
     ui.error ? errorCard(null) : null,
     !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
       button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null,
-    jump, weak, pearl,
+    pearl || side ? h('div.home-grid' + (pearl && side ? '.two' : ''), { id: 'home-grid' }, pearl, side) : null,
+    h('section.home-add', { id: 'home-add', 'aria-label': 'Add material' }, drop, chips), paste,
     books.length ? [h('div.section-head', h('h2', 'My books'), h('label.plus', { for: 'book-input', 'aria-label': 'Add a book' }, '+')),
       h('ul.units', { id: 'books' }, books)] : null,
     units.length ? h('div.section-head', h('h2', 'My units'), h('label.plus', { for: 'pdf-input', 'aria-label': 'Add a PDF' }, '+')) : null,

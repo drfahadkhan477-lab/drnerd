@@ -560,3 +560,183 @@ main.home > :nth-child(4) { animation-delay: .18s; } main.home > :nth-child(n+5)
 .closing li { margin: .375rem 0; }
 .closing .letters { font-family: var(--script); font-size: var(--t-lead); color: var(--accent); letter-spacing: .08em; }
 .weak-report li[data-graduated="true"] strong { text-decoration: line-through; text-decoration-color: var(--good); }
+
+/* ═══ Glass, glow and the aurora ══════════════════════════════════════════
+   The finish over the layout above. Surfaces are frosted glass over a slow
+   aurora of the theme's own colours (--aura-1..3, --glass*, from
+   appearance.js, where every text colour is fitted against the glass as it
+   actually composites over the page and each aurora pool — so the finish
+   cannot cost contrast). High contrast and the Contrast theme get opaque
+   glass and no blur from the same tokens; a browser without backdrop-filter,
+   or a person who asks for less transparency, gets the solid surface. */
+:root { --accent-2: #0B7DB1; --glass: rgba(255,255,255,.72); --glass-strong: rgba(255,255,255,.86); --glass-2: rgba(230,236,243,.72);
+  --glass-edge: rgba(255,255,255,.65); --glass-blur: 22px;
+  --aura-1: rgba(94,234,212,.20); --aura-2: rgba(56,189,248,.18); --aura-3: rgba(129,140,248,.15);
+  --ease-out: cubic-bezier(.2,.7,.2,1); --lift: 0 2px 4px rgba(0,0,0,.06), 0 18px 40px -12px rgba(0,0,0,.22); }
+body { position: relative; min-height: 100vh; }
+body::before { content: ""; position: fixed; inset: -20vmax; z-index: -1; pointer-events: none;
+  background: radial-gradient(38vmax 30vmax at 12% 8%, var(--aura-1), transparent 70%),
+    radial-gradient(34vmax 28vmax at 88% 18%, var(--aura-2), transparent 70%),
+    radial-gradient(40vmax 34vmax at 60% 92%, var(--aura-3), transparent 72%);
+  animation: aura-drift 40s ease-in-out infinite alternate; }
+@keyframes aura-drift { from { transform: translate3d(0,0,0) rotate(0deg); } to { transform: translate3d(-3vmax,2vmax,0) rotate(8deg); } }
+
+.card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list {
+  background-color: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6); backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+  border-color: var(--line);
+  box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow); }
+.dock, .menu-list { background-color: var(--glass-strong); box-shadow: inset 0 1px 0 var(--glass-edge), 0 12px 40px -8px rgba(0,0,0,.35); }
+.card.note { background-color: var(--accent-soft); }
+.card.error { background-color: var(--bad-soft); }
+.hook { background-color: var(--mid-soft); }
+.option.right { background-color: var(--good-soft); }
+.option.wrong { background-color: var(--bad-soft); }
+.nav-btn[aria-current="page"] { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); box-shadow: 0 6px 18px -6px var(--accent); }
+.nav-btn { transition: background-color .2s, color .2s, transform .2s var(--ease-out); }
+.nav-btn:active { transform: scale(.94); }
+
+/* Primary buttons: the accent run into its partner, with a sheen that
+   crosses on hover. accent-ink is fitted against both ends. */
+.btn { transition: transform .18s var(--ease-out), box-shadow .18s, border-color .18s; }
+.btn.primary { position: relative; overflow: hidden; border-color: transparent;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 8px 22px -10px var(--accent); }
+.btn.primary::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent); transform: skewX(-18deg); transition: left .6s var(--ease-out); }
+.btn.primary:hover::after { left: 120%; }
+.btn:hover:not([disabled]) { transform: translateY(-1px); }
+.btn:active:not([disabled]) { transform: translateY(0) scale(.98); }
+.bar i { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.stepper li.now { border-image: linear-gradient(90deg, var(--accent), var(--accent-2)) 1; }
+
+/* Lift on hover, for the things that open something. */
+.jump-card, .unit-row, .section-card, .learn-box, .option:not([disabled]) { transition: transform .25s var(--ease-out), box-shadow .25s, border-color .25s; }
+.jump-card:hover, .unit-row:hover, .section-card:hover, .learn-box:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--glass-edge), var(--lift); border-color: var(--accent); }
+
+/* ── the home, as a dashboard ─────────────────────────────────────────── */
+.wrap.home { max-width: 74rem; }
+.home-hero { position: relative; overflow: hidden; isolation: isolate; align-items: center; flex-wrap: wrap;
+  margin: var(--s-3) 0 var(--s-5); padding: var(--s-6) var(--s-6) calc(var(--s-6) + 1.5rem); border-radius: 2rem;
+  color: var(--hero-ink); border: 1px solid var(--hero-edge);
+  background: radial-gradient(60% 120% at 100% 0%, var(--hero-edge), transparent 60%),
+    radial-gradient(50% 90% at 0% 100%, rgba(255,255,255,.06), transparent 70%),
+    linear-gradient(135deg, var(--hero-a), var(--hero-b) 55%, var(--hero-c));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 24px 60px -24px rgba(0,0,0,.55); }
+.home-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .5;
+  background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+  background-size: 1.5rem 1.5rem;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 40%, #000 70%, transparent); mask-image: linear-gradient(90deg, transparent, #000 40%, #000 70%, transparent); }
+.home-hero::after { content: ""; position: absolute; z-index: -1; width: 26rem; height: 26rem; right: -8rem; top: -12rem; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, var(--hero-accent), transparent 65%); opacity: .18; animation: hero-glow 9s ease-in-out infinite alternate; }
+@keyframes hero-glow { from { transform: scale(.9); opacity: .12; } to { transform: scale(1.1); opacity: .24; } }
+.home-hero .hello { color: var(--hero-muted); }
+.home-hero .learn { color: var(--hero-ink); font-size: 3.25rem;
+  background: linear-gradient(120deg, var(--hero-ink) 30%, var(--hero-accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.hero-line { margin: var(--s-2) 0 0; color: var(--hero-muted); font-size: var(--t-body); display: flex; align-items: center; flex-wrap: wrap; gap: .25rem; }
+.hero-line strong { color: var(--hero-ink); }
+.hero-dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--hero-accent); margin-right: .25rem; box-shadow: 0 0 0 0 var(--hero-accent); animation: hero-pulse 2.4s ease-out infinite; }
+@keyframes hero-pulse { 0% { box-shadow: 0 0 0 0 var(--hero-edge); } 70% { box-shadow: 0 0 0 .6rem transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.hero-trace { position: absolute; left: 0; right: 0; bottom: .25rem; width: 100%; height: 2.5rem; z-index: -1; pointer-events: none; opacity: .75; overflow: visible; }
+.hero-trace path { fill: none; stroke: var(--hero-accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
+  stroke-dasharray: 1; stroke-dashoffset: 0; filter: drop-shadow(0 0 4px var(--hero-accent)); animation: trace-draw 3.2s var(--ease-out) both; }
+@keyframes trace-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.hero-stats { gap: var(--s-3); }
+.home-hero .pill.stat { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; min-width: 6.5rem; padding: .625rem 1rem; border-radius: 1.25rem;
+  font-size: var(--t-lead); color: var(--hero-ink); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+.home-hero button.pill.stat { cursor: pointer; transition: transform .2s var(--ease-out), background-color .2s; }
+.home-hero button.pill.stat:hover { transform: translateY(-2px); background: rgba(255,255,255,.14); }
+.stat-label { display: block; font-size: var(--t-tiny); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--hero-muted); }
+.home-hero .pill.stat-ring { flex-direction: row; align-items: center; gap: var(--s-2); }
+.home-hero .stat-ring .ring-wrap { width: 2.75rem; height: 2.75rem; }
+.home-hero .stat-ring .ring .track { stroke: rgba(255,255,255,.14); }
+.home-hero .stat-ring .ring .fill { stroke: var(--hero-accent); }
+.home-hero .stat-ring .ring-pct { color: var(--hero-ink); font-size: var(--t-tiny); }
+.home-hero .mascot { filter: drop-shadow(0 6px 16px rgba(0,0,0,.35)); }
+
+.home-grid { display: grid; gap: var(--s-4); align-items: start; margin: 0 0 var(--s-4); }
+.home-grid > .pearl { margin: 0; }
+.home-side { display: flex; flex-direction: column; gap: var(--s-2); min-width: 0; }
+.home-side > .section-head:first-child { margin-top: 0; }
+.home-side .jump { flex-direction: column; overflow: visible; scroll-snap-type: none; }
+.home-side .jump-card { flex: none; width: 100%; }
+@media (min-width: 60rem) {
+  .home-grid.two { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+  .units#units, .units:not(#books) { grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); }
+}
+.home-add { display: grid; gap: var(--s-2); margin: var(--s-2) 0 0; }
+.home-add .chips { margin: 0; }
+.learn-box { position: relative; overflow: hidden; min-height: 7rem; border-style: dashed; border-width: 2px; }
+.learn-box::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background: radial-gradient(40% 120% at 100% 50%, var(--aura-2), transparent 70%); }
+.learn-plus { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 50%; color: var(--accent-ink);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 8px 20px -8px var(--accent); position: relative; }
+.chip:hover { border-color: var(--accent); }
+
+/* ── the pearl, the feature of the page ───────────────────────────────── */
+.pearl { position: relative; overflow: hidden; padding: var(--s-6) var(--s-6) var(--s-5); border-radius: 1.75rem; min-height: 22rem;
+  background-color: var(--glass); border-color: var(--line); }
+.pearl::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--hero-accent)); }
+.pearl.with-visual { flex-direction: row; flex-wrap: wrap; gap: var(--s-5); align-items: stretch; }
+.pearl-main { flex: 1 1 20rem; min-width: 0; display: flex; flex-direction: column; }
+.pearl .eyebrow { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--accent); font-size: var(--t-meta); }
+.pearl-gem { width: 1.125rem; height: 1.125rem; border-radius: 50%; flex: none;
+  background: radial-gradient(circle at 30% 30%, #FFFFFF, var(--accent-2) 45%, var(--accent) 80%);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 0 14px var(--accent-2); animation: gem-shine 3.6s ease-in-out infinite; }
+@keyframes gem-shine { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
+.pearl-steps { font-size: 1.3125rem; line-height: 1.5; margin: var(--s-3) 0 var(--s-4); }
+.pearl-steps li { padding: var(--s-3) 0 var(--s-3) 2.75rem; }
+.pearl-steps li::before { top: var(--s-3); width: 1.875rem; height: 1.875rem; line-height: 1.875rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 12px -4px var(--accent); }
+.pearl-actions { margin-top: var(--s-4); }
+.pearl-visual { flex: 1 1 15rem; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: var(--s-2);
+  border-radius: 1.25rem; padding: var(--s-2); background: var(--glass-strong); border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow); animation: rise-in .6s .2s var(--ease-out) both; }
+.pearl-fig { display: block; width: 100%; padding: 0; border: 0; border-radius: .875rem; overflow: hidden; background: #FFFFFF; cursor: zoom-in; flex: 1 1 auto; }
+.pearl-fig img { display: block; width: 100%; height: auto; max-height: 24rem; object-fit: contain; transition: transform .5s var(--ease-out); }
+.pearl-fig:hover img { transform: scale(1.03); }
+.pearl-visual figcaption { font-size: var(--t-meta); color: var(--muted); padding: 0 var(--s-2) var(--s-1); }
+.pearl-visual .table-wrap { margin: 0; background: var(--surface); }
+.pearl-visual table.data { font-size: var(--t-meta); }
+
+/* The home rises in, a beat apart, in reading order. */
+main.home > .home-hero, main.home > .home-grid, main.home > .home-add, main.home > .section-head, main.home > .units { animation: rise-in .55s var(--ease-out) both; }
+main.home > .home-grid { animation-delay: .08s; } main.home > .home-add { animation-delay: .16s; }
+main.home > .section-head, main.home > .units { animation-delay: .22s; }
+.home-side .jump-card, .home-side .weak-list li, .units .unit-row { animation: rise-in .45s var(--ease-out) both; }
+.home-side .jump-card:nth-child(2), .units .unit-row:nth-child(2) { animation-delay: .06s; }
+.home-side .jump-card:nth-child(3), .units .unit-row:nth-child(3) { animation-delay: .12s; }
+.units .unit-row:nth-child(n+4) { animation-delay: .18s; }
+
+@media (max-width: 32.5rem) {
+  .home-hero { padding: var(--s-5) var(--s-4) calc(var(--s-5) + 1.5rem); border-radius: 1.5rem; }
+  .home-hero .learn { font-size: 2.5rem; }
+  .hero-stats { width: 100%; justify-content: flex-start; }
+  .home-hero .pill.stat { flex: 1 1 0; min-width: 0; }
+  .pearl { padding: var(--s-5) var(--s-4) var(--s-4); min-height: 0; }
+  .pearl-steps { font-size: var(--t-lead); }
+}
+
+/* Opaque where it must be: High contrast and the Contrast theme (the tokens
+   already say alpha 1, blur 0), less transparency asked for, or no
+   backdrop-filter to frost with. */
+@media (prefers-reduced-transparency: reduce) {
+  .card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list, .pearl, .pearl-visual {
+    background-color: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  body::before { display: none; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card, .jump-card, .unit-row, .learn-box, .pill, .chip, .btn.chip, .dock, .section-card, .option, details.source, .menu-list, .pearl, .pearl-visual { background-color: var(--surface); }
+}
+:root[data-contrast="high"] body::before { display: none; }
+:root[data-contrast="high"] .btn.primary, :root[data-contrast="high"] .nav-btn[aria-current="page"], :root[data-contrast="high"] .learn-plus { background: var(--accent); box-shadow: none; }
+:root[data-contrast="high"] .btn.primary::after { display: none; }
+:root[data-contrast="high"] .home-hero .learn { -webkit-text-fill-color: currentColor; background: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  body::before, .home-hero::after, .hero-dot, .hero-trace path, .pearl-gem, .pearl-visual { animation: none !important; }
+  main.home, main.home *, nav.dock, nav.dock *, .btn, .btn::after, .section-card, .option { transition: none !important; animation: none !important; }
+  .jump-card:hover, .unit-row:hover, .section-card:hover, .learn-box:hover, .btn:hover:not([disabled]), .pearl-fig:hover img { transform: none; }
+}

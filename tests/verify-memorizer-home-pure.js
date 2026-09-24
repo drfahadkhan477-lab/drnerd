@@ -248,5 +248,27 @@ ok('one section, three sections', H.count(1, 'section') === '1 section' && H.cou
 ok('the hero trace is a still line across the whole band', /^M0 30 /.test(H.tracePath(600, 4)) && / L600 30$/.test(H.tracePath(600, 4)) &&
    (H.tracePath(600, 4).match(/l5 -30/g) || []).length === 4);
 
+head('beside the pearl: its own section’s figure, or its table');
+{
+  const C = require(path.join(ROOT, 'memorizer', 'src', 'chunk.js'));
+  const sec = (index, p0, p1, segs) => ({ index, title: 'S' + index, pageStart: p0, pageEnd: p1, text: segs.map(x => x.text || '').join(' '), segments: segs });
+  const tbl = { page: 4, heading: false, text: '', table: [['LVEDP', '12', 'mmHg'], ['SV', '70', 'mL'], ['HR', '72', 'bpm'], ['EF', '60', '%'], ['CO', '5', 'L/min'], ['CI', '3', 'L/min/m2']], tableHeader: ['Measure', 'Normal', 'Unit'] };
+  const doc = { id: 'd', hasFile: true, clusters: [sec(0, 1, 2, [{ page: 1, text: 'Preload rises.' }, { page: 2, text: 'More on preload.' }]), sec(1, 3, 4, [{ page: 3, text: 'Afterload.' }, tbl])],
+    figures: [{ page: 1, box: [0, 0, 100, 100] }, { page: 2, box: [0, 0, 200, 100] }, { page: 3, box: [5, 5, 50, 50] }] };
+  const v = H.pearlVisual(doc, { cluster: 0, page: 2 }, C);
+  ok('the figure on the pearl’s own page, from its own section', v && v.kind === 'figure' && v.page === 2 && v.box[2] === 200, JSON.stringify(v));
+  const v1 = H.pearlVisual(doc, { cluster: 0, page: 9 }, C);
+  ok('else the section’s first figure', v1 && v1.kind === 'figure' && v1.page === 1, JSON.stringify(v1));
+  const d2 = Object.assign({}, doc, { figures: [{ page: 1, box: [0, 0, 1, 1] }] });
+  const v2 = H.pearlVisual(d2, { cluster: 1, page: 3 }, C);
+  ok('with no figure of its own, not another section’s figure but its own table', v2 && v2.kind === 'table' && v2.page === 4 && (v2.header || []).join() === 'Measure,Normal,Unit', JSON.stringify(v2 && v2.kind));
+  ok('a few rows of it, and how many more', v2.rows.length === H.PEARL_ROWS && v2.rows[0][0] === 'LVEDP' && v2.more === 1, v2.rows.length + ' +' + v2.more);
+  const d3 = { id: 'e', hasFile: true, clusters: [sec(0, 1, 1, [{ page: 1, text: 'Only prose.' }])], figures: [] };
+  ok('nothing at all when the section has neither', H.pearlVisual(d3, { cluster: 0, page: 1 }, C) === null);
+  ok('and nothing for a pearl whose section is not in the unit', H.pearlVisual(doc, { cluster: 7, page: 1 }, C) === null && H.pearlVisual(null, {}, C) === null);
+  const noFile = Object.assign({}, doc, { hasFile: false });
+  ok('a unit whose PDF is not kept has no figure to draw: its table instead', H.pearlVisual(noFile, { cluster: 1, page: 3 }, C).kind === 'table');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

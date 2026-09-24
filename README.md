@@ -188,17 +188,28 @@ Every missed answer becomes a review card — the same multiple-choice question
 — scheduled with the same FSRS scheduler Systole uses (`src/core/fsrs.js`,
 shared, not copied).
 
-The home screen asks what you want to learn: a big box to add a chapter, with
-chips for a PDF, photos or pasted notes; your streak and the cards due; "jump
-back in" cards with a progress ring and the section up next; the sections
-that need work, each with a drill of its review cards, due or not; a pearl of
-the day — a sentence from your own PDF, found and broken into steps by
-Systole's `src/core/pearl.js`, shared rather than copied — and your units,
-each with its progress. Nothing on it moves. The look is Systole's too: its
+The home screen is laid out as a dashboard. At the top, a hero band: the
+greeting, what is up next, and three numbers — your streak, the cards due,
+and how much of what you have studied is held today — over a gradient with
+an ECG trace along its foot. Then the pearl of the day, the feature of the
+page — a sentence from your own PDF, found and broken into steps by
+Systole's `src/core/pearl.js`, shared rather than copied — shown beside its
+own section's figure, drawn from the stored PDF, or the first rows of that
+section's table, with a button to open the section. Beside the pearl on an
+iPad held landscape (below it on a phone): "jump back in" cards with a
+progress ring and the section up next, and the sections that need work,
+each with a drill of its review cards, due or not. Then the box to add a
+chapter, with chips for a PDF, photos or pasted notes, and your units, each
+with its progress. Surfaces are frosted glass over a slow aurora in the
+theme's own colours; cards rise in, the trace draws, the pearl's steps
+arrive one by one. With reduced motion asked for, nothing moves; at High
+contrast, with less transparency asked for, or where the browser cannot
+blur, the glass is solid. The look is Systole's too: its
 themes, colour for colour, and its type scale, with text size, reading width,
 line spacing, font, contrast and brightness to choose. Contrast and
 brightness are computed from the theme you pick, and every theme at every
-setting is tested to keep its text at WCAG AA or better, with form controls
+setting is tested to keep its text at WCAG AA or better — measured against
+the glass as it composites over the page and each pool of the aurora — with form controls
 outlined to WCAG's floor for controls.
 
 ```bash
