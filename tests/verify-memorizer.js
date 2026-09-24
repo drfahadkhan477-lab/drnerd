@@ -888,6 +888,13 @@ function kindOf(user) {
   const stillNow = await movingNow();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   ok('and with reduced motion asked for, nothing on it animates or transitions', stillNow.length === 0, stillNow.slice(0, 5).join(', ') || 'still');
+  /* Every tap redraws the screen. The owner saw the cards jump in again each
+     time: entrance motion is for entering a screen, not for a redraw of it.
+     (What loops — the aurora, the pearl's paper — is not an entrance.) */
+  const replayed = await page.evaluate(() => { Memorizer.render();
+    return document.querySelector('main').getAnimations({ subtree: true }).filter(a => a.effect && a.effect.getTiming().iterations !== Infinity)
+      .map(a => (a.animationName || 'script') + ' on ' + a.effect.target.tagName + '.' + a.effect.target.className); });
+  ok('a redraw of the same screen plays no entrance again', replayed.length === 0, replayed.slice(0, 5).join(', ') || 'still');
   const dock = await page.evaluate(() => { const r = document.querySelector('nav.dock').getBoundingClientRect(); return { pos: getComputedStyle(document.querySelector('nav.dock')).position, gap: innerHeight - r.bottom, w: r.width }; });
   ok('the tabs float at the foot of the screen', dock.pos === 'fixed' && dock.gap > 0 && dock.w < 820, JSON.stringify(dock));
   /* Section 1 scored 1 of 2 on its drill: 50%, and its one miss is its card. */

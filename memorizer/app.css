@@ -166,7 +166,10 @@ table.data tbody tr:last-child td { border-bottom: 0; }
    still stops all of it (the browser suite holds that). */
 .pearl { animation: pearl-paper 28s linear infinite; }
 @keyframes pearl-paper { from { background-position: 0 0, 0 0, 0 0, 0 0; } to { background-position: 0 .5rem, .5rem 0, 0 2.5rem, 2.5rem 0; } }
-.pearl-steps li { animation: pearl-rung .5s ease-out both; }
+/* Entrance motion plays when a screen is entered (render() marks main
+   data-enter), never on a redraw of the same screen: every tap redraws,
+   and the owner saw the cards jump in again each time. */
+main[data-enter] .pearl-steps li { animation: pearl-rung .5s ease-out both; }
 .pearl-steps li:nth-child(2) { animation-delay: .07s; } .pearl-steps li:nth-child(3) { animation-delay: .14s; }
 .pearl-steps li:nth-child(4) { animation-delay: .21s; } .pearl-steps li:nth-child(n+5) { animation-delay: .28s; }
 @keyframes pearl-rung { from { opacity: 0; transform: translateX(-.5rem); } to { opacity: 1; transform: none; } }
@@ -534,11 +537,11 @@ summary.fold-head:hover .fold-btn { color: var(--accent); border-color: currentC
    one shakes, so the outcome registers before the words are read; a
    revealed recall answer rises into place. All short (under half a second)
    so nothing waits on them. */
-main.home > .card, main.home > section > .card, main.home .hero { animation: rise-in .45s cubic-bezier(.2,.7,.2,1) both; }
+main.home[data-enter] > .card, main.home[data-enter] > section > .card, main.home[data-enter] .hero { animation: rise-in .45s cubic-bezier(.2,.7,.2,1) both; }
 main.home > :nth-child(2) { animation-delay: .06s; } main.home > :nth-child(3) { animation-delay: .12s; }
 main.home > :nth-child(4) { animation-delay: .18s; } main.home > :nth-child(n+5) { animation-delay: .24s; }
-.ring-wrap svg { animation: ring-in .6s cubic-bezier(.2,.7,.2,1) both; transform-origin: center; }
-.section-card { animation: rise-in .4s cubic-bezier(.2,.7,.2,1) both; }
+main[data-enter] .ring-wrap svg { animation: ring-in .6s cubic-bezier(.2,.7,.2,1) both; transform-origin: center; }
+main[data-enter] .section-card { animation: rise-in .4s cubic-bezier(.2,.7,.2,1) both; }
 .section-card:nth-child(2) { animation-delay: .05s; } .section-card:nth-child(3) { animation-delay: .1s; }
 .section-card:nth-child(4) { animation-delay: .15s; } .section-card:nth-child(n+5) { animation-delay: .2s; }
 .option.right { animation: right-pulse .45s ease-out; }
@@ -669,7 +672,8 @@ main[data-enter] { animation: screen-in .32s var(--ease-out) backwards; }
 @keyframes hero-pulse { 0% { box-shadow: 0 0 0 0 var(--hero-edge); } 70% { box-shadow: 0 0 0 .6rem transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 .hero-trace { position: absolute; left: 0; right: 0; bottom: .25rem; width: 100%; height: 2.5rem; z-index: -1; pointer-events: none; opacity: .75; overflow: visible; }
 .hero-trace path { fill: none; stroke: var(--hero-accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
-  stroke-dasharray: 1; stroke-dashoffset: 0; filter: drop-shadow(0 0 4px var(--hero-accent)); animation: trace-draw 3.2s var(--ease-out) both; }
+  stroke-dasharray: 1; stroke-dashoffset: 0; filter: drop-shadow(0 0 4px var(--hero-accent)); }
+main[data-enter] .hero-trace path { animation: trace-draw 3.2s var(--ease-out) both; }
 @keyframes trace-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 .hero-stats { gap: var(--s-3); }
 .home-hero .pill.stat { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; min-width: 6.5rem; padding: .625rem 1rem; border-radius: 1.25rem;
@@ -721,7 +725,8 @@ main[data-enter] { animation: screen-in .32s var(--ease-out) backwards; }
 .pearl-actions { margin-top: var(--s-4); }
 .pearl-visual { flex: 1 1 15rem; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: var(--s-2);
   border-radius: 1.25rem; padding: var(--s-2); background: var(--glass-strong); border: 1px solid var(--line);
-  box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow); animation: rise-in .6s .2s var(--ease-out) both; }
+  box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow); }
+main[data-enter] .pearl-visual { animation: rise-in .6s .2s var(--ease-out) both; }
 .pearl-fig { display: block; width: 100%; padding: 0; border: 0; border-radius: .875rem; overflow: hidden; background: #FFFFFF; cursor: zoom-in; flex: 1 1 auto; }
 .pearl-fig img { display: block; width: 100%; height: auto; max-height: 24rem; object-fit: contain; transition: transform .5s var(--ease-out); }
 .pearl-fig:hover img { transform: scale(1.03); }
@@ -730,10 +735,10 @@ main[data-enter] { animation: screen-in .32s var(--ease-out) backwards; }
 .pearl-visual table.data { font-size: var(--t-meta); }
 
 /* The home rises in, a beat apart, in reading order. */
-main.home > .home-hero, main.home > .home-grid, main.home > .home-add, main.home > .section-head, main.home > .units { animation: rise-in .55s var(--ease-out) both; }
+main.home[data-enter] > .home-hero, main.home[data-enter] > .home-grid, main.home[data-enter] > .home-add, main.home[data-enter] > .section-head, main.home[data-enter] > .units { animation: rise-in .55s var(--ease-out) both; }
 main.home > .home-grid { animation-delay: .08s; } main.home > .home-add { animation-delay: .16s; }
 main.home > .section-head, main.home > .units { animation-delay: .22s; }
-.home-side .jump-card, .home-side .weak-list li, .units .unit-row { animation: rise-in .45s var(--ease-out) both; }
+main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list li, main[data-enter] .units .unit-row { animation: rise-in .45s var(--ease-out) both; }
 .home-side .jump-card:nth-child(2), .units .unit-row:nth-child(2) { animation-delay: .06s; }
 .home-side .jump-card:nth-child(3), .units .unit-row:nth-child(3) { animation-delay: .12s; }
 .units .unit-row:nth-child(n+4) { animation-delay: .18s; }
