@@ -251,6 +251,9 @@ const SUITES = [
   /* Needs no build: the repository's own physio, coronaryTree and wiggers in
      a real browser, measured for the physiology the view is there to show. */
   ['coronaryview', 'the Coronary view draws the left bed collapsing in systole, on one scale'],
+  /* Needs no build: the shipped ambient-patch over a scaffold, with the
+     repository's own Heart3D, ECG12, Wiggers and LivingDiagram. */
+  ['ambient',      'the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -305,7 +308,7 @@ const SUITES = [
    measured the four that had been waiting — livingdiagram-pure,
    conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
    and echo. */
-const PENDING_RECORD = ['coronaryview'];
+const PENDING_RECORD = ['coronaryview', 'ambient'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
