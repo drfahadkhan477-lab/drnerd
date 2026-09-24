@@ -2233,6 +2233,14 @@ function storageBanner() {
         (ui.state ? save() : Promise.resolve()).then(render);
       }, 'primary', { id: 'store-retry' })));
   }
+  /* Opened from the iPad's Files app, Safari shows the file as a data: URL:
+     no origin, so no storage of any kind, and no "normal window" fixes it. */
+  if (!Store.persistent && /^data:/.test(String(root.location && root.location.protocol))) {
+    return h('p.warn.store-banner', { id: 'store-banner', role: 'status' },
+      h('strong', 'Nothing you add here will be kept. '),
+      'Opened from the Files app, Safari gives this page no storage at all, so units, progress and cards are gone when the tab closes. ' +
+      'Open Memorizer from its web address instead (for example your Cloudflare Pages link), then Share → Add to Home Screen.');
+  }
   if (!Store.persistent) {
     return h('p.warn.store-banner', { id: 'store-banner', role: 'status' },
       h('strong', 'Study data is kept only for this visit. '),

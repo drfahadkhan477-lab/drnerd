@@ -140,9 +140,10 @@ var CFG_KEY = 'memorizer.ai.v1';
    this, removing a retired model from the list would fix new users and leave
    everyone who had already saved it stuck on the 404. The key is kept. */
 function loadConfig(storage) {
-  var st = storage || root.localStorage;
   var d = { provider: DEFAULT_PROVIDER, model: PROVIDERS[DEFAULT_PROVIDER].models[0][0], key: '' };
   try {
+    /* reading root.localStorage itself throws where storage is refused (a data: URL) */
+    var st = storage || root.localStorage;
     var s = JSON.parse(st.getItem(CFG_KEY) || 'null');
     if (s && PROVIDERS[s.provider]) {
       var listed = PROVIDERS[s.provider].models.some(function (m) { return m[0] === s.model; });
@@ -154,8 +155,7 @@ function loadConfig(storage) {
   return d;
 }
 function saveConfig(cfg, storage) {
-  var st = storage || root.localStorage;
-  try { st.setItem(CFG_KEY, JSON.stringify(cfg)); return true; } catch (_) { return false; }
+  try { var st = storage || root.localStorage; st.setItem(CFG_KEY, JSON.stringify(cfg)); return true; } catch (_) { return false; }
 }
 
 function needsKey(cfg) { return !(PROVIDERS[cfg.provider] && PROVIDERS[cfg.provider].noKey); }
