@@ -924,7 +924,6 @@ function kindOf(user) {
     ok('a chapter that runs on into the next PDF holds all of its words, and no other chapter’s', text2.split(/\s+/).filter(w => /^c2w/.test(w)).length === bk.words[2] &&
        !/c[13]w[a-z]/.test(text2), `${text2.split(/\s+/).filter(w => /^c2w/.test(w)).length} of ${bk.words[2]}`);
     ok('its running header is gone from its text', !/CHAPTER 2/.test(text2) && !docs.some(d => /CHAPTER \d/.test(d.clusters.map(c => c.text).join(' '))));
-    ok('the chapters are not listed as units of their own on the home screen', await p5.evaluate(() => Memorizer.ui.docs.filter(d => !d.bookId).length) === 0);
 
     head('a chapter of the book: taught, its figure found when opened');
     await p5.locator('#chapters .chapter-row').nth(2).locator('button.unit-open').click();
@@ -950,6 +949,7 @@ function kindOf(user) {
     /* Chapter 1 opened, so it has a session to keep. */
     await p5.locator('#chapters .chapter-row').nth(1).locator('button.unit-open').click();
     await p5.locator('#sections').waitFor(T);
+    await p5.waitForFunction(() => MemStore.all('docs').then(ds => Array.isArray(ds.find(d => d.pageStart === 2).figures)), null, T);
     await p5.locator('header.topbar button[aria-label="Back"]').click();
     await p5.locator('#chapters').waitFor(T);
     const keptId = (await p5.evaluate(() => MemStore.all('books').then(x => x[0].chapters))).find(c => c.pageStart === 2).docId;
@@ -968,12 +968,21 @@ function kindOf(user) {
        JSON.stringify(await ranges()) === '["pp. 1–1","pp. 2–3","pp. 4–5","pp. 6–8"]', JSON.stringify(await titles()));
     ok('from the book’s stored text, without reading the PDFs again', await p5.evaluate(() => window.__reads) === 0);
     const again = await p5.evaluate(() => Promise.all([MemStore.all('books'), MemStore.all('sessions')]));
-    ok('renamed chapters on the same pages keep their progress', again[0][0].chapters.find(c => c.pageStart === 2).docId === keptId &&
+    /* Kept, not rebuilt on the same id: a rebuilt chapter forgets the
+       figures it found and is split into sections again for nothing — on a
+       real book, a hundred chapters of it at every re-cut. */
+    ok('renamed chapters on the same pages keep their progress, and are not rebuilt', await p5.evaluate(id => MemStore.get('docs', id).then(d => Array.isArray(d.figures)), keptId) &&
+       again[0][0].chapters.find(c => c.pageStart === 2).docId === keptId &&
        again[1].some(s => s.id === keptId) && await p5.evaluate(id => MemStore.get('docs', id).then(d => d.name), keptId) === 'Heart Failure Basics');
 
     head('the book on the home screen');
     await p5.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await p5.locator('#books .book-row').waitFor(T);
+    /* Counted where it is drawn: the first version of this check read
+       ui.docs, which holds the chapters either way, and survived the list
+       showing them. */
+    ok('its chapters are not listed as units of their own', await p5.locator('#units .unit-row').count() === 0 && await p5.locator('#books .book-row').count() === 1,
+       `${await p5.locator('#units .unit-row').count()} unit rows`);
     ok('my books: its name, chapters, pages and PDFs', /^Book\s*3 chapters · 8 pages · 2 PDFs/.test((await p5.locator('#books .book-row').innerText()).trim()),
        await text(p5, '#books .book-row'));
     ok('a chapter opened joins jump back in; the ones never opened do not', JSON.stringify(await p5.$$eval('.jump-card strong', es => es.map(e => e.textContent))) === '["Heart Failure Basics"]',
