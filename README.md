@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 48 suites that need neither a browser nor a build all stay
+present, and the 49 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -144,6 +144,17 @@ heading size that opens chapters — and the one that fits best is used; the
 book's page shows the others, and any chapter can be joined to the one before
 it. A chapter whose pages do not change keeps its progress. Each chapter is a
 unit like any other, and its figures are found the first time it is opened.
+
+**Ask your book.** Type a question and the built-in coach answers with the
+book's own sentences, word for word, each labelled with where it was printed,
+arranged under clinical headings (definition, causes, mechanism,
+presentation, diagnosis, treatment, complications) that are marked as
+Memorizer's arrangement, not the book's; when nothing matches it says "Not
+found in your book" rather than guess. It finds sentences through five
+indexes — chapters, diseases, clinical scenarios, diagnostic tests and
+treatments — built on the device from a vocabulary of cardiology terms and
+their synonyms ("NT-proBNP", "TAVI", a drug by its suffix), and the indexes
+can be browsed too. Nothing is sent anywhere.
 
 Every missed answer becomes a review card — the same multiple-choice question
 — scheduled with the same FSRS scheduler Systole uses (`src/core/fsrs.js`,

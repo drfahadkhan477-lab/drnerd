@@ -18,13 +18,14 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
 
 var ui = {
-  view: 'library',      /* library | book | session | review | settings */
+  view: 'library',      /* library | book | session | ask | review | settings */
+  askIdx: null, askFor: null, askQ: '', askR: null, askKind: 'chapters', askBusy: false,
   docs: [], cards: [], sessions: {}, at: {}, pearlSkip: 0, books: [], days: [], bookId: null,
   docsStale: true, pearlCache: null,
   docId: null, docRec: null, state: null,
@@ -1044,6 +1045,70 @@ function viewReview() {
         : button('Show answer', function () { ui.reviewShown = true; render(); }, 'primary big', { id: 'show-answer' })));
 }
 
+/* ── ASK YOUR BOOK ───────────────────────────────────────────────────────── */
+/* Built once per set of units: over a whole book it reads every sentence. */
+function askIndex() {
+  if (ui.askIdx && ui.askFor === ui.docs) return Promise.resolve(ui.askIdx);
+  ui.askBusy = true; render();
+  return new Promise(function (resolve) {
+    setTimeout(function () {                      /* let "Indexing…" paint first */
+      ui.askIdx = Ask.build(ui.docs); ui.askFor = ui.docs; ui.askBusy = false;
+      resolve(ui.askIdx);
+    }, 30);
+  });
+}
+function askNow(q) {
+  ui.askQ = q;
+  if (!q.trim()) { ui.askR = null; render(); return; }
+  askIndex().then(function (idx) { ui.askR = Ask.ask(idx, q); render(); });
+}
+function sectionLink(idx, secId, extra) {
+  var sec = idx.sections[secId];
+  return h('li', button([h('strong', sec.title), h('span.muted', ' ' + (sec.book ? sec.book + ' · ' : '') + sec.chapter + ' · p. ' + sec.pageStart + (extra ? ' · ' + extra : ''))],
+    function () { openDoc(sec.docId, sec.ci); }, 'quiet link', { 'data-sec': String(secId) }));
+}
+function viewAsk() {
+  var idx = ui.askIdx, r = ui.askR;
+  var input = h('input', { id: 'ask-q', type: 'search', value: ui.askQ, placeholder: 'e.g. How is aortic stenosis treated?', 'aria-label': 'Your question',
+    onkeydown: function (e) { if (e.key === 'Enter') askNow(input.value); } });
+  var answer = null;
+  if (r && idx) {
+    answer = r.found ? h('div.card', { id: 'answer' },
+      h('p.muted.legend', h('span.src', 'Book · p.'), ' your book’s own words, where it printed them · ', h('span.arranged', 'Headings'), ' arranged by Memorizer, not the book'),
+      r.groups.map(function (g) {
+        return [h('h3.arranged', g.heading), h('ul.quotes', g.items.map(function (it) {
+          var sec = idx.sections[it.sec];
+          return h('li', h('p.quote-text', marked(it.text)), h('span.src', (sec.book || sec.chapter) + ' · p. ' + it.page));
+        }))];
+      }),
+      h('h3', 'Read more'), h('ul.read-more', { id: 'read-more' }, r.sections.map(function (s) { return sectionLink(idx, s); })))
+      : h('div.card', { id: 'not-found', role: 'status' }, h('h2', 'Not found in your book'),
+        h('p', 'Nothing in your units matches that question. Try the name of the condition, test or drug, or browse the indexes below. Memorizer does not answer from anywhere but your book.'));
+  }
+  var kinds = [['chapters', 'Chapters']].concat(Object.keys(Ask.KIND_LABELS).map(function (k) { return [k, Ask.KIND_LABELS[k]]; }));
+  var browse = null;
+  if (idx) {
+    var list = ui.askKind === 'chapters'
+      ? idx.chapters.map(function (c) { return h('li', h('details', h('summary', (c.book ? c.book + ' · ' : '') + c.title), h('ul.read-more', c.sections.map(function (s) { return sectionLink(idx, s); })))); })
+      : idx.index[ui.askKind].map(function (e) {
+          return h('li', h('details', h('summary', e.label + ' · ' + Home.count(e.sections.length, 'section')),
+            h('ul.read-more', e.sections.slice(0, 20).map(function (w) { return sectionLink(idx, w.sec, w.count + '×'); }))));
+        });
+    browse = h('div.card', { id: 'browse' }, h('h2', 'Browse your book'),
+      h('div.seg', { role: 'radiogroup', 'aria-label': 'Index' }, kinds.map(function (k) {
+        return h('button', { type: 'button', role: 'radio', 'aria-checked': String(ui.askKind === k[0]), 'data-kind': k[0], onclick: function () { ui.askKind = k[0]; render(); } }, k[1]);
+      })),
+      list.length ? h('ul.index-list', list) : h('p.muted', 'Nothing of this kind is named in your units.'));
+  }
+  return h('main.wrap.ask',
+    backBar('Ask your book', function () { leave('library'); }),
+    h('div.card', h('div.row.ask-row', input, button('Ask', function () { askNow(input.value); }, 'primary', { id: 'ask-go' })),
+      h('p.muted', 'Answers are your book’s own sentences, each with its page — found on this device, never sent anywhere.')),
+    ui.askBusy ? h('div.card.busy', { role: 'status' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', 'Indexing your book (once)…')) : null,
+    !ui.docs.length ? h('div.card.empty', h('p', 'Add a chapter or a book first; then ask it anything.')) : null,
+    answer, browse);
+}
+
 /* ── SETTINGS ────────────────────────────────────────────────────────────── */
 function appearanceCard() {
   var look = Look.load();
@@ -1125,6 +1190,7 @@ function nav() {
   }
   return h('nav.dock', { 'aria-label': 'Main' },
     tab('library', '⌂', 'Home', function () { leave('library'); }),
+    tab('ask', '🔎', 'Ask', function () { ui.view = 'ask'; ui.error = ''; refresh().then(function () { render(); if (ui.docs.length) askIndex().then(render); }); }),
     tab('review', '↻', 'Review', function () { startReview(); }, due),
     tab('settings', '⚙', 'Settings', function () { leave('settings'); }));
 }
@@ -1133,6 +1199,7 @@ function render() {
   var app = doc.getElementById('app');
   var view = ui.view === 'session' && ui.state ? viewSession()
     : ui.view === 'book' ? viewBook()
+    : ui.view === 'ask' ? viewAsk()
     : ui.view === 'review' ? viewReview()
     : ui.view === 'settings' ? viewSettings() : viewHome();
   app.textContent = '';

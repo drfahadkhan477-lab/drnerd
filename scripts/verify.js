@@ -283,6 +283,7 @@ const SUITES = [
   ['memorizer-appearance-pure', 'the themes are Systole\u2019s, colour for colour, and readable at every contrast and brightness'],
   ['memorizer-home-pure',    'the home screen\u2019s progress counts what happened, and its pearl is your PDF\u2019s own sentence'],
   ['memorizer-book-pure',   'a whole textbook: its parts in order, its pages straight through, its chapters found three ways'],
+  ['memorizer-ask-pure',    'asking your book: its own sentences with their pages, from the right section, or nothing found'],
   ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
 ];
 
@@ -323,7 +324,7 @@ const SUITES = [
    conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
    and echo. */
 const PENDING_RECORD = ['coronaryview', 'ambient',
-  'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer-coach-pure', 'memorizer-appearance-pure', 'memorizer-home-pure', 'memorizer-book-pure', 'memorizer'];
+  'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer-coach-pure', 'memorizer-appearance-pure', 'memorizer-home-pure', 'memorizer-book-pure', 'memorizer-ask-pure', 'memorizer'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

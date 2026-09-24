@@ -892,6 +892,34 @@ function kindOf(user) {
     await p2.locator('#learn-unit').click();
     await p2.locator('ol.points > li').first().waitFor(T);
     ok('and it is taught like a PDF, without a pages card', await p2.locator('#visuals').count() === 0 && await p2.locator('#big-idea').count() === 1);
+
+    head('ask your book: its own sentences, with their pages, on the device');
+    const askBefore = stub.requests.length;
+    await p2.locator('nav.dock').getByRole('button', { name: 'Ask' }).click();
+    await p2.locator('#ask-q').waitFor(T);
+    await p2.locator('#browse').waitFor(T);
+    await p2.fill('#ask-q', 'What reduces preload?');
+    await p2.locator('#ask-go').click();
+    await p2.locator('#answer, #not-found').first().waitFor(T);
+    const quotes = await p2.$$eval('#answer ul.quotes li', ls => ls.map(l => ({ text: l.querySelector('.quote-text').textContent, src: l.querySelector('.src').textContent })));
+    const allText = await p2.evaluate(() => MemStore.all('docs').then(ds => ds.map(d => d.clusters.map(c => c.text).join(' ')).join(' ')));
+    ok('the answer is the book\u2019s own sentence, with where it was printed', quotes.some(q => q.text === pdf.causal[0] && q.src === 'unit · p. 1'), JSON.stringify(quotes.slice(0, 3)));
+    ok('and every line of it is word for word in one of your units', quotes.length > 0 && quotes.every(q => allText.indexOf(q.text) !== -1),
+       JSON.stringify(quotes.filter(q => allText.indexOf(q.text) === -1)));
+    ok('under a heading marked as Memorizer\u2019s arrangement', await p2.locator('#answer h3.arranged').count() >= 1 && /arranged by Memorizer, not the book/.test(await p2.locator('#answer .legend').innerText()));
+    ok('and nothing was sent anywhere to find it', stub.requests.length === askBefore, `${stub.requests.length - askBefore} requests`);
+    await p2.fill('#ask-q', 'tax law for accountants');
+    await p2.locator('#ask-go').click();
+    await p2.locator('#not-found').waitFor(T);
+    ok('a question the book cannot answer says so, and gives no lines', /Not found in your book/.test(await p2.locator('#not-found').innerText()) && await p2.locator('#answer').count() === 0);
+    await p2.locator('#browse [data-kind="treatment"]').click();
+    await p2.waitForFunction(() => /Diuretics/.test(document.querySelector('#browse').innerText), null, T);
+    ok('the treatment index lists what the book names, with its sections', /Diuretics · 1 section/.test(await p2.locator('#browse').innerText()), (await p2.locator('#browse .index-list').innerText()).slice(0, 120));
+    await p2.fill('#ask-q', 'What reduces preload?');
+    await p2.locator('#ask-go').click();
+    await p2.locator('#read-more li button').first().click();
+    await p2.locator('#big-idea').waitFor(T);
+    ok('read more opens that section\u2019s lesson', await p2.evaluate(() => Memorizer.ui.state.phase === 'teach' && Memorizer.ui.docRec.name === 'unit' && Memorizer.ui.state.section === 0));
   }
 
   head('a whole book: its PDFs as one, cut into chapters');
