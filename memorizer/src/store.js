@@ -129,7 +129,51 @@ function mergeCards(cards) {
   });
 }
 
+/* One study step, stored as one thing: the session and the cards it made go
+   in ONE transaction, so they cannot disagree. Written as two (put the
+   session, then merge the cards) a failure between them left a session that
+   had moved on and cards that had not — a miss filed in the session with no
+   review card for it, and nothing on screen to say so. Now either both are
+   stored or neither is, and the promise rejects, so the caller can say so.
+   Resolves with every card in the deck, as mergeCards + all('cards') did. */
+function saveStep(session, cards) {
+  var fresh = function (have) {
+    var ids = {};
+    have.forEach(function (c) { ids[c.id] = true; });
+    return (cards || []).filter(function (c) { return !ids[c.id]; }).map(function (c) { return JSON.parse(JSON.stringify(c)); });
+  };
+  return open().then(function (db) {
+    if (!db) {
+      mem.sessions[session.id] = JSON.parse(JSON.stringify(session));
+      var have = Object.keys(mem.cards).map(function (k) { return mem.cards[k]; });
+      fresh(have).forEach(function (c) { mem.cards[c.id] = c; });
+      return Object.keys(mem.cards).map(function (k) { return JSON.parse(JSON.stringify(mem.cards[k])); });
+    }
+    return new Promise(function (resolve, reject) {
+      var t, out = null;
+      try { t = db.transaction(['sessions', 'cards'], 'readwrite'); } catch (e) { reject(e); return; }
+      t.oncomplete = function () { resolve(out); };
+      t.onerror = function () { reject(t.error); };
+      t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+      try {
+        var cs = t.objectStore('cards');
+        t.objectStore('sessions').put(session);
+        var req = cs.getAll();
+        req.onsuccess = function () {
+          /* A throw here (a quota error, an uncloneable card) aborts the
+             transaction, the session's write with it. */
+          try {
+            var add = fresh(req.result);
+            add.forEach(function (c) { cs.put(c); });
+            out = req.result.concat(add);
+          } catch (e) { try { t.abort(); } catch (_) {} reject(e); }
+        };
+      } catch (e) { try { t.abort(); } catch (_) {} reject(e); }
+    });
+  });
+}
+
 api.open = open; api.put = put; api.get = get; api.all = all; api.del = del;
-api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards;
+api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards; api.saveStep = saveStep;
 root.MemStore = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -32,8 +32,10 @@
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
-# What DOES run here needs no source file and no browser, and is genuinely
-# worth having on every push:
+# What DOES run here needs no source file, and is genuinely worth having on
+# every push. All of it needs no browser either, except the memorizer-browser
+# job, which drives the Memorizer — a second app that carries no licensed
+# content — in Chromium:
 #
 #   syntax       every .js and .py file in the repo parses, and the two
 #                listing commands (which patch chain steps exist, which test
@@ -43,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 54 suites that are pure Node with no Playwright and no
+#   logic        the 55 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -96,6 +98,13 @@ name: verify (source-independent subset)
 on:
   push:
   pull_request:
+
+# Read-only, for every job. Nothing here writes to the repository, comments,
+# or publishes; each job checks out and runs Node. Without this block the jobs
+# get the repository's default token, which may be read-write — and nothing
+# could notice that while GitHub was unable to parse this file at all.
+permissions:
+  contents: read
 
 jobs:
   syntax:
@@ -225,9 +234,9 @@ jobs:
         run: node tests/verify-memorizer-session-pure.js
       - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, makes the cards to memorise, and re-teaches by the kind of miss (137 checks)
         run: node tests/verify-memorizer-coach-pure.js
-      - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness (36 checks)
+      - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness, on glass and aurora as well as solid (42 checks)
         run: node tests/verify-memorizer-appearance-pure.js
-      - name: Memorizer — the home screen's progress, streak, pearl and weak spots say true things (60 checks)
+      - name: Memorizer — the home screen's progress, streak, pearl, the pearl's figure or table, and weak spots say true things (67 checks)
         run: node tests/verify-memorizer-home-pure.js
       - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (32 checks)
         run: node tests/verify-memorizer-book-pure.js
@@ -237,12 +246,52 @@ jobs:
         run: node tests/verify-memorizer-ground-pure.js
       - name: Memorizer — search by meaning, its measured floor, and its merge with search by words (14 checks)
         run: node tests/verify-memorizer-vec-pure.js
-      - name: Memorizer — a lesson laid out to be remembered: clinical headings, number tiles, the section at a glance, nothing twice (21 checks)
+      - name: Memorizer — a lesson laid out to be remembered — clinical headings, number tiles, the section at a glance, nothing twice (21 checks)
         run: node tests/verify-memorizer-sheet-pure.js
       - name: Memorizer — figures made from the book, every word the lesson's (17 checks)
         run: node tests/verify-memorizer-figure-pure.js
-      - name: Memorizer — the Coach as an agent: it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, and names what is still weak (30 checks)
+      - name: Memorizer — the Coach as an agent — it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, and names what is still weak (30 checks)
         run: node tests/verify-memorizer-agent-pure.js
+      - name: Memorizer — where a unit came from — a real SHA-256 of its bytes, a duplicate recognised, an import report that counts what happened (31 checks)
+        run: node tests/verify-memorizer-provenance-pure.js
+
+  # ── Memorizer in a real browser ────────────────────────────────────────────
+  #
+  # THE ONE BROWSER JOB THAT CAN RUN HERE, because Memorizer carries no
+  # licensed content: scripts/build-memorizer.js builds it from this
+  # repository alone, and both suites generate their own documents — a PDF
+  # written byte by byte, and pasted notes — so nothing of anyone's is read.
+  # Until this job existed the Memorizer's pure suites ran on every push and
+  # its whole-app suites never did: the glue between the modules (pdf.js's
+  # output reaching the chunker, a session surviving a reload, a failed save
+  # being said) was proven only when someone remembered to run it.
+  #
+  # NETWORK: verify-memorizer fetches pdf.js, and the text reader for scanned
+  # pages, from jsDelivr at pinned versions and checks them against their
+  # integrity hashes, as the app does. verify-memorizer-hardening uses pasted
+  # notes only and fails any request that leaves the page other than to the
+  # stubbed model.
+  #
+  # Chromium only, on purpose, for now: the suites run on WebKit through
+  # SYSTOLE_ENGINE=webkit, and adding that here is one more matrix entry once
+  # a WebKit run of both has been seen green.
+  memorizer-browser:
+    name: memorizer-browser — the whole app, in Chromium, on documents made for the test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: install the pinned test tools, and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (270 checks)
+        run: node tests/verify-memorizer.js
+      - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
+        run: node tests/verify-memorizer-hardening.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

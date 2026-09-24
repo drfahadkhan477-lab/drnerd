@@ -484,6 +484,23 @@ function kindOf(user) {
      JSON.stringify(rec.figures[0]));
   ok('and the PDF itself is kept on the device, to draw them from', await page.evaluate(id => MemStore.get('files', id).then(f => !!f && f.bytes.byteLength > 1000), rec.id));
   ok('pdf.js and its worker came from the pinned CDN', cdnHits >= 2, `${cdnHits} requests`);
+  /* Provenance: the unit knows exactly which bytes it came from, and what
+     read them. The digest is computed here, in Node, from the PDF handed
+     in — not read back from the page and compared with itself. */
+  const sha = 'sha256:' + require('crypto').createHash('sha256').update(pdf.buffer).digest('hex');
+  ok('the unit keeps a SHA-256 of the PDF it came from, and its file name', rec.fingerprint === sha && rec.fileName === 'unit.pdf', rec.fingerprint);
+  ok('and what read it: this build, the pinned PDF reader, the figure finder', rec.processing && rec.processing.build === built.stamp &&
+     rec.processing.pdfjs === '3.11.174' && rec.processing.figures === await page.evaluate(() => MemPdf.FIGURES_V), JSON.stringify(rec.processing));
+  const srcCard = (await page.locator('#source-card').textContent()).replace(/\s+/g, ' ');
+  ok('the unit page says where it came from and how it was read', new RegExp(pdf.pages + ' of ' + pdf.pages + ' pages read from the PDF').test(srcCard) &&
+     /Read cleanly/.test(srcCard) && /unit\.pdf/.test(srcCard) && srcCard.indexOf('SHA-256 ' + sha.slice(7, 19)) !== -1 && /2 figures/.test(srcCard) && /1 table/.test(srcCard), srcCard.slice(0, 200));
+  await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+  await page.locator('#pdf-input').waitFor({ state: 'attached', timeout: 60000 });
+  await page.setInputFiles('#pdf-input', { name: 'unit (copy).pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
+  /* Either way a unit is opened; that is the precondition, not the notice. */
+  await page.waitForFunction(() => Memorizer.ui.view === 'session' && !Memorizer.ui.importing && document.querySelector('#sections'), null, T);
+  ok('the same PDF added again opens the unit already here, and makes no copy', await page.evaluate(() => MemStore.all('docs').then(d => d.length)) === 1 &&
+     await page.locator('#notice').count() === 1 && /already added this as \u201Cunit\u201D/.test(await page.locator('#notice').innerText()) && await page.evaluate(() => Memorizer.ui.state.phase === 'unit'));
 
   head('the lesson: only this section leaves the device');
   await page.locator('#learn-unit').click();
@@ -532,8 +549,15 @@ function kindOf(user) {
   await page.locator('.lightbox img').waitFor(T);
   await page.waitForFunction(() => /^data:image/.test((document.querySelector('.lightbox img') || {}).src || ''), null, T);
   ok('a page opens large', await page.locator('.lightbox').count() === 1);
+  ok('focus goes into it, the lesson behind it inert, and it says which page of which unit it is', await page.evaluate(() => document.activeElement && document.activeElement.id) === 'lb-close' &&
+     await page.evaluate(() => document.getElementById('app').inert) && /page 1 of unit/.test(await page.locator('.lightbox .lb-where').innerText()),
+     await page.locator('.lightbox .lb-where').innerText());
+  await page.keyboard.press('Tab');
+  ok('Tab stays inside it', await page.evaluate(() => !!document.activeElement.closest('.lightbox')));
   await page.keyboard.press('Escape');
   ok('and Escape closes it', await page.locator('.lightbox').count() === 0);
+  ok('giving focus back to the page it was opened from', await page.evaluate(() => (document.activeElement.getAttribute('aria-label') || '') === 'Open page 1' && !document.getElementById('app').inert),
+     await page.evaluate(() => document.activeElement.getAttribute('aria-label') || document.activeElement.tagName));
   await page.locator('#fold-pages > summary').click();
   const shut = await page.evaluate(() => !document.querySelector('#fold-pages').open && !document.querySelector('#visuals .pages').checkVisibility());
   /* precondition: the lesson has been drawn again — a new #fold-pages, not the old one */
@@ -776,6 +800,60 @@ function kindOf(user) {
   const weakText = (await page.locator('#weak').innerText()).replace(/\s+/g, ' ');
   ok('needs work names the shaky section, with its score and its cards', /Section One Preload/.test(weakText) && /50% on the drill/.test(weakText) &&
      await page.locator('#weak li').count() === 1 && await page.locator('#weak button', { hasText: 'Drill · 1' }).count() === 1, weakText);
+
+  head('home: the pearl as the feature, with its own figure, under glass');
+  /* Section 1 carries the fixture's picture on page 1, the pearl's page, so
+     the pearl is shown beside it — drawn from the stored PDF, not a
+     placeholder. The wait is for the drawing to arrive; what it drew is
+     the check. */
+  await page.waitForFunction(() => { const i = document.querySelector('#pearl-visual img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
+  const pv = await page.evaluate(() => { const f = document.querySelector('#pearl-visual'); const i = f && f.querySelector('img');
+    return f ? { kind: f.getAttribute('data-kind'), src: i ? i.src.slice(0, 15) : '', w: i ? i.naturalWidth : 0, cap: f.querySelector('figcaption').textContent.replace(/\s+/g, ' ').trim(),
+      withVisual: document.querySelector('#pearl').classList.contains('with-visual') } : null; });
+  ok('beside the pearl, its own section’s figure, drawn from the PDF with its caption and page',
+     !!pv && pv.kind === 'figure' && /^data:image\/png/.test(pv.src) && pv.w > 0 && pv.cap.indexOf(pdf.CAPTION.replace(/\.$/, '')) === 0 && /p\.1$/.test(pv.cap) && pv.withVisual, JSON.stringify(pv));
+  await page.locator('#pearl-visual .pearl-fig').click();
+  await page.locator('.lightbox img').waitFor(T).catch(() => {});
+  await page.waitForFunction(() => { const i = document.querySelector('.lightbox img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
+  ok('and it opens full size', await page.evaluate(() => { const i = document.querySelector('.lightbox img'); return !!i && i.naturalWidth > 0; }));
+  await page.locator('.lightbox .btn').click();
+  await page.locator('.lightbox').waitFor({ state: 'detached', timeout: 60000 });
+  /* Surfaces are frosted glass over the aurora: translucent and blurred,
+     as the browser computes them — and opaque, unblurred, at High
+     contrast, where the tokens say alpha 1. */
+  const glassOf = () => page.evaluate(() => ['.jump-card', '#pearl', 'nav.dock', '.unit-row'].map(q => { const cs = getComputedStyle(document.querySelector(q));
+    const m = cs.backgroundColor.match(/rgba?\(([^)]+)\)/); const a = m ? m[1].split(',').map(Number) : [];
+    return { q: q, alpha: a.length === 4 ? a[3] : 1, blur: (cs.backdropFilter || cs.webkitBackdropFilter || '') }; }));
+  const glassNow = await glassOf();
+  ok('the cards, the pearl and the dock are glass: translucent and blurred', glassNow.every(g => g.alpha < 1 && /blur\((?!0px)/.test(g.blur)), JSON.stringify(glassNow));
+  const lookBefore = await page.evaluate(() => MemLook.load());
+  await page.evaluate(() => MemLook.apply(Object.assign(MemLook.load(), { contrast: 'high' })));
+  const glassHigh = await glassOf();
+  await page.evaluate(l => MemLook.apply(l), lookBefore);
+  ok('and at High contrast, solid: no translucency, no blur', glassHigh.every(g => g.alpha === 1 && !/blur\((?!0px)/.test(g.blur)), JSON.stringify(glassHigh));
+  const hero = await page.evaluate(() => { const e = document.querySelector('#home-hero'); const cs = getComputedStyle(e);
+    return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('svg.hero-trace path[d^="M0"]'), held: (document.querySelector('#stat-held') || {}).textContent || '',
+      inHero: !!e.querySelector('#streak') && !!e.querySelector('#pill-due') }; });
+  ok('the hero band carries the streak, what is due and how much is held, over its gradient and trace',
+     /gradient/.test(hero.bg) && hero.trace && /\d+%\s*Likely recalled/.test(hero.held) && hero.inHero, JSON.stringify(hero));
+  /* Laid out as a dashboard on an iPad held landscape — the pearl, and
+     beside it where to jump back in — and stacked in reading order on a
+     phone, with nothing wider than the screen. */
+  const placing = () => page.evaluate(() => { const a = document.querySelector('#pearl').getBoundingClientRect(), b = document.querySelector('#home-side').getBoundingClientRect();
+    return { beside: b.left >= a.right - 1 && Math.abs(b.top - a.top) < 4, below: b.top >= a.bottom - 1, wide: document.documentElement.scrollWidth > innerWidth }; });
+  await page.setViewportSize({ width: 1180, height: 820 });
+  const land = await placing();
+  await page.setViewportSize({ width: 375, height: 812 });
+  const phone = await placing();
+  await page.setViewportSize({ width: 820, height: 1100 });
+  ok('landscape: the pearl with where to jump back in beside it', land.beside && !land.wide, JSON.stringify(land));
+  ok('phone: stacked, pearl first, no sideways scroll', phone.below && !phone.wide, JSON.stringify(phone));
+  await page.locator('#pearl-open').click();
+  await page.locator('#big-idea').waitFor(T).catch(() => {});
+  ok('“Open the section” opens the pearl’s own section', /Section One Preload/.test(await page.locator('main').innerText()) &&
+     await page.evaluate(() => Memorizer.ui.view === 'session' && Memorizer.ui.state.phase === 'teach' && Memorizer.ui.state.section === 0), await page.evaluate(() => Memorizer.ui.view + ' ' + (Memorizer.ui.state && Memorizer.ui.state.phase + ' ' + Memorizer.ui.state.section)));
+  await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+  await page.locator('#weak').waitFor(T);
   /* The drill rates the card; the review checks below expect it unreviewed,
      so it is put back as it was before leaving. It is reviewed Easy first,
      so it is not due: plain review would offer nothing, the drill must
@@ -1568,6 +1646,14 @@ function kindOf(user) {
     ok('its heading is found by its size, as a real one would be', srec.clusters.some(c => c.headings.indexOf('Scanned Page Heading') !== -1),
        JSON.stringify(srec.clusters.map(c => c.headings)));
     ok('and the page with a text layer is read as before', /This first page carries real text/.test(stext));
+    const scard = (await p3.locator('#source-card').textContent()).replace(/\s+/g, ' ');
+    ok('the unit\u2019s source card flags the recognised page to check, and is open by itself', /Read, with pages to check/.test(scard) &&
+       /1 page read by text recognition \(2\)/.test(scard) && await p3.evaluate(() => document.querySelector('#source-card').open), scard.slice(0, 160));
+    const onScan = srec.clusters.findIndex(c => c.pageStart <= 2 && c.pageEnd >= 2);
+    await p3.evaluate(([id, i]) => Memorizer.openDoc(id, i), [srec.id, onScan]);
+    await p3.locator('#big-idea').waitFor(T);
+    const ocrNote = await p3.locator('#ocr-note').count() ? await p3.locator('#ocr-note').innerText() : 'no note';
+    ok('the lesson of the section on that page says it was recognised, and to check it', /scanned page by text recognition \(p\. 2\)/.test(ocrNote), ocrNote);
     await p3.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await p3.locator('.unit-row').first().waitFor(T);
     ok('my units says which pages were recognised', /Read by text recognition: pages 2\./.test(await p3.locator('.unit-row').first().innerText()));

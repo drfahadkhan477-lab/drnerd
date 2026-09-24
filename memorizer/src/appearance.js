@@ -98,6 +98,31 @@ var THEMES = [
          accent: '#38BDF8', 'accent-soft': '#082F49', 'accent-ink': '#060606' },
     hero: { 'hero-a': '#0A0A0A', 'hero-b': '#151515', 'hero-c': '#050505', 'hero-accent': '#7DD3FC', 'hero-edge': 'rgba(56,189,248,.32)' } },
 ];
+/* GLOW: the second accent a gradient runs to, and the aurora behind the
+   page — Systole's --teal2 and --aura-1..3, palette by palette, read out of
+   scripts/theme-patch.js and highcontrast-patch.js by the appearance suite.
+   Daylight and Midnight have no palette block there: their aurora is the
+   :root default Systole sets for both. Daylight's second accent is
+   Systole's root --teal2 (semantictokens-patch.js); Midnight has no Systole
+   value to read, so its second accent is chosen — the next step lighter
+   than its own accent (#0EA5E9), which is also the aurora's sky colour. */
+var GLOW = {
+  daylight:  { a2: '#0EA5E9', aura: ['rgba(94,234,212,.20)', 'rgba(56,189,248,.18)', 'rgba(129,140,248,.15)'] },
+  slate:     { a2: '#6366F1', aura: ['rgba(129,140,248,.22)', 'rgba(99,102,241,.18)', 'rgba(56,189,248,.12)'] },
+  parchment: { a2: '#12919B', aura: ['rgba(18,145,155,.20)', 'rgba(217,155,60,.16)', 'rgba(120,90,50,.14)'] },
+  midnight:  { a2: '#38BDF8', aura: ['rgba(94,234,212,.20)', 'rgba(56,189,248,.18)', 'rgba(129,140,248,.15)'] },
+  nocturne:  { a2: '#C4B5FD', aura: ['rgba(167,139,250,.22)', 'rgba(139,92,246,.18)', 'rgba(99,102,241,.14)'] },
+  cathlab:   { a2: '#FBBF24', aura: ['rgba(245,158,11,.22)', 'rgba(251,191,36,.16)', 'rgba(180,83,9,.16)'] },
+  monitor:   { a2: '#5EEAD4', aura: ['rgba(45,212,191,.22)', 'rgba(94,234,212,.16)', 'rgba(16,185,129,.14)'] },
+  contrast:  { a2: '#7DD3FC', aura: ['rgba(56,189,248,.22)', 'rgba(125,211,252,.16)', 'rgba(255,255,255,.10)'] },
+};
+/* GLASS: how much of the card colour a frosted surface keeps over the
+   aurora. The suite composites it over every aurora colour, at every
+   setting, and holds text on it to the same floors as text on a card.
+   At High contrast, and in the Contrast theme, surfaces are opaque. */
+var GLASS = { light: { card: 0.72, strong: 0.86, edge: 'rgba(255,255,255,.65)' },
+              dark:  { card: 0.64, strong: 0.84, edge: 'rgba(255,255,255,.08)' } };
+
 /* Auto follows the device: Daylight by day, Midnight at night. */
 var AUTO = { id: 'auto', name: 'Auto', light: 'daylight', dark: 'midnight' };
 
@@ -193,7 +218,36 @@ function variant(theme, contrast, bright) {
   t.accent = fit(t.accent, [t.bg, t.surface], f.accent, far);
   t['accent-ink'] = fit(t['accent-ink'], [t.accent], f.accent, near);
   t.edge = fit(t.line, [t.bg, t.surface], f.edge, t.ink);
+  /* The second accent carries button text too (a gradient runs to it), so
+     it is fitted against the button text, as the accent is. */
+  var g = GLOW[theme.id];
+  if (g) {
+    t['accent-2'] = fit(g.a2, [t['accent-ink']], f.accent, far);
+    /* Text sits on glass over the aurora as well as on cards: what the
+       page shows there is fitted too — the ground under each aurora
+       colour, with the frosted surface over it. */
+    var gl = glassOf(theme, contrast, t);
+    var backs = [t.bg].concat(g.aura.map(function (a) { return over(a, t.bg); }));
+    var onGlass = [];
+    backs.forEach(function (bk) { onGlass.push(over(gl.glass, bk), over(gl['glass-2'], bk)); });
+    t.ink = fit(t.ink, onGlass, f.text, far);
+    t.muted = fit(t.muted, onGlass, f.muted, far);
+    t.accent = fit(t.accent, onGlass.filter(function (_, i) { return i % 2 === 0; }), f.accent, far);
+    t['accent-ink'] = fit(t['accent-ink'], [t.accent], f.accent, near);
+    t['accent-2'] = fit(t['accent-2'], [t['accent-ink']], f.accent, far);
+  }
   return t;
+}
+/* rgba() from a hex and an alpha; composite(fg rgba, bg hex) → hex. */
+function rgba(hex, a) { var v = rgb(hex); return 'rgba(' + v[0] + ',' + v[1] + ',' + v[2] + ',' + a + ')'; }
+function parseRgba(s) { var m = /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/.exec(s); return m ? [+m[1], +m[2], +m[3], +m[4]] : null; }
+function over(fg, bgHex) { var f = parseRgba(fg), b = rgb(bgHex); return hexOf([0, 1, 2].map(function (i) { return f[i] * f[3] + b[i] * (1 - f[3]); })); }
+/* The glass tokens for a theme at a setting. */
+function glassOf(theme, contrast, t) {
+  var opaque = contrast === 'high' || theme.id === 'contrast', G = GLASS[theme.mode];
+  return { glass: rgba(t.surface, opaque ? 1 : G.card), 'glass-strong': rgba(t.surface, opaque ? 1 : G.strong),
+           'glass-2': rgba(t['surface-2'], opaque ? 1 : G.card), 'glass-edge': opaque ? 'rgba(255,255,255,0)' : G.edge,
+           'glass-blur': opaque ? '0px' : '22px' };
 }
 function semanticOf(mode, contrast) { return (contrast === 'high' ? SEMANTIC_HIGH : SEMANTIC)[mode]; }
 
@@ -209,6 +263,8 @@ function block(sel, theme, look) {
     .concat(Object.keys(sem).map(function (k) { return '--' + k + ':' + sem[k]; }))
     .concat(Object.keys(hero).map(function (k) { return '--' + k + ':' + hero[k]; }))
     .concat(['--hero-ink:' + HERO_INK, '--hero-muted:' + heroMuted(theme)])
+    .concat((function () { var g = glassOf(theme, contrast, t); return Object.keys(g).map(function (k) { return '--' + k + ':' + g[k]; }); })())
+    .concat(GLOW[theme.id] ? GLOW[theme.id].aura.map(function (a, i) { return '--aura-' + (i + 1) + ':' + a; }) : [])
     .concat(['--shadow:' + (contrast === 'high' ? 'none' : SHADOW[theme.mode]), 'color-scheme:' + theme.mode]);
   return sel + '{' + decl.join(';') + '}';
 }
@@ -264,6 +320,7 @@ var MemLook = {
   THEMES: THEMES, AUTO: AUTO, SEMANTIC: SEMANTIC, SEMANTIC_HIGH: SEMANTIC_HIGH, OPTIONS: OPTIONS, FONTS: FONTS, DEFAULT: DEFAULT, KEY: KEY,
   FLOORS: FLOORS, HERO_INK: HERO_INK,
   byId: byId, optValue: optValue, normalise: normalise, load: load, save: save, css: css, isDark: isDark, apply: apply,
+  GLOW: GLOW, GLASS: GLASS, glassOf: glassOf, over: over, parseRgba: parseRgba,
   variant: variant, semanticOf: semanticOf, heroMuted: heroMuted, mix: mix, ratio: ratio, fit: fit,
 };
 root.MemLook = MemLook;

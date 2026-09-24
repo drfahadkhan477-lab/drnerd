@@ -210,6 +210,79 @@ head('the hero band is Systole’s');
   ok('the hero’s text, accent and secondary text are readable across its whole gradient', weak.length === 0, weak.join('; ') || 'all clear');
 }
 
+head('glass and glow: Systole’s aurora and second accent, and text readable on glass over it');
+{
+  const semantic = fs.readFileSync(path.join(ROOT, 'scripts', 'semantictokens-patch.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
+  const blockOf = re => { const m = src.match(re); const t = {}; if (m) for (const x of m[1].matchAll(/--([a-z0-9-]+):([^;]+);/g)) t[x[1]] = x[2].trim(); return t; };
+  const rootDefaults = blockOf(/\n:root\{([\s\S]*?)\n\}/);
+  const drift = [];
+  let compared = 0;
+  L.THEMES.forEach(th => {
+    const g = L.GLOW[th.id];
+    if (!g) { drift.push(th.id + ': no glow'); return; }
+    const s = th.source ? blockOf(new RegExp('data-palette="' + th.source + '"\\]\\{([\\s\\S]*?)\\n\\}')) : {};
+    const want = Object.assign({}, rootDefaults, s);
+    [1, 2, 3].forEach(i => { compared++; if ((want['aura-' + i] || '').replace(/\s/g, '') !== g.aura[i - 1].replace(/\s/g, '')) drift.push(`${th.id} aura-${i}: ${g.aura[i - 1]} vs ${want['aura-' + i]}`); });
+    /* Daylight is Systole's root palette: its second accent is the root
+       --teal2 there. Midnight has none to read, and its chosen one is held
+       to what the comment says it is: aura-2's colour, lighter than its
+       own accent. */
+    if (th.id === 'daylight') { compared++; const r = (semantic.match(/--teal:#0284C7;--teal2:(#[0-9A-F]{6});/) || [])[1]; if (!r || r !== g.a2.toUpperCase()) drift.push(`daylight accent-2: ${g.a2} vs ${r}`); }
+    if (th.id === 'midnight') { compared++; const hex = '#' + g.aura[1].match(/\d+/g).slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('').toUpperCase();
+      if (g.a2.toUpperCase() !== hex || lum(g.a2) <= lum(th.swatch[1])) drift.push(`midnight accent-2: ${g.a2} vs aura-2 ${hex}`); }
+    if (th.source) {
+      compared++;
+      const t2 = s.teal2 === 'var(--accent-2)' ? s['accent-2'] : (s.teal2 || s['accent-2']);
+      if ((t2 || '').toUpperCase() !== g.a2.toUpperCase()) drift.push(`${th.id} accent-2: ${g.a2} vs ${t2}`);
+    }
+  });
+  ok('every aurora colour and second accent is Systole’s, palette by palette (Midnight’s, which Systole lacks, is aura-2’s colour)', compared === 32 && drift.length === 0, drift.join('; ') || `${compared} compared`);
+
+  /* Glass over the aurora. The backdrop behind a glass card is the ground
+     with an aurora colour over it; the card is the surface at its alpha over
+     that. Text on the card must clear the same floors as text on a card. */
+  const FLOOR = { standard: { text: 7, muted: 4.5, accent: 4.5 }, high: { text: 10, muted: 7, accent: 7 } };
+  const bad = [];
+  let n = 0;
+  L.THEMES.forEach(th => ['standard', 'high'].forEach(c => ['dim', 'standard', 'bright'].forEach(b => {
+    const t = L.variant(th, c, b), g = L.glassOf(th, c, t), f = FLOOR[c];
+    const backs = [t.bg].concat(L.GLOW[th.id].aura.map(a => L.over(a, t.bg)));
+    backs.forEach((back, bi) => ['glass', 'glass-2'].forEach(k => {
+      n++;
+      const card = L.over(g[k], back);
+      const need = (what, fg, min) => { const r = ratio(fg, card); if (r < min) bad.push(`${th.id}/${c}/${b} ${what} on ${k} over aura ${bi} ${r.toFixed(2)} < ${min}`); };
+      need('text', t.ink, f.text); need('secondary text', t.muted, f.muted);
+      if (k === 'glass') need('accent', t.accent, f.accent);
+    }));
+    const bt = ratio(t['accent-ink'], t['accent-2']);
+    if (bt < f.accent) bad.push(`${th.id}/${c}/${b} button text on accent-2 ${bt.toFixed(2)}`);
+  })));
+  ok('text on glass over every aurora colour clears its floors, in every theme and setting, and so does button text on the second accent',
+     n === 384 && bad.length === 0, bad.slice(0, 5).join('; ') || `${n} glass composites`);
+  ok('Systole’s second accent was too light for white button text in three light themes, and is fitted there',
+     ['daylight', 'slate', 'parchment'].every(id => ratio('#FFFFFF', L.GLOW[id].a2) < 4.5 && L.variant(L.byId(id), 'standard', 'standard')['accent-2'] !== L.GLOW[id].a2) &&
+     ['midnight', 'nocturne', 'cathlab', 'monitor', 'contrast'].every(id => L.variant(L.byId(id), 'standard', 'standard')['accent-2'] === L.GLOW[id].a2));
+  const hi = L.glassOf(L.byId('slate'), 'high', L.variant(L.byId('slate'), 'high', 'standard'));
+  const ct = L.glassOf(L.byId('contrast'), 'standard', L.variant(L.byId('contrast'), 'standard', 'standard'));
+  const st = L.glassOf(L.byId('slate'), 'standard', L.variant(L.byId('slate'), 'standard', 'standard'));
+  ok('at High contrast and in the Contrast theme surfaces are opaque, with no blur', /,1\)$/.test(hi.glass) && hi['glass-blur'] === '0px' && /,1\)$/.test(ct.glass) && ct['glass-blur'] === '0px' &&
+     /,0\.72\)$/.test(st.glass) && st['glass-blur'] !== '0px', JSON.stringify([hi.glass, ct.glass, st.glass]));
+  /* app.css's fallbacks, for the moment before appearance.js runs, are
+     Daylight's generated glass tokens — a second copy, so held equal. */
+  {
+    const appcss = fs.readFileSync(path.join(ROOT, 'memorizer', 'app.css'), 'utf8');
+    const fb = (appcss.match(/:root \{ --accent-2:[^}]*\}/) || [''])[0];
+    const gen = L.css({ theme: 'daylight', contrast: 'standard', bright: 'standard' });
+    const norm = v => String(v).replace(/\s/g, '').replace(/0\./g, '.').toUpperCase();
+    const keys = ['accent-2', 'glass', 'glass-strong', 'glass-2', 'glass-edge', 'glass-blur', 'aura-1', 'aura-2', 'aura-3'];
+    const off = keys.filter(k => { const a = fb.match(new RegExp('--' + k + ':\\s*([^;]+);')), b = gen.match(new RegExp('--' + k + ':([^;]+);'));
+      return !a || !b || norm(a[1]) !== norm(b[1]); });
+    ok('app.css’s fallbacks before the script runs are Daylight’s glass tokens', fb && off.length === 0, off.join(', ') || keys.length + ' tokens');
+  }
+  ok('and the stylesheet carries the glass and aurora tokens for every theme', L.THEMES.every(th => new RegExp(':root\\[data-look="' + th.id + '"\\]\\{[^}]*--glass:rgba[^}]*--aura-1:rgba').test(L.css())));
+}
+
 head('the stylesheet covers every setting');
 {
   const css = L.css();
