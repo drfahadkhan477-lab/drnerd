@@ -1692,30 +1692,67 @@ function planFor(q) {
     .then(function (t) { return Agent.parsePlan(t); }, function () { return null; })
     .then(function (p) { return p || Agent.plan(q, ui.memory || {}); });
 }
+/* THE LOOP (agent.js clauses / afterStep): a message is split into its
+   steps; each is planned when its turn comes, with the memory the step
+   before left; after each, what it found decides whether to act again.
+   Every step is a turn in the conversation, numbered when there is more
+   than one. */
 function askNow(q) {
   ui.askQ = q;
   if (!q.trim()) { ui.askR = null; render(); return; }
   ui.turns = ui.turns || []; ui.memory = ui.memory || {};
-  askIndex().then(function (idx) {
-    return planFor(q).then(function (p) {
-      if (p.tool !== 'search') { ui.turns.push(agentTurn(idx, p, q)); render(); return; }
-      /* a search is the reader's own words, unless it only follows on */
-      var query = Agent.plan(q, ui.memory).tool === 'search' ? Agent.plan(q, ui.memory).topic : q;
-      var turn = { q: q, plan: p, query: query };
-      var done = function (r) {
-        ui.askR = r; turn.r = r; ui.turns.push(turn);
-        if (r.found && r.sections.length) ui.memory.topic = idx.sections[r.sections[0]].title;
-        render();
-      };
-      if (!meaningOn()) { done(Ask.ask(idx, query)); return; }
-      ui.askBusy = true; ui.askBusyText = 'Searching by meaning…'; render();
-      return byMeaning(idx, query).then(function (m) {
-        ui.askBusy = false; done(Ask.ask(idx, query, m));
-      }, function (e) {
-        ui.askBusy = false; ui.ai.error = 'search by meaning could not run (' + ((e && e.message) || e) + '); searched by words'; done(Ask.ask(idx, query));
+  return askIndex().then(function (idx) {
+    var queue = Agent.clauses(q).map(function (c) { return { clause: c }; });
+    var multi = queue.length > 1, n = 0;
+    function step() {
+      if (!queue.length || n >= Agent.MAX_STEPS + 2) { render(); return; }
+      var item = queue.shift(); n++;
+      return (item.plan ? Promise.resolve(item.plan) : planFor(item.clause)).then(function (p) {
+        var turn = { q: n === 1 ? q : null, plan: p, step: n, multi: multi || !!p.recovered };
+        if (p.recovered) multi = true;
+        return (p.tool === 'search' ? searchStep(idx, p, item.clause || p.topic, turn) : Promise.resolve(toolStep(idx, p, turn))).then(function (obs) {
+          ui.turns.push(turn); render();
+          var nx = Agent.afterStep(p, obs);
+          if (nx) queue.unshift({ plan: nx });
+          return step();
+        });
       });
-    });
+    }
+    return step();
   });
+}
+/* A search step: the reader's own words (unless it only follows on), or,
+   recovering, the topic by meaning alone. What it found is the observation. */
+function searchStep(idx, p, clause, turn) {
+  var query = p.meaningOnly ? p.topic : Agent.plan(clause, ui.memory).tool === 'search' ? Agent.plan(clause, ui.memory).topic : clause;
+  turn.query = query;
+  var done = function (r) {
+    ui.askR = r; turn.r = r;
+    var title = r.found && r.sections.length ? idx.sections[r.sections[0]].title : '';
+    if (title) ui.memory.topic = title;
+    return { section: title, missing: !title, meaning: meaningOn() };
+  };
+  if (!meaningOn()) return Promise.resolve(done(p.meaningOnly ? { found: false, groups: [], sections: [], question: query } : Ask.ask(idx, query)));
+  ui.askBusy = true; ui.askBusyText = 'Searching by meaning…'; render();
+  return byMeaning(idx, query).then(function (m) {
+    ui.askBusy = false; return done(Ask.ask(idx, query, m));
+  }, function (e) {
+    ui.askBusy = false; ui.ai.error = 'search by meaning could not run (' + ((e && e.message) || e) + '); searched by words'; return done(Ask.ask(idx, query));
+  });
+}
+/* A tool step: the tool's result goes on the turn, and what it found — or
+   did not — is the observation. */
+function toolStep(idx, p, turn) {
+  var t = agentTurn(idx, p, turn.q);
+  Object.keys(t).forEach(function (k) { if (k !== 'q') turn[k] = t[k]; });
+  var sec = turn.at ? turn.at.sec.title : '';
+  return {
+    section: sec, meaning: meaningOn(),
+    missing: turn.at === null || !!(turn.rows && !turn.rows.length),
+    empty: p.tool === 'quiz' ? !!turn.quiz && !turn.quiz.length
+      : p.tool === 'mnemonic' ? !!turn.at && !(turn.at.L.mnemonics || []).length
+      : p.tool === 'numbers' ? !!turn.sheet && !turn.sheet.numbers.length : false,
+  };
 }
 /* A tool used on the book: what it found, kept with the turn. */
 function lessonFor(docRec, ci) {
@@ -1750,7 +1787,9 @@ function agentTurn(idx, p, q) {
 function turnView(t, idx, latest) {
   var p = t.plan, title = t.at ? t.at.sec.title : t.rows && t.rows.length ? t.rows.map(function (r) { return r.sec.title; }).join('” and “') : '';
   var body = [];
-  var steps = h('p.agent-steps', p.by === 'ai' ? '✨ ' : '🧭 ', p.tool === 'search' ? 'Searched your book' : 'Used: ' + p.tool, title ? ' · ' + title : '');
+  var steps = h('p.agent-steps', t.multi ? 'Step ' + t.step + ' · ' : '', p.by === 'ai' ? '✨ ' : '🧭 ',
+    p.tool === 'search' ? (p.meaningOnly ? 'Searched your book by meaning' : 'Searched your book') : 'Used: ' + p.tool, title ? ' · ' + title : '',
+    p.because ? ' · ↪ ' + p.because : '');
   var open = t.at ? button('Open this section', function () { openDoc(t.at.doc.id, t.at.ci); }, 'chip quiet') : null;
   var missing = (t.at === null || (t.rows && !t.rows.length)) && p.tool !== 'search';
   if (missing) body.push(h('p', 'I couldn’t find “' + (p.topic || (p.topics || []).join(', ')) + '” in your book. Try the name of the condition, test or drug.'));
@@ -1789,7 +1828,7 @@ function turnView(t, idx, latest) {
     }, 'chip quiet')) : null);
   } else if (p.tool === 'open') body.push(h('p.muted', 'Opening it now…'));
   return h('div.turn', { 'data-tool': p.tool },
-    h('div.you', h('div.bubble.mine', t.q)),
+    t.q ? h('div.you', h('div.bubble.mine', t.q)) : null,
     p.tool === 'search' ? steps : h('div.coach-says', h('div.coach-avatar.small', mascot()),
       h('div.bubble.agent' + (latest ? '.latest' : ''), { id: latest ? 'agent-latest' : null }, steps, h('p', Agent.say(p, title)), body)));
 }

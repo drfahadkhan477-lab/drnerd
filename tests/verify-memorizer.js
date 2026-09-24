@@ -1357,6 +1357,15 @@ function kindOf(user) {
     await say('compare preload and afterload');
     const cols = await last('.agent-compare .cmp-col h3').allTextContents();
     ok('"compare preload and afterload": the two sections side by side', cols.length === 2 && /Preload/.test(cols[0]) && /Afterload/.test(cols[1]), JSON.stringify(cols));
+    /* THE LOOP: one message, two steps; the second takes the section the first found */
+    const before2 = await p2.locator('.turn').count();
+    await p2.fill('#ask-q', 'explain what reduces preload and then quiz me on it');
+    await p2.locator('#ask-go').click();
+    await p2.waitForFunction(k => document.querySelectorAll('.turn').length >= k + 2, before2, T);
+    const two = await p2.$$eval('.turn', (ts, k) => ts.slice(k).map(t => ({ tool: t.dataset.tool, you: !!t.querySelector('.you'), steps: t.querySelector('.agent-steps').textContent })), before2);
+    ok('one message, two steps: it explains, then quizzes on the section it just explained — numbered, the message shown once', two.length === 2 &&
+       two[0].tool === 'explain' && two[1].tool === 'quiz' && /^Step 1 · /.test(two[0].steps) && /^Step 2 · /.test(two[1].steps) &&
+       two[0].you && !two[1].you && two[0].steps.replace(/^.*· /, '') === two[1].steps.replace(/^.*· /, ''), JSON.stringify(two));
     await say('where am I weakest?');
     ok('"where am I weakest?" is answered from the sessions', await p2.locator('.turn').last().getAttribute('data-tool') === 'weak');
     await say('explain zebra migration patterns');

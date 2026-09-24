@@ -48,7 +48,7 @@ var RULES = [
   ['explain', /^\s*(?:explain|tell me about|describe|summari[sz]e|give me an overview of|overview of|teach me about)\b/i],
   ['open', /^\s*(?:open|teach me|learn|study|go to|take me to)\b/i],
 ];
-var FILLER = /\b(?:please|me|the|a|an|on|about|of|for|in|to|and|my|this|that|it|them|those|these|one|section|chapter|topic|can you|could you|would you|i want|let'?s|now|again)\b/gi;
+var FILLER = /\b(?:please|give|show|list|me|the|a|an|on|about|of|for|in|to|and|my|this|that|it|them|those|these|one|section|chapter|topic|can you|could you|would you|i want|let'?s|now|again)\b/gi;
 var FOLLOW = /^\s*(?:it|that|this|them|those|these|more|again|why|how|same|the same)?\s*[?.!]*\s*$/i;
 
 function topicOf(text, rule) {
@@ -161,7 +161,43 @@ function weakItems(docs, sessions, max) {
   return out.sort(function (a, b) { return b.n - a.n; });
 }
 
-var MemAgent = { weakItems: weakItems, TOOLS: TOOLS, RULES: RULES, topicOf: topicOf, plan: plan, planPrompt: planPrompt, PLAN_SCHEMA: PLAN_SCHEMA, parsePlan: parsePlan, findSection: findSection, say: say };
+/* ── the loop: several steps, each decided by what the last one found ────
+   A message may ask for more than one thing ("explain aortic stenosis and
+   quiz me on it"): clauses() splits it into steps, and each step is planned
+   when its turn comes, with the memory the step before left — so "it" in
+   the second is the section the first found. After each step, afterStep()
+   looks at what it found and decides whether to act again:
+     · a topic found neither by title nor by words, with search by meaning
+       on → search by meaning, then the same tool on the section that finds;
+     · a quiz, numbers or mnemonic with nothing in it → explain that section;
+     · else stop.
+   Each recovery happens once. MAX_STEPS bounds the whole message. */
+var MAX_STEPS = 3;
+function clauses(text) {
+  var parts = String(text || '').split(/\s*(?:,?\s*\band then\b|,?\s*\bthen\b|;)\s*/i);
+  var out = [];
+  parts.forEach(function (p) {
+    /* "… and quiz me": an "and" followed by a request of its own */
+    var bits = p.split(/\s+and\s+(?=(?:quiz|test|drill|ask)\s+me\b|(?:explain|compare|open|teach|show|give|tell|list)\b|(?:the\s+)?(?:mnemonics?|numbers?)\b)/i);
+    bits.forEach(function (b) { b = b.trim().replace(/^[,.]\s*/, ''); if (b) out.push(b); });
+  });
+  return out.slice(0, MAX_STEPS);
+}
+/* obs: { missing, empty, section (title found, or ''), meaning (search by
+   meaning is on) }. Returns the next plan, or null. */
+function afterStep(p, obs) {
+  var o = obs || {};
+  if (p.recovered) return p.then && o.section ? { tool: p.then, topic: o.section, recovered: true, because: 'found by meaning' } : null;
+  if (o.missing && p.topic && o.meaning && /^(?:explain|quiz|mnemonic|numbers|open)$/.test(p.tool)) {
+    return { tool: 'search', topic: p.topic, meaningOnly: true, then: p.tool, recovered: true, because: 'not found by its words' };
+  }
+  if (o.empty && o.section && /^(?:quiz|mnemonic|numbers)$/.test(p.tool)) {
+    return { tool: 'explain', topic: o.section, recovered: true, because: 'no ' + (p.tool === 'quiz' ? 'questions' : p.tool === 'numbers' ? 'numbers' : 'mnemonic') + ' in it' };
+  }
+  return null;
+}
+
+var MemAgent = { MAX_STEPS: MAX_STEPS, clauses: clauses, afterStep: afterStep, weakItems: weakItems, TOOLS: TOOLS, RULES: RULES, topicOf: topicOf, plan: plan, planPrompt: planPrompt, PLAN_SCHEMA: PLAN_SCHEMA, parsePlan: parsePlan, findSection: findSection, say: say };
 root.MemAgent = MemAgent;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemAgent;
 })(typeof window !== 'undefined' ? window : this);
