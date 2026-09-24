@@ -253,11 +253,15 @@ function next(state, event) {
       var a = answer(c, c.quiz.questions, event.choice);
       var id = cardId(s, 'drill', s.section, a.q);
       var mt = a.correct ? null : missType(a.q, event.choice);
-      c.answers.push({ q: a.qi, choice: event.choice, correct: a.correct, first: a.first, errorType: mt ? mt.t : '' });
+      /* sure: said before answering (study.js rateWith). A confident miss
+         is the most dangerous kind: its card and weak item are flagged. */
+      var sure = event.sure === true && event.choice !== NOT_SURE;
+      c.answers.push({ q: a.qi, choice: event.choice, correct: a.correct, first: a.first, errorType: mt ? mt.t : '', sure: sure });
       if (a.first) {
         if (!a.correct) {
           addCard(s, 'drill', s.section, a.q);
           weakMiss(s, id, s.section, 'drill', a.q, mt.t, mt.w);
+          if (sure) { s.weak[id].hazard = true; for (var hc = 0; hc < s.cards.length; hc++) if (s.cards[hc].id === id) s.cards[hc].hazard = true; }
           c.order.push(a.qi);                      /* asked again, once, at the end */
         } else weakHit(s, id);                     /* a retaken drill: a right answer in a new round */
       } else if (s.weak[id]) {
@@ -465,7 +469,13 @@ function closingText(state) {
 }
 
 /* ── review ──────────────────────────────────────────────────────────────── */
-function isDue(card, today) { return !card.srs || !card.srs.due || card.srs.due <= today; }
+/* A card never reviewed is due at once — unless it was made to start
+   later (study.js's cloze and occlusion cards start tomorrow, so a drill
+   does not end in a second drill of the same sentences). */
+function isDue(card, today) {
+  if (!card.srs) return !card.dueFrom || card.dueFrom <= today;
+  return !card.srs.due || card.srs.due <= today;
+}
 function dueCards(cards, today) { return (cards || []).filter(function (c) { return isDue(c, today); }); }
 /* FSRS is passed in (src/core/fsrs.js, shared with Systole) rather than
    reached for, so this stays pure and the test can hand it the real one. */

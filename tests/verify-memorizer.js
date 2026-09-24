@@ -231,6 +231,31 @@ function makeBoxedTablePdf() {
   return Buffer.from(out, 'latin1');
 }
 
+/* A one-page PDF with a LABELLED DIAGRAM: a drawing (filled shapes and
+   rules) with five short labels printed inside it and its caption under
+   it, as an anatomy figure is printed. */
+function makeDiagramPdf() {
+  const T = (t, size, x, y) => `BT /F1 ${size} Tf ${x} ${y} Td (${t}) Tj ET`;
+  const text = [T('The Four Chambers', 18, 72, 740),
+    T('The heart has four chambers: two atria above and two ventricles below.', 11, 72, 700),
+    T('The aorta leaves the left ventricle and carries blood to the body.', 11, 72, 684),
+    T('Left atrium', 9, 120, 560), T('Right atrium', 9, 330, 560), T('Left ventricle', 9, 120, 420), T('Right ventricle', 9, 330, 420), T('Aorta', 9, 240, 610),
+    T('Figure 2.1 The chambers of the heart.', 9, 100, 318)];
+  const draw = ['0.85 g 100 330 400 300 re f', '0.6 g 110 470 180 120 re f 310 470 180 120 re f 110 340 180 120 re f 310 340 180 120 re f',
+    '0 G 1 w 100 465 m 500 465 l S 300 330 m 300 630 l S'];
+  const stream = draw.concat(['0 g'], text).join('\n');
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`];
+  let out = '%PDF-1.4\n';
+  const off = [];
+  objs.forEach((o, i) => { off.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + off.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+
 /* A two-page PDF: page 1 has a text layer, page 2 is a SCAN — one JPEG of
    a page of text, drawn by the browser (makeScanJpeg below), no text at
    all — so only text recognition can read it. */
@@ -622,8 +647,8 @@ function kindOf(user) {
   await page.locator('#step-mode').click();
   await page.locator('#lesson-steps').waitFor(T);
   const N = +(/\/(\d+)/.exec(await text(page, '#lesson-steps .step-count')) || [])[1];
-  const MARKS = ['#big-idea', '#pathway-play', '#glance', '#points', '#numbers', '.hook', '#quick', '#visuals'];
-  const MUST = ['#big-idea', '#pathway-play', '#points', '#numbers', '.hook', '#quick', '#visuals'];
+  const MARKS = ['#big-idea', '#pathway-play', '#glance', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
+  const MUST = ['#big-idea', '#pathway-play', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
   /* what is showing, by opacity (and clip, for an unfolding word), with the composition held at time t */
   const at = (sel, t) => page.evaluate(([sel, t]) => {
     const comp = document.querySelector(sel); Memorizer.motion.seek(comp, t === 'end' ? Memorizer.motion.total(comp) : t);
@@ -641,7 +666,7 @@ function kindOf(user) {
     if (here[0] === '#numbers') motion.nums = { early: await at('#numbers', 0.35), end: await at('#numbers', 'end'), text: await page.$$eval('#numbers .tile-value', ts => ts.map(t => t.textContent)) };
   }
   const order = seen.map(x => x[0]).filter((m, i, a) => a.indexOf(m) === i);
-  ok('each slide shows one thing, in order — the idea, how it works, each heading’s points, the numbers, the mnemonic, a check, the figures — the drill at the end',
+  ok('each slide shows one thing, in order — the idea, how it works, each heading’s points, the numbers, the mnemonic, a check, teaching it back, the figures — the drill at the end',
      N >= 7 && seen.every(x => x.length === 1) && MUST.every(m => order.includes(m)) && JSON.stringify(order) === JSON.stringify(MARKS.filter(m => order.includes(m))) &&
      await page.locator('#to-drill').count() === 1 && await page.locator('#step-next').count() === 0, JSON.stringify(seen));
   const P = motion.path || { start: [], end: [] }, steps = x => x.filter(p => /pp-step/.test(p.c));
@@ -745,24 +770,43 @@ function kindOf(user) {
   await page.waitForFunction(() => /Question 2 of 2/.test(document.querySelector('.mcq-meta').innerText), null, T);
   ok('and forward again to the current question, still unanswered', await page.locator('.option:not([disabled])').count() === 4 && await page.locator('#prev-q').count() === 1);
   ok('a sentence from the book with a gap shows the gap', (await page.locator('blockquote.quote .gap').innerText()) === '_____');
+  /* Said before answering (study.js): sure, and then wrong. */
+  await page.locator('#sure').click();
+  ok('"I’m sure" is said before answering, and shows it is on', (await page.locator('#sure').getAttribute('aria-pressed')) === 'true');
   await page.locator('.option[data-i="0"]').click();
+  ok('sure and wrong: it says this is a confident miss, the most dangerous kind', /confident miss/.test(await text(page, '#hazard-note')));
   ok('a wrong choice turns red, and the right one green', await page.locator('.option.wrong[data-i="0"]').count() === 1 && await page.locator('.option.right[data-i="1"]').count() === 1 &&
      await page.locator('.option.dim').count() === 2);
   ok('it names the answer, fills the gap and says it will come back', /The answer is B: preload/.test(await page.locator('.why.bad strong').innerText()) &&
      (await page.locator('blockquote.quote .gap').innerText()) === 'preload' && /comes back at the end of this drill/.test(await page.locator('.why').innerText()));
   await page.locator('#next').click();
   await page.waitForFunction(() => /Again/.test(document.querySelector('.mcq-meta').innerText), null, T);
+  ok('and the miss is filed as one: its weak item and its card are flagged', await page.evaluate(() => { const s = Memorizer.ui.state, w = Object.values(s.weak)[0];
+    return !!w && w.hazard === true && s.cards.some(c => c.id === w.id && c.hazard === true) && s.per[0].answers[s.per[0].answers.length - 1].sure === true; }));
   ok('the miss is asked again at the end', (await page.locator('#mcq h2.q').innerText()) === Q_GAP.question && /you missed this one/.test(await meta(page)));
   await page.locator('.option[data-i="1"]').click();
   await page.locator('#next').click();
   await page.locator('#result').waitFor(T);
+  ok('the week’s log has the drill’s three answers, as the drill’s, the one missed filed under its section', await page.evaluate(() => {
+    const d = Memorizer.ui.activity && Memorizer.ui.activity.days[FSRS.todayISO()];
+    return !!d && d.answers === 3 && d.right === 2 && d.by && d.by.drill === 3 && d.misses['Section One Preload'] === 1; }),
+    JSON.stringify(await page.evaluate(() => Memorizer.ui.activity)));
   ok('the result counts first tries only: 1 of 2', /1 of 2 right first time/.test(await page.locator('#result h2').innerText()) &&
      (await page.locator('#result .ring-pct').innerText()) === '50%');
   ok('and lists what was missed, with its answer', /Which does a diuretic lower\?/.test(await page.locator('ul.missed').innerText()) &&
      /→ preload/.test(await page.locator('ul.missed').innerText()));
-  const cards1 = await page.evaluate(() => MemStore.all('cards'));
+  /* Misses' cards carry no kind; the recall cards a drill makes (study.js
+     cloze and occlusion) do, and are checked on their own below. */
+  const allCards1 = await page.evaluate(() => MemStore.all('cards'));
+  const cards1 = allCards1.filter(c => !c.kind);
   ok('the miss is one review card, carrying its options', cards1.length === 1 && cards1[0].source === 'drill' && cards1[0].front === Q_GAP.question &&
      cards1[0].options.length === 4 && cards1[0].answer === 1, cards1.map(c => c.source + ':' + c.front).join(' | '));
+  const recall1 = allCards1.filter(c => c.kind === 'cloze');
+  const tomorrow1 = await page.evaluate(() => MemStudy.addDays(FSRS.todayISO(), 1));
+  ok('the drill also made the section’s recall cards: its own sentences with a number or term blanked, starting tomorrow',
+     recall1.length === 2 && recall1.every(c => c.cluster === 0 && c.dueFrom === tomorrow1 && c.front.indexOf('_____') !== -1 && c.explain.replace('_____', '') !== c.explain.replace(c.back, '')) &&
+     recall1.some(c => /\d/.test(c.back)), recall1.map(c => c.back + ' @' + c.dueFrom).join(' | '));
+  ok('and they are not due today: the drill does not end in a second drill', await page.evaluate(() => MemStore.all('cards').then(cs => MemSession.dueCards(cs, FSRS.todayISO()).filter(c => c.kind).length)) === 0);
   ok('the next step offers section 2', /Section Two Afterload/.test(await page.locator('#next-section').innerText()));
   const daysNow = await page.evaluate(() => MemStore.get('meta', 'days').then(r => r && JSON.stringify(r.days)));
   ok('answering a drill records today as a study day, with the units and cards', daysNow === JSON.stringify([await page.evaluate(() => FSRS.todayISO())]), String(daysNow));
@@ -886,7 +930,7 @@ function kindOf(user) {
      so it is not due: plain review would offer nothing, the drill must
      still offer it. */
   const cardsBefore = await page.evaluate(() => MemStore.all('cards'));
-  await page.evaluate(() => MemStore.all('cards').then(cs => { cs[0].srs = FSRS.update(null, 4, FSRS.todayISO()); return MemStore.put('cards', cs[0]); }));
+  await page.evaluate(() => MemStore.all('cards').then(cs => { const m = cs.find(c => !c.kind); m.srs = FSRS.update(null, 4, FSRS.todayISO()); return MemStore.put('cards', m); }));
   await page.locator('#weak button', { hasText: 'Drill · 1' }).click();
   await page.locator('#mcq .option').first().waitFor(T);
   const drillHead = await page.locator('.review-head').textContent();
@@ -913,7 +957,7 @@ function kindOf(user) {
   await page.locator('ol.points > li').first().waitFor(T);
   ok('section 2 opens with its lesson, without asking the model again', stub.requests.length === before && /Section 2 of 3/.test(await page.locator('.unit-meta').innerText()),
      `${stub.requests.length - before} new requests`);
-  ok('the card survived the reload', (await page.evaluate(() => MemStore.all('cards'))).length === 1);
+  ok('the card survived the reload', (await page.evaluate(() => MemStore.all('cards'))).filter(c => !c.kind).length === 1);
 
   head('the final exam: after every section, weighted to the weakest');
   /* Sections 2 and 3 drilled right through the real reducer, so only the
@@ -983,10 +1027,12 @@ function kindOf(user) {
   ok('the exam is scored, by section', /Final exam: 50%/.test(await page.locator('#result h2').innerText()) &&
      JSON.stringify(await page.$$eval('ul.by-section li', ls => ls.map(l => l.innerText.replace(/\s+/g, ' ').trim()))) === '["Section One Preload 0/1","Section Two Afterload 1/1"]',
      JSON.stringify(await page.$$eval('ul.by-section li', ls => ls.map(l => l.innerText.replace(/\s+/g, ' ').trim()))));
-  const cards2 = await page.evaluate(() => MemStore.all('cards'));
+  const cards2 = (await page.evaluate(() => MemStore.all('cards'))).filter(c => !c.kind);
   ok('its miss is a review card from the exam, filed under its section', cards2.length === 2 &&
      cards2.some(c => c.source === 'exam' && c.cluster === 0 && c.front === 'In the exam: what is preload?'), cards2.map(c => c.source + ':' + c.cluster).join(' | '));
   ok('and it can be retaken', await page.locator('#retake').count() === 1);
+  ok('the exam’s answers are logged as the exam’s', await page.evaluate(() => { const d = Memorizer.ui.activity.days[FSRS.todayISO()];
+    return d.by.exam === Memorizer.ui.state.exam.results.length && d.by.exam >= 2; }), JSON.stringify(await page.evaluate(() => Memorizer.ui.activity.days[FSRS.todayISO()].by)));
   /* The skill's closing deliverable: pillars, mnemonics, weak-area report. */
   const closing = await text(page, '#closing');
   const st = await page.evaluate(() => MemSession.closing(Memorizer.ui.state));
@@ -1171,6 +1217,291 @@ function kindOf(user) {
   ok('no horizontal scroll at 375 px: home, unit, lesson', overHome <= 0 && overUnit <= 0 && overLesson <= 0, `${overHome}/${overUnit}/${overLesson}px over`);
   await page.setViewportSize({ width: 820, height: 1100 });
 
+  head('studying beyond the drill: recall cards, checks days apart, timed practice');
+  {
+    const today = await page.evaluate(() => FSRS.todayISO());
+    const unitId = await page.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'unit').id));
+    /* section 1 was drilled through the app; sections 2 and 3 the test drove straight through the reducer, so the app's own drill never ran for them */
+    ok('the drilled section’s checks began the day it was drilled, and a section never drilled has none', await page.evaluate(([id, t]) => { const c = Memorizer.ui.checks;
+      return !!c[id + ':0'] && c[id + ':0'].start === t && c[id + ':0'].done.length === 0 && !c[id + ':2']; }, [unitId, today]),
+      JSON.stringify(await page.evaluate(() => Memorizer.ui.checks)) + ' store ' + JSON.stringify(await page.evaluate(() => MemStore.get('meta', 'checks'))));
+    /* A cloze card made due today, every other card put out of the way. */
+    const cardsBack = await page.evaluate(() => MemStore.all('cards'));
+    const cz = await page.evaluate(t => MemStore.all('cards').then(async cs => {
+      const c = cs.find(x => x.kind === 'cloze' && /\d/.test(x.back));
+      for (const x of cs) { if (x.id === c.id) { x.dueFrom = t; x.srs = null; } else x.srs = { due: '2099-01-01', stability: 100, difficulty: 5, reps: 1, lapses: 0, ivl: 100, last: t }; await MemStore.put('cards', x); }
+      return c; }), today);
+    await page.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
+    await page.locator('#cloze').waitFor(T);
+    ok('a cloze card is the book’s own sentence with its number blanked, answered by typing', (await text(page, '#cloze .cloze-front')).replace('_____', cz.back) === cz.explain &&
+       await page.locator('#cloze-input').count() === 1, await text(page, '#cloze .cloze-front'));
+    await page.fill('#cloze-input', '999');
+    await page.locator('#sure').click();
+    await page.locator('#cloze-check').click();
+    await page.locator('#cloze-verdict').waitFor(T);
+    ok('a wrong number, said sure: marked wrong, with the book’s answer, flagged as a confident miss', (await page.locator('#cloze-verdict').getAttribute('data-verdict')) === 'wrong' &&
+       (await text(page, '#cloze-verdict')).indexOf(cz.back) !== -1 && await page.locator('#cloze-verdict #hazard-note').count() === 1);
+    await page.locator('#next').click();
+    await page.locator('#cloze .again-tag').waitFor(T);
+    const after1 = await page.evaluate(id => MemStore.get('cards', id), cz.id);
+    const want1 = await page.evaluate(t => FSRS.update(null, 1, t), today);
+    ok('rated Again, and flagged; then asked again before the review ends', JSON.stringify(after1.srs) === JSON.stringify(want1) && after1.hazard === true &&
+       /asked again/i.test(await text(page, '#cloze .again-tag')), JSON.stringify(after1.srs) + ' want ' + JSON.stringify(want1) + ' hazard ' + after1.hazard + ' tag ' + await text(page, '#cloze .again-tag'));
+    await page.fill('#cloze-input', cz.back.toLowerCase().replace(/\s+/g, ''));
+    await page.locator('#cloze-check').click();
+    await page.locator('#cloze-verdict').waitFor(T);
+    ok('typed right the second time, as the book prints it or not', (await page.locator('#cloze-verdict').getAttribute('data-verdict')) === 'right');
+    await page.locator('#next').click();
+    await page.locator('h1', { hasText: 'Done for today.' }).waitFor(T);
+    ok('and not rated twice: FSRS keeps the one miss', JSON.stringify((await page.evaluate(id => MemStore.get('cards', id), cz.id)).srs) === JSON.stringify(want1));
+
+    /* A figure card: the fixture's picture with four labels set on it, one hidden. */
+    const oc = await page.evaluate(([id, t]) => {
+      const d = Memorizer.ui.docs.find(x => x.id === id), f = d.figures.find(x => x.page === 1);
+      const b = f.box, lab = (text, i) => ({ text, box: [b[0] + 10 + i * 45, b[1] + 40, b[0] + 50 + i * 45, b[1] + 52] });
+      const c = MemStudy.occlusionCards(d, 0, [Object.assign({}, f, { labels: ['Atrium', 'Ventricle', 'Valve', 'Septum'].map(lab) })])[0];
+      c.dueFrom = t;
+      return MemStore.put('cards', c).then(() => c);
+    }, [unitId, today]);
+    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
+    await page.locator('#occlusion').waitFor(T);
+    await page.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
+    const mask = await page.evaluate(() => { const m = document.querySelector('#occlusion .occlusion-mask'), i = document.querySelector('#occlusion img');
+      return { style: m.getAttribute('style'), drawn: !!i && /^data:image/.test(i.src) && i.naturalWidth > 0 }; });
+    ok('a figure card: the book’s figure, drawn from the PDF, with a mask where its label was printed, and four labels to choose from', mask.drawn &&
+       mask.style.indexOf('left:' + (100 * oc.mask.left).toFixed(2) + '%') !== -1 && mask.style.indexOf('top:' + (100 * oc.mask.top).toFixed(2) + '%') !== -1 &&
+       await page.locator('#mcq .option').count() === 4, JSON.stringify(mask));
+    await page.locator('.option[data-i="' + oc.answer + '"]').click();
+    ok('answered, the mask lifts', await page.locator('#occlusion.revealed').count() === 1);
+    await page.locator('#next').click();
+    await page.evaluate(cs => Promise.all(cs.map(c => MemStore.put('cards', c))), cardsBack);
+    await page.evaluate(id => MemStore.del('cards', id), oc.id);
+
+    /* A section check, made due: drilled two days ago. */
+    const key = unitId + ':0';
+    await page.evaluate(([k, t]) => { Memorizer.ui.checks[k] = { start: MemStudy.addDays(t, -2), done: [], scores: [] };
+      return MemStore.put('meta', { id: 'checks', recs: Memorizer.ui.checks }); }, [key, today]);
+    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('#checks').waitFor(T);
+    ok('home lists the section check that has come due', await page.locator('#checks li button[data-key="' + key + '"]').count() === 1 &&
+       /check 1 of 4/.test(await text(page, '#checks')), await text(page, '#checks'));
+    await page.locator('#checks li button[data-key="' + key + '"]').click();
+    for (let k = 0; k < 3; k++) {
+      await page.locator('#mcq .option').first().waitFor(T);
+      if (await page.locator('#check-result').count()) break;
+      await page.locator('.option[data-i="' + await page.evaluate(() => Memorizer.ui.check.qs[Memorizer.ui.check.pos].answer) + '"]').click();
+      await page.locator('#next').click();
+      if (await page.evaluate(() => Memorizer.ui.check.done)) break;
+    }
+    await page.locator('#check-result').waitFor(T);
+    const rec = await page.evaluate(k => MemStore.get('meta', 'checks').then(r => r.recs[k]), key);
+    ok('a check of the section’s own questions, all right: the next falls 3 days after the drill, and it is kept', /Holding\. The next check is on/.test(await text(page, '#check-result')) &&
+       rec.done.length === 1 && rec.done[0] === today && (await text(page, '#check-result')).indexOf(await page.evaluate(t => MemStudy.addDays(t, 1), today)) !== -1, JSON.stringify(rec));
+
+    /* Timed practice. */
+    await page.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
+    await page.locator('#practice-start').waitFor(T);
+    await page.locator('#practice-10').click();
+    await page.locator('#practice-clock').waitFor(T);
+    const pr = await page.evaluate(() => { const p = Memorizer.ui.practice; return { n: p.qs.length, kinds: [...new Set(p.qs.map(q => q.kind))], ids: new Set(p.qs.map(q => q.id)).size }; });
+    ok('ten minutes: at most ten questions, from due cards, weak items and the hardest, none twice, with a clock', pr.n > 0 && pr.n <= 10 && pr.ids === pr.n &&
+       pr.kinds.every(k => ['due', 'weak', 'hard'].includes(k)) && /^(?:10:00|9:\d\d)$/.test(await text(page, '#practice-clock')), JSON.stringify(pr));
+    await page.locator('.option[data-i="' + await page.evaluate(() => Memorizer.ui.practice.qs[0].q.answer) + '"]').click();
+    await page.locator('#next').click();
+    /* the clock run out, rather than waited for */
+    await page.evaluate(() => { Memorizer.ui.practice.ends = Date.now() + 300; });
+    await page.locator('#practice-result').waitFor(T).catch(() => {});
+    const log1 = await page.evaluate(() => MemStore.get('meta', 'practice').then(r => r && r.history));
+    ok('when time is up it stops, scores what was answered, and keeps the result', await page.locator('#practice-result').count() === 1 &&
+       /1 of 1 in 10 minutes/.test(await text(page, '#practice-result')) && log1 && log1.length === 1 && log1[0].right === 1 && log1[0].asked === 1, JSON.stringify(log1));
+    await page.locator('#practice-10').click();
+    await page.locator('#practice-clock').waitFor(T);
+    const wrongI = await page.evaluate(() => (Memorizer.ui.practice.qs[0].q.answer + 1) % Memorizer.ui.practice.qs[0].q.options.length);
+    await page.locator('.option[data-i="' + wrongI + '"]').click();
+    await page.locator('#next').click();
+    await page.evaluate(() => { Memorizer.ui.practice.ends = Date.now() + 300; });
+    await page.locator('#practice-result').waitFor(T).catch(() => {});
+    ok('and the next is compared with it: down, with the scores across days', /Down on last time/.test(await text(page, '#practice-result')) &&
+       await page.locator('#practice-start .trend i').count() === 2);
+    await page.locator('#practice-10').click();
+    await page.locator('#practice-clock').waitFor(T);
+    const ticking = await page.evaluate(() => !!Memorizer.ui.practiceTimer);
+    /* left by the dock, not the practice's own Back (which stops the clock itself) */
+    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('main.home').waitFor(T);
+    ok('leaving a practice stops its clock', ticking && await page.evaluate(() => !Memorizer.ui.practiceTimer && Memorizer.ui.view === 'library'));
+  }
+
+  head('the Coach: a plan to the exam, teaching it back, speaking instead of typing');
+  {
+    const today = await page.evaluate(() => FSRS.todayISO());
+    const unitId = await page.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'unit').id));
+    const plus = n => page.evaluate(([t, n]) => MemStudy.addDays(t, n), [today, n]);
+    /* every section of the test unit is drilled by now: a second unit, not begun, to plan */
+    const body = t => Array.from({ length: 12 }, (_, i) => `${t} note ${i} says what ${t.toLowerCase()} does to the heart.`).join('\n');
+    await page.evaluate(b => Memorizer.importText('Plan notes', b), `Contractility\n\n${body('Contractility')}\n\nHeart Rate\n\n${body('Heart Rate')}`);
+    await page.waitForFunction(() => MemStore.all('docs').then(ds => ds.some(d => d.name === 'Plan notes')), null, T);
+    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('#exam-plan').waitFor(T);
+    await page.fill('#exam-date', await plus(10));
+    await page.locator('#exam-set').click();
+    await page.locator('#plan-line').waitFor(T).catch(() => {});
+    const todo = await page.evaluate(() => Memorizer.ui.docs.reduce((n, d) => { const st = Memorizer.ui.sessions[d.id];
+      return n + d.clusters.filter((_, i) => !(st && st.per[i] && st.per[i].done)).length; }, 0));
+    ok('an exam date set on the home screen: the days left, what is left to learn, and today’s sections to open', (await page.locator('#exam-plan').getAttribute('data-days')) === '10' &&
+       new RegExp('Exam in 10 days\\. ' + todo + ' sections? to learn').test(await text(page, '#plan-line')) &&
+       await page.locator('#exam-plan button[data-plan]').count() >= 1 && (await page.evaluate(() => MemStore.get('meta', 'plan'))).examDate === await plus(10),
+       await text(page, '#plan-line'));
+    await page.locator('#exam-plan button[data-plan]').first().click();
+    await page.locator('#big-idea').waitFor(T);
+    ok('a section of today’s plan opens its lesson', await page.evaluate(() => Memorizer.ui.view === 'session' && Memorizer.ui.state.phase === 'teach'));
+
+    /* teach it back */
+    await page.evaluate(id => Memorizer.openDoc(id, 0), unitId);
+    await page.locator('#teach-back').waitFor(T);
+    const said = 'Preload is the stretch on the ventricle at the end of diastole, and 19 mmHg means overload.';
+    await page.fill('#teach-text', said);
+    await page.locator('#teach-check').click();
+    await page.locator('#teach-result').waitFor(T);
+    const want = await page.evaluate(said => { const s = Memorizer.ui.state, c = Memorizer.ui.docRec.clusters[s.section];
+      const pts = MemSheet.sheetOf(s.per[s.section].lesson).groups.reduce((a, g) => a.concat(g.points), []).map(p => p.text);
+      return MemStudy.teachBack(said, pts, c.text); }, said);
+    ok('teaching it back: how many key points were covered, and the rest in the book’s words', new RegExp('You covered ' + want.covered.length + ' of ' + (want.covered.length + want.missed.length)).test(await text(page, '#teach-result')) &&
+       want.missed.length > 0 && await page.locator('#teach-result .teach-missed li').count() === want.missed.length, await text(page, '#teach-result'));
+    ok('a number given that the section does not have is named', /You gave 19/.test(await text(page, '#teach-wrong')));
+    await page.locator('#teach-cards').click();
+    await page.locator('#teach-made').waitFor(T);
+    const made = await page.evaluate(() => MemStore.all('cards').then(cs => cs.filter(c => c.source === 'explain' && c.kind === 'cloze')));
+    const tomorrowP = await plus(1);
+    ok('what was left out becomes cards, from tomorrow', made.length > 0 && made.every(c => c.dueFrom === tomorrowP) &&
+       new RegExp(made.length + ' cards? made').test(await text(page, '#teach-made')), JSON.stringify(made.map(c => c.back)));
+
+    /* speaking instead of typing: the device's dictation, stood in for */
+    /* Chromium has its own; defined over it, so the stand-in is what the app finds */
+    await page.evaluate(() => { const SR = class { start() { setTimeout(() => { this.onresult({ results: [[{ transcript: window.__said || '' }]] }); this.onend(); }, 20); } stop() { this.onend(); } };
+      for (const k of ['webkitSpeechRecognition', 'SpeechRecognition']) Object.defineProperty(window, k, { value: SR, configurable: true, writable: true });
+      Memorizer.render(); });
+    await page.evaluate(() => { window.__said = 'Preload is stretch'; });
+    await page.locator('#teach-mic').click();
+    await page.waitForFunction(() => /Preload is stretch/.test((document.querySelector('#teach-text') || {}).value || ''), null, T).catch(() => {});
+    ok('speaking into teach-back adds what was said to the explanation', /Preload is stretch/.test(await page.locator('#teach-text').inputValue()));
+    await page.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
+    await page.locator('#ask-mic').waitFor(T);
+    const n0 = await page.locator('.turn').count();
+    await page.evaluate(() => { window.__said = 'what reduces preload'; });
+    await page.locator('#ask-mic').click();
+    await page.waitForFunction(k => document.querySelectorAll('.turn').length > k, n0, T).catch(() => {});
+    ok('speaking to the Coach asks what was said', /what reduces preload/.test(await page.locator('.turn').last().locator('.bubble.mine').innerText()));
+    await page.evaluate(() => { for (const k of ['webkitSpeechRecognition', 'SpeechRecognition']) Object.defineProperty(window, k, { value: undefined, configurable: true, writable: true }); Memorizer.render(); });
+    ok('with no dictation in the browser there is no microphone button', await page.locator('#ask-mic').count() === 0);
+
+    /* the Coach sets the date, and opens a teach-back */
+    const sayP = async m => { const n = await page.locator('.turn').count(); await page.fill('#ask-q', m); await page.locator('#ask-go').click();
+      await page.waitForFunction(k => document.querySelectorAll('.turn').length > k, n, T); };
+    await sayP('my exam is in 3 weeks');
+    ok('"my exam is in 3 weeks": the date is set, and the plan to it given', await page.locator('.turn').last().getAttribute('data-tool') === 'exam' &&
+       /Exam in 21 days/.test(await text(page, '#agent-exam')) && (await page.evaluate(() => MemStore.get('meta', 'plan'))).examDate === await plus(21), await text(page, '#agent-latest'));
+    await sayP('let me explain afterload');
+    await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'teach-text', null, T).catch(() => {});
+    ok('"let me explain afterload": its lesson opens at teaching it back, ready to type', await page.evaluate(() => document.activeElement && document.activeElement.id === 'teach-text' &&
+       /Afterload/.test(Memorizer.ui.docRec.clusters[Memorizer.ui.state.section].title)));
+    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('#exam-clear').click();
+    await page.waitForFunction(() => !Memorizer.ui.examDate, null, T).catch(() => {});
+    ok('and the date can be cleared', await page.evaluate(() => MemStore.get('meta', 'plan')) == null);
+  }
+
+  head('your notes and marks, and a table row by row');
+  {
+    const unitId = await page.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'unit').id));
+    await page.evaluate(id => Memorizer.openDoc(id, 0), unitId);
+    await page.locator('#notes').waitFor(T);
+    await page.fill('#note-text', 'Think of a balloon filling.');
+    await page.locator('#note-save').click();
+    const nrec = await page.evaluate(id => MemStore.get('meta', 'notes').then(r => r && r.recs[id + ':0']), unitId);
+    ok('a note is kept with its section, as yours', nrec && nrec.text === 'Think of a balloon filling.', JSON.stringify(nrec));
+    await page.locator('#mark-0').click();
+    await page.locator('#mark-0[aria-pressed="true"]').waitFor(T).catch(() => {});
+    const mk = await page.evaluate(() => MemStore.all('cards').then(cs => cs.filter(c => c.source === 'mark')));
+    ok('a key point marked is highlighted, kept, and made a cloze card of its sentence from tomorrow', await page.locator('li.point.marked').count() === 1 &&
+       mk.length === 1 && mk[0].dueFrom === await page.evaluate(() => MemStudy.addDays(FSRS.todayISO(), 1)) && mk[0].front.indexOf('_____') !== -1, JSON.stringify(mk.map(c => c.front)));
+    await page.locator('#mark-0').click();
+    await page.locator('#mark-0[aria-pressed="false"]').waitFor(T).catch(() => {});
+    ok('unmarked, its card goes (it was never reviewed)', await page.evaluate(() => MemStore.all('cards').then(cs => cs.filter(c => c.source === 'mark').length)) === 0 &&
+       await page.locator('li.point.marked').count() === 0);
+    /* the note, with the section's cards and in the Coach */
+    const reviewBack = await page.evaluate(() => MemStore.all('cards'));
+    await page.evaluate(t => MemStore.all('cards').then(async cs => { for (const c of cs) { if (!c.kind && c.cluster === 0 && c.options) { c.srs = null; c.dueFrom = t; } else c.srs = { due: '2099-01-01', stability: 100, difficulty: 5, reps: 1, lapses: 0, ivl: 100, last: t }; await MemStore.put('cards', c); } }),
+      await page.evaluate(() => FSRS.todayISO()));
+    await page.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
+    await page.locator('#mcq .option').first().waitFor(T);
+    await page.locator('#mcq .option').first().click();
+    await page.locator('#card-note').waitFor(T).catch(() => {});
+    ok('answered, a card shows its section’s note, labelled as yours', /Your note, not the book’s: Think of a balloon filling\./.test(await page.locator('#card-note').count() ? await text(page, '#card-note') : ''));
+    await page.evaluate(cs => Promise.all(cs.map(c => MemStore.put('cards', c))), reviewBack);
+    await page.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
+    await page.locator('#ask-q').waitFor(T);
+    const sayP = async m => { const n = await page.locator('.turn').count(); await page.fill('#ask-q', m); await page.locator('#ask-go').click();
+      await page.waitForFunction(k => document.querySelectorAll('.turn').length > k, n, T); };
+    await sayP('explain section one preload');
+    ok('and the Coach’s explanation of the section shows it too', /Your note, not the book’s: Think of a balloon filling\./.test(await page.locator('#agent-note').count() ? await text(page, '#agent-note') : ''));
+    /* The test PDF's table has three rows, and a question needs four different values in its column: a fourth
+       row, in the stored unit, whose unit repeats one already there — so its Normal column gives four questions
+       and its Unit column none, and a round that took any question would show others. */
+    await page.evaluate(id => MemStore.get('docs', id).then(d => { const seg = d.clusters[1].segments.find(g => g.table);
+      seg.table.push(['Ejection fraction', '60', 'mmHg']); return MemStore.put('docs', d); }), unitId);
+    await page.evaluate(() => { Memorizer.ui.docsStale = true; Memorizer.ui.askIdx = null; });
+    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
+    await page.locator('#ask-q').waitFor(T);
+    await sayP('quiz me on the table in section two afterload');
+    const tq = await page.$$eval('.turn:last-child .agent-q .q, #agent-latest .agent-q .q', qs => qs.map(q => q.textContent));
+    ok('"quiz me on the table in …": every question read from the table, row by row', await page.locator('.turn').last().getAttribute('data-tool') === 'table' &&
+       tq.length === 4 && tq.every(q => /^In the table, what is the Normal for /.test(q)), JSON.stringify(tq) + ' ' + (await text(page, '#agent-latest')).slice(0, 200));
+    await page.evaluate(id => Memorizer.openDoc(id, 1), unitId);
+    await page.locator('#tables').waitFor(T);
+    ok('and the lesson’s table offers the same', await page.locator('#tables #table-round').count() === 1);
+  }
+
+  head('progress: the mastery map, the week, and a streak that forgives a day');
+  {
+    const unitId = await page.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'unit').id));
+    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('#mastery').waitFor(T);
+    const cells = await page.$$eval('#mastery .mm-cell[data-key]', cs => cs.map(c => c.getAttribute('data-key') + '=' + c.getAttribute('data-state')));
+    const n = await page.evaluate(id => Memorizer.ui.docs.find(d => d.id === id).clusters.length, unitId);
+    const planId = await page.evaluate(() => Memorizer.ui.docs.find(d => d.name === 'Plan notes').id);
+    ok('the mastery map: every section of the unit, drilled ones not new, a unit not begun all new', cells.filter(c => c.startsWith(unitId + ':')).length === n &&
+       cells.filter(c => c.startsWith(unitId + ':')).every(c => !/=new$/.test(c)) && cells.filter(c => c.startsWith(planId + ':')).length >= 2 &&
+       cells.filter(c => c.startsWith(planId + ':')).every(c => /=new$/.test(c)), JSON.stringify(cells));
+    const want = await page.evaluate(() => MemStudy.masteryMap(Memorizer.ui.docs, Memorizer.ui.sessions, Memorizer.ui.cards, FSRS.todayISO(), FSRS)
+      .flatMap(u => u.sections.map(s => u.docId + ':' + s.ci + '=' + s.state)));
+    ok('each cell is its section’s state, as study.js works it out from the drills and the cards', cells.every(c => want.includes(c)));
+    await page.locator('#mastery .mm-cell[data-key="' + planId + ':1"]').click();
+    await page.locator('#big-idea').waitFor(T).catch(() => {});
+    ok('a cell opens its section', await page.evaluate(id => Memorizer.ui.view === 'session' && Memorizer.ui.docId === id && Memorizer.ui.state.section === 1, planId));
+    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('#weekly').waitFor(T);
+    const wk = await page.evaluate(() => { const w = MemStudy.weekly(Memorizer.ui.activity, FSRS.todayISO()).week;
+      const g = k => (document.querySelector('#weekly strong[data-k="' + k + '"]') || {}).textContent; return { w, answers: g('answers'), reviews: g('reviews'), days: g('days') }; });
+    const by = await page.evaluate(() => { const d = Memorizer.ui.activity.days[FSRS.todayISO()]; return d && d.by; });
+    ok('and the section checks and timed practice answered today are logged as theirs', by && by.check >= 1 && by.practice >= 1, JSON.stringify(by));
+    ok('this week: the answers and reviews done today, counted as they were done, and the section missed most', wk.w.answers >= 5 && wk.answers === String(wk.w.answers) &&
+       wk.w.reviews >= 1 && wk.reviews === String(wk.w.reviews) && wk.days === '1' && /Section One Preload/.test(await text(page, '#week-weakest')), JSON.stringify(wk));
+    /* a day missed this week, forgiven */
+    const t = await page.evaluate(() => FSRS.todayISO());
+    const days = await page.evaluate(() => MemStore.get('meta', 'days'));
+    await page.evaluate(t => MemStore.put('meta', { id: 'days', days: [MemStudy.addDays(t, -3), MemStudy.addDays(t, -2), t] }), t);
+    await page.reload();
+    await page.locator('#streak').waitFor(T);
+    const frozenDay = await page.evaluate(t => MemStudy.addDays(t, -1), t);
+    const sameWeek = await page.evaluate(([a, b]) => MemStudy.weekOf(a) === MemStudy.weekOf(b), [frozenDay, t]);
+    ok('a single missed day this week is forgiven: the streak runs on, and says so', /\b3$/.test(await text(page, '#streak')) &&
+       (await page.locator('#streak-freeze').count() === 1) === sameWeek, await text(page, '#streak') + ' same week ' + sameWeek);
+    await page.evaluate(d => MemStore.put('meta', d), days);
+  }
+
   head('the built-in coach: no key, no AI, nothing sent');
   {
     /* A fresh browser profile with nothing saved — what a new user gets. */
@@ -1229,7 +1560,7 @@ function kindOf(user) {
     }
     await p2.locator('#result').waitFor(T);
     ok('every right answer: 100%, and no card made', (await p2.locator('#result .ring-pct').innerText()) === '100%' &&
-       await p2.evaluate(() => MemStore.all('cards').then(c => c.length)) === 0);
+       await p2.evaluate(() => MemStore.all('cards').then(c => c.filter(x => !x.kind).length)) === 0);
     ok('and not one request went to an AI provider', stub.requests.length === aiBefore, `${stub.requests.length - aiBefore} requests`);
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#builtin-about').waitFor(T);
@@ -1481,6 +1812,7 @@ function kindOf(user) {
           const k = (u.split('\n').find(l => /Diuretics reduce preload/.test(l)) || '[1]').match(/^\[(\d+)\]/)[1];
           out = `<think>The passage says 99 mmHg, so I will say that [${k}].</think>Diuretics reduce preload by lowering circulating volume [${k}]. Diuretics reduce preload by 75 percent [${k}]. Nitrates reduce preload too [${k}]. It works well.`;
         } else if (/Explain this section/.test(u)) out = 'Preload is how much the ventricle is stretched before it contracts. Doctors give 40 mg of furosemide.';
+        else if (/Write ONE short clinical case/.test(u)) out = window.__case || '';
         else if (/ONE everyday analogy/.test(u)) out = 'Like filling a water balloon: the more you fill it, the harder it pushes back.';
         else if (/multiple-choice/.test(u)) out = JSON.stringify({ questions: [
           { question: 'What do diuretics reduce by lowering circulating volume?', options: ['Preload', 'Afterload', 'Contractility', 'Heart rate'], answer: 0 },
@@ -1515,6 +1847,8 @@ function kindOf(user) {
     const loopAns = (await p2.locator('#agent-answer').count()) ? await text(p2, '#agent-latest') : '';
     ok('its answer keeps the sentence the search found, cited to its step, and drops a dose and a claim resting on nothing — and says so',
        /Diuretics reduce preload by lowering circulating volume\. \[1\]/.test(loopAns) && !/40|works well/.test(loopAns) && /2 sentences dropped/.test(loopAns), loopAns.slice(0, 220));
+    const srcs = await p2.$$eval('.turn[data-tool="answer"]:last-of-type .claim-src, #agent-latest .claim-src', xs => xs.map(x => x.textContent));
+    ok('each sentence it kept names the section and page of the step it rests on', srcs.length >= 1 && srcs.every(x => /Preload · p\.1$/.test(x)), JSON.stringify(srcs));
     ok('and only the first step shows the question: the rest continue the same turn', await p2.$$eval('.turn', (ts, k) => ts.slice(k).map(t => t.querySelectorAll('.bubble.mine').length).join(), turnsBefore) === '1,0,0');
     await say2('what causes pulmonary oedema');
     ok('and a tool it makes up is thrown away: the rules decide, and the book answers', await p2.locator('.turn').last().getAttribute('data-tool') === 'search' &&
@@ -1549,6 +1883,30 @@ function kindOf(user) {
     ok('and none of it went over the network', stub.requests.length === aiNet && await p2.evaluate(() => window.__ai.filter(u => !/You are the coach in a study app/.test(u)).length) === 4,
        String(await p2.evaluate(() => window.__ai.length)));
     ok('every request asks Qwen3 not to reason aloud; its <think> is removed before checking', await p2.evaluate(() => window.__thinkOn) === false && !/99|think/i.test(sumText));
+
+    /* A case by the model (study.js): kept only when the book states its answer and its story adds nothing. */
+    const caseOf = c => p2.evaluate(([id, c]) => { window.__case = JSON.stringify(c); return MemStore.get('docs', id).then(d => Memorizer.aiCase(d, 0)); }, [unitId, c]);
+    const Q = { question: 'What do diuretics reduce by lowering circulating volume?', options: ['Preload', 'Afterload', 'Contractility', 'Heart rate'], answer: 0 };
+    const good = await caseOf(Object.assign({ case: 'A patient’s ventricle is overfilled, and the team lowers the circulating volume.' }, Q));
+    ok('a case whose answer the section states is kept, the case as its opening, explained by the book’s sentence', !!good.q && good.q.by === 'ai' &&
+       /overfilled/.test(good.q.quote) && /Diuretics reduce preload by lowering circulating volume\./.test(good.q.explain) && good.q.page === 1, JSON.stringify(good));
+    const dose = await caseOf(Object.assign({ case: 'A patient is given 40 mg of a diuretic to lower the circulating volume.' }, Q));
+    ok('a case that adds a number the section does not have is not shown, and says why', !dose.q && /number not in the book: 40/.test(dose.why), JSON.stringify(dose));
+    const off = await caseOf({ case: 'A patient arrives breathless.', question: 'Which drug is first-line for acute pulmonary edema?', options: ['Morphine', 'Digoxin', 'Aspirin', 'Heparin'], answer: 0 });
+    ok('a case whose answer the section does not state is not shown', !off.q && /answer is not in the section/.test(off.why), JSON.stringify(off));
+    /* and on the section's result, as a question to answer */
+    for (let k = 0; k < 30 && !(await p2.locator('#result').count()); k++) {
+      await p2.locator('#mcq .option').first().waitFor(T);
+      if (!(await p2.locator('#next').count())) await p2.locator('.option[data-i="' + await p2.evaluate(() => { const s = Memorizer.ui.state, c = s.per[s.section]; return c.quiz.questions[c.order[c.pos]].answer; }) + '"]').click();
+      await p2.locator('#next').click();
+      await p2.waitForFunction(() => document.querySelector('#result') || document.querySelector('#mcq .option:not([disabled])'), null, T);
+    }
+    await p2.evaluate(() => { window.__case = JSON.stringify({ case: 'A patient’s ventricle is overfilled, and the team lowers the circulating volume.',
+      question: 'What do diuretics reduce by lowering circulating volume?', options: ['Preload', 'Afterload', 'Contractility', 'Heart rate'], answer: 0 }); });
+    await p2.locator('#ai-case').click();
+    await p2.locator('#case-card #mcq').waitFor(T).catch(() => {});
+    ok('the section’s result offers a case, and shows it as a question with its story', await p2.locator('#case-card #mcq blockquote.quote').count() === 1 &&
+       /overfilled/.test(await text(p2, '#case-card #mcq')) && /A case by the on-device AI/i.test(await text(p2, '#case-card')), await p2.locator('#case-card').count() ? await text(p2, '#case-card') : 'no case card');
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#ai-toggle').click();
     await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
@@ -1765,6 +2123,24 @@ function kindOf(user) {
     await p3.locator('#big-idea').waitFor(T);
     const ocrNote = await p3.locator('#ocr-note').count() ? await p3.locator('#ocr-note').innerText() : 'no note';
     ok('the lesson of the section on that page says it was recognised, and to check it', /scanned page by text recognition \(p\. 2\)/.test(ocrNote), ocrNote);
+    const pc = srec.ocrConf && srec.ocrConf['2'];
+    ok('how sure recognition was of the page is kept: the mean of its words, and how many it dropped', !!pc && pc.mean > 0 && pc.mean <= 100 && pc.words > 10 && pc.dropped >= 0, JSON.stringify(pc));
+    await p3.locator('#fix-text summary').click();
+    const fixSi = await p3.evaluate(() => [...document.querySelectorAll('#fix-text textarea')].find(a => /Venous return/.test(a.value)).getAttribute('data-si'));
+    const was = await p3.locator('#fix-text textarea[data-si="' + fixSi + '"]').inputValue();
+    await p3.fill('#fix-text textarea[data-si="' + fixSi + '"]', was.replace('preload rises with volume', 'preload rises with volume load'));
+    await p3.locator('#fix-text button[data-fix="' + fixSi + '"]').click();
+    await p3.waitForFunction(id => MemStore.get('docs', id).then(d => (d.corrections || []).length === 1), srec.id, T).catch(() => {});
+    const fixed = await p3.evaluate(id => MemStore.get('docs', id), srec.id);
+    ok('a paragraph recognition read can be corrected: the section keeps your text, and the correction with what it said before', fixed.corrections && fixed.corrections.length === 1 &&
+       fixed.corrections[0].was === was && /volume load/.test(fixed.clusters[onScan].text) && fixed.clusters[onScan].segments[+fixSi].corrected === true, JSON.stringify(fixed.corrections));
+    await p3.locator('#big-idea').waitFor(T);
+    ok('and the lesson is taught again from it', /volume load/.test(await p3.evaluate(() => JSON.stringify(Memorizer.ui.state.per[Memorizer.ui.state.section].lesson))) &&
+       /volume load/.test(await p3.locator('details.source').textContent()), await p3.evaluate(() => JSON.stringify(Memorizer.ui.state.per[Memorizer.ui.state.section].lesson.points.map(p => p.text))).then(t => t.slice(0, 300)));
+    await p3.evaluate(id => MemStore.get('docs', id).then(d => { d.ocrConf['2'].mean = 50; return MemStore.put('docs', d); }), srec.id);
+    await p3.evaluate(id => Memorizer.openDoc(id), srec.id);
+    await p3.locator('#source-card').waitFor(T);
+    ok('a page recognition was unsure of is named on the source card, with how sure, to check', /unsure of p\. 2 \(50%\)/.test(await p3.locator('#ocr-unsure').count() ? await text(p3, '#ocr-unsure') : ''));
     await p3.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await p3.locator('.unit-row').first().waitFor(T);
     ok('my units says which pages were recognised', /Read by text recognition: pages 2\./.test(await p3.locator('.unit-row').first().innerText()));
@@ -1798,6 +2174,26 @@ function kindOf(user) {
     await p5t.locator('#visuals .figs figure').first().waitFor(T);
     ok('and the lesson shows it under that name', await p5t.locator('#visuals .figs button[aria-label="Enlarge Table 9.1"]').count() === 1 &&
        /TABLE 9\.1/.test(await p5t.locator('#visuals .figs figcaption').first().innerText()), await p5t.locator('#visuals .figs figcaption').first().innerText());
+
+    /* A labelled diagram: the labels printed inside it are kept, and a figure card is made from them */
+    const p5d = await fresh('diagram', true);
+    await p5d.setInputFiles('#pdf-input', { name: 'chambers.pdf', mimeType: 'application/pdf', buffer: makeDiagramPdf() });
+    await p5d.locator('#sections .section-card').first().waitFor({ timeout: 60000 });
+    const drec = await p5d.evaluate(() => MemStore.all('docs').then(d => d[0]));
+    const df = (drec.figures || [])[0];
+    ok('a diagram’s printed labels are kept with it — its caption and the page’s prose are not', !!df && df.label === 'Figure 2.1' &&
+       JSON.stringify((df.labels || []).map(l => l.text).sort()) === JSON.stringify(['Aorta', 'Left atrium', 'Left ventricle', 'Right atrium', 'Right ventricle']),
+       JSON.stringify(df && { label: df.label, labels: (df.labels || []).map(l => l.text) }));
+    const made = await p5d.evaluate(id => MemStore.get('docs', id).then(d => Memorizer.makeStudyCards(d, 0)), drec.id);
+    const occ = made.find(c => c.kind === 'occlusion');
+    ok('and a figure card hides one of them, asked among the others', !!occ && occ.options.length === 4 && occ.options.every(o => df.labels.some(l => l.text === o)) &&
+       occ.figure.page === df.page && occ.mask.width > 0 && occ.mask.height > 0, JSON.stringify(occ && { opts: occ.options, mask: occ.mask }));
+    /* found again the other way — when a unit's figures are re-read (a book's chapter, or a finder upgrade) */
+    await p5d.evaluate(id => MemStore.get('docs', id).then(d => { d.figures = []; d.figuresV = 0; return MemStore.put('docs', d); }), drec.id);
+    await p5d.evaluate(id => Memorizer.openDoc(id, 0), drec.id);
+    await p5d.waitForFunction(v => Memorizer.ui.docRec && Memorizer.ui.docRec.figuresV === v, await p5d.evaluate(() => MemPdf.FIGURES_V), T).catch(() => {});
+    const again = await p5d.evaluate(id => MemStore.get('docs', id).then(d => (d.figures[0] && d.figures[0].labels || []).map(l => l.text).sort()), drec.id);
+    ok('and a unit whose figures are found again keeps its labels too', JSON.stringify(again) === JSON.stringify(['Aorta', 'Left atrium', 'Left ventricle', 'Right atrium', 'Right ventricle']), JSON.stringify(again));
   }
 
   head('opened as a data: URL, the way the iPad\u2019s Files app hands a file to Safari');

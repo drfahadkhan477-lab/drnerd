@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 55 suites that need neither a browser nor a build all stay
+present, and the 56 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -199,6 +199,47 @@ what it remembers, with a button to forget it.
 Every missed answer becomes a review card — the same multiple-choice question
 — scheduled with the same FSRS scheduler Systole uses (`src/core/fsrs.js`,
 shared, not copied).
+
+**Recall, not only recognition** (`memorizer/src/study.js`). Multiple choice
+puts the answer on the screen; an exam asks you to bring it back. So each
+drilled section also makes recall cards, due from the next day: **cloze
+cards** — the book's own sentence with its number or key term blanked,
+answered by typing (a number must be the book's number; a word may be a
+letter out, rated Hard) — and **figure cards**, where one of the labels the
+book printed inside a figure is hidden and asked for among the others. A
+drilled section comes back as a short **section check** on a widening
+schedule of days and weeks; a failed check starts it again. **Timed
+practice** mixes due cards, weak items and each unit's hardest questions for
+the minutes you have, and shows the score across days. Say **"I'm sure"**
+before answering: a confident wrong answer is the most dangerous kind, so it
+is flagged and asked again before the review ends. With the on-device AI on,
+a section's result offers a **case** — a short patient story whose answer is
+a sentence of your book; a case that adds a number, disease, test or drug
+the section does not have is not shown.
+
+**Planning and explaining.** Tell the Coach or the home screen your exam
+date and each day gets its sections to learn, with the last days kept for
+review; the plan is worked out again each day from where you are. **Teach it
+back**: explain a section in your own words — typed or spoken, through your
+device's dictation — and it is checked against the section's key points:
+what you covered, what you left out (in your book's words, and as cards if
+you like), and any number you gave that the section does not have. With the
+on-device AI's answers, each sentence names the section and page it rests
+on.
+
+**Your book, as it was printed and as you read it.** Text recognition's
+confidence is kept for every scanned page, and the pages it was unsure of
+are named on the source card; a paragraph it misread can be corrected in
+the lesson, and the correction is kept with what it said before. Your own
+notes on a section are kept as yours — shown with its cards and in the
+Coach, labelled as yours, never mixed with the book's words — and a key
+point you mark becomes a cloze card. The Coach asks a section's table row
+by row.
+
+**Progress.** A mastery map colours every section new, weak, fading or solid
+from its drill and its cards' recall today; "this week" gives time,
+answers, accuracy, reviews and the topics missed most, against last week;
+and the streak forgives one missed day a week.
 
 The home screen is laid out as a dashboard. At the top, a hero band: the
 greeting, what is up next, and three numbers — your streak, the cards due,

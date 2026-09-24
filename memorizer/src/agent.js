@@ -43,17 +43,20 @@
 
 function askMod() { return root.MemAsk || (typeof require === 'function' ? require('./ask.js') : null); }
 
-var TOOLS = ['help', 'mistake', 'round', 'weak', 'schedule', 'plan', 'review', 'quiz', 'compare', 'mnemonic', 'numbers', 'explain', 'open', 'search'];
+var TOOLS = ['help', 'exam', 'teach', 'table', 'mistake', 'round', 'weak', 'schedule', 'plan', 'review', 'quiz', 'compare', 'mnemonic', 'numbers', 'explain', 'open', 'search'];
 /* In order: the first that matches wins. Each one's words are removed from
    the message to leave its topic. */
 var RULES = [
   ['help', /^\s*(?:help|hi|hello|hey|what can you do|who are you)\b[\s?!.]*$/i],
+  ['exam', /\b(?:my )?exams? (?:is |are )?(?:on|in|date|tomorrow|next)\b|\bexam date\b|\bplan (?:to|for|until) (?:my |the )?exam\b/i],
+  ['teach', /\b(?:let me explain|teach (?:it |this )?back|explain (?:it|this) back|i(?:'|’)?ll explain|let me teach)\b/i],
   ['mistake', /\b(?:why (?:did|do) i (?:get|keep getting|keep missing|miss)|explain my (?:mistakes?|misses|errors?)|my (?:mistakes?|misses|errors?))\b/i],
   ['round', /\b(?:review round|round of (?:my )?weak|re-?test (?:my )?weak|drill my weak)\b/i],
   ['weak', /\b(?:weak(?:est)?|shakiest|struggl\w*|where am i (?:bad|weak)|what do i (?:get wrong|miss))\b/i],
   ['schedule', /\b(?:schedule|this week|tomorrow|next few days|when (?:is|are) (?:my )?(?:next )?(?:cards?|reviews?) due)\b/i],
   ['plan', /\b(?:what should i (?:study|learn|do|revise)|study plan|plan (?:for )?(?:today|my day)|what(?:'s| is) next|where do i start)\b/i],
   ['review', /\b(?:review|due cards?|flash ?cards?|revise my cards)\b/i],
+  ['table', /\b(?:quiz|test|drill|ask) me on (?:the |this |its )?table\b|\btable (?:round|quiz)\b|\bthe table (?:in|of|on)\b/i],
   ['quiz', /\b(?:quiz|test|drill|ask) me\b|\bmcqs?\b|\bquestions? (?:on|about)\b/i],
   ['compare', /\b(?:compare|comparison|difference(?:s)? between|differ(?:s|ence)?|versus|vs\.?)\b/i],
   ['mnemonic', /\b(?:mnemonics?|how (?:do|can) i remember|help me remember)\b/i],
@@ -88,7 +91,8 @@ function plan(text, memory) {
       out.topics = parts.slice(0, 2);
       if (out.topics.length === 1 && mem.topic) out.topics.unshift(mem.topic);
     }
-    if (!out.topic && /quiz|explain|mnemonic|numbers|open|compare/.test(r[0])) out.topic = mem.topic || '';
+    if (!out.topic && /quiz|explain|mnemonic|numbers|open|compare|teach|table/.test(r[0])) out.topic = mem.topic || '';
+    if (r[0] === 'exam') out.topic = t;
     return out;
   }
   /* "why?", "more", "that one" — carry on from the last topic */
@@ -137,11 +141,14 @@ function say(p, title) {
     case 'plan': return 'Here is what I’d do next.';
     case 'review': return 'Your cards due today.';
     case 'quiz': return t ? 'Three questions on ' + t + '. Answer them here.' : 'Tell me the topic to be quizzed on.';
+    case 'table': return t ? 'The table in ' + t + ', row by row.' : 'Tell me which section’s table.';
     case 'compare': return t ? 'Side by side: ' + t + '.' : 'Tell me the two topics to compare.';
     case 'mnemonic': return t ? 'The mnemonics for ' + t + '.' : 'Tell me the topic.';
     case 'numbers': return t ? 'The numbers to know in ' + t + '.' : 'Tell me the topic.';
     case 'explain': return t ? t + ', as your book tells it.' : 'Tell me what to explain.';
     case 'open': return t ? 'Opening ' + t + '.' : 'Tell me what to open.';
+    case 'exam': return 'Your plan from today to the exam.';
+    case 'teach': return t ? 'Explain ' + t + ' in your own words; I’ll check it against the book.' : 'Tell me what you will explain.';
     case 'mistake': return 'Why your recent misses happened, and what fixes each kind.';
     case 'round': return 'A review round of what you still get wrong, mixed.';
     case 'schedule': return 'Your cards due each day this week.';
@@ -218,16 +225,19 @@ function afterStep(p, obs) {
    round) or needs nothing more (help) ends it too, and so does the same
    tool asked for the same topic twice. */
 var MODEL_STEPS = 4;
-var TERMINAL = ['open', 'round', 'help'];
+var TERMINAL = ['open', 'round', 'help', 'teach'];
 var DESCRIBE = {
   search: 'what the book says on a question',
   explain: 'a section in one line, how it works, its key facts',
   quiz: 'three questions on a topic, for the student to answer',
+  table: 'every cell of a topic’s table, asked row by row',
   compare: 'two topics side by side (give "topics")',
   mnemonic: 'the mnemonics of a topic',
   numbers: 'the numbers to know in a topic',
   open: 'open a section to learn it (ends the turn)',
   weak: 'the items the student still gets wrong, with their error type',
+  exam: 'set the exam date and see the plan to it',
+  teach: 'open a section for the student to explain it back (ends the turn)',
   mistake: 'why the student’s recent misses happened, by error type, and the fix',
   plan: 'what to study now',
   review: 'the flashcards due today',
@@ -321,6 +331,7 @@ function observe(tool, t) {
       if (!t.explain) return 'Not found in the book.';
       return [t.title ? t.title + ':' : '', t.explain.gist, t.explain.chain].concat(t.explain.facts.slice(0, 3)).filter(Boolean).join(' ');
     case 'quiz': return t.quiz ? 'Showed ' + t.quiz.length + ' questions on ' + t.title + ' for the student to answer.' : 'Not found in the book.';
+    case 'table': return t.quiz ? (t.quiz.length ? 'Showed ' + t.quiz.length + ' questions from the table in ' + t.title + '.' : 'No table in ' + t.title + '.') : 'Not found in the book.';
     case 'mnemonic':
       if (!t.mnemonics) return 'Not found in the book.';
       return t.mnemonics.length ? t.mnemonics.map(function (m) { return m.title + ': ' + m.letters + ' = ' + m.words.join(', '); }).join('. ') : 'No mnemonics in ' + t.title + '.';
@@ -337,6 +348,8 @@ function observe(tool, t) {
     case 'plan': return t.planText || 'Nothing to suggest yet.';
     case 'review': return (t.due || 0) + ' cards due today.';
     case 'schedule': return t.week ? t.week.map(function (d) { return d.label + ' ' + d.n; }).join(', ') + '.' : 'No cards yet.';
+    case 'exam': return t.planText || 'No exam date set.';
+    case 'teach': return t.title ? 'Opened ' + t.title + ' to be explained back.' : 'Not found in the book.';
     case 'round': return t.started ? 'Started a review round of ' + t.n + ' weak items in ' + t.name + '.' : 'Nothing is on the weak list.';
     case 'open': return t.title ? 'Opened ' + t.title + '.' : 'Not found in the book.';
     default: return 'Showed what the coach can do.';
@@ -373,7 +386,8 @@ function schedule(cards, today) {
   var week = [];
   for (var i = 0; i < 7; i++) week.push({ day: addDays(today, i), n: 0, label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : addDays(today, i) });
   (cards || []).forEach(function (c) {
-    var due = c.srs && c.srs.due ? c.srs.due : today;
+    /* a card never reviewed is due from its dueFrom (study.js), else now */
+    var due = c.srs && c.srs.due ? c.srs.due : !c.srs && c.dueFrom ? c.dueFrom : today;
     if (due <= today) { week[0].n++; return; }
     for (var j = 1; j < 7; j++) if (week[j].day === due) { week[j].n++; return; }
   });
