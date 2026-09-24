@@ -68,3 +68,9 @@ node_modules/
 # `.claude/settings.json.graphify-bak` (graphify/install.py). A suffix on a
 # file, not a directory — so the pattern is a suffix too.
 *.graphify-bak
+
+# Memorizer (memorizer/) — build output, and a place to keep PDFs you test it
+# with. The app reads a PDF in the browser and never stores it; nothing a user
+# studies belongs in the repository, whosever it is.
+dist-memorizer/
+memorizer/samples/

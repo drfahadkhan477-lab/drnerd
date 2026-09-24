@@ -21,7 +21,7 @@
  *
  * ── FOUR ANCHORS, ALL OF THEM ECHO'S OUTPUT ──────────────────────────────
  *
- * This runs immediately after echo (87), the last step, and every anchor is
+ * This runs immediately after echo (88), and every anchor is
  * text echo-patch itself emits — its router line, its nav button, the banner
  * it re-emits, and the .nav rule its CSS ends on. Nothing runs between the
  * two, so nothing can rewrite them first: the focusmode failure (an anchor

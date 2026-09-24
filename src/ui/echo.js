@@ -112,13 +112,34 @@
       '</dl></div>';
   }
 
+  /* A range as the table holds it. Where the source gives separate ranges
+     for men and women, `normal` is the men's and `normalF` the women's, and
+     both are shown: printing only one reads a normal woman's value as
+     abnormal, which is what this screen did for four measurements. */
+  function rangeHtml(m) {
+    /* Both ends at the same precision. A number prints as JavaScript holds
+       it, so the men's septal range read "0.6–1 cm" and LVIDs "2.5–4 cm":
+       the table says 1.0 and 4.0, and a reference screen should too. */
+    var places = function (v) { var t = String(v), i = t.indexOf('.'); return i < 0 ? 0 : t.length - i - 1; };
+    var one = function (r) {
+      var p = Math.max(places(r[0]), places(r[1]));
+      return esc(r[0].toFixed(p)) + '–' + esc(r[1].toFixed(p)) + ' ' + esc(m.units);
+    };
+    if (!m.normalF) return one(m.normal);
+    return one(m.normal) + ' <span class="echo-sex">men</span><br>' +
+      one(m.normalF) + ' <span class="echo-sex">women</span>';
+  }
+
   function measureRowHtml(measureId) {
     var m = byId(E.MEASUREMENTS, measureId);
     if (!m) return '';
     var view = byId(E.VIEWS, m.view);
+    /* THE NOTE IS SHOWN NOW. Every measurement carried one — the teaching
+       point, and for two of them the women's range — and nothing rendered
+       it: fourteen notes of declared data that no screen read. */
     return '<tr>' +
-      '<td>' + esc(m.name) + '</td>' +
-      '<td>' + esc(m.normal[0]) + '–' + esc(m.normal[1]) + ' ' + esc(m.units) + '</td>' +
+      '<td>' + esc(m.name) + (m.note ? '<div class="echo-note">' + esc(m.note) + '</div>' : '') + '</td>' +
+      '<td>' + rangeHtml(m) + '</td>' +
       '<td>' + esc(view ? view.name : m.view) + '</td>' +
       '<td class="echo-ref">' + esc(m.ref) + '</td>' +
       '</tr>';
@@ -310,6 +331,7 @@
     TABS: TABS, FIELDS: FIELDS, DERIVED: DERIVED,
     esc: esc, fmt: fmt, tabId: tabId, tabsHtml: tabsHtml,
     diseaseListHtml: diseaseListHtml, viewCardHtml: viewCardHtml, diseaseHtml: diseaseHtml,
+    rangeHtml: rangeHtml, measureRowHtml: measureRowHtml,
     referenceHtml: referenceHtml, compute: compute, fieldsHtml: fieldsHtml,
     resultsHtml: resultsHtml, calculatorHtml: calculatorHtml, screenHtml: screenHtml,
   };

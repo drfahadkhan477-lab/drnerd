@@ -9,7 +9,7 @@
  * worked. A scaffold carrying echo-patch's four anchors is written, the real
  * scripts/echo-patch.js is run over it, then the real
  * scripts/notesearch-patch.js over that — so notesearch reads the text echo
- * actually emits, exactly as it does as step 88 — and the result is driven.
+ * actually emits, exactly as it does as step 89 — and the result is driven.
  *
  * WHAT THE SCAFFOLD SUPPLIES. What the export and earlier steps would: an S,
  * a render() with the router chain, icon(), e(), a nav with a theme-wrap, and
@@ -183,7 +183,7 @@ if (ns.status !== 0) { console.log('\n' + nsOut); console.log(`\n${passed} passe
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
-})().catch(e => {
-  console.error('\n  the suite itself died: ' + (e && e.stack ? e.stack : e));
-  process.exit(1);
-});
+/* No .catch: onDeath() above owns an unhandled rejection and prints the note
+   — a handler here would eat it first (verify-engine holds every suite to
+   this). */
+})();

@@ -353,7 +353,4 @@ const MARK = 'echomark';
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
-})().catch(e => {
-  console.error('\n  the suite itself died: ' + (e && e.stack ? e.stack : e));
-  process.exit(1);
-});
+})();

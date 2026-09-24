@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 88 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 89 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -339,6 +339,10 @@ const CHAIN = [
   /* Last on purpose: its anchors come from home, theme, fullbleed, quiznav,
      chapters and resume, and resume is the final rewrite of SCHEMA_KEYS. */
   'focusmode',
+  /* After focusmode, whose S.focusMode it reads; before echo, which stays last
+     for its own reasons. Its one anchor is the Durable memory banner, which
+     it re-emits, so echo still finds it exactly once. */
+  'ambient',
   'echo',
   /* After echo, on text echo emits — see notesearch-patch.js. */
   'notesearch',

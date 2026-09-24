@@ -14,7 +14,7 @@
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 90 suites and roughly 2937 checks, and they
+ * WHY THIS EXISTS. There are 90 suites and roughly 2944 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -248,6 +248,12 @@ const SUITES = [
      about in a comment. It needs no build — see its header for what that
      buys and what it costs. */
   ['echo',         'Echo Studio routes, delegates and keeps the caret where it was'],
+  /* Needs no build: the repository's own physio, coronaryTree and wiggers in
+     a real browser, measured for the physiology the view is there to show. */
+  ['coronaryview', 'the Coronary view draws the left bed collapsing in systole, on one scale'],
+  /* Needs no build: the shipped ambient-patch over a scaffold, with the
+     repository's own Heart3D, ECG12, Wiggers and LivingDiagram. */
+  ['ambient',      'the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL'],
   /* Search your notes: the ranking, quoting and markup in pure Node (with the
      proof that its four anchors are echo's own output), then the patched
      screen driven in a browser over a scaffold, the way echo is. */
@@ -269,6 +275,30 @@ const SUITES = [
   ['figsharp',     'no figure is drawn wider than the pixels it has'],
   ['heartreuse',   'navigating the app does not spend WebGL contexts'],
   ['flushguard',   'a reply can be stopped, and the last chunk is painted however the stream ends'],
+  /* Memorizer — a second, standalone app in memorizer/: upload a PDF (or
+     photos, or pasted notes), it is split into sections, and each is taught
+     — key points, numbers, mnemonics, analogies — then drilled with
+     multiple-choice questions; a final exam closes the unit, and every miss
+     becomes an FSRS card. It carries no licensed
+     content, so none of these needs a build: the -pure ones run in CI's
+     logic job, and the two browser suites in its memorizer-browser job. */
+  ['memorizer-chunk-pure',   'every word of the PDF is taught once, in sections of a teachable size, headings kept with their body'],
+  ['memorizer-prompts-pure', 'the model is held to your PDF, only the section being studied goes out, and a bad reply is never a pass'],
+  ['memorizer-session-pure', 'no phase of the protocol is skipped, and every miss becomes exactly one card'],
+  ['memorizer-coach-pure',   'the built-in coach needs no key, invents nothing, and asks fair multiple-choice questions'],
+  ['memorizer-appearance-pure', 'the themes are Systole\u2019s, colour for colour, and readable at every contrast and brightness'],
+  ['memorizer-home-pure',    'the home screen\u2019s progress counts what happened, and its pearl is your PDF\u2019s own sentence'],
+  ['memorizer-book-pure',   'a whole textbook: its parts in order, its pages straight through, its chapters found three ways'],
+  ['memorizer-ask-pure',    'asking your book: its own sentences with their pages, from the right section, or nothing found'],
+  ['memorizer-ground-pure', 'the on-device AI says nothing the book does not: no new number or name, cited, answers found in the section'],
+  ['memorizer-vec-pure',    'search by meaning: similarity, a measured floor, and the merge with search by words'],
+  ['memorizer-sheet-pure',  'a lesson laid out to be remembered: points under clinical headings, numbers as tiles, nothing twice'],
+  ['memorizer-figure-pure', 'figures made from the book: a study card and a comparison chart, every word the lesson\u2019s, escaped and wrapped'],
+  ['memorizer-agent-pure',  'the Coach as an agent: each tool reached, its topic, follow-ups remembered, a model\u2019s plan used only when it names a real tool'],
+  ['memorizer-study-pure',  'studying beyond the drill: recall and figure cards from the book, checks days apart, timed practice, an exam plan, teach-back, corrections, notes, progress'],
+  ['memorizer-provenance-pure', 'where a unit came from: a real SHA-256 of its bytes, a duplicate recognised, and an import report that counts what happened'],
+  ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
+  ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
 ];
 
 /* ── suites registered since the last full green run ──────────────────────────
@@ -307,7 +337,10 @@ const SUITES = [
    measured the four that had been waiting — livingdiagram-pure,
    conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
    and echo. */
-const PENDING_RECORD = ['notesearch-pure', 'notesearch'];
+const PENDING_RECORD = ['notesearch-pure', 'notesearch',
+  'coronaryview', 'ambient',
+  'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer-coach-pure', 'memorizer-appearance-pure', 'memorizer-home-pure', 'memorizer-book-pure', 'memorizer-ask-pure', 'memorizer-ground-pure', 'memorizer-vec-pure', 'memorizer-sheet-pure', 'memorizer-figure-pure', 'memorizer-agent-pure', 'memorizer',
+  'memorizer-provenance-pure', 'memorizer-hardening', 'memorizer-study-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

@@ -21,19 +21,21 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 2937 checks in
-# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 1387.
-# The other 1683 all drive a real build of the app in a real browser
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 2944 checks in
+# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 1393.
+# The other 1684 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 1683 checks here. See docs/BUILD.md and the
+# there is no way to run those 1684 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
-# What DOES run here needs no source file and no browser, and is genuinely
-# worth having on every push:
+# What DOES run here needs no source file, and is genuinely worth having on
+# every push. All of it needs no browser either, except the memorizer-browser
+# job, which drives the Memorizer — a second app that carries no licensed
+# content — in Chromium:
 #
 #   syntax       every .js and .py file in the repo parses, and the two
 #                listing commands (which patch chain steps exist, which test
@@ -43,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 42 suites that are pure Node with no Playwright and no
+#   logic        the 57 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -70,7 +72,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                1387 real checks, up
+#                1393 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -83,7 +85,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 1683 checks to this file is possible — GitHub Actions
+# Adding the other 1684 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -97,6 +99,13 @@ on:
   push:
   pull_request:
 
+# Read-only, for every job. Nothing here writes to the repository, comments,
+# or publishes; each job checks out and runs Node. Without this block the jobs
+# get the repository's default token, which may be read-write — and nothing
+# could notice that while GitHub was unable to parse this file at all.
+permissions:
+  contents: read
+
 jobs:
   syntax:
     name: syntax — every file parses, both listings work
@@ -109,7 +118,7 @@ jobs:
       - name: every .js file parses
         run: |
           set -e
-          find scripts src tests tools -name '*.js' -print0 \
+          find scripts src tests tools memorizer -name '*.js' -print0 \
             | xargs -0 -n1 node --check
       - name: every .py tool parses
         run: |
@@ -120,6 +129,12 @@ jobs:
         run: npm run steps
       - name: the verify suite list lists without crashing
         run: npm run suites
+      - name: Memorizer builds into one file (it needs no licensed source)
+        run: |
+          set -e
+          node scripts/build-memorizer.js --out "$RUNNER_TEMP/memorizer"
+          test -s "$RUNNER_TEMP/memorizer/index.html"
+          node --check "$RUNNER_TEMP/memorizer/sw.js"
 
   logic:
     name: logic — every suite that needs no browser and no build
@@ -165,7 +180,7 @@ jobs:
         run: node tests/verify-coronarytree-pure.js
       - name: the engine is a flag, not thirty-four hardcoded copies of one (79 checks)
         run: node tests/verify-engine.js
-      - name: the licensed question bank cannot be committed (27 checks)
+      - name: the licensed question bank cannot be committed (31 checks)
         run: node tests/verify-leakguard.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js
@@ -205,7 +220,7 @@ jobs:
         run: node tests/verify-ui-pure.js
       - name: the corpus checker holds every floor it claims (17 checks)
         run: node tests/verify-refscheck-pure.js
-      - name: the echo tables and the echo arithmetic (53 checks)
+      - name: the echo tables and the echo arithmetic (55 checks)
         run: node tests/verify-echo-pure.js
       - name: Echo Studio computes only what was measured (55 checks)
         run: node tests/verify-echoui-pure.js
@@ -213,6 +228,74 @@ jobs:
         run: node tests/verify-echoanchor-pure.js
       - name: the notes search ranks, quotes and escapes (41 checks)
         run: node tests/verify-notesearch-pure.js
+      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (166 checks)
+        run: node tests/verify-memorizer-chunk-pure.js
+      - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
+        run: node tests/verify-memorizer-prompts-pure.js
+      - name: Memorizer — teach, memorise, then drill; every miss typed, one card, and kept until it graduates; review rounds interleaved (100 checks)
+        run: node tests/verify-memorizer-session-pure.js
+      - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, makes the cards to memorise, and re-teaches by the kind of miss (137 checks)
+        run: node tests/verify-memorizer-coach-pure.js
+      - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness, on glass and aurora as well as solid (42 checks)
+        run: node tests/verify-memorizer-appearance-pure.js
+      - name: Memorizer — the home screen's progress, streak, pearl, the pearl's figure or table, and weak spots say true things (68 checks)
+        run: node tests/verify-memorizer-home-pure.js
+      - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (32 checks)
+        run: node tests/verify-memorizer-book-pure.js
+      - name: Memorizer — asking your book answers in its own sentences, with pages, or says nothing was found (38 checks)
+        run: node tests/verify-memorizer-ask-pure.js
+      - name: Memorizer — the on-device AI says nothing the book does not (24 checks)
+        run: node tests/verify-memorizer-ground-pure.js
+      - name: Memorizer — search by meaning, its measured floor, and its merge with search by words (14 checks)
+        run: node tests/verify-memorizer-vec-pure.js
+      - name: Memorizer — a lesson laid out to be remembered — clinical headings, number tiles, the section at a glance, nothing twice (21 checks)
+        run: node tests/verify-memorizer-sheet-pure.js
+      - name: Memorizer — figures made from the book, every word the lesson's (17 checks)
+        run: node tests/verify-memorizer-figure-pure.js
+      - name: Memorizer — the Coach as an agent — it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, names what is still weak, and runs a message as steps, each decided by what the last found — and, with the on-device model, a loop whose answer holds to what its tools found, the new tools, and what it remembers (76 checks)
+        run: node tests/verify-memorizer-agent-pure.js
+      - name: Memorizer — studying beyond the drill — recall and figure cards from the book, section checks days apart, timed practice, confidence, cases, an exam plan, teach-back, corrections, notes, the mastery map, the week and the streak (75 checks)
+        run: node tests/verify-memorizer-study-pure.js
+      - name: Memorizer — where a unit came from — a real SHA-256 of its bytes, a duplicate recognised, an import report that counts what happened (31 checks)
+        run: node tests/verify-memorizer-provenance-pure.js
+
+  # ── Memorizer in a real browser ────────────────────────────────────────────
+  #
+  # THE ONE BROWSER JOB THAT CAN RUN HERE, because Memorizer carries no
+  # licensed content: scripts/build-memorizer.js builds it from this
+  # repository alone, and both suites generate their own documents — a PDF
+  # written byte by byte, and pasted notes — so nothing of anyone's is read.
+  # Until this job existed the Memorizer's pure suites ran on every push and
+  # its whole-app suites never did: the glue between the modules (pdf.js's
+  # output reaching the chunker, a session surviving a reload, a failed save
+  # being said) was proven only when someone remembered to run it.
+  #
+  # NETWORK: verify-memorizer fetches pdf.js, and the text reader for scanned
+  # pages, from jsDelivr at pinned versions and checks them against their
+  # integrity hashes, as the app does. verify-memorizer-hardening uses pasted
+  # notes only and fails any request that leaves the page other than to the
+  # stubbed model.
+  #
+  # Chromium only, on purpose, for now: the suites run on WebKit through
+  # SYSTOLE_ENGINE=webkit, and adding that here is one more matrix entry once
+  # a WebKit run of both has been seen green.
+  memorizer-browser:
+    name: memorizer-browser — the whole app, in Chromium, on documents made for the test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: install the pinned test tools, and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (345 checks)
+        run: node tests/verify-memorizer.js
+      - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
+        run: node tests/verify-memorizer-hardening.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

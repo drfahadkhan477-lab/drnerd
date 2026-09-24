@@ -190,7 +190,7 @@ head('echo-patch is where it says it is');
 {
   ok('echo is a step in the chain', CHAIN.indexOf('echo') !== -1, CHAIN.indexOf('echo') + 1 || 'absent');
   /* Its header argued it must be LAST, because focusmode(86) is the final
-     step to rewrite the nav's button row. When notesearch(88) was added after
+     step to rewrite the nav's button row. When notesearch(89) was added after
      it, this check went red and asked for the argument to be re-made, and it
      was: what echo needs is to come after focusmode — no step can change what
      echo reads once echo has run — and anything after echo must be a step
@@ -209,39 +209,62 @@ head('echo-patch is where it says it is');
   ok('its patch script is on disk', fs.existsSync(path.join(SCRIPTS, 'echo-patch.js')));
 }
 
-head('every anchor echo-patch uses still exists at step ' + (CHAIN.indexOf('echo') + 1));
+/* ── AMBIENT, the step before echo ────────────────────────────────────────
+   ambient-patch (the Living Diagram's ambient mode) runs at the position
+   just before echo, anchors on the same Durable memory banner, and re-emits
+   it. So it is held here too: its anchor must survive from assets(27) to its
+   own position, and echo's copy of that anchor now comes from it. */
+head('ambient-patch sits between focusmode and echo');
 {
-  const at = CHAIN.indexOf('echo') + 1;
-  const mine = pairs('echo');
+  const a = CHAIN.indexOf('ambient'), f = CHAIN.indexOf('focusmode'), e = CHAIN.indexOf('echo');
+  ok('ambient is a step in the chain', a !== -1, a + 1 || 'absent');
+  ok('after focusmode, whose S.focusMode it reads, and before echo',
+     a > f && a < e, `focusmode ${f + 1}, ambient ${a + 1}, echo ${e + 1}`);
+  ok('its patch script is on disk', fs.existsSync(path.join(SCRIPTS, 'ambient-patch.js')));
+}
 
-  /* VACUITY, twice over. Extraction returning nothing would make the survival
-     check below trivially true, and that is the failure this project is named
-     after. So the count is asserted, and separately every patch() the file
-     DECLARES must have been readable — a call the regex cannot parse is an
-     anchor this suite would skip in silence. */
-  ok('its anchors were read', mine.length >= 4, `${mine.length} anchors`);
-  const declared = [...fs.readFileSync(path.join(SCRIPTS, 'echo-patch.js'), 'utf8')
+/* One step's anchors, replayed to the position it runs from. VACUITY, twice
+   over, for each: extraction returning nothing would make the survival check
+   trivially true, so the count is asserted, and every patch() the file
+   DECLARES must have been readable — a call the regex cannot parse is an
+   anchor this suite would skip in silence. */
+function stepAnchors(step, atLeast) {
+  const at = CHAIN.indexOf(step) + 1;
+  head(`every anchor ${step}-patch uses still exists at step ${at}`);
+  const mine = pairs(step);
+  ok('its anchors were read', mine.length >= atLeast, `${mine.length} anchors`);
+  const declared = [...fs.readFileSync(path.join(SCRIPTS, step + '-patch.js'), 'utf8')
     .matchAll(/patch\(\s*(['"])((?:\\.|(?!\1)[^\\])*)\1/g)].map(m => m[2]);
   const got = new Set(mine.map(p => p.label));
   const dropped = declared.filter(d => !got.has(d));
   ok('and every patch it declares was readable, none skipped in silence',
      dropped.length === 0, dropped.join('; ') || 'none');
-
   const results = mine.map(p => ({ label: p.label, r: check(p.find, at) }));
   const broken = results.filter(x => !x.r.ok).map(x => `${x.label}: ${x.r.why}`);
   ok('every anchor survives to that position', broken.length === 0, broken.join(' | ') || 'none');
-
-  /* The replay has to have DONE something for at least one of them, or the
-     "survives" above is just the seed being handed straight back. */
-  const replayed = results.filter(x => x.r.applied.length > 0);
-  ok('and at least one was replayed through intervening steps rather than read raw',
-     replayed.length > 0,
-     replayed.length ? `${replayed[0].label} through ${replayed[0].r.applied.length} steps` : 'none replayed');
-
   for (const x of results) {
     console.log('        ' + (x.r.ok ? '·' : '!') + ' ' + x.label.slice(0, 44).padEnd(46) +
                 (x.r.producer || '-') + '  ' + x.r.why);
   }
+  return results;
+}
+
+const ambientResults = stepAnchors('ambient', 1);
+const echoResults = stepAnchors('echo', 4);
+
+/* The replay has to have DONE something, or every "survives" above is just a
+   seed handed straight back. JUDGED ACROSS BOTH STEPS, and on purpose: echo's
+   banner anchor is now produced by ambient at the position immediately
+   before it, so there is nothing between them to replay through — handing
+   that seed back is the right answer, not a vacuous one. The banner's real
+   journey, assets(27) through every later step to ambient, is ambient's
+   anchor, replayed above. Held across the pair, a replay gone blind still
+   fails; held on echo alone, this failed for a reason that was not a defect. */
+{
+  const replayed = ambientResults.concat(echoResults).filter(x => x.r.applied.length > 0);
+  ok('and at least one anchor of the two steps was replayed through intervening steps rather than read raw',
+     replayed.length > 0,
+     replayed.length ? `${replayed[0].label} through ${replayed[0].r.applied.length} steps` : 'none replayed');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
