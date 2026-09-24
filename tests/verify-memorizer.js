@@ -703,6 +703,24 @@ function kindOf(user) {
   ok('and Back to sections goes there, the exam card keeping its score', /Last score 50%/.test(await page.locator('#exam-card').innerText()) &&
      (await page.locator('#exam-card #to-exam').innerText()) === 'Retake');
 
+  head('figures made from the book: a comparison chart, saved as an image');
+  await page.locator('#make-compare').click();
+  await page.locator('.figure-view img').waitFor(T);
+  const cmp = decodeURIComponent((await page.locator('.figure-view img').getAttribute('src')).replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+  const cmpText = cmp.replace(/<\/text><text[^>]*>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  ok('every taught section is a row, in order, with its big idea from its lesson', /^<svg /.test(cmp) &&
+     pdf.titles.every((t, i) => cmpText.indexOf(t) !== -1 && (i === 0 || cmpText.indexOf(t) > cmpText.indexOf(pdf.titles[i - 1]))) &&
+     /Preload is how full the ventricle is before it squeezes\./.test(cmpText), cmpText.slice(0, 200));
+  ok('its buttons can both be pressed: neither covers the other', await page.evaluate(() => {
+    const a = document.querySelector('#save-figure').getBoundingClientRect(), b = [...document.querySelectorAll('.figure-view .btn')].find(x => x.textContent === 'Close').getBoundingClientRect();
+    return a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top; }));
+  const [dl] = await Promise.all([page.waitForEvent('download', T), page.locator('#save-figure').click()]);
+  const png = fs.readFileSync(await dl.path());
+  ok('saved as a PNG image, named for the unit', dl.suggestedFilename() === 'unit-compared.png' && png.slice(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) && png.length > 5000,
+     dl.suggestedFilename() + ' ' + png.length + ' bytes');
+  await page.keyboard.press('Escape');
+  ok('and Escape closes it', await page.locator('.figure-view').count() === 0);
+
   head('review');
   await page.locator('nav.dock').getByRole('button', { name: /Review/ }).click();
   await page.locator('#mcq .option').first().waitFor(T);
@@ -947,13 +965,26 @@ function kindOf(user) {
     await p2.locator('#read-more li button').first().click();
     await p2.locator('#big-idea').waitFor(T);
     ok('read more opens that section\u2019s lesson', await p2.evaluate(() => Memorizer.ui.state.phase === 'teach' && Memorizer.ui.docRec.name === 'unit' && Memorizer.ui.state.section === 0));
+    await p2.locator('#make-card').click();
+    await p2.locator('.figure-view img').waitFor(T);
+    const card = decodeURIComponent((await p2.locator('.figure-view img').getAttribute('src')).replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+    const cardText = card.replace(/<\/text><text[^>]*>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const Lb = await p2.evaluate(() => Memorizer.ui.state.per[0].lesson);
+    ok('a study card of the section: its big idea, its number tiles, its source', cardText.indexOf((Lb.overview || Lb.points[0].text).replace(/\s+/g, ' ')) !== -1 &&
+       /&gt; 18 mmHg/.test(card) && /^ Section One Preload UNIT · P\. 1 /.test(cardText), cardText.slice(0, 200));
+    const [dl2] = await Promise.all([p2.waitForEvent('download', T), p2.locator('#save-figure').click()]);
+    ok('saved as a PNG image', dl2.suggestedFilename() === 'Section-One-Preload-study-card.png' && fs.readFileSync(await dl2.path()).slice(0, 4).equals(Buffer.from([137, 80, 78, 71])),
+       dl2.suggestedFilename());
+    await p2.locator('.figure-view').getByRole('button', { name: 'Close' }).click();
 
     head('the on-device AI tutor: everything it writes checked against the book');
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#ai-card').waitFor(T);
-    ok('Settings offers it, off, with two small models and their licences', (await p2.locator('#ai-toggle').innerText()) === 'Turn on' &&
-       JSON.stringify(await p2.$$eval('#ai-model option', os => os.map(o => /Llama|Gemma/.test(o.textContent) && /License|Terms/.test(o.textContent)))) === '[true,true]');
+    ok('Settings offers it, off, with two Qwen3 models, both Apache-2.0', (await p2.locator('#ai-toggle').innerText()) === 'Turn on' &&
+       JSON.stringify(await p2.$$eval('#ai-model option', os => os.map(o => /^Qwen3 /.test(o.textContent) && /Apache-2\.0/.test(o.textContent)))) === '[true,true]');
     ok('the real AI engine downloads, passes its integrity check, and loads from a local file', await p2.evaluate(() => MemLLM.loadLib().then(m => typeof m.CreateMLCEngine, e => 'failed: ' + e.message)) === 'function');
+    const known = await p2.evaluate(() => MemLLM.loadLib().then(m => MemLLM.MODELS.map(x => x.id).concat([MemLLM.EMBED.id]).filter(id => !m.prebuiltAppConfig.model_list.some(r => r.model_id === id))));
+    ok('every model offered is one the pinned engine knows', known.length === 0, JSON.stringify(known));
     /* A stand-in for the model, answering each job with faithful sentences
        and made-up ones, the way a small model does. */
     await p2.evaluate(() => {
@@ -961,10 +992,11 @@ function kindOf(user) {
       MemLLM.saveConfig({ on: true, model: 'stub' });
       MemLLM.useEngine({ chat: { completions: { create: async req => {
         const u = req.messages[1].content; window.__ai.push(u);
+        window.__thinkOn = window.__thinkOn || !(req.extra_body && req.extra_body.enable_thinking === false);
         let out = '';
         if (/Answer the question in 2 to 4/.test(u)) {
           const k = (u.split('\n').find(l => /Diuretics reduce preload/.test(l)) || '[1]').match(/^\[(\d+)\]/)[1];
-          out = `Diuretics reduce preload by lowering circulating volume [${k}]. Diuretics reduce preload by 75 percent [${k}]. Nitrates reduce preload too [${k}]. It works well.`;
+          out = `<think>The passage says 99 mmHg, so I will say that [${k}].</think>Diuretics reduce preload by lowering circulating volume [${k}]. Diuretics reduce preload by 75 percent [${k}]. Nitrates reduce preload too [${k}]. It works well.`;
         } else if (/Explain this section/.test(u)) out = 'Preload is how much the ventricle is stretched before it contracts. Doctors give 40 mg of furosemide.';
         else if (/ONE everyday analogy/.test(u)) out = 'Like filling a water balloon: the more you fill it, the harder it pushes back.';
         else if (/multiple-choice/.test(u)) out = JSON.stringify({ questions: [
@@ -1006,6 +1038,7 @@ function kindOf(user) {
     ok('and the explanation shown is the book\u2019s sentence with its page, not the model\u2019s', /Why: Diuretics reduce preload by lowering circulating volume\./.test(await p2.locator('.why').innerText()) &&
        (await p2.locator('.why .pg').innerText()) === 'p.1');
     ok('and none of it went over the network', stub.requests.length === aiNet && await p2.evaluate(() => window.__ai.length) === 4);
+    ok('every request asks Qwen3 not to reason aloud; its <think> is removed before checking', await p2.evaluate(() => window.__thinkOn) === false && !/99|think/i.test(sumText));
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#ai-toggle').click();
     await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();

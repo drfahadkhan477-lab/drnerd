@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 52 suites that need neither a browser nor a build all stay
+present, and the 53 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -157,7 +157,7 @@ their synonyms ("NT-proBNP", "TAVI", a drug by its suffix), and the indexes
 can be browsed too. Nothing is sent anywhere.
 
 **An on-device AI tutor, optional.** Turned on in Settings, a small language
-model (Llama 3.2 1B or Gemma 3 1B, through WebLLM on WebGPU) is downloaded
+model (Qwen3 0.6B or 1.7B, Apache-2.0, through WebLLM on WebGPU) is downloaded
 once and runs on the iPad with no key and no connection. It explains a
 section in plain words, suggests an analogy, summarises what the book says in
 answer to a question, and writes harder questions. It is not a source of

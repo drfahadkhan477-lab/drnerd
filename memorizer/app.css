@@ -372,3 +372,12 @@ details.more-analogies > summary { cursor: pointer; font-weight: 600; }
 .bubble.mine { flex: 0 1 auto; background: var(--accent); color: var(--accent-ink); border-color: transparent; border-radius: 1.125rem 1.125rem .25rem 1.125rem; font-weight: 600; }
 .chips.suggest { margin-top: var(--s-2); }
 .chips.suggest .btn.chip { font-size: var(--t-meta); text-align: left; }
+
+/* ── figures made from the book ── */
+.figure-view { flex-direction: column; gap: var(--s-3); }
+/* The page lightbox pins its one button to a corner; the figure viewer has
+   two, and pinned they sat on top of each other ("Close" covered "Save"). */
+.figure-view .btn { position: static; }
+.figure-view img { max-width: min(92vw, 1080px); max-height: 78vh; background: #FFFFFF; border-radius: .75rem; }
+.figure-view .fig-note { color: #E2E8F0; }
+.compare-row { margin-top: var(--s-3); }

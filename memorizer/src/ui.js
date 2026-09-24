@@ -18,7 +18,7 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -746,6 +746,7 @@ function viewUnit() {
     h('h2.grid-title', 'Sections (' + n + ')'),
     h('div.sections', { id: 'sections' }, cards),
     examCard,
+    compareButton(s, d),
     h('div.sticky-cta', allDone
       ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
       : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })));
@@ -800,6 +801,16 @@ function viewBook() {
     }, 'quiet danger', { id: 'delete-book' })));
 }
 
+/* Compare the sections taught so far, side by side, as one figure. */
+function compareButton(s, d) {
+  var rows = d.clusters.map(function (c, i) {
+    var L = s.per[i].lesson;
+    return L ? { title: c.title, sheet: Sheet.sheetOf(L), mnemonic: (L.mnemonics || [])[0] } : null;
+  }).filter(Boolean);
+  if (rows.length < 2) return null;
+  return h('div.row.compare-row', button('🖼 Compare sections (' + rows.length + ')', function () { showFigure(Figure.compareChart(d.name, rows), d.name + ' compared'); }, 'quiet', { id: 'make-compare' }));
+}
+
 /* ── LESSON ──────────────────────────────────────────────────────────────── */
 function steps(which) {
   return h('ol.stepper', { 'aria-label': 'Step' }, [['teach', 'Learn'], ['drill', 'Drill']].map(function (p) {
@@ -842,6 +853,37 @@ function drawFlowCard(c, lessonV) {
       h('span.muted', fromModel ? 'drawn by Claude from this section' : 'from this section’s cause-and-effect sentences')),
     drawFlow(f));
 }
+/* ── figures made from the book (figure.js): shown, and saved as a PNG ─── */
+function svgUrl(svg) { return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); }
+function savePng(svg, name) {
+  var img = new Image();
+  img.onload = function () {
+    var c = doc.createElement('canvas'), k = 2;
+    c.width = img.naturalWidth * k; c.height = img.naturalHeight * k;
+    var ctx = c.getContext('2d'); ctx.scale(k, k); ctx.drawImage(img, 0, 0);
+    c.toBlob(function (b) {
+      var a = doc.createElement('a');
+      a.href = URL.createObjectURL(b); a.download = name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.png';
+      doc.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+    }, 'image/png');
+  };
+  img.src = svgUrl(svg);
+}
+function showFigure(svg, name) {
+  var close = function () { if (el.parentNode) el.parentNode.removeChild(el); doc.removeEventListener('keydown', esc); };
+  var esc = function (e) { if (e.key === 'Escape') close(); };
+  var el = h('div.lightbox.figure-view', { role: 'dialog', 'aria-modal': 'true', 'aria-label': name, onclick: function (e) { if (e.target === el) close(); } },
+    h('img', { src: svgUrl(svg), alt: name }),
+    h('p.muted.fig-note', 'Every word and number here is your book\u2019s, arranged by Memorizer.'),
+    h('div.row', button('Save image', function () { savePng(svg, name); }, 'primary', { id: 'save-figure' }), button('Close', close)));
+  doc.addEventListener('keydown', esc);
+  doc.body.appendChild(el);
+}
+function sourceLine(d, c) {
+  return (d.bookName ? d.bookName + ' · ' : '') + d.name + ' · ' + (c.pageEnd !== c.pageStart ? 'pp. ' + c.pageStart + '–' + c.pageEnd : 'p. ' + c.pageStart);
+}
+
 /* Clinical headings, each with a small mark so the eye finds its place. */
 var HEAD_MARK = { 'Definition': '◆', 'Causes and risk factors': '⚑', 'Mechanism': '⚙', 'Presentation': '☺', 'Diagnosis': '⌕', 'Treatment': '✚',
                   'Complications and prognosis': '⚠', 'Also know': '•' };
@@ -885,7 +927,9 @@ function viewLesson() {
     h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(sh.bigIdea))),
     analogies.length ? analogyCard(analogies[0], true) : null,
     h('div.card', { id: 'points' },
-      h('div.card-head', h('h2', 'Key points'), button('🔊 Listen', function () { speak(all.map(function (p) { return p.text; }).join('. ')); }, 'quiet')),
+      h('div.card-head', h('h2', 'Key points'), h('div.row',
+        button('🖼 Study card', function () { showFigure(Figure.studyCard(c.title, sh, L.mnemonics || [], sourceLine(ui.docRec, c)), c.title + ' study card'); }, 'quiet', { id: 'make-card' }),
+        button('🔊 Listen', function () { speak(all.map(function (p) { return p.text; }).join('. ')); }, 'quiet'))),
       sh.groups.map(function (g) {
         return h('section.point-group', h('h3.group-head', h('span.group-mark', { 'aria-hidden': 'true' }, HEAD_MARK[g.heading] || '•'), g.heading),
           h('ol.points', { start: String(n + 1) }, g.points.map(function (p) { return pointCard(c, p, n++); })));
@@ -1374,7 +1418,7 @@ function aiSettingsCard() {
     return h('option', { value: m.id, selected: m.id === c.model }, m.label + ' — about ' + (m.mb >= 1000 ? (m.mb / 1000).toFixed(1) + ' GB' : m.mb + ' MB') + ' · ' + m.licence);
   }));
   return h('div.card.settings.ai-card', { id: 'ai-card' }, h('h2', '✨ On-device AI tutor'),
-    h('p', 'Optional. A small language model, downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. It needs no key and, once downloaded, no connection.'),
+    h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. It needs no key and, once downloaded, no connection.'),
     h('p', h('strong', 'It is not a source of facts. '), 'Every sentence it writes is checked against your book before you see it: no number and no disease, test or drug the book passage does not have, and a question is kept only when your book states its answer — and the book\u2019s own sentence is shown as the explanation. What fails the check is dropped and counted.'),
     h('label', 'Model', model),
     h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr; the model itself comes from Hugging Face through that engine, which does not check it against a hash, and is kept in this browser\u2019s cache.'),

@@ -3,7 +3,7 @@
 
    OPTIONAL, and off until the owner turns it on in Settings. It downloads a
    model once (under a gigabyte) and runs it on the iPad's GPU through WebGPU
-   with WebLLM (Apache-2.0); after that it works offline and nothing is sent
+   with WebLLM (Apache-2.0), running Qwen3 (Apache-2.0); after that it works offline and nothing is sent
    anywhere. It makes the built-in coach more like a tutor — a summary of what
    the book says, an explanation in plain words, an analogy, harder
    questions — and NOTHING IT WRITES IS SHOWN UNCHECKED: ground.js holds every
@@ -25,11 +25,14 @@
 
 var WEBLLM = { url: 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.85/lib/index.js',
                sri: 'sha384-rfElDdXnNkSgbLTTGiKHTrsetCVAYzzLZBD96/rZdD9XYvryEyShqz3ph8j+x7HH' };
-/* Small enough for an iPad: Safari caps one GPU buffer at about a gigabyte
-   even on an iPad Pro, and a tab's memory lower on older models. */
+/* Qwen3, Apache-2.0, at the owner's request for an Apache-licensed model.
+   The GPU memory is WebLLM's own figure for each (its prebuilt config): the
+   0.6B fits more iPads; the 1.7B is stronger and wants a recent one (M-series).
+   Earlier versions offered Llama 3.2 1B and Gemma 3 1B, under their own
+   licences. */
 var MODELS = [
-  { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', mb: 879, licence: 'Llama 3.2 Community License' },
-  { id: 'gemma3-1b-it-q4f16_1-MLC', label: 'Gemma 3 1B (smaller)', mb: 711, licence: 'Gemma Terms of Use' },
+  { id: 'Qwen3-0.6B-q4f16_1-MLC', label: 'Qwen3 0.6B', mb: 1403, licence: 'Apache-2.0' },
+  { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B (stronger; newer iPads)', mb: 2037, licence: 'Apache-2.0' },
 ];
 var CFG_KEY = 'memorizer.llm.v1';
 /* Search by meaning: Snowflake's arctic-embed-s (Apache-2.0, 384
@@ -105,12 +108,16 @@ function start(model, onProgress) {
   }).then(function (e) { engine = e; engineModel = model; return e; });
 }
 
+function stripThinking(t) { return String(t).replace(/<think>[\s\S]*?(?:<\/think>|$)/g, '').trim(); }
 function chat(system, user, schema, maxTokens) {
   if (!engine) return Promise.reject(new Error('the on-device AI is not running'));
-  var req = { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0.2, max_tokens: maxTokens || 400 };
+  /* Qwen3 reasons aloud in <think> by default; off, its answers are short
+     and come at once. Anything that still arrives in <think> is removed. */
+  var req = { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0.2, max_tokens: maxTokens || 400,
+              extra_body: { enable_thinking: false } };
   if (schema) req.response_format = { type: 'json_object', schema: JSON.stringify(schema) };
   return engine.chat.completions.create(req).then(function (r) {
-    return String((r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '');
+    return stripThinking(String((r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || ''));
   });
 }
 
@@ -150,7 +157,7 @@ function parseQuestions(text) {
 var MemLLM = { EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
                loadLib: loadLib, useEngine: useEngine, ready: ready, start: start, chat: chat, SYSTEM: SYSTEM,
                summaryPrompt: summaryPrompt, plainPrompt: plainPrompt, analogyPrompt: analogyPrompt, questionsPrompt: questionsPrompt,
-               QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions };
+               QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions, stripThinking: stripThinking };
 root.MemLLM = MemLLM;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemLLM;
 })(typeof window !== 'undefined' ? window : this);
