@@ -1057,7 +1057,12 @@ function keepable(req, res) {
 fs.writeFileSync(path.join(DIST, 'sw.js'), SW);
 
 /* ── NO FILE THE HOST WILL REFUSE ─────────────────────────────────────────────
-   Cloudflare Pages will not serve a single asset over 25 MiB. Nothing here
+   Cloudflare Pages will not take a single asset over "25 MiB" — and the
+   number it enforces is 25,000,000 bytes, not 25 x 1024 x 1024. The first
+   version of this guard took the label at its word (26,214,400) and passed a
+   refs-images.json of 23.9 MiB, which the dashboard upload then refused as
+   "larger than the file size limit of 25 MiB": 23.9 MiB is 25.06 million
+   bytes. So the ceiling is the smaller reading, which satisfies both. Nothing here
    knew that, and docs/IPAD.md's "5.4 MB for the largest against 25 MB" had
    gone stale by a factor of four: an arrhythmias unit took refs-images.json
    to 25.7 MiB, the build printed its usual green, and the deployed app opened
@@ -1072,10 +1077,10 @@ fs.writeFileSync(path.join(DIST, 'sw.js'), SW);
    build. The warning line is not a second limit: it only says how close the
    largest file is, because the refs-images.json that tripped this grows with
    every unit and the next one should be seen coming. */
-const PAGES_FILE_LIMIT = 25 * 1024 * 1024;
+const PAGES_FILE_LIMIT = 25 * 1000 * 1000;   // bytes; see above — NOT 25 MiB
 function pagesLimitReport(files, limit) {
   const over = files.filter(f => f.bytes > limit)
-    .map(f => f.rel + ' is ' + (f.bytes / 1048576).toFixed(1) + ' MiB');
+    .map(f => f.rel + ' is ' + f.bytes.toLocaleString('en-US') + ' bytes (' + (f.bytes / 1048576).toFixed(1) + ' MiB)');
   let largest = null;
   for (const f of files) if (!largest || f.bytes > largest.bytes) largest = f;
   return { over, largest };
@@ -1090,7 +1095,7 @@ const distFiles = [];
 })(DIST);
 const hostCheck = pagesLimitReport(distFiles, PAGES_FILE_LIMIT);
 if (hostCheck.over.length) {
-  console.error('\n  build-pwa: Cloudflare Pages refuses any file over 25 MiB, and this dist/ has '
+  console.error('\n  build-pwa: Cloudflare Pages refuses any file over 25,000,000 bytes, and this dist/ has '
     + hostCheck.over.join('; ') + '.\n  Nothing in dist/ is safe to deploy. For refs-images.json, re-run '
     + 'tools/add-unit.py with a lower --quality or --max-width, or crop the figures.');
   process.exit(1);
@@ -1117,7 +1122,7 @@ console.log(`  shell total          ${kb(shellBytes)}   (was ${mb(fs.statSync(SR
 console.log(`  shell transferred    ${kb(shellWire)} gzipped   (the budget: 280 KB)`);
 console.log(`  content/             ${mb(contentManifest.figureBytes)} of figures + questions.json`);
 console.log(`  content/splash-heart ${splashAssets.map(([n,b])=>`${n} ${(b.length/1024).toFixed(0)}KB`).join(', ')}`);
-console.log(`  largest file         ${hostCheck.largest.rel} ${(hostCheck.largest.bytes / 1048576).toFixed(1)} MiB   (the host's ceiling: 25 MiB)`);
+console.log(`  largest file         ${hostCheck.largest.rel} ${(hostCheck.largest.bytes / 1e6).toFixed(2)} MB   (the host's ceiling: 25.00 MB, decimal)`);
 console.log(`  build                ${BUILD_ID}   from commit ${COMMIT}`);
 console.log(`\n  written to           ${DIST}`);
 /* Icons are drawn by a headless browser, which lives in the global node_modules

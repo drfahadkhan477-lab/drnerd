@@ -169,21 +169,27 @@ head('build-pwa refuses a dist/ with a file Cloudflare Pages will not serve');
   const lim = /const PAGES_FILE_LIMIT = ([^;]+);/.exec(SRC);
   if (lim) limit = new Function(`return ${lim[1]};`)();
   ok('pagesLimitReport was lifted out of build-pwa.js', typeof report === 'function');
-  ok('the ceiling is Cloudflare Pages\' 25 MiB, in bytes', limit === 25 * 1024 * 1024, String(limit));
+  /* 25,000,000, not 26,214,400. The dashboard labels its limit "25 MiB" and
+     refused a 23.9 MiB file (25.06 million bytes) under it; the first version
+     of this check asserted the binary reading and passed that file. */
+  ok('the ceiling is the 25,000,000 bytes Cloudflare actually enforces', limit === 25 * 1000 * 1000, String(limit));
   /* The file that actually broke a deploy, at the size it actually was. */
   const MiB = 1048576;
   const dist = [{ rel: 'app.js', bytes: 682 * 1024 }, { rel: 'content/questions.json', bytes: 1.65 * MiB },
                 { rel: 'content/refs-images.json', bytes: Math.round(25.7 * MiB) }];
   const r = report ? report(dist, limit) : { over: [], largest: null };
   ok('the 25.7 MiB refs-images.json that broke a deploy is refused',
-     r.over.length === 1 && /^content\/refs-images\.json is 25\.7 MiB$/.test(r.over[0]), r.over.join('; '));
+     r.over.length === 1 && /^content\/refs-images\.json is [\d,]+ bytes \(25\.7 MiB\)$/.test(r.over[0]), r.over.join('; '));
   ok('and the files under the ceiling are not named', !r.over.some(x => /app\.js|questions/.test(x)));
   ok('the largest file is reported, so the margin is visible on a green build',
      !!r.largest && r.largest.rel === 'content/refs-images.json');
-  /* Its rebuilt size, which deployed. The boundary is inclusive of the limit. */
-  const fixed = report ? report([{ rel: 'content/refs-images.json', bytes: Math.round(23.9 * MiB) },
-                                 { rel: 'edge', bytes: limit }], limit) : { over: ['n/a'] };
-  ok('the 23.9 MiB rebuild passes, and so does a file of exactly 25 MiB', fixed.over.length === 0, fixed.over.join('; '));
+  /* The rebuild that was ALSO refused by the upload — under 25 MiB, over
+     25 million bytes. This is the case the binary reading got wrong. */
+  const second = report ? report([{ rel: 'content/refs-images.json', bytes: Math.round(23.9 * MiB) }], limit) : { over: [] };
+  ok('the 23.9 MiB rebuild the upload also refused is refused here', second.over.length === 1, second.over.join('; ') || 'passed');
+  /* The boundary is inclusive of the limit. */
+  const edge = report ? report([{ rel: 'a', bytes: limit }, { rel: 'b', bytes: 23.5e6 }], limit) : { over: ['n/a'] };
+  ok('a file of exactly 25,000,000 bytes passes, and so does 23.5 MB', edge.over.length === 0, edge.over.join('; '));
   ok('one byte over is refused', report ? report([{ rel: 'x', bytes: limit + 1 }], limit).over.length === 1 : false);
   /* The check is only worth anything if the build acts on it. */
   ok('the build exits non-zero when anything is over',
