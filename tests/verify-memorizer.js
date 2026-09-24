@@ -1688,6 +1688,24 @@ function kindOf(user) {
     ok('and the rest of the PDF is imported all the same', orec.clusters.some(c => /This first page carries real text/.test(c.text)));
   }
 
+  head('opened as a data: URL, the way the iPad\u2019s Files app hands a file to Safari');
+  {
+    /* No origin, so no storage: reading localStorage itself throws. The
+       owner's iPad showed a blank page here — an unguarded read stopped
+       the script before anything was drawn. */
+    const pd = await (await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' })).newPage();
+    const derr = [];
+    pd.on('pageerror', e => derr.push(e.message));
+    await pd.goto('data:text/html;base64,' + Buffer.from(html).toString('base64'));
+    await pd.locator('#store-banner').waitFor(T);
+    ok('it opens: the home screen is drawn, and nothing throws', derr.length === 0 && await pd.locator('main.home').count() === 1, derr.join(' | '));
+    await pd.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await pd.waitForFunction(() => Memorizer.ui.view === 'settings' && document.querySelector('[data-theme-id]'), null, T).catch(() => {});
+    ok('Settings opens there too, its appearance choices drawn, nothing thrown', derr.length === 0 && await pd.locator('[data-theme-id]').count() > 0, derr.join(' | '));
+    ok('and it says plainly that nothing will be kept, and what to do instead', /Nothing you add here will be kept/.test(await pd.locator('#store-banner').innerText()) &&
+       /web address/.test(await pd.locator('#store-banner').innerText()), await pd.locator('#store-banner').innerText());
+  }
+
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));
   await browser.close();
   fs.rmSync(dir, { recursive: true, force: true });

@@ -165,13 +165,14 @@ function normalise(look) {
   });
   return out;
 }
+/* Reading root.localStorage itself throws where storage is refused — a page
+   opened as a data: URL (the iPad's Files app hands an .html to Safari that
+   way), some private modes — so it is read inside the try, not before it. */
 function load(storage) {
-  var st = storage || (root.localStorage || null);
-  try { return normalise(JSON.parse(st.getItem(KEY) || 'null')); } catch (_) { return normalise(null); }
+  try { var st = storage || root.localStorage; return normalise(JSON.parse(st.getItem(KEY) || 'null')); } catch (_) { return normalise(null); }
 }
 function save(look, storage) {
-  var st = storage || root.localStorage;
-  try { st.setItem(KEY, JSON.stringify(normalise(look))); return true; } catch (_) { return false; }
+  try { var st = storage || root.localStorage; st.setItem(KEY, JSON.stringify(normalise(look))); return true; } catch (_) { return false; }
 }
 
 /* ── colour arithmetic (sRGB hex; no color-mix, which iPadOS 13 lacks) ── */
