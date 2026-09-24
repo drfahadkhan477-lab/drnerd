@@ -70,6 +70,35 @@ var LABELS_ONLY = new RegExp('^(?:' + LABEL + '\\s*)+$');
    in a clinical text, and a question in its own right. */
 var MOST = /\b(?:is|are|remains?|represents?)\s+(?:by far\s+)?the\s+most\s+(?:common|frequent|important)\s+/i;
 
+/* What makes a sentence high-yield: what an exam asks and what changes what
+   is done. The owner found the lessons "baby level, not identifying high
+   yield and important points". Each cue names itself, so a point can say
+   why it was chosen. */
+var YIELD = [
+  ['Most common', /\b(?:most (?:common|frequent)(?:ly)?|commonest|leading cause|predominant cause)\b/i],
+  ['First-line', /\b(?:first[- ]line|treatment of choice|drug of choice|agent of choice|mainstay|cornerstone|initial (?:therapy|treatment|test|investigation))\b/i],
+  ['Diagnostic', /\b(?:gold standard|pathognomonic|hallmark|diagnostic of|confirms? the diagnosis|diagnosis is (?:made|confirmed)|definitive (?:test|diagnosis))\b/i],
+  ['Avoid', /\b(?:contraindicat\w*|should not|must not|avoid(?:ed)?|not recommended|harmful)\b/i],
+  ['Guideline', /\b(?:class (?:I{1,3}|1|2a|2b|3)\b|(?:is|are) (?:recommended|indicated)|guidelines?)\b/i],
+  ['Prognosis', /\b(?:mortality|survival|prognos\w*|independent(?:ly)? predict\w*|risk of death|sudden (?:cardiac )?death)\b/i],
+  ['Accuracy', /\b(?:sensitivity|specificity|specific for|sensitive for|predictive value)\b/i],
+  ['Contrast', /\b(?:unlike|in contrast|whereas|as opposed to|except|unless|paradoxical(?:ly)?)\b/i]
+];
+/* A threshold: a number that is a value (not "Table 1.4") with a unit or a
+   comparison beside it. */
+var COMPARE = /(?:[<>≤≥]|\b(?:above|below|over|under|greater than|less than|more than|at least|exceed\w*|or more|or less)\b)/i;
+var UNIT_AFTER = /^(?:%|mmhg|mm|cm|cm2|m\/s|ms|mg|mcg|g|kg|ml|l|min|hours?|h|days?|weeks?|months?|years?|bpm|mv|mmol|meq|au|ml\/m2|l\/min)\b/i;
+function yieldOf(text) {
+  var t = String(text || ''), out = YIELD.filter(function (y) { return y[1].test(t); }).map(function (y) { return y[0]; });
+  var ws = t.split(/\s+/);
+  for (var i = 0; i < ws.length; i++) {
+    if (!isFactNumber(ws, i)) continue;
+    var unit = /\d%/.test(ws[i]) || UNIT_AFTER.test(String(ws[i + 1] || '').replace(/[,.;:)]+$/, ''));
+    if (unit && (COMPARE.test(ws.slice(Math.max(0, i - 3), i + 1).join(' ')) || /[<>≤≥]/.test(ws[i]))) { out.unshift('Threshold'); break; }
+  }
+  return out;
+}
+
 /* Words: split on spaces, dashes and slashes, so "leaflets—septal" is two
    words (the owner's hook once offered "leaflets—septal" as one). */
 function toks(text) { return String(text || '').split(/[\s\u2014\u2013\/]+/).filter(Boolean); }
@@ -249,6 +278,13 @@ function keySentences(cluster) {
      myocytes at the end of diastole" left out of the Preload section. */
   var def = usable.filter(function (s) { return DEFINITION.test(s.text); })[0];
   if (def && picked.indexOf(def) === -1) picked.unshift(def);
+  /* Then what is high-yield — the most common cause, the first-line drug,
+     what to avoid, what predicts death (yieldOf) — most cues first. Its
+     words are often rare in the section too: a paragraph that keeps saying
+     "left ventricle" outscored "Beta-blockers are first-line therapy". */
+  usable.map(function (s) { return { s: s, n: yieldOf(s.text).length }; }).filter(function (x) { return x.n; })
+    .sort(function (a, b) { return b.n - a.n || scoreSentence(b.s, freq) - scoreSentence(a.s, freq); })
+    .forEach(function (x) { if (picked.length < k && picked.indexOf(x.s) === -1) picked.push(x.s); });
   byScore.forEach(function (s) { if (picked.length < k && picked.indexOf(s) === -1) picked.push(s); });
 
   return picked.sort(function (a, b) { return a.index - b.index; });
@@ -1287,7 +1323,7 @@ function reteach(item, cluster) {
 
 var MemCoach = {
   OPTIONS: OPTIONS, PER_KIND: PER_KIND, QUIZ_SIZE: QUIZ_SIZE, KIND_ORDER: KIND_ORDER, family: family, FLIP: FLIP, keyTermOf: keyTermOf,
-  sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, defined: defined, toks: toks,
+  sentences: sentences, keySentences: keySentences, yieldOf: yieldOf, YIELD: YIELD, lists: lists, patternQuestions: patternQuestions, defined: defined, toks: toks,
   rankedTerms: rankedTerms, frequencies: frequencies, bare: bare, numberFacts: numberFacts, mnemonicsOf: mnemonicsOf,
   pools: pools, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
   lesson: lesson, quiz: quiz, exam: exam, flow: flow, paths: paths, tree: tree,

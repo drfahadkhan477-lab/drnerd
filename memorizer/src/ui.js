@@ -822,7 +822,7 @@ function viewHome() {
   /* Worked out once per day and per "Another": over a whole book it reads
      every chapter's prose. */
   var pkey = day + '|' + (ui.pearlSkip || 0);
-  if (!ui.pearlCache || ui.pearlCache.key !== pkey) ui.pearlCache = { key: pkey, pk: ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0) : null };
+  if (!ui.pearlCache || ui.pearlCache.key !== pkey) ui.pearlCache = { key: pkey, pk: ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0, Coach.yieldOf) : null };
   var pk = ui.pearlCache.pk;
   /* The pearl is the feature of the page: larger, and with its own
      section's figure or table beside it (Home.pearlVisual), so the fact is
@@ -1077,10 +1077,17 @@ function pointCard(c, p, i) {
     h('span.point-n', String(i + 1)),
     ui.state ? button(marked_ ? '★' : '☆', function () { toggleMark(c, p.text); }, 'quiet mark-btn', { id: 'mark-' + i, 'aria-pressed': String(marked_), 'aria-label': marked_ ? 'Unmark this point' : 'Mark this point to be asked' }) : null,
     h('div.point-body',
+      hyTags(p.text),
       h('p.point-text', b.lead ? [h('strong.lead', b.lead), marked(b.body)] : withKey(b.body, Coach.keyTermOf(c, p.text)), ' ', page(p.page)),
       b.subs.length ? h('ul.subs', b.subs.map(function (x) { return h('li', marked(x)); })) : null,
       para && para.text.length > p.text.length + 20 ? h('details.context', h('summary', 'In the book'),
         h('p', marked(para.text))) : null));
+}
+/* Why a point is high-yield, from its own words (Coach.yieldOf): "Most
+   common", "First-line", "Threshold" … — whatever wrote the lesson. */
+function hyTags(text) {
+  var hy = Coach.yieldOf(text);
+  return hy.length ? h('p.hy-tags', h('span.hy', 'High yield'), hy.map(function (t) { return h('span.hy-why', t); })) : null;
 }
 /* The point with its key term in bold, every word still the book's. */
 function withKey(text, key) {

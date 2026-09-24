@@ -851,3 +851,9 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 .week-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: var(--s-2); margin: var(--s-2) 0; }
 .week-stats strong { font-size: var(--t-h4); }
 .freeze { margin-left: .125rem; }
+
+/* ── high-yield points (Coach.yieldOf) ── */
+.hy-tags { display: flex; flex-wrap: wrap; gap: .375rem; margin: 0 0 .25rem; }
+.hy, .hy-why { font-size: var(--t-tiny); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: .0625rem .5rem; }
+.hy { color: var(--accent-ink); background: var(--accent); }
+.hy-why { color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); }

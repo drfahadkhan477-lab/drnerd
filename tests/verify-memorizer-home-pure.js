@@ -212,6 +212,25 @@ head('the pearl is the PDF’s own sentence');
     { text: 'Afterload and the valve', heading: true, page: 4 }, { text: PROSE_B, page: 4 }], 3)])], Pearl, DAY, 0).pearl;
   ok('credited to the heading it was printed under, not the section’s first', where.heading === 'Afterload and the valve', where.heading);
   ok('and to the page it was printed on', where.page === 4, String(where.page));
+  /* High-yield pearls come up more often. Every section below has a pearl
+     pearl.js would take (a value with its unit, a full statement); one also
+     says what an exam asks — "the most common cause" — which pearl.js does
+     not weigh. Over two months of days it opens the home more often than
+     its even share (one in four) with yieldOf, and more often than without. */
+  {
+    const K = require(path.join(ROOT, 'memorizer', 'src', 'coach.js'));
+    const HY = 'Rheumatic heart disease is the most common cause of mitral stenosis, and intervention should be offered once the valve area falls to 1.5 cm or less in a patient with symptoms.';
+    const plain = ['Diuretics should be given for pulmonary congestion in mitral stenosis, and a resting heart rate kept near 60 bpm lets the left atrium empty through the narrow valve.',
+      'Warfarin should be started for mitral stenosis with atrial fibrillation, keeping the international ratio near 2 to 3 for as long as the rhythm lasts, with a check every 4 weeks.',
+      'Balloon valvotomy should be offered when the valve is pliable and not heavily calcified, and the result is judged by a fall in the mean gradient to about 5 mmHg afterwards.'];
+    const hyDoc = doc('y', 1, [cl(0, 'Mitral stenosis', [HY], 1), cl(1, 'Filling', [plain[0]], 1), cl(2, 'Atria', [plain[1]], 1), cl(3, 'Coronaries', [plain[2]], 1)]);
+    const dates = Array.from({ length: 60 }, (_, i) => new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10));
+    const share = y => dates.filter(x => { const q = H.pearlOf([hyDoc], Pearl, x, 0, y); return q && /most common cause/.test(q.pearl.text); }).length;
+    const pool = (H.pearlOf([hyDoc], Pearl, dates[0], 0) || {}).of;
+    const withHy = share(K.yieldOf), without = share(undefined);
+    ok('a high-yield pearl is drawn more often than its even share, and than without', pool === 4 && withHy > without && withHy > dates.length / 4,
+       `${withHy} of ${dates.length} days, against ${without} without (pool ${pool})`);
+  }
   ok('a unit with no sentence worth a pearl has none, rather than a poor one', H.pearlOf([doc('t', 1, [cl(0, 'x', ['It is short.', 'So is this.'])])], Pearl, DAY, 0) === null);
 }
 

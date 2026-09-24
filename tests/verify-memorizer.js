@@ -392,7 +392,7 @@ const stub = {
     switch (kind) {
       case 'lesson': return {
         overview: 'Preload is how full the ventricle is before it squeezes.',
-        points: [{ text: 'Preload — end-diastolic stretch ' + EVIL, page: 1 }, { text: 'Venous return sets preload', page: 2 }],
+        points: [{ text: 'Preload — end-diastolic stretch ' + EVIL, page: 1 }, { text: 'Venous return is the most common thing that sets preload', page: 2 }],
         numbers: [{ text: 'An LVEDP greater than 18 mmHg prompts a search for overload', page: 1 }],
         mnemonics: [{ title: 'What sets preload', letters: 'VVC', words: ['Venous return', 'Volume', 'Compliance'] }],
         analogies: [{ title: 'A balloon', text: 'The more you fill a balloon, the harder it snaps back.', source: 'Claude' }],
@@ -586,6 +586,11 @@ function kindOf(user) {
   ok('the key points are numbered cards, a definition leading with its term',
      await page.locator('ol.points > li').count() === 2 && (await page.locator('ol.points > li .lead').first().innerText()) === 'Preload' &&
      (await page.locator('ol.points > li .point-n').first().innerText()) === '1', pointText.replace(/\s+/g, ' '));
+  /* A point that says what an exam asks is marked high-yield, with why; a
+     plain one is not. */
+  const hyShown = await page.$$eval('ol.points > li', ls => ls.map(l => [...l.querySelectorAll('.hy-tags span')].map(x => x.textContent)));
+  ok('a high-yield point says so, and why; a plain one is not marked', hyShown.length === 2 && hyShown[0].length === 0 &&
+     JSON.stringify(hyShown[1]) === JSON.stringify(['High yield', 'Most common']), JSON.stringify(hyShown));
   /* The ☆ that marks a point made it a third item in a two-column grid, and
      the text fell into the 2.25rem number column, a word to a line. Widths
      as laid out: the text has the room, the star sits at the end, all on

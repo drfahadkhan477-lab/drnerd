@@ -154,14 +154,18 @@ function seeded(str) {
   return function () { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }
 
-/* Today's pearl from the given units; `skip` counts presses of "Another". */
-function pearlOf(docs, Pearl, today, skip) {
+/* Today's pearl from the given units; `skip` counts presses of "Another".
+   `yieldOf` (Coach.yieldOf, passed in so this stays pure) makes a
+   high-yield sentence likelier: each cue, up to three, adds 20 to its
+   pearl.js score — about twice what a strong pearl scores on its own, so a
+   pearl that is also high-yield is drawn roughly half again as often. */
+function pearlOf(docs, Pearl, today, skip, yieldOf) {
   var pool = [];
   (docs || []).forEach(function (d) {
     Pearl.harvest(notesOf(d)).forEach(function (p) {
       var idx = Number(String(p.id).split(':').pop());
       var c = d.clusters.filter(function (x) { return x.index === idx; })[0];
-      pool.push({ id: p.id, text: p.text, score: p.score, title: p.title, docId: d.id, docName: d.name, cluster: idx,
+      pool.push({ id: p.id, text: p.text, score: p.score + (yieldOf ? 20 * Math.min(3, yieldOf(p.text).length) : 0), title: p.title, docId: d.id, docName: d.name, cluster: idx,
                   page: c ? pageOf(c, p.text) : null, heading: c ? headingOf(c, p.text) : p.title });
     });
   });

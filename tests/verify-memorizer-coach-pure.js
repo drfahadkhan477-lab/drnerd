@@ -192,6 +192,39 @@ head('the lesson: the book’s own words, in teaching order');
   ok('a list’s topic is its section’s title without the part mark', topics.every(t => t === 'Tricuspid stenosis'), JSON.stringify(topics));
 }
 
+head('high-yield: what an exam asks, found and taken first');
+{
+  const cases = [
+    ['Rheumatic heart disease is the most common cause of TS.', 'Most common'],
+    ['Beta-blockers are first-line therapy for stable angina.', 'First-line'],
+    ['Coronary angiography remains the gold standard for coronary anatomy.', 'Diagnostic'],
+    ['Nitrates should not be given within a day of sildenafil.', 'Avoid'],
+    ['Primary PCI is recommended when it can be done within 120 minutes.', 'Guideline'],
+    ['Mortality rises steeply once symptoms begin.', 'Prognosis'],
+    ['Troponin has a high sensitivity for myocardial injury.', 'Accuracy'],
+    ['Unlike LBBB, RBBB does not hide ST elevation.', 'Contrast'],
+    ['Severe stenosis is a peak velocity of at least 4 m/s.', 'Threshold']];
+  const miss = cases.filter(([t, want]) => K.yieldOf(t).indexOf(want) === -1).map(([t, want]) => want + ': ' + JSON.stringify(K.yieldOf(t)));
+  ok('each kind of high-yield sentence is named for what makes it so', miss.length === 0, miss.join('; ') || cases.length + ' kinds');
+  ok('and a plain sentence, or a number that only names a table, is not high-yield',
+     K.yieldOf('The ventricle fills in diastole.').length === 0 && K.yieldOf('Table 1.4 lists the subsets by their ECG findings.').length === 0 &&
+     K.yieldOf('It was described in 1904 in 3 patients.').indexOf('Threshold') === -1 &&
+     K.yieldOf('Of the 3 patients, more than 2 improved.').indexOf('Threshold') === -1 &&
+     K.yieldOf('Aspirin 75 mg is given daily with food.').indexOf('Threshold') === -1 && K.yieldOf('An LVEDP above 18 mmHg means overload.')[0] === 'Threshold');
+  /* A paragraph that keeps saying "left ventricle" and two sentences in rarer
+     words that an exam would ask: the frequency score alone chose three
+     filler sentences (the owner: "not identifying high yield"). */
+  const filler = ['The left ventricle fills with blood during diastole as the mitral valve opens.', 'Ventricular filling depends on the pressure in the left atrium and on ventricular relaxation.',
+    'The left ventricle relaxes early in diastole and then fills passively.', 'Atrial contraction adds the last part of ventricular filling in late diastole.',
+    'Filling of the left ventricle is slowed when the ventricle is stiff.', 'A stiff left ventricle needs a higher atrial pressure to fill.',
+    'Ventricular relaxation uses energy as calcium is taken back up.', 'The ventricle fills less when the heart rate is fast and diastole is short.',
+    'Left atrial pressure rises when the left ventricle fills poorly.', 'Diastolic filling of the left ventricle is measured on echocardiography.',
+    'Beta-blockers are first-line therapy because they lengthen diastole.', 'Nitrates should not be given with sildenafil.'];
+  const dia = withText({ index: 0, title: 'Diastolic filling', pageStart: 1, pageEnd: 1, segments: [seg(1, filler.join(' '))] });
+  const pts = K.keySentences(dia).map(x => x.text);
+  ok('the high-yield sentences are among the key points, whatever their words score', pts.some(t => /first-line/.test(t)) && pts.some(t => /should not/.test(t)), JSON.stringify(pts));
+}
+
 head('the analogy bank');
 {
   ok('every analogy is free of numbers — values come from the book, not from here', A.BANK.every(e => !/\d/.test(e.text)),
