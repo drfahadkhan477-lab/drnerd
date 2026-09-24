@@ -111,7 +111,9 @@ brew install tesseract                    # macOS
 
 A second, standalone app in [`memorizer/`](memorizer/). Upload a PDF — any
 subject — and it is read **in your browser** with pdf.js, split into sections
-at its headings, and taught one section at a time:
+at its headings (including the ones set in body type and marked only by their
+number, "A. Etiology." or "17.2 Clinical features", which are titled under the
+heading above them), and taught one section at a time:
 
 1. **Encode** — the key points, each citing its page; one mnemonic; a
    flowchart when the section describes a process.
@@ -129,14 +131,17 @@ bullets with the key term first, the memory hook in a handwritten face beside
 them — built from the section's own lists where it has one — a flowchart drawn
 from its cause-and-effect sentences, its tables as tables, its figures cut
 from the page (pictures only: a highlight band behind text is not taken for
-one), and the pages themselves.
+one) under their own captions, and the pages themselves. A numbered figure is
+shown with the section whose text names it ("see Fig. 17.3"), wherever it was
+printed; one that nothing names is shown with the section on its page.
 
 The home screen is laid out as Systole's, and holds still: a hero band with
 where you are and a two-layer progress bar (sections studied; review cards
 FSRS says you still hold today), a pearl of the day — a sentence from your
 own PDF, found and broken into steps by Systole's `src/core/pearl.js`, shared
-rather than copied — and doors to continue, review, add a PDF or change
-settings. The look is Systole's too: its themes, colour for colour, and its
+rather than copied — doors to continue, review, add a PDF or change
+settings, and your weak spots: the sections your sessions say you hold least
+well, each with a drill of its review cards, due or not. The look is Systole's too: its themes, colour for colour, and its
 type scale, with text size, reading width, line spacing, font, contrast and
 brightness to choose. Contrast and brightness are computed from the theme you
 pick, and every theme at every setting is tested to keep its text at WCAG AA
@@ -149,7 +154,10 @@ npm run memorizer:serve    # the same, served on :8081 so it installs as an app
 
 **It needs no API key.** The default is a built-in coach that runs the whole
 protocol on the device: key points are the PDF's own sentences, verbatim;
-recall and the gauntlet are fill-in-the-blank; grading matches words, and a
+recall asks the section's definitions, its "most common" facts and its
+longest list, then fill-in-the-blank; the gauntlet asks definitions
+backwards (the meaning given, the term wanted), names the lists recall did
+not, and blanks sentences recall never showed; grading matches words, and a
 synonym can be counted as correct by you. Nothing leaves the device. For
 deeper questions and grading that understands answers in your own words, add
 a Claude key in Settings — then each step sends only the text of the section

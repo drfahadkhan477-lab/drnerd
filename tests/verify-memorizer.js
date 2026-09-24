@@ -54,9 +54,9 @@ function makePdf() {
   const pages = [];
   let cur = [], y = 760;
   const newPage = () => { if (cur.length) pages.push(cur); cur = []; y = 760; };
-  const line = (text, size) => {
+  const line = (text, size, x) => {
     if (y < 70) newPage();
-    cur.push({ text, size, y });
+    cur.push({ text, size, y, x });
     y -= size + 5;
   };
   /* A table row: each cell its own text run, at its column's x — which is
@@ -77,6 +77,7 @@ function makePdf() {
      "above" or "below" in it, as a pointer to text outside the pearl. */
   const pearlLines = ['A left ventricular end-diastolic pressure greater than 18 mmHg should prompt a search for volume',
     'overload, whereas a normal pressure of 8 to 12 mmHg does not exclude a stiff ventricle.'];
+  const CAPTION = 'Figure 4 A test picture.';
   const table = [['Measure', 'Normal', 'Unit'], ['LVEDP', '12', 'mmHg'], ['Stroke volume', '70', 'mL'], ['Heart rate', '72', 'bpm']];
   /* Letter-coded (s1wab …), not numbered: a body line of numbered words
      normalises to the same text on every page, which is what a running
@@ -93,6 +94,8 @@ function makePdf() {
     if (si === 0) y -= 12;
     /* A gap in section 1 for the picture, the way a book leaves one. */
     if (si === 0) { IMG_BOX = [300, y - 105, 500, y - 5]; y -= 115; }
+    /* Its caption, under it and set at its left edge, in small type. */
+    if (si === 0) { line(CAPTION, 9, 300); bodyWords += CAPTION.split(' ').length; y -= 6; }
     const words = [];
     for (let i = 1; i <= PER; i++) words.push(`s${si + 1}w${code(i)}` + (i % 10 === 0 ? '.' : ''));
     for (let i = 0; i < words.length; i += 12) line(words.slice(i, i + 12).join(' '), 11);
@@ -121,7 +124,7 @@ function makePdf() {
     const ops = ['BT /F1 9 Tf 72 790 Td (Memorizer Test Unit) Tj ET'];
     lines.forEach(l => {
       if (l.cells) l.cells.forEach(([x, t]) => ops.push(`BT /F1 ${l.size} Tf ${x} ${l.y} Td (${esc(t)}) Tj ET`));
-      else ops.push(`BT /F1 ${l.size} Tf 72 ${l.y} Td (${esc(l.text)}) Tj ET`);
+      else ops.push(`BT /F1 ${l.size} Tf ${l.x || 72} ${l.y} Td (${esc(l.text)}) Tj ET`);
     });
     ops.push(`BT /F1 9 Tf 300 30 Td (${pi + 1}) Tj ET`);
     if (pi === 0) [IMG_BOX, UNDER_BOX].forEach(B => ops.unshift(`q ${B[2] - B[0]} 0 0 ${B[3] - B[1]} ${B[0]} ${B[1]} cm /Im1 Do Q`));
@@ -139,7 +142,7 @@ function makePdf() {
   const xref = Buffer.byteLength(out, 'latin1');
   out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
   out += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return { buffer: Buffer.from(out, 'latin1'), pages: pages.length, titles, bodyWords, table, causal, IMG_BOX, pearl: pearlLines.join(' '),
+  return { buffer: Buffer.from(out, 'latin1'), pages: pages.length, titles, bodyWords, table, causal, IMG_BOX, CAPTION, pearl: pearlLines.join(' '),
            firstCode: code(1), lastCode: code(PER) };
 }
 
@@ -252,6 +255,8 @@ function kindOf(user) {
   ok('the table in section 2 is found, cell for cell', !!tbl && JSON.stringify(tbl.table) === JSON.stringify(pdf.table), tbl && JSON.stringify(tbl.table));
   ok('the picture on page 1 is found where it was drawn, and the band under the text is not a figure', rec.figures.length === 1 && rec.figures[0].page === 1 &&
      rec.figures[0].box.every((v, i) => Math.abs(v - pdf.IMG_BOX[i]) <= 1), JSON.stringify(rec.figures) + ' want ' + JSON.stringify(pdf.IMG_BOX));
+  ok('its caption is read with it, number and all', rec.figures[0] && rec.figures[0].number === '4' && rec.figures[0].caption === pdf.CAPTION,
+     JSON.stringify(rec.figures[0]));
   ok('and the PDF itself is kept on the device, to draw them from', await page.evaluate(id => MemStore.get('files', id).then(f => !!f && f.bytes.byteLength > 1000), rec.id));
   ok('pdf.js and its worker came from the pinned CDN', cdnHits >= 2, `${cdnHits} requests`);
 
@@ -275,6 +280,9 @@ function kindOf(user) {
   await page.waitForFunction(() => { const i = document.querySelector('#visuals .figs img'); return i && /^data:image\/png/.test(i.src) && i.naturalWidth > 0; }, null, T);
   const fig = await page.evaluate(() => { const i = document.querySelector('#visuals .figs img'); return { w: i.naturalWidth, h: i.naturalHeight }; });
   ok('the figure on page 1 is shown, cut from the page at its own shape', Math.abs(fig.w / fig.h - 2) < 0.1, `${fig.w}×${fig.h}`);
+  const figCap = await page.locator('#visuals .figs figcaption').first().innerText();
+  ok('under its own caption, and named by it to a screen reader', figCap.indexOf(pdf.CAPTION) === 0 &&
+     await page.locator('#visuals .figs button[aria-label="Enlarge Figure 4"]').count() === 1, figCap);
   await page.waitForFunction(() => [...document.querySelectorAll('#visuals .pages img')].every(i => /^data:image\/png/.test(i.src)) &&
     document.querySelectorAll('#visuals .pages img').length >= 1, null, T);
   ok('and every page of the section is there to open', (await page.locator('#visuals .pages img').count()) >= 1);
@@ -374,6 +382,32 @@ function kindOf(user) {
   ok('landscape: the hero and the pearl side by side', cols === 2, String(cols));
   await page.setViewportSize({ width: 820, height: 1100 });
   ok('and stacked in portrait', await page.evaluate(() => getComputedStyle(document.querySelector('.home-top')).gridTemplateColumns.split(' ').length) === 1);
+  /* Section 1 was taught with one recall answer of two right and a
+     teach-back of 55: mastery 0.5 × ½ + 0.5 × 0.55 = 52.5%. Its two misses
+     are its two cards. */
+  const weakText = (await page.locator('#weak').innerText()).replace(/\s+/g, ' ');
+  ok('weak spots name the shaky section, with its mastery and its cards', /Section One Preload/.test(weakText) && /53% mastered/.test(weakText) &&
+     await page.locator('#weak li').count() === 1 && await page.locator('#weak button', { hasText: 'Drill · 2' }).count() === 1, weakText);
+  /* The drill rates a card; the review checks below expect both cards
+     unreviewed, so they are put back as they were before leaving. */
+  const cardsBefore = await page.evaluate(() => MemStore.all('cards'));
+  /* One of the two is reviewed Easy first, so it is not due: plain review
+     would offer one card, the drill must offer both. */
+  await page.evaluate(() => MemStore.all('cards').then(cs => { cs[1].srs = FSRS.update(null, 4, FSRS.todayISO()); return MemStore.put('cards', cs[1]); }));
+  await page.locator('#weak button').click();
+  await page.locator('.card.flash').waitFor(T);
+  const drillHead = await page.locator('.review-head').textContent();
+  const dueNow = await page.evaluate(() => MemSession.dueCards(Memorizer.ui.cards, FSRS.todayISO()).length);
+  ok('a drill opens that section\u2019s cards, due or not', dueNow === 1 && /Drill · 2 left/.test(drillHead) && /Section One Preload/.test(drillHead),
+     drillHead + ' · ' + dueNow + ' due');
+  await page.locator('#show-answer').click();
+  await page.getByRole('button', { name: 'Again' }).click();
+  await page.waitForFunction(() => /Drill · 1 left/.test((document.querySelector('.review-head') || {}).textContent || ''), null, T);
+  ok('each card once: rated, it leaves the drill', await page.evaluate(() => Object.keys(Memorizer.ui.drill.done).length === 1));
+  await page.evaluate(cs => Promise.all(cs.map(c => MemStore.put('cards', c))), cardsBefore);
+  await page.locator('nav.top').getByRole('button', { name: 'Library' }).click();
+  await page.locator('#weak').waitFor(T);
+  ok('leaving ends the drill', await page.evaluate(() => Memorizer.ui.drill === null));
   const before = stub.requests.length;
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.locator('ul.bullets > li').first().waitFor(T);
@@ -514,6 +548,36 @@ function kindOf(user) {
     ok('a malformed built-in step is an error on screen, and the session does not advance',
        /malformed encode/.test(await p2.locator('.card.error').innerText()) &&
        await p2.evaluate(() => !Memorizer.ui.state.per[Memorizer.ui.state.cluster].points));
+
+    /* The gauntlet, reached by storing a session that has taught every
+       section — graded right, from the built-in coach's own output — so
+       only the gauntlet is left. Its header must not name the section: the
+       gauntlet asks definitions backwards, and the section's title is often
+       the answer. It is named in the feedback, once answered. */
+    const titles = await p2.evaluate(async id => {
+      MemProvider.saveConfig({ provider: 'builtin' });
+      const d = await MemStore.get('docs', id);
+      let s = MemSession.init(d.id, d.clusters.map(c => c.title));
+      d.clusters.forEach((c, i) => {
+        s = MemSession.next(s, { type: 'encoded', value: { points: MemCoach.sentences(c).slice(0, 2).map(x => ({ text: x.text, page: x.page })), mnemonic: '', flowchart: '' } });
+        s = MemSession.next(s, { type: 'toRecall' });
+        s = MemSession.next(s, { type: 'recallPrompts', value: { prompts: [{ question: 'q', answer: 'a', page: c.pageStart }] } });
+        s = MemSession.next(s, { type: 'recallGraded', value: { correct: true } });
+        s = MemSession.next(s, { type: 'explainGraded', value: { score: 100, gaps: [] } });
+      });
+      await MemStore.put('sessions', { id: d.id, state: s });
+      await Memorizer.openDoc(d.id);
+      return d.clusters.map(c => c.title);
+    }, docId);
+    await p2.locator('.card.gauntlet h2.q').waitFor(T);
+    const gHead = await p2.locator('.card.gauntlet .count').textContent();
+    ok('the gauntlet’s header does not name the section it is asking about', /^Gauntlet 1 of \d+$/.test(gHead) && !titles.some(t => gHead.indexOf(t) !== -1), gHead);
+    await p2.fill('textarea.answer', 'zzzz');
+    await p2.locator('#submit-answer').click();
+    await p2.locator('.feedback.bad').waitFor(T);
+    const gq = await p2.evaluate(() => Memorizer.ui.state.gauntlet.questions[0]);
+    ok('the feedback does, once it is answered', (await p2.locator('#from').innerText()).indexOf(titles[gq.cluster]) !== -1,
+       await p2.locator('#from').innerText());
   }
 
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));

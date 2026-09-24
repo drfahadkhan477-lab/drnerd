@@ -147,6 +147,40 @@ head('the numbers in a pearl are marked');
   ok('a sentence with no number has nothing marked', !H.marks('Preload rises with volume.').some(r => r.num));
 }
 
+head('weak spots: where the sessions say you are shakiest');
+{
+  const S = require(path.join(ROOT, 'memorizer', 'src', 'session.js'));
+  /* A real session, driven through its reducer: each section taught with
+     `right` of two recall answers correct and a teach-back scored `score`.
+     Mastery is half recall, half teach-back — so 2/2 and 60 is exactly 0.8. */
+  const taught = (id, titles, marks) => {
+    let s = S.init(id, titles);
+    marks.forEach(([right, score]) => {
+      s = S.next(s, { type: 'encoded', value: { points: [{ text: 'p', page: 1 }] } });
+      s = S.next(s, { type: 'toRecall' });
+      s = S.next(s, { type: 'recallPrompts', value: { prompts: [{ question: 'a', answer: 'x', page: 1 }, { question: 'b', answer: 'y', page: 1 }] } });
+      s = S.next(s, { type: 'recallGraded', value: { correct: right >= 1 } });
+      s = S.next(s, { type: 'recallGraded', value: { correct: right >= 2 } });
+      s = S.next(s, { type: 'explainGraded', value: { score, gaps: [] } });
+    });
+    return s;
+  };
+  const u = doc('u', 1, [cl(0, 'Preload', ['a']), cl(1, 'Afterload', ['b']), cl(2, 'Contractility', ['c']), cl(3, 'Untaught', ['d'])]);
+  const v = doc('v', 2, [cl(0, 'Stenosis', ['e']), cl(1, 'Regurgitation', ['f'])]);
+  const sessions = { u: taught('u', ['Preload', 'Afterload', 'Contractility', 'Untaught'], [[2, 60], [2, 58], [0, 10]]),
+                     v: taught('v', ['Stenosis', 'Regurgitation'], [[1, 30], [1, 30]]) };
+  const cards = [{ docId: 'v', cluster: 1 }, { docId: 'v', cluster: 1 }, { docId: 'v', cluster: 0 }, { docId: 'u', cluster: 1 }, { docId: 'v', cluster: 3 }];
+  const all = H.weakSpots([u, v], sessions, cards, S.mastery, 10);
+  const names = all.map(w => w.title + ':' + w.pct + ':' + w.cards);
+  ok('a section at 80% mastery is not weak; one at 79% is', !names.some(n => /^Preload:/.test(n)) && names.some(n => /^Afterload:79:/.test(n)), names.join(' | '));
+  ok('a section not yet taught is never called weak', !names.some(n => /^Untaught/.test(n)));
+  ok('weakest first, across units', names[0] === 'Contractility:5:0', names.join(' | '));
+  ok('between two equally weak, the one with more cards waiting first', names[1] === 'Regurgitation:40:2' && names[2] === 'Stenosis:40:1', names.join(' | '));
+  ok('its cards are counted from its own unit and section only', all.find(w => w.title === 'Afterload').cards === 1);
+  ok('three at most on the home screen', H.weakSpots([u, v], sessions, cards, S.mastery, 3).length === 3);
+  ok('a unit with no session has none', H.weakSpots([u], {}, cards, S.mastery, 3).length === 0);
+}
+
 head('words');
 ok('one section, three sections', H.count(1, 'section') === '1 section' && H.count(3, 'section') === '3 sections' && H.count(0, 'page') === '0 pages');
 ok('the hero trace is a still line across the whole band', /^M0 30 /.test(H.tracePath(600, 4)) && / L600 30$/.test(H.tracePath(600, 4)) &&

@@ -232,7 +232,13 @@ head('gauntlet: new blanks, weighted to the weakest');
   const g3 = K.gauntlet([all3], { 0: p3 }, [0], 5).questions.map(q => q.question.replace(/^Gauntlet — fill in the blank: /, ''));
   ok('a section with no unused sentences still gets a gauntlet that repeats no recall blank',
      p3.length === 3 && g3.length >= 2 && !g3.some(q => r3.indexOf(q) !== -1), g3.join(' | '));
-  ok('every answer is a word of its own section', g.questions.every(q => text(clusters[q.cluster]).toLowerCase().indexOf(q.answer) !== -1));
+  /* A blank's answer is a bare lower-case word; a reversed definition's is
+     the term as printed ("Afterload"), and a list's is its items joined by
+     "; " — each still words of the section, compared without case. */
+  ok('every answer is words of its own section', g.questions.every(q => q.answer.split('; ').every(a => text(clusters[q.cluster]).toLowerCase().indexOf(a.toLowerCase()) !== -1)),
+     g.questions.filter(q => !q.answer.split('; ').every(a => text(clusters[q.cluster]).toLowerCase().indexOf(a.toLowerCase()) !== -1)).map(q => q.answer).join(' | '));
+  ok('the harder questions are in it: a definition asked backwards', g.questions.some(q => q.question === 'Which term is defined as \u201Cthe wall stress the ventricle must overcome to eject blood\u201D?' && q.answer === 'Afterload'),
+     g.questions.map(q => q.question.slice(0, 50)).join(' | '));
   /* One sentence, one word worth blanking: nothing fresh to ask and no
      second word — the case the fallback exists for. */
   const bare1 = { index: 0, title: 't', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text: 'It is in the cell now.' }] };
@@ -368,6 +374,27 @@ head('the coach asks, lists and checks numbers');
   ok('a section\u2019s defined abbreviations, and their expansions, are terms', dt.rhd === true && dt.tee === true && Object.keys(dt).some(k => /^rheumat/.test(k)),
      Object.keys(dt).join(', '));
   ok('the generic head of an item does not name it', K.itemMatch('some disease', 'Whipple disease') === false && K.itemMatch('whipple', 'Whipple disease') === true);
+
+  /* The gauntlet's harder questions, on the same section. */
+  const hq = K.hardQuestions(TS, e.points);
+  const back = hq.find(q => /^Which term is defined as/.test(q.question));
+  ok('the gauntlet asks the definition backwards: the meaning given, the term wanted',
+     back && back.question === 'Which term is defined as \u201Ca narrowing of the tricuspid valve orifice that obstructs right atrial emptying\u201D?' &&
+     back.answer === 'Tricuspid stenosis (TS)', JSON.stringify(back));
+  const gb = a => K.gradeRecall(TS, back, a).correct;
+  ok('and grades the term: its abbreviation or its words are right, a neighbouring lesion is not', gb('TS') && gb('tricuspid stenosis') && !gb('tricuspid regurgitation'));
+  ok('it names the list recall did not ask', hq.some(q => q.question === 'Name the Congenital causes of TS (2).' && q.answer === 'Tricuspid atresia; Atypical Ebstein anomaly'),
+     hq.map(q => q.question).join(' | '));
+  const askedR = r.prompts.map(q => q.question);
+  ok('and repeats nothing recall asked', !hq.some(q => askedR.indexOf(q.question) !== -1), hq.filter(q => askedR.indexOf(q.question) !== -1).map(q => q.question).join(' | '));
+  const giveaway = { index: 0, title: 'Valves', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text:
+    'Aortic stenosis is a stenosis of the aortic valve that obstructs left ventricular outflow. It is common in the elderly and rare in the young.' }] };
+  ok('a definition that already says its whole term is not asked backwards',
+     !K.hardQuestions(giveaway, K.encode(giveaway).points).some(q => /^Which term/.test(q.question)), JSON.stringify(K.hardQuestions(giveaway, K.encode(giveaway).points)));
+  const gts = K.gauntlet([TS], { 0: e.points }, [0], 5).questions;
+  ok('in the gauntlet the harder questions lead, with blanks between them', !/_____/.test(gts[0].question) && /_____/.test(gts[1].question),
+     gts.map(q => q.question.slice(0, 40)).join(' | '));
+  ok('and it still matches the schema', P.check(P.SCHEMAS.gauntlet, { questions: gts }) === '');
 }
 
 head('questions from tables');

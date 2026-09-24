@@ -180,6 +180,50 @@ function figureBoxes(opList, OPS, view, textBoxes) {
   }).map(function (b) { return b.map(function (v) { return Math.round(v); }); });
 }
 
+/* ── captions ───────────────────────────────────────────────────────────────
+   A figure's caption is the line that starts "Figure 17.3", "Fig. 2" or
+   "FIGURE 4B" printed just under it — or, failing that, just over it —
+   and overlapping it across the page, plus the lines that continue it at
+   the same size and leading. Its number is what a section's "(see Fig.
+   17.3)" names, which is how chunk.js's assignFigures puts a figure with
+   the section that talks about it rather than every section sharing its
+   page. The number is kept as printed ("17-3", "4B"); chunk.js alone
+   decides when two numbers are the same one. The caption's words stay in
+   the section's prose as well; this only reads them.
+
+   `lines` are linesOf()'s, y down the page; `box` is in PDF units, y up. */
+var CAPTION = /^(fig(?:ure)?s?\.?)\s*(\d+(?:[.\-\u2013]\d+)*[A-Za-z]?)\b/i;
+var CAPTION_REACH = 60;
+function captionFor(box, lines, pageHeight) {
+  var top = pageHeight - box[3], bottom = pageHeight - box[1];
+  var best = null;
+  (lines || []).forEach(function (l, i) {
+    var m = CAPTION.exec(String(l.text || ''));
+    if (!m) return;
+    var x = l.cells && l.cells[0] ? +l.cells[0].x : box[0];
+    if (x < box[0] - 40 || x > box[2]) return;
+    /* below: the caption's baseline is under the picture's bottom edge;
+       above: its baseline is over the picture's top edge. Any caption below
+       beats any above — below is where captions go, and in a stack of
+       figures the caption just over one picture is the one under the
+       picture before it. */
+    var below = l.y - bottom, above = top - l.y;
+    var d = below >= 0 && below <= CAPTION_REACH ? below : above >= 0 && above <= CAPTION_REACH ? above + CAPTION_REACH : null;
+    if (d == null || (best && best.d <= d)) return;
+    best = { d: d, i: i, m: m };
+  });
+  if (!best) return null;
+  var first = lines[best.i], text = [first.text];
+  for (var k = best.i + 1; k < lines.length && text.length < 5; k++) {
+    var prev = lines[k - 1], l = lines[k];
+    if (CAPTION.test(l.text) || Math.abs((+l.size || 0) - (+first.size || 0)) > 0.6) break;
+    var gap = l.y - prev.y;
+    if (gap <= 0 || gap > (+first.size || 10) * 1.8) break;
+    text.push(l.text);
+  }
+  return { number: best.m[2], label: 'Figure ' + best.m[2], text: text.join(' ').replace(/\s+/g, ' ').trim() };
+}
+
 /* Text runs as boxes in PDF units, for the text-cover test above. */
 function textBoxesOf(items) {
   return items.filter(function (it) { return it.str && it.str.trim() && it.width > 0; }).map(function (it) {
@@ -208,7 +252,11 @@ function read(buffer, onProgress) {
             pages.push({ page: n, lines: lines });
             counts.push(lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0));
             return page.getOperatorList().then(function (ops) {
-              figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items)).forEach(function (b) { figures.push({ page: n, box: b }); });
+              figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items)).forEach(function (b) {
+                var f = { page: n, box: b }, cap = captionFor(b, lines, h);
+                if (cap) { f.number = cap.number; f.label = cap.label; f.caption = cap.text; }
+                figures.push(f);
+              });
             }, function () { /* a page whose drawing cannot be listed still has its text */ });
           }).then(function () { if (onProgress) onProgress(n, doc.numPages); });
         });
@@ -248,6 +296,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { read: read, linesOf: linesOf, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

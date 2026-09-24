@@ -134,6 +134,22 @@ function blocksFromPages(pages) {
       var l = lines[j];
       var t = String(l.text).replace(/\s+/g, ' ').trim();
       var w = words(t);
+      /* A heading set at body size, marked by its outline number instead of
+         its font: a line of its own ("B. Pathophysiology", "17.2 Tricuspid
+         stenosis"), or run into its paragraph ("A. Etiology. Table 17.1
+         lists …" — how the owner's first PDF set every sub-heading, which
+         until now reached the coach as a two-word sentence and left the
+         section titled by its first six words). A run-in heading opens a
+         paragraph, so it is only looked for where the text before it ended
+         a sentence. */
+      var opens = !cur || cur.heading || /[.!?:]["'\u201D\u2019)\]]*$/.test(cur.text);
+      var mk = opens && (+l.size || 0) < bodySize * 1.15 && (OUTLINE_LINE.test(t) ? { head: t, rest: '' } : runIn(t));
+      if (mk) {
+        close();
+        blocks.push({ text: mk.head, page: p.page, heading: true, minor: true });
+        if (mk.rest) cur = { text: mk.rest, page: p.page, heading: false };
+        continue;
+      }
       var isHeading = (+l.size || 0) >= bodySize * 1.15 && w.length <= HEADING_MAX_WORDS &&
                       !/[.,;:]$/.test(t);
       if (isHeading) {
@@ -166,6 +182,23 @@ function blocksFromPages(pages) {
     close();
   });
   return { blocks: blocks, bodySize: bodySize };
+}
+
+/* ── outline headings ──────────────────────────────────────────────────────
+   The markers: a capital letter A–H or a Roman numeral with a stop ("A.",
+   "IV."), or a dotted section number ("17.2", "3.1.4"). A bare "1." is not
+   one — that is how a numbered list or a numbered paragraph starts ("1.
+   Rheumatic heart disease (RHD) is …"), and lists are chunk.js's too. The
+   label is a capitalised phrase of at most OUTLINE_MAX_WORDS words with no
+   sentence punctuation inside it. */
+var OUTLINE_MAX_WORDS = 6;
+var MARKER = '(?:[A-H]\\.|(?:I|II|III|IV|V|VI|VII|VIII|IX|X)\\.|\\d{1,2}(?:\\.\\d{1,2})+\\.?)';
+var LABEL = '[A-Z][A-Za-z\\-\\u2019\']{2,}(?:\\s+(?:[A-Za-z][A-Za-z\\-\\u2019\']*|and|or|of|&)){0,' + (OUTLINE_MAX_WORDS - 1) + '}';
+var OUTLINE_LINE = new RegExp('^' + MARKER + '\\s+' + LABEL + '$');
+var RUN_IN = new RegExp('^(' + MARKER + '\\s+' + LABEL + '[.:])\\s+(\\S.*)$');
+function runIn(t) {
+  var m = RUN_IN.exec(t);
+  return m ? { head: m[1], rest: m[2] } : null;
 }
 
 /* ── tables ────────────────────────────────────────────────────────────────
@@ -289,7 +322,7 @@ function unitsFromBlocks(blocks, max) {
     var ws = words(b.text).map(function (w) { return { w: w, page: b.page, para: bi }; });
     if (!ws.length) return;
     if (b.heading && ws.length <= HEADING_MAX_WORDS) {
-      units.push({ heading: true, words: ws });
+      units.push({ heading: true, minor: !!b.minor, words: ws });
       return;
     }
     if (b.table) {
@@ -316,11 +349,29 @@ function unitsFromBlocks(blocks, max) {
   return units;
 }
 
-function buildCluster(units, index, lastHeading, tables) {
+/* What a heading is called in a title. An outline heading ("A. Etiology.")
+   loses its marker and its stop and is named under the last size-set
+   heading before it — "Tricuspid Stenosis: Etiology" — because a unit on
+   four valves has four sections called "Etiology", and a review card titled
+   "A. Etiology." does not say which. `ctx` carries that heading from one
+   cluster to the next. */
+var MARKER_RE = new RegExp('^' + MARKER + '\\s+');
+function titleOf(u, text, ctx) {
+  if (!u.minor) { ctx.major = text; return text; }
+  var label = text.replace(MARKER_RE, '').replace(/[.:]$/, '');
+  return ctx.major ? ctx.major + ': ' + label : label;
+}
+
+function buildCluster(units, index, ctx, tables) {
   var toks = [];
   var headings = [];
+  var titles = [];
   units.forEach(function (u) {
-    if (u.heading) headings.push(u.words.map(function (t) { return t.w; }).join(' '));
+    if (u.heading) {
+      var ht = u.words.map(function (t) { return t.w; }).join(' ');
+      headings.push(ht);
+      titles.push(titleOf(u, ht, ctx));
+    }
     u.words.forEach(function (t) { toks.push({ w: t.w, page: t.page, para: t.para, heading: u.heading, row: t.row }); });
   });
   /* Segments: consecutive words from one paragraph on one page. These are
@@ -347,8 +398,9 @@ function buildCluster(units, index, lastHeading, tables) {
     return out;
   });
   var body = toks.filter(function (t) { return !t.heading; }).map(function (t) { return t.w; });
-  var title = headings[0] ||
-    (lastHeading ? lastHeading + ' (cont.)' : body.slice(0, 6).join(' ') + (body.length > 6 ? '…' : ''));
+  var title = titles[0] ||
+    (ctx.last ? ctx.last + ' (cont.)' : body.slice(0, 6).join(' ') + (body.length > 6 ? '…' : ''));
+  if (titles.length) ctx.last = titles[titles.length - 1];
   var gistWords = [];
   for (var i = 0; i < body.length && gistWords.length < 25; i++) {
     gistWords.push(body[i]);
@@ -432,16 +484,64 @@ function clusterBlocks(blocks, opts) {
     }
   }
 
-  var lastHeading = '';
+  var ctx = { major: '', last: '' };
   return groups.map(function (g, i) {
-    var c = buildCluster(g, i, lastHeading, tables);
-    if (c.headings.length) lastHeading = c.headings[c.headings.length - 1];
+    var c = buildCluster(g, i, ctx, tables);
     return c;
   });
 }
 
+/* ── figures, to the sections that use them ────────────────────────────────
+   Until captions were read, a section showed every figure printed within its
+   pages — so two sections sharing a page both showed its figure, and a
+   section that said "(Fig. 17.3)" of a figure printed two pages on showed
+   nothing. Now a numbered figure goes to the sections whose text names it
+   (its own caption, which is prose in the section it was printed in, counts
+   as naming it). A figure with no number, or one no section names, falls
+   back to the page rule. Named figures come first, in the order the section
+   names them; FIGURES_PER_SECTION at most.
+
+   clusters: clusterBlocks()'s; figures: [{ page, box, number? }] from
+   memorizer/src/pdf.js. Returns one array of figures per cluster. */
+var FIGURES_PER_SECTION = 6;
+var FIG_REF = /\bfig(?:ure)?s?\.?\s*(\d+(?:[.\-\u2013]\d+)*[A-Za-z]?(?:\s*(?:,|and|&)\s*\d+(?:[.\-\u2013]\d+)*[A-Za-z]?)*)/gi;
+function figNo(n) { return String(n).replace(/[\-\u2013]/g, '.').toLowerCase(); }
+function figBase(n) { return n.replace(/[a-z]$/, ''); }
+function figureRefs(text) {
+  var out = [], m;
+  FIG_REF.lastIndex = 0;
+  while ((m = FIG_REF.exec(String(text || '')))) {
+    m[1].split(/\s*(?:,|and|&)\s*/).forEach(function (n) { n = figNo(n); if (n && out.indexOf(n) === -1) out.push(n); });
+  }
+  return out;
+}
+function assignFigures(clusters, figures) {
+  var named = {};
+  var refs = (clusters || []).map(function (c) {
+    var r = figureRefs(c.text);
+    r.forEach(function (n) { named[n] = true; named[figBase(n)] = true; });
+    return r;
+  });
+  return (clusters || []).map(function (c, ci) {
+    var out = [];
+    refs[ci].forEach(function (n) {
+      (figures || []).forEach(function (f) {
+        var fn = f.number ? figNo(f.number) : '';
+        if (fn && (fn === n || figBase(fn) === figBase(n)) && out.indexOf(f) === -1) out.push(f);
+      });
+    });
+    (figures || []).forEach(function (f) {
+      var fn = f.number ? figNo(f.number) : '';
+      var claimed = fn && (named[fn] || named[figBase(fn)]);
+      if (!claimed && f.page >= c.pageStart && f.page <= c.pageEnd && out.indexOf(f) === -1) out.push(f);
+    });
+    return out.slice(0, FIGURES_PER_SECTION);
+  });
+}
+
 var MemChunk = {
-  CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
+  FIGURES_PER_SECTION: FIGURES_PER_SECTION, figureRefs: figureRefs, assignFigures: assignFigures,
+  OUTLINE_MAX_WORDS: OUTLINE_MAX_WORDS, runIn: runIn, CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
   words: words, blocksFromPages: blocksFromPages, scannedPages: scannedPages,
   unitsFromBlocks: unitsFromBlocks, clusterBlocks: clusterBlocks,
 };

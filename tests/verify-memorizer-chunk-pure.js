@@ -397,6 +397,65 @@ head('lists: found by their shape, bullets or not');
   ok('a cluster\u2019s segments say which are list items, and which sub-headings', segs.length === 8 && segs.filter(g => g.sub).length === 2);
 }
 
+head('outline headings: found by their number, not their font');
+{
+  const L = (text, y, size = 11) => ({ text, size, y, cells: [{ x: 72, text }] });
+  /* The owner's first PDF set every sub-heading at body size, run into its
+     paragraph: "A. Etiology. Table 17.1 lists …". */
+  const page = { page: 4, lines: [
+    L('Tricuspid Stenosis', 40, 18),
+    L('A. Etiology. Table 17.1 lists the causes of TS and how often each is seen.', 60),
+    L('Rheumatic disease accounts for nearly all of them in adults.', 74),
+    L('B. Pathophysiology', 100),
+    L('The gradient across the valve rises with flow and with heart rate.', 114),
+    L('17.2 Clinical features', 140),
+    L('Fatigue and oedema dominate, as described by Braunwald and', 154),
+    L('C. Libby. Later work showed the same pattern in children.', 168),
+    L('1. Rheumatic heart disease (RHD) is the most common cause of TS in adults.', 190),
+    L('2. Carcinoid syndrome', 204),
+    L('It is rarer, and it thickens both right-sided valves.', 218),
+  ] };
+  const bl = C.blocksFromPages([page]).blocks;
+  const heads = bl.filter(b => b.heading);
+  ok('a run-in heading is split from its paragraph', bl.some(b => b.heading && b.minor && b.text === 'A. Etiology.') &&
+     bl.some(b => !b.heading && /^Table 17\.1 lists the causes/.test(b.text)), heads.map(b => b.text).join(' | '));
+  ok('a lettered heading on a line of its own is a heading', heads.some(b => b.minor && b.text === 'B. Pathophysiology'));
+  ok('so is a dotted section number', heads.some(b => b.minor && b.text === '17.2 Clinical features'));
+  ok('a size-set heading is not an outline heading', heads.some(b => !b.minor && b.text === 'Tricuspid Stenosis'));
+  ok('an initial at the start of a wrapped line, mid-sentence, is not a heading', !heads.some(b => /Libby/.test(b.text)) &&
+     bl.some(b => /Braunwald and C\. Libby\. Later work/.test(b.text)));
+  ok('a numbered paragraph, or a lone numbered item, is not a heading', !heads.some(b => /^\d\./.test(b.text)), heads.map(b => b.text).join(' | '));
+  const inWords = page.lines.map(l => l.text).join(' ').split(/\s+/);
+  const outWords = bl.map(b => b.text).join(' ').split(/\s+/);
+  ok('every word of the page is still there, in order', JSON.stringify(inWords) === JSON.stringify(outWords),
+     `${outWords.length} of ${inWords.length}`);
+  const big = { page: 1, lines: [L('17.2 Tricuspid Stenosis', 40, 18), L('Body text here, long enough to be prose.', 60)] };
+  ok('a numbered heading in a big font is a size-set heading', C.blocksFromPages([big]).blocks.some(b => b.heading && !b.minor && b.text === '17.2 Tricuspid Stenosis'));
+  const n = { i: 0 };
+  const para = k => ({ text: Array.from({ length: k }, () => 'q' + n.i++).join(' ') + '.', page: 1, heading: false });
+  const cs = C.clusterBlocks([
+    { text: 'Tricuspid Stenosis', page: 1, heading: true },
+    { text: 'A. Etiology.', page: 1, heading: true, minor: true }, para(300),
+    { text: 'B. Pathophysiology', page: 1, heading: true, minor: true }, para(300), para(300),
+    { text: 'Tricuspid Regurgitation', page: 2, heading: true },
+    { text: 'A. Etiology.', page: 2, heading: true, minor: true }, para(300),
+  ]);
+  const titles = cs.map(c => c.title);
+  ok('a section opening at an outline heading is titled under the heading above it',
+     titles[1] === 'Tricuspid Stenosis: Pathophysiology', titles.join(' | '));
+  ok('its continuation says so', titles[2] === 'Tricuspid Stenosis: Pathophysiology (cont.)', titles.join(' | '));
+  ok('and the next size-set heading takes over', titles[3] === 'Tricuspid Regurgitation', titles.join(' | '));
+  const two = C.clusterBlocks([
+    { text: 'Tricuspid Stenosis', page: 1, heading: true }, para(300),
+    { text: 'A. Etiology.', page: 1, heading: true, minor: true }, para(300),
+    { text: 'Tricuspid Regurgitation', page: 2, heading: true }, para(300),
+    { text: 'A. Etiology.', page: 2, heading: true, minor: true }, para(300),
+  ]).map(c => c.title);
+  ok('so two "Etiology" sections are told apart', two[1] === 'Tricuspid Stenosis: Etiology' && two[3] === 'Tricuspid Regurgitation: Etiology', two.join(' | '));
+  const alone = C.clusterBlocks([{ text: 'C. Management', page: 1, heading: true, minor: true }, para(40)]);
+  ok('an outline heading with nothing above it is titled by its label alone', alone[0].title === 'Management', alone[0].title);
+}
+
 head('the pdf.js adapter: cells and figure boxes');
 {
   /* memorizer/src/pdf.js is the one file that talks to pdf.js, and these two
@@ -469,6 +528,64 @@ head('figures: pictures, not highlighted text');
   ok('two separate pictures stay two', Pdf.figureBoxes(ops(img(72, 100, 250, 250).concat(img(320, 500, 540, 700))), OPS, view, []).length === 2);
   const tb = Pdf.textBoxesOf([{ str: 'Hello', width: 30, transform: [10, 0, 0, 10, 72, 700] }, { str: ' ', width: 3, transform: [10, 0, 0, 10, 102, 700] }]);
   ok('text boxes come from runs with text, in PDF units', tb.length === 1 && tb[0][0] === 72 && tb[0][2] === 102 && tb[0][1] < 700 && tb[0][3] > 700);
+}
+
+head('figures: captions, and the sections that name them');
+{
+  const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
+  const H = 792;
+  /* linesOf()'s lines: y down the page, the first cell's x. */
+  const L = (text, y, size = 11, x = 72) => ({ text, y, size, cells: [{ x, text }] });
+  /* A picture from (72,400) to (400,620) in PDF units: y 172..392 down the page. */
+  const box = [72, 400, 400, 620];
+  const lines = [
+    L('Body text above the figure ends here.', 150),
+    L('Figure 17.3 Continuous-wave Doppler across the', 408, 9),
+    L('tricuspid valve in severe stenosis.', 419, 9),
+    /* at ordinary leading after the caption: only its size says it is body */
+    L('The body resumes here after the caption.', 431),
+  ];
+  const cap = Pdf.captionFor(box, lines, H);
+  ok('the caption under a picture is found, with its number', cap && cap.number === '17.3' && cap.label === 'Figure 17.3', JSON.stringify(cap));
+  ok('and the line that continues it', cap && cap.text === 'Figure 17.3 Continuous-wave Doppler across the tricuspid valve in severe stenosis.', cap && cap.text);
+  const gapped = [L('Figure 2 Pressure tracings.', 408, 9), L('Unrelated small print further down.', 440, 9)];
+  ok('a line after a gap is not part of it', Pdf.captionFor(box, gapped, H).text === 'Figure 2 Pressure tracings.', Pdf.captionFor(box, gapped, H).text);
+  ok('a caption over the picture is found when there is none under it',
+     (Pdf.captionFor(box, [L('FIG. 4B Pressure tracings', 160, 9)], H) || {}).label === 'Figure 4B');
+  ok('a caption-shaped line far from the picture is not its caption',
+     Pdf.captionFor(box, [L('Figure 9 shows the same in children.', 520)], H) === null);
+  /* Two pictures side by side, each captioned under itself. */
+  const right = [440, 400, 590, 620];
+  const pair = [L('Figure 5 Left panel.', 408, 9, 72), L('Figure 6 Right panel.', 408, 9, 440)];
+  ok('side by side, each picture takes the caption under it, not its neighbour’s',
+     Pdf.captionFor(box, pair, H).number === '5' && Pdf.captionFor(right, pair, H).number === '6');
+  /* A stack: the caption just over the lower picture belongs to the upper one. */
+  /* upper: y 92..272 down the page; lower: 312..492. Figure 7's caption is
+     28 under the upper picture and 12 over the lower; Figure 8's is 48 under
+     the lower — farther than 7's is over it. */
+  const upper = [72, 520, 400, 700], lower = [72, 300, 400, 480];
+  const stack = [L('Figure 7 Upper.', 300, 9), L('Figure 8 Lower.', 540, 9)];
+  const num = b => (Pdf.captionFor(b, stack, H) || {}).number;
+  ok('in a stack, the caption just over a picture is the one under the picture before it',
+     num(upper) === '7' && num(lower) === '8', num(upper) + ' / ' + num(lower));
+
+  ok('references are read as the text writes them', JSON.stringify(C.figureRefs('as shown (Fig. 17.3) and Figures 4, 5 and 6A; see figure 2–1')) === '["17.3","4","5","6a","2.1"]',
+     JSON.stringify(C.figureRefs('as shown (Fig. 17.3) and Figures 4, 5 and 6A; see figure 2–1')));
+  const A = { page: 2, number: '17.3' }, B = { page: 2 }, Cf = { page: 3, number: '17-4' }, D = { page: 3, number: '9' }, E = { page: 6, number: '5' };
+  const cl = (index, pageStart, pageEnd, text) => ({ index, pageStart, pageEnd, text });
+  const got = C.assignFigures([
+    cl(0, 1, 2, 'The gradient (Fig. 17.3) rises with flow, and figure 17.4 shows why.'),
+    cl(1, 2, 3, 'Nothing here names a figure.'),
+    cl(2, 4, 4, 'Panel B of Fig. 5B shows the jet.'),
+  ], [A, B, Cf, D, E]);
+  ok('a section gets the figures it names, in the order it names them, then the rest of its pages’',
+     got[0].length === 3 && got[0][0] === A && got[0][1] === Cf && got[0][2] === B, JSON.stringify(got[0]));
+  ok('a numbered figure another section names is not shown on a section that merely shares its page',
+     got[1].indexOf(A) === -1 && got[1].indexOf(Cf) === -1, JSON.stringify(got[1]));
+  ok('an unnumbered figure, and one no section names, still go by page', got[1].indexOf(B) !== -1 && got[1].indexOf(D) !== -1, JSON.stringify(got[1]));
+  ok('a figure printed off the section’s pages is shown where it is named, panel letter or not', got[2].length === 1 && got[2][0] === E, JSON.stringify(got[2]));
+  const many = Array.from({ length: 9 }, () => ({ page: 1 }));
+  ok(`no section shows more than ${C.FIGURES_PER_SECTION}`, C.assignFigures([cl(0, 1, 1, 'x')], many)[0].length === C.FIGURES_PER_SECTION);
 }
 
 head('scanned pages are named, not skipped silently');

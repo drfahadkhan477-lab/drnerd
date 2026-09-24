@@ -29,7 +29,10 @@
      · teach-back  scored by how many key points your explanation touches,
                 judged by their key terms. It cannot tell a right explanation
                 from a wrong one that uses the same words.
-     · gauntlet fill-in-the-blank on sentences recall did not use, and on
+     · gauntlet the harder questions recall did not ask — definitions
+                backwards (the meaning given, the term wanted), the other
+                lists, the other "most common" facts — taking turns with
+                fill-in-the-blank on sentences recall did not use and on
                 different words of the ones it did, weighted to your weakest
                 sections.
 
@@ -478,7 +481,7 @@ function patternQuestions(cluster) {
       /* "Preload" opens its sentence with a capital; the question reads it as
          a term. An abbreviation or a name (second letter a capital) is kept. */
       if (/^[A-Z][a-z]/.test(term)) term = term.charAt(0).toLowerCase() + term.slice(1);
-      out.push({ question: 'What is ' + term + '?', answer: d[2].trim(), page: s.page, kind: 'define' });
+      out.push({ question: 'What is ' + term + '?', answer: d[2].trim(), page: s.page, kind: 'define', term: d[1].replace(/^(?:the|a|an)\s+/i, '') });
     }
   });
   return out;
@@ -491,9 +494,7 @@ function recall(cluster, points) {
      then the section's biggest list, then blanks. Six at most. */
   patternQuestions(cluster).slice(0, 2).forEach(function (q) { out.push({ question: q.question, answer: q.answer, page: q.page }); });
   var big = lists(cluster).sort(function (a, b) { return b.items.length - a.items.length; })[0];
-  if (big && big.items.length >= 3) {
-    out.push({ question: 'Name the ' + big.title + ' (' + big.items.length + ').', answer: big.items.map(function (i) { return i.label; }).join('; '), page: big.page });
-  }
+  if (big && big.items.length >= 3) out.push(listQuestion(big));
   (points || []).forEach(function (p) {
     if (out.length >= 6) return;
     if (out.some(function (q) { return p.text.indexOf(q.answer) !== -1 && q.answer.split(' ').length > 1; })) return;
@@ -504,6 +505,39 @@ function recall(cluster, points) {
   tableQuestions(cluster, 2).forEach(function (q) { if (out.length < 7 && !used[stem(q.answer)]) { used[stem(q.answer)] = true; out.push(q); } });
   /* A section that is all table and no sentence still gets asked something. */
   return { prompts: out };
+}
+
+function listQuestion(l) {
+  return { question: 'Name the ' + l.title + ' (' + l.items.length + ').', answer: l.items.map(function (i) { return i.label; }).join('; '), page: l.page };
+}
+
+/* ── the gauntlet's harder questions ───────────────────────────────────────
+   Recall asks a definition forwards ("What is preload?"); the gauntlet asks
+   it backwards — the definition, and you name the term — which is the
+   harder direction and the one an examiner uses. It also asks the section's
+   other "most common" questions and names its other lists: whatever recall
+   did not ask. Every answer is still the section's own words.
+
+   A definition that already says its term ("Mitral stenosis is a narrowing
+   of the mitral valve…" gives away "mitral") is still asked, but only when
+   some word of the term is left to find. */
+function hardQuestions(cluster, points) {
+  var asked = {};
+  recall(cluster, points).prompts.forEach(function (q) { asked[q.question] = true; });
+  var out = [];
+  patternQuestions(cluster).forEach(function (q) {
+    if (q.kind === 'define') {
+      var said = stemsOf(q.answer), ts = Object.keys(stemsOf(q.term));
+      if (ts.length && !ts.every(function (k) { return said[k]; })) {
+        out.push({ question: 'Which term is defined as \u201C' + q.answer + '\u201D?', answer: q.term, page: q.page });
+      }
+    } else if (!asked[q.question]) out.push({ question: q.question, answer: q.answer, page: q.page });
+  });
+  lists(cluster).forEach(function (l) {
+    var lq = listQuestion(l);
+    if (!asked[lq.question]) out.push(lq);
+  });
+  return out;
 }
 
 function lev(a, b) {
@@ -655,9 +689,17 @@ function gauntlet(clusters, pointsByCluster, focus, n) {
     }).sort(function (a, b) { return scoreSentence(b, freq) - scoreSentence(a, freq) || a.index - b.index; })
       .map(function (s) { var t = rankedTerms(s.text, freq, title, terms)[0]; return t && { s: s, word: t.word }; });
     var second = points.map(function (p) { var t = rankedTerms(p.text, freq, title, terms)[1]; return t && { s: p, word: t.word }; });
-    var qs = fresh.concat(second).filter(Boolean).map(function (x) {
+    var blanks = fresh.concat(second).filter(Boolean).map(function (x) {
       return { question: 'Gauntlet — fill in the blank: ' + cloze(x.s.text, x.word), answer: x.word, cluster: c.index, page: x.s.page };
     });
+    /* A harder question, then a blank, in turn: the hard ones lead, and a
+       section with many of them still gets blanks. */
+    var hard = hardQuestions(c, points).map(function (q) { return { question: q.question, answer: q.answer, cluster: c.index, page: q.page }; });
+    var qs = [];
+    for (var qi = 0; qi < Math.max(hard.length, blanks.length); qi++) {
+      if (hard[qi]) qs.push(hard[qi]);
+      if (blanks[qi]) qs.push(blanks[qi]);
+    }
     (isFocus ? fromFocus : fromRest).push(qs);
   });
   /* Take round-robin across sections, focus first, so no one section fills
@@ -710,7 +752,7 @@ function tree(f) {
 }
 
 var MemCoach = {
-  sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, phraseMatch: phraseMatch, itemMatch: itemMatch, numberSlips: numberSlips, defined: defined, toks: toks, rankedTerms: rankedTerms, matches: matches, cloze: cloze,
+  sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, hardQuestions: hardQuestions, phraseMatch: phraseMatch, itemMatch: itemMatch, numberSlips: numberSlips, defined: defined, toks: toks, rankedTerms: rankedTerms, matches: matches, cloze: cloze,
   encode: encode, recall: recall, flow: flow, paths: paths, tree: tree, tableQuestions: tableQuestions, gradeRecall: gradeRecall, gradeExplain: gradeExplain, gauntlet: gauntlet,
   bare: bare, frequencies: frequencies,
 };

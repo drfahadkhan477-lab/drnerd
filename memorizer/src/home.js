@@ -133,6 +133,30 @@ function headingOf(cluster, text) {
   return cluster.title;
 }
 
+/* WEAK SPOTS. The sections taught and held least well, across every unit:
+   mastery is the session's own measure (session.js — half recall accuracy,
+   half the teach-back score), and a section not yet taught has none, so it
+   is never called weak. Under WEAK is weak. Weakest first; between two
+   equally weak, the one with more review cards waiting, since that is where
+   a drill has the most to work on. `mastery` is MemSession.mastery, passed
+   in so this stays pure. */
+var WEAK = 0.8;
+function weakSpots(docs, sessions, cards, mastery, n) {
+  var out = [];
+  (docs || []).forEach(function (d, di) {
+    var st = sessions[d.id];
+    if (!st) return;
+    (d.clusters || []).forEach(function (c, i) {
+      var m = mastery(st, i);
+      if (m == null || m >= WEAK) return;
+      var k = (cards || []).filter(function (x) { return x.docId === d.id && x.cluster === i; }).length;
+      out.push({ docId: d.id, docName: d.name, cluster: i, title: c.title, mastery: m, pct: Math.round(100 * m), cards: k, order: di });
+    });
+  });
+  out.sort(function (a, b) { return a.mastery - b.mastery || b.cards - a.cards || a.order - b.order || a.cluster - b.cluster; });
+  return out.slice(0, n || 3);
+}
+
 /* "1 section", "3 sections". */
 function count(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
 
@@ -162,7 +186,7 @@ function marks(text) {
   return out;
 }
 
-var MemHome = { HELD: HELD, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
+var MemHome = { HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
   notesOf: notesOf, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath };
 root.MemHome = MemHome;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemHome;

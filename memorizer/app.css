@@ -150,6 +150,7 @@ table.data tbody tr:last-child td { border-bottom: 0; }
 .fig button { display: block; width: 100%; padding: 0; border: 0; background: #FFFFFF; cursor: zoom-in; }
 .fig img { display: block; width: 100%; height: auto; }
 .fig figcaption { padding: var(--s-2) var(--s-3); font-size: var(--t-meta); color: var(--muted); }
+.fig-cap { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .pages { display: flex; gap: var(--s-3); overflow-x: auto; padding-bottom: var(--s-2); margin-top: var(--s-3); }
 .pages .fig { flex: 0 0 9rem; }
 .lightbox { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; padding: var(--s-4); }
@@ -264,6 +265,10 @@ textarea.answer { width: 100%; font: inherit; color: var(--ink); background: var
 .door-icon { font-size: var(--t-h4); line-height: 1; color: var(--accent); margin-bottom: var(--s-2); }
 .door-title { font-weight: 700; }
 .door-sub { color: var(--muted); font-size: var(--t-meta); overflow-wrap: anywhere; }
+.weak-list { list-style: none; margin: var(--s-3) 0 0; padding: 0; }
+.weak-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-2) 0; border-top: 1px solid var(--line); }
+.weak-list li:first-child { border-top: 0; }
+.weak-what { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 #door-continue { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 #door-continue .door-icon, #door-continue .door-sub { color: var(--accent-ink); }
 .home, .home * { transition: none; animation: none; }

@@ -217,17 +217,17 @@ jobs:
         run: node tests/verify-echoui-pure.js
       - name: echo-patch's anchors still exist where it runs (13 checks)
         run: node tests/verify-echoanchor-pure.js
-      - name: Memorizer — every word of a PDF taught once, headings kept with their body (81 checks)
+      - name: Memorizer — every word of a PDF taught once, headings kept with their body (107 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass (84 checks)
         run: node tests/verify-memorizer-prompts-pure.js
       - name: Memorizer — no protocol phase skipped, every miss one card (55 checks)
         run: node tests/verify-memorizer-session-pure.js
-      - name: Memorizer — the built-in coach needs no key and invents nothing (108 checks)
+      - name: Memorizer — the built-in coach needs no key and invents nothing (116 checks)
         run: node tests/verify-memorizer-coach-pure.js
       - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness (36 checks)
         run: node tests/verify-memorizer-appearance-pure.js
-      - name: Memorizer — the home screen's progress and pearl say true things (34 checks)
+      - name: Memorizer — the home screen's progress, pearl and weak spots say true things (41 checks)
         run: node tests/verify-memorizer-home-pure.js
 
   build-guard:

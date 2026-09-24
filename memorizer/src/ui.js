@@ -335,6 +335,17 @@ function viewLibrary() {
     cur ? addDoor : null,
     door('door-settings', '⚙', 'Settings', 'Theme, text size, coach', function () { leave('settings'); }));
 
+  /* ── weak spots: where the sessions say you are shakiest ── */
+  var spots = Home.weakSpots(ui.docs, sessions, ui.cards, Session.mastery, 3);
+  var weak = spots.length ? h('section.card.weak', { id: 'weak', 'aria-labelledby': 'weak-label' },
+    h('span.eyebrow', { id: 'weak-label' }, 'Weak spots'),
+    h('ul.weak-list', spots.map(function (w) {
+      return h('li',
+        h('div.weak-what', h('strong', w.title), h('span.muted', (ui.docs.length > 1 ? w.docName + ' · ' : '') + w.pct + '% mastered')),
+        w.cards ? button('Drill · ' + w.cards, function () { startDrill(w); }, '', { 'aria-label': 'Drill the ' + w.cards + ' card' + (w.cards === 1 ? '' : 's') + ' from ' + w.title })
+          : h('span.muted', 'No cards'));
+    }))) : null;
+
   /* ── units ── */
   var list = ui.docs.map(function (d) {
     var st = sessions[d.id];
@@ -358,7 +369,7 @@ function viewLibrary() {
 
   return h('main.wrap.home',
     h('div.home-top', hero, pearl),
-    input, doors,
+    input, doors, weak,
     !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
       button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null,
     hasKey() && builtin() ? h('p.muted.coach-line', 'Using the built-in coach: free, no key, nothing leaves this device. For smarter questions and grading, add a Claude key in Settings.') : null,
@@ -487,13 +498,20 @@ function lazyImage(alt, pageNo, box, scale) {
   }).then(function (url) { img.src = url; }, function () { img.alt = alt + ' (could not be drawn)'; });
   return img;
 }
-function lightbox(pageNo, box) {
+function lightbox(pageNo, box, name) {
   var close = function () { if (el.parentNode) el.parentNode.removeChild(el); doc.removeEventListener('keydown', esc); };
   var esc = function (e) { if (e.key === 'Escape') close(); };
-  var el = h('div.lightbox', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Page ' + pageNo, onclick: function (e) { if (e.target === el) close(); } },
+  var el = h('div.lightbox', { role: 'dialog', 'aria-modal': 'true', 'aria-label': name || 'Page ' + pageNo, onclick: function (e) { if (e.target === el) close(); } },
     lazyImage('Page ' + pageNo + (box ? ' figure' : ''), pageNo, box, 2.5), button('Close', close, 'primary'));
   doc.addEventListener('keydown', esc);
   doc.body.appendChild(el);
+}
+/* The figures a section uses: the ones its text names, else the ones on its
+   pages (chunk.js's assignFigures). Worked out once per unit opened. */
+function figuresOf(c) {
+  var d = ui.docRec;
+  if (ui.figsFor !== d) { ui.figsFor = d; ui.figs = Chunk.assignFigures(d.clusters, d.figures || []); }
+  return ui.figs[c.index] || [];
 }
 function visualsCard(c) {
   var d = ui.docRec;
@@ -501,13 +519,15 @@ function visualsCard(c) {
     return h('div.card', h('span.eyebrow', 'Figures and pages'),
       h('p.muted', 'This PDF was added before figures and pages could be shown. Delete it and add it again to see them here.'));
   }
-  var figs = (d.figures || []).filter(function (f) { return f.page >= c.pageStart && f.page <= c.pageEnd; }).slice(0, 6);
+  var figs = figuresOf(c);
   var pages = [];
   for (var pn = c.pageStart; pn <= c.pageEnd && pages.length < 6; pn++) pages.push(pn);
   return h('div.card', { id: 'visuals' },
     figs.length ? [h('span.eyebrow', 'Figures'), h('div.figs', figs.map(function (f, i) {
-      return h('figure.fig', h('button', { type: 'button', 'aria-label': 'Enlarge figure ' + (i + 1), onclick: function () { lightbox(f.page, f.box); } },
-        lazyImage('Figure ' + (i + 1) + ', page ' + f.page, f.page, f.box, 2)), h('figcaption', 'Figure ', page(f.page)));
+      var name = f.label || 'Figure ' + (i + 1);
+      return h('figure.fig', h('button', { type: 'button', 'aria-label': 'Enlarge ' + name, onclick: function () { lightbox(f.page, f.box, name); } },
+        lazyImage(f.caption || name + ', page ' + f.page, f.page, f.box, 2)),
+        h('figcaption', f.caption ? h('span.fig-cap', f.caption) : name, ' ', page(f.page)));
     }))] : null,
     h('span.eyebrow', 'The pages'),
     h('p.muted', 'Everything as printed — tables, charts and diagrams included. Tap to enlarge.'),
@@ -518,7 +538,7 @@ function visualsCard(c) {
 }
 
 function glanceCard(c, per) {
-  var figs = (ui.docRec.figures || []).filter(function (f) { return f.page >= c.pageStart && f.page <= c.pageEnd; }).length;
+  var figs = figuresOf(c).length;
   var tables = c.segments.filter(function (g) { return g.table; }).length;
   return h('div.card.glance', h('span.eyebrow', 'At a glance'), h('dl',
     h('dt', 'Pages'), h('dd', c.pageStart + (c.pageEnd !== c.pageStart ? '–' + c.pageEnd : '')),
@@ -594,13 +614,16 @@ function viewExplain(c, per) {
 function viewGauntlet() {
   var g = ui.state.gauntlet, q = g.questions[g.idx];
   var ci = q.cluster == null ? Session.gauntletCluster(ui.state, g.idx) : q.cluster;
+  /* The section is named only once the question is answered: "Which term
+     is defined as …" under a header reading "· Afterload" asks nothing. */
+  var from = (ui.docRec.clusters[ci] || {}).title;
   return [
     h('div.card.gauntlet',
-      h('span.count', 'Gauntlet ' + (g.idx + 1) + ' of ' + g.questions.length + ' · ' + (ui.docRec.clusters[ci] || {}).title),
+      h('span.count', 'Gauntlet ' + (g.idx + 1) + ' of ' + g.questions.length),
       h('h2.q', q.question),
       answerBox('Defend your answer…', function (a) {
         ask('The examiner is reading your answer…', 'gradeRecall', [ui.docRec.clusters[ci], q, a]).then(function (v) {
-          ui.feedback = { kind: 'gauntlet', grade: v, q: q, answer: a, event: { type: 'gauntletGraded', value: v, answer: a } };
+          ui.feedback = { kind: 'gauntlet', grade: v, q: q, answer: a, from: from, event: { type: 'gauntletGraded', value: v, answer: a } };
         }).then(render, function () {});
       })),
   ];
@@ -617,6 +640,7 @@ function settle() {
   return f && f.event ? dispatch(f.event) : Promise.resolve();
 }
 function leave(view) {
+  ui.drill = null;
   settle().then(function () { ui.view = view; ui.error = ''; return refresh(); }).then(render);
 }
 function viewFeedback() {
@@ -644,6 +668,7 @@ function viewFeedback() {
       ? [h('h3', 'Missing'), h('ul', g.missing.map(function (x) { return h('li', x); }))] : null,
     g.misconception ? [h('h3', 'Misconception'), h('p', g.misconception)] : null,
     h('h3', 'Model answer'), h('p', f.q.answer, ' ', page(f.q.page)),
+    f.from ? h('p.muted', { id: 'from' }, 'From \u201C' + f.from + '\u201D') : null,
     /* A fill-in-the-blank question, shown whole: the word alone, without its
        sentence, is not much to learn from. */
     /_____/.test(f.q.question)
@@ -683,14 +708,28 @@ function viewSession() {
 
 /* ── REVIEW ──────────────────────────────────────────────────────────────── */
 function startReview() {
+  ui.view = 'review'; ui.reviewIdx = 0; ui.reviewShown = false; ui.reviewDone = 0; ui.drill = null;
+  refresh().then(render);
+}
+/* A drill: every card from one weak section, due or not, each once. Rating
+   one early is still a review — FSRS reads how long it has been. */
+function startDrill(w) {
   ui.view = 'review'; ui.reviewIdx = 0; ui.reviewShown = false; ui.reviewDone = 0;
+  ui.drill = { docId: w.docId, cluster: w.cluster, title: w.title, done: {} };
   refresh().then(render);
 }
 function viewReview() {
-  var due = Session.dueCards(ui.cards, today());
+  var dr = ui.drill;
+  var due = dr ? ui.cards.filter(function (c) { return c.docId === dr.docId && c.cluster === dr.cluster && !dr.done[c.id]; })
+    : Session.dueCards(ui.cards, today());
   var names = {};
   ui.docs.forEach(function (d) { names[d.id] = d.name; });
   if (!due.length) {
+    if (dr) {
+      return h('main.wrap', h('div.card', h('h1', 'Drill done.'),
+        h('p', ui.reviewDone + ' card' + (ui.reviewDone === 1 ? '' : 's') + ' from \u201C' + dr.title + '\u201D, each rated once.'),
+        button('Back to library', function () { ui.drill = null; ui.view = 'library'; render(); }, 'primary')));
+    }
     return h('main.wrap', h('div.card', h('h1', ui.reviewDone ? 'Done for today.' : 'Nothing due.'),
       h('p', ui.reviewDone ? ui.reviewDone + ' card' + (ui.reviewDone === 1 ? '' : 's') + ' reviewed. Come back tomorrow.' : 'Cards appear here when you miss something in a session, and again when they are due.'),
       button('Back to library', function () { ui.view = 'library'; render(); }, 'primary')));
@@ -698,10 +737,11 @@ function viewReview() {
   var card = due[0];
   var rate = function (r) {
     var upd = Session.review(card, r, today(), FSRS);
+    if (dr) dr.done[card.id] = true;
     Store.put('cards', upd).then(refresh).then(function () { ui.reviewShown = false; ui.reviewDone++; render(); });
   };
   return h('main.wrap',
-    h('div.review-head', h('span.count', due.length + ' due'), h('span.muted', (names[card.docId] || '') + ' · ' + card.title)),
+    h('div.review-head', h('span.count', dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'), h('span.muted', (names[card.docId] || '') + ' · ' + card.title)),
     h('div.card.flash',
       h('span.tag', card.source === 'explain' ? 'teach-back gap' : card.source),
       h('h2.q', card.front),
