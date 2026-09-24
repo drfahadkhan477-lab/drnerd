@@ -33,8 +33,11 @@
 (function (root) {
 'use strict';
 
-var CLUSTER_MIN = 600;
-var CLUSTER_MAX = 900;
+/* 250..450 words: about a page of a textbook, three to six key points. The
+   first version used 600..900, and the owner found a section that size too
+   much to take in at once — "change it to smaller chunks". */
+var CLUSTER_MIN = 250;
+var CLUSTER_MAX = 450;
 /* A "heading" longer than this is a sentence set in a big font — a pull
    quote, a callout — and is taught as body text. */
 var HEADING_MAX_WORDS = 20;
@@ -112,6 +115,14 @@ function blocksFromPages(pages) {
     function close() { if (cur && cur.text) blocks.push(cur); cur = null; }
 
     for (var j = 0; j < lines.length; j++) {
+      var tb = tableAt(lines, j);
+      if (tb) {
+        close();
+        blocks.push({ text: tb.rows.map(function (r) { return r.join(' '); }).join(' ').replace(/\s+/g, ' ').trim(),
+                      page: p.page, heading: false, table: tb.rows });
+        j += tb.count - 1;
+        continue;
+      }
       var l = lines[j];
       var t = String(l.text).replace(/\s+/g, ' ').trim();
       var w = words(t);
@@ -149,6 +160,48 @@ function blocksFromPages(pages) {
   return { blocks: blocks, bodySize: bodySize };
 }
 
+/* ── tables ────────────────────────────────────────────────────────────────
+   pdf.js gives text runs with positions; memorizer/src/pdf.js groups a line's
+   runs into CELLS wherever the gap between runs is wide. A table is three or
+   more consecutive lines of two or more cells whose columns line up with the
+   first line's — the header. Cells are placed in the header's column nearest
+   them, so a row with an empty cell keeps its other cells in the right
+   columns. Everything else about a table's words — which cluster, which
+   page — is as for prose, so the coverage invariant holds for tables too:
+   a table's text is its rows' cells, in order, exactly the words of its
+   lines. */
+var TABLE_MIN_ROWS = 3;
+function cellsOf(l) { return (l && l.cells && l.cells.length >= 2) ? l.cells : null; }
+function tableAt(lines, j) {
+  var head = cellsOf(lines[j]);
+  if (!head) return null;
+  var tol = Math.max(8, (+lines[j].size || 10));
+  var anchors = head.map(function (c) { return +c.x || 0; });
+  var n = 1;
+  while (j + n < lines.length) {
+    var cs = cellsOf(lines[j + n]);
+    if (!cs) break;
+    var aligned = cs.filter(function (c) {
+      return anchors.some(function (a) { return Math.abs((+c.x || 0) - a) <= tol; });
+    }).length;
+    if (aligned < 2) break;
+    n++;
+  }
+  if (n < TABLE_MIN_ROWS) return null;
+  var rows = [];
+  for (var k = 0; k < n; k++) {
+    var row = anchors.map(function () { return ''; });
+    cellsOf(lines[j + k]).forEach(function (c) {
+      var best = 0;
+      anchors.forEach(function (a, ai) { if (Math.abs((+c.x || 0) - a) < Math.abs((+c.x || 0) - anchors[best])) best = ai; });
+      var t = String(c.text || '').replace(/\s+/g, ' ').trim();
+      row[best] = row[best] ? row[best] + ' ' + t : t;
+    });
+    rows.push(row);
+  }
+  return { rows: rows, count: n };
+}
+
 /* Pages with almost no extractable text are scans: an image of a page with no
    text layer. pdf.js cannot read them and v1 does no OCR, so they are named
    to the user rather than silently skipped. */
@@ -176,6 +229,18 @@ function unitsFromBlocks(blocks, max) {
       units.push({ heading: true, words: ws });
       return;
     }
+    if (b.table) {
+      /* One unit per row, marked atomic: a row is never cut between two
+         clusters (see clusterBlocks). Each word knows its row, so a cluster
+         can rebuild the rows it holds. */
+      var at = 0;
+      b.table.forEach(function (row, ri) {
+        var rw = words(row.join(' ')).map(function (w) { return { w: w, page: b.page, para: bi, row: ri }; });
+        at += rw.length;
+        if (rw.length) units.push({ heading: false, atomic: rw.length <= max, words: rw });
+      });
+      return;
+    }
     var sent = [];
     ws.forEach(function (tok, i) {
       sent.push(tok);
@@ -188,12 +253,12 @@ function unitsFromBlocks(blocks, max) {
   return units;
 }
 
-function buildCluster(units, index, lastHeading) {
+function buildCluster(units, index, lastHeading, tables) {
   var toks = [];
   var headings = [];
   units.forEach(function (u) {
     if (u.heading) headings.push(u.words.map(function (t) { return t.w; }).join(' '));
-    u.words.forEach(function (t) { toks.push({ w: t.w, page: t.page, para: t.para, heading: u.heading }); });
+    u.words.forEach(function (t) { toks.push({ w: t.w, page: t.page, para: t.para, heading: u.heading, row: t.row }); });
   });
   /* Segments: consecutive words from one paragraph on one page. These are
      what a prompt shows the model, each with its page, so every point it
@@ -201,11 +266,20 @@ function buildCluster(units, index, lastHeading) {
   var segments = [];
   toks.forEach(function (t) {
     var s = segments[segments.length - 1];
-    if (s && s.para === t.para && s.page === t.page) s.words.push(t.w);
-    else segments.push({ para: t.para, page: t.page, heading: t.heading, words: [t.w] });
+    if (s && s.para === t.para && s.page === t.page) { s.words.push(t.w); if (t.row != null && s.rows.indexOf(t.row) === -1) s.rows.push(t.row); }
+    else segments.push({ para: t.para, page: t.page, heading: t.heading, words: [t.w], rows: t.row != null ? [t.row] : [] });
   });
   segments = segments.map(function (s) {
-    return { page: s.page, heading: s.heading, text: s.words.join(' ') };
+    var out = { page: s.page, heading: s.heading, text: s.words.join(' ') };
+    var tb = tables && tables[s.para];
+    if (tb && s.rows.length) {
+      out.table = s.rows.map(function (r) { return tb[r]; });
+      /* The header row again, for display only, when this part of a table
+         does not start at it. Its words are not counted twice: it is not in
+         `text`, which is what the coverage invariant reads. */
+      if (s.rows[0] !== 0) out.tableHeader = tb[0];
+    }
+    return out;
   });
   var body = toks.filter(function (t) { return !t.heading; }).map(function (t) { return t.w; });
   var title = headings[0] ||
@@ -234,6 +308,8 @@ function clusterBlocks(blocks, opts) {
   var MIN = opts.min || CLUSTER_MIN;
   var MAX = opts.max || CLUSTER_MAX;
   var units = unitsFromBlocks(blocks, MAX);
+  var tables = {};
+  (blocks || []).forEach(function (b, bi) { if (b.table) tables[bi] = b.table; });
   var groups = [];
   var cur = [];
   var curN = 0;
@@ -253,6 +329,17 @@ function clusterBlocks(blocks, opts) {
       continue;
     }
     if (curN + n <= MAX) { cur.push(u); curN += n; continue; }
+    if (u.atomic) {
+      /* A table row does not fit. Rows are short, so the cluster is nearly
+         full and well over MIN; close it — taking any heading it ends with
+         along to the next cluster, so the heading stays with its table. */
+      var carry = [];
+      while (cur.length && cur[cur.length - 1].heading) { var hu = cur.pop(); curN -= hu.words.length; carry.unshift(hu); }
+      flush();
+      carry.forEach(function (hu) { cur.push(hu); curN += hu.words.length; });
+      cur.push(u); curN += n;
+      continue;
+    }
     if (curN < MIN || endsWithHeading()) {
       /* Too small to close, or closing would strand a heading: fill to MAX
          with the front of this sentence and carry the rest over. */
@@ -279,14 +366,14 @@ function clusterBlocks(blocks, opts) {
 
   var lastHeading = '';
   return groups.map(function (g, i) {
-    var c = buildCluster(g, i, lastHeading);
+    var c = buildCluster(g, i, lastHeading, tables);
     if (c.headings.length) lastHeading = c.headings[c.headings.length - 1];
     return c;
   });
 }
 
 var MemChunk = {
-  CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS,
+  CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt,
   words: words, blocksFromPages: blocksFromPages, scannedPages: scannedPages,
   unitsFromBlocks: unitsFromBlocks, clusterBlocks: clusterBlocks,
 };

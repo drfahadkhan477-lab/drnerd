@@ -144,6 +144,12 @@ function parse(kind, text) {
 /* ── the excerpt, as the model sees it ───────────────────────────────────── */
 function excerpt(cluster) {
   return (cluster.segments || []).map(function (s) {
+    /* A table goes as rows of cells, not a run of words — the model can only
+       read a grid it is shown as one. */
+    if (s.table) {
+      var rows = (s.tableHeader ? [s.tableHeader] : []).concat(s.table);
+      return '[p.' + s.page + '] TABLE:\n' + rows.map(function (r) { return '| ' + r.join(' | ') + ' |'; }).join('\n');
+    }
     return '[p.' + s.page + '] ' + (s.heading ? '## ' : '') + s.text;
   }).join('\n\n');
 }
@@ -158,8 +164,10 @@ function wrap(cluster, task) {
 
 function encode(cluster) {
   var p = wrap(cluster,
-    'ENCODE. Extract the 5 to 9 points from this excerpt a student must be able to reproduce on an exam, ' +
-    'most important first, each one self-contained and each citing its page. Then write ONE mnemonic that ' +
+    'ENCODE. Extract the 3 to 7 points from this excerpt a student must be able to reproduce on an exam, ' +
+    'most important first, each one self-contained and each citing its page. Write each point as one concise, ' +
+    'professional bullet of at most 20 words that starts with its key term, e.g. "Preload \u2014 the stretch on ' +
+    'myocytes at end-diastole". Then write ONE mnemonic that ' +
     'packs the points together (acrostic, story or image), built only from the points. If the excerpt ' +
     'describes a process, pathway, sequence or decision, give it as a Mermaid "flowchart TD" diagram in ' +
     '"flowchart"; otherwise give an empty string. Mermaid node labels must be quoted, e.g. A["label"].');

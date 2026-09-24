@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 45 suites that need neither a browser nor a build all stay
+present, and the 46 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -124,6 +124,14 @@ at its headings, and taught one section at a time:
 Every missed answer and every gap becomes a review card, scheduled with the
 same FSRS scheduler Systole uses (`src/core/fsrs.js`, shared, not copied).
 
+Sections are short (about 250–450 words), and the study page shows each one
+as 3–7 bullets with the key term first, the memory hook in a handwritten face
+beside them, a flowchart drawn from the section's own cause-and-effect
+sentences, its tables as tables, its figures cut from the page, and the
+pages themselves. The look is Systole's: the same nine themes, colour for
+colour, and its type scale, with text size, reading width, line spacing and
+font to choose.
+
 ```bash
 npm run memorizer          # → dist-memorizer/index.html, one self-contained file
 npm run memorizer:serve    # the same, served on :8081 so it installs as an app
@@ -136,6 +144,7 @@ synonym can be counted as correct by you. Nothing leaves the device. For
 deeper questions and grading that understands answers in your own words, add
 a Claude key in Settings — then each step sends only the text of the section
 being studied, and every prompt forbids the model from adding anything that
-is not in your PDF. Either way the PDF is never uploaded or stored.
+is not in your PDF. Either way the PDF is never uploaded; it is kept only on
+your device, so its pages and figures can be shown.
 Memorizer carries no content of its own, so unlike Systole it builds
 anywhere, CI included.

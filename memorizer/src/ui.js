@@ -17,6 +17,7 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
+var Format = root.MemFormat, Look = root.MemLook;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -143,7 +144,9 @@ function readBuffer(file) {
 function importFile(file) {
   if (!file) return;
   ui.importing = 'Opening ' + file.name + '…'; ui.error = ''; render();
+  var bytes = null;
   readBuffer(file).then(function (buf) {
+    bytes = buf;
     return Pdf.read(buf, function (n, total) { ui.importing = 'Reading page ' + n + ' of ' + total + '…'; render(); });
   }).then(function (r) {
     var blocks = Chunk.blocksFromPages(r.pages).blocks;
@@ -152,9 +155,9 @@ function importFile(file) {
     var rec = {
       id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       name: file.name.replace(/\.pdf$/i, ''), addedAt: Date.now(), pages: r.numPages,
-      scanned: Chunk.scannedPages(r.wordCounts), clusters: clusters,
+      scanned: Chunk.scannedPages(r.wordCounts), clusters: clusters, figures: r.figures || [], hasFile: true,
     };
-    return Store.put('docs', rec);
+    return Store.put('files', { id: rec.id, bytes: bytes }).then(function () { return Store.put('docs', rec); });
   }).then(function () {
     ui.importing = ''; return refresh();
   }).then(render, function (e) {
@@ -323,23 +326,163 @@ function sessionHeader() {
     h('div.crumbs', button('← Library', function () { leave('library'); }, 'quiet'),
       h('span.muted', ui.docRec.name)),
     c ? h('div.where', h('span.count', 'Section ' + (s.cluster + 1) + ' of ' + n), h('h1', c.title),
-          h('span.muted', 'pages ' + c.pageStart + (c.pageEnd !== c.pageStart ? '–' + c.pageEnd : '') + ' · ' + c.words + ' words'))
+          h('span.muted', (c.pageEnd !== c.pageStart ? 'pages ' + c.pageStart + '–' + c.pageEnd : 'page ' + c.pageStart) + ' · ' + c.words + ' words'))
       : h('div.where', h('h1', s.phase === 'done' ? 'Unit complete' : 'The gauntlet')),
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * (s.phase === 'gauntlet' || s.phase === 'done' ? n : s.cluster) / n) + '%' })),
     s.phase !== 'done' ? stepper(s) : null);
 }
 
+/* ── the study page's pieces ─────────────────────────────────────────────── */
+
+/* A point as a bullet: its key term bold, its sub-points below. format.js
+   only removes words, so this is still the PDF talking. */
+function bulletItem(p) {
+  var b = Format.bullet(p.text);
+  return h('li',
+    b.lead ? h('span.lead', b.lead) : null, b.body, page(p.page),
+    b.subs.length ? h('ul.subs', b.subs.map(function (x) { return h('li', x); })) : null);
+}
+
+/* The built-in hook is "First letters: CECCC — a · b · c. …": drawn as an
+   acrostic. Anything else (Claude's) is shown as written, in the script face. */
+function hookCard(per) {
+  if (!per.mnemonic) return null;
+  var m = /^First letters: ([A-Z]+) — (.+?)\. /.exec(per.mnemonic);
+  var body = m
+    ? [h('p.hook-script', m[1].split('').join(' · ')),
+       h('ul.acrostic', m[2].split(' · ').map(function (w) {
+         return h('li', h('span.letter', w.charAt(0).toUpperCase()), h('span.word', w));
+       })),
+       h('p.muted', 'Say the letters, then what each stands for.')]
+    : [h('p.hook-script', per.mnemonic)];
+  return h('div.card.hook', { id: 'hook' }, h('span.eyebrow', 'Memory hook'), body);
+}
+
+/* A flowchart as boxes and arrows, drawn as HTML so it works offline and in
+   every theme. From the built-in coach's flow, or from a simple Mermaid chart
+   Claude wrote. */
+function drawFlow(f) {
+  var label = {};
+  f.nodes.forEach(function (n) { label[n.id] = n.label; });
+  function draw(t, root) {
+    var box = h('div.flow-node' + (root ? '.root' : '') + (t.again ? '.again' : ''), label[t.id]);
+    if (!t.next.length) return h('div.flow-tree', box);
+    var kids = t.next.map(function (b) { return h('div.flow-branch', h('div.flow-arrow', b.verb), draw(b.node, false)); });
+    return h('div.flow-tree', box, kids.length > 1 ? h('div.flow-fork', kids) : kids[0]);
+  }
+  return h('div.flow', Coach.tree(f).map(function (t) { return draw(t, true); }));
+}
+/* Mermaid's simple forms: A["x"] --> B["y"], A -->|label| B, A -- label --> B. */
+function parseMermaid(code) {
+  var labels = {}, edges = [];
+  var node = /([A-Za-z0-9_]+)\s*(?:\[\s*"?([^"\]]*)"?\s*\]|\(\s*"?([^")]*)"?\s*\)|\{\s*"?([^"}]*)"?\s*\})?/;
+  String(code || '').split(/\n|;/).forEach(function (line) {
+    var m = /^\s*(.+?)\s*(?:--\s*([^->|]+?)\s*-->|-->\s*\|([^|]*)\||-->|==>|-\.->)\s*(.+?)\s*$/.exec(line);
+    if (!m) return;
+    var a = node.exec(m[1]), b = node.exec(m[4]);
+    if (!a || !b) return;
+    [a, b].forEach(function (x) { var l = x[2] || x[3] || x[4]; if (l) labels[x[1]] = l; else if (!labels[x[1]]) labels[x[1]] = x[1]; });
+    edges.push({ from: a[1], to: b[1], verb: (m[2] || m[3] || '').trim() });
+  });
+  var ids = Object.keys(labels);
+  return { nodes: ids.map(function (id) { return { id: id, label: labels[id] }; }), edges: edges };
+}
+function flowCard(c, per) {
+  var f = null, fromModel = false;
+  if (per.flowchart && per.flowchart.trim()) {
+    var parsed = parseMermaid(per.flowchart);
+    if (parsed.edges.length) { f = parsed; fromModel = true; }
+    else return h('div.card', h('span.eyebrow', 'Flow'), flowchart(per.flowchart));
+  }
+  if (!f) { f = Coach.flow(c); if (f.edges.length < 2) return null; }
+  return h('div.card', { id: 'flow' }, h('div.card-head', h('span.eyebrow', 'Flow'),
+      h('span.muted', fromModel ? 'drawn by Claude from this section' : 'from this section’s cause-and-effect sentences')),
+    drawFlow(f));
+}
+
+function tablesCard(c) {
+  var segs = c.segments.filter(function (g) { return g.table; });
+  if (!segs.length) return null;
+  return h('div.card', { id: 'tables' }, h('span.eyebrow', 'Tables'), segs.map(function (g) {
+    var headRow = g.tableHeader || g.table[0];
+    var body = g.tableHeader ? g.table : g.table.slice(1);
+    return [h('div.table-wrap', h('table.data',
+        h('thead', h('tr', headRow.map(function (x) { return h('th', { scope: 'col' }, x); }))),
+        h('tbody', body.map(function (r) { return h('tr', r.map(function (x, i) { return i === 0 ? h('th', { scope: 'row' }, x) : h('td', x); })); })))),
+      h('p.muted.table-cap', 'Table', page(g.page), g.tableHeader ? ' · continued' : '')];
+  }));
+}
+
+/* Figures and pages are drawn from the PDF kept on this device. */
+function withBytes() {
+  if (ui.bytesFor === ui.docId) return Promise.resolve(ui.bytes);
+  return Store.get('files', ui.docId).then(function (f) { ui.bytesFor = ui.docId; ui.bytes = f && f.bytes; return ui.bytes; });
+}
+function lazyImage(alt, pageNo, box, scale) {
+  var img = h('img', { alt: alt });
+  withBytes().then(function (bytes) {
+    if (!bytes) throw new Error('no file');
+    return Pdf.renderBox(ui.docId, bytes, pageNo, box, scale);
+  }).then(function (url) { img.src = url; }, function () { img.alt = alt + ' (could not be drawn)'; });
+  return img;
+}
+function lightbox(pageNo, box) {
+  var close = function () { if (el.parentNode) el.parentNode.removeChild(el); doc.removeEventListener('keydown', esc); };
+  var esc = function (e) { if (e.key === 'Escape') close(); };
+  var el = h('div.lightbox', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Page ' + pageNo, onclick: function (e) { if (e.target === el) close(); } },
+    lazyImage('Page ' + pageNo + (box ? ' figure' : ''), pageNo, box, 2.5), button('Close', close, 'primary'));
+  doc.addEventListener('keydown', esc);
+  doc.body.appendChild(el);
+}
+function visualsCard(c) {
+  var d = ui.docRec;
+  if (!d.hasFile) {
+    return h('div.card', h('span.eyebrow', 'Figures and pages'),
+      h('p.muted', 'This PDF was added before figures and pages could be shown. Delete it and add it again to see them here.'));
+  }
+  var figs = (d.figures || []).filter(function (f) { return f.page >= c.pageStart && f.page <= c.pageEnd; }).slice(0, 6);
+  var pages = [];
+  for (var pn = c.pageStart; pn <= c.pageEnd && pages.length < 6; pn++) pages.push(pn);
+  return h('div.card', { id: 'visuals' },
+    figs.length ? [h('span.eyebrow', 'Figures'), h('div.figs', figs.map(function (f, i) {
+      return h('figure.fig', h('button', { type: 'button', 'aria-label': 'Enlarge figure ' + (i + 1), onclick: function () { lightbox(f.page, f.box); } },
+        lazyImage('Figure ' + (i + 1) + ', page ' + f.page, f.page, f.box, 2)), h('figcaption', 'Figure ', page(f.page)));
+    }))] : null,
+    h('span.eyebrow', 'The pages'),
+    h('p.muted', 'Everything as printed — tables, charts and diagrams included. Tap to enlarge.'),
+    h('div.pages', pages.map(function (pn) {
+      return h('figure.fig', h('button', { type: 'button', 'aria-label': 'Open page ' + pn, onclick: function () { lightbox(pn, null); } },
+        lazyImage('Page ' + pn, pn, null, 0.5)), h('figcaption', 'Page ' + pn));
+    })));
+}
+
+function glanceCard(c, per) {
+  var figs = (ui.docRec.figures || []).filter(function (f) { return f.page >= c.pageStart && f.page <= c.pageEnd; }).length;
+  var tables = c.segments.filter(function (g) { return g.table; }).length;
+  return h('div.card.glance', h('span.eyebrow', 'At a glance'), h('dl',
+    h('dt', 'Pages'), h('dd', c.pageStart + (c.pageEnd !== c.pageStart ? '–' + c.pageEnd : '')),
+    h('dt', 'Key points'), h('dd', String(per.points.length)),
+    h('dt', 'Words'), h('dd', String(c.words)),
+    tables ? [h('dt', 'Tables'), h('dd', String(tables))] : null,
+    figs ? [h('dt', 'Figures'), h('dd', String(figs))] : null));
+}
+
+var wide = root.matchMedia ? root.matchMedia('(min-width: 62rem)') : null;
+if (wide && wide.addEventListener) wide.addEventListener('change', function () { if (ui.view === 'session') render(); });
+function hookBeside() { return Look.load().hook === 'side' && !!(wide && wide.matches); }
+
 function viewEncode(c, per) {
   var src = h('details.source', h('summary', 'Show the PDF text for this section'),
-    cluster().segments.map(function (seg) { return h(seg.heading ? 'h3' : 'p', page(seg.page), ' ', seg.text); }));
+    c.segments.map(function (seg) { return seg.table ? null : h(seg.heading ? 'h3' : 'p', page(seg.page), ' ', seg.text); }));
+  var points = h('div.card', { id: 'points' },
+    h('div.card-head', h('h2', 'Key points'), button('🔊 Listen', function () { speak(per.points.map(function (p) { return p.text; }).join('. ')); }, 'quiet')),
+    h('ul.bullets', per.points.map(bulletItem)));
+  var hook = hookCard(per);
+  var side = hookBeside();
+  var main = h('div.study-main', points, side ? null : hook, flowCard(c, per), tablesCard(c), visualsCard(c), src);
+  var aside = side ? h('aside.study-aside', { 'aria-label': 'Memory hook and summary' }, hook, glanceCard(c, per)) : null;
   return [
-    h('div.card',
-      h('h2', 'Key points'),
-      h('ol.points', per.points.map(function (p) { return h('li', p.text, ' ', page(p.page)); })),
-      h('div.row', button('🔊 Listen', function () { speak(per.points.map(function (p) { return p.text; }).join('. ')); }, 'quiet'))),
-    per.mnemonic ? h('div.card.mnemonic', h('h2', 'Memory hook'), h('p', per.mnemonic)) : null,
-    per.flowchart && per.flowchart.trim() ? h('div.card', h('h2', 'The flow'), flowchart(per.flowchart)) : null,
-    src,
+    h('div.study-grid', main, aside),
     h('div.card.cta',
       h('p', 'Read the points twice, say the hook out loud, then close your eyes and replay them. Ready?'),
       button('I’m ready — test me', function () { dispatch({ type: 'toRecall' }).then(render); }, 'primary big', { id: 'to-recall' })),
@@ -474,7 +617,7 @@ function viewSession() {
   else if (s.phase === 'encode') body = per.points ? viewEncode(cluster(), per) : busyCard();
   else if (s.phase === 'recall') body = per.prompts ? viewRecall(cluster(), per) : busyCard();
   else body = viewExplain(cluster(), per);
-  return h('main.wrap', sessionHeader(), h('div.phase', { 'data-phase': s.phase }, body));
+  return h('main.wrap.study', sessionHeader(), h('div.phase', { 'data-phase': s.phase }, body));
 }
 
 /* ── REVIEW ──────────────────────────────────────────────────────────────── */
@@ -509,6 +652,39 @@ function viewReview() {
 }
 
 /* ── SETTINGS ────────────────────────────────────────────────────────────── */
+/* Appearance: Systole's themes, text size and layout. Every choice applies at
+   once and is saved at once — there is nothing to confirm. */
+function appearanceCard() {
+  var look = Look.load();
+  function set(k, v) { look[k] = v; Look.apply(look); Look.save(look); render(); }
+  function seg(kind, label) {
+    return [h('div.group-label', { id: 'lbl-' + kind }, label),
+      h('div.seg', { role: 'radiogroup', 'aria-labelledby': 'lbl-' + kind }, Look.OPTIONS[kind].map(function (o) {
+        var at = { type: 'button', role: 'radio', 'aria-checked': String(look[kind] === o[0]), onclick: function () { set(kind, o[0]); } };
+        at['data-' + kind] = o[0];
+        return h('button', at, o[1]);
+      }))];
+  }
+  function swatch(id, name, sw) {
+    return h('button.swatch', { type: 'button', role: 'radio', 'aria-checked': String(look.theme === id), 'data-theme-id': id,
+        onclick: function () { set('theme', id); } },
+      h('i', { style: 'background:linear-gradient(135deg,' + sw[0] + ' 0 55%,' + sw[1] + ' 55% 100%)', 'aria-hidden': 'true' }), name);
+  }
+  var themes = function (mode) {
+    return Look.THEMES.filter(function (t) { return t.mode === mode; }).map(function (t) { return swatch(t.id, t.name, t.swatch); });
+  };
+  return h('div.card.settings', { id: 'appearance' }, h('h2', 'Appearance'),
+    h('p.muted', 'Systole’s themes and type scale.'),
+    h('div.group-label', { id: 'lbl-theme' }, 'Theme'),
+    h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' },
+      swatch('auto', 'Auto', ['#EFF3F8', '#0A1628']), themes('light')),
+    h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' }, themes('dark')),
+    seg('size', 'Text size'), seg('width', 'Reading width'), seg('spacing', 'Line spacing'),
+    seg('font', 'Font'), seg('hook', 'Memory hook'),
+    h('div.preview', h('span.count', 'Preview'), h('p', { style: 'margin:0' },
+      h('strong', 'Preload'), ' — the stretch on ventricular myocytes at the end of diastole.', page(4))));
+}
+
 function viewSettings() {
   var c = cfg();
   var prov = h('select', { id: 'provider', onchange: function () { fillModels(); } },
@@ -532,7 +708,9 @@ function viewSettings() {
   fillModels();
   var saved = h('span.muted', { role: 'status' });
   return h('main.wrap',
-    h('div.card.settings', h('h1', 'Settings'),
+    h('h1', { style: 'margin-top:1rem' }, 'Settings'),
+    appearanceCard(),
+    h('div.card.settings', h('h2', 'Coach'),
       h('label', 'Coach', prov), about, keyed,
       h('div.row', button('Save', function () {
         var P = Provider.PROVIDERS[prov.value];

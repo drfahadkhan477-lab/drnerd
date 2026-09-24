@@ -63,7 +63,9 @@ function stem(b) { return b.replace(/(?:ies|es|s|ed|ing|ly)$/, '').replace(/(.)\
 function sentences(cluster) {
   var out = [];
   (cluster.segments || []).forEach(function (seg) {
-    if (seg.heading) return;
+    /* Headings are titles and tables are grids — neither is a sentence. A
+       table's own questions come from tableQuestions() below. */
+    if (seg.heading || seg.table) return;
     var cur = [];
     String(seg.text).split(/\s+/).filter(Boolean).forEach(function (w, i, all) {
       cur.push(w);
@@ -158,7 +160,10 @@ function keySentences(cluster) {
   var all = sentences(cluster);
   var usable = all.filter(function (s) { var n = s.text.split(/\s+/).length; return n >= 6 && n <= 60; });
   if (!usable.length) usable = all.filter(function (s) { return s.text.split(/\s+/).length >= 3; });
-  var k = Math.max(1, Math.min(9, Math.max(5, Math.round(all.length / 4)), usable.length));
+  /* 3..7 points, about one for every five sentences: enough to carry a
+     section, few enough to hold in mind at once. (It was 5..9, and a short
+     section came out as nine near-sentences — the owner asked for smaller.) */
+  var k = Math.max(1, Math.min(7, Math.max(3, Math.round(all.length / 5)), usable.length));
   var byScore = usable.slice().sort(function (a, b) { return scoreSentence(b, freq) - scoreSentence(a, freq) || a.index - b.index; });
   /* A sentence that states a number — a threshold, a dose, a percentage —
      is taken first, up to half the points, whatever its words score: its
@@ -196,15 +201,149 @@ function encode(cluster) {
   };
 }
 
+/* ── tables ────────────────────────────────────────────────────────────────
+   A table asks itself questions: given the row's label and the column's
+   header, what is in the cell? Numbers first — a table of values is where a
+   section keeps them. Needs a header row and at least one data row. */
+function tableQuestions(cluster, limit) {
+  var out = [];
+  (cluster.segments || []).forEach(function (seg) {
+    if (!seg.table || out.length >= limit) return;
+    var header = seg.tableHeader || seg.table[0];
+    var rows = seg.tableHeader ? seg.table : seg.table.slice(1);
+    var cells = [];
+    rows.forEach(function (row) {
+      for (var ci = 1; ci < row.length; ci++) {
+        var cell = String(row[ci] || '').trim();
+        if (!cell || !row[0] || !header[ci]) continue;
+        var toks = cell.split(/\s+/).map(bare).filter(Boolean);
+        var num = toks.filter(function (t) { return NUM.test(t); })[0];
+        var word = num || toks.filter(isContent)[0];
+        if (word) cells.push({ row: row[0], col: header[ci], cell: cell, word: word, num: !!num });
+      }
+    });
+    cells.sort(function (a, b) { return (b.num ? 1 : 0) - (a.num ? 1 : 0); });
+    cells.slice(0, limit - out.length).forEach(function (c) {
+      out.push({ question: 'From the table: ' + c.row + ' \u2014 ' + c.col + ': ' + cloze(c.cell, c.word),
+                 answer: c.word, page: seg.page });
+    });
+  });
+  return out;
+}
+
+/* ── flow ──────────────────────────────────────────────────────────────────
+   A flowchart built from the section's own cause-and-effect sentences:
+   "A raises B", "B leads to C", "…, resulting in D". Every box is words
+   of the sentence it came from; every arrow is the verb that sentence used.
+   Boxes that name the same thing ("pulmonary venous pressure", "venous
+   pressure") are merged, which is what turns separate sentences into a
+   chain. Nothing is inferred: a link that no sentence states is not drawn. */
+var CAUSE = /\b(leads? to|lead to|results? in|causes?|triggers?|produces?|increases?|decreases?|raises?|lowers?|reduces?|activates?|inhibits?|stimulates?|promotes?|impairs?|worsens?|improves?|leading to|resulting in|causing|triggering|producing)\b/i;
+var CLAUSE_END = /[,;:.]|\s(?:and|but|while|whereas|because|since|which|who|when|by|through|via|so|although|unless|in order)\s/i;
+var LEADING = /^(?:the|a|an|this|these|that|those|its|their|such)\s+/i;
+function phrase(text, fromEnd, max) {
+  var ws = String(text).replace(/^[\s,;:]+|[\s,;:.]+$/g, '').split(/\s+/).filter(Boolean);
+  ws = fromEnd ? ws.slice(-max) : ws.slice(0, max);
+  var out = ws.join(' ');
+  while (LEADING.test(out)) out = out.replace(LEADING, '');
+  return out.replace(/[.,;:]+$/, '');
+}
+function stemsOf(label) {
+  var out = {};
+  String(label).split(/\s+/).forEach(function (w) { var b = bare(w); if (isContent(b)) out[stem(b)] = true; });
+  return out;
+}
+function sameThing(a, b) {
+  var ka = Object.keys(stemsOf(a)), kb = stemsOf(b);
+  var nb = Object.keys(kb).length;
+  if (!ka.length || !nb) return false;
+  var both = ka.filter(function (k) { return kb[k]; }).length;
+  return both / Math.min(ka.length, nb) >= 0.6;
+}
+function flow(cluster) {
+  var nodes = [], edges = [];
+  function node(label, page) {
+    if (!label || !Object.keys(stemsOf(label)).length) return -1;
+    for (var i = 0; i < nodes.length; i++) if (sameThing(nodes[i].label, label)) return i;
+    if (nodes.length >= 10) return -1;
+    nodes.push({ id: nodes.length, label: label, page: page });
+    return nodes.length - 1;
+  }
+  function edge(a, verb, b) {
+    if (a < 0 || b < 0 || a === b) return;
+    if (edges.some(function (e) { return e.from === a && e.to === b; })) return;
+    edges.push({ from: a, to: b, verb: verb.toLowerCase() });
+  }
+  sentences(cluster).forEach(function (s) {
+    var rest = s.text, subject = null, m;
+    var guard = 0;
+    while ((m = CAUSE.exec(rest)) && guard++ < 4) {
+      var before = rest.slice(0, m.index), after = rest.slice(m.index + m[0].length);
+      var participle = /ing\b/i.test(m[1]) && /,\s*$/.test(before);
+      /* The subject is the end of what precedes the verb, after its last
+         comma — "When preload rises, the ventricle stretches" starts at
+         "the ventricle". A participle ("…, leading to C") takes the
+         previous object as its subject instead. */
+      var subj;
+      if (participle && subject != null) subj = subject.lastObject;
+      else subj = phrase(before.split(/[,;:]/).pop(), true, 7);
+      var endAt = after.search(CLAUSE_END);
+      var obj = phrase(endAt === -1 ? after : after.slice(0, endAt), false, 7);
+      var a = node(subj, s.page), b = node(obj, s.page);
+      edge(a, m[1], b);
+      subject = { label: subj, lastObject: obj };
+      rest = endAt === -1 ? '' : after.slice(endAt);
+      /* "A raises B and causes C": the "and" keeps A as the subject. */
+      if (/^\s*and\s/i.test(rest) && CAUSE.test(rest.slice(0, 40))) {
+        var mm = CAUSE.exec(rest);
+        if (mm && /^\s*and\s*$/i.test(rest.slice(0, mm.index))) {
+          var obj2End = rest.slice(mm.index + mm[0].length).search(CLAUSE_END);
+          var tail2 = rest.slice(mm.index + mm[0].length);
+          var obj2 = phrase(obj2End === -1 ? tail2 : tail2.slice(0, obj2End), false, 7);
+          edge(node(subj, s.page), mm[1], node(obj2, s.page));
+          subject = { label: subj, lastObject: obj2 };
+          rest = obj2End === -1 ? '' : tail2.slice(obj2End);
+        }
+      }
+    }
+  });
+  var used = {};
+  edges.forEach(function (e) { used[e.from] = true; used[e.to] = true; });
+  return { nodes: nodes.filter(function (n) { return used[n.id]; }), edges: edges };
+}
+
+/* Paths through the flow for drawing it top to bottom: from each box nothing
+   points into, follow the arrows. A box with two arrows out starts two
+   paths. Cycles are cut where they close. */
+function paths(f) {
+  var into = {}, out = {};
+  f.edges.forEach(function (e) { into[e.to] = true; (out[e.from] = out[e.from] || []).push(e); });
+  var roots = f.nodes.filter(function (n) { return !into[n.id]; }).map(function (n) { return n.id; });
+  if (!roots.length && f.nodes.length) roots = [f.nodes[0].id];
+  var res = [];
+  function walk(id, path, seen) {
+    var next = (out[id] || []).filter(function (e) { return !seen[e.to]; });
+    if (!next.length) { res.push(path); return; }
+    next.forEach(function (e) {
+      var s2 = {}; Object.keys(seen).forEach(function (k) { s2[k] = true; }); s2[e.to] = true;
+      walk(e.to, path.concat([{ verb: e.verb, to: e.to }]), s2);
+    });
+  }
+  roots.forEach(function (r) { var sn = {}; sn[r] = true; walk(r, [{ start: r }], sn); });
+  return res.slice(0, 6);
+}
+
 function recall(cluster, points) {
   var freq = frequencies(cluster), title = titleStems(cluster);
   var out = [], used = {};
   (points || []).forEach(function (p) {
-    if (out.length >= 5) return;
+    if (out.length >= 4) return;
     var t = freshTerm(rankedTerms(p.text, freq, title), used, false);
     if (!t) return;
     out.push({ question: 'Fill in the blank: ' + cloze(p.text, t.word), answer: t.word, page: p.page });
   });
+  tableQuestions(cluster, 2).forEach(function (q) { if (!used[stem(q.answer)]) { used[stem(q.answer)] = true; out.push(q); } });
+  /* A section that is all table and no sentence still gets asked something. */
   return { prompts: out };
 }
 
@@ -328,9 +467,27 @@ function gauntlet(clusters, pointsByCluster, focus, n) {
   return { questions: all };
 }
 
+/* The flow as a tree for drawing: each box once, its arrows out as
+   branches beneath it. Paths repeated the shared start of every branch —
+   the first screenshot drew "Diuretics → preload" twice. A box reached
+   again is not drawn again: the branch stops at a reference to it. */
+function tree(f) {
+  var out = {}, into = {};
+  f.edges.forEach(function (e) { into[e.to] = true; (out[e.from] = out[e.from] || []).push(e); });
+  var roots = f.nodes.filter(function (n) { return !into[n.id]; }).map(function (n) { return n.id; });
+  if (!roots.length && f.nodes.length) roots = [f.nodes[0].id];
+  var drawn = {};
+  function grow(id) {
+    if (drawn[id]) return { id: id, again: true, next: [] };
+    drawn[id] = true;
+    return { id: id, next: (out[id] || []).map(function (e) { return { verb: e.verb, node: grow(e.to) }; }) };
+  }
+  return roots.map(grow);
+}
+
 var MemCoach = {
   sentences: sentences, keySentences: keySentences, rankedTerms: rankedTerms, matches: matches, cloze: cloze,
-  encode: encode, recall: recall, gradeRecall: gradeRecall, gradeExplain: gradeExplain, gauntlet: gauntlet,
+  encode: encode, recall: recall, flow: flow, paths: paths, tree: tree, tableQuestions: tableQuestions, gradeRecall: gradeRecall, gradeExplain: gradeExplain, gauntlet: gauntlet,
   bare: bare, frequencies: frequencies,
 };
 root.MemCoach = MemCoach;

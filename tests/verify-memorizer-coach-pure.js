@@ -83,7 +83,9 @@ head('encode: the section’s own sentences, nothing else');
 {
   const e = K.encode(PRELOAD);
   ok('matches the schema the model is held to', P.check(P.SCHEMAS.encode, e) === '', P.check(P.SCHEMAS.encode, e));
-  ok('picks between 5 and 9 key points', e.points.length >= 5 && e.points.length <= 9, String(e.points.length));
+  /* 3..7 since the owner asked for smaller, more digestible sections (was
+     5..9). A product change, made in coach.js and here together. */
+  ok('picks between 3 and 7 key points', e.points.length >= 3 && e.points.length <= 7, String(e.points.length));
   const pageOf = {};
   PRELOAD.segments.forEach(s => K.sentences({ segments: [s] }).forEach(x => { pageOf[x.text] = s.page; }));
   ok('every point is a sentence of the section, verbatim', e.points.every(p => text(PRELOAD).indexOf(p.text) !== -1),
@@ -106,7 +108,7 @@ head('encode: the section’s own sentences, nothing else');
      count is five whatever the cap says, and a cap of 90 passed. */
   const long = { index: 0, title: 'x', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false,
     text: Array.from({ length: 60 }, (_, i) => 'Factor ' + i + ' raises cardiac output through pathway ' + 'abcdefghij'[i % 10] + ' today.').join(' ') }] };
-  ok('a long section is capped at 9 points', K.encode(long).points.length === 9, String(K.encode(long).points.length));
+  ok('a long section is capped at 7 points', K.encode(long).points.length === 7, String(K.encode(long).points.length));
   ok('and so is the section\u2019s definition', e.points.some(p => /^Preload is the stretch/.test(p.text)), e.points.map(p => p.text.slice(0, 30)).join(' | '));
   ok('the memory hook is built from the points’ own words',
      /^First letters: [A-Z]+ /.test(e.mnemonic) && e.mnemonic.split(' — ')[1].split('.')[0].split(' · ').every(w => text(PRELOAD).toLowerCase().indexOf(w) !== -1),
@@ -210,6 +212,94 @@ head('gauntlet: new blanks, weighted to the weakest');
   const bare1 = { index: 0, title: 't', pageStart: 1, pageEnd: 1, segments: [{ page: 1, heading: false, text: 'It is in the cell now.' }] };
   const lone = K.gauntlet([bare1], { 0: K.encode(bare1).points }, [0], 5);
   ok('a unit with almost nothing to ask still gets a gauntlet, so the session can finish', lone.questions.length >= 1, String(lone.questions.length));
+}
+
+head('flowcharts from the section\u2019s own cause-and-effect');
+{
+  const CAUSAL = { index: 0, title: 'Congestion', pageStart: 9, pageEnd: 9, segments: [{ page: 9, heading: false, text:
+    'Diuretics reduce preload by lowering circulating volume. ' +
+    'Excessive preload raises pulmonary venous pressure and causes pulmonary congestion. ' +
+    'Rising venous pressure leads to oedema of the lungs. ' +
+    'Oedema impairs gas exchange, resulting in hypoxaemia. ' +
+    'The patient is usually breathless at night.' }] };
+  const f = K.flow(CAUSAL);
+  const lab = id => (f.nodes.find(n => n.id === id) || {}).label;
+  const has = (a, verb, b) => f.edges.some(e => new RegExp(a, 'i').test(lab(e.from)) && e.verb === verb && new RegExp(b, 'i').test(lab(e.to)));
+  ok('"A reduce B" becomes an arrow', has('^Diuretics$', 'reduce', '^preload$'), JSON.stringify(f.edges.map(e => lab(e.from) + ' -' + e.verb + '-> ' + lab(e.to))));
+  ok('"A raises B and causes C" gives A two arrows, not B→C', has('^Excessive preload$|^preload$', 'raises', 'venous pressure') &&
+     has('preload', 'causes', 'congestion') && !has('venous pressure', 'causes', 'congestion'));
+  ok('"…, resulting in D" hangs D off what came just before', has('gas exchange', 'resulting in', 'hypoxaemia'));
+  ok('the same thing named twice is one box, which is what makes a chain',
+     f.nodes.filter(n => /venous pressure/i.test(n.label)).length === 1 && has('venous pressure', 'leads to', 'oedema'));
+  const src = text(CAUSAL).toLowerCase();
+  ok('every word in every box is a word of the section', f.nodes.every(n => n.label.toLowerCase().split(/\s+/).every(w => src.indexOf(w) !== -1)),
+     f.nodes.map(n => n.label).join(' | '));
+  ok('a sentence with no cause-and-effect verb adds nothing', !f.nodes.some(n => /breathless|night|patient/i.test(n.label)));
+  const ps = K.paths(f);
+  ok('the paths start where nothing points in, and follow the arrows', ps.length >= 1 &&
+     ps.some(p => /Diuretics/.test(lab(p[0].start)) && p.length >= 3), JSON.stringify(ps));
+  const two = K.flow({ segments: [{ page: 1, heading: false, text: 'Diuretics reduce preload. Hypertension raises afterload. Afterload increases wall stress.' }] });
+  const tp = K.paths(two);
+  const tl = id => two.nodes.find(n => n.id === id).label;
+  ok('every box nothing points into starts a path', ['Diuretics', 'Hypertension'].every(r => tp.some(p => tl(p[0].start) === r)),
+     tp.map(p => tl(p[0].start)).join(', '));
+  ok('and every arrow is on some path', two.edges.every(e => tp.some(p => p.some((st, i) => i > 0 && st.to === e.to && (p[i - 1].start === e.from || p[i - 1].to === e.from)))));
+  /* Drawn as a tree, the shared start of two branches is one box. */
+  const tr = K.tree(f);
+  const count = {};
+  (function walk(t) { count[t.id] = (count[t.id] || 0) + (t.again ? 0 : 1); t.next.forEach(b => walk(b.node)); })(tr[0]);
+  ok('as a tree, every box is drawn once — the shared start is not repeated per branch', Object.values(count).every(n => n === 1) &&
+     tr[0].next.length === 1 && tr[0].next[0].node.next.length === 2, JSON.stringify(count));
+  const loop = K.tree({ nodes: [{ id: 0, label: 'a' }, { id: 1, label: 'b' }], edges: [{ from: 0, to: 1, verb: 'raises' }, { from: 1, to: 0, verb: 'lowers' }] });
+  ok('a cycle ends at a reference back, not in an endless tree', loop.length === 1 && loop[0].next[0].node.next[0].node.again === true);
+  ok('a section with no such sentences has no flow', K.flow({ segments: [{ page: 1, text: 'The heart has four chambers. It sits in the chest.' }] }).edges.length === 0);
+}
+
+head('questions from tables');
+{
+  const T = { index: 0, title: 'Values', pageStart: 3, pageEnd: 3, segments: [
+    { page: 3, heading: false, text: 'Normal values are listed below.' },
+    /* text is the rows' words, as the chunker gives it — the first version
+       had a placeholder here, and the check that tables are not read as
+       sentences could not fail against it. */
+    { page: 3, heading: false, text: 'Measure Normal Unit LVEDP < 12 mmHg. Stroke volume 60-100 mL Ejection fraction 55 percent.',
+      table: [['Measure', 'Normal', 'Unit'], ['LVEDP', '< 12', 'mmHg'], ['Stroke volume', '60-100', 'mL'], ['Ejection fraction', '55', 'percent']] }] };
+  const qs = K.tableQuestions(T, 2);
+  ok('a table gives questions, numbers first', qs.length === 2 && qs.every(q => /^\d/.test(q.answer)), JSON.stringify(qs));
+  ok('each names its row and its column, and blanks the cell', qs.every(q => /From the table: .+ \u2014 .+: .*_____/.test(q.question)), qs.map(q => q.question).join(' | '));
+  ok('and its answer is gone from the question', qs.every(q => q.question.indexOf(q.answer) === -1));
+  const many = K.tableQuestions(T, 20);
+  ok('the header row is never asked about, however many are asked for', many.length >= 3 && !many.some(q => /^(measure|normal|unit)$/.test(q.answer)),
+     many.map(q => q.answer).join(', '));
+  const r = K.recall(T, [{ text: 'Normal values are listed below.', page: 3 }]);
+  ok('recall includes the table\u2019s questions', r.prompts.some(q => /From the table/.test(q.question)) && P.check(P.SCHEMAS.recall, r) === '');
+  ok('a table is not mistaken for sentences', !K.sentences(T).some(s => /LVEDP/.test(s.text)));
+  ok('a table split across clusters asks with its repeated header',
+     K.tableQuestions({ segments: [{ page: 4, table: [['Ejection fraction', '55', 'percent']], tableHeader: ['Measure', 'Normal', 'Unit'] }] }, 2)
+      .some(q => /Ejection fraction \u2014 Normal/.test(q.question)));
+}
+
+head('bullets: shorter, the key term first, nothing added');
+{
+  const F = require(path.join(ROOT, 'memorizer', 'src', 'format.js'));
+  const b = F.bullet('Preload is the stretch on ventricular myocytes at the end of diastole.');
+  ok('a definition leads with its term', b.lead === 'Preload' && b.body === 'the stretch on ventricular myocytes at the end of diastole', JSON.stringify(b));
+  ok('filler and preamble go', F.bullet('However, it is important to note that diuretics reduce preload.').body === 'Diuretics reduce preload');
+  ok('citations and figure references go', F.bullet('Diuretics reduce preload [12, 14] (see Figure 3).').body === 'Diuretics reduce preload');
+  const semi = F.bullet('Afterload rises with hypertension; it falls with vasodilators; stenosis raises it.');
+  ok('a long point splits at its semicolons into sub-bullets', semi.body === 'Afterload rises with hypertension' && semi.subs.length === 2, JSON.stringify(semi));
+  ok('"This …" is not taken as a term to lead with', F.bullet('This relationship is the Frank-Starling mechanism.').lead === '');
+  /* The rule the formatter lives by, over every sentence this suite has. */
+  const all = [PRELOAD, AFTERLOAD, CONTRACT].map(c => K.sentences(c).map(x => x.text)).flat().concat([
+    'However, it is important to note that diuretics reduce preload [12] (see Figure 3).', 'Afterload rises with hypertension; it falls with vasodilators.']);
+  const norm = w => w.toLowerCase().replace(/[^a-z0-9\-]/g, '');
+  const added = all.map(t => {
+    const src = t.split(/\s+/).map(norm);
+    const out = F.bullet(t);
+    const got = [out.lead, out.body].concat(out.subs).join(' ').split(/\s+/).map(norm).filter(Boolean);
+    return got.filter(w => src.indexOf(w) === -1);
+  }).flat();
+  ok('no word comes out that did not go in', added.length === 0, added.join(', ') || `${all.length} sentences`);
 }
 
 head('same shape over many generated sections');

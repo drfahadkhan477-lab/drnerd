@@ -1,14 +1,15 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    store.js — where your PDFs' clusters, your sessions and your cards live.
 
-   IndexedDB, on this device only. The PDF file itself is never stored: only
-   the text clusters drawn from it, which is all the app needs to teach from
-   and a fraction of the size.
+   IndexedDB, on this device only. Nothing here is ever uploaded. The PDF's
+   bytes are kept too (from v2), so a section can show its figures, its
+   tables as printed and its pages — the text clusters alone cannot.
 
-   Three object stores, all keyed by `id`:
+   Four object stores, all keyed by `id`:
      docs      { id, name, addedAt, pages, scanned:[page…], clusters:[…] }
      sessions  { id: docId, state }        — the MemSession state, saved every step
      cards     { id, docId, …, srs }       — the review deck
+     files     { id: docId, bytes }         — the PDF itself, for its pages and figures
 
    When IndexedDB cannot be opened (some private-browsing modes refuse it),
    everything still works for this visit from memory, and `persistent` says
@@ -19,10 +20,12 @@
 'use strict';
 
 var DB_NAME = 'memorizer';
-var DB_VERSION = 1;
-var STORES = ['docs', 'sessions', 'cards'];
+var DB_VERSION = 2;
+/* v2 adds `files`: the PDF's own bytes, kept on this device so its pages and
+   figures can be drawn while studying. Upgrading keeps the other three. */
+var STORES = ['docs', 'sessions', 'cards', 'files'];
 
-var mem = { docs: {}, sessions: {}, cards: {} };
+var mem = { docs: {}, sessions: {}, cards: {}, files: {} };
 var dbp = null;
 var api = { persistent: false };
 
@@ -85,7 +88,7 @@ function del(store, id) {
 function deleteDoc(id) {
   return all('cards').then(function (cards) {
     return Promise.all(cards.filter(function (c) { return c.docId === id; }).map(function (c) { return del('cards', c.id); }));
-  }).then(function () { return del('sessions', id); }).then(function () { return del('docs', id); });
+  }).then(function () { return del('sessions', id); }).then(function () { return del('files', id); }).then(function () { return del('docs', id); });
 }
 
 /* Cards from a session are merged in, never overwritten: a card already in

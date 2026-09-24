@@ -55,6 +55,13 @@ function makeDoc(seed, opts = {}) {
   for (let b = 0; b < nBlocks; b++) {
     if (r() < 0.15) page++;
     const isHeading = opts.headingEvery ? b % opts.headingEvery === 0 : r() < 0.2;
+    if (opts.tables && !isHeading && r() < 0.2) {
+      const cols = 2 + Math.floor(r() * 3), nRows = 3 + Math.floor(r() * 10);
+      const rows = Array.from({ length: nRows }, () => Array.from({ length: cols }, () =>
+        Array.from({ length: 1 + Math.floor(r() * 3) }, word).join(' ')));
+      blocks.push({ text: rows.map(x => x.join(' ')).join(' '), page, heading: false, table: rows });
+      continue;
+    }
     if (isHeading) {
       const len = 1 + Math.floor(r() * 8);
       blocks.push({ text: Array.from({ length: len }, word).join(' '), page, heading: true });
@@ -70,11 +77,14 @@ function makeDoc(seed, opts = {}) {
       blocks.push({ text: parts.join(' '), page, heading: false });
     }
   }
-  const words = [], kinds = [];
-  blocks.forEach(bl => bl.text.split(/\s+/).forEach(w => { words.push(w); kinds.push(bl.heading); }));
+  const words = [], kinds = [], rowOf = [];
+  blocks.forEach((bl, bi) => {
+    if (bl.table) bl.table.forEach((row, ri) => row.join(' ').split(/\s+/).filter(Boolean).forEach(w => { words.push(w); kinds.push(false); rowOf.push(bi + ':' + ri); }));
+    else bl.text.split(/\s+/).forEach(w => { words.push(w); kinds.push(bl.heading); rowOf.push(null); });
+  });
   const headingEnds = [];
   for (let i = 0; i < words.length - 1; i++) if (kinds[i] && !kinds[i + 1]) headingEnds.push(i);
-  return { blocks, words, headingEnds };
+  return { blocks, words, headingEnds, rowOf };
 }
 
 /* The invariants, as data rather than PASS lines, so one check can summarise
@@ -94,6 +104,13 @@ function violations(doc, clusters) {
     if (c.words !== c.text.split(/\s+/).filter(Boolean).length) out.push(`count: cluster ${i} says ${c.words} words`);
   });
   if (!out.some(v => v.startsWith('coverage'))) {
+    /* A table row is never cut between two clusters. */
+    const rowHome = {};
+    (doc.rowOf || []).forEach((id, i) => {
+      if (id == null) return;
+      if (rowHome[id] == null) rowHome[id] = owner[i];
+      else if (rowHome[id] !== owner[i]) out.push(`table: row ${id} is split between clusters ${rowHome[id]} and ${owner[i]}`);
+    });
     doc.headingEnds.forEach(i => {
       if (owner[i] !== owner[i + 1]) out.push(`heading: word ${i} ends a heading in cluster ${owner[i]}, its body starts in ${owner[i + 1]}`);
     });
@@ -134,6 +151,8 @@ head('the shapes most likely to break them');
     ['long sentences, so boundaries fall mid-sentence', { longSentences: true, blocks: 60 }],
     ['one sentence of 3000 words, longer than any cluster', { giantSentence: 3000, blocks: 8 }],
     ['one sentence of exactly MAX words', { giantSentence: MAX, blocks: 8 }],
+    ['tables among the prose, rows never split', { tables: true, blocks: 60 }],
+    ['tables right after headings', { tables: true, headingEvery: 2, blocks: 80 }],
   ];
   for (const [name, opts] of cases) {
     const bad = [];
@@ -210,7 +229,7 @@ head('what a cluster says about itself');
      cs.every(c => c.segments.every(s => typeof s.page === 'number')) && cs[0].segments[0].heading === true);
   ok('its gist is the start of its first sentence, not its heading', /^a0 a1/.test(cs[0].gist), cs[0].gist.slice(0, 20));
   const tail = C.clusterBlocks([
-    { text: Array.from({ length: 650 }, (_, i) => 'c' + i).join(' ') + '.', page: 1, heading: false },
+    { text: Array.from({ length: MIN + 50 }, (_, i) => 'c' + i).join(' ') + '.', page: 1, heading: false },
     { text: 'Short', page: 1, heading: true },
     { text: 'd0 d1 d2 d3 d4.', page: 1, heading: false },
   ]);
@@ -269,6 +288,103 @@ head('lines → blocks');
   ok('a numeric line on every page, at a different height each time, is body — not a header', kept === 4, `${kept} of 4 kept`);
   const rare = [1, 2, 3, 4, 5, 6].map(p => ({ page: p, lines: [L(p <= 2 ? 'Twice only' : 'x' + p, 11, 50)] }));
   ok('a line on only two of six pages is kept', C.blocksFromPages(rare).blocks.some(b => b.text === 'Twice only'));
+}
+
+head('tables: found by their columns, kept whole');
+{
+  /* Lines as memorizer/src/pdf.js produces them: text, plus cells where the
+     gaps between runs are wide. */
+  const row = (y, cells) => ({ text: cells.map(c => c[1]).join(' '), size: 11, y, cells: cells.map(([x, text]) => ({ x, text })) });
+  const tablePage = { page: 3, lines: [
+    { text: 'Normal values are given below.', size: 11, y: 60 },
+    row(80, [[72, 'Measure'], [220, 'Normal'], [360, 'Unit']]),
+    row(94, [[72, 'LVEDP'], [220, '< 12'], [360, 'mmHg']]),
+    row(108, [[72, 'Cardiac index'], [360, 'L/min/m2']]),
+    row(122, [[73, 'Stroke volume'], [221, '60-100'], [359, 'mL']]),
+    { text: 'The body resumes after the table.', size: 11, y: 150 },
+  ] };
+  const { blocks } = C.blocksFromPages([tablePage]);
+  const t = blocks.find(b => b.table);
+  ok('four aligned lines of cells become one table block', !!t && t.table.length === 4, t && JSON.stringify(t.table));
+  ok('with the header as its first row', t && JSON.stringify(t.table[0]) === '["Measure","Normal","Unit"]');
+  ok('a row with an empty cell keeps its other cells in their own columns',
+     t && JSON.stringify(t.table[2]) === '["Cardiac index","","L/min/m2"]', t && JSON.stringify(t.table[2]));
+  ok('cells a pixel or two off their column still land in it', t && JSON.stringify(t.table[3]) === '["Stroke volume","60-100","mL"]');
+  ok('the prose before and after is not swallowed into it',
+     blocks.some(b => !b.table && /Normal values/.test(b.text)) && blocks.some(b => !b.table && /resumes after/.test(b.text)));
+  ok('its words are exactly its lines\u2019 words, in order',
+     t && t.text === tablePage.lines.slice(1, 5).map(l => l.text).join(' '), t && t.text);
+  const two = { page: 1, lines: [row(80, [[72, 'a'], [220, 'b']]), row(94, [[72, 'c'], [220, 'd']]), { text: 'Prose.', size: 11, y: 120 }] };
+  ok(`fewer than ${C.TABLE_MIN_ROWS} rows is not a table`, !C.blocksFromPages([two]).blocks.some(b => b.table));
+  const skew = { page: 1, lines: [row(80, [[72, 'a'], [220, 'b']]), row(94, [[140, 'c'], [300, 'd']]), row(108, [[10, 'e'], [400, 'f']])] };
+  ok('lines whose columns do not line up are not a table', !C.blocksFromPages([skew]).blocks.some(b => b.table));
+
+  const cs = C.clusterBlocks(blocks);
+  const seg = cs[0].segments.find(g => g.table);
+  ok('a cluster holding a table carries its rows, for drawing it', seg && seg.table.length === 4);
+  /* A table too long for one cluster continues in the next, with its header
+     shown again there — for display only, not counted twice. */
+  const longRows = [['Drug', 'Dose']].concat(Array.from({ length: 120 }, (_, i) => ['drug' + i + ' name', 'dose' + i + ' mg daily']));
+  const big = C.clusterBlocks([{ text: longRows.map(r => r.join(' ')).join(' '), page: 1, heading: false, table: longRows }]);
+  const parts = big.map(c => c.segments.find(g => g.table)).filter(Boolean);
+  ok('a table too long for one cluster is split between rows', big.length >= 2 && parts.length === big.length,
+     `${big.length} clusters`);
+  ok('and every part after the first shows the header again', parts.slice(1).every(g => JSON.stringify(g.tableHeader) === '["Drug","Dose"]'));
+  /* The one case where a row is at risk: a heading taken in with the
+     cluster nearly full, and its table's first row cannot fit. At the default
+     250..450 it cannot happen — a heading arriving at or over MIN always
+     opens a new cluster — so, as with the heading test above, it is reached
+     with a MIN close to MAX. The first two versions of this fixture used the
+     defaults and passed with both rules deleted; that is how this was found. */
+  {
+    const nn = { i: 0 };
+    const ws = k => Array.from({ length: k }, () => 'p' + nn.i++).join(' ');
+    const blks = [];
+    let tot = 0;
+    const O = { min: 440, max: 450 };
+    while (tot + 30 <= 436) { blks.push({ text: ws(30) + '.', page: 1, heading: false }); tot += 30; }
+    if (436 - tot) blks.push({ text: ws(436 - tot) + '.', page: 1, heading: false });
+    blks.push({ text: 'Dose table', page: 1, heading: true });
+    const trows = [['Drug name written here in full', 'Dose in milligrams per day', 'Route of giving it to them']].concat(Array.from({ length: 5 }, (_, i) => ['d' + i + ' x y z', 'e' + i + ' x y z', 'f' + i + ' x y z']));
+    blks.push({ text: trows.map(r => r.join(' ')).join(' '), page: 1, heading: false, table: trows });
+    const out = C.clusterBlocks(blks, O);
+    const own = {};
+    out.forEach((c, ci) => c.text.split(/\s+/).forEach(w => { (own[w] = own[w] || []).push(ci); }));
+    const firstRow = trows[0].join(' ').split(' ');
+    ok('a table row that does not fit moves whole to the next cluster, never cut',
+       firstRow.every(w => own[w] && own[w][0] === own[firstRow[0]][0]), firstRow.map(w => w + ':' + own[w]).join(' '));
+    ok('and the heading above it moves with it', own['Dose'] && own['Dose'][0] === own[firstRow[0]][0],
+       `heading in ${own['Dose']}, table in ${own[firstRow[0]]}`);
+  }
+  ok('without counting the header\u2019s words twice', big.reduce((n, c) => n + c.words, 0) === longRows.reduce((n, r) => n + r.join(' ').split(' ').length, 0));
+}
+
+head('the pdf.js adapter: cells and figure boxes');
+{
+  /* memorizer/src/pdf.js is the one file that talks to pdf.js, and these two
+     functions of it are pure: they take what pdf.js returns and decide. */
+  const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
+  const item = (str, x, y, size, width) => ({ str, transform: [size, 0, 0, size, x, y], width });
+  const lines = Pdf.linesOf([
+    item('Measure', 72, 700, 11, 40), item('Normal', 220, 700, 11, 34), item('Unit', 360, 700, 11, 22),
+    item('A sentence of', 72, 680, 11, 66), item('prose here.', 142, 680, 11, 50),
+  ], 792);
+  ok('runs on one line far apart become separate cells', lines[0].cells.length === 3 &&
+     JSON.stringify(lines[0].cells.map(c => c.text)) === '["Measure","Normal","Unit"]', JSON.stringify(lines[0].cells));
+  ok('runs close together stay one cell, so prose is one cell', lines[1].cells.length === 1 && lines[1].cells[0].text === 'A sentence of prose here.',
+     JSON.stringify(lines[1].cells));
+  ok('and the line text is unchanged by it', lines[0].text === 'Measure Normal Unit' && lines[1].text === 'A sentence of prose here.');
+  ok('cells keep their x, for lining up columns', lines[0].cells[1].x === 220);
+
+  const OPS = { save: 10, restore: 11, transform: 12, paintImageXObject: 85, paintInlineImageXObject: 86 };
+  const view = [0, 0, 612, 792];
+  const ops = (list) => ({ fnArray: list.map(x => x[0]), argsArray: list.map(x => x[1] || null) });
+  const one = Pdf.figureBoxes(ops([[10], [12, [200, 0, 0, 100, 72, 400]], [85, ['img1']], [11]]), OPS, view);
+  ok('a picture drawn at 200×100 from (72, 400) is found there', JSON.stringify(one) === '[[72,400,272,500]]', JSON.stringify(one));
+  const nested = Pdf.figureBoxes(ops([[12, [1, 0, 0, 1, 50, 50]], [10], [12, [300, 0, 0, 150, 0, 0]], [86, ['x']], [11], [85, ['tiny']]]), OPS, view);
+  ok('transforms compose, and restore undoes one', nested.length === 1 && JSON.stringify(nested[0]) === '[50,50,350,200]', JSON.stringify(nested));
+  const small = Pdf.figureBoxes(ops([[12, [20, 0, 0, 20, 10, 10]], [85, ['logo']]]), OPS, view);
+  ok('a tiny picture (a logo, a bullet) is not a figure', small.length === 0, JSON.stringify(small));
 }
 
 head('scanned pages are named, not skipped silently');
