@@ -773,6 +773,16 @@ head('figures: captions, and the sections that name them');
     /* at ordinary leading after the caption: only its size says it is body */
     L('The body resumes here after the caption.', 431),
   ];
+  /* A table in a shaded box: its title on its own top row, inside it. */
+  const tbox = [72, 400, 540, 700];                                /* top edge at y-down 92 */
+  const t = Pdf.tableTitleFor(tbox, [L('TABLE 63.1 Indications and Contraindications for Left Heart Catheterization', 104, 9, 76), L('Acute coronary syndrome', 130, 9, 90)], H);
+  ok('a table in a box is named by the title on its own top row, "Table 63.1" — with no figure number', t && t.label === 'Table 63.1' && t.kind === 'table' && !('number' in t) &&
+     /^TABLE 63\.1 Indications/.test(t.text), JSON.stringify(t));
+  ok('a title just over the box counts too; one far below its top, or beside it, does not', !!Pdf.tableTitleFor(tbox, [L('Table 2 Causes', 86, 9, 72)], H) &&
+     Pdf.tableTitleFor(tbox, [L('Table 2 Causes', 92 + Pdf.TABLE_TOP + 30, 9, 76)], H) === null && Pdf.tableTitleFor(tbox, [L('Table 2 Causes', 100, 9, 560)], H) === null &&
+     Pdf.tableTitleFor(tbox, [L('Stable angina, uncontrolled by medications', 104, 9, 76)], H) === null);
+  ok('"Tab. 4B" and "Table 17-2" are read as printed', (Pdf.tableTitleFor(tbox, [L('Tab. 4B Doses', 100, 9, 76)], H) || {}).label === 'Table 4B' &&
+     (Pdf.tableTitleFor(tbox, [L('Table 17-2 Grades', 100, 9, 76)], H) || {}).label === 'Table 17-2');
   const cap = Pdf.captionFor(box, lines, H);
   ok('the caption under a picture is found, with its number', cap && cap.number === '17.3' && cap.label === 'Figure 17.3', JSON.stringify(cap));
   ok('and the line that continues it', cap && cap.text === 'Figure 17.3 Continuous-wave Doppler across the tricuspid valve in severe stenosis.', cap && cap.text);

@@ -304,6 +304,31 @@ function figureBoxes(opList, OPS, view, textBoxes, lines) {
   }).map(function (b) { return b.map(function (v) { return Math.round(v); }); });
 }
 
+/* ── a table's own title ───────────────────────────────────────────────────
+   A table printed in a shaded box is found as a drawing, and its title —
+   "TABLE 63.1 Indications and …" — is printed INSIDE the box, on its top
+   row, where captionFor (which looks under and over a picture) never
+   looks: the owner's screenshot showed such tables labelled "Figure 1".
+   A line starting "Table N" within TABLE_TOP of the box's top edge, inside
+   it or just over it, and starting across it, names it "Table N". It gets
+   no figure number: a section's "(see Fig. 63.1)" must not pick up a
+   table by the same number. `lines` y down the page; `box` y up. */
+var TABLE_TITLE = /^tab(?:le)?\.?\s*(\d+(?:[.\-\u2013]\d+)*[A-Za-z]?)\b/i;
+var TABLE_TOP = 40;
+function tableTitleFor(box, lines, pageHeight) {
+  var top = pageHeight - box[3], best = null;
+  (lines || []).forEach(function (l) {
+    var m = TABLE_TITLE.exec(String(l.text || '').trim());
+    if (!m) return;
+    var x = l.cells && l.cells[0] ? +l.cells[0].x : box[0];
+    if (x < box[0] - 20 || x > box[2]) return;
+    var d = l.y - top;                          /* baseline below the top edge: inside */
+    if (d < -12 || d > TABLE_TOP) return;
+    if (!best || Math.abs(d) < best.d) best = { d: Math.abs(d), m: m, text: String(l.text).trim() };
+  });
+  return best ? { label: 'Table ' + best.m[1], text: best.text, kind: 'table' } : null;
+}
+
 /* ── captions ───────────────────────────────────────────────────────────────
    A figure's caption is the line that starts "Figure 17.3", "Fig. 2" or
    "FIGURE 4B" printed just under it — or, failing that, just over it —
@@ -383,8 +408,8 @@ function read(buffer, onProgress, onStatus, opts) {
             if (!withFigures) return null;
             return page.getOperatorList().then(function (ops) {
               figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
-                var f = { page: n, box: b }, cap = captionFor(b, lines, h);
-                if (cap) { f.number = cap.number; f.label = cap.label; f.caption = cap.text; }
+                var f = { page: n, box: b }, cap = captionFor(b, lines, h) || tableTitleFor(b, lines, h);
+                if (cap) { if (cap.number) f.number = cap.number; f.label = cap.label; f.caption = cap.text; if (cap.kind) f.kind = cap.kind; }
                 figures.push(f);
               });
             }, function () { /* a page whose drawing cannot be listed still has its text */ });
@@ -462,8 +487,8 @@ function figuresOn(key, buffer, pageNos) {
           var lines = linesOf(tc.items, h);
           return page.getOperatorList().then(function (ops) {
             figureBoxes(ops, L.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
-              var f = { page: n, box: b }, cap = captionFor(b, lines, h);
-              if (cap) { f.number = cap.number; f.label = cap.label; f.caption = cap.text; }
+              var f = { page: n, box: b }, cap = captionFor(b, lines, h) || tableTitleFor(b, lines, h);
+              if (cap) { if (cap.number) f.number = cap.number; f.label = cap.label; f.caption = cap.text; if (cap.kind) f.kind = cap.kind; }
               figures.push(f);
             });
           }, function () {});
@@ -482,8 +507,8 @@ function figuresOn(key, buffer, pageNos) {
    outer line. */
 var CROP_MARGIN = 8;
 /* The finder's version, stored with the figures it found. 2: annotations
-   skipped. */
-var FIGURES_V = 2;
+   skipped. 3: a table in a box named by its own title. */
+var FIGURES_V = 3;
 function padBox(box, view, m) {
   m = m == null ? CROP_MARGIN : m;
   return [Math.max(view[0], box[0] - m), Math.max(view[1], box[1] - m), Math.min(view[2], box[2] + m), Math.min(view[3], box[3] + m)];
@@ -514,6 +539,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { PDFJS_V: /pdfjs-dist@([\d.]+)/.exec(BASE)[1], FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { TABLE_TOP: TABLE_TOP, tableTitleFor: tableTitleFor, PDFJS_V: /pdfjs-dist@([\d.]+)/.exec(BASE)[1], FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);
