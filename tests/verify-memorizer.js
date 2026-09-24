@@ -144,6 +144,7 @@ function kindOf(user) {
      (NODE_EXTRA_CA_CERTS). Measured: in this repository's cloud sandbox the
      browser failed pdf.min.js with ERR_CERT_AUTHORITY_INVALID. */
   let cdnHits = 0;
+  const wire = async page => {
   await page.route('https://cdn.jsdelivr.net/**', async route => {
     cdnHits++;
     const res = await fetch(route.request().url());
@@ -166,6 +167,8 @@ function kindOf(user) {
     return route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(v) }] }) });
   });
+  };
+  await wire(page);
   const URL = 'file://' + path.join(dir, 'index.html');
   const T = { timeout: 60000 };
 
@@ -228,6 +231,10 @@ function kindOf(user) {
   await page.locator('#submit-answer').click();
   await page.locator('.feedback.bad').waitFor(T);
   ok('a wrong answer says it is now a review card', await page.locator('.feedback h2', { hasText: 'review card' }).count() === 1);
+  /* Recorded on Continue, not before — so a grader's mistake can still be
+     overruled from this screen. */
+  ok('but the grade is not recorded until Continue', (await page.evaluate(() => MemStore.all('cards'))).length === 0);
+  ok('and it can be overruled from here', await page.locator('#overrule').count() === 1);
   ok('and shows the model answer with its page', await page.locator('.feedback', { hasText: 'It sets stroke volume.' }).count() === 1);
 
   head('teach-back: scored, gaps become cards');
@@ -239,16 +246,16 @@ function kindOf(user) {
   await page.locator('.feedback .score').waitFor(T);
   ok('the score is shown', (await page.locator('.feedback .score strong').innerText()) === '55');
   ok('with the gap it found', await page.locator('.feedback li', { hasText: 'Starling' }).count() === 1);
-  const cards = await page.evaluate(() => MemStore.all('cards'));
-  ok('two cards now exist: the missed prompt and the gap', cards.length === 2 &&
-     cards.some(c => c.source === 'recall' && c.front === 'Why does it matter?') && cards.some(c => c.source === 'explain'),
-     cards.map(c => c.source + ':' + c.front).join(' | '));
-  ok('the Review tab counts them as due', /Review · 2/.test(await page.locator('nav.top').innerText()));
 
   head('a failed step says so, and does not advance');
   stub.breakNextEncode = true;
   await page.locator('#continue').click();
   await page.locator('.card.error').waitFor(T);
+  const cards = await page.evaluate(() => MemStore.all('cards'));
+  ok('Continue recorded both misses as cards: the missed prompt and the gap', cards.length === 2 &&
+     cards.some(c => c.source === 'recall' && c.front === 'Why does it matter?') && cards.some(c => c.source === 'explain'),
+     cards.map(c => c.source + ':' + c.front).join(' | '));
+  ok('the Review tab counts them as due', /Review · 2/.test(await page.locator('nav.top').innerText()));
   const errText = await page.locator('.card.error').innerText();
   ok('a garbled reply shows an error saying what was wrong', /not valid JSON|no JSON|did not match/.test(errText), errText.replace(/\s+/g, ' ').slice(0, 120));
   ok('it is on section 2, still at encode, with no points', await page.evaluate(() => {
@@ -287,6 +294,80 @@ function kindOf(user) {
   await page.locator('li.doc').waitFor(T);
   const over = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
   ok('no horizontal scroll at 375 px', over <= 0, `${over}px over`);
+
+  head('the built-in coach: no key, no AI, nothing sent');
+  {
+    /* A fresh browser profile with nothing saved — what a new user gets. */
+    const p2 = watch(await (await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' })).newPage(), events, 'builtin', errors);
+    await wire(p2);
+    const aiBefore = stub.requests.length;
+    await p2.goto(URL);
+    await p2.locator('.drop').waitFor(T);
+    ok('a new user is on the built-in coach, with no key asked for',
+       /built-in coach/.test(await p2.locator('main').innerText()) && !/needs your API key/.test(await p2.locator('main').innerText()));
+    await p2.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
+    await p2.locator('li.doc').waitFor(T);
+    await p2.getByRole('button', { name: 'Start', exact: true }).click();
+    await p2.locator('ol.points li').first().waitFor(T);
+    const pts = await p2.evaluate(() => Memorizer.ui.state.per[0].points);
+    const sec1 = (await p2.evaluate(() => MemStore.all('docs').then(d => d[0].clusters[0].text)));
+    ok('encode shows key points taken verbatim from section 1', pts.length >= 1 && pts.every(x => sec1.indexOf(x.text) !== -1), `${pts.length} points`);
+    await p2.locator('#to-recall').click();
+    await p2.locator('h2.q').waitFor(T);
+    const prompts = await p2.evaluate(() => Memorizer.ui.state.per[0].prompts);
+    ok('recall asks fill-in-the-blank questions', prompts.length >= 1 && prompts.every(q => /_____/.test(q.question)), `${prompts.length} questions`);
+    await p2.fill('textarea.answer', prompts[0].answer);
+    await p2.locator('#submit-answer').click();
+    await p2.locator('.feedback.good').waitFor(T);
+    ok('the right word is marked correct', await p2.locator('.feedback h2', { hasText: 'Correct' }).count() === 1);
+    await p2.locator('#continue').click();
+    if (prompts.length > 1) {
+      await p2.locator('h2.q', { hasText: prompts[1].question.slice(0, 40) }).waitFor(T);
+      await p2.fill('textarea.answer', 'zzzz');
+      await p2.locator('#submit-answer').click();
+      await p2.locator('.feedback.bad').waitFor(T);
+      ok('the feedback shows the whole sentence, the answer filled in', /\u00AB/.test(await p2.locator('#filled').innerText()) &&
+         (await p2.locator('#filled').innerText()).indexOf(prompts[1].answer) !== -1);
+      await p2.locator('#overrule').click();
+      await p2.locator('.feedback.good').waitFor(T);
+      ok('a wrong-looking answer can be counted as correct by the student', await p2.locator('.feedback h2', { hasText: 'Correct' }).count() === 1);
+      await p2.locator('#continue').click();
+      await p2.waitForFunction(() => Memorizer.ui.state.per[0].recall.length === 2, null, T);
+      ok('and it is recorded as correct, with no card made', await p2.evaluate(() =>
+        Memorizer.ui.state.per[0].recall[1].correct === true && Memorizer.ui.state.cards.length === 0));
+    }
+    for (let i = Math.min(2, prompts.length); i < prompts.length; i++) {
+      await p2.locator('h2.q', { hasText: prompts[i].question.slice(0, 40) }).waitFor(T);
+      await p2.fill('textarea.answer', prompts[i].answer);
+      await p2.locator('#submit-answer').click();
+      await p2.locator('#continue').waitFor(T);
+      await p2.locator('#continue').click();
+    }
+    await p2.locator('h2', { hasText: 'Teach it back' }).waitFor(T);
+    await p2.fill('textarea.answer', pts.map(x => x.text).join(' '));
+    await p2.locator('#submit-answer').click();
+    await p2.locator('.feedback .score').waitFor(T);
+    ok('a teach-back that covers every point scores 100', (await p2.locator('.feedback .score strong').innerText()) === '100');
+    ok('and not one request went to an AI provider', stub.requests.length === aiBefore, `${stub.requests.length - aiBefore} requests`);
+    await p2.locator('nav.top').getByRole('button', { name: 'Settings' }).click();
+    await p2.locator('#builtin-about').waitFor(T);
+    ok('Settings explains the built-in coach, and asks for no key while it is chosen',
+       await p2.locator('#builtin-about').isVisible() && !(await p2.locator('#key').isVisible()));
+    ok('and offers only the built-in coach and Claude', JSON.stringify(await p2.$$eval('#provider option', os => os.map(o => o.value))) === '["builtin","anthropic"]');
+    await p2.selectOption('#provider', 'anthropic');
+    ok('choosing Claude shows the key field', await p2.locator('#key').isVisible() && !(await p2.locator('#builtin-about').isVisible()));
+    /* The coach's output is held to the model's schema before the session
+       sees it. The real coach never trips that, so a broken one is handed
+       in here: a malformed step must be an error on screen, not a session
+       stepping forward on garbage. */
+    await p2.evaluate(() => { window.MemCoach.encode = () => ({ points: 'not a list', mnemonic: '', flowchart: '' }); });
+    const docId = await p2.evaluate(() => MemStore.all('docs').then(d => d[0].id));
+    await p2.evaluate(id => Memorizer.openDoc(id), docId);
+    await p2.locator('.card.error').waitFor(T);
+    ok('a malformed built-in step is an error on screen, and the session does not advance',
+       /malformed encode/.test(await p2.locator('.card.error').innerText()) &&
+       await p2.evaluate(() => !Memorizer.ui.state.per[Memorizer.ui.state.cluster].points));
+  }
 
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));
   await browser.close();

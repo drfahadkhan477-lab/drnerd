@@ -16,9 +16,11 @@
  *     gauntlet contains full text only for the sections it targets.
  *   · PARSING — malformed, incomplete, mistyped or out-of-range replies are
  *     rejected with a reason, and none of them comes back as a grade.
- *   · THE WIRE — each provider gets its own shape, the key goes where that
- *     provider expects it and nowhere else, and a refusal, an auth failure
- *     or a garbled body is an error rather than an empty success.
+ *   · THE WIRE — Claude gets the Messages shape with its key and headers,
+ *     and a refusal, an auth failure, an overload or a garbled body is an
+ *     error rather than an empty success.
+ *   · THE CHOICE — the built-in coach is the default and needs no key; a
+ *     saved Gemini or Groq setting (both removed) becomes it, key dropped.
  */
 'use strict';
 const path = require('path');
@@ -149,7 +151,7 @@ head('a reply that does not parse is never a grade');
   ok('an unknown reply kind is refused, not parsed against nothing', !P.parse('nope', '{}').ok);
 }
 
-head('each provider gets its own wire shape');
+head('the Claude request has the Messages wire shape');
 {
   const prompt = P.encode(A);
   const a = Provider.build({ provider: 'anthropic', model: 'claude-opus-5', key: 'sk-ant-TEST' }, prompt, P.SCHEMAS.encode);
@@ -167,20 +169,6 @@ head('each provider gets its own wire shape');
   const s5 = Provider.build({ provider: 'anthropic', model: 'claude-sonnet-5', key: 'k' }, prompt, P.SCHEMAS.encode);
   ok('anthropic: other models do not send fallbacks', !('fallbacks' in JSON.parse(s5.init.body)) && !s5.init.headers['anthropic-beta']);
 
-  const g = Provider.build({ provider: 'gemini', model: 'gemini-3.8-flash', key: 'AIzaTEST' }, prompt, P.SCHEMAS.encode);
-  const gb = JSON.parse(g.init.body);
-  ok('gemini: generateContent for the chosen model', /\/models\/gemini-3\.8-flash:generateContent$/.test(g.url));
-  ok('gemini: the key is a header, never in the URL where logs and history keep it',
-     g.init.headers['x-goog-api-key'] === 'AIzaTEST' && g.url.indexOf('AIzaTEST') === -1);
-  ok('gemini: system instruction, user content, JSON mime type',
-     gb.systemInstruction.parts[0].text === P.GROUNDING && gb.contents[0].parts[0].text === prompt.user &&
-     gb.generationConfig.responseMimeType === 'application/json');
-
-  const q2 = Provider.build({ provider: 'groq', model: 'openai/gpt-oss-120b', key: 'gsk_TEST' }, prompt, P.SCHEMAS.encode);
-  const qb = JSON.parse(q2.init.body);
-  ok('groq: bearer token, OpenAI-shaped messages, JSON mode',
-     q2.init.headers.authorization === 'Bearer gsk_TEST' && qb.messages[0].role === 'system' &&
-     qb.messages[1].content === prompt.user && qb.response_format.type === 'json_object');
   let threw = '';
   try { Provider.build({ provider: 'nope', model: 'x', key: 'k' }, prompt); } catch (e) { threw = e.message; }
   ok('an unknown provider throws rather than sending somewhere', /unknown provider/.test(threw));
@@ -225,32 +213,48 @@ head('a call that goes wrong says so');
   const gaveUp = await outcome(Provider.call(cfg, P.encode(A), 'encode', always400));
   ok('and retried only once, not forever', 'e' in gaveUp && loops.length === 2, `${loops.length} requests`);
 
-  const gem = await outcome(Provider.call({ provider: 'gemini', model: 'gemini-3.8-flash', key: 'k' }, P.gradeRecall(A, q, 'x'), 'gradeRecall',
-    reply(200, { candidates: [{ content: { parts: [{ text: grade }] } }] })));
-  ok('gemini: the reply text is read from its candidates', gem.v && gem.v.correct === true, JSON.stringify(gem));
-  const gemBlock = await outcome(Provider.call({ provider: 'gemini', model: 'gemini-3.8-flash', key: 'k' }, P.encode(A), 'encode',
-    reply(200, { promptFeedback: { blockReason: 'SAFETY' } })));
-  ok('gemini: a blocked prompt is an error naming the reason', /SAFETY/.test(gemBlock.e || ''), gemBlock.e);
-  const groq = await outcome(Provider.call({ provider: 'groq', model: 'openai/gpt-oss-20b', key: 'k' }, P.gradeRecall(A, q, 'x'), 'gradeRecall',
-    reply(200, { choices: [{ message: { content: grade } }] })));
-  ok('groq: the reply text is read from its choices', groq.v && groq.v.correct === true);
+  /* Overloaded is the "high demand" failure the owner hit on Gemini. It is
+     retried once after a pause; a second overload is reported, in words
+     that point at the built-in coach. */
+  Provider.RETRY_MS = 5;
+  const busy = [];
+  const once529 = () => { busy.push(1); return busy.length === 1 ? reply(529, { error: { message: 'Overloaded' } })() : reply(200, msg(grade))(); };
+  const recovered = await outcome(Provider.call(cfg, P.gradeRecall(A, q, 'x'), 'gradeRecall', once529));
+  ok('an overloaded provider is retried once, and the retry\'s answer is used', recovered.v && recovered.v.correct === true && busy.length === 2,
+     `${busy.length} requests`);
+  const stuck = [];
+  const always529 = () => { stuck.push(1); return reply(529, { error: { message: 'Overloaded' } })(); };
+  const over = await outcome(Provider.call(cfg, P.encode(A), 'encode', always529));
+  ok('a second overload is reported, not retried again', 'e' in over && stuck.length === 2, `${stuck.length} requests`);
+  ok('and the report says it is overload, and names the built-in coach', /overloaded/.test(over.e || '') && /built-in coach/.test(over.e || ''), over.e);
 
-  /* Found by a user: Google closed gemini-2.5-flash to new keys and the app
-     had it as Gemini's only model, so every step 404'd — and the model was
-     saved in Settings, so fixing the list alone would not have reached them. */
-  const retired = await outcome(Provider.call({ provider: 'gemini', model: 'gemini-3.8-flash', key: 'k' }, P.encode(A), 'encode',
-    reply(404, { error: { message: 'This model models/gemini-2.5-flash is no longer available to new users.' } })));
+  const retired = await outcome(Provider.call(cfg, P.encode(A), 'encode',
+    reply(404, { error: { message: 'model: claude-2.1 is no longer available' } })));
   ok('a 404 says to choose another model in Settings, and keeps the provider\'s words',
      /choose another model in Settings/.test(retired.e || '') && /no longer available/.test(retired.e || ''), retired.e);
+
+  head('which coach, and what a saved setting becomes');
   const mem = v => { const m = { v }; return { getItem: () => m.v, setItem: (_, x) => { m.v = x; } }; };
-  const stale = Provider.loadConfig(mem(JSON.stringify({ provider: 'gemini', model: 'gemini-2.5-flash', key: 'AIzaKEEP' })));
-  ok('a saved model the app no longer lists is replaced by that provider\'s first model',
-     stale.provider === 'gemini' && stale.model === Provider.PROVIDERS.gemini.models[0][0], stale.model);
-  ok('and the saved key survives the replacement', stale.key === 'AIzaKEEP');
-  const kept = Provider.loadConfig(mem(JSON.stringify({ provider: 'gemini', model: 'gemini-3.6-flash', key: 'k' })));
-  ok('a saved model that is still listed is kept, not reset', kept.model === 'gemini-3.6-flash', kept.model);
-  ok('no provider lists gemini-2.5-flash any more',
-     !Object.keys(Provider.PROVIDERS).some(k => Provider.PROVIDERS[k].models.some(m => m[0] === 'gemini-2.5-flash')));
+  ok('there are exactly two coaches: built-in and Claude',
+     JSON.stringify(Object.keys(Provider.PROVIDERS).sort()) === '["anthropic","builtin"]', Object.keys(Provider.PROVIDERS).join(', '));
+  const fresh = Provider.loadConfig(mem(null));
+  ok('with nothing saved, the coach is the built-in one', fresh.provider === 'builtin' && fresh.key === '', JSON.stringify(fresh));
+  ok('which is ready without any key', Provider.ready(fresh) && !Provider.needsKey(fresh));
+  ok('while Claude without a key is not ready', !Provider.ready({ provider: 'anthropic', model: 'claude-opus-5', key: '' }) &&
+     Provider.ready({ provider: 'anthropic', model: 'claude-opus-5', key: 'k' }));
+  /* The owner's own browser has a Gemini setting saved. It must come back as
+     the built-in coach — and the Gemini key must not survive to be sent to
+     Anthropic. */
+  for (const old of [{ provider: 'gemini', model: 'gemini-3.8-flash', key: 'AIzaOLD' }, { provider: 'groq', model: 'openai/gpt-oss-120b', key: 'gsk_OLD' }]) {
+    const c = Provider.loadConfig(mem(JSON.stringify(old)));
+    ok(`a saved ${old.provider} setting becomes the built-in coach, and its key is dropped`,
+       c.provider === 'builtin' && c.key === '', JSON.stringify(c));
+  }
+  const stale = Provider.loadConfig(mem(JSON.stringify({ provider: 'anthropic', model: 'claude-2.1', key: 'sk-KEEP' })));
+  ok('a saved Claude model the app no longer lists is replaced by the first listed', stale.model === 'claude-opus-5', stale.model);
+  ok('and the saved key survives that replacement', stale.key === 'sk-KEEP');
+  const kept = Provider.loadConfig(mem(JSON.stringify({ provider: 'anthropic', model: 'claude-haiku-4-5', key: 'k' })));
+  ok('a saved model that is still listed is kept, not reset', kept.model === 'claude-haiku-4-5', kept.model);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

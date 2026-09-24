@@ -1,17 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   provider.js — one call, three providers, JSON back.
+   provider.js — which coach runs the protocol, and the one call to Claude.
 
-   The key is the user's own, kept in this browser's localStorage and sent
-   only to the provider it belongs to. Nothing goes anywhere else.
+   Two choices. The BUILT-IN coach (coach.js) needs no key, no account and no
+   network, and is the default. CLAUDE is the optional upgrade: the user's
+   own key, kept in this browser's localStorage and sent only to Anthropic.
 
-   Raw fetch rather than an SDK: this is a single HTML file with no bundler,
-   and the wire shapes are the same ones Systole's gemini-patch.js already
-   speaks (Anthropic Messages, Gemini generateContent, Groq's OpenAI-shaped
-   chat completions).
+   Gemini and Groq were here and were removed at the owner's request after
+   both failed on first use (Gemini: "high demand"; Groq: key rejected). A
+   saved setting naming either is read as the built-in coach — and its key is
+   dropped, never sent to a different provider.
 
-   Every phase asks for JSON and names its schema. Where the provider can
-   constrain output to a schema it is asked to; either way the reply goes
-   through MemPrompts.parse, which is the check that counts.
+   Raw fetch rather than an SDK: this is a single HTML file with no bundler.
+   Every phase asks for JSON and names its schema, and the reply goes through
+   MemPrompts.parse, which is the check that counts.
 
    build(): pure — the request a call WOULD make. call(): does it.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -19,36 +20,29 @@
 'use strict';
 
 var PROVIDERS = {
+  builtin: {
+    label: 'Built-in coach \u2014 free, no key, works offline',
+    models: [['builtin', 'Built-in']],
+    keyHint: '',
+    noKey: true,
+  },
   anthropic: {
-    label: 'Claude (Anthropic)',
-    models: [['claude-opus-5', 'Claude Opus 5 — best teacher'],
-             ['claude-sonnet-5', 'Claude Sonnet 5 — faster, cheaper'],
-             ['claude-haiku-4-5', 'Claude Haiku 4.5 — fastest']],
-    keyHint: 'sk-ant-…  from console.anthropic.com',
-  },
-  gemini: {
-    label: 'Gemini (Google)',
-    /* gemini-2.5-flash was the only entry until Google closed it to new keys
-       ("no longer available to new users", a 404 whose message names
-       gemini-3.6-flash as the replacement). IDs from the Gemini API models
-       page, stable section, 2026-09-24. */
-    models: [['gemini-3.8-flash', 'Gemini 3.8 Flash — newest'],
-             ['gemini-3.6-flash', 'Gemini 3.6 Flash'],
-             ['gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite — cheapest']],
-    keyHint: 'from aistudio.google.com',
-  },
-  groq: {
-    label: 'Groq (free tier)',
-    models: [['openai/gpt-oss-120b', 'GPT-OSS 120B'], ['openai/gpt-oss-20b', 'GPT-OSS 20B — fastest']],
-    keyHint: 'gsk_…  from console.groq.com',
+    label: 'Claude (Anthropic) \u2014 your own API key',
+    models: [['claude-opus-5', 'Claude Opus 5 \u2014 best teacher'],
+             ['claude-sonnet-5', 'Claude Sonnet 5 \u2014 faster, cheaper'],
+             ['claude-haiku-4-5', 'Claude Haiku 4.5 \u2014 fastest']],
+    keyHint: 'sk-ant-\u2026  from console.anthropic.com',
   },
 };
+var DEFAULT_PROVIDER = 'builtin';
 
 var ENDPOINT = {
   anthropic: 'https://api.anthropic.com/v1/messages',
-  gemini: 'https://generativelanguage.googleapis.com/v1beta/models',
-  groq: 'https://api.groq.com/openai/v1/chat/completions',
 };
+
+/* How long to wait before the one retry of an overloaded provider. A
+   property so a test can shorten it. */
+var RETRY_MS = 2000;
 
 /* Claude Opus 5's safety classifiers can decline a request; "default"
    fallbacks re-run a declined request on Anthropic's recommended model
@@ -76,28 +70,6 @@ function build(cfg, prompt, schema, opts) {
     }
     return { url: ENDPOINT.anthropic, init: { method: 'POST', headers: headers, body: JSON.stringify(body) } };
   }
-  if (provider === 'gemini') {
-    return {
-      url: ENDPOINT.gemini + '/' + encodeURIComponent(model) + ':generateContent',
-      init: { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: prompt.system }] },
-          contents: [{ role: 'user', parts: [{ text: prompt.user }] }],
-          generationConfig: { responseMimeType: 'application/json' },
-        }) },
-    };
-  }
-  if (provider === 'groq') {
-    return {
-      url: ENDPOINT.groq,
-      init: { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
-        body: JSON.stringify({
-          model: model,
-          messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
-          response_format: { type: 'json_object' },
-        }) },
-    };
-  }
   throw new Error('unknown provider ' + provider);
 }
 
@@ -112,15 +84,6 @@ function textOf(provider, data) {
     return (data.content || []).filter(function (b) { return b.type === 'text'; })
       .map(function (b) { return b.text; }).join('');
   }
-  if (provider === 'gemini') {
-    var cand = data.candidates && data.candidates[0];
-    if (!cand) throw new Error('Gemini returned no answer' + (data.promptFeedback && data.promptFeedback.blockReason ? ' (' + data.promptFeedback.blockReason + ')' : ''));
-    return ((cand.content && cand.content.parts) || []).map(function (p) { return p.text || ''; }).join('');
-  }
-  if (provider === 'groq') {
-    var ch = data.choices && data.choices[0];
-    return (ch && ch.message && ch.message.content) || '';
-  }
   return '';
 }
 
@@ -128,6 +91,7 @@ function errorText(status, data) {
   var m = data && data.error && (data.error.message || data.error.type);
   if (status === 401 || status === 403) return 'the API key was rejected (' + status + '). Check it in Settings.';
   if (status === 429) return 'rate limited (429) — wait a moment and try again.';
+  if (status === 529 || status === 503) return 'the provider is overloaded right now (' + status + ') \u2014 try again in a minute, or switch to the built-in coach in Settings.';
   /* Providers retire models; the one saved in Settings may no longer exist
      for this key. Say what to do, and keep the provider's own words. */
   if (status === 404) return 'this model is not available to your key (404) — choose another model in Settings.' + (m ? ' The provider said: ' + m : '');
@@ -149,7 +113,13 @@ function call(cfg, prompt, kind, fetchImpl) {
              take it, says so in a 400 naming the parameter. Retry once
              without it rather than fail the whole step. */
           if (res.status === 400 && !(opts && opts.noFallbacks) && /fallback/i.test(t) && cfg.provider === 'anthropic') {
-            return attempt({ noFallbacks: true });
+            return attempt({ noFallbacks: true, retried: opts && opts.retried });
+          }
+          /* Overloaded ("high demand") is usually over in seconds. One
+             retry, after a pause; a second overload is reported. */
+          if ((res.status === 529 || res.status === 503) && !(opts && opts.retried)) {
+            return new Promise(function (resolve) { setTimeout(resolve, MemProvider.RETRY_MS); })
+              .then(function () { return attempt({ noFallbacks: opts && opts.noFallbacks, retried: true }); });
           }
           throw new Error(errorText(res.status, data));
         }
@@ -171,7 +141,7 @@ var CFG_KEY = 'memorizer.ai.v1';
    everyone who had already saved it stuck on the 404. The key is kept. */
 function loadConfig(storage) {
   var st = storage || root.localStorage;
-  var d = { provider: 'anthropic', model: 'claude-opus-5', key: '' };
+  var d = { provider: DEFAULT_PROVIDER, model: PROVIDERS[DEFAULT_PROVIDER].models[0][0], key: '' };
   try {
     var s = JSON.parse(st.getItem(CFG_KEY) || 'null');
     if (s && PROVIDERS[s.provider]) {
@@ -188,8 +158,11 @@ function saveConfig(cfg, storage) {
   try { st.setItem(CFG_KEY, JSON.stringify(cfg)); return true; } catch (_) { return false; }
 }
 
+function needsKey(cfg) { return !(PROVIDERS[cfg.provider] && PROVIDERS[cfg.provider].noKey); }
+function ready(cfg) { return !needsKey(cfg) || !!cfg.key; }
+
 var MemProvider = {
-  PROVIDERS: PROVIDERS, ENDPOINT: ENDPOINT, build: build, textOf: textOf, call: call,
+  PROVIDERS: PROVIDERS, DEFAULT_PROVIDER: DEFAULT_PROVIDER, RETRY_MS: RETRY_MS, needsKey: needsKey, ready: ready, ENDPOINT: ENDPOINT, build: build, textOf: textOf, call: call,
   loadConfig: loadConfig, saveConfig: saveConfig,
 };
 root.MemProvider = MemProvider;

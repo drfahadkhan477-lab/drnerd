@@ -16,7 +16,7 @@
 
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession;
-var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS;
+var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -56,7 +56,8 @@ function h(sel, attrs) {
 
 function today() { return FSRS.todayISO(); }
 function cfg() { return Provider.loadConfig(); }
-function hasKey() { return !!cfg().key; }
+function hasKey() { return Provider.ready(cfg()); }
+function builtin() { return !Provider.needsKey(cfg()); }
 
 /* ── persistence ─────────────────────────────────────────────────────────── */
 function refresh() {
@@ -79,10 +80,23 @@ function dispatch(event) {
   return save();
 }
 
-/* ── the AI step runner: one place that shows busy, error and retry ─────── */
-function ask(label, prompt, kind) {
+/* ── the step runner: one place that shows busy, error and retry ────────── */
+/* kind names the step; args are the same for either coach — prompts.js
+   builds a request for Claude from them, coach.js answers from them
+   directly. The built-in coach's answer is held to the same schema the
+   model's is, so a bug there is an error on screen, never a bad grade. */
+function ask(label, kind, args) {
   ui.busy = label; ui.error = ''; render();
-  return Provider.call(cfg(), prompt, kind).then(function (v) {
+  var c = cfg();
+  var step = !Provider.needsKey(c)
+    ? new Promise(function (resolve) {
+        var v = Coach[kind].apply(null, args);
+        var err = Prompts.check(Prompts.SCHEMAS[kind], v);
+        if (err) throw new Error('the built-in coach produced a malformed ' + kind + ': ' + err);
+        resolve(v);
+      })
+    : Provider.call(c, Prompts[kind].apply(null, args), kind);
+  return step.then(function (v) {
     ui.busy = ''; return v;
   }, function (e) {
     ui.busy = ''; ui.error = (e && e.message) || String(e); render();
@@ -98,18 +112,18 @@ function pump() {
   if (!s || ui.busy || ui.error || ui.feedback) return;
   var c = s.per[s.cluster];
   if (s.phase === 'encode' && !c.points) {
-    ask('Reading this section and building your memory hooks…', Prompts.encode(cluster()), 'encode')
+    ask('Reading this section and building your memory hooks…', 'encode', [cluster()])
       .then(function (v) { return dispatch({ type: 'encoded', value: v }); })
       .then(render, function () {});
   } else if (s.phase === 'recall' && !c.prompts) {
-    ask('Writing your recall questions…', Prompts.recall(cluster(), c.points), 'recall')
+    ask('Writing your recall questions…', 'recall', [cluster(), c.points])
       .then(function (v) { return dispatch({ type: 'recallPrompts', value: v }); })
       .then(render, function () {});
   } else if (s.phase === 'gauntlet' && !s.gauntlet.questions) {
     var points = {};
     ui.docRec.clusters.forEach(function (_, i) { points[i] = s.per[i].points || []; });
     ask('Preparing the gauntlet — hostile questions on your weakest sections…',
-        Prompts.gauntlet(ui.docRec.clusters, points, Session.weakest(s, 2), Session.gauntletSize(s)), 'gauntlet')
+        'gauntlet', [ui.docRec.clusters, points, Session.weakest(s, 2), Session.gauntletSize(s)])
       .then(function (v) { return dispatch({ type: 'gauntletReady', value: v }); })
       .then(render, function () {});
   }
@@ -279,8 +293,9 @@ function viewLibrary() {
     h('section.hero',
       h('h1', 'Master a whole unit.'),
       h('p.lede', 'Upload the PDF. Each section goes through encode → recall → teach-back, then a hostile gauntlet. Everything you miss comes back as a spaced-repetition card until it sticks.')),
-    !hasKey() ? h('div.card.note', h('strong', 'First, add an AI key. '), 'The app uses your own Claude, Gemini or Groq key. ',
+    !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
       button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null,
+    hasKey() && builtin() ? h('p.muted', 'Using the built-in coach: free, no key, nothing leaves this device. For smarter questions and grading, add a Claude key in Settings.') : null,
     ui.error ? errorCard(null) : null,
     input, drop,
     due ? h('div.card.note', h('strong', due + ' card' + (due === 1 ? '' : 's') + ' due today. '),
@@ -305,7 +320,7 @@ function sessionHeader() {
   var s = ui.state, n = ui.docRec.clusters.length;
   var c = s.phase === 'gauntlet' || s.phase === 'done' ? null : cluster();
   return h('header.session-head',
-    h('div.crumbs', button('← Library', function () { ui.view = 'library'; ui.feedback = null; ui.error = ''; refresh().then(render); }, 'quiet'),
+    h('div.crumbs', button('← Library', function () { leave('library'); }, 'quiet'),
       h('span.muted', ui.docRec.name)),
     c ? h('div.where', h('span.count', 'Section ' + (s.cluster + 1) + ' of ' + n), h('h1', c.title),
           h('span.muted', 'pages ' + c.pageStart + (c.pageEnd !== c.pageStart ? '–' + c.pageEnd : '') + ' · ' + c.words + ' words'))
@@ -352,9 +367,8 @@ function viewRecall(c, per) {
       h('h2.q', q.question),
       h('p.muted', 'From memory — no peeking. Write what you would say in the exam.'),
       answerBox('Your answer…', function (a) {
-        ask('Grading your answer…', Prompts.gradeRecall(cluster(), q, a), 'gradeRecall').then(function (v) {
-          ui.feedback = { kind: 'recall', grade: v, q: q, answer: a };
-          return dispatch({ type: 'recallGraded', value: v, answer: a });
+        ask('Grading your answer…', 'gradeRecall', [cluster(), q, a]).then(function (v) {
+          ui.feedback = { kind: 'recall', grade: v, q: q, answer: a, event: { type: 'recallGraded', value: v, answer: a } };
         }).then(render, function () {});
       })),
   ];
@@ -366,9 +380,8 @@ function viewExplain(c, per) {
       h('h2', 'Teach it back'),
       h('p', 'Explain “' + c.title + '” out loud as if you were teaching a colleague who has never seen it. Cover the why, not just the what. No notes.'),
       answerBox('Your explanation (tap Speak to dictate)…', function (a) {
-        ask('Listening like an examiner…', Prompts.gradeExplain(cluster(), per.points, a), 'gradeExplain').then(function (v) {
-          ui.feedback = { kind: 'explain', grade: v, title: c.title };
-          return dispatch({ type: 'explainGraded', value: v, explanation: a });
+        ask('Listening like an examiner…', 'gradeExplain', [cluster(), per.points, a]).then(function (v) {
+          ui.feedback = { kind: 'explain', grade: v, title: c.title, event: { type: 'explainGraded', value: v, explanation: a } };
         }).then(render, function () {});
       }, true)),
   ];
@@ -382,17 +395,35 @@ function viewGauntlet() {
       h('span.count', 'Gauntlet ' + (g.idx + 1) + ' of ' + g.questions.length + ' · ' + (ui.docRec.clusters[ci] || {}).title),
       h('h2.q', q.question),
       answerBox('Defend your answer…', function (a) {
-        ask('The examiner is reading your answer…', Prompts.gradeRecall(ui.docRec.clusters[ci], q, a), 'gradeRecall').then(function (v) {
-          ui.feedback = { kind: 'gauntlet', grade: v, q: q, answer: a };
-          return dispatch({ type: 'gauntletGraded', value: v, answer: a });
+        ask('The examiner is reading your answer…', 'gradeRecall', [ui.docRec.clusters[ci], q, a]).then(function (v) {
+          ui.feedback = { kind: 'gauntlet', grade: v, q: q, answer: a, event: { type: 'gauntletGraded', value: v, answer: a } };
         }).then(render, function () {});
       })),
   ];
 }
 
+/* A grade is shown before it is recorded, so the one thing a grader cannot
+   know — that "fibre" and "fiber", or a synonym, were right — can be put
+   right by the one person who does. The step is dispatched on Continue, or
+   when leaving the screen: settle() is the only way a shown grade is lost
+   to nothing, and nothing calls it without dispatching. */
+function settle() {
+  var f = ui.feedback;
+  ui.feedback = null;
+  return f && f.event ? dispatch(f.event) : Promise.resolve();
+}
+function leave(view) {
+  settle().then(function () { ui.view = view; ui.error = ''; return refresh(); }).then(render);
+}
 function viewFeedback() {
   var f = ui.feedback, g = f.grade;
-  var next = button('Continue', function () { ui.feedback = null; render(); root.scrollTo(0, 0); }, 'primary big', { id: 'continue' });
+  var next = button('Continue', function () { settle().then(function () { render(); root.scrollTo(0, 0); }); }, 'primary big', { id: 'continue' });
+  var overrule = f.kind !== 'explain' && !g.correct
+    ? button('I had it right \u2014 count it as correct', function () {
+        var fixed = { correct: true, missing: [], misconception: '', feedback: 'Counted as correct by you.' };
+        f.grade = fixed; f.event.value = fixed; render();
+      }, 'quiet', { id: 'overrule' })
+    : null;
   if (f.kind === 'explain') {
     return h('div.card.feedback' + (g.score >= 80 ? '.good' : g.score >= 50 ? '.mid' : '.bad'), { role: 'status' },
       h('div.score', h('strong', String(g.score)), h('span', '/ 100')),
@@ -405,10 +436,15 @@ function viewFeedback() {
   return h('div.card.feedback' + (g.correct ? '.good' : '.bad'), { role: 'status' },
     h('h2', g.correct ? '✓ Correct' : '✗ Not quite — this is now a review card'),
     h('p', g.feedback),
-    g.missing.length ? [h('h3', 'Missing'), h('ul', g.missing.map(function (x) { return h('li', x); }))] : null,
+    g.missing.length && !(g.missing.length === 1 && g.missing[0] === f.q.answer)
+      ? [h('h3', 'Missing'), h('ul', g.missing.map(function (x) { return h('li', x); }))] : null,
     g.misconception ? [h('h3', 'Misconception'), h('p', g.misconception)] : null,
     h('h3', 'Model answer'), h('p', f.q.answer, ' ', page(f.q.page)),
-    next);
+    /* A fill-in-the-blank question, shown whole: the word alone, without its
+       sentence, is not much to learn from. */
+    /_____/.test(f.q.question)
+      ? h('p.muted', { id: 'filled' }, f.q.question.replace(/^[^:]*blank:\s*/, '').replace('_____', '\u00AB' + f.q.answer + '\u00BB')) : null,
+    h('div.row', next, overrule));
 }
 
 function viewDone() {
@@ -478,28 +514,34 @@ function viewSettings() {
   var prov = h('select', { id: 'provider', onchange: function () { fillModels(); } },
     Object.keys(Provider.PROVIDERS).map(function (k) { return h('option', { value: k, selected: k === c.provider }, Provider.PROVIDERS[k].label); }));
   var model = h('select', { id: 'model' });
-  var key = h('input', { id: 'key', type: 'password', autocomplete: 'off', spellcheck: 'false', value: c.provider === prov.value ? c.key : '' });
+  var key = h('input', { id: 'key', type: 'password', autocomplete: 'off', spellcheck: 'false', value: c.key });
   var hint = h('p.muted');
+  var keyed = h('div', h('label', 'Model', model), h('label', 'API key', key), hint);
+  var about = h('div.card.note', { id: 'builtin-about' },
+    h('strong', 'The built-in coach '), 'teaches from your PDF\u2019s own sentences \u2014 it never invents anything \u2014 ',
+    'quizzes you with fill-in-the-blank questions, and grades by matching your words (a synonym can be counted as correct by you). ',
+    'It needs no key and no account, and nothing leaves this device. Claude writes deeper questions and understands answers in your own words.');
   function fillModels() {
     var P = Provider.PROVIDERS[prov.value];
     model.textContent = '';
     P.models.forEach(function (m) { model.appendChild(h('option', { value: m[0], selected: m[0] === c.model }, m[1])); });
-    hint.textContent = 'Key: ' + P.keyHint;
+    hint.textContent = P.keyHint ? 'Key: ' + P.keyHint : '';
+    keyed.style.display = P.noKey ? 'none' : '';
+    about.style.display = P.noKey ? '' : 'none';
   }
   fillModels();
   var saved = h('span.muted', { role: 'status' });
   return h('main.wrap',
     h('div.card.settings', h('h1', 'Settings'),
-      h('label', 'AI provider', prov),
-      h('label', 'Model', model),
-      h('label', 'API key', key), hint,
+      h('label', 'Coach', prov), about, keyed,
       h('div.row', button('Save', function () {
-        var ok = Provider.saveConfig({ provider: prov.value, model: model.value, key: key.value.trim() });
+        var P = Provider.PROVIDERS[prov.value];
+        var ok = Provider.saveConfig({ provider: prov.value, model: model.value, key: P.noKey ? '' : key.value.trim() });
         saved.textContent = ok ? 'Saved on this device.' : 'This browser refused to save it (private mode?).';
       }, 'primary', { id: 'save-settings' }), saved)),
     h('div.card', h('h2', 'What leaves this device'),
-      h('p', 'Your PDF is read here, in the browser, and is never uploaded. For each step, only the text of the section you are studying — plus your answer — goes to the provider you chose, with your key. The gauntlet sends the key points of every section and the full text of your two weakest.'),
-      h('p', 'Your key is kept in this browser’s storage and sent only to that provider.')));
+      h('p', 'Your PDF is read here, in the browser, and is never uploaded. The PDF reader itself is downloaded once from jsDelivr.'),
+      h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each step sends only the text of the section you are studying \u2014 plus your answer \u2014 to Anthropic, with your key; the gauntlet sends the key points of every section and the full text of your two weakest. Your key is kept in this browser\u2019s storage and sent only to Anthropic.')));
 }
 
 /* ── frame ───────────────────────────────────────────────────────────────── */
@@ -511,9 +553,9 @@ function nav() {
   return h('nav.top', { 'aria-label': 'Main' },
     h('span.brand', h('span.logo', { 'aria-hidden': 'true' }, '◆'), 'Memorizer'),
     h('div.tabs',
-      tab('library', 'Library', function () { ui.view = 'library'; ui.feedback = null; ui.error = ''; refresh().then(render); }),
-      tab('review', due ? 'Review · ' + due : 'Review', startReview),
-      tab('settings', 'Settings', function () { ui.view = 'settings'; render(); })));
+      tab('library', 'Library', function () { leave('library'); }),
+      tab('review', due ? 'Review · ' + due : 'Review', function () { settle().then(startReview); }),
+      tab('settings', 'Settings', function () { leave('settings'); })));
 }
 
 function render() {
