@@ -270,6 +270,14 @@ const SUITES = [
   ['figsharp',     'no figure is drawn wider than the pixels it has'],
   ['heartreuse',   'navigating the app does not spend WebGL contexts'],
   ['flushguard',   'a reply can be stopped, and the last chunk is painted however the stream ends'],
+  /* Memorizer — a second, standalone app in memorizer/: upload any PDF, and
+     each section goes through encode, recall and teach-back, then a
+     gauntlet, with every miss becoming an FSRS card. It carries no licensed
+     content, so all four need no build; the three -pure ones run in CI. */
+  ['memorizer-chunk-pure',   'every word of the PDF is taught once, in sections of a teachable size, headings kept with their body'],
+  ['memorizer-prompts-pure', 'the model is held to your PDF, only the section being studied goes out, and a bad reply is never a pass'],
+  ['memorizer-session-pure', 'no phase of the protocol is skipped, and every miss becomes exactly one card'],
+  ['memorizer',              'a real PDF becomes its sections, and one goes through encode, recall and teach-back in a browser'],
 ];
 
 /* ── suites registered since the last full green run ──────────────────────────
@@ -308,7 +316,8 @@ const SUITES = [
    measured the four that had been waiting — livingdiagram-pure,
    conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
    and echo. */
-const PENDING_RECORD = ['coronaryview', 'ambient'];
+const PENDING_RECORD = ['coronaryview', 'ambient',
+  'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

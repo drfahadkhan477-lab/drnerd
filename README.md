@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 41 suites that need neither a browser nor a build all stay
+present, and the 44 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -106,3 +106,31 @@ brew install tesseract                    # macOS
 ```
 
 ---
+
+## Memorizer — master any PDF
+
+A second, standalone app in [`memorizer/`](memorizer/). Upload a PDF — any
+subject — and it is read **in your browser** with pdf.js, split into sections
+at its headings, and taught one section at a time:
+
+1. **Encode** — the key points, each citing its page; one mnemonic; a
+   flowchart when the section describes a process.
+2. **Recall** — free-recall questions, answered from memory and graded.
+3. **Teach back** — explain the section aloud (dictation where the browser
+   has it) as if to a colleague; scored, with the gaps named.
+4. **Gauntlet** — after the last section, hostile examiner questions leaning
+   on your weakest sections.
+
+Every missed answer and every gap becomes a review card, scheduled with the
+same FSRS scheduler Systole uses (`src/core/fsrs.js`, shared, not copied).
+
+```bash
+npm run memorizer          # → dist-memorizer/index.html, one self-contained file
+npm run memorizer:serve    # the same, served on :8081 so it installs as an app
+```
+
+It uses your own key for Claude, Gemini or Groq, set in its Settings. The PDF
+never leaves the device and is never stored; each step sends only the text of
+the section being studied, and every prompt forbids the model from adding
+anything that is not in your PDF. Memorizer carries no content of its own,
+so unlike Systole it builds anywhere, CI included.

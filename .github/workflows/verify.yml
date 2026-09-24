@@ -43,7 +43,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 41 suites that are pure Node with no Playwright and no
+#   logic        the 44 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -109,7 +109,7 @@ jobs:
       - name: every .js file parses
         run: |
           set -e
-          find scripts src tests tools -name '*.js' -print0 \
+          find scripts src tests tools memorizer -name '*.js' -print0 \
             | xargs -0 -n1 node --check
       - name: every .py tool parses
         run: |
@@ -120,6 +120,12 @@ jobs:
         run: npm run steps
       - name: the verify suite list lists without crashing
         run: npm run suites
+      - name: Memorizer builds into one file (it needs no licensed source)
+        run: |
+          set -e
+          node scripts/build-memorizer.js --out "$RUNNER_TEMP/memorizer"
+          test -s "$RUNNER_TEMP/memorizer/index.html"
+          node --check "$RUNNER_TEMP/memorizer/sw.js"
 
   logic:
     name: logic — every suite that needs no browser and no build
@@ -211,6 +217,12 @@ jobs:
         run: node tests/verify-echoui-pure.js
       - name: echo-patch's anchors still exist where it runs (13 checks)
         run: node tests/verify-echoanchor-pure.js
+      - name: Memorizer — every word of a PDF taught once, headings kept with their body (36 checks)
+        run: node tests/verify-memorizer-chunk-pure.js
+      - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass (76 checks)
+        run: node tests/verify-memorizer-prompts-pure.js
+      - name: Memorizer — no protocol phase skipped, every miss one card (55 checks)
+        run: node tests/verify-memorizer-session-pure.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

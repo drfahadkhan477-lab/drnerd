@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141619" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Memorizer">
+<title>Memorizer</title>
+<!-- @pwa -->
+<link rel="stylesheet" href="app.css" data-inline>
+</head>
+<body>
+<div id="app"><noscript>Memorizer needs JavaScript.</noscript></div>
+<!--
+  Order matters: fsrs.js is Systole's scheduler, shared rather than copied
+  (src/core/fsrs.js); ui.js reads every module before it at load.
+  scripts/build-memorizer.js inlines each tag marked data-inline, so the
+  built app is one file. Served from the repository root, this page also
+  runs as-is: http://localhost:8080/memorizer/
+-->
+<script src="../src/core/fsrs.js" data-inline></script>
+<script src="src/chunk.js" data-inline></script>
+<script src="src/prompts.js" data-inline></script>
+<script src="src/session.js" data-inline></script>
+<script src="src/provider.js" data-inline></script>
+<script src="src/store.js" data-inline></script>
+<script src="src/pdf.js" data-inline></script>
+<script src="src/ui.js" data-inline></script>
+</body>
+</html>
