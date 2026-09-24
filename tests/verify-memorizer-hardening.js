@@ -38,6 +38,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+/* Node's URL class, under its own name: `URL` below is the page's address. */
+const { URL: WebURL } = require('url');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 
@@ -74,7 +76,11 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
   const context = async (tag, init) => {
     const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' });
     const p = watch(await ctx.newPage(), events, tag, errors);
-    p.on('request', r => { if (!/^(file|data|blob):/.test(r.url()) && !/api\.anthropic\.com/.test(r.url())) outside.push(tag + ' ' + r.url()); });
+    /* The model's host is compared whole, after parsing: a pattern matched
+       anywhere in the URL would excuse https://elsewhere/?api.anthropic.com
+       (CodeQL, on this PR). */
+    const model = u => { try { const x = new WebURL(u); return x.protocol === 'https:' && x.hostname === 'api.anthropic.com'; } catch (_) { return false; } };
+    p.on('request', r => { if (!/^(file|data|blob):/.test(r.url()) && !model(r.url())) outside.push(tag + ' ' + r.url()); });
     if (init) await p.addInitScript(init);
     return p;
   };
@@ -256,7 +262,7 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
       /* Counts model replies once read, so a wait can know the app has had
          one; the app's own handling runs in the microtasks straight after. */
       const text = Response.prototype.text;
-      Response.prototype.text = function () { const u = this.url; return text.call(this).then(v => { if (/anthropic/.test(u)) window.__replies = (window.__replies || 0) + 1; return v; }); };
+      Response.prototype.text = function () { const u = this.url; return text.call(this).then(v => { if ((() => { try { return new URL(u).hostname === 'api.anthropic.com'; } catch (_) { return false; } })()) window.__replies = (window.__replies || 0) + 1; return v; }); };
     });
     await r.route('https://api.anthropic.com/**', route => {
       const b = JSON.parse(route.request().postData() || '{}');
