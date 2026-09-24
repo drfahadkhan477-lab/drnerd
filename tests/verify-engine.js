@@ -587,7 +587,13 @@ head('a reload is not a boot, and the split build is why');
     }
     /* The tail. A handler that is not the emitter returned by onDeath() eats
        the rejection before the process ever sees it. */
-    const tail = /\}\)\(\)\s*\.catch\s*\(([^\n]*)\)\s*;?\s*$/m.exec(code);
+    /* The WHOLE tail, not one line of it. The first version matched a
+       .catch whose argument fit on one line, so a handler written across
+       four — `.catch(e => {\n console.error(...); process.exit(1);\n})` —
+       swallowed the note just as surely and passed: verify-echo did exactly
+       that for a day. Anchored to the end of the file, not the end of a line,
+       and the argument may span lines. */
+    const tail = /\}\)\(\)\s*\.catch\s*\(([\s\S]*)\)\s*;?\s*$/.exec(code);
     if (tail && !/^\s*\w+\s*$/.test(tail[1])) swallowed.push(`${f}: .catch(${tail[1].trim().slice(0, 40)})`);
   }
   /* Vacuity guards, both directions. "No suite is missing a note" is also

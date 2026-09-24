@@ -248,6 +248,9 @@ const SUITES = [
      about in a comment. It needs no build — see its header for what that
      buys and what it costs. */
   ['echo',         'Echo Studio routes, delegates and keeps the caret where it was'],
+  /* Needs no build: the repository's own physio, coronaryTree and wiggers in
+     a real browser, measured for the physiology the view is there to show. */
+  ['coronaryview', 'the Coronary view draws the left bed collapsing in systole, on one scale'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -302,7 +305,7 @@ const SUITES = [
    measured the four that had been waiting — livingdiagram-pure,
    conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
    and echo. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['coronaryview'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
