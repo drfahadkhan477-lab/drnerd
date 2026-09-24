@@ -85,7 +85,8 @@ function makePdf() {
   const code = i => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(i / 26) % 26] + 'abcdefghijklmnopqrstuvwxyz'[i % 26];
   const PER = 320;
   let bodyWords = 0;
-  let IMG_BOX = null;
+  let IMG_BOX = null, VEC = null;
+  const VCAP = 'Figure 5 A drawn chart.';
   titles.forEach((t, si) => {
     if (si) y -= 20;
     line(t, 20); bodyWords += t.split(' ').length;
@@ -100,6 +101,13 @@ function makePdf() {
     for (let i = 1; i <= PER; i++) words.push(`s${si + 1}w${code(i)}` + (i % 10 === 0 ? '.' : ''));
     for (let i = 0; i < words.length; i += 12) line(words.slice(i, i + 12).join(' '), 11);
     bodyWords += PER;
+    /* Section 3 carries a chart drawn only with lines and filled
+       rectangles — no picture in it — and its caption. */
+    if (si === 2) {
+      if (y < 70 + 150) newPage();
+      VEC = { pageIndex: pages.length, box: [150, y - 125, 450, y - 5] };
+      y -= 135; line(VCAP, 9, 150); bodyWords += VCAP.split(' ').length; y -= 6;
+    }
     if (si === 1) {
       y -= 12;
       table.forEach(r => { row(r.map((c, ci) => [72 + ci * 150, c])); bodyWords += r.join(' ').split(' ').length; });
@@ -128,6 +136,12 @@ function makePdf() {
     });
     ops.push(`BT /F1 9 Tf 300 30 Td (${pi + 1}) Tj ET`);
     if (pi === 0) [IMG_BOX, UNDER_BOX].forEach(B => ops.unshift(`q ${B[2] - B[0]} 0 0 ${B[3] - B[1]} ${B[0]} ${B[1]} cm /Im1 Do Q`));
+    if (pi === VEC.pageIndex) {
+      const [x0, y0, x1, y1] = VEC.box;
+      ops.push(`q 1 w ${x0} ${y0} m ${x1} ${y0} l S ${x0} ${y0} m ${x0} ${y1} l S`);
+      for (let i = 0; i < 8; i++) ops.push(`${x0 + 10 + i * 36} ${y0} 24 ${10 + i * 14} re f`);
+      ops.push('Q');
+    }
     const stream = ops.join('\n');
     const content = add(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
     const xo = pi === 0 ? ` /XObject << /Im1 ${image} 0 R >>` : '';
@@ -142,7 +156,7 @@ function makePdf() {
   const xref = Buffer.byteLength(out, 'latin1');
   out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
   out += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return { buffer: Buffer.from(out, 'latin1'), pages: pages.length, titles, bodyWords, table, causal, IMG_BOX, CAPTION, pearl: pearlLines.join(' '),
+  return { buffer: Buffer.from(out, 'latin1'), pages: pages.length, titles, bodyWords, table, causal, IMG_BOX, CAPTION, VEC, VCAP, pearl: pearlLines.join(' '),
            firstCode: code(1), lastCode: code(PER) };
 }
 
@@ -253,8 +267,12 @@ function kindOf(user) {
   ok('no page is reported as scanned', rec.scanned.length === 0, JSON.stringify(rec.scanned));
   const tbl = rec.clusters[1].segments.find(g => g.table);
   ok('the table in section 2 is found, cell for cell', !!tbl && JSON.stringify(tbl.table) === JSON.stringify(pdf.table), tbl && JSON.stringify(tbl.table));
-  ok('the picture on page 1 is found where it was drawn, and the band under the text is not a figure', rec.figures.length === 1 && rec.figures[0].page === 1 &&
+  ok('the picture on page 1 is found where it was drawn, and the band under the text is not a figure', rec.figures.filter(f => f.page === 1).length === 1 && rec.figures[0].page === 1 &&
      rec.figures[0].box.every((v, i) => Math.abs(v - pdf.IMG_BOX[i]) <= 1), JSON.stringify(rec.figures) + ' want ' + JSON.stringify(pdf.IMG_BOX));
+  const vf = rec.figures.find(f => f.page === pdf.VEC.pageIndex + 1);
+  ok('a chart drawn only with lines and bars is found too, where it was drawn, by the real pdf.js',
+     rec.figures.length === 2 && !!vf && vf.box.every((v, i) => Math.abs(v - pdf.VEC.box[i]) <= 2), JSON.stringify(rec.figures.slice(1)) + ' want ' + JSON.stringify(pdf.VEC.box));
+  ok('with its own caption', vf && vf.number === '5' && vf.caption === pdf.VCAP, vf && vf.caption);
   ok('its caption is read with it, number and all', rec.figures[0] && rec.figures[0].number === '4' && rec.figures[0].caption === pdf.CAPTION,
      JSON.stringify(rec.figures[0]));
   ok('and the PDF itself is kept on the device, to draw them from', await page.evaluate(id => MemStore.get('files', id).then(f => !!f && f.bytes.byteLength > 1000), rec.id));

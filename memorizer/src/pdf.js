@@ -108,21 +108,37 @@ function linesOf(items, pageHeight) {
    Where on a page each embedded picture is drawn. A picture is painted into
    the unit square under the current transform, so tracking the transform
    through save/restore gives its box in PDF units. Tiny images (bullets,
-   logos, rules) are dropped. Vector drawings — charts made of lines rather
-   than a picture — are NOT found this way; the page viewer shows those. */
+   logos, rules) are dropped. Charts drawn as lines rather than a picture
+   are found from their painted paths (figureBoxes below). */
 function mul(m, n) {
   return [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3],
           m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
 }
-/* A picture's box in PDF units, from the transform in force when it is
+/* What is drawn where, in PDF units, from the transform in force when it is
    painted. Form XObjects carry their own matrix — begin/end pairs in the
    operator list — and the first version ignored it, which is how figures on
-   a real textbook page were cropped from the wrong place. */
-function imageBoxes(opList, OPS) {
-  var ctm = [1, 0, 0, 1, 0, 0], stack = [], boxes = [];
-  var paint = {};
+   a real textbook page were cropped from the wrong place.
+
+   `images`: each embedded picture's box. `paths`: each PAINTED path's box —
+   a line, a bar, an axis, a curve that is stroked or filled. pdf.js 3.11
+   gives a path's bounds as [minX, maxX, minY, maxY] in the path's own
+   space (evaluator.js buildPath — not the [x0, y0, x1, y1] used for boxes
+   here), and a clipping path is built exactly like a drawn one, so a path
+   counts only when the next operator paints it. */
+function drawn(opList, OPS) {
+  var ctm = [1, 0, 0, 1, 0, 0], stack = [], images = [], paths = [];
+  var paint = {}, ink = {};
   [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageXObjectRepeat, OPS.paintJpegXObject]
     .forEach(function (o) { if (o != null) paint[o] = true; });
+  [OPS.stroke, OPS.closeStroke, OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]
+    .forEach(function (o) { if (o != null) ink[o] = true; });
+  function place(x0, y0, x1, y1) {
+    var xs = [], ys = [];
+    [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].forEach(function (p) {
+      xs.push(ctm[0] * p[0] + ctm[2] * p[1] + ctm[4]); ys.push(ctm[1] * p[0] + ctm[3] * p[1] + ctm[5]);
+    });
+    return [Math.min.apply(null, xs), Math.min.apply(null, ys), Math.max.apply(null, xs), Math.max.apply(null, ys)];
+  }
   for (var i = 0; i < opList.fnArray.length; i++) {
     var fn = opList.fnArray[i], args = opList.argsArray[i];
     if (fn === OPS.save) stack.push(ctm.slice());
@@ -132,18 +148,23 @@ function imageBoxes(opList, OPS) {
       stack.push(ctm.slice());
       if (args && args[0] && args[0].length === 6) ctm = mul(ctm, args[0]);
     } else if (OPS.paintFormXObjectEnd != null && fn === OPS.paintFormXObjectEnd) ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
-    else if (paint[fn]) {
-      var xs = [], ys = [];
-      [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(function (p) {
-        xs.push(ctm[0] * p[0] + ctm[2] * p[1] + ctm[4]); ys.push(ctm[1] * p[0] + ctm[3] * p[1] + ctm[5]);
-      });
-      boxes.push([Math.min.apply(null, xs), Math.min.apply(null, ys), Math.max.apply(null, xs), Math.max.apply(null, ys)]);
+    else if (paint[fn]) images.push(place(0, 0, 1, 1));
+    else if (OPS.constructPath != null && fn === OPS.constructPath && ink[opList.fnArray[i + 1]]) {
+      /* A path pdf.js could not bound (curves only: its bounds stay at
+         ±Infinity) gets a NaN box, which the page-size filter drops. */
+      var mm = args && args[2];
+      if (mm) paths.push(place(mm[0], mm[2], mm[1], mm[3]));
     }
   }
-  return boxes;
+  return { images: images, paths: paths };
 }
+function imageBoxes(opList, OPS) { return drawn(opList, OPS).images; }
+
 function area(b) { return Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]); }
 function overlap(a, b) { return area([Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])]); }
+/* Touching, edges included. Not overlap() > 0: a straight line's box has no
+   area, so an axis would never join the bars standing on it. */
+function touches(a, b) { return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]; }
 
 /* Which of those boxes are FIGURES. Rejected, each for a reason seen in a
    real PDF:
@@ -154,23 +175,50 @@ function overlap(a, b) { return area([Math.max(a[0], b[0]), Math.max(a[1], b[1])
        shaded box, a scanned column. A diagram has labels, not paragraphs;
        over a quarter of its area covered by text lines is not a figure.
    Overlapping or touching boxes are merged first, so a figure built from
-   several tiles, or a multi-panel figure, is one figure. */
-function figureBoxes(opList, OPS, view, textBoxes) {
-  var raw = imageBoxes(opList, OPS);
-  var merged = [];
-  raw.forEach(function (b) {
-    var g = [b[0] - 6, b[1] - 6, b[2] + 6, b[3] + 6];
-    for (var i = 0; i < merged.length; i++) {
-      var m = merged[i];
-      if (overlap(g, m) > 0) {
-        merged[i] = [Math.min(m[0], b[0]), Math.min(m[1], b[1]), Math.max(m[2], b[2]), Math.max(m[3], b[3])];
+   several tiles, or a multi-panel figure, is one figure.
+
+   DRAWN FIGURES. A chart or diagram made of lines rather than a picture is
+   found from its painted paths: paths that touch are one drawing, and a
+   drawing of VECTOR_MIN_PATHS or more paths is held to the same rules as a
+   picture. Fewer is a frame, a box round a callout, an underline. A path
+   covering most of the page (a border, a background) is dropped before the
+   merge, or everything inside it would become one "figure". A drawing that
+   touches a picture is part of it — axes and labels drawn over a plot. */
+var VECTOR_MIN_PATHS = 6;
+function merge(boxes, pad) {
+  var out = [];
+  boxes.forEach(function (x) {
+    var b = x.box, g = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
+    for (var i = 0; i < out.length; i++) {
+      var m = out[i].box;
+      if (touches(g, m)) {
+        out[i] = { box: [Math.min(m[0], b[0]), Math.min(m[1], b[1]), Math.max(m[2], b[2]), Math.max(m[3], b[3])], n: out[i].n + x.n };
         return;
       }
     }
-    merged.push(b.slice());
+    out.push({ box: b.slice(), n: x.n });
   });
+  /* A merge can bridge two earlier groups; repeat until nothing touches. */
+  return out.length < boxes.length ? merge(out, pad) : out;
+}
+function figureBoxes(opList, OPS, view, textBoxes) {
+  var d = drawn(opList, OPS);
   var pageArea = (view[2] - view[0]) * (view[3] - view[1]);
-  return merged.filter(function (b) {
+  var pics = merge(d.images.map(function (b) { return { box: b, n: 1 }; }), 6).map(function (m) { return m.box; });
+  var drawings = merge(d.paths.filter(function (b) { return area(b) <= 0.8 * pageArea; })
+    .map(function (b) { return { box: b, n: 1 }; }), 6)
+    .filter(function (m) { return m.n >= VECTOR_MIN_PATHS; }).map(function (m) { return m.box; });
+  drawings.forEach(function (b) {
+    for (var i = 0; i < pics.length; i++) {
+      if (touches(b, pics[i])) {
+        var p = pics[i];
+        pics[i] = [Math.min(p[0], b[0]), Math.min(p[1], b[1]), Math.max(p[2], b[2]), Math.max(p[3], b[3])];
+        return;
+      }
+    }
+    pics.push(b.slice());
+  });
+  return pics.filter(function (b) {
     var w = b[2] - b[0], h = b[3] - b[1];
     if (w < 60 || h < 40 || w * h < 0.02 * pageArea) return false;
     if (w / h > 12 || h / w > 12) return false;
@@ -296,6 +344,6 @@ function renderBox(key, buffer, pageNo, box, scale) {
   });
 }
 
-root.MemPdf = { read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

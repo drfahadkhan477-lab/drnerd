@@ -130,8 +130,9 @@ Sections are short, and the study page shows each one as a handful of
 bullets with the key term first, the memory hook in a handwritten face beside
 them — built from the section's own lists where it has one — a flowchart drawn
 from its cause-and-effect sentences, its tables as tables, its figures cut
-from the page (pictures only: a highlight band behind text is not taken for
-one) under their own captions, and the pages themselves. A numbered figure is
+from the page — pictures, and charts drawn as lines, but not a highlight band
+behind text or ruled lines under a table — under their own captions, and the
+pages themselves. A numbered figure is
 shown with the section whose text names it ("see Fig. 17.3"), wherever it was
 printed; one that nothing names is shown with the section on its page.
 

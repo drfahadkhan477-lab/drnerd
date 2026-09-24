@@ -530,6 +530,42 @@ head('figures: pictures, not highlighted text');
   ok('text boxes come from runs with text, in PDF units', tb.length === 1 && tb[0][0] === 72 && tb[0][2] === 102 && tb[0][1] < 700 && tb[0][3] > 700);
 }
 
+head('figures drawn as lines, not pictures');
+{
+  const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
+  /* pdf.js 3.11's own numbers for these operators (src/shared/util.js OPS). */
+  const OPS = { save: 10, restore: 11, transform: 12, stroke: 20, closeStroke: 21, fill: 22, eoFill: 23, fillStroke: 24,
+                endPath: 28, clip: 29, paintImageXObject: 85, paintFormXObjectBegin: 74, paintFormXObjectEnd: 75, constructPath: 91 };
+  const view = [0, 0, 612, 792];
+  const ops = list => ({ fnArray: list.map(x => x[0]), argsArray: list.map(x => x[1] || null) });
+  /* A painted path as pdf.js lists it: its bounds are [minX, maxX, minY, maxY]. */
+  const line = (x0, y0, x1, y1, paint = 20) => [[91, [[13, 14], [x0, y0, x1, y1], [Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1)]]], [paint]];
+  const bar = (x, y, w, h) => [[91, [[19], [x, y, w, h], [x, x + w, y, y + h]]], [22]];
+  /* A bar chart: two axes and eight bars, from (100,300) to (400,500). */
+  const chart = [].concat(line(100, 300, 400, 300), line(100, 300, 100, 500),
+    ...[0, 1, 2, 3, 4, 5, 6, 7].map(i => bar(110 + i * 36, 300, 24, 40 + i * 20)));
+  const found = Pdf.figureBoxes(ops(chart), OPS, view, []);
+  ok('a chart drawn as lines and bars is a figure, boxed where it was drawn', JSON.stringify(found) === '[[100,300,400,500]]', JSON.stringify(found));
+  ok(`fewer than ${Pdf.VECTOR_MIN_PATHS} paths — a frame, a box round a callout — is not`,
+     Pdf.figureBoxes(ops([].concat(line(100, 300, 400, 300), line(100, 300, 100, 500), bar(120, 300, 200, 150))), OPS, view, []).length === 0);
+  /* Painted axes, and eight bars that are only clipping paths: counted, the
+     bars would join the axes and make ten paths — a figure. */
+  const clipped = Pdf.figureBoxes(ops([].concat(line(100, 300, 400, 300), line(100, 300, 100, 500),
+    ...[0, 1, 2, 3, 4, 5, 6, 7].map(i => [[91, [[19], [110 + i * 36, 300, 24, 100], [110 + i * 36, 134 + i * 36, 300, 400]]], [29], [28]]))), OPS, view, []);
+  ok('clipping paths draw nothing, and are not counted', clipped.length === 0, JSON.stringify(clipped));
+  const moved = Pdf.figureBoxes(ops([[10], [12, [1, 0, 0, 1, 50, -100]]].concat(chart, [[11]])), OPS, view, []);
+  ok('a drawing is placed by the transform in force', JSON.stringify(moved) === '[[150,200,450,400]]', JSON.stringify(moved));
+  const framed = Pdf.figureBoxes(ops([[91, [[19], [20, 20, 572, 752], [20, 592, 20, 772]]], [20]].concat(chart)), OPS, view, []);
+  ok('a border round the whole page is not merged into what it frames', JSON.stringify(framed) === '[[100,300,400,500]]', JSON.stringify(framed));
+  const textBox = (x0, y0, x1, y1, step) => { const out = []; for (let y = y0; y < y1; y += step) out.push([x0, y, x1, y + 10]); return out; };
+  ok('ruled lines under a column of text (a table, a form) are not a figure',
+     Pdf.figureBoxes(ops(chart), OPS, view, textBox(100, 300, 400, 500, 13)).length === 0);
+  const withPic = Pdf.figureBoxes(ops([[10], [12, [200, 0, 0, 150, 150, 320]], [85, ['i']], [11]].concat(chart)), OPS, view, []);
+  ok('axes drawn over a picture are part of it: one figure', JSON.stringify(withPic) === '[[100,300,400,500]]', JSON.stringify(withPic));
+  const curveOnly = [[91, [[15], [1, 2, 3, 4, 5, 6], [Infinity, -Infinity, Infinity, -Infinity]]], [20]];
+  ok('a path pdf.js could not bound changes nothing', Pdf.figureBoxes(ops(curveOnly.concat(chart)), OPS, view, []).length === 1);
+}
+
 head('figures: captions, and the sections that name them');
 {
   const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));

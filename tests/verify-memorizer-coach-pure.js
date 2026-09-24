@@ -395,6 +395,26 @@ head('the coach asks, lists and checks numbers');
   ok('in the gauntlet the harder questions lead, with blanks between them', !/_____/.test(gts[0].question) && /_____/.test(gts[1].question),
      gts.map(q => q.question.slice(0, 40)).join(' | '));
   ok('and it still matches the schema', P.check(P.SCHEMAS.gauntlet, { questions: gts }) === '');
+
+  /* A list item is not a sentence: it is taught by the hook and "Name the …",
+     never blanked, never a key point. The first gauntlet on this section
+     blanked "_____ (eg, myxoma and metastases)" and "Atypical _____ anomaly". */
+  const itemTexts = TS.segments.filter(g => g.item).map(g => g.text);
+  const filled = q => q.question.replace(/^[^:]*blank:\s*/, '').replace('_____', q.answer);
+  const gAll = K.gauntlet([TS], { 0: e.points }, [0], 10).questions;
+  const blanked = gAll.filter(q => /_____/.test(q.question));
+  ok('the gauntlet never blanks a list item', blanked.length >= 1 && !blanked.some(q => itemTexts.some(t => t.toLowerCase() === filled(q).toLowerCase())),
+     blanked.map(q => q.question.slice(0, 50)).join(' | '));
+  ok('and no key point is one', !e.points.some(p => itemTexts.indexOf(p.text) !== -1), e.points.map(p => p.text.slice(0, 30)).join(' | '));
+  ok('but its words still count toward what the section is about', (K.frequencies(TS).whipple || 0) >= 1, JSON.stringify(K.frequencies(TS).whipple));
+  const DOSE = { index: 0, title: 'Digoxin', pageStart: 3, pageEnd: 3, segments: [
+    { page: 3, heading: false, text: 'Digoxin is given as follows.' },
+    { page: 3, heading: false, text: 'Loading dose 0.5 mg digoxin orally', item: true, list: 'L9' },
+    { page: 3, heading: false, text: 'Maintenance dose 0.125 mg digoxin daily', item: true, list: 'L9' },
+    { page: 3, heading: false, text: 'Lower maintenance doses in renal failure', item: true, list: 'L9' },
+  ] };
+  const ds = K.numberSlips(DOSE, 'The maintenance dose of digoxin is 0.25 mg daily.');
+  ok('and a wrong number set against a list item is still caught', ds.length === 1 && /0\.125 mg/.test(ds[0]), JSON.stringify(ds));
 }
 
 head('questions from tables');

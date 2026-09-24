@@ -100,13 +100,20 @@ function isContent(b) { return b.length >= 4 && !STOP[b] && /[a-z]/.test(b); }
 function stem(b) { return b.replace(/(?:ies|es|s|ed|ing|ly)$/, '').replace(/(.)\1$/, '$1'); }
 
 /* The section's sentences, each with its page. Headings are titles, not
-   teaching material, and are left out. */
-function sentences(cluster) {
+   teaching material, and are left out.
+
+   So are list items, unless `withItems`: "Tricuspid atresia" is a thing in a
+   list, not a sentence, and a list is taught as a list — its hook, and
+   "Name the …" questions. Before this, the gauntlet blanked items as if
+   they were sentences ("_____ (eg, myxoma and metastases)"). Word counts
+   and the number check still read them: an item's words are the section's
+   terms, and its numbers are the section's numbers. */
+function sentences(cluster, withItems) {
   var out = [];
   (cluster.segments || []).forEach(function (seg) {
     /* Headings are titles and tables are grids — neither is a sentence. A
        table's own questions come from tableQuestions() below. */
-    if (seg.heading || seg.table) return;
+    if (seg.heading || seg.table || (seg.item && !withItems)) return;
     var cur = [];
     String(seg.text).split(/\s+/).filter(Boolean).forEach(function (w, i, all) {
       cur.push(w);
@@ -120,7 +127,7 @@ function sentences(cluster) {
    section keeps coming back to is what it is about. */
 function frequencies(cluster) {
   var f = {};
-  sentences(cluster).forEach(function (s) {
+  sentences(cluster, true).forEach(function (s) {
     toks(s.text).forEach(function (w) {
       var b = bare(w);
       if (isContent(b)) f[stem(b)] = (f[stem(b)] || 0) + 1;
@@ -650,7 +657,7 @@ function gradeExplain(cluster, points, explanation) {
    shares the most of its words; if that sentence has numbers and none is
    theirs, it is said back to them with the page. */
 function numberSlips(cluster, explanation) {
-  var src = sentences(cluster).map(function (s) {
+  var src = sentences(cluster, true).map(function (s) {
     var st = {}, nums = [];
     toks(s.text).forEach(function (w) { var b = bare(w); if (NUM.test(b)) nums.push(parseFloat(b)); else if (isContent(b)) st[stem(b)] = true; });
     return { s: s, st: st, nums: nums };
