@@ -282,3 +282,24 @@ closes. It needs an `https` address.
 Each address has its own storage. Units added under one address, or in the
 Files app's own preview, do not appear under another; add the PDFs again once.
 Your book never leaves the iPad: the zip holds only the app.
+
+### On a laptop
+
+The same app runs in a laptop's browser, which is the easier place to bring
+in a whole textbook: a keyboard, a large screen, and the PDFs already on the
+disk. Chrome and Edge also have WebGPU, so the on-device AI can be tried there.
+
+1. Install git and a current Node.js (the version `package.json` names under
+   `engines`). The Memorizer build needs nothing else — no `npm install`.
+2. `git clone https://github.com/drfahadkhan477-lab/drnerd.git`, then
+   `cd drnerd` and `npm run hooks`, which puts the leak guard on every commit.
+3. `npm run memorizer:serve` builds the app and serves it on `localhost` (the
+   port it prints). Open that address in the browser.
+4. Home → **Whole book**, and choose every PDF part of the book at once; the
+   chapters are found from its outline. Or add a single chapter's PDF.
+
+Keep the book's PDFs **outside** the repository folder and never `git add`
+them. What you import lives in that browser's storage on that laptop and is
+never written into the repo; the leak guard and CI refuse licensed files on a
+commit regardless. As on the iPad, each address keeps its own units, so a
+book imported on the laptop is imported again on the iPad.

@@ -38,6 +38,7 @@ const lum = hex => {
   const v = [0, 2, 4].map(i => parseInt(c.slice(i, i + 2), 16) / 255).map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4));
   return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
 };
+const parseRgba = s => { const m = /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/.exec(s); return m ? [+m[1], +m[2], +m[3], +m[4]] : [0, 0, 0, -1]; };
 const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
 head('the nine themes are Systole’s nine');
@@ -260,6 +261,28 @@ head('glass and glow: Systole’s aurora and second accent, and text readable on
   })));
   ok('text on glass over every aurora colour clears its floors, in every theme and setting, and so does button text on the second accent',
      n === 384 && bad.length === 0, bad.slice(0, 5).join('; ') || `${n} glass composites`);
+  /* The same, under the glass's sheen and the finger's light at their
+     brightest (both white over the card, where the text is): a white that
+     lifts a light page only helps dark text, but one on a dark page costs
+     light text its floor, so this is where a too-bright sheen shows. */
+  {
+    const dim = [];
+    let m = 0;
+    L.THEMES.forEach(th => ['standard', 'high'].forEach(c => ['dim', 'standard', 'bright'].forEach(b => {
+      const t = L.variant(th, c, b), g = L.glassOf(th, c, t), f = FLOOR[c];
+      [t.bg].concat(L.GLOW[th.id].aura.map(a => L.over(a, t.bg))).forEach((back, bi) => ['glass', 'glass-2'].forEach(k => {
+        m++;
+        const lit = L.over(g['glass-light'], L.over(g['glass-sheen'], L.over(g[k], back)));
+        const need = (what, fg, min) => { const r = ratio(fg, lit); if (r < min) dim.push(`${th.id}/${c}/${b} ${what} on lit ${k} over aura ${bi} ${r.toFixed(2)} < ${min}`); };
+        need('text', t.ink, f.text); need('secondary text', t.muted, f.muted);
+        if (k === 'glass') need('accent', t.accent, f.accent);
+      }));
+    })));
+    ok('and under the sheen and the finger’s light, at their brightest, every one still clears its floors', m === n && dim.length === 0, dim.slice(0, 5).join('; ') || `${m} lit composites`);
+    ok('the sheen and the light are there on a light page, and opaque surfaces have neither',
+       ['glass-sheen', 'glass-light', 'glass-rim'].every(k => parseRgba(L.glassOf(L.byId('daylight'), 'standard', L.variant(L.byId('daylight'), 'standard', 'standard'))[k])[3] > 0 &&
+         parseRgba(L.glassOf(L.byId('slate'), 'high', L.variant(L.byId('slate'), 'high', 'standard'))[k])[3] === 0));
+  }
   ok('Systole’s second accent was too light for white button text in three light themes, and is fitted there',
      ['daylight', 'slate', 'parchment'].every(id => ratio('#FFFFFF', L.GLOW[id].a2) < 4.5 && L.variant(L.byId(id), 'standard', 'standard')['accent-2'] !== L.GLOW[id].a2) &&
      ['midnight', 'nocturne', 'cathlab', 'monitor', 'contrast'].every(id => L.variant(L.byId(id), 'standard', 'standard')['accent-2'] === L.GLOW[id].a2));
@@ -267,7 +290,7 @@ head('glass and glow: Systole’s aurora and second accent, and text readable on
   const ct = L.glassOf(L.byId('contrast'), 'standard', L.variant(L.byId('contrast'), 'standard', 'standard'));
   const st = L.glassOf(L.byId('slate'), 'standard', L.variant(L.byId('slate'), 'standard', 'standard'));
   ok('at High contrast and in the Contrast theme surfaces are opaque, with no blur', /,1\)$/.test(hi.glass) && hi['glass-blur'] === '0px' && /,1\)$/.test(ct.glass) && ct['glass-blur'] === '0px' &&
-     /,0\.72\)$/.test(st.glass) && st['glass-blur'] !== '0px', JSON.stringify([hi.glass, ct.glass, st.glass]));
+     /,0\.52\)$/.test(st.glass) && st['glass-blur'] !== '0px', JSON.stringify([hi.glass, ct.glass, st.glass]));
   /* app.css's fallbacks, for the moment before appearance.js runs, are
      Daylight's generated glass tokens — a second copy, so held equal. */
   {
@@ -275,7 +298,7 @@ head('glass and glow: Systole’s aurora and second accent, and text readable on
     const fb = (appcss.match(/:root \{ --accent-2:[^}]*\}/) || [''])[0];
     const gen = L.css({ theme: 'daylight', contrast: 'standard', bright: 'standard' });
     const norm = v => String(v).replace(/\s/g, '').replace(/0\./g, '.').toUpperCase();
-    const keys = ['accent-2', 'glass', 'glass-strong', 'glass-2', 'glass-edge', 'glass-blur', 'aura-1', 'aura-2', 'aura-3'];
+    const keys = ['accent-2', 'glass', 'glass-strong', 'glass-2', 'glass-edge', 'glass-blur', 'glass-rim', 'glass-sheen', 'glass-light', 'aura-1', 'aura-2', 'aura-3'];
     const off = keys.filter(k => { const a = fb.match(new RegExp('--' + k + ':\\s*([^;]+);')), b = gen.match(new RegExp('--' + k + ':([^;]+);'));
       return !a || !b || norm(a[1]) !== norm(b[1]); });
     ok('app.css’s fallbacks before the script runs are Daylight’s glass tokens', fb && off.length === 0, off.join(', ') || keys.length + ' tokens');

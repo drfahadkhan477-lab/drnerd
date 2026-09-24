@@ -174,7 +174,10 @@ can be browsed too. Nothing is sent anywhere.
 
 **An on-device AI tutor, optional.** Turned on in Settings, a small language
 model (Qwen3 0.6B, 1.7B or 4B, Apache-2.0, through WebLLM on WebGPU) is downloaded
-once and runs on the iPad with no key and no connection. It explains a
+once and runs on the iPad with no key and no connection. Where the GPU has no
+16-bit shaders (many iPads), the 32-bit build of the same model is fetched
+instead; a download that breaks is retried, then moved to the browser's other
+store, and a failure says what went wrong. Settings can delete the model. It explains a
 section in plain words, suggests an analogy, summarises what the book says in
 answer to a question, and writes harder questions. It is not a source of
 facts, and nothing it writes is shown unchecked (`memorizer/src/ground.js`):
@@ -253,16 +256,20 @@ iPad held landscape (below it on a phone): "jump back in" cards with a
 progress ring and the section up next, and the sections that need work,
 each with a drill of its review cards, due or not. Then the box to add a
 chapter, with chips for a PDF, photos or pasted notes, and your units, each
-with its progress. Surfaces are frosted glass over a slow aurora in the
-theme's own colours; cards rise in, the trace draws, the pearl's steps
-arrive one by one. With reduced motion asked for, nothing moves; at High
+with its progress. Surfaces are clear frosted glass, as on an iPad — a heavy
+blur, a bright rim, a sheen, and a light that follows the finger — over a slow
+aurora in the theme's own colours, with the accent solid rather than run into
+a second colour; cards rise in, give under the finger, and a new screen
+settles in; the trace draws, the pearl's steps arrive one by one. With reduced
+motion asked for, nothing moves and there is no light to follow; at High
 contrast, with less transparency asked for, or where the browser cannot
 blur, the glass is solid. The look is Systole's too: its
 themes, colour for colour, and its type scale, with text size, reading width,
 line spacing, font, contrast and brightness to choose. Contrast and
 brightness are computed from the theme you pick, and every theme at every
 setting is tested to keep its text at WCAG AA or better — measured against
-the glass as it composites over the page and each pool of the aurora — with form controls
+the glass as it composites over the page and each pool of the aurora, under its
+sheen and the finger's light at their brightest — with form controls
 outlined to WCAG's floor for controls.
 
 ```bash
