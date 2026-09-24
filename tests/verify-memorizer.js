@@ -173,6 +173,31 @@ function makePdf() {
            firstCode: code(1), lastCode: code(PER) };
 }
 
+/* A one-page PDF of two columns of prose, written LINE BY LINE across both
+   columns — left line, right line, next left, next right — which is how
+   some PDF writers lay out a two-column page. pdf.js then hands back one
+   line per height with both columns in it. */
+function makeTwoColumnPdf() {
+  const L = [], R = [];
+  for (let i = 0; i < 12; i++) { L.push(`leftcol${i} alpha beta gamma delta.`); R.push(`rightcol${i} one two three four.`); }
+  const ops = ['BT /F1 18 Tf 72 780 Td (Two Column Page) Tj ET'];
+  for (let i = 0; i < 12; i++) {
+    ops.push(`BT /F1 10 Tf 72 ${750 - i * 14} Td (${L[i]}) Tj ET`);
+    ops.push(`BT /F1 10 Tf 320 ${750 - i * 14} Td (${R[i]}) Tj ET`);
+  }
+  const stream = ops.join('\n');
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`];
+  let out = '%PDF-1.4\n';
+  const off = [];
+  objs.forEach((o, i) => { off.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + off.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
+  return { buffer: Buffer.from(out, 'latin1'), left: L.join(' '), right: R.join(' ') };
+}
+
 /* ── the model, stubbed at the network ────────────────────────────────── */
 const EVIL = '<img src=x onerror="window.__pwned=1">';
 const stub = {
@@ -581,6 +606,21 @@ function kindOf(user) {
     ok('a malformed built-in step is an error on screen, and the session does not advance',
        /malformed encode/.test(await p2.locator('.card.error').innerText()) &&
        await p2.evaluate(() => !Memorizer.ui.state.per[Memorizer.ui.state.cluster].points));
+
+    /* Two columns written line by line, through the real pdf.js and the
+       real chunker: read column by column, not as a table. */
+    const tc = makeTwoColumnPdf();
+    const tcr = await p2.evaluate(async b64 => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      const r = await MemPdf.read(u.buffer);
+      const paired = r.pages[0].lines.filter(l => l.cells.length === 2).length;
+      const bl = MemChunk.blocksFromPages(r.pages).blocks;
+      return { paired, tables: bl.filter(b => b.table).length, text: bl.filter(b => !b.heading).map(b => b.text).join(' ') };
+    }, tc.buffer.toString('base64'));
+    ok('a two-column page written line by line reaches the chunker as paired lines', tcr.paired >= 10, String(tcr.paired));
+    ok('and is read column by column, not as a table', tcr.tables === 0 && tcr.text === tc.left + ' ' + tc.right,
+       `${tcr.tables} tables; ${tcr.text.slice(0, 90)}`);
 
     /* The gauntlet, reached by storing a session that has taught every
        section — graded right, from the built-in coach's own output — so

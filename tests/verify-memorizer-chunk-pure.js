@@ -397,6 +397,50 @@ head('lists: found by their shape, bullets or not');
   ok('a cluster\u2019s segments say which are list items, and which sub-headings', segs.length === 8 && segs.filter(g => g.sub).length === 2);
 }
 
+head('two columns written line by line are read column by column');
+{
+  /* How pdf.js hands back a page whose PDF writes both columns on each line:
+     one line per height, two far-apart cells. Measured with the real
+     pdf.js; the browser suite repeats it end to end. */
+  const two = (y, l, r) => ({ text: l + ' ' + r, size: 10, y, cells: [{ x: 72, text: l }, { x: 320, text: r }] });
+  const one = (y, x, t, size = 10) => ({ text: t, size, y, cells: [{ x, text: t }] });
+  const page = { page: 1, lines: [
+    one(40, 72, 'Two Column Heading', 18),
+    two(70, 'Left column starts here and', 'Right column starts here and'),
+    two(84, 'the left sentence ends now.', 'the right sentence ends now.'),
+    two(98, 'Another left sentence runs on', 'Another right sentence runs on'),
+    two(112, 'and stops at this point.', 'and it stops at this point.'),
+    one(126, 72, 'The left column is longer.'),
+    one(140, 320, 'So is the right, lower down.'),
+  ] };
+  const bl = C.blocksFromPages([page]).blocks;
+  ok('it is not taken for a table', !bl.some(b => b.table), bl.map(b => (b.table ? 'T:' : b.heading ? 'H:' : 'P:') + b.text.slice(0, 30)).join(' | '));
+  const text = bl.map(b => b.text).join(' ');
+  ok('the left column is read whole, then the right',
+     /^Two Column Heading Left column starts here and the left sentence ends now\. Another left sentence runs on and stops at this point\. The left column is longer\. Right column starts here/.test(text), text);
+  ok('a line with only a right-hand cell goes to the right column', /right sentence runs on and it stops at this point\. So is the right, lower down\.$/.test(text), text.slice(-80));
+  const after = { page: 1, lines: page.lines.concat([one(190, 72, 'A closing paragraph across the page, after a gap.')]) };
+  const afterText = C.blocksFromPages([after]).blocks.map(b => b.text).join(' ');
+  ok('the region ends at a larger gap: what follows stays after both columns', /lower down\. A closing paragraph across the page, after a gap\.$/.test(afterText), afterText.slice(-90));
+  /* A note at the top of the page, set at the right column's x, above the
+     heading: it is before the columns and must stay there. */
+  const noted = { page: 1, lines: [one(20, 320, 'Page note set at the right.')].concat(page.lines) };
+  const notedText = C.blocksFromPages([noted]).blocks.map(b => b.text).join(' ');
+  ok('what comes before the columns stays before them', /^Page note set at the right\. Two Column Heading Left column/.test(notedText), notedText.slice(0, 80));
+  const inWords = page.lines.map(l => l.text).join(' ').split(/\s+/).sort();
+  ok('every word is kept, only reordered', JSON.stringify(text.split(/\s+/).sort()) === JSON.stringify(inWords));
+  /* A two-column table of short cells is still a table. */
+  const tbl = { page: 1, lines: [two(60, 'Drug', 'Dose'), two(74, 'Digoxin', '0.125 mg'), two(88, 'Furosemide', '40 mg'), two(102, 'Bisoprolol', '5 mg')] };
+  ok('a two-column table of short cells is still a table', C.blocksFromPages([tbl]).blocks.some(b => b.table && b.table.length === 4));
+  /* A literal two, not COLUMN_MIN_ROWS - 1: a fixture sized by the constant
+     it tests moves with it, and passes whatever the constant says. */
+  const few = page.lines.slice(0, 3);
+  ok('two lines of paired prose are left as they are — three make columns', C.columnsOf(few) === few && C.columnsOf(page.lines.slice(0, 4)) !== page.lines.slice(0, 4));
+  const skew = [two(70, 'one two three four', 'five six seven eight'), two(84, 'one two three four', 'five six seven eight'),
+    two(98, 'one two three four', 'five six seven eight')].map((l, i) => Object.assign(l, { cells: [l.cells[0], { x: 200 + i * 60, text: l.cells[1].text }] }));
+  ok('pairs whose second cells do not line up are not columns', C.columnsOf(skew) === skew);
+}
+
 head('outline headings: found by their number, not their font');
 {
   const L = (text, y, size = 11) => ({ text, size, y, cells: [{ x: 72, text }] });

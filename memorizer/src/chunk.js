@@ -97,13 +97,13 @@ function blocksFromPages(pages) {
   var blocks = [];
 
   pages.forEach(function (p) {
-    var lines = (p.lines || []).filter(function (l) {
+    var lines = columnsOf((p.lines || []).filter(function (l) {
       var t = String(l.text || '').trim();
       if (!t) return false;
       if (/^\d{1,4}$/.test(t)) return false;                     /* a bare page number */
       if (running[lineKey(l)]) return false;
       return true;
-    });
+    }));
     var gaps = [];
     for (var i = 1; i < lines.length; i++) {
       var g = (+lines[i].y || 0) - (+lines[i - 1].y || 0);
@@ -182,6 +182,67 @@ function blocksFromPages(pages) {
     close();
   });
   return { blocks: blocks, bodySize: bodySize };
+}
+
+/* ── two columns ───────────────────────────────────────────────────────────
+   A PDF may write a two-column page line by line across both columns, and
+   pdf.js then hands back one line per height holding both columns' text as
+   two far-apart cells. Measured with the real pdf.js on a generated page:
+   written that way, a page of two columns of prose came out as ONE TABLE
+   of thirty rows — and the coach takes no sentences from a table, so the
+   page was never taught. Written column by column, it was already right.
+
+   A run of COLUMN_MIN_ROWS or more lines each split into two cells of prose
+   (COLUMN_MIN_WORDS words or more in each), their second cells starting at
+   one x, is two columns. From the first such line to the last, every
+   line's cells are sorted by that x into a left and a right column, and the
+   left column is read first; the region runs on past the last paired line
+   while the longer column continues at its ordinary leading. A table's
+   cells are short — a name, a value, a
+   unit — so a table is not taken for columns; a table inside one column
+   keeps its cells, and tableAt() still finds it. Every word is kept; only
+   their order changes, to the order they are read in. */
+var COLUMN_MIN_ROWS = 3;
+var COLUMN_MIN_WORDS = 4;
+function proseCell(c) { return words(c && c.text).length >= COLUMN_MIN_WORDS; }
+function columnsOf(lines) {
+  var pairs = [];
+  lines.forEach(function (l, i) {
+    if (l.cells && l.cells.length === 2 && proseCell(l.cells[0]) && proseCell(l.cells[1])) pairs.push(i);
+  });
+  if (pairs.length < COLUMN_MIN_ROWS) return lines;
+  var xs = pairs.map(function (i) { return +lines[i].cells[1].x || 0; }).sort(function (a, b) { return a - b; });
+  var split = xs[Math.floor(xs.length / 2)];
+  var tol = Math.max(8, +lines[pairs[0]].size || 10);
+  var aligned = pairs.filter(function (i) { return Math.abs((+lines[i].cells[1].x || 0) - split) <= tol; });
+  if (aligned.length < COLUMN_MIN_ROWS) return lines;
+  var from = aligned[0], to = aligned[aligned.length - 1];
+  /* Columns rarely end together: the longer one runs on below the last line
+     that has both. The region goes on while lines follow at the column's
+     ordinary leading and every cell sits in one of the two columns. */
+  var leftX = Math.min.apply(null, aligned.map(function (i) { return +lines[i].cells[0].x || 0; }));
+  var gaps = [];
+  for (var g = from + 1; g <= to; g++) { var d = (+lines[g].y || 0) - (+lines[g - 1].y || 0); if (d > 0) gaps.push(d); }
+  var lead = median(gaps) || tol;
+  function inColumn(c) { var x = +c.x || 0; return Math.abs(x - leftX) <= tol || Math.abs(x - split) <= tol; }
+  while (to + 1 < lines.length) {
+    var nx = lines[to + 1], gap = (+nx.y || 0) - (+lines[to].y || 0);
+    if (!(gap > 0 && gap <= lead * 1.6) || !(nx.cells && nx.cells.length && nx.cells.every(inColumn))) break;
+    to++;
+  }
+  var left = [], right = [];
+  function part(l, cells) {
+    var text = cells.map(function (c) { return c.text; }).join(' ');
+    return { text: text, y: l.y, size: l.size, cells: cells };
+  }
+  for (var i = from; i <= to; i++) {
+    var l = lines[i], cs = l.cells && l.cells.length ? l.cells : [{ x: 0, text: l.text }];
+    var lc = cs.filter(function (c) { return (+c.x || 0) < split - tol; });
+    var rc = cs.filter(function (c) { return (+c.x || 0) >= split - tol; });
+    if (lc.length) left.push(part(l, lc));
+    if (rc.length) right.push(part(l, rc));
+  }
+  return lines.slice(0, from).concat(left, right, lines.slice(to + 1));
 }
 
 /* ── outline headings ──────────────────────────────────────────────────────
@@ -541,7 +602,7 @@ function assignFigures(clusters, figures) {
 
 var MemChunk = {
   FIGURES_PER_SECTION: FIGURES_PER_SECTION, figureRefs: figureRefs, assignFigures: assignFigures,
-  OUTLINE_MAX_WORDS: OUTLINE_MAX_WORDS, runIn: runIn, CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
+  COLUMN_MIN_ROWS: COLUMN_MIN_ROWS, COLUMN_MIN_WORDS: COLUMN_MIN_WORDS, columnsOf: columnsOf, OUTLINE_MAX_WORDS: OUTLINE_MAX_WORDS, runIn: runIn, CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
   words: words, blocksFromPages: blocksFromPages, scannedPages: scannedPages,
   unitsFromBlocks: unitsFromBlocks, clusterBlocks: clusterBlocks,
 };
