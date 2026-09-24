@@ -381,3 +381,23 @@ details.more-analogies > summary { cursor: pointer; font-weight: 600; }
 .figure-view img { max-width: min(92vw, 1080px); max-height: 78vh; background: #FFFFFF; border-radius: .75rem; }
 .figure-view .fig-note { color: #E2E8F0; }
 .compare-row { margin-top: var(--s-3); }
+
+/* ── at a glance (after the owner's reference: fact boxes, a pathway) ── */
+.glance { display: flex; flex-direction: column; gap: var(--s-3); }
+.gl-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--s-2); }
+.gl-fact { display: flex; flex-direction: column; gap: .125rem; padding: var(--s-3) var(--s-4); border-radius: .75rem; text-align: center;
+  background: hsl(32 80% 50% / .16); border: 1px solid hsl(32 80% 50% / .55); }
+.gl-fact strong { color: hsl(32 90% 62%); font-size: var(--t-lead); }
+.gl-fact span { color: hsl(32 60% 70%); font-size: var(--t-meta); }
+.gl-caption { margin: 0; font-size: var(--t-meta); color: var(--muted); }
+.gl-path { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.gl-step { padding: var(--s-2) var(--s-3); border-radius: .625rem; background: hsl(215 70% 45% / .28); border: 1px solid hsl(215 70% 60% / .6);
+  color: var(--ink); font-weight: 600; font-size: var(--t-meta); text-align: center; }
+.gl-arrow { display: inline-flex; flex-direction: column; align-items: center; color: var(--muted); font-size: var(--t-tiny); line-height: 1.1; }
+.gl-verb { font-style: italic; }
+.gl-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--s-2); }
+.gl-list { display: flex; flex-direction: column; gap: .125rem; padding: var(--s-3); border-radius: .75rem; background: var(--surface-2); border: 1px solid var(--line); }
+.gl-list span { font-size: var(--t-meta); color: var(--muted); }
+strong.key { color: var(--accent); }
+.quick { border-left: 4px solid hsl(45 90% 55%); }
+.quick .q { font-weight: 700; margin: var(--s-2) 0; }

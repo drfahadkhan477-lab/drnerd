@@ -21,6 +21,7 @@
 'use strict';
 
 var Ask = root.MemAsk || (typeof require === 'function' ? require('./ask.js') : null);
+function coach() { return root.MemCoach || (typeof require === 'function' ? require('./coach.js') : null); }
 
 var CMP = [
   [/^(?:at least|greater than or equal to|no less than|≥)$/i, '≥'],
@@ -91,7 +92,31 @@ function sheetOf(lesson) {
   return { bigIdea: big, groups: groups, numbers: numbers };
 }
 
-var MemSheet = { MAX_LABEL_WORDS: MAX_LABEL_WORDS, numberTiles: numberTiles, sheetOf: sheetOf };
+/* A section at a glance, the way a teacher draws it on the board:
+     · key facts — "the most common cause of …", each its answer large and
+       what it is under it;
+     · the pathway — the longest chain of the section's own cause and
+       effect, left to right, each arrow the verb the book used;
+     · its lists — each a box of its items, except a list that already has
+       a mnemonic (`hooked`: the lesson's mnemonic titles), shown there.
+   All of it the book's words; nothing when the section has none of them. */
+var MAX_FACTS = 3, MAX_LISTS = 3, MAX_ITEMS = 6;
+function glance(cluster, hooked) {
+  var K = coach();
+  var facts = K.patternQuestions(cluster).filter(function (q) { return q.kind === 'most'; }).slice(0, MAX_FACTS).map(function (q) {
+    return { title: q.answer, sub: q.question.replace(/^What is /, '').replace(/\?$/, ''), page: q.page };
+  });
+  var f = K.flow(cluster), byId = {};
+  f.nodes.forEach(function (n) { byId[n.id] = n; });
+  var longest = K.paths(f).sort(function (a, b) { return b.length - a.length; })[0] || [];
+  var pathway = longest.length >= 2 ? longest.map(function (st) { return st.start != null ? { label: byId[st.start].label } : { verb: st.verb, label: byId[st.to].label }; }) : [];
+  var lists = K.lists(cluster).filter(function (l) { return l.items.length >= 2 && (hooked || []).indexOf(l.title) === -1; }).slice(0, MAX_LISTS).map(function (l) {
+    return { title: l.title, items: l.items.slice(0, MAX_ITEMS).map(function (i) { return i.label; }), more: Math.max(0, l.items.length - MAX_ITEMS), page: l.page };
+  });
+  return facts.length || pathway.length || lists.length ? { facts: facts, pathway: pathway, lists: lists } : null;
+}
+
+var MemSheet = { MAX_LABEL_WORDS: MAX_LABEL_WORDS, MAX_FACTS: MAX_FACTS, MAX_LISTS: MAX_LISTS, MAX_ITEMS: MAX_ITEMS, numberTiles: numberTiles, sheetOf: sheetOf, glance: glance };
 root.MemSheet = MemSheet;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemSheet;
 })(typeof window !== 'undefined' ? window : this);

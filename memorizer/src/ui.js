@@ -836,10 +836,53 @@ function pointCard(c, p, i) {
   return h('li.point',
     h('span.point-n', String(i + 1)),
     h('div.point-body',
-      h('p.point-text', b.lead ? h('strong.lead', b.lead) : null, marked(b.body), ' ', page(p.page)),
+      h('p.point-text', b.lead ? [h('strong.lead', b.lead), marked(b.body)] : withKey(b.body, Coach.keyTermOf(c, p.text)), ' ', page(p.page)),
       b.subs.length ? h('ul.subs', b.subs.map(function (x) { return h('li', marked(x)); })) : null,
       para && para.text.length > p.text.length + 20 ? h('details.context', h('summary', 'In the book'),
         h('p', marked(para.text))) : null));
+}
+/* The point with its key term in bold, every word still the book's. */
+function withKey(text, key) {
+  var at = key ? String(text).indexOf(key) : -1;
+  if (at === -1 && key) at = String(text).toLowerCase().indexOf(key.toLowerCase());
+  if (at === -1) return marked(text);
+  return [marked(text.slice(0, at)), h('strong.key', text.slice(at, at + key.length)), marked(text.slice(at + key.length))];
+}
+/* The section at a glance: key facts, its pathway, its lists (sheet.js). */
+function glanceCard(c, L) {
+  /* a list with a mnemonic of its own is shown there, not twice */
+  var g = Sheet.glance(c, (L.mnemonics || []).map(function (m) { return m.title; }));
+  if (!g) return null;
+  return h('div.card.glance', { id: 'glance' }, h('span.eyebrow', 'At a glance'),
+    g.facts.length ? h('div.gl-facts', g.facts.map(function (f) { return h('div.gl-fact', h('strong', f.title), h('span', f.sub)); })) : null,
+    g.pathway.length ? [h('p.gl-caption', 'The mechanism, as your book tells it'), h('div.gl-path', g.pathway.map(function (st, i) {
+      return [i ? h('span.gl-arrow', h('span.gl-verb', st.verb), h('span', { 'aria-hidden': 'true' }, '→')) : null, h('span.gl-step', st.label)];
+    }))] : null,
+    g.lists.length ? h('div.gl-lists', g.lists.map(function (l) {
+      return h('div.gl-list', h('strong', l.title), h('span', l.items.join(' · ') + (l.more ? ' · +' + l.more + ' more' : '')));
+    })) : null);
+}
+/* One question from the drill's own pool, asked in the lesson and not
+   recorded: active recall while the section is fresh. */
+function quickCheck(c, L) {
+  var key = ui.docId + ':' + ui.state.section;
+  if (!ui.quick || ui.quick.key !== key) {
+    var qs = Coach.quiz(c, L, ui.docRec.clusters).questions;
+    ui.quick = { key: key, q: qs[0] || null, choice: null };
+  }
+  var q = ui.quick.q;
+  if (!q) return null;
+  var chosen = ui.quick.choice, answered = chosen != null;
+  return h('div.card.quick', { id: 'quick' }, h('span.eyebrow', '⚡ Quick check'),
+    q.quote ? h('blockquote.quote', q.quote.split('_____').map(function (part, i, all) { return [part, i < all.length - 1 ? h('span.gap', answered ? q.options[q.answer] : '_____') : null]; })) : null,
+    h('p.q', q.question),
+    h('div.options', q.options.map(function (o, i) {
+      var cls = answered ? (i === q.answer ? '.right' : i === chosen ? '.wrong' : '.dim') : '';
+      return h('button.option' + cls, { type: 'button', disabled: answered ? true : null, 'data-i': String(i), onclick: function () { ui.quick.choice = i; render(); } },
+        h('span.opt-letter', LETTERS[i]), h('span.opt-text', o));
+    })),
+    answered ? h('p.why' + (chosen === q.answer ? '.good' : '.bad'), h('strong', chosen === q.answer ? '✓ Right. ' : '✗ It is ' + q.options[q.answer] + '. '), marked(q.explain), ' ', page(q.page),
+      h('span.muted', ' — not counted; the drill is next.')) : null);
 }
 function drawFlowCard(c, lessonV) {
   var f = null, fromModel = false;
@@ -925,6 +968,7 @@ function viewLesson() {
   return [
     sectionBar('teach'),
     h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(sh.bigIdea))),
+    glanceCard(c, L),
     analogies.length ? analogyCard(analogies[0], true) : null,
     h('div.card', { id: 'points' },
       h('div.card-head', h('h2', 'Key points'), h('div.row',
@@ -937,9 +981,13 @@ function viewLesson() {
       h('p.muted.arranged-note', 'Headings arranged by Memorizer; the points are your book’s.')),
     numbersCard(sh),
     mnemonics,
+    /* after everything has been read: recall, not a look at the next card */
+    quickCheck(c, L),
     analogies.length > 1 ? h('details.card.more-analogies', h('summary', 'More analogies (' + (analogies.length - 1) + ')'), analogies.slice(1).map(function (a) { return analogyCard(a, false); })) : null,
     aiLessonCard(c, L),
-    drawFlowCard(c, L),
+    /* the built-in pathway is on the glance card; a model's flowchart is
+       its own */
+    L.flowchart && L.flowchart.trim() || !(Sheet.glance(c) || {}).pathway || !Sheet.glance(c).pathway.length ? drawFlowCard(c, L) : null,
     tablesCard(c),
     visualsCard(c),
     full,

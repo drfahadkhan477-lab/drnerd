@@ -193,9 +193,19 @@ head('the drill: multiple choice from the book');
   ok('every section of the unit gets a drill', quizzes.every(q => q.questions.length >= 4), quizzes.map(q => q.questions.length).join(', '));
   ok(`no drill is longer than ${K.QUIZ_SIZE}`, quizzes.every(q => q.questions.length <= K.QUIZ_SIZE));
   const rightText = q => q.options[q.answer];
-  ok('every right answer is the book’s: its words are in the unit', all.every(q => unitText.indexOf(norm(rightText(q)).replace(/%$/, '')) !== -1 ||
+  /* A threshold answer ("≥ 40 mmHg") is the book's value with its
+     comparison as a symbol: the value must be in the source sentence, and
+     so must a comparison meaning that symbol. Every other answer's words
+     are in the unit. */
+  const CMPW = { '≥': /at least|or more|≥/, '>': /greater than|more than|above|over|exceed/, '≤': /at most|or less|≤/, '<': /less than|below|under/ };
+  const isThr = q => /^[≥≤<>] /.test(rightText(q));
+  const thrOk = q => { const m = /^([≥≤<>]) (\S+)(?: (.+))?$/.exec(rightText(q)); const src = q.explain.replace(/cm2/g, 'cm²').replace(/ percent/g, '%');
+    return !!m && src.indexOf(m[2] + (m[3] ? ' ' + m[3] : '')) !== -1 && CMPW[m[1]].test(src); };
+  ok('every threshold answer is the book\u2019s value, with the comparison the book makes', all.filter(isThr).length >= 1 && all.filter(isThr).every(thrOk),
+     all.filter(isThr).filter(q => !thrOk(q)).map(q => rightText(q) + ' / ' + q.explain.slice(0, 60)).join(' | '));
+  ok('every other right answer is the book’s: its words are in the unit', all.filter(q => !isThr(q)).every(q => unitText.indexOf(norm(rightText(q)).replace(/%$/, '')) !== -1 ||
      norm(q.quote).length && q.explain && unitText.indexOf(norm(q.explain).slice(0, 40)) !== -1),
-     all.filter(q => unitText.indexOf(norm(rightText(q))) === -1).map(q => rightText(q)).join(' | '));
+     all.filter(q => !isThr(q) && unitText.indexOf(norm(rightText(q))) === -1).map(q => rightText(q)).join(' | '));
   ok('and so is every explanation', all.every(q => unitText.indexOf(norm(q.explain).slice(0, 40)) !== -1 || /^The .+: /.test(q.explain) || /—/.test(q.explain)),
      all.filter(q => unitText.indexOf(norm(q.explain).slice(0, 40)) === -1).map(q => q.explain.slice(0, 50)).join(' | '));
   ok('the right option is not always in the same place', new Set(all.map(q => q.answer)).size >= 3, all.map(q => q.answer).join(''));
@@ -350,7 +360,74 @@ head('the final exam');
      new Set(K.exam(UNIT, asked, [2], 40).questions.map(q => q.question + q.quote)).size === K.exam(UNIT, asked, [2], 40).questions.length);
 }
 
-head('flowcharts from the section\u2019s own cause-and-effect');
+head('questions that test reasoning: mechanisms and thresholds');
+{
+  const CH = { index: 3, title: 'Congestion', pageStart: 9, pageEnd: 9, text: '', segments: [{ page: 9, heading: false, text:
+    'Diuretics reduce preload by lowering circulating volume. Excessive preload raises pulmonary venous pressure and causes pulmonary congestion. ' +
+    'Raised pulmonary venous pressure leads to oedema of the lungs.' }] };
+  CH.text = CH.segments[0].text;
+  const U2 = UNIT.concat([CH]);
+  const mech = K.candidates(CH, K.pools(U2)).filter(q => q.kind === 'mechanism');
+  const fwd = mech.find(q => /Diuretics → reduce → \?$/.test(q.question));
+  ok('forward: "Diuretics → reduce → ?", the answer the next step, the book’s sentence the reason', fwd && fwd.options[fwd.answer] === 'preload' &&
+     fwd.explain === 'Diuretics reduce preload by lowering circulating volume.' && fwd.page === 9, JSON.stringify(mech.map(q => q.question)));
+  ok('no step on the same chain is offered as wrong: what preload leads to is not "wrong" for diuretics', fwd &&
+     !fwd.options.some(o => /pulmonary venous pressure|pulmonary congestion|oedema of the lungs/.test(o)), fwd && JSON.stringify(fwd.options));
+  const back = mech.find(q => /\? → leads to → oedema of the lungs$/.test(q.question));
+  ok('backward: "? → leads to → oedema of the lungs", and nothing upstream offered as wrong', back && back.options[back.answer] === 'pulmonary venous pressure' &&
+     !back.options.some(o => /^(?:preload|Diuretics)$/.test(o)), back && JSON.stringify(back.options));
+  const TH = { index: 4, title: 'Severity', pageStart: 12, pageEnd: 12, text: '', segments: [{ page: 12, heading: false, text:
+    'Severe stenosis is defined by a peak velocity of at least 4 m/s, a mean gradient of at least 40 mmHg or a valve area below 1.0 cm2. ' +
+    'Moderate stenosis is defined by a mean gradient of at least 20 mmHg.' }] };
+  TH.text = TH.segments[0].text;
+  const thr = K.candidates(TH, K.pools(UNIT.concat([TH]))).filter(q => q.kind === 'threshold');
+  const g = thr.find(q => q.question === 'In your book, what mean gradient defines severe stenosis?');
+  ok('a threshold: "what mean gradient defines severe stenosis?", answered "≥ 40 mmHg"', g && g.options[g.answer] === '≥ 40 mmHg', JSON.stringify(thr.map(q => q.question)));
+  ok('its wrong options: the comparison turned round, and other values in the same unit', g && g.options.includes('< 40 mmHg') && g.options.includes('≥ 20 mmHg') &&
+     g.options.every(o => / mmHg$/.test(o)), g && JSON.stringify(g.options));
+  ok('a sentence that defines nothing asks no threshold ("90% of cases" is not a grade)', K.candidates(TS, K.pools(UNIT)).every(q => q.kind !== 'threshold'));
+  /* Two names for one step, merged by the flowchart: the edge's two labels
+     are in no one sentence, and no explanation is made up for it. */
+  const MG = { index: 5, title: 'Pressure', pageStart: 14, pageEnd: 14, text: '', segments: [{ page: 14, heading: false, text:
+    'Excessive preload raises venous pressure. Raised pulmonary venous pressure leads to oedema of the lungs. Diuretics reduce excessive preload.' }] };
+  MG.text = MG.segments[0].text;
+  const mg = K.candidates(MG, K.pools(UNIT.concat([MG]))).filter(q => q.kind === 'mechanism');
+  const bookSents = ['Excessive preload raises venous pressure.', 'Raised pulmonary venous pressure leads to oedema of the lungs.', 'Diuretics reduce excessive preload.'];
+  ok('every mechanism question is explained by a sentence of the book, word for word, never one made up', mg.length >= 1 && mg.every(q => bookSents.includes(q.explain)),
+     JSON.stringify(mg.map(q => q.explain)));
+  ok('reasoning comes first in a drill: mechanism, then threshold', K.KIND_ORDER[0] === 'mechanism' && K.KIND_ORDER[1] === 'threshold');
+}
+
+head('the key term of a point, set in bold');
+{
+  const c = { index: 0, title: 'X', segments: [{ page: 3, heading: false, text: 'Rheumatic heart disease is the most common cause of tricuspid stenosis. Diuretics reduce preload by lowering circulating volume.' }] };
+  ok('the subject the sentence is about, not its rarest word', K.keyTermOf(c, 'Diuretics reduce preload by lowering circulating volume.') === 'Diuretics' &&
+     K.keyTermOf(c, 'Excessive preload raises pulmonary venous pressure.') === 'Excessive preload' &&
+     K.keyTermOf(c, 'Rheumatic heart disease (RHD) is the most common cause of tricuspid stenosis.') === 'Rheumatic heart disease (RHD)');
+  ok('after an opening clause', K.keyTermOf(c, 'In older adults, calcific degeneration is common.') === 'calcific degeneration');
+  ok('"This …" has no subject to bold, and no clinical term: nothing', K.keyTermOf(c, 'This is a common cause of syncope.') === '');
+}
+
+head('a missing word, only among its own kind');
+{
+  ok('"increases" and "dilate" are not clinical nouns; "hypertrophy" and "dilatation" are', K.kindOf('increases') === 'plain' && K.kindOf('dilate') === 'plain' &&
+     K.kindOf('hypertrophy') === 'thing' && K.kindOf('dilatation') === 'thing', ['increases', 'dilate', 'hypertrophy', 'dilatation'].map(K.kindOf).join());
+  ok('an enzyme is still an enzyme: "kinase"', K.kindOf('kinase') === 'thing');
+  ok('families: a condition, a drug, a test; a place as a noun or an adjective', K.family('hypertrophy') === 'condition' && K.family('metoprolol') === 'drug' &&
+     K.family('echocardiography') === 'test' && K.family('valve') === 'site' && K.family('atrial') === 'site-adj' && K.family('pulmonary') === 'site-adj' && K.family('stroke') === '');
+  /* A unit naming conditions, drugs and tests, all "things": a missing
+     condition is offered against conditions only. */
+  const FAM = [0, 1, 2].map(i => ({ index: i, title: 'F' + i, pageStart: i + 1, pageEnd: i + 1, text: '', segments: [{ page: i + 1, heading: false, text: [
+    'The left ventricle responds to pressure overload with concentric hypertrophy that keeps wall stress normal for many years. Myocardial fibrosis follows.',
+    'Metoprolol and bisoprolol slow the heart rate in patients with angina. Echocardiography measures the gradient and the valve area.',
+    'Ventricular dilatation and aortic sclerosis are common in the elderly. Coronary angiography shows the arteries. Carvedilol is also used.'][i] }] }));
+  FAM.forEach(c => { c.text = c.segments[0].text; });
+  const terms = FAM.map(c => K.candidates(c, K.pools(FAM)).filter(q => q.kind === 'term')).flat().concat(UNIT.map(c => K.candidates(c, K.pools(UNIT)).filter(q => q.kind === 'term')).flat());
+  ok('every missing-word question offers only its answer’s family', terms.length >= 1 && terms.every(q => q.options.every(o => K.family(o) === K.family(q.options[q.answer]))),
+     terms.filter(q => !q.options.every(o => K.family(o) === K.family(q.options[q.answer]))).map(q => q.options.join('/')).slice(0, 2).join(' | '));
+}
+
+head('flowcharts from the section’s own cause-and-effect');
 {
   const CAUSAL = { index: 0, title: 'Congestion', pageStart: 9, pageEnd: 9, segments: [{ page: 9, heading: false, text:
     'Diuretics reduce preload by lowering circulating volume. ' +

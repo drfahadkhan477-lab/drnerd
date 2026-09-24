@@ -217,13 +217,13 @@ jobs:
         run: node tests/verify-echoui-pure.js
       - name: echo-patch's anchors still exist where it runs (13 checks)
         run: node tests/verify-echoanchor-pure.js
-      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections (158 checks)
+      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections (159 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass (82 checks)
         run: node tests/verify-memorizer-prompts-pure.js
       - name: Memorizer — teach before drill, a miss asked again, every miss one card (50 checks)
         run: node tests/verify-memorizer-session-pure.js
-      - name: Memorizer — the built-in coach needs no key, invents nothing, and asks fair multiple-choice questions (95 checks)
+      - name: Memorizer — the built-in coach needs no key, invents nothing, and asks multiple-choice questions that test reasoning (111 checks)
         run: node tests/verify-memorizer-coach-pure.js
       - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness (36 checks)
         run: node tests/verify-memorizer-appearance-pure.js
@@ -237,7 +237,7 @@ jobs:
         run: node tests/verify-memorizer-ground-pure.js
       - name: Memorizer — search by meaning, its measured floor, and its merge with search by words (14 checks)
         run: node tests/verify-memorizer-vec-pure.js
-      - name: Memorizer — a lesson laid out to be remembered: clinical headings, number tiles, nothing twice (16 checks)
+      - name: Memorizer — a lesson laid out to be remembered: clinical headings, number tiles, the section at a glance, nothing twice (21 checks)
         run: node tests/verify-memorizer-sheet-pure.js
       - name: Memorizer — figures made from the book, every word the lesson's (17 checks)
         run: node tests/verify-memorizer-figure-pure.js

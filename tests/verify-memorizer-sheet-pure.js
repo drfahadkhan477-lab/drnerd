@@ -17,6 +17,7 @@ const ok = (label, cond, detail = '') => {
 };
 const head = t => console.log('\n── ' + t + ' ──');
 const S = require(path.join(__dirname, '..', 'memorizer', 'src', 'sheet.js'));
+const C = require(path.join(__dirname, '..', 'memorizer', 'src', 'coach.js'));
 const tiles = t => S.numberTiles(t).tiles.map(x => x.label + ' = ' + x.value).join(' | ');
 
 head('numbers as tiles: the value large, what it measures under it');
@@ -60,6 +61,28 @@ head('the sheet');
   const noOv = S.sheetOf({ overview: '', points: [{ text: 'First point here.', page: 1 }, { text: 'Treatment is surgery.', page: 1 }], numbers: [] });
   ok('with no overview, the first point is the big idea, and not repeated', noOv.bigIdea === 'First point here.' && noOv.groups.reduce((n, g) => n + g.points.length, 0) === 1);
   ok('a point under no heading is under "Also know"', S.sheetOf({ overview: 'x', points: [{ text: 'Blue skies are nice.', page: 1 }], numbers: [] }).groups[0].heading === 'Also know');
+}
+
+head('at a glance: facts, the pathway, the lists');
+{
+  const seg = (t, page = 3, extra = {}) => Object.assign({ text: t, page, heading: false }, extra);
+  const c = { index: 0, title: 'Tricuspid stenosis', segments: [
+    seg('Rheumatic heart disease is the most common cause of tricuspid stenosis.'),
+    seg('Diuretics reduce preload by lowering circulating volume. Excessive preload raises pulmonary venous pressure and causes pulmonary congestion. Raised pulmonary venous pressure leads to oedema of the lungs.'),
+    seg('The causes include:'),
+    ...['Rheumatic disease', 'Carcinoid', 'Endocarditis', 'Myxoma', 'Radiation', 'Whipple disease', 'Fabry disease'].map(t => seg(t, 4, { item: true, list: 'L1' })),
+  ] };
+  const g = S.glance(c);
+  ok('a key fact: its answer, and what it is', g && g.facts.length === 1 && g.facts[0].title === 'Rheumatic heart disease' && g.facts[0].sub === 'the most common cause of tricuspid stenosis',
+     JSON.stringify(g && g.facts));
+  ok('the pathway: the longest chain, left to right, each arrow the book’s verb', g && JSON.stringify(g.pathway) ===
+     '[{"label":"Diuretics"},{"verb":"reduce","label":"preload"},{"verb":"raises","label":"pulmonary venous pressure"},{"verb":"leads to","label":"oedema of the lungs"}]',
+     JSON.stringify(g && g.pathway));
+  ok(`a list: its items, at most ${S.MAX_ITEMS}, and how many more`, g && g.lists.length === 1 && g.lists[0].items.length === 6 && g.lists[0].more === 1, JSON.stringify(g && g.lists));
+  const hooked = S.glance(c, C.mnemonicsOf(c, []).map(m => m.title));
+  ok('a list with a mnemonic of its own is left to the mnemonic, not boxed twice', C.mnemonicsOf(c, []).length === 1 && hooked && hooked.lists.length === 0 &&
+     hooked.pathway.length === g.pathway.length, JSON.stringify(hooked && hooked.lists));
+  ok('a section with none of them has no glance', S.glance({ index: 0, title: 'x', segments: [seg('Plain words here without any pattern at all.')] }) === null);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

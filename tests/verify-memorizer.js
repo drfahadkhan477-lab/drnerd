@@ -522,8 +522,15 @@ function kindOf(user) {
   ok('a page opens large', await page.locator('.lightbox').count() === 1);
   await page.keyboard.press('Escape');
   ok('and Escape closes it', await page.locator('.lightbox').count() === 0);
-  await page.locator('#flow').waitFor(T);
-  ok('the cause-and-effect sentences are drawn as a flowchart', /Diuretics/.test(await page.locator('#flow').innerText()));
+  await page.locator('#glance .gl-path').waitFor(T);
+  ok('at a glance: the cause-and-effect sentences as a pathway, the book\u2019s verbs on the arrows', /^Diuretics reduce → preload raises → venous pressure/.test(await text(page, '#glance .gl-path')) &&
+     await page.locator('#flow').count() === 0, await text(page, '#glance .gl-path'));
+  ok('the quick check comes after the lesson\u2019s cards, before its extras', await page.evaluate(() => {
+    const q = document.querySelector('#quick'), h = document.querySelector('.hook'), n = document.querySelector('#numbers');
+    return !!q && !!(h.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(n.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING); }));
+  await page.locator('#quick .option').first().click();
+  ok('answered, it shows right or wrong and why — and is not recorded', await page.locator('#quick .why').count() === 1 &&
+     await page.evaluate(() => Memorizer.ui.state.per[0].answers.length === 0 && Memorizer.ui.state.cards.length === 0 && Memorizer.ui.state.phase === 'teach'));
 
   head('the drill: multiple choice, and a miss comes back');
   await page.locator('#to-drill').click();
@@ -783,10 +790,18 @@ function kindOf(user) {
        /Memorizer’s, not your book’s/.test(await p2.locator('.analogy .label').first().innerText()), JSON.stringify(L.analogies.map(a => a.title)));
     const tv = await p2.$$eval('#numbers .tile-value', ts => ts.map(t => t.textContent));
     ok('the numbers to know are the section’s own, as tiles', L.numbers.some(n => /18 mmHg/.test(n.text)) && tv.indexOf('> 18 mmHg') !== -1 && tv.indexOf('8–12 mmHg') !== -1, JSON.stringify(tv));
-    await p2.locator('#flow').waitFor(T);
-    const flowText = (await p2.locator('#flow').innerText()).replace(/\s+/g, ' ');
-    ok('section 1 shows a flowchart built from its cause-and-effect sentences', /Diuretics/.test(flowText) && /reduce/.test(flowText) && /preload/.test(flowText) &&
+    await p2.locator('#glance .gl-path').waitFor(T);
+    const flowText = await text(p2, '#glance .gl-path');
+    ok('section 1 shows its cause-and-effect sentences as a pathway at a glance', /Diuretics/.test(flowText) && /reduce/.test(flowText) && /preload/.test(flowText) &&
        /oedema/i.test(flowText), flowText.slice(0, 140));
+    const keys = await p2.$$eval('ol.points .point-text strong.key', ks => ks.map(k => k.textContent));
+    const changed = (await p2.$$eval('ol.points .point-text', ps => ps.map(p => p.textContent.replace(/\s*p\.\d+$/, '').trim()))).filter(t => {
+      /* the whole sentence, to its end: tidy capitalises a point's first letter, so case aside */
+      const src = sec1.replace(/\s+/g, ' ').toLowerCase(), at = src.indexOf(t.toLowerCase());
+      return at === -1 || !(/[.!?]$/.test(t) || /^[.!?]/.test(src.slice(at + t.length)));
+    });
+    ok('each point sets its key term in bold, the sentence unchanged', keys.length >= 1 && keys.every(k => sec1.indexOf(k) !== -1) && changed.length === 0,
+       JSON.stringify({ keys, changed }));
     await p2.locator('#to-drill').click();
     await p2.locator('#mcq .option').first().waitFor(T);
     const qs = await p2.evaluate(() => Memorizer.ui.state.per[0].quiz.questions);
