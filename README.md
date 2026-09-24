@@ -67,10 +67,13 @@ Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.
 
 ### The figure tools
 
-`tools/` holds three Python scripts. `visual-atlas.py` (extraction and OCR) and
+`tools/` holds the Python figure scripts. `visual-atlas.py` (extraction and OCR) and
 `trim-figure.py` (whitespace trimming, and replaying a crop record) were used
 when the figures were first pulled out of the export. `figure-review.py` builds
-the sheet a person decides crops on.
+the sheet a person decides crops on. `add-unit.py` bakes a unit written for the
+in-app importer — notes citing `page_figures/…` — into `content/refs/` and
+`content/refs-images/<unit>/`, copying only the cited images and re-encoding
+them so a unit's page renders do not balloon `refs-images.json`.
 
 ```bash
 python3 tools/figure-review.py                      # → build/figure-review.html
