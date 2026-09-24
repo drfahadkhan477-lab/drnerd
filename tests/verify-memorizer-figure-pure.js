@@ -54,7 +54,7 @@ head('the study card: the lesson, and nothing else');
   ok(`no line wider than the card: every text line fits ${F.W} px at its size`, [...svg.matchAll(/<text x="(\d+)"[^>]*font-size="(\d+)"[^>]*>([^<]*)</g)].every(m => +m[1] + m[3].length * +m[2] * 0.52 <= F.W + 1),
      [...svg.matchAll(/<text x="(\d+)"[^>]*font-size="(\d+)"[^>]*>([^<]*)</g)].filter(m => +m[1] + m[3].length * +m[2] * 0.52 > F.W + 1).map(m => m[3]).slice(0, 2).join(' | '));
   const evil = F.studyCard('<script>alert(1)</script> & "x"', { bigIdea: 'a < b > c', groups: [], numbers: [] }, [], 's');
-  ok('text is escaped: a title with markup is drawn as text, not run', !/<script>/.test(evil) && /&lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; &quot;x&quot;/.test(evil) && /a &lt; b &gt; c/.test(evil));
+  ok('text is escaped: a title with markup is drawn as text, not run', !/<script/i.test(evil) && /&lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; &quot;x&quot;/.test(evil) && /a &lt; b &gt; c/.test(evil));
   const longer = F.studyCard('T', S.sheetOf(Object.assign({}, LESSON, { points: LESSON.points.concat([{ text: 'Valve replacement is indicated once symptoms appear, surgically or by transcatheter implantation.', page: 2 }]) })), LESSON.mnemonics, 's');
   const hOf = s => +/height="(\d+)"/.exec(s)[1];
   ok('the card grows with its content, never cutting it', hOf(longer) > hOf(F.studyCard('T', sh, LESSON.mnemonics, 's')));

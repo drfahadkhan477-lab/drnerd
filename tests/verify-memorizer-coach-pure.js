@@ -218,7 +218,7 @@ head('the drill: multiple choice from the book');
   ok('and none of them is already in the definition', back && back.options.every((o, i) => i === back.answer || norm(back.question).indexOf(norm(o)) === -1));
   const most = find(/^What is the most common cause of TS\?/);
   ok('"the most common…" asks for it, with the other causes as the wrong options', most && rightText(most) === 'Rheumatic heart disease (RHD)' &&
-     most.options.filter((o, i) => i !== most.answer).every(o => /Infective|Carcinoid|Malignancy|Whipple|Tricuspid atresia|Ebstein|Pacemaker|Chest|Rheumatic$/.test(o)), most && most.options.join(' / '));
+     most.options.filter((o, i) => i !== most.answer).every(o => /(?:Infective|Carcinoid|Malignancy|Whipple|Tricuspid atresia|Ebstein|Pacemaker|Chest)|(?:Rheumatic$)/.test(o)), most && most.options.join(' / '));
   const exc = find(/EXCEPT/);
   /* The odd one out may come from the same lesion's other list — "acquired
      causes EXCEPT Ebstein anomaly", which is congenital — the confusion an
