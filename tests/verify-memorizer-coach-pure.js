@@ -165,8 +165,31 @@ head('the lesson: the book’s own words, in teaching order');
      L.mnemonics[0].words.every(w => norm(PRELOAD.text).indexOf(w.toLowerCase()) !== -1), JSON.stringify(L.mnemonics));
   ok('an analogy that fits is chosen, and marked as Memorizer’s', L.analogies.length >= 1 && L.analogies[0].title === 'Preload' && L.analogies.every(a => a.source === 'Memorizer'),
      L.analogies.map(a => a.title).join(', '));
+  /* The owner's first whole book: a section opening on a caption got it as
+     its big idea. A caption labels a picture; a sentence about a table is a
+     sentence. */
+  const capt = withText({ index: 0, title: 'Electrocardiographic subsets', pageStart: 5, pageEnd: 5, segments: [
+    seg(5, 'TABLE 1.4 FIGURE 1.2 Electrocardiographic subsets of acute myocardial infarction (MI).'),
+    seg(5, 'Figure 3-2. Anatomy of the coronary arteries.'),
+    seg(5, 'An infarct is death of heart muscle from a blocked coronary artery. ST elevation on the ECG marks a transmural infarct that needs reperfusion within 90 minutes. ' +
+      'Table 1.4 lists the subsets by their ECG findings. New Q waves appear over hours as the muscle dies.')] });
+  const CL = K.lesson(capt);
+  const said = [CL.overview].concat(CL.points.map(p => p.text), CL.numbers.map(n => n.text));
+  ok('a caption is never the big idea, a key point or a number to learn', /^An infarct is death/.test(CL.overview) && !said.some(t => /^(?:TABLE|Figure) \d/.test(t)), JSON.stringify(said));
+  ok('a number that only names a table does not make a sentence a key point first', !CL.points.some(p => /^Table 1\.4/.test(p.text)), JSON.stringify(CL.points.map(p => p.text)));
+  ok('a sentence about a table is kept; a caption, its title included, is not a sentence', K.sentences(capt).some(x => /^Table 1\.4 lists/.test(x.text)) &&
+     !K.sentences(capt).some(x => /Anatomy of the coronary|^Figure|^TABLE/.test(x.text)), JSON.stringify(K.sentences(capt).map(x => x.text)));
   const kidney = withText({ index: 0, title: 'The nephron', pageStart: 1, pageEnd: 1, segments: [seg(1, 'The glomerulus filters plasma. The tubule reabsorbs sodium and water. The collecting duct concentrates urine.')] });
   ok('and none is forced on a section it does not fit', K.lesson(kidney).analogies.length === 0);
+}
+
+{
+  /* A list with no sentence before it takes its section's title as its
+     topic, without the part mark: "(part 3)" now, "(cont.)" in units
+     imported before parts were numbered. */
+  const items = ['Rheumatic', 'Infective endocarditis', 'Carcinoid syndrome'].map(t => seg(1, t, { item: true, list: 'L9' }));
+  const topics = ['Tricuspid stenosis (part 3)', 'Tricuspid stenosis (cont.)'].map(title => (K.lists({ title, segments: items })[0] || {}).title);
+  ok('a list’s topic is its section’s title without the part mark', topics.every(t => t === 'Tricuspid stenosis'), JSON.stringify(topics));
 }
 
 head('the analogy bank');
@@ -183,6 +206,15 @@ head('the analogy bank');
      would put Preload first; the stronger match must lead. */
   const both = withText({ index: 0, title: 'Loading', segments: [seg(1, 'Afterload and afterload and afterload. Preload and preload.')] });
   ok('the strongest match comes first, wherever it sits in the bank', A.forSection(both)[0].title === 'Afterload', A.forSection(both).map(a => a.title).join(', '));
+  /* A section about infarction that names LBBB over and over (a list of ECG
+     subsets, a table of them) and says what it is about in several words. */
+  const mi = withText({ index: 0, title: 'Electrocardiographic subsets', segments: [
+    seg(1, 'An infarct follows occlusion of a coronary artery. STEMI needs reperfusion; NSTEMI is managed by risk. Necrosis spreads from the endocardium over hours.'),
+    seg(1, 'New LBBB with symptoms.', { item: true, list: 'L1' }), seg(1, 'Old LBBB with Sgarbossa criteria.', { item: true, list: 'L1' }),
+    seg(1, 'LBBB with a paced rhythm.', { item: true, list: 'L1' }), seg(1, 'LBBB and RBBB together.', { item: true, list: 'L1' }), seg(1, 'LBBB in heart failure.', { item: true, list: 'L1' }),
+    seg(1, 'LBBB LBBB LBBB LBBB', { table: [['LBBB', 'LBBB'], ['LBBB', 'LBBB']] })] });
+  ok('what the section is about wins over one term repeated through it', A.forSection(mi)[0].title === 'Myocardial infarction', A.forSection(mi).map(a => a.title).join(', '));
+  ok('a table is not counted: its cells repeat, it is not prose', A.proseOf(mi).indexOf('LBBB LBBB LBBB LBBB') === -1 && A.proseOf(mi).indexOf('New LBBB') !== -1);
 }
 
 head('the drill: multiple choice from the book');

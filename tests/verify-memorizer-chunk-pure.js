@@ -232,7 +232,18 @@ head('what a cluster says about itself');
   ];
   const cs = C.clusterBlocks(blocks);
   ok('a cluster that holds a heading is titled by it', cs[0].title === 'Heart failure', cs[0].title);
-  ok('the next one, with none of its own, is titled as a continuation', cs[1] && cs[1].title === 'Heart failure (cont.)', cs[1] && cs[1].title);
+  ok('the next one, with none of its own, is titled as a continuation', cs[1] && cs[1].title === 'Heart failure (part 2)', cs[1] && cs[1].title);
+  /* The owner's whole book: seven sections in a row titled "Reperfusion
+     therapy (cont.)". Each part is numbered, and a new heading starts again. */
+  const partTitles = C.clusterBlocks([
+    { text: 'Reperfusion therapy', page: 1, heading: true },
+    { text: Array.from({ length: 1800 }, (_, i) => 'r' + i).join(' ') + '.', page: 1, heading: false },
+    { text: 'Risk stratification', page: 2, heading: true },
+    { text: Array.from({ length: 900 }, (_, i) => 's' + i).join(' ') + '.', page: 2, heading: false }]).map(c => c.title);
+  const rp = partTitles.filter(t => /^Reperfusion/.test(t)), sp = partTitles.filter(t => /^Risk/.test(t));
+  ok('parts are numbered in order, and numbering starts again under the next heading',
+     rp.length >= 3 && rp.every((t, i) => t === (i ? 'Reperfusion therapy (part ' + (i + 1) + ')' : 'Reperfusion therapy')) &&
+     sp.length >= 2 && sp[1] === 'Risk stratification (part 2)', partTitles.join(' | '));
   ok('its page range is the pages its words came from', cs[0].pageStart === 3 && cs[cs.length - 1].pageEnd === 4,
      cs.map(c => c.pageStart + '-' + c.pageEnd).join(', '));
   ok('its segments carry each page, so a prompt can mark [p.N]',
@@ -299,6 +310,15 @@ head('lines → blocks');
   ok('a word hyphenated across a line break is rejoined', texts.some(t => /LV pressure exceeds/.test(t)), texts.find(t => /LV/.test(t)));
   ok('a big short line is a heading', blocks.some(b => b.heading && b.text === 'Valve disease'));
   ok('a big line that is a sentence is body, not a heading', blocks.some(b => !b.heading && /pull quote/.test(b.text)));
+  /* A display title that recognition garbled, in big type: not a heading,
+     so it opens no section and is put in front of no title. */
+  const junk = C.blocksFromPages([{ page: 1, lines: [L('hy = rly', 20, 40), L('Risk stratification', 18, 60),
+    L('Early risk scores guide the choice of an invasive strategy after admission.', 11, 90)] }]).blocks;
+  ok('a garbled big line ("hy = rly") is not a heading; the real heading after it is', !junk.some(b => b.heading && /rly/.test(b.text)) &&
+     junk.some(b => b.heading && b.text === 'Risk stratification'), JSON.stringify(junk.map(b => [b.text, b.heading])));
+  ok('what reads as a heading: words, or an acronym or two — not symbols, numbers or fragments',
+     ['Reperfusion therapy', 'RISK STRATIFICATION', 'ECG', 'PET CT', 'Aortic Stenosis'].every(C.wordy) &&
+     !['hy = rly', 'rly hy', '— — —', '12.4', 'll | Il', 'Ix{y}', 'Heart = rly', '1234567 Valve', 'Srtk Pqlm'].some(C.wordy));
   ok('a vertical gap starts a new paragraph',
      blocks.some(b => b.text === 'A new paragraph begins after a gap.'), texts.filter(t => /paragraph/.test(t)).join(' | '));
   ok('blocks keep their page', blocks.filter(b => b.heading)[0].page === 1);
@@ -551,7 +571,7 @@ head('outline headings: found by their number, not their font');
   const titles = cs.map(c => c.title);
   ok('a section opening at an outline heading is titled under the heading above it',
      titles[1] === 'Tricuspid Stenosis: Pathophysiology', titles.join(' | '));
-  ok('its continuation says so', titles[2] === 'Tricuspid Stenosis: Pathophysiology (cont.)', titles.join(' | '));
+  ok('its continuation says so', titles[2] === 'Tricuspid Stenosis: Pathophysiology (part 2)', titles.join(' | '));
   ok('and the next size-set heading takes over', titles[3] === 'Tricuspid Regurgitation', titles.join(' | '));
   const two = C.clusterBlocks([
     { text: 'Tricuspid Stenosis', page: 1, heading: true }, para(300),

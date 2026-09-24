@@ -29,6 +29,8 @@
 (function (root) {
 'use strict';
 
+var Chunk = root.MemChunk || (typeof require === 'function' ? require('./chunk.js') : null);
+
 /* A method must find at least this many chapters to be preferred. */
 var MIN_CHAPTERS = 3;
 /* …and its chapters must reach this far into the book (first to last start,
@@ -84,15 +86,16 @@ function bodySizeOf(pages) {
   return sizes[Math.floor(sizes.length / 2)] || 1;
 }
 
-/* A chapter's title from its opening page: the given text if it has words,
-   else the biggest line on the page that is not the "Chapter N" line. */
+/* A chapter's title from its opening page: the given text if it reads as
+   words (Chunk.wordy — not a line recognition garbled), else the biggest
+   such line on the page that is not the "Chapter N" line. */
 function titleOn(page, given, skip) {
   var t = clean(given).replace(/\s+\d{1,4}$/, '');
-  if (/[A-Za-z]{2}/.test(t)) return t;
+  if (Chunk.wordy(t)) return t;
   var best = null;
   (page.lines || []).forEach(function (l) {
     var s = clean(l.text);
-    if (!s || s === skip || !/[A-Za-z]{2}/.test(s) || words(s).length > 16) return;
+    if (!s || s === skip || !Chunk.wordy(s) || words(s).length > 16) return;
     if (!best || (+l.size || 0) > (+best.size || 0)) best = l;
   });
   return best ? clean(best.text) : '';
@@ -155,7 +158,7 @@ function bySize(pages) {
   pages.forEach(function (p) {
     var big = (p.lines || []).filter(function (l) {
       var s = clean(l.text);
-      return (+l.size || 0) >= body * 1.5 && s && words(s).length <= 12 && /[A-Za-z]{2}/.test(s);
+      return (+l.size || 0) >= body * 1.5 && s && words(s).length <= 12 && Chunk.wordy(s);
     });
     big.forEach(function (l) { sizes[Math.round(+l.size)] = true; });
     tops.push({ p: p, big: big });

@@ -942,16 +942,18 @@ function viewUnit() {
     d.bookId ? h('p.muted.book-of', d.bookName + (d.chapter ? ' · chapter ' + d.chapter : ' · front matter') + ' · pp. ' + d.pageStart + '–' + d.pageEnd) : null,
     h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
+    /* Where to go next, at the top: it floated over the foot of the page
+       and covered the last sections (the owner's screenshot). */
+    h('div.unit-cta', allDone
+      ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
+      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })),
     ui.notice ? h('p.card.note', { id: 'notice', role: 'status' }, ui.notice) : null,
     weakCard(s),
     h('h2.grid-title', 'Sections (' + n + ')'),
     h('div.sections', { id: 'sections' }, cards),
     examCard,
     compareButton(s, d),
-    sourceCard(d),
-    h('div.sticky-cta', allDone
-      ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
-      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })));
+    sourceCard(d));
 }
 
 /* Where this unit came from and how well it was read (provenance.js):

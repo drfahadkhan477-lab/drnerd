@@ -237,11 +237,15 @@ function tracePath(width, beats) {
 /* A pearl's text in runs, with the numbers that carry units marked, so the
    threshold is what the eye lands on. */
 var FIGURE = /(\d+(?:[.,]\d+)?(?:\s?[–-]\s?\d+(?:[.,]\d+)?)?\s?(?:%|mmHg|mg|mcg|g|mL|ml|L\/min|cm|mm|ms|bpm|hours?|days?|weeks?|months?|years?)?)/;
+/* A number that names a place in the book — "Table 1.4", "Fig. 2", "p. 52"
+   — is not a value to learn, so it is not marked. */
+var PLACE = /\b(?:tables?|fig(?:ure)?s?|chapters?|sections?|pages?|pp?|box|panel|eq)\.?\s*$/i;
 function marks(text) {
-  var out = [];
+  var out = [], prev = '';
   String(text).split(FIGURE).forEach(function (part, i) {
     if (!part) return;
-    out.push({ text: part, num: i % 2 === 1 && /\d/.test(part) });
+    out.push({ text: part, num: i % 2 === 1 && /\d/.test(part) && !PLACE.test(prev) });
+    prev = part;
   });
   return out;
 }

@@ -512,6 +512,15 @@ function kindOf(user) {
   ok('the final exam is locked until every section is drilled', await page.locator('#exam-card.locked').count() === 1 &&
      /0 of 3/.test(await page.locator('#exam-card').innerText()) && await page.locator('#exam-card #to-exam').count() === 0);
   ok('and the one button says Learn unit', (await page.locator('#learn-unit').innerText()) === 'Learn unit');
+  /* The owner's screenshot: the button floated over the foot of the page and
+     covered the last sections, and each card carried a block of colour. The
+     button now sits above the sections, in the flow; the colour is a line. */
+  const unitLook = await page.evaluate(() => { const b = document.querySelector('#learn-unit'), s = document.querySelector('#sections');
+    const band = getComputedStyle(document.querySelector('#sections .band'));
+    return { above: b.getBoundingClientRect().bottom <= s.getBoundingClientRect().top, pos: getComputedStyle(b.parentElement).position,
+      fill: band.backgroundColor, line: parseFloat(band.borderTopWidth) }; });
+  ok('the button sits above the sections, not over them; each card’s colour is a line along its top',
+     unitLook.above && unitLook.pos === 'static' && /rgba\(0, 0, 0, 0\)|transparent/.test(unitLook.fill) && unitLook.line > 0 && unitLook.line <= 6, JSON.stringify(unitLook));
   const rec = await page.evaluate(() => MemStore.all('docs').then(d => d[0]));
   ok('the unit is stored with its page count', rec.pages === pdf.pages && rec.name === 'unit' && rec.source === 'pdf', `${rec.pages} pages`);
   ok('each section is titled by its heading', JSON.stringify(rec.clusters.map(c => c.title)) === JSON.stringify(pdf.titles),

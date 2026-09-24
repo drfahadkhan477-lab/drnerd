@@ -52,6 +52,20 @@ var SENTENCE_END = /[.!?]["'”’)\]]*$/;
 var CAUSAL = /\b(is|are|means|defined|refers|causes?|leads?|results?|because|therefore|due|increases?|decreases?|reduces?|occurs?|requires?|indicates?)\b/i;
 var NUM = /^\d+(?:[.,]\d+)?%?$/;
 var DEFINITION = /^(?:\S+\s+){0,5}(?:is|are|refers to|means|is defined as)\s/i;
+/* A figure's or a table's caption: "TABLE 1.4 Electrocardiographic
+   subsets …", "Figure 12-3. Anatomy of …" — the label, then a title that
+   starts with a capital (or another label). It labels a picture; it is not
+   a sentence to learn. The owner's first whole book had a caption as a
+   section's big idea, its label numbers marked as values. A sentence ABOUT
+   a table ("Table 17.1 lists the causes") goes on in lower case, and stays.
+   Case-sensitive on purpose: the capital is the difference. */
+var LABEL = '(?:[Tt]ables?|TABLES?|[Ff]ig(?:ure)?s?|FIG(?:URE)?S?|[Bb]ox|BOX|[Pp]anel|PANEL)\\.?\\s*[A-Z]?\\d+(?:[.\\-–]\\d+)*[a-z]?[.:]?';
+var CAPTION = new RegExp('^' + LABEL + '\\s+(?:' + LABEL + '\\s+)*[A-Z(]');
+/* A continuing section's title mark: "(part 3)", or "(cont.)" in a unit
+   imported before parts were numbered. */
+var CONTINUED = /\s*\((?:cont\.|part \d+)\)$/;
+/* Labels alone so far: "Figure 3-2." does not end a sentence there. */
+var LABELS_ONLY = new RegExp('^(?:' + LABEL + '\\s*)+$');
 /* "X is the most common cause of Y": the single highest-yield sentence shape
    in a clinical text, and a question in its own right. */
 var MOST = /\b(?:is|are|remains?|represents?)\s+(?:by far\s+)?the\s+most\s+(?:common|frequent|important)\s+/i;
@@ -114,10 +128,10 @@ function sentences(cluster, withItems) {
     var cur = [];
     String(seg.text).split(/\s+/).filter(Boolean).forEach(function (w, i, all) {
       cur.push(w);
-      if (SENTENCE_END.test(w) || i === all.length - 1) { out.push({ text: cur.join(' '), page: seg.page }); cur = []; }
+      if ((SENTENCE_END.test(w) && !LABELS_ONLY.test(cur.join(' '))) || i === all.length - 1) { out.push({ text: cur.join(' '), page: seg.page }); cur = []; }
     });
   });
-  return out.map(function (s, i) { s.index = i; return s; });
+  return out.filter(function (s) { return !CAPTION.test(s.text); }).map(function (s, i) { s.index = i; return s; });
 }
 
 /* How often each content word appears in the section, by stem: what the
@@ -224,7 +238,9 @@ function keySentences(cluster) {
      is taken first, up to half the points, whatever its words score: its
      words are often rare in the section (so it scores low), and it is
      exactly what an exam asks. */
-  var hasNum = function (s) { return s.text.split(/\s+/).some(function (w) { return NUM.test(bare(w)); }); };
+  /* (A number that names a table or a page — "Table 1.4 lists …" — is not
+     a value, and does not jump the queue: isFactNumber.) */
+  var hasNum = function (s) { var ws = s.text.split(/\s+/); return ws.some(function (w, i) { return isFactNumber(ws, i); }); };
   var picked = byScore.filter(hasNum).slice(0, Math.ceil(k / 2));
   /* So is the section's first DEFINITION — "X is …", "X refers to …" near
      the start of the sentence. It is the first thing an exam asks, and it is
@@ -621,7 +637,7 @@ function blankOut(text, word) {
 /* Every question the section can support, best kinds first. */
 function candidates(cluster, P) {
   var out = [], ci = cluster.index;
-  var title = String(cluster.title || '').replace(/\s*\(cont\.\)$/, '');
+  var title = String(cluster.title || '').replace(CONTINUED, '');
   var sents = sentences(cluster);
   var findSentence = function (frag) { return (sents.filter(function (s) { return s.text.indexOf(frag) !== -1; })[0] || {}).text || frag; };
   var otherTerms = P.terms;
@@ -1012,7 +1028,7 @@ function lists(cluster) {
       cur = null;
       return;
     }
-    var topic = topicOf(intro) || String(cluster.title || '').replace(/\s*\(cont\.\)$/, '');
+    var topic = topicOf(intro) || String(cluster.title || '').replace(CONTINUED, '');
     if (seg.sub) {
       /* "Congenital" + "causes of TS" → "Congenital causes of TS"; a
          sub-heading that already names its kind ("Causes of aortic

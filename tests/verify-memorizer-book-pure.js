@@ -98,6 +98,17 @@ head('"Chapter N" lines: openers found, headers and cross-references not fooling
   ok('with numbers only in running headers, a chapter starts at its first header', h.map(c => c.start).join() === '2,8,13,20' && h.map(c => c.n).join() === '1,2,3,4',
      JSON.stringify(h.map(c => [c.n, c.start, c.title])));
   ok('and is titled by the header, its page number dropped', h[0].title === 'Heart Failure', h[0].title);
+  /* The owner's first whole book: a chapter's display title, recognised
+     from a scan, came back as "hy = rly" in the biggest type on its opener.
+     It named the unit. A line that does not read as words is not a title. */
+  const garbled = makeBook(SPEC);
+  garbled[6].lines.unshift(L('hy = rly', 30, 40));
+  const gt = B.numbered(garbled).find(c => c.n === 2);
+  ok('a garbled line in the biggest type does not title the chapter: the real title does', gt && gt.title === 'Valve Disease', gt && gt.title);
+  const onLine = makeBook(SPEC);
+  onLine[6].lines[0] = L('Chapter 2 hy = rly', 24, 80);
+  const ol = B.numbered(onLine).find(c => c.n === 2);
+  ok('nor does one on the "Chapter N" line itself', ol && ol.title === 'Valve Disease', ol && ol.title);
   const long = [{ page: 1, lines: [L('Chapter 5 is where the reader will find the whole of the long discussion of this matter.', 10, 100)] }];
   ok(`a "Chapter N" line longer than ${B.NUMBERED_MAX_WORDS} words is running text`, B.numbered(long).length === 0);
 }
@@ -129,6 +140,10 @@ head('the size that opens chapters');
   const spread = makeBook(SPEC, { noHeaders: true });
   spread[1].lines.unshift(L('Learning objectives', 24, 60));
   ok('an opener over two pages is one chapter', B.bySize(spread).map(c => c.start).join() === '1,7,12,19', B.bySize(spread).map(c => c.start).join());
+  const garbledSize = makeBook(SPEC, { noHeaders: true });
+  garbledSize[6].lines.unshift(L('hy = rly', 24, 40));
+  const gs = B.bySize(garbledSize);
+  ok('nor, by size, is a garbled line part of the opener’s title', gs[1] && gs[1].title === 'Chapter 2 Valve Disease', gs[1] && gs[1].title);
   /* Section headings on every page: gaps of one page are sections. */
   const onlySections = makeBook(SPEC, { noHeaders: true }).map(p => ({ page: p.page, lines: p.lines.filter(l => l.size !== 24) }));
   ok(`a size on nearly every page (sections, under ${B.MIN_MEAN_PAGES} pages apart) is not either`, B.bySize(onlySections).length === 0,

@@ -222,6 +222,8 @@ head('the numbers in a pearl are marked');
   ok('each figure, with its unit', marked.join('|') === '18 mmHg|8|12|40%|3 days', marked.join('|'));
   ok('and the text between is left as it was', runs.map(r => r.text).join('') === 'Above 18 mmHg, or 8 to 12, in 40% of patients over 3 days.');
   ok('a sentence with no number has nothing marked', !H.marks('Preload rises with volume.').some(r => r.num));
+  const place = H.marks('TABLE 1.4 FIGURE 1.2 and Fig. 3, p. 52: a pressure above 18 mmHg.').filter(r => r.num).map(r => r.text.trim());
+  ok('a number that names a place in the book — a table, a figure, a page — is not marked; a value is', place.join('|') === '18 mmHg', place.join('|'));
 }
 
 head('weak spots: where the sessions say you are shakiest');
