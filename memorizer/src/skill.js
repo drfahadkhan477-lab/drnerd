@@ -30,7 +30,7 @@
    rule (this app teaches only from the uploaded PDF — the grounding rule in
    prompts.js wins wherever the two disagree); its free-recall and
    explain-aloud passes (the owner replaced them with multiple choice); its
-   navy/gold palette (the app has Systole's themes); its sprint clock and
+   navy/gold palette (the app has its own themes); its sprint clock and
    break prompts, and its self-growing known-mnemonics file (not built yet).
 
    PURE.

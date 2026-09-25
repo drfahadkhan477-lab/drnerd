@@ -2674,10 +2674,10 @@ function appearanceCard() {
     return Look.THEMES.filter(function (t) { return t.mode === mode; }).map(function (t) { return swatch(t.id, t.name, t.swatch); });
   };
   return h('div.card.settings', { id: 'appearance' }, h('h2', 'Appearance'),
-    h('p.muted', 'Systole’s themes and type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
+    h('p.muted', 'Daylight by day and Clinical at night, or Systole\u2019s Contrast; Systole\u2019s type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
     h('div.group-label', { id: 'lbl-theme' }, 'Theme'),
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' },
-      swatch('auto', 'Auto', ['#EFF3F8', '#0A1628']), themes('light')),
+      swatch('auto', 'Auto', [Look.byId(Look.AUTO.light).swatch[0], Look.byId(Look.AUTO.dark).swatch[0]]), themes('light')),
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' }, themes('dark')),
     seg('size', 'Text size'), seg('width', 'Reading width'), seg('spacing', 'Line spacing'),
     seg('contrast', 'Contrast'), seg('bright', 'Brightness'),

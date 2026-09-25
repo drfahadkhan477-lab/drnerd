@@ -288,8 +288,11 @@ every tap), give under the finger, and the pearl's steps arrive one by one.
 With reduced motion asked for, nothing moves, the strip is drawn still, and
 there is no light to follow; at High
 contrast, with less transparency asked for, or where the browser cannot
-blur, the glass is solid. The look is Systole's too: its
-themes, colour for colour, and its type scale, with text size, reading width,
+blur, the glass is solid. The themes are the owner's choice from mock-ups
+drawn on these screens: **Daylight** by day — the iPad's own grey grouped
+ground, white cards and system blue — and **Clinical** at night — near-black,
+graphite cards and monitor green — with Systole's **Contrast** kept, colour
+for colour. The type scale is Systole's, with text size, reading width,
 line spacing, font, contrast and brightness to choose. Contrast and
 brightness are computed from the theme you pick, and every theme at every
 setting is tested to keep its text at WCAG AA or better — measured against

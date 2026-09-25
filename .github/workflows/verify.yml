@@ -234,7 +234,7 @@ jobs:
         run: node tests/verify-memorizer-session-pure.js
       - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, makes the cards to memorise, and re-teaches by the kind of miss (137 checks)
         run: node tests/verify-memorizer-coach-pure.js
-      - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness, on glass and aurora as well as solid (42 checks)
+      - name: Memorizer — Daylight by day, Clinical at night and Systole's Contrast, readable at every contrast and brightness, on glass and aurora as well as solid (42 checks)
         run: node tests/verify-memorizer-appearance-pure.js
       - name: Memorizer — the home screen's progress, streak, pearl, the pearl's figure or table, and weak spots say true things (68 checks)
         run: node tests/verify-memorizer-home-pure.js

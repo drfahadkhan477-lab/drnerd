@@ -1,4 +1,4 @@
-/* Memorizer — Systole's themes and type ladder, iPad-first.
+/* Memorizer — the owner's two themes and Systole's type ladder, iPad-first.
    Colours come from appearance.js, which generates one block per theme;
    the :root below is Daylight, for the moment before it runs. Every size is
    rem, so the text-size setting (the root font size) scales all of it.
@@ -8,9 +8,10 @@
    busy spinner and the robot coach (which stands still under reduced
    motion). */
 :root {
-  --bg: #EFF3F8; --surface: #FFFFFF; --surface-2: #E6ECF3; --ink: #0F1E33; --muted: #4A5A70; --line: #D3DCE7;
-  --accent: #0369A1; --accent-soft: #E3F0FA; --accent-ink: #FFFFFF; --edge: #818C9B;
-  --hero-a: #12243F; --hero-b: #173A5E; --hero-c: #0F1E3D; --hero-accent: #5EEAD4; --hero-edge: rgba(94,234,212,.16); --hero-ink: #F4F7FB; --hero-muted: #CBD3DE;
+  --bg: #F2F2F7; --surface: #FFFFFF; --surface-2: #F2F2F7; --ink: #1C1C1E; --muted: #68686C; --line: #E5E5EA;
+  --accent: #0064D2; --accent-soft: #E6F0FC; --accent-ink: #FFFFFF; --edge: #89898C;
+  --hero-a: #FFFFFF; --hero-b: #F7F9FC; --hero-c: #FFFFFF; --hero-accent: #0064D2; --hero-edge: rgba(0,100,210,.10); --hero-ink: #1C1C1E; --hero-muted: #6C6C70;
+  --hero-pill: rgba(0,0,0,.04); --hero-pill-edge: rgba(0,0,0,.06);
   --good: #1A6B40; --good-soft: #E1F2E8; --mid: #7A5000; --mid-soft: #FBF0D6; --bad: #A3221B; --bad-soft: #F9E3E1;
   /* Type — Systole's minor third (1.2) from the body, named by role. */
   --t-micro: .5625rem; --t-tiny: .6875rem; --t-meta: .8125rem; --t-body: 1rem; --t-lead: 1.1875rem;
@@ -286,7 +287,7 @@ details.menu summary::-webkit-details-marker { display: none; }
 .big-idea { background: linear-gradient(145deg, var(--hero-a), var(--hero-b)); color: var(--hero-ink); border: 0; }
 .big-idea .eyebrow { color: var(--hero-accent); }
 .big-idea .big { font-size: var(--t-h4); line-height: 1.4; margin: var(--s-2) 0 0; font-weight: 600; }
-.big-idea mark { background: rgba(255,255,255,.18); color: inherit; }
+.big-idea mark { background: var(--hero-pill-edge); color: inherit; }
 .analogy { border-left: .375rem solid var(--accent); }
 .analogy h3 { margin-top: var(--s-1); }
 .analogy-text { font-size: var(--t-lead); line-height: 1.55; }
@@ -592,9 +593,9 @@ main[data-enter] .section-card { animation: rise-in .4s cubic-bezier(.2,.7,.2,1)
    panes under a stronger blur, a bright rim, a sheen from the top-left and a
    light that follows the finger (--px/--py, set by ui.js) — and the accent
    solid, where it used to run into a second colour. */
-:root { --accent-2: #0B7DB1; --glass: rgba(255,255,255,.52); --glass-strong: rgba(255,255,255,.74); --glass-2: rgba(230,236,243,.52);
+:root { --accent-2: #0051A8; --glass: rgba(255,255,255,.52); --glass-strong: rgba(255,255,255,.74); --glass-2: rgba(242,242,247,.52);
   --glass-edge: rgba(255,255,255,.75); --glass-blur: 28px; --glass-rim: rgba(255,255,255,.55); --glass-sheen: rgba(255,255,255,.30); --glass-light: rgba(255,255,255,.38);
-  --aura-1: rgba(94,234,212,.20); --aura-2: rgba(56,189,248,.18); --aura-3: rgba(129,140,248,.15);
+  --aura-1: rgba(0,122,255,.14); --aura-2: rgba(90,200,250,.16); --aura-3: rgba(175,82,222,.10);
   --ease-out: cubic-bezier(.2,.7,.2,1); --lift: 0 2px 4px rgba(0,0,0,.06), 0 18px 40px -12px rgba(0,0,0,.22); }
 body { position: relative; min-height: 100vh; }
 body::before { content: ""; position: fixed; inset: -20vmax; z-index: -1; pointer-events: none;
@@ -663,7 +664,7 @@ main[data-enter] { animation: screen-in .32s var(--ease-out) backwards; }
   background: radial-gradient(60% 120% at 100% 0%, var(--hero-edge), transparent 60%),
     radial-gradient(50% 90% at 0% 100%, rgba(255,255,255,.04), transparent 70%),
     linear-gradient(135deg, var(--hero-a), var(--hero-b) 55%, var(--hero-c));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 24px 60px -24px rgba(0,0,0,.55); }
+  box-shadow: inset 0 1px 0 var(--hero-pill-edge), var(--shadow); }
 .home-hero::after { content: ""; position: absolute; z-index: -1; width: 26rem; height: 26rem; right: -8rem; top: -12rem; border-radius: 50%; pointer-events: none;
   background: radial-gradient(circle, var(--hero-accent), transparent 65%); opacity: .18; animation: hero-glow 9s ease-in-out infinite alternate; }
 @keyframes hero-glow { from { transform: scale(.9); opacity: .08; } to { transform: scale(1.1); opacity: .16; } }
@@ -681,14 +682,14 @@ main[data-enter] .hero-trace path { animation: trace-draw 3.2s var(--ease-out) b
 @keyframes trace-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 .hero-stats { gap: var(--s-3); }
 .home-hero .pill.stat { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; min-width: 6.5rem; padding: .625rem 1rem; border-radius: 1.25rem;
-  font-size: var(--t-lead); color: var(--hero-ink); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
-  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  font-size: var(--t-lead); color: var(--hero-ink); background: var(--hero-pill); border: 1px solid var(--hero-pill-edge);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset 0 1px 0 var(--hero-pill-edge); }
 .home-hero button.pill.stat { cursor: pointer; transition: transform .2s var(--ease-out), background-color .2s; }
-.home-hero button.pill.stat:hover { transform: translateY(-2px); background: rgba(255,255,255,.14); }
+.home-hero button.pill.stat:hover { transform: translateY(-2px); background: var(--hero-pill-edge); }
 .stat-label { display: block; font-size: var(--t-tiny); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--hero-muted); }
 .home-hero .pill.stat-ring { flex-direction: row; align-items: center; gap: var(--s-2); }
 .home-hero .stat-ring .ring-wrap { width: 2.75rem; height: 2.75rem; }
-.home-hero .stat-ring .ring .track { stroke: rgba(255,255,255,.14); }
+.home-hero .stat-ring .ring .track { stroke: var(--hero-pill-edge); }
 .home-hero .stat-ring .ring .fill { stroke: var(--hero-accent); }
 .home-hero .stat-ring .ring-pct { color: var(--hero-ink); font-size: var(--t-tiny); }
 .home-hero .mascot { filter: drop-shadow(0 6px 16px rgba(0,0,0,.35)); }
