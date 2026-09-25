@@ -36,13 +36,17 @@ const many = (n, o) => Array.from({ length: n }, () => row(o));
 
 head('an empty log says nothing rather than saying zero');
 const empty = C.calibration([]);
-ok('no confidence bands claim an accuracy', empty.bands.every(b => b.accuracy === null));
-ok('every band is marked sparse', empty.bands.every(b => b.sparse));
+/* Every band, not "whatever came back": [].every() is true, so a log with no answers returning no bands at all
+   passed both of these. The card draws one row per band in BANDS. */
+ok('no confidence bands claim an accuracy', empty.bands.length === C.BANDS.length && empty.bands.every(b => b.accuracy === null),
+   `${empty.bands.length} of ${C.BANDS.length} bands`);
+ok('every band is marked sparse', empty.bands.length === C.BANDS.length && empty.bands.every(b => b.sparse));
 ok('the headline figure is null, not 0 — 0 would read as "never wrong"',
    empty.certainButWrong === null, String(empty.certainButWrong));
 ok('and it reports that there is not enough', empty.enough === false);
 ok('speed over an empty log is null, not 0', C.speed([]).correctMs === null);
-ok('reasons over an empty log share nothing', C.reasons([]).counts.every(c => c.share === null));
+ok('reasons over an empty log share nothing', C.reasons([]).counts.length === C.REASONS.length && C.reasons([]).counts.every(c => c.share === null),
+   `${C.reasons([]).counts.length} of ${C.REASONS.length} reasons`);
 
 head('a sparse band refuses to quote a percentage');
 const sparse = C.calibration([...many(3, { cf: 3, ok: 1 })]);
