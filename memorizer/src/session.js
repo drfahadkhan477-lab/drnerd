@@ -322,6 +322,25 @@ function next(state, event) {
       return s;
     }
 
+    /* A unit's pack (pack.js), imported: each section it covers is taught
+       from it — its lesson now, its questions from the next drill on. The
+       section open in the middle of memorising, a drill or its result keeps
+       what it has until it is left: its cards and answers count against the
+       lesson and questions on screen. What a section has already earned —
+       its score, its review cards, its weak items — stays. */
+    case 'packed': {
+      if (s.phase === 'exam') refuse(s, event, 'finish or leave the exam first');
+      if (!v || !Array.isArray(v.sections)) refuse(s, event, 'a pack is a list of sections');
+      v.sections.forEach(function (p) {
+        var k = p && p.index, cp = typeof k === 'number' ? s.per[k] : null;
+        if (!cp || !p.lesson || !Array.isArray(p.lesson.points) || !p.lesson.points.length) return;
+        if (k === s.section && /^(?:memorize|drill|result)$/.test(s.phase)) return;
+        cp.lesson = clone(p.lesson);
+        if (p.quiz && validQuestions(p.quiz)) { cp.quiz = { questions: clone(p.quiz.questions) }; cp.order = []; cp.pos = 0; cp.answers = []; }
+      });
+      return s;
+    }
+
     case 'toExam':
       if (s.phase === 'drill' || s.phase === 'exam') refuse(s, event, 'finish the drill first');
       if (!allDone(s)) refuse(s, event, 'the exam comes after every section’s drill');

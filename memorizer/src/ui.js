@@ -19,7 +19,7 @@ var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
 var Skill = root.MemSkill, Monitor = root.MemMonitor;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance, Study = root.MemStudy;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance, Study = root.MemStudy, Pack = root.MemPack;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -218,7 +218,14 @@ function pump() {
   var s = ui.state;
   if (!s || ui.busy || ui.error) return;
   var c = s.per[s.section];
-  if (s.phase === 'teach' && !c.lesson) {
+  /* The unit's pack (pack.js), where it has this section: already checked
+     against the book when it was imported, so nothing to ask for. */
+  var fromPack = Pack.sectionOf(ui.pack, s.section);
+  if (s.phase === 'teach' && !c.lesson && fromPack) {
+    dispatch({ type: 'taught', value: JSON.parse(JSON.stringify(fromPack.lesson)) }).then(render);
+  } else if (s.phase === 'drill' && !c.quiz && fromPack && fromPack.quiz.questions.length) {
+    dispatch({ type: 'quizReady', value: JSON.parse(JSON.stringify(fromPack.quiz)) }).then(render);
+  } else if (s.phase === 'teach' && !c.lesson) {
     ask('Preparing the lesson…', 'lesson', [cluster()], [cluster()])
       .then(function (v) { return dispatch({ type: 'taught', value: v }); })
       .then(render, function () {});
@@ -447,9 +454,10 @@ function recut(book, chapters, method) {
 }
 
 function openDoc(id, section) {
-  return Promise.all([Store.get('docs', id), Store.get('sessions', id)]).then(function (r) {
+  return Promise.all([Store.get('docs', id), Store.get('sessions', id), Store.get('packs', id)]).then(function (r) {
     ui.docRec = r[0];
     ui.docId = id;
+    ui.pack = r[2] || null; ui.packReport = null; ui.packText = ''; ui.packOpen = false; ui.packShow = false;
     var st = r[1] && r[1].state;
     ui.state = Session.resumable(st) ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }));
     ui.state = Session.next(ui.state, { type: 'toUnit' });
@@ -490,6 +498,15 @@ function readBuffer(file) {
     r.onload = function () { resolve(r.result); };
     r.onerror = function () { reject(r.error || new Error('could not read the file')); };
     r.readAsArrayBuffer(file);
+  });
+}
+function readText(file) {
+  if (file.text) return file.text();
+  return new Promise(function (resolve, reject) {
+    var r = new FileReader();
+    r.onload = function () { resolve(r.result); };
+    r.onerror = function () { reject(r.error || new Error('could not read the file')); };
+    r.readAsText(file);
   });
 }
 /* ── mermaid, loaded only when a flowchart is first shown ────────────────── */
@@ -949,12 +966,72 @@ function viewUnit() {
       ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
       : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })),
     ui.notice ? h('p.card.note', { id: 'notice', role: 'status' }, ui.notice) : null,
+    packCard(d),
     weakCard(s),
     h('h2.grid-title', 'Sections (' + n + ')'),
     h('div.sections', { id: 'sections' }, cards),
     examCard,
     compareButton(s, d),
     sourceCard(d));
+}
+
+/* THE STUDY PACK (pack.js): the prompt to copy into the owner's own
+   Claude chat, and the reply pasted back, checked against the book before
+   any of it is stored. */
+function packCard(d) {
+  var cov = Pack.coverage(ui.pack, d), r = ui.packReport;
+  var status = h('span.muted', { id: 'pack-copy-status', role: 'status' });
+  var area = h('textarea', { id: 'pack-text', rows: '4', 'aria-label': 'Claude\u2019s reply', placeholder: 'Paste Claude\u2019s whole reply here, code block and all.',
+    oninput: function () { ui.packText = area.value; } });
+  area.value = ui.packText || '';
+  var file = h('input', { type: 'file', accept: 'application/json,.json,text/plain,.txt', id: 'pack-file', class: 'visually-hidden',
+    onchange: function (e) { var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) readText(f).then(importPack, function (err) { ui.packReport = { error: err.message || String(err) }; render(); }); } });
+  var left = cov.next && cov.have ? 'Still to import: ' + (cov.next[0] === cov.next[1] ? 'section ' + cov.next[0] : 'sections ' + cov.next[0] + '\u2013' + cov.next[1]) + '.' : '';
+  /* folded to its one line until opened; open after an import, for its
+     report. Every tap redraws the page, so the fold is remembered. */
+  var card = h('details.card.pack-card', { id: 'pack-card', open: ui.packOpen || r ? true : null, ontoggle: function () { ui.packOpen = card.open; } },
+    h('summary', h('span.eyebrow', '\u2726 Study pack \u00B7 written with Claude'),
+      h('span.muted.pack-status', { id: 'pack-status' }, cov.have ? cov.have + ' of ' + cov.of + ' sections' + (cov.flagged ? ' \u00B7 ' + cov.flagged + ' flagged' : '') : 'none yet')),
+    h('p', 'Have Claude write this unit\u2019s lessons and questions, with your Braunwald and Memorizer skills, and import its reply here. ' +
+      'Memorizer checks every number, page and quoted sentence, and the conditions, tests and treatments it names, against your book; what it cannot find is flagged where it is shown.'),
+    h('ol.pack-steps',
+      h('li', 'Copy the prompt. It carries this unit\u2019s text, page by page.'),
+      h('li', 'Paste it into a new chat on claude.ai' + (cov.of > Pack.PER_REPLY ? ', and say \u201Cnext\u201D after each reply' : '') + '.'),
+      h('li', 'Paste each reply here and import it.')),
+    h('div.row', button('Copy the prompt', function () { copyText(Pack.prompt(d), status, function () { ui.packShow = true; render(); }); }, 'primary', { id: 'pack-copy' }),
+      button(ui.packShow ? 'Hide the prompt' : 'Show the prompt', function () { ui.packShow = !ui.packShow; render(); }, 'quiet', { id: 'pack-show' }), status),
+    ui.packShow ? h('textarea.pack-prompt', { id: 'pack-prompt', rows: '6', readonly: true, 'aria-label': 'The prompt for Claude', onfocus: function (e) { e.target.select(); } }, Pack.prompt(d)) : null,
+    left ? h('p.muted', { id: 'pack-next' }, left) : null,
+    area,
+    h('div.row', button('Check and import', function () { importPack(area.value); }, 'primary', { id: 'pack-import' }),
+      file, h('label.chip', { for: 'pack-file' }, 'Or choose a file')),
+    r ? packReportView(r) : null);
+  return card;
+}
+function packReportView(r) {
+  if (r.error) return h('p.warn', { id: 'pack-report', role: 'status' }, 'Not imported: ' + r.error + '.');
+  return h('div.pack-report', { id: 'pack-report', role: 'status' },
+    h('p', h('strong', r.report.line)),
+    r.refused.length ? h('ul.pack-refused', r.refused.map(function (x) {
+      return h('li', 'Section ' + (x.section == null ? '?' : x.section) + (x.title ? ' \u201C' + x.title + '\u201D' : '') + ' was not imported: ' + x.why + '.');
+    })) : null,
+    r.dropped.length ? h('details.pack-dropped', h('summary', Home.count(r.dropped.length, 'item') + ' left out'),
+      h('ul', r.dropped.map(function (x) { return h('li', 'Section ' + x.section + ', ' + x.where + ': ' + x.why + '.'); }))) : null);
+}
+/* A reply, checked and stored: its sections replace the built-in lessons
+   and questions (session.js 'packed'); nothing is stored when nothing
+   passed. */
+function importPack(text) {
+  var d = ui.docRec, got = Pack.parse(text);
+  if (!got.ok) { ui.packReport = { error: got.error }; render(); return Promise.resolve(); }
+  var checked = Pack.check(got.packs, d);
+  ui.packReport = { report: Pack.report(checked), refused: checked.refused, dropped: checked.dropped };
+  if (!checked.sections.length) { render(); return Promise.resolve(); }
+  var rec = Pack.merge(ui.pack, checked, d, Date.now());
+  return Store.put('packs', rec).then(function () {
+    ui.pack = rec; ui.packText = '';
+    return dispatch({ type: 'packed', value: { sections: checked.sections } });
+  }).then(render, function (e) { saveFailed(e); render(); });
 }
 
 /* Where this unit came from and how well it was read (provenance.js):
@@ -1080,9 +1157,15 @@ function pointCard(c, p, i) {
     h('div.point-body',
       hyTags(p.text),
       h('p.point-text', b.lead ? [h('strong.lead', b.lead), marked(b.body)] : withKey(b.body, Coach.keyTermOf(c, p.text)), ' ', page(p.page)),
+      flagLine(p.flag),
       b.subs.length ? h('ul.subs', b.subs.map(function (x) { return h('li', marked(x)); })) : null,
       para && para.text.length > p.text.length + 20 ? h('details.context', h('summary', 'In the book'),
         h('p', marked(para.text))) : null));
+}
+/* What a pack's check could not find in the book (pack.js), said on the
+   item itself. */
+function flagLine(why) {
+  return why ? h('p.flag', { 'data-flag': why }, '\u26A0 ' + why.charAt(0).toUpperCase() + why.slice(1) + '.') : null;
 }
 /* Why a point is high-yield, from its own words (Coach.yieldOf): "Most
    common", "First-line", "Threshold" … — whatever wrote the lesson. */
@@ -1129,7 +1212,7 @@ function teachCard(c, L) {
   var res = got ? h('div', { id: 'teach-result' },
     h('p', h('strong', 'You covered ' + got.r.covered.length + ' of ' + (got.r.covered.length + got.r.missed.length) + ' key points.')),
     got.r.wrong.length ? h('p.warn', { id: 'teach-wrong' }, 'You gave ' + got.r.wrong.join(', ') + ' — this section has no such number. Check it against the page.') : null,
-    got.r.missed.length ? [h('p.muted', 'What you left out, in your book’s words:'), h('ul.teach-missed', got.r.missed.map(function (i) { return h('li', marked(got.points[i].text), ' ', page(got.points[i].page)); })),
+    got.r.missed.length ? [h('p.muted', L.by === 'pack' ? 'What you left out, in the lesson\u2019s words:' : 'What you left out, in your book’s words:'), h('ul.teach-missed', got.r.missed.map(function (i) { return h('li', marked(got.points[i].text), ' ', page(got.points[i].page)); })),
       button('Make cards of what I left out', function () { teachCards(c, got); }, 'quiet', { id: 'teach-cards' })] : h('p', '✓ Everything the section’s key points say.'),
     ui.teachMade != null ? h('p.muted', { id: 'teach-made' }, ui.teachMade + ' card' + (ui.teachMade === 1 ? '' : 's') + ' made, from tomorrow.') : null) : null;
   return h('div.card.teach-card', { id: 'teach-back' }, h('span.eyebrow', '🗣 Teach it back'),
@@ -1269,11 +1352,11 @@ function savePng(svg, name) {
   };
   img.src = svgUrl(svg);
 }
-function showFigure(svg, name) {
+function showFigure(svg, name, note) {
   var close = function () { closeFn(); };
   var el = h('div.lightbox.figure-view', { 'aria-label': name },
     h('img', { src: svgUrl(svg), alt: name }),
-    h('p.muted.fig-note', 'Every word and number here is your book\u2019s, arranged by Memorizer.'),
+    h('p.muted.fig-note', note || 'Every word and number here is your book\u2019s, arranged by Memorizer.'),
     h('div.row', button('Save image', function () { savePng(svg, name); }, 'primary', { id: 'save-figure' }), button('Close', close, '', { 'data-autofocus': true, id: 'fig-close' })));
   var closeFn = Dialog.open(el, doc.getElementById('app'));
 }
@@ -1302,6 +1385,7 @@ function numbersCard(sh, play) {
             h('span.tile-label', { 'data-start': t0 + 0.55, 'data-duration': 0.35, 'data-anim': 'fade' }, t.label));
         })),
         n.subject ? null : h('p.muted.fact-src', 'p.' + n.page),
+        flagLine(n.flag),
         h('details.context', h('summary', 'The sentence'), h('p', marked(n.text), ' ', page(n.page))));
     }));
 }
@@ -1317,6 +1401,24 @@ function ocrNote(c) {
   return h('p.warn.ocr-lesson', { id: 'ocr-note' },
     d.source === 'photo' ? 'This section was read from a photo by text recognition. ' : 'Part of this section was read from a scanned page by text recognition (' + (ns.length === 1 ? 'p. ' : 'pp. ') + Prov.pageList(ns) + '). ',
     'Recognition can misread a number or a word: check anything surprising against the page.');
+}
+/* What only a pack's lesson has (pack.js): the label saying who wrote it,
+   the mechanism, the pairs that get confused, the pearls. */
+function packCards(L) {
+  var flagged = (L.points || []).concat(L.numbers || [], L.pearls || [], L.distinctions || []).filter(function (x) { return x.flag; }).length +
+    Object.keys(L.flags || {}).length;
+  return {
+    label: h('p.pack-label', { id: 'pack-label' }, h('strong', '\u2726 Written with Claude'), ' \u00B7 checked against your book',
+      flagged ? h('span.pack-flagged', ' \u00B7 ' + flagged + ' not found in it, flagged') : null),
+    mechanism: L.mechanism ? h('div.card.mechanism', { id: 'mechanism' }, h('span.eyebrow', 'The mechanism'), h('p', marked(L.mechanism)),
+      flagLine(L.flags && L.flags.mechanism)) : null,
+    distinctions: (L.distinctions || []).length ? h('div.card.distinctions', { id: 'distinctions' }, h('span.eyebrow', 'Don\u2019t confuse'),
+      h('ul.confuse', L.distinctions.map(function (x) {
+        return h('li', h('p.confuse-pair', h('strong', x.a), h('span.vs', ' vs '), h('strong', x.b)), h('p', marked(x.how), ' ', page(x.page)), flagLine(x.flag));
+      }))) : null,
+    pearls: (L.pearls || []).length ? h('div.card.pearls', { id: 'pearls' }, h('span.eyebrow', 'Exam pearls'),
+      h('ul.pearl-list', L.pearls.map(function (x) { return h('li', marked(x.text), ' ', page(x.page), flagLine(x.flag)); }))) : null,
+  };
 }
 function viewLesson() {
   var s = ui.state, c = cluster(), L = s.per[s.section].lesson;
@@ -1338,13 +1440,16 @@ function viewLesson() {
   var n = 0;
   var all = [{ text: sh.bigIdea }].concat(sh.groups.reduce(function (a, g) { return a.concat(g.points); }, []));
   var tools = h('div.row',
-    button('🖼 Study card', function () { showFigure(Figure.studyCard(c.title, sh, L.mnemonics || [], sourceLine(ui.docRec, c)), c.title + ' study card'); }, 'quiet', { id: 'make-card' }),
+    button('🖼 Study card', function () { showFigure(Figure.studyCard(c.title, sh, L.mnemonics || [], sourceLine(ui.docRec, c)), c.title + ' study card', fromPack ? 'Written with Claude from your book, and checked against it; arranged by Memorizer.' : ''); }, 'quiet', { id: 'make-card' }),
     button('🔊 Listen', function () { speak(all.map(function (p) { return p.text; }).join('. ')); }, 'quiet'));
   var group = function (g) {
     return h('section.point-group', h('h3.group-head', h('span.group-mark', { 'aria-hidden': 'true' }, HEAD_MARK[g.heading] || '•'), g.heading),
       h('ol.points', { start: String(n + 1) }, g.points.map(function (p) { return pointCard(c, p, n++); })));
   };
-  var bigIdea = h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(sh.bigIdea)));
+  var fromPack = L.by === 'pack';
+  var bigIdea = h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(sh.bigIdea)),
+    fromPack && L.flags && sh.bigIdea === L.overview ? flagLine(L.flags.overview) : null);
+  var pk = fromPack ? packCards(L) : {};
   var moreAnalogies = analogies.length > 1 ? h('details.card.more-analogies', h('summary', 'More analogies (' + (analogies.length - 1) + ')'), analogies.slice(1).map(function (a) { return analogyCard(a, false); })) : null;
   /* the built-in pathway is on the glance card; a model's flowchart is its own */
   var flowCard = L.flowchart && L.flowchart.trim() || !(Sheet.glance(c) || {}).pathway || !Sheet.glance(c).pathway.length ? drawFlowCard(c, L) : null;
@@ -1356,7 +1461,8 @@ function viewLesson() {
     /* STEP BY STEP — one card at a time, like the owner's reference: the
        idea, then each heading's points, the numbers, each mnemonic, a check,
        then what else the section has; the drill at the end. */
-    var parts = [{ label: 'The big idea', nodes: [bigIdea, analogies.length ? analogyCard(analogies[0], true) : null] }];
+    var parts = [{ label: 'The big idea', nodes: [pk.label, bigIdea, analogies.length ? analogyCard(analogies[0], true) : null] }];
+    if (pk.mechanism) parts.push({ label: 'The mechanism', nodes: [pk.mechanism] });
     var gl = Sheet.glance(c, (L.mnemonics || []).map(function (m) { return m.title; }));
     if (gl && gl.pathway.length >= 2) parts.push({ label: 'How it works', nodes: [pathwayPlay(gl.pathway)] });
     var facts = glanceCard(c, L, true);
@@ -1366,6 +1472,8 @@ function viewLesson() {
     });
     var nums = numbersCard(sh, true);
     if (nums) parts.push({ label: 'Numbers to know', nodes: [nums] });
+    if (pk.distinctions) parts.push({ label: 'Don\u2019t confuse', nodes: [pk.distinctions] });
+    if (pk.pearls) parts.push({ label: 'Exam pearls', nodes: [pk.pearls] });
     (L.mnemonics || []).forEach(function (m) { parts.push({ label: 'Remember it: ' + m.title, nodes: [mnemonicPlay(m)] }); });
     var qc = quickCheck(c, L);
     if (qc) parts.push({ label: 'Check yourself', nodes: [qc] });
@@ -1392,14 +1500,18 @@ function viewLesson() {
     sectionBar('teach'),
     ocrNote(c),
     h('div.row.lesson-mode', button('▶ Play this section', function () { setStepMode(true); ui.step = null; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'step-mode' })),
+    pk.label,
     bigIdea,
+    pk.mechanism,
     glanceCard(c, L),
     analogies.length ? analogyCard(analogies[0], true) : null,
     h('div.card', { id: 'points' },
       h('div.card-head', h('h2', 'Key points'), tools),
       sh.groups.map(group),
-      h('p.muted.arranged-note', 'Headings arranged by Memorizer; the points are your book’s.')),
+      h('p.muted.arranged-note', fromPack ? 'Headings arranged by Memorizer; the points written with Claude from your book.' : 'Headings arranged by Memorizer; the points are your book’s.')),
     numbersCard(sh),
+    pk.distinctions,
+    pk.pearls,
     mnemonics,
     /* after everything has been read: recall, not a look at the next card */
     quickCheck(c, L),
@@ -1495,9 +1607,22 @@ function mcqCard(q, meta, onNext, reveal, nav, after, opts) {
       reveal ? h('p.muted', reveal) : null,
       askSure && !right && !unsure && ui.sure ? hazardNote() : null,
       h('p', h('span.why-label', 'Why: '), marked(q.explain), q.page ? [' ', page(q.page)] : null),
+      whyNot(q, chosen, right),
       past ? null : after ? after(chosen, right) : right ? null : h('p.muted', 'This one is now a review card, and it comes back at the end of this drill.'),
       past ? null : h('div.row.mcq-nav', prev, button('Next →', onNext, 'primary big', { id: 'next' }))) : null,
     past ? h('div.row.mcq-nav', prev, fwd) : !answered && prev ? h('div.row.mcq-nav', prev) : null);
+}
+/* A pack's question (pack.js) says why each wrong option is wrong, and
+   names the trap it sets: the reason for the one chosen first, then every
+   option's, folded. */
+function whyNot(q, chosen, right) {
+  var why = q.why || [];
+  var mine = !right && chosen >= 0 && why[chosen] ? h('p.why-not', { id: 'why-not' }, h('span.why-label', 'Why not ' + LETTERS[chosen] + ': '), marked(why[chosen])) : null;
+  var all = why.length === q.options.length && why.some(Boolean) ? h('details.why-all', { id: 'why-all' }, h('summary', 'Why each option is right or wrong'),
+    h('ul', q.options.map(function (o, i) {
+      return h('li' + (i === q.answer ? '.right' : ''), h('strong', LETTERS[i] + '. ' + o), ' \u2014 ', i === q.answer ? 'the answer.' : marked(why[i] || ''));
+    }))) : null;
+  return [mine, q.trap ? h('p.trap', { id: 'trap' }, h('span.why-label', 'The trap: '), q.trap) : null, flagLine(q.flag), all];
 }
 /* Sure or not, said before answering (study.js rateWith). */
 function sureToggle() {
@@ -1549,6 +1674,7 @@ function viewDrill() {
   var firsts = c.quiz.questions.length;
   var meta = [h('span', retry ? 'Again — you missed this one' : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
     q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · its answer checked against your book') : null,
+    q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, q.flag ? '\u2726 Written with Claude \u00B7 \u26A0 not all of it found in your book' : '\u2726 Written with Claude \u00B7 checked against your book') : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
   /* The kind of miss, read from what happened (skill.js); a second miss in
      a row is re-taught on the spot with a different kind of hook. */
@@ -1597,22 +1723,26 @@ function viewReviewRound() {
   return [backBar('Review round', function () { go({ type: 'toUnit' }); }),
     mcqCard(q, meta, function () { go({ type: 'reviewAnswered', choice: ui.choice }); }, from ? 'From \u201C' + from + '\u201D' : '', null, after)];
 }
+/* Text to the clipboard, and `status` says whether it got there. */
+function copyText(text, status, onFail) {
+  var done = function () { status.textContent = 'Copied.'; };
+  try {
+    if (root.navigator && root.navigator.clipboard && root.navigator.clipboard.writeText) { root.navigator.clipboard.writeText(text).then(done, fallback); return; }
+  } catch (_) {}
+  fallback();
+  function fallback() {
+    var ta = h('textarea', { 'aria-hidden': 'true', style: 'position:fixed;left:-9999px' }); ta.value = text; doc.body.appendChild(ta); ta.select();
+    var copied = false;
+    try { copied = doc.execCommand('copy'); } catch (_) {}
+    doc.body.removeChild(ta);
+    if (copied) done();
+    else { status.textContent = 'Your browser would not copy it.'; if (onFail) onFail(); }
+  }
+}
 /* The skill's closing deliverable, after the exam (skill §16). */
 function closingCard(s) {
   var c = Session.closing(s), status = h('span.muted', { id: 'copy-status', role: 'status' });
-  var copy = function () {
-    var text = Session.closingText(s);
-    var done = function () { status.textContent = 'Copied.'; };
-    try {
-      if (root.navigator && root.navigator.clipboard && root.navigator.clipboard.writeText) { root.navigator.clipboard.writeText(text).then(done, fallback); return; }
-    } catch (_) {}
-    fallback();
-    function fallback() {
-      var ta = h('textarea', { 'aria-hidden': 'true', style: 'position:fixed;left:-9999px' }); ta.value = text; doc.body.appendChild(ta); ta.select();
-      try { doc.execCommand('copy'); done(); } catch (_) { status.textContent = 'Select and copy it from here.'; }
-      doc.body.removeChild(ta);
-    }
-  };
+  var copy = function () { copyText(Session.closingText(s), status); };
   return h('div.card.closing', { id: 'closing' },
     h('h2', 'Your sheet for the exam'),
     h('h3', 'Three pillars'), h('ol.pillars', c.pillars.map(function (p) { return h('li', marked(p.text), p.page ? [' ', page(p.page)] : null); })),

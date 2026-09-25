@@ -79,7 +79,7 @@ function sheetOf(lesson) {
   var norm = function (t) { return String(t).replace(/\s+/g, ' ').replace(/[.\s]+$/, '').toLowerCase(); };
   var numbers = (L.numbers || []).map(function (n) {
     var t = numberTiles(n.text);
-    return { subject: t.subject, tiles: t.tiles, page: n.page, text: n.text };
+    return { subject: t.subject, tiles: t.tiles, page: n.page, text: n.text, flag: n.flag || '' };
   }).filter(function (n) { return n.tiles.length; });
   /* A point shown as tiles is not shown again as a sentence. */
   var tiled = numbers.map(function (n) { return norm(n.text); });

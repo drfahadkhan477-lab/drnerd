@@ -114,6 +114,24 @@ head('it refuses the licensed bank, by every route in');
   ok('and the header only counts on the first line, where verify.js writes it',
      r.code === 0, r.out.trim().slice(0, 60));
 
+  /* 6. PACK — the owner's textbook, by way of Memorizer's study pack
+     (memorizer/src/pack.js). Both fixtures are made here by pack.js itself,
+     from a two-line synthetic unit, so what is recognised is what the app
+     really writes and no book is involved. */
+  const Pack = require(path.join(ROOT, 'memorizer', 'src', 'pack.js'));
+  const unit = { id: 'u', name: 'Unit', clusters: [{ title: 'One', pageStart: 1, pageEnd: 1, segments: [{ text: 'A synthetic sentence.', page: 1 }] }] };
+  r = run([write('prompt-for-claude.txt', Pack.prompt(unit))]);
+  ok('a Memorizer prompt, which carries the book\u2019s text and the pack\u2019s shape, is refused', r.code === 1 && /PACK/.test(r.out), r.out.match(/PACK.*/)?.[0] || r.out.slice(0, 60));
+  const reply = JSON.stringify({ format: Pack.FORMAT, version: Pack.VERSION, unit: 'Unit', sections: [Pack.EXAMPLE] }, null, 2);
+  r = run([write('chapter-7.json', reply)]);
+  ok('and so is the pack Claude writes back, under any name', r.code === 1 && /PACK/.test(r.out));
+  r = run([write('reply.md', 'Here is reply 1.\n```json\n' + JSON.stringify({ format: Pack.FORMAT, sections: [] }) + '\n```\n')]);
+  ok('in a code fence, compact, with prose around it', r.code === 1 && /PACK/.test(r.out));
+  r = run([path.join(ROOT, 'memorizer', 'src', 'pack.js'), path.join(ROOT, 'tests', 'verify-memorizer-pack-pure.js')]);
+  ok('while the code that names the format is not refused', r.code === 0, r.out.trim().slice(0, 80));
+  r = run([write('pack-notes.md', 'Notes on the memorizer-pack format, and its "format" key.\n')]);
+  ok('nor prose that mentions it', r.code === 0, r.out.trim().slice(0, 60));
+
   /* 2. NAME — the export dragged somewhere unignored. */
   r = run(['assets/ACCSAP_12_super_v12.html']);
   ok('an ACCSAP export is refused wherever it has been moved to',

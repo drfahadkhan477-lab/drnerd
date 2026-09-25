@@ -2123,6 +2123,100 @@ function kindOf(user) {
     ok('figures stored by an older finder are found again, and kept', refound === stale.was, refound.slice(0, 120));
   }
 
+  head('a study pack written with Claude: the prompt out, the reply in, held to the book');
+  {
+    /* A fresh profile on the built-in coach, as the owner uses it: the pack
+       is how Claude's work reaches the app without a key. The clipboard is
+       granted so the copy can be read back. */
+    const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block', permissions: ['clipboard-read', 'clipboard-write'] });
+    const p4 = watch(await ctx.newPage(), events, 'pack', errors);
+    await wire(p4);
+    const aiBefore = stub.requests.length;
+    await p4.goto(URL);
+    await p4.locator('#door-add').waitFor(T);
+    await p4.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
+    await p4.locator('#sections .section-card').first().waitFor(T);
+    ok('a unit with no pack says so, folded to one line', /none yet/.test(await text(p4, '#pack-card summary')) &&
+       await p4.evaluate(() => !document.querySelector('#pack-card').open));
+    await p4.locator('#pack-card summary').click();
+    await p4.locator('#pack-copy').click();
+    await p4.waitForFunction(() => /Copied|copy it/.test(document.querySelector('#pack-copy-status').textContent), null, T);
+    const want = await p4.evaluate(() => MemPack.prompt(Memorizer.ui.docRec));
+    const got = await p4.evaluate(() => navigator.clipboard.readText().catch(e => 'unreadable: ' + e.message));
+    ok('the prompt is copied whole: the rules, the shape, every section and its text', got === want && /THE CHAPTER TEXT/.test(want) &&
+       /1\. "Section One Preload"/.test(want) && /\[p\.1\] .*Diuretics reduce preload/.test(want), got.slice(0, 80));
+    ok('and the card stays open while it is used', await p4.evaluate(() => document.querySelector('#pack-card').open));
+    await p4.locator('#pack-show').click();
+    ok('the prompt can be shown, to select by hand', (await p4.locator('#pack-prompt').inputValue()) === want);
+
+    const d = await p4.evaluate(() => Memorizer.ui.docRec);
+    const c0 = d.clusters[0], pg = c0.pageStart;
+    const reply = { format: 'memorizer-pack', version: 1, unit: d.name, sections: [
+      { section: 1, title: c0.title, lesson: {
+        overview: 'Diuretics reduce preload by lowering circulating volume.',
+        mechanism: 'Excessive preload raises venous pressure, which leads to oedema of the lungs.',
+        points: [{ text: 'Diuretics — reduce preload by lowering circulating volume', page: pg },
+                 { text: 'Volume overload — sought when LVEDP is greater than 18 mmHg', page: pg },
+                 { text: 'Venous pressure — above 99 mmHg it causes oedema', page: pg }],
+        numbers: [{ text: 'LVEDP: greater than 18 mmHg', page: pg }],
+        distinctions: [{ a: 'Volume overload', b: 'a stiff ventricle', how: 'A normal pressure of 8 to 12 mmHg does not exclude a stiff ventricle.', page: pg }],
+        pearls: [{ text: 'An LVEDP greater than 18 mmHg should prompt a search for volume overload.', page: pg }],
+        mnemonics: [], analogies: [], flowchart: '' },
+        quiz: { questions: [
+          { question: 'Which LVEDP should prompt a search for volume overload?', quote: '', options: ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', '4 mmHg'], answer: 2,
+            explain: 'An LVEDP greater than 18 mmHg should prompt a search for volume overload.', page: pg,
+            why: ['8 mmHg is inside the normal 8 to 12.', '12 mmHg is the top of normal.', '', '4 mmHg is below normal.'], trap: 'the normal range taken for the threshold' },
+          { question: 'What do diuretics reduce?', quote: 'Diuretics reduce _____ by lowering circulating volume.', options: ['Afterload', 'Preload', 'Contractility', 'Heart rate'], answer: 1,
+            explain: 'Diuretics reduce preload by lowering circulating volume.', page: pg, why: ['Not afterload.', '', 'Not contractility.', 'Not heart rate.'], trap: '' }] } },
+      { section: 2, title: 'Not this unit’s section', lesson: { points: [{ text: 'x', page: pg }] } }] };
+    await p4.fill('#pack-text', 'Here is reply 1.\n```json\n' + JSON.stringify(reply, null, 2) + '\n```');
+    await p4.locator('#pack-import').click();
+    await p4.locator('#pack-report').waitFor(T);
+    const rep = await text(p4, '#pack-report');
+    ok('the import says what it took, and what it flagged, in counts from the check',
+       /Imported section 1: 1 lesson, 2 questions\. 1 item not found in your book, flagged where it is shown\./.test(rep), rep.slice(0, 160));
+    ok('and what it refused, with why', /Section 2 “Not this unit’s section” was not imported: it is "Not this unit’s section", and section 2 here is "Section Two Afterload"/.test(rep), rep);
+    const stored = await p4.evaluate(id => MemStore.get('packs', id), d.id);
+    ok('the pack is kept on the device, by unit, section by section', stored && stored.sections[0] && !stored.sections[1] && stored.sections[0].quiz.questions.length === 2);
+    ok('and section 1 is taught from it now', await p4.evaluate(() => Memorizer.ui.state.per[0].lesson.by === 'pack' && Memorizer.ui.state.per[0].quiz.questions.length === 2));
+    ok('the card counts it', /1 of 3 sections · 1 flagged/.test(await text(p4, '#pack-status')), await text(p4, '#pack-status'));
+
+    await p4.locator('#learn-unit').click();
+    await p4.locator('#pack-label').waitFor(T);
+    ok('the lesson says who wrote it', /Written with Claude · checked against your book · 1 not found in it, flagged/.test(await text(p4, '#pack-label')), await text(p4, '#pack-label'));
+    /* innerText is the text as shown, and "vs" is set in capitals */
+    const extra = [await text(p4, '#mechanism'), await text(p4, '#distinctions'), await text(p4, '#pearls')];
+    ok('and shows what only a pack has: the mechanism, the pair confused, the pearl',
+       /leads to oedema of the lungs/.test(extra[0]) && /Volume overload vs a stiff ventricle/i.test(extra[1]) && /greater than 18 mmHg should prompt/.test(extra[2]), JSON.stringify(extra).slice(0, 200));
+    const flags = await p4.$$eval('ol.points .flag', fs => fs.map(f => f.textContent));
+    ok('the point with a number the book does not have is flagged on the point', JSON.stringify(flags) === JSON.stringify(['⚠ A number not in your book: 99.']), JSON.stringify(flags));
+    ok('and the page no longer says the points are the book’s', /written with Claude from your book/.test(await text(p4, '.arranged-note')));
+    await p4.locator('#to-drill').click();
+    await memorize(p4);
+    await p4.locator('#mcq .option').first().waitFor(T);
+    ok('the drill asks the pack’s questions, labelled', /Which LVEDP should prompt a search for volume overload\?/.test(await text(p4, '#mcq h2.q')) &&
+       /Written with Claude · checked against your book/i.test(await text(p4, '.pack-tag')), await text(p4, '.pack-tag'));
+    await p4.locator('.option[data-i="0"]').click();
+    await p4.locator('#why-not').waitFor(T);
+    ok('a wrong answer is told why that option is wrong, and the trap it fell into',
+       /Why not A: 8 mmHg is inside the normal 8 to 12\./.test(await text(p4, '#why-not')) && /The trap: the normal range taken for the threshold/.test(await text(p4, '#trap')));
+    ok('and every option’s reason is there to open', await p4.locator('#why-all li').count() === 4);
+    ok('nothing went to an AI provider', stub.requests.length === aiBefore, `${stub.requests.length - aiBefore} requests`);
+
+    /* A unit started over is taught from the pack again: pump() takes the
+       section from it, with nothing to ask the built-in coach for. */
+    await p4.evaluate(id => MemStore.del('sessions', id).then(() => Memorizer.openDoc(id, 0)), d.id);
+    await p4.locator('#pack-label').waitFor(T);
+    ok('a unit started over is taught from its pack, not rebuilt', await p4.evaluate(() => Memorizer.ui.state.per[0].lesson.by === 'pack' && !Memorizer.ui.state.per[1].lesson));
+    await p4.locator('#to-drill').click();
+    await memorize(p4);
+    await p4.locator('#mcq .option').first().waitFor(T);
+    ok('and drilled from it', /Which LVEDP should prompt/.test(await text(p4, '#mcq h2.q')) &&
+       await p4.evaluate(() => Memorizer.ui.state.per[0].quiz.questions.every(q => q.by === 'pack')));
+    ok('with no errors', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+
   head('a whole book: its PDFs as one, cut into chapters');
   {
     const bk = makeBook();

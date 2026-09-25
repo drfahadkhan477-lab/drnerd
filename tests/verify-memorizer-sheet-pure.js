@@ -85,5 +85,14 @@ head('at a glance: facts, the pathway, the lists');
   ok('a section with none of them has no glance', S.glance({ index: 0, title: 'x', segments: [seg('Plain words here without any pattern at all.')] }) === null);
 }
 
+head('what a pack\u2019s check flagged stays with the number it is on (pack.js)');
+{
+  const sh = S.sheetOf({ overview: '', points: [{ text: 'A point.', page: 1 }], numbers: [
+    { text: 'Severe: a mean gradient of at least 40 mmHg.', page: 2, flag: 'a number not in your book: 40' },
+    { text: 'Moderate: a mean gradient of at least 20 mmHg.', page: 2 }] });
+  ok('a flagged number keeps its flag as a tile, and an unflagged one has none',
+     sh.numbers.length === 2 && sh.numbers[0].flag === 'a number not in your book: 40' && sh.numbers[1].flag === '', JSON.stringify(sh.numbers.map(n => n.flag)));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
