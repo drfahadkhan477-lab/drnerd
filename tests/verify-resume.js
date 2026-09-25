@@ -180,7 +180,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }, beforeReload.ch);
   ok('a reload still knows where you were', afterReload.at === beforeReload.at,
      `${beforeReload.at} → ${afterReload.at}`);
-  ok('and still has the same deck', afterReload.ids.every((id, i) => id === beforeReload.ids[i]));
+  /* The same length first: every() over the deck after the reload passed on an empty or truncated one. */
+  ok('and still has the same deck', beforeReload.ids.length > 0 && afterReload.ids.length === beforeReload.ids.length &&
+     afterReload.ids.every((id, i) => id === beforeReload.ids[i]), `${beforeReload.ids.length} → ${afterReload.ids.length} questions`);
 
   head('the answer you gave before walking away');
   /* THE CASE EVERY SECTION ABOVE MISSES. All of them answer and then advance,

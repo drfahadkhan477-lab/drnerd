@@ -150,13 +150,16 @@ const SSE = [
 
   head('vision: a question with no figure sends no image');
   const noFig = await ask(false);
-  ok('no image block on a text-only question', !/"inlineData"/.test(JSON.stringify(noFig)));
+  /* Both checks below also pass on a request that was never made — JSON.stringify(undefined) holds no
+     "inlineData" and [].every() is true — so each first requires the request, as the figure case does. */
+  ok('no image block on a text-only question', !!noFig && !/"inlineData"/.test(JSON.stringify(noFig)),
+     noFig ? '' : 'no request was made');
   /* On this wire every turn is parts[], so the old "stays a plain string"
      phrasing has no counterpart. The claim underneath it survives: nothing but
      text goes up when there is nothing to attach. */
+  const noFigUser = turns(noFig).find(x => x.role === 'user');
   ok('the turn carries text and nothing else when there is nothing to attach',
-     (turns(noFig).find(x => x.role === 'user') || { parts: [] })
-       .parts.every(pt => typeof pt.text === 'string'));
+     !!noFigUser && noFigUser.parts.length > 0 && noFigUser.parts.every(pt => typeof pt.text === 'string'));
 
   head('images are never persisted to localStorage');
   const persisted = await page.evaluate(() => {

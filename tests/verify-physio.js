@@ -157,8 +157,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('left coronary flow arrives mostly in diastole', M.coronaryDia > 0.75, (M.coronaryDia * 100).toFixed(0) + '%');
 
   head('the pressure-volume relations, against every loop they explain');
-  ok('ESPVR passes through end-systole on all six interventions', M.ivErr.every(e => e.esErr < 0.5), M.ivErr.map(e => e.id + ':' + e.esErr.toFixed(2)).join(' '));
-  ok('EDPVR passes through end-diastole on all six interventions', M.ivErr.every(e => e.edErr < 0.5), M.ivErr.map(e => e.id + ':' + e.edErr.toFixed(2)).join(' '));
+  /* "All six" is counted, not assumed: [].every() is true, so an emptied or shortened INTERVENTIONS passed both. */
+  ok('ESPVR passes through end-systole on all six interventions', M.ivErr.length === 6 && M.ivErr.every(e => e.esErr < 0.5), M.ivErr.map(e => e.id + ':' + e.esErr.toFixed(2)).join(' '));
+  ok('EDPVR passes through end-diastole on all six interventions', M.ivErr.length === 6 && M.ivErr.every(e => e.edErr < 0.5), M.ivErr.map(e => e.id + ':' + e.edErr.toFixed(2)).join(' '));
   ok('the base parametric loop reproduces the physiological one', Math.abs(M.base.esv - 50) < 1 && Math.abs(M.base.ef - M.d.ef) < 0.01, `ESV ${M.base.esv.toFixed(1)}  EF ${(M.base.ef * 100).toFixed(1)}%`);
   ok('raising afterload raises ESV and lowers EF with contractility untouched',
      M.after.esv > M.base.esv + 5 && M.after.ef < M.base.ef - 0.05, `ESV ${M.base.esv.toFixed(0)}→${M.after.esv.toFixed(0)}  EF ${(M.base.ef*100).toFixed(0)}%→${(M.after.ef*100).toFixed(0)}%`);
