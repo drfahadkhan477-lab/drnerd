@@ -122,12 +122,16 @@ every section is done. Each section is:
 
 1. **Taught** — the big idea first, then the key points as numbered cards
    (the key term bold, each citing its page, the paragraph it came from one
-   tap away), the numbers to know with their values marked, a mnemonic for
+   tap away; what an exam asks — the most common cause, the first-line
+   drug, what to avoid, a threshold, what predicts death — is taken first
+   and tagged "High yield" with why; a figure's caption is never a point), the numbers to know with their values marked, a mnemonic for
    every list, everyday analogies for the mechanisms, a flowchart drawn from
    its cause-and-effect sentences, its tables as tables and its figures cut
    from the page under their own captions.
 2. **Drilled** — single-best-answer multiple-choice questions, four options,
-   never a blank to type into: the right option turns green, a wrong choice
+   never a blank to type into, board-style where the book allows ("What is
+   the first-line therapy for …?", "Which is contraindicated with …?", a drug
+   against other drugs), from high-yield sentences first: the right option turns green, a wrong choice
    red, and the book's own sentence says why. A question missed on the first
    try is asked again at the end of the drill, and only first tries count
    toward the score.
@@ -259,9 +263,11 @@ chapter, with chips for a PDF, photos or pasted notes, and your units, each
 with its progress. Surfaces are clear frosted glass, as on an iPad — a heavy
 blur, a bright rim, a sheen, and a light that follows the finger — over a slow
 aurora in the theme's own colours, with the accent solid rather than run into
-a second colour; cards rise in, give under the finger, and a new screen
-settles in; the trace draws, the pearl's steps arrive one by one. With reduced
-motion asked for, nothing moves and there is no light to follow; at High
+a second colour; Systole's live rhythm strip sweeps across the hero, a
+rhythm named in monitor type; cards rise in when a screen opens (not again on
+every tap), give under the finger, and the pearl's steps arrive one by one.
+With reduced motion asked for, nothing moves, the strip is drawn still, and
+there is no light to follow; at High
 contrast, with less transparency asked for, or where the browser cannot
 blur, the glass is solid. The look is Systole's too: its
 themes, colour for colour, and its type scale, with text size, reading width,

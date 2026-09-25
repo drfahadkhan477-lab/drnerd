@@ -154,14 +154,18 @@ function seeded(str) {
   return function () { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }
 
-/* Today's pearl from the given units; `skip` counts presses of "Another". */
-function pearlOf(docs, Pearl, today, skip) {
+/* Today's pearl from the given units; `skip` counts presses of "Another".
+   `yieldOf` (Coach.yieldOf, passed in so this stays pure) makes a
+   high-yield sentence likelier: each cue, up to three, adds 20 to its
+   pearl.js score — about twice what a strong pearl scores on its own, so a
+   pearl that is also high-yield is drawn roughly half again as often. */
+function pearlOf(docs, Pearl, today, skip, yieldOf) {
   var pool = [];
   (docs || []).forEach(function (d) {
     Pearl.harvest(notesOf(d)).forEach(function (p) {
       var idx = Number(String(p.id).split(':').pop());
       var c = d.clusters.filter(function (x) { return x.index === idx; })[0];
-      pool.push({ id: p.id, text: p.text, score: p.score, title: p.title, docId: d.id, docName: d.name, cluster: idx,
+      pool.push({ id: p.id, text: p.text, score: p.score + (yieldOf ? 20 * Math.min(3, yieldOf(p.text).length) : 0), title: p.title, docId: d.id, docName: d.name, cluster: idx,
                   page: c ? pageOf(c, p.text) : null, heading: c ? headingOf(c, p.text) : p.title });
     });
   });
@@ -237,11 +241,15 @@ function tracePath(width, beats) {
 /* A pearl's text in runs, with the numbers that carry units marked, so the
    threshold is what the eye lands on. */
 var FIGURE = /(\d+(?:[.,]\d+)?(?:\s?[–-]\s?\d+(?:[.,]\d+)?)?\s?(?:%|mmHg|mg|mcg|g|mL|ml|L\/min|cm|mm|ms|bpm|hours?|days?|weeks?|months?|years?)?)/;
+/* A number that names a place in the book — "Table 1.4", "Fig. 2", "p. 52"
+   — is not a value to learn, so it is not marked. */
+var PLACE = /\b(?:tables?|fig(?:ure)?s?|chapters?|sections?|pages?|pp?|box|panel|eq)\.?\s*$/i;
 function marks(text) {
-  var out = [];
+  var out = [], prev = '';
   String(text).split(FIGURE).forEach(function (part, i) {
     if (!part) return;
-    out.push({ text: part, num: i % 2 === 1 && /\d/.test(part) });
+    out.push({ text: part, num: i % 2 === 1 && /\d/.test(part) && !PLACE.test(prev) });
+    prev = part;
   });
   return out;
 }

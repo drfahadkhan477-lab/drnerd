@@ -116,19 +116,35 @@ var BANK = [
     text: 'Syncope is the brain’s power briefly cut: whether from a pump that stopped (arrhythmia), a pipe that is blocked (outflow obstruction) or pressure that sagged (reflex), the lights go out and come back on by themselves.' },
 ];
 
+/* How well an analogy fits: each of its terms counted in the section's
+   prose, with diminishing returns — one mention 1, two 2, four 3, eight 4
+   (1 + log2 n) — so one acronym repeated down a list cannot outvote the
+   several terms of what the section is about; and more for a term in the
+   title. The owner's first whole book showed "bundle branch block" on a
+   section about infarction: LBBB, repeated through the section, had
+   outscored everything else it said. */
+function weight(n) { return n ? 1 + Math.log(n) / Math.LN2 : 0; }
 function score(entry, text, title) {
   var s = 0;
   entry.match.forEach(function (re) {
     var g = new RegExp(re.source, re.flags.indexOf('g') === -1 ? re.flags + 'g' : re.flags);
-    s += (String(text || '').match(g) || []).length;
+    s += weight((String(text || '').match(g) || []).length);
     if (re.test(String(title || ''))) s += 3;
   });
   return s;
 }
 
+/* A section's prose: its paragraphs and list items, not its tables or its
+   headings (the title is counted on its own). */
+function proseOf(cluster) {
+  if (!cluster) return '';
+  if (!cluster.segments) return cluster.text || '';
+  return cluster.segments.filter(function (g) { return !g.table && !g.heading; }).map(function (g) { return g.text; }).join('\n');
+}
+
 /* The best `n` analogies for a section, strongest first, or none. */
 function forSection(cluster, n) {
-  var title = cluster && cluster.title, text = cluster && cluster.text;
+  var title = cluster && cluster.title, text = proseOf(cluster);
   return BANK.map(function (e, i) { return { e: e, s: score(e, text, title), i: i }; })
     .filter(function (x) { return x.s >= MIN_SCORE; })
     .sort(function (a, b) { return b.s - a.s || a.i - b.i; })
@@ -136,7 +152,7 @@ function forSection(cluster, n) {
     .map(function (x) { return { title: x.e.title, text: x.e.text, source: 'Memorizer' }; });
 }
 
-var MemAnalogies = { BANK: BANK, MIN_SCORE: MIN_SCORE, score: score, forSection: forSection };
+var MemAnalogies = { BANK: BANK, MIN_SCORE: MIN_SCORE, weight: weight, score: score, proseOf: proseOf, forSection: forSection };
 root.MemAnalogies = MemAnalogies;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemAnalogies;
 })(typeof window !== 'undefined' ? window : this);

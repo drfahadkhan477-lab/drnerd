@@ -98,6 +98,17 @@ head('"Chapter N" lines: openers found, headers and cross-references not fooling
   ok('with numbers only in running headers, a chapter starts at its first header', h.map(c => c.start).join() === '2,8,13,20' && h.map(c => c.n).join() === '1,2,3,4',
      JSON.stringify(h.map(c => [c.n, c.start, c.title])));
   ok('and is titled by the header, its page number dropped', h[0].title === 'Heart Failure', h[0].title);
+  /* The owner's first whole book: a chapter's display title, recognised
+     from a scan, came back as "hy = rly" in the biggest type on its opener.
+     It named the unit. A line that does not read as words is not a title. */
+  const garbled = makeBook(SPEC);
+  garbled[6].lines.unshift(L('hy = rly', 30, 40));
+  const gt = B.numbered(garbled).find(c => c.n === 2);
+  ok('a garbled line in the biggest type does not title the chapter: the real title does', gt && gt.title === 'Valve Disease', gt && gt.title);
+  const onLine = makeBook(SPEC);
+  onLine[6].lines[0] = L('Chapter 2 hy = rly', 24, 80);
+  const ol = B.numbered(onLine).find(c => c.n === 2);
+  ok('nor does one on the "Chapter N" line itself', ol && ol.title === 'Valve Disease', ol && ol.title);
   const long = [{ page: 1, lines: [L('Chapter 5 is where the reader will find the whole of the long discussion of this matter.', 10, 100)] }];
   ok(`a "Chapter N" line longer than ${B.NUMBERED_MAX_WORDS} words is running text`, B.numbered(long).length === 0);
 }
@@ -110,6 +121,19 @@ head('running headers out of a chapter’s text');
   ok('headers and the opener’s number go; the title, prose and body stay', JSON.stringify(kept) ===
      JSON.stringify(['Valve Disease', 'Chapter 2 describes the long history of this condition in far more detail than any short header ever would.', 'Body text.']), JSON.stringify(kept));
   ok('and the pages given are not changed', pg[0].lines.length === 5);
+  /* The owner's first whole book: a chapter's title on its "CHAPTER 17" line
+     ran on to a second line at the same size. That second line was left
+     behind, read as a heading, and titled the chapter's first section. */
+  const wrap = [{ page: 7, lines: [L('CHAPTER 17 Tricuspid Valve Disease, Pulmonary Valve Disease, and', 20, 60), L('Drug-Induced Valve Disease', 20, 84),
+    L('I. INTRODUCTION. The tricuspid valve has three leaflets.', 10, 130), L('More body text follows here.', 10, 144)] }];
+  const kept2 = B.stripHeaders(wrap)[0].lines.map(l => l.text);
+  ok('a chapter title that runs on to the next line goes with its "Chapter N" line', JSON.stringify(kept2) === JSON.stringify(['I. INTRODUCTION. The tricuspid valve has three leaflets.', 'More body text follows here.']), JSON.stringify(kept2));
+  const wrapCh = B.numbered(wrap.concat([{ page: 20, lines: [L('CHAPTER 18 Heart Failure', 20, 60)] }, { page: 30, lines: [L('CHAPTER 19 Arrhythmias', 20, 60)] }]));
+  ok('and the chapter is named by the whole title', wrapCh[0] && wrapCh[0].title === 'Tricuspid Valve Disease, Pulmonary Valve Disease, and Drug-Induced Valve Disease', wrapCh[0] && wrapCh[0].title);
+  const notRun = B.stripHeaders([{ page: 3, lines: [L('CHAPTER 4 Heart Failure', 20, 60), L('Chronic Heart Failure', 20, 84), L('Body.', 10, 120)] }])[0].lines.map(l => l.text);
+  const hdr = B.stripHeaders([{ page: 9, lines: [L('CHAPTER 17 Tricuspid, Pulmonary and', 9, 30), L('Body text of the page begins here.', 10, 60)] }])[0].lines.map(l => l.text);
+  ok('nor does a small running header that stops on "and" take the body under it', JSON.stringify(hdr) === JSON.stringify(['Body text of the page begins here.']), JSON.stringify(hdr));
+  ok('a title that ends whole does not take the next big line with it', JSON.stringify(notRun) === JSON.stringify(['Chronic Heart Failure', 'Body.']), JSON.stringify(notRun));
 }
 
 head('the size that opens chapters');
@@ -129,6 +153,10 @@ head('the size that opens chapters');
   const spread = makeBook(SPEC, { noHeaders: true });
   spread[1].lines.unshift(L('Learning objectives', 24, 60));
   ok('an opener over two pages is one chapter', B.bySize(spread).map(c => c.start).join() === '1,7,12,19', B.bySize(spread).map(c => c.start).join());
+  const garbledSize = makeBook(SPEC, { noHeaders: true });
+  garbledSize[6].lines.unshift(L('hy = rly', 24, 40));
+  const gs = B.bySize(garbledSize);
+  ok('nor, by size, is a garbled line part of the opener’s title', gs[1] && gs[1].title === 'Chapter 2 Valve Disease', gs[1] && gs[1].title);
   /* Section headings on every page: gaps of one page are sections. */
   const onlySections = makeBook(SPEC, { noHeaders: true }).map(p => ({ page: p.page, lines: p.lines.filter(l => l.size !== 24) }));
   ok(`a size on nearly every page (sections, under ${B.MIN_MEAN_PAGES} pages apart) is not either`, B.bySize(onlySections).length === 0,

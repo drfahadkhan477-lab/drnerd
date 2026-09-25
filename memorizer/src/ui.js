@@ -18,7 +18,7 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Skill = root.MemSkill;
+var Skill = root.MemSkill, Monitor = root.MemMonitor;
 var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance, Study = root.MemStudy;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
@@ -762,7 +762,8 @@ function viewHome() {
   var prog = Home.progress(ui.docs, sessions, ui.cards, day, FSRS);
   var cur = Home.current(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), sessions);
   var top = h('header.home-top.home-hero', { id: 'home-hero' },
-    heroTrace(),
+    /* Systole's live strip (monitor.js); the still trace where it is absent */
+    Monitor ? Monitor.mount(doc, reducedMotion) : heroTrace(),
     h('div.home-brand', mascot(), h('div', h('span.hello', Home.greeting(new Date().getHours()) + ' · what shall we'), h('h1.learn', 'Learn?'),
       h('p.hero-line', cur ? [h('span.hero-dot', { 'aria-hidden': 'true' }), 'Up next: ', h('strong', cur.doc.name), cur.next ? ' · ' + cur.next : ''] : 'Add a chapter of your book to begin.'))),
     h('div.pills.hero-stats',
@@ -822,7 +823,7 @@ function viewHome() {
   /* Worked out once per day and per "Another": over a whole book it reads
      every chapter's prose. */
   var pkey = day + '|' + (ui.pearlSkip || 0);
-  if (!ui.pearlCache || ui.pearlCache.key !== pkey) ui.pearlCache = { key: pkey, pk: ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0) : null };
+  if (!ui.pearlCache || ui.pearlCache.key !== pkey) ui.pearlCache = { key: pkey, pk: ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0, Coach.yieldOf) : null };
   var pk = ui.pearlCache.pk;
   /* The pearl is the feature of the page: larger, and with its own
      section's figure or table beside it (Home.pearlVisual), so the fact is
@@ -942,16 +943,18 @@ function viewUnit() {
     d.bookId ? h('p.muted.book-of', d.bookName + (d.chapter ? ' · chapter ' + d.chapter : ' · front matter') + ' · pp. ' + d.pageStart + '–' + d.pageEnd) : null,
     h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
+    /* Where to go next, at the top: it floated over the foot of the page
+       and covered the last sections (the owner's screenshot). */
+    h('div.unit-cta', allDone
+      ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
+      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })),
     ui.notice ? h('p.card.note', { id: 'notice', role: 'status' }, ui.notice) : null,
     weakCard(s),
     h('h2.grid-title', 'Sections (' + n + ')'),
     h('div.sections', { id: 'sections' }, cards),
     examCard,
     compareButton(s, d),
-    sourceCard(d),
-    h('div.sticky-cta', allDone
-      ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
-      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })));
+    sourceCard(d));
 }
 
 /* Where this unit came from and how well it was read (provenance.js):
@@ -1075,10 +1078,17 @@ function pointCard(c, p, i) {
     h('span.point-n', String(i + 1)),
     ui.state ? button(marked_ ? '★' : '☆', function () { toggleMark(c, p.text); }, 'quiet mark-btn', { id: 'mark-' + i, 'aria-pressed': String(marked_), 'aria-label': marked_ ? 'Unmark this point' : 'Mark this point to be asked' }) : null,
     h('div.point-body',
+      hyTags(p.text),
       h('p.point-text', b.lead ? [h('strong.lead', b.lead), marked(b.body)] : withKey(b.body, Coach.keyTermOf(c, p.text)), ' ', page(p.page)),
       b.subs.length ? h('ul.subs', b.subs.map(function (x) { return h('li', marked(x)); })) : null,
       para && para.text.length > p.text.length + 20 ? h('details.context', h('summary', 'In the book'),
         h('p', marked(para.text))) : null));
+}
+/* Why a point is high-yield, from its own words (Coach.yieldOf): "Most
+   common", "First-line", "Threshold" … — whatever wrote the lesson. */
+function hyTags(text) {
+  var hy = Coach.yieldOf(text);
+  return hy.length ? h('p.hy-tags', h('span.hy', 'High yield'), hy.map(function (t) { return h('span.hy-why', t); })) : null;
 }
 /* The point with its key term in bold, every word still the book's. */
 function withKey(text, key) {
@@ -2073,6 +2083,11 @@ function aiQuestions(c) {
 /* One build at a time: opening the Coach and asking at once used to start
    two, each redrawing the screen — a tap landing in a redraw can be lost. */
 function askIndex() {
+  /* Units changed and not yet read back: read them first. The index was
+     built from the ones in memory, kept, and a unit just edited or added
+     was missing from every answer until the next change (CI caught it
+     twice, on a slow runner). */
+  if (ui.docsStale) return refresh().then(askIndex);
   if (ui.askIdx && ui.askFor === ui.docs) return Promise.resolve(ui.askIdx);
   if (ui.askBuild && ui.askBuildFor === ui.docs) return ui.askBuild;
   ui.askBusy = true; ui.askBusyText = ''; render();

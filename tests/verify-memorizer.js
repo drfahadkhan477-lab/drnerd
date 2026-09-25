@@ -392,7 +392,7 @@ const stub = {
     switch (kind) {
       case 'lesson': return {
         overview: 'Preload is how full the ventricle is before it squeezes.',
-        points: [{ text: 'Preload — end-diastolic stretch ' + EVIL, page: 1 }, { text: 'Venous return sets preload', page: 2 }],
+        points: [{ text: 'Preload — end-diastolic stretch ' + EVIL, page: 1 }, { text: 'Venous return is the most common thing that sets preload', page: 2 }],
         numbers: [{ text: 'An LVEDP greater than 18 mmHg prompts a search for overload', page: 1 }],
         mnemonics: [{ title: 'What sets preload', letters: 'VVC', words: ['Venous return', 'Volume', 'Compliance'] }],
         analogies: [{ title: 'A balloon', text: 'The more you fill a balloon, the harder it snaps back.', source: 'Claude' }],
@@ -512,6 +512,15 @@ function kindOf(user) {
   ok('the final exam is locked until every section is drilled', await page.locator('#exam-card.locked').count() === 1 &&
      /0 of 3/.test(await page.locator('#exam-card').innerText()) && await page.locator('#exam-card #to-exam').count() === 0);
   ok('and the one button says Learn unit', (await page.locator('#learn-unit').innerText()) === 'Learn unit');
+  /* The owner's screenshot: the button floated over the foot of the page and
+     covered the last sections, and each card carried a block of colour. The
+     button now sits above the sections, in the flow; the colour is a line. */
+  const unitLook = await page.evaluate(() => { const b = document.querySelector('#learn-unit'), s = document.querySelector('#sections');
+    const band = getComputedStyle(document.querySelector('#sections .band'));
+    return { above: b.getBoundingClientRect().bottom <= s.getBoundingClientRect().top, pos: getComputedStyle(b.parentElement).position,
+      fill: band.backgroundColor, line: parseFloat(band.borderTopWidth) }; });
+  ok('the button sits above the sections, not over them; each card’s colour is a line along its top',
+     unitLook.above && unitLook.pos === 'static' && /rgba\(0, 0, 0, 0\)|transparent/.test(unitLook.fill) && unitLook.line > 0 && unitLook.line <= 6, JSON.stringify(unitLook));
   const rec = await page.evaluate(() => MemStore.all('docs').then(d => d[0]));
   ok('the unit is stored with its page count', rec.pages === pdf.pages && rec.name === 'unit' && rec.source === 'pdf', `${rec.pages} pages`);
   ok('each section is titled by its heading', JSON.stringify(rec.clusters.map(c => c.title)) === JSON.stringify(pdf.titles),
@@ -577,6 +586,11 @@ function kindOf(user) {
   ok('the key points are numbered cards, a definition leading with its term',
      await page.locator('ol.points > li').count() === 2 && (await page.locator('ol.points > li .lead').first().innerText()) === 'Preload' &&
      (await page.locator('ol.points > li .point-n').first().innerText()) === '1', pointText.replace(/\s+/g, ' '));
+  /* A point that says what an exam asks is marked high-yield, with why; a
+     plain one is not. */
+  const hyShown = await page.$$eval('ol.points > li', ls => ls.map(l => [...l.querySelectorAll('.hy-tags span')].map(x => x.textContent)));
+  ok('a high-yield point says so, and why; a plain one is not marked', hyShown.length === 2 && hyShown[0].length === 0 &&
+     JSON.stringify(hyShown[1]) === JSON.stringify(['High yield', 'Most common']), JSON.stringify(hyShown));
   /* The ☆ that marks a point made it a third item in a two-column grid, and
      the text fell into the 2.25rem number column, a word to a line. Widths
      as laid out: the text has the room, the star sits at the end, all on
@@ -859,6 +873,20 @@ function kindOf(user) {
      (await page.locator('.unit-row .badge').innerText()) === '33%', await text(page, '.unit-row'));
   ok('with its colour bar and a menu', await page.evaluate(() => getComputedStyle(document.querySelector('.unit-row')).getPropertyValue('--hue').trim() !== '') &&
      await page.locator('.unit-row details.menu summary').count() === 1);
+  /* The owner's screenshot: ⋮ opened a sliver — the row clipped its own
+     menu, so Delete could not be reached. Each item, where it is drawn, is
+     what a tap there lands on. */
+  await page.locator('.unit-row details.menu summary').click();
+  /* the page is scrolled to the row, never the item into view: a clipping
+     row is a scroll container, and scrolling the item scrolled it into
+     sight inside the row — the first version of this check did that, and
+     passed with the clipping back */
+  await page.evaluate(() => document.querySelector('.unit-row').scrollIntoView({ block: 'center' }));
+  const menuHit = await page.evaluate(() => [...document.querySelectorAll('.unit-row details.menu[open] .menu-list button')].map(b => {
+    const r = b.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { t: b.textContent, h: Math.round(r.height), hit: !!at && (at === b || b.contains(at)), rowTop: Math.round(document.querySelector('.unit-row .doc-name').getBoundingClientRect().top) }; }));
+  await page.locator('.unit-row details.menu summary').click();
+  ok('its menu opens whole: every item can be seen and tapped, not cut off by the row', menuHit.length === 2 && menuHit.every(m => m.hit && m.h > 20), JSON.stringify(menuHit));
   const pearlText = (await page.locator('#pearl .pearl-steps').innerText()).replace(/\s+/g, ' ');
   ok('the pearl of the day is the PDF’s own sentence, broken into steps', /Pearl of the day/i.test(await page.locator('#pearl .eyebrow').innerText()) &&
      await page.locator('#pearl .pearl-steps li').count() >= 2 && /end-diastolic pressure greater than 18 mmHg/.test(pearlText) && /stiff ventricle/.test(pearlText), pearlText);
@@ -879,6 +907,13 @@ function kindOf(user) {
   const stillNow = await movingNow();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   ok('and with reduced motion asked for, nothing on it animates or transitions', stillNow.length === 0, stillNow.slice(0, 5).join(', ') || 'still');
+  /* Every tap redraws the screen. The owner saw the cards jump in again each
+     time: entrance motion is for entering a screen, not for a redraw of it.
+     (What loops — the aurora, the pearl's paper — is not an entrance.) */
+  const replayed = await page.evaluate(() => { Memorizer.render();
+    return document.querySelector('main').getAnimations({ subtree: true }).filter(a => a.effect && a.effect.getTiming().iterations !== Infinity)
+      .map(a => (a.animationName || 'script') + ' on ' + a.effect.target.tagName + '.' + a.effect.target.className); });
+  ok('a redraw of the same screen plays no entrance again', replayed.length === 0, replayed.slice(0, 5).join(', ') || 'still');
   const dock = await page.evaluate(() => { const r = document.querySelector('nav.dock').getBoundingClientRect(); return { pos: getComputedStyle(document.querySelector('nav.dock')).position, gap: innerHeight - r.bottom, w: r.width }; });
   ok('the tabs float at the foot of the screen', dock.pos === 'fixed' && dock.gap > 0 && dock.w < 820, JSON.stringify(dock));
   /* Section 1 scored 1 of 2 on its drill: 50%, and its one miss is its card. */
@@ -953,10 +988,47 @@ function kindOf(user) {
      JSON.stringify({ litOn, litMoved, litOff }));
   ok('and with reduced motion asked for, there is no light to follow', litStill === 0, String(litStill));
   const hero = await page.evaluate(() => { const e = document.querySelector('#home-hero'); const cs = getComputedStyle(e);
-    return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('svg.hero-trace path[d^="M0"]'), held: (document.querySelector('#stat-held') || {}).textContent || '',
+    return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('.hero-monitor canvas'), held: (document.querySelector('#stat-held') || {}).textContent || '',
       inHero: !!e.querySelector('#streak') && !!e.querySelector('#pill-due') }; });
   ok('the hero band carries the streak, what is due and how much is held, over its gradient and trace',
      /gradient/.test(hero.bg) && hero.trace && /\d+%\s*Likely recalled/.test(hero.held) && hero.inHero, JSON.stringify(hero));
+  /* Systole's live strip (monitor.js): drawn, sweeping, a rhythm named in
+     monitor type — the same canvas through a redraw, so a tap does not
+     restart it — and still, but drawn, with reduced motion asked for. The
+     waits are for frames to have been painted; what they painted is the
+     check. */
+  const strip = () => page.evaluate(() => { const m = document.querySelector('.hero-monitor'), c = m.querySelector('canvas');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let ink = 0; const cols = new Set();
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) { ink++; cols.add(((i - 3) / 4) % c.width); }
+    return { x: m.getAttribute('data-x'), still: m.getAttribute('data-still'), ink, cols: cols.size, w: c.width, rhythm: m.getAttribute('data-rhythm'),
+      label: m.querySelector('.hero-monitor-label').textContent, font: getComputedStyle(m.querySelector('.hero-monitor-label')).fontFamily }; });
+  await page.waitForFunction(() => { const m = document.querySelector('.hero-monitor'); return m && +m.getAttribute('data-x') > 0; }, null, T).catch(() => {});
+  const s1 = await strip();
+  /* it moves by itself: no redraw between the two readings (a redraw
+     nudges it one frame, and the first version of this check measured that) */
+  await page.waitForFunction(x => { const m = document.querySelector('.hero-monitor'); return m && m.getAttribute('data-x') !== x; }, s1.x, T).catch(() => {});
+  const s2 = await strip();
+  const sameCanvas = await page.evaluate(() => { const c = document.querySelector('.hero-monitor canvas'); Memorizer.render(); return document.querySelector('.hero-monitor canvas') === c; });
+  const playlist = await page.evaluate(() => MemMonitor.PLAYLIST);
+  ok('Systole’s rhythm strip sweeps across the hero, a rhythm named in monitor type',
+     s1.ink > 0 && s2.x !== s1.x && playlist.indexOf(s1.rhythm) !== -1 && /^II · .+ · \d+ bpm$/.test(s1.label) && /mono|Menlo|Consolas/i.test(s1.font), JSON.stringify({ s1, s2 }));
+  ok('and a redraw keeps the same strip running, rather than starting another', sameCanvas, String(sameCanvas));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => Memorizer.render());
+  /* The still strip is drawn on the next frame: wait for that drawing to
+     have happened (data-drawn, set when it has run) — a precondition; what
+     it drew is the check. CI read the canvas between the flag and the
+     frame, and saw a quarter of a strip. */
+  await page.waitForFunction(() => { const m = document.querySelector('.hero-monitor'); return m.getAttribute('data-still') === 'true' && m.getAttribute('data-drawn') === 'whole'; }, null, T).catch(() => {});
+  const r1 = await strip();
+  await page.waitForTimeout(400);
+  const r2 = await strip();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.evaluate(() => Memorizer.render());
+  /* whole: ink in every column — a sweeping strip always has the eraser's
+     blank gap ahead of its pen, and ink left over from the sweep would
+     otherwise pass for a drawing */
+  ok('with reduced motion asked for, the strip is drawn whole and holds still', r1.still === 'true' && r1.cols === r1.w && r2.x === r1.x && r2.ink === r1.ink, JSON.stringify({ r1, r2 }));
   /* Laid out as a dashboard on an iPad held landscape — the pearl, and
      beside it where to jump back in — and stacked in reading order on a
      phone, with nothing wider than the screen. */
@@ -1506,10 +1578,17 @@ function kindOf(user) {
     await page.evaluate(id => MemStore.get('docs', id).then(d => { const seg = d.clusters[1].segments.find(g => g.table);
       seg.table.push(['Ejection fraction', '60', 'mmHg']); return MemStore.put('docs', d); }), unitId);
     await page.evaluate(() => { Memorizer.ui.docsStale = true; Memorizer.ui.askIdx = null; });
+    /* Reading the units back is slowed, as on a slow device: CI twice asked
+       before the edited unit was read back, the Coach indexed the old one
+       (three rows, too few to ask from) and answered about the last topic
+       instead. Slowed here, that race is run every time, not by chance. */
+    await page.evaluate(() => { const all = MemStore.all; window.__storeAll = all;
+      MemStore.all = n => n === 'docs' ? new Promise(r => setTimeout(r, 800)).then(() => all.call(MemStore, n)) : all.call(MemStore, n); });
     await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await page.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await page.locator('#ask-q').waitFor(T);
     await sayP('quiz me on the table in section two afterload');
+    await page.evaluate(() => { MemStore.all = window.__storeAll; });
     const tq = await page.$$eval('.turn:last-child .agent-q .q, #agent-latest .agent-q .q', qs => qs.map(q => q.textContent));
     ok('"quiz me on the table in …": every question read from the table, row by row', await page.locator('.turn').last().getAttribute('data-tool') === 'table' &&
        tq.length === 4 && tq.every(q => /^In the table, what is the Normal for /.test(q)), JSON.stringify(tq) + ' ' + (await text(page, '#agent-latest')).slice(0, 200));
@@ -2103,6 +2182,22 @@ function kindOf(user) {
     await p5.locator('header.topbar button[aria-label="Back"]').click();
     await p5.locator('#chapters').waitFor(T);
     const keptId = (await p5.evaluate(() => MemStore.all('books').then(x => x[0].chapters))).find(c => c.pageStart === 2).docId;
+    /* A chapter's row is short: its menu hangs below it, over the next row,
+       and must be what a tap there lands on — with the finger still on the
+       row, which is then :hover and lifted by a transform. Row 2 has a row
+       after it. (A z-index for the open row was written against the next
+       row covering the menu; with it removed this still passed in Chromium,
+       so it was dropped rather than kept on a guess.) */
+    await p5.locator('#chapters .chapter-row').nth(2).locator('details.menu summary').click();
+    await p5.evaluate(() => document.querySelector('[data-join="2"]').closest('.chapter-row').scrollIntoView({ block: 'center' }));
+    await p5.locator('#chapters .chapter-row').nth(2).locator('details.menu summary').hover();
+    const joinHit = await p5.evaluate(() => { const b = document.querySelector('[data-join="2"]');
+      const r = b.getBoundingClientRect(), row = b.closest('.chapter-row'), rr = row.getBoundingClientRect(), next = row.nextElementSibling.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { below: Math.round(r.bottom - rr.bottom), overNext: r.bottom > next.top, hover: row.matches(':hover'), lifted: getComputedStyle(row).transform !== 'none', hit: !!at && (at === b || b.contains(at)) }; });
+    await p5.locator('#chapters .chapter-row').nth(2).locator('details.menu summary').click();
+    ok('a chapter’s menu, hanging over the next row, can be seen and tapped — the row lifted under the finger too',
+       joinHit.below > 0 && joinHit.overNext && joinHit.hover && joinHit.lifted && joinHit.hit, JSON.stringify(joinHit));
     await p5.locator('#chapters .chapter-row').nth(3).locator('details.menu summary').click();
     await p5.locator('[data-join="3"]').click();
     await p5.waitForFunction(() => document.querySelectorAll('#chapters .chapter-row').length === 3, null, T);
