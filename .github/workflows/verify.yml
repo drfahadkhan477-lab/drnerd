@@ -238,7 +238,7 @@ jobs:
         run: node tests/verify-memorizer-coach-pure.js
       - name: Memorizer — Daylight by day, Clinical at night, Paper and Neuron, and Systole's Contrast, readable at every contrast and brightness, on glass and aurora as well as solid, each drawing the brain in its own colours (44 checks)
         run: node tests/verify-memorizer-appearance-pure.js
-      - name: Memorizer — the home screen's progress, streak, brain, pearl, the pearl's figure or table, and weak spots say true things (68 checks)
+      - name: Memorizer — the home screen's progress, streak, brain and its live impulses, pearl, the pearl's figure or table, and weak spots say true things (68 checks)
         run: node tests/verify-memorizer-home-pure.js
       - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (32 checks)
         run: node tests/verify-memorizer-book-pure.js

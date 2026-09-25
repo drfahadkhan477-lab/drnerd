@@ -1657,7 +1657,31 @@ function kindOf(user) {
     /* A tap on a neuron says which section it is — a neuron is small under
        a finger, and a mis-tap should not start a lesson; its button opens it. */
     await page.locator('#mastery .neuron[data-key="' + planId + ':1"]').click();
+    /* THE BRAIN, LIVE (home.js liveStep, ui.js brainLive). The tap fires the
+       neuron: it flashes, and impulses leave it down its connections. */
+    const tapI = await page.evaluate(k => +document.querySelector('#mastery .neuron[data-key="' + k + '"]').getAttribute('data-i'), planId + ':1');
+    const flashed = await page.waitForFunction(i => { const f = document.querySelector('#brain .flash[data-i="' + i + '"]'); return !!f && +f.style.opacity > 0; },
+      tapI, { timeout: 3000, polling: 'raf' }).then(() => true, () => false);
+    const lt = await page.evaluate(() => { const b = Memorizer.ui.brainLive; return b && b.st.lastTap ? { i: b.st.lastTap.i, sent: b.st.lastTap.sent, deg: b.st.net.adj[b.st.lastTap.i].length } : null; });
+    ok('a tapped neuron fires: it flashes, and impulses leave it along its connections', flashed && lt && lt.i === tapI && lt.sent >= 1 && lt.sent <= lt.deg, JSON.stringify({ flashed, lt }));
     await page.waitForFunction(k => { const i = document.getElementById('brain-info'); return i && document.querySelector('#mastery .neuron.sel[data-key="' + k + '"]'); }, planId + ':1', T).catch(() => {});
+    /* It runs: frames go on being drawn while the brain is on the page. */
+    const f0 = await page.evaluate(() => Memorizer.ui.brainLive ? Memorizer.ui.brainLive.frames : -1);
+    const ran = await page.waitForFunction(f => Memorizer.ui.brainLive && Memorizer.ui.brainLive.running && Memorizer.ui.brainLive.frames > f + 5, f0, { timeout: 5000 }).then(() => true, () => false);
+    ok('the brain is live: it goes on being drawn while it is on the page', f0 >= 0 && ran, 'from frame ' + f0);
+    /* Every impulse is drawn on the connection it is travelling — its head
+       inside the stroke of that connection's path, as the browser draws it —
+       and that connection is lit while it travels. Read inside one frame, after
+       the brain's own. */
+    await page.waitForFunction(() => Memorizer.ui.brainLive && Memorizer.ui.brainLive.st.sparks.length > 0, null, T).catch(() => {});
+    const onCurve = await page.evaluate(() => new Promise(res => requestAnimationFrame(() => {
+      const b = Memorizer.ui.brainLive, art = document.getElementById('brain'), pool = art.querySelectorAll('.spark');
+      res(b.st.sparks.map((x, k) => { const g = pool[k], m = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(g.querySelector('.head').getAttribute('transform') || '') || [0, -99, -99];
+        const path = art.querySelector('.brain-axons path[data-e="' + x.e + '"]'), pt = art.createSVGPoint(); pt.x = +m[1]; pt.y = +m[2];
+        return { shown: g.style.display !== 'none', on: path.isPointInStroke(pt), hot: path.hasAttribute('data-hot') }; }));
+    })));
+    ok('each impulse is drawn on the connection it travels, and lights it', onCurve.length > 0 && onCurve.every(o => o.shown && o.on && o.hot), JSON.stringify(onCurve));
+    ok('and a light glances across the cortex', await page.evaluate(() => getComputedStyle(document.querySelector('#brain .brain-glint')).animationName) === 'brain-glint');
     const title1 = await page.evaluate(id => Memorizer.ui.docs.find(d => d.id === id).clusters[1].title, planId);
     const tapped = await page.evaluate(() => ({ view: Memorizer.ui.view, hero: !!document.getElementById('home-hero'),
       title: ((document.querySelector('#brain-info .brain-title') || {}).textContent || '').trim(), info: ((document.getElementById('brain-info') || {}).textContent || 'no panel') }));
@@ -1672,8 +1696,25 @@ function kindOf(user) {
     await page.locator('#brain-open').click();
     await page.locator('#big-idea').waitFor(T).catch(() => {});
     ok('its button opens its section', await page.evaluate(id => Memorizer.ui.view === 'session' && Memorizer.ui.docId === id && Memorizer.ui.state.section === 1, planId));
+    /* Gone from the page, it stops: nothing drawn for a brain no one sees. */
+    const gone = await page.evaluate(() => new Promise(r => setTimeout(() => { const b = Memorizer.ui.brainLive, a = b && b.frames;
+      setTimeout(() => r({ running: b && b.running, a, b: b && b.frames }), 400); }, 200)));
+    ok('leaving the home screen stops it', gone.running === false && gone.a === gone.b, JSON.stringify(gone));
     await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await page.locator('#weekly').waitFor(T);
+    const back = await page.evaluate(() => Memorizer.ui.brainLive ? Memorizer.ui.brainLive.frames : -1);
+    ok('and coming back starts it again', await page.waitForFunction(f => Memorizer.ui.brainLive && Memorizer.ui.brainLive.running && Memorizer.ui.brainLive.frames > f + 5, back, { timeout: 5000 }).then(() => true, () => false));
+    /* With reduced motion asked for, it is still: no impulses, no glancing
+       light, nothing running. */
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.evaluate(() => Memorizer.render());
+    await page.locator('#brain').waitFor(T);
+    const calm = await page.evaluate(() => new Promise(r => setTimeout(() => r({ live: Memorizer.ui.brainLive,
+      glint: getComputedStyle(document.querySelector('#brain .brain-glint')).display, sparks: [...document.querySelectorAll('#brain .spark')].filter(g => g.style.display !== 'none').length,
+      breathe: getComputedStyle(document.querySelector('#brain .brain-cortex')).animationName }), 400)));
+    ok('with reduced motion asked for, the brain is still: nothing running, no impulse, no glancing light', calm.live === null && calm.glint === 'none' && calm.sparks === 0 && calm.breathe === 'none', JSON.stringify(calm));
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.evaluate(() => Memorizer.render());
     const wk = await page.evaluate(() => { const w = MemStudy.weekly(Memorizer.ui.activity, FSRS.todayISO()).week;
       const g = k => (document.querySelector('#weekly strong[data-k="' + k + '"]') || {}).textContent; return { w, answers: g('answers'), reviews: g('reviews'), days: g('days') }; });
     const by = await page.evaluate(() => { const d = Memorizer.ui.activity.days[FSRS.todayISO()]; return d && d.by; });

@@ -528,10 +528,102 @@ function brainLayout(units, max) {
 }
 /* The part of the drawing the brain fills: the viewBox the page uses. */
 var BRAIN_VIEW = '70 34 862 640';
+/* ── THE BRAIN, LIVE ───────────────────────────────────────────────────────
+   The owner: "make the brain animated, live signals going on, glancing".
+   The page runs this at the display's rate; everything here is the pure
+   part, stepped with a clock and a random source handed in, so the suite can
+   drive it for a simulated minute and count what happened.
+
+   IMPULSES TRAVEL THE WIRING. A neuron fires; an impulse leaves it along its
+   connections, at SPEED units a second, following the same curve the
+   connection is drawn with (axonCtrl is shared with the page). Where one
+   arrives, that neuron flashes, and may fire on in turn — never back the way
+   the impulse came.
+
+   WHAT IS KNOWN CARRIES A SIGNAL; WHAT IS NOT, BARELY. Whether a neuron
+   passes an impulse on is its state's RELAY chance — high for a solid
+   section, low for one not yet drilled — and each onward connection is taken
+   at the PASS chance of the neuron at its far end. So a cascade runs through
+   what you have learned and dies at the edge of what you have not. Neurons
+   also fire on their own, every AMBIENT_MS or so, a lit one several times as
+   often as a dark one (FIRE): a brain with nothing learned yet still flickers,
+   faintly. MAX_SPARKS impulses at once at most. A tap fires a neuron down
+   every connection it has. */
+var LIVE = { SPEED: 240, MAX_SPARKS: 16, AMBIENT_MS: 420, FLASH_MS: 650,
+  FIRE: { solid: 6, fading: 4, weak: 3, 'new': 1 },
+  RELAY: { solid: 0.95, fading: 0.8, weak: 0.6, 'new': 0.15 },
+  PASS: { solid: 0.7, fading: 0.55, weak: 0.45, 'new': 0.15 } };
+/* A connection's bend: the control point of the curve it is drawn with. */
+function axonCtrl(a, b, i) {
+  var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y, bend = i % 2 ? 0.16 : -0.16;
+  return { x: Math.round((mx - dy * bend) * 10) / 10, y: Math.round((my + dx * bend) * 10) / 10 };
+}
+function quad(a, c, b, t) {
+  var u = 1 - t;
+  return { x: u * u * a.x + 2 * u * t * c.x + t * t * b.x, y: u * u * a.y + 2 * u * t * c.y + t * t * b.y };
+}
+/* Each neuron's connections, both ways, and each connection's length along
+   its curve (twelve chords). */
+function brainNet(L) {
+  var adj = L.nodes.map(function () { return []; }), len = [], ctrl = [];
+  L.edges.forEach(function (e, k) {
+    var A = L.nodes[e.a], B = L.nodes[e.b], C = axonCtrl(A, B, k), n = 0, p = A;
+    for (var i = 1; i <= 12; i++) { var q = quad(A, C, B, i / 12); n += Math.hypot(q.x - p.x, q.y - p.y); p = q; }
+    ctrl.push(C); len.push(n);
+    adj[e.a].push({ j: e.b, e: k }); adj[e.b].push({ j: e.a, e: k });
+  });
+  return { adj: adj, len: len, ctrl: ctrl };
+}
+function liveInit(L) {
+  var tally = {};
+  ['solid', 'fading', 'weak', 'new'].forEach(function (k) { tally[k] = { arrived: 0, relayed: 0, spont: 0 }; });
+  return { net: brainNet(L), sparks: [], flash: {}, wait: LIVE.AMBIENT_MS * 0.3, fired: 0, tally: tally };
+}
+/* Neuron i fires. `from` is the neuron the impulse came from (-1 for none);
+   `how` is 'arrive' (it relays at its state's chance), 'spont' (it fires on
+   its own) or 'tap' (down every connection). */
+function liveFire(st, L, i, rand, from, how) {
+  var n = L.nodes[i];
+  if (!n) return;
+  st.flash[i] = LIVE.FLASH_MS; st.fired++;
+  if (how === 'arrive') { st.tally[n.state].arrived++; if (rand() >= LIVE.RELAY[n.state]) return; st.tally[n.state].relayed++; }
+  if (how === 'spont') st.tally[n.state].spont++;
+  var sent = 0;
+  st.net.adj[i].forEach(function (x) {
+    if (x.j === from || st.sparks.length >= LIVE.MAX_SPARKS) return;
+    if (how !== 'tap' && rand() >= LIVE.PASS[L.nodes[x.j].state]) return;
+    st.sparks.push({ e: x.e, a: i, b: x.j, t: 0, len: st.net.len[x.e], state: n.state }); sent++;
+  });
+  if (how === 'tap') st.lastTap = { i: i, sent: sent };
+}
+function livePick(L, rand) {
+  var total = 0, w = L.nodes.map(function (n) { return (total += LIVE.FIRE[n.state]); }), r = rand() * total;
+  for (var i = 0; i < w.length; i++) if (r < w[i]) return i;
+  return w.length - 1;
+}
+/* The brain `dt` seconds on: flashes fade, impulses move, those that arrive
+   fire on, and now and then a neuron fires on its own. */
+function liveStep(st, L, dt, rand) {
+  if (!(dt > 0) || !L.nodes.length) return st;
+  var ms = dt * 1000, arrived = [];
+  Object.keys(st.flash).forEach(function (k) { st.flash[k] -= ms; if (st.flash[k] <= 0) delete st.flash[k]; });
+  st.sparks = st.sparks.filter(function (s) { s.t += LIVE.SPEED * dt / Math.max(1, s.len); if (s.t >= 1) { arrived.push(s); return false; } return true; });
+  arrived.forEach(function (s) { liveFire(st, L, s.b, rand, s.a, 'arrive'); });
+  st.wait -= ms;
+  if (st.wait <= 0) { st.wait = LIVE.AMBIENT_MS * (0.5 + rand()); liveFire(st, L, livePick(L, rand), rand, -1, 'spont'); }
+  return st;
+}
+/* Where an impulse is, `back` of the way behind it (its tail), on the curve
+   its connection is drawn with. */
+function sparkAt(L, st, s, back) {
+  var e = L.edges[s.e], t = Math.max(0, Math.min(1, s.t - (back || 0)));
+  return quad(L.nodes[e.a], st.net.ctrl[s.e], L.nodes[e.b], s.a === e.a ? t : 1 - t);
+}
+
 var BRAIN = { W: BRAIN_W, H: BRAIN_H, VIEW: BRAIN_VIEW, CEREBRUM: CEREBRUM, CEREBELLUM: CEREBELLUM, STEM: STEM, SULCI: SULCI, FOLIA: FOLIA, MAX: BRAIN_MAX,
   cerebrum: smoothPath(CEREBRUM), cerebellum: smoothPath(CEREBELLUM), stem: smoothPath(STEM) };
 
-var MemHome = { BRAIN: BRAIN, brainLayout: brainLayout, smoothPath: smoothPath, inPoly: inPoly, edgeDist: edgeDist, pearlVisual: pearlVisual, recallParts: recallParts, recallStreak: recallStreak, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
+var MemHome = { BRAIN: BRAIN, brainLayout: brainLayout, LIVE: LIVE, axonCtrl: axonCtrl, brainNet: brainNet, liveInit: liveInit, liveFire: liveFire, liveStep: liveStep, sparkAt: sparkAt, smoothPath: smoothPath, inPoly: inPoly, edgeDist: edgeDist, pearlVisual: pearlVisual, recallParts: recallParts, recallStreak: recallStreak, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
   HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
   notesOf: notesOf, harvest: harvest, readout: readout, leans: leans, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath };
 root.MemHome = MemHome;

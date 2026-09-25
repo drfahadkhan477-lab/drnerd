@@ -327,6 +327,95 @@ head('the brain: every section a neuron, inside it, wired into one net, lit by p
   ok('the outline is a closed smooth curve through every point it is given', /^M0 0C/.test(d) && /Z$/.test(d) && ['100 0', '100 100', '0 100', '0 0'].every(p => d.indexOf(' ' + p + 'C') !== -1 || d.indexOf(' ' + p + 'Z') !== -1), d);
 }
 
+head('the brain, live: impulses run the wiring, and die at the edge of what is known');
+{
+  const mk = (id, n, done) => ({ docId: id, name: 'Unit ' + id, sections: Array.from({ length: n }, (_, i) => ({ ci: i, title: 't', state: i < done ? ['solid', 'fading', 'weak'][i % 3] : 'new' })) });
+  const L = H.brainLayout([mk('a', 27, 17), mk('b', 14, 9), mk('c', 20, 4), mk('d', 12, 0)]);
+  const seeded = seed => () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const net = H.brainNet(L);
+  ok('every connection is known to both its neurons, and its length is at least the straight line', L.edges.every((e, k) =>
+    net.adj[e.a].some(x => x.j === e.b && x.e === k) && net.adj[e.b].some(x => x.j === e.a && x.e === k) &&
+    net.len[k] >= Math.hypot(L.nodes[e.a].x - L.nodes[e.b].x, L.nodes[e.a].y - L.nodes[e.b].y) - 1e-9));
+  /* Its length along the curve, not the straight line: an impulse's speed
+     is what it covers on the drawn curve. Against the curve walked in 400
+     steps here. */
+  const q = (a, c, b, t) => ({ x: (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * c.x + t * t * b.x, y: (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * c.y + t * t * b.y });
+  const arc = k => { const e = L.edges[k], a = L.nodes[e.a], b = L.nodes[e.b], c = H.axonCtrl(a, b, k); let n = 0, p = a; for (let i = 1; i <= 400; i++) { const r = q(a, c, b, i / 400); n += Math.hypot(r.x - p.x, r.y - p.y); p = r; } return n; };
+  ok('a connection’s length is along its curve, longer than the straight line between its neurons', L.edges.every((e, k) => Math.abs(net.len[k] - arc(k)) < arc(k) * 0.005 &&
+     net.len[k] > Math.hypot(L.nodes[e.a].x - L.nodes[e.b].x, L.nodes[e.a].y - L.nodes[e.b].y) + 0.1));
+  /* Neighbouring connections bend to opposite sides, so a lobe's wiring
+     fans out rather than stacking into parallel arcs. */
+  const P = { x: 0, y: 0 }, Q = { x: 100, y: 0 };
+  ok('alternate connections bend to opposite sides of the line they join', H.axonCtrl(P, Q, 0).y === -H.axonCtrl(P, Q, 1).y && H.axonCtrl(P, Q, 0).y !== 0);
+  /* An impulse runs on the curve the page draws: from its source at the
+     start, to its target at the end, through the curve's midpoint halfway —
+     whichever way along the connection it is going. */
+  const st0 = H.liveInit(L), e0 = L.edges[0], A = L.nodes[e0.a], B = L.nodes[e0.b], C = H.axonCtrl(A, B, 0);
+  const near = (p, q) => Math.abs(p.x - q.x) < 1e-6 && Math.abs(p.y - q.y) < 1e-6;
+  const fwd = { e: 0, a: e0.a, b: e0.b }, back = { e: 0, a: e0.b, b: e0.a };
+  ok('an impulse leaves its source, passes the curve’s midpoint, and reaches its target, either way along', near(H.sparkAt(L, st0, Object.assign({ t: 0 }, fwd)), A) &&
+     near(H.sparkAt(L, st0, Object.assign({ t: 1 }, fwd)), B) && near(H.sparkAt(L, st0, Object.assign({ t: 0 }, back)), B) &&
+     near(H.sparkAt(L, st0, Object.assign({ t: 0.5 }, fwd)), { x: 0.25 * A.x + 0.5 * C.x + 0.25 * B.x, y: 0.25 * A.y + 0.5 * C.y + 0.25 * B.y }) &&
+     near(H.sparkAt(L, st0, Object.assign({ t: 0.3 }, back)), H.sparkAt(L, st0, Object.assign({ t: 0.7 }, fwd))));
+  ok('and its tail is behind it, never before its source', near(H.sparkAt(L, st0, Object.assign({ t: 0.02 }, fwd), 0.2), A));
+  /* A simulated minute, stepped at 60 a second. */
+  const st = H.liveInit(L), rand = seeded(7);
+  let maxN = 0, off = 0, sum = 0;
+  for (let k = 0; k < 3600; k++) {
+    H.liveStep(st, L, 1 / 60, rand);
+    maxN = Math.max(maxN, st.sparks.length); sum += st.sparks.length;
+    st.sparks.forEach(x => { const e = L.edges[x.e]; if (!((x.a === e.a && x.b === e.b) || (x.a === e.b && x.b === e.a)) || !(x.t >= 0 && x.t < 1)) off++; });
+  }
+  ok('over a minute impulses only ever run along a connection, between its two neurons', off === 0 && sum > 0, off + ' off the wiring, ' + (sum / 3600).toFixed(1) + ' in flight on average');
+  ok('and never more than ' + H.LIVE.MAX_SPARKS + ' at once', maxN <= H.LIVE.MAX_SPARKS && maxN > 1, String(maxN));
+  const T = st.tally, rate = k => T[k].arrived ? T[k].relayed / T[k].arrived : 0;
+  ok('a solid neuron passes an impulse on far more often than one not drilled', rate('solid') > 0.8 && rate('new') < 0.35 && T.new.arrived > 10,
+     ['solid', 'fading', 'weak', 'new'].map(k => k + ' ' + T[k].relayed + '/' + T[k].arrived).join(', '));
+  const per = k => T[k].spont / L.nodes.filter(n => n.state === k).length;
+  ok('and a lit neuron fires on its own several times as often as a dark one', per('solid') > 3 * per('new'),
+     ['solid', 'new'].map(k => k + ' ' + per(k).toFixed(2) + ' each').join(', '));
+  const dark = H.brainLayout([mk('z', 30, 0)]), sd = H.liveInit(dark), rd = seeded(3);
+  for (let k = 0; k < 1800; k++) H.liveStep(sd, dark, 1 / 60, rd);
+  ok('a brain with nothing learned still flickers — faintly', sd.fired > 20 && sd.fired < st.fired / 2, sd.fired + ' fired, against ' + st.fired + ' with sections learned');
+  const again = H.liveInit(L), r2 = seeded(7);
+  for (let k = 0; k < 3600; k++) H.liveStep(again, L, 1 / 60, r2);
+  ok('the same clock and the same chances give the same minute', again.fired === st.fired && JSON.stringify(again.tally) === JSON.stringify(st.tally));
+  /* One impulse, followed: it lands, the neuron flashes, and it fires on —
+     down every other connection, never back the way it came. */
+  const hub = L.nodes.findIndex((n, i) => n.state === 'solid' && net.adj[i].length >= 3);
+  const into = net.adj[hub][0];
+  const one = H.liveInit(L); one.wait = 1e9;
+  one.sparks.push({ e: into.e, a: into.j, b: hub, t: 0.999, len: net.len[into.e], state: 'solid' });
+  H.liveStep(one, L, 0.05, () => 0);
+  ok('where an impulse lands, that neuron flashes', one.flash[hub] > 0 && one.tally.solid.arrived === 1, JSON.stringify(one.flash));
+  const out = one.sparks.map(x => x.b).sort(), want = net.adj[hub].map(x => x.j).filter(j => j !== into.j).sort();
+  ok('and fires on down every other connection, never back the way it came', JSON.stringify(out) === JSON.stringify(want) && one.sparks.every(x => x.a === hub), JSON.stringify(out) + ' / ' + JSON.stringify(want));
+  const stop = H.liveInit(L); stop.wait = 1e9;
+  const darkI = L.nodes.findIndex((n, i) => n.state === 'new' && net.adj[i].length >= 2), din = net.adj[darkI][0];
+  stop.sparks.push({ e: din.e, a: din.j, b: darkI, t: 0.999, len: 1, state: 'solid' });
+  H.liveStep(stop, L, 0.05, () => 0.5);
+  ok('an impulse reaching a neuron not drilled flickers there and, at an even chance, goes no further', stop.flash[darkI] > 0 && stop.sparks.length === 0 && 0.5 >= H.LIVE.RELAY.new);
+  let fade = H.liveInit(L); fade.wait = 1e9; H.liveFire(fade, L, hub, () => 0.99, -1, 'spont');
+  ok('a flash fades and is gone after ' + H.LIVE.FLASH_MS + ' ms', (H.liveStep(fade, L, (H.LIVE.FLASH_MS - 50) / 1000, () => 0.99), fade.flash[hub] > 0) &&
+     (H.liveStep(fade, L, 0.1, () => 0.99), !(hub in fade.flash)));
+  const tap = H.liveInit(L); tap.wait = 1e9;
+  H.liveFire(tap, L, darkI, () => 0.999, -1, 'tap');
+  ok('a tap fires a neuron down every connection it has, whatever the chances', tap.lastTap.i === darkI && tap.lastTap.sent === net.adj[darkI].length && tap.sparks.length === net.adj[darkI].length);
+  const still = H.liveInit(L); H.liveStep(still, L, 0, rand);
+  ok('no time passing, nothing happens', still.fired === 0 && still.sparks.length === 0);
+  /* A clock that jumps backwards (a tab brought back, a device's time set)
+     moves nothing backwards. */
+  const rev = H.liveInit(L); rev.wait = 1e9;
+  rev.sparks.push({ e: into.e, a: into.j, b: hub, t: 0.5, len: net.len[into.e], state: 'solid' });
+  H.liveStep(rev, L, -1, rand); H.liveStep(rev, L, NaN, rand);
+  ok('and a clock running backwards moves no impulse backwards', rev.sparks.length === 1 && rev.sparks[0].t === 0.5, JSON.stringify(rev.sparks));
+  /* Every neuron tapped at once: the cap holds however much is fired. */
+  const flood = H.liveInit(L); flood.wait = 1e9;
+  L.nodes.forEach((_, i) => H.liveFire(flood, L, i, () => 0, -1, 'tap'));
+  H.liveStep(flood, L, 0.01, () => 0);
+  ok('every neuron fired at once, still no more than ' + H.LIVE.MAX_SPARKS + ' impulses', flood.sparks.length === H.LIVE.MAX_SPARKS, String(flood.sparks.length));
+}
+
 head('Systole’s rhythm strip on the hero (monitor.js)');
 {
   global.RhythmsExtra = load('src/core/rhythms-extra.js').RhythmsExtra;
