@@ -256,7 +256,7 @@ jobs:
         run: node tests/verify-memorizer-study-pure.js
       - name: Memorizer — where a unit came from — a real SHA-256 of its bytes, a duplicate recognised, an import report that counts what happened (31 checks)
         run: node tests/verify-memorizer-provenance-pure.js
-      - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (78 checks)
+      - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (80 checks)
         run: node tests/verify-memorizer-pack-pure.js
 
   # ── Memorizer in a real browser ────────────────────────────────────────────
