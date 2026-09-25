@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 2944 + 133 checks
+node scripts/verify.js --pwa                           # → 4412 + 133 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -61,8 +61,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 89
-  run normally — it is 35 of the 2944 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 110
+  run normally — it is 35 of the 4412 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -269,7 +269,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 90 suites, 2944 checks, plus 133 more on the split build. Those numbers are
+Across 111 suites, 4412 checks, plus 133 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
@@ -569,7 +569,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 89 *-patch · build-pwa · serve · shots
-tests/        90 suites · 57 need no browser · + pwa
+tests/        111 suites · 57 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

@@ -21,14 +21,14 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 2944 checks in
-# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 1393.
-# The other 1684 all drive a real build of the app in a real browser
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 4412 checks in
+# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 2807.
+# The other 1738 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 1684 checks here. See docs/BUILD.md and the
+# there is no way to run those 1738 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
@@ -72,7 +72,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                1393 real checks, up
+#                2807 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -85,7 +85,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 1684 checks to this file is possible — GitHub Actions
+# Adding the other 1738 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -200,7 +200,7 @@ jobs:
         run: node tests/verify-ipad-pure.js
       - name: the newer copy survives and a refused write is not lost (56 checks)
         run: node tests/verify-store-pure.js
-      - name: the counts in the docs are the counts the tests produced (56 checks)
+      - name: the counts in the docs are the counts the tests produced (60 checks)
         run: node tests/verify-stats.js
       - name: a stem that points at a picture is caught, and the count is honest (36 checks)
         run: node tests/verify-figaudit.js
@@ -210,7 +210,7 @@ jobs:
         run: node tests/verify-md-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
-      - name: a splash that cannot load the bank says which failure it was (23 checks)
+      - name: a splash that cannot load the bank says which failure it was (44 checks)
         run: node tests/verify-loader-pure.js
       - name: a split build cannot be half of one build and half of another (52 checks)
         run: node tests/verify-provenance-pure.js
@@ -220,15 +220,15 @@ jobs:
         run: node tests/verify-ui-pure.js
       - name: the corpus checker holds every floor it claims (17 checks)
         run: node tests/verify-refscheck-pure.js
-      - name: the echo tables and the echo arithmetic (55 checks)
+      - name: the echo tables and the echo arithmetic (59 checks)
         run: node tests/verify-echo-pure.js
-      - name: Echo Studio computes only what was measured (55 checks)
+      - name: Echo Studio computes only what was measured (58 checks)
         run: node tests/verify-echoui-pure.js
-      - name: echo-patch's anchors still exist where it runs (13 checks)
+      - name: echo-patch's anchors still exist where it runs (20 checks)
         run: node tests/verify-echoanchor-pure.js
       - name: the notes search ranks, quotes and escapes (41 checks)
         run: node tests/verify-notesearch-pure.js
-      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (166 checks)
+      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (177 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
         run: node tests/verify-memorizer-prompts-pure.js
@@ -236,7 +236,7 @@ jobs:
         run: node tests/verify-memorizer-session-pure.js
       - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, makes the cards to memorise, and re-teaches by the kind of miss (137 checks)
         run: node tests/verify-memorizer-coach-pure.js
-      - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness, on glass and aurora as well as solid (42 checks)
+      - name: Memorizer — Systole's themes, colour for colour, readable at every contrast and brightness, on glass and aurora as well as solid (44 checks)
         run: node tests/verify-memorizer-appearance-pure.js
       - name: Memorizer — the home screen's progress, streak, pearl, the pearl's figure or table, and weak spots say true things (68 checks)
         run: node tests/verify-memorizer-home-pure.js
@@ -292,7 +292,7 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (345 checks)
+      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (354 checks)
         run: node tests/verify-memorizer.js
       - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
