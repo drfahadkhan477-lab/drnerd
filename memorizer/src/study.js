@@ -589,6 +589,69 @@ function streak(days, today) {
   return { n: n, frozen: frozen };
 }
 
+/* ── the owner's plan, phases 3 and 4 ─────────────────────────────────── */
+
+/* SOCRATIC CHAINS: "why?" asked down the section's own chain of cause and
+   effect, one link at a time, the answer hidden until asked for. From the
+   book's pathway (sheet.js glance: [{label}, {verb, label}, …]) when it has
+   one of three steps or more; else from a lesson's mechanism, a sentence a
+   step. Nothing is asked that the chain does not answer. */
+/* No lookbehind: Safari before 16.4 cannot parse one (ground.js). */
+function sentencesIn(t) { return String(t || '').replace(/\s+/g, ' ').trim().replace(/([.;])\s+(?=[A-Z])/g, '$1\u0000').split('\u0000').filter(function (x) { return x.length > 12; }); }
+function socratic(pathway, mechanism) {
+  var p = pathway || [];
+  if (p.length >= 3) {
+    var steps = [];
+    for (var i = 1; i < p.length; i++) {
+      steps.push({ ask: p[i - 1].label + ' ' + (p[i].verb || 'leads to') + ' \u2026 what?', answer: p[i].label });
+    }
+    steps.push({ ask: 'So: why does ' + p[0].label + ' end in ' + p[p.length - 1].label + '?',
+                 answer: p.map(function (x, k) { return (k ? (x.verb || '\u2192') + ' ' : '') + x.label; }).join(' ') });
+    return { source: 'book', steps: steps };
+  }
+  var ms = sentencesIn(mechanism);
+  if (ms.length >= 2) return { source: 'lesson', steps: ms.map(function (m, k) { return { ask: k ? 'And then \u2014 what follows, and why?' : 'Where does it start?', answer: m }; }) };
+  return null;
+}
+
+/* TEACH-BACK FROM THE PACK'S RUBRIC: what an explanation is scored against.
+   The lesson's key points, and — when the lesson has them (a pack's) — its
+   pearls and its mechanism, sentence by sentence: an explanation that
+   leaves out why it happens has left something out. Each once. */
+function rubricOf(points, lesson) {
+  var L = lesson || {}, out = [], seen = {};
+  var add = function (x) { var k = String(x.text).toLowerCase().trim(); if (k && !seen[k]) { seen[k] = true; out.push({ text: x.text, page: x.page }); } };
+  (points || []).forEach(add);
+  (L.pearls || []).forEach(add);
+  sentencesIn(L.mechanism).forEach(function (m) { add({ text: m, page: null }); });
+  return out;
+}
+
+/* EXAM CONDITIONS: a board's pace, ninety seconds a question. The clock is
+   shown, never enforced — running out of time is information, not a
+   penalty. */
+var EXAM_PACE_S = 90;
+function mss(sec) { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ':' + ('0' + sec % 60).slice(-2); }
+function examClock(startMs, nowMs, n, done) {
+  var el = Math.max(0, (nowMs - startMs) / 1000), total = n * EXAM_PACE_S;
+  return { elapsed: mss(el), target: mss(total), left: mss(total - el), behind: el > (done + 1) * EXAM_PACE_S, over: el > total };
+}
+
+/* THE DOCK'S CONTEXT ACTION: the one next thing on this screen, beside
+   Home, Coach, Review and Settings — none while answering (a question is
+   answered on the card, not the dock). */
+function contextAction(state, allDone) {
+  if (!state) return null;
+  var c = state.per && state.per[state.section];
+  switch (state.phase) {
+    case 'unit': return allDone ? { id: 'exam', label: 'Exam' } : { id: 'learn', label: 'Learn' };
+    case 'teach': return c && c.lesson ? (c.memorized ? { id: 'drill', label: 'Drill' } : { id: 'memorise', label: 'Memorise' }) : null;
+    case 'result': return { id: 'next', label: 'Next' };
+    case 'done': return { id: 'sections', label: 'Sections' };
+    default: return null;
+  }
+}
+
 var MemStudy = {
   correctSegment: correctSegment, LOW_CONFIDENCE: LOW_CONFIDENCE, pageConfidence: pageConfidence,
   noteKey: noteKey, toggleMark: toggleMark, markCard: markCard, TABLE_ROUND: TABLE_ROUND, tableRound: tableRound,
@@ -596,6 +659,7 @@ var MemStudy = {
   MONTHS: MONTHS, parseExamDate: parseExamDate, REVIEW_SHARE: REVIEW_SHARE, studyPlan: studyPlan,
   TEACH_SHARE: TEACH_SHARE, teachBack: teachBack, claimSources: claimSources,
   addDays: addDays, daysFrom: daysFrom,
+  socratic: socratic, rubricOf: rubricOf, EXAM_PACE_S: EXAM_PACE_S, examClock: examClock, contextAction: contextAction,
   BLANK: BLANK, NUMBER: NUMBER, CLOZE_WORDS: CLOZE_WORDS, CLOZE_PER_SECTION: CLOZE_PER_SECTION, clozeOf: clozeOf, clozeCards: clozeCards,
   checkTyped: checkTyped, TYPED_RATING: TYPED_RATING,
   OCCLUDE_MIN: OCCLUDE_MIN, occlusionOf: occlusionOf, maskOf: maskOf, occlusionCards: occlusionCards,

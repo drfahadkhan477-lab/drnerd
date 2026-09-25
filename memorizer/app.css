@@ -903,3 +903,44 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 .why-all { margin-top: var(--s-2); }
 .why-all ul { margin: var(--s-2) 0 0; padding-left: 1.25rem; }
 .why-all li.right strong { color: var(--good); }
+
+/* ── the owner's plan, phases 2–4 ──
+   Stages as a strip of steps; the clinical map as groups of chips; the
+   Socratic chain and rounds as cards; the one-screen review in a dialog;
+   exam conditions' held choice; focus hides everything but the lesson. */
+.pg-open { border: 0; cursor: pointer; font-family: inherit; line-height: inherit; }
+.pg-open:hover, .pg-open:focus-visible { color: var(--accent); text-decoration: underline; }
+.stage-strip { list-style: none; display: flex; flex-wrap: wrap; gap: .375rem; margin: 0 0 var(--s-3); padding: 0; }
+.stage-strip li .stage-btn { border-radius: 999px; padding: .25rem .75rem; font-size: var(--t-meta); }
+.stage-strip li[data-state="now"] .stage-btn { background: var(--accent); color: var(--accent-ink); }
+.stage-strip li[data-state="done"] .stage-btn { color: var(--accent); }
+.stage-strip li[data-state="next"] .stage-btn { color: var(--muted); }
+.clinical-map .eyebrow, .socratic .eyebrow, .rounds .eyebrow { color: var(--accent); }
+.map-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--s-3); margin: var(--s-2) 0; }
+.map-kind { display: block; font-size: var(--t-meta); margin-bottom: .25rem; }
+.map-items { display: flex; flex-wrap: wrap; gap: .375rem; }
+.map-item { background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: .125rem .625rem; font-size: var(--t-meta); }
+.soc-steps { margin: var(--s-2) 0 0; padding-left: 1.25rem; }
+.soc-steps li { margin-bottom: var(--s-2); }
+.soc-ask { font-weight: 700; margin: 0; }
+.soc-answer { margin: .125rem 0 0; }
+.rounds-stem { font-style: italic; }
+.rounds-q, .rounds-a { margin: var(--s-2) 0; }
+.review-sheet { max-width: 44rem; text-align: left; }
+.review-sheet h3 { margin: var(--s-3) 0 var(--s-1); font-size: var(--t-body); }
+.rs-idea { font-weight: 700; }
+.rs-values { display: flex; flex-wrap: wrap; gap: .5rem; }
+.rs-value { background: var(--surface-2); border-radius: .5rem; padding: .125rem .5rem; font-size: var(--t-meta); }
+.option.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.why.blind { background: var(--surface-2); }
+.exam-clock { font-family: var(--font-mono); font-size: var(--t-meta); color: var(--muted); }
+.exam-clock.behind { color: var(--mid); }
+.exam-go { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.section-meta { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); flex-wrap: wrap; }
+.focus-btn { font-size: var(--t-meta); }
+:root[data-focus="on"] .dock, :root[data-focus="on"] .robot-dock { display: none; }
+:root[data-focus="on"] body::before { opacity: 0; animation: none; }
+.nav-context { color: var(--accent-ink); background: var(--accent); border-radius: 999px; }
+.nav-context .nav-icon, .nav-context .nav-label { color: inherit; }
+.type-chip[data-type="V"] .type-badge { background: var(--mid-soft); }
+.pearl-steps .blank { display: inline-block; min-width: 2.5em; border-bottom: 2px solid var(--accent); text-align: center; color: var(--accent); }

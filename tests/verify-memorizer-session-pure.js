@@ -381,5 +381,34 @@ head('a pack imported (pack.js): its sections taught from it, what was earned ke
   })());
 }
 
+head('the kind of miss: a wrong value is its own (phase 3), and a pack can be removed');
+{
+  const nq = { question: 'Severe AS mean gradient?', options: ['20 mmHg', '40 mmHg', 'Aortic valve', '60 mmHg'], answer: 1 };
+  ok('a wrong number for a number is a wrong value (V), the value picked kept', S.missType(nq, 0).t === 'V' && S.missType(nq, 0).w === '20 mmHg');
+  ok('a word for a number is a confusion (C); not sure is N', S.missType(nq, 2).t === 'C' && S.missType(nq, S.NOT_SURE).t === 'N');
+  const wq = { question: 'Which drug?', options: ['Aspirin', 'Heparin', '5 mg', 'Warfarin'], answer: 0 };
+  ok('a number picked for a word is a confusion, not a value', S.missType(wq, 2).t === 'C' && S.missType(wq, 1).t === 'C');
+  ok('a long phrase with a number in it is not a value', S.missType({ options: ['Class 1 recommendation for surgery in all', '2 mmHg', 'c', 'd'], answer: 1 }, 0).t === 'C');
+  ok('a value said with its comparison is still a value', S.missType({ options: ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', 'at least 4 m/s'], answer: 2 }, 0).t === 'V' &&
+     S.missType({ options: ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', 'at least 4 m/s'], answer: 2 }, 3).t === 'V');
+  let s = go(S.init('dv', TITLES), { type: 'open', section: 0 }, { type: 'taught', value: lesson }, { type: 'toMemorize', value: { cards: 0 } }, { type: 'toDrill' },
+    { type: 'quizReady', value: { questions: [nq, { question: 'q2', quote: '', options: ['a', 'b', 'c', 'd'], answer: 0, explain: '', page: 1 }].map(q => Object.assign({ quote: '', explain: 'e', page: 1 }, q)) } });
+  s = S.next(s, { type: 'answered', choice: 0 });
+  const w = Object.values(s.weak)[0];
+  ok('a drill’s wrong value is filed V, with the value it was confused with, on its weak item and its card',
+     w.types[0] === 'V' && w.confusedWith === '20 mmHg' && s.cards.some(c => c.errorType === 'V' && c.confusedWith === '20 mmHg'), JSON.stringify(w.types));
+  const packLesson = { overview: 'p', points: [{ text: 'x', page: 1 }], numbers: [], mnemonics: [], analogies: [], flowchart: '', by: 'pack' };
+  const pq = quiz(2, 'P').questions.map(q => Object.assign(q, { by: 'pack' }));
+  let t = go(S.init('du', TITLES), { type: 'toUnit' }, { type: 'packed', value: { sections: [{ index: 0, lesson: packLesson, quiz: { questions: pq } }, { index: 1, lesson: packLesson, quiz: { questions: pq } }] } });
+  t = go(t, { type: 'open', section: 2 }, { type: 'taught', value: lesson }, { type: 'toUnit' });
+  const u = S.next(t, { type: 'unpacked' });
+  ok('removing the pack sends its sections back to the built-in coach', !u.per[0].lesson && !u.per[0].quiz && !u.per[1].lesson && !u.per[1].quiz);
+  ok('and leaves a section the built-in coach taught as it was', u.per[2].lesson && u.per[2].lesson.overview === 'o');
+  const mid = go(S.init('dm2', TITLES), { type: 'packed', value: { sections: [{ index: 0, lesson: packLesson, quiz: { questions: pq } }] } },
+    { type: 'open', section: 0 }, { type: 'toMemorize', value: { cards: 0 } }, { type: 'toDrill' });
+  const m2 = S.next(mid, { type: 'unpacked' });
+  ok('the section being drilled keeps its pack questions until it is left', m2.per[0].quiz && m2.per[0].quiz.questions[0].by === 'pack' && m2.per[0].lesson.by === 'pack');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

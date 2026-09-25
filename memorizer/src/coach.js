@@ -1476,6 +1476,16 @@ function reteach(item, cluster) {
     else line('The book', rs);
   } else if (type === 'R') {
     line('The book', rs);
+  } else if (type === 'V') {
+    /* A wrong value: the right one in its sentence, then the section's other
+       values, so the number is learnt among its neighbours rather than
+       alone — the picked value, if the section has it, among them. */
+    out.hookType = 'values';
+    out.title = right + ' — not ' + item.confusedWith;
+    line('The value', rs);
+    numberFacts(cluster, 8).filter(function (n) { return !rs || n.text !== rs.text; }).slice(0, 3).forEach(function (n) {
+      line(n.text.indexOf(String(item.confusedWith || '').replace(/\s.*$/, '')) !== -1 && item.confusedWith ? 'Where ' + item.confusedWith + ' belongs' : 'Beside it', n);
+    });
   } else {
     out.hookType = 'teach';
     var all = sentences(cluster, true), k = -1;

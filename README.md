@@ -195,6 +195,33 @@ itself marked `NOT_IN_PDF`. What passes teaches the section, labelled
 questions. The pack stays on the device, and `scripts/leak-guard.js` refuses
 a saved pack or prompt at commit, since both carry your book.
 
+**A lesson built as one mental model.** Step by step, a section is taught
+in stages — *orient*, *mechanism*, *recognise*, *numbers*, *don't confuse*,
+*recall* — shown as a strip over the slides, each a tap straight to its
+first slide, and only the stages the section has material for. It opens
+with a **clinical map** of what the section names (conditions, scenarios,
+tests, treatments, each with the page it is first named on), asks **"why?"
+down the section's own chain of cause and effect** one link at a time,
+and ends with recall: the mnemonics, a check, teaching it back and, from a
+pack, **rounds** — an oral case, the examiner's question, the model answer
+on request. Every page reference opens that page of the PDF as printed,
+and *One screen* puts the whole section — idea, points, values, the pairs
+confused, hooks, pearls — on one card to glance at before a drill.
+
+**Misses taught by their kind, and exams under exam conditions.** A wrong
+number for the right thing is its own kind of miss, *wrong value*, and is
+anchored at once among the section's other values rather than contrasted
+like a confusion. A pack's teach-back is scored against its rubric — the
+points, its pearls and its mechanism. The final exam asks a pack's
+questions for the sections it covers, and can be taken under **exam
+conditions**: a clock at a board's pace, each answer held rather than
+marked, and at the end what was missed with the answer picked, the right
+one and why. **Focus** hides the dock, the robot and the background while
+studying; the dock itself carries the one next thing on the screen
+(learn, memorise, drill, next, sections), and none while a question is
+open. The pearl of the day can be **recalled first**, its values hidden
+until asked for, with an honest "I knew it" kept by the day.
+
 **An on-device AI tutor, optional.** Turned on in Settings, a small language
 model (Qwen3 0.6B, 1.7B or 4B, Apache-2.0, through WebLLM on WebGPU) is downloaded
 once and runs on the iPad with no key and no connection. Where the GPU has no

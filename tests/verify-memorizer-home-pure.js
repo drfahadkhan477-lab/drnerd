@@ -312,5 +312,20 @@ head('beside the pearl: its own section’s figure, or its table');
   ok('a unit whose PDF is not kept has no figure to draw: its table instead', H.pearlVisual(noFile, { cluster: 1, page: 3 }, C).kind === 'table');
 }
 
+head('the pearl as the day’s recall (phase 4)');
+{
+  const rp = H.recallParts([{ lead: 'Rule', text: 'An LVEDP greater than 18 mmHg means overload.' }, { lead: '', text: 'Normal is 8 to 12.' }]);
+  ok('its values are the blanks — the numbers the page marks', rp.blanks === 3 && rp.steps[0].parts.filter(p => p.blank).map(p => p.text).join('|') === '18 mmHg' &&
+     rp.steps.every(s => !s.leadBlank), JSON.stringify(rp.steps.map(s => s.parts.filter(p => p.blank).map(p => p.text))));
+  ok('and nothing else is hidden: the words put back together are the pearl', rp.steps[0].parts.map(p => p.text).join('') === 'An LVEDP greater than 18 mmHg means overload.');
+  ok('a reference number is not a blank', H.recallParts([{ lead: '', text: 'See Table 4 for the 12 causes.' }]).steps[0].parts.filter(p => p.blank).map(p => p.text).join() === '12 ');
+  const nl = H.recallParts([{ lead: 'Stiff ventricle', text: 'depends on atrial kick.' }]);
+  ok('a pearl with no value hides its first lead instead', nl.blanks === 1 && nl.steps[0].leadBlank === true);
+  ok('and one with neither has nothing to hide', H.recallParts([{ lead: '', text: 'Plain words.' }]).blanks === 0);
+  const add = (d, n) => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const rs = H.recallStreak({ '2026-09-25': true, '2026-09-24': false, '2026-09-20': true, '2026-09-10': true }, '2026-09-25', 7, add);
+  ok('the last seven days: how many it was recalled, of those tried', rs.knew === 2 && rs.of === 3, JSON.stringify(rs));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

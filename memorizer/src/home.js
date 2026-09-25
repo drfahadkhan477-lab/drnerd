@@ -279,7 +279,31 @@ function pearlVisual(doc, pearl, Chunk) {
   return null;
 }
 
-var MemHome = { pearlVisual: pearlVisual, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
+/* ── the pearl as the day's recall (the owner's plan, phase 4) ───────────
+   Its values are hidden until asked for — the numbers marks() finds, as
+   the page marks them — so the pearl is recalled before it is read. A
+   pearl with no value hides the lead of its first step instead, so there
+   is always something to bring back. */
+function recallParts(steps) {
+  var blanks = 0;
+  var out = (steps || []).map(function (st) {
+    var parts = marks(st.text).map(function (m) { if (m.num) blanks++; return { text: m.text, blank: !!m.num }; });
+    return { lead: st.lead || '', leadBlank: false, parts: parts };
+  });
+  if (!blanks && out.length && out[0].lead) { out[0].leadBlank = true; blanks = 1; }
+  return { steps: out, blanks: blanks };
+}
+/* The days of the last `days` (7) the pearl was recalled: { day: true|false }. */
+function recallStreak(recs, today, days, addDays) {
+  var n = 0, of = 0;
+  for (var i = 0; i < (days || 7); i++) {
+    var d = addDays(today, -i);
+    if (recs && d in recs) { of++; if (recs[d]) n++; }
+  }
+  return { knew: n, of: of };
+}
+
+var MemHome = { pearlVisual: pearlVisual, recallParts: recallParts, recallStreak: recallStreak, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
   HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
   notesOf: notesOf, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath };
 root.MemHome = MemHome;

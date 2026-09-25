@@ -116,7 +116,59 @@ function glance(cluster, hooked) {
   return facts.length || pathway.length || lists.length ? { facts: facts, pathway: pathway, lists: lists } : null;
 }
 
-var MemSheet = { MAX_LABEL_WORDS: MAX_LABEL_WORDS, MAX_FACTS: MAX_FACTS, MAX_LISTS: MAX_LISTS, MAX_ITEMS: MAX_ITEMS, numberTiles: numberTiles, sheetOf: sheetOf, glance: glance };
+/* ── the lesson as one mental model (the owner's plan, phase 2) ──────────
+   THE STAGES, in the order a clinician builds a topic: orient (what it is),
+   mechanism (why), recognise (the points, the glance), numbers, don't
+   confuse (the pairs), recall (check, teach back). A section shows the
+   stages it has material for: orient, recognise and recall always; the
+   others only when the lesson carries them, so no stage is an empty
+   page. */
+var STAGES = [['orient', 'Orient'], ['mechanism', 'Mechanism'], ['recognise', 'Recognise'], ['numbers', 'Numbers'],
+              ['confuse', 'Don\u2019t confuse'], ['recall', 'Recall']];
+var ALWAYS = { orient: true, recognise: true, recall: true };
+function stages(have) {
+  return STAGES.filter(function (st) { return ALWAYS[st[0]] || (have && have[st[0]]); }).map(function (st) { return { id: st[0], label: st[1] }; });
+}
+
+/* THE CLINICAL MAP: the conditions, scenarios, tests and treatments the
+   section names (ask.js's vocabulary), grouped, each with the page it is
+   first named on — the section's cast, before its lines. Only what the
+   book's own text names. */
+var MAP_ORDER = ['disease', 'scenario', 'test', 'treatment'];
+function clinicalMap(cluster) {
+  var by = {}, seen = {};
+  (cluster && cluster.segments || []).forEach(function (sg) {
+    var t = sg.table ? (sg.tableHeader ? [sg.tableHeader] : []).concat(sg.table).map(function (r) { return r.join(' '); }).join(' ') : sg.text;
+    Ask.entriesIn(t || '').forEach(function (e) {
+      var k = e.kind + ':' + e.id;
+      if (seen[k]) return;
+      seen[k] = true;
+      (by[e.kind] = by[e.kind] || []).push({ label: e.label, page: sg.page });
+    });
+  });
+  var groups = MAP_ORDER.filter(function (k) { return by[k]; }).map(function (k) { return { kind: k, label: Ask.KIND_LABELS[k], items: by[k] }; });
+  return { groups: groups, count: groups.reduce(function (n, g) { return n + g.items.length; }, 0) };
+}
+
+/* THE ONE-SCREEN REVIEW: the whole section on a card to glance at before
+   a drill or an exam — the idea, each point, the values, the pairs, the
+   hooks, the pearls. The lesson's own words, cut to fit, never reworded. */
+var REVIEW_POINTS = 8, REVIEW_VALUES = 8;
+function reviewSheet(lesson) {
+  var L = lesson || {}, sh = sheetOf(L);
+  var points = sh.groups.reduce(function (a, g) { return a.concat(g.points); }, []).slice(0, REVIEW_POINTS).map(function (p) { return { text: p.text, page: p.page }; });
+  var values = [];
+  sh.numbers.forEach(function (n) { n.tiles.forEach(function (t) { values.push({ value: t.value, label: t.label, page: n.page }); }); });
+  return {
+    idea: sh.bigIdea, points: points, values: values.slice(0, REVIEW_VALUES),
+    confuse: (L.distinctions || []).map(function (d) { return { a: d.a, b: d.b, how: d.how }; }),
+    hooks: (L.mnemonics || []).map(function (m) { return { title: m.title, letters: m.letters }; }),
+    pearls: (L.pearls || []).map(function (p) { return p.text; }),
+  };
+}
+
+var MemSheet = { MAX_LABEL_WORDS: MAX_LABEL_WORDS, MAX_FACTS: MAX_FACTS, MAX_LISTS: MAX_LISTS, MAX_ITEMS: MAX_ITEMS, numberTiles: numberTiles, sheetOf: sheetOf, glance: glance,
+                 STAGES: STAGES, stages: stages, clinicalMap: clinicalMap, REVIEW_POINTS: REVIEW_POINTS, REVIEW_VALUES: REVIEW_VALUES, reviewSheet: reviewSheet };
 root.MemSheet = MemSheet;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemSheet;
 })(typeof window !== 'undefined' ? window : this);
