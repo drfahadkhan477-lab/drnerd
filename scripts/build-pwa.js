@@ -287,6 +287,20 @@ const LOADER = `<script>
      device that has no other way to say what it is running. */
   var SHELL_COMMIT = '__COMMIT__';
   try { window.SYSTOLE_BUILD = { build: SHELL_BUILD_ID, commit: SHELL_COMMIT }; } catch(_){}
+  /* The heart's baked mesh (see "a copy baked at build time" in
+     src/core/heart3d.js): fetched from the start, alongside the bank, and
+     handed to the heart as window.HEART3D_MESH before app.js runs. Replaced at
+     build time with its path under content/, or with nothing when the build
+     carries no mesh. It is never a reason not to launch: a failed fetch, a
+     sign-in page in its place, or a copy from other code all leave the heart
+     to mesh itself as it always did, and a slow one is waited for at most five
+     seconds, which is still less than meshing takes on an iPad. */
+  var HEART_MESH_URL = '__HEART_MESH__';
+  var heartMesh = HEART_MESH_URL
+    ? fetch(HEART_MESH_URL).then(function(r){ return r.ok ? r.arrayBuffer() : null; })
+        .then(function(b){ if(b) window.HEART3D_MESH = b; })
+        .catch(function(){})
+    : null;
   function fail(msg, err){
     console.error(msg, err||'');
     var sp = document.getElementById('splash');
@@ -359,6 +373,7 @@ const LOADER = `<script>
      tests/verify-pwa.js caught it by blocking app.js at the network and
      counting registrations, which is the only reason this is a try/catch and
      not a plausible-looking one-liner. */
+  if(heartMesh) await Promise.race([heartMesh, new Promise(function(r){ setTimeout(r, 5000); })]);
   try{
     await new Promise(function(resolve, reject){
       var s = document.createElement('script');
@@ -641,6 +656,34 @@ step('pull the reference figures out of the app code, one file per unit', () => 
 `;
 });
 
+/* THE HEART'S BAKED MESH comes out of app.js the same way. apex-patch embeds it
+   as one line of base64 beside heart3d.js — 3.3 MB, which the shell budget
+   (280 KB gzipped for index.html + app.js, tests/verify-pwa.js) could never
+   hold. It becomes a binary file the loader fetches in parallel with the bank.
+
+   NAMED BY ITS OWN DIGEST. The service worker serves content/ cache-first
+   and keeps it across code deploys, which is right for the bank and wrong
+   for anything derived from code: a mesh under a fixed name would be served
+   from cache after heart3d.js changed. A new mesh is a new name, so an old one
+   can never answer for it. (heart3d.js checks its key as well.)
+
+   A plain function of the app code, so tests/verify-heartbake-pure.js can
+   drive it without a build. */
+function splitHeartMesh(code) {
+  const re = /window\.HEART3D_MESH_B64='([A-Za-z0-9+/=]*)';/g;
+  const hits = [...code.matchAll(re)];
+  if (!hits.length) return null;
+  if (hits.length > 1) throw new Error(`build-pwa: ${hits.length} baked heart meshes in app.js, expected one`);
+  const bin = Buffer.from(hits[0][1], 'base64');
+  const name = 'content/heart-mesh-' + crypto.createHash('sha256').update(bin).digest('hex').slice(0, 12) + '.bin';
+  return { code: code.replace(re, () => 'window.HEART3D_MESH_B64=null;'), bin, name };
+}
+let heartMesh = null;
+step('move the heart\'s baked mesh out of the app code', () => {
+  heartMesh = splitHeartMesh(appCode);
+  if (heartMesh) appCode = heartMesh.code;
+});
+
 /* ── 3.8. the fonts ───────────────────────────────────────────────────────
    Four woff2 faces are inlined as base64 in the single-file build — 250 KB of
    the 802 KB shell, and correctly so there: one file that works offline cannot
@@ -724,6 +767,11 @@ if (html.indexOf('__BUILD_ID__') >= 0) throw new Error('more than one build-stam
 /* The same both-directions check as the stamp above, and for the same reason:
    a placeholder that silently fails to substitute ships the literal
    __COMMIT__ to the device, and a second copy means one of them is stale. */
+/* The same both-directions check again: a placeholder left in would send the
+   loader to fetch a file literally named __HEART_MESH__. */
+if (html.indexOf('__HEART_MESH__') < 0) throw new Error('the loader lost its heart-mesh placeholder');
+html = html.replace('__HEART_MESH__', heartMesh ? heartMesh.name : '');
+if (html.indexOf('__HEART_MESH__') >= 0) throw new Error('more than one heart-mesh placeholder in the loader');
 if (html.indexOf('__COMMIT__') < 0) throw new Error('the loader lost its commit placeholder');
 html = html.replace('__COMMIT__', COMMIT);
 if (html.indexOf('__COMMIT__') >= 0) throw new Error('more than one commit placeholder in the loader');
@@ -868,6 +916,7 @@ fs.mkdirSync(fontDir, { recursive: true });
 for (const [name, body] of fontAssets) fs.writeFileSync(path.join(fontDir, name), body);
 
 if (refSeed) fs.writeFileSync(path.join(DIST, 'content', 'refs-seed.json'), refSeed);
+if (heartMesh) fs.writeFileSync(path.join(DIST, heartMesh.name), heartMesh.bin);
 if (refImgParts) {
   const dir = path.join(DIST, 'content', 'refs-images');
   fs.mkdirSync(dir, { recursive: true });
