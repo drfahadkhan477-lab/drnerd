@@ -873,6 +873,20 @@ function kindOf(user) {
      (await page.locator('.unit-row .badge').innerText()) === '33%', await text(page, '.unit-row'));
   ok('with its colour bar and a menu', await page.evaluate(() => getComputedStyle(document.querySelector('.unit-row')).getPropertyValue('--hue').trim() !== '') &&
      await page.locator('.unit-row details.menu summary').count() === 1);
+  /* The owner's screenshot: ⋮ opened a sliver — the row clipped its own
+     menu, so Delete could not be reached. Each item, where it is drawn, is
+     what a tap there lands on. */
+  await page.locator('.unit-row details.menu summary').click();
+  /* the page is scrolled to the row, never the item into view: a clipping
+     row is a scroll container, and scrolling the item scrolled it into
+     sight inside the row — the first version of this check did that, and
+     passed with the clipping back */
+  await page.evaluate(() => document.querySelector('.unit-row').scrollIntoView({ block: 'center' }));
+  const menuHit = await page.evaluate(() => [...document.querySelectorAll('.unit-row details.menu[open] .menu-list button')].map(b => {
+    const r = b.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { t: b.textContent, h: Math.round(r.height), hit: !!at && (at === b || b.contains(at)), rowTop: Math.round(document.querySelector('.unit-row .doc-name').getBoundingClientRect().top) }; }));
+  await page.locator('.unit-row details.menu summary').click();
+  ok('its menu opens whole: every item can be seen and tapped, not cut off by the row', menuHit.length === 2 && menuHit.every(m => m.hit && m.h > 20), JSON.stringify(menuHit));
   const pearlText = (await page.locator('#pearl .pearl-steps').innerText()).replace(/\s+/g, ' ');
   ok('the pearl of the day is the PDF’s own sentence, broken into steps', /Pearl of the day/i.test(await page.locator('#pearl .eyebrow').innerText()) &&
      await page.locator('#pearl .pearl-steps li').count() >= 2 && /end-diastolic pressure greater than 18 mmHg/.test(pearlText) && /stiff ventricle/.test(pearlText), pearlText);
@@ -2157,6 +2171,22 @@ function kindOf(user) {
     await p5.locator('header.topbar button[aria-label="Back"]').click();
     await p5.locator('#chapters').waitFor(T);
     const keptId = (await p5.evaluate(() => MemStore.all('books').then(x => x[0].chapters))).find(c => c.pageStart === 2).docId;
+    /* A chapter's row is short: its menu hangs below it, over the next row,
+       and must be what a tap there lands on — with the finger still on the
+       row, which is then :hover and lifted by a transform. Row 2 has a row
+       after it. (A z-index for the open row was written against the next
+       row covering the menu; with it removed this still passed in Chromium,
+       so it was dropped rather than kept on a guess.) */
+    await p5.locator('#chapters .chapter-row').nth(2).locator('details.menu summary').click();
+    await p5.evaluate(() => document.querySelector('[data-join="2"]').closest('.chapter-row').scrollIntoView({ block: 'center' }));
+    await p5.locator('#chapters .chapter-row').nth(2).locator('details.menu summary').hover();
+    const joinHit = await p5.evaluate(() => { const b = document.querySelector('[data-join="2"]');
+      const r = b.getBoundingClientRect(), row = b.closest('.chapter-row'), rr = row.getBoundingClientRect(), next = row.nextElementSibling.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { below: Math.round(r.bottom - rr.bottom), overNext: r.bottom > next.top, hover: row.matches(':hover'), lifted: getComputedStyle(row).transform !== 'none', hit: !!at && (at === b || b.contains(at)) }; });
+    await p5.locator('#chapters .chapter-row').nth(2).locator('details.menu summary').click();
+    ok('a chapter’s menu, hanging over the next row, can be seen and tapped — the row lifted under the finger too',
+       joinHit.below > 0 && joinHit.overNext && joinHit.hover && joinHit.lifted && joinHit.hit, JSON.stringify(joinHit));
     await p5.locator('#chapters .chapter-row').nth(3).locator('details.menu summary').click();
     await p5.locator('[data-join="3"]').click();
     await p5.waitForFunction(() => document.querySelectorAll('#chapters .chapter-row').length === 3, null, T);

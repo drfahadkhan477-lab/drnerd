@@ -224,9 +224,13 @@ main[data-enter] .pearl-steps li { animation: pearl-rung .5s ease-out both; }
 .result { text-align: center; }
 .units { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--s-3); }
 .unit-row { position: relative; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: var(--s-2);
-  background: var(--surface); border: 1px solid var(--line); border-radius: 1.25rem; padding: var(--s-3) var(--s-3) var(--s-3) calc(var(--s-5) + .5rem);
-  box-shadow: var(--shadow); overflow: hidden; }
-.unit-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: .375rem; background: hsl(var(--hue) 38% 66%); }
+  background: var(--surface); border: 1px solid var(--line); border-radius: 1.25rem; padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+  box-shadow: var(--shadow); }
+/* The unit's colour is its left edge — a border follows the rounded corner
+   by itself. It was a stripe the row clipped with overflow: hidden, and the
+   same clipping cut off the ⋮ menu below the row (the owner's screenshot:
+   a sliver, no Delete). */
+.units .unit-row { border-left: .375rem solid hsl(var(--hue) 38% 66%); }
 .unit-row > p { grid-column: 1 / -1; margin: 0; }
 .unit-open { font: inherit; color: var(--ink); text-align: left; background: none; border: 0; padding: var(--s-2) 0; display: flex; flex-direction: column; cursor: pointer; min-width: 0; }
 .doc-name { font-size: var(--t-lead); overflow-wrap: anywhere; }
