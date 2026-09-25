@@ -612,11 +612,31 @@ function mechanismQuestions(cluster, P) {
         .filter(function (t) { return avoid.map(norm).indexOf(norm(t)) === -1; });
       var w = distractors(right, pool, OPTIONS - 1, forward ? from : to, from + e.verb + to + forward);
       if (!w) return;
-      var q = forward ? 'Follow the mechanism in your book: ' + from + ' → ' + e.verb + ' → ?' : 'Follow the mechanism in your book: ? → ' + e.verb + ' → ' + to;
+      /* asked as a sentence, the chain's own verb in it: "In your book,
+         calcific degeneration causes what?" — the arrows it was asked in
+         first read as a puzzle, not a question (the owner's screens) */
+      var q = forward ? 'In your book, ' + lowerLead(from) + ' ' + e.verb + ' what?' : 'In your book, what ' + singular(e.verb) + ' ' + lowerLead(to) + '?';
       out.push(mcq('mechanism', q, '', right, w, src.text, src.page));
     });
   });
   return out;
+}
+
+/* A label lower-cased to sit inside a sentence — but not an abbreviation
+   ("LVEDP", "AF") or a name the book capitalises in mid-sentence. */
+function lowerLead(t) {
+  var s = String(t || ''), w = s.split(/\s+/)[0] || '';
+  if (/[A-Z].*[A-Z]/.test(w) || /\d/.test(w)) return s;
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
+/* "what reduce preload?" → "what reduces preload?": the verb as it goes
+   with "what", its first word given the third person. */
+function singular(verb) {
+  var ws = String(verb || '').split(' '), w = ws[0];
+  if (!w || /s$/.test(w)) return verb;
+  ws[0] = /[^aeiou]y$/.test(w) ? w.slice(0, -1) + 'ies' : /(?:sh|ch|x|o)$/.test(w) ? w + 'es' : w + 's';
+  return ws.join(' ');
 }
 
 /* ── threshold: the value that defines a grade ─────────────────────────── */
@@ -1299,7 +1319,7 @@ var ASK_SOMETHING = 'A question on this section: one option is what your book sa
    replies), and one made by an AI has none. Checked against every
    candidate's real kind in the coach suite. */
 var KIND_SHAPES = [
-  ['mechanism', /^Follow the mechanism in your book: /], ['threshold', /^In your book, what .+ defines .+\?$/],
+  ['threshold', /^In your book, what .+ defines .+\?$/], ['mechanism', /^In your book, (?:what \S.* \S.*\?|\S.* what\?)$/],
   ['most', /^What is the most /], ['choice', /^What is the (?:first[- ]line|treatment of choice|drug of choice|test of choice|investigation of choice|gold standard|mainstay of) /],
   ['avoid', /^Which is contraindicated /], ['except', / EXCEPT:$/], ['define-back', /^Which term is defined as /],
   ['define', /^Which best describes /], ['member', /^Which of the following is one of the /], ['table', /^In the table, what is the /],
@@ -1503,7 +1523,7 @@ var MemCoach = {
   rankedTerms: rankedTerms, frequencies: frequencies, bare: bare, numberFacts: numberFacts, mnemonicsOf: mnemonicsOf,
   pools: pools, kinOf: kinOf, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
   lesson: lesson, quiz: quiz, exam: exam, flow: flow, paths: paths, tree: tree,
-  reteach: reteach, sentenceAbout: sentenceAbout,
+  reteach: reteach, sentenceAbout: sentenceAbout, lowerLead: lowerLead, singular: singular,
   recallCards: recallCards, KIND_SAYS: KIND_SAYS, questionKind: questionKind, explainQuestion: explainQuestion, explainSection: explainSection,
 };
 root.MemCoach = MemCoach;

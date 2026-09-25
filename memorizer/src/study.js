@@ -652,6 +652,35 @@ function contextAction(state, allDone) {
   }
 }
 
+/* SMART REVIEW ORDER: which due card first. A confident miss first —
+   the most dangerous kind (the skill); then by the kind of miss, the ones
+   a hook has not held yet before the ones that only need retrieving
+   (E encoding, V wrong value, C confusion, N never met, R retrieval, then
+   a card never missed); then the one lapsed most; then the longest
+   overdue. And interleaved: no two in a row from the same section while
+   another section still has a card waiting — mixing is what makes a review
+   a test rather than a reread. Pure; cards are not changed. */
+var TYPE_RANK = { E: 0, V: 1, C: 2, N: 3, R: 4 };
+function reviewOrder(cards, today) {
+  var score = function (c) {
+    var due = c.srs && c.srs.due || c.dueFrom || today;
+    return [c.hazard ? 0 : 1, c.errorType in TYPE_RANK ? TYPE_RANK[c.errorType] : 5, -((c.srs && c.srs.lapses) || 0), due < today ? -daysFrom(due, today) : 0];
+  };
+  var ranked = (cards || []).map(function (c, i) { return { c: c, k: score(c), i: i }; }).sort(function (a, b) {
+    for (var j = 0; j < a.k.length; j++) if (a.k[j] !== b.k[j]) return a.k[j] - b.k[j];
+    return a.i - b.i;
+  });
+  var out = [], last = null;
+  while (ranked.length) {
+    var at = 0;
+    for (var k = 0; k < ranked.length; k++) { if (sectionKey(ranked[k].c) !== last) { at = k; break; } }
+    var pick = ranked.splice(at, 1)[0];
+    out.push(pick.c); last = sectionKey(pick.c);
+  }
+  return out;
+}
+function sectionKey(c) { return c.docId + ':' + c.cluster; }
+
 var MemStudy = {
   correctSegment: correctSegment, LOW_CONFIDENCE: LOW_CONFIDENCE, pageConfidence: pageConfidence,
   noteKey: noteKey, toggleMark: toggleMark, markCard: markCard, TABLE_ROUND: TABLE_ROUND, tableRound: tableRound,
@@ -659,7 +688,7 @@ var MemStudy = {
   MONTHS: MONTHS, parseExamDate: parseExamDate, REVIEW_SHARE: REVIEW_SHARE, studyPlan: studyPlan,
   TEACH_SHARE: TEACH_SHARE, teachBack: teachBack, claimSources: claimSources,
   addDays: addDays, daysFrom: daysFrom,
-  socratic: socratic, rubricOf: rubricOf, EXAM_PACE_S: EXAM_PACE_S, examClock: examClock, contextAction: contextAction,
+  socratic: socratic, rubricOf: rubricOf, TYPE_RANK: TYPE_RANK, reviewOrder: reviewOrder, EXAM_PACE_S: EXAM_PACE_S, examClock: examClock, contextAction: contextAction,
   BLANK: BLANK, NUMBER: NUMBER, CLOZE_WORDS: CLOZE_WORDS, CLOZE_PER_SECTION: CLOZE_PER_SECTION, clozeOf: clozeOf, clozeCards: clozeCards,
   checkTyped: checkTyped, TYPED_RATING: TYPED_RATING,
   OCCLUDE_MIN: OCCLUDE_MIN, occlusionOf: occlusionOf, maskOf: maskOf, occlusionCards: occlusionCards,

@@ -2075,7 +2075,7 @@ function startDrill(w) {
 function viewReview() {
   var dr = ui.drill;
   var due = dr ? ui.cards.filter(function (c) { return c.docId === dr.docId && c.cluster === dr.cluster && !c.kind && !dr.done[c.id]; })
-    : Session.dueCards(ui.cards, today());
+    : Study.reviewOrder(Session.dueCards(ui.cards, today()), today());
   var names = {};
   ui.docs.forEach(function (d) { names[d.id] = d.name; });
   var back = backBar(dr ? 'Drill · ' + dr.title : 'Review', function () { leave('library'); });

@@ -349,5 +349,23 @@ head('Socratic chains, the pack’s rubric, exam conditions and the dock’s nex
      S.contextAction(st('memorize')) === null && S.contextAction(st('teach', {})) === null && S.contextAction(null) === null);
 }
 
+head('smart review order: the dangerous misses first, then by kind, mixed across sections');
+{
+  const c = (id, o) => Object.assign({ id, docId: 'd', cluster: 0, errorType: '', srs: null }, o);
+  const cards = [c('r', { errorType: 'R' }), c('e', { errorType: 'E' }), c('h', { errorType: 'C', hazard: true }), c('v', { errorType: 'V' }),
+                 c('n', { errorType: 'N' }), c('x', {}), c('c', { errorType: 'C' })].map((x, i) => Object.assign(x, { cluster: i }));
+  ok('a confident miss first, then encoding, wrong value, confusion, never met, retrieval, then the rest',
+     S.reviewOrder(cards, '2026-09-25').map(x => x.id).join('') === 'hevcnrx', S.reviewOrder(cards, '2026-09-25').map(x => x.id).join(''));
+  const lap = [c('a', { errorType: 'C', srs: { lapses: 1, due: '2026-09-25' } }), c('b', { errorType: 'C', cluster: 1, srs: { lapses: 3, due: '2026-09-25' } })];
+  ok('of two alike, the one lapsed most', S.reviewOrder(lap, '2026-09-25').map(x => x.id).join('') === 'ba');
+  const od = [c('a', { errorType: 'C', srs: { lapses: 0, due: '2026-09-24' } }), c('b', { errorType: 'C', cluster: 1, srs: { lapses: 0, due: '2026-09-10' } })];
+  ok('then the one overdue longest', S.reviewOrder(od, '2026-09-25').map(x => x.id).join('') === 'ba');
+  const mix = [c('a1', { errorType: 'E', cluster: 0 }), c('a2', { errorType: 'E', cluster: 0 }), c('a3', { errorType: 'E', cluster: 0 }), c('b1', { errorType: 'R', cluster: 1 })];
+  ok('interleaved: no two from one section in a row while another has one waiting', S.reviewOrder(mix, '2026-09-25').map(x => x.id).join() === 'a1,b1,a2,a3',
+     S.reviewOrder(mix, '2026-09-25').map(x => x.id).join());
+  ok('every card once, none changed', S.reviewOrder(cards, '2026-09-25').length === cards.length && JSON.stringify(cards[0]) === JSON.stringify(c('r', { errorType: 'R', cluster: 0 })));
+  ok('nothing due, nothing ordered', S.reviewOrder([], '2026-09-25').length === 0 && S.reviewOrder(null, '2026-09-25').length === 0);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

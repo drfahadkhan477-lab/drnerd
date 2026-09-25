@@ -216,7 +216,11 @@ confused, hooks, pearls — on one card to glance at before a drill.
 number for the right thing is its own kind of miss, *wrong value*, and is
 anchored at once among the section's other values rather than contrasted
 like a confusion. A pack's teach-back is scored against its rubric — the
-points, its pearls and its mechanism. The final exam asks a pack's
+points, its pearls and its mechanism. **Review asks the most dangerous
+first:** a confident miss, then the kinds a hook has not yet held (an
+encoding miss, a wrong value, a confusion) before those that only need
+retrieving, the most-lapsed and longest-overdue first, mixed across
+sections so no two in a row come from one while another is waiting. The final exam asks a pack's
 questions for the sections it covers, and can be taken under **exam
 conditions**: a clock at a board's pace, each answer held rather than
 marked, and at the end what was missed with the answer picked, the right

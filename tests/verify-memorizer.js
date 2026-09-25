@@ -1320,12 +1320,22 @@ function kindOf(user) {
   ok('and Escape closes it', await page.locator('.figure-view').count() === 0);
 
   head('review');
+  /* Precondition for the order check below: the card the plain due list
+     puts second is made a confident miss, so the smart order and the
+     plain one disagree about which comes first. */
+  const flagged = await page.evaluate(() => { const due = MemSession.dueCards(Memorizer.ui.cards, FSRS.todayISO());
+    due.forEach((c, i) => { c.hazard = i === due.length - 1; });
+    return Promise.all(due.map(c => MemStore.put('cards', c))).then(() => due[due.length - 1].id); });
   await page.locator('nav.dock').getByRole('button', { name: /Review/ }).click();
   await page.locator('#mcq .option').first().waitFor(T);
   ok('a review card is the question again, as multiple choice', /2 due/.test(await page.locator('.review-head').textContent()) && await page.locator('#mcq .option').count() === 4,
      await text(page, '.review-head') + ' · ' + await page.locator('#mcq .option').count() + ' options');
   const shown = await page.locator('#mcq h2.q').innerText();
   const card = cards2.find(c => c.front === shown);
+  /* the smart order (study.js reviewOrder): what is asked first is what it
+     puts first — here the exam's miss or the drill's, by their kinds */
+  const firstId = await page.evaluate(() => MemStudy.reviewOrder(MemSession.dueCards(Memorizer.ui.cards, FSRS.todayISO()), FSRS.todayISO())[0].id);
+  ok('the review asks first the card the smart order puts first — the confident miss', card && card.id === firstId && firstId === flagged, JSON.stringify([card && card.id, firstId, flagged]));
   await page.locator(`.option[data-i="${card.answer}"]`).click();
   await page.locator('#next').click();
   await page.waitForFunction(() => /1 due/.test((document.querySelector('.review-head') || {}).textContent || ''), null, T);
