@@ -304,9 +304,17 @@ green, amber or red — solid, fading or weak, from its drill and its cards'
 recall today. Each unit is a lobe of neighbouring neurons wired into one net,
 its first section at the lobe's heart and the rest spreading outward in
 order, and the lobes are wired to one another; a connection is lit when both
-its neurons are, and a signal runs along it. A tap names the neuron's
-section and how it stands, with a button to open it; arrow keys walk the
-neurons in order. "This week" gives time,
+its neurons are, and a signal runs along it. The brain is live: impulses run
+the wiring as glowing sparks with a tail, the connection they travel lit as
+they go; where one lands the neuron flashes and may fire on — a solid
+section almost always passes it on, one not yet drilled seldom, so a cascade
+runs through what you know and dies at the edge of what you do not. Lit
+neurons also fire on their own and breathe, the tissue breathes, and a light
+glances across the cortex every few seconds. A tap fires the neuron, names
+its section and how it stands, with a button to open it; arrow keys walk the
+neurons in order. It runs only while it is on the screen, stops when you
+leave the home screen, and is still when the device asks for reduced
+motion. "This week" gives time,
 answers, accuracy, reviews and the topics missed most, against last week;
 and the streak forgives one missed day a week.
 

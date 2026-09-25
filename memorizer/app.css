@@ -883,8 +883,28 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 .brain-signals path { fill: none; stroke: var(--brain-spark); stroke-width: 3.2; stroke-linecap: round; stroke-dasharray: 3 26; opacity: .95;
   animation: brain-fire 2.8s linear infinite; }
 @keyframes brain-fire { to { stroke-dashoffset: -58; } }
-.brain-glow circle { opacity: .55; }
-.brain-glow circle[data-state="solid"] { fill: var(--brain-n-solid); } .brain-glow circle[data-state="fading"] { fill: var(--brain-n-fading); } .brain-glow circle[data-state="weak"] { fill: var(--brain-n-weak); }
+/* THE BRAIN, LIVE (ui.js brainLive): glows that fade from their middle —
+   gradients, not a blur filter, which would be redrawn every frame — lit
+   neurons breathing each on its own beat, a flash where an impulse lands,
+   the impulses themselves (a head and a tail), the connection an impulse is
+   on lit while it travels, and a light glancing across the cortex. */
+.gl-solid { stop-color: var(--brain-n-solid); } .gl-fading { stop-color: var(--brain-n-fading); } .gl-weak { stop-color: var(--brain-n-weak); }
+.gl-new { stop-color: var(--brain-dendrite); } .gl-spark { stop-color: var(--brain-spark); }
+.g0 { stop-opacity: 1; } .g1 { stop-opacity: .42; } .g2 { stop-opacity: 0; }
+.brain-glow circle { opacity: .6; animation: glow-breathe 3.6s ease-in-out infinite; }
+@keyframes glow-breathe { 0%, 100% { opacity: .35; } 50% { opacity: .85; } }
+.brain-flashes circle, .brain-sparks { pointer-events: none; }
+.spark .core { fill: var(--brain-spark); stroke: var(--brain-spark); stroke-opacity: .35; stroke-width: 3; }
+.spark .halo { opacity: 1; }
+.spark .tail { fill: var(--brain-spark); }
+.spark .t1 { opacity: .75; } .spark .t2 { opacity: .55; } .spark .t3 { opacity: .35; } .spark .t4 { opacity: .18; }
+.spark[data-state="new"] { opacity: .5; }
+.brain-axons path[data-hot] { stroke: var(--brain-spark); stroke-opacity: .9; stroke-width: 4; stroke-dasharray: none; }
+.bg-0 { stop-color: var(--brain-glint); stop-opacity: 0; } .bg-1 { stop-color: var(--brain-glint); stop-opacity: 1; }
+.brain-glint { pointer-events: none; animation: brain-glint 9s ease-in-out infinite; }
+@keyframes brain-glint { 0% { transform: translateX(0); } 40%, 100% { transform: translateX(1800px); } }
+.brain-cortex { animation: brain-breathe 7s ease-in-out infinite; }
+@keyframes brain-breathe { 0%, 100% { opacity: .88; } 50% { opacity: 1; } }
 .neuron { cursor: pointer; outline: none; transform-box: fill-box; transform-origin: center; transition: transform .25s var(--ease-out); }
 .neuron .hit { fill: transparent; }
 .neuron .dendrite { fill: none; stroke: var(--brain-dendrite); stroke-width: 1.6; stroke-linecap: round; }
@@ -906,7 +926,9 @@ main[data-enter] .brain-neurons .neuron:nth-child(3n) { animation-delay: .3s; }
 main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation: axon-in .9s .35s var(--ease-out) both; }
 @keyframes axon-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .brain-signals path, .neuron.next .next-ring, main[data-enter] .brain-neurons .neuron, main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation: none; }
+  .brain-signals path, .neuron.next .next-ring, main[data-enter] .brain-neurons .neuron, main[data-enter] .brain-axons path, main[data-enter] .brain-signals,
+  .brain-glint, .brain-cortex, .brain-glow circle { animation: none; }
+  .brain-glint { display: none; }
   .neuron { transition: none; }
 }
 .brain-side { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; }

@@ -338,7 +338,7 @@ head('the brain’s colours: every theme’s, and a theme’s own where it names
   const css = L.css();
   const tokOf = (id, k) => (css.match(new RegExp(':root\\[data-look="' + id + '"\\]\\{[^}]*--brain-' + k + ':([^;]+);')) || [])[1];
   const keys = Object.keys(L.BRAIN_TONES.light);
-  ok('every theme’s stylesheet carries every brain colour', L.THEMES.every(th => keys.every(k => tokOf(th.id, k))) && keys.length === 14,
+  ok('every theme’s stylesheet carries every brain colour', L.THEMES.every(th => keys.every(k => tokOf(th.id, k))) && keys.length === 15,
      L.THEMES.map(th => th.id + ':' + keys.filter(k => !tokOf(th.id, k)).join('/')).join(' '));
   ok('a theme with no brain of its own takes its mode’s; one that names its own gets it', tokOf('daylight', 't1') === L.BRAIN_TONES.light.t1 &&
      tokOf('clinical', 't1') === L.BRAIN_TONES.dark.t1 && tokOf('neuron', 't1') === L.byId('neuron').brain.t1 && tokOf('paper', 'sulcus') === L.byId('paper').brain.sulcus,

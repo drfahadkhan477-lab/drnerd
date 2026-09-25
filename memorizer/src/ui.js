@@ -2223,9 +2223,77 @@ function dendrites(n) {
   }
   return d;
 }
+/* A connection's curve: its bend is home.js axonCtrl's, the same one the
+   live impulses follow, so an impulse runs on the line that is drawn. */
 function axonPath(a, b, i) {
-  var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y, bend = (i % 2 ? 0.16 : -0.16);
-  return 'M' + a.x + ' ' + a.y + 'Q' + (mx - dy * bend).toFixed(1) + ' ' + (my + dx * bend).toFixed(1) + ' ' + b.x + ' ' + b.y;
+  var c = Home.axonCtrl(a, b, i);
+  return 'M' + a.x + ' ' + a.y + 'Q' + c.x + ' ' + c.y + ' ' + b.x + ' ' + b.y;
+}
+/* A glow that fades from its middle: one per state, so nothing needs a blur
+   filter redrawn every frame. */
+function glowGrad(id, cls) {
+  return svg('radialGradient', { id: id }, [svg('stop', { offset: '0', 'class': cls + ' g0' }), svg('stop', { offset: '.45', 'class': cls + ' g1' }), svg('stop', { offset: '1', 'class': cls + ' g2' })]);
+}
+/* ── THE BRAIN, LIVE (home.js liveStep) ────────────────────────────────────
+   Impulses run the wiring, neurons flash where they land, a tap fires one.
+   Run by requestAnimationFrame, at most about thirty draws a second; only
+   while the brain is on the page — a redraw that replaces it hands its
+   activity to the new one, and leaving the home screen stops it — and not
+   at all when the device asks for reduced motion. ui.brainLive says what
+   it is doing (the suite reads it). */
+function brainLive(art, L) {
+  if (reducedMotion() || !root.requestAnimationFrame) { ui.brainLive = null; return; }
+  var prev = ui.brainLive, st = prev && prev.L === L ? prev.st : Home.liveInit(L);
+  var live = ui.brainLive = { L: L, st: st, frames: prev && prev.L === L ? prev.frames : 0, running: true, token: (prev ? prev.token : 0) + 1 };
+  var token = live.token, pool = [], flashEls = {}, hotEls = {}, shown = {}, hot = {}, last = 0, drawn = 0, seen = false, waits = 0, onScreen = true;
+  art.querySelectorAll('.flash').forEach(function (c) { flashEls[c.getAttribute('data-i')] = c; });
+  art.querySelectorAll('.brain-axons path').forEach(function (p) { hotEls[p.getAttribute('data-e')] = p; });
+  art.querySelectorAll('.spark').forEach(function (g) { pool.push({ g: g, tails: g.querySelectorAll('.tail'), head: g.querySelector('.head'), halo: g.querySelector('.halo') }); });
+  function draw() {
+    pool.forEach(function (p, k) {
+      var s = st.sparks[k];
+      if (!s) { if (p.on) { p.g.style.display = 'none'; p.on = false; } return; }
+      if (!p.on) { p.g.style.display = ''; p.on = true; }
+      if (p.state !== s.state) { p.g.setAttribute('data-state', s.state); p.halo.setAttribute('fill', 'url(#glow-' + s.state + ')'); p.state = s.state; }
+      var at = Home.sparkAt(L, st, s, 0);
+      p.head.setAttribute('transform', 'translate(' + at.x.toFixed(1) + ' ' + at.y.toFixed(1) + ')');
+      for (var t = 0; t < p.tails.length; t++) {
+        var b = Home.sparkAt(L, st, s, 0.045 * (t + 1));
+        p.tails[t].setAttribute('cx', b.x.toFixed(1)); p.tails[t].setAttribute('cy', b.y.toFixed(1));
+      }
+    });
+    Object.keys(st.flash).forEach(function (i) {
+      var el = flashEls[i]; if (!el) return;
+      el.style.opacity = (st.flash[i] / Home.LIVE.FLASH_MS * (L.nodes[i].state === 'new' ? 0.5 : 1)).toFixed(2); shown[i] = true;
+    });
+    Object.keys(shown).forEach(function (i) { if (!(i in st.flash)) { flashEls[i].style.opacity = '0'; delete shown[i]; } });
+    var now = {};
+    st.sparks.forEach(function (x) { now[x.e] = true; });
+    Object.keys(now).forEach(function (e) { if (!hot[e] && hotEls[e]) hotEls[e].setAttribute('data-hot', ''); });
+    Object.keys(hot).forEach(function (e) { if (!now[e] && hotEls[e]) hotEls[e].removeAttribute('data-hot'); });
+    hot = now;
+  }
+  function frame(ts) {
+    if (ui.brainLive !== live) return;
+    if (!art.isConnected) {
+      if (seen || ++waits > 240) { live.running = false; return; }
+      root.requestAnimationFrame(frame); return;
+    }
+    /* Watched from when it is on the page, and by the latest report. The
+       first version observed it before it was placed and read the first
+       report: Chromium delivered two at once — not in view (not yet
+       placed), then in view — and the brain stood still after one frame.
+       Either change alone fixes it (both were measured); both are kept. */
+    if (!seen && root.IntersectionObserver) new root.IntersectionObserver(function (es) { onScreen = es[es.length - 1].isIntersecting; }).observe(art);
+    seen = true;
+    var dt = last ? Math.min(0.1, (ts - last) / 1000) : 0;
+    if (!onScreen || doc.hidden) { last = ts; root.requestAnimationFrame(frame); return; }
+    if (ts - drawn >= 30) {
+      Home.liveStep(st, L, dt, Math.random); draw(); drawn = ts; last = ts; live.frames++;
+    }
+    root.requestAnimationFrame(frame);
+  }
+  root.requestAnimationFrame(frame);
 }
 var MM_LABEL = { new: 'not drilled yet', weak: 'weak', fading: 'fading', solid: 'solid' };
 function brainData() {
@@ -2255,7 +2323,9 @@ function masteryCard() {
       svg('stop', { offset: '0', 'class': 'bt-1' }), svg('stop', { offset: '.62', 'class': 'bt-2' }), svg('stop', { offset: '1', 'class': 'bt-3' })]),
     svg('linearGradient', { id: 'brain-sheen', x1: '0', y1: '0', x2: '0', y2: '1' }, [
       svg('stop', { offset: '0', 'class': 'bs-1' }), svg('stop', { offset: '.5', 'class': 'bs-2' })]),
-    svg('filter', { id: 'neuron-glow', x: '-60%', y: '-60%', width: '220%', height: '220%' }, [svg('feGaussianBlur', { stdDeviation: String(Math.max(4, L.gap * 0.18)) })]),
+    glowGrad('glow-solid', 'gl-solid'), glowGrad('glow-fading', 'gl-fading'), glowGrad('glow-weak', 'gl-weak'), glowGrad('glow-new', 'gl-new'), glowGrad('glow-spark', 'gl-spark'),
+    svg('linearGradient', { id: 'brain-glint-g', x1: '0', y1: '0', x2: '1', y2: '0' }, [
+      svg('stop', { offset: '0', 'class': 'bg-0' }), svg('stop', { offset: '.5', 'class': 'bg-1' }), svg('stop', { offset: '1', 'class': 'bg-0' })]),
     svg('clipPath', { id: 'brain-clip' }, [svg('path', { d: B.cerebrum })])]);
   var body = svg('g', { 'class': 'brain-body', 'aria-hidden': 'true' }, [
     svg('path', { 'class': 'brain-stem', d: B.stem }),
@@ -2264,18 +2334,33 @@ function masteryCard() {
     svg('path', { 'class': 'brain-cortex', d: B.cerebrum, fill: 'url(#brain-tissue)' }),
     svg('g', { 'class': 'brain-sulci', 'clip-path': 'url(#brain-clip)' }, B.SULCI.map(function (d) { return svg('path', { d: d }); })),
     svg('path', { 'class': 'brain-sheen', d: B.cerebrum, fill: 'url(#brain-sheen)' }),
+    /* the light glancing across it, every few seconds */
+    svg('g', { 'clip-path': 'url(#brain-clip)' }, [svg('g', { transform: 'skewX(-20)' }, [svg('rect', { 'class': 'brain-glint', x: -420, y: 0, width: 260, height: 720, fill: 'url(#brain-glint-g)' })])]),
     svg('path', { 'class': 'brain-rim', d: B.cerebrum })]);
   var lobes = svg('g', { 'class': 'brain-lobes', 'clip-path': 'url(#brain-clip)', 'aria-hidden': 'true' }, L.units.map(function (u, k) {
     return svg('circle', { cx: u.x, cy: u.y, r: Math.round(L.gap * (1.2 + Math.sqrt(u.n))), style: 'fill:hsla(' + lobeHue(k) + ',75%,60%,.10)' });
   }));
   var axons = svg('g', { 'class': 'brain-axons', 'aria-hidden': 'true' }, L.edges.map(function (e, i) {
-    return svg('path', { d: axonPath(nodes[e.a], nodes[e.b], i), 'data-fired': e.lit, 'data-state': e.state, 'data-kind': e.kind });
+    return svg('path', { d: axonPath(nodes[e.a], nodes[e.b], i), 'data-fired': e.lit, 'data-state': e.state, 'data-kind': e.kind, 'data-e': i });
   }));
   var signals = svg('g', { 'class': 'brain-signals', 'aria-hidden': 'true' }, L.edges.filter(function (e) { return e.lit === 2; }).map(function (e, i) {
     return svg('path', { d: axonPath(nodes[e.a], nodes[e.b], L.edges.indexOf(e)), 'data-state': e.state, style: 'animation-delay:-' + ((hashOf(nodes[e.a].key) % 30) / 10) + 's' });
   }));
-  var glow = svg('g', { 'class': 'brain-glow', filter: 'url(#neuron-glow)', 'aria-hidden': 'true' }, nodes.filter(function (x) { return x.state !== 'new'; }).map(function (x) {
-    return svg('circle', { cx: x.x, cy: x.y, r: (x.r * 1.9).toFixed(1), 'data-state': x.state });
+  /* each lit neuron's glow, breathing on its own beat */
+  var glow = svg('g', { 'class': 'brain-glow', 'aria-hidden': 'true' }, nodes.filter(function (x) { return x.state !== 'new'; }).map(function (x) {
+    return svg('circle', { cx: x.x, cy: x.y, r: (x.r * 2.6).toFixed(1), 'data-state': x.state, fill: 'url(#glow-' + x.state + ')',
+      style: 'animation-delay:-' + ((hashOf(x.key) % 36) / 10) + 's' });
+  }));
+  /* where an impulse lands: a flash, drawn at nothing until one does */
+  var flashes = svg('g', { 'class': 'brain-flashes', 'aria-hidden': 'true' }, nodes.map(function (x, i) {
+    return svg('circle', { 'class': 'flash', 'data-i': i, cx: x.x, cy: x.y, r: (x.r * 3.4).toFixed(1), fill: 'url(#glow-' + (x.state === 'new' ? 'new' : x.state) + ')', style: 'opacity:0' });
+  }));
+  /* the impulses: a pool drawn once and moved, a glowing head and a tail */
+  var sparkR = Math.max(18, L.gap * 0.8);
+  var sparks = svg('g', { 'class': 'brain-sparks', 'aria-hidden': 'true' }, Array.apply(null, Array(Home.LIVE.MAX_SPARKS)).map(function () {
+    return svg('g', { 'class': 'spark', style: 'display:none' }, [
+      svg('circle', { 'class': 'tail t1', r: 4.2 }), svg('circle', { 'class': 'tail t2', r: 3.5 }), svg('circle', { 'class': 'tail t3', r: 2.8 }), svg('circle', { 'class': 'tail t4', r: 2.1 }),
+      svg('g', { 'class': 'head' }, [svg('circle', { 'class': 'halo', r: sparkR.toFixed(1), fill: 'url(#glow-spark)' }), svg('circle', { 'class': 'core', r: 5 })])]);
   }));
   var cells = svg('g', { 'class': 'brain-neurons' }, nodes.map(function (x, i) {
     var label = x.title + ', ' + MM_LABEL[x.state] + (x.recall != null ? ', recall ' + x.recall + '% today' : '');
@@ -2288,11 +2373,16 @@ function masteryCard() {
       svg('circle', { 'class': 'soma', cx: x.x, cy: x.y, r: x.r }),
       svg('circle', { 'class': 'nucleus', cx: (x.x - x.r * 0.25).toFixed(1), cy: (x.y - x.r * 0.25).toFixed(1), r: (x.r * 0.34).toFixed(1) })]);
   }));
-  var pick = function (i) { ui.brainSel = nodes[i].key; render(); var el = doc.querySelector('#mastery .neuron[data-i="' + i + '"]'); if (el) el.focus(); };
+  /* a tap fires the neuron, down every connection it has */
+  var pick = function (i) {
+    if (ui.brainLive && ui.brainLive.L === L) Home.liveFire(ui.brainLive.st, L, i, Math.random, -1, 'tap');
+    ui.brainSel = nodes[i].key; render(); var el = doc.querySelector('#mastery .neuron[data-i="' + i + '"]'); if (el) el.focus();
+  };
   var open = function (i) { openDoc(nodes[i].docId, nodes[i].ci); };
   var art = svg('svg', { viewBox: B.VIEW, 'class': 'brain-svg', role: 'group', id: 'brain',
       'aria-label': 'Your brain: ' + lit + ' of ' + nodes.length + ' sections drilled. Arrow keys move between them; Enter opens one.' },
-    [defs, body, lobes, axons, signals, glow, cells]);
+    [defs, body, lobes, axons, signals, glow, flashes, sparks, cells]);
+  brainLive(art, L);
   art.addEventListener('click', function (e) {
     var g = e.target.closest && e.target.closest('.neuron');
     if (g) pick(+g.getAttribute('data-i'));

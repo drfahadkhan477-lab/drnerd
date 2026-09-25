@@ -85,7 +85,7 @@ var THEMES = [
     hero: { 'hero-a': '#FFFCF5', 'hero-b': '#F8F1E4', 'hero-c': '#FFFAF0', 'hero-accent': '#8A3324', 'hero-edge': 'rgba(138,51,36,.12)',
             'hero-ink': '#221C15', 'hero-muted': '#5E5345', 'hero-pill': 'rgba(60,40,20,.05)', 'hero-pill-edge': 'rgba(60,40,20,.10)' },
     brain: { t1: '#F7E3DA', t2: '#EBCFC4', t3: '#D8B6AA', sulcus: 'rgba(120,60,50,.30)', rim: 'rgba(255,250,240,.95)', sheen: 'rgba(255,255,255,.55)',
-             axon: 'rgba(120,80,60,.22)', dendrite: 'rgba(110,70,55,.55)', dormant: '#F4E9E2', spark: '#FFFFFF',
+             axon: 'rgba(120,80,60,.22)', dendrite: 'rgba(110,70,55,.55)', dormant: '#F4E9E2', spark: '#D9480F', glint: 'rgba(255,250,238,.85)',
              stage: 'radial-gradient(90% 90% at 30% 20%, rgba(214,150,110,.16), transparent 70%)' } },
   { id: 'neuron', name: 'Neuron', mode: 'dark', swatch: ['#070B1C', '#5CC8FF'], source: null,
     t: { bg: '#070B1C', surface: '#10162E', 'surface-2': '#19213F', ink: '#EEF1FF', muted: '#A7AFD3', line: '#262F58',
@@ -93,7 +93,7 @@ var THEMES = [
     hero: { 'hero-a': '#121A3A', 'hero-b': '#161E46', 'hero-c': '#0B1128', 'hero-accent': '#5CC8FF', 'hero-edge': 'rgba(92,200,255,.18)',
             'hero-ink': '#EEF1FF', 'hero-muted': '#A7AFD3', 'hero-pill': 'rgba(255,255,255,.06)', 'hero-pill-edge': 'rgba(255,255,255,.12)' },
     brain: { t1: 'rgba(139,123,255,.34)', t2: 'rgba(92,120,255,.16)', t3: 'rgba(40,46,120,.34)', sulcus: 'rgba(180,190,255,.24)', rim: 'rgba(160,180,255,.45)',
-             sheen: 'rgba(200,210,255,.14)', axon: 'rgba(150,165,255,.20)', dendrite: 'rgba(170,185,255,.45)', dormant: '#1A2250', spark: '#E6F7FF',
+             sheen: 'rgba(200,210,255,.14)', axon: 'rgba(150,165,255,.20)', dendrite: 'rgba(170,185,255,.45)', dormant: '#1A2250', spark: '#E6F7FF', glint: 'rgba(180,205,255,.36)',
              stage: 'radial-gradient(80% 90% at 35% 30%, rgba(92,120,255,.20), transparent 70%), radial-gradient(60% 70% at 80% 80%, rgba(255,92,190,.10), transparent 70%)' } },
   { id: 'contrast', name: 'Contrast', mode: 'dark', swatch: ['#060606', '#38BDF8'], source: 'contrast',
     t: { bg: '#060606', surface: '#121212', 'surface-2': '#1E1E1E', ink: '#FAFAFA', muted: '#D6D6D6', line: '#666666',
@@ -120,11 +120,11 @@ var GLOW = {
    page, and a lit neuron drawn in them looked burnt out, not lit (n-*). */
 var BRAIN_TONES = {
   light: { t1: '#EEE6F7', t2: '#E0D5EE', t3: '#CDBFE0', sulcus: 'rgba(90,70,130,.26)', rim: 'rgba(255,255,255,.95)', sheen: 'rgba(255,255,255,.6)',
-           axon: 'rgba(80,70,120,.20)', dendrite: 'rgba(80,70,130,.45)', dormant: '#F3EFF8', spark: '#FFFFFF',
+           axon: 'rgba(80,70,120,.20)', dendrite: 'rgba(80,70,130,.45)', dormant: '#F3EFF8', spark: '#3D7BFF', glint: 'rgba(255,255,255,.8)',
            'n-solid': '#1FBF75', 'n-fading': '#F0A12E', 'n-weak': '#EE4B5A',
            stage: 'radial-gradient(90% 90% at 30% 20%, rgba(120,110,255,.10), transparent 70%)' },
   dark:  { t1: 'rgba(120,200,170,.22)', t2: 'rgba(80,120,140,.14)', t3: 'rgba(30,50,60,.40)', sulcus: 'rgba(180,230,210,.18)', rim: 'rgba(170,230,210,.35)',
-           sheen: 'rgba(255,255,255,.08)', axon: 'rgba(170,220,210,.16)', dendrite: 'rgba(170,220,210,.38)', dormant: '#1B2226', spark: '#F2FFF9',
+           sheen: 'rgba(255,255,255,.08)', axon: 'rgba(170,220,210,.16)', dendrite: 'rgba(170,220,210,.38)', dormant: '#1B2226', spark: '#F2FFF9', glint: 'rgba(200,255,235,.30)',
            'n-solid': '#5EF2B0', 'n-fading': '#FFC857', 'n-weak': '#FF6B7A',
            stage: 'radial-gradient(80% 90% at 35% 30%, rgba(52,211,153,.10), transparent 70%)' },
 };
