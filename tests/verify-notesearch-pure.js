@@ -99,15 +99,16 @@ head('highlight: escaped first, marked once');
 head('the markup the screen shows');
 {
   const hint = N.resultsHtml('', [], 530, esc);
-  ok('an empty field says how many notes there are to search', /530 notes/.test(hint), hint.replace(/<[^>]+>/g, ''));
+  ok('an empty field says how many notes there are to search', /530 notes/.test(hint), hint.slice(0, 120));
   const none = N.resultsHtml('zzzz', [], 530, esc);
   ok('no match says so, naming the query', /No note matched <b>zzzz<\/b>/.test(none));
   const list = N.resultsHtml('sotalol', [NOTES[1], NOTES[0]], 530, esc);
   ok('hits are buttons carrying their note id', (list.match(/data-ns-open="n[12]"/g) || []).length === 2);
   ok('with the chapter shown apart from the section', /class="ns-chapter">Arrhythmias · Therapy</.test(list));
   ok('and a count', /2 notes/.test(list));
-  const hostile = N.resultsHtml('x', [{ id: '"><script>', title: 'T — t', body: 'x' }], 1, esc);
-  ok('an id is escaped into its attribute', !/<script>/.test(hostile));
+  const hostile = N.resultsHtml('sotalol', [{ id: '"><script>', title: 'T — t', body: 'x' }], 1, esc);
+  ok('an id is escaped into its attribute', /data-ns-open="&quot;&gt;&lt;script&gt;"/.test(hostile) && !/<script/i.test(hostile),
+     (hostile.match(/data-ns-open="[^"]*"/) || ['no data-ns-open'])[0]);
   let mdSeen = '';
   const note = N.noteHtml(NOTES[1], esc, b => { mdSeen = b; return '<figure>rendered</figure>'; }, () => '<svg></svg>');
   ok('an opened note\'s body goes through md(), so its figures render', mdSeen === NOTES[1].body && /<figure>rendered<\/figure>/.test(note));
