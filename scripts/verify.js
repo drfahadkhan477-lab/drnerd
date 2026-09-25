@@ -286,7 +286,7 @@ const SUITES = [
   ['memorizer-prompts-pure', 'the model is held to your PDF, only the section being studied goes out, and a bad reply is never a pass'],
   ['memorizer-session-pure', 'no phase of the protocol is skipped, and every miss becomes exactly one card'],
   ['memorizer-coach-pure',   'the built-in coach needs no key, invents nothing, and asks fair multiple-choice questions'],
-  ['memorizer-appearance-pure', 'the themes are Systole\u2019s, colour for colour, and readable at every contrast and brightness'],
+  ['memorizer-appearance-pure', 'Daylight by day, Clinical at night and Systole\u2019s Contrast, each readable at every contrast and brightness, on glass over the aurora as well as solid'],
   ['memorizer-home-pure',    'the home screen\u2019s progress counts what happened, and its pearl is your PDF\u2019s own sentence'],
   ['memorizer-book-pure',   'a whole textbook: its parts in order, its pages straight through, its chapters found three ways'],
   ['memorizer-ask-pure',    'asking your book: its own sentences with their pages, from the right section, or nothing found'],
@@ -297,6 +297,7 @@ const SUITES = [
   ['memorizer-agent-pure',  'the Coach as an agent: each tool reached, its topic, follow-ups remembered, a model\u2019s plan used only when it names a real tool'],
   ['memorizer-study-pure',  'studying beyond the drill: recall and figure cards from the book, checks days apart, timed practice, an exam plan, teach-back, corrections, notes, progress'],
   ['memorizer-provenance-pure', 'where a unit came from: a real SHA-256 of its bytes, a duplicate recognised, and an import report that counts what happened'],
+  ['memorizer-pack-pure',   'a study pack written with Claude: the prompt carries the chapter, and the reply is held to the book \u2014 numbers, pages, names and quotes \u2014 before any of it is used'],
   ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
   ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
 ];
@@ -340,8 +341,9 @@ const SUITES = [
 
    Emptied a fourth time by the green run of 2026-09-25 on the owner's Windows
    laptop, which measured the twenty-one that had been waiting: notesearch-pure,
-   notesearch, coronaryview, ambient, and the seventeen Memorizer suites. */
-const PENDING_RECORD = [];
+   notesearch, coronaryview, ambient, and the seventeen Memorizer suites. That
+   run predates memorizer-pack-pure, which master registered meanwhile. */
+const PENDING_RECORD = ['memorizer-pack-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

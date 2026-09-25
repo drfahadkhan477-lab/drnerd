@@ -85,5 +85,37 @@ head('at a glance: facts, the pathway, the lists');
   ok('a section with none of them has no glance', S.glance({ index: 0, title: 'x', segments: [seg('Plain words here without any pattern at all.')] }) === null);
 }
 
+head('what a pack\u2019s check flagged stays with the number it is on (pack.js)');
+{
+  const sh = S.sheetOf({ overview: '', points: [{ text: 'A point.', page: 1 }], numbers: [
+    { text: 'Severe: a mean gradient of at least 40 mmHg.', page: 2, flag: 'a number not in your book: 40' },
+    { text: 'Moderate: a mean gradient of at least 20 mmHg.', page: 2 }] });
+  ok('a flagged number keeps its flag as a tile, and an unflagged one has none',
+     sh.numbers.length === 2 && sh.numbers[0].flag === 'a number not in your book: 40' && sh.numbers[1].flag === '', JSON.stringify(sh.numbers.map(n => n.flag)));
+}
+
+head('the lesson as one mental model: stages, the clinical map, one screen (phase 2)');
+{
+  ok('the stages a section always has: orient, recognise, recall — in that order', JSON.stringify(S.stages({}).map(x => x.id)) === '["orient","recognise","recall"]');
+  ok('and the others only with material, in the plan’s order', JSON.stringify(S.stages({ confuse: 1, mechanism: 1, numbers: 1 }).map(x => x.id)) === '["orient","mechanism","recognise","numbers","confuse","recall"]' &&
+     S.stages({ numbers: 1 }).map(x => x.label).join('/') === 'Orient/Recognise/Numbers/Recall');
+  const c = { segments: [{ text: 'Aortic stenosis causes syncope; echocardiography confirms it.', page: 3 },
+    { text: 'Heart failure follows. Aortic stenosis again, with syncope.', page: 4 }, { table: [['Drug', 'Use'], ['Beta-blockers', 'rate']], page: 5 }] };
+  const m = S.clinicalMap(c);
+  ok('the map groups what the section names, in the order diseases, scenarios, tests, treatments', m.groups.map(g => g.kind).join() === 'disease,scenario,test,treatment', m.groups.map(g => g.kind).join());
+  ok('each named once, with the page it is first named on', JSON.stringify(m.groups[0].items) === JSON.stringify([{ label: 'Aortic stenosis', page: 3 }, { label: 'Heart failure', page: 4 }]) && m.count === m.groups.reduce((n, g) => n + g.items.length, 0), JSON.stringify(m.groups[0].items));
+  ok('a table’s cells are read too', m.groups.some(g => g.items.some(it => it.page === 5)), JSON.stringify(m.groups));
+  ok('a section naming nothing has an empty map', S.clinicalMap({ segments: [{ text: 'Plain words.', page: 1 }] }).count === 0);
+  const L = { overview: 'Big idea.', points: Array.from({ length: 10 }, (_, i) => ({ text: 'Point number ' + i + ' of the lesson.', page: 1 })),
+    numbers: [{ text: 'Severe: mean gradient at least 40 mmHg.', page: 2 }], distinctions: [{ a: 'x', b: 'y', how: 'z', page: 1 }],
+    mnemonics: [{ title: 'T', letters: 'AB', words: ['a', 'b'] }], pearls: [{ text: 'P.', page: 1 }] };
+  const r = S.reviewSheet(L);
+  ok('one screen: the idea, the points cut to fit, the values as tiles, the pairs, the hooks, the pearls',
+     r.idea === 'Big idea.' && r.points.length === S.REVIEW_POINTS && r.values[0].value === '≥ 40 mmHg' && r.values[0].label === 'mean gradient' &&
+     r.confuse[0].a === 'x' && r.hooks[0].letters === 'AB' && r.pearls[0] === 'P.', JSON.stringify(r).slice(0, 200));
+  ok('every point on it is the lesson’s own words', r.points.every(p => L.points.some(q => q.text === p.text)));
+  ok('a lesson without pairs, hooks or pearls has none on its screen', (() => { const x = S.reviewSheet({ overview: 'o', points: [{ text: 'A point.', page: 1 }] }); return !x.confuse.length && !x.hooks.length && !x.pearls.length; })());
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

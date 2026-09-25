@@ -392,7 +392,7 @@ const stub = {
     switch (kind) {
       case 'lesson': return {
         overview: 'Preload is how full the ventricle is before it squeezes.',
-        points: [{ text: 'Preload — end-diastolic stretch ' + EVIL, page: 1 }, { text: 'Venous return sets preload', page: 2 }],
+        points: [{ text: 'Preload — end-diastolic stretch ' + EVIL, page: 1 }, { text: 'Venous return is the most common thing that sets preload', page: 2 }],
         numbers: [{ text: 'An LVEDP greater than 18 mmHg prompts a search for overload', page: 1 }],
         mnemonics: [{ title: 'What sets preload', letters: 'VVC', words: ['Venous return', 'Volume', 'Compliance'] }],
         analogies: [{ title: 'A balloon', text: 'The more you fill a balloon, the harder it snaps back.', source: 'Claude' }],
@@ -512,6 +512,15 @@ function kindOf(user) {
   ok('the final exam is locked until every section is drilled', await page.locator('#exam-card.locked').count() === 1 &&
      /0 of 3/.test(await page.locator('#exam-card').innerText()) && await page.locator('#exam-card #to-exam').count() === 0);
   ok('and the one button says Learn unit', (await page.locator('#learn-unit').innerText()) === 'Learn unit');
+  /* The owner's screenshot: the button floated over the foot of the page and
+     covered the last sections, and each card carried a block of colour. The
+     button now sits above the sections, in the flow; the colour is a line. */
+  const unitLook = await page.evaluate(() => { const b = document.querySelector('#learn-unit'), s = document.querySelector('#sections');
+    const band = getComputedStyle(document.querySelector('#sections .band'));
+    return { above: b.getBoundingClientRect().bottom <= s.getBoundingClientRect().top, pos: getComputedStyle(b.parentElement).position,
+      fill: band.backgroundColor, line: parseFloat(band.borderTopWidth) }; });
+  ok('the button sits above the sections, not over them; each card’s colour is a line along its top',
+     unitLook.above && unitLook.pos === 'static' && /rgba\(0, 0, 0, 0\)|transparent/.test(unitLook.fill) && unitLook.line > 0 && unitLook.line <= 6, JSON.stringify(unitLook));
   const rec = await page.evaluate(() => MemStore.all('docs').then(d => d[0]));
   ok('the unit is stored with its page count', rec.pages === pdf.pages && rec.name === 'unit' && rec.source === 'pdf', `${rec.pages} pages`);
   ok('each section is titled by its heading', JSON.stringify(rec.clusters.map(c => c.title)) === JSON.stringify(pdf.titles),
@@ -577,6 +586,11 @@ function kindOf(user) {
   ok('the key points are numbered cards, a definition leading with its term',
      await page.locator('ol.points > li').count() === 2 && (await page.locator('ol.points > li .lead').first().innerText()) === 'Preload' &&
      (await page.locator('ol.points > li .point-n').first().innerText()) === '1', pointText.replace(/\s+/g, ' '));
+  /* A point that says what an exam asks is marked high-yield, with why; a
+     plain one is not. */
+  const hyShown = await page.$$eval('ol.points > li', ls => ls.map(l => [...l.querySelectorAll('.hy-tags span')].map(x => x.textContent)));
+  ok('a high-yield point says so, and why; a plain one is not marked', hyShown.length === 2 && hyShown[0].length === 0 &&
+     JSON.stringify(hyShown[1]) === JSON.stringify(['High yield', 'Most common']), JSON.stringify(hyShown));
   /* The ☆ that marks a point made it a third item in a two-column grid, and
      the text fell into the 2.25rem number column, a word to a line. Widths
      as laid out: the text has the room, the star sits at the end, all on
@@ -661,8 +675,20 @@ function kindOf(user) {
   await page.locator('#step-mode').click();
   await page.locator('#lesson-steps').waitFor(T);
   const N = +(/\/(\d+)/.exec(await text(page, '#lesson-steps .step-count')) || [])[1];
-  const MARKS = ['#big-idea', '#pathway-play', '#glance', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
-  const MUST = ['#big-idea', '#pathway-play', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
+  const MARKS = ['#big-idea', '#clinical-map', '#pathway-play', '#socratic', '#glance', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
+  const MUST = ['#big-idea', '#pathway-play', '#socratic', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
+  /* THE STAGES (the owner's plan, phase 2): a strip of them over the slides,
+     the first one current, and each a way straight to its first slide. */
+  const stageStrip = await page.$$eval('#stages li', ls => ls.map(l => [l.getAttribute('data-stage'), l.getAttribute('data-state')]));
+  ok('the lesson is staged: orient, mechanism, recognise, numbers, recall, the first one current',
+     JSON.stringify(stageStrip.map(x => x[0])) === JSON.stringify(['orient', 'mechanism', 'recognise', 'numbers', 'recall']) && stageStrip[0][1] === 'now' && stageStrip.slice(1).every(x => x[1] === 'next'), JSON.stringify(stageStrip));
+  await page.locator('#stages li[data-stage="numbers"] button').click();
+  await page.waitForFunction(() => /Numbers to know/.test(document.querySelector('#lesson-steps .step-count').textContent), null, T);
+  ok('a stage goes straight to its first slide, and the stages before it are done', await page.locator('main #numbers').count() === 1 &&
+     JSON.stringify(await page.$$eval('#stages li', ls => ls.map(l => l.getAttribute('data-state')))) === '["done","done","done","now","next"]',
+     JSON.stringify(await page.$$eval('#stages li', ls => ls.map(l => l.getAttribute('data-state')))));
+  await page.locator('#stages li[data-stage="orient"] button').click();
+  await page.waitForFunction(() => /^Slide 1\//.test(document.querySelector('#lesson-steps .step-count').textContent), null, T);
   /* what is showing, by opacity (and clip, for an unfolding word), with the composition held at time t */
   const at = (sel, t) => page.evaluate(([sel, t]) => {
     const comp = document.querySelector(sel); Memorizer.motion.seek(comp, t === 'end' ? Memorizer.motion.total(comp) : t);
@@ -859,6 +885,20 @@ function kindOf(user) {
      (await page.locator('.unit-row .badge').innerText()) === '33%', await text(page, '.unit-row'));
   ok('with its colour bar and a menu', await page.evaluate(() => getComputedStyle(document.querySelector('.unit-row')).getPropertyValue('--hue').trim() !== '') &&
      await page.locator('.unit-row details.menu summary').count() === 1);
+  /* The owner's screenshot: ⋮ opened a sliver — the row clipped its own
+     menu, so Delete could not be reached. Each item, where it is drawn, is
+     what a tap there lands on. */
+  await page.locator('.unit-row details.menu summary').click();
+  /* the page is scrolled to the row, never the item into view: a clipping
+     row is a scroll container, and scrolling the item scrolled it into
+     sight inside the row — the first version of this check did that, and
+     passed with the clipping back */
+  await page.evaluate(() => document.querySelector('.unit-row').scrollIntoView({ block: 'center' }));
+  const menuHit = await page.evaluate(() => [...document.querySelectorAll('.unit-row details.menu[open] .menu-list button')].map(b => {
+    const r = b.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { t: b.textContent, h: Math.round(r.height), hit: !!at && (at === b || b.contains(at)), rowTop: Math.round(document.querySelector('.unit-row .doc-name').getBoundingClientRect().top) }; }));
+  await page.locator('.unit-row details.menu summary').click();
+  ok('its menu opens whole: every item can be seen and tapped, not cut off by the row', menuHit.length === 2 && menuHit.every(m => m.hit && m.h > 20), JSON.stringify(menuHit));
   const pearlText = (await page.locator('#pearl .pearl-steps').innerText()).replace(/\s+/g, ' ');
   ok('the pearl of the day is the PDF’s own sentence, broken into steps', /Pearl of the day/i.test(await page.locator('#pearl .eyebrow').innerText()) &&
      await page.locator('#pearl .pearl-steps li').count() >= 2 && /end-diastolic pressure greater than 18 mmHg/.test(pearlText) && /stiff ventricle/.test(pearlText), pearlText);
@@ -879,6 +919,13 @@ function kindOf(user) {
   const stillNow = await movingNow();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   ok('and with reduced motion asked for, nothing on it animates or transitions', stillNow.length === 0, stillNow.slice(0, 5).join(', ') || 'still');
+  /* Every tap redraws the screen. The owner saw the cards jump in again each
+     time: entrance motion is for entering a screen, not for a redraw of it.
+     (What loops — the aurora, the pearl's paper — is not an entrance.) */
+  const replayed = await page.evaluate(() => { Memorizer.render();
+    return document.querySelector('main').getAnimations({ subtree: true }).filter(a => a.effect && a.effect.getTiming().iterations !== Infinity)
+      .map(a => (a.animationName || 'script') + ' on ' + a.effect.target.tagName + '.' + a.effect.target.className); });
+  ok('a redraw of the same screen plays no entrance again', replayed.length === 0, replayed.slice(0, 5).join(', ') || 'still');
   const dock = await page.evaluate(() => { const r = document.querySelector('nav.dock').getBoundingClientRect(); return { pos: getComputedStyle(document.querySelector('nav.dock')).position, gap: innerHeight - r.bottom, w: r.width }; });
   ok('the tabs float at the foot of the screen', dock.pos === 'fixed' && dock.gap > 0 && dock.w < 820, JSON.stringify(dock));
   /* Section 1 scored 1 of 2 on its drill: 50%, and its one miss is its card. */
@@ -953,10 +1000,47 @@ function kindOf(user) {
      JSON.stringify({ litOn, litMoved, litOff }));
   ok('and with reduced motion asked for, there is no light to follow', litStill === 0, String(litStill));
   const hero = await page.evaluate(() => { const e = document.querySelector('#home-hero'); const cs = getComputedStyle(e);
-    return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('svg.hero-trace path[d^="M0"]'), held: (document.querySelector('#stat-held') || {}).textContent || '',
+    return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('.hero-monitor canvas'), held: (document.querySelector('#stat-held') || {}).textContent || '',
       inHero: !!e.querySelector('#streak') && !!e.querySelector('#pill-due') }; });
   ok('the hero band carries the streak, what is due and how much is held, over its gradient and trace',
      /gradient/.test(hero.bg) && hero.trace && /\d+%\s*Likely recalled/.test(hero.held) && hero.inHero, JSON.stringify(hero));
+  /* Systole's live strip (monitor.js): drawn, sweeping, a rhythm named in
+     monitor type — the same canvas through a redraw, so a tap does not
+     restart it — and still, but drawn, with reduced motion asked for. The
+     waits are for frames to have been painted; what they painted is the
+     check. */
+  const strip = () => page.evaluate(() => { const m = document.querySelector('.hero-monitor'), c = m.querySelector('canvas');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let ink = 0; const cols = new Set();
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) { ink++; cols.add(((i - 3) / 4) % c.width); }
+    return { x: m.getAttribute('data-x'), still: m.getAttribute('data-still'), ink, cols: cols.size, w: c.width, rhythm: m.getAttribute('data-rhythm'),
+      label: m.querySelector('.hero-monitor-label').textContent, font: getComputedStyle(m.querySelector('.hero-monitor-label')).fontFamily }; });
+  await page.waitForFunction(() => { const m = document.querySelector('.hero-monitor'); return m && +m.getAttribute('data-x') > 0; }, null, T).catch(() => {});
+  const s1 = await strip();
+  /* it moves by itself: no redraw between the two readings (a redraw
+     nudges it one frame, and the first version of this check measured that) */
+  await page.waitForFunction(x => { const m = document.querySelector('.hero-monitor'); return m && m.getAttribute('data-x') !== x; }, s1.x, T).catch(() => {});
+  const s2 = await strip();
+  const sameCanvas = await page.evaluate(() => { const c = document.querySelector('.hero-monitor canvas'); Memorizer.render(); return document.querySelector('.hero-monitor canvas') === c; });
+  const playlist = await page.evaluate(() => MemMonitor.PLAYLIST);
+  ok('Systole’s rhythm strip sweeps across the hero, a rhythm named in monitor type',
+     s1.ink > 0 && s2.x !== s1.x && playlist.indexOf(s1.rhythm) !== -1 && /^II · .+ · \d+ bpm$/.test(s1.label) && /mono|Menlo|Consolas/i.test(s1.font), JSON.stringify({ s1, s2 }));
+  ok('and a redraw keeps the same strip running, rather than starting another', sameCanvas, String(sameCanvas));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => Memorizer.render());
+  /* The still strip is drawn on the next frame: wait for that drawing to
+     have happened (data-drawn, set when it has run) — a precondition; what
+     it drew is the check. CI read the canvas between the flag and the
+     frame, and saw a quarter of a strip. */
+  await page.waitForFunction(() => { const m = document.querySelector('.hero-monitor'); return m.getAttribute('data-still') === 'true' && m.getAttribute('data-drawn') === 'whole'; }, null, T).catch(() => {});
+  const r1 = await strip();
+  await page.waitForTimeout(400);
+  const r2 = await strip();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.evaluate(() => Memorizer.render());
+  /* whole: ink in every column — a sweeping strip always has the eraser's
+     blank gap ahead of its pen, and ink left over from the sweep would
+     otherwise pass for a drawing */
+  ok('with reduced motion asked for, the strip is drawn whole and holds still', r1.still === 'true' && r1.cols === r1.w && r2.x === r1.x && r2.ink === r1.ink, JSON.stringify({ r1, r2 }));
   /* Laid out as a dashboard on an iPad held landscape — the pearl, and
      beside it where to jump back in — and stacked in reading order on a
      phone, with nothing wider than the screen. */
@@ -1506,14 +1590,17 @@ function kindOf(user) {
     await page.evaluate(id => MemStore.get('docs', id).then(d => { const seg = d.clusters[1].segments.find(g => g.table);
       seg.table.push(['Ejection fraction', '60', 'mmHg']); return MemStore.put('docs', d); }), unitId);
     await page.evaluate(() => { Memorizer.ui.docsStale = true; Memorizer.ui.askIdx = null; });
+    /* Reading the units back is slowed, as on a slow device: CI twice asked
+       before the edited unit was read back, the Coach indexed the old one
+       (three rows, too few to ask from) and answered about the last topic
+       instead. Slowed here, that race is run every time, not by chance. */
+    await page.evaluate(() => { const all = MemStore.all; window.__storeAll = all;
+      MemStore.all = n => n === 'docs' ? new Promise(r => setTimeout(r, 800)).then(() => all.call(MemStore, n)) : all.call(MemStore, n); });
     await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await page.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await page.locator('#ask-q').waitFor(T);
-    /* precondition: the index rebuilt over the reloaded units, as for the second tab below. #ask-q alone
-       can be the Coach screen still up from before the reload, whose question is then answered from the
-       three-row table — "no table to ask from", red here with the units' reload slowed by 400 ms. */
-    await page.waitForFunction(() => { const u = Memorizer.ui; return u.view === 'ask' && !u.docsStale && !u.askBusy && u.askIdx && u.askFor === u.docs; }, null, T);
     await sayP('quiz me on the table in section two afterload');
+    await page.evaluate(() => { MemStore.all = window.__storeAll; });
     const tq = await page.$$eval('.turn:last-child .agent-q .q, #agent-latest .agent-q .q', qs => qs.map(q => q.textContent));
     ok('"quiz me on the table in …": every question read from the table, row by row', await page.locator('.turn').last().getAttribute('data-tool') === 'table' &&
        tq.length === 4 && tq.every(q => /^In the table, what is the Normal for /.test(q)), JSON.stringify(tq) + ' ' + (await text(page, '#agent-latest')).slice(0, 200));
@@ -1627,27 +1714,29 @@ function kindOf(user) {
        /multiple-choice questions built from the book/.test(await p2.locator('#builtin-about').innerText()));
     ok('and offers only the built-in coach and Claude', JSON.stringify(await p2.$$eval('#provider option', os => os.map(o => o.value))) === '["builtin","anthropic"]');
     /* Appearance: a theme and a size, applied at once and kept. */
-    await p2.locator('#appearance .swatch[data-theme-id="nocturne"]').click();
+    ok('the picker offers the owner’s two and Contrast, and Auto', JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))) ===
+       JSON.stringify(['auto', 'daylight', 'clinical', 'contrast']), JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))));
+    await p2.locator('#appearance .swatch[data-theme-id="clinical"]').click();
     const bg = await p2.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    ok('picking Nocturne recolours the page with Systole’s Nocturne ground', bg === 'rgb(14, 11, 26)', bg);
+    ok('picking Clinical recolours the page with its near-black ground', bg === 'rgb(5, 6, 8)', bg);
     /* Contrast and brightness: the page gets the colours appearance.js
        computes for that setting, read back from what the browser drew. */
     const rgbOf = hex => 'rgb(' + [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(', ') + ')';
     await p2.locator('#appearance .seg button[data-contrast="high"]').click();
-    const hiWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('nocturne'), 'high', 'standard'));
+    const hiWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('clinical'), 'high', 'standard'));
     const hiGot = await p2.evaluate(() => ({ ink: getComputedStyle(document.body).color, edge: getComputedStyle(document.querySelector('#appearance .seg button[data-contrast="high"]').closest('.card').querySelector('.swatch')).borderTopColor }));
     ok('High contrast draws the text and the control outlines in the fitted colours', hiGot.ink === rgbOf(hiWant.ink) && hiGot.edge === rgbOf(hiWant.edge) &&
-       hiWant.ink !== MemLookNode.byId('nocturne').t.ink, JSON.stringify(hiGot) + ' want ' + rgbOf(hiWant.ink) + ' / ' + rgbOf(hiWant.edge));
+       hiWant.ink !== MemLookNode.byId('clinical').t.ink, JSON.stringify(hiGot) + ' want ' + rgbOf(hiWant.ink) + ' / ' + rgbOf(hiWant.edge));
     await p2.locator('#appearance .seg button[data-bright="dim"]').click();
-    const dimWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('nocturne'), 'high', 'dim').bg);
-    ok('and Dim sinks the ground', await p2.evaluate(() => getComputedStyle(document.body).backgroundColor) === rgbOf(dimWant) && rgbOf(dimWant) !== 'rgb(14, 11, 26)', rgbOf(dimWant));
+    const dimWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('clinical'), 'high', 'dim').bg);
+    ok('and Dim sinks the ground', await p2.evaluate(() => getComputedStyle(document.body).backgroundColor) === rgbOf(dimWant) && rgbOf(dimWant) !== 'rgb(5, 6, 8)', rgbOf(dimWant));
     await p2.locator('#appearance .seg button[data-size="xl"]').click();
     ok('Extra large text makes the body 20px', await p2.evaluate(() => getComputedStyle(document.body).fontSize) === '20px');
     await p2.locator('#appearance .seg button[data-font="serif"]').click();
     await p2.reload();
     await p2.locator('#door-add').waitFor(T);
     ok('and all of it survives a reload, applied before the page draws', await p2.evaluate(() =>
-      document.documentElement.getAttribute('data-look') === 'nocturne' && getComputedStyle(document.body).fontSize === '20px' &&
+      document.documentElement.getAttribute('data-look') === 'clinical' && getComputedStyle(document.body).fontSize === '20px' &&
       document.documentElement.getAttribute('data-contrast') === 'high' && document.documentElement.getAttribute('data-bright') === 'dim' &&
       /Iowan|Charter|Georgia/.test(getComputedStyle(document.body).fontFamily)));
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
@@ -2048,6 +2137,204 @@ function kindOf(user) {
     ok('figures stored by an older finder are found again, and kept', refound === stale.was, refound.slice(0, 120));
   }
 
+  head('a study pack written with Claude: the prompt out, the reply in, held to the book');
+  {
+    /* A fresh profile on the built-in coach, as the owner uses it: the pack
+       is how Claude's work reaches the app without a key. The clipboard is
+       granted so the copy can be read back. */
+    const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block', permissions: ['clipboard-read', 'clipboard-write'] });
+    const p4 = watch(await ctx.newPage(), events, 'pack', errors);
+    await wire(p4);
+    const aiBefore = stub.requests.length;
+    await p4.goto(URL);
+    await p4.locator('#door-add').waitFor(T);
+    await p4.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
+    await p4.locator('#sections .section-card').first().waitFor(T);
+    ok('a unit with no pack says so, folded to one line', /none yet/.test(await text(p4, '#pack-card summary')) &&
+       await p4.evaluate(() => !document.querySelector('#pack-card').open));
+    await p4.locator('#pack-card summary').click();
+    await p4.locator('#pack-copy').click();
+    await p4.waitForFunction(() => /Copied|copy it/.test(document.querySelector('#pack-copy-status').textContent), null, T);
+    const want = await p4.evaluate(() => MemPack.prompt(Memorizer.ui.docRec));
+    const got = await p4.evaluate(() => navigator.clipboard.readText().catch(e => 'unreadable: ' + e.message));
+    ok('the prompt is copied whole: the rules, the shape, every section and its text', got === want && /THE CHAPTER TEXT/.test(want) &&
+       /1\. "Section One Preload"/.test(want) && /\[p\.1\] .*Diuretics reduce preload/.test(want), got.slice(0, 80));
+    ok('and the card stays open while it is used', await p4.evaluate(() => document.querySelector('#pack-card').open));
+    await p4.locator('#pack-show').click();
+    ok('the prompt can be shown, to select by hand', (await p4.locator('#pack-prompt').inputValue()) === want);
+
+    const d = await p4.evaluate(() => Memorizer.ui.docRec);
+    const c0 = d.clusters[0], pg = c0.pageStart;
+    const reply = { format: 'memorizer-pack', version: 1, unit: d.name, sections: [
+      { section: 1, title: c0.title, lesson: {
+        overview: 'Diuretics reduce preload by lowering circulating volume.',
+        mechanism: 'Excessive preload raises venous pressure, which leads to oedema of the lungs.',
+        points: [{ text: 'Diuretics — reduce preload by lowering circulating volume', page: pg },
+                 { text: 'Volume overload — sought when LVEDP is greater than 18 mmHg', page: pg },
+                 { text: 'Venous pressure — above 99 mmHg it causes oedema', page: pg }],
+        numbers: [{ text: 'LVEDP: greater than 18 mmHg', page: pg }],
+        distinctions: [{ a: 'Volume overload', b: 'a stiff ventricle', how: 'A normal pressure of 8 to 12 mmHg does not exclude a stiff ventricle.', page: pg }],
+        pearls: [{ text: 'An LVEDP greater than 18 mmHg should prompt a search for volume overload.', page: pg }],
+        cases: [{ stem: 'A breathless patient on the ward round.', asks: [{ q: 'Which LVEDP prompts a search for volume overload?', a: 'An LVEDP greater than 18 mmHg.' }], page: pg }],
+        mnemonics: [], analogies: [], flowchart: '' },
+        quiz: { questions: [
+          { question: 'Which LVEDP should prompt a search for volume overload?', quote: '', options: ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', '4 mmHg'], answer: 2,
+            explain: 'An LVEDP greater than 18 mmHg should prompt a search for volume overload.', page: pg,
+            why: ['8 mmHg is inside the normal 8 to 12.', '12 mmHg is the top of normal.', '', '4 mmHg is below normal.'], trap: 'the normal range taken for the threshold' },
+          { question: 'What do diuretics reduce?', quote: 'Diuretics reduce _____ by lowering circulating volume.', options: ['Afterload', 'Preload', 'Contractility', 'Heart rate'], answer: 1,
+            explain: 'Diuretics reduce preload by lowering circulating volume.', page: pg, why: ['Not afterload.', '', 'Not contractility.', 'Not heart rate.'], trap: '' }] } },
+      { section: 2, title: 'Not this unit’s section', lesson: { points: [{ text: 'x', page: pg }] } }] };
+    await p4.fill('#pack-text', 'Here is reply 1.\n```json\n' + JSON.stringify(reply, null, 2) + '\n```');
+    await p4.locator('#pack-import').click();
+    await p4.locator('#pack-report').waitFor(T);
+    const rep = await text(p4, '#pack-report');
+    ok('the import says what it took, and what it flagged, in counts from the check',
+       /Imported section 1: 1 lesson, 2 questions\. 1 item not found in your book, flagged where it is shown\./.test(rep), rep.slice(0, 160));
+    ok('and what it refused, with why', /Section 2 “Not this unit’s section” was not imported: it is "Not this unit’s section", and section 2 here is "Section Two Afterload"/.test(rep), rep);
+    const stored = await p4.evaluate(id => MemStore.get('packs', id), d.id);
+    ok('the pack is kept on the device, by unit, section by section', stored && stored.sections[0] && !stored.sections[1] && stored.sections[0].quiz.questions.length === 2);
+    ok('and section 1 is taught from it now', await p4.evaluate(() => Memorizer.ui.state.per[0].lesson.by === 'pack' && Memorizer.ui.state.per[0].quiz.questions.length === 2));
+    ok('the card counts it', /1 of 3 sections · 1 flagged/.test(await text(p4, '#pack-status')), await text(p4, '#pack-status'));
+
+    await p4.locator('#learn-unit').click();
+    await p4.locator('#pack-label').waitFor(T);
+    ok('the lesson says who wrote it', /Written with Claude · checked against your book · 1 not found in it, flagged/.test(await text(p4, '#pack-label')), await text(p4, '#pack-label'));
+    /* innerText is the text as shown, and "vs" is set in capitals */
+    const extra = [await text(p4, '#mechanism'), await text(p4, '#distinctions'), await text(p4, '#pearls')];
+    ok('and shows what only a pack has: the mechanism, the pair confused, the pearl',
+       /leads to oedema of the lungs/.test(extra[0]) && /Volume overload vs a stiff ventricle/i.test(extra[1]) && /greater than 18 mmHg should prompt/.test(extra[2]), JSON.stringify(extra).slice(0, 200));
+    const flags = await p4.$$eval('ol.points .flag', fs => fs.map(f => f.textContent));
+    ok('the point with a number the book does not have is flagged on the point', JSON.stringify(flags) === JSON.stringify(['⚠ A number not in your book: 99.']), JSON.stringify(flags));
+    ok('and the page no longer says the points are the book’s', /written with Claude from your book/.test(await text(p4, '.arranged-note')));
+
+    /* PHASE 2: page references open the page; the section on one screen;
+       the clinical map; why, asked down the chain. */
+    const pgN = +(await p4.locator('#points .pg-open').first().innerText()).replace('p.', '');
+    await p4.locator('#points .pg-open').first().click();
+    await p4.locator('#lb-where').waitFor(T);
+    ok('a page reference opens that page as printed', new RegExp('^page ' + pgN + '\\b').test(await text(p4, '#lb-where')), await text(p4, '#lb-where'));
+    await p4.locator('#lb-close').click();
+    await p4.locator('#one-screen').click();
+    await p4.locator('#review-sheet').waitFor(T);
+    const rsText = await text(p4, '#review-sheet');
+    ok('the section on one screen: its points, the pair confused, its pearl', /Key points/i.test(rsText) && /Volume overload vs a stiff ventricle/i.test(rsText) &&
+       /greater than 18 mmHg should prompt/.test(rsText), rsText.slice(0, 200));
+    await p4.locator('#review-close').click();
+    const mapN = await p4.evaluate(() => MemSheet.clinicalMap(Memorizer.ui.docRec.clusters[0]).count);
+    ok('the clinical map is shown when the section names two things or more', (await p4.locator('#clinical-map').count()) === (mapN >= 2 ? 1 : 0), 'names ' + mapN);
+    ok('why is asked down the chain, each answer hidden', await p4.locator('#socratic .soc-answer').count() === 0 && await p4.locator('#soc-show').count() === 1);
+    await p4.locator('#soc-show').click();
+    await p4.waitForFunction(() => document.querySelectorAll('#socratic .soc-answer').length === 1, null, T);
+    ok('and shown one link at a time', await p4.locator('#socratic .soc-answer').count() === 1);
+    /* PHASE 3: a pack's teach-back is scored against its rubric — the
+       points, and the pearls and mechanism too (study.js rubricOf). */
+    await p4.fill('#teach-text', 'Diuretics reduce preload by lowering circulating volume.');
+    await p4.locator('#teach-check').click();
+    await p4.locator('#teach-result').waitFor(T);
+    const rub = await p4.evaluate(() => { const L = Memorizer.ui.state.per[0].lesson, pts = MemSheet.sheetOf(L).groups.reduce((a, g) => a.concat(g.points), []);
+      return { points: pts.length, rubric: MemStudy.rubricOf(pts, L).length }; });
+    ok('a pack\u2019s teach-back is scored against its rubric, pearls and mechanism included', rub.rubric > rub.points &&
+       new RegExp('You covered \\d+ of ' + rub.rubric + ' key points').test(await text(p4, '#teach-result')), JSON.stringify(rub) + ' ' + (await text(p4, '#teach-result')).slice(0, 60));
+
+    /* PHASE 4: rounds from the pack's case; focus; the dock's next thing. */
+    await p4.locator('#rounds-show').click();
+    await p4.locator('#rounds-answer').waitFor(T);
+    ok('rounds: the case, the examiner’s question, and its answer on request', /A breathless patient on the ward round/.test(await text(p4, '#rounds')) &&
+       /greater than 18 mmHg/.test(await text(p4, '#rounds-answer')));
+    await p4.locator('#rounds-had').click();
+    await p4.locator('#rounds-done').waitFor(T);
+    ok('and a score at the end of the round', /Rounds done: 1 of 1 answered/.test(await text(p4, '#rounds-done')));
+    await p4.locator('#focus-toggle').click();
+    await p4.waitForFunction(() => document.documentElement.getAttribute('data-focus') === 'on', null, T);
+    ok('focus hides the dock and the robot while studying', await p4.evaluate(() => getComputedStyle(document.querySelector('nav.dock')).display === 'none' &&
+       getComputedStyle(document.querySelector('#robot-dock')).display === 'none'));
+    await p4.locator('#focus-toggle').click();
+    await p4.waitForFunction(() => document.documentElement.getAttribute('data-focus') === 'off', null, T);
+    ok('the dock’s next thing on the lesson is to memorise it', (await text(p4, '#dock-context .nav-label')) === 'Memorise' && await p4.locator('nav.dock .nav-btn').count() === 5,
+       await text(p4, '#dock-context'));
+    await p4.locator('#dock-context').click();
+    await memorize(p4);
+    await p4.locator('#mcq .option').first().waitFor(T);
+    ok('the drill asks the pack’s questions, labelled', /Which LVEDP should prompt a search for volume overload\?/.test(await text(p4, '#mcq h2.q')) &&
+       /Written with Claude · checked against your book/i.test(await text(p4, '.pack-tag')), await text(p4, '.pack-tag'));
+    await p4.locator('.option[data-i="0"]').click();
+    await p4.locator('#why-not').waitFor(T);
+    ok('a wrong answer is told why that option is wrong, and the trap it fell into',
+       /Why not A: 8 mmHg is inside the normal 8 to 12\./.test(await text(p4, '#why-not')) && /The trap: the normal range taken for the threshold/.test(await text(p4, '#trap')));
+    ok('and every option’s reason is there to open', await p4.locator('#why-all li').count() === 4);
+    ok('a wrong number for a number is a wrong value (phase 3), anchored at once among the section’s values',
+       await p4.locator('#type-chip[data-type="V"]').count() === 1 && /Wrong value/.test(await text(p4, '#type-chip')) && await p4.locator('#reteach[data-hook="values"]').count() === 1,
+       await text(p4, '#type-chip'));
+    ok('and while a question is open the dock offers no shortcut past it', await p4.locator('#dock-context').count() === 0);
+    ok('nothing went to an AI provider', stub.requests.length === aiBefore, `${stub.requests.length - aiBefore} requests`);
+
+    /* A unit started over is taught from the pack again: pump() takes the
+       section from it, with nothing to ask the built-in coach for. */
+    await p4.evaluate(id => MemStore.del('sessions', id).then(() => Memorizer.openDoc(id, 0)), d.id);
+    await p4.locator('#pack-label').waitFor(T);
+    ok('a unit started over is taught from its pack, not rebuilt', await p4.evaluate(() => Memorizer.ui.state.per[0].lesson.by === 'pack' && !Memorizer.ui.state.per[1].lesson));
+    await p4.locator('#to-drill').click();
+    await memorize(p4);
+    await p4.locator('#mcq .option').first().waitFor(T);
+    ok('and drilled from it', /Which LVEDP should prompt/.test(await text(p4, '#mcq h2.q')) &&
+       await p4.evaluate(() => Memorizer.ui.state.per[0].quiz.questions.every(q => q.by === 'pack')));
+    /* EXAM CONDITIONS, from the pack. Precondition, not proposition: every
+       section counted as drilled, so the exam opens. */
+    p4.on('dialog', dl => dl.accept());
+    await p4.evaluate(() => { const s = Memorizer.ui.state; Object.keys(s.per).forEach(k => { s.per[k].done = true; s.per[k].score = 1; if (!s.per[k].quiz) s.per[k].quiz = { questions: [] }; }); s.phase = 'unit'; Memorizer.render(); });
+    await p4.locator('#exam-mode').click();
+    await p4.waitForFunction(() => document.querySelector('#exam-mode').getAttribute('aria-pressed') === 'true', null, T);
+    await p4.locator('#to-exam').click();
+    await p4.waitForFunction(() => ['exam', 'review'].includes(Memorizer.ui.state.phase), null, T);
+    for (let g = 0; g < 40 && await p4.evaluate(() => Memorizer.ui.state.phase === 'review'); g++) {
+      const before = await p4.evaluate(() => Memorizer.ui.state.review && Memorizer.ui.state.review.idx);
+      const a = await p4.evaluate(() => MemSession.reviewItem(Memorizer.ui.state).q.answer);
+      await p4.locator('.option[data-i="' + a + '"]').click(); await p4.locator('#next').click();
+      await p4.waitForFunction(b => Memorizer.ui.state.phase !== 'review' || (Memorizer.ui.state.review && Memorizer.ui.state.review.idx !== b), before, T);
+    }
+    await p4.locator('#exam-clock').waitFor(T);
+    const exq = await p4.evaluate(() => Memorizer.ui.state.exam.questions);
+    ok('the exam asks the pack’s questions for the section it covers, and the built-in coach’s for the rest', exq.filter(x => x.cluster === 0).length >= 1 &&
+       exq.filter(x => x.cluster === 0).every(x => x.by === 'pack') && exq.filter(x => x.cluster !== 0).every(x => x.by !== 'pack'), JSON.stringify(exq.map(x => [x.cluster, x.by || 'coach'])));
+    ok('under exam conditions the clock runs at a board’s pace', /^⏱ \d+:\d\d of \d+:\d\d$/.test(await text(p4, '#exam-clock')), await text(p4, '#exam-clock'));
+    for (let k = 0; k < exq.length; k++) {
+      const q = await p4.evaluate(() => { const g = Memorizer.ui.state.exam; return g.questions[g.order[g.pos]]; });
+      await p4.locator('.option[data-i="' + (k === 0 ? (q.answer + 1) % 4 : q.answer) + '"]').click();
+      if (k === 0) ok('an answer is held, not marked, until the end', await p4.locator('#blind-note').count() === 1 &&
+        await p4.locator('.option.right, .option.wrong').count() === 0 && await p4.locator('.option.chosen').count() === 1);
+      await p4.locator('#next').click();
+      await p4.waitForFunction(n => Memorizer.ui.state.phase === 'done' || Memorizer.ui.state.exam.pos === n, k + 1, T);
+    }
+    await p4.locator('#exam-missed').waitFor(T);
+    ok('at the end, what was missed: the question, the answer picked, the right one and why', /What you missed \(1\)/.test(await text(p4, '#exam-missed')) &&
+       /You: /.test(await text(p4, '#exam-missed')) && /Why: /.test(await text(p4, '#exam-missed')), (await text(p4, '#exam-missed')).slice(0, 160));
+    ok('and the dock’s next thing from the result is back to the sections', (await text(p4, '#dock-context .nav-label')) === 'Sections');
+    await p4.locator('#dock-context').click();
+    await p4.locator('#pack-card').waitFor(T);
+    /* the pack removed: its sections go back to the built-in coach */
+    await p4.locator('#pack-card summary').click();
+    await p4.locator('#pack-remove').click();
+    await p4.waitForFunction(() => !Memorizer.ui.pack, null, T);
+    ok('removing the pack deletes it and sends its section back to the built-in coach', await p4.evaluate(id => MemStore.get('packs', id), d.id) === null &&
+       await p4.evaluate(() => !Memorizer.ui.state.per[0].lesson) && /none yet/.test(await text(p4, '#pack-card summary')));
+
+    /* THE PEARL AS THE DAY'S RECALL (phase 4) */
+    await p4.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p4.locator('#pearl-recall').waitFor(T);
+    await p4.locator('#pearl-recall').click();
+    await p4.locator('#pearl-recalling').waitFor(T);
+    const blanks = await p4.evaluate(() => MemHome.recallParts(Memorizer.ui.pearlCache.pk.steps).blanks);
+    ok('the pearl is recalled first: its values hidden', blanks >= 1 && await p4.locator('#pearl-recalling .blank').count() === blanks && await p4.locator('#pearl-recalling mark').count() === 0, 'blanks ' + blanks);
+    await p4.locator('#pearl-show').click();
+    await p4.locator('#pearl-knew').click();
+    await p4.waitForFunction(() => Memorizer.ui.pearlRecalls[FSRS.todayISO()] === true, null, T);
+    await p4.locator('#pearl-recall').click();
+    ok('and an honest "knew it" is kept for the day', /Recalled on 1 of the last 1 day you tried/.test(await text(p4, '#pearl-streak')) &&
+       (await p4.evaluate(() => MemStore.get('meta', 'pearl-recall'))).recs[await p4.evaluate(() => FSRS.todayISO())] === true);
+    ok('with no errors', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+
   head('a whole book: its PDFs as one, cut into chapters');
   {
     const bk = makeBook();
@@ -2107,6 +2394,22 @@ function kindOf(user) {
     await p5.locator('header.topbar button[aria-label="Back"]').click();
     await p5.locator('#chapters').waitFor(T);
     const keptId = (await p5.evaluate(() => MemStore.all('books').then(x => x[0].chapters))).find(c => c.pageStart === 2).docId;
+    /* A chapter's row is short: its menu hangs below it, over the next row,
+       and must be what a tap there lands on — with the finger still on the
+       row, which is then :hover and lifted by a transform. Row 2 has a row
+       after it. (A z-index for the open row was written against the next
+       row covering the menu; with it removed this still passed in Chromium,
+       so it was dropped rather than kept on a guess.) */
+    await p5.locator('#chapters .chapter-row').nth(2).locator('details.menu summary').click();
+    await p5.evaluate(() => document.querySelector('[data-join="2"]').closest('.chapter-row').scrollIntoView({ block: 'center' }));
+    await p5.locator('#chapters .chapter-row').nth(2).locator('details.menu summary').hover();
+    const joinHit = await p5.evaluate(() => { const b = document.querySelector('[data-join="2"]');
+      const r = b.getBoundingClientRect(), row = b.closest('.chapter-row'), rr = row.getBoundingClientRect(), next = row.nextElementSibling.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { below: Math.round(r.bottom - rr.bottom), overNext: r.bottom > next.top, hover: row.matches(':hover'), lifted: getComputedStyle(row).transform !== 'none', hit: !!at && (at === b || b.contains(at)) }; });
+    await p5.locator('#chapters .chapter-row').nth(2).locator('details.menu summary').click();
+    ok('a chapter’s menu, hanging over the next row, can be seen and tapped — the row lifted under the finger too',
+       joinHit.below > 0 && joinHit.overNext && joinHit.hover && joinHit.lifted && joinHit.hit, JSON.stringify(joinHit));
     await p5.locator('#chapters .chapter-row').nth(3).locator('details.menu summary').click();
     await p5.locator('[data-join="3"]').click();
     await p5.waitForFunction(() => document.querySelectorAll('#chapters .chapter-row').length === 3, null, T);

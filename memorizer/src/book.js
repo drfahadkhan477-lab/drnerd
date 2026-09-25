@@ -29,6 +29,8 @@
 (function (root) {
 'use strict';
 
+var Chunk = root.MemChunk || (typeof require === 'function' ? require('./chunk.js') : null);
+
 /* A method must find at least this many chapters to be preferred. */
 var MIN_CHAPTERS = 3;
 /* …and its chapters must reach this far into the book (first to last start,
@@ -84,18 +86,34 @@ function bodySizeOf(pages) {
   return sizes[Math.floor(sizes.length / 2)] || 1;
 }
 
-/* A chapter's title from its opening page: the given text if it has words,
-   else the biggest line on the page that is not the "Chapter N" line. */
+/* A chapter's title from its opening page: the given text if it reads as
+   words (Chunk.wordy — not a line recognition garbled), else the biggest
+   such line on the page that is not the "Chapter N" line. */
 function titleOn(page, given, skip) {
   var t = clean(given).replace(/\s+\d{1,4}$/, '');
-  if (/[A-Za-z]{2}/.test(t)) return t;
+  if (Chunk.wordy(t)) return t;
   var best = null;
   (page.lines || []).forEach(function (l) {
     var s = clean(l.text);
-    if (!s || s === skip || !/[A-Za-z]{2}/.test(s) || words(s).length > 16) return;
+    if (!s || s === skip || !Chunk.wordy(s) || words(s).length > 16) return;
     if (!best || (+l.size || 0) > (+best.size || 0)) best = l;
   });
   return best ? clean(best.text) : '';
+}
+
+/* A "Chapter N" line whose title runs on: it stops on a word that cannot
+   end a title ("…, Pulmonary Valve Disease, and") and the next lines, at
+   its size, finish it ("Drug-Induced Valve Disease"). The owner's first
+   whole book: the continuation was left behind when the "Chapter 17" line
+   was taken out, and titled the chapter's first section. Returns how many
+   lines after line j continue it. */
+var DANGLING = /(?:,|\b(?:and|or|of|the|in|for|with|to|on|from|&))\s*$/i;
+function runsOn(lines, j) {
+  var n = 0, prev = lines[j];
+  while (DANGLING.test(clean(prev.text)) && lines[j + n + 1] && Math.abs((+lines[j + n + 1].size || 0) - (+prev.size || 0)) < 0.5) {
+    n++; prev = lines[j + n];
+  }
+  return n;
 }
 
 /* ── numbered: "Chapter 12 …" lines ─────────────────────────────────────── */
@@ -103,10 +121,12 @@ function numbered(pages) {
   var hits = [];
   pages.forEach(function (p) {
     var seen = {};
-    (p.lines || []).forEach(function (l) {
+    (p.lines || []).forEach(function (l, j, all) {
       var s = clean(l.text), m = CHAPTER_LINE.exec(s);
       if (!m || words(s).length > NUMBERED_MAX_WORDS || seen[m[1]]) return;
       seen[m[1]] = true;
+      var more = runsOn(all, j);
+      for (var k = 1; k <= more; k++) m[2] += ' ' + clean(all[j + k].text);
       hits.push({ n: +m[1], page: p.page, rest: m[2], line: s, p: p });
     });
   });
@@ -140,10 +160,15 @@ function numbered(pages) {
    stays. */
 function stripHeaders(pages) {
   return (pages || []).map(function (p) {
-    return { page: p.page, lines: (p.lines || []).filter(function (l) {
+    var drop = {}, all = p.lines || [];
+    all.forEach(function (l, j) {
       var s = clean(l.text);
-      return !(CHAPTER_LINE.test(s) && words(s).length <= NUMBERED_MAX_WORDS);
-    }) };
+      if (!(CHAPTER_LINE.test(s) && words(s).length <= NUMBERED_MAX_WORDS)) return;
+      drop[j] = true;
+      /* and the lines its title runs on to */
+      for (var k = 1, more = runsOn(all, j); k <= more; k++) drop[j + k] = true;
+    });
+    return { page: p.page, lines: all.filter(function (l, j) { return !drop[j]; }) };
   });
 }
 
@@ -155,7 +180,7 @@ function bySize(pages) {
   pages.forEach(function (p) {
     var big = (p.lines || []).filter(function (l) {
       var s = clean(l.text);
-      return (+l.size || 0) >= body * 1.5 && s && words(s).length <= 12 && /[A-Za-z]{2}/.test(s);
+      return (+l.size || 0) >= body * 1.5 && s && words(s).length <= 12 && Chunk.wordy(s);
     });
     big.forEach(function (l) { sizes[Math.round(+l.size)] = true; });
     tops.push({ p: p, big: big });

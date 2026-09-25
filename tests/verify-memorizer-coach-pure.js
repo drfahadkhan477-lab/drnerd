@@ -165,8 +165,118 @@ head('the lesson: the book’s own words, in teaching order');
      L.mnemonics[0].words.every(w => norm(PRELOAD.text).indexOf(w.toLowerCase()) !== -1), JSON.stringify(L.mnemonics));
   ok('an analogy that fits is chosen, and marked as Memorizer’s', L.analogies.length >= 1 && L.analogies[0].title === 'Preload' && L.analogies.every(a => a.source === 'Memorizer'),
      L.analogies.map(a => a.title).join(', '));
+  /* The owner's first whole book: a section opening on a caption got it as
+     its big idea. A caption labels a picture; a sentence about a table is a
+     sentence. */
+  const capt = withText({ index: 0, title: 'Electrocardiographic subsets', pageStart: 5, pageEnd: 5, segments: [
+    seg(5, 'TABLE 1.4 FIGURE 1.2 Electrocardiographic subsets of acute myocardial infarction (MI).'),
+    seg(5, 'Figure 3-2. Anatomy of the coronary arteries.'),
+    seg(5, 'An infarct is death of heart muscle from a blocked coronary artery. ST elevation on the ECG marks a transmural infarct that needs reperfusion within 90 minutes. ' +
+      'Table 1.4 lists the subsets by their ECG findings. New Q waves appear over hours as the muscle dies.')] });
+  const CL = K.lesson(capt);
+  const said = [CL.overview].concat(CL.points.map(p => p.text), CL.numbers.map(n => n.text));
+  ok('a caption is never the big idea, a key point or a number to learn', /^An infarct is death/.test(CL.overview) && !said.some(t => /^(?:TABLE|Figure) \d/.test(t)), JSON.stringify(said));
+  ok('a number that only names a table does not make a sentence a key point first', !CL.points.some(p => /^Table 1\.4/.test(p.text)), JSON.stringify(CL.points.map(p => p.text)));
+  ok('a sentence about a table is kept; a caption, its title included, is not a sentence', K.sentences(capt).some(x => /^Table 1\.4 lists/.test(x.text)) &&
+     !K.sentences(capt).some(x => /Anatomy of the coronary|^Figure|^TABLE/.test(x.text)), JSON.stringify(K.sentences(capt).map(x => x.text)));
+  /* The owner's first whole book, a drill of four options: the chapter's
+     authors as a "statement", two sentences leaning on the one before them
+     ("However, …", "It is …"), and a noun swapped for an adjective. */
+  const byl = withText({ index: 0, title: 'Tricuspid valve', pageStart: 7, pageEnd: 7, segments: [
+    seg(7, 'Maria Lopez and Tom Kai Ming Wang'),
+    seg(7, 'However, recent imaging studies have shown that the valve has three leaflets in most adults.'),
+    seg(7, 'It is the inlet valve of the right ventricle, separating it from the right atrium in every adult heart.'),
+    seg(7, 'The tricuspid valve has three leaflets attached to the annulus by the chordae. The tricuspid annulus dilates when the right ventricle enlarges. ' +
+      'Functional regurgitation follows annular dilation in most patients with pulmonary hypertension. Rheumatic disease is the most common cause of tricuspid stenosis. ' +
+      'Carcinoid syndrome thickens the tricuspid leaflets and causes regurgitation. Endocarditis of the tricuspid valve is common in people who inject drugs. ' +
+      'Ebstein anomaly displaces the septal leaflet toward the apex of the ventricle. Pulmonary hypertension enlarges the right ventricle over months. ' +
+      'Severe regurgitation raises right atrial pressure and congests the liver.')] });
+  const BL = K.lesson(byl), bsents = K.sentences(byl).map(x => x.text);
+  ok('a line of names (the chapter’s authors) is not a sentence; a sentence is', !bsents.some(t => /Lopez/.test(t)) && bsents.some(t => /^Rheumatic disease/.test(t)) &&
+     K.nameLine('A. B. Smith, MD, and Jane van der Berg') && !K.nameLine('ECG shows LBBB.') && !K.nameLine('Aspirin reduces mortality.'), JSON.stringify(bsents));
+  /* and with no definition to lead, the first key point that stands alone */
+  const lean = withText({ index: 0, title: 'Drugs', pageStart: 1, pageEnd: 1, segments: [seg(1, 'However, diuretics lower the filling pressure in most patients quickly. ' +
+    'Beta-blockers slow the heart rate and lengthen diastole in angina. Nitrates dilate the veins and lower preload within minutes.')] });
+  const LO = K.lesson(lean).overview;
+  ok('the big idea stands alone: not "However, …" or "It is …"', !/^(However|It)\b/.test(BL.overview) && !/^However\b/.test(LO) && !!LO, BL.overview + ' | ' + LO);
+  const bcand = K.candidates(byl, K.pools([byl])), btrue = bcand.filter(q => q.kind === 'true');
+  ok('a statement to judge stands alone, right or wrong', btrue.length >= 1 && btrue.every(q => q.options.every(o => !/^(However|It)\b/.test(o) && !/Lopez/.test(o))),
+     btrue.map(q => q.options.join(' / ')).join(' | '));
+  ok('a word is swapped only for one of its family: a noun for a noun, not "annulus" for "atrial"', btrue.length >= 1 &&
+     btrue.every(q => q.options.every(o => !/\bthe (?:atrial|ventricular|pulmonary|aortic|mitral|coronary) by the\b|\bto the (?:atrial|ventricular|pulmonary|coronary)\b/.test(o))), btrue.map(q => q.options.join(' / ')).join(' | '));
+  /* Names of more than one word are used whole: no "Syndrome" or
+     "Carcinoid" as a cause, no "Endocarditis syndrome", no half a name
+     hidden. */
+  ok('a clinical name of more than one word is found whole', ['Carcinoid syndrome', 'Ebstein anomaly', 'Rheumatic disease', 'pulmonary hypertension', 'tricuspid stenosis']
+     .every(n => K.pools([byl]).entities.some(e => e.text === n)) && !K.pools([byl]).entities.some(e => /^(?:most|Severe|the)\b/i.test(e.text)), JSON.stringify(K.pools([byl]).entities.map(e => e.text)));
+  const bmost = bcand.find(q => q.kind === 'most');
+  ok('a "most common cause" is asked among whole names of its family', bmost && bmost.options[bmost.answer] === 'Rheumatic disease' &&
+     bmost.options.every(o => /\s/.test(o) && !/^(?:Syndrome|Carcinoid|Anomaly|Valve)$/i.test(o)), bmost && bmost.options.join(' / '));
+  const halves = bcand.filter(q => q.kind === 'true' || q.kind === 'term').map(q => [q.quote].concat(q.options).join(' '));
+  ok('and a name is never split — half hidden, or half swapped', halves.length >= 3 && !halves.some(t => /Endocarditis syndrome|Rheumatic syndrome|Carcinoid _____|_____ syndrome|_____ anomaly|Ebstein _____/.test(t)),
+     halves.join(' | '));
+  /* A point that states a value is asked for the value; a term with its
+     own abbreviation beside it is hidden with it. */
+  const val = withText({ index: 0, title: 'Leaflets', pageStart: 8, pageEnd: 8, segments: [seg(8,
+    'Transesophageal echocardiogram (TEE) studies show that only 54% of patients have three valve leaflets. ' +
+    'Severe tricuspid regurgitation is present when the vena contracta is at least 7 mm wide. ' +
+    'Transesophageal echocardiogram (TEE) is the test of choice for leaflet anatomy.')] });
+  const vc = K.recallCards(val, K.lesson(val)).filter(x => x.kind === 'point');
+  const byFull = t => vc.find(x => x.full.indexOf(t) === 0);
+  ok('a point with a value is asked for the value ("only _____ of patients")', byFull('Transesophageal echocardiogram (TEE) studies') && byFull('Transesophageal echocardiogram (TEE) studies').answer === '54%' &&
+     byFull('Severe tricuspid') && byFull('Severe tricuspid').answer === '7 mm', JSON.stringify(vc.map(x => [x.prompt, x.answer])));
+  /* the owner's card: "transesophageal _____ (TEE)" */
+  const teeT = 'However, recent transesophageal echocardiogram (TEE) studies have revealed four leaflets in some patients.';
+  const tee = withText({ index: 0, title: 'Leaflets', pageStart: 1, pageEnd: 1, segments: [seg(1, teeT + ' The tricuspid valve usually has three leaflets. An echocardiogram shows the leaflets. Endocarditis damages the leaflets.')] });
+  const teeCard = K.recallCards(tee, { overview: '', points: [{ text: teeT, page: 1 }], numbers: [], mnemonics: [] }).find(x => x.kind === 'point');
+  ok('a term’s own abbreviation beside the blank is hidden with it — "_____ (TEE)" gave it away', teeCard && teeCard.answer === 'echocardiogram (TEE)' && !/\(TEE\)/.test(teeCard.prompt),
+     teeCard && JSON.stringify([teeCard.prompt, teeCard.answer]));
+  ok('and a term hidden with its own abbreviation, not beside it', byFull('Transesophageal echocardiogram (TEE) is') && byFull('Transesophageal echocardiogram (TEE) is').answer === 'Transesophageal echocardiogram (TEE)' &&
+     vc.every(x => x.prompt.replace('_____', x.answer) === x.full), JSON.stringify(vc.map(x => [x.prompt, x.answer])));
   const kidney = withText({ index: 0, title: 'The nephron', pageStart: 1, pageEnd: 1, segments: [seg(1, 'The glomerulus filters plasma. The tubule reabsorbs sodium and water. The collecting duct concentrates urine.')] });
   ok('and none is forced on a section it does not fit', K.lesson(kidney).analogies.length === 0);
+}
+
+{
+  /* A list with no sentence before it takes its section's title as its
+     topic, without the part mark: "(part 3)" now, "(cont.)" in units
+     imported before parts were numbered. */
+  const items = ['Rheumatic', 'Infective endocarditis', 'Carcinoid syndrome'].map(t => seg(1, t, { item: true, list: 'L9' }));
+  const topics = ['Tricuspid stenosis (part 3)', 'Tricuspid stenosis (cont.)'].map(title => (K.lists({ title, segments: items })[0] || {}).title);
+  ok('a list’s topic is its section’s title without the part mark', topics.every(t => t === 'Tricuspid stenosis'), JSON.stringify(topics));
+}
+
+head('high-yield: what an exam asks, found and taken first');
+{
+  const cases = [
+    ['Rheumatic heart disease is the most common cause of TS.', 'Most common'],
+    ['Beta-blockers are first-line therapy for stable angina.', 'First-line'],
+    ['Coronary angiography remains the gold standard for coronary anatomy.', 'Diagnostic'],
+    ['Nitrates should not be given within a day of sildenafil.', 'Avoid'],
+    ['Primary PCI is recommended when it can be done within 120 minutes.', 'Guideline'],
+    ['Mortality rises steeply once symptoms begin.', 'Prognosis'],
+    ['Troponin has a high sensitivity for myocardial injury.', 'Accuracy'],
+    ['Unlike LBBB, RBBB does not hide ST elevation.', 'Contrast'],
+    ['Severe stenosis is a peak velocity of at least 4 m/s.', 'Threshold']];
+  const miss = cases.filter(([t, want]) => K.yieldOf(t).indexOf(want) === -1).map(([t, want]) => want + ': ' + JSON.stringify(K.yieldOf(t)));
+  ok('each kind of high-yield sentence is named for what makes it so', miss.length === 0, miss.join('; ') || cases.length + ' kinds');
+  ok('and a plain sentence, or a number that only names a table, is not high-yield',
+     K.yieldOf('The ventricle fills in diastole.').length === 0 && K.yieldOf('Table 1.4 lists the subsets by their ECG findings.').length === 0 &&
+     K.yieldOf('It was described in 1904 in 3 patients.').indexOf('Threshold') === -1 &&
+     K.yieldOf('Of the 3 patients, more than 2 improved.').indexOf('Threshold') === -1 &&
+     K.yieldOf('Aspirin 75 mg is given daily with food.').indexOf('Threshold') === -1 && K.yieldOf('An LVEDP above 18 mmHg means overload.')[0] === 'Threshold');
+  /* A paragraph that keeps saying "left ventricle" and two sentences in rarer
+     words that an exam would ask: the frequency score alone chose three
+     filler sentences (the owner: "not identifying high yield"). */
+  const filler = ['The left ventricle fills with blood during diastole as the mitral valve opens.', 'Ventricular filling depends on the pressure in the left atrium and on ventricular relaxation.',
+    'The left ventricle relaxes early in diastole and then fills passively.', 'Atrial contraction adds the last part of ventricular filling in late diastole.',
+    'Filling of the left ventricle is slowed when the ventricle is stiff.', 'A stiff left ventricle needs a higher atrial pressure to fill.',
+    'Ventricular relaxation uses energy as calcium is taken back up.', 'The ventricle fills less when the heart rate is fast and diastole is short.',
+    'Left atrial pressure rises when the left ventricle fills poorly.', 'Diastolic filling of the left ventricle is measured on echocardiography.',
+    'Beta-blockers are first-line therapy because they lengthen diastole.', 'Nitrates should not be given with sildenafil.'];
+  const dia = withText({ index: 0, title: 'Diastolic filling', pageStart: 1, pageEnd: 1, segments: [seg(1, filler.join(' '))] });
+  const pts = K.keySentences(dia).map(x => x.text);
+  ok('the high-yield sentences are among the key points, whatever their words score', pts.some(t => /first-line/.test(t)) && pts.some(t => /should not/.test(t)), JSON.stringify(pts));
 }
 
 head('the analogy bank');
@@ -183,6 +293,15 @@ head('the analogy bank');
      would put Preload first; the stronger match must lead. */
   const both = withText({ index: 0, title: 'Loading', segments: [seg(1, 'Afterload and afterload and afterload. Preload and preload.')] });
   ok('the strongest match comes first, wherever it sits in the bank', A.forSection(both)[0].title === 'Afterload', A.forSection(both).map(a => a.title).join(', '));
+  /* A section about infarction that names LBBB over and over (a list of ECG
+     subsets, a table of them) and says what it is about in several words. */
+  const mi = withText({ index: 0, title: 'Electrocardiographic subsets', segments: [
+    seg(1, 'An infarct follows occlusion of a coronary artery. STEMI needs reperfusion; NSTEMI is managed by risk. Necrosis spreads from the endocardium over hours.'),
+    seg(1, 'New LBBB with symptoms.', { item: true, list: 'L1' }), seg(1, 'Old LBBB with Sgarbossa criteria.', { item: true, list: 'L1' }),
+    seg(1, 'LBBB with a paced rhythm.', { item: true, list: 'L1' }), seg(1, 'LBBB and RBBB together.', { item: true, list: 'L1' }), seg(1, 'LBBB in heart failure.', { item: true, list: 'L1' }),
+    seg(1, 'LBBB LBBB LBBB LBBB', { table: [['LBBB', 'LBBB'], ['LBBB', 'LBBB']] })] });
+  ok('what the section is about wins over one term repeated through it', A.forSection(mi)[0].title === 'Myocardial infarction', A.forSection(mi).map(a => a.title).join(', '));
+  ok('a table is not counted: its cells repeat, it is not prose', A.proseOf(mi).indexOf('LBBB LBBB LBBB LBBB') === -1 && A.proseOf(mi).indexOf('New LBBB') !== -1);
 }
 
 head('the drill: multiple choice from the book');
@@ -274,8 +393,13 @@ head('the drill: multiple choice from the book');
   ok('a definition asked forwards offers the unit’s other definitions as the wrong meanings', fwd.length >= 1 &&
      fwd.every(q => q.options.every(o => UNIT.some(c => c.text.indexOf(o) !== -1))), fwd.length + ' — ' + (fwd[0] ? fwd[0].question + ' ' + fwd[0].options.join(' / ') : 'none'));
   const allTerms = cands.filter(q => q.kind === 'term');
+  /* A name is compared word by word ("Tricuspid stenosis" against
+     "Tricuspid atresia" or "aortic stenosis" is two lesions, not two forms
+     of one word); a single word as before. */
+  const sameForm = (a, b) => { const x = String(a).toLowerCase().trim().split(/\s+/), y = String(b).toLowerCase().trim().split(/\s+/);
+    return x.length === y.length && x.every((w, i) => w.slice(0, 6) === y[i].slice(0, 6)); };
   ok('no missing-term question offers another form of the same word (hypertrophy, hypertrophied)', allTerms.length >= 3 &&
-     allTerms.every(q => q.options.every((o, i) => i === q.answer || o.slice(0, 6).toLowerCase() !== rightText(q).slice(0, 6).toLowerCase())),
+     allTerms.every(q => q.options.every((o, i) => i === q.answer || !sameForm(o, rightText(q)))),
      allTerms.map(q => q.options.join('/')).join(' | '));
   /* Two sentences the same but for one term: changing one into the other
      gives a sentence of the book — true, so it may not be a wrong option. */
@@ -410,7 +534,36 @@ head('the robot explains the question in front of you');
   const TB = { index: 9, title: 'Values', pageStart: 3, pageEnd: 3, text: '', segments: [{ page: 3, heading: false, text: 'Measure Normal Unit LVEDP < 12 mmHg Stroke volume 60-100 mL Ejection fraction 55 percent Heart rate 50-90 bpm',
     table: [['Measure', 'Normal', 'Unit'], ['LVEDP', '< 12', 'mmHg'], ['Stroke volume', '60-100', 'mL'], ['Ejection fraction', '55', 'percent'], ['Heart rate', '50-90', 'bpm']] }] };
   TB.text = TB.segments[0].text;
-  const cands = [].concat(...U2.concat([TB]).map(c => K.candidates(c, K.pools(U2.concat([TB])))));
+  /* A board question: "what is first-line", "which is contraindicated" —
+     the answer the book's own subject, the options the unit's other drugs. */
+  const DR = withText({ index: 10, title: 'Angina drugs', pageStart: 4, pageEnd: 4, segments: [seg(4,
+    'Beta-blockers are the first-line therapy for stable angina. Nitrates are contraindicated with sildenafil. ' +
+    'Calcium channel blockers relieve coronary spasm. Ranolazine reduces the late sodium current. Ivabradine slows the sinus node alone. ' +
+    'Aspirin prevents platelet aggregation in the coronary arteries.')] });
+  const U3 = U2.concat([TB, DR]);
+  const cands = [].concat(...U3.map(c => K.candidates(c, K.pools(U3))));
+  const board = K.candidates(DR, K.pools(U3));
+  const fl = board.find(q => q.kind === 'choice'), ci = board.find(q => q.kind === 'avoid');
+  ok('board stems: "What is the first-line therapy for …?" and "Which is contraindicated with …?", the book’s answer among the unit’s other terms',
+     fl && fl.question === 'What is the first-line therapy for stable angina?' && fl.options[fl.answer] === 'Beta-blockers' && fl.options.length === 4 &&
+     ci && ci.question === 'Which is contraindicated with sildenafil?' && ci.options[ci.answer] === 'Nitrates' && ci.options.length === 4 &&
+     /* every option a drug, not a cause or a word from the sentence */
+     fl.options.concat(ci.options).every(o => K.family(o) === 'drug' && /^[A-Z]/.test(o)) &&
+     /* and none a fragment of another ("Blockers" of "Beta-blockers") */
+     [fl, ci].every(q => q.options.every(o => q.options.every(x => x === o || x.toLowerCase().indexOf(o.toLowerCase()) === -1))),
+     JSON.stringify([fl && [fl.question, fl.options], ci && [ci.question, ci.options]]));
+  /* Within each kind, the questions from high-yield sentences come first —
+     a drill takes the first of each kind. Held for every section, and it
+     has to matter somewhere: some kind must hold both. */
+  const ordered = U3.map(c => K.candidates(c, K.pools(U3)));
+  const hyOf = q => K.yieldOf(q.src || '').length;
+  const unsorted = ordered.filter(cs => [...new Set(cs.map(q => q.kind))].some(k => { const h = cs.filter(q => q.kind === k).map(hyOf); return h.some((v, i) => i && v > h[i - 1]); }));
+  const mixed = ordered.some(cs => [...new Set(cs.map(q => q.kind))].some(k => { const h = cs.filter(q => q.kind === k).map(hyOf); return h.some(v => v > 0) && h.some(v => v === 0); }));
+  ok('within each kind, a question from a high-yield sentence is offered first', unsorted.length === 0 && mixed, `${unsorted.length} out of order; mixed: ${mixed}`);
+  const kin = K.kinOf('Nitrates', K.pools(U3)).map(t => t.toLowerCase());
+  ok('the options a drug is offered against are the unit’s other drugs — whole names, not "first-line" or a fragment',
+     kin.indexOf('ivabradine') !== -1 && kin.indexOf('ranolazine') !== -1 && kin.every(t => K.family(t) === 'drug') &&
+     !kin.some(t => t === 'first-line' || t === 'blockers') && K.family('first-line') === '', JSON.stringify(kin));
   const misread = cands.filter(q => K.questionKind(q) !== q.kind);
   ok('every kind of question is read back from its wording — for all the section’s candidates, not just those drilled',
      new Set(cands.map(q => q.kind)).size >= 10 && misread.length === 0 && Object.keys(K.KIND_SAYS).every(k => cands.some(q => q.kind === k)),
@@ -664,6 +817,21 @@ head('re-teach: the fix follows the kind of miss (Supreme Memorizer)');
   ok('every card names its type and the skill’s fix for it', ['C', 'E', 'R', 'N'].every(t => { const x = rt(t, 'Nitrates'); return x.type === t && x.name && x.fix; }));
   ok('a sentence is about a term only when it carries most of it, not one word', K.sentenceAbout(RT, 'venous congestion kidney failure') === null &&
      /^Excessive preload/.test(K.sentenceAbout(RT, 'venous pressure').text));
+}
+
+head('a wrong value is re-taught among the section’s other values (phase 3)');
+{
+  const VC = { index: 0, title: 'Grading', segments: [
+    { text: 'Severe aortic stenosis is defined by a mean gradient of at least 40 mmHg.', page: 3 },
+    { text: 'A peak velocity of at least 4 m/s also marks severe stenosis.', page: 3 },
+    { text: 'Moderate stenosis has a mean gradient of 20 to 39 mmHg.', page: 4 },
+    { text: 'Valve area below 1.0 cm2 is severe.', page: 4 }] };
+  const q = { question: 'Mean gradient in severe AS?', options: ['20 mmHg', 'at least 40 mmHg', '60 mmHg', '4 m/s'], answer: 1, explain: '', page: 3 };
+  const r = K.reteach({ q, types: ['C', 'V'], confusedWith: '20 mmHg' }, VC);
+  ok('it is named a wrong value, with its hook', r.type === 'V' && r.name === 'Wrong value' && r.hookType === 'values' && r.title === 'at least 40 mmHg — not 20 mmHg', JSON.stringify([r.type, r.hookType, r.title]));
+  ok('the value first, in the book’s sentence', r.lines[0].label === 'The value' && /at least 40 mmHg/.test(r.lines[0].text));
+  ok('then the section’s other values beside it, never the same sentence twice', r.lines.length >= 3 && r.lines.slice(1).every(l => l.text !== r.lines[0].text), JSON.stringify(r.lines.map(l => l.label)));
+  ok('and where the value picked belongs, when the section has it', r.lines.some(l => l.label === 'Where 20 mmHg belongs' && /20 to 39 mmHg/.test(l.text)), JSON.stringify(r.lines.map(l => l.label)));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

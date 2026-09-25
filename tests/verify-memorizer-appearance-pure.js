@@ -1,20 +1,24 @@
 #!/usr/bin/env node
 /*
- * Memorizer's themes are Systole's themes, and every one of them is readable.
+ * Memorizer's themes — the owner's Daylight and Clinical, and Systole's
+ * Contrast — and every one of them is readable.
  *
  *   node tests/verify-memorizer-appearance-pure.js
  *
  * Pure Node. memorizer/src/appearance.js holds the palettes as data and
  * generates the stylesheet from them. Two things are proven about that data:
  *
- *   · PORTED, NOT INVENTED. For every theme with a Systole source block, each
- *     colour is read out of scripts/theme-patch.js or
- *     scripts/highcontrast-patch.js and compared, value for value. A palette
- *     edited in either app without the other fails here.
+ *   · CONTRAST IS PORTED, NOT INVENTED. Its colours are read out of
+ *     scripts/highcontrast-patch.js and compared, value for value. The
+ *     owner's two were drawn for Memorizer and have no source to drift from;
+ *     until they replaced them, Systole's other eight were held here the
+ *     same way.
  *   · READABLE. WCAG contrast ratios, computed, for every pairing the page
  *     actually draws: body and secondary text on the ground and on cards,
  *     accent-coloured text, text on accent buttons, and the right/wrong/partly
- *     colours on their own tints — in all nine themes, and both halves of Auto.
+ *     colours on their own tints — in every theme, and both halves of Auto,
+ *     on glass over the aurora as well as on solid cards. The floors are the
+ *     ones the old themes were held to; none moved with the themes.
  *
  * Plus the plumbing: settings normalise to known values, the stylesheet has a
  * rule for every value a setting can take, and text size scales in rem.
@@ -41,22 +45,21 @@ const lum = hex => {
 const parseRgba = s => { const m = /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/.exec(s); return m ? [+m[1], +m[2], +m[3], +m[4]] : [0, 0, 0, -1]; };
 const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
-head('the nine themes are Systole’s nine');
+head('the themes: the owner’s two, and Systole’s Contrast');
 {
   const ids = L.THEMES.map(t => t.id);
-  ok('eight palettes plus Auto', ids.length === 8 && L.AUTO && L.AUTO.light === 'daylight' && L.AUTO.dark === 'midnight', ids.join(', '));
-  /* Systole's THEMES list, read from its own source. */
+  ok('Daylight and Clinical, Contrast, and Auto pairing the first two', ids.join() === 'daylight,clinical,contrast' && L.AUTO &&
+     L.AUTO.light === 'daylight' && L.AUTO.dark === 'clinical' && L.byId('daylight').mode === 'light' && L.byId('clinical').mode === 'dark', ids.join(', '));
+  /* Contrast is Systole's: its id, name and swatch are what Systole's
+     picker shows, read from Systole's own source. */
   const tp = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
-  /* id → name, read as pairs and compared as strings. The first version
-     built a regex from each name with a no-op replace(' ', ' ') where an
-     escape belonged — CodeQL flagged it (alert 18). */
   const systole = {};
   for (const m of tp.matchAll(/\{id:'([a-z]+)',\s*name:'([^']+)'/g)) systole[m[1]] = m[2];
-  const mismatch = L.THEMES.filter(t => systole[t.id] !== t.name).map(t => `${t.id}: "${t.name}" vs Systole "${systole[t.id]}"`);
-  ok('the same ids, and names, as Systole’s theme picker', 'auto' in systole && mismatch.length === 0,
-     mismatch.join('; ') || Object.keys(systole).join(', '));
-  ok('each swatch is the one Systole’s picker shows', L.THEMES.every(t => new RegExp("id:'" + t.id + "'[^}]*bg:'" + t.swatch[0] + "',ac:'" + t.swatch[1] + "'", 'i').test(tp)),
-     L.THEMES.filter(t => !new RegExp("id:'" + t.id + "'[^}]*bg:'" + t.swatch[0] + "',ac:'" + t.swatch[1] + "'", 'i').test(tp)).map(t => t.id).join(', ') || 'all match');
+  const ct = L.byId('contrast');
+  ok('Contrast has Systole’s id, name and swatch', systole.contrast === ct.name &&
+     new RegExp("id:'contrast'[^}]*bg:'" + ct.swatch[0] + "',ac:'" + ct.swatch[1] + "'", 'i').test(tp), `${systole.contrast} / ${ct.swatch}`);
+  ok('each swatch is its theme’s own ground and accent', L.THEMES.every(t => t.swatch[0] === t.t.bg && (t.swatch[1] === t.t.accent || t.source)),
+     L.THEMES.map(t => t.id + ' ' + t.swatch.join('/')).join(' '));
 }
 
 head('ported colour for colour');
@@ -84,9 +87,9 @@ head('ported colour for colour');
       if ((s[from] || '').toUpperCase() !== t.t[k].toUpperCase()) drift.push(`${t.id} ${k}: ${t.t[k]}, Systole --${from}: ${s[from]}`);
     });
   });
-  ok('the source blocks were found and read', compared >= 48, `${compared} colours compared`);
-  ok('every ported colour is Systole’s, exactly', drift.length === 0, drift.join('; ') || 'no drift');
-  ok('Daylight and Midnight, which have no Systole block to read, say so', L.THEMES.filter(t => !t.source).map(t => t.id).join() === 'daylight,midnight');
+  ok('Contrast’s source block was found and read', compared === 8, `${compared} colours compared`);
+  ok('every one of its colours is Systole’s, exactly', drift.length === 0, drift.join('; ') || 'no drift');
+  ok('the owner’s two, drawn for Memorizer, name no Systole source', L.THEMES.filter(t => !t.source).map(t => t.id).join() === 'daylight,clinical');
 }
 
 head('every theme is readable');
@@ -108,9 +111,7 @@ head('every theme is readable');
       need(th.id, 'text on ' + k + ' tint', t.ink, s[k + '-soft'], 4.5);
     });
   });
-  ok('all nine themes clear AA for every text pairing the page draws (7:1 for body text)', bad.length === 0, bad.join('; ') || `${L.THEMES.length} themes × 14 pairings`);
-  ok('Daylight’s accent was darkened from Systole’s for text, and needed to be',
-     ratio('#0284C7', '#FFFFFF') < 4.5 && ratio(L.byId('daylight').t.accent, '#FFFFFF') >= 4.5, `${ratio('#0284C7', '#FFFFFF').toFixed(2)} → ${ratio(L.byId('daylight').t.accent, '#FFFFFF').toFixed(2)}`);
+  ok('every theme clears AA for every text pairing the page draws (7:1 for body text)', bad.length === 0, bad.join('; ') || `${L.THEMES.length} themes × 14 pairings`);
   ok('no palette but Contrast uses pure black or white as a ground (Systole’s rule)',
      L.THEMES.filter(t => t.id !== 'contrast').every(t => !/^#(000000|FFFFFF)$/i.test(t.t.bg)));
   /* Read from the generated stylesheet, per theme: the meaning colours are
@@ -143,7 +144,7 @@ head('contrast and brightness, computed, and readable at every setting');
       const r = ratio(t.ink, s[k + '-soft']); if (r < 4.5) bad.push(`${id}: text on ${k} tint ${r.toFixed(2)}`);
     });
   })));
-  ok('every theme, at every contrast and brightness, clears its floors for every pairing', n === 48 && bad.length === 0, bad.slice(0, 6).join('; ') || `${n} variants`);
+  ok('every theme, at every contrast and brightness, clears its floors for every pairing', n === 18 && bad.length === 0, bad.slice(0, 6).join('; ') || `${n} variants`);
 
   /* No palette today needs its ink, secondary text or button text fitted —
      only accents are moved — so those fits are a net for a palette added
@@ -155,15 +156,21 @@ head('contrast and brightness, computed, and readable at every setting');
      ['bg', 'surface', 'surface-2', 'accent-soft'].every(g => ratio(wv.ink, wv[g]) >= 7) && ['bg', 'surface', 'surface-2'].every(g => ratio(wv.muted, wv[g]) >= 4.5) &&
      ratio(wv.accent, wv.surface) >= 4.5 && ratio(wv['accent-ink'], wv.accent) >= 4.5 && ratio(wv.edge, wv.surface) >= 3,
      ['ink', 'muted', 'accent', 'accent-ink', 'edge'].map(k => k + ' ' + wv[k]).join(' '));
-  /* Standard/Standard is Systole, untouched — with the one colour that did
-     not clear its floor, named, and shown to need it. */
+  /* Standard/Standard is each palette as drawn — with the one colour that
+     did not clear its floor, named, and shown to need it. */
   const moved = [];
   L.THEMES.forEach(th => { const v = L.variant(th, 'standard', 'standard'); Object.keys(th.t).forEach(k => { if (v[k] !== th.t[k]) moved.push(th.id + ' ' + k); }); });
-  ok('at Standard contrast and brightness every ported colour comes through unchanged but one', moved.join() === 'parchment accent', moved.join(', ') || 'none moved');
-  const pa = L.byId('parchment').t;
-  ok('and that one — Parchment’s accent on its own ground — was under 4.5:1 as Systole has it',
-     ratio(pa.accent, pa.bg) < 4.5 && ratio(L.variant(L.byId('parchment'), 'standard', 'standard').accent, pa.bg) >= 4.5,
-     `${ratio(pa.accent, pa.bg).toFixed(2)} → ${ratio(L.variant(L.byId('parchment'), 'standard', 'standard').accent, pa.bg).toFixed(2)}`);
+  ok('at Standard contrast and brightness every colour comes through as drawn but one', moved.join() === 'daylight muted', moved.join(', ') || 'none moved');
+  {
+    /* Daylight's secondary text clears 4.5:1 on its cards, but not on the
+       second glass (a filled chip's) over the aurora's blue, where no sheen
+       lifts it: 4.32:1 as drawn. */
+    const th = L.byId('daylight'), v = L.variant(th, 'standard', 'standard'), g = L.glassOf(th, 'standard', v);
+    const panes = [th.t.bg].concat(L.GLOW.daylight.aura.map(a => L.over(a, th.t.bg))).map(bk => L.over(g['glass-2'], bk));
+    const worst = c => Math.min(...panes.map(x => ratio(c, x)));
+    ok('and that one — Daylight’s secondary text — was under 4.5:1 on its glass as drawn, and clears it as fitted',
+       ratio(th.t.muted, th.t.surface) >= 4.5 && worst(th.t.muted) < 4.5 && worst(v.muted) >= 4.5, `${worst(th.t.muted).toFixed(2)} → ${worst(v.muted).toFixed(2)}`);
+  }
   /* Contrast is the exception: its rules are drawn at 3:1 already. */
   ok('a control’s outline is darker than Systole’s hairline, which is under 3:1 in every theme but Contrast',
      L.THEMES.every(th => (ratio(th.t.line, th.t.surface) < 3) === (th.id !== 'contrast') &&
@@ -181,64 +188,67 @@ head('contrast and brightness, computed, and readable at every setting');
      L.THEMES.every(th => gain(th, 'ink') > 0.2 && gain(th, 'muted') > 0.5), L.THEMES.map(th => `${th.id} +${gain(th, 'ink').toFixed(1)}/+${gain(th, 'muted').toFixed(1)}`).join(' '));
   const hi = L.css({ contrast: 'high' }), dim = L.css({ bright: 'dim' });
   ok('and the stylesheet the page gets is the one for the setting', hi !== L.css() && dim !== L.css() &&
-     hi.indexOf('--ink:' + L.variant(L.byId('slate'), 'high', 'standard').ink) !== -1 && dim.indexOf('--bg:' + L.variant(L.byId('monitor'), 'standard', 'dim').bg) !== -1);
+     hi.indexOf('--ink:' + L.variant(L.byId('daylight'), 'high', 'standard').ink) !== -1 && dim.indexOf('--bg:' + L.variant(L.byId('clinical'), 'standard', 'dim').bg) !== -1);
   ok('High contrast drops the soft shadows for outlines', /--shadow:none/.test(hi) && !/--shadow:none/.test(L.css()));
   ok('the meaning colours are by mode only at High contrast too',
      L.THEMES.every(th => (hi.match(new RegExp(':root\\[data-look="' + th.id + '"\\]\\{[^}]*--good:(#[0-9A-F]{6})', 'i')) || [])[1] === L.SEMANTIC_HIGH[th.mode].good));
 }
 
-head('the hero band is Systole’s');
+head('the hero band: each theme’s own, readable across its gradient');
 {
   const src = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
   const blockOf = re => { const m = src.match(re); const t = {}; if (m) for (const x of m[1].matchAll(/--([a-z0-9-]+):([^;]+);/g)) t[x[1]] = x[2].trim(); return t; };
   const rootDefaults = blockOf(/\n:root\{([\s\S]*?)\n\}/);
-  const lightDefaults = Object.assign({}, rootDefaults, blockOf(/\nhtml\[data-theme="light"\]\{([\s\S]*?)\n\}/));
-  const KEYS = ['hero-a', 'hero-b', 'hero-c', 'hero-accent', 'hero-edge'];
   const drift = [];
   let compared = 0;
-  L.THEMES.forEach(th => {
-    const s = th.source ? blockOf(new RegExp('data-palette="' + th.source + '"\\]\\{([\\s\\S]*?)\\n\\}')) : {};
-    const want = Object.assign({}, th.mode === 'light' ? lightDefaults : rootDefaults, s);
-    KEYS.forEach(k => { compared++; if (!th.hero || (want[k] || '').toUpperCase() !== String(th.hero[k]).toUpperCase()) drift.push(`${th.id} ${k}: ${th.hero && th.hero[k]} vs ${want[k]}`); });
+  L.THEMES.filter(th => th.source).forEach(th => {
+    const want = Object.assign({}, rootDefaults, blockOf(new RegExp('data-palette="' + th.source + '"\\]\\{([\\s\\S]*?)\\n\\}')));
+    L.HERO_KEYS.forEach(k => { compared++; if ((want[k] || '').toUpperCase() !== String(th.hero[k]).toUpperCase()) drift.push(`${th.id} ${k}: ${th.hero[k]} vs ${want[k]}`); });
   });
-  ok('every hero colour is Systole’s, palette by palette (Daylight and Midnight from its light and dark defaults)', compared === 40 && drift.length === 0, drift.join('; ') || `${compared} compared`);
+  ok('Contrast’s hero is Systole’s, colour for colour', compared === 5 && drift.length === 0, drift.join('; ') || `${compared} compared`);
   const weak = [];
   L.THEMES.forEach(th => ['hero-a', 'hero-b', 'hero-c'].forEach(g => {
-    if (ratio(L.HERO_INK, th.hero[g]) < 7) weak.push(`${th.id} ink on ${g}`);
+    if (ratio(L.heroInk(th), th.hero[g]) < 7) weak.push(`${th.id} ink on ${g}`);
     if (ratio(th.hero['hero-accent'], th.hero[g]) < 4.5) weak.push(`${th.id} accent on ${g}`);
     if (ratio(L.heroMuted(th), th.hero[g]) < 4.5) weak.push(`${th.id} muted on ${g}`);
   }));
   ok('the hero’s text, accent and secondary text are readable across its whole gradient', weak.length === 0, weak.join('; ') || 'all clear');
+  ok('Daylight’s hero is light, with the page’s dark ink; the others are dark, with light ink',
+     lum(L.byId('daylight').hero['hero-a']) > 0.8 && L.heroInk(L.byId('daylight')) === L.byId('daylight').t.ink &&
+     ['clinical', 'contrast'].every(id => lum(L.byId(id).hero['hero-a']) < 0.05 && lum(L.heroInk(L.byId(id))) > 0.8));
+  /* The pills on the hero are tinted by the hero, not by a white that
+     vanishes on a white band: dark on Daylight's, light on the others. */
+  const css = L.css();
+  const tok = (id, k) => (css.match(new RegExp(':root\\[data-look="' + id + '"\\]\\{[^}]*--' + k + ':(rgba\\([^)]*\\))')) || [])[1] || '';
+  ok('the hero’s pills are a dark tint on a light hero and a light one on a dark hero',
+     /^rgba\(0,0,0,/.test(tok('daylight', 'hero-pill')) && /^rgba\(255,255,255,/.test(tok('clinical', 'hero-pill')) && /^rgba\(255,255,255,/.test(tok('contrast', 'hero-pill')),
+     ['daylight', 'clinical', 'contrast'].map(id => id + ' ' + tok(id, 'hero-pill')).join(' '));
+  const appcss = fs.readFileSync(path.join(ROOT, 'memorizer', 'app.css'), 'utf8');
+  const pill = (appcss.match(/\.home-hero \.pill\.stat \{[^}]*\}/) || [''])[0], track = (appcss.match(/\.home-hero \.stat-ring \.ring \.track \{[^}]*\}/) || [''])[0];
+  ok('and app.css draws them, and the ring’s track, with those tokens', /background: var\(--hero-pill\)/.test(pill) && /var\(--hero-pill-edge\)/.test(track), pill.slice(0, 120));
 }
 
-head('glass and glow: Systole’s aurora and second accent, and text readable on glass over it');
+head('glass and glow: the aurora and second accent, and text readable on glass over it');
 {
-  const semantic = fs.readFileSync(path.join(ROOT, 'scripts', 'semantictokens-patch.js'), 'utf8');
   const src = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
   const blockOf = re => { const m = src.match(re); const t = {}; if (m) for (const x of m[1].matchAll(/--([a-z0-9-]+):([^;]+);/g)) t[x[1]] = x[2].trim(); return t; };
   const rootDefaults = blockOf(/\n:root\{([\s\S]*?)\n\}/);
   const drift = [];
   let compared = 0;
-  L.THEMES.forEach(th => {
-    const g = L.GLOW[th.id];
-    if (!g) { drift.push(th.id + ': no glow'); return; }
-    const s = th.source ? blockOf(new RegExp('data-palette="' + th.source + '"\\]\\{([\\s\\S]*?)\\n\\}')) : {};
+  L.THEMES.filter(th => th.source).forEach(th => {
+    const g = L.GLOW[th.id], s = blockOf(new RegExp('data-palette="' + th.source + '"\\]\\{([\\s\\S]*?)\\n\\}'));
     const want = Object.assign({}, rootDefaults, s);
     [1, 2, 3].forEach(i => { compared++; if ((want['aura-' + i] || '').replace(/\s/g, '') !== g.aura[i - 1].replace(/\s/g, '')) drift.push(`${th.id} aura-${i}: ${g.aura[i - 1]} vs ${want['aura-' + i]}`); });
-    /* Daylight is Systole's root palette: its second accent is the root
-       --teal2 there. Midnight has none to read, and its chosen one is held
-       to what the comment says it is: aura-2's colour, lighter than its
-       own accent. */
-    if (th.id === 'daylight') { compared++; const r = (semantic.match(/--teal:#0284C7;--teal2:(#[0-9A-F]{6});/) || [])[1]; if (!r || r !== g.a2.toUpperCase()) drift.push(`daylight accent-2: ${g.a2} vs ${r}`); }
-    if (th.id === 'midnight') { compared++; const hex = '#' + g.aura[1].match(/\d+/g).slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('').toUpperCase();
-      if (g.a2.toUpperCase() !== hex || lum(g.a2) <= lum(th.swatch[1])) drift.push(`midnight accent-2: ${g.a2} vs aura-2 ${hex}`); }
-    if (th.source) {
-      compared++;
-      const t2 = s.teal2 === 'var(--accent-2)' ? s['accent-2'] : (s.teal2 || s['accent-2']);
-      if ((t2 || '').toUpperCase() !== g.a2.toUpperCase()) drift.push(`${th.id} accent-2: ${g.a2} vs ${t2}`);
-    }
+    compared++;
+    const t2 = s.teal2 === 'var(--accent-2)' ? s['accent-2'] : (s.teal2 || s['accent-2']);
+    if ((t2 || '').toUpperCase() !== g.a2.toUpperCase()) drift.push(`${th.id} accent-2: ${g.a2} vs ${t2}`);
   });
-  ok('every aurora colour and second accent is Systole’s, palette by palette (Midnight’s, which Systole lacks, is aura-2’s colour)', compared === 32 && drift.length === 0, drift.join('; ') || `${compared} compared`);
+  ok('Contrast’s aurora and second accent are Systole’s', compared === 4 && drift.length === 0, drift.join('; ') || `${compared} compared`);
+  /* The owner's two: the aurora is kept, faint — a colour in the corner of
+     the eye. Held to it, so a louder one is a decision, not a drift. */
+  const loud = [];
+  L.THEMES.filter(th => !th.source).forEach(th => L.GLOW[th.id].aura.forEach((a, i) => { if (!(parseRgba(a)[3] > 0 && parseRgba(a)[3] <= 0.16)) loud.push(th.id + ' aura-' + (i + 1) + ' ' + a); }));
+  ok('Daylight’s and Clinical’s aurora is there, and faint: every colour at 16% or less', L.THEMES.filter(th => !th.source).length === 2 && loud.length === 0, loud.join('; ') || 'all faint');
 
   /* Glass over the aurora. The backdrop behind a glass card is the ground
      with an aurora colour over it; the card is the surface at its alpha over
@@ -260,7 +270,7 @@ head('glass and glow: Systole’s aurora and second accent, and text readable on
     if (bt < f.accent) bad.push(`${th.id}/${c}/${b} button text on accent-2 ${bt.toFixed(2)}`);
   })));
   ok('text on glass over every aurora colour clears its floors, in every theme and setting, and so does button text on the second accent',
-     n === 384 && bad.length === 0, bad.slice(0, 5).join('; ') || `${n} glass composites`);
+     n === 144 && bad.length === 0, bad.slice(0, 5).join('; ') || `${n} glass composites`);
   /* The same, under the glass's sheen and the finger's light at their
      brightest (both white over the card, where the text is): a white that
      lifts a light page only helps dark text, but one on a dark page costs
@@ -281,14 +291,11 @@ head('glass and glow: Systole’s aurora and second accent, and text readable on
     ok('and under the sheen and the finger’s light, at their brightest, every one still clears its floors', m === n && dim.length === 0, dim.slice(0, 5).join('; ') || `${m} lit composites`);
     ok('the sheen and the light are there on a light page, and opaque surfaces have neither',
        ['glass-sheen', 'glass-light', 'glass-rim'].every(k => parseRgba(L.glassOf(L.byId('daylight'), 'standard', L.variant(L.byId('daylight'), 'standard', 'standard'))[k])[3] > 0 &&
-         parseRgba(L.glassOf(L.byId('slate'), 'high', L.variant(L.byId('slate'), 'high', 'standard'))[k])[3] === 0));
+         parseRgba(L.glassOf(L.byId('daylight'), 'high', L.variant(L.byId('daylight'), 'high', 'standard'))[k])[3] === 0));
   }
-  ok('Systole’s second accent was too light for white button text in three light themes, and is fitted there',
-     ['daylight', 'slate', 'parchment'].every(id => ratio('#FFFFFF', L.GLOW[id].a2) < 4.5 && L.variant(L.byId(id), 'standard', 'standard')['accent-2'] !== L.GLOW[id].a2) &&
-     ['midnight', 'nocturne', 'cathlab', 'monitor', 'contrast'].every(id => L.variant(L.byId(id), 'standard', 'standard')['accent-2'] === L.GLOW[id].a2));
-  const hi = L.glassOf(L.byId('slate'), 'high', L.variant(L.byId('slate'), 'high', 'standard'));
+  const hi = L.glassOf(L.byId('clinical'), 'high', L.variant(L.byId('clinical'), 'high', 'standard'));
   const ct = L.glassOf(L.byId('contrast'), 'standard', L.variant(L.byId('contrast'), 'standard', 'standard'));
-  const st = L.glassOf(L.byId('slate'), 'standard', L.variant(L.byId('slate'), 'standard', 'standard'));
+  const st = L.glassOf(L.byId('daylight'), 'standard', L.variant(L.byId('daylight'), 'standard', 'standard'));
   ok('at High contrast and in the Contrast theme surfaces are opaque, with no blur', /,1\)$/.test(hi.glass) && hi['glass-blur'] === '0px' && /,1\)$/.test(ct.glass) && ct['glass-blur'] === '0px' &&
      /,0\.52\)$/.test(st.glass) && st['glass-blur'] !== '0px', JSON.stringify([hi.glass, ct.glass, st.glass]));
   /* app.css's fallbacks, for the moment before appearance.js runs, are
@@ -310,7 +317,7 @@ head('the stylesheet covers every setting');
 {
   const css = L.css();
   ok('a rule for every theme', L.THEMES.every(t => css.indexOf(':root[data-look="' + t.id + '"]{') !== -1));
-  ok('Auto is Daylight, and Midnight when the device is dark', /:root\[data-look="auto"\]\{--bg:#EFF3F8/.test(css) && /@media \(prefers-color-scheme: dark\)\{:root\[data-look="auto"\]\{--bg:#0A1628/.test(css));
+  ok('Auto is Daylight, and Clinical when the device is dark', /:root\[data-look="auto"\]\{--bg:#F2F2F7/.test(css) && /@media \(prefers-color-scheme: dark\)\{:root\[data-look="auto"\]\{--bg:#050608/.test(css));
   ok('a rule for every text size, in px on the root so rem scales everything', L.OPTIONS.size.every(o => css.indexOf(':root[data-size="' + o[0] + '"]{font-size:' + o[2] + 'px}') !== -1));
   ok('and for every width, spacing and font', ['width', 'spacing'].every(k => L.OPTIONS[k].every(o => css.indexOf('data-' + k + '="' + o[0] + '"') !== -1)) &&
      L.OPTIONS.font.every(o => css.indexOf('data-font="' + o[0] + '"') !== -1));
@@ -335,19 +342,21 @@ head('settings come back as known values');
   ok('a torn save is the defaults, not a throw', JSON.stringify(L.load(mem('{not json'))) === JSON.stringify(L.DEFAULT));
   const attrs = {};
   const el = { setAttribute: (k, v) => { attrs[k] = v; } };
-  L.apply({ theme: 'cathlab', size: 'xl' }, el, { getElementById: () => ({}) });
-  ok('apply sets one attribute per setting, normalised', attrs['data-look'] === 'cathlab' && attrs['data-size'] === 'xl' && attrs['data-width'] === 'standard' &&
+  L.apply({ theme: 'clinical', size: 'xl' }, el, { getElementById: () => ({}) });
+  ok('apply sets one attribute per setting, normalised', attrs['data-look'] === 'clinical' && attrs['data-size'] === 'xl' && attrs['data-width'] === 'standard' &&
      attrs['data-hook'] === 'side' && attrs['data-contrast'] === 'standard' && attrs['data-bright'] === 'standard', JSON.stringify(attrs));
   /* A style element that already exists is rewritten when the setting
      changes — the first version wrote it once and never again. */
   const style = { textContent: '' };
   const d = { getElementById: () => style };
-  L.apply({ theme: 'slate' }, el, d);
+  L.apply({ theme: 'daylight' }, el, d);
   const first = style.textContent;
-  L.apply({ theme: 'slate', contrast: 'high', bright: 'dim' }, el, d);
+  L.apply({ theme: 'daylight', contrast: 'high', bright: 'dim' }, el, d);
   ok('changing contrast or brightness rewrites the stylesheet in place', first === L.css({}) && style.textContent === L.css({ contrast: 'high', bright: 'dim' }) &&
      attrs['data-contrast'] === 'high' && attrs['data-bright'] === 'dim');
-  ok('isDark follows the theme, and the device under Auto', L.isDark({ theme: 'monitor' }) && !L.isDark({ theme: 'parchment' }) &&
+  ok('a theme saved before the owner’s two replaced it comes back as Auto', L.load(mem(JSON.stringify({ theme: 'nocturne', size: 'l' }))).theme === 'auto' &&
+     L.load(mem(JSON.stringify({ theme: 'nocturne', size: 'l' }))).size === 'l');
+  ok('isDark follows the theme, and the device under Auto', L.isDark({ theme: 'clinical' }) && !L.isDark({ theme: 'daylight' }) &&
      L.isDark({ theme: 'auto' }, true) && !L.isDark({ theme: 'auto' }, false));
 }
 

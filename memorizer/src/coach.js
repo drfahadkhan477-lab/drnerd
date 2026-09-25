@@ -52,9 +52,66 @@ var SENTENCE_END = /[.!?]["'”’)\]]*$/;
 var CAUSAL = /\b(is|are|means|defined|refers|causes?|leads?|results?|because|therefore|due|increases?|decreases?|reduces?|occurs?|requires?|indicates?)\b/i;
 var NUM = /^\d+(?:[.,]\d+)?%?$/;
 var DEFINITION = /^(?:\S+\s+){0,5}(?:is|are|refers to|means|is defined as)\s/i;
+/* A figure's or a table's caption: "TABLE 1.4 Electrocardiographic
+   subsets …", "Figure 12-3. Anatomy of …" — the label, then a title that
+   starts with a capital (or another label). It labels a picture; it is not
+   a sentence to learn. The owner's first whole book had a caption as a
+   section's big idea, its label numbers marked as values. A sentence ABOUT
+   a table ("Table 17.1 lists the causes") goes on in lower case, and stays.
+   Case-sensitive on purpose: the capital is the difference. */
+var LABEL = '(?:[Tt]ables?|TABLES?|[Ff]ig(?:ure)?s?|FIG(?:URE)?S?|[Bb]ox|BOX|[Pp]anel|PANEL)\\.?\\s*[A-Z]?\\d+(?:[.\\-–]\\d+)*[a-z]?[.:]?';
+var CAPTION = new RegExp('^' + LABEL + '\\s+(?:' + LABEL + '\\s+)*[A-Z(]');
+/* A continuing section's title mark: "(part 3)", or "(cont.)" in a unit
+   imported before parts were numbered. */
+var CONTINUED = /\s*\((?:cont\.|part \d+)\)$/;
+/* A line of names — a chapter's authors, an affiliation: every word a
+   capitalised name, an initial, a degree, or a joining word. It is not a
+   sentence; the owner's first whole book offered its authors as a "correct
+   statement". */
+var NAME_WORD = /^(?:[A-Z][a-z\u00C0-\u017F'\u2019-]+,?|[A-Z]\.,?|(?:MD|PhD|MBBS|FRCP|FACC|FESC|FAHA|MPH|MS|MSc|DO|RN),?|and|&|de|del|da|di|van|von|der|la|le|el|al|bin|ibn)$/;
+function nameLine(t) {
+  var ws = String(t).replace(/[.;]+$/, '').split(/\s+/).filter(Boolean);
+  return ws.length >= 2 && ws.every(function (w) { return NAME_WORD.test(w); }) && ws.some(function (w) { return /^[A-Z][a-z]/.test(w); });
+}
+/* Words that make a sentence lean on the one before it: "However, …",
+   "It is …", "These …". Such a sentence is not offered alone — as a
+   statement to judge true or false, or as the big idea. (Asked which
+   section a statement is from, it has the section's title beside it.) */
+var LEANS = /^(?:However|Thus|Therefore|Hence|Also|Moreover|Furthermore|Nevertheless|Conversely|Similarly|Instead|Accordingly|Consequently|Likewise|Otherwise|Still|Yet|In addition|In contrast|In this|In these|On the other hand|As such|It|Its|This|These|That|Those|They|Their|Them|Such|Both|He|She|Here|There)\b/;
+/* Labels alone so far: "Figure 3-2." does not end a sentence there. */
+var LABELS_ONLY = new RegExp('^(?:' + LABEL + '\\s*)+$');
 /* "X is the most common cause of Y": the single highest-yield sentence shape
    in a clinical text, and a question in its own right. */
 var MOST = /\b(?:is|are|remains?|represents?)\s+(?:by far\s+)?the\s+most\s+(?:common|frequent|important)\s+/i;
+
+/* What makes a sentence high-yield: what an exam asks and what changes what
+   is done. The owner found the lessons "baby level, not identifying high
+   yield and important points". Each cue names itself, so a point can say
+   why it was chosen. */
+var YIELD = [
+  ['Most common', /\b(?:most (?:common|frequent)(?:ly)?|commonest|leading cause|predominant cause)\b/i],
+  ['First-line', /\b(?:first[- ]line|treatment of choice|drug of choice|agent of choice|mainstay|cornerstone|initial (?:therapy|treatment|test|investigation))\b/i],
+  ['Diagnostic', /\b(?:gold standard|pathognomonic|hallmark|diagnostic of|confirms? the diagnosis|diagnosis is (?:made|confirmed)|definitive (?:test|diagnosis))\b/i],
+  ['Avoid', /\b(?:contraindicat\w*|should not|must not|avoid(?:ed)?|not recommended|harmful)\b/i],
+  ['Guideline', /\b(?:class (?:I{1,3}|1|2a|2b|3)\b|(?:is|are) (?:recommended|indicated)|guidelines?)\b/i],
+  ['Prognosis', /\b(?:mortality|survival|prognos\w*|independent(?:ly)? predict\w*|risk of death|sudden (?:cardiac )?death)\b/i],
+  ['Accuracy', /\b(?:sensitivity|specificity|specific for|sensitive for|predictive value)\b/i],
+  ['Contrast', /\b(?:unlike|in contrast|whereas|as opposed to|except|unless|paradoxical(?:ly)?)\b/i]
+];
+/* A threshold: a number that is a value (not "Table 1.4") with a unit or a
+   comparison beside it. */
+var COMPARE = /(?:[<>≤≥]|\b(?:above|below|over|under|greater than|less than|more than|at least|exceed\w*|or more|or less)\b)/i;
+var UNIT_AFTER = /^(?:%|mmhg|mm|cm|cm2|m\/s|ms|mg|mcg|g|kg|ml|l|min|hours?|h|days?|weeks?|months?|years?|bpm|mv|mmol|meq|au|ml\/m2|l\/min)\b/i;
+function yieldOf(text) {
+  var t = String(text || ''), out = YIELD.filter(function (y) { return y[1].test(t); }).map(function (y) { return y[0]; });
+  var ws = t.split(/\s+/);
+  for (var i = 0; i < ws.length; i++) {
+    if (!isFactNumber(ws, i)) continue;
+    var unit = /\d%/.test(ws[i]) || UNIT_AFTER.test(String(ws[i + 1] || '').replace(/[,.;:)]+$/, ''));
+    if (unit && (COMPARE.test(ws.slice(Math.max(0, i - 3), i + 1).join(' ')) || /[<>≤≥]/.test(ws[i]))) { out.unshift('Threshold'); break; }
+  }
+  return out;
+}
 
 /* Words: split on spaces, dashes and slashes, so "leaflets—septal" is two
    words (the owner's hook once offered "leaflets—septal" as one). */
@@ -114,10 +171,10 @@ function sentences(cluster, withItems) {
     var cur = [];
     String(seg.text).split(/\s+/).filter(Boolean).forEach(function (w, i, all) {
       cur.push(w);
-      if (SENTENCE_END.test(w) || i === all.length - 1) { out.push({ text: cur.join(' '), page: seg.page }); cur = []; }
+      if ((SENTENCE_END.test(w) && !LABELS_ONLY.test(cur.join(' '))) || i === all.length - 1) { out.push({ text: cur.join(' '), page: seg.page }); cur = []; }
     });
   });
-  return out.map(function (s, i) { s.index = i; return s; });
+  return out.filter(function (s) { return !CAPTION.test(s.text) && !nameLine(s.text); }).map(function (s, i) { s.index = i; return s; });
 }
 
 /* How often each content word appears in the section, by stem: what the
@@ -224,7 +281,9 @@ function keySentences(cluster) {
      is taken first, up to half the points, whatever its words score: its
      words are often rare in the section (so it scores low), and it is
      exactly what an exam asks. */
-  var hasNum = function (s) { return s.text.split(/\s+/).some(function (w) { return NUM.test(bare(w)); }); };
+  /* (A number that names a table or a page — "Table 1.4 lists …" — is not
+     a value, and does not jump the queue: isFactNumber.) */
+  var hasNum = function (s) { var ws = s.text.split(/\s+/); return ws.some(function (w, i) { return isFactNumber(ws, i); }); };
   var picked = byScore.filter(hasNum).slice(0, Math.ceil(k / 2));
   /* So is the section's first DEFINITION — "X is …", "X refers to …" near
      the start of the sentence. It is the first thing an exam asks, and it is
@@ -233,6 +292,13 @@ function keySentences(cluster) {
      myocytes at the end of diastole" left out of the Preload section. */
   var def = usable.filter(function (s) { return DEFINITION.test(s.text); })[0];
   if (def && picked.indexOf(def) === -1) picked.unshift(def);
+  /* Then what is high-yield — the most common cause, the first-line drug,
+     what to avoid, what predicts death (yieldOf) — most cues first. Its
+     words are often rare in the section too: a paragraph that keeps saying
+     "left ventricle" outscored "Beta-blockers are first-line therapy". */
+  usable.map(function (s) { return { s: s, n: yieldOf(s.text).length }; }).filter(function (x) { return x.n; })
+    .sort(function (a, b) { return b.n - a.n || scoreSentence(b.s, freq) - scoreSentence(a.s, freq); })
+    .forEach(function (x) { if (picked.length < k && picked.indexOf(x.s) === -1) picked.push(x.s); });
   byScore.forEach(function (s) { if (picked.length < k && picked.indexOf(s) === -1) picked.push(s); });
 
   return picked.sort(function (a, b) { return a.index - b.index; });
@@ -244,9 +310,10 @@ function keySentences(cluster) {
    one line a student should be able to say first. */
 function overviewOf(cluster, picked) {
   var all = sentences(cluster);
-  var def = all.filter(function (s) { var n = s.text.split(/\s+/).length; return DEFINITION.test(s.text) && n >= 6 && n <= 45; })[0];
+  var def = all.filter(function (s) { var n = s.text.split(/\s+/).length; return DEFINITION.test(s.text) && n >= 6 && n <= 45 && !LEANS.test(s.text); })[0];
   if (def) return def;
-  return picked[0] || all[0] || null;
+  /* the big idea stands alone: not "However, …" or "It is …" */
+  return picked.filter(function (s) { return !LEANS.test(s.text); })[0] || all.filter(function (s) { return !LEANS.test(s.text); })[0] || picked[0] || all[0] || null;
 }
 
 /* Sentences that state a value — a threshold, a percentage, a dose, a
@@ -313,7 +380,7 @@ var PER_KIND = 2;
 var QUIZ_SIZE = 8;
 /* Reasoning first — how one thing leads to another, the value that
    defines a grade — then recognition, and a missing word last. */
-var KIND_ORDER = ['mechanism', 'threshold', 'most', 'except', 'define-back', 'member', 'table', 'true', 'define', 'number', 'term', 'source'];
+var KIND_ORDER = ['mechanism', 'threshold', 'most', 'choice', 'avoid', 'except', 'define-back', 'member', 'table', 'true', 'define', 'number', 'term', 'source'];
 
 /* A number from a string, the same every time: options are shuffled with it,
    so the right answer is not always first and a test can reproduce a drill. */
@@ -370,19 +437,63 @@ function norm(s) { return String(s).toLowerCase().replace(/[^a-z0-9%.]+/g, ' ').
    drug against drugs, a test against tests — "hypertrophy" against
    "fibrosis" and "dilatation", never against "echocardiography". */
 var FAMILY = [
-  ['drug', /(?:olol|pril|sartan|statin|mab|nib|azole|mycin|cillin|parin|ban|gatran|ide|ides|ine|ines)$/],
+  ['drug', /(?:olol|pril|sartan|statin|mab|nib|azole|mycin|cillin|parin|ban|gatran|ide|ides|ine|ines|blockers?|inhibitors?|antagonists?|agonists?|nitrates?|diuretics?|anticoagulants?|aspirin|warfarin|digoxin|amiodarone)$/],
   ['test', /(?:gram|graphy|scopy|echocardiogra\w*)$/],
   ['condition', /(?:itis|osis|oses|emia|aemia|pathy|megaly|trophy|trophies|plasia|stenosis|sclerosis|syndrome|disease|failure|regurgitation|atresia|anomal\w*|infarct\w*|ischaemi\w*|ischemi\w*|dilatation|dilation|carcino\w*|malignan\w*|endocarditis|thrombo\w*|cardia)$/],
   ['procedure', /(?:ectomy|otomy|ostomy|plasty)$/],
 ];
+/* Words that end like a drug and are not one: "first-line" was offered
+   against "Beta-blockers". */
+var NOT_DRUG = /(?:line|^(?:medicine|urine|routine|examine|determine|combine|define|decline|fine|mine|nine|spine|machine|intestine|genuine|feminine|masculine|marine|uterine|online))$/;
 function family(w) {
   var b = bare(String(w).split(/\s+/).pop());
   /* a place is a noun ("valve", "annulus") or an adjective ("atrial",
      "pulmonary"), and a blank takes one or the other: "a bicuspid _____"
      offered "valve / atrial / ventricular / pulmonary" */
   if (PLACE.test(b)) return /(?:al|ar|ic|ary)$/.test(b) ? 'site-adj' : 'site';
-  for (var i = 0; i < FAMILY.length; i++) if (FAMILY[i][1].test(b)) return FAMILY[i][0];
+  for (var i = 0; i < FAMILY.length; i++) if (FAMILY[i][1].test(b) && !(FAMILY[i][0] === 'drug' && NOT_DRUG.test(b))) return FAMILY[i][0];
   return '';
+}
+
+/* ── clinical names of more than one word ─────────────────────────────────
+   "Carcinoid syndrome", "Ebstein anomaly", "pulmonary hypertension": a
+   condition word with the words that name which one. Taken apart, a drill
+   offered "Syndrome" and "Carcinoid" as causes, swapped half a name
+   ("Endocarditis syndrome"), and hid one word of it. A name is used whole,
+   and against other names of its family. */
+var HEAD = /^(?:block|prolapse|flutter|fibrillation|aneurysm|dissection|shock|effusion|tamponade|embolism|murmur|hypertension|hypotension|tachycardia|bradycardia|arrest|infarction|hypertrophy|dysfunction|insufficiency|obstruction|congestion)s?$/i;
+var MODIFIER = /^(?:[A-Z][a-z]{2,}|[a-z]+(?:al|ic|ary|ous|oid|ar|ive|id))$/;
+var NOT_MODIFIER = /^(?:severe|mild|moderate|significant|marked|important|major|minor|common|rare|early|late|new|old|recent|prior|progressive|isolated|associated|symptomatic|asymptomatic|most|several|general|usual|typical|total|normal|initial|final|potential|special|original|additional|clinical|critical|natural|equal|annual|each|this|these|that|those|their|its|his|her|our|your|many|much|some|such|both|other|same|every|all|any|no|not|and|or|but|in|on|of|with|for|by|to|from|at|as|is|are|was|were|be|the|a|an|when|where|which|who|because|although|if|then|than|after|before|while|during|however|thus|also|only|usually|often|rarely)$/i;
+function isHead(w) { var b = bare(w); return !!b && (family(b) === 'condition' || HEAD.test(b)); }
+function isModifier(w) { var b = String(w).replace(/^[("'\u201C]+|[)"',;:.\u201D]+$/g, ''); return MODIFIER.test(b) && !NOT_MODIFIER.test(b); }
+var CLOSES = /[,;:.)]$/;
+/* The name a word is part of, as the text writes it — or the word. */
+function entityOf(text, word) {
+  var ws = String(text).split(/\s+/), lw = String(word).toLowerCase();
+  for (var i = 0; i < ws.length; i++) {
+    if (bare(ws[i]).toLowerCase() !== lw.replace(/[^a-z0-9-]/g, '')) continue;
+    /* on to the name's last condition word ("carcinoid" → "syndrome") */
+    var h = i;
+    while (h - i < 2 && !CLOSES.test(ws[h]) && ws[h + 1] && isHead(ws[h + 1]) && (isHead(ws[h]) || isModifier(ws[h]))) h++;
+    if (!isHead(ws[h])) return word;
+    var s = h;
+    while (s > 0 && h - s < 2 && isModifier(ws[s - 1]) && !CLOSES.test(ws[s - 1])) s--;
+    if (s === h) return word;
+    return ws.slice(s, h + 1).join(' ').replace(/^[("'\u201C]+|[)"',;:.\u201D]+$/g, '');
+  }
+  return word;
+}
+/* Every such name in a text. */
+function entitiesIn(text) {
+  var ws = String(text).split(/\s+/), out = [];
+  ws.forEach(function (w, i) {
+    /* at a name's last condition word, with a word naming which before it */
+    if (!isHead(w) || i === 0 || !isModifier(ws[i - 1]) || CLOSES.test(ws[i - 1])) return;
+    if (!CLOSES.test(w) && ws[i + 1] && isHead(ws[i + 1])) return;
+    var e = entityOf(text, bare(w));
+    if (e.indexOf(' ') !== -1 && out.indexOf(e) === -1) out.push(e);
+  });
+  return out;
 }
 
 /* The unit's material for wrong options, gathered once per quiz. */
@@ -401,7 +512,7 @@ function pools(clusters) {
     });
     patternQuestions(c).forEach(function (q) {
       if (q.kind === 'define') { defs.push({ term: q.term, def: q.answer, page: q.page, ci: c.index }); addPhrase(q.term, c.index); }
-      if (q.kind === 'most') addPhrase(q.answer, c.index);
+      if (q.kind === 'most' || q.kind === 'choice' || q.kind === 'avoid') addPhrase(q.answer, c.index);
     });
     lists(c).forEach(function (l) { l.items.forEach(function (i) { items.push({ text: i.label, list: l.list + ':' + l.title, ci: c.index }); addPhrase(i.label, c.index); }); });
     /* "rheumatic heart disease (RHD)": a named thing, by the section's own say-so */
@@ -431,7 +542,11 @@ function pools(clusters) {
     flow(c).nodes.forEach(function (n) { steps.push({ text: n.label, ci: c.index }); });
     if (Sheet) sentences(c, true).forEach(function (s) { Sheet.numberTiles(s.text).tiles.forEach(function (t) { tiles.push({ value: t.value, label: t.label, ci: c.index }); }); });
   });
-  return { terms: terms, defs: defs, items: items, nums: nums, phrases: phrases, sents: sents, steps: steps, tiles: tiles };
+  var entities = [], seenE = {};
+  (clusters || []).forEach(function (c) {
+    sentences(c, true).forEach(function (s) { entitiesIn(s.text).forEach(function (e) { if (!seenE[norm(e)]) { seenE[norm(e)] = true; entities.push({ text: e, ci: c.index }); } }); });
+  });
+  return { terms: terms, defs: defs, items: items, nums: nums, phrases: phrases, sents: sents, steps: steps, tiles: tiles, entities: entities };
 }
 /* sheet.js needs ask.js, which needs this file: reached for when a quiz is
    made, by which time all three are loaded. */
@@ -618,13 +733,37 @@ function blankOut(text, word) {
   return String(text).replace(new RegExp('(^|[^A-Za-z0-9])' + esc + '(?![A-Za-z0-9])', 'i'), function (all, pre) { return pre + '_____'; });
 }
 
+/* The unit's terms of the answer's family — drugs for a drug — and none a
+   fragment of another or of the answer: "Blockers" out of "Calcium channel
+   blockers" and "Beta-blockers". */
+function kinOf(answer, P) {
+  var fam = family(answer);
+  if (!fam) return [];
+  var kin = P.terms.map(function (t) { return t.text; }).concat(P.phrases.map(function (p) { return p.text; }), P.items.map(function (i) { return i.text; }), (P.entities || []).map(function (e) { return e.text; }))
+    .filter(function (t) { return family(t) === fam && norm(t) !== norm(answer); });
+  return kin.filter(function (t) {
+    var n = norm(t);
+    return [answer].concat(kin).every(function (o) { var m = norm(o); return m === n || m.indexOf(n) === -1; });
+  });
+}
+
 /* Every question the section can support, best kinds first. */
 function candidates(cluster, P) {
   var out = [], ci = cluster.index;
-  var title = String(cluster.title || '').replace(/\s*\(cont\.\)$/, '');
+  var title = String(cluster.title || '').replace(CONTINUED, '');
   var sents = sentences(cluster);
   var findSentence = function (frag) { return (sents.filter(function (s) { return s.text.indexOf(frag) !== -1; })[0] || {}).text || frag; };
   var otherTerms = P.terms;
+  /* the unit's names of a name's family, none already in the sentence */
+  var namesLike = function (name, text) {
+    var fam = family(name), low = String(text).toLowerCase();
+    return (P.entities || []).map(function (e) { return e.text; }).filter(function (x) { return family(x) === fam && low.indexOf(x.toLowerCase()) === -1; });
+  };
+  /* a single word that is only ever half of a name ("syndrome", "carcinoid") */
+  var partOfName = function (w) {
+    var n = norm(w);
+    return (P.entities || []).some(function (e) { return norm(e.text).split(' ').indexOf(n) !== -1; });
+  };
 
   mechanismQuestions(cluster, P).forEach(function (q) { out.push(q); });
   thresholdQuestions(cluster, P).forEach(function (q) { out.push(q); });
@@ -646,10 +785,19 @@ function candidates(cluster, P) {
       var otherDefs = P.defs.filter(function (d) { return norm(d.term) !== norm(q.term); }).map(function (d) { return d.def; });
       var wd = distractors(q.answer, otherDefs, OPTIONS - 1, q.term, q.answer);
       if (wd) out.push(mcq('define', 'Which best describes ' + q.term.replace(/^[A-Z][a-z]/, function (x) { return x.toLowerCase(); }) + '?', '', q.answer, wd, src, q.page));
-    } else if (q.kind === 'most') {
+    } else if (q.kind === 'most' || q.kind === 'choice' || q.kind === 'avoid') {
       var itemTexts = P.items.map(function (i) { return i.text; });
-      var wm = distractors(q.answer, itemTexts, OPTIONS - 1, q.question, q.question) || pickTerms(q.answer, otherTerms, q.question, q.question, P.phrases);
-      if (wm) out.push(mcq('most', q.question, '', q.answer, wm, src, q.page));
+      /* A first-line drug against other drugs, a test against tests, a
+         cause against causes: the first version offered "Rheumatic" and
+         "Pacemaker lead injury" against "Beta-blockers", and "Valve" and
+         "Separating" as the most common cause of a stenosis. */
+      var fam = family(q.answer);
+      var kin = fam ? kinOf(q.answer, P) : [];
+      var wm = (fam && distractors(q.answer, kin, OPTIONS - 1, q.question, q.question)) ||
+               distractors(q.answer, itemTexts, OPTIONS - 1, q.question, q.question) || pickTerms(q.answer, otherTerms, q.question, q.question, P.phrases);
+      /* options set as the answer is: "Beta-blockers", "Ivabradine" */
+      if (wm && /^[A-Z]/.test(q.answer)) wm = wm.map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); });
+      if (wm) out.push(mcq(q.kind, q.question, '', q.answer, wm, src, q.page));
     }
   });
 
@@ -720,10 +868,16 @@ function candidates(cluster, P) {
       return k === 'thing' || k === 'place' || k === 'name' || k === 'abbr';
     })[0];
     if (t) {
-      var shown = displayForm(s.text, t.word);
-      var fam = family(shown);
-      var wt2 = distractors(shown, byKind(otherTerms, shown).same.filter(function (x) { return family(x) === fam; }), OPTIONS - 1, s.text, s.text);
-      if (wt2) out.push(mcq('term', 'Which term completes this statement from your book?', blankOut(s.text, t.word), shown, wt2, s.text, s.page));
+      var shown = displayForm(s.text, t.word), whole = entityOf(s.text, shown);
+      if (whole !== shown) {
+        /* part of a name: the whole name is hidden, among the unit's other names of its family */
+        var wn = distractors(whole, namesLike(whole, s.text), OPTIONS - 1, s.text, s.text);
+        if (wn) out.push(mcq('term', 'Which term completes this statement from your book?', blankOut(s.text, whole), whole, wn, s.text, s.page));
+      } else {
+        var fam = family(shown);
+        var wt2 = distractors(shown, byKind(otherTerms, shown).same.filter(function (x) { return family(x) === fam && !partOfName(x); }), OPTIONS - 1, s.text, s.text);
+        if (wt2) out.push(mcq('term', 'Which term completes this statement from your book?', blankOut(s.text, t.word), shown, wt2, s.text, s.page));
+      }
     }
   });
 
@@ -750,12 +904,31 @@ function candidates(cluster, P) {
     if (!t) return null;
     /* A swap is only plausible within a kind: "stenosis" for "regurgitation",
        never "echocardiogram" for "stenosis". */
-    var shown = displayForm(s.text, t.word);
+    var shown = displayForm(s.text, t.word), whole = entityOf(s.text, shown);
+    /* a name that its own abbreviation follows is not swapped: "Congenital
+       anomaly (TS)" gives itself away by the letters */
+    var escW = whole.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(escW + '\\s*\\([A-Z]{2,6}\\)', 'i').test(s.text)) return null;
+    if (whole !== shown) {
+      /* part of a name: the whole name is swapped for another of its
+         family — the first that does not make another sentence of the book */
+      var names = namesLike(whole, s.text), bn = blankOut(s.text, whole);
+      var sn = distractors(whole, names, names.length, s.text, seed) || [];
+      for (var k = 0; k < sn.length; k++) {
+        var f2 = bn.replace('_____', bn.indexOf('_____') === 0 ? sn[k].charAt(0).toUpperCase() + sn[k].slice(1) : sn[k]);
+        if (bookText.indexOf(norm(f2)) === -1) return f2;
+      }
+      return null;
+    }
     /* not a word inside a named abbreviation — "Tricuspid disease (TS)"
        gives itself away by the letters */
     var esc = t.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (new RegExp(esc + '\\s*\\([A-Z]{2,6}\\)', 'i').test(s.text)) return null;
-    var same = byKind(otherTerms, shown).same;
+    /* and within its family: a noun for a noun ("valve" for "annulus"),
+       never an adjective for a noun — "the RV inlet arterial" was offered */
+    var fam = family(shown);
+    /* a word of its family, or a whole name of it ("Endocarditis" for "Aortic stenosis") */
+    var same = byKind(otherTerms, shown).same.filter(function (x) { return family(x) === fam && !partOfName(x); }).concat(fam ? namesLike(shown, s.text) : []);
     var sw = distractors(shown, same, 1, s.text, seed);
     if (!sw) return null;
     var out = blankOut(s.text, t.word);
@@ -766,7 +939,9 @@ function candidates(cluster, P) {
   /* The right statement is a key point; the wrong ones are the section's
      other sentences, each falsified — so a section with three key points
      still has enough to build from. */
-  var short = function (x) { var n = x.text.split(/\s+/).length; return n >= 6 && n <= 32 && !REF_WORD.test(x.text.split(/\s+/)[0].replace(/[^A-Za-z.]/g, '')); };
+  /* a statement to judge stands alone: not one that leans on the sentence
+     before it ("However, …", "It is …") */
+  var short = function (x) { var n = x.text.split(/\s+/).length; return n >= 6 && n <= 32 && !REF_WORD.test(x.text.split(/\s+/)[0].replace(/[^A-Za-z.]/g, '')) && !LEANS.test(x.text); };
   var shortOnes = picked.filter(short);
   shortOnes.forEach(function (s, k) {
     var others = sents.filter(function (x) { return short(x) && x.text !== s.text; });
@@ -789,7 +964,12 @@ function candidates(cluster, P) {
   });
 
   out.forEach(function (q) { q.cluster = ci; });
-  return out;
+  /* Within each kind, a question from a high-yield sentence comes first
+     (choose() takes the first of each kind): a missing word from "X is the
+     first-line therapy" before one from a sentence that only restates the
+     topic. Stable, so the order among equals is as it was. */
+  return out.map(function (q, i) { return { q: q, i: i, hy: yieldOf(q.src || '').length }; })
+    .sort(function (a, b) { return b.hy - a.hy || a.i - b.i; }).map(function (x) { return x.q; });
 }
 
 /* A drill: up to `size` questions, the kinds in KIND_ORDER, at most
@@ -1012,7 +1192,7 @@ function lists(cluster) {
       cur = null;
       return;
     }
-    var topic = topicOf(intro) || String(cluster.title || '').replace(/\s*\(cont\.\)$/, '');
+    var topic = topicOf(intro) || String(cluster.title || '').replace(CONTINUED, '');
     if (seg.sub) {
       /* "Congenital" + "causes of TS" → "Congenital causes of TS"; a
          sub-heading that already names its kind ("Causes of aortic
@@ -1041,6 +1221,19 @@ function patternQuestions(cluster) {
     var m = /^(.{3,90}?)\s+(?:is|are|remains?|represents?)\s+(?:by far\s+)?the\s+most\s+(common|frequent|important)\s+([^,.;]{3,80})/i.exec(t);
     if (m && m[1].split(/\s+/).length <= 10) {
       out.push({ question: 'What is the most ' + m[2].toLowerCase() + ' ' + m[3].trim() + '?', answer: m[1].trim(), page: s.page, kind: 'most' });
+      return;
+    }
+    /* What a board asks: "What is the first-line therapy for stable
+       angina?", "Which is contraindicated in …?" — the book's own answer,
+       the options the unit's other terms of the same kind. */
+    var ch = /^(.{3,70}?)\s+(?:is|are|remains?)\s+(?:the\s+)?(first[- ]line (?:therapy|treatment|agent|drug|test|investigation)|treatment of choice|drug of choice|test of choice|investigation of choice|gold standard(?: test)?|mainstay of (?:therapy|treatment))\s+(?:for|in|of)\s+([^,.;]{3,80})/i.exec(t);
+    if (ch && ch[1].split(/\s+/).length <= 8) {
+      out.push({ question: 'What is the ' + ch[2].toLowerCase() + ' for ' + ch[3].trim() + '?', answer: ch[1].trim(), page: s.page, kind: 'choice' });
+      return;
+    }
+    var av = /^(.{3,60}?)\s+(?:is|are)\s+(?:absolutely\s+|relatively\s+)?contraindicated\s+(in|with|for|after)\s+([^,.;]{3,80})/i.exec(t);
+    if (av && av[1].split(/\s+/).length <= 6) {
+      out.push({ question: 'Which is contraindicated ' + av[2].toLowerCase() + ' ' + av[3].trim() + '?', answer: av[1].trim(), page: s.page, kind: 'avoid' });
       return;
     }
     var d = /^((?:[A-Za-z][\w\-]*\s+){0,4}[A-Za-z][\w\-]*(?:\s+\([A-Z]{2,6}\))?)\s+(?:is|are|refers to|is defined as|are defined as|means)\s+(.{12,160}?)(?:[.;]|,\s+(?:which|and|but)\s|$)/.exec(t);
@@ -1088,6 +1281,8 @@ var KIND_SAYS = {
   mechanism: 'A mechanism question: follow your book’s cause and effect one step along.',
   threshold: 'A threshold question: the value your book uses to define it, and which side of the cut-off.',
   most: 'A “most common” question: the one your book ranks first.',
+  choice: 'A first-choice question: what your book says to use first — the drug, the test, the treatment.',
+  avoid: 'A contraindication question: what your book says must not be used here.',
   except: 'An EXCEPT question: three options are on your book’s list; find the one that is not.',
   'define-back': 'A definition question: the term your book defines in these words.',
   define: 'A definition question: the words your book defines it with.',
@@ -1105,7 +1300,8 @@ var ASK_SOMETHING = 'A question on this section: one option is what your book sa
    candidate's real kind in the coach suite. */
 var KIND_SHAPES = [
   ['mechanism', /^Follow the mechanism in your book: /], ['threshold', /^In your book, what .+ defines .+\?$/],
-  ['most', /^What is the most /], ['except', / EXCEPT:$/], ['define-back', /^Which term is defined as /],
+  ['most', /^What is the most /], ['choice', /^What is the (?:first[- ]line|treatment of choice|drug of choice|test of choice|investigation of choice|gold standard|mainstay of) /],
+  ['avoid', /^Which is contraindicated /], ['except', / EXCEPT:$/], ['define-back', /^Which term is defined as /],
   ['define', /^Which best describes /], ['member', /^Which of the following is one of the /], ['table', /^In the table, what is the /],
   ['number', /^Which value completes this statement from your book\?$/], ['term', /^Which term completes this statement from your book\?$/],
   ['true', /^Which statement about .+ is correct\?$/], ['source', /^Which of these statements is from /],
@@ -1162,6 +1358,20 @@ function explainSection(cluster, lessonValue) {
      · the chain of cause and effect: its two ends, to walk between them.
    Every answer is the lesson's own words. session.js runs the cards. */
 var OPENING_WORDS = 6;
+/* The first value a sentence states — a number that is a fact (not
+   "Table 1.4"), with its percent sign or its unit — and where it is. */
+function valueIn(text) {
+  var t = String(text), ws = t.split(/\s+/), pos = 0;
+  for (var i = 0; i < ws.length; i++) {
+    var at = t.indexOf(ws[i], pos); pos = at + ws[i].length;
+    if (!isFactNumber(ws, i)) continue;
+    var w = ws[i].replace(/[,;:.)]+$/, '');
+    if (/\d%$/.test(w)) return { text: w, at: at };
+    var u = String(ws[i + 1] || '').replace(/[,;:.)]+$/, '');
+    if (UNIT_WORD.test(u) || UNIT_AFTER.test(u)) { var full = t.slice(at, t.indexOf(u, at + ws[i].length) + u.length); return { text: full, at: at }; }
+  }
+  return null;
+}
 function recallCards(cluster, lessonValue) {
   var L = lessonValue || {}, out = [];
   var norm = function (t) { return String(t).replace(/\s+/g, ' ').replace(/[.\s]+$/, '').toLowerCase(); };
@@ -1170,7 +1380,15 @@ function recallCards(cluster, lessonValue) {
     out.push({ kind: 'idea', prompt: 'In one line, what is this section about?', answer: L.overview, full: L.overview, page: 0 });
   }
   (L.points || []).forEach(function (p) {
+    /* A point that states a value is asked for the value: "only _____ of
+       patients have three leaflets", not "transesophageal _____ (TEE)". */
+    var v = valueIn(p.text);
+    if (v) { out.push({ kind: 'point', prompt: p.text.slice(0, v.at) + '_____' + p.text.slice(v.at + v.text.length), answer: v.text, full: p.text, page: p.page }); return; }
     var key = keyTermOf(cluster, p.text), at = key ? p.text.toLowerCase().indexOf(key.toLowerCase()) : -1;
+    /* and a term's own abbreviation beside it goes with it — "_____ (TEE)"
+       gave the answer away */
+    var abbr = at !== -1 ? /^\s*\([A-Z][A-Za-z0-9-]{1,7}\)/.exec(p.text.slice(at + key.length)) : null;
+    if (abbr) key = key + abbr[0];
     if (at !== -1) out.push({ kind: 'point', prompt: p.text.slice(0, at) + '_____' + p.text.slice(at + key.length), answer: p.text.slice(at, at + key.length), full: p.text, page: p.page });
     else {
       var ws = p.text.split(/\s+/);
@@ -1258,6 +1476,16 @@ function reteach(item, cluster) {
     else line('The book', rs);
   } else if (type === 'R') {
     line('The book', rs);
+  } else if (type === 'V') {
+    /* A wrong value: the right one in its sentence, then the section's other
+       values, so the number is learnt among its neighbours rather than
+       alone — the picked value, if the section has it, among them. */
+    out.hookType = 'values';
+    out.title = right + ' — not ' + item.confusedWith;
+    line('The value', rs);
+    numberFacts(cluster, 8).filter(function (n) { return !rs || n.text !== rs.text; }).slice(0, 3).forEach(function (n) {
+      line(n.text.indexOf(String(item.confusedWith || '').replace(/\s.*$/, '')) !== -1 && item.confusedWith ? 'Where ' + item.confusedWith + ' belongs' : 'Beside it', n);
+    });
   } else {
     out.hookType = 'teach';
     var all = sentences(cluster, true), k = -1;
@@ -1271,9 +1499,9 @@ function reteach(item, cluster) {
 
 var MemCoach = {
   OPTIONS: OPTIONS, PER_KIND: PER_KIND, QUIZ_SIZE: QUIZ_SIZE, KIND_ORDER: KIND_ORDER, family: family, FLIP: FLIP, keyTermOf: keyTermOf,
-  sentences: sentences, keySentences: keySentences, lists: lists, patternQuestions: patternQuestions, defined: defined, toks: toks,
+  sentences: sentences, nameLine: nameLine, valueIn: valueIn, keySentences: keySentences, yieldOf: yieldOf, YIELD: YIELD, lists: lists, patternQuestions: patternQuestions, defined: defined, toks: toks,
   rankedTerms: rankedTerms, frequencies: frequencies, bare: bare, numberFacts: numberFacts, mnemonicsOf: mnemonicsOf,
-  pools: pools, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
+  pools: pools, kinOf: kinOf, candidates: candidates, choose: choose, distractors: distractors, numberOptions: numberOptions, shuffled: shuffled, kindOf: kindOf,
   lesson: lesson, quiz: quiz, exam: exam, flow: flow, paths: paths, tree: tree,
   reteach: reteach, sentenceAbout: sentenceAbout,
   recallCards: recallCards, KIND_SAYS: KIND_SAYS, questionKind: questionKind, explainQuestion: explainQuestion, explainSection: explainSection,

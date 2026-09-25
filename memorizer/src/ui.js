@@ -18,8 +18,8 @@
 var doc = root.document;
 var Chunk = root.MemChunk, Prompts = root.MemPrompts, Session = root.MemSession, Ocr = root.MemOcr;
 var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS = root.FSRS, Coach = root.MemCoach;
-var Skill = root.MemSkill;
-var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance, Study = root.MemStudy;
+var Skill = root.MemSkill, Monitor = root.MemMonitor;
+var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance, Study = root.MemStudy, Pack = root.MemPack;
 
 var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
@@ -74,7 +74,7 @@ function builtin() { return !Provider.needsKey(cfg()); }
 function docsChanged() { ui.docsStale = true; ui.pearlCache = null; }
 function refresh() {
   return Promise.all([ui.docsStale ? Store.all('docs') : Promise.resolve(null), Store.all('cards'), Store.all('sessions'),
-                      Store.all('books'), Store.get('meta', 'days'), Store.get('meta', 'coach-profile'), Store.get('meta', 'checks'), Store.get('meta', 'practice'), Store.get('meta', 'plan'), Store.get('meta', 'notes'), Store.get('meta', 'activity')]).then(function (r) {
+                      Store.all('books'), Store.get('meta', 'days'), Store.get('meta', 'coach-profile'), Store.get('meta', 'checks'), Store.get('meta', 'practice'), Store.get('meta', 'plan'), Store.get('meta', 'notes'), Store.get('meta', 'activity'), Store.get('meta', 'pearl-recall')]).then(function (r) {
     if (r[0]) { ui.docs = r[0].sort(function (a, b) { return b.addedAt - a.addedAt; }); ui.docsStale = false; }
     ui.cards = r[1];
     ui.sessions = {}; ui.at = {};
@@ -87,6 +87,7 @@ function refresh() {
     ui.examDate = r[8] && r[8].examDate || '';
     ui.notes = r[9] && r[9].recs || {};
     ui.activity = r[10] && r[10].log || null;
+    ui.pearlRecalls = r[11] && r[11].recs || {};
   });
 }
 /* The session and the cards it made are stored in one transaction
@@ -218,7 +219,14 @@ function pump() {
   var s = ui.state;
   if (!s || ui.busy || ui.error) return;
   var c = s.per[s.section];
-  if (s.phase === 'teach' && !c.lesson) {
+  /* The unit's pack (pack.js), where it has this section: already checked
+     against the book when it was imported, so nothing to ask for. */
+  var fromPack = Pack.sectionOf(ui.pack, s.section);
+  if (s.phase === 'teach' && !c.lesson && fromPack) {
+    dispatch({ type: 'taught', value: JSON.parse(JSON.stringify(fromPack.lesson)) }).then(render);
+  } else if (s.phase === 'drill' && !c.quiz && fromPack && fromPack.quiz.questions.length) {
+    dispatch({ type: 'quizReady', value: JSON.parse(JSON.stringify(fromPack.quiz)) }).then(render);
+  } else if (s.phase === 'teach' && !c.lesson) {
     ask('Preparing the lesson…', 'lesson', [cluster()], [cluster()])
       .then(function (v) { return dispatch({ type: 'taught', value: v }); })
       .then(render, function () {});
@@ -241,6 +249,12 @@ function pump() {
   } else if (s.phase === 'exam' && !s.exam.questions) {
     var weak = Session.weakest(s, 2), n = Session.examSize(s), lessons = {};
     ui.docRec.clusters.forEach(function (_, i) { lessons[i] = s.per[i].lesson; });
+    /* With a pack, the exam asks its questions for the sections it covers
+       (pack.js exam) and the built-in coach's for the rest. */
+    if (builtin() && Pack.coverage(ui.pack, ui.docRec).have) {
+      dispatch({ type: 'examReady', value: Pack.exam(ui.pack, Coach.exam(ui.docRec.clusters, Session.asked(s), weak, n), weak, n) }).then(render);
+      return;
+    }
     ask('Setting your final exam…', 'exam', [ui.docRec.clusters, Session.asked(s), weak, n], [ui.docRec.clusters, lessons, weak, n])
       .then(function (v) { return dispatch({ type: 'examReady', value: v }); })
       .then(render, function () {});
@@ -447,9 +461,10 @@ function recut(book, chapters, method) {
 }
 
 function openDoc(id, section) {
-  return Promise.all([Store.get('docs', id), Store.get('sessions', id)]).then(function (r) {
+  return Promise.all([Store.get('docs', id), Store.get('sessions', id), Store.get('packs', id)]).then(function (r) {
     ui.docRec = r[0];
     ui.docId = id;
+    ui.pack = r[2] || null; ui.packReport = null; ui.packText = ''; ui.packOpen = false; ui.packShow = false;
     var st = r[1] && r[1].state;
     ui.state = Session.resumable(st) ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }));
     ui.state = Session.next(ui.state, { type: 'toUnit' });
@@ -490,6 +505,15 @@ function readBuffer(file) {
     r.onload = function () { resolve(r.result); };
     r.onerror = function () { reject(r.error || new Error('could not read the file')); };
     r.readAsArrayBuffer(file);
+  });
+}
+function readText(file) {
+  if (file.text) return file.text();
+  return new Promise(function (resolve, reject) {
+    var r = new FileReader();
+    r.onload = function () { resolve(r.result); };
+    r.onerror = function () { reject(r.error || new Error('could not read the file')); };
+    r.readAsText(file);
   });
 }
 /* ── mermaid, loaded only when a flowchart is first shown ────────────────── */
@@ -685,7 +709,16 @@ function fold(key, title, n, body) {
 
 
 /* ── shared pieces ───────────────────────────────────────────────────────── */
-function page(n) { return h('span.pg', 'p.' + n); }
+/* A page reference. In a unit whose PDF is on the device, it opens that
+   page as printed (phase 2: "page references that open the PDF page"). */
+function page(n) {
+  if (n == null) return null;
+  var d = ui.view === 'session' && ui.docRec;
+  var first = d && (d.bookId ? d.pageStart : 1), lastP = d && (d.bookId ? d.pageEnd : d.pages);
+  if (!d || !d.hasFile || !(n >= first && n <= lastP)) return h('span.pg', 'p.' + n);
+  return h('button.pg.pg-open', { type: 'button', 'aria-label': 'Open page ' + n, title: 'Open page ' + n,
+    onclick: function (e) { e.preventDefault(); e.stopPropagation(); lightbox(n, null); } }, 'p.' + n);
+}
 function button(label, onclick, cls, attrs) {
   var a = attrs || {};
   a.onclick = onclick; a.type = 'button';
@@ -762,7 +795,8 @@ function viewHome() {
   var prog = Home.progress(ui.docs, sessions, ui.cards, day, FSRS);
   var cur = Home.current(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), sessions);
   var top = h('header.home-top.home-hero', { id: 'home-hero' },
-    heroTrace(),
+    /* Systole's live strip (monitor.js); the still trace where it is absent */
+    Monitor ? Monitor.mount(doc, reducedMotion) : heroTrace(),
     h('div.home-brand', mascot(), h('div', h('span.hello', Home.greeting(new Date().getHours()) + ' · what shall we'), h('h1.learn', 'Learn?'),
       h('p.hero-line', cur ? [h('span.hero-dot', { 'aria-hidden': 'true' }), 'Up next: ', h('strong', cur.doc.name), cur.next ? ' · ' + cur.next : ''] : 'Add a chapter of your book to begin.'))),
     h('div.pills.hero-stats',
@@ -822,7 +856,7 @@ function viewHome() {
   /* Worked out once per day and per "Another": over a whole book it reads
      every chapter's prose. */
   var pkey = day + '|' + (ui.pearlSkip || 0);
-  if (!ui.pearlCache || ui.pearlCache.key !== pkey) ui.pearlCache = { key: pkey, pk: ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0) : null };
+  if (!ui.pearlCache || ui.pearlCache.key !== pkey) ui.pearlCache = { key: pkey, pk: ui.docs.length ? Home.pearlOf(ui.docs, Pearl, day, ui.pearlSkip || 0, Coach.yieldOf) : null };
   var pk = ui.pearlCache.pk;
   /* The pearl is the feature of the page: larger, and with its own
      section's figure or table beside it (Home.pearlVisual), so the fact is
@@ -844,9 +878,7 @@ function viewHome() {
   var pearl = pk ? h('aside.pearl.card' + (visual ? '.with-visual' : ''), { id: 'pearl', 'aria-labelledby': 'pearl-label' },
     h('div.pearl-main',
       h('span.eyebrow', { id: 'pearl-label' }, h('span.pearl-gem', { 'aria-hidden': 'true' }), 'Pearl of the day'),
-      h('ol.pearl-steps', pk.steps.map(function (st) {
-        return h('li', st.lead ? h('span.pearl-lead', st.lead) : null, marked(st.text));
-      })),
+      pearlSteps(pk),
       h('p.pearl-src', pk.pearl.heading, pk.pearl.page ? page(pk.pearl.page) : null, ui.docs.length > 1 ? ' · ' + pk.pearl.docName : ''),
       h('div.row.pearl-actions',
         pdoc ? button('Open the section', function () { openDoc(pdoc.id, pdoc.clusters.map(function (c) { return c.index; }).indexOf(pk.pearl.cluster)); }, 'primary', { id: 'pearl-open' }) : null,
@@ -936,22 +968,121 @@ function viewUnit() {
     h('div', h('strong', 'Final exam'),
       h('p.muted', allDone ? (s.exam.score != null ? 'Last score ' + Math.round(100 * s.exam.score) + '%. Take it again any time.' : 'Mixed questions across the unit, weighted to your weakest sections.')
         : 'Unlocks when every section has been drilled (' + doneN + ' of ' + n + ').')),
-    allDone ? button(s.exam.score != null ? 'Retake' : 'Start', function () { go({ type: 'toExam' }); }, 'primary', { id: 'to-exam' }) : h('span.lock', { 'aria-hidden': 'true' }, '🔒'));
+    allDone ? h('div.exam-go', button(examMode() ? '\u2713 Exam conditions' : 'Exam conditions', function () { setExamMode(!examMode()); render(); }, examMode() ? 'chip sure-on' : 'chip quiet',
+        { id: 'exam-mode', 'aria-pressed': String(examMode()), title: 'Timed at a board\u2019s pace, answers shown at the end' }),
+      button(s.exam.score != null ? 'Retake' : 'Start', function () { go({ type: 'toExam' }); }, 'primary', { id: 'to-exam' })) : h('span.lock', { 'aria-hidden': 'true' }, '🔒'));
   return h('main.wrap.unit',
     backBar(d.name, function () { if (d.bookId) openBook(d.bookId); else leave('library'); }),
     d.bookId ? h('p.muted.book-of', d.bookName + (d.chapter ? ' · chapter ' + d.chapter : ' · front matter') + ' · pp. ' + d.pageStart + '–' + d.pageEnd) : null,
     h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
+    /* Where to go next, at the top: it floated over the foot of the page
+       and covered the last sections (the owner's screenshot). */
+    h('div.unit-cta', allDone
+      ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
+      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })),
     ui.notice ? h('p.card.note', { id: 'notice', role: 'status' }, ui.notice) : null,
+    packCard(d),
     weakCard(s),
     h('h2.grid-title', 'Sections (' + n + ')'),
     h('div.sections', { id: 'sections' }, cards),
     examCard,
     compareButton(s, d),
-    sourceCard(d),
-    h('div.sticky-cta', allDone
-      ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
-      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })));
+    sourceCard(d));
+}
+
+/* THE PEARL AS THE DAY'S RECALL (phase 4; home.js recallParts): its values
+   hidden until asked for, then an honest "knew it" kept per day, and how
+   many of the last seven days it was recalled. */
+function pearlSteps(pk) {
+  var id = pk.pearl.id, rec = ui.pearlShow && ui.pearlShow.id === id ? ui.pearlShow : null;
+  if (!rec) {
+    return [h('ol.pearl-steps', pk.steps.map(function (st) { return h('li', st.lead ? h('span.pearl-lead', st.lead) : null, marked(st.text)); })),
+      button('\u21BA Recall it first', function () { ui.pearlShow = { id: id, shown: false }; render(); }, 'quiet', { id: 'pearl-recall' })];
+  }
+  var rp = Home.recallParts(pk.steps), day = today(), rs = Home.recallStreak(ui.pearlRecalls, day, 7, Study.addDays);
+  var rate = function (knew) {
+    ui.pearlRecalls = Object.assign({}, ui.pearlRecalls); ui.pearlRecalls[day] = knew; ui.pearlShow = null;
+    Store.put('meta', { id: 'pearl-recall', recs: ui.pearlRecalls }).then(null, function (e) { saveFailed(e); });
+    logActivity('review', {}); render();
+  };
+  return [h('ol.pearl-steps.recalling', { id: 'pearl-recalling' }, rp.steps.map(function (st) {
+      var lead = st.lead ? h('span.pearl-lead', st.leadBlank && !rec.shown ? h('span.blank', '\u2003?\u2003') : st.lead) : null;
+      return h('li', lead, st.parts.map(function (p) { return p.blank ? (rec.shown ? h('mark', p.text) : h('span.blank', '\u2003?\u2003')) : p.text; }));
+    })),
+    rec.shown ? h('div.row', { id: 'pearl-rate' }, button('\u2717 Not yet', function () { rate(false); }, 'quiet', { id: 'pearl-notyet' }),
+        button('\u2713 I knew it', function () { rate(true); }, 'primary', { id: 'pearl-knew' }))
+      : button('Show ' + (rp.blanks === 1 ? 'it' : 'them'), function () { rec.shown = true; render(); }, 'primary', { id: 'pearl-show' }),
+    rs.of ? h('p.muted', { id: 'pearl-streak' }, 'Recalled on ' + rs.knew + ' of the last ' + rs.of + (rs.of === 1 ? ' day' : ' days') + ' you tried.') : null];
+}
+/* THE STUDY PACK (pack.js): the prompt to copy into the owner's own
+   Claude chat, and the reply pasted back, checked against the book before
+   any of it is stored. */
+function packCard(d) {
+  var cov = Pack.coverage(ui.pack, d), r = ui.packReport;
+  var status = h('span.muted', { id: 'pack-copy-status', role: 'status' });
+  var area = h('textarea', { id: 'pack-text', rows: '4', 'aria-label': 'Claude\u2019s reply', placeholder: 'Paste Claude\u2019s whole reply here, code block and all.',
+    oninput: function () { ui.packText = area.value; } });
+  area.value = ui.packText || '';
+  var file = h('input', { type: 'file', accept: 'application/json,.json,text/plain,.txt', id: 'pack-file', class: 'visually-hidden',
+    onchange: function (e) { var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) readText(f).then(importPack, function (err) { ui.packReport = { error: err.message || String(err) }; render(); }); } });
+  var left = cov.next && cov.have ? 'Still to import: ' + (cov.next[0] === cov.next[1] ? 'section ' + cov.next[0] : 'sections ' + cov.next[0] + '\u2013' + cov.next[1]) + '.' : '';
+  /* folded to its one line until opened; open after an import, for its
+     report. Every tap redraws the page, so the fold is remembered. */
+  var card = h('details.card.pack-card', { id: 'pack-card', open: ui.packOpen || r ? true : null, ontoggle: function () { ui.packOpen = card.open; } },
+    h('summary', h('span.eyebrow', '\u2726 Study pack \u00B7 written with Claude'),
+      h('span.muted.pack-status', { id: 'pack-status' }, cov.have ? cov.have + ' of ' + cov.of + ' sections' + (cov.flagged ? ' \u00B7 ' + cov.flagged + ' flagged' : '') : 'none yet')),
+    h('p', 'Have Claude write this unit\u2019s lessons and questions, with your Braunwald and Memorizer skills, and import its reply here. ' +
+      'Memorizer checks every number, page and quoted sentence, and the conditions, tests and treatments it names, against your book; what it cannot find is flagged where it is shown.'),
+    h('ol.pack-steps',
+      h('li', 'Copy the prompt. It carries this unit\u2019s text, page by page.'),
+      h('li', 'Paste it into a new chat on claude.ai' + (cov.of > Pack.PER_REPLY ? ', and say \u201Cnext\u201D after each reply' : '') + '.'),
+      h('li', 'Paste each reply here and import it.')),
+    h('div.row', button('Copy the prompt', function () { copyText(Pack.prompt(d), status, function () { ui.packShow = true; render(); }); }, 'primary', { id: 'pack-copy' }),
+      button(ui.packShow ? 'Hide the prompt' : 'Show the prompt', function () { ui.packShow = !ui.packShow; render(); }, 'quiet', { id: 'pack-show' }), status),
+    ui.packShow ? h('textarea.pack-prompt', { id: 'pack-prompt', rows: '6', readonly: true, 'aria-label': 'The prompt for Claude', onfocus: function (e) { e.target.select(); } }, Pack.prompt(d)) : null,
+    left ? h('p.muted', { id: 'pack-next' }, left) : null,
+    area,
+    h('div.row', button('Check and import', function () { importPack(area.value); }, 'primary', { id: 'pack-import' }),
+      file, h('label.chip', { for: 'pack-file' }, 'Or choose a file'),
+      cov.have ? button('Remove the pack', function () { removePack(d); }, 'quiet danger', { id: 'pack-remove' }) : null),
+    r ? packReportView(r) : null);
+  return card;
+}
+function packReportView(r) {
+  if (r.error) return h('p.warn', { id: 'pack-report', role: 'status' }, 'Not imported: ' + r.error + '.');
+  return h('div.pack-report', { id: 'pack-report', role: 'status' },
+    h('p', h('strong', r.report.line)),
+    r.refused.length ? h('ul.pack-refused', r.refused.map(function (x) {
+      return h('li', 'Section ' + (x.section == null ? '?' : x.section) + (x.title ? ' \u201C' + x.title + '\u201D' : '') + ' was not imported: ' + x.why + '.');
+    })) : null,
+    r.dropped.length ? h('details.pack-dropped', h('summary', Home.count(r.dropped.length, 'item') + ' left out'),
+      h('ul', r.dropped.map(function (x) { return h('li', 'Section ' + x.section + ', ' + x.where + ': ' + x.why + '.'); }))) : null);
+}
+/* A reply, checked and stored: its sections replace the built-in lessons
+   and questions (session.js 'packed'); nothing is stored when nothing
+   passed. */
+function importPack(text) {
+  var d = ui.docRec, got = Pack.parse(text);
+  if (!got.ok) { ui.packReport = { error: got.error }; render(); return Promise.resolve(); }
+  var checked = Pack.check(got.packs, d);
+  ui.packReport = { report: Pack.report(checked), refused: checked.refused, dropped: checked.dropped };
+  if (!checked.sections.length) { render(); return Promise.resolve(); }
+  var rec = Pack.merge(ui.pack, checked, d, Date.now());
+  return Store.put('packs', rec).then(function () {
+    ui.pack = rec; ui.packText = '';
+    return dispatch({ type: 'packed', value: { sections: checked.sections } });
+  }).then(render, function (e) { saveFailed(e); render(); });
+}
+
+/* The pack removed: the sections it taught go back to the built-in coach
+   (session.js 'unpacked'); scores and cards stay. */
+function removePack(d) {
+  if (!root.confirm('Remove the study pack from "' + d.name + '"? Its sections are taught by the built-in coach again; your scores and review cards are kept.')) return Promise.resolve();
+  return Store.del('packs', d.id).then(function () {
+    ui.pack = null; ui.packReport = null;
+    return dispatch({ type: 'unpacked' });
+  }).then(render, function (e) { saveFailed(e); render(); });
 }
 
 /* Where this unit came from and how well it was read (provenance.js):
@@ -1058,8 +1189,10 @@ function steps(which) {
 function sectionBar(which) {
   var s = ui.state, c = cluster(), n = ui.docRec.clusters.length;
   return [backBar(c.title, function () { go({ type: 'toUnit' }); }),
-    h('p.muted.unit-meta', 'Section ' + (s.section + 1) + ' of ' + n + ' · ' + (c.pageEnd !== c.pageStart ? 'pp. ' + c.pageStart + '–' + c.pageEnd : 'p. ' + c.pageStart) +
+    h('div.section-meta', h('p.muted.unit-meta', 'Section ' + (s.section + 1) + ' of ' + n + ' · ' + (c.pageEnd !== c.pageStart ? 'pp. ' + c.pageStart + '–' + c.pageEnd : 'p. ' + c.pageStart) +
       ' · about ' + Math.max(1, Math.round(c.words / 200)) + ' min read'),
+      button(focusOn() ? '\u25C9 Focus' : '\u25CB Focus', function () { setFlag_(FOCUS_KEY, 'focus', !focusOn()); render(); }, 'quiet focus-btn',
+        { id: 'focus-toggle', 'aria-pressed': String(focusOn()), title: 'Hide the dock, the robot and the background while you study' })),
     steps(which)];
 }
 /* A point as a card: its key term bold, its sub-points below, and the
@@ -1075,10 +1208,23 @@ function pointCard(c, p, i) {
     h('span.point-n', String(i + 1)),
     ui.state ? button(marked_ ? '★' : '☆', function () { toggleMark(c, p.text); }, 'quiet mark-btn', { id: 'mark-' + i, 'aria-pressed': String(marked_), 'aria-label': marked_ ? 'Unmark this point' : 'Mark this point to be asked' }) : null,
     h('div.point-body',
+      hyTags(p.text),
       h('p.point-text', b.lead ? [h('strong.lead', b.lead), marked(b.body)] : withKey(b.body, Coach.keyTermOf(c, p.text)), ' ', page(p.page)),
+      flagLine(p.flag),
       b.subs.length ? h('ul.subs', b.subs.map(function (x) { return h('li', marked(x)); })) : null,
       para && para.text.length > p.text.length + 20 ? h('details.context', h('summary', 'In the book'),
         h('p', marked(para.text))) : null));
+}
+/* What a pack's check could not find in the book (pack.js), said on the
+   item itself. */
+function flagLine(why) {
+  return why ? h('p.flag', { 'data-flag': why }, '\u26A0 ' + why.charAt(0).toUpperCase() + why.slice(1) + '.') : null;
+}
+/* Why a point is high-yield, from its own words (Coach.yieldOf): "Most
+   common", "First-line", "Threshold" … — whatever wrote the lesson. */
+function hyTags(text) {
+  var hy = Coach.yieldOf(text);
+  return hy.length ? h('p.hy-tags', h('span.hy', 'High yield'), hy.map(function (t) { return h('span.hy-why', t); })) : null;
 }
 /* The point with its key term in bold, every word still the book's. */
 function withKey(text, key) {
@@ -1109,6 +1255,9 @@ function glanceCard(c, L, noPath) {
 function teachCard(c, L) {
   var key = ui.docId + ':' + ui.state.section, got = ui.teach && ui.teach.key === key ? ui.teach : null;
   var points = Sheet.sheetOf(L).groups.reduce(function (a, g) { return a.concat(g.points); }, []);
+  /* a pack's lesson is scored against its rubric: its pearls and its
+     mechanism too (study.js rubricOf) */
+  if (L.by === 'pack') points = Study.rubricOf(points, L);
   var area = h('textarea', { id: 'teach-text', rows: '5', 'aria-label': 'Your explanation', placeholder: 'Explain this section as if to a colleague: what it is, why it happens, the numbers.',
     oninput: function () { ui.teachDraft = area.value; } });
   area.value = ui.teachDraft || '';
@@ -1119,7 +1268,7 @@ function teachCard(c, L) {
   var res = got ? h('div', { id: 'teach-result' },
     h('p', h('strong', 'You covered ' + got.r.covered.length + ' of ' + (got.r.covered.length + got.r.missed.length) + ' key points.')),
     got.r.wrong.length ? h('p.warn', { id: 'teach-wrong' }, 'You gave ' + got.r.wrong.join(', ') + ' — this section has no such number. Check it against the page.') : null,
-    got.r.missed.length ? [h('p.muted', 'What you left out, in your book’s words:'), h('ul.teach-missed', got.r.missed.map(function (i) { return h('li', marked(got.points[i].text), ' ', page(got.points[i].page)); })),
+    got.r.missed.length ? [h('p.muted', L.by === 'pack' ? 'What you left out, in the lesson\u2019s words:' : 'What you left out, in your book’s words:'), h('ul.teach-missed', got.r.missed.map(function (i) { return h('li', marked(got.points[i].text), ' ', page(got.points[i].page)); })),
       button('Make cards of what I left out', function () { teachCards(c, got); }, 'quiet', { id: 'teach-cards' })] : h('p', '✓ Everything the section’s key points say.'),
     ui.teachMade != null ? h('p.muted', { id: 'teach-made' }, ui.teachMade + ' card' + (ui.teachMade === 1 ? '' : 's') + ' made, from tomorrow.') : null) : null;
   return h('div.card.teach-card', { id: 'teach-back' }, h('span.eyebrow', '🗣 Teach it back'),
@@ -1259,11 +1408,11 @@ function savePng(svg, name) {
   };
   img.src = svgUrl(svg);
 }
-function showFigure(svg, name) {
+function showFigure(svg, name, note) {
   var close = function () { closeFn(); };
   var el = h('div.lightbox.figure-view', { 'aria-label': name },
     h('img', { src: svgUrl(svg), alt: name }),
-    h('p.muted.fig-note', 'Every word and number here is your book\u2019s, arranged by Memorizer.'),
+    h('p.muted.fig-note', note || 'Every word and number here is your book\u2019s, arranged by Memorizer.'),
     h('div.row', button('Save image', function () { savePng(svg, name); }, 'primary', { id: 'save-figure' }), button('Close', close, '', { 'data-autofocus': true, id: 'fig-close' })));
   var closeFn = Dialog.open(el, doc.getElementById('app'));
 }
@@ -1292,6 +1441,7 @@ function numbersCard(sh, play) {
             h('span.tile-label', { 'data-start': t0 + 0.55, 'data-duration': 0.35, 'data-anim': 'fade' }, t.label));
         })),
         n.subject ? null : h('p.muted.fact-src', 'p.' + n.page),
+        flagLine(n.flag),
         h('details.context', h('summary', 'The sentence'), h('p', marked(n.text), ' ', page(n.page))));
     }));
 }
@@ -1307,6 +1457,89 @@ function ocrNote(c) {
   return h('p.warn.ocr-lesson', { id: 'ocr-note' },
     d.source === 'photo' ? 'This section was read from a photo by text recognition. ' : 'Part of this section was read from a scanned page by text recognition (' + (ns.length === 1 ? 'p. ' : 'pp. ') + Prov.pageList(ns) + '). ',
     'Recognition can misread a number or a word: check anything surprising against the page.');
+}
+/* THE CLINICAL MAP (sheet.js clinicalMap): what the section names, grouped
+   — shown when it names two things or more. */
+function mapCard(c) {
+  var m = Sheet.clinicalMap(c);
+  if (m.count < 2) return null;
+  return h('div.card.clinical-map', { id: 'clinical-map' }, h('span.eyebrow', 'Clinical map'),
+    h('div.map-groups', m.groups.map(function (g) {
+      return h('div.map-group', { 'data-kind': g.kind }, h('strong.map-kind', g.label),
+        h('div.map-items', g.items.map(function (it) { return h('span.map-item', it.label, page(it.page)); })));
+    })),
+    h('p.muted', 'What this section names, grouped by Memorizer, each with the page it is first named on.'));
+}
+/* WHY? WHY? WHY? (study.js socratic): down the chain, one link at a time,
+   each answer hidden until asked for. */
+function socraticCard(c, L, gl) {
+  var sc = Study.socratic(gl && gl.pathway, L.mechanism);
+  if (!sc) return null;
+  var key = ui.docId + ':' + ui.state.section;
+  if (!ui.soc || ui.soc.key !== key) ui.soc = { key: key, shown: 0 };
+  var n = ui.soc.shown;
+  return h('div.card.socratic', { id: 'socratic', 'data-source': sc.source }, h('span.eyebrow', 'Why? Why? Why?'),
+    h('p.muted', sc.source === 'book' ? 'Down the section\u2019s own chain of cause and effect. Answer each aloud, then look.'
+      : 'Down the lesson\u2019s mechanism' + (L.by === 'pack' ? ', written with Claude' : '') + ', a step at a time. Answer aloud, then look.'),
+    h('ol.soc-steps', sc.steps.map(function (st, k) {
+      if (k > n) return null;
+      return h('li', h('p.soc-ask', st.ask), k < n ? h('p.soc-answer', marked(st.answer))
+        : button('Show', function () { ui.soc.shown = k + 1; render(); }, 'quiet', { id: 'soc-show' }));
+    })),
+    n >= sc.steps.length ? h('p.muted', { id: 'soc-done' }, 'That is the chain. Say it through once more without looking.') : null);
+}
+/* ROUNDS (phase 4): a pack's oral cases — the stem, the examiner's
+   question, the model answer on request, and an honest "had it". */
+function roundsCard(L) {
+  var cs = L.cases || [];
+  if (!cs.length) return null;
+  var key = ui.docId + ':' + ui.state.section;
+  if (!ui.rounds || ui.rounds.key !== key) ui.rounds = { key: key, c: 0, a: 0, shown: false, had: 0, n: 0 };
+  var r = ui.rounds, cur = cs[r.c], ask = cur && cur.asks[r.a];
+  var rate = function (had) { r.n++; if (had) r.had++; r.shown = false; r.a++; if (r.a >= cur.asks.length) { r.c++; r.a = 0; } render(); };
+  if (!cur) return h('div.card.rounds', { id: 'rounds' }, h('span.eyebrow', 'Rounds'),
+    h('p', { id: 'rounds-done' }, 'Rounds done: ' + r.had + ' of ' + r.n + ' answered.'),
+    button('Again', function () { ui.rounds = null; render(); }, 'quiet', { id: 'rounds-again' }));
+  return h('div.card.rounds', { id: 'rounds' }, h('span.eyebrow', 'Rounds \u00B7 case ' + (r.c + 1) + ' of ' + cs.length),
+    h('p.rounds-stem', cur.stem),
+    h('p.rounds-q', h('strong', 'Q: '), ask.q),
+    r.shown ? [h('p.rounds-a', { id: 'rounds-answer' }, h('strong', 'A: '), marked(ask.a), ' ', page(cur.page)), flagLine(ask.flag),
+      h('div.row', button('\u2717 Missed it', function () { rate(false); }, 'quiet', { id: 'rounds-missed' }),
+        button('\u2713 Had it', function () { rate(true); }, 'primary', { id: 'rounds-had' }))]
+      : button('Say it aloud, then show the answer', function () { r.shown = true; render(); }, 'primary', { id: 'rounds-show' }),
+    h('p.muted', 'A case written with Claude from your book; each answer checked against it.'));
+}
+/* THE ONE-SCREEN REVIEW (sheet.js reviewSheet), in a dialog. */
+function showReview(c, L) {
+  var r = Sheet.reviewSheet(L), close = function () { closeFn(); };
+  var el = h('div.lightbox.review-sheet', { id: 'review-sheet', 'aria-label': c.title + ' on one screen' },
+    h('h2', c.title), r.idea ? h('p.rs-idea', marked(r.idea)) : null,
+    r.points.length ? [h('h3', 'Key points'), h('ol.rs-points', r.points.map(function (p) { return h('li', marked(p.text)); }))] : null,
+    r.values.length ? [h('h3', 'Values'), h('div.rs-values', r.values.map(function (v) { return h('span.rs-value', h('strong', v.value), ' ', v.label); }))] : null,
+    r.confuse.length ? [h('h3', 'Don\u2019t confuse'), h('ul.rs-confuse', r.confuse.map(function (x) { return h('li', h('strong', x.a), ' vs ', h('strong', x.b), ' \u2014 ', x.how); }))] : null,
+    r.hooks.length ? [h('h3', 'Hooks'), h('ul.rs-hooks', r.hooks.map(function (m) { return h('li', h('strong', m.letters), ' ', m.title); }))] : null,
+    r.pearls.length ? [h('h3', 'Pearls'), h('ul.rs-pearls', r.pearls.map(function (t) { return h('li', marked(t)); }))] : null,
+    button('Close', close, 'primary', { 'data-autofocus': true, id: 'review-close' }));
+  var closeFn = Dialog.open(el, doc.getElementById('app'));
+}
+/* What only a pack's lesson has (pack.js): the label saying who wrote it,
+   the mechanism, the pairs that get confused, the pearls. */
+function packCards(L) {
+  var asks = (L.cases || []).reduce(function (a, cs) { return a.concat(cs.asks); }, []);
+  var flagged = (L.points || []).concat(L.numbers || [], L.pearls || [], L.distinctions || [], asks).filter(function (x) { return x.flag; }).length +
+    Object.keys(L.flags || {}).length;
+  return {
+    label: h('p.pack-label', { id: 'pack-label' }, h('strong', '\u2726 Written with Claude'), ' \u00B7 checked against your book',
+      flagged ? h('span.pack-flagged', ' \u00B7 ' + flagged + ' not found in it, flagged') : null),
+    mechanism: L.mechanism ? h('div.card.mechanism', { id: 'mechanism' }, h('span.eyebrow', 'The mechanism'), h('p', marked(L.mechanism)),
+      flagLine(L.flags && L.flags.mechanism)) : null,
+    distinctions: (L.distinctions || []).length ? h('div.card.distinctions', { id: 'distinctions' }, h('span.eyebrow', 'Don\u2019t confuse'),
+      h('ul.confuse', L.distinctions.map(function (x) {
+        return h('li', h('p.confuse-pair', h('strong', x.a), h('span.vs', ' vs '), h('strong', x.b)), h('p', marked(x.how), ' ', page(x.page)), flagLine(x.flag));
+      }))) : null,
+    pearls: (L.pearls || []).length ? h('div.card.pearls', { id: 'pearls' }, h('span.eyebrow', 'Exam pearls'),
+      h('ul.pearl-list', L.pearls.map(function (x) { return h('li', marked(x.text), ' ', page(x.page), flagLine(x.flag)); }))) : null,
+  };
 }
 function viewLesson() {
   var s = ui.state, c = cluster(), L = s.per[s.section].lesson;
@@ -1328,13 +1561,17 @@ function viewLesson() {
   var n = 0;
   var all = [{ text: sh.bigIdea }].concat(sh.groups.reduce(function (a, g) { return a.concat(g.points); }, []));
   var tools = h('div.row',
-    button('🖼 Study card', function () { showFigure(Figure.studyCard(c.title, sh, L.mnemonics || [], sourceLine(ui.docRec, c)), c.title + ' study card'); }, 'quiet', { id: 'make-card' }),
-    button('🔊 Listen', function () { speak(all.map(function (p) { return p.text; }).join('. ')); }, 'quiet'));
+    button('🖼 Study card', function () { showFigure(Figure.studyCard(c.title, sh, L.mnemonics || [], sourceLine(ui.docRec, c)), c.title + ' study card', fromPack ? 'Written with Claude from your book, and checked against it; arranged by Memorizer.' : ''); }, 'quiet', { id: 'make-card' }),
+    button('🔊 Listen', function () { speak(all.map(function (p) { return p.text; }).join('. ')); }, 'quiet'),
+    button('📋 One screen', function () { showReview(c, L); }, 'quiet', { id: 'one-screen' }));
   var group = function (g) {
     return h('section.point-group', h('h3.group-head', h('span.group-mark', { 'aria-hidden': 'true' }, HEAD_MARK[g.heading] || '•'), g.heading),
       h('ol.points', { start: String(n + 1) }, g.points.map(function (p) { return pointCard(c, p, n++); })));
   };
-  var bigIdea = h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(sh.bigIdea)));
+  var fromPack = L.by === 'pack';
+  var bigIdea = h('div.card.big-idea', { id: 'big-idea' }, h('span.eyebrow', 'The big idea'), h('p.big', marked(sh.bigIdea)),
+    fromPack && L.flags && sh.bigIdea === L.overview ? flagLine(L.flags.overview) : null);
+  var pk = fromPack ? packCards(L) : {};
   var moreAnalogies = analogies.length > 1 ? h('details.card.more-analogies', h('summary', 'More analogies (' + (analogies.length - 1) + ')'), analogies.slice(1).map(function (a) { return analogyCard(a, false); })) : null;
   /* the built-in pathway is on the glance card; a model's flowchart is its own */
   var flowCard = L.flowchart && L.flowchart.trim() || !(Sheet.glance(c) || {}).pathway || !Sheet.glance(c).pathway.length ? drawFlowCard(c, L) : null;
@@ -1342,32 +1579,53 @@ function viewLesson() {
   var drill = h('div.end-cta', s.per[s.section].memorized
     ? button('Start the drill', function () { go({ type: 'toDrill' }); }, 'primary big', { id: 'to-drill' })
     : button('I’ve got it — now memorise it', function () { go({ type: 'toMemorize', value: { cards: Coach.recallCards(c, L).length } }); }, 'primary big', { id: 'to-drill' }));
+  var gl = Sheet.glance(c, (L.mnemonics || []).map(function (m) { return m.title; }));
+  var mapC = mapCard(c), soc = socraticCard(c, L, gl), rounds = roundsCard(L);
   if (stepMode()) {
-    /* STEP BY STEP — one card at a time, like the owner's reference: the
-       idea, then each heading's points, the numbers, each mnemonic, a check,
-       then what else the section has; the drill at the end. */
-    var parts = [{ label: 'The big idea', nodes: [bigIdea, analogies.length ? analogyCard(analogies[0], true) : null] }];
-    var gl = Sheet.glance(c, (L.mnemonics || []).map(function (m) { return m.title; }));
-    if (gl && gl.pathway.length >= 2) parts.push({ label: 'How it works', nodes: [pathwayPlay(gl.pathway)] });
+    /* STEP BY STEP, in the stages of the owner's plan (sheet.js stages):
+       orient — the idea and the section's clinical map; mechanism — how it
+       works, then why, asked down the chain; recognise — the glance and each
+       heading's points, the pearls; numbers; don't confuse; recall — the
+       mnemonics, a check, teaching it back, rounds; then what else the
+       section has. The drill at the end. */
+    var parts = [{ label: 'The big idea', stage: 'orient', nodes: [pk.label, bigIdea, analogies.length ? analogyCard(analogies[0], true) : null] }];
+    if (mapC) parts.push({ label: 'Clinical map', stage: 'orient', nodes: [mapC] });
+    if (pk.mechanism) parts.push({ label: 'The mechanism', stage: 'mechanism', nodes: [pk.mechanism] });
+    if (gl && gl.pathway.length >= 2) parts.push({ label: 'How it works', stage: 'mechanism', nodes: [pathwayPlay(gl.pathway)] });
+    if (soc) parts.push({ label: 'Why? Why? Why?', stage: 'mechanism', nodes: [soc] });
     var facts = glanceCard(c, L, true);
-    if (facts) parts.push({ label: 'At a glance', nodes: [facts] });
+    if (facts) parts.push({ label: 'At a glance', stage: 'recognise', nodes: [facts] });
     sh.groups.forEach(function (g) {
-      parts.push({ label: g.heading, nodes: [h('div.card', { id: 'points' }, h('div.card-head', h('h2', 'Key points'), tools), group(g))] });
+      parts.push({ label: g.heading, stage: 'recognise', nodes: [h('div.card', { id: 'points' }, h('div.card-head', h('h2', 'Key points'), tools), group(g))] });
     });
+    if (pk.pearls) parts.push({ label: 'Exam pearls', stage: 'recognise', nodes: [pk.pearls] });
     var nums = numbersCard(sh, true);
-    if (nums) parts.push({ label: 'Numbers to know', nodes: [nums] });
-    (L.mnemonics || []).forEach(function (m) { parts.push({ label: 'Remember it: ' + m.title, nodes: [mnemonicPlay(m)] }); });
+    if (nums) parts.push({ label: 'Numbers to know', stage: 'numbers', nodes: [nums] });
+    if (pk.distinctions) parts.push({ label: 'Don\u2019t confuse', stage: 'confuse', nodes: [pk.distinctions] });
+    (L.mnemonics || []).forEach(function (m) { parts.push({ label: 'Remember it: ' + m.title, stage: 'recall', nodes: [mnemonicPlay(m)] }); });
     var qc = quickCheck(c, L);
-    if (qc) parts.push({ label: 'Check yourself', nodes: [qc] });
-    parts.push({ label: 'Teach it back', nodes: [teachCard(c, L)] });
-    parts.push({ label: 'Also in this section', nodes: [moreAnalogies, flowCard, tablesCard(c), visualsCard(c), noteCard(c), fixCard(c), full] });
+    if (qc) parts.push({ label: 'Check yourself', stage: 'recall', nodes: [qc] });
+    parts.push({ label: 'Teach it back', stage: 'recall', nodes: [teachCard(c, L)] });
+    if (rounds) parts.push({ label: 'Rounds', stage: 'recall', nodes: [rounds] });
+    parts.push({ label: 'Also in this section', stage: 'recall', nodes: [moreAnalogies, flowCard, tablesCard(c), visualsCard(c), noteCard(c), fixCard(c), full] });
     var key = ui.docId + ':' + s.section;
     if (!ui.step || ui.step.key !== key) ui.step = { key: key, i: 0 };
     var i = Math.min(ui.step.i, parts.length - 1), last = i === parts.length - 1;
     var move = function (d) { ui.step.i = Math.max(0, Math.min(parts.length - 1, i + d)); render(); root.scrollTo(0, 0); };
+    var has = {};
+    parts.forEach(function (pt) { has[pt.stage] = true; });
+    var stageList = Sheet.stages(has), now = parts[i].stage, nowAt = -1;
+    stageList.forEach(function (st, k) { if (st.id === now) nowAt = k; });
     return [
       sectionBar('teach'),
       ocrNote(c),
+      h('ol.stage-strip', { id: 'stages', 'aria-label': 'Stages of this lesson' }, stageList.map(function (st, k) {
+        var first = -1;
+        parts.forEach(function (pt, j) { if (first === -1 && pt.stage === st.id) first = j; });
+        return h('li', { 'data-state': k === nowAt ? 'now' : k < nowAt ? 'done' : 'next', 'data-stage': st.id },
+          button(st.label, function () { if (first !== -1) { ui.step.i = first; render(); root.scrollTo(0, 0); } }, 'quiet stage-btn',
+            { 'aria-current': k === nowAt ? 'step' : null, disabled: first === -1 ? true : null }));
+      })),
       h('div.step-head', { id: 'lesson-steps' },
         h('div.step-count', h('strong', 'Slide ' + (i + 1) + '/' + parts.length), h('span', ' · ' + parts[i].label)),
         button('↻ Replay', function () { replay(); }, 'quiet', { id: 'replay' }),
@@ -1382,18 +1640,25 @@ function viewLesson() {
     sectionBar('teach'),
     ocrNote(c),
     h('div.row.lesson-mode', button('▶ Play this section', function () { setStepMode(true); ui.step = null; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'step-mode' })),
+    pk.label,
     bigIdea,
+    mapC,
+    pk.mechanism,
+    soc,
     glanceCard(c, L),
     analogies.length ? analogyCard(analogies[0], true) : null,
     h('div.card', { id: 'points' },
       h('div.card-head', h('h2', 'Key points'), tools),
       sh.groups.map(group),
-      h('p.muted.arranged-note', 'Headings arranged by Memorizer; the points are your book’s.')),
+      h('p.muted.arranged-note', fromPack ? 'Headings arranged by Memorizer; the points written with Claude from your book.' : 'Headings arranged by Memorizer; the points are your book’s.')),
     numbersCard(sh),
+    pk.distinctions,
+    pk.pearls,
     mnemonics,
     /* after everything has been read: recall, not a look at the next card */
     quickCheck(c, L),
     teachCard(c, L),
+    rounds,
     noteCard(c),
     fixCard(c),
     moreAnalogies,
@@ -1405,6 +1670,16 @@ function viewLesson() {
     drill,
   ];
 }
+/* Exam conditions and focus: the reader's choices, remembered on this
+   device (a convenience — lost storage means off). Focus hides the dock,
+   the robot and the aurora while studying a section. */
+var EXAM_KEY = 'memorizer.exammode.v1', FOCUS_KEY = 'memorizer.focus.v1';
+function flag_(k, cache) { if (ui[cache] == null) { try { ui[cache] = root.localStorage.getItem(k) === '1'; } catch (_) { ui[cache] = false; } } return ui[cache]; }
+function setFlag_(k, cache, on) { ui[cache] = !!on; try { root.localStorage.setItem(k, on ? '1' : '0'); } catch (_) {} }
+function examMode() { return flag_(EXAM_KEY, 'examMode'); }
+function setExamMode(on) { setFlag_(EXAM_KEY, 'examMode', on); }
+function focusOn() { return flag_(FOCUS_KEY, 'focus'); }
+function applyFocus() { doc.documentElement.setAttribute('data-focus', focusOn() && ui.view === 'session' ? 'on' : 'off'); }
 /* Step by step or the whole page: the reader's choice, remembered on this
    device (a convenience — lost storage means the whole page). */
 var STEP_KEY = 'memorizer.stepmode.v1';
@@ -1452,7 +1727,7 @@ var LETTERS = 'ABCDEFGH';
    as it was answered, read-only: answers are recorded on Next, and changing
    one afterwards would change a score and a review card already made. */
 function mcqCard(q, meta, onNext, reveal, nav, after, opts) {
-  var askSure = !!(opts && opts.sure);
+  var askSure = !!(opts && opts.sure), blind = !!(opts && opts.blind);
   var past = nav && nav.back > 0 ? nav.hist[nav.hist.length - nav.back] : null;
   var chosen = past ? past.choice : ui.choice;
   var answered = chosen != null;
@@ -1461,11 +1736,13 @@ function mcqCard(q, meta, onNext, reveal, nav, after, opts) {
   var prev = canPrev ? button('← Previous', function () { ui.back = nav.back + 1; render(); }, 'quiet', { id: 'prev-q' }) : null;
   var fwd = past ? button(nav.back === 1 ? 'Back to the current question →' : 'Forward →', function () { ui.back = nav.back - 1; render(); }, 'primary big', { id: 'fwd-q' }) : null;
   var quote = q.quote ? h('blockquote.quote', q.quote.split('_____').map(function (part, i, all) {
-    return [part, i < all.length - 1 ? h('span.gap', answered ? q.options[q.answer] : '_____') : null];
+    return [part, i < all.length - 1 ? h('span.gap', answered && !blind ? q.options[q.answer] : '_____') : null];
   })) : null;
   var opts = h('div.options', { role: 'group', 'aria-label': 'Options' }, q.options.map(function (o, i) {
     var cls = '';
-    if (answered) cls = i === q.answer ? '.right' : i === chosen ? '.wrong' : '.dim';
+    /* EXAM CONDITIONS: the choice is held, and whether it was right waits
+       for the end, as in the exam hall */
+    if (answered) cls = blind ? (i === chosen ? '.chosen' : '.dim') : i === q.answer ? '.right' : i === chosen ? '.wrong' : '.dim';
     return h('button.option' + cls, { type: 'button', disabled: answered || past ? true : null, 'data-i': String(i),
         onclick: function () { ui.choice = i; render(); } },
       h('span.opt-letter', LETTERS[i]), h('span.opt-text', o));
@@ -1480,14 +1757,29 @@ function mcqCard(q, meta, onNext, reveal, nav, after, opts) {
     h('h2.q', q.question),
     opts,
     notSure,
+    answered && blind ? h('div.why.blind', { role: 'status', id: 'blind-note' }, h('p.muted', 'Answer held \u2014 you will see how you did at the end.'),
+      past ? null : h('div.row.mcq-nav', prev, button('Next \u2192', onNext, 'primary big', { id: 'next' }))) :
     answered ? h('div.why' + (right ? '.good' : '.bad'), { role: 'status' },
       h('strong', right ? '✓ Correct' : (unsure ? '✗ Not sure \u2014 the answer is ' : '✗ The answer is ') + LETTERS[q.answer] + ': ' + q.options[q.answer]),
       reveal ? h('p.muted', reveal) : null,
       askSure && !right && !unsure && ui.sure ? hazardNote() : null,
       h('p', h('span.why-label', 'Why: '), marked(q.explain), q.page ? [' ', page(q.page)] : null),
+      whyNot(q, chosen, right),
       past ? null : after ? after(chosen, right) : right ? null : h('p.muted', 'This one is now a review card, and it comes back at the end of this drill.'),
       past ? null : h('div.row.mcq-nav', prev, button('Next →', onNext, 'primary big', { id: 'next' }))) : null,
     past ? h('div.row.mcq-nav', prev, fwd) : !answered && prev ? h('div.row.mcq-nav', prev) : null);
+}
+/* A pack's question (pack.js) says why each wrong option is wrong, and
+   names the trap it sets: the reason for the one chosen first, then every
+   option's, folded. */
+function whyNot(q, chosen, right) {
+  var why = q.why || [];
+  var mine = !right && chosen >= 0 && why[chosen] ? h('p.why-not', { id: 'why-not' }, h('span.why-label', 'Why not ' + LETTERS[chosen] + ': '), marked(why[chosen])) : null;
+  var all = why.length === q.options.length && why.some(Boolean) ? h('details.why-all', { id: 'why-all' }, h('summary', 'Why each option is right or wrong'),
+    h('ul', q.options.map(function (o, i) {
+      return h('li' + (i === q.answer ? '.right' : ''), h('strong', LETTERS[i] + '. ' + o), ' \u2014 ', i === q.answer ? 'the answer.' : marked(why[i] || ''));
+    }))) : null;
+  return [mine, q.trap ? h('p.trap', { id: 'trap' }, h('span.why-label', 'The trap: '), q.trap) : null, flagLine(q.flag), all];
 }
 /* Sure or not, said before answering (study.js rateWith). */
 function sureToggle() {
@@ -1539,14 +1831,17 @@ function viewDrill() {
   var firsts = c.quiz.questions.length;
   var meta = [h('span', retry ? 'Again — you missed this one' : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
     q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · its answer checked against your book') : null,
+    q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, q.flag ? '\u2726 Written with Claude \u00B7 \u26A0 not all of it found in your book' : '\u2726 Written with Claude \u00B7 checked against your book') : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
   /* The kind of miss, read from what happened (skill.js); a second miss in
      a row is re-taught on the spot with a different kind of hook. */
   var after = function (chosen, right) {
     if (right) return retry ? typeChip('R', '', 'It came back when asked again.') : null;
     if (retry) return [typeChip('E', ''), reteachCard(Coach.reteach({ q: q, types: ['E'], confusedWith: '' }, cluster()))];
-    var t = chosen === Session.NOT_SURE ? 'N' : 'C';
-    return [typeChip(t, t === 'C' ? q.options[chosen] : ''), h('p.muted', 'Now a review card; it comes back at the end of this drill.')];
+    var t = Session.missType(q, chosen).t, picked = chosen >= 0 ? q.options[chosen] : '';
+    /* a wrong value is anchored at once, among the section's other values */
+    return [typeChip(t, t === 'C' || t === 'V' ? picked : ''), t === 'V' ? reteachCard(Coach.reteach({ q: q, types: ['V'], confusedWith: picked }, cluster())) : null,
+      h('p.muted', 'Now a review card; it comes back at the end of this drill.')];
   };
   return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice, sure: !!ui.sure }); }, null, nav, after, { sure: true })];
 }
@@ -1555,7 +1850,7 @@ function typeChip(t, confusedWith, lead) {
   var e = Skill.ERRORS[t];
   return h('div.type-chip', { 'data-type': t, id: 'type-chip' },
     h('span.type-badge', 'Type ' + t + ' \u00B7 ' + e.name),
-    h('span', lead ? lead + ' ' : '', t === 'C' && confusedWith ? 'You picked \u201C' + confusedWith + '\u201D. ' : '', e.fix));
+    h('span', lead ? lead + ' ' : '', (t === 'C' || t === 'V') && confusedWith ? 'You picked \u201C' + confusedWith + '\u201D. ' : '', e.fix));
 }
 /* A re-teach (Coach.reteach): every line the book's own sentence. */
 function reteachCard(r) {
@@ -1578,31 +1873,35 @@ function viewReviewRound() {
   var from = ui.docRec.clusters[w.cluster] ? ui.docRec.clusters[w.cluster].title : '';
   var after = function (chosen, right) {
     if (right) return h('p.muted', w.hits.length ? 'Right again, in a later round: that graduates it off the weak list.' : 'Right. One more time in a later round and it graduates.');
-    var t = w.streak >= 1 ? 'E' : chosen === Session.NOT_SURE ? 'N' : 'C';
+    var t = w.streak >= 1 ? 'E' : Session.missType(q, chosen).t;
     var picked = chosen >= 0 ? q.options[chosen] : '';
-    var item = { q: q, types: w.types.concat([t]), confusedWith: t === 'C' ? picked : w.confusedWith };
+    var item = { q: q, types: w.types.concat([t]), confusedWith: t === 'C' || t === 'V' ? picked : w.confusedWith };
     return [typeChip(t, picked), Session.needsReteach(s) ? reteachCard(Coach.reteach(item, ui.docRec.clusters[w.cluster])) : null,
       h('p.muted', 'It comes back once more at the end of this round.')];
   };
   return [backBar('Review round', function () { go({ type: 'toUnit' }); }),
     mcqCard(q, meta, function () { go({ type: 'reviewAnswered', choice: ui.choice }); }, from ? 'From \u201C' + from + '\u201D' : '', null, after)];
 }
+/* Text to the clipboard, and `status` says whether it got there. */
+function copyText(text, status, onFail) {
+  var done = function () { status.textContent = 'Copied.'; };
+  try {
+    if (root.navigator && root.navigator.clipboard && root.navigator.clipboard.writeText) { root.navigator.clipboard.writeText(text).then(done, fallback); return; }
+  } catch (_) {}
+  fallback();
+  function fallback() {
+    var ta = h('textarea', { 'aria-hidden': 'true', style: 'position:fixed;left:-9999px' }); ta.value = text; doc.body.appendChild(ta); ta.select();
+    var copied = false;
+    try { copied = doc.execCommand('copy'); } catch (_) {}
+    doc.body.removeChild(ta);
+    if (copied) done();
+    else { status.textContent = 'Your browser would not copy it.'; if (onFail) onFail(); }
+  }
+}
 /* The skill's closing deliverable, after the exam (skill §16). */
 function closingCard(s) {
   var c = Session.closing(s), status = h('span.muted', { id: 'copy-status', role: 'status' });
-  var copy = function () {
-    var text = Session.closingText(s);
-    var done = function () { status.textContent = 'Copied.'; };
-    try {
-      if (root.navigator && root.navigator.clipboard && root.navigator.clipboard.writeText) { root.navigator.clipboard.writeText(text).then(done, fallback); return; }
-    } catch (_) {}
-    fallback();
-    function fallback() {
-      var ta = h('textarea', { 'aria-hidden': 'true', style: 'position:fixed;left:-9999px' }); ta.value = text; doc.body.appendChild(ta); ta.select();
-      try { doc.execCommand('copy'); done(); } catch (_) { status.textContent = 'Select and copy it from here.'; }
-      doc.body.removeChild(ta);
-    }
-  };
+  var copy = function () { copyText(Session.closingText(s), status); };
   return h('div.card.closing', { id: 'closing' },
     h('h2', 'Your sheet for the exam'),
     h('h3', 'Three pillars'), h('ol.pillars', c.pillars.map(function (p) { return h('li', marked(p.text), p.page ? [' ', page(p.page)] : null); })),
@@ -1691,13 +1990,20 @@ function viewExam() {
   if (nav.back) {
     var rec = nav.hist[nav.hist.length - nav.back], pq = g.questions[rec.q];
     var pfrom = pq.cluster != null && ui.docRec.clusters[pq.cluster] ? ui.docRec.clusters[pq.cluster].title : '';
-    return [bar, mcqCard(pq, [h('span.looking-back', 'Looking back · answer ' + (nav.hist.length - nav.back + 1) + ' of ' + nav.hist.length)], null, pfrom ? 'From “' + pfrom + '”' : '', nav)];
+    return [bar, mcqCard(pq, [h('span.looking-back', 'Looking back · answer ' + (nav.hist.length - nav.back + 1) + ' of ' + nav.hist.length)], null, pfrom ? 'From “' + pfrom + '”' : '', nav, null, { blind: examMode() })];
   }
   var qi = g.order[g.pos], q = g.questions[qi];
   /* The section is named only once answered: its title is often the answer. */
   var from = q.cluster != null && ui.docRec.clusters[q.cluster] ? ui.docRec.clusters[q.cluster].title : '';
-  var meta = [h('span', 'Question ' + (g.pos + 1) + ' of ' + g.order.length), h('div.bar', h('i', { style: 'width:' + Math.round(100 * g.pos / g.order.length) + '%' }))];
-  return [bar, mcqCard(q, meta, function () { go({ type: 'examAnswered', choice: ui.choice }); }, from ? 'From “' + from + '”' : '', nav)];
+  var clock = null;
+  if (examMode()) {
+    var ek = ui.docId + ':' + s.round;
+    if (!ui.examStart || ui.examStart.key !== ek) ui.examStart = { key: ek, at: Date.now() };
+    var ck = Study.examClock(ui.examStart.at, Date.now(), g.order.length, g.pos);
+    clock = h('span.exam-clock' + (ck.behind ? '.behind' : ''), { id: 'exam-clock' }, '\u23F1 ' + ck.elapsed + ' of ' + ck.target);
+  }
+  var meta = [h('span', 'Question ' + (g.pos + 1) + ' of ' + g.order.length), clock, h('div.bar', h('i', { style: 'width:' + Math.round(100 * g.pos / g.order.length) + '%' }))];
+  return [bar, mcqCard(q, meta, function () { go({ type: 'examAnswered', choice: ui.choice }); }, from ? 'From “' + from + '”' : '', nav, null, { blind: examMode() })];
 }
 function viewDone() {
   var s = ui.state, g = s.exam, d = ui.docRec;
@@ -1715,10 +2021,24 @@ function viewDone() {
       var t = +k >= 0 ? d.clusters[+k].title : 'Across the unit', b = by[k];
       return h('li', h('span', t), h('span.badge', b.right + '/' + b.n));
     }))),
+    examMissed(g),
     closingCard(s),
     h('div.row', button('Retake the exam', function () { go({ type: 'toExam' }); }, 'primary', { id: 'retake' }),
       button('Back to sections', function () { go({ type: 'toUnit' }); })),
   ];
+}
+/* What the exam got wrong, each with the answer, why, and — for a pack's
+   question — why the option picked was wrong: the review exam conditions
+   held back until the end. */
+function examMissed(g) {
+  var wrong = g.results.filter(function (r) { return !r.correct; });
+  if (!wrong.length) return null;
+  return h('div.card', { id: 'exam-missed' }, h('h2', 'What you missed (' + wrong.length + ')'),
+    h('ol.missed', wrong.map(function (r) {
+      var q = g.questions[r.q], mine = r.choice >= 0 ? q.options[r.choice] : 'Not sure';
+      return h('li', h('strong', q.question), h('p.muted', 'You: ' + mine), h('p', '\u2192 ', h('strong', q.options[q.answer]), ' ', q.page ? page(q.page) : null),
+        h('p', h('span.why-label', 'Why: '), marked(q.explain)), q.why && r.choice >= 0 && q.why[r.choice] ? h('p', h('span.why-label', 'Why not yours: '), marked(q.why[r.choice])) : null);
+    })));
 }
 function viewSession() {
   var s = ui.state, body;
@@ -2073,6 +2393,11 @@ function aiQuestions(c) {
 /* One build at a time: opening the Coach and asking at once used to start
    two, each redrawing the screen — a tap landing in a redraw can be lost. */
 function askIndex() {
+  /* Units changed and not yet read back: read them first. The index was
+     built from the ones in memory, kept, and a unit just edited or added
+     was missing from every answer until the next change (CI caught it
+     twice, on a slow runner). */
+  if (ui.docsStale) return refresh().then(askIndex);
   if (ui.askIdx && ui.askFor === ui.docs) return Promise.resolve(ui.askIdx);
   if (ui.askBuild && ui.askBuildFor === ui.docs) return ui.askBuild;
   ui.askBusy = true; ui.askBusyText = ''; render();
@@ -2529,10 +2854,10 @@ function appearanceCard() {
     return Look.THEMES.filter(function (t) { return t.mode === mode; }).map(function (t) { return swatch(t.id, t.name, t.swatch); });
   };
   return h('div.card.settings', { id: 'appearance' }, h('h2', 'Appearance'),
-    h('p.muted', 'Systole’s themes and type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
+    h('p.muted', 'Daylight by day and Clinical at night, or Systole\u2019s Contrast; Systole\u2019s type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
     h('div.group-label', { id: 'lbl-theme' }, 'Theme'),
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' },
-      swatch('auto', 'Auto', ['#EFF3F8', '#0A1628']), themes('light')),
+      swatch('auto', 'Auto', [Look.byId(Look.AUTO.light).swatch[0], Look.byId(Look.AUTO.dark).swatch[0]]), themes('light')),
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' }, themes('dark')),
     seg('size', 'Text size'), seg('width', 'Reading width'), seg('spacing', 'Line spacing'),
     seg('contrast', 'Contrast'), seg('bright', 'Brightness'),
@@ -2624,11 +2949,25 @@ function nav() {
     return h('button.nav-btn', { type: 'button', 'aria-current': here === v ? 'page' : null, onclick: go2, 'aria-label': label + (badge ? ', ' + badge + ' due' : '') },
       h('span.nav-icon', { 'aria-hidden': 'true' }, icon), h('span.nav-label', label), badge ? h('span.nav-badge', String(badge)) : null);
   }
+  /* the one next thing on this screen (study.js contextAction) */
+  var ctx = ui.view === 'session' && ui.state ? Study.contextAction(ui.state, Session.allDone(ui.state)) : null;
   return h('nav.dock', { 'aria-label': 'Main' },
+    ctx ? h('button.nav-btn.nav-context', { type: 'button', id: 'dock-context', 'data-action': ctx.id, onclick: function () { contextGo(ctx.id); } },
+      h('span.nav-icon', { 'aria-hidden': 'true' }, '\u25B6'), h('span.nav-label', ctx.label)) : null,
     tab('library', '⌂', 'Home', function () { leave('library'); }),
     tab('ask', '🎓', 'Coach', function () { ui.view = 'ask'; ui.error = ''; refresh().then(function () { render(); if (ui.docs.length) askIndex().then(render); }); }),
     tab('review', '↻', 'Review', function () { startReview(); }, due),
     tab('settings', '⚙', 'Settings', function () { leave('settings'); }));
+}
+
+function contextGo(id) {
+  var s = ui.state;
+  if (id === 'learn') return go({ type: 'open', section: upNext(s) });
+  if (id === 'exam') return go({ type: 'toExam' });
+  if (id === 'memorise') return go({ type: 'toMemorize', value: { cards: Coach.recallCards(cluster(), s.per[s.section].lesson).length } });
+  if (id === 'drill') return go({ type: 'toDrill' });
+  if (id === 'sections') return go({ type: 'toUnit' });
+  if (id === 'next') { var nx = Session.nextSection(s); return go(nx != null ? { type: 'open', section: nx } : { type: 'toExam' }); }
 }
 
 /* ── motion: HyperFrames' composition model, played live ───────────────────
@@ -2837,6 +3176,7 @@ doc.addEventListener('pointerout', function (e) { if (!e.relatedTarget) unlight(
 
 function render() {
   releaseStale();
+  applyFocus();
   var app = doc.getElementById('app');
   var view = ui.view === 'session' && ui.state ? viewSession()
     : ui.view === 'book' ? viewBook()

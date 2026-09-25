@@ -30,7 +30,7 @@
    rule (this app teaches only from the uploaded PDF — the grounding rule in
    prompts.js wins wherever the two disagree); its free-recall and
    explain-aloud passes (the owner replaced them with multiple choice); its
-   navy/gold palette (the app has Systole's themes); its sprint clock and
+   navy/gold palette (the app has its own themes); its sprint clock and
    break prompts, and its self-growing known-mnemonics file (not built yet).
 
    PURE.
@@ -50,8 +50,14 @@ var ERRORS = {
        fix: 'Learn the difference: the two side by side.' },
   N: { name: 'Never encountered', means: 'You were not sure at all.',
        fix: 'A short re-teach from the page, then back into the questions.' },
+  /* The owner's plan, phase 3: a number missed is its own kind of miss.
+     Picking 25 mmHg for 40 mmHg is not confusing two things — the thing
+     was known, its value was not — and contrasting two sentences does not
+     fix it. Seeing the value among the section's other values does. */
+  V: { name: 'Wrong value', means: 'You knew what it was about; the number was wrong.',
+       fix: 'Anchor the value: say it with its unit and what it measures, then the section\u2019s other values beside it.' },
 };
-var TYPES = ['R', 'E', 'C', 'N'];
+var TYPES = ['R', 'E', 'C', 'N', 'V'];
 
 /* Hook types the built-in coach can make without inventing anything —
    every one is built from the PDF's own words. Claude may use any of the
@@ -62,6 +68,7 @@ var HOOKS = {
   chain: 'The chain it sits in',
   row: 'Its row in the table',
   contrast: 'Side by side',
+  values: 'Among its neighbours',
   teach: 'Re-read from the page',
 };
 
@@ -121,6 +128,7 @@ function systemText() {
     '',
     'THE ERROR TYPES THE APP ASSIGNS (so your questions make them meaningful):',
     '- C (confusion): picked a wrong option — fixed by contrasting the two.',
+    '- V (wrong value): picked a wrong number for the right thing — fixed by anchoring the value among the section\u2019s other values.',
     '- N (never encountered): answered "not sure" — fixed by a short re-teach from the page.',
     '- R (retrieval): missed, then right when asked again — the memory is there; fixed by more retrieval.',
     '- E (encoding): missed twice — nothing stuck; fixed by a new hook of a different type.',

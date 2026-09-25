@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 57 suites that need neither a browser nor a build all stay
+present, and the 58 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1738 checks can't run here.
 
@@ -126,12 +126,16 @@ every section is done. Each section is:
 
 1. **Taught** — the big idea first, then the key points as numbered cards
    (the key term bold, each citing its page, the paragraph it came from one
-   tap away), the numbers to know with their values marked, a mnemonic for
+   tap away; what an exam asks — the most common cause, the first-line
+   drug, what to avoid, a threshold, what predicts death — is taken first
+   and tagged "High yield" with why; a figure's caption is never a point), the numbers to know with their values marked, a mnemonic for
    every list, everyday analogies for the mechanisms, a flowchart drawn from
    its cause-and-effect sentences, its tables as tables and its figures cut
    from the page under their own captions.
 2. **Drilled** — single-best-answer multiple-choice questions, four options,
-   never a blank to type into: the right option turns green, a wrong choice
+   never a blank to type into, board-style where the book allows ("What is
+   the first-line therapy for …?", "Which is contraindicated with …?", a drug
+   against other drugs), from high-yield sentences first: the right option turns green, a wrong choice
    red, and the book's own sentence says why. A question missed on the first
    try is asked again at the end of the drill, and only first tries count
    toward the score.
@@ -175,6 +179,52 @@ indexes — chapters, diseases, clinical scenarios, diagnostic tests and
 treatments — built on the device from a vocabulary of cardiology terms and
 their synonyms ("NT-proBNP", "TAVI", a drug by its suffix), and the indexes
 can be browsed too. Nothing is sent anywhere.
+
+**A study pack written with Claude.** On a unit's page, *Copy the prompt*
+gives a request for your own Claude chat — claude.ai, with your own skills —
+that carries the unit's text page by page and asks for every section's lesson
+and questions in a fixed JSON shape: the key points, the numbers, the
+mechanism, the pairs students confuse and the exam pearls; board-style
+questions that say why each wrong option is wrong and name the trap each one
+sets. A long chapter is asked for a few sections to a reply, so none is cut
+off. Paste each reply back and Memorizer checks it against your book
+([`memorizer/src/pack.js`](memorizer/src/pack.js)) before any of it is used.
+A number not in the section or on the page it cites is flagged on screen
+where it is shown. So is a page outside the section, a condition, test or
+treatment the chapter never names, and a quoted sentence that is not the
+book's. Three things are refused, with the reason: a section from another
+unit, a question that is not a fair single-best-answer, and anything Claude
+itself marked `NOT_IN_PDF`. What passes teaches the section, labelled
+"Written with Claude · checked against your book", and the drill asks its
+questions. The pack stays on the device, and `scripts/leak-guard.js` refuses
+a saved pack or prompt at commit, since both carry your book.
+
+**A lesson built as one mental model.** Step by step, a section is taught
+in stages — *orient*, *mechanism*, *recognise*, *numbers*, *don't confuse*,
+*recall* — shown as a strip over the slides, each a tap straight to its
+first slide, and only the stages the section has material for. It opens
+with a **clinical map** of what the section names (conditions, scenarios,
+tests, treatments, each with the page it is first named on), asks **"why?"
+down the section's own chain of cause and effect** one link at a time,
+and ends with recall: the mnemonics, a check, teaching it back and, from a
+pack, **rounds** — an oral case, the examiner's question, the model answer
+on request. Every page reference opens that page of the PDF as printed,
+and *One screen* puts the whole section — idea, points, values, the pairs
+confused, hooks, pearls — on one card to glance at before a drill.
+
+**Misses taught by their kind, and exams under exam conditions.** A wrong
+number for the right thing is its own kind of miss, *wrong value*, and is
+anchored at once among the section's other values rather than contrasted
+like a confusion. A pack's teach-back is scored against its rubric — the
+points, its pearls and its mechanism. The final exam asks a pack's
+questions for the sections it covers, and can be taken under **exam
+conditions**: a clock at a board's pace, each answer held rather than
+marked, and at the end what was missed with the answer picked, the right
+one and why. **Focus** hides the dock, the robot and the background while
+studying; the dock itself carries the one next thing on the screen
+(learn, memorise, drill, next, sections), and none while a question is
+open. The pearl of the day can be **recalled first**, its values hidden
+until asked for, with an honest "I knew it" kept by the day.
 
 **An on-device AI tutor, optional.** Turned on in Settings, a small language
 model (Qwen3 0.6B, 1.7B or 4B, Apache-2.0, through WebLLM on WebGPU) is downloaded
@@ -263,12 +313,17 @@ chapter, with chips for a PDF, photos or pasted notes, and your units, each
 with its progress. Surfaces are clear frosted glass, as on an iPad — a heavy
 blur, a bright rim, a sheen, and a light that follows the finger — over a slow
 aurora in the theme's own colours, with the accent solid rather than run into
-a second colour; cards rise in, give under the finger, and a new screen
-settles in; the trace draws, the pearl's steps arrive one by one. With reduced
-motion asked for, nothing moves and there is no light to follow; at High
+a second colour; Systole's live rhythm strip sweeps across the hero, a
+rhythm named in monitor type; cards rise in when a screen opens (not again on
+every tap), give under the finger, and the pearl's steps arrive one by one.
+With reduced motion asked for, nothing moves, the strip is drawn still, and
+there is no light to follow; at High
 contrast, with less transparency asked for, or where the browser cannot
-blur, the glass is solid. The look is Systole's too: its
-themes, colour for colour, and its type scale, with text size, reading width,
+blur, the glass is solid. The themes are the owner's choice from mock-ups
+drawn on these screens: **Daylight** by day — the iPad's own grey grouped
+ground, white cards and system blue — and **Clinical** at night — near-black,
+graphite cards and monitor green — with Systole's **Contrast** kept, colour
+for colour. The type scale is Systole's, with text size, reading width,
 line spacing, font, contrast and brightness to choose. Contrast and
 brightness are computed from the theme you pick, and every theme at every
 setting is tested to keep its text at WCAG AA or better — measured against

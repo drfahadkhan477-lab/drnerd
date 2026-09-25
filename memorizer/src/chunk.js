@@ -45,6 +45,22 @@ var TOPIC_MIN = 60;
    quote, a callout — and is taught as body text. */
 var HEADING_MAX_WORDS = 20;
 
+/* Text that reads as words. A line that text recognition garbled — a
+   chapter's display title read as "hy = rly" — is set big, so it passed for
+   a heading, named the unit, and was put in front of every section title.
+   A heading or a title has a word of four letters or more with a vowel in
+   it (or is an acronym or two, "ECG", "PET CT"), is mostly letters, and has
+   none of the symbols recognition leaves and headings do not use. */
+var GARBLE = /[=|~^_{}\\]/;
+function wordy(t) {
+  var s = String(t || '').trim(), solid = s.replace(/\s/g, '');
+  if (!solid || GARBLE.test(s)) return false;
+  if ((solid.match(/[A-Za-z]/g) || []).length < solid.length * 0.6) return false;
+  var ws = s.split(/\s+/).map(function (w) { return w.replace(/[^A-Za-z]/g, ''); }).filter(Boolean);
+  if (ws.some(function (w) { return w.length >= 4 && /[aeiouy]/i.test(w); })) return true;
+  return ws.length <= 3 && ws.every(function (w) { return /^[A-Z]{2,6}$/.test(w); });
+}
+
 function words(s) {
   return String(s || '').split(/\s+/).filter(function (w) { return w.length > 0; });
 }
@@ -154,7 +170,7 @@ function blocksFromPages(pages) {
         continue;
       }
       var isHeading = (+l.size || 0) >= bodySize * 1.15 && w.length <= HEADING_MAX_WORDS &&
-                      !/[.,;:]$/.test(t);
+                      !/[.,;:]$/.test(t) && wordy(t);
       if (isHeading) {
         /* Consecutive heading lines at one size are one heading wrapped. */
         if (cur && cur.heading && j > 0 && Math.abs((+lines[j - 1].size || 0) - (+l.size || 0)) < 0.5 &&
@@ -465,9 +481,12 @@ function buildCluster(units, index, ctx, tables) {
     return out;
   });
   var body = toks.filter(function (t) { return !t.heading; }).map(function (t) { return t.w; });
+  /* A section with no heading of its own goes on from the last one, and is
+     numbered as its part: seven sections all called "Reperfusion therapy
+     (cont.)" could not be told apart on the unit page. */
   var title = titles[0] ||
-    (ctx.last ? ctx.last + ' (cont.)' : body.slice(0, 6).join(' ') + (body.length > 6 ? '…' : ''));
-  if (titles.length) ctx.last = titles[titles.length - 1];
+    (ctx.last ? ctx.last + ' (part ' + (ctx.part = (ctx.part || 1) + 1) + ')' : body.slice(0, 6).join(' ') + (body.length > 6 ? '…' : ''));
+  if (titles.length) { ctx.last = titles[titles.length - 1]; ctx.part = 1; }
   var gistWords = [];
   for (var i = 0; i < body.length && gistWords.length < 25; i++) {
     gistWords.push(body[i]);
@@ -646,7 +665,7 @@ function pagesFromText(text) {
 var MemChunk = {
   PASTE_PAGE_LINES: PASTE_PAGE_LINES, pagesFromText: pagesFromText,
   FIGURES_PER_SECTION: FIGURES_PER_SECTION, figureRefs: figureRefs, assignFigures: assignFigures,
-  TOPIC_MIN: TOPIC_MIN, COLUMN_MIN_ROWS: COLUMN_MIN_ROWS, COLUMN_MIN_WORDS: COLUMN_MIN_WORDS, columnsOf: columnsOf, OUTLINE_MAX_WORDS: OUTLINE_MAX_WORDS, runIn: runIn, CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
+  TOPIC_MIN: TOPIC_MIN, COLUMN_MIN_ROWS: COLUMN_MIN_ROWS, COLUMN_MIN_WORDS: COLUMN_MIN_WORDS, columnsOf: columnsOf, OUTLINE_MAX_WORDS: OUTLINE_MAX_WORDS, runIn: runIn, CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, wordy: wordy, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
   words: words, blocksFromPages: blocksFromPages, scannedPages: scannedPages,
   unitsFromBlocks: unitsFromBlocks, clusterBlocks: clusterBlocks,
 };

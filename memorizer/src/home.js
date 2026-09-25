@@ -154,14 +154,18 @@ function seeded(str) {
   return function () { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }
 
-/* Today's pearl from the given units; `skip` counts presses of "Another". */
-function pearlOf(docs, Pearl, today, skip) {
+/* Today's pearl from the given units; `skip` counts presses of "Another".
+   `yieldOf` (Coach.yieldOf, passed in so this stays pure) makes a
+   high-yield sentence likelier: each cue, up to three, adds 20 to its
+   pearl.js score — about twice what a strong pearl scores on its own, so a
+   pearl that is also high-yield is drawn roughly half again as often. */
+function pearlOf(docs, Pearl, today, skip, yieldOf) {
   var pool = [];
   (docs || []).forEach(function (d) {
     Pearl.harvest(notesOf(d)).forEach(function (p) {
       var idx = Number(String(p.id).split(':').pop());
       var c = d.clusters.filter(function (x) { return x.index === idx; })[0];
-      pool.push({ id: p.id, text: p.text, score: p.score, title: p.title, docId: d.id, docName: d.name, cluster: idx,
+      pool.push({ id: p.id, text: p.text, score: p.score + (yieldOf ? 20 * Math.min(3, yieldOf(p.text).length) : 0), title: p.title, docId: d.id, docName: d.name, cluster: idx,
                   page: c ? pageOf(c, p.text) : null, heading: c ? headingOf(c, p.text) : p.title });
     });
   });
@@ -237,11 +241,15 @@ function tracePath(width, beats) {
 /* A pearl's text in runs, with the numbers that carry units marked, so the
    threshold is what the eye lands on. */
 var FIGURE = /(\d+(?:[.,]\d+)?(?:\s?[–-]\s?\d+(?:[.,]\d+)?)?\s?(?:%|mmHg|mg|mcg|g|mL|ml|L\/min|cm|mm|ms|bpm|hours?|days?|weeks?|months?|years?)?)/;
+/* A number that names a place in the book — "Table 1.4", "Fig. 2", "p. 52"
+   — is not a value to learn, so it is not marked. */
+var PLACE = /\b(?:tables?|fig(?:ure)?s?|chapters?|sections?|pages?|pp?|box|panel|eq)\.?\s*$/i;
 function marks(text) {
-  var out = [];
+  var out = [], prev = '';
   String(text).split(FIGURE).forEach(function (part, i) {
     if (!part) return;
-    out.push({ text: part, num: i % 2 === 1 && /\d/.test(part) });
+    out.push({ text: part, num: i % 2 === 1 && /\d/.test(part) && !PLACE.test(prev) });
+    prev = part;
   });
   return out;
 }
@@ -271,7 +279,31 @@ function pearlVisual(doc, pearl, Chunk) {
   return null;
 }
 
-var MemHome = { pearlVisual: pearlVisual, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
+/* ── the pearl as the day's recall (the owner's plan, phase 4) ───────────
+   Its values are hidden until asked for — the numbers marks() finds, as
+   the page marks them — so the pearl is recalled before it is read. A
+   pearl with no value hides the lead of its first step instead, so there
+   is always something to bring back. */
+function recallParts(steps) {
+  var blanks = 0;
+  var out = (steps || []).map(function (st) {
+    var parts = marks(st.text).map(function (m) { if (m.num) blanks++; return { text: m.text, blank: !!m.num }; });
+    return { lead: st.lead || '', leadBlank: false, parts: parts };
+  });
+  if (!blanks && out.length && out[0].lead) { out[0].leadBlank = true; blanks = 1; }
+  return { steps: out, blanks: blanks };
+}
+/* The days of the last `days` (7) the pearl was recalled: { day: true|false }. */
+function recallStreak(recs, today, days, addDays) {
+  var n = 0, of = 0;
+  for (var i = 0; i < (days || 7); i++) {
+    var d = addDays(today, -i);
+    if (recs && d in recs) { of++; if (recs[d]) n++; }
+  }
+  return { knew: n, of: of };
+}
+
+var MemHome = { pearlVisual: pearlVisual, recallParts: recallParts, recallStreak: recallStreak, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
   HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
   notesOf: notesOf, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath };
 root.MemHome = MemHome;

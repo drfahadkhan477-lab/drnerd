@@ -212,7 +212,44 @@ head('the pearl is the PDF’s own sentence');
     { text: 'Afterload and the valve', heading: true, page: 4 }, { text: PROSE_B, page: 4 }], 3)])], Pearl, DAY, 0).pearl;
   ok('credited to the heading it was printed under, not the section’s first', where.heading === 'Afterload and the valve', where.heading);
   ok('and to the page it was printed on', where.page === 4, String(where.page));
+  /* High-yield pearls come up more often. Every section below has a pearl
+     pearl.js would take (a value with its unit, a full statement); one also
+     says what an exam asks — "the most common cause" — which pearl.js does
+     not weigh. Over two months of days it opens the home more often than
+     its even share (one in four) with yieldOf, and more often than without. */
+  {
+    const K = require(path.join(ROOT, 'memorizer', 'src', 'coach.js'));
+    const HY = 'Rheumatic heart disease is the most common cause of mitral stenosis, and intervention should be offered once the valve area falls to 1.5 cm or less in a patient with symptoms.';
+    const plain = ['Diuretics should be given for pulmonary congestion in mitral stenosis, and a resting heart rate kept near 60 bpm lets the left atrium empty through the narrow valve.',
+      'Warfarin should be started for mitral stenosis with atrial fibrillation, keeping the international ratio near 2 to 3 for as long as the rhythm lasts, with a check every 4 weeks.',
+      'Balloon valvotomy should be offered when the valve is pliable and not heavily calcified, and the result is judged by a fall in the mean gradient to about 5 mmHg afterwards.'];
+    const hyDoc = doc('y', 1, [cl(0, 'Mitral stenosis', [HY], 1), cl(1, 'Filling', [plain[0]], 1), cl(2, 'Atria', [plain[1]], 1), cl(3, 'Coronaries', [plain[2]], 1)]);
+    const dates = Array.from({ length: 60 }, (_, i) => new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10));
+    const share = y => dates.filter(x => { const q = H.pearlOf([hyDoc], Pearl, x, 0, y); return q && /most common cause/.test(q.pearl.text); }).length;
+    const pool = (H.pearlOf([hyDoc], Pearl, dates[0], 0) || {}).of;
+    const withHy = share(K.yieldOf), without = share(undefined);
+    ok('a high-yield pearl is drawn more often than its even share, and than without', pool === 4 && withHy > without && withHy > dates.length / 4,
+       `${withHy} of ${dates.length} days, against ${without} without (pool ${pool})`);
+  }
   ok('a unit with no sentence worth a pearl has none, rather than a poor one', H.pearlOf([doc('t', 1, [cl(0, 'x', ['It is short.', 'So is this.'])])], Pearl, DAY, 0) === null);
+}
+
+head('Systole’s rhythm strip on the hero (monitor.js)');
+{
+  global.RhythmsExtra = load('src/core/rhythms-extra.js').RhythmsExtra;
+  const M = require(path.join(ROOT, 'memorizer', 'src', 'monitor.js'));
+  ok('every rhythm on the strip is one Systole draws, named with its rate, and nothing alarming',
+     M.PLAYLIST.every(k => M.info(k).name && M.info(k).hr > 0) && M.PLAYLIST.every(k => k === 'sinus' || global.RhythmsExtra.EXTRA[k]) &&
+     !M.PLAYLIST.some(k => ['vt', 'vfib', 'asystole', 'torsades', 'chb', 'stemi'].indexOf(k) !== -1), M.PLAYLIST.join(', '));
+  /* each rhythm drawn for ten seconds: a real strip, with R waves near
+     1 mV at about the rate it names (sinus 72 → about 12 beats) */
+  const peaks = k => { const st = {}; let n = 0, prev = 0, up = false;
+    for (let t = 0; t < 10000; t += 2) { const v = M.sample(k, t, st); if (!up && v > 0.6 && prev <= 0.6) { n++; up = true; } if (v < 0.3) up = false; prev = v; } return n; };
+  ok('sinus draws twelve beats in ten seconds, as 72 a minute', peaks('sinus') === 12, String(peaks('sinus')));
+  ok('and every other rhythm draws beats too, none flat', M.PLAYLIST.every(k => peaks(k) >= 3), JSON.stringify(M.PLAYLIST.map(k => [k, peaks(k)])));
+  const repeats = M.PLAYLIST.filter(prev => Array.from({ length: 50 }, (_, i) => M.next(prev, () => i / 50)).some(k => k === prev));
+  ok('the next rhythm is never the one showing, whatever the draw', repeats.length === 0, repeats.join(', ') || 'none');
+  ok('its label reads as a monitor’s: lead, rhythm, rate', M.label('sinus') === 'II · Sinus Rhythm · 72 bpm', M.label('sinus'));
 }
 
 head('the numbers in a pearl are marked');
@@ -222,6 +259,8 @@ head('the numbers in a pearl are marked');
   ok('each figure, with its unit', marked.join('|') === '18 mmHg|8|12|40%|3 days', marked.join('|'));
   ok('and the text between is left as it was', runs.map(r => r.text).join('') === 'Above 18 mmHg, or 8 to 12, in 40% of patients over 3 days.');
   ok('a sentence with no number has nothing marked', !H.marks('Preload rises with volume.').some(r => r.num));
+  const place = H.marks('TABLE 1.4 FIGURE 1.2 and Fig. 3, p. 52: a pressure above 18 mmHg.').filter(r => r.num).map(r => r.text.trim());
+  ok('a number that names a place in the book — a table, a figure, a page — is not marked; a value is', place.join('|') === '18 mmHg', place.join('|'));
 }
 
 head('weak spots: where the sessions say you are shakiest');
@@ -271,6 +310,21 @@ head('beside the pearl: its own section’s figure, or its table');
   ok('and nothing for a pearl whose section is not in the unit', H.pearlVisual(doc, { cluster: 7, page: 1 }, C) === null && H.pearlVisual(null, {}, C) === null);
   const noFile = Object.assign({}, doc, { hasFile: false });
   ok('a unit whose PDF is not kept has no figure to draw: its table instead', H.pearlVisual(noFile, { cluster: 1, page: 3 }, C).kind === 'table');
+}
+
+head('the pearl as the day’s recall (phase 4)');
+{
+  const rp = H.recallParts([{ lead: 'Rule', text: 'An LVEDP greater than 18 mmHg means overload.' }, { lead: '', text: 'Normal is 8 to 12.' }]);
+  ok('its values are the blanks — the numbers the page marks', rp.blanks === 3 && rp.steps[0].parts.filter(p => p.blank).map(p => p.text).join('|') === '18 mmHg' &&
+     rp.steps.every(s => !s.leadBlank), JSON.stringify(rp.steps.map(s => s.parts.filter(p => p.blank).map(p => p.text))));
+  ok('and nothing else is hidden: the words put back together are the pearl', rp.steps[0].parts.map(p => p.text).join('') === 'An LVEDP greater than 18 mmHg means overload.');
+  ok('a reference number is not a blank', H.recallParts([{ lead: '', text: 'See Table 4 for the 12 causes.' }]).steps[0].parts.filter(p => p.blank).map(p => p.text).join() === '12 ');
+  const nl = H.recallParts([{ lead: 'Stiff ventricle', text: 'depends on atrial kick.' }]);
+  ok('a pearl with no value hides its first lead instead', nl.blanks === 1 && nl.steps[0].leadBlank === true);
+  ok('and one with neither has nothing to hide', H.recallParts([{ lead: '', text: 'Plain words.' }]).blanks === 0);
+  const add = (d, n) => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const rs = H.recallStreak({ '2026-09-25': true, '2026-09-24': false, '2026-09-20': true, '2026-09-10': true }, '2026-09-25', 7, add);
+  ok('the last seven days: how many it was recalled, of those tried', rs.knew === 2 && rs.of === 3, JSON.stringify(rs));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

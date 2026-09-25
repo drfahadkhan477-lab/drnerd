@@ -91,7 +91,16 @@ function label(text) {
   return w.length > 6 ? w.slice(0, 6).join(' ') + '\u2026' : w.join(' ');
 }
 /* A miss: C with what was picked, or N for "not sure". */
-function missType(q, choice) { return choice === NOT_SURE ? { t: 'N', w: '' } : { t: 'C', w: q.options[choice] || '' }; }
+/* The kind of miss, from the option picked: "not sure" is N; a wrong
+   number where the answer is a number (the thing was known, its value was
+   not) is V; any other wrong option is C, confused with what was picked. */
+var COMPARE = /\b(?:greater|less|more|fewer|than|at|least|most|above|below|over|under|or|to|of|about|up)\b/gi;
+function numeric(t) { return /\d/.test(String(t || '')) && String(t).replace(COMPARE, '').replace(/[\d.,\s%<>≥≤–\/-]/g, '').length <= 8; }
+function missType(q, choice) {
+  if (choice === NOT_SURE) return { t: 'N', w: '' };
+  var picked = q.options[choice] || '';
+  return { t: numeric(picked) && numeric(q.options[q.answer]) ? 'V' : 'C', w: picked };
+}
 function weakMiss(s, id, section, source, q, type, confusedWith) {
   var w = s.weak[id];
   if (!w) {
@@ -100,8 +109,8 @@ function weakMiss(s, id, section, source, q, type, confusedWith) {
   }
   w.misses++; w.streak++; w.hits = [];
   w.types.push(type);
-  if (type === 'C' && confusedWith) w.confusedWith = confusedWith;
-  setCardType(s, id, type, type === 'C' ? confusedWith : w.confusedWith);
+  if ((type === 'C' || type === 'V') && confusedWith) w.confusedWith = confusedWith;
+  setCardType(s, id, type, type === 'C' || type === 'V' ? confusedWith : w.confusedWith);
   return w;
 }
 function weakHit(s, id) {
@@ -322,6 +331,40 @@ function next(state, event) {
       return s;
     }
 
+    /* A unit's pack (pack.js), imported: each section it covers is taught
+       from it — its lesson now, its questions from the next drill on. The
+       section open in the middle of memorising, a drill or its result keeps
+       what it has until it is left: its cards and answers count against the
+       lesson and questions on screen. What a section has already earned —
+       its score, its review cards, its weak items — stays. */
+    case 'packed': {
+      if (s.phase === 'exam') refuse(s, event, 'finish or leave the exam first');
+      if (!v || !Array.isArray(v.sections)) refuse(s, event, 'a pack is a list of sections');
+      v.sections.forEach(function (p) {
+        var k = p && p.index, cp = typeof k === 'number' ? s.per[k] : null;
+        if (!cp || !p.lesson || !Array.isArray(p.lesson.points) || !p.lesson.points.length) return;
+        if (k === s.section && /^(?:memorize|drill|result)$/.test(s.phase)) return;
+        cp.lesson = clone(p.lesson);
+        if (p.quiz && validQuestions(p.quiz)) { cp.quiz = { questions: clone(p.quiz.questions) }; cp.order = []; cp.pos = 0; cp.answers = []; }
+      });
+      return s;
+    }
+
+    /* The pack removed: every section taught from it goes back to the
+       built-in coach, which teaches it afresh when it is next opened. Held
+       to the same rule as importing — the section in the middle of being
+       memorised, drilled or scored keeps what it has — and what was earned
+       stays. */
+    case 'unpacked':
+      if (s.phase === 'exam') refuse(s, event, 'finish or leave the exam first');
+      Object.keys(s.per).forEach(function (key) {
+        var k = +key, cp = s.per[key];
+        if (k === s.section && /^(?:memorize|drill|result)$/.test(s.phase)) return;
+        if (cp.lesson && cp.lesson.by === 'pack') cp.lesson = null;
+        if (cp.quiz && cp.quiz.questions.some(function (q) { return q.by === 'pack'; })) { cp.quiz = null; cp.order = []; cp.pos = 0; cp.answers = []; }
+      });
+      return s;
+
     case 'toExam':
       if (s.phase === 'drill' || s.phase === 'exam') refuse(s, event, 'finish the drill first');
       if (!allDone(s)) refuse(s, event, 'the exam comes after every section’s drill');
@@ -489,7 +532,7 @@ var MemSession = {
   VERSION: VERSION, init: init, next: next, mastery: mastery, weakest: weakest, examSize: examSize, asked: asked,
   nextSection: nextSection, allDone: allDone, isDue: isDue, dueCards: dueCards, review: review,
   NOT_SURE: NOT_SURE, resumable: resumable, pending: pending, interleave: interleave, reviewItem: reviewItem, needsReteach: needsReteach,
-  closing: closing, closingText: closingText,
+  closing: closing, closingText: closingText, missType: missType,
 };
 root.MemSession = MemSession;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemSession;
