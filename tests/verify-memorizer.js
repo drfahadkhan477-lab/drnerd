@@ -1509,6 +1509,10 @@ function kindOf(user) {
     await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await page.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await page.locator('#ask-q').waitFor(T);
+    /* precondition: the index rebuilt over the reloaded units, as for the second tab below. #ask-q alone
+       can be the Coach screen still up from before the reload, whose question is then answered from the
+       three-row table — "no table to ask from", red here with the units' reload slowed by 400 ms. */
+    await page.waitForFunction(() => { const u = Memorizer.ui; return u.view === 'ask' && !u.docsStale && !u.askBusy && u.askIdx && u.askFor === u.docs; }, null, T);
     await sayP('quiz me on the table in section two afterload');
     const tq = await page.$$eval('.turn:last-child .agent-q .q, #agent-latest .agent-q .q', qs => qs.map(q => q.textContent));
     ok('"quiz me on the table in …": every question read from the table, row by row', await page.locator('.turn').last().getAttribute('data-tool') === 'table' &&
