@@ -2083,6 +2083,11 @@ function aiQuestions(c) {
 /* One build at a time: opening the Coach and asking at once used to start
    two, each redrawing the screen — a tap landing in a redraw can be lost. */
 function askIndex() {
+  /* Units changed and not yet read back: read them first. The index was
+     built from the ones in memory, kept, and a unit just edited or added
+     was missing from every answer until the next change (CI caught it
+     twice, on a slow runner). */
+  if (ui.docsStale) return refresh().then(askIndex);
   if (ui.askIdx && ui.askFor === ui.docs) return Promise.resolve(ui.askIdx);
   if (ui.askBuild && ui.askBuildFor === ui.docs) return ui.askBuild;
   ui.askBusy = true; ui.askBusyText = ''; render();

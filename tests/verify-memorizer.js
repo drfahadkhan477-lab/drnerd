@@ -1578,10 +1578,17 @@ function kindOf(user) {
     await page.evaluate(id => MemStore.get('docs', id).then(d => { const seg = d.clusters[1].segments.find(g => g.table);
       seg.table.push(['Ejection fraction', '60', 'mmHg']); return MemStore.put('docs', d); }), unitId);
     await page.evaluate(() => { Memorizer.ui.docsStale = true; Memorizer.ui.askIdx = null; });
+    /* Reading the units back is slowed, as on a slow device: CI twice asked
+       before the edited unit was read back, the Coach indexed the old one
+       (three rows, too few to ask from) and answered about the last topic
+       instead. Slowed here, that race is run every time, not by chance. */
+    await page.evaluate(() => { const all = MemStore.all; window.__storeAll = all;
+      MemStore.all = n => n === 'docs' ? new Promise(r => setTimeout(r, 800)).then(() => all.call(MemStore, n)) : all.call(MemStore, n); });
     await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await page.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
     await page.locator('#ask-q').waitFor(T);
     await sayP('quiz me on the table in section two afterload');
+    await page.evaluate(() => { MemStore.all = window.__storeAll; });
     const tq = await page.$$eval('.turn:last-child .agent-q .q, #agent-latest .agent-q .q', qs => qs.map(q => q.textContent));
     ok('"quiz me on the table in …": every question read from the table, row by row', await page.locator('.turn').last().getAttribute('data-tool') === 'table' &&
        tq.length === 4 && tq.every(q => /^In the table, what is the Normal for /.test(q)), JSON.stringify(tq) + ' ' + (await text(page, '#agent-latest')).slice(0, 200));
