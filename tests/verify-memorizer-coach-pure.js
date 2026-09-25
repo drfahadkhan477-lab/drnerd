@@ -819,5 +819,20 @@ head('re-teach: the fix follows the kind of miss (Supreme Memorizer)');
      /^Excessive preload/.test(K.sentenceAbout(RT, 'venous pressure').text));
 }
 
+head('a wrong value is re-taught among the section’s other values (phase 3)');
+{
+  const VC = { index: 0, title: 'Grading', segments: [
+    { text: 'Severe aortic stenosis is defined by a mean gradient of at least 40 mmHg.', page: 3 },
+    { text: 'A peak velocity of at least 4 m/s also marks severe stenosis.', page: 3 },
+    { text: 'Moderate stenosis has a mean gradient of 20 to 39 mmHg.', page: 4 },
+    { text: 'Valve area below 1.0 cm2 is severe.', page: 4 }] };
+  const q = { question: 'Mean gradient in severe AS?', options: ['20 mmHg', 'at least 40 mmHg', '60 mmHg', '4 m/s'], answer: 1, explain: '', page: 3 };
+  const r = K.reteach({ q, types: ['C', 'V'], confusedWith: '20 mmHg' }, VC);
+  ok('it is named a wrong value, with its hook', r.type === 'V' && r.name === 'Wrong value' && r.hookType === 'values' && r.title === 'at least 40 mmHg — not 20 mmHg', JSON.stringify([r.type, r.hookType, r.title]));
+  ok('the value first, in the book’s sentence', r.lines[0].label === 'The value' && /at least 40 mmHg/.test(r.lines[0].text));
+  ok('then the section’s other values beside it, never the same sentence twice', r.lines.length >= 3 && r.lines.slice(1).every(l => l.text !== r.lines[0].text), JSON.stringify(r.lines.map(l => l.label)));
+  ok('and where the value picked belongs, when the section has it', r.lines.some(l => l.label === 'Where 20 mmHg belongs' && /20 to 39 mmHg/.test(l.text)), JSON.stringify(r.lines.map(l => l.label)));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -67,13 +67,15 @@ var LESSON = extend(Prompts.SCHEMAS.lesson, {
   mechanism: S,
   distinctions: arr(extend({ properties: {} }, { a: S, b: S, how: S, page: I })),
   pearls: arr(PAGED),
+  /* oral cases for rounds (phase 4): a stem, and what an examiner asks */
+  cases: arr(extend({ properties: {} }, { stem: S, asks: arr(extend({ properties: {} }, { q: S, a: S })), page: I })),
 });
 var QUESTION = extend(Prompts.SCHEMAS.quiz.properties.questions.items, { why: arr(S), trap: S });
 /* What may be left out of a reply, and reads as nothing to say when it is:
    a chat that writes no pearls for a section has not written a wrong one.
    What may not: a lesson's points, and a question's stem, options, answer,
    explanation and page. Keys a reply adds that are not here are left out. */
-var LESSON_EMPTY = { overview: '', mechanism: '', numbers: [], distinctions: [], pearls: [], mnemonics: [], analogies: [], flowchart: '' };
+var LESSON_EMPTY = { overview: '', mechanism: '', numbers: [], distinctions: [], pearls: [], cases: [], mnemonics: [], analogies: [], flowchart: '' };
 var QUESTION_EMPTY = { quote: '', why: [], trap: '' };
 function filled(v, schema, empty) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return v;
@@ -98,6 +100,7 @@ var EXAMPLE = {
     numbers: [{ text: 'What it measures: the value and its unit.', page: 12 }],
     distinctions: [{ a: 'one thing', b: 'what it is confused with', how: 'How to tell them apart, in one sentence.', page: 13 }],
     pearls: [{ text: 'The one fact most likely to be asked.', page: 12 }],
+    cases: [{ stem: 'A short clinical scenario, as on rounds.', asks: [{ q: 'What an examiner asks first?', a: 'The answer, from the text.' }], page: 12 }],
     mnemonics: [{ title: 'What the list is', letters: 'ABC', words: ['Alpha', 'Beta', 'Gamma'] }],
     analogies: [{ title: 'Short name', text: 'An everyday comparison.', source: 'Claude' }],
     flowchart: 'flowchart TD\n  A["first step"] --> B["next step"]',
@@ -166,6 +169,8 @@ function prompt(doc) {
     '- lesson.distinctions: the pairs a student confuses — two conditions, drugs, signs or criteria — ' +
     'and how to tell them apart, in one sentence.',
     '- lesson.pearls: one to three exam pearls, the facts most likely to be asked.',
+    '- lesson.cases: one or two oral-exam cases for rounds: a short clinical "stem" and two to four "asks" an ' +
+    'examiner would put on it, each {q, a} with the model answer from the text ([] if the section has no clinical material).',
     '- lesson.mnemonics: for every list of three or more items, an acrostic: "words" are the items in order ' +
     'and "letters" their first letters.',
     '- lesson.analogies: one everyday analogy for a mechanism, or [] if none fits.',
@@ -312,6 +317,18 @@ function checkOne(p0, doc, book) {
   L.numbers = keep(L.numbers, 'number');
   L.pearls = keep(L.pearls, 'pearl');
   L.distinctions = keep(L.distinctions, 'distinction');
+  /* A case's stem is its scenario, like a question's; what it claims is
+     each model answer, held to the book as a point is. */
+  L.cases = L.cases.map(function (cs, k) {
+    var where = 'case ' + (k + 1), asks = cs.asks.filter(function (x, j) {
+      if (says(x.q + ' ' + x.a)) { dropped.push({ where: where + ' ask ' + (j + 1), why: 'Claude marked it ' + NOT_IN_PDF }); return false; }
+      var why = pageFlag(cs.page, c) || claimFlag(x.a, sec, book, cs.page);
+      if (why) { x.flag = why; flags.push({ where: where + ' ask ' + (j + 1), text: x.a, why: why }); }
+      return true;
+    });
+    if (!asks.length) { dropped.push({ where: where, why: 'it has no question left to ask' }); return null; }
+    return { stem: cs.stem, asks: asks, page: cs.page };
+  }).filter(Boolean);
   if (!L.points.length) return { refused: 'its lesson has no points left once what Claude marked ' + NOT_IN_PDF + ' is out' };
   ['overview', 'mechanism'].forEach(function (k) {
     if (says(L[k])) { dropped.push({ where: k, why: 'Claude marked it ' + NOT_IN_PDF }); L[k] = ''; return; }
@@ -390,6 +407,40 @@ function report(checked) {
       : 'Nothing was imported.',
   };
 }
+/* THE FINAL EXAM FROM THE PACK: the pack's questions for the sections it
+   covers, the built-in coach's for the rest — half, or as near as there
+   are, from the weakest sections, taken a section at a time so no one
+   section fills the exam. `builtin` is Coach.exam's; each question keeps
+   its section (`cluster`). */
+function exam(rec, builtin, weak, n) {
+  var groups = {}, covered = {};
+  Object.keys(rec && rec.sections || {}).forEach(function (i) {
+    var qs = rec.sections[i].quiz.questions;
+    if (!qs.length) return;
+    covered[i] = true;
+    groups[i] = qs.map(function (q) { var o = JSON.parse(JSON.stringify(q)); o.cluster = +i; return o; });
+  });
+  if (!Object.keys(covered).length) return builtin;
+  (builtin && builtin.questions || []).forEach(function (q) {
+    if (covered[q.cluster]) return;
+    (groups[q.cluster] = groups[q.cluster] || []).push(q);
+  });
+  var want = Math.max(1, n || 10), got = [], half = Math.ceil(want / 2), weakSet = {};
+  (weak || []).forEach(function (w) { weakSet[w] = true; });
+  var take = function (keys, until) {
+    for (var round = 0; got.length < until(); round++) {
+      var any = false;
+      keys.forEach(function (k) { var q = groups[k][round]; if (q) { any = true; if (got.length < until()) got.push(q); } });
+      if (!any) break;
+    }
+  };
+  var keys = Object.keys(groups);
+  take(keys.filter(function (k) { return weakSet[k]; }), function () { return Math.min(want, half); });
+  var taken = got.slice();
+  keys.forEach(function (k) { groups[k] = groups[k].filter(function (q) { return taken.indexOf(q) === -1; }); });
+  take(keys, function () { return want; });
+  return { questions: got };
+}
 /* How much of the unit the pack covers. */
 function coverage(rec, doc) {
   var have = doc.clusters.filter(function (_, i) { return !!sectionOf(rec, i); }).length;
@@ -401,7 +452,7 @@ function coverage(rec, doc) {
 
 var MemPack = { FORMAT: FORMAT, VERSION: VERSION, PER_REPLY: PER_REPLY, LESSON: LESSON, QUESTION: QUESTION, EXAMPLE: EXAMPLE,
                 prompt: prompt, replies: replies, unitName: unitName, packsIn: packsIn, parse: parse, check: check, merge: merge,
-                sectionOf: sectionOf, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf };
+                sectionOf: sectionOf, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam };
 root.MemPack = MemPack;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemPack;
 })(typeof window !== 'undefined' ? window : this);

@@ -324,5 +324,30 @@ head('days, stepped in UTC');
   ok('across a month and a year', S.addDays('2026-01-31', 1) === '2026-02-01' && S.addDays('2026-12-31', 1) === '2027-01-01' && S.daysFrom('2026-09-01', '2026-09-22') === 21);
 }
 
+head('Socratic chains, the pack’s rubric, exam conditions and the dock’s next thing (phases 3 and 4)');
+{
+  const path_ = [{ label: 'Calcific degeneration' }, { verb: 'causes', label: 'valve narrowing' }, { verb: 'raises', label: 'afterload' }];
+  const sc = S.socratic(path_, '');
+  ok('down the book’s chain, a link at a time: each answer is the next step', sc.source === 'book' && sc.steps.length === 3 &&
+     sc.steps[0].ask === 'Calcific degeneration causes … what?' && sc.steps[0].answer === 'valve narrowing' && sc.steps[1].answer === 'afterload', JSON.stringify(sc.steps));
+  ok('then the whole chain, in the book’s verbs', /Calcific degeneration causes valve narrowing raises afterload/.test(sc.steps[2].answer));
+  ok('a chain of two is too short to ask down; a mechanism is used instead', S.socratic(path_.slice(0, 2), 'The valve narrows. Afterload rises and the wall thickens.').source === 'lesson');
+  const ms = S.socratic([], 'The valve narrows. Afterload rises; the wall thickens. Then the ventricle stiffens and filling fails.');
+  ok('a mechanism sentence by sentence, asked in order', ms.steps.length >= 3 && ms.steps[0].answer === 'The valve narrows.' && ms.steps[0].ask === 'Where does it start?', JSON.stringify(ms.steps.map(x => x.answer)));
+  ok('nothing to ask down, nothing asked', S.socratic([], '') === null && S.socratic(null, 'One sentence only.') === null);
+  const rb = S.rubricOf([{ text: 'Point A', page: 1 }], { pearls: [{ text: 'Pearl B', page: 2 }, { text: 'point a', page: 1 }], mechanism: 'It starts at the valve. Then the wall thickens.' });
+  ok('a pack’s rubric: the points, the pearls, the mechanism sentence by sentence, each once', JSON.stringify(rb.map(x => x.text)) === JSON.stringify(['Point A', 'Pearl B', 'It starts at the valve.', 'Then the wall thickens.']), JSON.stringify(rb));
+  ok('without a pack’s extras the rubric is the points', JSON.stringify(S.rubricOf([{ text: 'P', page: 1 }], {})) === JSON.stringify([{ text: 'P', page: 1 }]));
+  const ck = S.examClock(0, 200000, 10, 1);
+  ok('exam conditions: the time taken against a board’s ninety seconds a question', ck.elapsed === '3:20' && ck.target === '15:00' && ck.left === '11:40' && ck.behind && !ck.over, JSON.stringify(ck));
+  ok('on pace is not behind; past the total is over', !S.examClock(0, 60000, 10, 0).behind && S.examClock(0, 901000, 10, 9).over && S.EXAM_PACE_S === 90);
+  const st = (phase, per) => ({ phase, section: 0, per: [per || {}] });
+  ok('the dock’s next thing follows the screen', S.contextAction(st('unit')).id === 'learn' && S.contextAction(st('unit'), true).id === 'exam' &&
+     S.contextAction(st('teach', { lesson: {} })).id === 'memorise' && S.contextAction(st('teach', { lesson: {}, memorized: true })).id === 'drill' &&
+     S.contextAction(st('result')).id === 'next' && S.contextAction(st('done')).id === 'sections');
+  ok('and is nothing while a question is being answered, or before the lesson is there', S.contextAction(st('drill')) === null && S.contextAction(st('exam')) === null &&
+     S.contextAction(st('memorize')) === null && S.contextAction(st('teach', {})) === null && S.contextAction(null) === null);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

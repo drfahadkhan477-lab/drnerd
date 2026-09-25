@@ -675,8 +675,20 @@ function kindOf(user) {
   await page.locator('#step-mode').click();
   await page.locator('#lesson-steps').waitFor(T);
   const N = +(/\/(\d+)/.exec(await text(page, '#lesson-steps .step-count')) || [])[1];
-  const MARKS = ['#big-idea', '#pathway-play', '#glance', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
-  const MUST = ['#big-idea', '#pathway-play', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
+  const MARKS = ['#big-idea', '#clinical-map', '#pathway-play', '#socratic', '#glance', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
+  const MUST = ['#big-idea', '#pathway-play', '#socratic', '#points', '#numbers', '.hook', '#quick', '#teach-back', '#visuals'];
+  /* THE STAGES (the owner's plan, phase 2): a strip of them over the slides,
+     the first one current, and each a way straight to its first slide. */
+  const stageStrip = await page.$$eval('#stages li', ls => ls.map(l => [l.getAttribute('data-stage'), l.getAttribute('data-state')]));
+  ok('the lesson is staged: orient, mechanism, recognise, numbers, recall, the first one current',
+     JSON.stringify(stageStrip.map(x => x[0])) === JSON.stringify(['orient', 'mechanism', 'recognise', 'numbers', 'recall']) && stageStrip[0][1] === 'now' && stageStrip.slice(1).every(x => x[1] === 'next'), JSON.stringify(stageStrip));
+  await page.locator('#stages li[data-stage="numbers"] button').click();
+  await page.waitForFunction(() => /Numbers to know/.test(document.querySelector('#lesson-steps .step-count').textContent), null, T);
+  ok('a stage goes straight to its first slide, and the stages before it are done', await page.locator('main #numbers').count() === 1 &&
+     JSON.stringify(await page.$$eval('#stages li', ls => ls.map(l => l.getAttribute('data-state')))) === '["done","done","done","now","next"]',
+     JSON.stringify(await page.$$eval('#stages li', ls => ls.map(l => l.getAttribute('data-state')))));
+  await page.locator('#stages li[data-stage="orient"] button').click();
+  await page.waitForFunction(() => /^Slide 1\//.test(document.querySelector('#lesson-steps .step-count').textContent), null, T);
   /* what is showing, by opacity (and clip, for an unfolding word), with the composition held at time t */
   const at = (sel, t) => page.evaluate(([sel, t]) => {
     const comp = document.querySelector(sel); Memorizer.motion.seek(comp, t === 'end' ? Memorizer.motion.total(comp) : t);
@@ -2163,6 +2175,7 @@ function kindOf(user) {
         numbers: [{ text: 'LVEDP: greater than 18 mmHg', page: pg }],
         distinctions: [{ a: 'Volume overload', b: 'a stiff ventricle', how: 'A normal pressure of 8 to 12 mmHg does not exclude a stiff ventricle.', page: pg }],
         pearls: [{ text: 'An LVEDP greater than 18 mmHg should prompt a search for volume overload.', page: pg }],
+        cases: [{ stem: 'A breathless patient on the ward round.', asks: [{ q: 'Which LVEDP prompts a search for volume overload?', a: 'An LVEDP greater than 18 mmHg.' }], page: pg }],
         mnemonics: [], analogies: [], flowchart: '' },
         quiz: { questions: [
           { question: 'Which LVEDP should prompt a search for volume overload?', quote: '', options: ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', '4 mmHg'], answer: 2,
@@ -2193,7 +2206,53 @@ function kindOf(user) {
     const flags = await p4.$$eval('ol.points .flag', fs => fs.map(f => f.textContent));
     ok('the point with a number the book does not have is flagged on the point', JSON.stringify(flags) === JSON.stringify(['⚠ A number not in your book: 99.']), JSON.stringify(flags));
     ok('and the page no longer says the points are the book’s', /written with Claude from your book/.test(await text(p4, '.arranged-note')));
-    await p4.locator('#to-drill').click();
+
+    /* PHASE 2: page references open the page; the section on one screen;
+       the clinical map; why, asked down the chain. */
+    const pgN = +(await p4.locator('#points .pg-open').first().innerText()).replace('p.', '');
+    await p4.locator('#points .pg-open').first().click();
+    await p4.locator('#lb-where').waitFor(T);
+    ok('a page reference opens that page as printed', new RegExp('^page ' + pgN + '\\b').test(await text(p4, '#lb-where')), await text(p4, '#lb-where'));
+    await p4.locator('#lb-close').click();
+    await p4.locator('#one-screen').click();
+    await p4.locator('#review-sheet').waitFor(T);
+    const rsText = await text(p4, '#review-sheet');
+    ok('the section on one screen: its points, the pair confused, its pearl', /Key points/i.test(rsText) && /Volume overload vs a stiff ventricle/i.test(rsText) &&
+       /greater than 18 mmHg should prompt/.test(rsText), rsText.slice(0, 200));
+    await p4.locator('#review-close').click();
+    const mapN = await p4.evaluate(() => MemSheet.clinicalMap(Memorizer.ui.docRec.clusters[0]).count);
+    ok('the clinical map is shown when the section names two things or more', (await p4.locator('#clinical-map').count()) === (mapN >= 2 ? 1 : 0), 'names ' + mapN);
+    ok('why is asked down the chain, each answer hidden', await p4.locator('#socratic .soc-answer').count() === 0 && await p4.locator('#soc-show').count() === 1);
+    await p4.locator('#soc-show').click();
+    await p4.waitForFunction(() => document.querySelectorAll('#socratic .soc-answer').length === 1, null, T);
+    ok('and shown one link at a time', await p4.locator('#socratic .soc-answer').count() === 1);
+    /* PHASE 3: a pack's teach-back is scored against its rubric — the
+       points, and the pearls and mechanism too (study.js rubricOf). */
+    await p4.fill('#teach-text', 'Diuretics reduce preload by lowering circulating volume.');
+    await p4.locator('#teach-check').click();
+    await p4.locator('#teach-result').waitFor(T);
+    const rub = await p4.evaluate(() => { const L = Memorizer.ui.state.per[0].lesson, pts = MemSheet.sheetOf(L).groups.reduce((a, g) => a.concat(g.points), []);
+      return { points: pts.length, rubric: MemStudy.rubricOf(pts, L).length }; });
+    ok('a pack\u2019s teach-back is scored against its rubric, pearls and mechanism included', rub.rubric > rub.points &&
+       new RegExp('You covered \\d+ of ' + rub.rubric + ' key points').test(await text(p4, '#teach-result')), JSON.stringify(rub) + ' ' + (await text(p4, '#teach-result')).slice(0, 60));
+
+    /* PHASE 4: rounds from the pack's case; focus; the dock's next thing. */
+    await p4.locator('#rounds-show').click();
+    await p4.locator('#rounds-answer').waitFor(T);
+    ok('rounds: the case, the examiner’s question, and its answer on request', /A breathless patient on the ward round/.test(await text(p4, '#rounds')) &&
+       /greater than 18 mmHg/.test(await text(p4, '#rounds-answer')));
+    await p4.locator('#rounds-had').click();
+    await p4.locator('#rounds-done').waitFor(T);
+    ok('and a score at the end of the round', /Rounds done: 1 of 1 answered/.test(await text(p4, '#rounds-done')));
+    await p4.locator('#focus-toggle').click();
+    await p4.waitForFunction(() => document.documentElement.getAttribute('data-focus') === 'on', null, T);
+    ok('focus hides the dock and the robot while studying', await p4.evaluate(() => getComputedStyle(document.querySelector('nav.dock')).display === 'none' &&
+       getComputedStyle(document.querySelector('#robot-dock')).display === 'none'));
+    await p4.locator('#focus-toggle').click();
+    await p4.waitForFunction(() => document.documentElement.getAttribute('data-focus') === 'off', null, T);
+    ok('the dock’s next thing on the lesson is to memorise it', (await text(p4, '#dock-context .nav-label')) === 'Memorise' && await p4.locator('nav.dock .nav-btn').count() === 5,
+       await text(p4, '#dock-context'));
+    await p4.locator('#dock-context').click();
     await memorize(p4);
     await p4.locator('#mcq .option').first().waitFor(T);
     ok('the drill asks the pack’s questions, labelled', /Which LVEDP should prompt a search for volume overload\?/.test(await text(p4, '#mcq h2.q')) &&
@@ -2203,6 +2262,10 @@ function kindOf(user) {
     ok('a wrong answer is told why that option is wrong, and the trap it fell into',
        /Why not A: 8 mmHg is inside the normal 8 to 12\./.test(await text(p4, '#why-not')) && /The trap: the normal range taken for the threshold/.test(await text(p4, '#trap')));
     ok('and every option’s reason is there to open', await p4.locator('#why-all li').count() === 4);
+    ok('a wrong number for a number is a wrong value (phase 3), anchored at once among the section’s values',
+       await p4.locator('#type-chip[data-type="V"]').count() === 1 && /Wrong value/.test(await text(p4, '#type-chip')) && await p4.locator('#reteach[data-hook="values"]').count() === 1,
+       await text(p4, '#type-chip'));
+    ok('and while a question is open the dock offers no shortcut past it', await p4.locator('#dock-context').count() === 0);
     ok('nothing went to an AI provider', stub.requests.length === aiBefore, `${stub.requests.length - aiBefore} requests`);
 
     /* A unit started over is taught from the pack again: pump() takes the
@@ -2215,6 +2278,59 @@ function kindOf(user) {
     await p4.locator('#mcq .option').first().waitFor(T);
     ok('and drilled from it', /Which LVEDP should prompt/.test(await text(p4, '#mcq h2.q')) &&
        await p4.evaluate(() => Memorizer.ui.state.per[0].quiz.questions.every(q => q.by === 'pack')));
+    /* EXAM CONDITIONS, from the pack. Precondition, not proposition: every
+       section counted as drilled, so the exam opens. */
+    p4.on('dialog', dl => dl.accept());
+    await p4.evaluate(() => { const s = Memorizer.ui.state; Object.keys(s.per).forEach(k => { s.per[k].done = true; s.per[k].score = 1; if (!s.per[k].quiz) s.per[k].quiz = { questions: [] }; }); s.phase = 'unit'; Memorizer.render(); });
+    await p4.locator('#exam-mode').click();
+    await p4.waitForFunction(() => document.querySelector('#exam-mode').getAttribute('aria-pressed') === 'true', null, T);
+    await p4.locator('#to-exam').click();
+    await p4.waitForFunction(() => ['exam', 'review'].includes(Memorizer.ui.state.phase), null, T);
+    for (let g = 0; g < 40 && await p4.evaluate(() => Memorizer.ui.state.phase === 'review'); g++) {
+      const before = await p4.evaluate(() => Memorizer.ui.state.review && Memorizer.ui.state.review.idx);
+      const a = await p4.evaluate(() => MemSession.reviewItem(Memorizer.ui.state).q.answer);
+      await p4.locator('.option[data-i="' + a + '"]').click(); await p4.locator('#next').click();
+      await p4.waitForFunction(b => Memorizer.ui.state.phase !== 'review' || (Memorizer.ui.state.review && Memorizer.ui.state.review.idx !== b), before, T);
+    }
+    await p4.locator('#exam-clock').waitFor(T);
+    const exq = await p4.evaluate(() => Memorizer.ui.state.exam.questions);
+    ok('the exam asks the pack’s questions for the section it covers, and the built-in coach’s for the rest', exq.filter(x => x.cluster === 0).length >= 1 &&
+       exq.filter(x => x.cluster === 0).every(x => x.by === 'pack') && exq.filter(x => x.cluster !== 0).every(x => x.by !== 'pack'), JSON.stringify(exq.map(x => [x.cluster, x.by || 'coach'])));
+    ok('under exam conditions the clock runs at a board’s pace', /^⏱ \d+:\d\d of \d+:\d\d$/.test(await text(p4, '#exam-clock')), await text(p4, '#exam-clock'));
+    for (let k = 0; k < exq.length; k++) {
+      const q = await p4.evaluate(() => { const g = Memorizer.ui.state.exam; return g.questions[g.order[g.pos]]; });
+      await p4.locator('.option[data-i="' + (k === 0 ? (q.answer + 1) % 4 : q.answer) + '"]').click();
+      if (k === 0) ok('an answer is held, not marked, until the end', await p4.locator('#blind-note').count() === 1 &&
+        await p4.locator('.option.right, .option.wrong').count() === 0 && await p4.locator('.option.chosen').count() === 1);
+      await p4.locator('#next').click();
+      await p4.waitForFunction(n => Memorizer.ui.state.phase === 'done' || Memorizer.ui.state.exam.pos === n, k + 1, T);
+    }
+    await p4.locator('#exam-missed').waitFor(T);
+    ok('at the end, what was missed: the question, the answer picked, the right one and why', /What you missed \(1\)/.test(await text(p4, '#exam-missed')) &&
+       /You: /.test(await text(p4, '#exam-missed')) && /Why: /.test(await text(p4, '#exam-missed')), (await text(p4, '#exam-missed')).slice(0, 160));
+    ok('and the dock’s next thing from the result is back to the sections', (await text(p4, '#dock-context .nav-label')) === 'Sections');
+    await p4.locator('#dock-context').click();
+    await p4.locator('#pack-card').waitFor(T);
+    /* the pack removed: its sections go back to the built-in coach */
+    await p4.locator('#pack-card summary').click();
+    await p4.locator('#pack-remove').click();
+    await p4.waitForFunction(() => !Memorizer.ui.pack, null, T);
+    ok('removing the pack deletes it and sends its section back to the built-in coach', await p4.evaluate(id => MemStore.get('packs', id), d.id) === null &&
+       await p4.evaluate(() => !Memorizer.ui.state.per[0].lesson) && /none yet/.test(await text(p4, '#pack-card summary')));
+
+    /* THE PEARL AS THE DAY'S RECALL (phase 4) */
+    await p4.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p4.locator('#pearl-recall').waitFor(T);
+    await p4.locator('#pearl-recall').click();
+    await p4.locator('#pearl-recalling').waitFor(T);
+    const blanks = await p4.evaluate(() => MemHome.recallParts(Memorizer.ui.pearlCache.pk.steps).blanks);
+    ok('the pearl is recalled first: its values hidden', blanks >= 1 && await p4.locator('#pearl-recalling .blank').count() === blanks && await p4.locator('#pearl-recalling mark').count() === 0, 'blanks ' + blanks);
+    await p4.locator('#pearl-show').click();
+    await p4.locator('#pearl-knew').click();
+    await p4.waitForFunction(() => Memorizer.ui.pearlRecalls[FSRS.todayISO()] === true, null, T);
+    await p4.locator('#pearl-recall').click();
+    ok('and an honest "knew it" is kept for the day', /Recalled on 1 of the last 1 day you tried/.test(await text(p4, '#pearl-streak')) &&
+       (await p4.evaluate(() => MemStore.get('meta', 'pearl-recall'))).recs[await p4.evaluate(() => FSRS.todayISO())] === true);
     ok('with no errors', errors.length === 0, errors.join(' | '));
     await ctx.close();
   }

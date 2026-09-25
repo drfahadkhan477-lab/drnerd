@@ -291,5 +291,38 @@ head('the import report counts what the check found');
   ok('nothing imported is said as nothing', P.report(run(Object.assign(honest(), { title: 'Nope' }))).line === 'Nothing was imported.');
 }
 
+head('oral cases for rounds: the stem is the scenario, each model answer held to the book (phase 4)');
+{
+  const withCases = cases => withLesson(L => { L.cases = cases; });
+  let c = run(withCases([{ stem: 'A 78-year-old faints climbing stairs; heart rate 110.', asks: [{ q: 'What marks it severe?', a: 'A mean gradient above 40 mmHg.' }], page: 10 }]));
+  ok('an honest case is kept, its vignette’s own numbers not flagged', c.sections[0].lesson.cases.length === 1 && !c.sections[0].lesson.cases[0].asks[0].flag && !c.sections[0].flags.length, JSON.stringify(c.sections[0].flags));
+  c = run(withCases([{ stem: 'A patient with syncope.', asks: [{ q: 'Threshold?', a: 'A mean gradient above 55 mmHg.' }, { q: 'Next?', a: 'NOT_IN_PDF' }], page: 10 }]));
+  const cs = c.sections[0].lesson.cases[0];
+  ok('a model answer with a number the book lacks is flagged', cs.asks[0].flag === 'a number not in your book: 55' && c.sections[0].flags.some(f => f.where === 'case 1 ask 1'));
+  ok('and an ask Claude could not ground is left out', cs.asks.length === 1 && c.dropped.some(d => d.where === 'case 1 ask 2'));
+  c = run(withCases([{ stem: 'x', asks: [{ q: 'q', a: 'NOT_IN_PDF' }], page: 10 }]));
+  ok('a case with nothing left to ask is dropped', !c.sections[0].lesson.cases.length && c.dropped.some(d => d.where === 'case 1' && /no question left/.test(d.why)));
+  c = run(withCases([{ stem: 'x', asks: [{ q: 'q', a: 'A mean gradient above 40 mmHg.' }], page: 13 }]));
+  ok('a case citing a page outside its section is flagged', /p\. 13 is not in this section/.test(c.sections[0].lesson.cases[0].asks[0].flag || ''));
+  ok('a reply with no cases reads as none', Array.isArray(run(withLesson(L => { delete L.cases; })).sections[0].lesson.cases));
+  ok('and the prompt asks for them', /lesson\.cases: one or two oral-exam cases/.test(P.prompt(DOC)) && Prompts.check(P.LESSON, P.EXAMPLE.lesson) === '');
+}
+
+head('the final exam from the pack: its questions where it has them, the built-in coach’s elsewhere, weighted to the weak');
+{
+  const q = (i, k) => ({ question: 'Pack s' + i + ' q' + k, quote: '', options: ['a', 'b', 'c', 'd'], answer: 0, explain: 'e', page: 1, by: 'pack' });
+  const rec = { sections: { 0: { quiz: { questions: [q(0, 1), q(0, 2), q(0, 3)] } }, 2: { quiz: { questions: [q(2, 1), q(2, 2), q(2, 3)] } }, 3: { quiz: { questions: [] } } } };
+  const b = (cl, k) => ({ question: 'Built s' + cl + ' q' + k, quote: '', options: ['a', 'b', 'c', 'd'], answer: 1, explain: 'e', page: 1, cluster: cl });
+  const builtin = { questions: [b(0, 1), b(1, 1), b(1, 2), b(2, 1), b(3, 1), b(1, 3), b(3, 2)] };
+  const ex = P.exam(rec, builtin, [2], 6).questions;
+  ok('a section the pack covers is examined on the pack’s questions, never the built-in coach’s', ex.filter(x => x.cluster === 0 || x.cluster === 2).every(x => x.by === 'pack'), JSON.stringify(ex.map(x => x.question)));
+  ok('a section it does not cover, on the built-in coach’s', ex.some(x => x.cluster === 1 && /^Built/.test(x.question)));
+  ok('a covered section with no questions falls back to the built-in coach', P.exam({ sections: { 3: { quiz: { questions: [] } } } }, builtin, [], 4) === builtin);
+  ok('half the exam from the weakest section, as near as there are', ex.filter(x => x.cluster === 2).length === 3 && ex.length === 6, JSON.stringify(ex.map(x => x.cluster)));
+  ok('each question keeps its section', ex.every(x => typeof x.cluster === 'number'));
+  ok('no pack, no change', P.exam(null, builtin, [1], 4) === builtin);
+  ok('the pack’s own questions are not changed by it', rec.sections[0].quiz.questions.every(x => !('cluster' in x)));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
