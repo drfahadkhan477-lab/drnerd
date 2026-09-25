@@ -1015,7 +1015,11 @@ function kindOf(user) {
   ok('and a redraw keeps the same strip running, rather than starting another', sameCanvas, String(sameCanvas));
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.evaluate(() => Memorizer.render());
-  await page.waitForFunction(() => document.querySelector('.hero-monitor').getAttribute('data-still') === 'true', null, T).catch(() => {});
+  /* The still strip is drawn on the next frame: wait for that drawing to
+     have happened (data-drawn, set when it has run) — a precondition; what
+     it drew is the check. CI read the canvas between the flag and the
+     frame, and saw a quarter of a strip. */
+  await page.waitForFunction(() => { const m = document.querySelector('.hero-monitor'); return m.getAttribute('data-still') === 'true' && m.getAttribute('data-drawn') === 'whole'; }, null, T).catch(() => {});
   const r1 = await strip();
   await page.waitForTimeout(400);
   const r2 = await strip();

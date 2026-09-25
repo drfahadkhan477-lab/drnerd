@@ -81,6 +81,7 @@ function mount(doc, reduced) {
       if (x) ctx.lineTo(x, v); else ctx.moveTo(x, v);
     }
     ctx.stroke();
+    el.setAttribute('data-drawn', 'whole');
   }
   function frame(now) {
     raf = 0;
@@ -106,7 +107,7 @@ function mount(doc, reduced) {
   el.__still = function (s) {
     still = !!s;
     el.setAttribute('data-still', still ? 'true' : 'false');
-    if (still) { if (raf) root.cancelAnimationFrame(raf); raf = 0; root.requestAnimationFrame(whole); }
+    if (still) { if (raf) root.cancelAnimationFrame(raf); raf = 0; el.removeAttribute('data-drawn'); root.requestAnimationFrame(whole); }
     else go();
   };
   if (doc.addEventListener) doc.addEventListener('visibilitychange', function () { if (!doc.hidden) go(); });
