@@ -234,6 +234,99 @@ head('the pearl is the PDF’s own sentence');
   ok('a unit with no sentence worth a pearl has none, rather than a poor one', H.pearlOf([doc('t', 1, [cl(0, 'x', ['It is short.', 'So is this.'])])], Pearl, DAY, 0) === null);
 }
 
+head('what a textbook’s pearl is not: a trial’s read-out, or a sentence leaning on the one before');
+{
+  /* Synthetic, in the shape of the owner's screenshot (never its words). The
+     read-out and the leaning sentence each outscore the plain rule on
+     pearl.js's own score — so pearl.js alone would take them. */
+  const RULE = 'An SGLT2 inhibitor should be started in type 2 diabetes with established cardiovascular disease, whereas metformin alone does not lower the rate of heart failure admission.';
+  const READ = 'Drug A lowered the major event rate in adults with diabetes (12.1 vs 15.4 per 1000 patient-years; HR 0.80; P = .01 for superiority) over a mean 120 weeks of follow-up, unlike placebo, and should be continued.';
+  const LEAN = 'Utilizing similar end points as with drug A, drug B should be given within 12 weeks and reduced heart failure admissions by 30%, whereas placebo did not, over a mean 3 years of follow-up.';
+  ok('as drawn, pearl.js would take the read-out and the leaning sentence over the rule', Pearl.isPearl(READ) && Pearl.isPearl(LEAN) && Pearl.score(READ) > Pearl.score(RULE) && Pearl.score(LEAN) > Pearl.score(RULE),
+     [Pearl.score(READ), Pearl.score(LEAN), Pearl.score(RULE)].join(' / '));
+  const one = t => H.pearlOf([doc('x', 1, [cl(0, 'Diabetes', [t + ' ' + RULE], 1)])], Pearl, DAY, 0);
+  ok('a trial’s read-out is never the pearl: the rule beside it is', (one(READ) || { pearl: {} }).pearl.text === RULE, (one(READ) || { pearl: {} }).pearl.text);
+  ok('nor a sentence whose opening leans on one it does not carry', (one(LEAN) || { pearl: {} }).pearl.text === RULE, (one(LEAN) || { pearl: {} }).pearl.text);
+  ok('each read-out form is one, and a plain value is not', ['HR 0.80', 'OR, 1.4', 'RR = 0.7', '95% CI', 'P < .001', 'p = 0.03', 'hazard ratio', 'per 1,000 participants', 'patient-years']
+       .every(x => H.readout('A rule with ' + x + ' in it.')) && !H.readout('A pressure greater than 18 mmHg or 40% of patients.') && !H.readout('Aspirin or clopidogrel should be given.'));
+  ok('a leaning opener is read from the opening clause only', H.leans('Similarly, heparin is given.') && H.leans('As with heparin, bivalirudin is given.') &&
+     !H.leans('Heparin is given, similarly to bivalirudin in the same trial.'));
+}
+
+head('a pearl is never cut inside its brackets');
+{
+  const B = 'Drug A lowered the event rate in older adults with diabetes (12.1 vs 15.4 per 1,000 patient-years; HR 0.80; P = .01 for superiority), over a mean 2 years of follow-up.';
+  const st = Pearl.steps(B);
+  const balanced = st.every(x => (x.text.match(/\(/g) || []).length === (x.text.match(/\)/g) || []).length);
+  ok('every step’s brackets close where they open', balanced, JSON.stringify(st));
+  ok('and nothing is lost putting the separators back', st.map(x => x.text).join(' ') === B.replace(/\.$/, ''), JSON.stringify(st));
+  const outside = Pearl.steps('The ventricle is stiff (as in amyloid; or hypertrophy, late): filling depends on atrial contraction; the loss of atrial kick causes sudden decompensation.');
+  ok('a joint outside the brackets is still cut there, and the step keeps its bracket’s own separators', outside.length === 3 &&
+     outside[0].text === 'The ventricle is stiff (as in amyloid; or hypertrophy, late)', JSON.stringify(outside));
+}
+
+head('the brain: every section a neuron, inside it, wired into one net, lit by progress');
+{
+  const mk = (id, n, done, st) => ({ docId: id, name: 'Unit ' + id, sections: Array.from({ length: n }, (_, i) => ({ ci: i, title: id + ' section ' + (i + 1),
+    state: i < done ? (st || ['solid', 'fading', 'weak'])[i % (st || [0, 0, 0]).length] : 'new', recall: i < done ? 90 : null })) });
+  const units = [mk('a', 27, 17), mk('b', 14, 9), mk('c', 20, 4), mk('d', 12, 0)];
+  const L = H.brainLayout(units);
+  const keys = L.nodes.map(x => x.key);
+  const want = units.flatMap(u => u.sections.map(x => u.docId + ':' + x.ci));
+  ok('every section of every unit is one neuron, keyed to its unit and section', keys.length === want.length && new Set(keys).size === keys.length && want.every(k => keys.indexOf(k) !== -1),
+     keys.length + ' neurons for ' + want.length + ' sections');
+  ok('each carries its section’s own title and state', units.every(u => u.sections.every(x => { const n = L.nodes.find(y => y.key === u.docId + ':' + x.ci); return n && n.title === x.title && n.state === x.state; })));
+  const out = L.nodes.filter(x => !H.inPoly(x.x, x.y, H.BRAIN.CEREBRUM) || H.edgeDist(x.x, x.y, H.BRAIN.CEREBRUM) < x.r);
+  ok('every neuron is inside the brain, clear of its edge', out.length === 0, out.map(x => x.key).join(', ') || 'all inside');
+  let close = 0;
+  L.nodes.forEach((a, i) => L.nodes.forEach((b, j) => { if (j > i && Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r) close++; }));
+  ok('and no two overlap', close === 0, close + ' overlapping pairs');
+  /* One net: from any neuron, every other is reachable along the connections. */
+  const reach = (edges, from, only) => { const seen = new Set([from]), todo = [from];
+    while (todo.length) { const a = todo.pop(); edges.forEach(e => { [[e.a, e.b], [e.b, e.a]].forEach(([p, q]) => { if (p === a && !seen.has(q) && (!only || only(q))) { seen.add(q); todo.push(q); } }); }); }
+    return seen; };
+  ok('the whole brain is one connected net', reach(L.edges, 0).size === L.nodes.length, reach(L.edges, 0).size + ' of ' + L.nodes.length);
+  ok('and each unit is wired within itself, a lobe of its own', L.units.every((u, k) => { const mine = L.nodes.map((x, i) => x.unit === k ? i : -1).filter(i => i >= 0);
+    return reach(L.edges.filter(e => e.kind === 'unit'), mine[0], q => L.nodes[q].unit === k).size === mine.length; }));
+  /* A lobe is a region, not a unit's neurons sprinkled through the whole
+     brain: most of its neurons are nearer its own middle than any other
+     lobe's. Measured 54 of 73 here as laid out (the wedges narrow toward the
+     brain's centre, where neighbours' middles are close); 21 of 73 with the
+     units dealt out unsorted. */
+  const own = L.nodes.filter(x => { const d = L.units.map(u => Math.hypot(x.x - u.x, x.y - u.y)); return d.indexOf(Math.min(...d)) === x.unit; }).length;
+  ok('each unit is a region of the brain: two in three of its neurons, or more, nearest its own lobe’s middle', own >= L.nodes.length * 2 / 3, own + ' of ' + L.nodes.length);
+  ok('the lobes are joined first neuron to first neuron, one bridge between each', L.edges.filter(e => e.kind === 'bridge').length === L.units.length - 1 &&
+     L.edges.filter(e => e.kind === 'bridge').every(e => L.nodes[e.a].order === 0 && L.nodes[e.b].order === 0));
+  ok('a connection is lit when both its neurons are, half-lit when one is, dark when neither', L.edges.every(e => e.lit === (L.nodes[e.a].state !== 'new') + (L.nodes[e.b].state !== 'new')));
+  const e2 = L.edges.filter(e => e.lit === 2);
+  const rank = { weak: 0, fading: 1, solid: 2 };
+  ok('a lit connection is as strong as its weaker end', e2.length > 0 && e2.every(e => e.state === (rank[L.nodes[e.a].state] <= rank[L.nodes[e.b].state] ? L.nodes[e.a].state : L.nodes[e.b].state)),
+     e2.length + ' lit');
+  /* Progress spreads from the lobe's heart: section 1 nearest its middle, the
+     rest outward in order. */
+  ok('a unit’s sections spread from the middle of its lobe outward, in order', L.units.every((u, k) => {
+    const d = L.nodes.filter(x => x.unit === k).sort((a, b) => a.order - b.order).map(x => Math.hypot(x.x - u.x, x.y - u.y));
+    return d.every((v, i) => i === 0 || v >= d[i - 1] - 1);
+  }));
+  ok('its lobe says how much of it is drilled', L.units.map(u => u.done).join() === '17,9,4,0' && L.counts.new === 73 - 30 && L.counts.total === 73, JSON.stringify(L.counts));
+  ok('the same sections give the same brain', JSON.stringify(H.brainLayout(units)) === JSON.stringify(L));
+  /* A whole book opened chapter by chapter can pass the cap: what is past it
+     is counted, not drawn, and not dropped silently. */
+  const big = H.brainLayout([mk('x', 200, 10), mk('y', 60, 0), mk('z', 30, 0)]);
+  ok('past ' + H.BRAIN.MAX + ' neurons the rest is counted, not drawn', big.nodes.length === H.BRAIN.MAX && big.hidden.sections === 290 - H.BRAIN.MAX && big.hidden.units === 1,
+     JSON.stringify(big.hidden));
+  const bigOut = big.nodes.filter(x => !H.inPoly(x.x, x.y, H.BRAIN.CEREBRUM)).length;
+  let bigClose = 0; big.nodes.forEach((a, i) => big.nodes.forEach((b, j) => { if (j > i && Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r) bigClose++; }));
+  ok('and at the cap they still fit, inside and apart', bigOut === 0 && bigClose === 0, bigOut + ' outside, ' + bigClose + ' overlapping');
+  ok('no sections, no brain', H.brainLayout([]).nodes.length === 0 && H.brainLayout([{ docId: 'e', name: 'e', sections: [] }]).units.length === 0);
+  const one = H.brainLayout([mk('s', 1, 1, ['solid'])]);
+  ok('a single section is a single lit neuron with nothing to wire', one.nodes.length === 1 && one.edges.length === 0 && one.nodes[0].state === 'solid');
+  /* The outline is drawn through its own points: what the neurons are
+     placed inside is what is seen. */
+  const d = H.smoothPath([[0, 0], [100, 0], [100, 100], [0, 100]]);
+  ok('the outline is a closed smooth curve through every point it is given', /^M0 0C/.test(d) && /Z$/.test(d) && ['100 0', '100 100', '0 100', '0 0'].every(p => d.indexOf(' ' + p + 'C') !== -1 || d.indexOf(' ' + p + 'Z') !== -1), d);
+}
+
 head('Systole’s rhythm strip on the hero (monitor.js)');
 {
   global.RhythmsExtra = load('src/core/rhythms-extra.js').RhythmsExtra;
@@ -261,6 +354,8 @@ head('the numbers in a pearl are marked');
   ok('a sentence with no number has nothing marked', !H.marks('Preload rises with volume.').some(r => r.num));
   const place = H.marks('TABLE 1.4 FIGURE 1.2 and Fig. 3, p. 52: a pressure above 18 mmHg.').filter(r => r.num).map(r => r.text.trim());
   ok('a number that names a place in the book — a table, a figure, a page — is not marked; a value is', place.join('|') === '18 mmHg', place.join('|'));
+  const dec = H.marks('A P value of .02 and a ratio of 0.86.').filter(r => r.num).map(r => r.text.trim());
+  ok('a value written without its leading zero is marked whole', dec.join('|') === '.02|0.86', dec.join('|'));
 }
 
 head('weak spots: where the sessions say you are shakiest');

@@ -319,6 +319,25 @@ head('lines → blocks');
   ok('what reads as a heading: words, or an acronym or two — not symbols, numbers or fragments',
      ['Reperfusion therapy', 'RISK STRATIFICATION', 'ECG', 'PET CT', 'Aortic Stenosis'].every(C.wordy) &&
      !['hy = rly', 'rly hy', '— — —', '12.4', 'll | Il', 'Ix{y}', 'Heart = rly', '1234567 Valve', 'Srtk Pqlm'].some(C.wordy));
+  /* A book stored before those fixes keeps its titles until repaired on
+     load (retitle): the owner's iPad still showed "hy = rly: THERAPY" and a
+     run of "(cont.)" once both were fixed, because titles are stored when a
+     unit is added. The names here are the shape of that screen, not its words. */
+  {
+    const T = C.retitle([{ title: 'DIAGNOSTIC TESTING' }, { title: 'Electrocardiography (cont.)' },
+      { title: 'hy = rly', gist: 'The first test in chest pain is a twelve lead tracing.', index: 3 }, { title: 'hy = rly: RISK STRATIFICATION' },
+      { title: 'hy = rly: Prior to reperfusion (cont.)' }, { title: 'hy = rly: Prior to reperfusion (cont.)' },
+      { title: 'Reperfusion therapy' }, { title: 'Reperfusion therapy (cont.)' }, { title: 'Aortic Stenosis (part 2)' }, { title: 'Aortic Stenosis (cont.)' },
+      { title: '= |', gist: '', index: 10 }]);
+    ok('a stored title’s garbled segment is dropped, and what is left kept as printed', T[3] === 'RISK STRATIFICATION' && T[0] === 'DIAGNOSTIC TESTING', JSON.stringify(T));
+    ok('a title with nothing left is named by the first words of its own text, as an untitled section is', T[2] === 'The first test in chest pain…', T[2]);
+    ok('and with no text either, by its number', T[10] === 'Section 11', T[10]);
+    ok('“(cont.)” becomes its part, counted from the section it continues', T[1] === 'Electrocardiography (part 2)' && T[4] === 'Prior to reperfusion (part 2)' &&
+       T[5] === 'Prior to reperfusion (part 3)' && T[7] === 'Reperfusion therapy (part 2)', JSON.stringify(T));
+    ok('a title already right is kept, and a stored “(part N)” counts on from N', T[6] === 'Reperfusion therapy' && T[8] === 'Aortic Stenosis (part 2)' && T[9] === 'Aortic Stenosis (part 3)', JSON.stringify(T));
+    const right = ['Aortic Stenosis', 'Aortic Stenosis (part 2)', 'Mitral Stenosis: Etiology'].map(title => ({ title }));
+    ok('titles the chunker names now come back unchanged, so repairing on every load is safe', JSON.stringify(C.retitle(right)) === JSON.stringify(right.map(x => x.title)));
+  }
   ok('a vertical gap starts a new paragraph',
      blocks.some(b => b.text === 'A new paragraph begins after a gap.'), texts.filter(t => /paragraph/.test(t)).join(' | '));
   ok('blocks keep their page', blocks.filter(b => b.heading)[0].page === 1);
@@ -914,6 +933,7 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
   const out = fs.mkdtempSync(path.join(require('os').tmpdir(), 'memsw-'));
   build(out);
   const sw = fs.readFileSync(path.join(out, 'sw.js'), 'utf8');
+  SW_SRC = sw;
   /* The Cloudflare Pages upload, read back by the central directory — the
      way unzip and Pages read it — not by trusting the writer. */
   const zip = zipOf(out), zlib = require('zlib');
@@ -1036,7 +1056,56 @@ async function startLoop() {
   L.useLib(null); L.useGpu(null); L.useEngine(null, null); delete global.localStorage;
 }
 
-startLoop().then(() => {
+/* THE PAGE COMES FROM THE NETWORK FIRST. The service worker served the page
+   cache-first, so an update reached the page only on the second opening
+   after it installed, and the owner's iPad showed a build two releases old.
+   The built sw.js is run here against a stub of the worker's world — its
+   caches, fetch and clock — so what is measured is the file that ships. */
+var SW_SRC; // set where the build is made, above (hoisted: a let here was read before it existed)
+async function swFetch() {
+  head('the service worker: the page from the network first, the cache when offline');
+  const ORIGIN = 'https://memorizer.example/';
+  const key = k => new URL(typeof k === 'string' ? k : k.url, ORIGIN).href;
+  const make = (net, timers) => {
+    const stores = {}, handlers = {}, fetched = [];
+    const cacheOf = n => stores[n] = stores[n] || { m: {}, put(r, res) { this.m[key(r)] = res; return Promise.resolve(); }, match(r) { return Promise.resolve(this.m[key(r)]); },
+      addAll(list) { list.forEach(u => { this.m[key(u)] = { ok: true, body: 'cached ' + key(u), clone() { return this; } }; }); return Promise.resolve(); } };
+    const caches = { open: n => Promise.resolve(cacheOf(n)), keys: () => Promise.resolve(Object.keys(stores)), delete: n => { delete stores[n]; return Promise.resolve(true); },
+      match: r => Promise.resolve(Object.keys(stores).map(n => stores[n].m[key(r)]).filter(Boolean)[0]) };
+    const self = { addEventListener: (t, f) => { handlers[t] = f; }, skipWaiting: () => Promise.resolve(), clients: { claim: () => Promise.resolve() } };
+    const fetch = (u, o) => { fetched.push({ u: key(u), cache: o && o.cache }); return net(key(u)); };
+    new Function('self', 'caches', 'fetch', 'location', 'setTimeout', SW_SRC)(self, caches, fetch, new URL(ORIGIN), timers || (() => {}));
+    /* A response that never comes, or an error, is a result to report, not
+       a hang or a crash that ends the suite before its summary. */
+    const go = req => new Promise(resolve => { let p = null; handlers.fetch({ request: Object.assign({ method: 'GET' }, req), respondWith: x => { p = x; } });
+      if (!p) return resolve('passed through'); p.then(resolve, e => resolve({ body: 'error: ' + e.message }));
+      setTimeout(() => resolve({ body: 'no answer in 2 s' }), 2000); });
+    const install = () => new Promise(resolve => handlers.install({ waitUntil: p => p.then(resolve) }));
+    return { go, install, fetched, stores };
+  };
+  const fresh = u => Promise.resolve({ ok: true, body: 'network ' + u, clone() { return this; } });
+  let w = make(fresh);
+  await w.install();
+  let r = await w.go({ mode: 'navigate', url: ORIGIN });
+  ok('online, opening the app loads the page from the network, not the copy cached at install', r && r.body === 'network ' + ORIGIN, r && r.body);
+  ok('asked with no-cache, so the browser’s own cache cannot hand back the old page either', w.fetched.some(f => f.u === ORIGIN && f.cache === 'no-cache'), JSON.stringify(w.fetched));
+  const cachedNow = await new Promise(res => setImmediate(() => res(Object.keys(w.stores).map(n => w.stores[n].m[ORIGIN]).filter(Boolean)[0])));
+  ok('and the fresh page is kept for when the network is gone', cachedNow && cachedNow.body === 'network ' + ORIGIN, cachedNow && cachedNow.body);
+  w = make(() => Promise.reject(new TypeError('Load failed')));
+  await w.install();
+  r = await w.go({ mode: 'navigate', url: ORIGIN + 'index.html' });
+  ok('offline, the page comes from the cache', r && r.body === 'cached ' + ORIGIN + 'index.html', r && r.body);
+  w = make(() => new Promise(() => {}), (f, ms) => { if (ms >= 1000) f(); });
+  await w.install();
+  r = await w.go({ mode: 'navigate', url: ORIGIN });
+  ok('on a network that never answers, the cached page after the wait, not a blank screen', r && r.body === 'cached ' + ORIGIN, r && r.body);
+  w = make(fresh);
+  await w.install();
+  r = await w.go({ mode: 'no-cors', url: ORIGIN + 'icon.svg' });
+  ok('everything else is still cache-first: the icon comes from the cache, with no request made', r && r.body === 'cached ' + ORIGIN + 'icon.svg' && w.fetched.length === 0, JSON.stringify(w.fetched));
+}
+
+startLoop().then(swFetch).then(() => {
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 }, e => { console.error(e); process.exit(1); });

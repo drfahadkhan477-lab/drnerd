@@ -116,7 +116,11 @@ table.data tbody tr:last-child td { border-bottom: 0; }
 .pages .fig { flex: 0 0 9rem; }
 .lightbox { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; padding: var(--s-4); }
 .lightbox img { max-width: 100%; max-height: 100%; background: #FFFFFF; border-radius: .375rem; }
-.lightbox .btn { position: absolute; top: calc(var(--s-4) + env(safe-area-inset-top)); right: var(--s-4); }
+/* :not(.figure-view) is what wins this: .btn.primary, later in the file, set
+   position: relative at the same weight, and the button went back into the
+   row beside a full-width page — off the right edge of the owner's iPad,
+   one letter showing. */
+.lightbox:not(.figure-view) > .btn { position: absolute; z-index: 1; top: calc(var(--s-4) + env(safe-area-inset-top)); right: calc(var(--s-4) + env(safe-area-inset-right)); }
 /* Where the enlarged page is from, over the dark backdrop: light on near-
    black, not the theme's muted ink, which is tuned for the theme's paper. */
 .lightbox .lb-where { position: absolute; left: var(--s-4); bottom: calc(var(--s-4) + env(safe-area-inset-bottom)); margin: 0; color: #E2E8F0; font-size: var(--t-meta); }
@@ -137,10 +141,19 @@ table.data tbody tr:last-child td { border-bottom: 0; }
 /* ── settings ─────────────────────────────────────────────────────────── */
 .settings label { display: block; margin: var(--s-3) 0 var(--s-1); font-weight: 600; }
 .settings select, .settings input { display: block; width: 100%; margin-top: var(--s-2); font: inherit; font-weight: 400; padding: .625rem; border-radius: .625rem; border: 1px solid var(--edge); background: var(--bg); color: var(--ink); }
-.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: var(--s-2); margin-top: var(--s-2); }
-.swatch { display: flex; align-items: center; gap: var(--s-2); font: inherit; font-size: var(--t-meta); text-align: left; padding: var(--s-2); border: 2px solid var(--edge); border-radius: .625rem; background: var(--surface); color: var(--ink); cursor: pointer; min-height: 2.75rem; }
-.swatch[aria-checked="true"] { border-color: var(--accent); font-weight: 700; }
-.swatch i { flex: none; width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--s-3); margin-top: var(--s-2); }
+.swatch { display: flex; flex-direction: column; align-items: stretch; gap: var(--s-2); font: inherit; font-size: var(--t-meta); text-align: left; padding: var(--s-2); border: 2px solid var(--edge); border-radius: 1rem; background: var(--surface); color: var(--ink); cursor: pointer; min-height: 2.75rem;
+  transition: transform .2s var(--ease-out), border-color .2s, box-shadow .2s; }
+.swatch:hover { transform: translateY(-2px); }
+.swatch[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.sw-minis { display: flex; gap: .375rem; }
+.sw-mini { flex: 1 1 0; display: block; height: 4.25rem; border-radius: .625rem; border: 1px solid; padding: .5rem; }
+.sw-card { display: flex; flex-direction: column; gap: .3rem; height: 100%; border-radius: .4rem; border: 1px solid; padding: .4rem .45rem; }
+.sw-line { display: block; height: .3rem; width: 80%; border-radius: 1rem; opacity: .85; }
+.sw-line.short { width: 55%; opacity: .7; }
+.sw-pill { display: block; margin-top: auto; height: .6rem; width: 45%; border-radius: 1rem; }
+.sw-name { display: flex; flex-direction: column; padding: 0 .25rem .125rem; }
+.sw-name small { color: var(--muted); font-size: var(--t-tiny); }
 .group-label { font-size: var(--t-tiny); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: var(--s-4) 0 0; }
 .seg { display: flex; flex-wrap: wrap; gap: var(--s-1); margin-top: var(--s-2); background: var(--surface-2); padding: var(--s-1); border-radius: .75rem; }
 .seg button { flex: 1 1 auto; font: inherit; font-size: var(--t-meta); border: 0; background: none; color: var(--ink); padding: var(--s-2) var(--s-3); border-radius: .5rem; cursor: pointer; min-height: 2.5rem; }
@@ -843,16 +856,79 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 .point.marked .point-text { background: var(--mid-soft); border-radius: .375rem; }
 .card-note { margin: var(--s-3) 0; padding: var(--s-2) var(--s-3); border-left: .25rem solid var(--mid); background: var(--mid-soft); border-radius: .5rem; color: var(--ink); }
 .note-label { font-weight: 800; }
-.mm-unit { display: grid; grid-template-columns: minmax(5rem, 9rem) 1fr; gap: var(--s-2); align-items: center; margin: var(--s-2) 0; }
-.mm-name { font-size: var(--t-meta); font-weight: 700; overflow-wrap: anywhere; }
-.mm-cells { display: flex; flex-wrap: wrap; gap: .25rem; }
-.mm-cell { width: 1.5rem; height: 1.5rem; border-radius: .375rem; border: 1px solid var(--edge); padding: 0; cursor: pointer; background: var(--surface-2); display: inline-block; }
-.mm-cell[data-state="solid"] { background: var(--good); border-color: var(--good); }
-.mm-cell[data-state="fading"] { background: var(--mid-soft); border-color: var(--mid); }
-.mm-cell[data-state="weak"] { background: var(--bad-soft); border-color: var(--bad); }
-.mm-legend { display: flex; flex-wrap: wrap; gap: var(--s-3); font-size: var(--t-meta); color: var(--muted); margin: var(--s-2) 0 0; }
+/* ── the brain (ui.js masteryCard, home.js brainLayout) ── */
+.brain-card { display: grid; gap: var(--s-4); align-items: center; padding: var(--s-4); border-radius: 1.75rem; margin: 0 0 var(--s-4); overflow: hidden; position: relative; isolation: isolate; }
+.brain-card::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: var(--brain-stage); }
+@media (min-width: 60rem) { .brain-card { grid-template-columns: minmax(0, 1.75fr) minmax(16rem, 1fr); padding: var(--s-5); } }
+.brain-stage { min-width: 0; }
+.brain-svg { display: block; width: 100%; height: auto; max-height: 36rem; overflow: visible; -webkit-user-select: none; user-select: none; }
+.brain-stem { fill: var(--brain-t3); stroke: var(--brain-rim); stroke-width: 2; }
+.brain-cbl { fill: var(--brain-t2); stroke: var(--brain-rim); stroke-width: 2; }
+.brain-folia path, .brain-sulci path { fill: none; stroke: var(--brain-sulcus); stroke-linecap: round; }
+.brain-folia path { stroke-width: 3; }
+.brain-sulci path { stroke-width: 4.5; }
+.brain-cortex { stroke: none; }
+.brain-rim { fill: none; stroke: var(--brain-rim); stroke-width: 3; }
+.brain-sheen { opacity: .9; pointer-events: none; }
+.bt-1 { stop-color: var(--brain-t1); } .bt-2 { stop-color: var(--brain-t2); } .bt-3 { stop-color: var(--brain-t3); }
+.bs-1 { stop-color: var(--brain-sheen); } .bs-2 { stop-color: var(--brain-sheen); stop-opacity: 0; }
+.brain-axons path { fill: none; stroke: var(--brain-axon); stroke-width: 1.6; stroke-linecap: round; }
+.brain-axons path[data-fired="1"] { stroke-width: 2; stroke-dasharray: 2 6; }
+.brain-axons path[data-fired="2"] { stroke-width: 2.6; }
+.brain-axons path[data-fired="2"][data-state="solid"], .brain-axons path[data-fired="1"][data-state="solid"] { stroke: var(--brain-n-solid); }
+.brain-axons path[data-fired="2"][data-state="fading"], .brain-axons path[data-fired="1"][data-state="fading"] { stroke: var(--brain-n-fading); }
+.brain-axons path[data-fired="2"][data-state="weak"], .brain-axons path[data-fired="1"][data-state="weak"] { stroke: var(--brain-n-weak); }
+.brain-axons path[data-kind="bridge"] { stroke-width: 3; }
+/* a signal travelling each lit connection */
+.brain-signals path { fill: none; stroke: var(--brain-spark); stroke-width: 3.2; stroke-linecap: round; stroke-dasharray: 3 26; opacity: .95;
+  animation: brain-fire 2.8s linear infinite; }
+@keyframes brain-fire { to { stroke-dashoffset: -58; } }
+.brain-glow circle { opacity: .55; }
+.brain-glow circle[data-state="solid"] { fill: var(--brain-n-solid); } .brain-glow circle[data-state="fading"] { fill: var(--brain-n-fading); } .brain-glow circle[data-state="weak"] { fill: var(--brain-n-weak); }
+.neuron { cursor: pointer; outline: none; transform-box: fill-box; transform-origin: center; transition: transform .25s var(--ease-out); }
+.neuron .hit { fill: transparent; }
+.neuron .dendrite { fill: none; stroke: var(--brain-dendrite); stroke-width: 1.6; stroke-linecap: round; }
+.neuron .soma { fill: var(--brain-dormant); stroke: var(--brain-dendrite); stroke-width: 1.5; }
+.neuron .nucleus { fill: var(--brain-dendrite); opacity: .55; }
+.neuron[data-state="solid"] .soma { fill: var(--brain-n-solid); stroke: var(--brain-n-solid); }
+.neuron[data-state="fading"] .soma { fill: var(--brain-n-fading); stroke: var(--brain-n-fading); }
+.neuron[data-state="weak"] .soma { fill: var(--brain-n-weak); stroke: var(--brain-n-weak); }
+.neuron[data-state="solid"] .dendrite { stroke: var(--brain-n-solid); } .neuron[data-state="fading"] .dendrite { stroke: var(--brain-n-fading); } .neuron[data-state="weak"] .dendrite { stroke: var(--brain-n-weak); }
+.neuron:not([data-state="new"]) .nucleus { fill: #FFFFFF; opacity: .85; }
+.neuron:hover, .neuron.sel, .neuron:focus-visible { transform: scale(1.3); }
+.neuron.sel .soma, .neuron:focus-visible .soma { stroke: var(--accent); stroke-width: 4; }
+.neuron.next .next-ring { fill: none; stroke: var(--accent); stroke-width: 2.5; transform-box: fill-box; transform-origin: center; animation: next-ring 2.2s ease-out infinite; }
+@keyframes next-ring { from { transform: scale(.8); opacity: .9; } to { transform: scale(2.4); opacity: 0; } }
+main[data-enter] .brain-neurons .neuron { animation: neuron-in .5s var(--ease-out) both; }
+main[data-enter] .brain-neurons .neuron:nth-child(3n+1) { animation-delay: .1s; } main[data-enter] .brain-neurons .neuron:nth-child(3n+2) { animation-delay: .2s; }
+main[data-enter] .brain-neurons .neuron:nth-child(3n) { animation-delay: .3s; }
+@keyframes neuron-in { from { opacity: 0; transform: scale(.2); } }
+main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation: axon-in .9s .35s var(--ease-out) both; }
+@keyframes axon-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .brain-signals path, .neuron.next .next-ring, main[data-enter] .brain-neurons .neuron, main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation: none; }
+  .neuron { transition: none; }
+}
+.brain-side { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; }
+.brain-side .eyebrow { color: var(--accent); }
+.brain-big { margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: .375rem; color: var(--muted); }
+.brain-big strong { font-size: 3rem; line-height: 1; letter-spacing: -.02em; color: var(--ink); }
+.mm-legend { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); font-size: var(--t-meta); color: var(--muted); margin: 0; }
 .mm-legend span { display: inline-flex; align-items: center; gap: .375rem; }
-.mm-legend .mm-cell { width: .875rem; height: .875rem; cursor: default; }
+.mm-legend b { color: var(--ink); }
+.mm-dot { width: .75rem; height: .75rem; border-radius: 50%; display: inline-block; background: var(--brain-dormant); border: 1.5px solid var(--brain-dendrite); }
+.mm-dot[data-state="solid"] { background: var(--brain-n-solid); border-color: var(--brain-n-solid); box-shadow: 0 0 8px var(--brain-n-solid); }
+.mm-dot[data-state="fading"] { background: var(--brain-n-fading); border-color: var(--brain-n-fading); box-shadow: 0 0 8px var(--brain-n-fading); }
+.mm-dot[data-state="weak"] { background: var(--brain-n-weak); border-color: var(--brain-n-weak); box-shadow: 0 0 8px var(--brain-n-weak); }
+.brain-info { display: flex; flex-direction: column; align-items: flex-start; gap: .25rem; padding: var(--s-3) var(--s-4); border-radius: 1.125rem;
+  background: var(--glass-2); border: 1px solid var(--line); }
+.brain-info .brain-title { font-size: var(--t-lead); line-height: 1.3; }
+.brain-info .btn { margin-top: var(--s-2); }
+.brain-lobes-list { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.lobe-chip { --lobe: 200; font-size: var(--t-meta); min-height: 2.25rem; padding: .375rem .75rem; gap: .5rem; max-width: 100%; }
+.lobe-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12rem; }
+.lobe-chip i { width: .625rem; height: .625rem; border-radius: 50%; flex: none; background: hsl(var(--lobe), 70%, 55%); }
+.lobe-chip b { color: var(--muted); font-weight: 700; }
 .week-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: var(--s-2); margin: var(--s-2) 0; }
 .week-stats strong { font-size: var(--t-h4); }
 .freeze { margin-left: .125rem; }

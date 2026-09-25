@@ -284,6 +284,12 @@ closes. It needs an `https` address.
    Screen**. From there it keeps what you add, and after the first visit it
    works offline: the service worker keeps the app and, as they are first
    used, the pinned PDF and text readers.
+5. After uploading a new build, open the app while online: the page itself
+   is fetched from the network first (the cache only when offline, or when
+   the network takes longer than four seconds), so the new build is what
+   opens. **Settings** names the build running at its foot — the same twelve
+   characters the build script prints — so an update can be checked on the
+   iPad itself.
 
 Each address has its own storage. Units added under one address, or in the
 Files app's own preview, do not appear under another; add the PDFs again once.

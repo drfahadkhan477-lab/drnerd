@@ -629,6 +629,11 @@ function kindOf(user) {
   await page.locator('.lightbox img').waitFor(T);
   await page.waitForFunction(() => /^data:image/.test((document.querySelector('.lightbox img') || {}).src || ''), null, T);
   ok('a page opens large', await page.locator('.lightbox').count() === 1);
+  /* Its Close is pinned in the top-right corner, on screen: a later rule
+     for primary buttons put it back in the row beside the page, centred and
+     off the right edge (the owner's iPad showed one letter of it). */
+  const lbc = await page.evaluate(() => { const r = document.getElementById('lb-close').getBoundingClientRect(); return { top: r.top, right: innerWidth - r.right, left: r.left, bottom: r.bottom, vh: innerHeight }; });
+  ok('its Close sits in the top-right corner, whole and on screen', lbc.left >= 0 && lbc.right >= 0 && lbc.right < 64 && lbc.top >= 0 && lbc.top < 64, JSON.stringify(lbc));
   ok('focus goes into it, the lesson behind it inert, and it says which page of which unit it is', await page.evaluate(() => document.activeElement && document.activeElement.id) === 'lb-close' &&
      await page.evaluate(() => document.getElementById('app').inert) && /page 1 of unit/.test(await page.locator('.lightbox .lb-where').innerText()),
      await page.locator('.lightbox .lb-where').innerText());
@@ -1619,7 +1624,7 @@ function kindOf(user) {
     ok('and the lesson’s table offers the same', await page.locator('#tables #table-round').count() === 1);
   }
 
-  head('progress: the mastery map, the week, and a streak that forgives a day');
+  head('progress: the brain, the week, and a streak that forgives a day');
   {
     const unitId = await page.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'unit').id));
     await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
@@ -1627,15 +1632,46 @@ function kindOf(user) {
     const cells = await page.$$eval('#mastery .mm-cell[data-key]', cs => cs.map(c => c.getAttribute('data-key') + '=' + c.getAttribute('data-state')));
     const n = await page.evaluate(id => Memorizer.ui.docs.find(d => d.id === id).clusters.length, unitId);
     const planId = await page.evaluate(() => Memorizer.ui.docs.find(d => d.name === 'Plan notes').id);
-    ok('the mastery map: every section of the unit, drilled ones not new, a unit not begun all new', cells.filter(c => c.startsWith(unitId + ':')).length === n &&
+    ok('the brain: a neuron for every section of the unit, drilled ones lit, a unit not begun all dark', cells.filter(c => c.startsWith(unitId + ':')).length === n &&
        cells.filter(c => c.startsWith(unitId + ':')).every(c => !/=new$/.test(c)) && cells.filter(c => c.startsWith(planId + ':')).length >= 2 &&
        cells.filter(c => c.startsWith(planId + ':')).every(c => /=new$/.test(c)), JSON.stringify(cells));
     const want = await page.evaluate(() => MemStudy.masteryMap(Memorizer.ui.docs, Memorizer.ui.sessions, Memorizer.ui.cards, FSRS.todayISO(), FSRS)
       .flatMap(u => u.sections.map(s => u.docId + ':' + s.ci + '=' + s.state)));
-    ok('each cell is its section’s state, as study.js works it out from the drills and the cards', cells.every(c => want.includes(c)));
-    await page.locator('#mastery .mm-cell[data-key="' + planId + ':1"]').click();
+    ok('each neuron is its section’s state, as study.js works it out from the drills and the cards', cells.every(c => want.includes(c)));
+    /* The brain is brought up: straight under the hero, before the pearl
+       and everything else (the owner: "bring the map up"). */
+    ok('the brain sits straight under the hero', await page.evaluate(() => { const h = document.getElementById('home-hero'); let e = h.nextElementSibling;
+      while (e && (e.tagName === 'INPUT' || e.classList.contains('error') || e.classList.contains('note'))) e = e.nextElementSibling; return e && e.id === 'mastery'; }));
+    /* Lit is any neuron drilled, however well held: with every drilled
+       section here solid, a count of the solid ones alone passed the first
+       version of this check (the mutation run showed it), so one section
+       of the plan is made weak, in memory only, before it is counted. */
+    const planIdL = await page.evaluate(() => Memorizer.ui.docs.find(d => d.name === 'Plan notes').id);
+    await page.evaluate(id => { const st = Memorizer.ui.sessions[id]; window.__per0 = st.per[0]; st.per[0] = Object.assign({}, st.per[0], { done: true, score: 0.2 }); Memorizer.render(); }, planIdL);
+    await page.waitForFunction(k => document.querySelector('#mastery .neuron[data-key="' + k + '"][data-state="weak"]'), planIdL + ':0', T).catch(() => {});
+    const litCells = await page.$$eval('#mastery .neuron[data-key]', cs => cs.map(c => c.getAttribute('data-state')));
+    const litText = await text(page, '#brain-lit');
+    ok('it says how much of it is lit — every drilled neuron, weak ones too — counted from its neurons', litCells.includes('weak') &&
+       litText === Math.round(100 * litCells.filter(c => c !== 'new').length / litCells.length) + '%', litText + ' of ' + JSON.stringify(litCells));
+    await page.evaluate(id => { Memorizer.ui.sessions[id].per[0] = window.__per0; Memorizer.render(); }, planIdL);
+    /* A tap on a neuron says which section it is — a neuron is small under
+       a finger, and a mis-tap should not start a lesson; its button opens it. */
+    await page.locator('#mastery .neuron[data-key="' + planId + ':1"]').click();
+    await page.waitForFunction(k => { const i = document.getElementById('brain-info'); return i && document.querySelector('#mastery .neuron.sel[data-key="' + k + '"]'); }, planId + ':1', T).catch(() => {});
+    const title1 = await page.evaluate(id => Memorizer.ui.docs.find(d => d.id === id).clusters[1].title, planId);
+    const tapped = await page.evaluate(() => ({ view: Memorizer.ui.view, hero: !!document.getElementById('home-hero'),
+      title: ((document.querySelector('#brain-info .brain-title') || {}).textContent || '').trim(), info: ((document.getElementById('brain-info') || {}).textContent || 'no panel') }));
+    ok('a tapped neuron is chosen and named, and nothing opens yet', tapped.view === 'library' && tapped.hero && tapped.title === title1, JSON.stringify(tapped));
+    /* Arrow keys walk the neurons in order; one of them is in the tab order. */
+    const walk = await page.evaluate(() => { const g = document.querySelector('#mastery .neuron.sel'); g.focus();
+      g.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); const a = document.activeElement;
+      return { from: +g.getAttribute('data-i'), to: a.classList.contains('neuron') ? +a.getAttribute('data-i') : -1,
+               tabbable: document.querySelectorAll('#mastery .neuron[tabindex="0"]').length }; });
+    ok('an arrow key moves to the next neuron, and one neuron at a time is in the tab order', walk.to === (walk.from + 1) % cells.length && walk.tabbable === 1, JSON.stringify(walk));
+    if (await page.evaluate(() => Memorizer.ui.view !== 'library')) { await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click(); await page.locator('#mastery .neuron[data-key="' + planId + ':1"]').click(); }
+    await page.locator('#brain-open').click();
     await page.locator('#big-idea').waitFor(T).catch(() => {});
-    ok('a cell opens its section', await page.evaluate(id => Memorizer.ui.view === 'session' && Memorizer.ui.docId === id && Memorizer.ui.state.section === 1, planId));
+    ok('its button opens its section', await page.evaluate(id => Memorizer.ui.view === 'session' && Memorizer.ui.docId === id && Memorizer.ui.state.section === 1, planId));
     await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await page.locator('#weekly').waitFor(T);
     const wk = await page.evaluate(() => { const w = MemStudy.weekly(Memorizer.ui.activity, FSRS.todayISO()).week;
@@ -1655,6 +1691,32 @@ function kindOf(user) {
     ok('a single missed day this week is forgiven: the streak runs on, and says so', /\b3$/.test(await text(page, '#streak')) &&
        (await page.locator('#streak-freeze').count() === 1) === sameWeek, await text(page, '#streak') + ' same week ' + sameWeek);
     await page.evaluate(d => MemStore.put('meta', d), days);
+  }
+
+  head('a unit stored before its titles could be read is named properly when it loads');
+  {
+    /* The owner's book, added before wordy() and part numbering, kept
+       "hy = rly: …" and a run of "(cont.)". Stored that way here, the page
+       must show what chunk.js retitle makes of it — and the store is left as
+       it was, so the repair is the load's, not a one-off rewrite. */
+    const planId = await page.evaluate(() => Memorizer.ui.docs.find(d => d.name === 'Plan notes').id);
+    const orig = await page.evaluate(id => MemStore.get('docs', id), planId);
+    const stale = JSON.parse(JSON.stringify(orig));
+    const base = stale.clusters[0].title;
+    stale.clusters[0].title = 'hy = rly: ' + base;
+    stale.clusters[1].title = 'hy = rly: ' + base + ' (cont.)';
+    await page.evaluate(d => MemStore.put('docs', d), stale);
+    await page.reload();
+    await page.locator('#home-hero').waitFor(T);
+    await page.evaluate(id => Memorizer.openDoc(id), planId);
+    await page.locator('#sections').waitFor(T);
+    const shown = await page.$$eval('#sections .section-title', xs => xs.slice(0, 2).map(x => x.textContent));
+    ok('the garbled prefix is gone and “(cont.)” is its part', shown[0] === base && shown[1] === base + ' (part 2)', JSON.stringify(shown));
+    ok('and the session’s copy of the titles follows', await page.evaluate(b => Memorizer.ui.state.titles[1] === b + ' (part 2)', base));
+    ok('the store is untouched: the repair is made on every load', (await page.evaluate(id => MemStore.get('docs', id), planId)).clusters[1].title === 'hy = rly: ' + base + ' (cont.)');
+    await page.evaluate(d => MemStore.put('docs', d), orig);
+    await page.reload();
+    await page.locator('#home-hero').waitFor(T);
   }
 
   head('the built-in coach: no key, no AI, nothing sent');
@@ -1724,8 +1786,21 @@ function kindOf(user) {
        /multiple-choice questions built from the book/.test(await p2.locator('#builtin-about').innerText()));
     ok('and offers only the built-in coach and Claude', JSON.stringify(await p2.$$eval('#provider option', os => os.map(o => o.value))) === '["builtin","anthropic"]');
     /* Appearance: a theme and a size, applied at once and kept. */
-    ok('the picker offers the owner’s two and Contrast, and Auto', JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))) ===
-       JSON.stringify(['auto', 'daylight', 'clinical', 'contrast']), JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))));
+    ok('the picker offers Auto, the light themes, then the dark ones', JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))) ===
+       JSON.stringify(['auto', 'daylight', 'paper', 'clinical', 'neuron', 'contrast']), JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))));
+    /* Each shown as itself in miniature — its own ground and accent, read
+       back from what the browser drew — and Auto as its day and its night. */
+    const minis = await p2.$$eval('#appearance .swatch', ss => ss.map(s => ({ id: s.getAttribute('data-theme-id'),
+      bgs: [...s.querySelectorAll('.sw-mini')].map(m => getComputedStyle(m).backgroundColor), acc: [...s.querySelectorAll('.sw-pill')].map(m => getComputedStyle(m).backgroundColor) })));
+    const rgbHex = hex => 'rgb(' + [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(', ') + ')';
+    ok('each theme’s preview is drawn in its own ground and accent, and Auto shows its day and night', minis.every(m => m.id === 'auto'
+        ? JSON.stringify(m.bgs) === JSON.stringify([rgbHex(MemLookNode.byId('daylight').t.bg), rgbHex(MemLookNode.byId('clinical').t.bg)])
+        : m.bgs.length === 1 && m.bgs[0] === rgbHex(MemLookNode.byId(m.id).t.bg) && m.acc[0] === rgbHex(MemLookNode.byId(m.id).t.accent)), JSON.stringify(minis));
+    await p2.locator('#appearance .swatch[data-theme-id="neuron"]').click();
+    ok('picking Neuron recolours the page with its indigo ground', await p2.evaluate(() => getComputedStyle(document.body).backgroundColor) === rgbHex('#070B1C'));
+    /* Which build is running, said where it can be checked on the device. */
+    ok('Settings names the build that is running', /^Memorizer build [0-9a-f]{12}\./.test(await p2.locator('#build').innerText()) &&
+       (await p2.locator('#build').innerText()).indexOf(await p2.evaluate(() => document.documentElement.getAttribute('data-build'))) !== -1, await p2.locator('#build').innerText());
     await p2.locator('#appearance .swatch[data-theme-id="clinical"]').click();
     const bg = await p2.evaluate(() => getComputedStyle(document.body).backgroundColor);
     ok('picking Clinical recolours the page with its near-black ground', bg === 'rgb(5, 6, 8)', bg);
