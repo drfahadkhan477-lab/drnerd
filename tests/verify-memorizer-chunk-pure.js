@@ -894,7 +894,15 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
      JSON.stringify(entries.map(e => e.name)) === JSON.stringify(['index.html', 'sw.js', 'icon.svg', 'manifest.webmanifest']) && entries.every(e => e.same && e.crc),
      JSON.stringify(entries));
   ok('with no backslash in any name (docs/IPAD.md: a hand-made zip with them served nothing), and the same build zips to the same bytes',
-     entries.every(e => e.name.indexOf('\\') === -1) && zipOf(out).equals(zip) && (() => { fs.writeFileSync(path.join(out, 'a\\b.html'), 'x'); try { zipOf(out, ['a\\b.html']); return false; } catch (e) { return /not a bare relative name/.test(e.message); } })());
+     entries.every(e => e.name.indexOf('\\') === -1) && zipOf(out).equals(zip) && (() => {
+       /* No file is written for the backslash name. It used to be, and on
+          Windows a backslash IS a separator, so the write itself failed —
+          ENOENT on a\\b.html — and took the whole suite down on the owner's
+          laptop before this check ran. zipOf refuses on the name, before any
+          read; with that refusal gone, the read of a file that does not exist
+          throws ENOENT instead, which the message test below does not accept.
+          So the check fails on the defect either way, on every OS. */
+       try { zipOf(out, ['a\\b.html']); return false; } catch (e) { return /not a bare relative name/.test(e.message); } })());
   fs.rmSync(out, { recursive: true, force: true });
   const m = /var pinnedCdn = (.*);/.exec(sw);
   const pinned = new Function('u', 'return ' + m[1]);
