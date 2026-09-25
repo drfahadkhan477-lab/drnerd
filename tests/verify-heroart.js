@@ -48,6 +48,12 @@ if (!target) { console.error('usage: node tests/verify-heroart.js <patched.html>
 const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
 let passed = 0, failed = 0, unmeasured = 0;
+/* The baked mesh was made from src/core/heart3d.js as apex-patch embedded it
+   (step 4). A later step that rewrote any of the heart's text would leave the
+   copy describing code the build no longer runs, under a key that still
+   matches — so the finished build must still carry that file byte for byte. */
+const heartVerbatim = /^https?:\/\//.test(target) ? null
+  : require('fs').readFileSync(target, 'utf8').includes(require('fs').readFileSync(path.join(__dirname, '..', 'src', 'core', 'heart3d.js'), 'utf8'));
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
@@ -165,6 +171,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      The allowance is generous on purpose — this is meant to catch a mesh that
      doubled, not to benchmark the machine, and it holds on both engines with
      four times over. */
+  if (heartVerbatim === null) unmeasurable('the build carries heart3d.js exactly as its mesh was baked from', 'probed over http, not read as a file');
+  else ok('the build carries heart3d.js exactly as its mesh was baked from', heartVerbatim);
   {
     const cost = await page.evaluate(() => {
       const h = typeof heroHeart3d !== 'undefined' ? heroHeart3d : null;
@@ -175,11 +183,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         if (gl && !gl.isContextLost()) buf = { w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
       } catch (_) {}
       return h && h.stats ? { tris: h.stats.triangles, verts: h.stats.vertices,
-                              buildMs: h.stats.buildMs, buf, dpr: window.devicePixelRatio } : null;
+                              buildMs: h.stats.buildMs, source: h.stats.meshSource, buf, dpr: window.devicePixelRatio } : null;
     });
     if (!cost) {
       unmeasurable('the mesh stays inside its budget', 'no live heart to measure');
       unmeasurable('and it is built quickly enough not to hold up the home screen', 'the same');
+      unmeasurable('and its surfaces are the build\'s baked copy, not meshed at launch', 'the same');
       unmeasurable('and the drawing buffer is a medallion, not a viewport', 'the same');
     } else {
       ok('the mesh stays inside its budget',
@@ -187,6 +196,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
          `${cost.tris} triangles, ${cost.verts} vertices`);
       ok('and it is built quickly enough not to hold up the home screen',
          cost.buildMs <= 2500, `${cost.buildMs}ms`);
+      /* Meshing at launch was 78% of it on the owner's laptop at an iPad's
+         pace, so the build bakes the surfaces (scripts/heart-bake.js) and
+         create() loads them. It falls back to meshing, correctly, whenever the
+         copy is missing or not for this code — which is exactly why a build
+         that lost the copy would look fine everywhere except the launch time. */
+      ok('and its surfaces are the build\'s baked copy, not meshed at launch',
+         cost.source === 'baked', String(cost.source));
       /* A canvas accidentally sized to the viewport instead of to the medallion
          is the classic way a WebGL cost multiplies without the mesh changing at
          all: same triangles, twenty times the fragments. 4M covers a 3x iPad
