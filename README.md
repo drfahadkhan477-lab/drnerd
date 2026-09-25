@@ -297,17 +297,27 @@ Coach, labelled as yours, never mixed with the book's words — and a key
 point you mark becomes a cloze card. The Coach asks a section's table row
 by row.
 
-**Progress.** A mastery map colours every section new, weak, fading or solid
-from its drill and its cards' recall today; "this week" gives time,
+**Progress.** The mastery map is a brain, straight under the hero: a
+side view with its sulci, cerebellum and stem, every section you have opened
+a neuron inside it. A neuron is dark until its section is drilled, then lit
+green, amber or red — solid, fading or weak, from its drill and its cards'
+recall today. Each unit is a lobe of neighbouring neurons wired into one net,
+its first section at the lobe's heart and the rest spreading outward in
+order, and the lobes are wired to one another; a connection is lit when both
+its neurons are, and a signal runs along it. A tap names the neuron's
+section and how it stands, with a button to open it; arrow keys walk the
+neurons in order. "This week" gives time,
 answers, accuracy, reviews and the topics missed most, against last week;
 and the streak forgives one missed day a week.
 
 The home screen is laid out as a dashboard. At the top, a hero band: the
 greeting, what is up next, and three numbers — your streak, the cards due,
 and how much of what you have studied is held today — over a gradient with
-an ECG trace along its foot. Then the pearl of the day, the feature of the
+an ECG trace along its foot. Then the brain. Then the pearl of the day, the feature of the
 page — a sentence from your own PDF, found and broken into steps by
-Systole's `src/core/pearl.js`, shared rather than copied — shown beside its
+Systole's `src/core/pearl.js`, shared rather than copied, never a trial's
+read-out (a hazard ratio, a P value) or a sentence leaning on the one before
+it, and never cut inside its brackets — shown beside its
 own section's figure, drawn from the stored PDF, or the first rows of that
 section's table, with a button to open the section. Beside the pearl on an
 iPad held landscape (below it on a phone): "jump back in" cards with a
@@ -327,7 +337,10 @@ blur, the glass is solid. The themes are the owner's choice from mock-ups
 drawn on these screens: **Daylight** by day — the iPad's own grey grouped
 ground, white cards and system blue — and **Clinical** at night — near-black,
 graphite cards and monitor green — with Systole's **Contrast** kept, colour
-for colour. The type scale is Systole's, with text size, reading width,
+for colour. Two more are Memorizer's own: **Paper**, a warm page for long
+reading, and **Neuron**, a deep indigo with an electric cyan. The picker
+shows each theme as itself in miniature, and each draws the brain in its own
+tissue and wiring. The type scale is Systole's, with text size, reading width,
 line spacing, font, contrast and brightness to choose. Contrast and
 brightness are computed from the theme you pick, and every theme at every
 setting is tested to keep its text at WCAG AA or better — measured against

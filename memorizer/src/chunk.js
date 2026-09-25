@@ -445,6 +445,34 @@ function titleOf(u, text, ctx) {
   return ctx.major ? ctx.major + ': ' + label : label;
 }
 
+/* TITLES STORED BEFORE THE FIXES. A unit is split once, when it is added,
+   and its section titles are stored with it — so a book added before
+   wordy() and part numbering kept "hy = rly: RISK STRATIFICATION" and seven
+   "Reperfusion therapy (cont.)" on the owner's iPad after both were fixed.
+   retitle() repairs a stored unit's titles the way the chunker would now
+   name them, without the PDF: a garbled segment of a "Major: minor" title
+   is dropped; a title with nothing left is named by the first words of its
+   own text, as an untitled section is; and "(cont.)" becomes "(part N)",
+   counted from the section it continues. Titles already right come back
+   unchanged, so running it on every load is safe. */
+var CONT_OLD = /\s*\(cont\.\)$/, PART = /\s*\(part (\d+)\)$/;
+function retitle(clusters) {
+  var last = '', part = 1;
+  return (clusters || []).map(function (c) {
+    var t = String(c.title || '').trim(), cont = CONT_OLD.test(t), m = PART.exec(t);
+    var base = t.replace(CONT_OLD, '').replace(PART, '');
+    base = base.split(/:\s+/).filter(wordy).join(': ');
+    if (!base) {
+      var ws = words(c.gist);
+      return ws.length ? ws.slice(0, 6).join(' ') + (ws.length > 6 ? '\u2026' : '') : 'Section ' + ((c.index || 0) + 1);
+    }
+    if (m) { last = base; part = +m[1]; return base + ' (part ' + part + ')'; }
+    if (!cont) { last = base; part = 1; return base; }
+    part = base === last ? part + 1 : 2; last = base;
+    return base + ' (part ' + part + ')';
+  });
+}
+
 function buildCluster(units, index, ctx, tables) {
   var toks = [];
   var headings = [];
@@ -665,7 +693,7 @@ function pagesFromText(text) {
 var MemChunk = {
   PASTE_PAGE_LINES: PASTE_PAGE_LINES, pagesFromText: pagesFromText,
   FIGURES_PER_SECTION: FIGURES_PER_SECTION, figureRefs: figureRefs, assignFigures: assignFigures,
-  TOPIC_MIN: TOPIC_MIN, COLUMN_MIN_ROWS: COLUMN_MIN_ROWS, COLUMN_MIN_WORDS: COLUMN_MIN_WORDS, columnsOf: columnsOf, OUTLINE_MAX_WORDS: OUTLINE_MAX_WORDS, runIn: runIn, CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, wordy: wordy, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
+  TOPIC_MIN: TOPIC_MIN, COLUMN_MIN_ROWS: COLUMN_MIN_ROWS, COLUMN_MIN_WORDS: COLUMN_MIN_WORDS, columnsOf: columnsOf, OUTLINE_MAX_WORDS: OUTLINE_MAX_WORDS, runIn: runIn, CLUSTER_MIN: CLUSTER_MIN, CLUSTER_MAX: CLUSTER_MAX, HEADING_MAX_WORDS: HEADING_MAX_WORDS, wordy: wordy, retitle: retitle, TABLE_MIN_ROWS: TABLE_MIN_ROWS, tableAt: tableAt, LIST_MAX_WORDS: LIST_MAX_WORDS, listAt: listAt,
   words: words, blocksFromPages: blocksFromPages, scannedPages: scannedPages,
   unitsFromBlocks: unitsFromBlocks, clusterBlocks: clusterBlocks,
 };

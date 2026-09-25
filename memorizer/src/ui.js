@@ -75,8 +75,8 @@ function docsChanged() { ui.docsStale = true; ui.pearlCache = null; }
 function refresh() {
   return Promise.all([ui.docsStale ? Store.all('docs') : Promise.resolve(null), Store.all('cards'), Store.all('sessions'),
                       Store.all('books'), Store.get('meta', 'days'), Store.get('meta', 'coach-profile'), Store.get('meta', 'checks'), Store.get('meta', 'practice'), Store.get('meta', 'plan'), Store.get('meta', 'notes'), Store.get('meta', 'activity'), Store.get('meta', 'pearl-recall')]).then(function (r) {
-    if (r[0]) { ui.docs = r[0].sort(function (a, b) { return b.addedAt - a.addedAt; }); ui.docsStale = false; }
-    ui.cards = r[1];
+    if (r[0]) { ui.docs = r[0].sort(function (a, b) { return b.addedAt - a.addedAt; }); ui.docsStale = false; ui.docs.forEach(retitleDoc); }
+    ui.cards = retitleCards(r[1]);
     ui.sessions = {}; ui.at = {};
     r[2].forEach(function (x) { ui.sessions[x.id] = x.state; ui.at[x.id] = x.at || 0; });
     ui.books = r[3].sort(function (a, b) { return b.addedAt - a.addedAt; });
@@ -89,6 +89,23 @@ function refresh() {
     ui.activity = r[10] && r[10].log || null;
     ui.pearlRecalls = r[11] && r[11].recs || {};
   });
+}
+/* A unit stored before its titles could be read properly is named the way
+   the chunker names one now (chunk.js retitle), in memory, every load: the
+   owner's book showed "hy = rly: THERAPY" and a run of "(cont.)" after
+   both were fixed, because the titles were stored when it was added. The
+   cards and the session carry copies of the titles, so they follow. */
+function retitleDoc(d) {
+  Chunk.retitle(d.clusters).forEach(function (t, i) { d.clusters[i].title = t; });
+}
+function retitleCards(cards) {
+  var by = {};
+  (ui.docs || []).forEach(function (d) { by[d.id] = d; });
+  (cards || []).forEach(function (c) {
+    var d = by[c.docId], cl = d && c.cluster != null && d.clusters[c.cluster];
+    if (cl && c.title != null && c.title !== cl.title) c.title = cl.title;
+  });
+  return cards;
 }
 /* The session and the cards it made are stored in one transaction
    (Store.saveStep), and a failure is SAID, never swallowed: ui.saveError
@@ -463,10 +480,12 @@ function recut(book, chapters, method) {
 function openDoc(id, section) {
   return Promise.all([Store.get('docs', id), Store.get('sessions', id), Store.get('packs', id)]).then(function (r) {
     ui.docRec = r[0];
+    if (ui.docRec) retitleDoc(ui.docRec);
     ui.docId = id;
     ui.pack = r[2] || null; ui.packReport = null; ui.packText = ''; ui.packOpen = false; ui.packShow = false;
     var st = r[1] && r[1].state;
     ui.state = Session.resumable(st) ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }));
+    if (ui.state.titles && ui.state.titles.length === ui.docRec.clusters.length) ui.state.titles = ui.docRec.clusters.map(function (c) { return c.title; });
     ui.state = Session.next(ui.state, { type: 'toUnit' });
     if (typeof section === 'number') ui.state = Session.next(ui.state, { type: 'open', section: section });
     ui.view = 'session'; ui.error = ''; ui.choice = null;
@@ -917,7 +936,7 @@ function viewHome() {
         (d.ocrError ? ' — the text reader could not run (' + d.ocrError + ').' : '.')) : null);
   });
 
-  /* Laid out as a dashboard: the hero; then the pearl as the feature, with
+  /* Laid out as a dashboard: the hero; the brain; then the pearl, with
      where to jump back in and what needs work beside it; then adding
      material; then the shelf. On a phone it stacks in that order. */
   var checks = checksCard(), plan = ui.docs.length ? planCard() : null, week = weekCard(), map = masteryCard();
@@ -927,8 +946,9 @@ function viewHome() {
     ui.error ? errorCard(null) : null,
     !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
       button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null,
-    pearl || side ? h('div.home-grid' + (pearl && side ? '.two' : ''), { id: 'home-grid' }, pearl, side) : null,
+    /* The brain first, under the hero (the owner: "bring the map up"). */
     map,
+    pearl || side ? h('div.home-grid' + (pearl && side ? '.two' : ''), { id: 'home-grid' }, pearl, side) : null,
     h('section.home-add', { id: 'home-add', 'aria-label': 'Add material' }, drop, chips), paste,
     books.length ? [h('div.section-head', h('h2', 'My books'), h('label.plus', { for: 'book-input', 'aria-label': 'Add a book' }, '+')),
       h('ul.units', { id: 'books' }, books)] : null,
@@ -2170,20 +2190,149 @@ function occlusionFigure(card) {
 }
 
 /* ── THE MASTERY MAP and THE WEEK (study.js) ─────────────────────────────── */
+/* ── THE BRAIN (home.js brainLayout) ─────────────────────────────────────
+   The mastery map, drawn as a brain whose neurons are your sections: lit as
+   each is drilled, in the colour of how well it is held, and wired into one
+   net. It sits under the hero. A tap on a neuron says which section it is
+   and how it stands, with the way to open it — a neuron is small under a
+   finger, and a mis-tap should not start a lesson. Arrow keys walk the
+   neurons in order; Enter opens the one chosen. */
+var SVG_NS = 'http://www.w3.org/2000/svg';
+function svg(tag, attrs, kids) {
+  var e = doc.createElementNS(SVG_NS, tag);
+  Object.keys(attrs || {}).forEach(function (k) { if (attrs[k] != null) e.setAttribute(k, String(attrs[k])); });
+  (kids || []).forEach(function (k) { if (k) e.appendChild(typeof k === 'string' ? doc.createTextNode(k) : k); });
+  return e;
+}
+/* A small whole number from a string, for a neuron's own angles. */
+function hashOf(t) { var x = 7; for (var i = 0; i < t.length; i++) x = (x * 31 + t.charCodeAt(i)) >>> 0; return x; }
+function dendrites(n) {
+  var h0 = hashOf(n.key), d = '', k;
+  for (k = 0; k < 4; k++) {
+    var a = (h0 % 628) / 100 + k * Math.PI / 2 + ((h0 >> (k + 3)) % 60 - 30) / 100;
+    var len = n.r * (1.5 + ((h0 >> (k * 2)) % 9) / 10), bend = ((h0 >> k) % 2 ? 1 : -1) * n.r * 0.5;
+    var sx = n.x + Math.cos(a) * n.r * 0.8, sy = n.y + Math.sin(a) * n.r * 0.8;
+    var ex = n.x + Math.cos(a) * (n.r + len), ey = n.y + Math.sin(a) * (n.r + len);
+    var cx = (sx + ex) / 2 - Math.sin(a) * bend, cy = (sy + ey) / 2 + Math.cos(a) * bend;
+    d += 'M' + sx.toFixed(1) + ' ' + sy.toFixed(1) + 'Q' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ' ' + ex.toFixed(1) + ' ' + ey.toFixed(1);
+    /* a fork at the tip of every other branch */
+    if (k % 2 === 0) {
+      var fa = a + 0.6, fx = ex + Math.cos(fa) * n.r * 0.7, fy = ey + Math.sin(fa) * n.r * 0.7;
+      d += 'M' + ex.toFixed(1) + ' ' + ey.toFixed(1) + 'L' + fx.toFixed(1) + ' ' + fy.toFixed(1);
+    }
+  }
+  return d;
+}
+function axonPath(a, b, i) {
+  var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y, bend = (i % 2 ? 0.16 : -0.16);
+  return 'M' + a.x + ' ' + a.y + 'Q' + (mx - dy * bend).toFixed(1) + ' ' + (my + dx * bend).toFixed(1) + ' ' + b.x + ' ' + b.y;
+}
 var MM_LABEL = { new: 'not drilled yet', weak: 'weak', fading: 'fading', solid: 'solid' };
-function masteryCard() {
+function brainData() {
   var map = Study.masteryMap(ui.docs.filter(function (d) { return !d.bookId || ui.at[d.id]; }), ui.sessions || {}, ui.cards, today(), FSRS)
     .filter(function (u) { return u.sections.length; });
-  if (!map.length) return null;
-  return h('div.card.mastery-card', { id: 'mastery' }, h('span.eyebrow', 'Mastery map'),
-    map.slice(0, 6).map(function (u) {
-      return h('div.mm-unit', h('span.mm-name', u.name), h('div.mm-cells', u.sections.map(function (s) {
-        return h('button.mm-cell', { type: 'button', 'data-state': s.state, 'data-key': u.docId + ':' + s.ci,
-          title: s.title + ' — ' + MM_LABEL[s.state] + (s.recall != null ? ', recall ' + s.recall + '% today' : ''), 'aria-label': s.title + ', ' + MM_LABEL[s.state],
-          onclick: function () { openDoc(u.docId, s.ci); } });
-      })));
-    }),
-    h('p.mm-legend', ['solid', 'fading', 'weak', 'new'].map(function (k) { return h('span', h('i.mm-cell', { 'data-state': k, 'aria-hidden': 'true' }), MM_LABEL[k]); })));
+  /* Laid out once per state of the map: the home redraws often. */
+  var sig = JSON.stringify(map.map(function (u) { return [u.docId, u.name, u.sections.map(function (x) { return x.state + (x.recall == null ? '' : x.recall) + x.title; })]; }));
+  if (!ui.brainCache || ui.brainCache.sig !== sig) ui.brainCache = { sig: sig, L: Home.brainLayout(map) };
+  return ui.brainCache.L;
+}
+function masteryCard() {
+  var L = brainData();
+  if (!L.nodes.length) return null;
+  var B = Home.BRAIN, nodes = L.nodes;
+  var lit = nodes.filter(function (x) { return x.state !== 'new'; }).length;
+  /* the neuron to point at: the one chosen, else the next section to learn
+     (the first not drilled), else the first */
+  var nextI = -1;
+  nodes.forEach(function (x, i) { if (nextI === -1 && x.state === 'new') nextI = i; });
+  var selI = -1;
+  nodes.forEach(function (x, i) { if (x.key === ui.brainSel) selI = i; });
+  var focusI = selI !== -1 ? selI : nextI !== -1 ? nextI : 0;
+  var lobeHue = function (k) { return hue(k + 1); };
+
+  var defs = svg('defs', {}, [
+    svg('radialGradient', { id: 'brain-tissue', cx: '42%', cy: '36%', r: '72%' }, [
+      svg('stop', { offset: '0', 'class': 'bt-1' }), svg('stop', { offset: '.62', 'class': 'bt-2' }), svg('stop', { offset: '1', 'class': 'bt-3' })]),
+    svg('linearGradient', { id: 'brain-sheen', x1: '0', y1: '0', x2: '0', y2: '1' }, [
+      svg('stop', { offset: '0', 'class': 'bs-1' }), svg('stop', { offset: '.5', 'class': 'bs-2' })]),
+    svg('filter', { id: 'neuron-glow', x: '-60%', y: '-60%', width: '220%', height: '220%' }, [svg('feGaussianBlur', { stdDeviation: String(Math.max(4, L.gap * 0.18)) })]),
+    svg('clipPath', { id: 'brain-clip' }, [svg('path', { d: B.cerebrum })])]);
+  var body = svg('g', { 'class': 'brain-body', 'aria-hidden': 'true' }, [
+    svg('path', { 'class': 'brain-stem', d: B.stem }),
+    svg('path', { 'class': 'brain-cbl', d: B.cerebellum }),
+    svg('g', { 'class': 'brain-folia' }, B.FOLIA.map(function (d) { return svg('path', { d: d }); })),
+    svg('path', { 'class': 'brain-cortex', d: B.cerebrum, fill: 'url(#brain-tissue)' }),
+    svg('g', { 'class': 'brain-sulci', 'clip-path': 'url(#brain-clip)' }, B.SULCI.map(function (d) { return svg('path', { d: d }); })),
+    svg('path', { 'class': 'brain-sheen', d: B.cerebrum, fill: 'url(#brain-sheen)' }),
+    svg('path', { 'class': 'brain-rim', d: B.cerebrum })]);
+  var lobes = svg('g', { 'class': 'brain-lobes', 'clip-path': 'url(#brain-clip)', 'aria-hidden': 'true' }, L.units.map(function (u, k) {
+    return svg('circle', { cx: u.x, cy: u.y, r: Math.round(L.gap * (1.2 + Math.sqrt(u.n))), style: 'fill:hsla(' + lobeHue(k) + ',75%,60%,.10)' });
+  }));
+  var axons = svg('g', { 'class': 'brain-axons', 'aria-hidden': 'true' }, L.edges.map(function (e, i) {
+    return svg('path', { d: axonPath(nodes[e.a], nodes[e.b], i), 'data-fired': e.lit, 'data-state': e.state, 'data-kind': e.kind });
+  }));
+  var signals = svg('g', { 'class': 'brain-signals', 'aria-hidden': 'true' }, L.edges.filter(function (e) { return e.lit === 2; }).map(function (e, i) {
+    return svg('path', { d: axonPath(nodes[e.a], nodes[e.b], L.edges.indexOf(e)), 'data-state': e.state, style: 'animation-delay:-' + ((hashOf(nodes[e.a].key) % 30) / 10) + 's' });
+  }));
+  var glow = svg('g', { 'class': 'brain-glow', filter: 'url(#neuron-glow)', 'aria-hidden': 'true' }, nodes.filter(function (x) { return x.state !== 'new'; }).map(function (x) {
+    return svg('circle', { cx: x.x, cy: x.y, r: (x.r * 1.9).toFixed(1), 'data-state': x.state });
+  }));
+  var cells = svg('g', { 'class': 'brain-neurons' }, nodes.map(function (x, i) {
+    var label = x.title + ', ' + MM_LABEL[x.state] + (x.recall != null ? ', recall ' + x.recall + '% today' : '');
+    return svg('g', { 'class': 'neuron mm-cell' + (i === nextI ? ' next' : '') + (i === selI ? ' sel' : ''), 'data-key': x.key, 'data-state': x.state, 'data-i': i,
+        role: 'button', tabindex: i === focusI ? '0' : '-1', 'aria-label': label, 'aria-pressed': i === selI ? 'true' : 'false' }, [
+      svg('title', {}, [label]),
+      svg('circle', { 'class': 'hit', cx: x.x, cy: x.y, r: Math.max(x.r * 1.9, L.gap * 0.5).toFixed(1) }),
+      svg('path', { 'class': 'dendrite', d: dendrites(x) }),
+      i === nextI ? svg('circle', { 'class': 'next-ring', cx: x.x, cy: x.y, r: (x.r * 1.6).toFixed(1) }) : null,
+      svg('circle', { 'class': 'soma', cx: x.x, cy: x.y, r: x.r }),
+      svg('circle', { 'class': 'nucleus', cx: (x.x - x.r * 0.25).toFixed(1), cy: (x.y - x.r * 0.25).toFixed(1), r: (x.r * 0.34).toFixed(1) })]);
+  }));
+  var pick = function (i) { ui.brainSel = nodes[i].key; render(); var el = doc.querySelector('#mastery .neuron[data-i="' + i + '"]'); if (el) el.focus(); };
+  var open = function (i) { openDoc(nodes[i].docId, nodes[i].ci); };
+  var art = svg('svg', { viewBox: B.VIEW, 'class': 'brain-svg', role: 'group', id: 'brain',
+      'aria-label': 'Your brain: ' + lit + ' of ' + nodes.length + ' sections drilled. Arrow keys move between them; Enter opens one.' },
+    [defs, body, lobes, axons, signals, glow, cells]);
+  art.addEventListener('click', function (e) {
+    var g = e.target.closest && e.target.closest('.neuron');
+    if (g) pick(+g.getAttribute('data-i'));
+  });
+  art.addEventListener('keydown', function (e) {
+    var g = e.target.closest && e.target.closest('.neuron'); if (!g) return;
+    var i = +g.getAttribute('data-i'), k = e.key;
+    if (k === 'Enter' || k === ' ') { e.preventDefault(); open(i); return; }
+    var step = k === 'ArrowRight' || k === 'ArrowDown' ? 1 : k === 'ArrowLeft' || k === 'ArrowUp' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    var j = (i + step + nodes.length) % nodes.length;
+    g.setAttribute('tabindex', '-1');
+    var nx = art.querySelector('.neuron[data-i="' + j + '"]'); nx.setAttribute('tabindex', '0'); nx.focus();
+  });
+
+  var shownI = selI !== -1 ? selI : nextI;
+  var info = shownI !== -1 ? (function () {
+    var x = nodes[shownI], u = L.units[x.unit];
+    return h('div.brain-info', { id: 'brain-info', 'aria-live': 'polite', 'data-state': x.state },
+      h('span.eyebrow', selI !== -1 ? 'This neuron' : 'Up next'),
+      h('strong.brain-title', x.title),
+      h('span.muted', u.name + ' · section ' + (x.ci + 1) + ' · ' + MM_LABEL[x.state] + (x.recall != null ? ' · recall ' + x.recall + '% today' : '')),
+      button(x.state === 'new' ? 'Learn it' : 'Open it', function () { open(shownI); }, 'primary', { id: 'brain-open' }));
+  })() : null;
+  var c = L.counts, pct = Math.round(100 * lit / nodes.length);
+  return h('section.card.brain-card', { id: 'mastery', 'aria-labelledby': 'brain-h' },
+    h('div.brain-stage', art),
+    h('div.brain-side',
+      h('span.eyebrow', { id: 'brain-h' }, 'Your brain'),
+      h('p.brain-big', h('strong', { id: 'brain-lit' }, pct + '%'), h('span', ' lit · ' + lit + ' of ' + Home.count(nodes.length, 'neuron'))),
+      h('p.mm-legend', ['solid', 'fading', 'weak', 'new'].map(function (k) {
+        return h('span', { 'data-k': k }, h('i.mm-dot', { 'data-state': k, 'aria-hidden': 'true' }), MM_LABEL[k] + ' ', h('b', String(c[k] || 0)));
+      })),
+      info,
+      h('div.brain-lobes-list', L.units.map(function (u, k) {
+        return h('button.chip.lobe-chip', { type: 'button', style: '--lobe:' + lobeHue(k), onclick: function () { openDoc(u.docId); } },
+          h('i', { 'aria-hidden': 'true' }), h('span', u.name), h('b', u.done + '/' + u.n));
+      })),
+      L.hidden.sections ? h('p.muted', { id: 'brain-more' }, '+ ' + Home.count(L.hidden.sections, 'more section') + (L.hidden.units ? ' in ' + Home.count(L.hidden.units, 'unit') : '') + ', not drawn.') : null));
 }
 function weekCard() {
   var w = Study.weekly(ui.activity, today()), a = w.week, b = w.before;
@@ -2845,19 +2994,30 @@ function appearanceCard() {
         return h('button', at, o[1]);
       }))];
   }
-  function swatch(id, name, sw) {
+  /* Each theme shown as itself in miniature: its ground, a card on it with
+     a line of text, and its accent — the choice is seen, not guessed from
+     two dots. Auto shows its day and night themes side by side. */
+  function mini(th) {
+    var t = th.t;
+    return h('span.sw-mini', { style: 'background:' + t.bg + ';border-color:' + t.line, 'aria-hidden': 'true' },
+      h('span.sw-card', { style: 'background:' + t.surface + ';border-color:' + t.line },
+        h('span.sw-line', { style: 'background:' + t.ink }), h('span.sw-line.short', { style: 'background:' + t.muted }),
+        h('span.sw-pill', { style: 'background:' + t.accent })));
+  }
+  function swatch(id, name, minis, note) {
     return h('button.swatch', { type: 'button', role: 'radio', 'aria-checked': String(look.theme === id), 'data-theme-id': id,
         onclick: function () { set('theme', id); } },
-      h('i', { style: 'background:linear-gradient(135deg,' + sw[0] + ' 0 55%,' + sw[1] + ' 55% 100%)', 'aria-hidden': 'true' }), name);
+      h('span.sw-minis', minis), h('span.sw-name', h('strong', name), note ? h('small', note) : null));
   }
+  var NOTES = { daylight: 'iPad light', clinical: 'Near-black, monitor green', paper: 'Warm, for long reading', neuron: 'Deep indigo, electric cyan', contrast: 'Systole\u2019s, strongest' };
   var themes = function (mode) {
-    return Look.THEMES.filter(function (t) { return t.mode === mode; }).map(function (t) { return swatch(t.id, t.name, t.swatch); });
+    return Look.THEMES.filter(function (t) { return t.mode === mode; }).map(function (t) { return swatch(t.id, t.name, [mini(t)], NOTES[t.id]); });
   };
   return h('div.card.settings', { id: 'appearance' }, h('h2', 'Appearance'),
-    h('p.muted', 'Daylight by day and Clinical at night, or Systole\u2019s Contrast; Systole\u2019s type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
+    h('p.muted', 'Daylight by day and Clinical at night, Paper for long reading, Neuron for the dark, or Systole\u2019s Contrast; Systole\u2019s type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
     h('div.group-label', { id: 'lbl-theme' }, 'Theme'),
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' },
-      swatch('auto', 'Auto', [Look.byId(Look.AUTO.light).swatch[0], Look.byId(Look.AUTO.dark).swatch[0]]), themes('light')),
+      swatch('auto', 'Auto', [mini(Look.byId(Look.AUTO.light)), mini(Look.byId(Look.AUTO.dark))], 'Follows the device'), themes('light')),
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' }, themes('dark')),
     seg('size', 'Text size'), seg('width', 'Reading width'), seg('spacing', 'Line spacing'),
     seg('contrast', 'Contrast'), seg('bright', 'Brightness'),
@@ -2909,7 +3069,11 @@ function viewSettings() {
     aiSettingsCard(),
     h('div.card', h('h2', 'What leaves this device'),
       h('p', 'Your PDF, photos and notes are read here, in the browser, and never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages and photos, the first time it is needed; they are read on this device too.'),
-      h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')));
+      h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')),
+    /* Which build is running, so an update can be checked on the device:
+       the owner's screenshots were of a build two releases old. */
+    h('p.muted.build-line', { id: 'build' }, 'Memorizer build ' + (doc.documentElement.getAttribute('data-build') || 'unbuilt (running from source)') +
+      '. When you are online the newest build loads each time the app opens.'));
 }
 
 function aiSettingsCard() {

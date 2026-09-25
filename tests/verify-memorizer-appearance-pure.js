@@ -45,10 +45,10 @@ const lum = hex => {
 const parseRgba = s => { const m = /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/.exec(s); return m ? [+m[1], +m[2], +m[3], +m[4]] : [0, 0, 0, -1]; };
 const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
-head('the themes: the owner’s two, and Systole’s Contrast');
+head('the themes: the owner’s two, Memorizer’s Paper and Neuron, and Systole’s Contrast');
 {
   const ids = L.THEMES.map(t => t.id);
-  ok('Daylight and Clinical, Contrast, and Auto pairing the first two', ids.join() === 'daylight,clinical,contrast' && L.AUTO &&
+  ok('Daylight and Clinical, Paper and Neuron, Contrast, and Auto pairing the first two', ids.join() === 'daylight,clinical,paper,neuron,contrast' && L.AUTO &&
      L.AUTO.light === 'daylight' && L.AUTO.dark === 'clinical' && L.byId('daylight').mode === 'light' && L.byId('clinical').mode === 'dark', ids.join(', '));
   /* Contrast is Systole's: its id, name and swatch are what Systole's
      picker shows, read from Systole's own source. */
@@ -89,7 +89,7 @@ head('ported colour for colour');
   });
   ok('Contrast’s source block was found and read', compared === 8, `${compared} colours compared`);
   ok('every one of its colours is Systole’s, exactly', drift.length === 0, drift.join('; ') || 'no drift');
-  ok('the owner’s two, drawn for Memorizer, name no Systole source', L.THEMES.filter(t => !t.source).map(t => t.id).join() === 'daylight,clinical');
+  ok('the four drawn for Memorizer name no Systole source', L.THEMES.filter(t => !t.source).map(t => t.id).join() === 'daylight,clinical,paper,neuron');
 }
 
 head('every theme is readable');
@@ -144,7 +144,7 @@ head('contrast and brightness, computed, and readable at every setting');
       const r = ratio(t.ink, s[k + '-soft']); if (r < 4.5) bad.push(`${id}: text on ${k} tint ${r.toFixed(2)}`);
     });
   })));
-  ok('every theme, at every contrast and brightness, clears its floors for every pairing', n === 18 && bad.length === 0, bad.slice(0, 6).join('; ') || `${n} variants`);
+  ok('every theme, at every contrast and brightness, clears its floors for every pairing', n === 30 && bad.length === 0, bad.slice(0, 6).join('; ') || `${n} variants`);
 
   /* No palette today needs its ink, secondary text or button text fitted —
      only accents are moved — so those fits are a net for a palette added
@@ -213,16 +213,16 @@ head('the hero band: each theme’s own, readable across its gradient');
     if (ratio(L.heroMuted(th), th.hero[g]) < 4.5) weak.push(`${th.id} muted on ${g}`);
   }));
   ok('the hero’s text, accent and secondary text are readable across its whole gradient', weak.length === 0, weak.join('; ') || 'all clear');
-  ok('Daylight’s hero is light, with the page’s dark ink; the others are dark, with light ink',
-     lum(L.byId('daylight').hero['hero-a']) > 0.8 && L.heroInk(L.byId('daylight')) === L.byId('daylight').t.ink &&
-     ['clinical', 'contrast'].every(id => lum(L.byId(id).hero['hero-a']) < 0.05 && lum(L.heroInk(L.byId(id))) > 0.8));
+  ok('a light theme’s hero is light, with the page’s dark ink; a dark theme’s is dark, with light ink',
+     ['daylight', 'paper'].every(id => lum(L.byId(id).hero['hero-a']) > 0.8 && L.heroInk(L.byId(id)) === L.byId(id).t.ink) &&
+     ['clinical', 'neuron', 'contrast'].every(id => lum(L.byId(id).hero['hero-a']) < 0.05 && lum(L.heroInk(L.byId(id))) > 0.8));
   /* The pills on the hero are tinted by the hero, not by a white that
      vanishes on a white band: dark on Daylight's, light on the others. */
   const css = L.css();
   const tok = (id, k) => (css.match(new RegExp(':root\\[data-look="' + id + '"\\]\\{[^}]*--' + k + ':(rgba\\([^)]*\\))')) || [])[1] || '';
   ok('the hero’s pills are a dark tint on a light hero and a light one on a dark hero',
-     /^rgba\(0,0,0,/.test(tok('daylight', 'hero-pill')) && /^rgba\(255,255,255,/.test(tok('clinical', 'hero-pill')) && /^rgba\(255,255,255,/.test(tok('contrast', 'hero-pill')),
-     ['daylight', 'clinical', 'contrast'].map(id => id + ' ' + tok(id, 'hero-pill')).join(' '));
+     L.THEMES.every(th => (th.mode === 'light' ? /^rgba\((0,0,0|60,40,20),/ : /^rgba\(255,255,255,/).test(tok(th.id, 'hero-pill'))),
+     L.THEMES.map(th => th.id + ' ' + tok(th.id, 'hero-pill')).join(' '));
   const appcss = fs.readFileSync(path.join(ROOT, 'memorizer', 'app.css'), 'utf8');
   const pill = (appcss.match(/\.home-hero \.pill\.stat \{[^}]*\}/) || [''])[0], track = (appcss.match(/\.home-hero \.stat-ring \.ring \.track \{[^}]*\}/) || [''])[0];
   ok('and app.css draws them, and the ring’s track, with those tokens', /background: var\(--hero-pill\)/.test(pill) && /var\(--hero-pill-edge\)/.test(track), pill.slice(0, 120));
@@ -248,7 +248,7 @@ head('glass and glow: the aurora and second accent, and text readable on glass o
      the eye. Held to it, so a louder one is a decision, not a drift. */
   const loud = [];
   L.THEMES.filter(th => !th.source).forEach(th => L.GLOW[th.id].aura.forEach((a, i) => { if (!(parseRgba(a)[3] > 0 && parseRgba(a)[3] <= 0.16)) loud.push(th.id + ' aura-' + (i + 1) + ' ' + a); }));
-  ok('Daylight’s and Clinical’s aurora is there, and faint: every colour at 16% or less', L.THEMES.filter(th => !th.source).length === 2 && loud.length === 0, loud.join('; ') || 'all faint');
+  ok('the aurora of each theme drawn for Memorizer is there, and faint: every colour at 16% or less', L.THEMES.filter(th => !th.source).length === 4 && loud.length === 0, loud.join('; ') || 'all faint');
 
   /* Glass over the aurora. The backdrop behind a glass card is the ground
      with an aurora colour over it; the card is the surface at its alpha over
@@ -270,7 +270,7 @@ head('glass and glow: the aurora and second accent, and text readable on glass o
     if (bt < f.accent) bad.push(`${th.id}/${c}/${b} button text on accent-2 ${bt.toFixed(2)}`);
   })));
   ok('text on glass over every aurora colour clears its floors, in every theme and setting, and so does button text on the second accent',
-     n === 144 && bad.length === 0, bad.slice(0, 5).join('; ') || `${n} glass composites`);
+     n === 240 && bad.length === 0, bad.slice(0, 5).join('; ') || `${n} glass composites`);
   /* The same, under the glass's sheen and the finger's light at their
      brightest (both white over the card, where the text is): a white that
      lifts a light page only helps dark text, but one on a dark page costs
@@ -331,6 +331,28 @@ head('the stylesheet covers every setting');
     const missing = used.filter(u => defined.indexOf(u) === -1);
     return missing.length === 0 || (console.log('    undefined: ' + missing.join(', ')), false);
   })());
+}
+
+head('the brain’s colours: every theme’s, and a theme’s own where it names them');
+{
+  const css = L.css();
+  const tokOf = (id, k) => (css.match(new RegExp(':root\\[data-look="' + id + '"\\]\\{[^}]*--brain-' + k + ':([^;]+);')) || [])[1];
+  const keys = Object.keys(L.BRAIN_TONES.light);
+  ok('every theme’s stylesheet carries every brain colour', L.THEMES.every(th => keys.every(k => tokOf(th.id, k))) && keys.length === 14,
+     L.THEMES.map(th => th.id + ':' + keys.filter(k => !tokOf(th.id, k)).join('/')).join(' '));
+  ok('a theme with no brain of its own takes its mode’s; one that names its own gets it', tokOf('daylight', 't1') === L.BRAIN_TONES.light.t1 &&
+     tokOf('clinical', 't1') === L.BRAIN_TONES.dark.t1 && tokOf('neuron', 't1') === L.byId('neuron').brain.t1 && tokOf('paper', 'sulcus') === L.byId('paper').brain.sulcus,
+     ['daylight', 'clinical', 'neuron', 'paper'].map(id => id + ' ' + tokOf(id, 't1')).join(' | '));
+  /* A dormant neuron is drawn on the brain's tissue, not on a card: it has
+     to be told from the tissue under it, and its outline (the dendrite
+     colour) seen. Held at 1.2:1 fill and 1.5:1 outline against the tissue's
+     middle tone over the ground — a shape, not text. */
+  const flat = (c, bg) => /^rgba/.test(c) ? L.over(c, bg) : c;
+  const weakN = L.THEMES.filter(th => {
+    const b = L.brainOf(th), g = th.t.bg, tissue = flat(b.t2, g);
+    return L.ratio(flat(b.dendrite, tissue), tissue) < 1.5;
+  }).map(th => th.id);
+  ok('a dormant neuron’s outline stands off the brain behind it, in every theme', weakN.length === 0, weakN.join(', ') || 'all');
 }
 
 head('settings come back as known values');

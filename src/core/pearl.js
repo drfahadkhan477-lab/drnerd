@@ -406,11 +406,32 @@ const MIN_STEP = 16;   // shorter than this is an aside, not a step
 const WEAK_MIN = 30;   // "…, or X" needs to be a clause, not the tail of a list
 const MAX_STEPS = 5;   // more than five is a list again
 
+/* NOTHING INSIDE BRACKETS IS A JOINT. "…a reduced event rate (26.9 vs 31.5
+   per 1,000 patient-years; HR 0.86; P = .02), over …" was cut at its
+   semicolons, and the owner's home screen showed a step ending on an open
+   bracket and the next beginning inside it. A separator inside ( ) or [ ]
+   is swapped for a control character before the cut and put back after, so
+   every step's brackets close where they opened. An unclosed bracket shields
+   the rest of the sentence: no cut is better than a wrong one. */
+const SHIELD = { ';': '\u0001', ':': '\u0002', ',': '\u0003', '—': '\u0004', '–': '\u0005' };
+const UNSHIELD = { '\u0001': ';', '\u0002': ':', '\u0003': ',', '\u0004': '—', '\u0005': '–' };
+function shield(t) {
+  let depth = 0, out = '';
+  for (const ch of t) {
+    if (ch === '(' || ch === '[') depth++;
+    else if ((ch === ')' || ch === ']') && depth) depth--;
+    out += depth && SHIELD[ch] ? SHIELD[ch] : ch;
+  }
+  return out;
+}
+const unshield = t => t.replace(/[\u0001-\u0005]/g, c => UNSHIELD[c]);
+
 function steps(text) {
   const t = String(text || '').trim();
   if (!t) return [];
+  const ts = shield(t);
 
-  const dashes = (t.match(/\s[—–]\s/g) || []).length;
+  const dashes = (ts.match(/\s[—–]\s/g) || []).length;
   /* Captured, not consumed: a piece that turns out not to be a step has to be
      put back the way it was found, and that needs the separator it was cut at. */
   const cut = new RegExp(
@@ -419,7 +440,7 @@ function steps(text) {
     (dashes === 1 ? '|\\s[—–]\\s' : '') +
     '|,\\s+(?=(?:' + CONNECTIVES + ')\\b))', 'i');
 
-  const raw = t.split(cut);
+  const raw = ts.split(cut).map(x => x === undefined ? x : unshield(x));
   const pieces = [{ sep: '', text: (raw[0] || '').trim() }];
   for (let i = 1; i < raw.length; i += 2) {
     const body = (raw[i + 1] || '').trim();
