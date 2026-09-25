@@ -5,6 +5,7 @@
  *   node tools/boot-probe.js build/systole.html
  *   node tools/boot-probe.js http://localhost:8080        # the split build
  *   node tools/boot-probe.js http://localhost:8123 --cpu 4 --runs 5
+ *   node tools/boot-probe.js http://localhost:8123 --cpu 4 --profile
  *
  * --cpu N slows the CPU N times (Chromium only; it says so when it cannot), the
  * nearest a laptop gets to an iPad without one. --runs N launches N times, each
@@ -14,6 +15,12 @@
  * hero appeared, slowest first, and the main thread's long tasks (over 50 ms)
  * before it — what makes an iPad feel stuck. Anything the engine cannot measure
  * is printed as unavailable, never as 0: a zero here would read as "fast".
+ *
+ * --profile adds one launch AFTER the timed ones, under Chrome's sampling CPU
+ * profiler, and lists the functions the main thread spent the time on before
+ * the hero: by self time (the function's own code) and by total time (itself
+ * and everything it called). It is a separate launch because the profiler
+ * slows what it watches, and the medians above should not carry that.
  *
  * WHY THIS EXISTS. verify-stage0 asserts "launches without stalling" as
  *
@@ -58,7 +65,7 @@ const flag = (name, dflt) => {
   if (!Number.isFinite(n) || n < 1) { console.error(`--${name} needs a number of 1 or more`); process.exit(1); }
   return n;
 };
-const CPU = flag('cpu', 1), RUNS = Math.round(flag('runs', 1));
+const CPU = flag('cpu', 1), RUNS = Math.round(flag('runs', 1)), PROFILE = argv.includes('--profile');
 const target = argv.find((a, i) => !a.startsWith('--') && !(i > 0 && /^--(cpu|runs)$/.test(argv[i - 1])));
 if (!target) {
   console.error('usage: node tools/boot-probe.js <build/systole.html | http://host:port> [--cpu N] [--runs N]');
@@ -75,8 +82,16 @@ const URL = /^https?:/.test(target) ? target
   console.log(`Boot probe — ${engineName()}\n  ${target}` +
               (CPU > 1 ? `, CPU slowed ${CPU}×` : '') + (RUNS > 1 ? `, ${RUNS} runs` : '') + '\n');
 
-  const once = async () => {
+  const once = async (profile = false) => {
   const page = await (await browser.newContext()).newPage();
+  /* Chromium only, like the throttle; null elsewhere, and said so below. */
+  let cdp = null;
+  if (profile && engineName() === 'chromium') {
+    cdp = await page.context().newCDPSession(page);
+    await cdp.send('Profiler.enable');
+    await cdp.send('Profiler.setSamplingInterval', { interval: 500 });
+    await cdp.send('Profiler.start');
+  }
   /* Asked for and not applied is said, not skipped: a --cpu 4 reading taken at
      full speed would be the number someone plans an iPad change around. */
   const throttled = CPU > 1 ? await cpuThrottle(page, CPU) : false;
@@ -120,6 +135,7 @@ const URL = /^https?:/.test(target) ? target
      against this build — rather than on the stamp, so a stamp that failed to
      install costs precision and not the whole reading. */
   await page.waitForFunction(() => !!document.querySelector('.hero-h1'), null, { timeout: 120000 });
+  const cpuProfile = cdp ? (await cdp.send('Profiler.stop')).profile : null;
   const wallMs = Date.now() - t0;
   const heroFallback = await page.evaluate(() => performance.now());
 
@@ -147,7 +163,7 @@ const URL = /^https?:/.test(target) ? target
      reported rather than presenting one as the other. */
   const heroAt = t.stamped ? t.heroAt : heroFallback;
   await page.context().close();
-  return { t, heroAt, wallMs, throttled };
+  return { t, heroAt, wallMs, throttled, cpuProfile };
   };
 
   const runs = [];
@@ -239,5 +255,59 @@ const URL = /^https?:/.test(target) ? target
   }
   console.log('');
 
+  if (PROFILE) {
+    const p = (await once(true)).cpuProfile;
+    if (!p) console.log('  Profile: unavailable — this engine has no sampling profiler.\n');
+    else printProfile(p);
+  }
+
   await browser.close();
 })().catch(e => { console.error(e); process.exit(1); });
+
+/* Self time is the sampled time a function was on top of the stack; total time
+   is the time it was anywhere on it, counted once per sample however deep the
+   recursion. Idle and the profiler's own bookkeeping are left out of the
+   ranking but the garbage collector is kept: on an iPad it is real time. */
+function printProfile(profile) {
+  const byId = new Map(profile.nodes.map(n => [n.id, n]));
+  const parent = new Map();
+  for (const n of profile.nodes) for (const c of n.children || []) parent.set(c, n.id);
+  const keyOf = n => {
+    const f = n.callFrame;
+    /* No URL: a built-in (JSON.parse, a regex) or the probe's own injected
+       code (Playwright's polling, the hero stamp), which cannot be told apart
+       here, so neither is named as the app's. */
+    if (!f.url) return `${f.functionName || '(anonymous)'}  (built-in or probe)`;
+    const file = f.url.replace(/^https?:\/\/[^/]+\//, '').replace(/^.*[\\/]/, '');
+    return `${f.functionName || '(anonymous)'}  ${file}:${f.lineNumber + 1}`;
+  };
+  const skip = new Set(['(root)', '(idle)', '(program)']);
+  const self = new Map(), total = new Map();
+  let sampled = 0;
+  profile.samples.forEach((id, i) => {
+    const dt = (profile.timeDeltas[i + 1] || 0) / 1000;   // µs → ms, the time until the next sample
+    const leaf = byId.get(id);
+    if (!leaf || skip.has(leaf.callFrame.functionName)) return;
+    sampled += dt;
+    self.set(keyOf(leaf), (self.get(keyOf(leaf)) || 0) + dt);
+    const seen = new Set();
+    for (let n = leaf; n; n = byId.get(parent.get(n.id))) {
+      if (skip.has(n.callFrame.functionName)) continue;
+      const k = keyOf(n);
+      if (!seen.has(k)) { seen.add(k); total.set(k, (total.get(k) || 0) + dt); }
+    }
+  });
+  /* Under 1% is dropped: at that size a row is sampling noise, and the list is
+     for finding where seconds go. */
+  const top = (m, n) => [...m.entries()].filter(([, ms]) => ms >= sampled / 100)
+                                        .sort((a, b) => b[1] - a[1]).slice(0, n);
+  const line = ([k, ms]) => console.log('    ' + (ms / 1000).toFixed(2).padStart(6) + 's  ' +
+                                        (100 * ms / sampled).toFixed(0).padStart(3) + '%  ' + k);
+  console.log(`  Profile of one more launch, to the hero: ${(sampled / 1000).toFixed(2)}s of main-thread work sampled`);
+  console.log('  (a separate launch: the profiler slows what it watches, so these times run long)\n');
+  console.log('  By total time — the function and everything it called:');
+  top(total, 15).forEach(line);
+  console.log('\n  By self time — the function\'s own code:');
+  top(self, 15).forEach(line);
+  console.log('');
+}
