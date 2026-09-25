@@ -1702,27 +1702,29 @@ function kindOf(user) {
        /multiple-choice questions built from the book/.test(await p2.locator('#builtin-about').innerText()));
     ok('and offers only the built-in coach and Claude', JSON.stringify(await p2.$$eval('#provider option', os => os.map(o => o.value))) === '["builtin","anthropic"]');
     /* Appearance: a theme and a size, applied at once and kept. */
-    await p2.locator('#appearance .swatch[data-theme-id="nocturne"]').click();
+    ok('the picker offers the owner’s two and Contrast, and Auto', JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))) ===
+       JSON.stringify(['auto', 'daylight', 'clinical', 'contrast']), JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))));
+    await p2.locator('#appearance .swatch[data-theme-id="clinical"]').click();
     const bg = await p2.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    ok('picking Nocturne recolours the page with Systole’s Nocturne ground', bg === 'rgb(14, 11, 26)', bg);
+    ok('picking Clinical recolours the page with its near-black ground', bg === 'rgb(5, 6, 8)', bg);
     /* Contrast and brightness: the page gets the colours appearance.js
        computes for that setting, read back from what the browser drew. */
     const rgbOf = hex => 'rgb(' + [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(', ') + ')';
     await p2.locator('#appearance .seg button[data-contrast="high"]').click();
-    const hiWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('nocturne'), 'high', 'standard'));
+    const hiWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('clinical'), 'high', 'standard'));
     const hiGot = await p2.evaluate(() => ({ ink: getComputedStyle(document.body).color, edge: getComputedStyle(document.querySelector('#appearance .seg button[data-contrast="high"]').closest('.card').querySelector('.swatch')).borderTopColor }));
     ok('High contrast draws the text and the control outlines in the fitted colours', hiGot.ink === rgbOf(hiWant.ink) && hiGot.edge === rgbOf(hiWant.edge) &&
-       hiWant.ink !== MemLookNode.byId('nocturne').t.ink, JSON.stringify(hiGot) + ' want ' + rgbOf(hiWant.ink) + ' / ' + rgbOf(hiWant.edge));
+       hiWant.ink !== MemLookNode.byId('clinical').t.ink, JSON.stringify(hiGot) + ' want ' + rgbOf(hiWant.ink) + ' / ' + rgbOf(hiWant.edge));
     await p2.locator('#appearance .seg button[data-bright="dim"]').click();
-    const dimWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('nocturne'), 'high', 'dim').bg);
-    ok('and Dim sinks the ground', await p2.evaluate(() => getComputedStyle(document.body).backgroundColor) === rgbOf(dimWant) && rgbOf(dimWant) !== 'rgb(14, 11, 26)', rgbOf(dimWant));
+    const dimWant = await p2.evaluate(() => MemLook.variant(MemLook.byId('clinical'), 'high', 'dim').bg);
+    ok('and Dim sinks the ground', await p2.evaluate(() => getComputedStyle(document.body).backgroundColor) === rgbOf(dimWant) && rgbOf(dimWant) !== 'rgb(5, 6, 8)', rgbOf(dimWant));
     await p2.locator('#appearance .seg button[data-size="xl"]').click();
     ok('Extra large text makes the body 20px', await p2.evaluate(() => getComputedStyle(document.body).fontSize) === '20px');
     await p2.locator('#appearance .seg button[data-font="serif"]').click();
     await p2.reload();
     await p2.locator('#door-add').waitFor(T);
     ok('and all of it survives a reload, applied before the page draws', await p2.evaluate(() =>
-      document.documentElement.getAttribute('data-look') === 'nocturne' && getComputedStyle(document.body).fontSize === '20px' &&
+      document.documentElement.getAttribute('data-look') === 'clinical' && getComputedStyle(document.body).fontSize === '20px' &&
       document.documentElement.getAttribute('data-contrast') === 'high' && document.documentElement.getAttribute('data-bright') === 'dim' &&
       /Iowan|Charter|Georgia/.test(getComputedStyle(document.body).fontFamily)));
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();

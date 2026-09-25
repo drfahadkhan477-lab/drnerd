@@ -26,9 +26,12 @@
    What cannot be used at all is refused, with the reason: a section whose
    title is not this unit's, a question that is not a fair multiple-choice
    question (prompts.js mcqError), and anything Claude marked NOT_IN_PDF.
-   Only what the checks name is checked: a sentence can pass all of them and
-   still be Claude's paraphrase, which is why it is labelled "Written with
-   Claude". tests/verify-memorizer-pack-pure.js holds every rule.
+   A question is held to these by what it claims — its right answer and its
+   explanation — not by its stem, whose vignette is a scenario, nor by its
+   wrong options, which are wrong on purpose. Only what the checks name is
+   checked: a sentence can pass all of them and still be Claude's
+   paraphrase, which is why it is labelled "Written with Claude".
+   tests/verify-memorizer-pack-pure.js holds every rule.
 
    The pack stays on this device (store.js `packs`), like the book.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -339,8 +342,12 @@ function checkOne(p0, doc, book) {
     if (!err && q.why.length && q.why.length !== q.options.length) err = where + ' has ' + q.why.length + ' reasons for ' + q.options.length + ' options';
     if (!err && says([q.question, q.options[q.answer], q.explain].join(' '))) err = 'Claude marked it ' + NOT_IN_PDF;
     if (err) { dropped.push({ where: where, why: err }); return; }
+    /* What a question claims is its right answer and its explanation. Its
+       stem is the scenario — a vignette's age, pressure or heart rate is
+       set up, not asserted — and its wrong options are wrong on purpose;
+       checking the stem flagged every vignette the prompt asks for. */
     var right = q.options[q.answer];
-    flag(q, where, pageFlag(q.page, c) || quoteFlag(q, sec) || claimFlag([q.question, right, q.explain].join(' '), sec, book, q.page));
+    flag(q, where, pageFlag(q.page, c) || quoteFlag(q, sec) || claimFlag([right, q.explain].join(' '), sec, book, q.page));
     q.by = 'pack';
     qs.push(q);
   });

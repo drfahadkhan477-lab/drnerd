@@ -1,24 +1,21 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   appearance.js — themes, text size and layout, from Systole.
+   appearance.js — themes, text size and layout.
 
-   THE THEMES ARE SYSTOLE'S. The eight presets of scripts/theme-patch.js and
-   the ninth of scripts/highcontrast-patch.js, with their palette colours
-   carried over value for value — tests/verify-memorizer-appearance-pure.js
-   reads both patch scripts and fails if a ported colour drifts from its
-   source. Systole's rules come with them: no pure black or white outside
-   Contrast, and the colours that MEAN something (green right, red wrong,
-   amber partly) are not themed, so what they mean never shifts underneath
-   you; they change only between light and dark.
+   THE THEMES ARE THE OWNER'S TWO, and Systole's Contrast. Memorizer first
+   carried Systole's eight palettes. The owner found them, and the page's
+   texture, not right for studying, and chose between three mock-ups drawn
+   on the real screens: A, the iPad's own light look — a grey grouped ground,
+   white cards, system blue — by day; B, a clinical dark — near-black,
+   graphite cards, monitor green — at night; and asked to keep the aurora
+   behind the page and the frosted glass over it. Auto pairs them. Contrast
+   is Systole's still (scripts/highcontrast-patch.js), and the suite still
+   holds it colour for colour to that source.
 
-   TWO ADAPTATIONS, both measured, both said here rather than hidden:
-     · Daylight and Midnight are Systole's own default look, and their full
-       palettes live in the licensed export's stylesheet, which this project
-       does not read. They are rebuilt from what theme-patch.js does publish
-       for them — the swatch ground and accent (#EFF3F8/#0284C7,
-       #0A1628/#0EA5E9) — with the rest chosen to the same rules.
-     · Daylight's accent is used as text here (section labels, links), and
-       #0284C7 on white is 4.1:1, under the 4.5:1 text needs. It is darkened
-       to #0369A1 (5.9:1). The swatch keeps Systole's colour.
+   The colours that MEAN something (green right, red wrong, amber partly) are
+   not themed, so what they mean never shifts underneath you; they change
+   only between light and dark. No ground is pure black or white outside
+   Contrast: the clinical dark is #050608, which a phone shows as black
+   without the halo pure black gives white text.
 
    SIZE is Systole's type ladder — a minor third (1.2) from a 16px body,
    tokens --t-* in app.css — with the body step itself scalable: Small 15,
@@ -29,16 +26,17 @@
    48 more palettes. variant() moves the grounds (brightness) and the ink
    (contrast), then FITS every text colour to a floor: a colour below its
    floor on any ground it is drawn on is mixed toward the far end, a step at
-   a time, until it clears. At Standard/Standard every ported colour already
-   clears its floor, so Systole's values come through untouched but one:
-   Parchment's accent is 4.2:1 on its own ground and is fitted to 4.6 there.
-   The suite checks both. One token is new at every setting: --edge, the outline
+   a time, until it clears. At Standard/Standard the palettes come through
+   as drawn except where glass over the aurora takes a colour under its
+   floor; the suite names each colour that moves, and shows it needed to. One token is new at every setting: --edge, the outline
    of a control (button, field, swatch). Systole's --border is a hairline,
    about 1.4:1 on a card, and a field drawn with it is hard to find; --edge
    is fitted to 3:1 (4.5:1 at High), WCAG's floor for a control's boundary.
 
-   THE HERO is Systole's too: the dark band at the top of the home screen,
-   its gradient and accent per palette from theme-patch.js.
+   THE HERO, the band at the top of the home screen, is each theme's own:
+   white with the ink of the page in Daylight, graphite in Clinical, and
+   Systole's dark band in Contrast. Its text colours are the theme's, held
+   to the same floors across its whole gradient.
 
    PURE except apply(), which touches only the document element it is given
    and one <style> element.
@@ -59,62 +57,39 @@ var SEMANTIC_HIGH = {
   dark:  { good: '#94EBBB', 'good-soft': '#17301F', mid: '#F7D98F', 'mid-soft': '#33290F', bad: '#FFB3AB', 'bad-soft': '#3A1B19' },
 };
 
-/* source: which Systole block the colours come from, for the drift test.
-   hero: Systole's hero band — the palette's own block, or for Daylight and
-   Midnight the defaults theme-patch.js sets for light and dark.
-   Tokens: bg, surface (Systole --card), surface-2, ink (--text), muted,
-   line (--border), accent (--teal), accent-soft (--teal4), accent-ink. */
+/* source: the Systole block a ported palette's colours come from, for the
+   drift test (Contrast's); null for the owner's two, drawn for Memorizer.
+   hero: the band at the top of home — its gradient, accent and rim, and its
+   own text colours and the tint of the pills on it, since it is light in
+   one theme and dark in the others.
+   Tokens: bg, surface (a card), surface-2, ink, muted, line, accent,
+   accent-soft, accent-ink. */
 var THEMES = [
-  { id: 'daylight', name: 'Daylight', mode: 'light', swatch: ['#EFF3F8', '#0284C7'], source: null,
-    t: { bg: '#EFF3F8', surface: '#FFFFFF', 'surface-2': '#E6ECF3', ink: '#0F1E33', muted: '#4A5A70', line: '#D3DCE7',
-         accent: '#0369A1', 'accent-soft': '#E3F0FA', 'accent-ink': '#FFFFFF' },
-    hero: { 'hero-a': '#12243F', 'hero-b': '#173A5E', 'hero-c': '#0F1E3D', 'hero-accent': '#5EEAD4', 'hero-edge': 'rgba(94,234,212,.16)' } },
-  { id: 'slate', name: 'Slate', mode: 'light', swatch: ['#EDF0F6', '#6366F1'], source: 'slate',
-    t: { bg: '#EDF0F6', surface: '#FFFFFF', 'surface-2': '#E7EBF3', ink: '#1E2536', muted: '#4B5568', line: '#D3D9E6',
-         accent: '#4F5BD5', 'accent-soft': '#EDEFFD', 'accent-ink': '#FFFFFF' },
-    hero: { 'hero-a': '#232056', 'hero-b': '#312E81', 'hero-c': '#1B1840', 'hero-accent': '#A5B4FC', 'hero-edge': 'rgba(129,140,248,.22)' } },
-  { id: 'parchment', name: 'Parchment', mode: 'light', swatch: ['#F3ECDD', '#0E7C86'], source: 'parchment',
-    t: { bg: '#F3ECDD', surface: '#FBF6EC', 'surface-2': '#EFE7D6', ink: '#372E20', muted: '#6A5B45', line: '#E2D7C2',
-         accent: '#0E7C86', 'accent-soft': '#E6F2EF', 'accent-ink': '#FFFFFF' },
-    hero: { 'hero-a': '#2B2419', 'hero-b': '#3A3121', 'hero-c': '#241E14', 'hero-accent': '#63D6C8', 'hero-edge': 'rgba(18,145,155,.22)' } },
-  { id: 'midnight', name: 'Midnight', mode: 'dark', swatch: ['#0A1628', '#0EA5E9'], source: null,
-    t: { bg: '#0A1628', surface: '#11213A', 'surface-2': '#172A47', ink: '#E6EDF7', muted: '#9FB0C8', line: '#22385A',
-         accent: '#0EA5E9', 'accent-soft': '#0E2A45', 'accent-ink': '#06121F' },
-    hero: { 'hero-a': '#0B1B33', 'hero-b': '#0E2947', 'hero-c': '#0A1628', 'hero-accent': '#5EEAD4', 'hero-edge': 'rgba(94,234,212,.16)' } },
-  { id: 'nocturne', name: 'Nocturne', mode: 'dark', swatch: ['#0E0B1A', '#A78BFA'], source: 'nocturne',
-    t: { bg: '#0E0B1A', surface: '#17132B', 'surface-2': '#231D3E', ink: '#EDE9F7', muted: '#A79FC4', line: '#2A2348',
-         accent: '#A78BFA', 'accent-soft': '#221B40', 'accent-ink': '#0E0B1A' },
-    hero: { 'hero-a': '#1A1533', 'hero-b': '#2A2160', 'hero-c': '#130E28', 'hero-accent': '#C4B5FD', 'hero-edge': 'rgba(167,139,250,.22)' } },
-  { id: 'cathlab', name: 'Cath Lab', mode: 'dark', swatch: ['#120C07', '#F59E0B'], source: 'cathlab',
-    t: { bg: '#120C07', surface: '#1D140B', 'surface-2': '#2C1F12', ink: '#F5EDE1', muted: '#C6AF93', line: '#3A2A18',
-         accent: '#F59E0B', 'accent-soft': '#2A1E08', 'accent-ink': '#120C07' },
-    hero: { 'hero-a': '#241708', 'hero-b': '#3A2610', 'hero-c': '#190F05', 'hero-accent': '#FBBF24', 'hero-edge': 'rgba(245,158,11,.22)' } },
-  { id: 'monitor', name: 'Monitor', mode: 'dark', swatch: ['#08110D', '#2DD4BF'], source: 'monitor',
-    t: { bg: '#08110D', surface: '#0F1A15', 'surface-2': '#16271E', ink: '#E6F4EC', muted: '#93B7A4', line: '#1E3328',
-         accent: '#2DD4BF', 'accent-soft': '#082820', 'accent-ink': '#08110D' },
-    hero: { 'hero-a': '#0A1F16', 'hero-b': '#103828', 'hero-c': '#07160F', 'hero-accent': '#5EEAD4', 'hero-edge': 'rgba(45,212,191,.22)' } },
+  { id: 'daylight', name: 'Daylight', mode: 'light', swatch: ['#F2F2F7', '#0064D2'], source: null,
+    t: { bg: '#F2F2F7', surface: '#FFFFFF', 'surface-2': '#F2F2F7', ink: '#1C1C1E', muted: '#6C6C70', line: '#E5E5EA',
+         accent: '#0064D2', 'accent-soft': '#E6F0FC', 'accent-ink': '#FFFFFF' },
+    hero: { 'hero-a': '#FFFFFF', 'hero-b': '#F7F9FC', 'hero-c': '#FFFFFF', 'hero-accent': '#0064D2', 'hero-edge': 'rgba(0,100,210,.10)',
+            'hero-ink': '#1C1C1E', 'hero-muted': '#6C6C70', 'hero-pill': 'rgba(0,0,0,.04)', 'hero-pill-edge': 'rgba(0,0,0,.06)' } },
+  { id: 'clinical', name: 'Clinical', mode: 'dark', swatch: ['#050608', '#34D399'], source: null,
+    t: { bg: '#050608', surface: '#16181B', 'surface-2': '#22252A', ink: '#F2F4F5', muted: '#9EA4AB', line: '#2C3035',
+         accent: '#34D399', 'accent-soft': '#10251C', 'accent-ink': '#04130C' },
+    hero: { 'hero-a': '#16181B', 'hero-b': '#1B1F23', 'hero-c': '#111315', 'hero-accent': '#34D399', 'hero-edge': 'rgba(52,211,153,.14)',
+            'hero-ink': '#F2F4F5', 'hero-muted': '#9EA4AB', 'hero-pill': 'rgba(255,255,255,.06)', 'hero-pill-edge': 'rgba(255,255,255,.10)' } },
   { id: 'contrast', name: 'Contrast', mode: 'dark', swatch: ['#060606', '#38BDF8'], source: 'contrast',
     t: { bg: '#060606', surface: '#121212', 'surface-2': '#1E1E1E', ink: '#FAFAFA', muted: '#D6D6D6', line: '#666666',
          accent: '#38BDF8', 'accent-soft': '#082F49', 'accent-ink': '#060606' },
     hero: { 'hero-a': '#0A0A0A', 'hero-b': '#151515', 'hero-c': '#050505', 'hero-accent': '#7DD3FC', 'hero-edge': 'rgba(56,189,248,.32)' } },
 ];
 /* GLOW: the second accent a gradient runs to, and the aurora behind the
-   page — Systole's --teal2 and --aura-1..3, palette by palette, read out of
-   scripts/theme-patch.js and highcontrast-patch.js by the appearance suite.
-   Daylight and Midnight have no palette block there: their aurora is the
-   :root default Systole sets for both. Daylight's second accent is
-   Systole's root --teal2 (semantictokens-patch.js); Midnight has no Systole
-   value to read, so its second accent is chosen — the next step lighter
-   than its own accent (#0EA5E9), which is also the aurora's sky colour. */
+   page. Contrast's are Systole's (--teal2, --aura-1..3 in
+   highcontrast-patch.js), read out by the suite. The owner's two are drawn
+   from their own accents, faint — the aurora is a colour in the corner of
+   the eye, not a picture: Daylight's the iPad's blue, cyan and violet;
+   Clinical's monitor green, with a cold blue. */
 var GLOW = {
-  daylight:  { a2: '#0EA5E9', aura: ['rgba(94,234,212,.20)', 'rgba(56,189,248,.18)', 'rgba(129,140,248,.15)'] },
-  slate:     { a2: '#6366F1', aura: ['rgba(129,140,248,.22)', 'rgba(99,102,241,.18)', 'rgba(56,189,248,.12)'] },
-  parchment: { a2: '#12919B', aura: ['rgba(18,145,155,.20)', 'rgba(217,155,60,.16)', 'rgba(120,90,50,.14)'] },
-  midnight:  { a2: '#38BDF8', aura: ['rgba(94,234,212,.20)', 'rgba(56,189,248,.18)', 'rgba(129,140,248,.15)'] },
-  nocturne:  { a2: '#C4B5FD', aura: ['rgba(167,139,250,.22)', 'rgba(139,92,246,.18)', 'rgba(99,102,241,.14)'] },
-  cathlab:   { a2: '#FBBF24', aura: ['rgba(245,158,11,.22)', 'rgba(251,191,36,.16)', 'rgba(180,83,9,.16)'] },
-  monitor:   { a2: '#5EEAD4', aura: ['rgba(45,212,191,.22)', 'rgba(94,234,212,.16)', 'rgba(16,185,129,.14)'] },
-  contrast:  { a2: '#7DD3FC', aura: ['rgba(56,189,248,.22)', 'rgba(125,211,252,.16)', 'rgba(255,255,255,.10)'] },
+  daylight: { a2: '#0051A8', aura: ['rgba(0,122,255,.14)', 'rgba(90,200,250,.16)', 'rgba(175,82,222,.10)'] },
+  clinical: { a2: '#10B981', aura: ['rgba(52,211,153,.14)', 'rgba(56,189,248,.10)', 'rgba(16,185,129,.10)'] },
+  contrast: { a2: '#7DD3FC', aura: ['rgba(56,189,248,.22)', 'rgba(125,211,252,.16)', 'rgba(255,255,255,.10)'] },
 };
 /* GLASS: how much of the card colour a frosted surface keeps over the
    aurora. The suite composites it over every aurora colour, at every
@@ -130,8 +105,8 @@ var GLOW = {
 var GLASS = { light: { card: 0.52, strong: 0.74, edge: 'rgba(255,255,255,.75)', rim: 'rgba(255,255,255,.55)', sheen: 'rgba(255,255,255,.30)', light: 'rgba(255,255,255,.38)', blur: '28px' },
               dark:  { card: 0.48, strong: 0.70, edge: 'rgba(255,255,255,.10)', rim: 'rgba(255,255,255,.12)', sheen: 'rgba(255,255,255,0)', light: 'rgba(255,255,255,0)', blur: '28px' } };
 
-/* Auto follows the device: Daylight by day, Midnight at night. */
-var AUTO = { id: 'auto', name: 'Auto', light: 'daylight', dark: 'midnight' };
+/* Auto follows the device: Daylight by day, Clinical at night. */
+var AUTO = { id: 'auto', name: 'Auto', light: 'daylight', dark: 'clinical' };
 
 var OPTIONS = {
   size:    [['s', 'Small', 15], ['m', 'Standard', 16], ['l', 'Large', 18], ['xl', 'Extra large', 20]],
@@ -270,6 +245,8 @@ function glassOf(theme, contrast, t) {
 }
 function semanticOf(mode, contrast) { return (contrast === 'high' ? SEMANTIC_HIGH : SEMANTIC)[mode]; }
 
+/* the hero's gradient, accent and rim; its text and pills are set below */
+var HERO_KEYS = ['hero-a', 'hero-b', 'hero-c', 'hero-accent', 'hero-edge'];
 var SHADOW = {
   light: '0 1px 2px rgba(15,30,51,.07), 0 4px 16px rgba(15,30,51,.08)',
   dark: '0 1px 2px rgba(0,0,0,.45), 0 6px 20px rgba(0,0,0,.35)',
@@ -280,16 +257,19 @@ function block(sel, theme, look) {
   var t = variant(theme, contrast, bright), sem = semanticOf(theme.mode, contrast), hero = theme.hero || {};
   var decl = Object.keys(t).map(function (k) { return '--' + k + ':' + t[k]; })
     .concat(Object.keys(sem).map(function (k) { return '--' + k + ':' + sem[k]; }))
-    .concat(Object.keys(hero).map(function (k) { return '--' + k + ':' + hero[k]; }))
-    .concat(['--hero-ink:' + HERO_INK, '--hero-muted:' + heroMuted(theme)])
+    .concat(HERO_KEYS.map(function (k) { return '--' + k + ':' + hero[k]; }).filter(function (d) { return !/undefined$/.test(d); }))
+    .concat(['--hero-ink:' + heroInk(theme), '--hero-muted:' + heroMuted(theme), '--hero-pill:' + (hero['hero-pill'] || 'rgba(255,255,255,.08)'),
+             '--hero-pill-edge:' + (hero['hero-pill-edge'] || 'rgba(255,255,255,.14)')])
     .concat((function () { var g = glassOf(theme, contrast, t); return Object.keys(g).map(function (k) { return '--' + k + ':' + g[k]; }); })())
     .concat(GLOW[theme.id] ? GLOW[theme.id].aura.map(function (a, i) { return '--aura-' + (i + 1) + ':' + a; }) : [])
     .concat(['--shadow:' + (contrast === 'high' ? 'none' : SHADOW[theme.mode]), 'color-scheme:' + theme.mode]);
   return sel + '{' + decl.join(';') + '}';
 }
-/* The hero band is dark in every theme (Systole's), so its text is light. */
+/* A hero that names no text colours of its own is a dark band (Systole's,
+   in Contrast), so its text is light. */
 var HERO_INK = '#F4F7FB';
-function heroMuted(theme) { return theme.hero ? mix(HERO_INK, theme.hero['hero-b'], 0.25) : HERO_INK; }
+function heroInk(theme) { return theme.hero && theme.hero['hero-ink'] || HERO_INK; }
+function heroMuted(theme) { return theme.hero && theme.hero['hero-muted'] || (theme.hero ? mix(HERO_INK, theme.hero['hero-b'], 0.25) : HERO_INK); }
 
 /* The stylesheet every theme needs, generated from the table above so the
    colours exist in exactly one place — at the contrast and brightness the
@@ -337,7 +317,7 @@ function apply(look, docEl, doc) {
 
 var MemLook = {
   THEMES: THEMES, AUTO: AUTO, SEMANTIC: SEMANTIC, SEMANTIC_HIGH: SEMANTIC_HIGH, OPTIONS: OPTIONS, FONTS: FONTS, DEFAULT: DEFAULT, KEY: KEY,
-  FLOORS: FLOORS, HERO_INK: HERO_INK,
+  FLOORS: FLOORS, HERO_INK: HERO_INK, HERO_KEYS: HERO_KEYS, heroInk: heroInk,
   byId: byId, optValue: optValue, normalise: normalise, load: load, save: save, css: css, isDark: isDark, apply: apply,
   GLOW: GLOW, GLASS: GLASS, glassOf: glassOf, over: over, parseRgba: parseRgba,
   variant: variant, semanticOf: semanticOf, heroMuted: heroMuted, mix: mix, ratio: ratio, fit: fit,

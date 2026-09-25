@@ -281,7 +281,7 @@ const SUITES = [
   ['memorizer-prompts-pure', 'the model is held to your PDF, only the section being studied goes out, and a bad reply is never a pass'],
   ['memorizer-session-pure', 'no phase of the protocol is skipped, and every miss becomes exactly one card'],
   ['memorizer-coach-pure',   'the built-in coach needs no key, invents nothing, and asks fair multiple-choice questions'],
-  ['memorizer-appearance-pure', 'the themes are Systole\u2019s, colour for colour, and readable at every contrast and brightness'],
+  ['memorizer-appearance-pure', 'Daylight by day, Clinical at night and Systole\u2019s Contrast, each readable at every contrast and brightness, on glass over the aurora as well as solid'],
   ['memorizer-home-pure',    'the home screen\u2019s progress counts what happened, and its pearl is your PDF\u2019s own sentence'],
   ['memorizer-book-pure',   'a whole textbook: its parts in order, its pages straight through, its chapters found three ways'],
   ['memorizer-ask-pure',    'asking your book: its own sentences with their pages, from the right section, or nothing found'],
