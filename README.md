@@ -40,7 +40,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 56 suites that need neither a browser nor a build all stay
+present, and the 57 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1684 checks can't run here.
 
@@ -175,6 +175,25 @@ indexes — chapters, diseases, clinical scenarios, diagnostic tests and
 treatments — built on the device from a vocabulary of cardiology terms and
 their synonyms ("NT-proBNP", "TAVI", a drug by its suffix), and the indexes
 can be browsed too. Nothing is sent anywhere.
+
+**A study pack written with Claude.** On a unit's page, *Copy the prompt*
+gives a request for your own Claude chat — claude.ai, with your own skills —
+that carries the unit's text page by page and asks for every section's lesson
+and questions in a fixed JSON shape: the key points, the numbers, the
+mechanism, the pairs students confuse and the exam pearls; board-style
+questions that say why each wrong option is wrong and name the trap each one
+sets. A long chapter is asked for a few sections to a reply, so none is cut
+off. Paste each reply back and Memorizer checks it against your book
+([`memorizer/src/pack.js`](memorizer/src/pack.js)) before any of it is used.
+A number not in the section or on the page it cites is flagged on screen
+where it is shown. So is a page outside the section, a condition, test or
+treatment the chapter never names, and a quoted sentence that is not the
+book's. Three things are refused, with the reason: a section from another
+unit, a question that is not a fair single-best-answer, and anything Claude
+itself marked `NOT_IN_PDF`. What passes teaches the section, labelled
+"Written with Claude · checked against your book", and the drill asks its
+questions. The pack stays on the device, and `scripts/leak-guard.js` refuses
+a saved pack or prompt at commit, since both carry your book.
 
 **An on-device AI tutor, optional.** Turned on in Settings, a small language
 model (Qwen3 0.6B, 1.7B or 4B, Apache-2.0, through WebLLM on WebGPU) is downloaded

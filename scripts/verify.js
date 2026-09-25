@@ -292,6 +292,7 @@ const SUITES = [
   ['memorizer-agent-pure',  'the Coach as an agent: each tool reached, its topic, follow-ups remembered, a model\u2019s plan used only when it names a real tool'],
   ['memorizer-study-pure',  'studying beyond the drill: recall and figure cards from the book, checks days apart, timed practice, an exam plan, teach-back, corrections, notes, progress'],
   ['memorizer-provenance-pure', 'where a unit came from: a real SHA-256 of its bytes, a duplicate recognised, and an import report that counts what happened'],
+  ['memorizer-pack-pure',   'a study pack written with Claude: the prompt carries the chapter, and the reply is held to the book \u2014 numbers, pages, names and quotes \u2014 before any of it is used'],
   ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
   ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
 ];
@@ -334,7 +335,7 @@ const SUITES = [
    and echo. */
 const PENDING_RECORD = ['coronaryview', 'ambient',
   'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer-coach-pure', 'memorizer-appearance-pure', 'memorizer-home-pure', 'memorizer-book-pure', 'memorizer-ask-pure', 'memorizer-ground-pure', 'memorizer-vec-pure', 'memorizer-sheet-pure', 'memorizer-figure-pure', 'memorizer-agent-pure', 'memorizer',
-  'memorizer-provenance-pure', 'memorizer-hardening', 'memorizer-study-pure'];
+  'memorizer-provenance-pure', 'memorizer-hardening', 'memorizer-study-pure', 'memorizer-pack-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

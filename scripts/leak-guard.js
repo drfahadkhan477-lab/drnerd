@@ -18,7 +18,7 @@
  * repository, published under the owner's name — and git history is not
  * something you can quietly take back.
  *
- * FIVE RULES, in the order they fire. Each names what it is for, because a
+ * SIX RULES, in the order they fire. Each names what it is for, because a
  * guard that refuses without saying why gets disabled the first time it is
  * inconvenient:
  *
@@ -46,6 +46,10 @@
  *                for a floor to protect against. A figure dump small enough
  *                to sit under PAYLOAD's 200 KB floor still has to clear this
  *                one.
+ *   6. PACK      a Memorizer study pack, or the prompt that asks Claude for
+ *                one — not the question bank, the owner's own textbook, which
+ *                the prompt carries page by page. Recognised by content, at
+ *                any size: see PACKJSON below.
  *
  * THE ESCAPE HATCH IS TYPED, ONCE, PER PATH. Same bargain as PENDING_RECORD in
  * scripts/verify.js: a blanket --force would be used the first time rule 3
@@ -126,6 +130,24 @@ const FILES = ['tests/last-run.log'];
  * scripts/verify.js writes this header as the first line of every run, so
  * there is one spelling of it and the guard moves when the runner does. */
 const LOGHEAD = /^#\s*systole verify\s+—/;
+/* RULE 6: THE OWNER'S TEXTBOOK, BY WAY OF MEMORIZER.
+ *
+ * memorizer/src/pack.js writes a prompt that carries a chapter of the
+ * owner's book, page by page, for them to paste into their own Claude chat,
+ * and imports the JSON pack Claude writes back. Both live on the device
+ * (IndexedDB) and the app never writes either to disk. But a reply saved to
+ * a file to paste in later, or a prompt kept for next time, is the book in a
+ * file, in a public repository — and like a verify log, it is small enough
+ * to walk under every size rule here.
+ *
+ * So it is recognised by what it says: the pack's format marker AS JSON
+ * WRITES IT, with the key quoted — which the prompt carries too, in the
+ * shape it asks Claude for. The source files that name the format, pack.js
+ * and its tests, build it as a JavaScript string and do not contain it.
+ * (A second test, for the prompt's first line, was written and taken out:
+ * with it removed the suite stayed green, because every prompt already
+ * carries the marker. It measured nothing this one does not.) */
+const PACKJSON = /"format"\s*:\s*"memorizer-pack"/;
 const NAME  = /ACCSAP|_super_v\d|question-bank|questions\.json$/i;
 const PAYLOAD = /const\s+(ALL_Q\s*=\s*\[|IMGS\s*=\s*\{)/;
 const B64IMG  = /data:image\/(?:webp|jpeg|png|gif);base64,/g;
@@ -195,6 +217,8 @@ function inspect(file) {
      says why), so it runs on every file rule 3 let through, not just the
      ones over PAYLOAD_SNIFF_BYTES. A small figure dump used to clear every
      rule in this file; this is the fix. */
+  if (PACKJSON.test(text))
+    return { rule: 'PACK', why: 'a Memorizer study pack, or the prompt for one — both carry your book' };
   if ((text.match(B64IMG) || []).length >= B64_MANY)
     return { rule: 'FIGURES', why: 'it is a figure dump, whatever it has been called' };
   if (st.size > PAYLOAD_SNIFF_BYTES && PAYLOAD.test(text))

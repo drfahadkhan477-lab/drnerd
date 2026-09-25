@@ -872,3 +872,33 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 /* the strip has a band of its own under the hero's content, as on Systole */
 .home-hero:has(.hero-monitor) { padding-bottom: calc(var(--s-6) + 4rem); }
 .home-hero .stat-label { font-family: var(--font-mono); letter-spacing: .06em; }
+
+/* ── the study pack, written with Claude (pack.js) ──
+   Who wrote it is said in the accent; what the check could not find in the
+   book, in the caution colour the rest of the app uses for "check this". */
+.pack-card summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2); }
+.pack-card summary::-webkit-details-marker { display: none; }
+.pack-card summary .eyebrow { color: var(--accent); margin: 0; }
+.pack-card[open] summary { margin-bottom: var(--s-3); }
+.pack-steps { margin: var(--s-2) 0 var(--s-3); padding-left: 1.25rem; }
+.pack-steps li { margin: .125rem 0; }
+.pack-card textarea { width: 100%; margin: var(--s-2) 0; }
+.pack-prompt { font-family: var(--font-mono); font-size: var(--t-tiny); }
+.pack-report { margin-top: var(--s-3); padding: var(--s-3); border-radius: .75rem; background: var(--surface-2); }
+.pack-report ul { margin: var(--s-2) 0 0; padding-left: 1.25rem; }
+.pack-label { font-size: var(--t-meta); color: var(--muted); margin: 0 0 var(--s-2); }
+.pack-label strong { color: var(--accent); }
+.pack-flagged { color: var(--mid); }
+.pack-tag { margin-left: var(--s-2); font-size: var(--t-meta); }
+.pack-tag[data-flagged="true"] { color: var(--mid); }
+.flag { color: var(--mid); background: var(--mid-soft); font-size: var(--t-meta); border-radius: .5rem; padding: .125rem .5rem; margin: .25rem 0 0; display: inline-block; }
+.mechanism .eyebrow, .distinctions .eyebrow, .pearls .eyebrow { color: var(--accent); }
+.confuse, .pearl-list { list-style: none; margin: var(--s-2) 0 0; padding: 0; }
+.confuse li, .pearl-list li { padding: var(--s-2) 0; border-top: 1px solid var(--line); }
+.confuse li:first-child, .pearl-list li:first-child { border-top: 0; }
+.confuse-pair { margin: 0 0 .125rem; }
+.confuse-pair .vs { color: var(--muted); font-size: var(--t-meta); text-transform: uppercase; letter-spacing: .06em; }
+.why-not, .trap { margin-top: var(--s-2); }
+.why-all { margin-top: var(--s-2); }
+.why-all ul { margin: var(--s-2) 0 0; padding-left: 1.25rem; }
+.why-all li.right strong { color: var(--good); }

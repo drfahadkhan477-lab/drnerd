@@ -37,6 +37,7 @@ const TITLES = ['Preload', 'Afterload', 'Contractility'];
 const lesson = { overview: 'o', points: [{ text: 'Preload stretches the sarcomere', page: 2 }], numbers: [], mnemonics: [], analogies: [], flowchart: '' };
 /* n questions; question k's right answer is option k % 4 */
 const quiz = (n, tag) => ({ questions: Array.from({ length: n }, (_, k) => ({ question: (tag || 'Q') + k, quote: '', options: ['a', 'b', 'c', 'd'], answer: k % 4, explain: 'e' + k, page: 2 + k })) });
+const clone = v => JSON.parse(JSON.stringify(v));
 const refused = (s, e) => { try { S.next(s, e); return ''; } catch (err) { return err.message; } };
 const go = (s, ...events) => events.reduce((st, e) => S.next(st, e), s);
 /* A review round, if one is open, answered right throughout; and toExam
@@ -342,6 +343,42 @@ head('a confident miss, and cards that start later (study.js)');
      !S.isDue({ srs: null, dueFrom: '2026-09-25' }, '2026-09-24') && S.dueCards([{ srs: null, dueFrom: '2026-09-25' }, { srs: null }], '2026-09-24').length === 1);
   ok('once reviewed, its schedule decides, not where it started', S.isDue({ srs: { due: '2026-09-20' }, dueFrom: '2026-09-30' }, '2026-09-24') &&
      !S.isDue({ srs: { due: '2026-09-30' } }, '2026-09-24'));
+}
+
+head('a pack imported (pack.js): its sections taught from it, what was earned kept');
+{
+  const packLesson = { overview: 'p', points: [{ text: 'Afterload is the load the ventricle ejects against', page: 3 }], numbers: [], mnemonics: [], analogies: [], flowchart: '', by: 'pack' };
+  const packed = (index, n) => ({ index, lesson: packLesson, quiz: quiz(n, 'P' + index + 'Q') });
+  let s = drill(S.init('dk', TITLES), 0, 2, [false, true]);
+  s = go(s, { type: 'toUnit' });
+  const cards = s.cards.length, weak = Object.keys(s.weak).length, score = s.per[0].score;
+  const t = S.next(s, { type: 'packed', value: { sections: [packed(0, 3), packed(1, 2)] } });
+  ok('each section it covers has the pack\u2019s lesson and questions', t.per[0].lesson.by === 'pack' && t.per[1].lesson.by === 'pack' &&
+     t.per[0].quiz.questions.length === 3 && t.per[0].quiz.questions[0].question === 'P0Q0' && t.per[1].quiz.questions.length === 2);
+  ok('a section it does not cover is left as it was', !t.per[2].lesson && !t.per[2].quiz);
+  ok('what the drilled section earned stays: its score, its cards, its weak items', t.per[0].score === score && t.per[0].done && t.cards.length === cards && Object.keys(t.weak).length === weak);
+  ok('the next drill of it asks the pack\u2019s questions', (() => {
+    const d = go(t, { type: 'open', section: 0 }, { type: 'toDrill' });
+    return d.phase === 'drill' && d.per[0].order.length === 3 && d.per[0].quiz.questions[d.per[0].order[0]].question === 'P0Q0';
+  })());
+  ok('a new section is taught from it, with nothing more to ask for', (() => {
+    const o = S.next(t, { type: 'open', section: 1 });
+    return o.phase === 'teach' && o.per[1].lesson.by === 'pack' && refused(o, { type: 'taught', value: lesson }) === '';
+  })());
+  const mid = go(S.init('dm', TITLES), { type: 'open', section: 0 }, { type: 'taught', value: lesson }, { type: 'toMemorize', value: { cards: 0 } }, { type: 'toDrill' }, { type: 'quizReady', value: quiz(2) });
+  const m2 = S.next(mid, { type: 'packed', value: { sections: [packed(0, 3), packed(1, 2)] } });
+  ok('the section being drilled keeps its lesson and questions until it is left', m2.per[0].quiz.questions[0].question === 'Q0' && m2.per[0].lesson.overview === 'o');
+  ok('while the others take the pack\u2019s', m2.per[1].lesson.by === 'pack');
+  const e = S.next(t, { type: 'packed', value: { sections: [{ index: 2, lesson: { points: [] }, quiz: quiz(2) }, { index: 9, lesson: packLesson, quiz: quiz(1) }, { index: 1, lesson: packLesson, quiz: { questions: [{ question: 'x', options: ['a'], answer: 3 }] } }] } });
+  ok('a lesson with no points, a section the unit does not have, and unusable questions are passed over',
+     !e.per[2].lesson && !e.per[9] && e.per[1].quiz.questions[0].question === 'P1Q0');
+  ok('a pack that is not a list of sections is refused', /list of sections/.test(refused(s, { type: 'packed', value: {} })));
+  ok('the stored lesson is the session\u2019s own copy', (() => {
+    const src = { sections: [{ index: 2, lesson: clone(packLesson), quiz: quiz(1) }] };
+    const u = S.next(s, { type: 'packed', value: src });
+    src.sections[0].lesson.points.push({ text: 'x', page: 1 }); src.sections[0].quiz.questions.push(quiz(1).questions[0]);
+    return u.per[2].lesson.points.length === 1 && u.per[2].quiz.questions.length === 1;
+  })());
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -23,6 +23,11 @@
                                             — each section's meaning, for search
                                               by meaning (vec.js); remade if the
                                               model changes
+   and, from v5:
+     packs     { id: docId, sections:{ index: … }, at }
+                                            — the unit's lessons and questions
+                                              written with Claude and checked
+                                              against the book (pack.js)
 
    A chapter of a book is a doc like any other, with bookId and the book's
    parts (its figures and pages are drawn from whichever part holds them).
@@ -36,13 +41,14 @@
 'use strict';
 
 var DB_NAME = 'memorizer';
-var DB_VERSION = 4;
+var DB_VERSION = 5;
 /* v2 adds `files`: the PDF's own bytes, kept on this device so its pages and
    figures can be drawn while studying. v3 adds `books`, `bookpages` and
-   `meta`; v4, `vectors`. Upgrading keeps every store already there. */
-var STORES = ['docs', 'sessions', 'cards', 'files', 'books', 'bookpages', 'meta', 'vectors'];
+   `meta`; v4, `vectors`; v5, `packs`. Upgrading keeps every store already
+   there. */
+var STORES = ['docs', 'sessions', 'cards', 'files', 'books', 'bookpages', 'meta', 'vectors', 'packs'];
 
-var mem = { docs: {}, sessions: {}, cards: {}, files: {}, books: {}, bookpages: {}, meta: {}, vectors: {} };
+var mem = { docs: {}, sessions: {}, cards: {}, files: {}, books: {}, bookpages: {}, meta: {}, vectors: {}, packs: {} };
 var dbp = null;
 var api = { persistent: false };
 
@@ -105,7 +111,7 @@ function del(store, id) {
 function deleteDoc(id) {
   return all('cards').then(function (cards) {
     return Promise.all(cards.filter(function (c) { return c.docId === id; }).map(function (c) { return del('cards', c.id); }));
-  }).then(function () { return del('sessions', id); }).then(function () { return del('files', id); }).then(function () { return del('vectors', id); }).then(function () { return del('docs', id); });
+  }).then(function () { return del('sessions', id); }).then(function () { return del('files', id); }).then(function () { return del('vectors', id); }).then(function () { return del('packs', id); }).then(function () { return del('docs', id); });
 }
 
 /* Removing a book removes its chapters (and everything from them), its
