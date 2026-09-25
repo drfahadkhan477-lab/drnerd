@@ -492,14 +492,20 @@ head('questions that test reasoning: mechanisms and thresholds');
   CH.text = CH.segments[0].text;
   const U2 = UNIT.concat([CH]);
   const mech = K.candidates(CH, K.pools(U2)).filter(q => q.kind === 'mechanism');
-  const fwd = mech.find(q => /Diuretics → reduce → \?$/.test(q.question));
-  ok('forward: "Diuretics → reduce → ?", the answer the next step, the book’s sentence the reason', fwd && fwd.options[fwd.answer] === 'preload' &&
+  const fwd = mech.find(q => q.question === 'In your book, diuretics reduce what?');
+  ok('forward: "In your book, diuretics reduce what?", the answer the next step, the book’s sentence the reason', fwd && fwd.options[fwd.answer] === 'preload' &&
      fwd.explain === 'Diuretics reduce preload by lowering circulating volume.' && fwd.page === 9, JSON.stringify(mech.map(q => q.question)));
   ok('no step on the same chain is offered as wrong: what preload leads to is not "wrong" for diuretics', fwd &&
      !fwd.options.some(o => /pulmonary venous pressure|pulmonary congestion|oedema of the lungs/.test(o)), fwd && JSON.stringify(fwd.options));
-  const back = mech.find(q => /\? → leads to → oedema of the lungs$/.test(q.question));
-  ok('backward: "? → leads to → oedema of the lungs", and nothing upstream offered as wrong', back && back.options[back.answer] === 'pulmonary venous pressure' &&
+  const back = mech.find(q => q.question === 'In your book, what leads to oedema of the lungs?');
+  ok('backward: "In your book, what leads to oedema of the lungs?", and nothing upstream offered as wrong', back && back.options[back.answer] === 'pulmonary venous pressure' &&
      !back.options.some(o => /^(?:preload|Diuretics)$/.test(o)), back && JSON.stringify(back.options));
+  ok('a label sits inside the sentence lower-cased, but an abbreviation or a value keeps its form',
+     K.lowerLead('Calcific degeneration') === 'calcific degeneration' && K.lowerLead('LVEDP rises') === 'LVEDP rises' && K.lowerLead('AF') === 'AF' && K.lowerLead('5 mg') === '5 mg');
+  ok('and the verb agrees with "what": reduce, lead to, carry, push — causes as it was',
+     K.singular('reduce') === 'reduces' && K.singular('lead to') === 'leads to' && K.singular('carry') === 'carries' && K.singular('push') === 'pushes' && K.singular('causes') === 'causes');
+  ok('asked as a sentence: a plural verb agrees with "what"', mech.some(q => q.question === 'In your book, what reduces preload?') &&
+     !mech.some(q => /→|what reduce /.test(q.question)), JSON.stringify(mech.map(q => q.question)));
   const TH = { index: 4, title: 'Severity', pageStart: 12, pageEnd: 12, text: '', segments: [{ page: 12, heading: false, text:
     'Severe stenosis is defined by a peak velocity of at least 4 m/s, a mean gradient of at least 40 mmHg or a valve area below 1.0 cm2. ' +
     'Moderate stenosis is defined by a mean gradient of at least 20 mmHg.' }] };
@@ -575,7 +581,7 @@ head('the robot explains the question in front of you');
      hinted.every(({ q, e }) => /_____/.test(e.hint) && e.hint.toLowerCase().indexOf(q.options[q.answer].toLowerCase()) === -1 &&
        e.hint.replace('_____', q.options[q.answer]).toLowerCase() === q.explain.toLowerCase()) &&
      before.every(({ q, e }) => !e.why && !e.options.length && (!q.quote || !e.hint)), `${hinted.length} hints`);
-  const fwd = K.candidates(CH, K.pools(U2)).find(q => q.kind === 'mechanism' && /Diuretics → reduce → \?$/.test(q.question));
+  const fwd = K.candidates(CH, K.pools(U2)).find(q => q.kind === 'mechanism' && q.question === 'In your book, diuretics reduce what?');
   const wrong = fwd.options.findIndex((o, i) => i !== fwd.answer);
   const after = K.explainQuestion(CH, fwd, wrong);
   ok('after an answer: the book’s sentence says why, your choice and the right one marked', after.why === fwd.explain &&
