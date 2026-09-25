@@ -22,7 +22,7 @@ and a row of glass doors to everything else.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 2944 checks, 90 suites
+node scripts/verify.js                              # 4412 checks, 111 suites
 node scripts/verify.js --pwa                        # + 133 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
@@ -33,16 +33,16 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 2944 + 133 checks above — read it as 1393, not 3077.**
+**That badge is not the 4412 + 133 checks above — read it as 2807, not 4545.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 57 suites that need neither a browser nor a build all stay
+present, and the 58 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
-the exact scope and why the other 1684 checks can't run here.
+the exact scope and why the other 1738 checks can't run here.
 
 ### The device this is for
 
@@ -67,10 +67,14 @@ Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.
 
 ### The figure tools
 
-`tools/` holds three Python scripts. `visual-atlas.py` (extraction and OCR) and
+`tools/` holds the Python figure scripts. `visual-atlas.py` (extraction and OCR) and
 `trim-figure.py` (whitespace trimming, and replaying a crop record) were used
 when the figures were first pulled out of the export. `figure-review.py` builds
-the sheet a person decides crops on.
+the sheet a person decides crops on. `add-unit.py` bakes a unit written for the
+in-app importer — notes citing `page_figures/…` — into `content/refs/` and
+`content/refs-images/<unit>/`, copying only the cited images and re-encoding
+them so a unit's page renders do not balloon its figure file (`content/refs-images/<unit>.json`
+in the split build, one per unit).
 
 ```bash
 python3 tools/figure-review.py                      # → build/figure-review.html

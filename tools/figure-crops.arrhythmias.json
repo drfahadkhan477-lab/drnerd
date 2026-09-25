@@ -1,0 +1,695 @@
+{
+ "_why": "Arrhythmias unit (Braunwald 13e Ch 43-53): each full-page render cropped to the figure its note cites, with the printed legend where it sits beside or under the figure. Boxes are in the pixels of the 827x1170 page renders; tools/add-unit.py --crops applies them to the originals.",
+ "crops": {
+  "page_003.jpg": {
+   "box": [
+    30,
+    100,
+    768,
+    635
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_005.jpg": {
+   "box": [
+    30,
+    110,
+    768,
+    362
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_007.jpg": {
+   "box": [
+    50,
+    635,
+    405,
+    912
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_008.jpg": {
+   "box": [
+    28,
+    125,
+    560,
+    256
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_009.jpg": {
+   "box": [
+    25,
+    105,
+    410,
+    628
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_011.jpg": {
+   "box": [
+    45,
+    108,
+    775,
+    630
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_018.jpg": {
+   "box": [
+    30,
+    728,
+    770,
+    1068
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_021.jpg": {
+   "box": [
+    30,
+    880,
+    770,
+    1055
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_033.jpg": {
+   "box": [
+    30,
+    758,
+    542,
+    1052
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_046.jpg": {
+   "box": [
+    25,
+    755,
+    775,
+    1090
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_061.jpg": {
+   "box": [
+    42,
+    112,
+    468,
+    802
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_064.jpg": {
+   "box": [
+    42,
+    112,
+    400,
+    800
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_065.jpg": {
+   "box": [
+    25,
+    105,
+    765,
+    318
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_067.jpg": {
+   "box": [
+    25,
+    105,
+    765,
+    335
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_072.jpg": {
+   "box": [
+    25,
+    592,
+    775,
+    1088
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_084.jpg": {
+   "box": [
+    40,
+    108,
+    535,
+    1048
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_117.jpg": {
+   "box": [
+    20,
+    112,
+    558,
+    512
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_119.jpg": {
+   "box": [
+    415,
+    105,
+    775,
+    875
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_120.jpg": {
+   "box": [
+    405,
+    488,
+    775,
+    1062
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_124.jpg": {
+   "box": [
+    45,
+    105,
+    775,
+    440
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_128.jpg": {
+   "box": [
+    45,
+    108,
+    775,
+    575
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_137.jpg": {
+   "box": [
+    25,
+    675,
+    775,
+    1065
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_140.jpg": {
+   "box": [
+    25,
+    105,
+    775,
+    478
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_142.jpg": {
+   "box": [
+    40,
+    548,
+    775,
+    868
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_144.jpg": {
+   "box": [
+    25,
+    640,
+    775,
+    1055
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_152.jpg": {
+   "box": [
+    40,
+    108,
+    550,
+    882
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_157.jpg": {
+   "box": [
+    40,
+    108,
+    550,
+    885
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_171.jpg": {
+   "box": [
+    40,
+    105,
+    405,
+    322
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_174.jpg": {
+   "box": [
+    25,
+    785,
+    402,
+    1058
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_176.jpg": {
+   "box": [
+    58,
+    140,
+    412,
+    486
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_181.jpg": {
+   "box": [
+    25,
+    108,
+    410,
+    465
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_193.jpg": {
+   "box": [
+    40,
+    108,
+    775,
+    630
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_200.jpg": {
+   "box": [
+    58,
+    125,
+    400,
+    364
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_202.jpg": {
+   "box": [
+    25,
+    105,
+    775,
+    745
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_206.jpg": {
+   "box": [
+    48,
+    108,
+    775,
+    485
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_207.jpg": {
+   "box": [
+    25,
+    105,
+    775,
+    402
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_210.jpg": {
+   "box": [
+    40,
+    108,
+    775,
+    590
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_211.jpg": {
+   "box": [
+    25,
+    105,
+    775,
+    592
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_213.jpg": {
+   "box": [
+    25,
+    105,
+    570,
+    966
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_215.jpg": {
+   "box": [
+    25,
+    105,
+    775,
+    682
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_217.jpg": {
+   "box": [
+    25,
+    105,
+    775,
+    792
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_230.jpg": {
+   "box": [
+    58,
+    395,
+    412,
+    545
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_234.jpg": {
+   "box": [
+    25,
+    480,
+    408,
+    910
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_236.jpg": {
+   "box": [
+    58,
+    108,
+    462,
+    455
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_237.jpg": {
+   "box": [
+    25,
+    105,
+    415,
+    590
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_263.jpg": {
+   "box": [
+    25,
+    105,
+    415,
+    592
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_271.jpg": {
+   "box": [
+    55,
+    108,
+    412,
+    800
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_285.jpg": {
+   "box": [
+    25,
+    105,
+    775,
+    700
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_293.jpg": {
+   "box": [
+    52,
+    112,
+    770,
+    450
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_306.jpg": {
+   "box": [
+    30,
+    780,
+    520,
+    1060
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_308.jpg": {
+   "box": [
+    25,
+    105,
+    520,
+    800
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_311.jpg": {
+   "box": [
+    25,
+    420,
+    775,
+    1062
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  },
+  "page_312.jpg": {
+   "box": [
+    25,
+    680,
+    780,
+    1068
+   ],
+   "was": [
+    827,
+    1170
+   ],
+   "why": "cropped to the cited figure"
+  }
+ },
+ "_checked_and_left_alone": {}
+}

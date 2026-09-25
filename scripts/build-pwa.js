@@ -589,24 +589,54 @@ function refLatePaint(){
    megabytes raw, base64'd, which is nothing against 27 MB and fatal against
    800 KB. Same move as the reference seed: pull it out, fetch it, apply it
    once the binding it fills exists. */
-let refImgs = null;
-step('pull the reference figures out of the app code', () => {
+/* ONE FILE PER UNIT, NOT ONE FOR THE SHELF. This used to write every figure
+   into a single content/refs-images.json. That file grows with every unit
+   added, and Cloudflare Pages will not take a file over 25,000,000 bytes: the
+   arrhythmias unit took it to 25.7 MiB and a deploy broke, and even after its
+   figures were cropped the shelf as a whole had room for about one more unit.
+   Split by the first segment of the refimg:// key — the unit folder under
+   content/refs-images/, so hf/049_FIG….jpg lands in hf.json — each unit now
+   has the ceiling to itself, and adding a unit never grows another unit's
+   file. The pagesLimitReport guard below still checks every one of them.
+
+   Kept as a plain function of the parsed map so tests/verify-loader-pure.js
+   can drive it without a build. A key with no folder goes to "loose"; a folder
+   name that is not URL-safe is made so, and two that collapse to the same safe
+   name simply share a file, which costs nothing. */
+function splitRefImages(imgs) {
+  const parts = {};
+  for (const key of Object.keys(imgs)) {
+    const slash = key.indexOf('/');
+    const unit = slash > 0 ? key.slice(0, slash).replace(/[^A-Za-z0-9_-]/g, '_') : 'loose';
+    (parts[unit] || (parts[unit] = {}))[key] = imgs[key];
+  }
+  return parts;
+}
+let refImgParts = null;
+step('pull the reference figures out of the app code, one file per unit', () => {
   const re = /\/\*REF_IMGS_START\*\/([\s\S]*?)\/\*REF_IMGS_END\*\//;
   const m = re.exec(appCode);
   if (!m) return;   // no note cites a figure — nothing to pull out
-  JSON.parse(m[1]);   // fail loudly here, not silently at runtime
-  refImgs = m[1];
+  const all = JSON.parse(m[1]);   // fail loudly here, not silently at runtime
+  refImgParts = splitRefImages(all);
+  if (!Object.keys(refImgParts).length) { refImgParts = null; return; }
+  const urls = Object.keys(refImgParts).sort().map(u => 'content/refs-images/' + u + '.json');
   appCode = appCode.replace(re, '{}');
   appCode += `
-/* ── reference figures, fetched (see build-pwa.js) ────────────────────────── */
+/* ── reference figures, fetched one unit at a time (see build-pwa.js) ─────── */
 (function(){
   if(typeof REF_IMGS === 'undefined') return;
-  fetch('content/refs-images.json').then(function(r){ return r.json(); }).then(function(imgs){
-    REF_IMGS = imgs;
-    /* The pearl may already be on screen quoting a note whose figure only
-       just landed. */
-    if(typeof refLatePaint === 'function') refLatePaint();
-  }).catch(function(){ /* notes still render — just without their figures */ });
+  var parts = ${JSON.stringify(urls)};
+  parts.forEach(function(u){
+    fetch(u).then(function(r){ return r.json(); }).then(function(imgs){
+      /* Merged into the binding, never assigned over it: the units land in
+         any order, and each must add to what the others brought. */
+      for(var k in imgs) REF_IMGS[k] = imgs[k];
+      /* The pearl may already be on screen quoting a note whose figure only
+         just landed. */
+      if(typeof refLatePaint === 'function') refLatePaint();
+    }).catch(function(){ /* that unit's notes still render — just without their figures */ });
+  });
 })();
 `;
 });
@@ -838,7 +868,11 @@ fs.mkdirSync(fontDir, { recursive: true });
 for (const [name, body] of fontAssets) fs.writeFileSync(path.join(fontDir, name), body);
 
 if (refSeed) fs.writeFileSync(path.join(DIST, 'content', 'refs-seed.json'), refSeed);
-if (refImgs) fs.writeFileSync(path.join(DIST, 'content', 'refs-images.json'), refImgs);
+if (refImgParts) {
+  const dir = path.join(DIST, 'content', 'refs-images');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [unit, imgs] of Object.entries(refImgParts)) fs.writeFileSync(path.join(dir, unit + '.json'), JSON.stringify(imgs));
+}
 
 const manifest = {
   name: 'Systole — Cardiology Board Review',
@@ -1056,6 +1090,52 @@ function keepable(req, res) {
 `;
 fs.writeFileSync(path.join(DIST, 'sw.js'), SW);
 
+/* ── NO FILE THE HOST WILL REFUSE ─────────────────────────────────────────────
+   Cloudflare Pages will not take a single asset over "25 MiB" — and the
+   number it enforces is 25,000,000 bytes, not 25 x 1024 x 1024. The first
+   version of this guard took the label at its word (26,214,400) and passed a
+   refs-images.json of 23.9 MiB, which the dashboard upload then refused as
+   "larger than the file size limit of 25 MiB": 23.9 MiB is 25.06 million
+   bytes. So the ceiling is the smaller reading, which satisfies both. Nothing here
+   knew that, and docs/IPAD.md's "5.4 MB for the largest against 25 MB" had
+   gone stale by a factor of four: an arrhythmias unit took refs-images.json
+   to 25.7 MiB, the build printed its usual green, and the deployed app opened
+   on "Could not load the question bank — the application code failed to
+   load." The splash is right that app.js did not arrive and silent on why,
+   and nothing on the laptop had said a word.
+
+   So the finished tree is measured, every file in it, after the last write —
+   and a file over the ceiling fails the build here, naming itself, instead of
+   failing the deploy somewhere nobody is looking. Kept as a plain function of
+   (path, bytes) pairs so tests/verify-loader-pure.js can drive it without a
+   build. The warning line is not a second limit: it only says how close the
+   largest file is, because a unit's figure file grows with its figures and the
+   next overrun should be seen coming. (refs-images.json, the file that tripped
+   this, is now split one file per unit — see splitRefImages.) */
+const PAGES_FILE_LIMIT = 25 * 1000 * 1000;   // bytes; see above — NOT 25 MiB
+function pagesLimitReport(files, limit) {
+  const over = files.filter(f => f.bytes > limit)
+    .map(f => f.rel + ' is ' + f.bytes.toLocaleString('en-US') + ' bytes (' + (f.bytes / 1048576).toFixed(1) + ' MiB)');
+  let largest = null;
+  for (const f of files) if (!largest || f.bytes > largest.bytes) largest = f;
+  return { over, largest };
+}
+const distFiles = [];
+(function walk(dir) {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name);
+    if (ent.isDirectory()) walk(p);
+    else distFiles.push({ rel: path.relative(DIST, p).split(path.sep).join('/'), bytes: fs.statSync(p).size });
+  }
+})(DIST);
+const hostCheck = pagesLimitReport(distFiles, PAGES_FILE_LIMIT);
+if (hostCheck.over.length) {
+  console.error('\n  build-pwa: Cloudflare Pages refuses any file over 25,000,000 bytes, and this dist/ has '
+    + hostCheck.over.join('; ') + '.\n  Nothing in dist/ is safe to deploy. For a content/refs-images/<unit>.json, re-run '
+    + 'tools/add-unit.py with a lower --quality or --max-width, or crop the figures.');
+  process.exit(1);
+}
+
 const mb = b => (b / 1048576).toFixed(2) + ' MB';
 const kb = b => (b / 1024).toFixed(0) + ' KB';
 const shellBytes = fs.statSync(path.join(DIST, 'index.html')).size
@@ -1077,6 +1157,7 @@ console.log(`  shell total          ${kb(shellBytes)}   (was ${mb(fs.statSync(SR
 console.log(`  shell transferred    ${kb(shellWire)} gzipped   (the budget: 280 KB)`);
 console.log(`  content/             ${mb(contentManifest.figureBytes)} of figures + questions.json`);
 console.log(`  content/splash-heart ${splashAssets.map(([n,b])=>`${n} ${(b.length/1024).toFixed(0)}KB`).join(', ')}`);
+console.log(`  largest file         ${hostCheck.largest.rel} ${(hostCheck.largest.bytes / 1e6).toFixed(2)} MB   (the host's ceiling: 25.00 MB, decimal)`);
 console.log(`  build                ${BUILD_ID}   from commit ${COMMIT}`);
 console.log(`\n  written to           ${DIST}`);
 /* Icons are drawn by a headless browser, which lives in the global node_modules

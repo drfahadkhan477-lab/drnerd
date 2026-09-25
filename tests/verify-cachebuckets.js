@@ -80,15 +80,20 @@ ok('and routes a precached content file to the content cache',
 
 head('what it is actually worth, measured');
 const sizes = {};
-for (const f of ['refs-images.json', 'refs-seed.json', 'questions.json']) {
+for (const f of ['refs-seed.json', 'questions.json']) {
   const p = path.join(DIST, 'content', f);
   sizes[f] = fs.existsSync(p) ? fs.statSync(p).size : 0;
 }
-const atRisk = sizes['refs-images.json'] + sizes['refs-seed.json'];
-ok('the two runtime-fetched content files are on disk to be protected',
-   atRisk > 1e6, `${(atRisk / 1048576).toFixed(1)} MB across refs-images.json + refs-seed.json`);
+/* The note figures are one file per unit under content/refs-images/ (see
+   splitRefImages in build-pwa.js), so they are measured as a folder. */
+const figDir = path.join(DIST, 'content', 'refs-images');
+const figFiles = fs.existsSync(figDir) ? fs.readdirSync(figDir).filter(f => f.endsWith('.json')) : [];
+sizes['refs-images/'] = figFiles.reduce((n, f) => n + fs.statSync(path.join(figDir, f)).size, 0);
+const atRisk = sizes['refs-images/'] + sizes['refs-seed.json'];
+ok('the runtime-fetched content files are on disk to be protected',
+   atRisk > 1e6, `${(atRisk / 1048576).toFixed(1)} MB across ${figFiles.length} unit figure file(s) + refs-seed.json`);
 ok('and they are not named in PRECACHE, so they are fetched at runtime',
-   !/PRECACHE[^\]]*refs-images\.json/.test(sw),
+   !/PRECACHE[^\]]*refs-images/.test(sw),
    'they reach the cache through the fetch handler, which is why its routing decides their bucket');
 
 console.log(`\n${passed} passed, ${failed} failed`);

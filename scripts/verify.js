@@ -14,7 +14,7 @@
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 90 suites and roughly 2944 checks, and they
+ * WHY THIS EXISTS. There are 111 suites and roughly 4412 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -254,6 +254,11 @@ const SUITES = [
   /* Needs no build: the shipped ambient-patch over a scaffold, with the
      repository's own Heart3D, ECG12, Wiggers and LivingDiagram. */
   ['ambient',      'the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL'],
+  /* Search your notes: the ranking, quoting and markup in pure Node (with the
+     proof that its four anchors are echo's own output), then the patched
+     screen driven in a browser over a scaffold, the way echo is. */
+  ['notesearch-pure','a note titled with the words is found first, quoted and escaped'],
+  ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -332,10 +337,13 @@ const SUITES = [
    Emptied a third time by the green run of 2026-09-22 on 28f4e5c, which
    measured the four that had been waiting — livingdiagram-pure,
    conductionwave-pure and coronarytree-pure from the Conduction Wave branch,
-   and echo. */
-const PENDING_RECORD = ['coronaryview', 'ambient',
-  'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer-coach-pure', 'memorizer-appearance-pure', 'memorizer-home-pure', 'memorizer-book-pure', 'memorizer-ask-pure', 'memorizer-ground-pure', 'memorizer-vec-pure', 'memorizer-sheet-pure', 'memorizer-figure-pure', 'memorizer-agent-pure', 'memorizer',
-  'memorizer-provenance-pure', 'memorizer-hardening', 'memorizer-study-pure', 'memorizer-pack-pure'];
+   and echo.
+
+   Emptied a fourth time by the green run of 2026-09-25 on the owner's Windows
+   laptop, which measured the twenty-one that had been waiting: notesearch-pure,
+   notesearch, coronaryview, ambient, and the seventeen Memorizer suites. That
+   run predates memorizer-pack-pure, which master registered meanwhile. */
+const PENDING_RECORD = ['memorizer-pack-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

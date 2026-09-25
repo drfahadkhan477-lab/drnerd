@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 2944 + 133 checks
+node scripts/verify.js --pwa                           # → 4412 + 133 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -61,8 +61,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 89
-  run normally — it is 35 of the 2944 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 110
+  run normally — it is 35 of the 4412 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -94,7 +94,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-The chain is 88 patch scripts, run in order against the export. Each applies a list of
+The chain is 89 patch scripts, run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -194,6 +194,7 @@ The cost is that order matters, and the dependencies are real:
 | 86 | `focusmode` | the quiz, without the chrome around it. `#navbar` is fixed and outside the reading column, and one variable — `--navh` — is what `.nav`'s height, `#shell`'s `padding-top` and the Apex panel's `top`/`height` all measure from, so the whole feature is hiding the bar and setting that to `0px`: the shell and the tutor reclaim the space themselves. `--sat` is deliberately left alone, being the status bar's reserve rather than the app's chrome. The screen test is in JS and not CSS on purpose — `#navbar` is a *sibling* of `#app`, so scoping it to the quiz in CSS would need `:has()`, which Safari gained in 15.4 against this app's 13.4 floor. Two controls, each rendered only where it can act: the way in sits in the nav and only on the quiz screen (offered on Home it would flip `aria-pressed`, save, re-render and visibly do nothing), and the way out is a fixed 44px button in the shell, outside everything `render()` replaces — quiznav's action row is `reviewing ? '' : ...`, so putting it there would strand a fellow with no chrome and no way back. Keeps the progress bar, and keeps the confidence row, which feeds `calib.js`: hiding that would change what gets recorded, which is a behaviour change wearing a layout change's clothes. **Before any build reached it**: every anchor was read verbatim from a committed patch script and proven to match exactly once against a fixture, but nothing has built it. `tests/verify-focus.js` ships with it and was listed in `PENDING_RECORD` until the full green run recorded in `6ee3e5a` took its count  **Build-verified at last.** The first run that ever reached step 86 died here: the exit button anchored on three lines copied out of `fullbleed`(34), but `disclaimer`(64) had swapped that `<div id="app">` for the `<main>` landmark and `announce`(65) had put a live region beside it, so the anchor described markup gone since step 64 — `found 0`. Reading a patch script is how you get that wrong, and it is all anyone without a build can read. The anchor is now `<header id="navbar"></header>` alone, which is unique and is the insertion point; the other two lines were never load-bearing. `verify-shellanchor-pure` replays the whole shell region through the chain and checks every anchor into it at the step that uses it |
 | 87 | `ambient` | the Living Diagram's ambient mode. `livingDiagram.js` has decided since the Conduction Wave branch *when* ambient mode may run — the home screen only, after two minutes with no interaction, never with the Apex panel open, in Focus Mode or under `prefers-reduced-motion` — and *which* view comes next, never the same twice running; this step draws it. The views are the repository's own: `Heart3D` (whose `destroy()` and WebGL budget `verify-heartreuse` already holds), `ECG12` and `Wiggers`' PV loop. The earlier deferral was about `ECGMonitor`, which lives only inside the licensed export; this does not touch it. **One anchor**, the Durable memory banner, re-emitted so `echo` still finds it once; no state on `S`, no mount, the stylesheet injected on first use. A tap closes the overlay through its own `click`, so waking the screen never presses what was under the finger; a mouse closes it by moving a real distance, not a jitter. A change of screen counts as activity, so returning home after time elsewhere does not raise it at once. `verify-ambient` drives the shipped step over a scaffold: every promise above, and twenty visits to the heart view with no WebGL context discarded |
 | 88 | `echo` | Echo Studio: a reference you can browse and a calculator you can drive, as two tabs over one set of tables. The thinking is in `src/core/echo.js` (12 views with window, position, index mark and angle; 14 measurements; 9 severity tables as ordered bands; 9 disease profiles; the continuity, PISA, Bernoulli, Simpson and Devereux arithmetic) and `src/ui/echo.js` (strings in, strings out — no DOM, no timers), so both are held by `verify-echo-pure` and `verify-echoui-pure` without a browser. The calculator's rule is that a derived row appears only when every input it names is a finite number: never defaulted, never guessed, never `NaN`, because a plausible wrong number on a study screen gets memorised while an absent one gets investigated. **Four anchors, and three more deliberately avoided**: Echo's state lives in a closure here rather than on `S`, which drops the state-object anchor, the save-tail anchor and any concern about `SCHEMA_KEYS`; interaction is delegated from `document` once, which drops the mount anchor. Each of the four was replayed through the chain before it was written down — `verify-echoanchor-pure` does that replay as a check, seeding from the step that emits each region and applying every later step that touches it. It carries the focusmode bug as a fixture: `<div id="app">` is emitted by `fullbleed`(34) and destroyed by `disclaimer`(64), and must be reported REWRITTEN rather than merely absent, so a replay that goes blind is caught by its own self-test. **Build-verified**: the full green run recorded in `94823e0` built step 87, so `patch()` found all four anchors unique in the whole document. The replay alone could not show that. It proves each anchor SURVIVES to step 87, not that it is UNIQUE, because the rest of the document is the licensed export |
+| 89 | `notesearch` | Search your notes: a book button beside Echo opens a field over `search()`'s own index, filtered to notes, with notes titled by every word typed moved first. A tap opens the whole note with its figures through `md()`. The top-bar search is the export's and answers from questions only; this repository does not read that code, so the notes got a screen of their own. Anchored only on text echo emits, straight after it. |
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
 
@@ -212,9 +213,9 @@ It needs those earlier steps to still be on disk, and a normal build cleans them
 up. So the iterating loop is:
 
 ```bash
-node scripts/build.js --keep              # once, keeps all 88 intermediates
+node scripts/build.js --keep              # once, keeps all 89 intermediates
 # ...edit scripts/theme-patch.js...
-node scripts/build.js --keep --from theme # only steps 14-88 rerun
+node scripts/build.js --keep --from theme # only steps 14-89 rerun
 ```
 
 ---
@@ -268,7 +269,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 90 suites, 2944 checks, plus 133 more on the split build. Those numbers are
+Across 111 suites, 4412 checks, plus 133 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
@@ -567,8 +568,8 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
-scripts/      build · verify · 88 *-patch · build-pwa · serve · shots
-tests/        90 suites · 57 need no browser · + pwa
+scripts/      build · verify · 89 *-patch · build-pwa · serve · shots
+tests/        111 suites · 58 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

@@ -273,11 +273,26 @@ function harvest(notes) {
    note titles ("HFrEF guideline-directed therapy — Devices") and question-bank
    chapters ("Heart Failure & Cardiomyopathies") name the same territory and
    almost never the same string. */
+/* WEAK MEANS BELOW YOUR OWN AVERAGE, NOT MERELY IN THE BOTTOM THREE.
+   weakChapters is a ranking — the lowest N with a meaningful sample — so when
+   few chapters have been attempted, the strongest one is on it too. That was
+   harmless while the shelf held no arrhythmia notes. With a 235-note
+   arrhythmias unit on it, a fellow scoring 28/30 there and 4/30 in heart
+   failure had both chapters aimed at, the 93% one included; the boost spread
+   over half the shelf and verify-pearl measured the weak chapter at 1.23x its
+   share, under its 1.25 floor. A chapter at or above the fellow's pooled
+   accuracy is not weak, whatever its rank, so it is not aimed at. With a
+   single chapter attempted there is nothing to be weak relative to, and
+   nothing is aimed — a uniform draw, which is what no evidence should give. */
 function weakWords(limit) {
   try {
     if (typeof Profile === 'undefined') return [];
+    const rows = Profile.weakChapters(6, Infinity);
+    let correct = 0, total = 0;
+    for (const w of rows) { correct += w.correct; total += w.total; }
+    const mean = total ? correct / total * 100 : 0;
     const words = [];
-    for (const w of Profile.weakChapters(6, limit || 3)) {
+    for (const w of rows.filter(r => r.pct < mean).slice(0, limit || 3)) {
       for (const t of String(w.ch).toLowerCase().split(/[^a-z]+/)) {
         if (t.length > 4) words.push(t);
       }

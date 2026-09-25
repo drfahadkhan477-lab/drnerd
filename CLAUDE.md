@@ -75,7 +75,7 @@ now. If you write a sentence containing a number, guard it or do not write it.
 
 ## The patch chain
 
-`scripts/build.js` holds `CHAIN`: 88 steps, each a `*-patch.js`. `patch(label,
+`scripts/build.js` holds `CHAIN`: 89 steps, each a `*-patch.js`. `patch(label,
 find, replace)` throws unless `find` matches **exactly once** — that is the
 whole safety model, so keep anchors distinctive and never loosen one to make it
 match. `cut(label, open, close)` removes a span.
