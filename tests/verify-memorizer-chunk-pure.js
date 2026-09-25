@@ -627,6 +627,22 @@ head('text from a real PDF: spaces where the page has them, and nowhere else');
   x += 8;
   '17'.split('').forEach(ch => { tracked.push(item(ch, x, 700, 11, 7)); x += 9.5; });
   ok('a letter-spaced heading reads as words, not letters', line(tracked) === 'CHAPTER 17', line(tracked));
+  /* The owner's first whole book: a tracked run-in heading and the plain
+     words after it on one line. Reading the whole line as letter-spaced
+     joined the words: "I.INTRODUCTION.Thetricuspid valve … apparatusis". */
+  const mixed = [];
+  let mx = 72;
+  ['I', '.'].forEach(ch => { mixed.push(item(ch, mx, 700, 11, 4)); mx += 4; });
+  mx += 8;
+  'INTRODUCTION.'.split('').forEach(ch => { mixed.push(item(ch, mx, 700, 11, 7)); mx += 9.5; });
+  mx += 0.3;
+  [['The', 17], ['tricuspid', 42], ['apparatus', 44], ['is', 8], ['a', 5], ['whole', 26]].forEach(([w, wd]) => { mixed.push(item(w, mx, 700, 11, wd)); mx += wd + 2.8; });
+  ok('a tracked run-in heading does not join the plain words after it, one-letter words included', line(mixed) === 'I. INTRODUCTION. The tricuspid apparatus is a whole', line(mixed));
+  /* Letters standing as words, in an ordinary line: its word gaps are not a
+     letter-spacing, and "A B C" stay three. */
+  const abc = []; let ax = 72;
+  [['Types', 27], ['of', 10], ['block', 26], ['are', 16], ['A', 7], ['B', 7], ['C', 7], ['and', 18], ['D', 7]].forEach(([w, wd]) => { abc.push(item(w, ax, 700, 11, wd)); ax += wd + 2.8; });
+  ok('single letters standing as words keep their spaces', line(abc) === 'Types of block are A B C and D', line(abc));
   ok('a kerned capital joins its word ("T" + "ricuspid")', line([item('T', 72, 700, 11, 6), item('ricuspid', 77.6, 700, 11, 40)]) === 'Tricuspid');
   ok('a word stored in two pieces is one word ("regur" + "gitation")', line([item('regur', 72, 700, 11, 26), item('gitation', 98.3, 700, 11, 38)]) === 'regurgitation');
   ok('a real space between words is kept', line([item('valve', 72, 700, 11, 26), item('disease', 101, 700, 11, 36)]) === 'valve disease');

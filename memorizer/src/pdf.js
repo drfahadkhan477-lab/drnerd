@@ -76,18 +76,26 @@ function linesOf(items, pageHeight) {
        chapter came out as "C H A P T E R 1 7" and "regur gitation". A gap
        wider than a fraction of the font size is a space; tracked (letter-
        spaced) lines get a threshold scaled to their own letter gap. */
-    var gaps = [];
+    /* Letter-spacing is read only where it is: between runs of one letter
+       each. It was read for the whole line, so a line holding a tracked
+       run-in heading ("I. INTRODUCTION.") or a tracked "CHAPTER" raised the
+       threshold for every gap on it, and the ordinary words after were
+       joined — "Thetricuspid", "apparatusis", "CHAPTER17" on the owner's
+       first whole book. */
+    var one = function (r) { return r.str.trim().length === 1; };
+    var small = [];
     for (var i = 1; i < g.runs.length; i++) {
-      var p = g.runs[i - 1];
-      if (p.w > 0) gaps.push(g.runs[i].x - (p.x + p.w));
+      var p = g.runs[i - 1], q = g.runs[i];
+      if (p.w > 0 && one(p) && one(q)) { var d = q.x - (p.x + p.w); if (d >= 0 && d < g.size * 0.6) small.push(d); }
     }
-    var small = gaps.filter(function (x) { return x >= 0 && x < g.size * 0.6; }).sort(function (a, b) { return a - b; });
+    small.sort(function (a, b) { return a - b; });
     var tracked = small.length >= 4 && small[Math.floor(small.length / 2)] > g.size * 0.05;
-    var thr = tracked ? Math.max(g.size * 0.15, small[Math.floor(small.length / 2)] * 1.8) : g.size * 0.15;
+    var trackThr = tracked ? Math.max(g.size * 0.15, small[Math.floor(small.length / 2)] * 1.8) : g.size * 0.15;
     var text = '', cells = [];
     g.runs.forEach(function (r, i) {
       var prev = g.runs[i - 1];
       var gap = prev && prev.w > 0 ? r.x - (prev.x + prev.w) : null;
+      var thr = tracked && one(prev || r) && one(r) ? trackThr : g.size * 0.15;
       /* A doubled space (a run that ends in one, then a gap) is folded by the
          whitespace normalisation below, so no special case is needed here. */
       var sep = !prev ? '' : (gap == null || gap > thr) ? ' ' : '';

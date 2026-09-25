@@ -179,6 +179,60 @@ head('the lesson: the book’s own words, in teaching order');
   ok('a number that only names a table does not make a sentence a key point first', !CL.points.some(p => /^Table 1\.4/.test(p.text)), JSON.stringify(CL.points.map(p => p.text)));
   ok('a sentence about a table is kept; a caption, its title included, is not a sentence', K.sentences(capt).some(x => /^Table 1\.4 lists/.test(x.text)) &&
      !K.sentences(capt).some(x => /Anatomy of the coronary|^Figure|^TABLE/.test(x.text)), JSON.stringify(K.sentences(capt).map(x => x.text)));
+  /* The owner's first whole book, a drill of four options: the chapter's
+     authors as a "statement", two sentences leaning on the one before them
+     ("However, …", "It is …"), and a noun swapped for an adjective. */
+  const byl = withText({ index: 0, title: 'Tricuspid valve', pageStart: 7, pageEnd: 7, segments: [
+    seg(7, 'Maria Lopez and Tom Kai Ming Wang'),
+    seg(7, 'However, recent imaging studies have shown that the valve has three leaflets in most adults.'),
+    seg(7, 'It is the inlet valve of the right ventricle, separating it from the right atrium in every adult heart.'),
+    seg(7, 'The tricuspid valve has three leaflets attached to the annulus by the chordae. The tricuspid annulus dilates when the right ventricle enlarges. ' +
+      'Functional regurgitation follows annular dilation in most patients with pulmonary hypertension. Rheumatic disease is the most common cause of tricuspid stenosis. ' +
+      'Carcinoid syndrome thickens the tricuspid leaflets and causes regurgitation. Endocarditis of the tricuspid valve is common in people who inject drugs. ' +
+      'Ebstein anomaly displaces the septal leaflet toward the apex of the ventricle. Pulmonary hypertension enlarges the right ventricle over months. ' +
+      'Severe regurgitation raises right atrial pressure and congests the liver.')] });
+  const BL = K.lesson(byl), bsents = K.sentences(byl).map(x => x.text);
+  ok('a line of names (the chapter’s authors) is not a sentence; a sentence is', !bsents.some(t => /Lopez/.test(t)) && bsents.some(t => /^Rheumatic disease/.test(t)) &&
+     K.nameLine('A. B. Smith, MD, and Jane van der Berg') && !K.nameLine('ECG shows LBBB.') && !K.nameLine('Aspirin reduces mortality.'), JSON.stringify(bsents));
+  /* and with no definition to lead, the first key point that stands alone */
+  const lean = withText({ index: 0, title: 'Drugs', pageStart: 1, pageEnd: 1, segments: [seg(1, 'However, diuretics lower the filling pressure in most patients quickly. ' +
+    'Beta-blockers slow the heart rate and lengthen diastole in angina. Nitrates dilate the veins and lower preload within minutes.')] });
+  const LO = K.lesson(lean).overview;
+  ok('the big idea stands alone: not "However, …" or "It is …"', !/^(However|It)\b/.test(BL.overview) && !/^However\b/.test(LO) && !!LO, BL.overview + ' | ' + LO);
+  const bcand = K.candidates(byl, K.pools([byl])), btrue = bcand.filter(q => q.kind === 'true');
+  ok('a statement to judge stands alone, right or wrong', btrue.length >= 1 && btrue.every(q => q.options.every(o => !/^(However|It)\b/.test(o) && !/Lopez/.test(o))),
+     btrue.map(q => q.options.join(' / ')).join(' | '));
+  ok('a word is swapped only for one of its family: a noun for a noun, not "annulus" for "atrial"', btrue.length >= 1 &&
+     btrue.every(q => q.options.every(o => !/\bthe (?:atrial|ventricular|pulmonary|aortic|mitral|coronary) by the\b|\bto the (?:atrial|ventricular|pulmonary|coronary)\b/.test(o))), btrue.map(q => q.options.join(' / ')).join(' | '));
+  /* Names of more than one word are used whole: no "Syndrome" or
+     "Carcinoid" as a cause, no "Endocarditis syndrome", no half a name
+     hidden. */
+  ok('a clinical name of more than one word is found whole', ['Carcinoid syndrome', 'Ebstein anomaly', 'Rheumatic disease', 'pulmonary hypertension', 'tricuspid stenosis']
+     .every(n => K.pools([byl]).entities.some(e => e.text === n)) && !K.pools([byl]).entities.some(e => /^(?:most|Severe|the)\b/i.test(e.text)), JSON.stringify(K.pools([byl]).entities.map(e => e.text)));
+  const bmost = bcand.find(q => q.kind === 'most');
+  ok('a "most common cause" is asked among whole names of its family', bmost && bmost.options[bmost.answer] === 'Rheumatic disease' &&
+     bmost.options.every(o => /\s/.test(o) && !/^(?:Syndrome|Carcinoid|Anomaly|Valve)$/i.test(o)), bmost && bmost.options.join(' / '));
+  const halves = bcand.filter(q => q.kind === 'true' || q.kind === 'term').map(q => [q.quote].concat(q.options).join(' '));
+  ok('and a name is never split — half hidden, or half swapped', halves.length >= 3 && !halves.some(t => /Endocarditis syndrome|Rheumatic syndrome|Carcinoid _____|_____ syndrome|_____ anomaly|Ebstein _____/.test(t)),
+     halves.join(' | '));
+  /* A point that states a value is asked for the value; a term with its
+     own abbreviation beside it is hidden with it. */
+  const val = withText({ index: 0, title: 'Leaflets', pageStart: 8, pageEnd: 8, segments: [seg(8,
+    'Transesophageal echocardiogram (TEE) studies show that only 54% of patients have three valve leaflets. ' +
+    'Severe tricuspid regurgitation is present when the vena contracta is at least 7 mm wide. ' +
+    'Transesophageal echocardiogram (TEE) is the test of choice for leaflet anatomy.')] });
+  const vc = K.recallCards(val, K.lesson(val)).filter(x => x.kind === 'point');
+  const byFull = t => vc.find(x => x.full.indexOf(t) === 0);
+  ok('a point with a value is asked for the value ("only _____ of patients")', byFull('Transesophageal echocardiogram (TEE) studies') && byFull('Transesophageal echocardiogram (TEE) studies').answer === '54%' &&
+     byFull('Severe tricuspid') && byFull('Severe tricuspid').answer === '7 mm', JSON.stringify(vc.map(x => [x.prompt, x.answer])));
+  /* the owner's card: "transesophageal _____ (TEE)" */
+  const teeT = 'However, recent transesophageal echocardiogram (TEE) studies have revealed four leaflets in some patients.';
+  const tee = withText({ index: 0, title: 'Leaflets', pageStart: 1, pageEnd: 1, segments: [seg(1, teeT + ' The tricuspid valve usually has three leaflets. An echocardiogram shows the leaflets. Endocarditis damages the leaflets.')] });
+  const teeCard = K.recallCards(tee, { overview: '', points: [{ text: teeT, page: 1 }], numbers: [], mnemonics: [] }).find(x => x.kind === 'point');
+  ok('a term’s own abbreviation beside the blank is hidden with it — "_____ (TEE)" gave it away', teeCard && teeCard.answer === 'echocardiogram (TEE)' && !/\(TEE\)/.test(teeCard.prompt),
+     teeCard && JSON.stringify([teeCard.prompt, teeCard.answer]));
+  ok('and a term hidden with its own abbreviation, not beside it', byFull('Transesophageal echocardiogram (TEE) is') && byFull('Transesophageal echocardiogram (TEE) is').answer === 'Transesophageal echocardiogram (TEE)' &&
+     vc.every(x => x.prompt.replace('_____', x.answer) === x.full), JSON.stringify(vc.map(x => [x.prompt, x.answer])));
   const kidney = withText({ index: 0, title: 'The nephron', pageStart: 1, pageEnd: 1, segments: [seg(1, 'The glomerulus filters plasma. The tubule reabsorbs sodium and water. The collecting duct concentrates urine.')] });
   ok('and none is forced on a section it does not fit', K.lesson(kidney).analogies.length === 0);
 }
@@ -339,8 +393,13 @@ head('the drill: multiple choice from the book');
   ok('a definition asked forwards offers the unit’s other definitions as the wrong meanings', fwd.length >= 1 &&
      fwd.every(q => q.options.every(o => UNIT.some(c => c.text.indexOf(o) !== -1))), fwd.length + ' — ' + (fwd[0] ? fwd[0].question + ' ' + fwd[0].options.join(' / ') : 'none'));
   const allTerms = cands.filter(q => q.kind === 'term');
+  /* A name is compared word by word ("Tricuspid stenosis" against
+     "Tricuspid atresia" or "aortic stenosis" is two lesions, not two forms
+     of one word); a single word as before. */
+  const sameForm = (a, b) => { const x = String(a).toLowerCase().trim().split(/\s+/), y = String(b).toLowerCase().trim().split(/\s+/);
+    return x.length === y.length && x.every((w, i) => w.slice(0, 6) === y[i].slice(0, 6)); };
   ok('no missing-term question offers another form of the same word (hypertrophy, hypertrophied)', allTerms.length >= 3 &&
-     allTerms.every(q => q.options.every((o, i) => i === q.answer || o.slice(0, 6).toLowerCase() !== rightText(q).slice(0, 6).toLowerCase())),
+     allTerms.every(q => q.options.every((o, i) => i === q.answer || !sameForm(o, rightText(q)))),
      allTerms.map(q => q.options.join('/')).join(' | '));
   /* Two sentences the same but for one term: changing one into the other
      gives a sentence of the book — true, so it may not be a wrong option. */

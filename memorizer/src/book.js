@@ -101,15 +101,32 @@ function titleOn(page, given, skip) {
   return best ? clean(best.text) : '';
 }
 
+/* A "Chapter N" line whose title runs on: it stops on a word that cannot
+   end a title ("…, Pulmonary Valve Disease, and") and the next lines, at
+   its size, finish it ("Drug-Induced Valve Disease"). The owner's first
+   whole book: the continuation was left behind when the "Chapter 17" line
+   was taken out, and titled the chapter's first section. Returns how many
+   lines after line j continue it. */
+var DANGLING = /(?:,|\b(?:and|or|of|the|in|for|with|to|on|from|&))\s*$/i;
+function runsOn(lines, j) {
+  var n = 0, prev = lines[j];
+  while (DANGLING.test(clean(prev.text)) && lines[j + n + 1] && Math.abs((+lines[j + n + 1].size || 0) - (+prev.size || 0)) < 0.5) {
+    n++; prev = lines[j + n];
+  }
+  return n;
+}
+
 /* ── numbered: "Chapter 12 …" lines ─────────────────────────────────────── */
 function numbered(pages) {
   var hits = [];
   pages.forEach(function (p) {
     var seen = {};
-    (p.lines || []).forEach(function (l) {
+    (p.lines || []).forEach(function (l, j, all) {
       var s = clean(l.text), m = CHAPTER_LINE.exec(s);
       if (!m || words(s).length > NUMBERED_MAX_WORDS || seen[m[1]]) return;
       seen[m[1]] = true;
+      var more = runsOn(all, j);
+      for (var k = 1; k <= more; k++) m[2] += ' ' + clean(all[j + k].text);
       hits.push({ n: +m[1], page: p.page, rest: m[2], line: s, p: p });
     });
   });
@@ -143,10 +160,15 @@ function numbered(pages) {
    stays. */
 function stripHeaders(pages) {
   return (pages || []).map(function (p) {
-    return { page: p.page, lines: (p.lines || []).filter(function (l) {
+    var drop = {}, all = p.lines || [];
+    all.forEach(function (l, j) {
       var s = clean(l.text);
-      return !(CHAPTER_LINE.test(s) && words(s).length <= NUMBERED_MAX_WORDS);
-    }) };
+      if (!(CHAPTER_LINE.test(s) && words(s).length <= NUMBERED_MAX_WORDS)) return;
+      drop[j] = true;
+      /* and the lines its title runs on to */
+      for (var k = 1, more = runsOn(all, j); k <= more; k++) drop[j + k] = true;
+    });
+    return { page: p.page, lines: all.filter(function (l, j) { return !drop[j]; }) };
   });
 }
 

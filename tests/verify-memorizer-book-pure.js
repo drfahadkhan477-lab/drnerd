@@ -121,6 +121,19 @@ head('running headers out of a chapter’s text');
   ok('headers and the opener’s number go; the title, prose and body stay', JSON.stringify(kept) ===
      JSON.stringify(['Valve Disease', 'Chapter 2 describes the long history of this condition in far more detail than any short header ever would.', 'Body text.']), JSON.stringify(kept));
   ok('and the pages given are not changed', pg[0].lines.length === 5);
+  /* The owner's first whole book: a chapter's title on its "CHAPTER 17" line
+     ran on to a second line at the same size. That second line was left
+     behind, read as a heading, and titled the chapter's first section. */
+  const wrap = [{ page: 7, lines: [L('CHAPTER 17 Tricuspid Valve Disease, Pulmonary Valve Disease, and', 20, 60), L('Drug-Induced Valve Disease', 20, 84),
+    L('I. INTRODUCTION. The tricuspid valve has three leaflets.', 10, 130), L('More body text follows here.', 10, 144)] }];
+  const kept2 = B.stripHeaders(wrap)[0].lines.map(l => l.text);
+  ok('a chapter title that runs on to the next line goes with its "Chapter N" line', JSON.stringify(kept2) === JSON.stringify(['I. INTRODUCTION. The tricuspid valve has three leaflets.', 'More body text follows here.']), JSON.stringify(kept2));
+  const wrapCh = B.numbered(wrap.concat([{ page: 20, lines: [L('CHAPTER 18 Heart Failure', 20, 60)] }, { page: 30, lines: [L('CHAPTER 19 Arrhythmias', 20, 60)] }]));
+  ok('and the chapter is named by the whole title', wrapCh[0] && wrapCh[0].title === 'Tricuspid Valve Disease, Pulmonary Valve Disease, and Drug-Induced Valve Disease', wrapCh[0] && wrapCh[0].title);
+  const notRun = B.stripHeaders([{ page: 3, lines: [L('CHAPTER 4 Heart Failure', 20, 60), L('Chronic Heart Failure', 20, 84), L('Body.', 10, 120)] }])[0].lines.map(l => l.text);
+  const hdr = B.stripHeaders([{ page: 9, lines: [L('CHAPTER 17 Tricuspid, Pulmonary and', 9, 30), L('Body text of the page begins here.', 10, 60)] }])[0].lines.map(l => l.text);
+  ok('nor does a small running header that stops on "and" take the body under it', JSON.stringify(hdr) === JSON.stringify(['Body text of the page begins here.']), JSON.stringify(hdr));
+  ok('a title that ends whole does not take the next big line with it', JSON.stringify(notRun) === JSON.stringify(['Chronic Heart Failure', 'Body.']), JSON.stringify(notRun));
 }
 
 head('the size that opens chapters');
