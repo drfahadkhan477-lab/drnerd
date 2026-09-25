@@ -391,11 +391,16 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
 
     let sent = null;
     const spy = async (u, i) => { sent = i && i.body; return new Response('ok', { status: 200 }); };
+    /* Asks for more than the default, so "fell back to the default" and "passed the request through" differ.
+       A request never forwarded leaves sent null, and !/NaN/.test('') and JSON.parse(null) both pass on that —
+       so both checks first require that a body was sent. */
     await handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
-      { method: 'POST', body: body(), headers: ACCESS }), { ...ENV, APEX_RPM: '0', APEX_MAX_OUTPUT: '2k' }, spy);
-    ok('a non-numeric APEX_MAX_OUTPUT never reaches the body as NaN', !/NaN/.test(sent || ''), (sent || '').slice(0, 70));
-    let parses = true; try { JSON.parse(sent); } catch (_) { parses = false; }
-    ok('so what is forwarded is still valid JSON', parses);
+      { method: 'POST', body: body({ generationConfig: { maxOutputTokens: 8000 } }), headers: ACCESS }), { ...ENV, APEX_RPM: '0', APEX_MAX_OUTPUT: '2k' }, spy);
+    ok('a non-numeric APEX_MAX_OUTPUT never reaches the body as NaN', typeof sent === 'string' && sent.length > 0 && !/NaN/.test(sent),
+       typeof sent === 'string' ? sent.slice(0, 70) : 'nothing was forwarded');
+    let fwd = null; try { fwd = JSON.parse(sent); } catch (_) {}
+    ok('so what is forwarded is valid JSON, capped at the default of 2000',
+       !!fwd && typeof fwd === 'object' && fwd.generationConfig.maxOutputTokens === 2000, fwd ? JSON.stringify(fwd.generationConfig) : String(fwd));
 
     const r = await worker.fetch(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
       { method: 'POST', body: body(), headers: ACCESS }),
