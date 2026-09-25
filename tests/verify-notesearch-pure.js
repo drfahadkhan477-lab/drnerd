@@ -92,8 +92,10 @@ head('highlight: escaped first, marked once');
   ok('a query of "amp" leaves &amp; whole', /&amp;/.test(q) && !/&<mark>/.test(q), q);
   const m = N.highlight('a remark on marks', 'mark remark', esc);
   ok('no word is marked inside a <mark> another word inserted', !/<<mark>|<mark>[^<]*<mark>/.test(m) && (m.match(/<mark>/g) || []).length === 2, m);
-  const x = N.highlight('safe text', '"><img src=x onerror=alert(1)>', esc);
-  ok('a hostile query adds no tag but <mark>', !/<img/.test(x), x);
+  /* The markup is in the text as well as the query: with plain text there is nothing for the query to match,
+     highlight() returns the text unchanged, and the check could not fail whatever highlight() did. */
+  const x = N.highlight('a note quoting "><img src=x onerror=alert(1)> as text', '"><img src=x onerror=alert(1)>', esc);
+  ok('a hostile query adds no tag but <mark>', (x.match(/<mark>/g) || []).length >= 3 && !/</.test(x.replace(/<\/?mark>/g, '')), x);
 }
 
 head('the markup the screen shows');

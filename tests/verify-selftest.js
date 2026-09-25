@@ -154,8 +154,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       const fig = r => r.find(x => x.name === 'every figure fits the viewer at Fit');
       return { a: fig(a).detail, b: fig(b).detail, aOk: fig(a).ok, bOk: fig(b).ok };
     });
-    ok('both runs report a full sample', !/unreachable/.test(both.a) && !/unreachable/.test(both.b),
-       `${both.a} | ${both.b}`);
+    /* "N sampled" first: the two other outcomes, "N figures could not be loaded" and "this build carries no
+       figures", contain no "unreachable" either, so without it a run in which nothing loaded passed here —
+       and two identical failures passed "both agree" below as well. */
+    ok('both runs report a full sample', /^\d+ sampled/.test(both.a) && /^\d+ sampled/.test(both.b) &&
+       !/unreachable/.test(both.a) && !/unreachable/.test(both.b), `${both.a} | ${both.b}`);
     ok('and both agree', both.a === both.b && both.aOk === both.bOk, `${both.a} vs ${both.b}`);
     ok('and both still pass', both.aOk === true && both.bOk === true);
   }
