@@ -794,7 +794,7 @@ function mascot() {
 }
 
 /* ── HOME ────────────────────────────────────────────────────────────────── */
-function viewHome() {
+function homeParts() {
   var sessions = ui.sessions || {};
   var day = today();
   var due = Session.dueCards(ui.cards, day).length;
@@ -936,25 +936,50 @@ function viewHome() {
         (d.ocrError ? ' — the text reader could not run (' + d.ocrError + ').' : '.')) : null);
   });
 
-  /* Laid out as a dashboard: the hero; the brain; then the pearl, with
-     where to jump back in and what needs work beside it; then adding
-     material; then the shelf. On a phone it stacks in that order. */
-  var checks = checksCard(), plan = ui.docs.length ? planCard() : null, week = weekCard(), map = masteryCard();
-  var side = jump || weak || checks || plan || week ? h('div.home-side', { id: 'home-side' }, plan, jump, checks, weak, week) : null;
+  var checks = checksCard(), plan = ui.docs.length ? planCard() : null, week = weekCard();
+  var keyNote = !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
+    button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null;
+  var empty = !units.length && !books.length ? h('div.card.empty', h('h2', 'Start with a chapter, or the whole book'),
+    h('p', 'Upload a chapter of your book as a PDF, take photos of its pages, or paste your notes — or add the whole textbook, in as many PDFs as it came in. Memorizer splits it into chapters and sections, teaches each one — key points, numbers to know, mnemonics and analogies — then drills you with multiple-choice questions. Everything you miss comes back as a review card until it sticks.')) : null;
+  return { top: top, inputs: [pdfIn, photoIn, bookIn], keyNote: keyNote, pearl: pearl, jump: jump, weak: weak, checks: checks, plan: plan, week: week,
+           add: h('section.home-add', { id: 'home-add', 'aria-label': 'Add material' }, drop, chips), paste: paste, books: books, units: units, empty: empty };
+}
+
+/* ── HOME: three things ────────────────────────────────────────────────────
+   The owner: "home screen layout not upto mark, too much scrolling down, in
+   home just add 2 or 3 sections including brain, move chapters to other
+   page". So home is the hero (with what to continue), the brain, and the
+   pearl — nothing else. Before anything is added, the box to add a chapter
+   is here too, since there is nothing else to do. Everything about the
+   chapters — adding, the books and units, jumping back in, the plan, the
+   checks, what needs work, the week — is the Chapters page (viewShelf),
+   a tab of its own. */
+function viewHome() {
+  var P = homeParts(), none = !ui.docs.length && !ui.books.length;
   return h('main.wrap.home',
-    top, pdfIn, photoIn, bookIn,
-    ui.error ? errorCard(null) : null,
-    !hasKey() ? h('div.card.note', h('strong', 'Claude needs your API key. '), 'Add it in Settings, or switch back to the built-in coach, which needs none. ',
-      button('Settings', function () { ui.view = 'settings'; render(); }, 'primary')) : null,
-    /* The brain first, under the hero (the owner: "bring the map up"). */
-    map,
-    pearl || side ? h('div.home-grid' + (pearl && side ? '.two' : ''), { id: 'home-grid' }, pearl, side) : null,
-    h('section.home-add', { id: 'home-add', 'aria-label': 'Add material' }, drop, chips), paste,
-    books.length ? [h('div.section-head', h('h2', 'My books'), h('label.plus', { for: 'book-input', 'aria-label': 'Add a book' }, '+')),
-      h('ul.units', { id: 'books' }, books)] : null,
-    units.length ? h('div.section-head', h('h2', 'My units'), h('label.plus', { for: 'pdf-input', 'aria-label': 'Add a PDF' }, '+')) : null,
-    units.length ? h('ul.units', { id: 'units' }, units) : !books.length ? h('div.card.empty', h('h2', 'Start with a chapter, or the whole book'),
-      h('p', 'Upload a chapter of your book as a PDF, take photos of its pages, or paste your notes — or add the whole textbook, in as many PDFs as it came in. Memorizer splits it into chapters and sections, teaches each one — key points, numbers to know, mnemonics and analogies — then drills you with multiple-choice questions. Everything you miss comes back as a review card until it sticks.')) : null);
+    P.top, P.inputs,
+    ui.error ? errorCard(null) : null, P.keyNote,
+    masteryCard(),
+    P.pearl,
+    none ? [P.add, P.paste, P.empty] : null);
+}
+
+/* ── CHAPTERS: the books and units, and what to do with them ─────────────── */
+function viewShelf() {
+  var P = homeParts();
+  var side = P.plan || P.jump || P.checks || P.weak || P.week ? h('div.home-side', { id: 'home-side' }, P.plan, P.jump, P.checks, P.weak, P.week) : null;
+  var shelf = h('div.shelf-main',
+    P.books.length ? [h('div.section-head', h('h2', 'My books'), h('label.plus', { for: 'book-input', 'aria-label': 'Add a book' }, '+')),
+      h('ul.units', { id: 'books' }, P.books)] : null,
+    P.units.length ? [h('div.section-head', h('h2', 'My units'), h('label.plus', { for: 'pdf-input', 'aria-label': 'Add a PDF' }, '+')),
+      h('ul.units', { id: 'units' }, P.units)] : null,
+    P.empty);
+  return h('main.wrap.home.shelf',
+    h('header.shelf-head', h('h1', 'Chapters'), h('p.muted', Home.count(ui.books.length, 'book') + ' · ' + Home.count(ui.docs.filter(function (d) { return !d.bookId; }).length, 'unit'))),
+    P.inputs,
+    ui.error ? errorCard(null) : null, P.keyNote,
+    P.add, P.paste,
+    h('div.home-grid' + (side ? '.two' : ''), { id: 'shelf-grid' }, shelf, side));
 }
 
 /* ── UNIT: the sections as cards ─────────────────────────────────────────── */
@@ -992,7 +1017,7 @@ function viewUnit() {
         { id: 'exam-mode', 'aria-pressed': String(examMode()), title: 'Timed at a board\u2019s pace, answers shown at the end' }),
       button(s.exam.score != null ? 'Retake' : 'Start', function () { go({ type: 'toExam' }); }, 'primary', { id: 'to-exam' })) : h('span.lock', { 'aria-hidden': 'true' }, '🔒'));
   return h('main.wrap.unit',
-    backBar(d.name, function () { if (d.bookId) openBook(d.bookId); else leave('library'); }),
+    backBar(d.name, function () { if (d.bookId) openBook(d.bookId); else leave('shelf'); }),
     d.bookId ? h('p.muted.book-of', d.bookName + (d.chapter ? ' · chapter ' + d.chapter : ' · front matter') + ' · pp. ' + d.pageStart + '–' + d.pageEnd) : null,
     h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
@@ -1171,7 +1196,7 @@ function viewBook() {
         } }, Book.LABELS[m] + ' · ' + (b.found ? b.found[m] : '?'));
   }));
   return h('main.wrap.book',
-    backBar(b.name, function () { leave('library'); }),
+    backBar(b.name, function () { leave('shelf'); }),
     h('p.muted.unit-meta', Home.count(real, 'chapter') + ' · ' + Home.count(b.pages, 'page') + (b.parts.length > 1 ? ' in ' + b.parts.length + ' PDFs' : '') + ' · ' + studied + ' fully drilled'),
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * studied / Math.max(1, real)) + '%' })),
     ui.importing ? h('div.card.busy', { role: 'status' }, h('span.spinner', { 'aria-hidden': 'true' }), h('span', ui.importing)) : null,
@@ -1184,7 +1209,7 @@ function viewBook() {
     b.scanned.length ? h('p.warn', 'Pages with no readable text: ' + b.scanned.slice(0, 12).join(', ') + (b.scanned.length > 12 ? '…' : '') + '.') : null,
     h('div.row', button('Delete this book', function () {
       if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
-      docsChanged(); Store.deleteBook(b.id).then(function () { leave('library'); });
+      docsChanged(); Store.deleteBook(b.id).then(function () { leave('shelf'); });
     }, 'quiet danger', { id: 'delete-book' })));
 }
 
@@ -3198,7 +3223,7 @@ function aiSettingsCard() {
 /* ── frame: a floating bar at the foot of the screen ─────────────────────── */
 function nav() {
   var due = Session.dueCards(ui.cards, today()).length;
-  var here = ui.view === 'session' || ui.view === 'book' ? 'library' : ui.view;
+  var here = ui.view === 'session' || ui.view === 'book' ? 'shelf' : ui.view;
   function tab(v, icon, label, go2, badge) {
     return h('button.nav-btn', { type: 'button', 'aria-current': here === v ? 'page' : null, onclick: go2, 'aria-label': label + (badge ? ', ' + badge + ' due' : '') },
       h('span.nav-icon', { 'aria-hidden': 'true' }, icon), h('span.nav-label', label), badge ? h('span.nav-badge', String(badge)) : null);
@@ -3209,6 +3234,7 @@ function nav() {
     ctx ? h('button.nav-btn.nav-context', { type: 'button', id: 'dock-context', 'data-action': ctx.id, onclick: function () { contextGo(ctx.id); } },
       h('span.nav-icon', { 'aria-hidden': 'true' }, '\u25B6'), h('span.nav-label', ctx.label)) : null,
     tab('library', '⌂', 'Home', function () { leave('library'); }),
+    tab('shelf', '📚', 'Chapters', function () { leave('shelf'); }),
     tab('ask', '🎓', 'Coach', function () { ui.view = 'ask'; ui.error = ''; refresh().then(function () { render(); if (ui.docs.length) askIndex().then(render); }); }),
     tab('review', '↻', 'Review', function () { startReview(); }, due),
     tab('settings', '⚙', 'Settings', function () { leave('settings'); }));
@@ -3438,7 +3464,8 @@ function render() {
     : ui.view === 'review' ? viewReview()
     : ui.view === 'check' ? viewCheck()
     : ui.view === 'practice' ? viewPractice()
-    : ui.view === 'settings' ? viewSettings() : viewHome();
+    : ui.view === 'settings' ? viewSettings()
+    : ui.view === 'shelf' ? viewShelf() : viewHome();
   /* A new screen settles in (app.css, main[data-enter]); a redraw of the
      same screen does not. */
   if (ui.view !== lastView) { view.setAttribute('data-enter', ''); lastView = ui.view; }

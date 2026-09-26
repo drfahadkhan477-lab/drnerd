@@ -85,7 +85,8 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     return p;
   };
   const paste = async (p, name) => {
-    await p.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    /* the box to add material is on the Chapters page */
+    await p.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await p.locator('#chip-paste').click();
     await p.fill('#paste-name', name);
     await p.fill('#paste-text', NOTES);
