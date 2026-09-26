@@ -4,19 +4,27 @@ Read this before changing anything. It is not a description of the project —
 `README.md` and `docs/BUILD.md` do that. It is the set of rules that are easy
 to break without noticing, each one here because it was broken at least once.
 
-## The licensed corpus never enters git
+## The licensed corpus never enters git (except via submodule)
 
 The ACCSAP 12 export is licensed content. `source/`, `build/`, `content/` and
-`dist/` are gitignored and stay that way. `tests/last-run.log` is gitignored
+`dist/` are gitignored in the main repository and stay that way. `tests/last-run.log` is gitignored
 because suite output quotes question text.
 
-Do not open, read, retain or reconstruct the licensed source material — the
-split PDF parts, the manifest, the ACCSAP_12 HTML exports. Building the app
-from the owner's own export is the sanctioned workflow; reading that export as
-a document is not, and neither is quoting question text into a transcript.
+**Main repository rule:** Do not commit the ACCSAP export, split PDFs, manifest,
+or question bank HTML directly to `drnerd`. Building the app from the owner's own
+export is the sanctioned workflow. Reading that export as a document is not sanctioned,
+and neither is quoting question text into a transcript.
 
-`scripts/leak-guard.js` enforces the first half of this on staged files. Run
+**Submodule exception:** The `content/refs-repo` submodule (at
+`drfahadkhan477-lab/systole-refs`) may contain derived reference material
+(markdown exports, figures) from the licensed corpus **if and only if**:
+1. The systole-refs repository is **private** (access-controlled)
+2. It is a separate git repository from drnerd (a gitlink, not committed files)
+3. The main drnerd repository remains clean per leak-guard checks
+
+`scripts/leak-guard.js` enforces this on drnerd's staged files. Run
 `npm run hooks` once per clone to get it on pre-commit; CI runs it regardless.
+The submodule's own repository content is the owner's responsibility to keep secure.
 
 ## The failure mode this project keeps producing
 
