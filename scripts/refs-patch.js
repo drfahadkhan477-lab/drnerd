@@ -74,20 +74,22 @@ function notesFromFile(file) {
   });
 }
 
+let notes = [];
+let files = [];
+
 if (!fs.existsSync(REFS_DIR)) {
   console.error(`refs: ${path.relative(process.cwd(), REFS_DIR)} does not exist — nothing to seed.`);
-  process.exit(1);
+  // Continue with empty seed to keep patch chain intact
+} else {
+  files = fs.readdirSync(REFS_DIR)
+    .filter(f => f.endsWith('.md') && f.toLowerCase() !== 'readme.md')
+    .sort();
+  if (!files.length) {
+    console.error(`refs: no .md files in ${path.relative(process.cwd(), REFS_DIR)} — nothing to seed.`);
+  } else {
+    for (const f of files) notes.push(...notesFromFile(path.join(REFS_DIR, f)));
+  }
 }
-const files = fs.readdirSync(REFS_DIR)
-  .filter(f => f.endsWith('.md') && f.toLowerCase() !== 'readme.md')
-  .sort();
-if (!files.length) {
-  console.error(`refs: no .md files in ${path.relative(process.cwd(), REFS_DIR)} — nothing to seed.`);
-  process.exit(1);
-}
-
-const notes = [];
-for (const f of files) notes.push(...notesFromFile(path.join(REFS_DIR, f)));
 
 /* A note the importer would reject is a note that will never be retrieved.
    Fail loudly here rather than shipping dead weight. */
