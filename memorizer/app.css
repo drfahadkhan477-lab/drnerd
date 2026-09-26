@@ -58,6 +58,13 @@ li { margin: .25em 0; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
 .btn.big { padding: .875rem 1.375rem; font-size: var(--t-lead); }
 .btn.quiet { background: none; border-color: transparent; color: var(--muted); }
+/* A quiet way on — the owner asked for Continue and "Open the section" to
+   be smaller and less prominent: the page's ink on the accent's tint, no
+   fill of the accent itself, and a compact size. */
+.btn.tonal { background: var(--accent-soft); color: var(--ink); border-color: transparent; font-size: var(--t-meta); font-weight: 600;
+  padding: .4375rem .875rem; min-height: 2.25rem; border-radius: 999px; }
+.btn.tonal > span[aria-hidden] { color: var(--accent); }
+.btn.tonal:hover { border-color: var(--accent); }
 
 .bar { height: .375rem; border-radius: .1875rem; background: var(--surface-2); overflow: hidden; margin: var(--s-3) 0 var(--s-2); }
 .bar i { display: block; height: 100%; background: var(--accent); border-radius: .1875rem; }
@@ -740,7 +747,9 @@ main[data-enter] .hero-trace path { animation: trace-draw 3.2s var(--ease-out) b
 
 /* ── home is three things; the chapters are their own page ───────────── */
 /* A tighter hero, so the brain is in view on opening. */
-main.home:not(.shelf) .home-hero { margin-bottom: var(--s-4); padding: var(--s-5) var(--s-5) calc(var(--s-5) + 1.25rem); }
+main.home:not(.shelf) .home-hero { margin-bottom: var(--s-4); padding: var(--s-5) var(--s-5) 3.75rem; }
+/* the strip and its label kept to the band's foot, under everything else */
+main.home:not(.shelf) .hero-monitor { height: 2.5rem; bottom: .375rem; }
 main.home:not(.shelf) .home-hero .learn { font-size: 2.75rem; }
 main.home:not(.shelf) > .pearl { min-height: 0; margin-bottom: var(--s-4); }
 /* the three numbers as one row of small chips, beside Continue */
@@ -757,16 +766,8 @@ main.home:not(.shelf) .home-hero .pill.stat, main.home:not(.shelf) .home-hero .p
   main.home:not(.shelf) .home-hero .hello { font-size: var(--t-meta); }
 }
 main.home:not(.shelf) .home-hero .stat-ring .ring-wrap { width: 2rem; height: 2rem; }
-main.home:not(.shelf) .hero-continue { margin: 0; }
-main.home:not(.shelf) .hero-continue .btn.big { padding: .75rem 1.25rem; font-size: var(--t-body); }
+main.home:not(.shelf) .hero-continue { margin: var(--s-2) 0 0; }
 main.home:not(.shelf) .home-hero .mascot { width: 3.5rem; height: 3.5rem; }
-/* the brain's panel in two columns beside each other where there is room */
-@media (min-width: 40rem) and (max-width: 59.99rem) {
-  .brain-card .brain-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); column-gap: var(--s-4); row-gap: var(--s-2); align-items: start; }
-  .brain-card .brain-side > .eyebrow, .brain-card .brain-side > .brain-big, .brain-card .brain-side > .mm-legend { grid-column: 1; }
-  .brain-card .brain-side > .brain-info { grid-column: 2; grid-row: 1 / span 3; }
-  .brain-card .brain-side > .brain-lobes-list, .brain-card .brain-side > #brain-more { grid-column: 1 / -1; }
-}
 .brain-card .brain-svg { max-height: 30rem; margin: 0 auto; }
 .brain-card .brain-lobes-list { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: .125rem; }
 .brain-card .brain-lobes-list::-webkit-scrollbar { display: none; }
@@ -784,6 +785,12 @@ main.home:not(.shelf) .home-hero .mascot { width: 3.5rem; height: 3.5rem; }
 .pearl.with-visual { flex-direction: row; flex-wrap: wrap; gap: var(--s-5); align-items: stretch; }
 .pearl-main { flex: 1 1 20rem; min-width: 0; display: flex; flex-direction: column; }
 .pearl .eyebrow { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--accent); font-size: var(--t-meta); }
+/* the pearl's mark: a gem */
+.pearl-mark { display: inline-flex; }
+.gem-icon { width: 1.75rem; height: 1.5rem; flex: none; overflow: visible; filter: drop-shadow(0 2px 6px var(--accent-soft)); }
+.gem-body { fill: var(--accent); }
+.gem-facet { fill: none; stroke: var(--accent-ink); stroke-opacity: .55; stroke-width: 1.2; stroke-linejoin: round; }
+.gem-shine { fill: none; stroke: #FFFFFF; stroke-opacity: .85; stroke-width: 1.6; stroke-linecap: round; }
 .pearl-gem { width: 1.125rem; height: 1.125rem; border-radius: 50%; flex: none;
   background: radial-gradient(circle at 30% 30%, #FFFFFF, var(--accent) 70%);
   box-shadow: 0 0 0 3px var(--accent-soft); animation: gem-shine 3.6s ease-in-out infinite; }
@@ -909,16 +916,61 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 .card-note { margin: var(--s-3) 0; padding: var(--s-2) var(--s-3); border-left: .25rem solid var(--mid); background: var(--mid-soft); border-radius: .5rem; color: var(--ink); }
 .note-label { font-weight: 800; }
 /* ── the brain (ui.js masteryCard, home.js brainLayout) ── */
-.brain-card { display: grid; gap: var(--s-4); align-items: center; padding: var(--s-4); border-radius: 1.75rem; margin: 0 0 var(--s-4); overflow: hidden; position: relative; isolation: isolate; }
+.brain-card { display: grid; gap: var(--s-4); align-items: start; padding: var(--s-4); border-radius: 1.75rem; margin: 0 0 var(--s-4); overflow: hidden; position: relative; isolation: isolate; }
 .brain-card::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: var(--brain-stage); }
-@media (min-width: 60rem) { .brain-card { grid-template-columns: minmax(0, 1.75fr) minmax(16rem, 1fr); padding: var(--s-5); } }
+/* ONE CARD: the brain and its statistics in one column, the pearl of the
+   day in the other — on an iPad either way up; stacked on a phone. The
+   pearl is a panel of the card, its paper under it, as tall as the brain
+   beside it; its figure or table goes under its words, not beside them. */
+@media (min-width: 48rem) {
+  .brain-card.with-pearl { grid-template-columns: minmax(0, 1.45fr) minmax(17.5rem, 1fr); gap: var(--s-5); padding: var(--s-5); align-items: stretch; }
+}
+.brain-col { min-width: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.brain-stats { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; padding: 0 var(--s-1); }
+.brain-stats-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s-2) var(--s-4); }
+.brain-headline { display: flex; flex-direction: column; gap: .125rem; }
+.brain-headline .eyebrow { color: var(--accent); }
+.brain-stats .mm-legend { justify-content: flex-start; }
+.brain-card > .pearl { margin: 0; min-height: 0; border-radius: 1.375rem; padding: var(--s-5); align-self: stretch; }
+.brain-card > .pearl.with-visual { flex-direction: column; flex-wrap: nowrap; gap: var(--s-4); }
+.brain-card > .pearl .pearl-main, .brain-card > .pearl .pearl-visual { flex: none; }
+.brain-card > .pearl .pearl-steps { font-size: var(--t-lead); line-height: 1.5; margin: var(--s-2) 0 var(--s-3); }
+.brain-card > .pearl .pearl-steps li { padding: var(--s-2) 0 var(--s-2) 2.5rem; }
+.brain-card > .pearl .pearl-actions { margin-top: var(--s-3); }
+.brain-card > .pearl .pearl-visual table.data { font-size: var(--t-meta); }
+@media (max-width: 47.99rem) { .brain-card > .pearl { padding: var(--s-4); } }
+/* An iPad held upright gives the pearl a narrow column: its words a step
+   smaller, its table tighter, "Recall it first" a quiet link under the
+   steps — so the two columns come out about the same height, and the
+   brain's column sits centred beside it. */
+@media (min-width: 48rem) { .brain-card.with-pearl .brain-col { justify-content: center; } }
+@media (min-width: 48rem) and (max-width: 63.99rem) {
+  .brain-card > .pearl { padding: var(--s-4) var(--s-4) var(--s-4); }
+  .brain-card > .pearl .pearl-steps { font-size: var(--t-body); }
+  .brain-card > .pearl .pearl-steps li { padding: .375rem 0 .375rem 2.25rem; }
+  .brain-card > .pearl .pearl-visual th, .brain-card > .pearl .pearl-visual td { padding: .3125rem .5rem; }
+}
+.brain-card > .pearl #pearl-recall { align-self: flex-start; padding-left: 0; padding-right: 0; }
+.brain-card > .pearl .pearl-actions { flex-wrap: nowrap; }
 .brain-stage { min-width: 0; }
 .brain-svg { display: block; width: 100%; height: auto; max-height: 36rem; overflow: visible; -webkit-user-select: none; user-select: none; }
 .brain-stem { fill: var(--brain-t3); stroke: var(--brain-rim); stroke-width: 2; }
 .brain-cbl { fill: var(--brain-t2); stroke: var(--brain-rim); stroke-width: 2; }
-.brain-folia path, .brain-sulci path { fill: none; stroke: var(--brain-sulcus); stroke-linecap: round; }
-.brain-folia path { stroke-width: 3; }
-.brain-sulci path { stroke-width: 4.5; }
+.brain-folia path, .brain-sulci path, .brain-grooves path, .brain-gyri-lit path, .brain-stem-lines path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.brain-folia path { stroke: var(--brain-sulcus); stroke-width: 1.8; }
+.brain-stem-lines path { stroke: var(--brain-sulcus); stroke-width: 1.6; opacity: .7; }
+/* each fold a groove with a lit edge beside it, so the cortex reads as ridges */
+/* each fold three times: the groove's shadow, wide and soft in the tissue's
+   deep tone; its lit lip above; and the fine line at its floor */
+.brain-grooves path { stroke: var(--brain-t3); stroke-width: 6; }
+.brain-grooves path.major { stroke-width: 9; }
+.brain-gyri-lit path { stroke: var(--brain-rim); stroke-width: 1.3; opacity: .5; }
+.brain-gyri-lit path.major { stroke-width: 2; }
+.brain-sulci path { stroke: var(--brain-sulcus); stroke-width: 1.5; }
+.brain-sulci path.major { stroke-width: 2.8; }
+.brain-shade { pointer-events: none; }
+.sh-0 { stop-color: var(--brain-t3); stop-opacity: .75; } .sh-1 { stop-color: var(--brain-t3); stop-opacity: 0; }
+.fl-0 { stop-color: #000000; stop-opacity: .28; } .fl-1 { stop-color: #000000; stop-opacity: 0; }
 .brain-cortex { stroke: none; }
 .brain-rim { fill: none; stroke: var(--brain-rim); stroke-width: 3; }
 .brain-sheen { opacity: .9; pointer-events: none; }
@@ -960,6 +1012,8 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 .neuron { cursor: pointer; outline: none; transform-box: fill-box; transform-origin: center; transition: transform .25s var(--ease-out); }
 .neuron .hit { fill: transparent; }
 .neuron .dendrite { fill: none; stroke: var(--brain-dendrite); stroke-width: 1.6; stroke-linecap: round; }
+/* a neuron not drilled yet keeps its branches faint, so the folds read through */
+.neuron[data-state="new"] .dendrite { opacity: .45; stroke-width: 1.2; }
 .neuron .soma { fill: var(--brain-dormant); stroke: var(--brain-dendrite); stroke-width: 1.5; }
 .neuron .nucleus { fill: var(--brain-dendrite); opacity: .55; }
 .neuron[data-state="solid"] .soma { fill: var(--brain-n-solid); stroke: var(--brain-n-solid); }
@@ -983,10 +1037,8 @@ main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation:
   .brain-glint { display: none; }
   .neuron { transition: none; }
 }
-.brain-side { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; }
-.brain-side .eyebrow { color: var(--accent); }
 .brain-big { margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: .375rem; color: var(--muted); }
-.brain-big strong { font-size: 3rem; line-height: 1; letter-spacing: -.02em; color: var(--ink); }
+.brain-big strong { font-size: 2.75rem; line-height: 1; letter-spacing: -.02em; color: var(--ink); }
 .mm-legend { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); font-size: var(--t-meta); color: var(--muted); margin: 0; }
 .mm-legend span { display: inline-flex; align-items: center; gap: .375rem; }
 .mm-legend b { color: var(--ink); }

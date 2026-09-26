@@ -793,6 +793,16 @@ function mascot() {
   return svg;
 }
 
+/* The pearl's mark: a cut gem, faceted, in the accent with a light edge. */
+function gemIcon() {
+  var e = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  e.setAttribute('viewBox', '0 0 32 28'); e.setAttribute('class', 'gem-icon'); e.setAttribute('aria-hidden', 'true');
+  e.innerHTML = '<path class="gem-body" d="M7 2h18l6 8-15 17L1 10z"/>' +
+    '<path class="gem-facet" d="M1 10h30M11 2l-3 8 8 17 8-17-3-8M8 10l8-8 8 8"/>' +
+    '<path class="gem-shine" d="M9 4.5l-2.6 3.7"/>';
+  return e;
+}
+
 /* ── HOME ────────────────────────────────────────────────────────────────── */
 function homeParts() {
   var sessions = ui.sessions || {};
@@ -817,7 +827,10 @@ function homeParts() {
     /* Systole's live strip (monitor.js); the still trace where it is absent */
     Monitor ? Monitor.mount(doc, reducedMotion) : heroTrace(),
     h('div.home-brand', mascot(), h('div', h('span.hello', Home.greeting(new Date().getHours()) + ' · what shall we'), h('h1.learn', 'Learn?'),
-      h('p.hero-line', cur ? [h('span.hero-dot', { 'aria-hidden': 'true' }), 'Up next: ', h('strong', cur.doc.name), cur.next ? ' · ' + cur.next : ''] : 'Add a chapter of your book to begin.'))),
+      h('p.hero-line', cur ? [h('span.hero-dot', { 'aria-hidden': 'true' }), 'Up next: ', h('strong', cur.doc.name), cur.next ? ' · ' + cur.next : ''] : 'Add a chapter of your book to begin.'),
+      /* under the line that names it, small: the trace keeps the band's foot */
+      cur ? h('div.row.hero-continue', button([h('span', { 'aria-hidden': 'true' }, '\u25B6 '), cur.started ? 'Continue: ' + cur.doc.name : 'Start: ' + cur.doc.name],
+        function () { openDoc(cur.doc.id); }, 'tonal', { id: 'continue' })) : null)),
     h('div.pills.hero-stats',
       h('span.pill.stat', { id: 'streak', title: 'Days in a row' + (frozenNow.length ? ' — a missed day this week was forgiven (one a week)' : '') }, h('span.stat-label', 'Streak'), h('span', h('span', { 'aria-hidden': 'true' }, '🔥'),
         frozenNow.length ? h('span.freeze', { id: 'streak-freeze', 'aria-label': 'one missed day forgiven this week' }, '🧊') : null), ' ' + streak),
@@ -829,9 +842,7 @@ function homeParts() {
       h('span.pill.stat.stat-ring', { id: 'stat-held', role: 'img',
           'aria-label': prog.heldPct + '% of your ' + prog.cards + ' review card' + (prog.cards === 1 ? '' : 's') + ' likely recalled today (estimated recall of 90% or more)',
           title: 'Likely recalled: of your ' + prog.cards + ' review card' + (prog.cards === 1 ? '' : 's') + ', the share the scheduler (FSRS) estimates you would recall today with 90% odds or better. An estimate about the cards, not a measure of how much of the book you know.' },
-        ring(prog.heldPct), h('span.stat-label', 'Likely recalled'))),
-    cur ? h('div.row.hero-continue', button([h('span', { 'aria-hidden': 'true' }, '\u25B6 '), cur.started ? 'Continue: ' + cur.doc.name : 'Start: ' + cur.doc.name],
-      function () { openDoc(cur.doc.id); }, 'primary big', { id: 'continue' })) : null);
+        ring(prog.heldPct), h('span.stat-label', 'Likely recalled'))));
 
   var drop = h('label.learn-box', { for: 'pdf-input', id: 'door-add',
       ondragover: function (e) { e.preventDefault(); drop.classList.add('over'); },
@@ -896,11 +907,13 @@ function homeParts() {
   }
   var pearl = pk ? h('aside.pearl.card' + (visual ? '.with-visual' : ''), { id: 'pearl', 'aria-labelledby': 'pearl-label' },
     h('div.pearl-main',
-      h('span.eyebrow', { id: 'pearl-label' }, h('span.pearl-gem', { 'aria-hidden': 'true' }), 'Pearl of the day'),
+      /* its name is a gem, not a label (the owner: "just an icon of pearls
+         or diamond"); a screen reader still hears "Pearl of the day" */
+      h('span.eyebrow.pearl-mark', { id: 'pearl-label', title: 'Pearl of the day' }, gemIcon(), h('span.visually-hidden', 'Pearl of the day')),
       pearlSteps(pk),
       h('p.pearl-src', pk.pearl.heading, pk.pearl.page ? page(pk.pearl.page) : null, ui.docs.length > 1 ? ' · ' + pk.pearl.docName : ''),
       h('div.row.pearl-actions',
-        pdoc ? button('Open the section', function () { openDoc(pdoc.id, pdoc.clusters.map(function (c) { return c.index; }).indexOf(pk.pearl.cluster)); }, 'primary', { id: 'pearl-open' }) : null,
+        pdoc ? button('Open the section', function () { openDoc(pdoc.id, pdoc.clusters.map(function (c) { return c.index; }).indexOf(pk.pearl.cluster)); }, 'tonal', { id: 'pearl-open' }) : null,
         pk.of > 1 ? button('Another', function () { ui.pearlSkip = (ui.pearlSkip || 0) + 1; render(); }, 'quiet', { id: 'pearl-next' }) : null)),
     visual) : null;
 
@@ -956,11 +969,14 @@ function homeParts() {
    a tab of its own. */
 function viewHome() {
   var P = homeParts(), none = !ui.docs.length && !ui.books.length;
+  /* the pearl sits beside the brain, in its card; alone only when no unit
+     has been opened for the brain to draw */
+  var brain = masteryCard(P.pearl);
   return h('main.wrap.home',
     P.top, P.inputs,
     ui.error ? errorCard(null) : null, P.keyNote,
-    masteryCard(),
-    P.pearl,
+    brain,
+    brain ? null : P.pearl,
     none ? [P.add, P.paste, P.empty] : null);
 }
 
@@ -2329,7 +2345,7 @@ function brainData() {
   if (!ui.brainCache || ui.brainCache.sig !== sig) ui.brainCache = { sig: sig, L: Home.brainLayout(map) };
   return ui.brainCache.L;
 }
-function masteryCard() {
+function masteryCard(pearl) {
   var L = brainData();
   if (!L.nodes.length) return null;
   var B = Home.BRAIN, nodes = L.nodes;
@@ -2351,13 +2367,29 @@ function masteryCard() {
     glowGrad('glow-solid', 'gl-solid'), glowGrad('glow-fading', 'gl-fading'), glowGrad('glow-weak', 'gl-weak'), glowGrad('glow-new', 'gl-new'), glowGrad('glow-spark', 'gl-spark'),
     svg('linearGradient', { id: 'brain-glint-g', x1: '0', y1: '0', x2: '1', y2: '0' }, [
       svg('stop', { offset: '0', 'class': 'bg-0' }), svg('stop', { offset: '.5', 'class': 'bg-1' }), svg('stop', { offset: '1', 'class': 'bg-0' })]),
-    svg('clipPath', { id: 'brain-clip' }, [svg('path', { d: B.cerebrum })])]);
+    svg('clipPath', { id: 'brain-clip' }, [svg('path', { d: B.cerebrum })]),
+    svg('clipPath', { id: 'cbl-clip' }, [svg('path', { d: B.cerebellum })]),
+    /* depth: the tissue darkens toward its underside and back, in its own tone */
+    svg('radialGradient', { id: 'brain-shade', cx: '68%', cy: '88%', r: '75%' }, [svg('stop', { offset: '0', 'class': 'sh-0' }), svg('stop', { offset: '1', 'class': 'sh-1' })]),
+    svg('radialGradient', { id: 'brain-floor', cx: '50%', cy: '50%', r: '50%' }, [svg('stop', { offset: '0', 'class': 'fl-0' }), svg('stop', { offset: '1', 'class': 'fl-1' })])]);
+  /* The body as an atlas draws it: a soft shadow under it; the stem and
+     the cerebellum with their lines; the cortex in its tissue, its folds
+     each drawn twice — a lit edge and the groove beside it, so they read as
+     ridges — the main fissures deeper; a shade toward the underside, the
+     sheen from above, and the rim. */
+  var gyrus = function (cls, dx) { return svg('g', { 'class': cls, 'clip-path': 'url(#brain-clip)' }, [svg('g', { transform: dx ? 'translate(' + dx + ' ' + dx + ')' : null },
+    B.GYRI.map(function (d) { return svg('path', { d: d }); }).concat(B.SULCI.map(function (d) { return svg('path', { d: d, 'class': 'major' }); })))]); };
   var body = svg('g', { 'class': 'brain-body', 'aria-hidden': 'true' }, [
+    svg('ellipse', { 'class': 'brain-floor', cx: 520, cy: 652, rx: 330, ry: 24, fill: 'url(#brain-floor)' }),
     svg('path', { 'class': 'brain-stem', d: B.stem }),
+    svg('g', { 'class': 'brain-stem-lines' }, B.STEM_LINES.map(function (d) { return svg('path', { d: d }); })),
     svg('path', { 'class': 'brain-cbl', d: B.cerebellum }),
-    svg('g', { 'class': 'brain-folia' }, B.FOLIA.map(function (d) { return svg('path', { d: d }); })),
+    svg('g', { 'class': 'brain-folia', 'clip-path': 'url(#cbl-clip)' }, B.FOLIA.map(function (d) { return svg('path', { d: d }); })),
     svg('path', { 'class': 'brain-cortex', d: B.cerebrum, fill: 'url(#brain-tissue)' }),
-    svg('g', { 'class': 'brain-sulci', 'clip-path': 'url(#brain-clip)' }, B.SULCI.map(function (d) { return svg('path', { d: d }); })),
+    gyrus('brain-grooves', 0),
+    gyrus('brain-gyri-lit', -2.2),
+    gyrus('brain-sulci', 0),
+    svg('path', { 'class': 'brain-shade', d: B.cerebrum, fill: 'url(#brain-shade)' }),
     svg('path', { 'class': 'brain-sheen', d: B.cerebrum, fill: 'url(#brain-sheen)' }),
     /* the light glancing across it, every few seconds */
     svg('g', { 'clip-path': 'url(#brain-clip)' }, [svg('g', { transform: 'skewX(-20)' }, [svg('rect', { 'class': 'brain-glint', x: -420, y: 0, width: 260, height: 720, fill: 'url(#brain-glint-g)' })])]),
@@ -2424,30 +2456,40 @@ function masteryCard() {
     var nx = art.querySelector('.neuron[data-i="' + j + '"]'); nx.setAttribute('tabindex', '0'); nx.focus();
   });
 
-  var shownI = selI !== -1 ? selI : nextI;
+  /* What a tapped neuron is, under the statistics. Nothing until one is
+     tapped: what is up next is the hero's Continue. */
+  var shownI = selI;
   var info = shownI !== -1 ? (function () {
     var x = nodes[shownI], u = L.units[x.unit];
     return h('div.brain-info', { id: 'brain-info', 'aria-live': 'polite', 'data-state': x.state },
-      h('span.eyebrow', selI !== -1 ? 'This neuron' : 'Up next'),
+      h('span.eyebrow', 'This neuron'),
       h('strong.brain-title', x.title),
       h('span.muted', u.name + ' · section ' + (x.ci + 1) + ' · ' + MM_LABEL[x.state] + (x.recall != null ? ' · recall ' + x.recall + '% today' : '')),
       button(x.state === 'new' ? 'Learn it' : 'Open it', function () { open(shownI); }, 'primary', { id: 'brain-open' }));
   })() : null;
   var c = L.counts, pct = Math.round(100 * lit / nodes.length);
-  return h('section.card.brain-card', { id: 'mastery', 'aria-labelledby': 'brain-h' },
-    h('div.brain-stage', art),
-    h('div.brain-side',
-      h('span.eyebrow', { id: 'brain-h' }, 'Your brain'),
-      h('p.brain-big', h('strong', { id: 'brain-lit' }, pct + '%'), h('span', ' lit · ' + lit + ' of ' + Home.count(nodes.length, 'neuron'))),
-      h('p.mm-legend', ['solid', 'fading', 'weak', 'new'].map(function (k) {
-        return h('span', { 'data-k': k }, h('i.mm-dot', { 'data-state': k, 'aria-hidden': 'true' }), MM_LABEL[k] + ' ', h('b', String(c[k] || 0)));
-      })),
-      info,
-      h('div.brain-lobes-list', L.units.map(function (u, k) {
-        return h('button.chip.lobe-chip', { type: 'button', style: '--lobe:' + lobeHue(k), onclick: function () { openDoc(u.docId); } },
-          h('i', { 'aria-hidden': 'true' }), h('span', u.name), h('b', u.done + '/' + u.n));
-      })),
-      L.hidden.sections ? h('p.muted', { id: 'brain-more' }, '+ ' + Home.count(L.hidden.sections, 'more section') + (L.hidden.units ? ' in ' + Home.count(L.hidden.units, 'unit') : '') + ', not drawn.') : null));
+  /* ONE CARD (the owner, choosing between five mock-ups: "Option E …
+     bring brain statistics below the brain as in option A and adjust
+     PEARLS on side of brain all in one section"): the brain, and its
+     statistics under it, in one column; the pearl of the day in the other.
+     On a phone the column comes first, then the pearl. */
+  return h('section.card.brain-card' + (pearl ? '.with-pearl' : ''), { id: 'mastery', 'aria-labelledby': 'brain-h' },
+    h('div.brain-col',
+      h('div.brain-stage', art),
+      h('div.brain-stats',
+        h('div.brain-stats-row',
+          h('div.brain-headline', h('span.eyebrow', { id: 'brain-h' }, 'Your brain'),
+            h('p.brain-big', h('strong', { id: 'brain-lit' }, pct + '%'), h('span', ' lit · ' + lit + ' of ' + Home.count(nodes.length, 'neuron')))),
+          h('p.mm-legend', ['solid', 'fading', 'weak', 'new'].map(function (k) {
+            return h('span', { 'data-k': k }, h('i.mm-dot', { 'data-state': k, 'aria-hidden': 'true' }), MM_LABEL[k] + ' ', h('b', String(c[k] || 0)));
+          }))),
+        info,
+        h('div.brain-lobes-list', L.units.map(function (u, k) {
+          return h('button.chip.lobe-chip', { type: 'button', style: '--lobe:' + lobeHue(k), onclick: function () { openDoc(u.docId); } },
+            h('i', { 'aria-hidden': 'true' }), h('span', u.name), h('b', u.done + '/' + u.n));
+        })),
+        L.hidden.sections ? h('p.muted', { id: 'brain-more' }, '+ ' + Home.count(L.hidden.sections, 'more section') + (L.hidden.units ? ' in ' + Home.count(L.hidden.units, 'unit') : '') + ', not drawn.') : null)),
+    pearl || null);
 }
 function weekCard() {
   var w = Study.weekly(ui.activity, today()), a = w.week, b = w.before;
@@ -3124,12 +3166,14 @@ function appearanceCard() {
         onclick: function () { set('theme', id); } },
       h('span.sw-minis', minis), h('span.sw-name', h('strong', name), note ? h('small', note) : null));
   }
-  var NOTES = { daylight: 'iPad light', clinical: 'Near-black, monitor green', paper: 'Warm, for long reading', neuron: 'Deep indigo, electric cyan', contrast: 'Systole\u2019s, strongest' };
+  var NOTES = { daylight: 'iPad light', clinical: 'Near-black, monitor green', paper: 'Warm, for long reading', neuron: 'Deep indigo, electric cyan',
+    ice: 'Quantum blue on ice glass', mint: 'Ghost green on zero black', butter: 'Royal iris on butter yellow', graphite: 'Graphite, a calm blue',
+    grape: 'Acid lime on cyber grape', contrast: 'Systole\u2019s, strongest' };
   var themes = function (mode) {
     return Look.THEMES.filter(function (t) { return t.mode === mode; }).map(function (t) { return swatch(t.id, t.name, [mini(t)], NOTES[t.id]); });
   };
   return h('div.card.settings', { id: 'appearance' }, h('h2', 'Appearance'),
-    h('p.muted', 'Daylight by day and Clinical at night, Paper for long reading, Neuron for the dark, or Systole\u2019s Contrast; Systole\u2019s type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
+    h('p.muted', 'Daylight by day and Clinical at night; Paper, Ice and Butter in the light; Neuron, Mint Night, Graphite and Grape in the dark; or Systole\u2019s Contrast. Systole\u2019s type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
     h('div.group-label', { id: 'lbl-theme' }, 'Theme'),
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' },
       swatch('auto', 'Auto', [mini(Look.byId(Look.AUTO.light)), mini(Look.byId(Look.AUTO.dark))], 'Follows the device'), themes('light')),

@@ -405,6 +405,45 @@ var SULCI = [
 var FOLIA = ['M676 488C732 474 810 470 876 488', 'M662 512C724 502 808 500 888 514', 'M666 534C730 528 806 530 878 538', 'M684 556C742 556 800 558 852 560', 'M712 574C756 576 796 576 826 574'];
 var BRAIN_MAX = 240, BRAIN_C = [500, 300];
 
+/* THE CORTEX'S FOLDS, drawn as a real brain's are: not a few strokes but a
+   field of short meandering gyri, each turning back on itself, packed over
+   the whole surface (the owner: "make the brain more realistic and good and
+   stylish looking"). Worked out from Halton points like the neurons — the
+   same every time — each a run of curved steps that swings left and right
+   and stops at the brain's edge. */
+function gyri() {
+  var out = [], seeds = [], f = function (v) { return Math.round(v * 10) / 10; };
+  for (var i = 1; i < 900 && out.length < 90; i++) {
+    var x = 100 + halton(i, 5) * 800, y = 55 + halton(i, 7) * 455;
+    if (!inPoly(x, y, CEREBRUM) || edgeDist(x, y, CEREBRUM) < 12) continue;
+    if (seeds.some(function (q) { return Math.hypot(q[0] - x, q[1] - y) < 40; })) continue;
+    seeds.push([x, y]);
+    var a = halton(i, 11) * Math.PI * 2, d = 'M' + f(x) + ' ' + f(y), steps = 0;
+    for (var k = 0; k < 6; k++) {
+      var len = 20 + halton(i + k * 97, 13) * 14, turn = (k % 2 ? 1 : -1) * (0.5 + halton(i + k * 31, 3) * 0.7);
+      var nx = x + Math.cos(a) * len, ny = y + Math.sin(a) * len;
+      if (!inPoly(nx, ny, CEREBRUM) || edgeDist(nx, ny, CEREBRUM) < 8) break;
+      var cx = (x + nx) / 2 - Math.sin(a) * len * 0.3 * (k % 2 ? 1 : -1), cy = (y + ny) / 2 + Math.cos(a) * len * 0.3 * (k % 2 ? 1 : -1);
+      d += 'Q' + f(cx) + ' ' + f(cy) + ' ' + f(nx) + ' ' + f(ny);
+      x = nx; y = ny; a += turn; steps++;
+    }
+    if (steps >= 2) out.push(d);
+  }
+  return out;
+}
+/* The cerebellum's folia: fine arcs fanned round the point where it meets
+   the stem, as it is drawn in an atlas (clipped to it where drawn), and a
+   few long lines down the stem. */
+function folia() {
+  var out = [], ox = 640, oy = 512, f = function (v) { return Math.round(v * 10) / 10; };
+  for (var r = 44; r <= 262; r += 12) {
+    var a0 = -1.05, a1 = 1.05;
+    out.push('M' + f(ox + Math.cos(a0) * r) + ' ' + f(oy + Math.sin(a0) * r * 0.8) + 'A' + r + ' ' + f(r * 0.8) + ' 0 0 1 ' + f(ox + Math.cos(a1) * r) + ' ' + f(oy + Math.sin(a1) * r * 0.8));
+  }
+  return out;
+}
+var STEM_LINES = ['M596 506C606 560 612 610 622 652', 'M622 500C628 560 634 610 640 652', 'M644 502C648 548 650 600 652 640'];
+
 /* A smooth closed curve through the points (Catmull-Rom as cubic Béziers):
    the outline passes through every point it is given. */
 function smoothPath(pts) {
@@ -620,7 +659,7 @@ function sparkAt(L, st, s, back) {
   return quad(L.nodes[e.a], st.net.ctrl[s.e], L.nodes[e.b], s.a === e.a ? t : 1 - t);
 }
 
-var BRAIN = { W: BRAIN_W, H: BRAIN_H, VIEW: BRAIN_VIEW, CEREBRUM: CEREBRUM, CEREBELLUM: CEREBELLUM, STEM: STEM, SULCI: SULCI, FOLIA: FOLIA, MAX: BRAIN_MAX,
+var BRAIN = { W: BRAIN_W, H: BRAIN_H, VIEW: BRAIN_VIEW, CEREBRUM: CEREBRUM, CEREBELLUM: CEREBELLUM, STEM: STEM, SULCI: SULCI, FOLIA: folia(), GYRI: gyri(), STEM_LINES: STEM_LINES, MAX: BRAIN_MAX,
   cerebrum: smoothPath(CEREBRUM), cerebellum: smoothPath(CEREBELLUM), stem: smoothPath(STEM) };
 
 var MemHome = { BRAIN: BRAIN, brainLayout: brainLayout, LIVE: LIVE, axonCtrl: axonCtrl, brainNet: brainNet, liveInit: liveInit, liveFire: liveFire, liveStep: liveStep, sparkAt: sparkAt, smoothPath: smoothPath, inPoly: inPoly, edgeDist: edgeDist, pearlVisual: pearlVisual, recallParts: recallParts, recallStreak: recallStreak, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,

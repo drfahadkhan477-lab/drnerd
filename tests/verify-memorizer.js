@@ -889,7 +889,25 @@ function kindOf(user) {
   await page.locator('#pearl').waitFor(T).catch(() => {});
   const homeIs = await page.evaluate(() => ({ parts: [...document.querySelector('main').children].filter(e => e.tagName !== 'INPUT' && !e.matches('.card.note, .card.error, .banner'))
       .map(e => e.id || e.className), shelfy: ['#units', '#books', '#door-add', '.jump-card', '#weak', '#exam-plan', '#weekly', '#checks'].filter(q => document.querySelector(q)) }));
-  ok('home is the hero, the brain and the pearl, and nothing of the chapters', JSON.stringify(homeIs.parts) === '["home-hero","mastery","pearl"]' && homeIs.shelfy.length === 0, JSON.stringify(homeIs));
+  ok('home is the hero, the brain and the pearl, and nothing of the chapters', JSON.stringify(homeIs.parts) === '["home-hero","mastery"]' && homeIs.shelfy.length === 0, JSON.stringify(homeIs));
+  /* One card (the owner's choice among five mock-ups): the brain with its
+     statistics under it in one column, the pearl beside it — on an iPad
+     upright and landscape — and on a phone the brain, its statistics, then
+     the pearl. Read from where the browser put them. */
+  const oneCard = () => page.evaluate(() => { const m = document.getElementById('mastery'), b = document.querySelector('#mastery .brain-stage').getBoundingClientRect(),
+      st = document.querySelector('#mastery .brain-stats').getBoundingClientRect(), p = document.querySelector('#mastery > #pearl');
+    const pr = p && p.getBoundingClientRect();
+    return { inCard: !!p, statsUnder: st.top >= b.bottom - 1 && Math.abs(st.left - b.left) < 40, beside: !!pr && pr.left >= b.right - 1 && pr.top < b.bottom,
+      below: !!pr && pr.top >= st.bottom - 1, wide: document.documentElement.scrollWidth > innerWidth }; });
+  const upright = await oneCard();
+  await page.setViewportSize({ width: 1180, height: 820 });
+  const sideways = await oneCard();
+  await page.setViewportSize({ width: 375, height: 812 });
+  const phoneCard = await oneCard();
+  await page.setViewportSize({ width: 820, height: 1100 });
+  ok('one card: the brain, its statistics under it, and the pearl beside it — iPad upright and landscape', upright.inCard && upright.statsUnder && upright.beside && sideways.statsUnder && sideways.beside && !upright.wide && !sideways.wide,
+     JSON.stringify({ upright, sideways }));
+  ok('and on a phone: the brain, its statistics, then the pearl, nothing wider than the screen', phoneCard.statsUnder && phoneCard.below && !phoneCard.wide, JSON.stringify(phoneCard));
   ok('the dock has a Chapters tab', await page.locator('nav.dock').getByRole('button', { name: 'Chapters' }).count() === 1);
   ok('the streak counts today, after a drill was answered, and survives the reload', /\b1$/.test(await text(page, '#streak')), await text(page, '#streak'));
   ok('the due pill and the Review tab both count the one card', /1 due/.test(await page.locator('#pill-due').innerText()) &&
@@ -953,8 +971,14 @@ function kindOf(user) {
   await page.locator('.jump-card').first().scrollIntoViewIfNeeded();
   const jc = await page.locator('.jump-card').first().boundingBox();
   await page.mouse.move(jc.x + 30, jc.y + 12);
-  const litOn = await page.evaluate(() => { const e = document.querySelector('.jump-card'); return { lit: e.hasAttribute('data-lit'), px: e.style.getPropertyValue('--px'), py: e.style.getPropertyValue('--py'),
-    light: getComputedStyle(e).getPropertyValue('--lit').trim() }; });
+  /* Where the pointer is on the card is taken from the card as it stands
+     when the light is read, not from the box read before the move: once in
+     a full run the page shifted 3 px between the two, and the light, where
+     the pointer really was, failed against the stale box (cause of the
+     shift not found; a shift injected there reproduces it exactly). */
+  const litOn = await page.evaluate(at => { const e = document.querySelector('.jump-card'), r = e.getBoundingClientRect();
+    return { lit: e.hasAttribute('data-lit'), px: e.style.getPropertyValue('--px'), py: e.style.getPropertyValue('--py'),
+      at: Math.round(at.x - r.left) + 'px ' + Math.round(at.y - r.top) + 'px', light: getComputedStyle(e).getPropertyValue('--lit').trim() }; }, { x: jc.x + 30, y: jc.y + 12 });
   await page.mouse.move(jc.x + 90, jc.y + 20);
   const litMoved = await page.evaluate(() => document.querySelector('.jump-card').style.getPropertyValue('--px'));
   await page.mouse.move(2, 2);
@@ -964,7 +988,7 @@ function kindOf(user) {
   const litStill = await page.evaluate(() => document.querySelectorAll('[data-lit]').length);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.mouse.move(2, 2);
-  ok('a light follows the pointer across the glass, and goes when it leaves', litOn.lit && litOn.px === '30px' && litOn.py === '12px' && /rgba\(255,\s*255,\s*255,\s*0?\.38\)/.test(litOn.light) && litMoved === '90px' && litOff === 0,
+  ok('a light follows the pointer across the glass, and goes when it leaves', litOn.lit && litOn.px + ' ' + litOn.py === litOn.at && litOn.px === '30px' && /rgba\(255,\s*255,\s*255,\s*0?\.38\)/.test(litOn.light) && litMoved === '90px' && litOff === 0,
      JSON.stringify({ litOn, litMoved, litOff }));
   ok('and with reduced motion asked for, there is no light to follow', litStill === 0, String(litStill));
   /* Laid out on an iPad held landscape: the units, and beside them where to
@@ -987,6 +1011,23 @@ function kindOf(user) {
      JSON.stringify(await page.$$eval('#pearl mark', ms => ms.map(m => m.textContent.trim()))));
   ok('credited to where it was printed', /Section One Preload/.test(await page.locator('#pearl .pearl-src').innerText()) &&
      /p\.1/.test(await page.locator('#pearl .pearl-src').innerText()), await page.locator('#pearl .pearl-src').innerText());
+  /* The owner circled Continue and Open the section: "small and less
+     prominent"; and asked for the pearl's label to be "just an icon". */
+  const quiet = await page.evaluate(() => { const p = document.createElement('i'); p.style.color = 'var(--accent)'; document.body.appendChild(p); const acc = getComputedStyle(p).color; p.remove();
+    const body = parseFloat(getComputedStyle(document.body).fontSize);
+    return ['#continue', '#pearl-open'].map(q => { const e = document.querySelector(q); if (!e) return { q: q, missing: true }; const cs = getComputedStyle(e), r = e.getBoundingClientRect();
+      return { q: q, bg: cs.backgroundColor, accent: acc, font: parseFloat(cs.fontSize), body: body, h: Math.round(r.height) }; }); });
+  ok('Continue and Open the section are small and quiet: not the accent fill, smaller than the text, no taller than 40 px',
+     quiet.every(b => !b.missing && b.bg !== b.accent && b.font < b.body && b.h <= 40), JSON.stringify(quiet));
+  const gem = await page.evaluate(() => { const e = document.querySelector('#pearl .eyebrow'), svg = e && e.querySelector('svg.gem-icon'), hid = e && e.querySelector('.visually-hidden');
+    const shown = e ? [...e.childNodes].filter(n => n !== hid).map(n => n.textContent).join('').trim() : null;
+    return { svg: svg ? Math.round(svg.getBoundingClientRect().width) : 0, shown: shown, name: hid ? hid.textContent : null, hidW: hid ? Math.round(hid.getBoundingClientRect().width) : null }; });
+  ok('the pearl is marked by a gem, not a line of text — its name kept for a screen reader', gem.svg >= 16 && gem.shown === '' && gem.name === 'Pearl of the day' && gem.hidW <= 1, JSON.stringify(gem));
+  const foot = await page.evaluate(() => { const m = document.querySelector('#home-hero .hero-monitor, #home-hero .hero-trace'); if (!m) return null;
+    const lab = m.querySelector('.hero-monitor-label'), top = Math.min(m.getBoundingClientRect().top, lab ? lab.getBoundingClientRect().top : Infinity);
+    const low = Math.max(...['#continue', '#home-hero .hero-stats', '#home-hero .hero-line'].map(q => document.querySelector(q)).filter(Boolean).map(e => e.getBoundingClientRect().bottom));
+    return { strip: Math.round(top), content: Math.round(low) }; });
+  ok('the hero keeps Continue and its numbers clear of the rhythm strip at its foot', !!foot && foot.content <= foot.strip, JSON.stringify(foot));
   /* The owner first asked for a still home screen, then for animation.
      Every element on the home screen, as the browser computes it: it moves
      now — and with reduced motion asked for, nothing does. */
@@ -1044,10 +1085,16 @@ function kindOf(user) {
   await page.evaluate(() => Promise.all(document.getAnimations().filter(a => a instanceof CSSTransition).map(a => a.finished.catch(() => {}))));
   const paper = await page.evaluate(() => getComputedStyle(document.querySelector('#pearl')).backgroundImage);
   ok('and the pearl keeps its ECG paper under it', (paper.match(/linear-gradient/g) || []).length === 4 && !/radial/.test(paper), paper.slice(0, 120));
-  const calm = calmShelf.concat(await page.evaluate(() => [...document.querySelectorAll('main .btn.primary, nav.dock .nav-btn[aria-current="page"]')].map(e => {
-    const cs = getComputedStyle(e); return { q: e.className, img: cs.backgroundImage, bg: cs.backgroundColor }; })));
+  /* Home has no primary button of its own now (Continue and Open the
+     section are tonal, on the owner's word), so a primary is put in its main
+     for the read — the rule is what is measured — and taken out again. */
+  const calm = calmShelf.concat(await page.evaluate(() => { const probe = document.createElement('button'); probe.className = 'btn primary'; probe.textContent = 'probe';
+    document.querySelector('main').appendChild(probe);
+    const out = [...document.querySelectorAll('main .btn.primary, nav.dock .nav-btn[aria-current="page"]')].map(e => {
+      const cs = getComputedStyle(e); return { q: e.className, img: cs.backgroundImage, bg: cs.backgroundColor }; });
+    probe.remove(); return out; }));
   const accentNow = await page.evaluate(() => { const p = document.createElement('i'); p.style.color = 'var(--accent)'; document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c; });
-  ok('the primary buttons, the current tab and the add button are the accent, solid — no gradient', calm.length >= 3 && calm.some(c => /learn-plus/.test(c.q)) && calm.every(c => c.img === 'none' && c.bg === accentNow), JSON.stringify(calm.slice(0, 4)) + ' ' + accentNow);
+  ok('the primary buttons, the current tab and the add button are the accent, solid — no gradient', calm.length >= 3 && ['learn-plus', 'nav-btn', 'primary'].every(k => calm.some(c => c.q.split(' ').indexOf(k) !== -1)) && calm.every(c => c.img === 'none' && c.bg === accentNow), JSON.stringify(calm.slice(0, 4)) + ' ' + accentNow);
   const hero = await page.evaluate(() => { const e = document.querySelector('#home-hero'); const cs = getComputedStyle(e);
     return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('.hero-monitor canvas'), held: (document.querySelector('#stat-held') || {}).textContent || '',
       inHero: !!e.querySelector('#streak') && !!e.querySelector('#pill-due') }; });
@@ -1864,7 +1911,7 @@ function kindOf(user) {
     ok('and offers only the built-in coach and Claude', JSON.stringify(await p2.$$eval('#provider option', os => os.map(o => o.value))) === '["builtin","anthropic"]');
     /* Appearance: a theme and a size, applied at once and kept. */
     ok('the picker offers Auto, the light themes, then the dark ones', JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))) ===
-       JSON.stringify(['auto', 'daylight', 'paper', 'clinical', 'neuron', 'contrast']), JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))));
+       JSON.stringify(['auto', 'daylight', 'paper', 'ice', 'butter', 'clinical', 'neuron', 'mint', 'graphite', 'grape', 'contrast']), JSON.stringify(await p2.$$eval('#appearance .swatch', ss => ss.map(s => s.getAttribute('data-theme-id')))));
     /* Each shown as itself in miniature — its own ground and accent, read
        back from what the browser drew — and Auto as its day and its night. */
     const minis = await p2.$$eval('#appearance .swatch', ss => ss.map(s => ({ id: s.getAttribute('data-theme-id'),
