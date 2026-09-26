@@ -2922,7 +2922,7 @@ function wordingFor(slot, q) {
   return ui.wording.q;
 }
 function rewordTag() {
-  return h('span.tag.ai-tag', { id: 'reworded-tag' }, '\u2728 In new words, on this device \u00B7 the answer and its reasons are Claude\u2019s, checked against your book');
+  return h('span.tag.ai-tag', { id: 'reworded-tag' }, '\u2728 Reworded on this device \u00B7 answer and reasons still Claude\u2019s');
 }
 /* A choice made on a reworded question, as the original's option. */
 function unmap(v, chosen) { return v && chosen >= 0 ? v.map[chosen] : chosen; }
