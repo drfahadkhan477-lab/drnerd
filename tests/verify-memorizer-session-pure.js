@@ -448,5 +448,38 @@ head('a section deleted: everything that names a section is renumbered');
      JSON.stringify(kept));
 }
 
+head('skip: a card to the back of the pile, a question to the end of the drill');
+{
+  /* recall */
+  let m = go(S.init('sk', TITLES), { type: 'open', section: 0 }, { type: 'taught', value: lesson }, { type: 'toMemorize', value: { cards: 3 } });
+  const m1 = S.next(m, { type: 'recallSkipped' });
+  ok('a skipped card goes to the back: the next one is up, none marked missed, the pile the same size',
+     JSON.stringify(m1.per[0].memo.order) === '[1,2,0]' && m1.per[0].memo.pos === 0 && m1.per[0].memo.misses === 0 && m1.phase === 'memorize', JSON.stringify(m1.per[0].memo));
+  let m2 = go(m1, { type: 'recalled', knew: true }, { type: 'recalled', knew: true });
+  ok('and the skipped card still has to be known before the drill opens', m2.phase === 'memorize' && m2.per[0].memo.order[m2.per[0].memo.pos] === 0, JSON.stringify(m2.per[0].memo));
+  ok('the last card left cannot be skipped', /last card left/.test(refused(m2, { type: 'recallSkipped' })));
+  ok('skipping is only while memorising', /while memorising/.test(refused(S.init('sk', TITLES), { type: 'recallSkipped' })));
+  m2 = S.next(m2, { type: 'recalled', knew: true });
+  ok('known, the drill opens', m2.phase === 'drill' && m2.per[0].memorized === true, m2.phase);
+  /* drill */
+  let d = go(m2, { type: 'quizReady', value: quiz(3, 'K') });
+  const d1 = S.next(d, { type: 'skipped' });
+  ok('a skipped question goes to the end, moved not copied; nothing answered, carded or weak',
+     JSON.stringify(d1.per[0].order) === '[1,2,0]' && d1.per[0].pos === 0 && d1.per[0].answers.length === 0 && d1.cards.length === 0 && Object.keys(d1.weak).length === 0, JSON.stringify(d1.per[0].order));
+  let d2 = answer(answer(d1, true), true);
+  d2 = answer(d2, true);
+  const firsts = d2.per[0].answers.map(a => a.q + (a.first ? 'F' : 'r'));
+  ok('answered at the end, the skipped question is still its first try, and counts: 3 of 3', d2.phase === 'result' && d2.per[0].score === 1 &&
+     JSON.stringify(firsts) === '["1F","2F","0F"]', JSON.stringify(firsts) + ' ' + d2.per[0].score);
+  let d3 = S.next(go(m2, { type: 'quizReady', value: quiz(3, 'K') }), { type: 'skipped' });
+  d3 = answer(d3, false);
+  const lastLeft = go(d3, { type: 'skipped' });
+  ok('a missed question asked again can be skipped too, and stays a retry', (() => { let t = answer(lastLeft, true); t = answer(t, true); t = answer(t, true);
+    return t.phase === 'result' && t.per[0].answers.filter(a => a.first).length === 3 && t.per[0].score === 2 / 3; })());
+  const oneLeft = answer(answer(S.next(go(m2, { type: 'quizReady', value: quiz(2, 'L') }), { type: 'skipped' }), true), false);
+  ok('the last question left cannot be skipped; skipping is only in a drill', /last question left/.test(refused(oneLeft, { type: 'skipped' })) &&
+     /in the drill/.test(refused(m1, { type: 'skipped' })), refused(oneLeft, { type: 'skipped' }));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

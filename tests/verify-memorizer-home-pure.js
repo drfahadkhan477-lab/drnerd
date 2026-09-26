@@ -551,5 +551,18 @@ head('a unit’s contents: chapters from shared headings, words set apart');
   ok('no sections, no contents', H.outline([]).length === 0 && H.outline(null).length === 0);
 }
 
+head('icons by topic, and short names for the round icons');
+{
+  const want = { 'Arrhythmias': 'rhythm', 'Congenital Heart Disease': 'congenital', 'Coronary Artery Disease': 'coronary', 'Heart Failure & Cardiomyopathies': 'heart',
+    'Pericardial Disease': 'pericardium', 'Pulmonary Circulation Disorders': 'lungs', 'Systemic Hypertension & Hypotension': 'pressure', 'Valvular Disease': 'valves',
+    'Vascular Disease': 'vessels', 'Systemic Disorders': 'systemic', 'Miscellaneous Topics': 'misc', 'Section One Preload': 'misc', '': 'misc' };
+  const got = Object.keys(want).map(t => [t, H.topicOf(t)]).filter(x => x[1] !== want[x[0]]);
+  ok('each title gets its topic’s icon — the particular before the general ("Systemic Hypertension" is blood pressure), anything else the clipboard',
+     got.length === 0, JSON.stringify(got));
+  const names = ['Congenital Heart Disease', 'Heart Failure & Cardiomyopathies', 'Valvular Disease', 'Chapter 3 ValvularHeartDiseaseInTheAdult', 'Arrhythmias', 'Electrocardiographically', '', 'Lung Disease'].map(H.shortName);
+  ok('a short name: the words that say it, "Chapter N" and "Disease" dropped, two words at most and 14 letters',
+     JSON.stringify(names) === '["Congenital","Heart Failure","Valvular","Valvular Heart","Arrhythmias","Electrocardio…","","Lung"]', JSON.stringify(names));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

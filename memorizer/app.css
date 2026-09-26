@@ -253,6 +253,38 @@ main[data-enter] .pearl-steps li { animation: pearl-rung .5s ease-out both; }
    a sliver, no Delete). */
 .units .unit-row { border-left: .375rem solid hsl(var(--hue) 38% 66%); }
 .unit-row > p { grid-column: 1 / -1; margin: 0; }
+/* ── Units, books and a book's chapters as tiles, as Systole's chapters are
+   (ui.js): the topic's icon in a tinted square, the name, the counts, a
+   bar of sixteen segments, and where it stands with its share. The hue is
+   the icon's, the bar's and the edge's; the words stay in the text colours. */
+.units.tiles { grid-template-columns: repeat(auto-fill, minmax(14.5rem, 1fr)); gap: var(--s-4); }
+.utile { grid-template-columns: 1fr auto auto; grid-template-areas: "open open open" "state pct menu"; align-items: center; row-gap: var(--s-2);
+  padding: var(--s-4) var(--s-3) var(--s-3) var(--s-5); }
+.units .utile { border-left: .25rem solid hsl(var(--hue) 62% 58%); }
+.utile > .unit-open { grid-area: open; gap: .375rem; padding: 0; width: 100%; align-items: flex-start; text-align: left; }
+.utile .seg { align-self: stretch; }
+.utile > .tile-state { grid-area: state; color: var(--muted); font-size: var(--t-meta); }
+.utile > .badge, .utile > .tile-pct { grid-area: pct; background: none; padding: 0 .25rem; font-weight: 800; font-size: var(--t-meta); color: var(--ink); font-variant-numeric: tabular-nums; }
+.utile > details.menu { grid-area: menu; }
+.utile > p { grid-column: 1 / -1; }
+.tile-icon { width: 3rem; height: 3rem; border-radius: .875rem; display: grid; place-items: center; margin-bottom: var(--s-2);
+  background: hsla(var(--hue), 70%, 55%, .16); color: hsl(var(--hue) 62% 56%); }
+.topic-icon { width: 1.5rem; height: 1.5rem; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.utile .doc-name { font-size: var(--t-lead); line-height: 1.25; }
+.seg { display: flex; gap: 3px; margin-top: var(--s-2); }
+.seg i { flex: 1; height: .375rem; border-radius: 2px; background: var(--surface-2); }
+.seg i.on { background: hsl(var(--hue) 62% 56%); }
+/* a chapter card's mark is its topic's icon, in its hue */
+.ch-n { color: hsl(var(--hue) 62% 56%); background: hsla(var(--hue), 70%, 55%, .16); }
+.ch-n .topic-icon { width: 1.25rem; height: 1.25rem; }
+/* the chapters as a row of round icons (the owner's picture of Systole) */
+.ch-icons { display: flex; gap: var(--s-3); overflow-x: auto; padding: var(--s-2) var(--s-1) var(--s-3); margin: 0 0 var(--s-2); scrollbar-width: none; }
+.ch-icons::-webkit-scrollbar { display: none; }
+.ch-icon { flex: none; width: 5.5rem; display: flex; flex-direction: column; align-items: center; gap: .5rem; background: none; border: 0; padding: 0; font: inherit; color: var(--ink); cursor: pointer; }
+.ci-ring { width: 4rem; height: 4rem; border-radius: 50%; display: grid; place-items: center; color: hsl(var(--hue) 62% 56%);
+  border: 3px solid hsla(var(--hue), 60%, 55%, .35); background: hsla(var(--hue), 70%, 55%, .08); transition: transform .2s var(--ease-out), border-color .2s; }
+.ch-icon:hover .ci-ring, .ch-icon:focus-visible .ci-ring { transform: translateY(-2px); border-color: hsl(var(--hue) 62% 56%); }
+.ci-label { font-size: var(--t-meta); font-weight: 650; text-align: center; line-height: 1.2; color: var(--muted); }
 .unit-open { font: inherit; color: var(--ink); text-align: left; background: none; border: 0; padding: var(--s-2) 0; display: flex; flex-direction: column; cursor: pointer; min-width: 0; }
 .doc-name { font-size: var(--t-lead); overflow-wrap: anywhere; }
 .badge { display: inline-block; font-size: var(--t-meta); font-weight: 700; padding: .125rem .625rem; border-radius: 999px; background: var(--surface-2); color: var(--ink); white-space: nowrap; }
@@ -626,9 +658,30 @@ summary.fold-head:hover .fold-btn { color: var(--accent); border-color: currentC
 .step-head .btn#replay { margin-left: auto; }
 
 /* memorize: one recall card at a time */
-.recall-prompt { font-size: var(--t-h4); font-weight: 700; line-height: 1.35; margin: var(--s-2) 0 var(--s-4); }
-.recall-answer { border-radius: 1rem; background: var(--good-soft); padding: var(--s-3) var(--s-4); margin: 0 0 var(--s-4); }
-.recall-answer strong { display: block; font-size: var(--t-lead); color: var(--good); }
+.recall-prompt { display: block; font-size: var(--t-h4); font-weight: 700; line-height: 1.35; }
+.recall-answer { display: block; font-size: var(--t-h4); line-height: 1.3; color: var(--ink); }
+.recall-full { margin: var(--s-3) 0 0; text-align: center; }
+.recall-skip, .recall-rate { justify-content: center; margin-top: var(--s-3); }
+/* ── The flashcard, a real card (ui.js flipCard): both faces in one grid
+   cell, so the card is as tall as its longer face; the back turned away
+   until tapped. ── */
+.flip { display: block; width: 100%; margin: var(--s-3) 0 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer;
+  perspective: 1600px; -webkit-tap-highlight-color: transparent; text-align: center; }
+.flip-inner { display: grid; min-height: 17rem; transform-style: preserve-3d; transition: transform .5s var(--ease-out); }
+.flip[data-flipped="true"] .flip-inner { transform: rotateY(180deg); }
+.flip[data-anim="back"] .flip-inner { animation: flip-back .5s var(--ease-out); }
+.flip[data-anim="front"] .flip-inner { animation: flip-front .5s var(--ease-out); }
+@keyframes flip-back { from { transform: rotateY(0deg); } to { transform: rotateY(180deg); } }
+@keyframes flip-front { from { transform: rotateY(180deg); } to { transform: rotateY(0deg); } }
+.flip-face { grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-3);
+  padding: var(--s-6) var(--s-5); border-radius: 1.5rem; border: 1px solid var(--line); background: var(--surface);
+  box-shadow: 0 1px 0 var(--glass-edge, transparent) inset, 0 18px 40px -22px rgba(0, 0, 0, .45);
+  -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+.flip-face.back { transform: rotateY(180deg); border-color: var(--good); }
+.flip-face.back .eyebrow { color: var(--good); }
+.flip-hint { font-size: var(--t-meta); color: var(--muted); margin-top: var(--s-2); }
+.flip:focus-visible .flip-face { outline: 3px solid var(--accent); outline-offset: 3px; }
+.flip .fc-text { display: block; font-size: var(--t-h4); font-weight: 650; line-height: 1.35; }
 .recall-rate { justify-content: space-between; }
 
 /* the Coach as an agent: a conversation */
@@ -662,13 +715,13 @@ main[data-enter] .sections > * { animation: rise-in .4s cubic-bezier(.2,.7,.2,1)
 .sections > :nth-child(4) { animation-delay: .15s; } .sections > :nth-child(n+5) { animation-delay: .2s; }
 .option.right { animation: right-pulse .45s ease-out; }
 .option.wrong { animation: wrong-shake .4s ease-in-out; }
-.recall-answer { animation: rise-in .35s cubic-bezier(.2,.7,.2,1) both; }
+
 @keyframes rise-in { from { opacity: 0; transform: translateY(.75rem); } to { opacity: 1; transform: none; } }
 @keyframes ring-in { from { opacity: 0; transform: rotate(-90deg) scale(.8); } to { opacity: 1; transform: none; } }
 @keyframes right-pulse { 0% { transform: scale(1); } 40% { transform: scale(1.03); } 100% { transform: scale(1); } }
 @keyframes wrong-shake { 0%, 100% { transform: none; } 20%, 60% { transform: translateX(-.375rem); } 40%, 80% { transform: translateX(.375rem); } }
 @media (prefers-reduced-motion: reduce) {
-  .pearl, .pearl-steps li, main.home *, .section-card, .option.right, .option.wrong, .recall-answer { animation: none !important; }
+  .pearl, .pearl-steps li, main.home *, .section-card, .option.right, .option.wrong, .recall-answer, .flip-inner { animation: none !important; transition: none !important; }
 }
 
 /* ═══ Supreme Memorizer: error types, re-teach, review rounds, the sheet ═══ */
@@ -813,7 +866,7 @@ main[data-enter] .hero-trace path { animation: trace-draw 3.2s var(--ease-out) b
 .home-side .jump-card { flex: none; width: 100%; }
 @media (min-width: 60rem) {
   .home-grid.two { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
-  .units#units, .units:not(#books) { grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); }
+  .units#units, .units:not(#books) { grid-template-columns: repeat(auto-fill, minmax(14.5rem, 1fr)); }
 }
 .home-add { display: grid; gap: var(--s-2); margin: var(--s-2) 0 0; }
 .home-add .chips { margin: 0; }
@@ -826,9 +879,14 @@ main[data-enter] .hero-trace path { animation: trace-draw 3.2s var(--ease-out) b
 
 /* ── home is three things; the chapters are their own page ───────────── */
 /* A tighter hero, so the brain is in view on opening. */
-main.home:not(.shelf) .home-hero { margin-bottom: var(--s-4); padding: var(--s-5) var(--s-5) 3.75rem; }
-/* the strip and its label kept to the band's foot, under everything else */
-main.home:not(.shelf) .hero-monitor { height: 2.5rem; bottom: .375rem; }
+main.home:not(.shelf) .home-hero { margin-bottom: var(--s-4); padding: var(--s-5); }
+/* the band's foot: sections drilled, of all of them */
+.hero-progress { flex: 1 1 100%; display: grid; gap: .375rem; margin-top: var(--s-1); }
+.hp-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-3); font-size: var(--t-meta); color: var(--hero-muted); }
+.hp-row strong { color: var(--hero-ink); }
+.hp-pct { font-variant-numeric: tabular-nums; }
+.hp-bar { height: .5rem; border-radius: 999px; background: var(--hero-pill, rgba(127,127,127,.18)); overflow: hidden; }
+.hp-bar i { display: block; height: 100%; border-radius: inherit; background: var(--hero-accent); transition: width .6s var(--ease-out); }
 main.home:not(.shelf) .home-hero .learn { font-size: 2.75rem; }
 main.home:not(.shelf) > .pearl { min-height: 0; margin-bottom: var(--s-4); }
 /* the three numbers as one row of small chips, beside Continue */

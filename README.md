@@ -136,6 +136,11 @@ every section is done. Each section is:
    and beside it what to memorise (the numbers, one block of tiles per
    subject, the pairs not to confuse, the pearls, the mnemonics, the map) —
    with the practice below; on a phone, one column.
+   Before the drill, the section is **memorised**: its recall cards one at a
+   time, each a big card that turns over when tapped (and back again) to its
+   answer; say whether you knew it, and one not known comes back at the end.
+   A card can be skipped to the back of the pile, and a drill question to the
+   end of the drill — still its first try, and counted as one.
 2. **Drilled** — single-best-answer multiple-choice questions, four options,
    never a blank to type into, board-style where the book allows ("What is
    the first-line therapy for …?", "Which is contraindicated with …?", a drug
@@ -333,8 +338,8 @@ and the streak forgives one missed day a week.
 The home screen is two cards. At the top, a hero band: the greeting, what
 is up next with a small button under it to continue, and three numbers in a
 row of chips — your streak, the cards due, and how much of what you have
-studied is held today — over a gradient with an ECG trace along its foot,
-clear of everything above it. Then one card: the brain, its numbers under it,
+studied is held today — over a gradient, with a progress bar along its
+foot: the sections drilled, of all of them. Then one card: the brain, its numbers under it,
 and beside it on an iPad (below it on a phone) the pearl of the day, marked
 by a gem rather than a heading — the feature of the
 page — a sentence from your own PDF, found and broken into steps by
@@ -358,13 +363,17 @@ rows, each named by its sub-heading, where a heading's run-together words
 ("CHAPTER1 ValveDiseaseBasics") are set apart for display. Any
 section can be deleted from its row, after a confirm: its progress, review
 cards and pack entry go with it and every later section moves up one; a
-unit's only section cannot be, the unit is deleted instead. Surfaces are clear frosted glass, as on an iPad — a heavy
+unit's only section cannot be, the unit is deleted instead. The chapters are
+also a row of round icons above the contents, each its topic's (a bolt for
+rhythm, a heart for heart failure, a shield for the pericardium …) with a
+short name; a tap opens that chapter's card and brings it up. On the
+Chapters page, units and books are tiles, as Systole's chapters are: the
+topic's icon, the counts, a bar of sixteen segments, and where it stands. Surfaces are clear frosted glass, as on an iPad — a heavy
 blur, a bright rim, a sheen, and a light that follows the finger — over a slow
 aurora in the theme's own colours, with the accent solid rather than run into
-a second colour; Systole's live rhythm strip sweeps across the hero, a
-rhythm named in monitor type; cards rise in when a screen opens (not again on
+a second colour; cards rise in when a screen opens (not again on
 every tap), give under the finger, and the pearl's steps arrive one by one.
-With reduced motion asked for, nothing moves, the strip is drawn still, and
+With reduced motion asked for, nothing moves, and
 there is no light to follow; at High
 contrast, with less transparency asked for, or where the browser cannot
 blur, the glass is solid. The themes are the owner's choice from mock-ups
