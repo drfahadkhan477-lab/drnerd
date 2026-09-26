@@ -265,6 +265,21 @@ sentence of its answer must cite the step it rests on and pass the same
 checks, or it is dropped. A reply that names no real tool hands the message
 back to the Coach's rules.
 
+**Claude writes, the device tutors.** With a study pack from Claude
+imported, the on-device model works from Claude's notes: the section's pack,
+only what passed the book check, is handed to it with each request, and it
+is asked for words, not facts. A pack question you miss comes back at the
+end of the drill, and in review rounds, **in new words**. The model writes
+only the question's stem. The options, the answer, the explanation and every
+option's reason stay Claude's, and the options change places. The new wording
+is dropped if it brings in a number or a named thing that neither the notes
+nor the book have, loses most of the key terms the question shares with its
+answer, gains or loses a "not", gives the answer away, or repeats the
+original. **Explain my mistake** asks the model why the answer is right and
+your choice is not, from Claude's reasons and the trap. Each sentence is held
+to those reasons and the book. A sentence that calls your choice right is
+dropped, and an explanation that never says what the answer is is not shown.
+
 **The Coach's own tools** also say why your misses happened — each by its
 error type, what that type means and its fix — show the cards due each day
 this week, and start a review round of what you still get wrong. It

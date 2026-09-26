@@ -2686,14 +2686,15 @@ function kindOf(user) {
       Memorizer.render();
     }, NEW1);
     /* precondition: the rewording has come back, kept or not */
-    await p4.waitForFunction(k => { const v = Memorizer.ui.tutor.v[k]; return !!(v && (v.question || v.none)); }, Q1, T);
-    const tut = await p4.evaluate(k => ({ v: Memorizer.ui.tutor.v[k], sent: window.__tut }), Q1);
+    await p4.waitForFunction(k => { const v = Memorizer.ui.tutor.v[k]; return !!(v && (v.question || v.none)); }, Q1, T).catch(() => {});
+    const tut = await p4.evaluate(k => ({ v: Memorizer.ui.tutor.v[k] || {}, sent: window.__tut }), Q1);
     ok('a missed pack question is asked in new words by the on-device model, and the new wording is kept', tut.v.question === NEW1 && tut.v.reworded === true, JSON.stringify(tut.v).slice(0, 200));
     ok('the model is handed the pack’s notes — what passed the book check, and not the point flagged for a number the book lacks',
        tut.sent.length >= 1 && /Diuretics reduce preload by lowering circulating volume/.test(tut.sent[0]) && /greater than 18 mmHg/.test(tut.sent[0]) && !/99/.test(tut.sent[0]), (tut.sent[0] || '').slice(0, 300));
-    await p4.locator('#ai-miss-go').click();
-    await p4.locator('#ai-miss').waitFor(T);
-    const missTxt = await text(p4, '#ai-miss');
+    const hasGo = await p4.locator('#ai-miss-go').count() === 1;
+    ok('with the AI on, a missed pack question offers "Explain my mistake"', hasGo);
+    if (hasGo) { await p4.locator('#ai-miss-go').click(); await p4.locator('#ai-miss').waitFor(T); }
+    const missTxt = hasGo ? await text(p4, '#ai-miss') : '';
     ok('"Explain my mistake": its words from Claude’s reasons are kept, a dose it made up is dropped, and it says so',
        /still a normal pressure/.test(missTxt) && /greater than 18 mmHg should make you look/.test(missTxt) && !/40 mg/.test(missTxt) && /1 sentence dropped/.test(missTxt), missTxt);
     ok('and it was asked with the choice, the answer, Claude’s reason and the trap', await p4.evaluate(() => window.__tut.some(u => /The student chose: 8 mmHg/.test(u) &&
@@ -2712,13 +2713,20 @@ function kindOf(user) {
     await p4.locator('.option[data-i="' + at + '"]').click();
     await p4.locator('#next').waitFor(T);
     ok('the right option, wherever it now sits, is marked right', await p4.locator('.option.right').getAttribute('data-i') === String(at) && /✓ Correct/.test(await text(p4, '#mcq .why')));
+    /* a rewording that arrives while the question is on screen must not move the options under the answer given */
+    await p4.evaluate(k => { const v = Memorizer.ui.tutor.v[k]; Memorizer.ui.tutor.v[k] = Object.assign({}, v, { question: 'A late rewording', options: v.options.slice().reverse() }); Memorizer.render(); }, Q1);
+    await p4.waitForFunction(() => !!document.querySelector('#mcq .option.right'), null, T);
+    const held = await p4.evaluate(() => ({ q: document.querySelector('#mcq h2.q').textContent, right: document.querySelector('#mcq .option.right').getAttribute('data-i') }));
+    ok('and a rewording that arrives while it is on screen changes nothing under the answer given', held.q === NEW1 && held.right === String(at), JSON.stringify(held));
+    await p4.evaluate(a => { Memorizer.ui.tutor.v[a.k] = a.v; }, { k: Q1, v: tut.v });
     await p4.locator('#next').click();
     await p4.waitForFunction(() => Memorizer.ui.state.phase === 'result', null, T);
     const last = await p4.evaluate(() => Memorizer.ui.state.per[0].answers.slice(-1)[0]);
     ok('and it is scored as the original’s answer: option C, right, on the retry', last.q === 0 && last.choice === 2 && last.correct === true && last.first === false, JSON.stringify(last));
     await p4.evaluate(() => { Memorizer.ui.state.phase = 'unit'; Memorizer.render(); });
     await p4.locator('#unit-review').click();
-    await p4.waitForFunction(() => Memorizer.ui.state.phase === 'review', null, T);
+    /* precondition: the review round is drawn (render swaps the page in a view transition) */
+    await p4.waitForFunction(() => /Review round/.test((document.querySelector('#mcq .mcq-meta') || {}).textContent || ''), null, T);
     const cold = await p4.evaluate(() => ({ q: document.querySelector('#mcq h2.q').textContent, tag: !!document.querySelector('#reworded-tag'), a: MemSession.reviewItem(Memorizer.ui.state).q.answer,
       opts: [...document.querySelectorAll('#mcq .option .opt-text')].map(o => o.textContent) }));
     ok('a review round’s cold retest asks it in the new words too', cold.q === NEW1 && cold.tag, JSON.stringify(cold));
