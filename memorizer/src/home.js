@@ -431,6 +431,19 @@ function gyri() {
   }
   return out;
 }
+/* The finest folds: short arcs between the gyri, from their own Halton
+   points (bases 3 and 11), each inside the cerebrum along its length. */
+function fine() {
+  var out = [], f = function (v) { return Math.round(v * 10) / 10; };
+  for (var i = 1; i < 1600 && out.length < 150; i++) {
+    var x = 100 + halton(i, 3) * 800, y = 55 + halton(i, 11) * 455, a = halton(i, 13) * Math.PI * 2, len = 9 + halton(i, 17) * 9;
+    var x1 = x + Math.cos(a) * len, y1 = y + Math.sin(a) * len;
+    if (!inPoly(x, y, CEREBRUM) || !inPoly(x1, y1, CEREBRUM) || edgeDist(x, y, CEREBRUM) < 8 || edgeDist(x1, y1, CEREBRUM) < 8) continue;
+    var bend = (i % 2 ? 1 : -1) * len * 0.35, cx = (x + x1) / 2 - Math.sin(a) * bend, cy = (y + y1) / 2 + Math.cos(a) * bend;
+    out.push('M' + f(x) + ' ' + f(y) + 'Q' + f(cx) + ' ' + f(cy) + ' ' + f(x1) + ' ' + f(y1));
+  }
+  return out;
+}
 /* The cerebellum's folia: fine arcs fanned round the point where it meets
    the stem, as it is drawn in an atlas (clipped to it where drawn), and a
    few long lines down the stem. */
@@ -659,12 +672,45 @@ function sparkAt(L, st, s, back) {
   return quad(L.nodes[e.a], st.net.ctrl[s.e], L.nodes[e.b], s.a === e.a ? t : 1 - t);
 }
 
-var BRAIN = { W: BRAIN_W, H: BRAIN_H, VIEW: BRAIN_VIEW, CEREBRUM: CEREBRUM, CEREBELLUM: CEREBELLUM, STEM: STEM, SULCI: SULCI, FOLIA: folia(), GYRI: gyri(), STEM_LINES: STEM_LINES, MAX: BRAIN_MAX,
+var BRAIN = { W: BRAIN_W, H: BRAIN_H, VIEW: BRAIN_VIEW, CEREBRUM: CEREBRUM, CEREBELLUM: CEREBELLUM, STEM: STEM, SULCI: SULCI, FOLIA: folia(), GYRI: gyri(), FINE: fine(), STEM_LINES: STEM_LINES, MAX: BRAIN_MAX,
   cerebrum: smoothPath(CEREBRUM), cerebellum: smoothPath(CEREBELLUM), stem: smoothPath(STEM) };
+
+/* ── A UNIT'S CONTENTS ─────────────────────────────────────────────────────
+   Words a PDF's text layer ran together ("ValveDiseaseBasics"), set
+   apart for display. Only a long run (16 letters or more) with at least two
+   capitals inside is touched, so "McDonald" and "iPad" are left alone; a
+   glued "and" between two names is set apart too. "CHAPTER1" is written
+   "Chapter 1". What is stored is not changed. */
+function unglue(t) {
+  return String(t == null ? '' : t).replace(/[A-Za-z]{16,}/g, function (w) {
+    if ((w.match(/[a-z][A-Z]/g) || []).length < 2) return w;
+    return w.replace(/([a-z])and([A-Z])/g, '$1 and $2').replace(/([a-z])([A-Z])/g, '$1 $2');
+  }).replace(/\b(CHAPTER|SECTION|PART)\s*(\d+|[IVXL]+)\b/g, function (_, k, n) { return k.charAt(0) + k.slice(1).toLowerCase() + ' ' + n; });
+}
+/* A unit's sections as its contents: a run of sections that share a
+   heading ("heading: sub-heading", as chunk.js titles them) is one chapter,
+   each named by what follows its heading; a section titled with the heading
+   alone, just before them, is the chapter's opening. Any other section
+   stands alone. Positions are kept (i), so a row opens its own section. */
+function outline(titles) {
+  var out = [];
+  (titles || []).forEach(function (t, i) {
+    t = String(t);
+    var at = t.indexOf(': '), major = at > 0 ? t.slice(0, at) : '', last = out[out.length - 1];
+    if (!major && i + 1 < titles.length && String(titles[i + 1]).indexOf(t + ': ') === 0) {
+      out.push({ key: t, title: unglue(t), items: [{ i: i, label: 'Opening' }] });
+      return;
+    }
+    if (major && last && last.key === major) { last.items.push({ i: i, label: unglue(t.slice(at + 2)) }); return; }
+    out.push(major ? { key: major, title: unglue(major), items: [{ i: i, label: unglue(t.slice(at + 2)) }] }
+                   : { key: null, title: null, items: [{ i: i, label: unglue(t) }] });
+  });
+  return out;
+}
 
 var MemHome = { BRAIN: BRAIN, brainLayout: brainLayout, LIVE: LIVE, axonCtrl: axonCtrl, brainNet: brainNet, liveInit: liveInit, liveFire: liveFire, liveStep: liveStep, sparkAt: sparkAt, smoothPath: smoothPath, inPoly: inPoly, edgeDist: edgeDist, pearlVisual: pearlVisual, recallParts: recallParts, recallStreak: recallStreak, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
   HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
-  notesOf: notesOf, harvest: harvest, readout: readout, leans: leans, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath };
+  notesOf: notesOf, harvest: harvest, readout: readout, leans: leans, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath, unglue: unglue, outline: outline };
 root.MemHome = MemHome;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemHome;
 })(typeof window !== 'undefined' ? window : this);

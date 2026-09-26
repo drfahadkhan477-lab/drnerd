@@ -131,7 +131,11 @@ every section is done. Each section is:
    and tagged "High yield" with why; a figure's caption is never a point), the numbers to know with their values marked, a mnemonic for
    every list, everyday analogies for the mechanisms, a flowchart drawn from
    its cause-and-effect sentences, its tables as tables and its figures cut
-   from the page under their own captions.
+   from the page under their own captions. On an iPad the whole lesson is
+   two columns — what to understand (the idea, the mechanism, the points)
+   and beside it what to memorise (the numbers, one block of tiles per
+   subject, the pairs not to confuse, the pearls, the mnemonics, the map) —
+   with the practice below; on a phone, one column.
 2. **Drilled** — single-best-answer multiple-choice questions, four options,
    never a blank to type into, board-style where the book allows ("What is
    the first-line therapy for …?", "Which is contraindicated with …?", a drug
@@ -186,15 +190,19 @@ chapter's ⋮ menu, which open its card in view — *Copy the prompt*
 gives a request for your own Claude chat — claude.ai, with your own skills —
 that carries the unit's text page by page and asks for every section's lesson
 and questions in a fixed JSON shape: the key points, the numbers, the
-mechanism, the pairs students confuse and the exam pearls; board-style
+mechanism, the pairs students confuse, the exam pearls, comparison tables
+and a flowchart drawn to rule, with the design it is to follow (the most
+examinable first, one fact per item, a table for a comparison, a flowchart
+for a sequence) and a check to run before replying; board-style
 questions that say why each wrong option is wrong and name the trap each one
 sets. A long chapter is asked for a few sections to a reply, so none is cut
 off. Paste each reply back and Memorizer checks it against your book
 ([`memorizer/src/pack.js`](memorizer/src/pack.js)) before any of it is used.
 A number not in the section or on the page it cites is flagged on screen
 where it is shown. So is a page outside the section, a condition, test or
-treatment the chapter never names, and a quoted sentence that is not the
-book's. Three things are refused, with the reason: a section from another
+treatment the chapter never names, a table cell with a number the section
+does not have, and a quoted sentence that is not the book's; a malformed
+table is left out on its own. Three things are refused, with the reason: a section from another
 unit, a question that is not a fair single-best-answer, and anything Claude
 itself marked `NOT_IN_PDF`. What passes teaches the section, labelled
 "Written with Claude · checked against your book", and the drill asks its
@@ -342,7 +350,15 @@ on an iPad held landscape (below them on a phone) the exam plan, "jump back
 in" cards with a progress ring and the section up next, the section checks
 that are due, the sections that need work — each with a drill of its review
 cards, due or not — and the week. Before anything is added, the box to add a
-chapter is on the home screen too. Surfaces are clear frosted glass, as on an iPad — a heavy
+chapter is on the home screen too. A unit's page opens on the unit at a glance (a ring
+of how much is drilled; drilled, taught and still to learn; the one next
+step) and then its contents: the sections that share a heading are one
+chapter card, with its count, pages and progress bar, folding open to its
+rows, each named by its sub-heading, where a heading's run-together words
+("CHAPTER1 ValveDiseaseBasics") are set apart for display. Any
+section can be deleted from its row, after a confirm: its progress, review
+cards and pack entry go with it and every later section moves up one; a
+unit's only section cannot be, the unit is deleted instead. Surfaces are clear frosted glass, as on an iPad — a heavy
 blur, a bright rim, a sheen, and a light that follows the finger — over a slow
 aurora in the theme's own colours, with the accent solid rather than run into
 a second colour; Systole's live rhythm strip sweeps across the hero, a

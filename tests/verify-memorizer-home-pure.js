@@ -338,7 +338,14 @@ head('the brain: every section a neuron, inside it, wired into one net, lit by p
      G.length >= 40 && gOut.length === 0 && Math.max(...xs) - Math.min(...xs) > 600 && Math.max(...ys) - Math.min(...ys) > 300,
      G.length + ' gyri, ' + gOut.length + ' points outside ' + JSON.stringify(gOut.slice(0, 3)));
   delete require.cache[require.resolve('../memorizer/src/home.js')];
-  ok('and the same folds every time', JSON.stringify(require('../memorizer/src/home.js').BRAIN.GYRI) === JSON.stringify(G));
+  const again = require('../memorizer/src/home.js').BRAIN;
+  ok('and the same folds every time', JSON.stringify(again.GYRI) === JSON.stringify(G) && JSON.stringify(again.FINE) === JSON.stringify(H.BRAIN.FINE));
+  const fOut = [];
+  H.BRAIN.FINE.forEach(d => { const n = (d.match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
+    for (let t = 0; t <= 1; t += 0.125) { const x = (1 - t) * (1 - t) * n[0] + 2 * t * (1 - t) * n[2] + t * t * n[4], y = (1 - t) * (1 - t) * n[1] + 2 * t * (1 - t) * n[3] + t * t * n[5];
+      if (!H.inPoly(x, y, H.BRAIN.CEREBRUM)) fOut.push([Math.round(x), Math.round(y)]); } });
+  ok('and finer folds between them, each a short arc inside the cerebrum along its length', H.BRAIN.FINE.length >= 100 && fOut.length === 0 &&
+     H.BRAIN.FINE.every(d => /^M[\d.]+ [\d.]+Q[\d.]+ [\d.]+ [\d.]+ [\d.]+$/.test(d)), H.BRAIN.FINE.length + ' fine, ' + fOut.length + ' points outside');
   const radii = H.BRAIN.FOLIA.map(d => +(d.match(/A(\d+(?:\.\d+)?)/) || [])[1]);
   ok('the cerebellum\u2019s folia are arcs fanned round one centre, each wider than the last', radii.length >= 10 && radii.every((r, i) => r > 0 && (i === 0 || r > radii[i - 1])), JSON.stringify(radii));
 }
@@ -525,6 +532,23 @@ head('the pearl as the day’s recall (phase 4)');
   const add = (d, n) => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
   const rs = H.recallStreak({ '2026-09-25': true, '2026-09-24': false, '2026-09-20': true, '2026-09-10': true }, '2026-09-25', 7, add);
   ok('the last seven days: how many it was recalled, of those tried', rs.knew === 2 && rs.of === 3, JSON.stringify(rs));
+}
+
+head('a unit’s contents: chapters from shared headings, words set apart');
+{
+  ok('words a PDF ran together are set apart, and CHAPTER1 reads Chapter 1',
+     H.unglue('CHAPTER1 SyntheticValveStudyForTesting') === 'Chapter 1 Synthetic Valve Study For Testing' &&
+     H.unglue('PartOneOfTheBookandMoreText') === 'Part One Of The Book and More Text', H.unglue('CHAPTER1 SyntheticValveStudyForTesting'));
+  ok('short words and single capitals inside are left as they are', H.unglue('McDonald iPad LaPlace pH HbA1c') === 'McDonald iPad LaPlace pH HbA1c' &&
+     H.unglue('PubMedCentral') === 'PubMedCentral' && H.unglue('ElectrocardiogramPaper') === 'ElectrocardiogramPaper' &&
+     H.unglue('Heart Failure') === 'Heart Failure' && H.unglue('') === '' && H.unglue(null) === '');
+  const o = H.outline(['Front', 'Big X', 'Big X: One', 'Big X: Two (part 2)', 'Lone', 'Other: A', 'Other: B', 'Big X: Three']);
+  ok('a run sharing a heading is one chapter, named by what follows the heading; its heading alone just before it is its opening',
+     JSON.stringify(o.map(g => [g.title, g.items.map(x => x.i + ':' + x.label)])) ===
+     '[[null,["0:Front"]],["Big X",["1:Opening","2:One","3:Two (part 2)"]],[null,["4:Lone"]],["Other",["5:A","6:B"]],["Big X",["7:Three"]]]',
+     JSON.stringify(o.map(g => [g.title, g.items.map(x => x.i + ':' + x.label)])));
+  ok('every section is in the contents once, in order', JSON.stringify([].concat(...o.map(g => g.items.map(x => x.i)))) === '[0,1,2,3,4,5,6,7]');
+  ok('no sections, no contents', H.outline([]).length === 0 && H.outline(null).length === 0);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -410,5 +410,43 @@ head('the kind of miss: a wrong value is its own (phase 3), and a pack can be re
   ok('the section being drilled keeps its pack questions until it is left', m2.per[0].quiz && m2.per[0].quiz.questions[0].by === 'pack' && m2.per[0].lesson.by === 'pack');
 }
 
+head('a section deleted: everything that names a section is renumbered');
+{
+  /* Synthetic: four sections; section 1 drilled with a card and a weak
+     item, section 2 taught, section 3 with a card. Delete section 1. */
+  let st = S.init('u', ['A', 'B', 'C', 'D']);
+  st.per[1].done = true; st.per[1].lesson = { points: ['b'] }; st.per[2].lesson = { points: ['c'] };
+  st.cards = [{ id: 'u:drill:1:x', docId: 'u', cluster: 1, title: 'B' }, { id: 'u:drill:3:y', docId: 'u', cluster: 3, title: 'D' }, { id: 'u:drill:0:z', docId: 'u', cluster: 0, title: 'A' }];
+  st.weak = { 'u:drill:1:x': { id: 'u:drill:1:x', cluster: 1 }, 'u:drill:3:y': { id: 'u:drill:3:y', cluster: 3 } };
+  st.section = 3;
+  const d = S.dropSection(st, 1);
+  ok('the titles and progress move up one; the deleted section’s progress goes', JSON.stringify(d.titles) === '["A","C","D"]' &&
+     !d.per[0].done && d.per[1].lesson && d.per[1].lesson.points[0] === 'c' && !d.per[2].lesson && !(3 in d.per), JSON.stringify(d.per));
+  ok('its cards and weak items go; the later ones are renumbered, the earlier untouched',
+     JSON.stringify(d.cards.map(c => c.id + '@' + c.cluster)) === '["u:drill:3:y@2","u:drill:0:z@0"]' &&
+     JSON.stringify(Object.keys(d.weak)) === '["u:drill:3:y"]' && d.weak['u:drill:3:y'].cluster === 2, JSON.stringify({ cards: d.cards, weak: d.weak }));
+  ok('the section open follows its own section', d.section === 2, String(d.section));
+  ok('the state given is not changed', st.titles.length === 4 && st.cards.length === 3 && st.section === 3);
+  const onIt = S.dropSection(Object.assign({}, st, { section: 1, phase: 'teach' }), 1);
+  ok('deleting the section being studied goes back to the unit', onIt.phase === 'unit' && onIt.section === 1, onIt.phase + ' ' + onIt.section);
+  const lastOne = S.dropSection(Object.assign({}, st, { section: 3 }), 3);
+  ok('deleting the last section, open, lands on the one before it', lastOne.section === 2 && lastOne.titles.length === 3, String(lastOne.section));
+  const ex = JSON.parse(JSON.stringify(st)); ex.exam = { questions: [{ cluster: 0 }, { cluster: 3 }], order: [], pos: 0, results: [], score: 0.5 };
+  const ex1 = S.dropSection(ex, 2);
+  ok('exam questions from other sections are renumbered', ex1.exam.questions && ex1.exam.questions[1].cluster === 2 && ex1.exam.questions[0].cluster === 0, JSON.stringify(ex1.exam));
+  const ex2 = S.dropSection(ex, 3);
+  ok('an exam that drew on the deleted section is set again, its last score kept', ex2.exam.questions === null && ex2.exam.score === 0.5, JSON.stringify(ex2.exam));
+  const threw = f => { try { f(); return ''; } catch (e) { return e.message; } };
+  ok('refused mid-exam, mid-review, for a section it has not, and for a unit’s only section',
+     /exam/.test(threw(() => S.dropSection(Object.assign({}, st, { phase: 'exam' }), 0))) &&
+     /review/.test(threw(() => S.dropSection(Object.assign({}, st, { phase: 'review', review: {} }), 0))) &&
+     /no section 7/.test(threw(() => S.dropSection(st, 7))) && /no section -1/.test(threw(() => S.dropSection(st, -1))) &&
+     /at least one section/.test(threw(() => S.dropSection(S.init('v', ['only']), 0))));
+  const kept = S.dropCards([{ id: 'a', docId: 'u', cluster: 1 }, { id: 'b', docId: 'u', cluster: 2, srs: { s: 1 } }, { id: 'c', docId: 'u', cluster: 0 }, { id: 'd', docId: 'w', cluster: 1 }], 'u', 1);
+  ok('the review cards on the device: the deleted section’s to remove, the later renumbered, other units untouched',
+     JSON.stringify(kept.drop) === '["a"]' && kept.renumbered.length === 1 && kept.renumbered[0].id === 'b' && kept.renumbered[0].cluster === 1 && kept.renumbered[0].srs.s === 1,
+     JSON.stringify(kept));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

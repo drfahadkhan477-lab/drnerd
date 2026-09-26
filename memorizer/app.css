@@ -297,16 +297,62 @@ details.menu summary::-webkit-details-marker { display: none; }
 .btn.round { width: 3rem; height: 3rem; min-height: 3rem; border-radius: 50%; padding: 0; font-size: 1.75rem; line-height: 1; flex: none; border-color: var(--line); }
 .unit-meta { margin: 0 0 var(--s-2); }
 .grid-title { font-size: var(--t-h4); margin: var(--s-5) 0 var(--s-3); }
-.sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--s-4); }
-.section-card { position: relative; font: inherit; color: var(--ink); text-align: left; padding: 0; cursor: pointer; overflow: hidden;
-  display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 1.5rem; box-shadow: var(--shadow); min-height: 9rem; }
-/* Each section's colour is a hairline along its top, not a block of it. */
-.band { display: flex; align-items: center; justify-content: flex-start; padding: var(--s-3) var(--s-4) 0; border-top: 4px solid hsl(var(--hue) 34% 66%); }
-.band-n { font-size: var(--t-meta); font-weight: 700; color: var(--muted); background: var(--surface-2); border-radius: 999px; min-width: 1.75rem; height: 1.75rem; padding: 0 .5rem; display: grid; place-items: center; }
-.section-body { display: flex; flex-direction: column; gap: .125rem; padding: var(--s-4) var(--s-4) var(--s-5); }
-.section-title { font-size: var(--t-lead); line-height: 1.3; overflow-wrap: anywhere; }
-.section-card .badge { position: absolute; right: var(--s-3); bottom: var(--s-3); }
-.section-card[data-state="drilled"] .band { border-top-color: var(--good); }
+.sections { display: flex; flex-direction: column; gap: var(--s-3); }
+/* ── A unit's page (ui.js viewUnit): the unit at a glance, then its
+   contents — a chapter a card with its bar, folding open to its rows; a
+   section on its own a row card of its own. Every row can be deleted. */
+.unit-hero { display: grid; gap: var(--s-3); padding: var(--s-5); margin: var(--s-3) 0 var(--s-4); }
+.unit-hero-top { display: flex; align-items: center; gap: var(--s-4); min-width: 0; }
+.unit-hero .ring-wrap { width: 4.5rem; height: 4.5rem; }
+.unit-hero .ring-pct { font-size: var(--t-body); }
+.unit-hero-text { min-width: 0; }
+.unit-hero .unit-meta { margin: 0 0 .25rem; font-size: var(--t-meta); }
+.unit-next { margin: 0; line-height: 1.35; overflow-wrap: anywhere; }
+.unit-hero .bar { margin: 0; }
+.unit-hero .unit-cta { margin: 0; }
+.contents-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); margin: var(--s-5) 0 var(--s-3); }
+.contents-head .grid-title { margin: 0; }
+.ch-group.card { padding: 0; overflow: hidden; }
+.ch-head { list-style: none; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "n text pct" "bar bar bar";
+  gap: .625rem var(--s-3); align-items: center; padding: var(--s-4) var(--s-5); cursor: pointer; }
+.ch-head::-webkit-details-marker { display: none; }
+.ch-n { grid-area: n; width: 2.25rem; height: 2.25rem; border-radius: .75rem; display: grid; place-items: center; font-weight: 800;
+  background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
+.ch-text { grid-area: text; display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
+.ch-title { font-size: var(--t-lead); line-height: 1.3; overflow-wrap: anywhere; }
+.ch-meta { font-size: var(--t-meta); }
+.ch-pct { grid-area: pct; display: flex; align-items: center; gap: .625rem; font-weight: 800; color: var(--good); font-variant-numeric: tabular-nums; }
+.ch-pct::after { content: ""; width: .5rem; height: .5rem; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg) translateY(-2px); transition: transform .2s var(--ease-out); }
+.ch-group[open] .ch-pct::after { transform: rotate(-135deg) translateY(-2px); }
+.ch-bar { grid-area: bar; height: .3125rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.ch-bar i { display: block; height: 100%; background: var(--good); border-radius: inherit; }
+.ch-rows { border-top: 1px solid var(--line); }
+.section-row { display: flex; align-items: stretch; min-width: 0; }
+.ch-rows .section-row + .section-row { border-top: 1px solid var(--line); }
+.section-row.card { padding: 0; overflow: hidden; }
+.sections .section-row .section-card { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--s-3);
+  font: inherit; color: var(--ink); text-align: left; padding: var(--s-3) var(--s-4) var(--s-3) 0; cursor: pointer; min-height: 3.5rem;
+  background: transparent; border: 0; border-radius: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-contrast="high"] .sections .section-row .section-card { border: 0; }
+.sections .section-row .section-card:hover { transform: none; box-shadow: none; background: var(--surface-2); }
+.sections .section-row .section-card:active { transform: none; }
+.section-row.next .section-title::after { content: " · next"; color: var(--accent); font-weight: 700; font-size: var(--t-meta); }
+/* Each section's colour is a line down its left, not a block of it. */
+.band { align-self: stretch; display: flex; align-items: center; padding-left: .75rem; border-left: 3px solid hsl(var(--hue) 40% 62%); }
+.band-n { font-size: var(--t-meta); font-weight: 700; color: var(--muted); background: var(--surface-2); border-radius: 999px; min-width: 1.75rem; height: 1.75rem; padding: 0 .5rem; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.section-body { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
+.section-title { font-size: var(--t-body); font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
+.row-meta { display: flex; align-items: center; gap: .375rem; font-size: var(--t-meta); }
+.sections > .card { margin: 0; }
+.state-dot { width: .5rem; height: .5rem; border-radius: 50%; flex: none; border: 1.5px solid var(--muted); }
+.section-card[data-state="taught"] .state-dot { background: var(--accent); border-color: var(--accent); }
+.section-card[data-state="drilled"] .state-dot { background: var(--good); border-color: var(--good); }
+.section-card .badge { position: static; }
+.section-card[data-state="drilled"] .band { border-left-color: var(--good); }
+.section-del { flex: none; width: 3rem; display: grid; place-items: center; background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; }
+.section-del:hover, .section-del:focus-visible { color: var(--bad); background: var(--bad-soft); }
+.trash-icon { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .exam-card { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-top: var(--s-5); }
 .exam-card p { margin: 0; }
 .exam-card.locked { opacity: .8; }
@@ -421,6 +467,32 @@ sup.cite { font-size: .7em; color: var(--accent); }
 ol.points { margin: 0; }
 .arranged-note { margin: var(--s-3) 0 0; font-style: italic; }
 .fact + .fact { margin-top: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--line); }
+/* ── The whole lesson (ui.js viewLesson): two columns where there is room —
+   what to understand, and beside it what to memorise — each at the
+   reading width; one column on a phone. Practice and extras below. */
+@media (min-width: 46rem) {
+  main.wrap.lesson-wide { max-width: min(78rem, 100%); }
+  .lesson-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(15rem, 1fr); gap: var(--s-4); align-items: start; }
+  .lesson-main { max-width: var(--measure); }
+  .lesson-side { min-width: 0; }
+  .lesson-main #points .card-head { flex-wrap: wrap; }
+  .lesson-main #points .card-head h2 { flex: none; white-space: nowrap; }
+  main.wrap.lesson-wide > :not(.lesson-grid):not(.lesson-practice):not(.lesson-extras) { max-width: var(--measure); }
+  .lesson-practice, .lesson-extras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--s-4); align-items: start; }
+  .lesson-extras > details.source, .lesson-extras > .tables, .lesson-extras > #tables, .lesson-extras > #visuals { grid-column: 1 / -1; }
+}
+.lesson-side > .card:first-of-type { margin-top: 0; }
+.pack-table { margin: var(--s-3) 0 0; }
+.pack-table + .pack-table { margin-top: var(--s-4); }
+.pack-table figcaption { margin: 0 0 var(--s-2); }
+.side-title { margin: 0 0 var(--s-2); }
+/* at the side, the numbers pack tight: facts side by side, tiles small */
+.lesson-side #numbers .fact + .fact { margin-top: var(--s-3); padding-top: var(--s-2); }
+.lesson-side .tiles { grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); }
+.lesson-side .tile { padding: var(--s-2) var(--s-3); }
+.lesson-side .tile-value { font-size: var(--t-lead); }
+.lesson-side .card { padding: var(--s-4); }
+.lesson-side .hook .acrostic { margin: var(--s-2) 0; }
 .fact-subject { font-weight: 700; margin: var(--s-2) 0; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: var(--s-2); }
 .tile { display: flex; flex-direction: column; gap: .125rem; padding: var(--s-3); border-radius: .75rem; background: var(--surface-2); border: 1px solid var(--line); }
@@ -580,9 +652,9 @@ main.home[data-enter] > .card, main.home[data-enter] > section > .card, main.hom
 main.home > :nth-child(2) { animation-delay: .06s; } main.home > :nth-child(3) { animation-delay: .12s; }
 main.home > :nth-child(4) { animation-delay: .18s; } main.home > :nth-child(n+5) { animation-delay: .24s; }
 main[data-enter] .ring-wrap svg { animation: ring-in .6s cubic-bezier(.2,.7,.2,1) both; transform-origin: center; }
-main[data-enter] .section-card { animation: rise-in .4s cubic-bezier(.2,.7,.2,1) both; }
-.section-card:nth-child(2) { animation-delay: .05s; } .section-card:nth-child(3) { animation-delay: .1s; }
-.section-card:nth-child(4) { animation-delay: .15s; } .section-card:nth-child(n+5) { animation-delay: .2s; }
+main[data-enter] .sections > * { animation: rise-in .4s cubic-bezier(.2,.7,.2,1) both; }
+.sections > :nth-child(2) { animation-delay: .05s; } .sections > :nth-child(3) { animation-delay: .1s; }
+.sections > :nth-child(4) { animation-delay: .15s; } .sections > :nth-child(n+5) { animation-delay: .2s; }
 .option.right { animation: right-pulse .45s ease-out; }
 .option.wrong { animation: wrong-shake .4s ease-in-out; }
 .recall-answer { animation: rise-in .35s cubic-bezier(.2,.7,.2,1) both; }
@@ -770,7 +842,7 @@ main.home:not(.shelf) .home-hero .pill.stat, main.home:not(.shelf) .home-hero .p
 main.home:not(.shelf) .home-hero .stat-ring .ring-wrap { width: 2rem; height: 2rem; }
 main.home:not(.shelf) .hero-continue { margin: var(--s-2) 0 0; }
 main.home:not(.shelf) .home-hero .mascot { width: 3.5rem; height: 3.5rem; }
-.brain-card .brain-svg { max-height: 30rem; margin: 0 auto; }
+.brain-card .brain-svg { max-height: 34rem; margin: 0 auto; }
 .brain-card .brain-lobes-list { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: .125rem; }
 .brain-card .brain-lobes-list::-webkit-scrollbar { display: none; }
 .brain-card .brain-lobes-list .lobe-chip { flex: none; }
@@ -925,7 +997,7 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
    pearl is a panel of the card, its paper under it, as tall as the brain
    beside it; its figure or table goes under its words, not beside them. */
 @media (min-width: 48rem) {
-  .brain-card.with-pearl { grid-template-columns: minmax(0, 1.45fr) minmax(17.5rem, 1fr); gap: var(--s-5); padding: var(--s-5); align-items: stretch; }
+  .brain-card.with-pearl { grid-template-columns: minmax(0, 1.8fr) minmax(16rem, 1fr); gap: var(--s-4); padding: var(--s-4) var(--s-5); align-items: stretch; }
 }
 .brain-col { min-width: 0; display: flex; flex-direction: column; gap: var(--s-3); }
 .brain-stats { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; padding: 0 var(--s-1); }
@@ -1018,6 +1090,10 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 .neuron[data-state="new"] .dendrite { opacity: .45; stroke-width: 1.2; }
 .neuron .soma { fill: var(--brain-dormant); stroke: var(--brain-dendrite); stroke-width: 1.5; }
 .neuron .nucleus { fill: var(--brain-dendrite); opacity: .55; }
+.soma-shine { pointer-events: none; }
+.ss-0 { stop-color: #FFFFFF; stop-opacity: .55; } .ss-1 { stop-color: #FFFFFF; stop-opacity: .06; } .ss-2 { stop-color: #000000; stop-opacity: .22; }
+.brain-fine path { fill: none; stroke: var(--brain-sulcus); stroke-width: .9; stroke-linecap: round; opacity: .7; }
+.brain-svg { shape-rendering: geometricPrecision; }
 .neuron[data-state="solid"] .soma { fill: var(--brain-n-solid); stroke: var(--brain-n-solid); }
 .neuron[data-state="fading"] .soma { fill: var(--brain-n-fading); stroke: var(--brain-n-fading); }
 .neuron[data-state="weak"] .soma { fill: var(--brain-n-weak); stroke: var(--brain-n-weak); }

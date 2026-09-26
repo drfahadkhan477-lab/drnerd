@@ -324,5 +324,38 @@ head('the final exam from the pack: its questions where it has them, the built-i
   ok('the pack’s own questions are not changed by it', rec.sections[0].quiz.questions.every(x => !('cluster' in x)));
 }
 
+head('a section deleted from the unit: its pack entry goes, the later ones move up');
+{
+  const rec = { id: 'u', at: 1, sections: { 0: { index: 0, title: 'A' }, 1: { index: 1, title: 'B' }, 3: { index: 3, title: 'D' } } };
+  const r = P.dropSection(rec, 1);
+  ok('the deleted section’s entry goes and the later ones take the numbers they now have',
+     JSON.stringify(Object.keys(r.sections)) === '["0","2"]' && r.sections[2].index === 2 && r.sections[2].title === 'D' && r.sections[0].index === 0, JSON.stringify(r.sections));
+  ok('the record given is not changed, and no pack stays no pack', rec.sections[1].title === 'B' && rec.sections[3].index === 3 && P.dropSection(null, 0) === null);
+}
+
+head('tables written with Claude: every cell held to the book, a bad one left out alone');
+{
+  const withTables = tables => { const x = honest(); x.lesson.tables = tables; return run(x); };
+  const good = { title: 'Grading', columns: ['Measure', 'Severe'], rows: [['Mean gradient', 'above 40 mmHg']], page: 10 };
+  const r1 = withTables([good]);
+  const t1 = r1.sections[0] && r1.sections[0].lesson.tables;
+  ok('a table from the text is kept, unflagged', t1 && t1.length === 1 && !t1[0].flag && JSON.stringify(t1[0].rows) === '[["Mean gradient","above 40 mmHg"]]', JSON.stringify(r1.sections[0] && r1.sections[0].lesson.tables));
+  const r2 = withTables([Object.assign({}, good, { rows: [['Mean gradient', 'above 55 mmHg']] })]);
+  const t2 = r2.sections[0] && r2.sections[0].lesson.tables[0];
+  ok('a cell with a number the section does not have is flagged, not passed off', t2 && /55/.test(t2.flag || ''), JSON.stringify(t2));
+  const r3 = withTables([Object.assign({}, good, { rows: [['Mean gradient']] }), good]);
+  ok('a table whose row does not match its columns is left out with its reason — the section and the other table stay',
+     r3.sections.length === 1 && r3.sections[0].lesson.tables.length === 1 && r3.dropped.some(d => d.where === 'table 1' && /do not match its 2 columns/.test(d.why)), JSON.stringify(r3.dropped));
+  const r4 = withTables([Object.assign({}, good, { rows: [['Mean gradient', P.NOT_IN_PDF || 'NOT_IN_PDF']] })]);
+  ok('a table Claude marked NOT_IN_PDF is left out', r4.sections[0].lesson.tables.length === 0 && r4.dropped.some(d => d.where === 'table 1'), JSON.stringify(r4.dropped));
+  const r5 = withTables([{ title: 'x', columns: ['only'], rows: [['a']], page: 10 }, { title: 7, columns: [], rows: [], page: 10 }]);
+  ok('a table with one column, or of the wrong shape, is left out, not the section', r5.sections.length === 1 && r5.sections[0].lesson.tables.length === 0 && r5.dropped.filter(d => /^table/.test(d.where)).length === 2, JSON.stringify(r5.dropped));
+  const noTables = honest(); delete noTables.lesson.tables;
+  ok('a reply without tables reads as none', run(noTables).sections[0].lesson.tables.length === 0);
+  const pr = P.prompt(DOC);
+  ok('the prompt asks for tables, a flowchart drawn to rule, the design and a check before replying',
+     /lesson\.tables: 0 to 2 tables/.test(pr) && /At most 12 nodes/.test(pr) && /HOW TO DESIGN IT/.test(pr) && /BEFORE YOU REPLY/.test(pr) && /TABLE/.test(pr));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

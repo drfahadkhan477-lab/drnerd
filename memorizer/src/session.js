@@ -528,11 +528,50 @@ function review(card, rating, today, FSRS) {
   return out;
 }
 
+/* A section deleted by the owner: every place that names a section by its
+   number is renumbered — its progress, the review cards and weak items the
+   session holds, the exam's questions — and what belonged to the deleted
+   one goes with it. Refused mid-exam and mid-review (their queues name
+   sections), and for the last section a unit has. The exam is set again
+   when it drew from the deleted section; its last score is kept. */
+function dropSection(state, i) {
+  var s = clone(state), n = s.titles.length;
+  if (typeof i !== 'number' || Math.floor(i) !== i || i < 0 || i >= n) throw new Error('this unit has no section ' + i);
+  if (n < 2) throw new Error('a unit keeps at least one section: delete the unit instead');
+  if (s.phase === 'exam' || s.phase === 'review' || s.review) throw new Error('finish or leave the ' + (s.phase === 'exam' ? 'exam' : 'review') + ' first');
+  var shift = function (k) { return k > i ? k - 1 : k; };
+  s.titles.splice(i, 1);
+  var per = {};
+  Object.keys(s.per).forEach(function (key) { var k = +key; if (k !== i) per[shift(k)] = s.per[key]; });
+  s.per = per;
+  if (s.section === i) { s.section = Math.min(i, n - 2); if (s.phase !== 'done') s.phase = 'unit'; }
+  else s.section = shift(s.section);
+  s.cards = (s.cards || []).filter(function (c) { return c.cluster !== i; }).map(function (c) { c.cluster = shift(c.cluster); return c; });
+  var weak = {};
+  Object.keys(s.weak || {}).forEach(function (id) { var w = s.weak[id]; if (w.cluster === i) return; w.cluster = shift(w.cluster); weak[id] = w; });
+  s.weak = weak;
+  var qs = s.exam && s.exam.questions;
+  if (qs && qs.some(function (q) { return q.cluster === i; })) s.exam = { questions: null, order: [], pos: 0, results: [], score: s.exam.score };
+  else if (qs) qs.forEach(function (q) { if (typeof q.cluster === 'number') q.cluster = shift(q.cluster); });
+  return s;
+}
+/* The review cards kept on the device, for the same deletion: those of the
+   deleted section to remove, the later ones renumbered. */
+function dropCards(cards, docId, i) {
+  var drop = [], keep = [];
+  (cards || []).forEach(function (c) {
+    if (c.docId !== docId || typeof c.cluster !== 'number') return;
+    if (c.cluster === i) drop.push(c.id);
+    else if (c.cluster > i) { var o = clone(c); o.cluster = c.cluster - 1; keep.push(o); }
+  });
+  return { drop: drop, renumbered: keep };
+}
+
 var MemSession = {
   VERSION: VERSION, init: init, next: next, mastery: mastery, weakest: weakest, examSize: examSize, asked: asked,
   nextSection: nextSection, allDone: allDone, isDue: isDue, dueCards: dueCards, review: review,
   NOT_SURE: NOT_SURE, resumable: resumable, pending: pending, interleave: interleave, reviewItem: reviewItem, needsReteach: needsReteach,
-  closing: closing, closingText: closingText, missType: missType,
+  closing: closing, closingText: closingText, missType: missType, dropSection: dropSection, dropCards: dropCards,
 };
 root.MemSession = MemSession;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemSession;
