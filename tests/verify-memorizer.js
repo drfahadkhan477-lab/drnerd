@@ -2667,6 +2667,70 @@ function kindOf(user) {
     ok('and while a question is open the dock offers no shortcut past it', await p4.locator('#dock-context').count() === 0);
     ok('nothing went to an AI provider', stub.requests.length === aiBefore, `${stub.requests.length - aiBefore} requests`);
 
+    /* CLAUDE WRITES, THE DEVICE TUTORS. With the on-device AI on (a
+       stand-in model here), a missed pack question comes back in new words
+       and a mistake can be explained — the model handed the pack's notes,
+       and what it writes held to them and the book. */
+    const Q1 = 'Which LVEDP should prompt a search for volume overload?';
+    const NEW1 = 'A breathless patient has an LVEDP measured. At what LVEDP should you search for volume overload?';
+    await p4.evaluate(stem => {
+      window.__tut = [];
+      MemLLM.saveConfig({ on: true, model: 'stub' });
+      MemLLM.useEngine({ chat: { completions: { create: async req => {
+        const u = req.messages[1].content; window.__tut.push(u);
+        let out = '';
+        if (/Rewrite the question/.test(u)) out = JSON.stringify({ question: stem });
+        else if (/explain why/.test(u)) out = 'You picked 8 mmHg, but that is still a normal pressure. Only an LVEDP greater than 18 mmHg should make you look for volume overload. Give 40 mg of furosemide.';
+        return { choices: [{ message: { content: out } }] };
+      } } } }, 'stub');
+      Memorizer.render();
+    }, NEW1);
+    /* precondition: the rewording has come back, kept or not */
+    await p4.waitForFunction(k => { const v = Memorizer.ui.tutor.v[k]; return !!(v && (v.question || v.none)); }, Q1, T);
+    const tut = await p4.evaluate(k => ({ v: Memorizer.ui.tutor.v[k], sent: window.__tut }), Q1);
+    ok('a missed pack question is asked in new words by the on-device model, and the new wording is kept', tut.v.question === NEW1 && tut.v.reworded === true, JSON.stringify(tut.v).slice(0, 200));
+    ok('the model is handed the pack’s notes — what passed the book check, and not the point flagged for a number the book lacks',
+       tut.sent.length >= 1 && /Diuretics reduce preload by lowering circulating volume/.test(tut.sent[0]) && /greater than 18 mmHg/.test(tut.sent[0]) && !/99/.test(tut.sent[0]), (tut.sent[0] || '').slice(0, 300));
+    await p4.locator('#ai-miss-go').click();
+    await p4.locator('#ai-miss').waitFor(T);
+    const missTxt = await text(p4, '#ai-miss');
+    ok('"Explain my mistake": its words from Claude’s reasons are kept, a dose it made up is dropped, and it says so',
+       /still a normal pressure/.test(missTxt) && /greater than 18 mmHg should make you look/.test(missTxt) && !/40 mg/.test(missTxt) && /1 sentence dropped/.test(missTxt), missTxt);
+    ok('and it was asked with the choice, the answer, Claude’s reason and the trap', await p4.evaluate(() => window.__tut.some(u => /The student chose: 8 mmHg/.test(u) &&
+       /The answer is: Greater than 18 mmHg/.test(u) && /Why their choice is wrong: 8 mmHg is inside the normal 8 to 12\./.test(u) && /The trap: the normal range/.test(u))));
+    await p4.locator('#next').click();
+    await p4.waitForFunction(() => /What do diuretics reduce/.test((document.querySelector('#mcq h2.q') || {}).textContent || ''), null, T);
+    await p4.locator('.option[data-i="1"]').click();
+    await p4.locator('#next').click();
+    await p4.waitForFunction(s => (document.querySelector('#mcq h2.q') || {}).textContent === s, NEW1, T).catch(() => {});
+    const again = await p4.evaluate(() => ({ q: (document.querySelector('#mcq h2.q') || {}).textContent, tag: !!document.querySelector('#reworded-tag'),
+      meta: (document.querySelector('.mcq-meta') || {}).textContent || '', opts: [...document.querySelectorAll('#mcq .option .opt-text')].map(o => o.textContent) }));
+    ok('the retry at the end of the drill is that new wording, labelled: the answer and its reasons Claude’s', again.q === NEW1 && again.tag && /Again, in new words/.test(again.meta), JSON.stringify(again));
+    ok('with the pack’s own options, every one in a new place', JSON.stringify([...again.opts].sort()) === JSON.stringify(['12 mmHg', '4 mmHg', '8 mmHg', 'Greater than 18 mmHg']) &&
+       again.opts.every((o, i) => o !== ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', '4 mmHg'][i]), JSON.stringify(again.opts));
+    const at = again.opts.indexOf('Greater than 18 mmHg');
+    await p4.locator('.option[data-i="' + at + '"]').click();
+    await p4.locator('#next').waitFor(T);
+    ok('the right option, wherever it now sits, is marked right', await p4.locator('.option.right').getAttribute('data-i') === String(at) && /✓ Correct/.test(await text(p4, '#mcq .why')));
+    await p4.locator('#next').click();
+    await p4.waitForFunction(() => Memorizer.ui.state.phase === 'result', null, T);
+    const last = await p4.evaluate(() => Memorizer.ui.state.per[0].answers.slice(-1)[0]);
+    ok('and it is scored as the original’s answer: option C, right, on the retry', last.q === 0 && last.choice === 2 && last.correct === true && last.first === false, JSON.stringify(last));
+    await p4.evaluate(() => { Memorizer.ui.state.phase = 'unit'; Memorizer.render(); });
+    await p4.locator('#unit-review').click();
+    await p4.waitForFunction(() => Memorizer.ui.state.phase === 'review', null, T);
+    const cold = await p4.evaluate(() => ({ q: document.querySelector('#mcq h2.q').textContent, tag: !!document.querySelector('#reworded-tag'), a: MemSession.reviewItem(Memorizer.ui.state).q.answer,
+      opts: [...document.querySelectorAll('#mcq .option .opt-text')].map(o => o.textContent) }));
+    ok('a review round’s cold retest asks it in the new words too', cold.q === NEW1 && cold.tag, JSON.stringify(cold));
+    const atR = cold.opts.indexOf('Greater than 18 mmHg');
+    await p4.locator('.option[data-i="' + atR + '"]').click();
+    await p4.locator('#next').click();
+    await p4.waitForFunction(() => Memorizer.ui.state.phase !== 'review' || Memorizer.ui.state.review.idx > 0, null, T);
+    ok('and counted on the original: a hit on its weak item', await p4.evaluate(() => Object.values(Memorizer.ui.state.weak).some(w => w.q && w.q.question === 'Which LVEDP should prompt a search for volume overload?' && w.hits.length >= 1)),
+       JSON.stringify(await p4.evaluate(() => Object.values(Memorizer.ui.state.weak).map(w => [w.q && w.q.question, w.hits]))));
+    /* the rest of this unit's checks count on the book's own wording */
+    await p4.evaluate(() => MemLLM.saveConfig({ on: false, model: 'stub' }));
+
     /* A unit started over is taught from the pack again: pump() takes the
        section from it, with nothing to ask the built-in coach for. */
     await p4.evaluate(id => MemStore.del('sessions', id).then(() => Memorizer.openDoc(id, 0)), d.id);

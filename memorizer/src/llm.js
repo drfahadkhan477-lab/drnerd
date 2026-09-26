@@ -260,6 +260,31 @@ var QUESTIONS_SCHEMA = { type: 'object', properties: { questions: { type: 'array
   properties: { question: { type: 'string' }, options: { type: 'array', items: { type: 'string' } }, answer: { type: 'integer' } },
   required: ['question', 'options', 'answer'] } } }, required: ['questions'] };
 
+/* ── with a study pack: Claude's notes, put another way ─────────────────
+   The model is handed the pack's notes (ground.js packContext) and asked
+   for words only; ground.js variant and missExplain hold what comes back. */
+function variantPrompt(q, notes) {
+  return 'Notes from the student\u2019s study pack, checked against their textbook:\n' + notes +
+    '\n\nExam question: ' + q.question + '\nIts answer: ' + q.options[q.answer] +
+    '\n\nRewrite the question so it asks for the same answer in different words, as a short clinical scenario if you can. ' +
+    'Do not change what it asks. Do not put the answer or any option in it. Use no number, drug, test or disease that is not in the notes or the question. ' +
+    'Reply as JSON: {"question": "..."}';
+}
+var VARIANT_SCHEMA = { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] };
+function parseVariant(text) {
+  var t = String(text || ''), a = t.indexOf('{'), b = t.lastIndexOf('}');
+  try { var v = JSON.parse(a >= 0 && b > a ? t.slice(a, b + 1) : t); return v && typeof v.question === 'string' ? v.question : ''; } catch (_) { return ''; }
+}
+function missPrompt(q, chosen, notes) {
+  var right = q.options[q.answer], mine = chosen >= 0 ? q.options[chosen] : '';
+  return 'Notes from the student\u2019s study pack, checked against their textbook:\n' + notes +
+    '\n\nQuestion: ' + q.question + '\n' + (mine ? 'The student chose: ' + mine + '.' : 'The student was not sure.') + ' The answer is: ' + right + '.' +
+    '\nWhy the answer is right: ' + q.explain +
+    (mine && q.why && q.why[chosen] ? '\nWhy their choice is wrong: ' + q.why[chosen] : '') + (q.trap ? '\nThe trap: ' + q.trap : '') +
+    '\n\nIn 2 or 3 short sentences, speaking to the student, explain why ' + right + ' is the answer' + (mine ? ' and why ' + mine + ' is not' : '') +
+    '. Use only what is written above. No new numbers, drugs, tests or diseases.';
+}
+
 function parseQuestions(text) {
   try {
     var v = JSON.parse(text);
@@ -272,7 +297,8 @@ function parseQuestions(text) {
 var MemLLM = { WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
                loadLib: loadLib, useEngine: useEngine, ready: ready, start: start, chat: chat, SYSTEM: SYSTEM,
                summaryPrompt: summaryPrompt, plainPrompt: plainPrompt, analogyPrompt: analogyPrompt, questionsPrompt: questionsPrompt,
-               QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions, stripThinking: stripThinking };
+               QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions, stripThinking: stripThinking,
+               variantPrompt: variantPrompt, VARIANT_SCHEMA: VARIANT_SCHEMA, parseVariant: parseVariant, missPrompt: missPrompt };
 root.MemLLM = MemLLM;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemLLM;
 })(typeof window !== 'undefined' ? window : this);

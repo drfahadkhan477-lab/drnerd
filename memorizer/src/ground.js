@@ -20,6 +20,10 @@
        also speaks to the question; no wrong option may be supported by that
        same sentence; and the explanation shown is that sentence, verbatim,
        with its page — not the model's words.
+     · WITH A STUDY PACK, ONLY WORDS. Claude's pack is the model's notes; it
+       may ask a pack question in new words (its answer, options and
+       reasons stay the pack's) and explain a mistake from the pack's
+       reasons — each held to the notes and the book (variant, missExplain).
 
    tests/verify-memorizer-ground-pure.js holds every rule.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -141,8 +145,108 @@ function question(q, sentences) {
   return { q: { question: q.question, quote: q.quote || '', options: q.options.slice(), answer: q.answer, explain: best.s.text, page: best.s.page, by: 'ai' }, why: '' };
 }
 
+/* ── the study pack as the model's notes ────────────────────────────────────
+   CLAUDE WRITES, THE DEVICE TUTORS. A pack (pack.js) is Claude's work on
+   the whole chapter, checked against the book when it was imported. The
+   small model on the iPad does not write facts; it is handed the pack's
+   notes and asked only to put them another way — a question asked in new
+   words, a mistake explained — and what it writes is held to those notes
+   and to the book before it is shown. */
+
+/* The section's pack as notes for the model: what passed the book check
+   and nothing flagged, the most useful first, cut to `words`. */
+var CONTEXT_WORDS = 180;
+function packContext(sec, words) {
+  if (!sec || !sec.lesson) return '';
+  var L = sec.lesson, lines = [], clean = function (x) { return x && !x.flag; };
+  if (L.overview && !(L.flags && L.flags.overview)) lines.push(L.overview);
+  if (L.mechanism && !(L.flags && L.flags.mechanism)) lines.push(L.mechanism);
+  (L.points || []).filter(clean).forEach(function (p) { lines.push(p.text); });
+  (L.pearls || []).filter(clean).forEach(function (p) { lines.push(p.text); });
+  (L.distinctions || []).filter(clean).forEach(function (d) { lines.push(d.a + ' vs ' + d.b + ': ' + d.how); });
+  var out = [], n = 0, max = words || CONTEXT_WORDS;
+  for (var i = 0; i < lines.length; i++) {
+    var w = String(lines[i]).split(/\s+/).filter(Boolean);
+    if (n + w.length > max) break;
+    out.push('- ' + w.join(' ')); n += w.length;
+  }
+  return out.join('\n');
+}
+
+/* A negation turns what a question asks for inside out ("which is NOT"):
+   read from the raw words, as Ask.terms drops "not" as a stop word. */
+var NEGATION = /\b(?:not|except|least|false|incorrect|never|untrue)\b/i;
+function wordsOf(text) { return uniq(Ask.terms(text).filter(function (w) { return w.length >= 3; })); }
+/* Every option moves: a rotation by k in 1..n-1, from the new wording, so
+   the same wording is always laid out the same way. */
+function rotation(text, n) {
+  var h = 0, s = String(text || '');
+  for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return n > 1 ? 1 + h % (n - 1) : 0;
+}
+
+/* A pack question asked in new words. The model writes only the stem; the
+   options, the answer, the explanation and every option's reason stay the
+   pack's (the options turned so none keeps its place). The stem is held to:
+     · the notes and the book — no new number, no new named thing;
+     · the same question — at least half of the original's key terms (those
+       it shares with its answer and explanation) still in it, and a "not"
+       or "except" in it exactly when the original has one;
+     · no giveaway — the answer's own words or numbers are not in it;
+     · new words — not the original again.
+   sources: the pack's notes and the section's text. Returns { q, why }. */
+function variant(q, stem, sources) {
+  var s = String(stem || '').replace(/\s+/g, ' ').trim();
+  if (s.length < 12) return { q: null, why: 'too short to be a question' };
+  if (s.length > 400) return { q: null, why: 'too long for a question' };
+  var norm = function (t) { return String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+  if (norm(s) === norm(q.question)) return { q: null, why: 'the same words as the original' };
+  var err = claimError(s, [q.question, q.explain].concat(sources || []), 0);
+  if (err) return { q: null, why: 'the question ' + err };
+  if (NEGATION.test(s) !== NEGATION.test(q.question)) return { q: null, why: NEGATION.test(q.question) ? 'it dropped the original’s "not"' : 'it added a "not" the original does not have' };
+  var right = q.options[q.answer], stemW = wordsOf(q.question), newW = wordsOf(s);
+  var tie = wordsOf(right + ' ' + q.explain), key = stemW.filter(function (w) { return tie.indexOf(w) !== -1; });
+  if (!key.length) key = stemW;
+  var kept = key.filter(function (w) { return newW.indexOf(w) !== -1; }).length;
+  if (kept * 2 < key.length) return { q: null, why: 'it no longer asks the same thing (' + kept + ' of ' + key.length + ' key terms kept)' };
+  var giveW = wordsOf(right).filter(function (w) { return stemW.indexOf(w) === -1; });
+  var giveN = numbersIn(right).filter(function (n) { return numbersIn(q.question).indexOf(n) === -1; });
+  if (giveN.some(function (n) { return numbersIn(s).indexOf(n) !== -1; }) ||
+      (giveW.length && giveW.every(function (w) { return newW.indexOf(w) !== -1; }))) return { q: null, why: 'it gives the answer away' };
+  var n = q.options.length, k = rotation(s, n), map = [], options = [], why = [];
+  for (var i = 0; i < n; i++) { map[(i + k) % n] = i; }
+  map.forEach(function (from, at) { options[at] = q.options[from]; why[at] = (q.why || [])[from] || ''; });
+  return { q: { question: s, quote: '', options: options, answer: (q.answer + k) % n, explain: q.explain, page: q.page,
+                why: q.why && q.why.length === n ? why : [], trap: q.trap || '', flag: q.flag || '', by: q.by, reworded: true, map: map }, why: '' };
+}
+
+/* A mistake explained in the model's words, from the pack's reasons. Each
+   sentence is held as plain words are (no new number or name; at least one
+   word the sources have), and one that calls the option chosen right is
+   dropped; what is kept must say what the answer is. chosen: an option's
+   index, or below 0 for "not sure". Returns { kept, dropped, why }. */
+var ENDORSE = /\b(?:is|was|are)\s+(?:the\s+)?(?:correct|right|best)\b|\bcorrect answer\b|\byou were right\b/i;
+function missExplain(text, q, chosen, sources) {
+  var src = [q.question, q.explain, q.trap || '', (q.why || []).join(' '), q.options[q.answer]].concat(sources || []);
+  /* an option is known by its words and its numbers: "8 mmHg" and
+     "greater than 18 mmHg" share a word and differ by their number */
+  var tokens = function (t) { return wordsOf(t).concat(numbersIn(t)); };
+  var mine = chosen >= 0 ? q.options[chosen] : '', rightW = tokens(q.options[q.answer]), mineW = tokens(mine).filter(function (w) { return rightW.indexOf(w) === -1; });
+  var hasAll = function (s, ws) { var t = tokens(s); return ws.length > 0 && ws.every(function (w) { return t.indexOf(w) !== -1; }); };
+  var kept = [], dropped = [];
+  sentencesOf(text).forEach(function (s) {
+    var err = claimError(s, src, 0);
+    if (!err && mine && hasAll(s, mineW) && !hasAll(s, rightW) && ENDORSE.test(s) && !NEGATION.test(s)) err = 'it calls the option chosen right';
+    if (err) dropped.push({ text: s, why: err }); else kept.push(s);
+  });
+  var names = kept.some(function (s) { return hasAll(s, rightW); });
+  if (kept.length && !names) return { kept: [], dropped: dropped.concat(kept.map(function (s) { return { text: s, why: 'it never says what the answer is' }; })), why: 'it never says what the answer is' };
+  return { kept: kept, dropped: dropped, why: kept.length ? '' : (dropped[0] ? dropped[0].why : 'it said nothing') };
+}
+
 var MemGround = { SUMMARY_SHARE: SUMMARY_SHARE, numbersIn: numbersIn, claimError: claimError, sentencesOf: sentencesOf,
-                  summary: summary, plain: plain, analogyError: analogyError, question: question };
+                  summary: summary, plain: plain, analogyError: analogyError, question: question,
+                  CONTEXT_WORDS: CONTEXT_WORDS, packContext: packContext, variant: variant, missExplain: missExplain };
 root.MemGround = MemGround;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemGround;
 })(typeof window !== 'undefined' ? window : this);

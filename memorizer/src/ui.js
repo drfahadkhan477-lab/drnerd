@@ -27,7 +27,8 @@ var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.m
 var ui = {
   view: 'library',      /* library | book | session | ask | review | settings */
   askIdx: null, askFor: null, askQ: '', askR: null, askKind: 'chapters', askBusy: false,
-  ai: { status: '', busy: '', summary: null, lesson: {} },
+  ai: { status: '', busy: '', summary: null, lesson: {}, miss: {} },
+  tutor: { v: {}, asking: {} }, wording: null,
   docs: [], cards: [], sessions: {}, at: {}, pearlSkip: 0, books: [], days: [], bookId: null,
   docsStale: true, pearlCache: null,
   docId: null, docRec: null, state: null,
@@ -2067,23 +2068,30 @@ function viewDrill() {
   }
   var retry = c.order.indexOf(qi) !== c.pos;
   var firsts = c.quiz.questions.length;
-  var meta = [h('span', retry ? 'Again — you missed this one' : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
+  /* a retry, asked in new words where the model has them */
+  var v = retry ? wordingFor(['d', ui.docId, s.section, s.round, c.pos, c.answers.length].join(':'), q) : null;
+  var orig = q;
+  if (v) q = v;
+  var meta = [h('span', retry ? (v ? 'Again, in new words — you missed this one' : 'Again — you missed this one') : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
     q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · its answer checked against your book') : null,
-    q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, q.flag ? '\u2726 Written with Claude \u00B7 \u26A0 not all of it found in your book' : '\u2726 Written with Claude \u00B7 checked against your book') : null,
+    v ? rewordTag() : q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, q.flag ? '\u2726 Written with Claude \u00B7 \u26A0 not all of it found in your book' : '\u2726 Written with Claude \u00B7 checked against your book') : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
   /* The kind of miss, read from what happened (skill.js); a second miss in
      a row is re-taught on the spot with a different kind of hook. */
-  var after = function (chosen, right) {
+  var after = function (chosen0, right) {
+    var chosen = unmap(v, chosen0);
     if (right) return retry ? typeChip('R', '', 'It came back when asked again.') : null;
-    if (retry) return [typeChip('E', ''), reteachCard(Coach.reteach({ q: q, types: ['E'], confusedWith: '' }, cluster()))];
-    var t = Session.missType(q, chosen).t, picked = chosen >= 0 ? q.options[chosen] : '';
+    if (retry) return [typeChip('E', ''), reteachCard(Coach.reteach({ q: orig, types: ['E'], confusedWith: '' }, cluster())), explainMiss(orig, chosen, s.section)];
+    var t = Session.missType(orig, chosen).t, picked = chosen >= 0 ? orig.options[chosen] : '';
+    /* asked again at the end of this drill: in new words, if the model has them by then */
+    tutorReword(orig, s.section).then(function (r) { if (r) render(); });
     /* a wrong value is anchored at once, among the section's other values */
-    return [typeChip(t, t === 'C' || t === 'V' ? picked : ''), t === 'V' ? reteachCard(Coach.reteach({ q: q, types: ['V'], confusedWith: picked }, cluster())) : null,
-      h('p.muted', 'Now a review card; it comes back at the end of this drill.')];
+    return [typeChip(t, t === 'C' || t === 'V' ? picked : ''), t === 'V' ? reteachCard(Coach.reteach({ q: orig, types: ['V'], confusedWith: picked }, cluster())) : null,
+      explainMiss(orig, chosen, s.section), h('p.muted', 'Now a review card; it comes back at the end of this drill.')];
   };
   /* skipped: to the end of the drill, still its first try (session.js) */
   var skip = c.pos < c.order.length - 1 ? function () { ui.choice = null; ui.sure = false; go({ type: 'skipped' }); } : null;
-  return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: ui.choice, sure: !!ui.sure }); }, null, nav, after, { sure: true, skip: skip })];
+  return [sectionBar('drill'), mcqCard(q, meta, function () { go({ type: 'answered', choice: unmap(v, ui.choice), sure: !!ui.sure }); }, null, nav, after, { sure: true, skip: skip })];
 }
 /* The error type of a miss, and the skill's fix for it. */
 function typeChip(t, confusedWith, lead) {
@@ -2106,21 +2114,26 @@ function reteachCard(r) {
 }
 /* A review round of the weak list: cold retest, interleaved (skill §7). */
 function viewReviewRound() {
-  var s = ui.state, r = s.review, w = Session.reviewItem(s), q = w.q;
+  var s = ui.state, r = s.review, w = Session.reviewItem(s), orig = w.q;
   var n = r.queue.length;
+  /* a cold retest of a pack question, in new words where the model has them */
+  var v = wordingFor(['r', ui.docId, s.round, r.idx, n].join(':'), orig), q = v || orig;
   var meta = [h('span', (r.final ? 'Before the exam \u00B7 ' : '') + 'Review round \u00B7 cold retest \u00B7 ' + (r.idx + 1) + ' of ' + n),
+    v ? rewordTag() : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * r.idx / n) + '%' }))];
   var from = ui.docRec.clusters[w.cluster] ? ui.docRec.clusters[w.cluster].title : '';
-  var after = function (chosen, right) {
+  var after = function (chosen0, right) {
     if (right) return h('p.muted', w.hits.length ? 'Right again, in a later round: that graduates it off the weak list.' : 'Right. One more time in a later round and it graduates.');
-    var t = w.streak >= 1 ? 'E' : Session.missType(q, chosen).t;
-    var picked = chosen >= 0 ? q.options[chosen] : '';
-    var item = { q: q, types: w.types.concat([t]), confusedWith: t === 'C' || t === 'V' ? picked : w.confusedWith };
+    var chosen = unmap(v, chosen0);
+    var t = w.streak >= 1 ? 'E' : Session.missType(orig, chosen).t;
+    var picked = chosen >= 0 ? orig.options[chosen] : '';
+    var item = { q: orig, types: w.types.concat([t]), confusedWith: t === 'C' || t === 'V' ? picked : w.confusedWith };
+    tutorReword(orig, w.cluster);
     return [typeChip(t, picked), Session.needsReteach(s) ? reteachCard(Coach.reteach(item, ui.docRec.clusters[w.cluster])) : null,
-      h('p.muted', 'It comes back once more at the end of this round.')];
+      explainMiss(orig, chosen, w.cluster), h('p.muted', 'It comes back once more at the end of this round.')];
   };
   return [backBar('Review round', function () { go({ type: 'toUnit' }); }),
-    mcqCard(q, meta, function () { go({ type: 'reviewAnswered', choice: ui.choice }); }, from ? 'From \u201C' + from + '\u201D' : '', null, after)];
+    mcqCard(q, meta, function () { go({ type: 'reviewAnswered', choice: unmap(v, ui.choice) }); }, from ? 'From \u201C' + from + '\u201D' : '', null, after)];
 }
 /* Text to the clipboard, and `status` says whether it got there. */
 function copyText(text, status, onFail) {
@@ -2879,6 +2892,56 @@ function aiQuestions(c) {
   }, function () { return []; });
 }
 
+/* ── CLAUDE WRITES, THE DEVICE TUTORS (ground.js variant, missExplain) ─────
+   A missed pack question comes back in new words: the model is handed the
+   pack's notes and writes the stem only; the options, the answer and every
+   reason stay Claude's, checked when the pack was imported. Kept in memory
+   by the question's words, so a review round asks it that way too. */
+function tutorNotes(i) {
+  var sec = Pack.sectionOf(ui.pack, i), c = cluster(i);
+  return { notes: Ground.packContext(sec), sources: [Ground.packContext(sec, 100000), c ? c.text : ''] };
+}
+function tutorReword(q, i) {
+  var key = q.question;
+  if (!aiOn() || q.by !== 'pack' || q.reworded || ui.tutor.v[key] || ui.tutor.asking[key]) return Promise.resolve(null);
+  var n = tutorNotes(i);
+  if (!n.notes) return Promise.resolve(null);
+  ui.tutor.asking[key] = true;
+  return aiEnsure().then(function () { return LLM.chat(LLM.SYSTEM, LLM.variantPrompt(q, n.notes), LLM.VARIANT_SCHEMA, 160); })
+    .then(function (t) { var r = Ground.variant(q, LLM.parseVariant(t), n.sources); ui.tutor.v[key] = r.q || { none: r.why }; },
+          function (e) { ui.tutor.v[key] = { none: (e && e.message) || String(e) }; })
+    .then(function () { delete ui.tutor.asking[key]; return ui.tutor.v[key]; });
+}
+/* How a question is asked is settled when it is first shown, and kept
+   while it is on screen: a rewording arriving after a tap must not move
+   the options under the answer already chosen. */
+function wordingFor(slot, q) {
+  if (ui.wording && ui.wording.slot === slot) return ui.wording.q;
+  var v = aiOn() ? ui.tutor.v[q.question] : null;
+  ui.wording = { slot: slot, q: v && v.question ? v : null };
+  return ui.wording.q;
+}
+function rewordTag() {
+  return h('span.tag.ai-tag', { id: 'reworded-tag' }, '\u2728 In new words, on this device \u00B7 the answer and its reasons are Claude\u2019s, checked against your book');
+}
+/* A choice made on a reworded question, as the original's option. */
+function unmap(v, chosen) { return v && chosen >= 0 ? v.map[chosen] : chosen; }
+/* "Explain my mistake": the model's words from the pack's reasons, each
+   sentence held to them and the book; nothing kept, nothing shown. */
+function explainMiss(q, chosen, i) {
+  if (!aiOn() || q.by !== 'pack') return null;
+  var key = q.question + '|' + chosen, got = ui.ai.miss[key];
+  if (!got) return h('div.row.ai-miss-row', button('\u2728 Explain my mistake', function () {
+    var n = tutorNotes(i);
+    aiJob('Explaining your mistake\u2026', function () { return LLM.chat(LLM.SYSTEM, LLM.missPrompt(q, chosen, n.notes), null, 200); }).then(function (t) {
+      if (t == null) return;
+      ui.ai.miss[key] = Ground.missExplain(t, q, chosen, n.sources); render();
+    });
+  }, 'quiet', { id: 'ai-miss-go' }), ui.ai.busy ? h('span.muted', { role: 'status' }, ui.ai.busy) : null);
+  return h('div.ai-miss', { id: 'ai-miss' }, got.kept.length ? [got.kept.map(function (t) { return h('p', t); }), aiNote(got.kept, got.dropped.length)]
+    : h('p.muted', { id: 'ai-miss-dropped' }, 'Its explanation was not shown: ' + got.why + '. The reasons above are Claude\u2019s, checked against your book.'));
+}
+
 /* ── ASK YOUR BOOK ───────────────────────────────────────────────────────── */
 /* Built once per set of units: over a whole book it reads every sentence. */
 /* One build at a time: opening the Coach and asking at once used to start
@@ -3426,7 +3489,7 @@ function aiSettingsCard() {
     return h('option', { value: m.id, selected: m.id === c.model }, m.label + ' — about ' + (m.mb >= 1000 ? (m.mb / 1000).toFixed(1) + ' GB' : m.mb + ' MB') + ' · ' + m.licence);
   }));
   return h('div.card.settings.ai-card', { id: 'ai-card' }, h('h2', '✨ On-device AI tutor'),
-    h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. It also runs your Coach as an agent: it can use several of the Coach’s tools on your book before it answers, and what it says is checked against what they found. It needs no key and, once downloaded, no connection.'),
+    h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. With a study pack written with Claude, it works from Claude\u2019s notes: a pack question you missed comes back in new words (its answer and reasons still Claude\u2019s), and it can explain a mistake from Claude\u2019s reasons. It also runs your Coach as an agent: it can use several of the Coach’s tools on your book before it answers, and what it says is checked against what they found. It needs no key and, once downloaded, no connection.'),
     h('p', h('strong', 'It is not a source of facts. '), 'Every sentence it writes is checked against your book before you see it: no number and no disease, test or drug the book passage does not have, and a question is kept only when your book states its answer — and the book\u2019s own sentence is shown as the explanation. What fails the check is dropped and counted.'),
     h('label', 'Model', model),
     h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr; the model itself comes from Hugging Face through that engine, which does not check it against a hash, and is kept in this browser\u2019s cache.'),

@@ -1243,6 +1243,10 @@ main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation:
 .confuse-pair { margin: 0 0 .125rem; }
 .confuse-pair .vs { color: var(--muted); font-size: var(--t-meta); text-transform: uppercase; letter-spacing: .06em; }
 .why-not, .trap { margin-top: var(--s-2); }
+/* the on-device tutor's words on a mistake: set apart from Claude's reasons */
+.ai-miss-row { margin-top: var(--s-2); gap: var(--s-2); align-items: center; }
+.ai-miss { margin-top: var(--s-3); padding: var(--s-2) var(--s-3); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--accent-soft); }
+.ai-miss p { margin: 0 0 var(--s-1); }
 .why-all { margin-top: var(--s-2); }
 .why-all ul { margin: var(--s-2) 0 0; padding-left: 1.25rem; }
 .why-all li.right strong { color: var(--good); }

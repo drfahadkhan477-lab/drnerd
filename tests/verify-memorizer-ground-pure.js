@@ -89,6 +89,81 @@ head('a question: its answer is in the book, and the book explains it');
      JSON.stringify(good.q.options) === '["Calcific degeneration","Rheumatic fever","Endocarditis","Radiation"]' && good.q.answer === 0);
 }
 
+head('the study pack as notes for the on-device model');
+{
+  const sec = { lesson: {
+    overview: 'Diuretics reduce preload by lowering circulating volume.', mechanism: 'Excessive preload raises venous pressure, which leads to oedema of the lungs.',
+    flags: { mechanism: 'a number not in your book: 1' },
+    points: [{ text: 'Volume overload is sought when LVEDP is greater than 18 mmHg', page: 1 }, { text: 'Venous pressure above 99 mmHg causes oedema', page: 1, flag: 'a number not in your book: 99' }],
+    pearls: [{ text: 'A normal LVEDP is 8 to 12 mmHg.', page: 1 }],
+    distinctions: [{ a: 'Volume overload', b: 'a stiff ventricle', how: 'a normal pressure does not exclude a stiff ventricle', page: 1 }] } };
+  const ctx = G.packContext(sec);
+  ok('the notes are what passed the book check — the overview, the points, the pearls, the pairs', /Diuretics reduce preload/.test(ctx) && /greater than 18 mmHg/.test(ctx) &&
+     /normal LVEDP is 8 to 12/.test(ctx) && /Volume overload vs a stiff ventricle/.test(ctx), ctx);
+  ok('and nothing flagged: not the point with a number the book lacks, not a flagged mechanism', !/99/.test(ctx) && !/Excessive preload/.test(ctx), ctx);
+  ok('cut to its word budget, whole lines only', G.packContext(sec, 12).split('\n').length === 1 && G.packContext(sec, 12).split(/\s+/).length <= 13, G.packContext(sec, 12));
+  ok('no pack, no notes', G.packContext(null) === '');
+}
+
+head('a pack question asked in new words: only the stem is the model’s');
+{
+  const Q = { question: 'Which LVEDP should prompt a search for volume overload?', quote: '', options: ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', '4 mmHg'], answer: 2,
+    explain: 'An LVEDP greater than 18 mmHg should prompt a search for volume overload.', page: 1,
+    why: ['8 is inside the normal range.', '12 is the top of normal.', '', '4 is below normal.'], trap: 'the normal range taken for the threshold', by: 'pack' };
+  const SRC = ['A normal LVEDP is 8 to 12 mmHg. An LVEDP greater than 18 mmHg should prompt a search for volume overload. Diuretics reduce preload.'];
+  const good = G.variant(Q, 'A breathless patient has an LVEDP measured. At what LVEDP should you search for volume overload?', SRC);
+  ok('a new wording of the same question is kept', !!good.q, good.why);
+  const v = good.q || { options: [], why: [], map: [] };
+  ok('its answer is the same option, moved: every option has a new place', v.options[v.answer] === 'Greater than 18 mmHg' && v.answer !== Q.answer &&
+     v.options.every((o, i) => o !== Q.options[i]), JSON.stringify(v.options));
+  ok('each option keeps its own reason, and the map leads back to the original', v.options.every((o, i) => v.why[i] === Q.why[Q.options.indexOf(o)] && Q.options[v.map[i]] === o), JSON.stringify(v.why));
+  ok('the explanation, page and trap stay the pack’s; the quote goes; it says it was reworded', v.explain === Q.explain && v.page === 1 && v.trap === Q.trap && v.quote === '' && v.reworded === true && v.by === 'pack');
+  ok('the same wording is laid out the same way every time', JSON.stringify(G.variant(Q, 'A breathless patient has an LVEDP measured. At what LVEDP should you search for volume overload?', SRC).q.options) === JSON.stringify(v.options));
+  const why = stem => G.variant(Q, stem, SRC).why;
+  ok('a number neither the notes nor the book have is dropped', /a number not in the book: 25/.test(why('After 25 minutes of breathlessness, which LVEDP should prompt a search for volume overload?')),
+     why('After 25 minutes of breathlessness, which LVEDP should prompt a search for volume overload?'));
+  ok('a drug the book never names is dropped', /names something/.test(why('On digoxin, which LVEDP should prompt a search for volume overload?')), why('On digoxin, which LVEDP should prompt a search for volume overload?'));
+  ok('a question that asks something else is dropped', /no longer asks the same thing/.test(why('What do diuretics reduce in a breathless patient?')), why('What do diuretics reduce in a breathless patient?'));
+  ok('a "not" the original lacks is dropped — it turns the question inside out', /added a "not"/.test(why('Which LVEDP should not prompt a search for volume overload?')));
+  const NQ = Object.assign({}, Q, { question: 'Which LVEDP should NOT prompt a search for volume overload?', options: ['Greater than 18 mmHg', '8 mmHg', '12 mmHg', '4 mmHg'], answer: 1 });
+  ok('and a "not" the original has must stay', /dropped the original’s "not"/.test(G.variant(NQ, 'At which LVEDP should you search for volume overload?', SRC).why));
+  ok('a stem that gives the answer away is dropped', why('Is an LVEDP greater than 18 mmHg the one that should prompt a search for volume overload?') === 'it gives the answer away');
+  ok('by its number alone', why('Past 18, which LVEDP reading should prompt a search for volume overload?') === 'it gives the answer away',
+     why('Past 18, which LVEDP reading should prompt a search for volume overload?'));
+  const Q2 = { question: 'What do diuretics reduce?', options: ['Afterload', 'Preload', 'Contractility', 'Heart rate'], answer: 1, explain: 'Diuretics reduce preload by lowering circulating volume.', why: [], trap: '' };
+  ok('or by its words alone', G.variant(Q2, 'By lowering circulating volume, diuretics reduce which load, the preload?', SRC).why === 'it gives the answer away' &&
+     !!G.variant(Q2, 'By lowering circulating volume, what do diuretics reduce?', SRC).q, G.variant(Q2, 'By lowering circulating volume, diuretics reduce which load, the preload?', SRC).why);
+  ok('and so is the original again', why('Which LVEDP should prompt a search for volume overload?') === 'the same words as the original');
+}
+
+head('a mistake explained in the model’s words, from the pack’s reasons');
+{
+  const Q = { question: 'Which LVEDP should prompt a search for volume overload?', options: ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', '4 mmHg'], answer: 2,
+    explain: 'An LVEDP greater than 18 mmHg should prompt a search for volume overload.', why: ['8 mmHg is inside the normal range of 8 to 12.', '', '', ''], trap: 'the normal range taken for the threshold' };
+  const r = G.missExplain('You picked 8 mmHg, but that is still a normal pressure. Only an LVEDP greater than 18 mmHg should make you look for volume overload. ' +
+    'Give 40 mg of furosemide. 8 mmHg is the correct answer here.', Q, 0, ['Diuretics reduce preload.']);
+  ok('its sentences that say what the pack says, in its own words, are kept', r.kept.length === 2 && /still a normal pressure/.test(r.kept[0]) && /greater than 18 mmHg/.test(r.kept[1]), JSON.stringify(r.kept));
+  const w = t => (r.dropped.find(d => d.text.indexOf(t) === 0) || {}).why || '';
+  ok('a dose it made up is dropped', /a number not in the book: 40/.test(w('Give 40 mg')), w('Give 40 mg'));
+  ok('a sentence that calls the option chosen right is dropped', w('8 mmHg is the correct') === 'it calls the option chosen right', w('8 mmHg is the correct'));
+  ok('and "8 mmHg is not the correct answer" is not taken for one', G.missExplain('8 mmHg is not the correct answer. The answer is greater than 18 mmHg.', Q, 0, []).kept.length === 2);
+  const none = G.missExplain('The normal range is the trap in this question.', Q, 0, []);
+  ok('what never says what the answer is, is not shown at all', none.kept.length === 0 && none.why === 'it never says what the answer is', JSON.stringify(none));
+  ok('"not sure" is explained too: the answer, with no option to set right', G.missExplain('An LVEDP greater than 18 mmHg should prompt a search for volume overload.', Q, -1, []).kept.length === 1);
+}
+
+head('the prompts for them: the notes in, words only out');
+{
+  const L = require(path.join(ROOT, 'memorizer', 'src', 'llm.js'));
+  const Q = { question: 'Which LVEDP should prompt a search?', options: ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', '4 mmHg'], answer: 2, explain: 'Greater than 18 mmHg.', why: ['Normal.', '', '', ''], trap: 'the normal range' };
+  const vp = L.variantPrompt(Q, '- NOTE ONE'), mp = L.missPrompt(Q, 0, '- NOTE ONE');
+  ok('both carry the pack’s notes and the question', /NOTE ONE/.test(vp) && /NOTE ONE/.test(mp) && /Which LVEDP should prompt a search\?/.test(vp) && /Which LVEDP/.test(mp));
+  ok('the explanation is asked with the answer, the choice, its reason and the trap', /The student chose: 8 mmHg/.test(mp) && /The answer is: Greater than 18 mmHg/.test(mp) &&
+     /Why their choice is wrong: Normal\./.test(mp) && /The trap: the normal range/.test(mp));
+  ok('the rewording is asked as JSON, and read back from a reply that wraps it', L.parseVariant('Sure! {"question": "At what LVEDP?"} Hope it helps') === 'At what LVEDP?' &&
+     L.parseVariant('no json') === '' && L.VARIANT_SCHEMA.required[0] === 'question');
+}
+
 head('sentences');
 {
   ok('split at a full stop before a capital, not inside "e.g." or a decimal', JSON.stringify(G.sentencesOf('A dose of 2.5 mg, e.g. daily. Then stop. 3 days later, recheck.')) ===
