@@ -1488,7 +1488,7 @@ function teachAi(got) {
     a.covered.filter(function (i) { return a.quotes[i] && got.r.missed.indexOf(i) !== -1; }).length ? h('ul.teach-ai-covered', a.covered.filter(function (i) { return a.quotes[i] && got.r.missed.indexOf(i) !== -1; }).map(function (i) {
       return h('li', h('span.why-label', '\u2713 In your own words: '), '\u201C' + a.quotes[i] + '\u201D \u2014 ', marked(got.points[i].text));
     })) : null,
-    a.missed.length ? h('p.muted', 'Still left out: ' + a.missed.map(function (i) { return got.points[i].text; }).join('; ') + '.') : null,
+    a.missed.length ? h('p.muted', { id: 'teach-ai-missed' }, 'Still left out: ' + a.missed.map(function (i) { return String(got.points[i].text).replace(/[.\s]+$/, ''); }).join('; ') + '.') : null,
     h('p.muted.ai-label', { id: 'teach-ai-note' }, 'A verdict counts only with your own words to show for it' +
       (a.dropped.length ? ' \u2014 ' + a.dropped.length + ' of its verdicts set aside' : '') + '.'));
 }

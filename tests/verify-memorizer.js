@@ -2628,12 +2628,12 @@ function kindOf(user) {
         if (/Rewrite the question/.test(u)) out = JSON.stringify({ question: a.stem });
         else if (/explain why/.test(u)) out = 'You picked 8 mmHg, but that is still a normal pressure. Only an LVEDP greater than 18 mmHg should make you look for volume overload. Give 40 mg of furosemide.';
         else if (/Mark the student/.test(u)) out = JSON.stringify({ points: [
-          { n: nOf(/^\d+\. Diuretics/), verdict: 'covered', quote: 'Water pills lower preload by taking volume off the circulation' },
+          { n: nOf(/^\d+\. Diuretics/), verdict: 'covered', quote: 'Water pills take fluid off the circulation' },
           { n: nOf(/Excessive preload raises venous pressure/), verdict: 'wrong', quote: 'excess preload lowers venous pressure' },
           { n: nOf(/Volume overload/), verdict: 'covered', quote: 'an LVEDP over 18 means overload' }] });
         else if (/ONE new "why" or "how" question/.test(u)) out = window.__follow++ === 0
           ? JSON.stringify({ question: a.follow, answer: 'Excessive preload raises venous pressure, which leads to oedema of the lungs.' })
-          : JSON.stringify({ question: 'Why is a larger dose sometimes needed?', answer: 'Give 40 mg of furosemide to lower preload.' });
+          : JSON.stringify({ question: 'Why are diuretics given when preload is too high?', answer: 'Give 40 mg of furosemide to lower preload.' });
         return { choices: [{ message: { content: out } }] };
       } } } }, 'stub');
       Memorizer.render();
@@ -2669,7 +2669,7 @@ function kindOf(user) {
     ok('a pack\u2019s teach-back is scored against its rubric, pearls and mechanism included', rub.rubric > rub.points &&
        new RegExp('You covered \\d+ of ' + rub.rubric + ' key points').test(await text(p4, '#teach-result')), JSON.stringify(rub) + ' ' + (await text(p4, '#teach-result')).slice(0, 60));
     /* marked by the on-device model: a point in other words counted, one said backwards caught, a verdict on words never said set aside */
-    const SAID = 'Water pills lower preload by taking volume off the circulation. Excess preload lowers venous pressure.';
+    const SAID = 'Water pills take fluid off the circulation, so the ventricle fills less. Excess preload lowers venous pressure.';
     await p4.fill('#teach-text', SAID);
     await p4.locator('#teach-check').click();
     await p4.waitForFunction(s => Memorizer.ui.teach && Memorizer.ui.teach.said === s, SAID, T);
@@ -2679,9 +2679,11 @@ function kindOf(user) {
     const mk = await p4.evaluate(() => ({ all: (document.querySelector('#teach-ai-result') || {}).textContent || '', wrong: (document.querySelector('.teach-ai-wrong') || {}).textContent || '',
       covered: (document.querySelector('.teach-ai-covered') || {}).textContent || '', note: (document.querySelector('#teach-ai-note') || {}).textContent || '',
       wordsHad: Memorizer.ui.teach.r.covered.length }));
-    ok('a point said in other words counts, shown with the student’s own words', /In your own words: “Water pills lower preload by taking volume off the circulation”/.test(mk.covered) && /Diuretics/.test(mk.covered), JSON.stringify(mk));
+    ok('a point said in other words counts, shown with the student’s own words', /In your own words: “Water pills take fluid off the circulation”/.test(mk.covered) && /Diuretics/.test(mk.covered), JSON.stringify(mk));
     ok('a point said backwards is caught: what was said beside what the lesson says', /You said: “excess preload lowers venous pressure”/.test(mk.wrong) && /The lesson says: Excessive preload raises venous pressure/.test(mk.wrong), mk.wrong);
     ok('a verdict resting on words never said is set aside, and counted', /1 of its verdicts set aside/.test(mk.note) && !/18 means overload/.test(mk.all), mk.note);
+    const leftOut = await p4.evaluate(() => (document.querySelector('#teach-ai-missed') || {}).textContent || '');
+    ok('what is still left out is listed once each, one full stop at the end', /^Still left out: .+[^.]\.$/.test(leftOut) && !/\.[;.]/.test(leftOut), leftOut);
     ok('the count is the points covered, and says how many were said wrongly', new RegExp('Marked on this device: ' + (mk.wordsHad + 1) + ' of ' + rub.rubric + ' covered, 1 said wrongly').test(mk.all), mk.all.slice(0, 120));
 
     /* PHASE 4: rounds from the pack's case; focus; the dock's next thing. */
