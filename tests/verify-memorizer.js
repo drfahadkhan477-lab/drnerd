@@ -2612,12 +2612,53 @@ function kindOf(user) {
     ok('the section on one screen: its points, the pair confused, its pearl', /Key points/i.test(rsText) && /Volume overload vs a stiff ventricle/i.test(rsText) &&
        /greater than 18 mmHg should prompt/.test(rsText), rsText.slice(0, 200));
     await p4.locator('#review-close').click();
+    /* CLAUDE WRITES, THE DEVICE TUTORS: from here the on-device AI is on,
+       a stand-in model answering each job the way a small model does —
+       faithfully in part, and making something up in part. */
+    const Q1 = 'Which LVEDP should prompt a search for volume overload?';
+    const NEW1 = 'A breathless patient has an LVEDP measured. At what LVEDP should you search for volume overload?';
+    const FOLLOW1 = 'Why does too much preload end in oedema of the lungs?';
+    await p4.evaluate(a => {
+      window.__tut = []; window.__follow = 0;
+      MemLLM.saveConfig({ on: true, model: 'stub' });
+      MemLLM.useEngine({ chat: { completions: { create: async req => {
+        const u = req.messages[1].content; window.__tut.push(u);
+        let out = '';
+        const nOf = re => { const l = u.split('\n').find(x => /^\d+\. /.test(x) && re.test(x)); return l ? +l.split('.')[0] : 0; };
+        if (/Rewrite the question/.test(u)) out = JSON.stringify({ question: a.stem });
+        else if (/explain why/.test(u)) out = 'You picked 8 mmHg, but that is still a normal pressure. Only an LVEDP greater than 18 mmHg should make you look for volume overload. Give 40 mg of furosemide.';
+        else if (/Mark the student/.test(u)) out = JSON.stringify({ points: [
+          { n: nOf(/^\d+\. Diuretics/), verdict: 'covered', quote: 'Water pills lower preload by taking volume off the circulation' },
+          { n: nOf(/Excessive preload raises venous pressure/), verdict: 'wrong', quote: 'excess preload lowers venous pressure' },
+          { n: nOf(/Volume overload/), verdict: 'covered', quote: 'an LVEDP over 18 means overload' }] });
+        else if (/ONE new "why" or "how" question/.test(u)) out = window.__follow++ === 0
+          ? JSON.stringify({ question: a.follow, answer: 'Excessive preload raises venous pressure, which leads to oedema of the lungs.' })
+          : JSON.stringify({ question: 'Why is a larger dose sometimes needed?', answer: 'Give 40 mg of furosemide to lower preload.' });
+        return { choices: [{ message: { content: out } }] };
+      } } } }, 'stub');
+      Memorizer.render();
+    }, { stem: NEW1, follow: FOLLOW1 });
     const mapN = await p4.evaluate(() => MemSheet.clinicalMap(Memorizer.ui.docRec.clusters[0]).count);
     ok('the clinical map is shown when the section names two things or more', (await p4.locator('#clinical-map').count()) === (mapN >= 2 ? 1 : 0), 'names ' + mapN);
     ok('why is asked down the chain, each answer hidden', await p4.locator('#socratic .soc-answer').count() === 0 && await p4.locator('#soc-show').count() === 1);
     await p4.locator('#soc-show').click();
     await p4.waitForFunction(() => document.querySelectorAll('#socratic .soc-answer').length === 1, null, T);
     ok('and shown one link at a time', await p4.locator('#socratic .soc-answer').count() === 1);
+    /* a Socratic follow-up from the pack's notes, held to them */
+    const hasFollow = await p4.locator('#soc-ai-go').count() === 1;
+    ok('with the AI on, a pack lesson offers a follow-up question from Claude’s notes', hasFollow);
+    if (hasFollow) { await p4.locator('#soc-ai-go').click(); await p4.locator('#soc-ai-list li').first().waitFor(T).catch(() => {}); }
+    const f1 = await p4.evaluate(() => [...document.querySelectorAll('#soc-ai-list li')].map(li => ({ ask: (li.querySelector('.soc-ask') || {}).textContent || '', answered: !!li.querySelector('.soc-answer') })));
+    ok('it asks a why the notes answer, its answer hidden', f1.length === 1 && f1[0].ask === '✨ ' + FOLLOW1 && !f1[0].answered, JSON.stringify(f1));
+    if (f1.length) await p4.locator('#soc-ai-show-0').click();
+    const f1a = f1.length ? await text(p4, '#soc-ai-list') : '';
+    ok('and shows it on request: the notes’ own sentence, labelled', /raises venous pressure, which leads to oedema of the lungs/.test(f1a) && /From Claude’s notes, checked against your book/.test(f1a), f1a);
+    if (hasFollow) { await p4.locator('#soc-ai-go').click(); await p4.locator('#soc-ai-dropped').waitFor(T).catch(() => {}); }
+    const f2 = await p4.evaluate(() => ({ dropped: (document.querySelector('#soc-ai-dropped') || {}).textContent || '', n: document.querySelectorAll('#soc-ai-list li').length,
+      sent: window.__tut.filter(u => /ONE new "why"/.test(u)) }));
+    ok('a follow-up whose answer has a dose the notes lack is not asked, and says why', /not asked: the answer a number not in the notes: 40/.test(f2.dropped) && f2.n === 1, JSON.stringify(f2.dropped));
+    ok('the model was handed the notes, and told what was asked already', f2.sent.length === 2 && /Diuretics reduce preload by lowering circulating volume/.test(f2.sent[0]) && !/99/.test(f2.sent[0]) &&
+       f2.sent[1].indexOf('Already asked:\n- ' + FOLLOW1) !== -1, JSON.stringify(f2.sent.map(x => x.slice(-260))));
     /* PHASE 3: a pack's teach-back is scored against its rubric — the
        points, and the pearls and mechanism too (study.js rubricOf). */
     await p4.fill('#teach-text', 'Diuretics reduce preload by lowering circulating volume.');
@@ -2627,6 +2668,21 @@ function kindOf(user) {
       return { points: pts.length, rubric: MemStudy.rubricOf(pts, L).length }; });
     ok('a pack\u2019s teach-back is scored against its rubric, pearls and mechanism included', rub.rubric > rub.points &&
        new RegExp('You covered \\d+ of ' + rub.rubric + ' key points').test(await text(p4, '#teach-result')), JSON.stringify(rub) + ' ' + (await text(p4, '#teach-result')).slice(0, 60));
+    /* marked by the on-device model: a point in other words counted, one said backwards caught, a verdict on words never said set aside */
+    const SAID = 'Water pills lower preload by taking volume off the circulation. Excess preload lowers venous pressure.';
+    await p4.fill('#teach-text', SAID);
+    await p4.locator('#teach-check').click();
+    await p4.waitForFunction(s => Memorizer.ui.teach && Memorizer.ui.teach.said === s, SAID, T);
+    const hasMark = await p4.locator('#teach-ai').count() === 1;
+    ok('with the AI on, a teach-back can be marked by the on-device model', hasMark);
+    if (hasMark) { await p4.locator('#teach-ai').click(); await p4.locator('#teach-ai-result').waitFor(T).catch(() => {}); }
+    const mk = await p4.evaluate(() => ({ all: (document.querySelector('#teach-ai-result') || {}).textContent || '', wrong: (document.querySelector('.teach-ai-wrong') || {}).textContent || '',
+      covered: (document.querySelector('.teach-ai-covered') || {}).textContent || '', note: (document.querySelector('#teach-ai-note') || {}).textContent || '',
+      wordsHad: Memorizer.ui.teach.r.covered.length }));
+    ok('a point said in other words counts, shown with the student’s own words', /In your own words: “Water pills lower preload by taking volume off the circulation”/.test(mk.covered) && /Diuretics/.test(mk.covered), JSON.stringify(mk));
+    ok('a point said backwards is caught: what was said beside what the lesson says', /You said: “excess preload lowers venous pressure”/.test(mk.wrong) && /The lesson says: Excessive preload raises venous pressure/.test(mk.wrong), mk.wrong);
+    ok('a verdict resting on words never said is set aside, and counted', /1 of its verdicts set aside/.test(mk.note) && !/18 means overload/.test(mk.all), mk.note);
+    ok('the count is the points covered, and says how many were said wrongly', new RegExp('Marked on this device: ' + (mk.wordsHad + 1) + ' of ' + rub.rubric + ' covered, 1 said wrongly').test(mk.all), mk.all.slice(0, 120));
 
     /* PHASE 4: rounds from the pack's case; focus; the dock's next thing. */
     await p4.locator('#rounds-show').click();
@@ -2667,27 +2723,13 @@ function kindOf(user) {
     ok('and while a question is open the dock offers no shortcut past it', await p4.locator('#dock-context').count() === 0);
     ok('nothing went to an AI provider', stub.requests.length === aiBefore, `${stub.requests.length - aiBefore} requests`);
 
-    /* CLAUDE WRITES, THE DEVICE TUTORS. With the on-device AI on (a
-       stand-in model here), a missed pack question comes back in new words
-       and a mistake can be explained — the model handed the pack's notes,
-       and what it writes held to them and the book. */
-    const Q1 = 'Which LVEDP should prompt a search for volume overload?';
-    const NEW1 = 'A breathless patient has an LVEDP measured. At what LVEDP should you search for volume overload?';
-    await p4.evaluate(stem => {
-      window.__tut = [];
-      MemLLM.saveConfig({ on: true, model: 'stub' });
-      MemLLM.useEngine({ chat: { completions: { create: async req => {
-        const u = req.messages[1].content; window.__tut.push(u);
-        let out = '';
-        if (/Rewrite the question/.test(u)) out = JSON.stringify({ question: stem });
-        else if (/explain why/.test(u)) out = 'You picked 8 mmHg, but that is still a normal pressure. Only an LVEDP greater than 18 mmHg should make you look for volume overload. Give 40 mg of furosemide.';
-        return { choices: [{ message: { content: out } }] };
-      } } } }, 'stub');
-      Memorizer.render();
-    }, NEW1);
+    /* With the on-device AI on (the stand-in model set up above), a missed
+       pack question comes back in new words and a mistake can be explained
+       — the model handed the pack's notes, and what it writes held to them
+       and the book. */
     /* precondition: the rewording has come back, kept or not */
     await p4.waitForFunction(k => { const v = Memorizer.ui.tutor.v[k]; return !!(v && (v.question || v.none)); }, Q1, T).catch(() => {});
-    const tut = await p4.evaluate(k => ({ v: Memorizer.ui.tutor.v[k] || {}, sent: window.__tut }), Q1);
+    const tut = await p4.evaluate(k => ({ v: Memorizer.ui.tutor.v[k] || {}, sent: window.__tut.filter(u => /Rewrite the question/.test(u)) }), Q1);
     ok('a missed pack question is asked in new words by the on-device model, and the new wording is kept', tut.v.question === NEW1 && tut.v.reworded === true, JSON.stringify(tut.v).slice(0, 200));
     ok('the model is handed the pack’s notes — what passed the book check, and not the point flagged for a number the book lacks',
        tut.sent.length >= 1 && /Diuretics reduce preload by lowering circulating volume/.test(tut.sent[0]) && /greater than 18 mmHg/.test(tut.sent[0]) && !/99/.test(tut.sent[0]), (tut.sent[0] || '').slice(0, 300));

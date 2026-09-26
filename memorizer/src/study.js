@@ -415,6 +415,59 @@ function teachBack(said, points, sectionText) {
   return { covered: covered, missed: missed, wrong: wrong, score: n ? covered.length / n : 0 };
 }
 
+/* ── teach it back, marked by the on-device model ─────────────────────────
+   The word check above counts a point as said when its words are said, so
+   it misses a point put in other words and passes one said backwards
+   ("preload lowers venous pressure"). With the on-device AI on, the model
+   marks each point covered, wrong or left out, and for covered or wrong
+   must copy the student's own words that show it. The model is a judge
+   here, not a writer, and is held to what was said:
+     · a verdict stands only when its quote is in the explanation, word for
+       word (spacing and case aside), three words or more;
+     · a covered point's quote may carry no number the point does not have;
+     · it may add what the word check missed, and mark wrong what the word
+       check passed — with the quote to show for it; a point it merely calls
+       left out, that the word check found, stays covered.
+   reply: the model's JSON; points: the rubric's texts; said: the
+   explanation; builtin: teachBack's result. */
+function normWords(t) { return String(t || '').toLowerCase().replace(/[^a-z0-9%.]+/g, ' ').replace(/\.(?!\d)/g, ' ').replace(/\s+/g, ' ').trim(); }
+function teachJudge(reply, points, said, builtin) {
+  var list = [];
+  try {
+    var t = String(reply || ''), a = t.indexOf('{'), b = t.lastIndexOf('}');
+    var v = JSON.parse(a >= 0 && b > a ? t.slice(a, b + 1) : t);
+    list = v && Array.isArray(v.points) ? v.points : [];
+  } catch (_) { list = []; }
+  var hay = ' ' + normWords(said) + ' ', seen = {}, verdict = {}, quotes = {}, dropped = [];
+  var nums = function (x) { return (String(x || '').match(/\d+(?:[.,]\d+)?/g) || []).map(function (n) { return n.replace(',', '.'); }); };
+  list.forEach(function (e) {
+    var n = e && e.n, i = n - 1;
+    if (typeof n !== 'number' || Math.floor(n) !== n || i < 0 || i >= points.length) { dropped.push({ n: n, why: 'no such point' }); return; }
+    if (seen[i]) { dropped.push({ n: n, why: 'marked twice' }); return; }
+    seen[i] = true;
+    var vd = e.verdict;
+    if (vd !== 'covered' && vd !== 'wrong' && vd !== 'missed') { dropped.push({ n: n, why: 'no verdict' }); return; }
+    if (vd === 'missed') { verdict[i] = 'missed'; return; }
+    var q = normWords(e.quote);
+    if (q.split(' ').length < 3 || hay.indexOf(' ' + q + ' ') === -1) { dropped.push({ n: n, why: 'its quote is not in what you said' }); return; }
+    if (vd === 'covered') {
+      var pn = nums(points[i]);
+      var extra = nums(e.quote).filter(function (x) { return pn.indexOf(x) === -1; });
+      if (extra.length) { dropped.push({ n: n, why: 'a number the point does not have: ' + extra[0] }); return; }
+    }
+    verdict[i] = vd; quotes[i] = String(e.quote).trim();
+  });
+  var was = {};
+  ((builtin && builtin.covered) || []).forEach(function (i) { was[i] = true; });
+  var covered = [], missed = [], wrong = [];
+  points.forEach(function (_, i) {
+    if (verdict[i] === 'wrong') wrong.push({ i: i, quote: quotes[i] });
+    else if (verdict[i] === 'covered' || was[i]) covered.push(i);
+    else missed.push(i);
+  });
+  return { covered: covered, missed: missed, wrong: wrong, quotes: quotes, dropped: dropped, score: points.length ? covered.length / points.length : 0 };
+}
+
 /* ── where each sentence of the model's answer came from ──────────────────
    kept: ground.js's sentences, each with the step numbers it cites. steps:
    the loop's [{ plan, turn }]. For each cited step, the book's section and
@@ -686,7 +739,7 @@ var MemStudy = {
   noteKey: noteKey, toggleMark: toggleMark, markCard: markCard, TABLE_ROUND: TABLE_ROUND, tableRound: tableRound,
   SOLID: SOLID, FADING: FADING, masteryMap: masteryMap, IDLE_MS: IDLE_MS, logActivity: logActivity, weekly: weekly, weekOf: weekOf, streak: streak,
   MONTHS: MONTHS, parseExamDate: parseExamDate, REVIEW_SHARE: REVIEW_SHARE, studyPlan: studyPlan,
-  TEACH_SHARE: TEACH_SHARE, teachBack: teachBack, claimSources: claimSources,
+  TEACH_SHARE: TEACH_SHARE, teachBack: teachBack, teachJudge: teachJudge, claimSources: claimSources,
   addDays: addDays, daysFrom: daysFrom,
   socratic: socratic, rubricOf: rubricOf, TYPE_RANK: TYPE_RANK, reviewOrder: reviewOrder, EXAM_PACE_S: EXAM_PACE_S, examClock: examClock, contextAction: contextAction,
   BLANK: BLANK, NUMBER: NUMBER, CLOZE_WORDS: CLOZE_WORDS, CLOZE_PER_SECTION: CLOZE_PER_SECTION, clozeOf: clozeOf, clozeCards: clozeCards,

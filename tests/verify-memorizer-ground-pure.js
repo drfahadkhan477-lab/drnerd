@@ -164,6 +164,32 @@ head('the prompts for them: the notes in, words only out');
      L.parseVariant('no json') === '' && L.VARIANT_SCHEMA.required[0] === 'question');
 }
 
+head('a Socratic follow-up from the pack’s notes');
+{
+  const notes = '- Diuretics reduce preload by lowering circulating volume.\n- Excessive preload raises venous pressure, which leads to oedema of the lungs.\n- A normal LVEDP is 8 to 12 mmHg.';
+  const book = ['Diuretics reduce preload by lowering circulating volume. A normal LVEDP is 8 to 12 mmHg.'];
+  const good = G.followUp('Why does too much preload end in oedema of the lungs?', 'Excessive preload raises venous pressure, which leads to oedema of the lungs.', notes, book, []);
+  ok('a why-question the notes answer, with its answer in the notes’ words, is asked', !!good.q && good.q.answer === 'Excessive preload raises venous pressure, which leads to oedema of the lungs.', good.why);
+  const why = (q, a, asked) => G.followUp(q, a, notes, book, asked || []).why;
+  ok('an answer with a number the notes lack is dropped', why('What is a raised LVEDP?', 'A raised LVEDP is above 25 mmHg.') === 'the answer a number not in the notes: 25', why('What is a raised LVEDP?', 'A raised LVEDP is above 25 mmHg.'));
+  ok('even one the book has: the answer is shown as the notes’', G.followUp('What is a raised LVEDP?', 'A raised LVEDP is above 15 mmHg.', notes, ['A normal LVEDP is 8 to 12 mmHg; a raised LVEDP is above 15 mmHg.'], []).why ===
+     'the answer a number not in the notes: 15');
+  ok('an answer mostly not the notes’ words is dropped', /the answer too little/.test(why('Why do diuretics help?', 'Diuretics make patients feel much better when walking upstairs.')),
+     why('Why do diuretics help?', 'Diuretics make patients feel much better when walking upstairs.'));
+  ok('a question naming a drug the notes and book lack is dropped', /the question names something/.test(why('Why is digoxin given with diuretics?', 'Diuretics reduce preload by lowering circulating volume.')));
+  ok('a statement is not a question', why('Tell me about preload.', 'Diuretics reduce preload by lowering circulating volume.') === 'it is not a question');
+  ok('a question that holds its own answer is dropped', why('Do diuretics reduce preload by lowering circulating volume?', 'Diuretics reduce preload by lowering circulating volume.') === 'the question holds its own answer');
+  ok('and one already asked is not asked again', why('Why does too much preload end in oedema of the lungs?', 'Excessive preload raises venous pressure, which leads to oedema of the lungs.',
+     ['why does too much preload end in oedema of the lungs']) === 'it was asked already');
+  const L = require(path.join(ROOT, 'memorizer', 'src', 'llm.js'));
+  const fp = L.followUpPrompt('- NOTE ONE', ['Why A?']);
+  ok('its prompt carries the notes and what was asked already, and its reply is read back', /NOTE ONE/.test(fp) && /Already asked:\n- Why A\?/.test(fp) &&
+     JSON.stringify(L.parseFollowUp('ok {"question": "Why?", "answer": "Because."}')) === '{"question":"Why?","answer":"Because."}' && L.parseFollowUp('nope').question === '');
+  const tp = L.teachPrompt(['Point one', 'Point two'], ' Said  it. ');
+  ok('the marking prompt numbers the points and quotes the explanation, and asks for the student’s own words', /1\. Point one\n2\. Point two/.test(tp) && /"Said it\."/.test(tp) && /copy the student’s own words/.test(tp) &&
+     JSON.stringify(L.TEACH_SCHEMA.properties.points.items.properties.verdict.enum) === '["covered","wrong","missed"]');
+}
+
 head('sentences');
 {
   ok('split at a full stop before a capital, not inside "e.g." or a decimal', JSON.stringify(G.sentencesOf('A dose of 2.5 mg, e.g. daily. Then stop. 3 days later, recheck.')) ===

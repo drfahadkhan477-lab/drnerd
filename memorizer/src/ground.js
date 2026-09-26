@@ -244,9 +244,31 @@ function missExplain(text, q, chosen, sources) {
   return { kept: kept, dropped: dropped, why: kept.length ? '' : (dropped[0] ? dropped[0].why : 'it said nothing') };
 }
 
+/* A follow-up asked from the pack's notes, Socratic: a "why" or "how"
+   question and its answer. The answer is held as a summary sentence is —
+   mostly the notes' own words, no number or named thing they lack — as it
+   is shown as the answer; the question may name nothing the notes and the
+   book lack, must be a question, must not hold its own answer, and must
+   not be one already asked. Returns { q: { question, answer }, why }. */
+function followUp(question, answer, notes, sources, asked) {
+  var qs = String(question || '').replace(/\s+/g, ' ').trim(), an = String(answer || '').replace(/\s+/g, ' ').trim();
+  if (qs.length < 10 || qs.length > 250 || !/\?$/.test(qs)) return { q: null, why: 'it is not a question' };
+  if (an.length < 10) return { q: null, why: 'it has no answer' };
+  var norm = function (t) { return String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+  if ((asked || []).some(function (a) { return norm(a) === norm(qs); })) return { q: null, why: 'it was asked already' };
+  var err = claimError(qs, [notes].concat(sources || []), 0);
+  if (err && !/too little|says nothing/.test(err)) return { q: null, why: 'the question ' + err };
+  var aerr = claimError(an, [notes], SUMMARY_SHARE);
+  /* held to the notes, and said so: a number the book has but the notes lack is still not the notes' */
+  if (aerr) return { q: null, why: 'the answer ' + aerr.replace('the book passage does not', 'the notes do not').replace(/the book\u2019s|the book's/, 'the notes\u2019').replace('the book', 'the notes') };
+  var qw = wordsOf(qs);
+  if (!wordsOf(an).some(function (w) { return qw.indexOf(w) === -1; })) return { q: null, why: 'the question holds its own answer' };
+  return { q: { question: qs, answer: an }, why: '' };
+}
+
 var MemGround = { SUMMARY_SHARE: SUMMARY_SHARE, numbersIn: numbersIn, claimError: claimError, sentencesOf: sentencesOf,
                   summary: summary, plain: plain, analogyError: analogyError, question: question,
-                  CONTEXT_WORDS: CONTEXT_WORDS, packContext: packContext, variant: variant, missExplain: missExplain };
+                  CONTEXT_WORDS: CONTEXT_WORDS, packContext: packContext, variant: variant, missExplain: missExplain, followUp: followUp };
 root.MemGround = MemGround;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemGround;
 })(typeof window !== 'undefined' ? window : this);

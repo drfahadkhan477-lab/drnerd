@@ -1461,11 +1461,36 @@ function teachCard(c, L) {
     got.r.wrong.length ? h('p.warn', { id: 'teach-wrong' }, 'You gave ' + got.r.wrong.join(', ') + ' — this section has no such number. Check it against the page.') : null,
     got.r.missed.length ? [h('p.muted', L.by === 'pack' ? 'What you left out, in the lesson\u2019s words:' : 'What you left out, in your book’s words:'), h('ul.teach-missed', got.r.missed.map(function (i) { return h('li', marked(got.points[i].text), ' ', page(got.points[i].page)); })),
       button('Make cards of what I left out', function () { teachCards(c, got); }, 'quiet', { id: 'teach-cards' })] : h('p', '✓ Everything the section’s key points say.'),
-    ui.teachMade != null ? h('p.muted', { id: 'teach-made' }, ui.teachMade + ' card' + (ui.teachMade === 1 ? '' : 's') + ' made, from tomorrow.') : null) : null;
+    ui.teachMade != null ? h('p.muted', { id: 'teach-made' }, ui.teachMade + ' card' + (ui.teachMade === 1 ? '' : 's') + ' made, from tomorrow.') : null,
+    teachAi(got)) : null;
   return h('div.card.teach-card', { id: 'teach-back' }, h('span.eyebrow', '🗣 Teach it back'),
     h('p.muted', 'Explaining it is how you find what you have not got yet. Say it or type it, then check it against the book.'),
     area, h('div.row', micButton(function (t) { ui.teachDraft = ((ui.teachDraft || '') + ' ' + t).trim(); render(); }, 'teach-mic'),
       button('Check my explanation', check, 'primary', { id: 'teach-check' })), res);
+}
+/* Marked by the on-device model (study.js teachJudge): each point covered,
+   wrong or left out, a verdict standing only on the student's own words. */
+function teachAi(got) {
+  if (!aiOn()) return null;
+  if (!got.ai) return h('div.row.teach-ai-row', button('\u2728 Mark it with the on-device AI', function () {
+    var texts = got.points.map(function (p) { return p.text; });
+    aiJob('Marking your explanation\u2026', function () { return LLM.chat(LLM.SYSTEM, LLM.teachPrompt(texts, got.said), LLM.TEACH_SCHEMA, 500); }).then(function (t) {
+      if (t == null) return;
+      got.ai = Study.teachJudge(t, texts, got.said, got.r); render();
+    });
+  }, 'quiet', { id: 'teach-ai' }), ui.ai.busy ? h('span.muted', { role: 'status' }, ui.ai.busy) : null);
+  var a = got.ai, n = got.points.length;
+  return h('div.teach-ai-result', { id: 'teach-ai-result' },
+    h('p', h('strong', '\u2728 Marked on this device: ' + a.covered.length + ' of ' + n + ' covered' + (a.wrong.length ? ', ' + a.wrong.length + ' said wrongly' : '') + '.')),
+    a.wrong.length ? h('ul.teach-ai-wrong', a.wrong.map(function (w) {
+      return h('li', h('span.why-label', '\u26A0 You said: '), '\u201C' + w.quote + '\u201D', h('br'), h('span.why-label', 'The lesson says: '), marked(got.points[w.i].text), ' ', page(got.points[w.i].page));
+    })) : null,
+    a.covered.filter(function (i) { return a.quotes[i] && got.r.missed.indexOf(i) !== -1; }).length ? h('ul.teach-ai-covered', a.covered.filter(function (i) { return a.quotes[i] && got.r.missed.indexOf(i) !== -1; }).map(function (i) {
+      return h('li', h('span.why-label', '\u2713 In your own words: '), '\u201C' + a.quotes[i] + '\u201D \u2014 ', marked(got.points[i].text));
+    })) : null,
+    a.missed.length ? h('p.muted', 'Still left out: ' + a.missed.map(function (i) { return got.points[i].text; }).join('; ') + '.') : null,
+    h('p.muted.ai-label', { id: 'teach-ai-note' }, 'A verdict counts only with your own words to show for it' +
+      (a.dropped.length ? ' \u2014 ' + a.dropped.length + ' of its verdicts set aside' : '') + '.'));
 }
 function teachCards(c, got) {
   var d = ui.docRec, ci = ui.state.section, from = Study.addDays(today(), 1), have = {};
@@ -1688,7 +1713,34 @@ function socraticCard(c, L, gl) {
       return h('li', h('p.soc-ask', st.ask), k < n ? h('p.soc-answer', marked(st.answer))
         : button('Show', function () { ui.soc.shown = k + 1; render(); }, 'quiet', { id: 'soc-show' }));
     })),
-    n >= sc.steps.length ? h('p.muted', { id: 'soc-done' }, 'That is the chain. Say it through once more without looking.') : null);
+    n >= sc.steps.length ? h('p.muted', { id: 'soc-done' }, 'That is the chain. Say it through once more without looking.') : null,
+    socraticAi(L));
+}
+/* Follow-ups from the pack's notes (ground.js followUp): a "why" or "how"
+   the notes answer, its answer hidden until asked for. */
+function socraticAi(L) {
+  if (!aiOn() || L.by !== 'pack') return null;
+  var i = ui.state.section, notes = Ground.packContext(Pack.sectionOf(ui.pack, i));
+  if (!notes) return null;
+  var soc = ui.soc;
+  soc.ai = soc.ai || [];
+  var ask = function () {
+    var asked = soc.ai.map(function (x) { return x.question; });
+    aiJob('Thinking of a follow-up\u2026', function () { return LLM.chat(LLM.SYSTEM, LLM.followUpPrompt(notes, asked), LLM.FOLLOW_SCHEMA, 200); }).then(function (t) {
+      if (t == null) return;
+      var f = LLM.parseFollowUp(t), r = Ground.followUp(f.question, f.answer, notes, [cluster(i) ? cluster(i).text : ''], asked);
+      if (r.q) { soc.ai.push({ question: r.q.question, answer: r.q.answer, shown: false }); soc.aiWhy = ''; } else soc.aiWhy = r.why;
+      render();
+    });
+  };
+  return h('div.soc-ai', { id: 'soc-ai' },
+    soc.ai.length ? h('ol.soc-steps.soc-ai-list', { id: 'soc-ai-list' }, soc.ai.map(function (x, k) {
+      return h('li', h('p.soc-ask', '\u2728 ' + x.question), x.shown ? [h('p.soc-answer', x.answer), h('p.muted.ai-label', 'From Claude\u2019s notes, checked against your book')]
+        : button('Show', function () { x.shown = true; render(); }, 'quiet', { id: 'soc-ai-show-' + k }));
+    })) : null,
+    soc.aiWhy ? h('p.muted', { id: 'soc-ai-dropped' }, 'Its question was not asked: ' + soc.aiWhy + '.') : null,
+    h('div.row', button(soc.ai.length ? '\u2728 Another follow-up' : '\u2728 Ask me a follow-up', ask, 'quiet', { id: 'soc-ai' + '-go' }),
+      ui.ai.busy ? h('span.muted', { role: 'status' }, ui.ai.busy) : null));
 }
 /* ROUNDS (phase 4): a pack's oral cases — the stem, the examiner's
    question, the model answer on request, and an honest "had it". */
@@ -3489,7 +3541,7 @@ function aiSettingsCard() {
     return h('option', { value: m.id, selected: m.id === c.model }, m.label + ' — about ' + (m.mb >= 1000 ? (m.mb / 1000).toFixed(1) + ' GB' : m.mb + ' MB') + ' · ' + m.licence);
   }));
   return h('div.card.settings.ai-card', { id: 'ai-card' }, h('h2', '✨ On-device AI tutor'),
-    h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. With a study pack written with Claude, it works from Claude\u2019s notes: a pack question you missed comes back in new words (its answer and reasons still Claude\u2019s), and it can explain a mistake from Claude\u2019s reasons. It also runs your Coach as an agent: it can use several of the Coach’s tools on your book before it answers, and what it says is checked against what they found. It needs no key and, once downloaded, no connection.'),
+    h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. With a study pack written with Claude, it works from Claude\u2019s notes: a pack question you missed comes back in new words (its answer and reasons still Claude\u2019s), it can explain a mistake from Claude\u2019s reasons, mark your teach-back point by point (a verdict only with your own words to show for it), and ask follow-up questions from Claude\u2019s notes. It also runs your Coach as an agent: it can use several of the Coach’s tools on your book before it answers, and what it says is checked against what they found. It needs no key and, once downloaded, no connection.'),
     h('p', h('strong', 'It is not a source of facts. '), 'Every sentence it writes is checked against your book before you see it: no number and no disease, test or drug the book passage does not have, and a question is kept only when your book states its answer — and the book\u2019s own sentence is shown as the explanation. What fails the check is dropped and counted.'),
     h('label', 'Model', model),
     h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr; the model itself comes from Hugging Face through that engine, which does not check it against a hash, and is kept in this browser\u2019s cache.'),

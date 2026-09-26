@@ -279,6 +279,19 @@ original. **Explain my mistake** asks the model why the answer is right and
 your choice is not, from Claude's reasons and the trap. Each sentence is held
 to those reasons and the book. A sentence that calls your choice right is
 dropped, and an explanation that never says what the answer is is not shown.
+**Teach-back, marked on the device.** The word check counts a key point as
+said when its words are said, so it misses a point put in other words and
+passes one said backwards. With the AI on, **Mark it with the on-device AI**
+has the model mark each point covered, wrong or left out. For covered or
+wrong it must copy your own words, and the verdict stands only if those
+words are in what you said. A covered quote may carry no number the point
+lacks, and "left out" cannot take away a point the word check found. What
+you said wrongly is shown beside what the lesson says. **Follow-up
+questions:** on a pack lesson, the Socratic card can ask a "why" or "how"
+from Claude's notes. Its answer is hidden until asked for and must be mostly
+the notes' own words, with no number or name they lack. A question that
+names what the notes and book lack, holds its own answer, or was asked
+already is not asked.
 
 **The Coach's own tools** also say why your misses happened — each by its
 error type, what that type means and its fix — show the cards due each day
