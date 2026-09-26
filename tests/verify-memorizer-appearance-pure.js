@@ -45,10 +45,10 @@ const lum = hex => {
 const parseRgba = s => { const m = /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/.exec(s); return m ? [+m[1], +m[2], +m[3], +m[4]] : [0, 0, 0, -1]; };
 const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
-head('the themes: the owner’s two, Memorizer’s Paper and Neuron, and Systole’s Contrast');
+head('the themes: the owner’s two, Memorizer’s own, the five from the owner’s colour pairs, and Systole’s Contrast');
 {
   const ids = L.THEMES.map(t => t.id);
-  ok('Daylight and Clinical, Paper and Neuron, Contrast, and Auto pairing the first two', ids.join() === 'daylight,clinical,paper,neuron,contrast' && L.AUTO &&
+  ok('Daylight and Clinical, Paper and Neuron, Ice, Mint Night, Butter, Graphite and Grape, Contrast, and Auto pairing the first two', ids.join() === 'daylight,clinical,paper,neuron,ice,mint,butter,graphite,grape,contrast' && L.AUTO &&
      L.AUTO.light === 'daylight' && L.AUTO.dark === 'clinical' && L.byId('daylight').mode === 'light' && L.byId('clinical').mode === 'dark', ids.join(', '));
   /* Contrast is Systole's: its id, name and swatch are what Systole's
      picker shows, read from Systole's own source. */
@@ -89,7 +89,17 @@ head('ported colour for colour');
   });
   ok('Contrast’s source block was found and read', compared === 8, `${compared} colours compared`);
   ok('every one of its colours is Systole’s, exactly', drift.length === 0, drift.join('; ') || 'no drift');
-  ok('the four drawn for Memorizer name no Systole source', L.THEMES.filter(t => !t.source).map(t => t.id).join() === 'daylight,clinical,paper,neuron');
+  ok('the nine drawn for Memorizer name no Systole source', L.THEMES.filter(t => !t.source).map(t => t.id).join() === 'daylight,clinical,paper,neuron,ice,mint,butter,graphite,grape');
+  /* The owner's pairs, kept as the reel showed them: the ground or the hero
+     and the accent are the pair's own two colours. */
+  const pair = (id, a, b) => { const t = L.byId(id); return [t.t.bg, t.t.accent, t.hero['hero-a'], t.hero['hero-accent']].map(x => x.toUpperCase()).filter(x => x === a || x === b).length >= 2; };
+  ok('each colour pair the owner chose is in its theme as shown', pair('ice', '#2457FF', '#DFF7FF') && pair('mint', '#050505', '#D7FFE0') && pair('butter', '#FFF275', '#3A0CA3') &&
+     pair('grape', '#D7FF00', '#4C1D95') && L.byId('graphite').t.surface === '#1F2329');
+  /* Graphite's accent is blue, not the reel's lime: an accent must never be
+     the green that means right. Measured as hue. */
+  const hueOf = hex => { const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    if (!d) return 0; const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };
+  ok('Graphite’s accent is a blue, well away from the green that means right', hueOf(L.byId('graphite').t.accent) > 200 && hueOf(L.byId('graphite').t.accent) < 240, String(hueOf(L.byId('graphite').t.accent)));
 }
 
 head('every theme is readable');
@@ -144,7 +154,7 @@ head('contrast and brightness, computed, and readable at every setting');
       const r = ratio(t.ink, s[k + '-soft']); if (r < 4.5) bad.push(`${id}: text on ${k} tint ${r.toFixed(2)}`);
     });
   })));
-  ok('every theme, at every contrast and brightness, clears its floors for every pairing', n === 30 && bad.length === 0, bad.slice(0, 6).join('; ') || `${n} variants`);
+  ok('every theme, at every contrast and brightness, clears its floors for every pairing', n === 60 && bad.length === 0, bad.slice(0, 6).join('; ') || `${n} variants`);
 
   /* No palette today needs its ink, secondary text or button text fitted —
      only accents are moved — so those fits are a net for a palette added
@@ -214,8 +224,8 @@ head('the hero band: each theme’s own, readable across its gradient');
   }));
   ok('the hero’s text, accent and secondary text are readable across its whole gradient', weak.length === 0, weak.join('; ') || 'all clear');
   ok('a light theme’s hero is light, with the page’s dark ink; a dark theme’s is dark, with light ink',
-     ['daylight', 'paper'].every(id => lum(L.byId(id).hero['hero-a']) > 0.8 && L.heroInk(L.byId(id)) === L.byId(id).t.ink) &&
-     ['clinical', 'neuron', 'contrast'].every(id => lum(L.byId(id).hero['hero-a']) < 0.05 && lum(L.heroInk(L.byId(id))) > 0.8));
+     L.THEMES.filter(t => t.mode === 'light').every(th => lum(th.hero['hero-a']) > 0.8 && L.heroInk(th) === th.t.ink) &&
+     L.THEMES.filter(t => t.mode === 'dark').every(th => lum(th.hero['hero-a']) < 0.05 && lum(L.heroInk(th)) > 0.8) && L.THEMES.filter(t => t.mode === 'light').length === 4);
   /* The pills on the hero are tinted by the hero, not by a white that
      vanishes on a white band: dark on Daylight's, light on the others. */
   const css = L.css();
@@ -248,7 +258,7 @@ head('glass and glow: the aurora and second accent, and text readable on glass o
      the eye. Held to it, so a louder one is a decision, not a drift. */
   const loud = [];
   L.THEMES.filter(th => !th.source).forEach(th => L.GLOW[th.id].aura.forEach((a, i) => { if (!(parseRgba(a)[3] > 0 && parseRgba(a)[3] <= 0.16)) loud.push(th.id + ' aura-' + (i + 1) + ' ' + a); }));
-  ok('the aurora of each theme drawn for Memorizer is there, and faint: every colour at 16% or less', L.THEMES.filter(th => !th.source).length === 4 && loud.length === 0, loud.join('; ') || 'all faint');
+  ok('the aurora of each theme drawn for Memorizer is there, and faint: every colour at 16% or less', L.THEMES.filter(th => !th.source).length === 9 && loud.length === 0, loud.join('; ') || 'all faint');
 
   /* Glass over the aurora. The backdrop behind a glass card is the ground
      with an aurora colour over it; the card is the surface at its alpha over
@@ -270,7 +280,7 @@ head('glass and glow: the aurora and second accent, and text readable on glass o
     if (bt < f.accent) bad.push(`${th.id}/${c}/${b} button text on accent-2 ${bt.toFixed(2)}`);
   })));
   ok('text on glass over every aurora colour clears its floors, in every theme and setting, and so does button text on the second accent',
-     n === 240 && bad.length === 0, bad.slice(0, 5).join('; ') || `${n} glass composites`);
+     n === 480 && bad.length === 0, bad.slice(0, 5).join('; ') || `${n} glass composites`);
   /* The same, under the glass's sheen and the finger's light at their
      brightest (both white over the card, where the text is): a white that
      lifts a light page only helps dark text, but one on a dark page costs

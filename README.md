@@ -298,8 +298,10 @@ point you mark becomes a cloze card. The Coach asks a section's table row
 by row.
 
 **Progress.** The mastery map is a brain, straight under the hero: a
-side view with its sulci, cerebellum and stem, every section you have opened
-a neuron inside it. A neuron is dark until its section is drilled, then lit
+side view drawn as an atlas draws one — the cortex folded all over, each fold
+a soft groove with a lit lip, the main fissures deeper, the cerebellum's folia
+fanned round its stem, a shade toward the underside and a shadow beneath —
+every section you have opened a neuron inside it. A neuron is dark until its section is drilled, then lit
 green, amber or red — solid, fading or weak, from its drill and its cards'
 recall today. Each unit is a lobe of neighbouring neurons wired into one net,
 its first section at the lobe's heart and the rest spreading outward in
@@ -318,17 +320,19 @@ motion. "This week" gives time,
 answers, accuracy, reviews and the topics missed most, against last week;
 and the streak forgives one missed day a week.
 
-The home screen is three things, and on an iPad the first two fit on one
-screen. At the top, a hero band: the greeting, what is up next with a button
-to continue it, and three numbers in a row of chips — your streak, the cards
-due, and how much of what you have studied is held today — over a gradient
-with an ECG trace along its foot. Then the brain. Then the pearl of the day, the feature of the
+The home screen is two cards. At the top, a hero band: the greeting, what
+is up next with a small button under it to continue, and three numbers in a
+row of chips — your streak, the cards due, and how much of what you have
+studied is held today — over a gradient with an ECG trace along its foot,
+clear of everything above it. Then one card: the brain, its numbers under it,
+and beside it on an iPad (below it on a phone) the pearl of the day, marked
+by a gem rather than a heading — the feature of the
 page — a sentence from your own PDF, found and broken into steps by
 Systole's `src/core/pearl.js`, shared rather than copied, never a trial's
 read-out (a hazard ratio, a P value) or a sentence leaning on the one before
 it, and never cut inside its brackets — shown beside its
 own section's figure, drawn from the stored PDF, or the first rows of that
-section's table, with a button to open the section. Everything about the
+section's table, with a small button to open the section. Everything about the
 chapters is its own tab, **Chapters**: the box to add a chapter, with chips
 for a PDF, the whole book, photos or pasted notes; your books and units, each
 with its progress (a unit opened from here goes back here); and beside them
@@ -349,8 +353,11 @@ blur, the glass is solid. The themes are the owner's choice from mock-ups
 drawn on these screens: **Daylight** by day — the iPad's own grey grouped
 ground, white cards and system blue — and **Clinical** at night — near-black,
 graphite cards and monitor green — with Systole's **Contrast** kept, colour
-for colour. Two more are Memorizer's own: **Paper**, a warm page for long
-reading, and **Neuron**, a deep indigo with an electric cyan. The picker
+for colour. The rest are Memorizer's own: **Paper**, a warm page for long
+reading; **Neuron**, a deep indigo with an electric cyan; **Ice**, pale ice
+glass with a quantum blue; **Butter**, butter yellow with a royal iris;
+**Mint Night**, zero black with a ghost green; **Graphite**, with a blue
+accent; and **Cyber Grape**, deep grape with an acid lime. The picker
 shows each theme as itself in miniature, and each draws the brain in its own
 tissue and wiring. The type scale is Systole's, with text size, reading width,
 line spacing, font, contrast and brightness to choose. Contrast and

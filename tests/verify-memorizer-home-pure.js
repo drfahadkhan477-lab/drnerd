@@ -325,6 +325,22 @@ head('the brain: every section a neuron, inside it, wired into one net, lit by p
      placed inside is what is seen. */
   const d = H.smoothPath([[0, 0], [100, 0], [100, 100], [0, 100]]);
   ok('the outline is a closed smooth curve through every point it is given', /^M0 0C/.test(d) && /Z$/.test(d) && ['100 0', '100 100', '0 100', '0 0'].every(p => d.indexOf(' ' + p + 'C') !== -1 || d.indexOf(' ' + p + 'Z') !== -1), d);
+  /* The folds (the owner: "make the brain more realistic"): a field of
+     gyri over the whole cortex, each curve sampled along its length. */
+  const G = H.BRAIN.GYRI, gOut = [], gAt = [];
+  G.forEach(d => { const n = (d.match(/-?\d+(?:\.\d+)?/g) || []).map(Number); let x0 = n[0], y0 = n[1]; gAt.push([x0, y0]);
+    for (let k = 2; k + 3 < n.length; k += 4) { const cx = n[k], cy = n[k + 1], x1 = n[k + 2], y1 = n[k + 3];
+      for (let t = 0; t <= 1; t += 0.125) { const x = (1 - t) * (1 - t) * x0 + 2 * t * (1 - t) * cx + t * t * x1, y = (1 - t) * (1 - t) * y0 + 2 * t * (1 - t) * cy + t * t * y1;
+        if (!H.inPoly(x, y, H.BRAIN.CEREBRUM)) gOut.push([Math.round(x), Math.round(y)]); }
+      x0 = x1; y0 = y1; } });
+  const xs = gAt.map(p => p[0]), ys = gAt.map(p => p[1]);
+  ok('the cortex is folded all over: gyri drawn inside the cerebrum, spread from front to back and top to bottom',
+     G.length >= 40 && gOut.length === 0 && Math.max(...xs) - Math.min(...xs) > 600 && Math.max(...ys) - Math.min(...ys) > 300,
+     G.length + ' gyri, ' + gOut.length + ' points outside ' + JSON.stringify(gOut.slice(0, 3)));
+  delete require.cache[require.resolve('../memorizer/src/home.js')];
+  ok('and the same folds every time', JSON.stringify(require('../memorizer/src/home.js').BRAIN.GYRI) === JSON.stringify(G));
+  const radii = H.BRAIN.FOLIA.map(d => +(d.match(/A(\d+(?:\.\d+)?)/) || [])[1]);
+  ok('the cerebellum\u2019s folia are arcs fanned round one centre, each wider than the last', radii.length >= 10 && radii.every((r, i) => r > 0 && (i === 0 || r > radii[i - 1])), JSON.stringify(radii));
 }
 
 head('the brain, live: impulses run the wiring, and die at the edge of what is known');
