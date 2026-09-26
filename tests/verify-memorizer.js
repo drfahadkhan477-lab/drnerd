@@ -463,6 +463,11 @@ function kindOf(user) {
   const URL = 'file://' + path.join(dir, 'index.html');
   const T = { timeout: 60000 };
   const text = async (p, sel) => (await p.locator(sel).innerText()).replace(/\s+/g, ' ').trim();
+  /* Home is the hero, the brain and the pearl; the chapters, and everything
+     done with them, are the Chapters tab (the owner: "move chapters to other
+     page"). The waits are for each page to be drawn — a precondition. */
+  const toShelf = async (p = page) => { await p.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click(); await p.locator('main.shelf #home-add').waitFor(T); };
+  const toHome = async (p = page) => { await p.locator('nav.dock').getByRole('button', { name: 'Home' }).click(); await p.locator('#home-hero').waitFor(T); };
   /* Go through the memorise cards, each known, until the drill opens. A
      precondition for the flows that test the drill, not a proposition. */
   const memorize = async p => {
@@ -490,7 +495,7 @@ function kindOf(user) {
   ok('and it is one file: no script or stylesheet it loads from the repository',
      !/<script src="(?!https:)/.test(html) && !/<link rel="stylesheet" href="(?!https:)/.test(html));
   await page.goto(URL);
-  await page.locator('#door-add').waitFor(T);
+  await page.locator('#home-hero').waitFor(T);
   ok('opens as a local file on the home screen: what shall we learn, and a box to add it', (await page.locator('h1.learn').innerText()) === 'Learn?' &&
      await page.locator('label.learn-box#door-add[for="pdf-input"]').count() === 1);
   ok('with chips to upload a PDF, add photos or paste notes',
@@ -875,17 +880,29 @@ function kindOf(user) {
 
   head('a reload resumes where it stopped');
   await page.reload();
-  await page.locator('.jump-card').first().waitFor(T);
+  await page.locator('#home-hero').waitFor(T);
 
-  head('home: what shall we learn, and where to jump back in');
+  head('home: three things — the hero, the brain, the pearl');
+  /* The owner: "home screen layout not upto mark, too much scrolling down,
+     in home just add 2 or 3 sections including brain, move chapters to
+     other page". What the home screen holds, read from what it drew. */
+  await page.locator('#pearl').waitFor(T).catch(() => {});
+  const homeIs = await page.evaluate(() => ({ parts: [...document.querySelector('main').children].filter(e => e.tagName !== 'INPUT' && !e.matches('.card.note, .card.error, .banner'))
+      .map(e => e.id || e.className), shelfy: ['#units', '#books', '#door-add', '.jump-card', '#weak', '#exam-plan', '#weekly', '#checks'].filter(q => document.querySelector(q)) }));
+  ok('home is the hero, the brain and the pearl, and nothing of the chapters', JSON.stringify(homeIs.parts) === '["home-hero","mastery","pearl"]' && homeIs.shelfy.length === 0, JSON.stringify(homeIs));
+  ok('the dock has a Chapters tab', await page.locator('nav.dock').getByRole('button', { name: 'Chapters' }).count() === 1);
+  ok('the streak counts today, after a drill was answered, and survives the reload', /\b1$/.test(await text(page, '#streak')), await text(page, '#streak'));
+  ok('the due pill and the Review tab both count the one card', /1 due/.test(await page.locator('#pill-due').innerText()) &&
+     (await page.locator('nav.dock .nav-badge').innerText()) === '1');
+  await toShelf();
+
+  head('chapters: the units, where to jump back in, and what needs work');
+  ok('the Chapters tab is the one marked current', await page.evaluate(() => (document.querySelector('nav.dock .nav-btn[aria-current="page"] .nav-label') || {}).textContent) === 'Chapters');
   ok('jump back in names the unit, the section up next and how far it has come',
      /unit/.test(await page.locator('.jump-card strong').first().innerText()) && /Section Two Afterload/.test(await page.locator('.jump-card').first().innerText()) &&
      (await page.locator('.jump-card .ring-pct').first().innerText()) === '33%', await text(page, '.jump-card'));
   /* The days were in localStorage, which this browser was measured to lose
-     whole across a reload (1 run in 6); IndexedDB, never. */
-  ok('the streak counts today, after a drill was answered, and survives the reload', /\b1$/.test(await text(page, '#streak')), await text(page, '#streak'));
-  ok('the due pill and the Review tab both count the one card', /1 due/.test(await page.locator('#pill-due').innerText()) &&
-     (await page.locator('nav.dock .nav-badge').innerText()) === '1');
+     whole across a reload (1 run in 6); IndexedDB, never (the streak, above). */
   ok('my units: the unit, its sections and pages, and its progress', /3 sections · \d+ pages/.test(await page.locator('.unit-row').innerText()) &&
      (await page.locator('.unit-row .badge').innerText()) === '33%', await text(page, '.unit-row'));
   ok('with its colour bar and a menu', await page.evaluate(() => getComputedStyle(document.querySelector('.unit-row')).getPropertyValue('--hue').trim() !== '') &&
@@ -904,6 +921,65 @@ function kindOf(user) {
     return { t: b.textContent, h: Math.round(r.height), hit: !!at && (at === b || b.contains(at)), rowTop: Math.round(document.querySelector('.unit-row .doc-name').getBoundingClientRect().top) }; }));
   await page.locator('.unit-row details.menu summary').click();
   ok('its menu opens whole: every item can be seen and tapped, not cut off by the row', menuHit.length === 2 && menuHit.every(m => m.hit && m.h > 20), JSON.stringify(menuHit));
+  /* A unit is opened from Chapters, and Back returns there, not home. */
+  await page.locator('.unit-row .unit-open').first().click();
+  await page.locator('#sections').waitFor(T);
+  await page.getByRole('button', { name: 'Back' }).first().click();
+  await page.locator('main.shelf').waitFor(T).catch(() => {});
+  ok('a unit opened from Chapters goes back to Chapters', await page.evaluate(() => Memorizer.ui.view === 'shelf' && !!document.querySelector('main.shelf #units')));
+  const dock = await page.evaluate(() => { const r = document.querySelector('nav.dock').getBoundingClientRect(); return { pos: getComputedStyle(document.querySelector('nav.dock')).position, gap: innerHeight - r.bottom, w: r.width }; });
+  ok('the tabs float at the foot of the screen', dock.pos === 'fixed' && dock.gap > 0 && dock.w < 820, JSON.stringify(dock));
+  /* Section 1 scored 1 of 2 on its drill: 50%, and its one miss is its card. */
+  const weakText = (await page.locator('#weak').innerText()).replace(/\s+/g, ' ');
+  ok('needs work names the shaky section, with its score and its cards', /Section One Preload/.test(weakText) && /50% on the drill/.test(weakText) &&
+     await page.locator('#weak li').count() === 1 && await page.locator('#weak button', { hasText: 'Drill · 1' }).count() === 1, weakText);
+  /* The glass and the light that follows the finger, on the Chapters page's
+     cards (read here, the home's pearl read after). */
+  const glassOfShelf = () => page.evaluate(() => ['.jump-card', 'nav.dock', '.unit-row'].map(q => { const cs = getComputedStyle(document.querySelector(q));
+    const m = cs.backgroundColor.match(/rgba?\(([^)]+)\)/); const a = m ? m[1].split(',').map(Number) : [];
+    return { q: q, alpha: a.length === 4 ? a[3] : 1, blur: (cs.backdropFilter || cs.webkitBackdropFilter || '') }; }));
+  const glassShelf = await glassOfShelf();
+  const lookBefore0 = await page.evaluate(() => MemLook.load());
+  await page.evaluate(() => MemLook.apply(Object.assign(MemLook.load(), { contrast: 'high' })));
+  const glassShelfHigh = await glassOfShelf();
+  await page.evaluate(l => MemLook.apply(l), lookBefore0);
+  const pane = await page.evaluate(() => { const cs = getComputedStyle(document.querySelector('.jump-card'));
+    const a = (cs.backgroundColor.match(/rgba\(([^)]+)\)/) || ['', ''])[1].split(',').map(Number)[3];
+    return { alpha: a, blur: parseFloat(((cs.backdropFilter || cs.webkitBackdropFilter || '').match(/blur\(([\d.]+)px/) || [])[1]), sheen: /linear-gradient/.test(cs.backgroundImage) }; });
+  ok('and the glass is clear: most of the page shows through, under a heavy blur, with a sheen', pane.alpha <= 0.6 && pane.blur >= 24 && pane.sheen, JSON.stringify(pane));
+  const calmShelf = await page.evaluate(() => [...document.querySelectorAll('main .learn-plus')].map(e => { const cs = getComputedStyle(e); return { q: e.className, img: cs.backgroundImage, bg: cs.backgroundColor }; }));
+  /* The light follows the pointer across a pane, and goes when it leaves;
+     with reduced motion there is none. */
+  await page.locator('.jump-card').first().scrollIntoViewIfNeeded();
+  const jc = await page.locator('.jump-card').first().boundingBox();
+  await page.mouse.move(jc.x + 30, jc.y + 12);
+  const litOn = await page.evaluate(() => { const e = document.querySelector('.jump-card'); return { lit: e.hasAttribute('data-lit'), px: e.style.getPropertyValue('--px'), py: e.style.getPropertyValue('--py'),
+    light: getComputedStyle(e).getPropertyValue('--lit').trim() }; });
+  await page.mouse.move(jc.x + 90, jc.y + 20);
+  const litMoved = await page.evaluate(() => document.querySelector('.jump-card').style.getPropertyValue('--px'));
+  await page.mouse.move(2, 2);
+  const litOff = await page.evaluate(() => document.querySelectorAll('[data-lit]').length);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.mouse.move(jc.x + 30, jc.y + 12);
+  const litStill = await page.evaluate(() => document.querySelectorAll('[data-lit]').length);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.mouse.move(2, 2);
+  ok('a light follows the pointer across the glass, and goes when it leaves', litOn.lit && litOn.px === '30px' && litOn.py === '12px' && /rgba\(255,\s*255,\s*255,\s*0?\.38\)/.test(litOn.light) && litMoved === '90px' && litOff === 0,
+     JSON.stringify({ litOn, litMoved, litOff }));
+  ok('and with reduced motion asked for, there is no light to follow', litStill === 0, String(litStill));
+  /* Laid out on an iPad held landscape: the units, and beside them where to
+     jump back in and what needs work — stacked on a phone, units first,
+     with nothing wider than the screen. */
+  const placing = () => page.evaluate(() => { const a = document.querySelector('.shelf-main').getBoundingClientRect(), b = document.querySelector('#home-side').getBoundingClientRect();
+    return { beside: b.left >= a.right - 1 && Math.abs(b.top - a.top) < 4, below: b.top >= a.bottom - 1, wide: document.documentElement.scrollWidth > innerWidth }; });
+  await page.setViewportSize({ width: 1180, height: 820 });
+  const land = await placing();
+  await page.setViewportSize({ width: 375, height: 812 });
+  const phone = await placing();
+  await page.setViewportSize({ width: 820, height: 1100 });
+  ok('landscape: the units with where to jump back in beside them', land.beside && !land.wide, JSON.stringify(land));
+  ok('phone: stacked, units first, no sideways scroll', phone.below && !phone.wide, JSON.stringify(phone));
+  await toHome();
   const pearlText = (await page.locator('#pearl .pearl-steps').innerText()).replace(/\s+/g, ' ');
   ok('the pearl of the day is the PDF’s own sentence, broken into steps', /Pearl of the day/i.test(await page.locator('#pearl .eyebrow').innerText()) &&
      await page.locator('#pearl .pearl-steps li').count() >= 2 && /end-diastolic pressure greater than 18 mmHg/.test(pearlText) && /stiff ventricle/.test(pearlText), pearlText);
@@ -931,12 +1007,6 @@ function kindOf(user) {
     return document.querySelector('main').getAnimations({ subtree: true }).filter(a => a.effect && a.effect.getTiming().iterations !== Infinity)
       .map(a => (a.animationName || 'script') + ' on ' + a.effect.target.tagName + '.' + a.effect.target.className); });
   ok('a redraw of the same screen plays no entrance again', replayed.length === 0, replayed.slice(0, 5).join(', ') || 'still');
-  const dock = await page.evaluate(() => { const r = document.querySelector('nav.dock').getBoundingClientRect(); return { pos: getComputedStyle(document.querySelector('nav.dock')).position, gap: innerHeight - r.bottom, w: r.width }; });
-  ok('the tabs float at the foot of the screen', dock.pos === 'fixed' && dock.gap > 0 && dock.w < 820, JSON.stringify(dock));
-  /* Section 1 scored 1 of 2 on its drill: 50%, and its one miss is its card. */
-  const weakText = (await page.locator('#weak').innerText()).replace(/\s+/g, ' ');
-  ok('needs work names the shaky section, with its score and its cards', /Section One Preload/.test(weakText) && /50% on the drill/.test(weakText) &&
-     await page.locator('#weak li').count() === 1 && await page.locator('#weak button', { hasText: 'Drill · 1' }).count() === 1, weakText);
 
   head('home: the pearl as the feature, with its own figure, under glass');
   /* Section 1 carries the fixture's picture on page 1, the pearl's page, so
@@ -958,52 +1028,26 @@ function kindOf(user) {
   /* Surfaces are frosted glass over the aurora: translucent and blurred,
      as the browser computes them — and opaque, unblurred, at High
      contrast, where the tokens say alpha 1. */
-  const glassOf = () => page.evaluate(() => ['.jump-card', '#pearl', 'nav.dock', '.unit-row'].map(q => { const cs = getComputedStyle(document.querySelector(q));
+  const glassOf = () => page.evaluate(() => ['#pearl'].map(q => { const cs = getComputedStyle(document.querySelector(q));
     const m = cs.backgroundColor.match(/rgba?\(([^)]+)\)/); const a = m ? m[1].split(',').map(Number) : [];
     return { q: q, alpha: a.length === 4 ? a[3] : 1, blur: (cs.backdropFilter || cs.webkitBackdropFilter || '') }; }));
-  const glassNow = await glassOf();
-  ok('the cards, the pearl and the dock are glass: translucent and blurred', glassNow.every(g => g.alpha < 1 && /blur\((?!0px)/.test(g.blur)), JSON.stringify(glassNow));
+  const glassNow = glassShelf.concat(await glassOf());
+  ok('the cards, the pearl and the dock are glass: translucent and blurred', glassNow.length === 4 && glassNow.every(g => g.alpha < 1 && /blur\((?!0px)/.test(g.blur)), JSON.stringify(glassNow));
   const lookBefore = await page.evaluate(() => MemLook.load());
   await page.evaluate(() => MemLook.apply(Object.assign(MemLook.load(), { contrast: 'high' })));
-  const glassHigh = await glassOf();
+  const glassHigh = glassShelfHigh.concat(await glassOf());
   await page.evaluate(l => MemLook.apply(l), lookBefore);
-  ok('and at High contrast, solid: no translucency, no blur', glassHigh.every(g => g.alpha === 1 && !/blur\((?!0px)/.test(g.blur)), JSON.stringify(glassHigh));
-  /* As an iPad's glass: clearer panes than the 0.72 they were, under a
-     stronger blur, with a sheen — and the accent solid, where it used to
-     run into a second colour. */
-  const pane = await page.evaluate(() => { const cs = getComputedStyle(document.querySelector('.jump-card'));
-    const a = (cs.backgroundColor.match(/rgba\(([^)]+)\)/) || ['', ''])[1].split(',').map(Number)[3];
-    return { alpha: a, blur: parseFloat(((cs.backdropFilter || cs.webkitBackdropFilter || '').match(/blur\(([\d.]+)px/) || [])[1]), sheen: /linear-gradient/.test(cs.backgroundImage) }; });
-  ok('and the glass is clear: most of the page shows through, under a heavy blur, with a sheen', pane.alpha <= 0.6 && pane.blur >= 24 && pane.sheen, JSON.stringify(pane));
+  ok('and at High contrast, solid: no translucency, no blur', glassHigh.length === 4 && glassHigh.every(g => g.alpha === 1 && !/blur\((?!0px)/.test(g.blur)), JSON.stringify(glassHigh));
   /* High contrast was just put back, and the tab fades its colour: the
      read waits for running transitions to end (a precondition — the colour
      they end on is the check). */
   await page.evaluate(() => Promise.all(document.getAnimations().filter(a => a instanceof CSSTransition).map(a => a.finished.catch(() => {}))));
   const paper = await page.evaluate(() => getComputedStyle(document.querySelector('#pearl')).backgroundImage);
   ok('and the pearl keeps its ECG paper under it', (paper.match(/linear-gradient/g) || []).length === 4 && !/radial/.test(paper), paper.slice(0, 120));
-  const calm = await page.evaluate(() => [...document.querySelectorAll('main .btn.primary, nav.dock .nav-btn[aria-current="page"], main .learn-plus')].map(e => {
-    const cs = getComputedStyle(e); return { q: e.className, img: cs.backgroundImage, bg: cs.backgroundColor }; }));
+  const calm = calmShelf.concat(await page.evaluate(() => [...document.querySelectorAll('main .btn.primary, nav.dock .nav-btn[aria-current="page"]')].map(e => {
+    const cs = getComputedStyle(e); return { q: e.className, img: cs.backgroundImage, bg: cs.backgroundColor }; })));
   const accentNow = await page.evaluate(() => { const p = document.createElement('i'); p.style.color = 'var(--accent)'; document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c; });
-  ok('the primary buttons, the current tab and the add button are the accent, solid — no gradient', calm.length >= 3 && calm.every(c => c.img === 'none' && c.bg === accentNow), JSON.stringify(calm.slice(0, 4)) + ' ' + accentNow);
-  /* The light follows the pointer across a pane, and goes when it leaves;
-     with reduced motion there is none. */
-  await page.locator('.jump-card').first().scrollIntoViewIfNeeded();
-  const jc = await page.locator('.jump-card').first().boundingBox();
-  await page.mouse.move(jc.x + 30, jc.y + 12);
-  const litOn = await page.evaluate(() => { const e = document.querySelector('.jump-card'); return { lit: e.hasAttribute('data-lit'), px: e.style.getPropertyValue('--px'), py: e.style.getPropertyValue('--py'),
-    light: getComputedStyle(e).getPropertyValue('--lit').trim() }; });
-  await page.mouse.move(jc.x + 90, jc.y + 20);
-  const litMoved = await page.evaluate(() => document.querySelector('.jump-card').style.getPropertyValue('--px'));
-  await page.mouse.move(2, 2);
-  const litOff = await page.evaluate(() => document.querySelectorAll('[data-lit]').length);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.mouse.move(jc.x + 30, jc.y + 12);
-  const litStill = await page.evaluate(() => document.querySelectorAll('[data-lit]').length);
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.mouse.move(2, 2);
-  ok('a light follows the pointer across the glass, and goes when it leaves', litOn.lit && litOn.px === '30px' && litOn.py === '12px' && /rgba\(255,\s*255,\s*255,\s*0?\.38\)/.test(litOn.light) && litMoved === '90px' && litOff === 0,
-     JSON.stringify({ litOn, litMoved, litOff }));
-  ok('and with reduced motion asked for, there is no light to follow', litStill === 0, String(litStill));
+  ok('the primary buttons, the current tab and the add button are the accent, solid — no gradient', calm.length >= 3 && calm.some(c => /learn-plus/.test(c.q)) && calm.every(c => c.img === 'none' && c.bg === accentNow), JSON.stringify(calm.slice(0, 4)) + ' ' + accentNow);
   const hero = await page.evaluate(() => { const e = document.querySelector('#home-hero'); const cs = getComputedStyle(e);
     return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('.hero-monitor canvas'), held: (document.querySelector('#stat-held') || {}).textContent || '',
       inHero: !!e.querySelector('#streak') && !!e.querySelector('#pill-due') }; });
@@ -1046,24 +1090,16 @@ function kindOf(user) {
      blank gap ahead of its pen, and ink left over from the sweep would
      otherwise pass for a drawing */
   ok('with reduced motion asked for, the strip is drawn whole and holds still', r1.still === 'true' && r1.cols === r1.w && r2.x === r1.x && r2.ink === r1.ink, JSON.stringify({ r1, r2 }));
-  /* Laid out as a dashboard on an iPad held landscape — the pearl, and
-     beside it where to jump back in — and stacked in reading order on a
-     phone, with nothing wider than the screen. */
-  const placing = () => page.evaluate(() => { const a = document.querySelector('#pearl').getBoundingClientRect(), b = document.querySelector('#home-side').getBoundingClientRect();
-    return { beside: b.left >= a.right - 1 && Math.abs(b.top - a.top) < 4, below: b.top >= a.bottom - 1, wide: document.documentElement.scrollWidth > innerWidth }; });
-  await page.setViewportSize({ width: 1180, height: 820 });
-  const land = await placing();
+  /* Home fits: on a phone, nothing wider than the screen. */
   await page.setViewportSize({ width: 375, height: 812 });
-  const phone = await placing();
+  const homeWide = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   await page.setViewportSize({ width: 820, height: 1100 });
-  ok('landscape: the pearl with where to jump back in beside it', land.beside && !land.wide, JSON.stringify(land));
-  ok('phone: stacked, pearl first, no sideways scroll', phone.below && !phone.wide, JSON.stringify(phone));
+  ok('phone: home has no sideways scroll', !homeWide);
   await page.locator('#pearl-open').click();
   await page.locator('#big-idea').waitFor(T).catch(() => {});
   ok('“Open the section” opens the pearl’s own section', /Section One Preload/.test(await page.locator('main').innerText()) &&
      await page.evaluate(() => Memorizer.ui.view === 'session' && Memorizer.ui.state.phase === 'teach' && Memorizer.ui.state.section === 0), await page.evaluate(() => Memorizer.ui.view + ' ' + (Memorizer.ui.state && Memorizer.ui.state.phase + ' ' + Memorizer.ui.state.section)));
-  await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
-  await page.locator('#weak').waitFor(T);
+  await toShelf();
   /* A new screen settles in; a redraw of the same one does not. */
   const entered = await page.evaluate(() => { const a = document.querySelector('main').hasAttribute('data-enter') && getComputedStyle(document.querySelector('main')).animationName;
     Memorizer.render(); return { a: a, redraw: document.querySelector('main').hasAttribute('data-enter') }; });
@@ -1086,8 +1122,7 @@ function kindOf(user) {
   await page.locator('h1', { hasText: 'Drill done.' }).waitFor(T);
   ok('each card once: answered, it leaves the drill', await page.evaluate(() => Object.keys(Memorizer.ui.drill.done).length === 1));
   await page.evaluate(cs => Promise.all(cs.map(c => MemStore.put('cards', c))), cardsBefore);
-  await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
-  await page.locator('#weak').waitFor(T);
+  await toShelf();
   ok('leaving ends the drill', await page.evaluate(() => Memorizer.ui.drill === null));
   const before = stub.requests.length;
   await page.locator('.jump-card').first().click();
@@ -1358,7 +1393,7 @@ function kindOf(user) {
   head('fits a phone');
   await page.setViewportSize({ width: 375, height: 800 });
   const overOf = () => page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
-  await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+  await page.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
   await page.locator('.jump-card').first().waitFor(T);
   const overHome = await overOf();
   await page.locator('.jump-card').first().click();
@@ -1435,9 +1470,9 @@ function kindOf(user) {
     const key = unitId + ':0';
     await page.evaluate(([k, t]) => { Memorizer.ui.checks[k] = { start: MemStudy.addDays(t, -2), done: [], scores: [] };
       return MemStore.put('meta', { id: 'checks', recs: Memorizer.ui.checks }); }, [key, today]);
-    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await page.locator('#checks').waitFor(T);
-    ok('home lists the section check that has come due', await page.locator('#checks li button[data-key="' + key + '"]').count() === 1 &&
+    ok('Chapters lists the section check that has come due', await page.locator('#checks li button[data-key="' + key + '"]').count() === 1 &&
        /check 1 of 4/.test(await text(page, '#checks')), await text(page, '#checks'));
     await page.locator('#checks li button[data-key="' + key + '"]').click();
     for (let k = 0; k < 3; k++) {
@@ -1495,14 +1530,14 @@ function kindOf(user) {
     const body = t => Array.from({ length: 12 }, (_, i) => `${t} note ${i} says what ${t.toLowerCase()} does to the heart.`).join('\n');
     await page.evaluate(b => Memorizer.importText('Plan notes', b), `Contractility\n\n${body('Contractility')}\n\nHeart Rate\n\n${body('Heart Rate')}`);
     await page.waitForFunction(() => MemStore.all('docs').then(ds => ds.some(d => d.name === 'Plan notes')), null, T);
-    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await page.locator('#exam-plan').waitFor(T);
     await page.fill('#exam-date', await plus(10));
     await page.locator('#exam-set').click();
     await page.locator('#plan-line').waitFor(T).catch(() => {});
     const todo = await page.evaluate(() => Memorizer.ui.docs.reduce((n, d) => { const st = Memorizer.ui.sessions[d.id];
       return n + d.clusters.filter((_, i) => !(st && st.per[i] && st.per[i].done)).length; }, 0));
-    ok('an exam date set on the home screen: the days left, what is left to learn, and today’s sections to open', (await page.locator('#exam-plan').getAttribute('data-days')) === '10' &&
+    ok('an exam date set on the Chapters page: the days left, what is left to learn, and today’s sections to open', (await page.locator('#exam-plan').getAttribute('data-days')) === '10' &&
        new RegExp('Exam in 10 days\\. ' + todo + ' sections? to learn').test(await text(page, '#plan-line')) &&
        await page.locator('#exam-plan button[data-plan]').count() >= 1 && (await page.evaluate(() => MemStore.get('meta', 'plan'))).examDate === await plus(10),
        await text(page, '#plan-line'));
@@ -1559,7 +1594,7 @@ function kindOf(user) {
     await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'teach-text', null, T).catch(() => {});
     ok('"let me explain afterload": its lesson opens at teaching it back, ready to type', await page.evaluate(() => document.activeElement && document.activeElement.id === 'teach-text' &&
        /Afterload/.test(Memorizer.ui.docRec.clusters[Memorizer.ui.state.section].title)));
-    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await page.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await page.locator('#exam-clear').click();
     await page.waitForFunction(() => !Memorizer.ui.examDate, null, T).catch(() => {});
     ok('and the date can be cleared', await page.evaluate(() => MemStore.get('meta', 'plan')) == null);
@@ -1700,8 +1735,7 @@ function kindOf(user) {
     const gone = await page.evaluate(() => new Promise(r => setTimeout(() => { const b = Memorizer.ui.brainLive, a = b && b.frames;
       setTimeout(() => r({ running: b && b.running, a, b: b && b.frames }), 400); }, 200)));
     ok('leaving the home screen stops it', gone.running === false && gone.a === gone.b, JSON.stringify(gone));
-    await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
-    await page.locator('#weekly').waitFor(T);
+    await toHome();
     const back = await page.evaluate(() => Memorizer.ui.brainLive ? Memorizer.ui.brainLive.frames : -1);
     ok('and coming back starts it again', await page.waitForFunction(f => Memorizer.ui.brainLive && Memorizer.ui.brainLive.running && Memorizer.ui.brainLive.frames > f + 5, back, { timeout: 5000 }).then(() => true, () => false));
     /* With reduced motion asked for, it is still: no impulses, no glancing
@@ -1715,6 +1749,8 @@ function kindOf(user) {
     ok('with reduced motion asked for, the brain is still: nothing running, no impulse, no glancing light', calm.live === null && calm.glint === 'none' && calm.sparks === 0 && calm.breathe === 'none', JSON.stringify(calm));
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.evaluate(() => Memorizer.render());
+    await toShelf();
+    await page.locator('#weekly').waitFor(T);
     const wk = await page.evaluate(() => { const w = MemStudy.weekly(Memorizer.ui.activity, FSRS.todayISO()).week;
       const g = k => (document.querySelector('#weekly strong[data-k="' + k + '"]') || {}).textContent; return { w, answers: g('answers'), reviews: g('reviews'), days: g('days') }; });
     const by = await page.evaluate(() => { const d = Memorizer.ui.activity.days[FSRS.todayISO()]; return d && d.by; });
@@ -1860,7 +1896,7 @@ function kindOf(user) {
     ok('Extra large text makes the body 20px', await p2.evaluate(() => getComputedStyle(document.body).fontSize) === '20px');
     await p2.locator('#appearance .seg button[data-font="serif"]').click();
     await p2.reload();
-    await p2.locator('#door-add').waitFor(T);
+    await p2.locator('#home-hero').waitFor(T);
     ok('and all of it survives a reload, applied before the page draws', await p2.evaluate(() =>
       document.documentElement.getAttribute('data-look') === 'clinical' && getComputedStyle(document.body).fontSize === '20px' &&
       document.documentElement.getAttribute('data-contrast') === 'high' && document.documentElement.getAttribute('data-bright') === 'dim' &&
@@ -1929,7 +1965,7 @@ function kindOf(user) {
        await text(p2, '.why'));
 
     head('pasted notes: split into sections the same way');
-    await p2.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p2.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await p2.locator('#chip-paste').click();
     /* One sentence a line, long enough to run past a page: Afterload's
        last notes are printed on page 2 of the pasted text. */
@@ -2376,8 +2412,15 @@ function kindOf(user) {
        getComputedStyle(document.querySelector('#robot-dock')).display === 'none'));
     await p4.locator('#focus-toggle').click();
     await p4.waitForFunction(() => document.documentElement.getAttribute('data-focus') === 'off', null, T);
-    ok('the dock’s next thing on the lesson is to memorise it', (await text(p4, '#dock-context .nav-label')) === 'Memorise' && await p4.locator('nav.dock .nav-btn').count() === 5,
+    ok('the dock’s next thing on the lesson is to memorise it, beside the five tabs', (await text(p4, '#dock-context .nav-label')) === 'Memorise' && await p4.locator('nav.dock .nav-btn').count() === 6,
        await text(p4, '#dock-context'));
+    /* Six buttons on a phone: the dock is all on the screen, every button in it. */
+    const vp4 = p4.viewportSize();
+    await p4.setViewportSize({ width: 375, height: 812 });
+    const dockFit = await p4.evaluate(() => { const d = document.querySelector('nav.dock').getBoundingClientRect();
+      return { left: d.left, right: innerWidth - d.right, out: [...document.querySelectorAll('nav.dock .nav-btn')].filter(b => { const r = b.getBoundingClientRect(); return r.left < 0 || r.right > innerWidth || r.width < 40; }).length, w: [...document.querySelectorAll("nav.dock .nav-btn")].map(b => Math.round(b.getBoundingClientRect().width) + ":" + Math.round(b.getBoundingClientRect().left)) }; });
+    await p4.setViewportSize(vp4);
+    ok('on a phone the dock fits the screen, all six buttons whole and tappable', dockFit.left >= 0 && dockFit.right >= 0 && dockFit.out === 0, JSON.stringify(dockFit));
     await p4.locator('#dock-context').click();
     await memorize(p4);
     await p4.locator('#mcq .option').first().waitFor(T);
@@ -2559,7 +2602,7 @@ function kindOf(user) {
        again[1].some(s => s.id === keptId) && await p5.evaluate(id => MemStore.get('docs', id).then(d => d.name), keptId) === 'Heart Failure Basics');
 
     head('the book on the home screen');
-    await p5.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p5.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await p5.locator('#books .book-row').waitFor(T);
     /* Counted where it is drawn: the first version of this check read
        ui.docs, which holds the chapters either way, and survived the list
@@ -2631,7 +2674,7 @@ function kindOf(user) {
     await p3.evaluate(id => Memorizer.openDoc(id), srec.id);
     await p3.locator('#source-card').waitFor(T);
     ok('a page recognition was unsure of is named on the source card, with how sure, to check', /unsure of p\. 2 \(50%\)/.test(await p3.locator('#ocr-unsure').count() ? await text(p3, '#ocr-unsure') : ''));
-    await p3.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p3.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await p3.locator('.unit-row').first().waitFor(T);
     ok('my units says which pages were recognised', /Read by text recognition: pages 2\./.test(await p3.locator('.unit-row').first().innerText()));
     /* A photo of the same page, through the Photo chip. */
@@ -2646,7 +2689,7 @@ function kindOf(user) {
     await p4.setInputFiles('#pdf-input', { name: 'scan.pdf', mimeType: 'application/pdf', buffer: scanPdf });
     await p4.locator('#sections .section-card').first().waitFor({ timeout: 60000 });
     const orec = await p4.evaluate(() => MemStore.all('docs').then(d => d[0]));
-    await p4.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p4.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await p4.locator('.unit-row').first().waitFor(T);
     ok('when the text reader cannot load, the scanned page is still named, with the reason', JSON.stringify(orec.scanned) === '[2]' && orec.ocr.length === 0 &&
        /text reader could not run/.test(await p4.locator('.unit-row').innerText()), JSON.stringify({ scanned: orec.scanned, err: orec.ocrError }));

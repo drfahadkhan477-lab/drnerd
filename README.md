@@ -318,21 +318,25 @@ motion. "This week" gives time,
 answers, accuracy, reviews and the topics missed most, against last week;
 and the streak forgives one missed day a week.
 
-The home screen is laid out as a dashboard. At the top, a hero band: the
-greeting, what is up next, and three numbers — your streak, the cards due,
-and how much of what you have studied is held today — over a gradient with
-an ECG trace along its foot. Then the brain. Then the pearl of the day, the feature of the
+The home screen is three things, and on an iPad the first two fit on one
+screen. At the top, a hero band: the greeting, what is up next with a button
+to continue it, and three numbers in a row of chips — your streak, the cards
+due, and how much of what you have studied is held today — over a gradient
+with an ECG trace along its foot. Then the brain. Then the pearl of the day, the feature of the
 page — a sentence from your own PDF, found and broken into steps by
 Systole's `src/core/pearl.js`, shared rather than copied, never a trial's
 read-out (a hazard ratio, a P value) or a sentence leaning on the one before
 it, and never cut inside its brackets — shown beside its
 own section's figure, drawn from the stored PDF, or the first rows of that
-section's table, with a button to open the section. Beside the pearl on an
-iPad held landscape (below it on a phone): "jump back in" cards with a
-progress ring and the section up next, and the sections that need work,
-each with a drill of its review cards, due or not. Then the box to add a
-chapter, with chips for a PDF, photos or pasted notes, and your units, each
-with its progress. Surfaces are clear frosted glass, as on an iPad — a heavy
+section's table, with a button to open the section. Everything about the
+chapters is its own tab, **Chapters**: the box to add a chapter, with chips
+for a PDF, the whole book, photos or pasted notes; your books and units, each
+with its progress (a unit opened from here goes back here); and beside them
+on an iPad held landscape (below them on a phone) the exam plan, "jump back
+in" cards with a progress ring and the section up next, the section checks
+that are due, the sections that need work — each with a drill of its review
+cards, due or not — and the week. Before anything is added, the box to add a
+chapter is on the home screen too. Surfaces are clear frosted glass, as on an iPad — a heavy
 blur, a bright rim, a sheen, and a light that follows the finger — over a slow
 aurora in the theme's own colours, with the accent solid rather than run into
 a second colour; Systole's live rhythm strip sweeps across the hero, a
