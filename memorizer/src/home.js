@@ -708,9 +708,43 @@ function outline(titles) {
   return out;
 }
 
+/* ── ICONS BY TOPIC, as Systole's chapters carry them ──────────────────────
+   A unit or chapter gets the icon of the first topic its title names, in
+   this order — the more particular first ("Systemic Hypertension" is blood
+   pressure, not "systemic"; "Heart Failure" before plain "heart"). None
+   named: the clipboard. The icons themselves are drawn by ui.js. */
+var TOPICS = [
+  ['pressure', /\b(?:hyper|hypo)tension|blood pressure/i],
+  ['rhythm', /arrhythm|rhythm|electrophysiol|conduction|pac(?:ing|emaker)|tachy|brady|fibrillation|ecg|electrocardiog/i],
+  ['congenital', /congenital|p(?:a)?ediatric|fetal|child/i],
+  ['coronary', /coronary|isch(?:a)?emi|infarct|angina|atheroscl/i],
+  ['heart', /heart failure|cardiomyopath|myocardi/i],
+  ['pericardium', /pericardi/i],
+  ['lungs', /pulmonar|lung|respirat/i],
+  ['valves', /valv|stenosis|regurgitation|endocarditis/i],
+  ['vessels', /vascular|aort|vessel|venous|thrombo|embol/i],
+  ['drugs', /pharmac|drug|medication/i],
+  ['imaging', /imaging|echocardiog|\bct\b|\bmri\b|nuclear/i],
+  ['systemic', /systemic|general|physical exam/i],
+];
+function topicOf(title) {
+  var t = String(title || '');
+  for (var i = 0; i < TOPICS.length; i++) if (TOPICS[i][1].test(t)) return TOPICS[i][0];
+  return 'misc';
+}
+/* A short name for a round icon's label: "Chapter 3 Valvular Heart
+   Disease" → "Valvular Heart", at most two words and 16 letters. */
+function shortName(title) {
+  var w = unglue(title).replace(/^\s*(?:chapter|section|part|unit)\s+(?:\d+|[ivxl]+)\b[.:\s-]*/i, '').split(/\s+/).filter(Boolean)
+    .filter(function (x, i) { return i === 0 || !/^(?:diseases?|disorders?|topics?|syndromes?)$/i.test(x); });
+  var two = w.slice(0, 2).join(' ').replace(/[,:;&]+$/, '');
+  if (!w[1] || /^(?:and|of|the|&|in|with)$/i.test(w[1]) || two.length > 14) two = w[0] || '';
+  return two.length > 14 ? two.slice(0, 13) + '…' : two || String(title || '').slice(0, 14);
+}
+
 var MemHome = { BRAIN: BRAIN, brainLayout: brainLayout, LIVE: LIVE, axonCtrl: axonCtrl, brainNet: brainNet, liveInit: liveInit, liveFire: liveFire, liveStep: liveStep, sparkAt: sparkAt, smoothPath: smoothPath, inPoly: inPoly, edgeDist: edgeDist, pearlVisual: pearlVisual, recallParts: recallParts, recallStreak: recallStreak, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
   HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
-  notesOf: notesOf, harvest: harvest, readout: readout, leans: leans, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath, unglue: unglue, outline: outline };
+  notesOf: notesOf, harvest: harvest, readout: readout, leans: leans, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath, unglue: unglue, outline: outline, topicOf: topicOf, shortName: shortName, TOPICS: TOPICS };
 root.MemHome = MemHome;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemHome;
 })(typeof window !== 'undefined' ? window : this);

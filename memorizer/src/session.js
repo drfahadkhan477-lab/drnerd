@@ -227,6 +227,17 @@ function next(state, event) {
       if (c.memo.pos >= c.memo.order.length) { c.memorized = true; s.phase = 'teach'; return next(s, { type: 'toDrill' }); }
       return s;
 
+    /* SKIP (the owner: "add skip option in recall and drill"): the card
+       goes to the back of the pile, not known and not missed — it still has
+       to be known once before the drill opens. Refused for the last card
+       left: there is nothing to go to first. */
+    case 'recallSkipped':
+      if (s.phase !== 'memorize') refuse(s, event, 'a card is skipped while memorising');
+      if (c.memo.pos >= c.memo.order.length - 1) refuse(s, event, 'this is the last card left');
+      c.memo.order.push(c.memo.order.splice(c.memo.pos, 1)[0]);
+      c.memo.skips = (c.memo.skips || 0) + 1;
+      return s;
+
     case 'toDrill':
       if (s.phase !== 'teach') refuse(s, event, 'the drill follows the lesson');
       if (!c.lesson) refuse(s, event, 'this section has not been taught yet');
@@ -293,6 +304,16 @@ function next(state, event) {
       }
       return s;
     }
+
+    /* A drill question skipped: moved, not copied, to the end — so when it
+       is answered there it is still its first try, and counts as one. Not
+       an answer: nothing is scored, carded or marked weak. */
+    case 'skipped':
+      if (s.phase !== 'drill') refuse(s, event, 'a question is skipped in the drill');
+      if (!c.quiz) refuse(s, event, 'no questions to skip');
+      if (c.pos >= c.order.length - 1) refuse(s, event, 'this is the last question left');
+      c.order.push(c.order.splice(c.pos, 1)[0]);
+      return s;
 
     case 'redrill':
       if (s.phase !== 'result') refuse(s, event, 'a drill is retaken from its result');

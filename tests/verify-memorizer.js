@@ -764,15 +764,43 @@ function kindOf(user) {
      await page.locator('#recall-answer').count() === 0 && (await page.locator('.stepper li.now').textContent()) === 'Memorize' &&
      await page.evaluate(() => Memorizer.ui.state.phase === 'memorize'), String(nCards));
   const firstPrompt = await text(page, '#recall .recall-prompt');
+  /* A real card (the owner: "touching it flips the card and shows the
+     answer"): the whole card is the button; tapped, it turns over. */
+  /* the turn played out first (a precondition): the end state is what is read */
+  const flipOf = () => page.evaluate(() => Promise.all(document.getAnimations().filter(a => /^flip-/.test(a.animationName || '')).map(a => a.finished.catch(() => {}))).then(() => {
+    const f = document.querySelector('#recall-show'), inner = f && f.querySelector('.flip-inner');
+    const m = inner ? new DOMMatrix(getComputedStyle(inner).transform) : null;
+    return f ? { tag: f.tagName, flipped: f.dataset.flipped, answer: !!f.querySelector('#recall-answer'), frontHidden: f.querySelector('.flip-face.front').getAttribute('aria-hidden'),
+      turned: m ? Math.round(m.m11) : null, h: Math.round(f.getBoundingClientRect().height) } : null; }));
+  const flip0 = await flipOf();
   await page.locator('#recall-show').click();
+  const turned = await flipOf();
+  ok('the flashcard is a big card, the whole of it a button; tapped, it turns over to its answer',
+     !!flip0 && flip0.tag === 'BUTTON' && flip0.flipped === 'false' && !flip0.answer && flip0.h >= 240 &&
+     turned.flipped === 'true' && turned.answer && turned.frontHidden === 'true' && turned.turned === -1, JSON.stringify({ flip0, turned }));
   ok('Show the answer, then say whether you knew it', await page.locator('#recall-answer').count() === 1 && await page.locator('#recall-knew').count() === 1 &&
      await page.locator('#recall-notyet').count() === 1);
+  await page.locator('#recall-show').click();
+  const flip2 = await flipOf(), rateOnFront = await page.locator('#recall-knew').count();
+  await page.locator('#recall-show').click();
+  ok('tapped again, it turns back to the question', flip2.flipped === 'false' && !flip2.answer && flip2.turned === 1 && rateOnFront === 0, JSON.stringify(flip2));
   await page.locator('#recall-notyet').click();
   await page.waitForFunction(() => /^Card 2 of/.test(document.querySelector('#recall .mcq-meta').textContent), null, T);
   ok('a card not known comes back at the end', await page.evaluate(n => Memorizer.ui.state.per[0].memo.order.length === n + 1, nCards) &&
      /of \d+/.test(await meta(page)) && new RegExp('of ' + (nCards + 1)).test(await meta(page)),
      JSON.stringify({ nCards, memo: await page.evaluate(() => Memorizer.ui.state.per[0].memo), meta: await meta(page) }));
   ok('and the drill is still shut: going to it straight is refused', await page.evaluate(() => { try { MemSession.next(Object.assign({}, Memorizer.ui.state, { phase: 'teach' }), { type: 'toDrill' }); return false; } catch (e) { return /memorise/.test(e.message); } }));
+  /* Skip (the owner: "add skip option in recall"): to the back of the pile,
+     not missed. */
+  const skippedPrompt = await text(page, '#recall .recall-prompt');
+  const memo0 = await page.evaluate(() => JSON.parse(JSON.stringify(Memorizer.ui.state.per[0].memo)));
+  const hasSkip = await page.locator('#recall-skip').count() === 1;
+  if (hasSkip) await page.locator('#recall-skip').click();
+  await page.waitForFunction(p0 => document.querySelector('#recall .recall-prompt') && document.querySelector('#recall .recall-prompt').textContent !== p0, skippedPrompt, T).catch(() => {});
+  const memo1 = await page.evaluate(() => Memorizer.ui.state.per[0].memo);
+  ok('a card can be skipped: the next one is up, the skipped one at the back, nothing missed',
+     hasSkip && memo1.order.length === memo0.order.length && memo1.misses === memo0.misses && memo1.pos === memo0.pos &&
+     memo1.order[memo1.order.length - 1] === memo0.order[memo0.pos] && (await text(page, '#recall .recall-prompt')) !== skippedPrompt, JSON.stringify({ memo0, memo1 }));
   const prompts = [];
   while (await page.evaluate(() => Memorizer.ui.state.phase === 'memorize')) {
     prompts.push(await text(page, '#recall .recall-prompt'));
@@ -781,7 +809,8 @@ function kindOf(user) {
     await page.locator('#recall-knew').click();
     await page.waitForFunction(k => !document.querySelector('#recall') || new RegExp('^Card ' + (k + 2) + ' of').test(document.querySelector('#recall .mcq-meta').textContent), k, T);
   }
-  ok('every card known once — the missed one again, last — and the drill opens by itself', prompts.length === nCards && prompts[prompts.length - 1] === firstPrompt &&
+  ok('every card known once — the missed one again, then the skipped one, last — and the drill opens by itself', prompts.length === nCards &&
+     prompts[prompts.length - 2] === firstPrompt && prompts[prompts.length - 1] === skippedPrompt &&
      await page.evaluate(() => Memorizer.ui.state.phase === 'drill' && Memorizer.ui.state.per[0].memorized === true), JSON.stringify(prompts.map(x => x.slice(0, 30))));
 
   head('the drill: multiple choice, and a miss comes back');
@@ -940,6 +969,14 @@ function kindOf(user) {
      (await page.locator('.unit-row .badge').innerText()) === '33%', await text(page, '.unit-row'));
   ok('with its colour bar and a menu', await page.evaluate(() => getComputedStyle(document.querySelector('.unit-row')).getPropertyValue('--hue').trim() !== '') &&
      await page.locator('.unit-row details.menu summary').count() === 1);
+  /* A tile, as Systole's chapters are (the owner's picture): its topic's
+     icon, sixteen segments lit by its share, and where it stands. */
+  const tile = await page.evaluate(() => { const t = document.querySelector('#units .unit-row.utile'); if (!t) return null;
+    const seg = t.querySelector('.seg'); return { icon: (t.querySelector('.tile-icon svg.topic-icon') || { dataset: {} }).dataset.topic || null,
+      segs: seg ? seg.children.length : 0, lit: seg ? seg.querySelectorAll('i.on').length : -1, state: (t.querySelector('.tile-state') || {}).textContent || '', pct: (t.querySelector('.badge') || {}).textContent || '',
+      iconW: Math.round((t.querySelector('.tile-icon') || document.body).getBoundingClientRect().width) }; });
+  ok('each unit is a tile: its topic’s icon, sixteen segments lit by its share (33% lights 5), in progress',
+     !!tile && tile.icon === 'misc' && tile.segs === 16 && tile.lit === 5 && tile.state === 'in progress' && tile.pct === '33%' && tile.iconW >= 40, JSON.stringify(tile));
   /* The owner's screenshot: ⋮ opened a sliver — the row clipped its own
      menu, so Delete could not be reached. Each item, where it is drawn, is
      what a tap there lands on. */
@@ -1050,11 +1087,18 @@ function kindOf(user) {
     const shown = e ? [...e.childNodes].filter(n => n !== hid).map(n => n.textContent).join('').trim() : null;
     return { svg: svg ? Math.round(svg.getBoundingClientRect().width) : 0, shown: shown, name: hid ? hid.textContent : null, hidW: hid ? Math.round(hid.getBoundingClientRect().width) : null }; });
   ok('the pearl is marked by a gem, not a line of text — its name kept for a screen reader', gem.svg >= 16 && gem.shown === '' && gem.name === 'Pearl of the day' && gem.hidW <= 1, JSON.stringify(gem));
-  const foot = await page.evaluate(() => { const m = document.querySelector('#home-hero .hero-monitor, #home-hero .hero-trace'); if (!m) return null;
-    const lab = m.querySelector('.hero-monitor-label'), top = Math.min(m.getBoundingClientRect().top, lab ? lab.getBoundingClientRect().top : Infinity);
-    const low = Math.max(...['#continue', '#home-hero .hero-stats', '#home-hero .hero-line'].map(q => document.querySelector(q)).filter(Boolean).map(e => e.getBoundingClientRect().bottom));
-    return { strip: Math.round(top), content: Math.round(low) }; });
-  ok('the hero keeps Continue and its numbers clear of the rhythm strip at its foot', !!foot && foot.content <= foot.strip, JSON.stringify(foot));
+  /* The owner: "Remove ECG strip in top home screen and replace it with
+     progress bar". The band's foot: sections drilled, of all of them, read
+     against the store's own sessions. */
+  const foot = await page.evaluate(() => { const b = document.querySelector('#home-hero #hero-progress'); if (!b) return null;
+    const bar = b.querySelector('.hp-bar'), fill = bar.querySelector('i'), low = Math.max(...['#continue', '#home-hero .hero-stats', '#home-hero .hero-line'].map(q => document.querySelector(q)).filter(Boolean).map(e => e.getBoundingClientRect().bottom));
+    let secs = 0, done = 0; Memorizer.ui.docs.forEach(d => { secs += d.clusters.length; const st = Memorizer.ui.sessions[d.id]; if (st && st.per) d.clusters.forEach((_, i) => { if (st.per[i] && st.per[i].done) done++; }); });
+    return { strip: !!document.querySelector('#home-hero .hero-monitor, #home-hero .hero-trace'), text: b.textContent.replace(/\s+/g, ' ').trim(), now: +bar.getAttribute('aria-valuenow'),
+      share: Math.round(100 * fill.getBoundingClientRect().width / bar.getBoundingClientRect().width), want: Math.round(100 * done / secs), done, secs,
+      under: Math.round(b.getBoundingClientRect().top) >= Math.round(low) }; });
+  ok('the band’s foot is a progress bar, not a rhythm strip: sections drilled, of all of them, drawn at its share',
+     !!foot && !foot.strip && foot.now === foot.want && Math.abs(foot.share - foot.want) <= 1 && new RegExp('^' + foot.done + ' of ' + foot.secs + ' sections drilled ?' + foot.want + '%$').test(foot.text) && foot.under,
+     JSON.stringify(foot));
   /* The owner first asked for a still home screen, then for animation.
      Every element on the home screen, as the browser computes it: it moves
      now — and with reduced motion asked for, nothing does. */
@@ -1123,47 +1167,10 @@ function kindOf(user) {
   const accentNow = await page.evaluate(() => { const p = document.createElement('i'); p.style.color = 'var(--accent)'; document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c; });
   ok('the primary buttons, the current tab and the add button are the accent, solid — no gradient', calm.length >= 3 && ['learn-plus', 'nav-btn', 'primary'].every(k => calm.some(c => c.q.split(' ').indexOf(k) !== -1)) && calm.every(c => c.img === 'none' && c.bg === accentNow), JSON.stringify(calm.slice(0, 4)) + ' ' + accentNow);
   const hero = await page.evaluate(() => { const e = document.querySelector('#home-hero'); const cs = getComputedStyle(e);
-    return { bg: cs.backgroundImage.slice(0, 40), trace: !!e.querySelector('.hero-monitor canvas'), held: (document.querySelector('#stat-held') || {}).textContent || '',
+    return { bg: cs.backgroundImage.slice(0, 40), bar: !!e.querySelector('#hero-progress .hp-bar'), held: (document.querySelector('#stat-held') || {}).textContent || '',
       inHero: !!e.querySelector('#streak') && !!e.querySelector('#pill-due') }; });
-  ok('the hero band carries the streak, what is due and how much is held, over its gradient and trace',
-     /gradient/.test(hero.bg) && hero.trace && /\d+%\s*Likely recalled/.test(hero.held) && hero.inHero, JSON.stringify(hero));
-  /* Systole's live strip (monitor.js): drawn, sweeping, a rhythm named in
-     monitor type — the same canvas through a redraw, so a tap does not
-     restart it — and still, but drawn, with reduced motion asked for. The
-     waits are for frames to have been painted; what they painted is the
-     check. */
-  const strip = () => page.evaluate(() => { const m = document.querySelector('.hero-monitor'), c = m.querySelector('canvas');
-    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let ink = 0; const cols = new Set();
-    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) { ink++; cols.add(((i - 3) / 4) % c.width); }
-    return { x: m.getAttribute('data-x'), still: m.getAttribute('data-still'), ink, cols: cols.size, w: c.width, rhythm: m.getAttribute('data-rhythm'),
-      label: m.querySelector('.hero-monitor-label').textContent, font: getComputedStyle(m.querySelector('.hero-monitor-label')).fontFamily }; });
-  await page.waitForFunction(() => { const m = document.querySelector('.hero-monitor'); return m && +m.getAttribute('data-x') > 0; }, null, T).catch(() => {});
-  const s1 = await strip();
-  /* it moves by itself: no redraw between the two readings (a redraw
-     nudges it one frame, and the first version of this check measured that) */
-  await page.waitForFunction(x => { const m = document.querySelector('.hero-monitor'); return m && m.getAttribute('data-x') !== x; }, s1.x, T).catch(() => {});
-  const s2 = await strip();
-  const sameCanvas = await page.evaluate(() => { const c = document.querySelector('.hero-monitor canvas'); Memorizer.render(); return document.querySelector('.hero-monitor canvas') === c; });
-  const playlist = await page.evaluate(() => MemMonitor.PLAYLIST);
-  ok('Systole’s rhythm strip sweeps across the hero, a rhythm named in monitor type',
-     s1.ink > 0 && s2.x !== s1.x && playlist.indexOf(s1.rhythm) !== -1 && /^II · .+ · \d+ bpm$/.test(s1.label) && /mono|Menlo|Consolas/i.test(s1.font), JSON.stringify({ s1, s2 }));
-  ok('and a redraw keeps the same strip running, rather than starting another', sameCanvas, String(sameCanvas));
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.evaluate(() => Memorizer.render());
-  /* The still strip is drawn on the next frame: wait for that drawing to
-     have happened (data-drawn, set when it has run) — a precondition; what
-     it drew is the check. CI read the canvas between the flag and the
-     frame, and saw a quarter of a strip. */
-  await page.waitForFunction(() => { const m = document.querySelector('.hero-monitor'); return m.getAttribute('data-still') === 'true' && m.getAttribute('data-drawn') === 'whole'; }, null, T).catch(() => {});
-  const r1 = await strip();
-  await page.waitForTimeout(400);
-  const r2 = await strip();
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.evaluate(() => Memorizer.render());
-  /* whole: ink in every column — a sweeping strip always has the eraser's
-     blank gap ahead of its pen, and ink left over from the sweep would
-     otherwise pass for a drawing */
-  ok('with reduced motion asked for, the strip is drawn whole and holds still', r1.still === 'true' && r1.cols === r1.w && r2.x === r1.x && r2.ink === r1.ink, JSON.stringify({ r1, r2 }));
+  ok('the hero band carries the streak, what is due and how much is held, over its gradient, with its progress bar',
+     /gradient/.test(hero.bg) && hero.bar && /\d+%\s*Likely recalled/.test(hero.held) && hero.inHero, JSON.stringify(hero));
   /* Home fits: on a phone, nothing wider than the screen. */
   await page.setViewportSize({ width: 375, height: 812 });
   const homeWide = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
@@ -2373,6 +2380,48 @@ function kindOf(user) {
     ok('figures stored by an older finder are found again, and kept', refound === stale.was, refound.slice(0, 120));
   }
 
+  head('skip a question in the drill');
+  {
+    /* A fresh profile on the built-in coach: its own drill, so the main
+       flow's questions keep their order. */
+    const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' });
+    const ps = watch(await ctx.newPage(), events, 'skip', errors);
+    await wire(ps);
+    await ps.goto(URL);
+    await ps.locator('#door-add').waitFor(T);
+    await ps.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
+    await ps.locator('#learn-unit').click();
+    await ps.locator('#to-drill').waitFor(T);
+    await ps.locator('#to-drill').click();
+    for (let g = 0; g < 40 && await ps.evaluate(() => Memorizer.ui.state.phase === 'memorize'); g++) {
+      const k = await ps.evaluate(() => Memorizer.ui.state.per[Memorizer.ui.state.section].memo.pos);
+      await ps.locator('#recall-show').click(); await ps.locator('#recall-knew').click();
+      await ps.waitForFunction(k => Memorizer.ui.state.phase !== 'memorize' || Memorizer.ui.state.per[Memorizer.ui.state.section].memo.pos !== k, k, T);
+    }
+    await ps.locator('#mcq .option').first().waitFor(T);
+    const d0 = await ps.evaluate(() => { const c = Memorizer.ui.state.per[Memorizer.ui.state.section]; return { order: c.order.slice(), pos: c.pos, n: c.quiz.questions.length, q: document.querySelector('#mcq h2.q').textContent }; });
+    const canSkip = await ps.locator('#skip-q').count() === 1;
+    if (canSkip) await ps.locator('#skip-q').click();
+    await ps.waitForFunction(q0 => document.querySelector('#mcq h2.q') && document.querySelector('#mcq h2.q').textContent !== q0, d0.q, T).catch(() => {});
+    const d1 = await ps.evaluate(() => { const c = Memorizer.ui.state.per[Memorizer.ui.state.section]; return { order: c.order.slice(), pos: c.pos, answers: c.answers.length, q: document.querySelector('#mcq h2.q').textContent }; });
+    ok('a question can be skipped: the next is asked, the skipped one moved to the end, nothing answered',
+       canSkip && d0.n >= 2 && d1.q !== d0.q && d1.answers === 0 && d1.pos === 0 && d1.order.length === d0.order.length && d1.order[d1.order.length - 1] === d0.order[0], JSON.stringify({ d0, d1 }));
+    /* every question answered right, the last left asked without a skip */
+    let lastSkip = null;
+    for (let g = 0; g < 40 && await ps.evaluate(() => Memorizer.ui.state.phase === 'drill'); g++) {
+      const left = await ps.evaluate(() => { const c = Memorizer.ui.state.per[Memorizer.ui.state.section]; return c.order.length - c.pos; });
+      if (left === 1) lastSkip = await ps.locator('#skip-q').count();
+      const a = await ps.evaluate(() => { const c = Memorizer.ui.state.per[Memorizer.ui.state.section]; return c.quiz.questions[c.order[c.pos]].answer; });
+      await ps.locator('#mcq .option[data-i="' + a + '"]').click();
+      await ps.locator('#next').click();
+      await ps.waitForFunction(() => Memorizer.ui.state.phase !== 'drill' || !document.querySelector('#mcq .why'), null, T);
+    }
+    const res = await ps.evaluate(() => { const c = Memorizer.ui.state.per[Memorizer.ui.state.section]; return { phase: Memorizer.ui.state.phase, score: c.score, firsts: c.answers.filter(a => a.first).length, n: c.quiz.questions.length }; });
+    ok('answered at the end, the skipped question counts as a first try; the last one left cannot be skipped',
+       res.phase === 'result' && res.score === 1 && res.firsts === res.n && lastSkip === 0, JSON.stringify({ res, lastSkip }));
+    await ctx.close();
+  }
+
   head('a unit’s contents: its chapters with their sections, and a section deleted');
   {
     /* The owner's screenshot: 116 sections as big cards, titled
@@ -2396,6 +2445,24 @@ function kindOf(user) {
        cont.groups.length === 1 && cont.groups[0].title === 'Chapter 7 Synthetic Loading Conditions Of The Heart' && cont.groups[0].open &&
        JSON.stringify(cont.groups[0].rows) === '["Preload","Afterload"]' && /^2 sections · p/.test(cont.groups[0].meta) && cont.groups[0].bar &&
        JSON.stringify(cont.solo) === '["A section on its own"]' && JSON.stringify(cont.order) === '["1","2","3"]' && cont.count === '1 chapter · 3 sections', JSON.stringify(cont));
+    /* The chapters as round icons (the owner's picture of Systole's row). */
+    await pc.evaluate(() => { const B = ['Arrhythmias: Preload', 'Valvular Disease: Afterload', 'Valvular Disease: A section on its own'];
+      const d = Memorizer.ui.docRec; d.clusters.forEach((c, i) => { c.title = B[i]; }); Memorizer.ui.state.titles = B.slice(); Memorizer.ui.openCh = null; Memorizer.render(); });
+    const row = await pc.evaluate(() => [...document.querySelectorAll('#ch-icons .ch-icon')].map(b => ({ topic: b.querySelector('svg.topic-icon').dataset.topic, label: b.querySelector('.ci-label').textContent,
+      ring: Math.round(b.querySelector('.ci-ring').getBoundingClientRect().width), r: getComputedStyle(b.querySelector('.ci-ring')).borderRadius })));
+    ok('a unit’s chapters are a row of round icons, each its topic’s, with a short name', row.length === 2 && row[0].topic === 'rhythm' && row[1].topic === 'valves' &&
+       row[0].label === 'Arrhythmias' && row[1].label === 'Valvular' && row.every(x => x.ring >= 56 && /50%/.test(x.r)), JSON.stringify(row));
+    /* a short screen, so the chapter starts below it (a precondition, read) */
+    await pc.setViewportSize({ width: 820, height: 480 });
+    await pc.evaluate(() => { document.querySelectorAll('.ch-group').forEach(g => { g.open = false; }); Memorizer.ui.openCh[document.querySelectorAll('.ch-group')[1].dataset.key] = false; window.scrollTo(0, 0); });
+    const below = await pc.evaluate(() => Math.round(document.querySelectorAll('.ch-group')[1].getBoundingClientRect().top) > innerHeight);
+    await pc.locator('#ch-icons .ch-icon').nth(1).click();
+    const jumped = await pc.evaluate(() => { const g = document.querySelectorAll('.ch-group')[1]; return { open: g.open, top: Math.round(g.getBoundingClientRect().top), icon: !!g.querySelector('.ch-n svg.topic-icon') }; });
+    await pc.setViewportSize({ width: 820, height: 1100 });
+    ok('tapped, a round icon opens its chapter and brings it to the top; the chapter card carries the same icon', below && jumped.open && jumped.top >= -2 && jumped.top < 120 && jumped.icon, JSON.stringify({ below, jumped }));
+    await pc.evaluate(() => { const T = ['CHAPTER7 SyntheticLoadingConditionsOfTheHeart: Preload', 'CHAPTER7 SyntheticLoadingConditionsOfTheHeart: Afterload', 'A section on its own'];
+      const d = Memorizer.ui.docRec; d.clusters.forEach((c, i) => { c.title = T[i]; }); Memorizer.ui.state.titles = T.slice(); Memorizer.ui.openCh = null; Memorizer.render(); });
+    await pc.evaluate(() => window.scrollTo(0, 0));
     await pc.locator('#sections .ch-head').click();
     ok('a chapter folds shut, and stays shut across a redraw', await pc.evaluate(() => { const g = document.querySelector('.ch-group'); if (g.open) return false;
       Memorizer.render(); return !document.querySelector('.ch-group').open; }));
