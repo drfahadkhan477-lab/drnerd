@@ -28,6 +28,8 @@
     "browsers": "Playwright downloads its own browsers on install. Set PLAYWRIGHT_BROWSERS_PATH to share one copy, and PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 where they are already provisioned. `npx playwright install chromium webkit` is the minimum for a full run; firefox is accepted by --engine and has to be installed before it will work."
   },
   "devDependencies": {
+    "chai": "6.2.2",
+    "mocha": "12.0.2",
     "playwright": "1.56.0",
     "ts-fsrs": "5.4.2"
   }
