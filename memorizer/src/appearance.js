@@ -110,9 +110,12 @@ var THEMES = [
     brain: { t1: '#E3F1FF', t2: '#D2E6FA', t3: '#B8D2EE', sulcus: 'rgba(40,70,140,.26)', rim: 'rgba(255,255,255,.95)', sheen: 'rgba(255,255,255,.6)',
              axon: 'rgba(40,70,140,.20)', dendrite: 'rgba(40,70,140,.50)', dormant: '#F2F8FF', spark: '#2457FF', glint: 'rgba(255,255,255,.85)',
              stage: 'radial-gradient(90% 90% at 30% 20%, rgba(36,87,255,.08), transparent 70%)' } },
-  { id: 'mint', name: 'Mint Night', mode: 'dark', swatch: ['#050505', '#D7FFE0'], source: null,
+  { id: 'mint', name: 'Mint Night', mode: 'dark', swatch: ['#050505', '#8CF0AE'], source: null,
     t: { bg: '#050505', surface: '#101412', 'surface-2': '#18201B', ink: '#EFFFF3', muted: '#9DB5A5', line: '#25302A',
-         accent: '#D7FFE0', 'accent-soft': '#14231A', 'accent-ink': '#050505' },
+         /* the owner's ghost green (#D7FFE0) is the hero's accent, as chosen;
+            as the working accent it sat 13 ΔE from the text, so links and
+            headings read as text — this deeper one of the same green does not */
+         accent: '#8CF0AE', 'accent-soft': '#14231A', 'accent-ink': '#050505' },
     hero: { 'hero-a': '#0C120E', 'hero-b': '#111A14', 'hero-c': '#070A08', 'hero-accent': '#D7FFE0', 'hero-edge': 'rgba(215,255,224,.16)',
             'hero-ink': '#EFFFF3', 'hero-muted': '#9DB5A5', 'hero-pill': 'rgba(255,255,255,.06)', 'hero-pill-edge': 'rgba(255,255,255,.10)' },
     brain: { t1: 'rgba(215,255,224,.18)', t2: 'rgba(120,180,140,.12)', t3: 'rgba(10,20,14,.5)', sulcus: 'rgba(215,255,224,.16)', rim: 'rgba(215,255,224,.35)',

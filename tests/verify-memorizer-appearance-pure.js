@@ -122,6 +122,17 @@ head('every theme is readable');
     });
   });
   ok('every theme clears AA for every text pairing the page draws (7:1 for body text)', bad.length === 0, bad.join('; ') || `${L.THEMES.length} themes × 14 pairings`);
+  /* An accent must look like an accent: links, headings and the next step
+     are set in it, beside text in ink. Mint Night's first accent sat 13 ΔE
+     (CIE76) from its text and read as text; the others are 38 or more. */
+  const lab = h => { const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const r = lin(parseInt(h.slice(1, 3), 16)), g = lin(parseInt(h.slice(3, 5), 16)), bl = lin(parseInt(h.slice(5, 7), 16));
+    const X = (r * 0.4124 + g * 0.3576 + bl * 0.1805) / 0.95047, Y = r * 0.2126 + g * 0.7152 + bl * 0.0722, Z = (r * 0.0193 + g * 0.1192 + bl * 0.9505) / 1.08883;
+    const f = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116; return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))]; };
+  const dE = (x, y) => { const p = lab(x), q = lab(y); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+  const near = L.THEMES.map(t => [t.id, dE(t.t.accent, t.t.ink)]).filter(x => x[1] < 30);
+  ok('in every theme the accent stands apart from the text (ΔE 30 or more)', near.length === 0,
+     near.map(x => x[0] + ' ' + x[1].toFixed(1)).join(', ') || L.THEMES.map(t => t.id + ' ' + dE(t.t.accent, t.t.ink).toFixed(0)).join(' '));
   ok('no palette but Contrast uses pure black or white as a ground (Systole’s rule)',
      L.THEMES.filter(t => t.id !== 'contrast').every(t => !/^#(000000|FFFFFF)$/i.test(t.t.bg)));
   /* Read from the generated stylesheet, per theme: the meaning colours are
@@ -263,11 +274,11 @@ head('glass and glow: the aurora and second accent, and text readable on glass o
   /* Glass over the aurora. The backdrop behind a glass card is the ground
      with an aurora colour over it; the card is the surface at its alpha over
      that. Text on the card must clear the same floors as text on a card. */
-  const FLOOR = { standard: { text: 7, muted: 4.5, accent: 4.5 }, high: { text: 10, muted: 7, accent: 7 } };
+  const FLOOR = { standard: { text: 7, muted: 4.5, accent: 4.5, meaning: 4.5 }, high: { text: 10, muted: 7, accent: 7, meaning: 7 } };
   const bad = [];
   let n = 0;
   L.THEMES.forEach(th => ['standard', 'high'].forEach(c => ['dim', 'standard', 'bright'].forEach(b => {
-    const t = L.variant(th, c, b), g = L.glassOf(th, c, t), f = FLOOR[c];
+    const t = L.variant(th, c, b), g = L.glassOf(th, c, t), f = FLOOR[c], sm = L.semanticOf(th.mode, c);
     const backs = [t.bg].concat(L.GLOW[th.id].aura.map(a => L.over(a, t.bg)));
     backs.forEach((back, bi) => ['glass', 'glass-2'].forEach(k => {
       n++;
@@ -275,11 +286,13 @@ head('glass and glow: the aurora and second accent, and text readable on glass o
       const need = (what, fg, min) => { const r = ratio(fg, card); if (r < min) bad.push(`${th.id}/${c}/${b} ${what} on ${k} over aura ${bi} ${r.toFixed(2)} < ${min}`); };
       need('text', t.ink, f.text); need('secondary text', t.muted, f.muted);
       if (k === 'glass') need('accent', t.accent, f.accent);
+      /* a drill's verdict is written in its meaning colour on the card */
+      if (k === 'glass') ['good', 'mid', 'bad'].forEach(m => need(m, sm[m], f.meaning));
     }));
     const bt = ratio(t['accent-ink'], t['accent-2']);
     if (bt < f.accent) bad.push(`${th.id}/${c}/${b} button text on accent-2 ${bt.toFixed(2)}`);
   })));
-  ok('text on glass over every aurora colour clears its floors, in every theme and setting, and so does button text on the second accent',
+  ok('text on glass over every aurora colour clears its floors — the meaning colours too — in every theme and setting, and so does button text on the second accent',
      n === 480 && bad.length === 0, bad.slice(0, 5).join('; ') || `${n} glass composites`);
   /* The same, under the glass's sheen and the finger's light at their
      brightest (both white over the card, where the text is): a white that

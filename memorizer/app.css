@@ -412,9 +412,14 @@ blockquote.quote { margin: var(--s-3) 0; padding: var(--s-3) var(--s-4); border-
 .option.wrong .opt-letter { background: var(--bad); color: #FFFFFF; }
 .option.dim { opacity: .6; }
 .option[disabled] { cursor: default; }
-.why { margin-top: var(--s-4); padding: var(--s-4); border-radius: 1rem; }
-.why.good { background: var(--good-soft); }
-.why.bad { background: var(--bad-soft); }
+/* The verdict: the card's own ground with a rail down its left in the
+   meaning colour, and the verdict line in it — a wrong answer read calmly,
+   not a block of red (the dark themes' tint was near-black red). */
+.why { margin-top: var(--s-4); padding: var(--s-3) var(--s-4); border-radius: 0 1rem 1rem 0; border-left: 4px solid var(--line); background: transparent; }
+.why.good { border-left-color: var(--good); }
+.why.bad { border-left-color: var(--bad); }
+.why.good > strong:first-child { color: var(--good); }
+.why.bad > strong:first-child { color: var(--bad); }
 .why strong { font-size: var(--t-lead); }
 .why-label { font-weight: 800; }
 .missed { padding-left: 1.1em; }
