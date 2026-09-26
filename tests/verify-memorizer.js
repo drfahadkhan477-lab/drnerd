@@ -938,13 +938,25 @@ function kindOf(user) {
     const r = b.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
     return { t: b.textContent, h: Math.round(r.height), hit: !!at && (at === b || b.contains(at)), rowTop: Math.round(document.querySelector('.unit-row .doc-name').getBoundingClientRect().top) }; }));
   await page.locator('.unit-row details.menu summary').click();
-  ok('its menu opens whole: every item can be seen and tapped, not cut off by the row', menuHit.length === 2 && menuHit.every(m => m.hit && m.h > 20), JSON.stringify(menuHit));
+  ok('its menu opens whole: every item can be seen and tapped, not cut off by the row', menuHit.length === 3 && menuHit.every(m => m.hit && m.h > 20), JSON.stringify(menuHit));
   /* A unit is opened from Chapters, and Back returns there, not home. */
   await page.locator('.unit-row .unit-open').first().click();
   await page.locator('#sections').waitFor(T);
   await page.getByRole('button', { name: 'Back' }).first().click();
   await page.locator('main.shelf').waitFor(T).catch(() => {});
   ok('a unit opened from Chapters goes back to Chapters', await page.evaluate(() => Memorizer.ui.view === 'shelf' && !!document.querySelector('main.shelf #units')));
+  /* The owner: "App generator prompt is missing" — it was there, folded on
+     the unit's page. A unit's menu on Chapters goes straight to it. */
+  await page.locator('.unit-row details.menu summary').click();
+  /* a missing item is this check's FAIL, not a crash on the click */
+  const hasMenuPack = await page.locator('.unit-row [data-pack]').count() === 1;
+  if (hasMenuPack) { await page.locator('.unit-row [data-pack]').click(); await page.locator('#pack-card').waitFor(T); }
+  else await page.locator('.unit-row details.menu summary').click();
+  const viaMenu = await page.evaluate(() => { const c = document.querySelector('#pack-card');
+    return c ? { open: c.open, copy: document.activeElement && document.activeElement.id, top: Math.round(c.getBoundingClientRect().top), h: innerHeight } : { card: 'none' }; });
+  ok('a unit’s menu on Chapters opens its study pack: the card open, in view, Copy the prompt focused',
+     hasMenuPack && viaMenu.open && viaMenu.copy === 'pack-copy' && viaMenu.top >= 0 && viaMenu.top < viaMenu.h / 2, JSON.stringify(viaMenu));
+  if (hasMenuPack) { await page.getByRole('button', { name: 'Back' }).first().click(); await page.locator('main.shelf').waitFor(T); }
   const dock = await page.evaluate(() => { const r = document.querySelector('nav.dock').getBoundingClientRect(); return { pos: getComputedStyle(document.querySelector('nav.dock')).position, gap: innerHeight - r.bottom, w: r.width }; });
   ok('the tabs float at the foot of the screen', dock.pos === 'fixed' && dock.gap > 0 && dock.w < 820, JSON.stringify(dock));
   /* Section 1 scored 1 of 2 on its drill: 50%, and its one miss is its card. */
@@ -2361,7 +2373,17 @@ function kindOf(user) {
     await p4.locator('#sections .section-card').first().waitFor(T);
     ok('a unit with no pack says so, folded to one line', /none yet/.test(await text(p4, '#pack-card summary')) &&
        await p4.evaluate(() => !document.querySelector('#pack-card').open));
-    await p4.locator('#pack-card summary').click();
+    /* and a way to it in sight, beside the unit's next step */
+    const goBtn = await p4.evaluate(() => { const b = document.querySelector('#pack-go'), l = document.querySelector('#learn-unit');
+      return b ? { text: b.textContent, near: b.parentElement === l.parentElement, shown: b.getBoundingClientRect().bottom <= innerHeight } : null; });
+    if (goBtn) await p4.locator('#pack-go').click();
+    const viaGo = await p4.evaluate(() => { const c = document.querySelector('#pack-card');
+      return { open: c.open, copy: document.activeElement && document.activeElement.id, top: Math.round(c.getBoundingClientRect().top), h: innerHeight }; });
+    /* the rest of the pack's checks need the card open, whatever the button did */
+    if (!viaGo.open) await p4.locator('#pack-card summary').click();
+    ok('the study pack is in sight beside Learn unit, and opens its card in view with Copy the prompt focused',
+       !!goBtn && /Study pack/.test(goBtn.text) && goBtn.near && goBtn.shown && viaGo.open && viaGo.copy === 'pack-copy' && viaGo.top >= 0 && viaGo.top < viaGo.h / 2,
+       JSON.stringify({ goBtn, viaGo }));
     await p4.locator('#pack-copy').click();
     await p4.waitForFunction(() => /Copied|copy it/.test(document.querySelector('#pack-copy-status').textContent), null, T);
     const want = await p4.evaluate(() => MemPack.prompt(Memorizer.ui.docRec));
@@ -2602,6 +2624,14 @@ function kindOf(user) {
     await p5.locator('#chapters').waitFor(T);
     ok('back from a chapter is back to its book', await p5.locator('#found-by').count() === 1);
 
+    /* A chapter's menu goes to its study pack too. */
+    const ch1 = (await p5.evaluate(() => MemStore.all('books').then(x => x[0].chapters))).find(c => c.pageStart === 2).docId;
+    const row1 = p5.locator('#chapters .chapter-row').nth(1), hasBookPack = await row1.locator('[data-pack]').count() === 1;
+    if (hasBookPack) { await row1.locator('details.menu summary').click(); await row1.locator('[data-pack]').click(); await p5.locator('#pack-card').waitFor(T); }
+    const bookPack = hasBookPack ? await p5.evaluate(() => ({ id: Memorizer.ui.docRec && Memorizer.ui.docRec.id, open: document.querySelector('#pack-card').open, copy: document.activeElement && document.activeElement.id }))
+      : { menu: 'no Study pack item' };
+    ok('a chapter’s menu in a book opens that chapter’s study pack, ready to copy', bookPack.id === ch1 && bookPack.open && bookPack.copy === 'pack-copy', JSON.stringify(bookPack) + ' want ' + ch1);
+    if (hasBookPack) { await p5.locator('header.topbar button[aria-label="Back"]').click(); await p5.locator('#chapters').waitFor(T); }
     head('cutting the book again');
     /* Chapter 1 opened, so it has a session to keep. */
     await p5.locator('#chapters .chapter-row').nth(1).locator('button.unit-open').click();

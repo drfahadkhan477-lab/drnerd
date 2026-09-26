@@ -936,6 +936,7 @@ function homeParts() {
       pct ? h('span.badge', pct + '%') : null,
       h('details.menu', h('summary', { 'aria-label': 'More for ' + d.name }, '⋮'),
         h('div.menu-list',
+          button('\u2726 Study pack for Claude', function () { openPack(d.id); }, 'quiet', { 'data-pack': d.id }),
           button('Start over', function () {
             if (!root.confirm('Start "' + d.name + '" from the beginning? Your review cards are kept.')) return;
             Store.del('sessions', d.id).then(function () { return openDoc(d.id); });
@@ -1041,7 +1042,10 @@ function viewUnit() {
        and covered the last sections (the owner's screenshot). */
     h('div.unit-cta', allDone
       ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
-      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' })),
+      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' }),
+      /* the owner could not find the prompt for Claude: folded to one line
+         below, it read as missing — so a way to it sits beside the next step */
+      button('\u2726 Study pack — the prompt for Claude', function () { ui.packOpen = true; ui.packFocus = true; render(); }, 'tonal', { id: 'pack-go' })),
     ui.notice ? h('p.card.note', { id: 'notice', role: 'status' }, ui.notice) : null,
     packCard(d),
     weakCard(s),
@@ -1195,11 +1199,12 @@ function viewBook() {
         h('strong.doc-name', h('span.chapter-n', label), ' ', c.title),
         h('span.muted', 'pp. ' + c.pageStart + '–' + c.pageEnd + ' · ' + (d ? Home.count(d.clusters.length, 'section') : 'no readable text'))),
       pct ? h('span.badge', pct + '%') : null,
-      i > 0 ? h('details.menu', h('summary', { 'aria-label': 'More for ' + c.title }, '⋮'),
-        h('div.menu-list', button('Join to the chapter before', function () {
-          if (!root.confirm('Join "' + c.title + '" to the chapter before it? Both start again; every other chapter keeps its progress.')) return;
-          recut(b, Book.merge(b.chapters, i));
-        }, 'quiet', { 'data-join': String(i) }))) : null);
+      d || i > 0 ? h('details.menu', h('summary', { 'aria-label': 'More for ' + c.title }, '⋮'),
+        h('div.menu-list', d ? button('\u2726 Study pack for Claude', function () { openPack(d.id); }, 'quiet', { 'data-pack': d.id }) : null,
+          i > 0 ? button('Join to the chapter before', function () {
+            if (!root.confirm('Join "' + c.title + '" to the chapter before it? Both start again; every other chapter keeps its progress.')) return;
+            recut(b, Book.merge(b.chapters, i));
+          }, 'quiet', { 'data-join': String(i) }) : null)) : null);
   });
   var real = b.chapters.filter(function (c) { return !c.front; }).length;
   var studied = b.chapters.filter(function (c) { var d = c.docId && byId[c.docId]; return d && Home.unitPct(d, ui.sessions[d.id]) === 100; }).length;
@@ -3511,7 +3516,9 @@ function render() {
     : ui.view === 'settings' ? viewSettings()
     : ui.view === 'shelf' ? viewShelf() : viewHome();
   /* A new screen settles in (app.css, main[data-enter]); a redraw of the
-     same screen does not. */
+     same screen does not — and keeps the focus where it was: a redraw the
+     reader did not ask for (a chapter's figures found, say) took it away. */
+  var had = ui.view === lastView && doc.activeElement && doc.activeElement !== doc.body ? doc.activeElement.id : '';
   if (ui.view !== lastView) { view.setAttribute('data-enter', ''); lastView = ui.view; }
   app.textContent = '';
   var banner = storageBanner();
@@ -3521,7 +3528,22 @@ function render() {
   var rb = robot();
   if (rb) app.appendChild(rb);
   Array.prototype.forEach.call(app.querySelectorAll('[data-comp]'), play);
-  if (ui.view === 'session') { pump(); focusTeach(); }
+  var back = had && doc.getElementById(had);
+  if (back && doc.activeElement !== back && back.focus) back.focus({ preventScroll: true });
+  if (ui.view === 'session') { pump(); focusTeach(); focusPack(); }
+}
+/* Asked for the study pack: its card, open, at the top, its Copy focused. */
+function focusPack() {
+  if (!ui.packFocus) return;
+  var card = doc.getElementById('pack-card'), copy = doc.getElementById('pack-copy');
+  if (!card) return;
+  ui.packFocus = false;
+  if (card.scrollIntoView) card.scrollIntoView({ block: 'start' });
+  if (copy) copy.focus({ preventScroll: true });
+}
+/* A unit opened straight to its study pack (the ⋮ menus). */
+function openPack(id) {
+  return openDoc(id).then(function () { ui.packOpen = true; ui.packFocus = true; render(); });
 }
 
 /* The Coach asked for a teach-back: its card, once the lesson is drawn. */

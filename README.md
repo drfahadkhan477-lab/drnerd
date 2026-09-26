@@ -180,7 +180,9 @@ treatments — built on the device from a vocabulary of cardiology terms and
 their synonyms ("NT-proBNP", "TAVI", a drug by its suffix), and the indexes
 can be browsed too. Nothing is sent anywhere.
 
-**A study pack written with Claude.** On a unit's page, *Copy the prompt*
+**A study pack written with Claude.** On a unit's page — through the
+*Study pack* button beside *Learn unit*, or straight from a unit's or a
+chapter's ⋮ menu, which open its card in view — *Copy the prompt*
 gives a request for your own Claude chat — claude.ai, with your own skills —
 that carries the unit's text page by page and asks for every section's lesson
 and questions in a fixed JSON shape: the key points, the numbers, the
