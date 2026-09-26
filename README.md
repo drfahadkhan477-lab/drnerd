@@ -212,7 +212,9 @@ unit, a question that is not a fair single-best-answer, and anything Claude
 itself marked `NOT_IN_PDF`. What passes teaches the section, labelled
 "Written with Claude · checked against your book", and the drill asks its
 questions. The pack stays on the device, and `scripts/leak-guard.js` refuses
-a saved pack or prompt at commit, since both carry your book.
+a saved pack or prompt at commit, since both carry your book. Standing instructions for a Claude Project
+that writes these packs, one chapter per chat, are in
+[`docs/MEMORIZER-CLAUDE-PROJECT.md`](docs/MEMORIZER-CLAUDE-PROJECT.md).
 
 **A lesson built as one mental model.** Step by step, a section is taught
 in stages — *orient*, *mechanism*, *recognise*, *numbers*, *don't confuse*,

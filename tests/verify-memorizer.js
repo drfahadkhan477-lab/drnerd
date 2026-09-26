@@ -1034,17 +1034,24 @@ function kindOf(user) {
      with reduced motion there is none. */
   await page.locator('.jump-card').first().scrollIntoViewIfNeeded();
   const jc = await page.locator('.jump-card').first().boundingBox();
+  /* Where the pointer is on the card is read at the pointer's own event —
+     the card's box and the pointer, the same instant the app reads them —
+     not from a box read before the move. The card can shift a pixel or three
+     between the two (the hover lift's transition, and under load more): in
+     a full run once, and on CI once (91px against 90), the light was where
+     the pointer was and the check failed against the stale box. It measured
+     the page holding still, not the light. */
+  await page.evaluate(() => { window.__ptr = null; document.addEventListener('pointermove', e => {
+    const c = e.target && e.target.closest && e.target.closest('.jump-card'); if (!c || c !== document.querySelector('.jump-card')) return;
+    const r = c.getBoundingClientRect(); window.__ptr = { x: Math.round(e.clientX - r.left) + 'px', y: Math.round(e.clientY - r.top) + 'px', cx: e.clientX, cy: e.clientY };
+  }, { capture: true, passive: true }); });
+  const onCard = (want) => page.evaluate(w => { const e = document.querySelector('.jump-card'), p = window.__ptr;
+    return { lit: e.hasAttribute('data-lit'), px: e.style.getPropertyValue('--px'), py: e.style.getPropertyValue('--py'), ptr: p,
+      ours: !!p && Math.abs(p.cx - w.x) < 1 && Math.abs(p.cy - w.y) < 1, light: getComputedStyle(e).getPropertyValue('--lit').trim() }; }, want);
   await page.mouse.move(jc.x + 30, jc.y + 12);
-  /* Where the pointer is on the card is taken from the card as it stands
-     when the light is read, not from the box read before the move: once in
-     a full run the page shifted 3 px between the two, and the light, where
-     the pointer really was, failed against the stale box (cause of the
-     shift not found; a shift injected there reproduces it exactly). */
-  const litOn = await page.evaluate(at => { const e = document.querySelector('.jump-card'), r = e.getBoundingClientRect();
-    return { lit: e.hasAttribute('data-lit'), px: e.style.getPropertyValue('--px'), py: e.style.getPropertyValue('--py'),
-      at: Math.round(at.x - r.left) + 'px ' + Math.round(at.y - r.top) + 'px', light: getComputedStyle(e).getPropertyValue('--lit').trim() }; }, { x: jc.x + 30, y: jc.y + 12 });
+  const litOn = await onCard({ x: jc.x + 30, y: jc.y + 12 });
   await page.mouse.move(jc.x + 90, jc.y + 20);
-  const litMoved = await page.evaluate(() => document.querySelector('.jump-card').style.getPropertyValue('--px'));
+  const litMoved = await onCard({ x: jc.x + 90, y: jc.y + 20 });
   await page.mouse.move(2, 2);
   const litOff = await page.evaluate(() => document.querySelectorAll('[data-lit]').length);
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -1052,7 +1059,9 @@ function kindOf(user) {
   const litStill = await page.evaluate(() => document.querySelectorAll('[data-lit]').length);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.mouse.move(2, 2);
-  ok('a light follows the pointer across the glass, and goes when it leaves', litOn.lit && litOn.px + ' ' + litOn.py === litOn.at && litOn.px === '30px' && /rgba\(255,\s*255,\s*255,\s*0?\.38\)/.test(litOn.light) && litMoved === '90px' && litOff === 0,
+  const atPtr = l => !!l.ptr && l.px === l.ptr.x && l.py === l.ptr.y;
+  ok('a light follows the pointer across the glass, and goes when it leaves', litOn.lit && litOn.ours && atPtr(litOn) && /rgba\(255,\s*255,\s*255,\s*0?\.38\)/.test(litOn.light) &&
+     litMoved.ours && atPtr(litMoved) && parseFloat(litMoved.px) - parseFloat(litOn.px) >= 50 && litOff === 0,
      JSON.stringify({ litOn, litMoved, litOff }));
   ok('and with reduced motion asked for, there is no light to follow', litStill === 0, String(litStill));
   /* Laid out on an iPad held landscape: the units, and beside them where to
