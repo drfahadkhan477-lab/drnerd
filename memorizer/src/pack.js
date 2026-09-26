@@ -69,13 +69,18 @@ var LESSON = extend(Prompts.SCHEMAS.lesson, {
   pearls: arr(PAGED),
   /* oral cases for rounds (phase 4): a stem, and what an examiner asks */
   cases: arr(extend({ properties: {} }, { stem: S, asks: arr(extend({ properties: {} }, { q: S, a: S })), page: I })),
+  /* comparison and classification tables: a first column of what is
+     compared, a column per feature (or the other way about), every cell
+     from the text */
+  tables: arr(extend({ properties: {} }, { title: S, columns: arr(S), rows: arr(arr(S)), page: I })),
 });
+var TABLE = LESSON.properties.tables.items;
 var QUESTION = extend(Prompts.SCHEMAS.quiz.properties.questions.items, { why: arr(S), trap: S });
 /* What may be left out of a reply, and reads as nothing to say when it is:
    a chat that writes no pearls for a section has not written a wrong one.
    What may not: a lesson's points, and a question's stem, options, answer,
    explanation and page. Keys a reply adds that are not here are left out. */
-var LESSON_EMPTY = { overview: '', mechanism: '', numbers: [], distinctions: [], pearls: [], cases: [], mnemonics: [], analogies: [], flowchart: '' };
+var LESSON_EMPTY = { overview: '', mechanism: '', numbers: [], distinctions: [], pearls: [], cases: [], mnemonics: [], analogies: [], flowchart: '', tables: [] };
 var QUESTION_EMPTY = { quote: '', why: [], trap: '' };
 function filled(v, schema, empty) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return v;
@@ -104,6 +109,7 @@ var EXAMPLE = {
     mnemonics: [{ title: 'What the list is', letters: 'ABC', words: ['Alpha', 'Beta', 'Gamma'] }],
     analogies: [{ title: 'Short name', text: 'An everyday comparison.', source: 'Claude' }],
     flowchart: 'flowchart TD\n  A["first step"] --> B["next step"]',
+    tables: [{ title: 'What the table compares', columns: ['Feature', 'first thing', 'second thing'], rows: [['a feature', 'its value for the first', 'its value for the second']], page: 12 }],
   },
   quiz: { questions: [{
     question: 'A vignette or a direct question?',
@@ -140,9 +146,10 @@ function prompt(doc) {
   return [
     'MEMORIZER STUDY PACK — ' + name,
     '',
-    'Write a study pack for my Memorizer app from the chapter below. Use your Braunwald-the-Master and ' +
-    'Supreme-Memorizer skills if this chat has them: teach it as a master clinician would, to be remembered ' +
-    'and to be examined on.',
+    'You are a master clinician and a medical educator preparing a candidate for boards and oral exams. Write a ' +
+    'study pack for my Memorizer app from the chapter below. Use your Braunwald-the-Master and Supreme-Memorizer ' +
+    'skills if this chat has them. The goal: after one pass through a section, I understand why, I can recall ' +
+    'every high-yield fact, and I can defend it under questioning.',
     '',
     'RULES',
     '1. Work ONLY from the chapter text below (and from the chapter’s PDF, if I attach it, for its figures ' +
@@ -151,39 +158,60 @@ function prompt(doc) {
     'it, write ' + NOT_IN_PDF + ' instead — Memorizer leaves those items out.',
     '2. Cite a page for every item, numbered as the [p.N] markers in the text number them.',
     '3. Memorizer checks your reply against my book before it uses it: every number, every page, every quoted ' +
-    'sentence, and the conditions, tests and treatments you name. Anything it cannot find is shown to me ' +
-    'flagged "not found in your book".',
+    'sentence, table cell and flowchart label, and the conditions, tests and treatments you name. Anything it ' +
+    'cannot find is shown to me flagged "not found in your book". Copy numbers exactly as printed (value, unit, ' +
+    'direction: >, <, ≥, ≤); never round, convert or combine them; name things in the text’s own words.',
     '4. ' + Prompts.ANALOGY_RULE,
     '5. Reply with JSON only, in one code block, in exactly the shape shown below. Every field is required: ' +
     'write "" or [] when there is nothing to put.',
     '',
+    'HOW TO DESIGN IT — for the eye, for memory, for the exam',
+    '- Most examinable first, in every list. Cut what is not worth a mark.',
+    '- One fact per item. Start with its key term, then the fact: "Key term — fact". Short, parallel phrasing; ' +
+    'no filler words ("it is important to note").',
+    '- Show structure, do not describe it: a comparison of two or more things across two or more features is a ' +
+    'TABLE; a sequence, cascade or decision is a FLOWCHART; a list of three or more is a MNEMONIC; two things a ' +
+    'student mixes up are a DISTINCTION.',
+    '- Understanding before memorising: the mechanism explains the facts, so a point never needs its own reason repeated.',
+    '- Every number worth a mark is in lesson.numbers, and again in a table if it belongs to a comparison.',
+    '',
     'FOR EACH SECTION',
     '- "section" is its number in the list below, and "title" its title exactly as listed.',
-    '- lesson.overview: the big idea, in one or two plain sentences.',
-    '- lesson.mechanism: the mechanism or chain of reasoning that makes the section make sense, in two to four ' +
-    'sentences ("" if it has none).',
+    '- lesson.overview: the big idea — what this section is about and why it matters — in one or two plain sentences.',
+    '- lesson.mechanism: the chain of cause and effect that makes the section make sense, as "A → B → C" in two ' +
+    'to four sentences ("" if it has none).',
     '- lesson.points: 5 to 10 high-yield points, most important first, each at most 25 words and starting ' +
     'with its key term.',
     '- lesson.numbers: every threshold, cut-off, dose, percentage or duration worth memorising, one to an ' +
-    'item, with what it measures.',
+    'item, as "what it measures: value unit".',
     '- lesson.distinctions: the pairs a student confuses — two conditions, drugs, signs or criteria — ' +
-    'and how to tell them apart, in one sentence.',
+    'and how to tell them apart, in one sentence naming the one feature that separates them.',
+    '- lesson.tables: 0 to 2 tables that make a comparison or classification visible at a glance — e.g. the ' +
+    'causes, grades, criteria or treatments side by side. "columns" are the headers (the first names what each ' +
+    'row is); every row has one cell per column; at most 6 rows and 5 columns; cells a few words, numbers exactly ' +
+    'as printed; a cell the text does not fill is "—". [] if nothing in the section compares.',
+    '- lesson.flowchart: a Mermaid "flowchart TD" for the section’s pathway, sequence or decision (diagnosis, ' +
+    'management, cause and effect); else "". At most 12 nodes; every label in double quotes and a few words from ' +
+    'the text; decisions as {"question?"} with the answers on the arrows (-->|"yes"|); no styling, no subgraphs.',
     '- lesson.pearls: one to three exam pearls, the facts most likely to be asked.',
     '- lesson.cases: one or two oral-exam cases for rounds: a short clinical "stem" and two to four "asks" an ' +
     'examiner would put on it, each {q, a} with the model answer from the text ([] if the section has no clinical material).',
     '- lesson.mnemonics: for every list of three or more items, an acrostic: "words" are the items in order ' +
     'and "letters" their first letters.',
     '- lesson.analogies: one everyday analogy for a mechanism, or [] if none fits.',
-    '- lesson.flowchart: a Mermaid "flowchart TD" with quoted labels if the section describes a pathway, ' +
-    'sequence or decision; else "".',
     '- quiz.questions: 6 to 8 board-style questions, the most important material first. ' + Prompts.MCQ_RULE +
     ' Exactly ' + Prompts.OPTIONS + ' options; "answer" is the index (0 to ' + (Prompts.OPTIONS - 1) + ') of ' +
-    'the right one. Prefer clinical vignettes, "most likely", "next best step" and "all EXCEPT". "explain": ' +
+    'the right one. Prefer clinical vignettes, "most likely", "next best step" and "all EXCEPT"; test ' +
+    'reasoning, not recall of wording. "explain": ' +
     'why the answer is right, in the book’s words. "why": ' + Prompts.OPTIONS + ' strings, one per ' +
     'option in order — for each wrong option the exact reason it is wrong by the book, and "" for the ' +
     'right one. "trap": the confusion the question tests (e.g. "stenosis vs regurgitation"), or "". "quote": ' +
     '"" unless the question completes a sentence of the text, then that sentence with the gap as _____. No ' +
     '"all of the above" or "none of the above".',
+    '',
+    'BEFORE YOU REPLY, check: every number and page against the text; every table row has as many cells as ' +
+    'columns; every flowchart label is in quotes; every mnemonic has one letter per word; the JSON is complete ' +
+    'and valid. Remove anything you cannot point to in the text.',
     '',
     'THE SHAPE — one reply:',
     '{ "format": "' + FORMAT + '", "version": ' + VERSION + ', "unit": ' + JSON.stringify(name) + ', "sections": [ … ] }',
@@ -295,6 +323,19 @@ function checkOne(p0, doc, book) {
   if (typeof p0.section !== 'number' || Math.floor(p0.section) !== p0.section) return { refused: 'it has no section number' };
   if (typeof p0.title !== 'string') return { refused: 'it has no title' };
   var p = { section: p0.section, title: p0.title, lesson: filled(p0.lesson, LESSON, LESSON_EMPTY), quiz: p0.quiz || { questions: [] } };
+  /* A malformed table is left out on its own, with its reason; it does not
+     cost the section the rest of its lesson. */
+  var early = [];
+  if (p.lesson && Array.isArray(p.lesson.tables)) {
+    p.lesson.tables = p.lesson.tables.filter(function (t, k) {
+      var where = 'table ' + (k + 1), e = Prompts.check(TABLE, t, where);
+      if (!e && t.columns.length < 2) e = where + ' has fewer than two columns';
+      if (!e && !t.rows.length) e = where + ' has no rows';
+      if (!e && t.rows.some(function (r) { return r.length !== t.columns.length; })) e = where + ' has a row whose cells do not match its ' + t.columns.length + ' columns';
+      if (e) early.push({ where: where, why: e });
+      return !e;
+    });
+  }
   var lerr = Prompts.check(LESSON, p.lesson, 'lesson');
   if (lerr) return { refused: lerr };
   if (!Array.isArray(p.quiz.questions)) return { refused: 'quiz.questions is not a list' };
@@ -303,7 +344,7 @@ function checkOne(p0, doc, book) {
   if (norm(p.title) !== norm(c.title)) return { refused: 'it is "' + p.title + '", and section ' + p.section + ' here is "' + c.title + '"' };
   var sec = { text: c.segments.map(segText).join(' ') };
   sec.norm = norm(sec.text);
-  var flags = [], dropped = [];
+  var flags = [], dropped = early;
   var flag = function (item, where, why) { if (why) { item.flag = why; flags.push({ where: where, text: item.text || item.question || item.how || '', why: why }); } };
   var L = JSON.parse(JSON.stringify(p.lesson)), keep = function (list, where) {
     return list.filter(function (x, k) {
@@ -350,6 +391,13 @@ function checkOne(p0, doc, book) {
     var fw = says(L.flowchart) ? 'Claude marked part of it ' + NOT_IN_PDF : claimFlag(labels(L.flowchart), sec, book);
     if (fw) { dropped.push({ where: 'flowchart', why: fw }); L.flowchart = ''; }
   }
+  /* A table claims every cell: each is held to the book as a point is. */
+  L.tables = L.tables.filter(function (t, k) {
+    var where = 'table ' + (k + 1), cells = [].concat.apply([], t.rows);
+    if (says([t.title].concat(t.columns, cells).join(' '))) { dropped.push({ where: where, why: 'Claude marked part of it ' + NOT_IN_PDF }); return false; }
+    flag(t, where, pageFlag(t.page, c) || claimFlag(t.columns.concat(cells).join(' ; '), sec, book, t.page));
+    return true;
+  });
   L.by = 'pack';
 
   var qs = [];
@@ -391,6 +439,19 @@ function merge(rec, checked, doc, now) {
   var r = rec ? JSON.parse(JSON.stringify(rec)) : { id: doc.id, sections: {} };
   checked.sections.forEach(function (s) { s.at = now; r.sections[s.index] = s; });
   r.at = now;
+  return r;
+}
+/* A section deleted from the unit: its imported lesson and questions go,
+   and the sections after it move up one, as the unit's do. */
+function dropSection(rec, i) {
+  if (!rec) return null;
+  var r = JSON.parse(JSON.stringify(rec)), out = {};
+  Object.keys(r.sections || {}).forEach(function (key) {
+    var k = +key, x = r.sections[key];
+    if (k === i) return;
+    if (k > i) { x.index = k - 1; out[k - 1] = x; } else out[k] = x;
+  });
+  r.sections = out;
   return r;
 }
 function sectionOf(rec, i) { return rec && rec.sections && rec.sections[i] || null; }
@@ -452,7 +513,7 @@ function coverage(rec, doc) {
 
 var MemPack = { FORMAT: FORMAT, VERSION: VERSION, PER_REPLY: PER_REPLY, LESSON: LESSON, QUESTION: QUESTION, EXAMPLE: EXAMPLE,
                 prompt: prompt, replies: replies, unitName: unitName, packsIn: packsIn, parse: parse, check: check, merge: merge,
-                sectionOf: sectionOf, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam };
+                sectionOf: sectionOf, dropSection: dropSection, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam };
 root.MemPack = MemPack;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemPack;
 })(typeof window !== 'undefined' ? window : this);

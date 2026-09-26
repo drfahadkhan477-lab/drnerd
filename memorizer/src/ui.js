@@ -1010,21 +1010,81 @@ function upNext(s) {
 function backBar(title, onBack, extra) {
   return h('header.topbar', button('‹', onBack, 'round', { 'aria-label': 'Back' }), h('h1.bar-title', title), extra || null);
 }
+/* A section deleted by the owner (session.js dropSection): its progress,
+   review cards and pack entry go, the sections after it move up one, and
+   the unit's search vectors are made again when next needed. */
+function deleteSection(i) {
+  var d = ui.docRec, st0 = ui.state, c = d && d.clusters[i];
+  if (!c) return Promise.resolve();
+  if (!root.confirm('Delete section ' + (i + 1) + ', \u201C' + c.title + '\u201D, from this unit? Its progress and review cards go with it; every other section keeps its own.')) return Promise.resolve();
+  var st;
+  try { st = Session.dropSection(st0, i); } catch (e) { ui.notice = 'Not deleted: ' + e.message + '.'; render(); return Promise.resolve(); }
+  var doc2 = Object.assign({}, d, { clusters: d.clusters.filter(function (_, k) { return k !== i; }) });
+  var cards = Session.dropCards(ui.cards, d.id, i), pack2 = Pack.dropSection(ui.pack, i);
+  docsChanged();
+  return Promise.all([Store.put('docs', doc2), Store.del('vectors', d.id), pack2 ? Store.put('packs', pack2) : null]
+      .concat(cards.drop.map(function (id) { return Store.del('cards', id); }), cards.renumbered.map(function (x) { return Store.put('cards', x); })))
+    .then(function () {
+      var gone = {}, moved = {};
+      cards.drop.forEach(function (id) { gone[id] = true; });
+      cards.renumbered.forEach(function (x) { moved[x.id] = x; });
+      ui.cards = ui.cards.filter(function (x) { return !gone[x.id]; }).map(function (x) { return moved[x.id] || x; });
+      ui.docRec = doc2; ui.state = st; ui.pack = pack2; ui.figsFor = null; ui.packReport = null;
+      return save();
+    })
+    .then(function () { ui.notice = 'Deleted \u201C' + c.title + '\u201D.'; render(); }, function (e) { saveFailed(e); render(); });
+}
+function trashIcon() {
+  return svg('svg', { viewBox: '0 0 24 24', 'class': 'trash-icon', 'aria-hidden': 'true' }, [
+    svg('path', { d: 'M4 7h16M9 7V4.8c0-.4.4-.8.8-.8h4.4c.4 0 .8.4.8.8V7M6.5 7l.9 12.2c.1.9.8 1.8 1.8 1.8h5.6c1 0 1.7-.9 1.8-1.8L17.5 7M10 11v6M14 11v6' })]);
+}
 function viewUnit() {
   var s = ui.state, d = ui.docRec, n = d.clusters.length;
   var doneN = d.clusters.filter(function (_, i) { return s.per[i].done; }).length;
   var nxt = upNext(s);
   var allDone = Session.allDone(s);
-  var cards = d.clusters.map(function (c, i) {
-    var p = s.per[i], pct = Home.sectionPct(s, i);
+  /* THE CONTENTS (home.js outline): the sections that share a heading are
+     one chapter, a card with its progress that folds open to its rows; a
+     section on its own is a row of its own. Every row can be deleted. */
+  var pagesOf = function (a, b) { return a !== b ? 'pp. ' + a + '–' + b : 'p. ' + a; };
+  var row = function (it, solo) {
+    var i = it.i, c = d.clusters[i], p = s.per[i], pct = Home.sectionPct(s, i);
     var state = p.done ? 'Drilled' : p.lesson ? 'Taught' : 'New';
-    return h('button.section-card', { type: 'button', style: '--hue:' + hue(i), 'data-state': state.toLowerCase(),
-        onclick: function () { go({ type: 'open', section: i }); } },
-      h('span.band', h('span.band-n', String(i + 1))),
-      h('span.section-body',
-        h('strong.section-title', c.title),
-        h('span.muted', (c.pageEnd !== c.pageStart ? 'pp. ' + c.pageStart + '–' + c.pageEnd : 'p. ' + c.pageStart) + ' · ' + state)),
-      pct != null ? h('span.badge', pct + '%') : null);
+    return h('div.section-row' + (solo === true ? '.card.solo' : '') + (i === nxt && !allDone ? '.next' : ''), { 'data-i': String(i) },
+      h('button.section-card', { type: 'button', style: '--hue:' + hue(i), 'data-state': state.toLowerCase(), title: c.title,
+          onclick: function () { go({ type: 'open', section: i }); } },
+        h('span.band', h('span.band-n', String(i + 1))),
+        h('span.section-body',
+          h('strong.section-title', it.label),
+          h('span.muted.row-meta', h('span.state-dot', { 'aria-hidden': 'true' }), pagesOf(c.pageStart, c.pageEnd) + ' · ' + state)),
+        pct != null ? h('span.badge', pct + '%') : null),
+      n > 1 ? h('button.section-del', { type: 'button', 'aria-label': 'Delete section ' + (i + 1) + ': ' + c.title, title: 'Delete this section',
+          onclick: function () { deleteSection(i); } }, trashIcon()) : null);
+  };
+  var groups = Home.outline(d.clusters.map(function (c) { return c.title; }));
+  var chN = 0, chapters = groups.filter(function (g) { return g.title; }).length;
+  if (!ui.openCh || ui.openCh.doc !== d.id) ui.openCh = { doc: d.id };
+  var cards = groups.map(function (g) {
+    if (!g.title) return row(g.items[0], true);
+    var key = g.key + '#' + g.items[0].i, idx = g.items.map(function (x) { return x.i; });
+    var first = d.clusters[idx[0]], last = d.clusters[idx[idx.length - 1]];
+    var drilled = idx.filter(function (i) { return s.per[i].done; }).length, taught = idx.filter(function (i) { return s.per[i].lesson; }).length;
+    var pct = Math.round(100 * drilled / idx.length);
+    /* open where the next section is, or all of them when there are few */
+    var open = key in ui.openCh ? ui.openCh[key] : (chapters <= 3 || idx.indexOf(nxt) !== -1);
+    var el = h('details.card.ch-group', { open: open ? true : null, 'data-key': key,
+        ontoggle: function () { ui.openCh[key] = el.open; } },
+      /* kept as it is tapped: the toggle event comes after, and a redraw
+         between the two opened the chapter again */
+      h('summary.ch-head', { onclick: function () { ui.openCh[key] = !el.open; } },
+        h('span.ch-n', { 'aria-hidden': 'true' }, String(++chN)),
+        h('span.ch-text',
+          h('strong.ch-title', g.title),
+          h('span.muted.ch-meta', Home.count(idx.length, 'section') + ' · ' + pagesOf(first.pageStart, last.pageEnd) + ' · ' + drilled + ' drilled' + (taught > drilled ? ', ' + (taught - drilled) + ' taught' : ''))),
+        h('span.ch-pct', pct + '%'),
+        h('span.ch-bar', { 'aria-hidden': 'true' }, h('i', { style: 'width:' + pct + '%' }))),
+      h('div.ch-rows', g.items.map(function (it) { return row(it, false); })));
+    return el;
   });
   var examCard = h('div.card.exam-card' + (allDone ? '' : '.locked'), { id: 'exam-card' },
     h('div', h('strong', 'Final exam'),
@@ -1036,20 +1096,31 @@ function viewUnit() {
   return h('main.wrap.unit',
     backBar(d.name, function () { if (d.bookId) openBook(d.bookId); else leave('shelf'); }),
     d.bookId ? h('p.muted.book-of', d.bookName + (d.chapter ? ' · chapter ' + d.chapter : ' · front matter') + ' · pp. ' + d.pageStart + '–' + d.pageEnd) : null,
-    h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
-    h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
-    /* Where to go next, at the top: it floated over the foot of the page
-       and covered the last sections (the owner's screenshot). */
-    h('div.unit-cta', allDone
-      ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
-      : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' }),
-      /* the owner could not find the prompt for Claude: folded to one line
-         below, it read as missing — so a way to it sits beside the next step */
-      button('\u2726 Study pack — the prompt for Claude', function () { ui.packOpen = true; ui.packFocus = true; render(); }, 'tonal', { id: 'pack-go' })),
+    /* The unit at a glance, as Systole's chapter tiles are: how much is
+       drilled, of what, and the one next step. */
+    h('section.card.unit-hero', { id: 'unit-hero' },
+      h('div.unit-hero-top',
+        ring(Math.round(100 * doneN / Math.max(1, n)), 'unit'),
+        h('div.unit-hero-text',
+          h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
+          h('p.unit-next', { id: 'unit-states' }, allDone ? 'Every section drilled — the final exam is open.' : (function () {
+            var taughtN = d.clusters.filter(function (_, i) { return !s.per[i].done && s.per[i].lesson; }).length;
+            return [h('strong', String(doneN)), ' drilled · ', h('strong', String(taughtN)), ' taught · ', h('strong', String(n - doneN - taughtN)), ' to learn'];
+          })()))),
+      h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
+      /* Where to go next, at the top: it floated over the foot of the page
+         and covered the last sections (the owner's screenshot). */
+      h('div.unit-cta', allDone
+        ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
+        : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' }),
+        /* the owner could not find the prompt for Claude: folded to one line
+           below, it read as missing — so a way to it sits beside the next step */
+        button('\u2726 Study pack — the prompt for Claude', function () { ui.packOpen = true; ui.packFocus = true; render(); }, 'tonal', { id: 'pack-go' }))),
     ui.notice ? h('p.card.note', { id: 'notice', role: 'status' }, ui.notice) : null,
     packCard(d),
     weakCard(s),
-    h('h2.grid-title', 'Sections (' + n + ')'),
+    h('div.contents-head', h('h2.grid-title', 'Contents'),
+      h('span.muted', { id: 'contents-count' }, (chapters ? Home.count(chapters, 'chapter') + ' · ' : '') + Home.count(n, 'section'))),
     h('div.sections', { id: 'sections' }, cards),
     examCard,
     compareButton(s, d),
@@ -1492,8 +1563,19 @@ var HEAD_MARK = { 'Definition': '◆', 'Causes and risk factors': '⚑', 'Mechan
 function numbersCard(sh, play) {
   if (!sh.numbers.length) return null;
   var at = 0;
+  /* the values of one subject on one page, together: "Severe AS" once,
+     with its three tiles, rather than three times with one each */
+  var facts = [];
+  sh.numbers.forEach(function (n) {
+    var last = facts[facts.length - 1];
+    if (last && n.subject && last.subject === n.subject && last.page === n.page) {
+      last.tiles = last.tiles.concat(n.tiles);
+      if (last.texts.indexOf(n.text) === -1) last.texts.push(n.text);
+      if (n.flag) last.flags.push(n.flag);
+    } else facts.push({ subject: n.subject, page: n.page, tiles: n.tiles.slice(), texts: [n.text], flags: n.flag ? [n.flag] : [] });
+  });
   return h('div.card', { id: 'numbers', 'data-comp': play ? 'numbers:' + ui.docId + ':' + ui.state.section : null }, h('span.eyebrow', 'Numbers to know'),
-    sh.numbers.map(function (n) {
+    facts.map(function (n) {
       return h('div.fact', n.subject ? h('p.fact-subject', n.subject, ' ', page(n.page)) : null,
         h('div.tiles', n.tiles.map(function (t) {
           if (!play) return h('div.tile', h('span.tile-value', t.value), h('span.tile-label', t.label));
@@ -1507,8 +1589,8 @@ function numbersCard(sh, play) {
             h('span.tile-label', { 'data-start': t0 + 0.55, 'data-duration': 0.35, 'data-anim': 'fade' }, t.label));
         })),
         n.subject ? null : h('p.muted.fact-src', 'p.' + n.page),
-        flagLine(n.flag),
-        h('details.context', h('summary', 'The sentence'), h('p', marked(n.text), ' ', page(n.page))));
+        n.flags.map(flagLine),
+        h('details.context', h('summary', n.texts.length > 1 ? 'The sentences' : 'The sentence'), n.texts.map(function (t) { return h('p', marked(t), ' ', page(n.page)); })));
     }));
 }
 function analogyCard(a, first) {
@@ -1605,6 +1687,15 @@ function packCards(L) {
       }))) : null,
     pearls: (L.pearls || []).length ? h('div.card.pearls', { id: 'pearls' }, h('span.eyebrow', 'Exam pearls'),
       h('ul.pearl-list', L.pearls.map(function (x) { return h('li', marked(x.text), ' ', page(x.page), flagLine(x.flag)); }))) : null,
+    /* Claude's comparisons, each cell held to the book (pack.js) */
+    tables: (L.tables || []).length ? h('div.card.pack-tables', { id: 'pack-tables' }, h('span.eyebrow', 'Compare'),
+      L.tables.map(function (t) {
+        return h('figure.pack-table', h('figcaption', h('strong', t.title), ' ', page(t.page)),
+          h('div.table-wrap', h('table.data',
+            h('thead', h('tr', t.columns.map(function (x) { return h('th', { scope: 'col' }, x); }))),
+            h('tbody', t.rows.map(function (r) { return h('tr', r.map(function (x, i) { return i === 0 ? h('th', { scope: 'row' }, marked(x)) : h('td', marked(x)); })); })))),
+          flagLine(t.flag));
+      })) : null,
   };
 }
 function viewLesson() {
@@ -1668,6 +1759,7 @@ function viewLesson() {
     var nums = numbersCard(sh, true);
     if (nums) parts.push({ label: 'Numbers to know', stage: 'numbers', nodes: [nums] });
     if (pk.distinctions) parts.push({ label: 'Don\u2019t confuse', stage: 'confuse', nodes: [pk.distinctions] });
+    if (pk.tables) parts.push({ label: 'Compare', stage: 'confuse', nodes: [pk.tables] });
     (L.mnemonics || []).forEach(function (m) { parts.push({ label: 'Remember it: ' + m.title, stage: 'recall', nodes: [mnemonicPlay(m)] }); });
     var qc = quickCheck(c, L);
     if (qc) parts.push({ label: 'Check yourself', stage: 'recall', nodes: [qc] });
@@ -1707,32 +1799,41 @@ function viewLesson() {
     ocrNote(c),
     h('div.row.lesson-mode', button('▶ Play this section', function () { setStepMode(true); ui.step = null; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'step-mode' })),
     pk.label,
-    bigIdea,
-    mapC,
-    pk.mechanism,
-    soc,
-    glanceCard(c, L),
-    analogies.length ? analogyCard(analogies[0], true) : null,
-    h('div.card', { id: 'points' },
-      h('div.card-head', h('h2', 'Key points'), tools),
-      sh.groups.map(group),
-      h('p.muted.arranged-note', fromPack ? 'Headings arranged by Memorizer; the points written with Claude from your book.' : 'Headings arranged by Memorizer; the points are your book’s.')),
-    numbersCard(sh),
-    pk.distinctions,
-    pk.pearls,
-    mnemonics,
+    /* THE WHOLE LESSON on one screen's width (the owner: "not too much
+       scrolling"): what to understand in the main column — the idea, how it
+       works, the points — and beside it on an iPad, below it on a phone,
+       what to memorise at a glance: the numbers, the pairs not to confuse,
+       the pearls, the hooks, the map. */
+    h('div.lesson-grid', { id: 'lesson-grid' },
+      h('div.lesson-main',
+        bigIdea,
+        pk.mechanism,
+        glanceCard(c, L),
+        h('div.card', { id: 'points' },
+          h('div.card-head', h('h2', 'Key points'), tools),
+          sh.groups.map(group),
+          h('p.muted.arranged-note', fromPack ? 'Headings arranged by Memorizer; the points written with Claude from your book.' : 'Headings arranged by Memorizer; the points are your book’s.')),
+        pk.tables,
+        analogies.length ? analogyCard(analogies[0], true) : null,
+        soc),
+      h('aside.lesson-side', { 'aria-label': 'To memorise' },
+        h('p.eyebrow.side-title', 'To memorise'),
+        numbersCard(sh),
+        pk.distinctions,
+        pk.pearls,
+        mnemonics,
+        mapC)),
     /* after everything has been read: recall, not a look at the next card */
-    quickCheck(c, L),
-    teachCard(c, L),
-    rounds,
-    noteCard(c),
-    fixCard(c),
-    moreAnalogies,
-    /* the on-device AI tutor is in the robot's window now (robot()) */
-    flowCard,
-    tablesCard(c),
-    visualsCard(c),
-    full,
+    h('div.lesson-practice', quickCheck(c, L), teachCard(c, L), rounds),
+    h('div.lesson-extras',
+      noteCard(c),
+      fixCard(c),
+      moreAnalogies,
+      /* the on-device AI tutor is in the robot's window now (robot()) */
+      flowCard,
+      tablesCard(c),
+      visualsCard(c),
+      full),
     drill,
   ];
 }
@@ -2116,7 +2217,8 @@ function viewSession() {
   else if (s.phase === 'done') body = viewDone();
   else if (s.phase === 'review') body = viewReviewRound();
   else return viewUnit();
-  return h('main.wrap.study', body);
+  /* the whole lesson in two columns needs the room an iPad has */
+  return h('main.wrap.study' + (s.phase === 'teach' && !stepMode() ? '.lesson-wide' : ''), body);
 }
 
 function leave(view) {
@@ -2376,7 +2478,8 @@ function masteryCard(pearl) {
     svg('clipPath', { id: 'cbl-clip' }, [svg('path', { d: B.cerebellum })]),
     /* depth: the tissue darkens toward its underside and back, in its own tone */
     svg('radialGradient', { id: 'brain-shade', cx: '68%', cy: '88%', r: '75%' }, [svg('stop', { offset: '0', 'class': 'sh-0' }), svg('stop', { offset: '1', 'class': 'sh-1' })]),
-    svg('radialGradient', { id: 'brain-floor', cx: '50%', cy: '50%', r: '50%' }, [svg('stop', { offset: '0', 'class': 'fl-0' }), svg('stop', { offset: '1', 'class': 'fl-1' })])]);
+    svg('radialGradient', { id: 'brain-floor', cx: '50%', cy: '50%', r: '50%' }, [svg('stop', { offset: '0', 'class': 'fl-0' }), svg('stop', { offset: '1', 'class': 'fl-1' })]),
+    svg('radialGradient', { id: 'soma-shine', cx: '36%', cy: '30%', r: '70%' }, [svg('stop', { offset: '0', 'class': 'ss-0' }), svg('stop', { offset: '.55', 'class': 'ss-1' }), svg('stop', { offset: '1', 'class': 'ss-2' })])]);
   /* The body as an atlas draws it: a soft shadow under it; the stem and
      the cerebellum with their lines; the cortex in its tissue, its folds
      each drawn twice — a lit edge and the groove beside it, so they read as
@@ -2394,6 +2497,8 @@ function masteryCard(pearl) {
     gyrus('brain-grooves', 0),
     gyrus('brain-gyri-lit', -2.2),
     gyrus('brain-sulci', 0),
+    /* the finest folds between them, a hairline each: detail at full size */
+    svg('g', { 'class': 'brain-fine', 'clip-path': 'url(#brain-clip)' }, B.FINE.map(function (d) { return svg('path', { d: d }); })),
     svg('path', { 'class': 'brain-shade', d: B.cerebrum, fill: 'url(#brain-shade)' }),
     svg('path', { 'class': 'brain-sheen', d: B.cerebrum, fill: 'url(#brain-sheen)' }),
     /* the light glancing across it, every few seconds */
@@ -2433,6 +2538,8 @@ function masteryCard(pearl) {
       svg('path', { 'class': 'dendrite', d: dendrites(x) }),
       i === nextI ? svg('circle', { 'class': 'next-ring', cx: x.x, cy: x.y, r: (x.r * 1.6).toFixed(1) }) : null,
       svg('circle', { 'class': 'soma', cx: x.x, cy: x.y, r: x.r }),
+      /* a round body, lit from above: the same light as the tissue's sheen */
+      svg('circle', { 'class': 'soma-shine', cx: x.x, cy: x.y, r: x.r, fill: 'url(#soma-shine)' }),
       svg('circle', { 'class': 'nucleus', cx: (x.x - x.r * 0.25).toFixed(1), cy: (x.y - x.r * 0.25).toFixed(1), r: (x.r * 0.34).toFixed(1) })]);
   }));
   /* a tap fires the neuron, down every connection it has */

@@ -519,12 +519,13 @@ function kindOf(user) {
   ok('and the one button says Learn unit', (await page.locator('#learn-unit').innerText()) === 'Learn unit');
   /* The owner's screenshot: the button floated over the foot of the page and
      covered the last sections, and each card carried a block of colour. The
-     button now sits above the sections, in the flow; the colour is a line. */
+     button now sits above the sections, in the flow; the colour is a line —
+     down each row's left, since the sections became rows of a contents. */
   const unitLook = await page.evaluate(() => { const b = document.querySelector('#learn-unit'), s = document.querySelector('#sections');
     const band = getComputedStyle(document.querySelector('#sections .band'));
     return { above: b.getBoundingClientRect().bottom <= s.getBoundingClientRect().top, pos: getComputedStyle(b.parentElement).position,
-      fill: band.backgroundColor, line: parseFloat(band.borderTopWidth) }; });
-  ok('the button sits above the sections, not over them; each card’s colour is a line along its top',
+      fill: band.backgroundColor, line: parseFloat(band.borderLeftWidth) }; });
+  ok('the button sits above the sections, not over them; each row’s colour is a line down its left',
      unitLook.above && unitLook.pos === 'static' && /rgba\(0, 0, 0, 0\)|transparent/.test(unitLook.fill) && unitLook.line > 0 && unitLook.line <= 6, JSON.stringify(unitLook));
   const rec = await page.evaluate(() => MemStore.all('docs').then(d => d[0]));
   ok('the unit is stored with its page count', rec.pages === pdf.pages && rec.name === 'unit' && rec.source === 'pdf', `${rec.pages} pages`);
@@ -898,7 +899,8 @@ function kindOf(user) {
       st = document.querySelector('#mastery .brain-stats').getBoundingClientRect(), p = document.querySelector('#mastery > #pearl');
     const pr = p && p.getBoundingClientRect();
     return { inCard: !!p, statsUnder: st.top >= b.bottom - 1 && Math.abs(st.left - b.left) < 40, beside: !!pr && pr.left >= b.right - 1 && pr.top < b.bottom,
-      below: !!pr && pr.top >= st.bottom - 1, wide: document.documentElement.scrollWidth > innerWidth }; });
+      below: !!pr && pr.top >= st.bottom - 1, wide: document.documentElement.scrollWidth > innerWidth,
+      share: Math.round(100 * document.querySelector('#mastery .brain-svg').getBoundingClientRect().width / m.getBoundingClientRect().width) }; });
   const upright = await oneCard();
   await page.setViewportSize({ width: 1180, height: 820 });
   const sideways = await oneCard();
@@ -908,6 +910,11 @@ function kindOf(user) {
   ok('one card: the brain, its statistics under it, and the pearl beside it — iPad upright and landscape', upright.inCard && upright.statsUnder && upright.beside && sideways.statsUnder && sideways.beside && !upright.wide && !sideways.wide,
      JSON.stringify({ upright, sideways }));
   ok('and on a phone: the brain, its statistics, then the pearl, nothing wider than the screen', phoneCard.statsUnder && phoneCard.below && !phoneCard.wide, JSON.stringify(phoneCard));
+  /* The owner: "make the brain a little bigger and more enhanced". It was
+     56% of the card’s width held sideways, measured before the change; 61% after. */
+  ok('held sideways, the brain is drawn across 60% or more of its card', sideways.share >= 60, String(sideways.share));
+  ok('and every neuron is a lit body: a highlight over each soma', await page.evaluate(() => { const ns = document.querySelectorAll('#mastery .neuron');
+    return ns.length > 0 && [...ns].every(n => n.querySelector('.soma-shine')) && !!document.querySelector('#soma-shine'); }));
   ok('the dock has a Chapters tab', await page.locator('nav.dock').getByRole('button', { name: 'Chapters' }).count() === 1);
   ok('the streak counts today, after a drill was answered, and survives the reload', /\b1$/.test(await text(page, '#streak')), await text(page, '#streak'));
   ok('the due pill and the Review tab both count the one card', /1 due/.test(await page.locator('#pill-due').innerText()) &&
@@ -2358,6 +2365,61 @@ function kindOf(user) {
     ok('figures stored by an older finder are found again, and kept', refound === stale.was, refound.slice(0, 120));
   }
 
+  head('a unit’s contents: its chapters with their sections, and a section deleted');
+  {
+    /* The owner's screenshot: 116 sections as big cards, titled
+       "CHAPTER1 WordsRunTogether: SUB-HEADING". The fixture's three sections
+       are given chapter titles in memory (synthetic), and the page drawn. */
+    const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' });
+    const pc = watch(await ctx.newPage(), events, 'contents', errors);
+    await wire(pc);
+    await pc.goto(URL);
+    await pc.locator('#door-add').waitFor(T);
+    await pc.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
+    await pc.locator('#sections .section-card').first().waitFor(T);
+    await pc.evaluate(() => { const T = ['CHAPTER7 SyntheticLoadingConditionsOfTheHeart: Preload', 'CHAPTER7 SyntheticLoadingConditionsOfTheHeart: Afterload', 'A section on its own'];
+      const d = Memorizer.ui.docRec; d.clusters.forEach((c, i) => { c.title = T[i]; }); Memorizer.ui.state.titles = T.slice(); Memorizer.render(); });
+    const cont = await pc.evaluate(() => ({
+      groups: [...document.querySelectorAll('#sections > .ch-group')].map(g => ({ title: g.querySelector('.ch-title').textContent, open: g.open,
+        rows: [...g.querySelectorAll('.section-row .section-title')].map(t => t.textContent), meta: g.querySelector('.ch-meta').textContent, bar: !!g.querySelector('.ch-bar i') })),
+      solo: [...document.querySelectorAll('#sections > .section-row .section-title')].map(t => t.textContent),
+      order: [...document.querySelectorAll('#sections .band-n')].map(e => e.textContent), count: document.querySelector('#contents-count').textContent }));
+    ok('sections sharing a heading are one chapter card, named with its words set apart, with its count, pages and bar; its rows named by their sub-headings',
+       cont.groups.length === 1 && cont.groups[0].title === 'Chapter 7 Synthetic Loading Conditions Of The Heart' && cont.groups[0].open &&
+       JSON.stringify(cont.groups[0].rows) === '["Preload","Afterload"]' && /^2 sections · p/.test(cont.groups[0].meta) && cont.groups[0].bar &&
+       JSON.stringify(cont.solo) === '["A section on its own"]' && JSON.stringify(cont.order) === '["1","2","3"]' && cont.count === '1 chapter · 3 sections', JSON.stringify(cont));
+    await pc.locator('#sections .ch-head').click();
+    ok('a chapter folds shut, and stays shut across a redraw', await pc.evaluate(() => { const g = document.querySelector('.ch-group'); if (g.open) return false;
+      Memorizer.render(); return !document.querySelector('.ch-group').open; }));
+    /* open again for what follows, whatever the check found */
+    if (!await pc.evaluate(() => document.querySelector('.ch-group').open)) await pc.locator('#sections .ch-head').click();
+    /* Delete, refused at the confirm: nothing goes. */
+    pc.once('dialog', dl => dl.dismiss());
+    const del2 = pc.locator('#sections .section-row[data-i="1"] .section-del');
+    const hasDel = await del2.count() === 1;
+    if (hasDel) await del2.click();
+    ok('every row has its delete button, named for its section; refused at the confirm, nothing goes',
+       hasDel && /Delete section 2: .*Afterload/.test(await del2.getAttribute('aria-label')) && await pc.locator('#sections .section-row').count() === 3 &&
+       (await pc.evaluate(() => MemStore.all('docs').then(d => d[0].clusters.length))) === 3);
+    /* Delete, confirmed: section 2 goes from the page, the store and the session. */
+    pc.once('dialog', dl => dl.accept());
+    if (hasDel) await del2.click();
+    await pc.waitForFunction(() => document.querySelectorAll('#sections .section-row').length === 2, null, T).catch(() => {});
+    const after = await pc.evaluate(() => Promise.all([MemStore.all('docs'), MemStore.all('sessions')]).then(([ds, ss]) => ({
+      rows: [...document.querySelectorAll('#sections .section-row .section-title')].map(t => t.textContent),
+      stored: ds[0].clusters.map(c => c.title), session: ss[0] && ss[0].state.titles, live: Memorizer.ui.state.titles.length,
+      notice: (document.querySelector('#notice') || {}).textContent || '' })));
+    ok('confirmed, the section goes from the page, the stored unit and its session; the others keep their places',
+       JSON.stringify(after.rows) === '["Preload","A section on its own"]' && after.stored.length === 2 && /Preload$/.test(after.stored[0]) && after.stored[1] === 'A section on its own' &&
+       JSON.stringify(after.session) === JSON.stringify(after.stored) && after.live === 2 && /Deleted/.test(after.notice), JSON.stringify(after));
+    pc.on('dialog', dl => dl.accept());
+    await pc.locator('#sections .section-row[data-i="1"] .section-del').click();
+    await pc.waitForFunction(() => document.querySelectorAll('#sections .section-row').length === 1, null, T).catch(() => {});
+    ok('a unit’s only section has no delete button: the unit is deleted from Chapters instead',
+       await pc.locator('#sections .section-row').count() === 1 && await pc.locator('#sections .section-del').count() === 0);
+    await ctx.close();
+  }
+
   head('a study pack written with Claude: the prompt out, the reply in, held to the book');
   {
     /* A fresh profile on the built-in coach, as the owner uses it: the pack
@@ -2403,11 +2465,12 @@ function kindOf(user) {
         points: [{ text: 'Diuretics — reduce preload by lowering circulating volume', page: pg },
                  { text: 'Volume overload — sought when LVEDP is greater than 18 mmHg', page: pg },
                  { text: 'Venous pressure — above 99 mmHg it causes oedema', page: pg }],
-        numbers: [{ text: 'LVEDP: greater than 18 mmHg', page: pg }],
+        numbers: [{ text: 'LVEDP: greater than 18 mmHg', page: pg }, { text: 'LVEDP: normal 8 to 12 mmHg', page: pg }],
         distinctions: [{ a: 'Volume overload', b: 'a stiff ventricle', how: 'A normal pressure of 8 to 12 mmHg does not exclude a stiff ventricle.', page: pg }],
         pearls: [{ text: 'An LVEDP greater than 18 mmHg should prompt a search for volume overload.', page: pg }],
         cases: [{ stem: 'A breathless patient on the ward round.', asks: [{ q: 'Which LVEDP prompts a search for volume overload?', a: 'An LVEDP greater than 18 mmHg.' }], page: pg }],
-        mnemonics: [], analogies: [], flowchart: '' },
+        mnemonics: [], analogies: [], flowchart: '',
+        tables: [{ title: 'LVEDP', columns: ['Pressure', 'LVEDP'], rows: [['Volume overload sought', 'greater than 18 mmHg'], ['Normal', '8 to 12 mmHg']], page: pg }] },
         quiz: { questions: [
           { question: 'Which LVEDP should prompt a search for volume overload?', quote: '', options: ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', '4 mmHg'], answer: 2,
             explain: 'An LVEDP greater than 18 mmHg should prompt a search for volume overload.', page: pg,
@@ -2437,6 +2500,29 @@ function kindOf(user) {
     const flags = await p4.$$eval('ol.points .flag', fs => fs.map(f => f.textContent));
     ok('the point with a number the book does not have is flagged on the point', JSON.stringify(flags) === JSON.stringify(['⚠ A number not in your book: 99.']), JSON.stringify(flags));
     ok('and the page no longer says the points are the book’s', /written with Claude from your book/.test(await text(p4, '.arranged-note')));
+    const facts = await p4.$$eval('#numbers .fact', fs => fs.map(f => ({ subject: (f.querySelector('.fact-subject') || {}).textContent || '', tiles: f.querySelectorAll('.tile').length })));
+    ok('numbers of one subject on one page are one block of tiles, not one block each', facts.length === 1 && /^LVEDP/.test(facts[0].subject) && facts[0].tiles >= 2, JSON.stringify(facts));
+    const tbl = await p4.evaluate(() => { const t = document.querySelector('#pack-tables'); return t ? { rows: [...t.querySelectorAll('tbody tr')].map(r => [...r.children].map(x => x.textContent.trim())),
+      head: [...t.querySelectorAll('thead th')].map(x => x.textContent), flags: t.querySelectorAll('.flag').length, inMain: !!t.closest('.lesson-main') } : null; });
+    ok('Claude’s table is drawn, row by row, in the lesson — its cells found in the book, unflagged',
+       !!tbl && JSON.stringify(tbl.head) === '["Pressure","LVEDP"]' && tbl.rows.length === 2 && tbl.rows[0][0] === 'Volume overload sought' && /18 mmHg/.test(tbl.rows[0][1]) && tbl.flags === 0 && tbl.inMain, JSON.stringify(tbl));
+    /* THE WHOLE LESSON (the owner: "not too much scrolling down"): on an
+       iPad held upright, what to memorise sits beside what to understand;
+       on a phone, below it, and nothing wider than the screen. */
+    const lay = () => p4.evaluate(() => { const m = document.querySelector('.lesson-main'), sd = document.querySelector('.lesson-side'), q = document.querySelector('.lesson-practice');
+      if (!m || !sd) return null; const a = m.getBoundingClientRect(), b = sd.getBoundingClientRect();
+      return { beside: b.left >= a.right - 1 && b.top < a.bottom, below: b.top >= a.bottom - 1, numbersSide: !!sd.querySelector('#numbers'), pointsMain: !!m.querySelector('#points'),
+        practiceAfter: !q || q.getBoundingClientRect().top >= Math.max(a.bottom, b.bottom) - 1, wide: document.documentElement.scrollWidth > innerWidth + 1 }; });
+    const upright = await lay();
+    await p4.setViewportSize({ width: 390, height: 844 });
+    await p4.waitForFunction(() => innerWidth === 390, null, T);
+    const onPhone = await lay();
+    await p4.setViewportSize({ width: 820, height: 1100 });
+    await p4.waitForFunction(() => innerWidth === 820, null, T);
+    ok('the whole lesson on an iPad upright: to memorise — the numbers — beside the points to understand; practice after both',
+       !!upright && upright.beside && upright.numbersSide && upright.pointsMain && upright.practiceAfter && !upright.wide, JSON.stringify(upright));
+    ok('and on a phone, one column: what to memorise under what to understand, nothing wider than the screen',
+       !!onPhone && onPhone.below && !onPhone.beside && !onPhone.wide, JSON.stringify(onPhone));
 
     /* PHASE 2: page references open the page; the section on one screen;
        the clinical map; why, asked down the chain. */
