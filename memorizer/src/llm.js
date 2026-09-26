@@ -285,6 +285,29 @@ function missPrompt(q, chosen, notes) {
     '. Use only what is written above. No new numbers, drugs, tests or diseases.';
 }
 
+/* Teach-back, marked: the model judges each point and quotes the student. */
+function teachPrompt(points, said) {
+  return 'Key points of the lesson:\n' + points.map(function (p, i) { return (i + 1) + '. ' + p; }).join('\n') +
+    '\n\nThe student\u2019s explanation:\n"' + String(said || '').replace(/\s+/g, ' ').trim() + '"' +
+    '\n\nMark the student\u2019s explanation against each key point: "covered" if it says the point, even in other words; "wrong" if it says something that contradicts the point; "missed" if it leaves the point out. ' +
+    'For "covered" or "wrong", copy the student\u2019s own words that show it, exactly as written. Reply as JSON: {"points": [{"n": 1, "verdict": "covered", "quote": "..."}]}';
+}
+var TEACH_SCHEMA = { type: 'object', properties: { points: { type: 'array', items: { type: 'object',
+  properties: { n: { type: 'integer' }, verdict: { type: 'string', enum: ['covered', 'wrong', 'missed'] }, quote: { type: 'string' } }, required: ['n', 'verdict', 'quote'] } } }, required: ['points'] };
+/* A Socratic follow-up from the pack's notes. */
+function followUpPrompt(notes, asked) {
+  return 'Notes from the student\u2019s study pack, checked against their textbook:\n' + notes +
+    ((asked || []).length ? '\n\nAlready asked:\n' + asked.map(function (a) { return '- ' + a; }).join('\n') : '') +
+    '\n\nAsk the student ONE new "why" or "how" question that these notes answer, and give its answer in one sentence taken from the notes. ' +
+    'Use no number, drug, test or disease that is not in the notes. Reply as JSON: {"question": "...", "answer": "..."}';
+}
+var FOLLOW_SCHEMA = { type: 'object', properties: { question: { type: 'string' }, answer: { type: 'string' } }, required: ['question', 'answer'] };
+function parseFollowUp(text) {
+  var t = String(text || ''), a = t.indexOf('{'), b = t.lastIndexOf('}');
+  try { var v = JSON.parse(a >= 0 && b > a ? t.slice(a, b + 1) : t); return { question: v && typeof v.question === 'string' ? v.question : '', answer: v && typeof v.answer === 'string' ? v.answer : '' }; }
+  catch (_) { return { question: '', answer: '' }; }
+}
+
 function parseQuestions(text) {
   try {
     var v = JSON.parse(text);
@@ -298,7 +321,8 @@ var MemLLM = { WAIT: WAIT, variantFor: variantFor, classify: classify, explain: 
                loadLib: loadLib, useEngine: useEngine, ready: ready, start: start, chat: chat, SYSTEM: SYSTEM,
                summaryPrompt: summaryPrompt, plainPrompt: plainPrompt, analogyPrompt: analogyPrompt, questionsPrompt: questionsPrompt,
                QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions, stripThinking: stripThinking,
-               variantPrompt: variantPrompt, VARIANT_SCHEMA: VARIANT_SCHEMA, parseVariant: parseVariant, missPrompt: missPrompt };
+               variantPrompt: variantPrompt, VARIANT_SCHEMA: VARIANT_SCHEMA, parseVariant: parseVariant, missPrompt: missPrompt,
+               teachPrompt: teachPrompt, TEACH_SCHEMA: TEACH_SCHEMA, followUpPrompt: followUpPrompt, FOLLOW_SCHEMA: FOLLOW_SCHEMA, parseFollowUp: parseFollowUp };
 root.MemLLM = MemLLM;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemLLM;
 })(typeof window !== 'undefined' ? window : this);

@@ -367,5 +367,35 @@ head('smart review order: the dangerous misses first, then by kind, mixed across
   ok('nothing due, nothing ordered', S.reviewOrder([], '2026-09-25').length === 0 && S.reviewOrder(null, '2026-09-25').length === 0);
 }
 
+head('teach it back, marked by the on-device model: a judge held to what was said');
+{
+  const pts = ['Diuretics reduce preload by lowering circulating volume', 'Volume overload is sought when LVEDP is greater than 18 mmHg',
+               'Excessive preload raises venous pressure, which leads to oedema of the lungs', 'A normal LVEDP is 8 to 12 mmHg'];
+  const said = 'Water pills take fluid off, so the ventricle fills less. Excess preload lowers venous pressure. Normal is 8 to 12 mmHg.';
+  const base = S.teachBack(said, pts, pts.join(' '));
+  const reply = 'Here you go: ' + JSON.stringify({ points: [
+    { n: 1, verdict: 'covered', quote: 'Water pills take fluid off, so the ventricle fills less' },
+    { n: 2, verdict: 'covered', quote: 'LVEDP above 18 means overload' },
+    { n: 3, verdict: 'wrong', quote: 'excess preload lowers venous pressure' },
+    { n: 4, verdict: 'missed', quote: '' },
+    { n: 9, verdict: 'covered', quote: 'Normal is 8 to 12 mmHg' }] });
+  const r = S.teachJudge(reply, pts, said, base);
+  ok('the word check misses a point said in other words, and passes the pearl', !base.covered.includes(0) && base.covered.includes(3), JSON.stringify(base));
+  ok('the model’s "covered" adds the point said in other words, with the student’s own words to show', r.covered.includes(0) && /Water pills/.test(r.quotes[0]), JSON.stringify(r));
+  ok('a quote that is not in what was said sets its verdict aside', !r.covered.includes(1) && r.dropped.some(d => d.n === 2 && d.why === 'its quote is not in what you said'), JSON.stringify(r.dropped));
+  ok('a point said backwards is marked wrong, with the words that said it — spacing and case aside', r.wrong.length === 1 && r.wrong[0].i === 2 && /lowers venous pressure/i.test(r.wrong[0].quote), JSON.stringify(r.wrong));
+  ok('"missed" cannot take away what the word check found', r.covered.includes(3), JSON.stringify(r.covered));
+  ok('a point that does not exist is set aside', r.dropped.some(d => d.n === 9 && d.why === 'no such point'));
+  ok('the score is the points covered', Math.abs(r.score - 2 / 4) < 1e-9 && r.missed.join() === '1', JSON.stringify(r));
+  const wrongBeatsWords = S.teachJudge(JSON.stringify({ points: [{ n: 1, verdict: 'wrong', quote: 'diuretics increase preload by lowering circulating volume' }] }), pts,
+    'Diuretics increase preload by lowering circulating volume.', S.teachBack('Diuretics increase preload by lowering circulating volume.', pts, pts.join(' ')));
+  ok('and wrong, shown by the quote, overrides the word check passing it', wrongBeatsWords.wrong.length === 1 && !wrongBeatsWords.covered.includes(0), JSON.stringify(wrongBeatsWords));
+  const num = S.teachJudge(JSON.stringify({ points: [{ n: 2, verdict: 'covered', quote: 'overload when LVEDP is over 25 mmHg' }] }), pts, 'We look for overload when LVEDP is over 25 mmHg.', { covered: [] });
+  ok('a covered quote with a number the point does not have is set aside', !num.covered.includes(1) && /a number the point does not have: 25/.test((num.dropped[0] || {}).why), JSON.stringify(num.dropped));
+  ok('a two-word quote proves nothing', (S.teachJudge(JSON.stringify({ points: [{ n: 1, verdict: 'covered', quote: 'water pills' }] }), pts, said, { covered: [] }).dropped[0] || {}).why === 'its quote is not in what you said');
+  ok('a point marked twice keeps its first verdict', S.teachJudge(JSON.stringify({ points: [{ n: 3, verdict: 'wrong', quote: 'excess preload lowers venous pressure' }, { n: 3, verdict: 'covered', quote: 'excess preload lowers venous pressure' }] }), pts, said, { covered: [] }).wrong.length === 1);
+  ok('a reply that is not JSON changes nothing', JSON.stringify(S.teachJudge('I think they did well', pts, said, base).covered) === JSON.stringify(base.covered));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
