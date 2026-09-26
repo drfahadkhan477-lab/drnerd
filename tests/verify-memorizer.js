@@ -830,6 +830,14 @@ function kindOf(user) {
      await page.locator('.option.dim').count() === 2);
   ok('it names the answer, fills the gap and says it will come back', /The answer is B: preload/.test(await page.locator('.why.bad strong').innerText()) &&
      (await page.locator('blockquote.quote .gap').innerText()) === 'preload' && /comes back at the end of this drill/.test(await page.locator('.why').innerText()));
+  /* Read calmly, not as a block of red: the card's own ground, a rail in the
+     meaning colour, and the verdict line in it (the dark themes' red tint was
+     near-black red behind the whole explanation). */
+  const verdict = await page.evaluate(() => { const w = document.querySelector('.why.bad'), cs = getComputedStyle(w), st = getComputedStyle(w.querySelector('strong'));
+    const p = document.createElement('i'); p.style.color = 'var(--bad)'; document.body.appendChild(p); const badC = getComputedStyle(p).color; p.remove();
+    return { bg: cs.backgroundColor, rail: parseFloat(cs.borderLeftWidth), railC: cs.borderLeftColor, line: st.color, bad: badC }; });
+  ok('a wrong answer’s card: no fill, a rail down its left and the verdict in the meaning colour',
+     /rgba\(0, 0, 0, 0\)|transparent/.test(verdict.bg) && verdict.rail >= 3 && verdict.railC === verdict.bad && verdict.line === verdict.bad, JSON.stringify(verdict));
   await page.locator('#next').click();
   await page.waitForFunction(() => /Again/.test(document.querySelector('.mcq-meta').innerText), null, T);
   ok('and the miss is filed as one: its weak item and its card are flagged', await page.evaluate(() => { const s = Memorizer.ui.state, w = Object.values(s.weak)[0];
