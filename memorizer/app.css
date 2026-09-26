@@ -313,6 +313,8 @@ details.menu summary::-webkit-details-marker { display: none; }
 .lock { font-size: 1.5rem; }
 .unit-cta { margin: var(--s-3) 0 var(--s-4); }
 .unit-cta .btn { width: 100%; border-radius: 999px; }
+.unit-cta { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); }
+.unit-cta #pack-go { width: auto; }
 
 /* ═══ The lesson ═════════════════════════════════════════════════════════ */
 .wrap.study { max-width: calc(var(--measure) + 4rem); }
