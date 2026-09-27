@@ -27,8 +27,28 @@ Welcome! Your complete Memorizer app with **Markdown and HTML study import** is 
 ## Quick Start
 
 ### Opening the App
-1. Open `index.html` in your web browser (works offline after first load)
-2. Click **"Import Study"** on the home screen (the 📄 button)
+
+**Important**: The app requires HTTP/HTTPS to store data (Safari file:// access has no storage). Use one of:
+
+1. **Cloudflare Pages** (recommended - permanent deployment)
+   ```bash
+   wrangler pages deploy dist-memorizer-complete/
+   ```
+   Then open your Pages URL in any browser
+
+2. **Local dev server** (for testing before deploying)
+   ```bash
+   cd dist-memorizer-complete
+   python3 -m http.server 8000
+   ```
+   Then open `http://localhost:8000`
+
+3. **Safari Home Screen** (for app-like experience)
+   - Open from a web URL (Cloudflare or local server)
+   - Safari → Share → Add to Home Screen
+   - Tap home screen icon for full storage access
+
+Once open, click **"Import Study"** on the home screen (the 📄 button)
 
 ### Importing a Study Unit
 
@@ -205,6 +225,7 @@ Step 12: Review → See all mistakes + misconceptions flagged
 - **Nothing uploaded** to any server
 - **Works offline** after opening once
 - **Private** — only you can see your study progress
+- **Requires HTTP/HTTPS** — accessed via Cloudflare Pages, local server, or home screen app (not file:// protocol)
 
 ### Data Stored
 - Study units you import
