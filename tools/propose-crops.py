@@ -108,6 +108,13 @@ def prose(l, mask, body_h):
     return (l['x1'] - l['x0']) >= 0.72 * (c1 - c0)
 
 
+def shaded(im):
+    """Pale tinted ground (table rows), as opposed to white paper or dark ink."""
+    a = np.asarray(im).astype(int)
+    g = a.mean(axis=2); sat = a.max(axis=2) - a.min(axis=2)
+    return (g > 170) & (g < 250) & (sat > 8)
+
+
 def table_band(im, A):
     """A table's width is its coloured header band's, not the gutter's: the
     white between a table's own columns looks exactly like a page gutter."""
@@ -178,9 +185,12 @@ def propose(path):
     else:  # TABLE: from the title down to body prose
         y0 = A['y0']
         bottom, run = H, []
+        tint = shaded(im)
         for l in (l for l in lines if l['y0'] > A['y1'] and overlaps(l)):
             if is_cap(l):
                 bottom = l['y0']; break
+            if tint[l['y0']:l['y1'], max(l['x0'], X0):min(l['x1'], X1)].mean() > 0.3:
+                run = []; continue   # a row on the table's shaded ground
             if prose(l, mask, body_h):
                 run.append(l)
                 if len(run) >= 2:
