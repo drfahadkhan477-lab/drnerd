@@ -211,13 +211,54 @@ def propose(path):
     return box, None
 
 
+def propose_blob(path):
+    """The figure as a connected region: erase body prose, bridge small gaps,
+    keep the ink region that joins onto the caption or title."""
+    import cv2
+    im = Image.open(path).convert('RGB')
+    W, H = im.size
+    lab = label_of(os.path.basename(path))
+    lines = ocr_lines(im)
+    A = find_anchor(lines, lab) if lab else None
+    if A is None:
+        return None, 'caption/title not found by OCR'
+    mask = nonwhite(im)
+    tint = shaded(im)
+    hs = sorted(l['h'] for l in lines if l['n'] >= 5)
+    body_h = hs[int(len(hs) * .6)] if hs else A['h']
+    cap = [l for l in lines if l['block'] == A['block'] and l['y0'] >= A['y0'] - 2]
+    ink = mask.copy()
+    for l in lines:
+        if l in cap or l['n'] < 4 or l['h'] < 0.8 * body_h:
+            continue
+        if tint[l['y0']:l['y1'], l['x0']:l['x1']].mean() > 0.3:
+            continue
+        if l['gap'] > 2.6 * max(l['h'], 8):
+            continue
+        ink[max(0, l['y0'] - 3):l['y1'] + 3, max(0, l['x0'] - 3):l['x1'] + 3] = False
+    k = max(9, int(body_h * 0.9))
+    grown = cv2.dilate(ink.astype(np.uint8), np.ones((k, k), np.uint8))
+    n, comp = cv2.connectedComponents(grown)
+    cy, cx = (A['y0'] + A['y1']) // 2, (A['x0'] + min(A['x1'], A['x0'] + 40)) // 2
+    ids = set(np.unique(comp[A['y0']:A['y1'], A['x0']:A['x1']])) - {0}
+    if not ids:
+        return None, 'caption not in any region'
+    sel = np.isin(comp, list(ids)) & mask
+    ys, xs = np.nonzero(sel)
+    box = [max(0, xs.min() - PAD), max(0, ys.min() - PAD), min(W, xs.max() + 1 + PAD), min(H, ys.max() + 1 + PAD)]
+    return box, None
+
+
 def one(path):
-    box, err = propose(path)
+    box, err = (propose_blob if MODE == 'blob' else propose)(path)
     return box, err, Image.open(path).size
 
 
+MODE = 'blob' if '--blob' in sys.argv else 'lines'
+
+
 def main():
-    src, out = sys.argv[1], sys.argv[2]
+    src, out = [a for a in sys.argv[1:] if not a.startswith('--')][:2]
     names = sorted(f for f in os.listdir(src) if f.lower().endswith(('.jpg', '.jpeg', '.png')))
     rec = {'_why': 'Proposed by tools/propose-crops.py (caption-anchored, gutter-bounded); '
                    'every box then reviewed by eye and corrected by hand where wrong. '
