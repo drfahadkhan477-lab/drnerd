@@ -343,11 +343,8 @@ const SUITES = [
    Emptied a fourth time by the green run of 2026-09-25 on the owner's Windows
    laptop, which measured the twenty-one that had been waiting: notesearch-pure,
    notesearch, coronaryview, ambient, and the seventeen Memorizer suites. That
-   run predates memorizer-pack-pure, which master registered meanwhile.
-
-   Emptied a fifth time by the full green run on the owner's laptop on
-   2026-09-27, which measured heartbake-pure. */
-const PENDING_RECORD = ['memorizer-pack-pure'];
+   run predates memorizer-pack-pure, which master registered meanwhile. */
+const PENDING_RECORD = ['memorizer-pack-pure', 'heartbake-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
