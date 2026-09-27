@@ -228,7 +228,7 @@ jobs:
         run: node tests/verify-echoanchor-pure.js
       - name: the notes search ranks, quotes and escapes (41 checks)
         run: node tests/verify-notesearch-pure.js
-      - name: the heart loads a mesh baked at build time, and refuses any other copy (34 checks)
+      - name: the heart loads a mesh baked at build time, and refuses any other copy (36 checks)
         run: node tests/verify-heartbake-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (177 checks)
         run: node tests/verify-memorizer-chunk-pure.js

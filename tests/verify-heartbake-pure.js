@@ -46,7 +46,7 @@ const HEART = fs.readFileSync(path.join(ROOT, 'src', 'core', 'heart3d.js'), 'utf
 const load = src => { const box = {}; new Function('window', src)(box); return box; };
 const box = load(HEART);
 const M = box.Heart3D && box.Heart3D.mesh;
-const { bake, keyOf } = require('../scripts/heart-bake.js');
+const { bake, keyOf, HERO_RES } = require('../scripts/heart-bake.js');
 
 const FIELDS = ['positions', 'normals', 'weights', 'color', 'extra', 'indices'];
 /* Every value of every field of both surfaces, compared as numbers. */
@@ -97,8 +97,19 @@ const baked = bake(HEART);
 ok('the bake is keyed to heart3d.js as it is', baked.key === KEY && /^[0-9a-f]{16}$/.test(baked.key), baked.key);
 ok('and a one-character change to the code changes the key', keyOf(HEART.replace('sdCapsule(', 'sdCapsule (')) !== KEY);
 const bakedBuf = new Uint8Array(Buffer.from(baked.b64, 'base64')).buffer;
+/* The hero's grid, not heart3d.js's default: the first bake used the default,
+   every check in this file passed, and the built hero meshed at every launch
+   because it asks for another grid (verify-heroart: meshSource "computed"). */
+const heroBuilt = M.build(HERO_RES, M.LO, M.HI);
+ok('it is baked on the grid the hero asks for',
+   String(baked.res) === String(HERO_RES) && !!M.unpack(bakedBuf, baked.key, HERO_RES, M.LO, M.HI), String(baked.res));
 ok('what it embeds unpacks to the mesh, value for value',
-   differences(built, M.unpack(bakedBuf, baked.key, M.RES, M.LO, M.HI)).length === 0);
+   differences(heroBuilt, M.unpack(bakedBuf, baked.key, HERO_RES, M.LO, M.HI)).length === 0);
+const heroart = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'heroart-patch.js'), 'utf8'));
+const heroGrids = heroart.match(/resolution:\[[^\]]*\]/g) || [];
+ok('heroart-patch mounts the hero at that grid, read from the bake, not typed twice',
+   /require\('\.\/heart-bake\.js'\)/.test(heroart) && heroGrids[heroGrids.length - 1] === "resolution:[${HERO_RES.join(',')}]",
+   heroGrids[heroGrids.length - 1]);
 const apex = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'apex-patch.js'), 'utf8'));
 ok('apex-patch bakes with this module, from the heart3d.js it embeds',
    /require\('\.\/heart-bake\.js'\)\.bake\(heart3d\)/.test(apex));
@@ -109,13 +120,13 @@ head('create() takes the copy only when it is the one for this code');
 /* take() is what create() calls: it reads the page's globals. */
 const page1 = load(HEART);
 page1.HEART3D_MESH_KEY = baked.key; page1.HEART3D_MESH_B64 = baked.b64;
-const took = page1.Heart3D.mesh.take(M.RES, M.LO, M.HI);
-ok('the single file\'s base64 is decoded and used', !!took && differences(built, took).length === 0);
+const took = page1.Heart3D.mesh.take(HERO_RES, M.LO, M.HI);
+ok('the single file\'s base64 is decoded and used', !!took && differences(heroBuilt, took).length === 0);
 ok('and kept, so a second heart on the page does not decode it again',
    page1.HEART3D_MESH instanceof ArrayBuffer && page1.HEART3D_MESH.byteLength === baked.bytes);
 const page2 = load(HEART);
 page2.HEART3D_MESH_KEY = keyOf('some other heart3d.js'); page2.HEART3D_MESH_B64 = baked.b64;
-ok('a copy with another key is left alone, and the heart meshes itself', page2.Heart3D.mesh.take(M.RES, M.LO, M.HI) === null);
+ok('a copy with another key is left alone, and the heart meshes itself', page2.Heart3D.mesh.take(HERO_RES, M.LO, M.HI) === null);
 const bad = buf.slice(0); new Uint32Array(bad, 56, 1)[0] = 1e7;   // a header claiming ten million vertices
 const page4 = load(HEART);
 page4.HEART3D_MESH_KEY = KEY; page4.HEART3D_MESH = bad;
@@ -123,7 +134,7 @@ let took4; try { took4 = page4.Heart3D.mesh.take(M.RES, M.LO, M.HI); } catch (e)
 ok('a copy whose header claims more than it holds is refused, not thrown', took4 === null, String(took4).slice(0, 60));
 const page3 = load(HEART);
 page3.HEART3D_MESH_KEY = baked.key; page3.HEART3D_MESH = bakedBuf;
-ok('the split build\'s fetched ArrayBuffer is used as it is', !!page3.Heart3D.mesh.take(M.RES, M.LO, M.HI));
+ok('the split build\'s fetched ArrayBuffer is used as it is', !!page3.Heart3D.mesh.take(HERO_RES, M.LO, M.HI));
 
 head('the split build moves it out of app.js, named by its bytes');
 const PWA = fs.readFileSync(path.join(ROOT, 'scripts', 'build-pwa.js'), 'utf8');
