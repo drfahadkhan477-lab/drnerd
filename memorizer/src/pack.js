@@ -513,7 +513,7 @@ function coverage(rec, doc) {
 
 var MemPack = { FORMAT: FORMAT, VERSION: VERSION, PER_REPLY: PER_REPLY, LESSON: LESSON, QUESTION: QUESTION, EXAMPLE: EXAMPLE,
                 prompt: prompt, replies: replies, unitName: unitName, packsIn: packsIn, parse: parse, check: check, merge: merge,
-                sectionOf: sectionOf, dropSection: dropSection, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam };
+                sectionOf: sectionOf, dropSection: dropSection, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam, segText: segText };
 root.MemPack = MemPack;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemPack;
 })(typeof window !== 'undefined' ? window : this);

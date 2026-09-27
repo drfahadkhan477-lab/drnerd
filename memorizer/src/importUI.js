@@ -79,7 +79,7 @@ function createModal() {
                 <span class="stat-value" id="statTables">0</span>
               </div>
               <div class="stat">
-                <span class="stat-label">Diagrams</span>
+                <span class="stat-label">Words</span>
                 <span class="stat-value" id="statDiagrams">0</span>
               </div>
             </div>
@@ -117,7 +117,7 @@ function createModal() {
       }
 
       .import-dialog {
-        background: white;
+        background: var(--surface);
         border-radius: 12px;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         width: 100%;
@@ -130,7 +130,7 @@ function createModal() {
 
       .import-header {
         padding: 20px;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--line);
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -140,14 +140,14 @@ function createModal() {
         margin: 0;
         font-size: 18px;
         font-weight: 600;
-        color: #1f2937;
+        color: var(--ink);
       }
 
       .close-btn {
         background: none;
         border: none;
         font-size: 28px;
-        color: #6b7280;
+        color: var(--muted);
         cursor: pointer;
         padding: 0;
         width: 32px;
@@ -158,7 +158,7 @@ function createModal() {
       }
 
       .close-btn:hover {
-        color: #1f2937;
+        color: var(--ink);
       }
 
       .import-content {
@@ -168,46 +168,46 @@ function createModal() {
       }
 
       .drop-zone {
-        border: 2px dashed #d1d5db;
+        border: 2px dashed var(--line);
         border-radius: 8px;
         padding: 40px 20px;
         text-align: center;
         cursor: pointer;
         transition: all 0.3s ease;
-        background: #f9fafb;
+        background: var(--surface-2);
       }
 
       .drop-zone:hover {
-        border-color: #3b82f6;
-        background: #eff6ff;
+        border-color: var(--accent);
+        background: var(--accent-soft);
       }
 
       .drop-zone.active {
-        border-color: #10b981;
-        background: #f0fdf4;
+        border-color: var(--good);
+        background: var(--good-soft);
       }
 
       .upload-icon {
         width: 48px;
         height: 48px;
-        color: #6b7280;
+        color: var(--muted);
         margin-bottom: 12px;
       }
 
       .drop-zone p {
         margin: 8px 0;
-        color: #374151;
+        color: var(--ink);
       }
 
       .hint {
         font-size: 12px;
-        color: #9ca3af;
+        color: var(--muted);
       }
 
       .file-info {
         margin-top: 16px;
         padding: 12px;
-        background: #f3f4f6;
+        background: var(--surface-2);
         border-radius: 6px;
         font-size: 14px;
       }
@@ -215,23 +215,23 @@ function createModal() {
       .detection {
         margin-top: 8px;
         padding: 8px;
-        background: #e0e7ff;
-        border-left: 4px solid #4f46e5;
-        color: #3730a3;
+        background: var(--accent-soft);
+        border-left: 4px solid var(--accent);
+        color: var(--ink);
         font-size: 13px;
       }
 
       .import-summary {
         margin-top: 16px;
         padding: 16px;
-        background: #ecfdf5;
-        border: 1px solid #a7f3d0;
+        background: var(--good-soft);
+        border: 1px solid var(--good);
         border-radius: 8px;
       }
 
       .import-summary h3 {
         margin: 0 0 12px 0;
-        color: #065f46;
+        color: var(--good);
         font-size: 14px;
       }
 
@@ -243,7 +243,7 @@ function createModal() {
 
       .stat {
         padding: 8px;
-        background: rgba(255, 255, 255, 0.7);
+        background: var(--surface);
         border-radius: 4px;
         text-align: center;
       }
@@ -251,7 +251,7 @@ function createModal() {
       .stat-label {
         display: block;
         font-size: 11px;
-        color: #047857;
+        color: var(--good);
         font-weight: 500;
         margin-bottom: 4px;
       }
@@ -260,7 +260,7 @@ function createModal() {
         display: block;
         font-size: 18px;
         font-weight: bold;
-        color: #065f46;
+        color: var(--good);
       }
 
       .status-message {
@@ -272,27 +272,27 @@ function createModal() {
       }
 
       .status-message.loading {
-        background: #dbeafe;
-        color: #1e40af;
+        background: var(--accent-soft);
+        color: var(--ink);
       }
 
       .status-message.success {
-        background: #dcfce7;
-        color: #166534;
+        background: var(--good-soft);
+        color: var(--good);
       }
 
       .status-message.error {
-        background: #fee2e2;
-        color: #991b1b;
+        background: var(--bad-soft);
+        color: var(--bad);
       }
 
       .import-footer {
         padding: 16px 20px;
-        border-top: 1px solid #e5e7eb;
+        border-top: 1px solid var(--line);
         display: flex;
         justify-content: flex-end;
         gap: 12px;
-        background: #f9fafb;
+        background: var(--surface-2);
       }
 
       .btn {
@@ -306,27 +306,27 @@ function createModal() {
       }
 
       .btn-primary {
-        background: #3b82f6;
-        color: white;
+        background: var(--accent);
+        color: var(--accent-ink);
       }
 
       .btn-primary:hover:not(:disabled) {
-        background: #2563eb;
+        background: var(--accent);
       }
 
       .btn-primary:disabled {
-        background: #d1d5db;
-        color: #9ca3af;
+        background: var(--line);
+        color: var(--muted);
         cursor: not-allowed;
       }
 
       .btn-secondary {
-        background: #e5e7eb;
-        color: #374151;
+        background: var(--line);
+        color: var(--ink);
       }
 
       .btn-secondary:hover {
-        background: #d1d5db;
+        background: var(--line);
       }
 
       @media (max-width: 600px) {
@@ -398,7 +398,7 @@ function handleFile(modal, file) {
       var result = StudyImport.parseStudyFile(content, file.name);
 
       if (result.success) {
-        modal.currentPack = result.pack;
+        modal.currentPack = result.study;
 
         fileName.textContent = file.name;
         detection.textContent = '✓ Format: ' + result.format.toUpperCase();
@@ -411,10 +411,10 @@ function handleFile(modal, file) {
         modal.querySelector('#statPoints').textContent = summary_data.teaching_points;
         modal.querySelector('#statQuestions').textContent = summary_data.questions;
         modal.querySelector('#statTables').textContent = summary_data.tables;
-        modal.querySelector('#statDiagrams').textContent = summary_data.diagrams;
+        modal.querySelector('#statDiagrams').textContent = summary_data.words;
         summary.style.display = 'block';
 
-        status.textContent = '✓ Ready to import';
+        status.textContent = '✓ Ready to import' + (summary_data.unanswered ? ' — ' + summary_data.unanswered + ' question(s) have no marked answer and will be left out' : '');
         status.className = 'status-message success';
         status.style.display = 'block';
 

@@ -298,6 +298,7 @@ const SUITES = [
   ['memorizer-study-pure',  'studying beyond the drill: recall and figure cards from the book, checks days apart, timed practice, an exam plan, teach-back, corrections, notes, progress'],
   ['memorizer-provenance-pure', 'where a unit came from: a real SHA-256 of its bytes, a duplicate recognised, and an import report that counts what happened'],
   ['memorizer-pack-pure',   'a study pack written with Claude: the prompt carries the chapter, and the reply is held to the book \u2014 numbers, pages, names and quotes \u2014 before any of it is used'],
+  ['memorizer-studyimport-pure', 'a study file, markdown or a saved HTML page: every question read, an unmarked answer never guessed, and its points and questions held to the unit\u2019s own text'],
   ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
   ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
 ];
@@ -343,7 +344,7 @@ const SUITES = [
    laptop, which measured the twenty-one that had been waiting: notesearch-pure,
    notesearch, coronaryview, ambient, and the seventeen Memorizer suites. That
    run predates memorizer-pack-pure, which master registered meanwhile. */
-const PENDING_RECORD = ['memorizer-pack-pure'];
+const PENDING_RECORD = ['memorizer-pack-pure', 'memorizer-studyimport-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

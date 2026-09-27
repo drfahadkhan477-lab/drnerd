@@ -537,34 +537,27 @@ function readText(file) {
   });
 }
 
-/* ── import study units from markdown or HTML files ─────────────────────────── */
-function importStudyUnit(pack) {
-  return Store.put('packs', {
-    id: pack.id,
-    sections: pack.sections,
-    at: new Date().toISOString()
-  }).then(function () {
-    return Store.put('docs', {
-      id: pack.id,
-      name: pack.name,
-      addedAt: pack.addedAt,
-      source: 'imported',
-      pages: 0,
-      scanned: [],
-      clusters: []
-    });
-  }).then(refresh).then(render, function (e) {
-    ui.error = 'Failed to import: ' + (e && e.message); render();
-  });
+/* ── a study file (.md or .html, studyImport.js) ─────────────────────────
+   Its text becomes a unit as pasted notes do; its own points, tables and
+   questions become the unit's pack, checked against that text. */
+function importStudyUnit(study) {
+  ui.importing = 'Splitting into sections…'; ui.error = ''; render();
+  return finishImport(Prov.fingerprint(study.text).then(function (fp) {
+    if (duplicate(fp)) throw DUPLICATE;
+    return saveUnit(study.name, 'text', Chunk.pagesFromText(study.text), { fingerprint: fp, emptyMessage: 'There was no text to learn from in that file.' });
+  }).then(function (rec) {
+    var got = root.MemStudyImport.packFor(study.parsed, rec, Pack);
+    var skipped = got.unanswered ? ' ' + Home.count(got.unanswered, 'question') + ' with no marked answer left out.' : '';
+    if (!got.pack) { ui.notice = 'Imported as study text; the built-in coach teaches it.' + skipped; return rec; }
+    var checked = Pack.check([got.pack], rec);
+    ui.notice = Pack.report(checked).line + skipped;
+    if (!checked.sections.length) return rec;
+    return Store.put('packs', Pack.merge(null, checked, rec, Date.now())).then(function () { return rec; });
+  }));
 }
 
 function showStudyImportDialog() {
-  if (!root.MemImportUI) {
-    ui.error = 'Import feature not available'; render(); return;
-  }
-  root.MemImportUI.show(function (pack) {
-    importStudyUnit(pack);
-  });
+  root.MemImportUI.show(importStudyUnit);
 }
 
 /* ── mermaid, loaded only when a flowchart is first shown ────────────────── */

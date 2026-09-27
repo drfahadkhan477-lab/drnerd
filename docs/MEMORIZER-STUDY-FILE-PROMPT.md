@@ -1,8 +1,27 @@
 # Claude Prompt: High-Yield Medical Unit Generator
 
-## Instructions for Claude
+Use this prompt when you have a medical PDF or textbook and want Claude to write
+a study file for it. Save Claude's reply as a `.md` file and add it with
+**Import Study** on Memorizer's home screen (a saved `.html` page is read the
+same way).
 
-Use this prompt when you have a medical PDF or textbook and want Claude to generate a complete study unit file with flowcharts, tables, and diagrams.
+**What Memorizer takes from the file** (`memorizer/src/studyImport.js`,
+checked by `tests/verify-memorizer-studyimport-pure.js`):
+
+- the prose, bullets and table rows under every heading, as the unit's text,
+  which the built-in coach, Ask and the on-device AI work from;
+- each `- **Term**: explanation` line as a lesson point, and each table as a
+  lesson table;
+- each question under the quiz heading that has **exactly four options A–D**
+  and a `**Correct Answer**:` line, with its explanation and the reasons listed
+  under "Why the distractors are wrong". A question with no marked answer is
+  left out and counted in the import note, never guessed.
+
+Points, tables and questions then go through the same check as a study pack:
+anything carrying a number that the file's own text does not have is flagged.
+
+**What stays in the file only:** ASCII flowcharts (code blocks) and SVG
+diagrams are not imported. Keep them for reading the file itself.
 
 ---
 

@@ -293,6 +293,10 @@ closes. It needs an `https` address.
 
 Each address has its own storage. Units added under one address, or in the
 Files app's own preview, do not appear under another; add the PDFs again once.
+
+A study file written by Claude (`.md`) or a saved study page (`.html`) goes in
+with **Import Study** on the home screen; `docs/MEMORIZER-STUDY-FILE-PROMPT.md`
+is the prompt that writes one, and says what the app takes from it.
 Your book never leaves the iPad: the zip holds only the app.
 
 ### On a laptop

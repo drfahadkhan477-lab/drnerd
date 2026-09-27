@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 58 suites that are pure Node with no Playwright and no
+#   logic        the 59 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -260,6 +260,8 @@ jobs:
         run: node tests/verify-memorizer-provenance-pure.js
       - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (80 checks)
         run: node tests/verify-memorizer-pack-pure.js
+      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text (23 checks)
+        run: node tests/verify-memorizer-studyimport-pure.js
 
   # ── Memorizer in a real browser ────────────────────────────────────────────
   #
