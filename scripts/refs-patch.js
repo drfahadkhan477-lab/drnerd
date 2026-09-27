@@ -59,10 +59,26 @@ function notesFromFile(file) {
   const raw = fs.readFileSync(file, 'utf8');
   const fm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
   const meta = fm ? fm[1] : '';
-  const body = fm ? raw.slice(fm[0].length) : raw;
+  let body = fm ? raw.slice(fm[0].length) : raw;
   const title = field(meta, 'title') || path.basename(file, '.md');
   const tags = field(meta, 'tags');
   const source = field(meta, 'source') || field(meta, 'citation') || field(meta, 'ref');
+
+  /* Embed images as base64 data URIs so they travel with the notes */
+  const fileDir = path.dirname(file);
+  body = body.replace(/!\[([^\]]*)\]\(<([^>]+)>\)/g, (match, alt, imgPath) => {
+    try {
+      const imgFile = path.join(fileDir, imgPath);
+      if (fs.existsSync(imgFile)) {
+        const data = fs.readFileSync(imgFile);
+        const ext = path.extname(imgPath).toLowerCase().slice(1);
+        const mimeType = { jpg: 'jpeg', jpeg: 'jpeg', png: 'png', gif: 'gif', webp: 'webp' }[ext] || 'jpeg';
+        const b64 = data.toString('base64');
+        return `![${alt}](data:image/${mimeType};base64,${b64})`;
+      }
+    } catch (_) {}
+    return match;
+  });
 
   return body.split('\n## ').slice(1).map(sec => {
     const lines = sec.split('\n');
