@@ -98,9 +98,29 @@ def column(mask, x0, x1, y0, y1, min_gutter=9):
     return walk(x0, -1), walk(x1, +1)
 
 
-def prose(l, cw, body_h):
-    return (l['n'] >= 5 and (l['x1'] - l['x0']) >= 0.72 * cw and
-            l['gap'] <= 2.6 * max(l['h'], 8) and l['h'] >= 0.85 * body_h)
+def prose(l, mask, body_h):
+    """Body text: several words, filling most of ITS OWN column, at body size,
+    evenly spaced. Measured against the line's own column, not the figure's —
+    a half-page column of prose beside a full-width figure is still prose."""
+    if l['n'] < 5 or l['gap'] > 2.6 * max(l['h'], 8) or l['h'] < 0.85 * body_h:
+        return False
+    c0, c1 = column(mask, l['x0'], l['x1'], l['y0'], l['y1'])
+    return (l['x1'] - l['x0']) >= 0.72 * (c1 - c0)
+
+
+def table_band(im, A):
+    """A table's width is its coloured header band's, not the gutter's: the
+    white between a table's own columns looks exactly like a page gutter."""
+    a = np.asarray(im).astype(int)
+    sat = (a.max(axis=2) - a.min(axis=2)) > 60
+    best = (0, 0, 0)
+    for y in range(A['y1'], min(a.shape[0], A['y1'] + 120)):
+        r = np.concatenate(([0], sat[y].astype(np.int8), [0]))
+        d = np.diff(r)
+        for x0, x1 in zip(np.nonzero(d == 1)[0], np.nonzero(d == -1)[0]):
+            if x1 - x0 > best[0]:
+                best = (x1 - x0, x0, x1)
+    return (best[1], best[2]) if best[0] >= 0.5 * (A['x1'] - A['x0']) else None
 
 
 def propose(path):
@@ -115,25 +135,35 @@ def propose(path):
     hs = sorted(l['h'] for l in lines if l['n'] >= 5)
     body_h = hs[int(len(hs) * .6)] if hs else A['h']
 
-    cap = [l for l in lines if l['block'] == A['block'] and l['y0'] >= A['y0'] - 2]
-    cy1 = max(l['y1'] for l in cap) if cap else A['y1']
-    cx0 = min([A['x0']] + [l['x0'] for l in cap]); cx1 = max([A['x1']] + [l['x1'] for l in cap])
-    X0, X1 = column(mask, cx0, cx1, A['y0'], cy1)
-    cw = X1 - X0
-    inside = lambda l: min(l['x1'], X1) - max(l['x0'], X0) > 0.6 * (l['x1'] - l['x0'])
+    # The caption paragraph: A's block, but only while the lines keep coming at
+    # caption pitch and size. OCR happily folds the next heading into it.
+    cap, prev = [A], A
+    for l in sorted((l for l in lines if l['block'] == A['block'] and l['y0'] > A['y0'] + 2),
+                    key=lambda l: l['y0']):
+        if l['y0'] - prev['y1'] > 1.3 * A['h'] or l['h'] > 1.3 * A['h']:
+            break
+        cap.append(l); prev = l
+    cy1 = max(l['y1'] for l in cap)
+    cx0 = min(l['x0'] for l in cap); cx1 = max(l['x1'] for l in cap)
+    band = table_band(im, A) if lab[1] == 'TABLE' else None
+    if band:
+        X0, X1 = min(band[0], cx0), max(band[1], cx1)
+    else:
+        X0, X1 = column(mask, cx0, cx1, A['y0'], cy1)
+    overlaps = lambda l: min(l['x1'], X1) - max(l['x0'], X0) > 0.3 * (l['x1'] - l['x0'])
     is_cap = lambda l: re.match(r'^\W{0,2}e?(F[I1l]G|TAB[L1I]E)\b', l['text'], re.I)
 
     if lab[1] == 'FIG':
         bottom = cy1
         top, run = 0, []
-        for l in sorted((l for l in lines if l['y1'] <= A['y0'] + 2 and inside(l)), key=lambda l: -l['y1']):
-            if l['block'] == A['block']:
+        for l in sorted((l for l in lines if l['y1'] <= A['y0'] + 2 and overlaps(l)), key=lambda l: -l['y1']):
+            if l in cap:
                 continue
             if is_cap(l):
                 # the whole of that other caption's paragraph sits above here
                 top = max(m['y1'] for m in lines if m['block'] == l['block'] and m['y0'] < A['y0'])
                 break
-            if prose(l, cw, body_h):
+            if prose(l, mask, body_h):
                 run.append(l)
                 if len(run) >= 2:
                     top = run[0]['y1']
@@ -148,10 +178,10 @@ def propose(path):
     else:  # TABLE: from the title down to body prose
         y0 = A['y0']
         bottom, run = H, []
-        for l in (l for l in lines if l['y0'] > A['y1'] and inside(l)):
-            if is_cap(l) and l is not A:
+        for l in (l for l in lines if l['y0'] > A['y1'] and overlaps(l)):
+            if is_cap(l):
                 bottom = l['y0']; break
-            if prose(l, cw, body_h):
+            if prose(l, mask, body_h):
                 run.append(l)
                 if len(run) >= 2:
                     bottom = run[0]['y0']; break
