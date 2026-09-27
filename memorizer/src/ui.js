@@ -536,6 +536,37 @@ function readText(file) {
     r.readAsText(file);
   });
 }
+
+/* ── import study units from markdown or HTML files ─────────────────────────── */
+function importStudyUnit(pack) {
+  return Store.put('packs', {
+    id: pack.id,
+    sections: pack.sections,
+    at: new Date().toISOString()
+  }).then(function () {
+    return Store.put('docs', {
+      id: pack.id,
+      name: pack.name,
+      addedAt: pack.addedAt,
+      source: 'imported',
+      pages: 0,
+      scanned: [],
+      clusters: []
+    });
+  }).then(refresh).then(render, function (e) {
+    ui.error = 'Failed to import: ' + (e && e.message); render();
+  });
+}
+
+function showStudyImportDialog() {
+  if (!root.MemImportUI) {
+    ui.error = 'Import feature not available'; render(); return;
+  }
+  root.MemImportUI.show(function (pack) {
+    importStudyUnit(pack);
+  });
+}
+
 /* ── mermaid, loaded only when a flowchart is first shown ────────────────── */
 var mermaidP = null;
 function mermaid() {
@@ -861,7 +892,8 @@ function homeParts() {
     h('label.chip', { for: 'pdf-input' }, h('span', { 'aria-hidden': 'true' }, '⬆'), ' Upload PDF'),
     h('label.chip', { for: 'book-input' }, h('span', { 'aria-hidden': 'true' }, '📚'), ' Whole book'),
     h('label.chip', { for: 'photo-input' }, h('span', { 'aria-hidden': 'true' }, '📷'), ' Photo'),
-    button([h('span', { 'aria-hidden': 'true' }, '📋'), ' Paste'], function () { ui.pasting = true; render(); }, 'chip', { id: 'chip-paste' }));
+    button([h('span', { 'aria-hidden': 'true' }, '📋'), ' Paste'], function () { ui.pasting = true; render(); }, 'chip', { id: 'chip-paste' }),
+    button([h('span', { 'aria-hidden': 'true' }, '📄'), ' Import Study'], function () { showStudyImportDialog(); }, 'chip', { id: 'chip-import-study' }));
 
   var paste = ui.pasting ? h('div.card.paste', { id: 'paste' },
     h('h2', 'Paste your notes'),
@@ -3864,6 +3896,6 @@ function start() {
   });
 }
 
-root.Memorizer = { makeStudyCards: makeStudyCards, aiCase: aiCase, startPractice: startPractice, motion: { seek: seek, total: total, replay: replay }, ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc };
+root.Memorizer = { makeStudyCards: makeStudyCards, aiCase: aiCase, startPractice: startPractice, motion: { seek: seek, total: total, replay: replay }, ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc, importStudyUnit: importStudyUnit, showStudyImportDialog: showStudyImportDialog };
 if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(window);
