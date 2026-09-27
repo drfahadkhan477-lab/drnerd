@@ -1,0 +1,3013 @@
+{
+ "_why": "Crop record for the ischemia unit (Braunwald 13e). Proposed by tools/propose-crops.py, then every figure checked by eye on a review sheet: 49 drawn by hand, 11 second-pass proposal, 171 proposal accepted, 3 no figure in image. Hand-drawn boxes had their edges snapped to the nearest white row/column. Boxes are [left, top, right, bottom] in the pixels of content/refs/ischemia/visuals/.",
+ "crops": {
+  "001_FIG.32.1_p002.jpg": {
+   "box": [
+    16,
+    25,
+    596,
+    462
+   ],
+   "was": [
+    661,
+    602
+   ],
+   "why": "drawn by hand"
+  },
+  "002_TABLE32.1_p003.jpg": {
+   "box": [
+    33,
+    67,
+    621,
+    738
+   ],
+   "was": [
+    621,
+    738
+   ],
+   "why": "second-pass proposal"
+  },
+  "003_FIG.32.2_p004.jpg": {
+   "box": [
+    0,
+    380,
+    557,
+    688
+   ],
+   "was": [
+    557,
+    688
+   ],
+   "why": "drawn by hand"
+  },
+  "004_TABLE32.2_p005.jpg": {
+   "box": [
+    178,
+    67,
+    632,
+    602
+   ],
+   "was": [
+    655,
+    755
+   ],
+   "why": "proposal accepted"
+  },
+  "005_TABLE32.3_p006.jpg": {
+   "box": [
+    22,
+    66,
+    476,
+    433
+   ],
+   "was": [
+    636,
+    754
+   ],
+   "why": "proposal accepted"
+  },
+  "006_FIG.32.3_p007.jpg": {
+   "box": [
+    48,
+    208,
+    743,
+    706
+   ],
+   "was": [
+    743,
+    907
+   ],
+   "why": "drawn by hand"
+  },
+  "007_TABLE32.4_p007.jpg": {
+   "box": [
+    32,
+    58,
+    762,
+    417
+   ],
+   "was": [
+    762,
+    738
+   ],
+   "why": "second-pass proposal"
+  },
+  "008_FIG.32.4_p009.jpg": {
+   "box": [
+    0,
+    110,
+    982,
+    905
+   ],
+   "was": [
+    982,
+    950
+   ],
+   "why": "drawn by hand"
+  },
+  "009_ETABLE32.3_p011.jpg": {
+   "box": [
+    24,
+    67,
+    650,
+    738
+   ],
+   "was": [
+    650,
+    738
+   ],
+   "why": "second-pass proposal"
+  },
+  "010_FIG.32.5_p012.jpg": {
+   "box": [
+    30,
+    55,
+    625,
+    600
+   ],
+   "was": [
+    731,
+    728
+   ],
+   "why": "drawn by hand"
+  },
+  "011_EFIG.32.1_p014.jpg": {
+   "box": [
+    31,
+    0,
+    982,
+    451
+   ],
+   "was": [
+    982,
+    576
+   ],
+   "why": "proposal accepted"
+  },
+  "012_FIG.32G.1_p016.jpg": {
+   "box": [
+    0,
+    231,
+    982,
+    785
+   ],
+   "was": [
+    982,
+    918
+   ],
+   "why": "drawn by hand"
+  },
+  "013_FIG.32G.2_p017.jpg": {
+   "box": [
+    18,
+    0,
+    949,
+    754
+   ],
+   "was": [
+    982,
+    893
+   ],
+   "why": "proposal accepted"
+  },
+  "014_FIG.32G.3_p018.jpg": {
+   "box": [
+    35,
+    0,
+    959,
+    727
+   ],
+   "was": [
+    982,
+    838
+   ],
+   "why": "proposal accepted"
+  },
+  "015_FIG.33.1_p020.jpg": {
+   "box": [
+    32,
+    0,
+    486,
+    500
+   ],
+   "was": [
+    547,
+    639
+   ],
+   "why": "proposal accepted"
+  },
+  "016_FIG.33.4_p020.jpg": {
+   "box": [
+    0,
+    470,
+    175,
+    985
+   ],
+   "was": [
+    562,
+    1146
+   ],
+   "why": "drawn by hand"
+  },
+  "017_FIG.33.2_p020.jpg": {
+   "box": [
+    33,
+    0,
+    621,
+    754
+   ],
+   "was": [
+    621,
+    865
+   ],
+   "why": "proposal accepted"
+  },
+  "018_FIG.33.4_p021.jpg": {
+   "box": [
+    22,
+    221,
+    949,
+    796
+   ],
+   "was": [
+    982,
+    866
+   ],
+   "why": "proposal accepted"
+  },
+  "019_FIG.33.3_p021.jpg": {
+   "box": [
+    19,
+    0,
+    949,
+    728
+   ],
+   "was": [
+    982,
+    867
+   ],
+   "why": "proposal accepted"
+  },
+  "020_FIG.33.5_p022.jpg": {
+   "box": [
+    25,
+    43,
+    525,
+    800
+   ],
+   "was": [
+    685,
+    867
+   ],
+   "why": "drawn by hand"
+  },
+  "021_FIG.33.6_p023.jpg": {
+   "box": [
+    20,
+    25,
+    492,
+    715
+   ],
+   "was": [
+    647,
+    854
+   ],
+   "why": "drawn by hand"
+  },
+  "022_TABLE33.1_p024.jpg": {
+   "box": [
+    35,
+    69,
+    510,
+    766
+   ],
+   "was": [
+    649,
+    772
+   ],
+   "why": "drawn by hand"
+  },
+  "023_EFIG.33.1_p025.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    493
+   ],
+   "was": [
+    982,
+    629
+   ],
+   "why": "proposal accepted"
+  },
+  "024_FIG.33.8_p027.jpg": {
+   "box": [
+    30,
+    0,
+    959,
+    488
+   ],
+   "was": [
+    982,
+    627
+   ],
+   "why": "proposal accepted"
+  },
+  "025_FIG.33.10_p028.jpg": {
+   "box": [
+    20,
+    301,
+    948,
+    796
+   ],
+   "was": [
+    982,
+    867
+   ],
+   "why": "proposal accepted"
+  },
+  "026_FIG.33.9_p028.jpg": {
+   "box": [
+    18,
+    0,
+    949,
+    808
+   ],
+   "was": [
+    982,
+    961
+   ],
+   "why": "proposal accepted"
+  },
+  "027_EFIG.33.2_p030.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    430
+   ],
+   "was": [
+    982,
+    569
+   ],
+   "why": "proposal accepted"
+  },
+  "028_FIG.33.11_p031.jpg": {
+   "box": [
+    20,
+    0,
+    950,
+    788
+   ],
+   "was": [
+    982,
+    927
+   ],
+   "why": "proposal accepted"
+  },
+  "029_FIG.33.13_p032.jpg": {
+   "box": [
+    33,
+    399,
+    959,
+    825
+   ],
+   "was": [
+    982,
+    977
+   ],
+   "why": "proposal accepted"
+  },
+  "030_EFIG.33.3_p033.jpg": {
+   "box": [
+    31,
+    0,
+    960,
+    797
+   ],
+   "was": [
+    982,
+    936
+   ],
+   "why": "proposal accepted"
+  },
+  "031_EFIG.33.4_p035.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    645
+   ],
+   "was": [
+    982,
+    781
+   ],
+   "why": "proposal accepted"
+  },
+  "032_EFIG.33.5_p036.jpg": {
+   "box": [
+    21,
+    0,
+    949,
+    749
+   ],
+   "was": [
+    982,
+    887
+   ],
+   "why": "proposal accepted"
+  },
+  "033_FIG.33.14_p037.jpg": {
+   "box": [
+    30,
+    0,
+    486,
+    869
+   ],
+   "was": [
+    547,
+    1005
+   ],
+   "why": "proposal accepted"
+  },
+  "034_EFIG.33.6_p038.jpg": {
+   "box": [
+    34,
+    0,
+    960,
+    622
+   ],
+   "was": [
+    982,
+    762
+   ],
+   "why": "proposal accepted"
+  },
+  "035_FIG.33.15_p039.jpg": {
+   "box": [
+    17,
+    0,
+    613,
+    534
+   ],
+   "was": [
+    673,
+    673
+   ],
+   "why": "proposal accepted"
+  },
+  "036_EFIG.33.7_p040.jpg": {
+   "box": [
+    34,
+    0,
+    961,
+    864
+   ],
+   "was": [
+    982,
+    1005
+   ],
+   "why": "proposal accepted"
+  },
+  "037_FIG.33.16_p041.jpg": {
+   "box": [
+    33,
+    0,
+    487,
+    1021
+   ],
+   "was": [
+    547,
+    1092
+   ],
+   "why": "proposal accepted"
+  },
+  "038_EFIG.33.8_p042.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    771
+   ],
+   "was": [
+    982,
+    907
+   ],
+   "why": "proposal accepted"
+  },
+  "039_FIG.33.17_p043.jpg": {
+   "box": [
+    21,
+    0,
+    735,
+    625
+   ],
+   "was": [
+    735,
+    750
+   ],
+   "why": "proposal accepted"
+  },
+  "040_EFIG.33.9_p044.jpg": {
+   "box": [
+    34,
+    0,
+    962,
+    940
+   ],
+   "was": [
+    982,
+    1075
+   ],
+   "why": "proposal accepted"
+  },
+  "041_FIG.33.18_p045.jpg": {
+   "box": [
+    35,
+    0,
+    964,
+    866
+   ],
+   "was": [
+    982,
+    1004
+   ],
+   "why": "proposal accepted"
+  },
+  "042_FIG.33.19_p046.jpg": {
+   "box": [
+    22,
+    0,
+    949,
+    583
+   ],
+   "was": [
+    982,
+    724
+   ],
+   "why": "proposal accepted"
+  },
+  "043_FIG.33.20_p046.jpg": {
+   "box": [
+    20,
+    326,
+    948,
+    838
+   ],
+   "was": [
+    982,
+    977
+   ],
+   "why": "proposal accepted"
+  },
+  "044_FIG.33.21_p047.jpg": {
+   "box": [
+    38,
+    63,
+    512,
+    545
+   ],
+   "was": [
+    547,
+    683
+   ],
+   "why": "drawn by hand"
+  },
+  "045_FIG.33.22_p047.jpg": {
+   "box": [
+    33,
+    365,
+    714,
+    838
+   ],
+   "was": [
+    714,
+    909
+   ],
+   "why": "proposal accepted"
+  },
+  "046_EFIG.33.10_p048.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    478
+   ],
+   "was": [
+    982,
+    617
+   ],
+   "why": "proposal accepted"
+  },
+  "047_FIG.33.23_p049.jpg": {
+   "box": [
+    19,
+    0,
+    949,
+    908
+   ],
+   "was": [
+    982,
+    1046
+   ],
+   "why": "proposal accepted"
+  },
+  "048_FIG.33.24_p050.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    778
+   ],
+   "was": [
+    982,
+    914
+   ],
+   "why": "proposal accepted"
+  },
+  "049_EFIG.33.11_p051.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    655
+   ],
+   "was": [
+    982,
+    793
+   ],
+   "why": "proposal accepted"
+  },
+  "050_FIG.33.25_p052.jpg": {
+   "box": [
+    19,
+    330,
+    948,
+    803
+   ],
+   "was": [
+    982,
+    881
+   ],
+   "why": "proposal accepted"
+  },
+  "052_EFIG.33.12_p053.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    796
+   ],
+   "was": [
+    982,
+    935
+   ],
+   "why": "proposal accepted"
+  },
+  "053_FIG.33.26_p054.jpg": {
+   "box": [
+    29,
+    0,
+    699,
+    638
+   ],
+   "was": [
+    760,
+    776
+   ],
+   "why": "proposal accepted"
+  },
+  "054_EFIG.33.13_p055.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    881
+   ],
+   "was": [
+    982,
+    1019
+   ],
+   "why": "proposal accepted"
+  },
+  "055_FIG.33.27_p056.jpg": {
+   "box": [
+    20,
+    0,
+    950,
+    735
+   ],
+   "was": [
+    982,
+    874
+   ],
+   "why": "proposal accepted"
+  },
+  "056_TABLE33.2_p056.jpg": {
+   "box": [
+    24,
+    143,
+    473,
+    661
+   ],
+   "was": [
+    645,
+    730
+   ],
+   "why": "drawn by hand"
+  },
+  "057_FIG.33.28_p057.jpg": {
+   "box": [
+    33,
+    0,
+    573,
+    950
+   ],
+   "was": [
+    632,
+    1089
+   ],
+   "why": "proposal accepted"
+  },
+  "058_EFIG.34.1_p060.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    726
+   ],
+   "was": [
+    982,
+    909
+   ],
+   "why": "proposal accepted"
+  },
+  "059_TABLE34.1_p061.jpg": {
+   "box": [
+    26,
+    67,
+    473,
+    530
+   ],
+   "was": [
+    645,
+    755
+   ],
+   "why": "second-pass proposal"
+  },
+  "060_FIG.34.1_p062.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    852
+   ],
+   "was": [
+    982,
+    990
+   ],
+   "why": "proposal accepted"
+  },
+  "061_FIG.34.2_p063.jpg": {
+   "box": [
+    23,
+    0,
+    588,
+    781
+   ],
+   "was": [
+    588,
+    934
+   ],
+   "why": "proposal accepted"
+  },
+  "062_EFIG.34.2_p064.jpg": {
+   "box": [
+    33,
+    33,
+    960,
+    769
+   ],
+   "was": [
+    982,
+    907
+   ],
+   "why": "proposal accepted"
+  },
+  "063_ETABLE34.2_p065.jpg": {
+   "box": [
+    22,
+    67,
+    622,
+    676
+   ],
+   "was": [
+    622,
+    738
+   ],
+   "why": "proposal accepted"
+  },
+  "064_FIG.34.3_p066.jpg": {
+   "box": [
+    34,
+    275,
+    798,
+    804
+   ],
+   "was": [
+    859,
+    883
+   ],
+   "why": "proposal accepted"
+  },
+  "065_TABLE34.2_p066.jpg": {
+   "box": [
+    35,
+    58,
+    500,
+    738
+   ],
+   "was": [
+    590,
+    738
+   ],
+   "why": "drawn by hand"
+  },
+  "066_FIG.34.4_p067.jpg": {
+   "box": [
+    44,
+    0,
+    610,
+    831
+   ],
+   "was": [
+    642,
+    963
+   ],
+   "why": "drawn by hand"
+  },
+  "067_FIG.34.4_p068.jpg": {
+   "box": [
+    34,
+    0,
+    489,
+    782
+   ],
+   "was": [
+    489,
+    866
+   ],
+   "why": "proposal accepted"
+  },
+  "068_EFIG.34.3_p069.jpg": {
+   "box": [
+    34,
+    0,
+    961,
+    797
+   ],
+   "was": [
+    982,
+    935
+   ],
+   "why": "proposal accepted"
+  },
+  "069_FIG.34.5_p070.jpg": {
+   "box": [
+    15,
+    0,
+    982,
+    704
+   ],
+   "was": [
+    982,
+    935
+   ],
+   "why": "drawn by hand"
+  },
+  "070_FIG.34.6_p071.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    583
+   ],
+   "was": [
+    982,
+    722
+   ],
+   "why": "proposal accepted"
+  },
+  "071_FIG.34.7_p071.jpg": {
+   "box": [
+    20,
+    25,
+    963,
+    721
+   ],
+   "was": [
+    982,
+    881
+   ],
+   "why": "drawn by hand"
+  },
+  "072_FIG.34.9_p072.jpg": {
+   "box": [
+    19,
+    386,
+    949,
+    776
+   ],
+   "was": [
+    982,
+    854
+   ],
+   "why": "proposal accepted"
+  },
+  "073_FIG.34.8_p072.jpg": {
+   "box": [
+    21,
+    0,
+    476,
+    516
+   ],
+   "was": [
+    647,
+    651
+   ],
+   "why": "proposal accepted"
+  },
+  "074_EFIG.34.4_p073.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    559
+   ],
+   "was": [
+    982,
+    697
+   ],
+   "why": "proposal accepted"
+  },
+  "075_FIG.34.10_p074.jpg": {
+   "box": [
+    0,
+    0,
+    598,
+    985
+   ],
+   "was": [
+    681,
+    1124
+   ],
+   "why": "proposal accepted"
+  },
+  "076_EFIG.34.5_p076.jpg": {
+   "box": [
+    31,
+    0,
+    959,
+    645
+   ],
+   "was": [
+    982,
+    783
+   ],
+   "why": "proposal accepted"
+  },
+  "077_ETABLE34.3_p077.jpg": {
+   "box": [
+    16,
+    30,
+    982,
+    729
+   ],
+   "was": [
+    982,
+    757
+   ],
+   "why": "drawn by hand"
+  },
+  "078_FIG.34.12_p078.jpg": {
+   "box": [
+    25,
+    25,
+    965,
+    833
+   ],
+   "was": [
+    982,
+    920
+   ],
+   "why": "drawn by hand"
+  },
+  "079_FIG.34.14_p079.jpg": {
+   "box": [
+    56,
+    0,
+    511,
+    605
+   ],
+   "was": [
+    544,
+    745
+   ],
+   "why": "proposal accepted"
+  },
+  "080_FIG.34.13_p079.jpg": {
+   "box": [
+    22,
+    0,
+    478,
+    661
+   ],
+   "was": [
+    647,
+    897
+   ],
+   "why": "proposal accepted"
+  },
+  "081_FIG.34.15_p080.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    735
+   ],
+   "was": [
+    982,
+    902
+   ],
+   "why": "proposal accepted"
+  },
+  "082_FIG.34.16_p081.jpg": {
+   "box": [
+    23,
+    0,
+    949,
+    783
+   ],
+   "was": [
+    982,
+    921
+   ],
+   "why": "proposal accepted"
+  },
+  "083_EFIG.34.6_p083.jpg": {
+   "box": [
+    34,
+    0,
+    960,
+    795
+   ],
+   "was": [
+    982,
+    935
+   ],
+   "why": "proposal accepted"
+  },
+  "084_FIG.34.17_p084.jpg": {
+   "box": [
+    0,
+    115,
+    688,
+    900
+   ],
+   "was": [
+    736,
+    922
+   ],
+   "why": "drawn by hand"
+  },
+  "085_FIG.34.18_p085.jpg": {
+   "box": [
+    34,
+    0,
+    488,
+    796
+   ],
+   "was": [
+    548,
+    867
+   ],
+   "why": "proposal accepted"
+  },
+  "086_FIG.34.20_p086.jpg": {
+   "box": [
+    60,
+    300,
+    544,
+    875
+   ],
+   "was": [
+    544,
+    963
+   ],
+   "why": "drawn by hand"
+  },
+  "087_FIG.34.19_p086.jpg": {
+   "box": [
+    19,
+    0,
+    707,
+    639
+   ],
+   "was": [
+    768,
+    778
+   ],
+   "why": "proposal accepted"
+  },
+  "088_FIG.34.21_p087.jpg": {
+   "box": [
+    40,
+    63,
+    520,
+    413
+   ],
+   "was": [
+    548,
+    556
+   ],
+   "why": "drawn by hand"
+  },
+  "089_EFIG.34.7_p088.jpg": {
+   "box": [
+    88,
+    45,
+    955,
+    435
+   ],
+   "was": [
+    982,
+    569
+   ],
+   "why": "drawn by hand"
+  },
+  "090_FIG.35.1_p092.jpg": {
+   "box": [
+    32,
+    266,
+    959,
+    769
+   ],
+   "was": [
+    982,
+    839
+   ],
+   "why": "proposal accepted"
+  },
+  "091_FIG.35.2_p093.jpg": {
+   "box": [
+    21,
+    65,
+    476,
+    697
+   ],
+   "was": [
+    647,
+    835
+   ],
+   "why": "drawn by hand"
+  },
+  "092_TABLE35.1_p093.jpg": {
+   "box": [
+    0,
+    134,
+    628,
+    428
+   ],
+   "was": [
+    662,
+    831
+   ],
+   "why": "proposal accepted"
+  },
+  "093_TABLE35.2_p093.jpg": {
+   "box": [
+    201,
+    143,
+    654,
+    568
+   ],
+   "was": [
+    688,
+    824
+   ],
+   "why": "proposal accepted"
+  },
+  "094_FIG.35.3_p094.jpg": {
+   "box": [
+    0,
+    335,
+    982,
+    950
+   ],
+   "was": [
+    982,
+    951
+   ],
+   "why": "drawn by hand"
+  },
+  "095_FIG.35.4_p095.jpg": {
+   "box": [
+    21,
+    0,
+    949,
+    633
+   ],
+   "was": [
+    982,
+    771
+   ],
+   "why": "proposal accepted"
+  },
+  "096_FIG.35.5_p095.jpg": {
+   "box": [
+    22,
+    384,
+    949,
+    796
+   ],
+   "was": [
+    982,
+    935
+   ],
+   "why": "proposal accepted"
+  },
+  "097_TABLE35.3_p096.jpg": {
+   "box": [
+    32,
+    58,
+    487,
+    677
+   ],
+   "was": [
+    657,
+    755
+   ],
+   "why": "second-pass proposal"
+  },
+  "098_FIG.35.6_p097.jpg": {
+   "box": [
+    45,
+    103,
+    767,
+    825
+   ],
+   "was": [
+    767,
+    825
+   ],
+   "why": "drawn by hand"
+  },
+  "099_EFIG.35.1_p098.jpg": {
+   "box": [
+    20,
+    50,
+    965,
+    585
+   ],
+   "was": [
+    982,
+    757
+   ],
+   "why": "drawn by hand"
+  },
+  "100_EFIG.35.2_p098.jpg": {
+   "box": [
+    33,
+    126,
+    959,
+    783
+   ],
+   "was": [
+    982,
+    897
+   ],
+   "why": "proposal accepted"
+  },
+  "101_FIG.35.7_p100.jpg": {
+   "box": [
+    58,
+    0,
+    652,
+    795
+   ],
+   "was": [
+    686,
+    867
+   ],
+   "why": "proposal accepted"
+  },
+  "102_TABLE35.4_p101.jpg": {
+   "box": [
+    33,
+    143,
+    648,
+    477
+   ],
+   "was": [
+    648,
+    546
+   ],
+   "why": "proposal accepted"
+  },
+  "103_FIG.35.8_p101.jpg": {
+   "box": [
+    32,
+    0,
+    678,
+    573
+   ],
+   "was": [
+    678,
+    706
+   ],
+   "why": "proposal accepted"
+  },
+  "104_EFIG.35.3_p102.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    809
+   ],
+   "was": [
+    982,
+    949
+   ],
+   "why": "proposal accepted"
+  },
+  "105_EFIG.35.4_p103.jpg": {
+   "box": [
+    22,
+    0,
+    948,
+    617
+   ],
+   "was": [
+    982,
+    755
+   ],
+   "why": "proposal accepted"
+  },
+  "106_FIG.35.9_p104.jpg": {
+   "box": [
+    22,
+    425,
+    476,
+    796
+   ],
+   "was": [
+    647,
+    849
+   ],
+   "why": "proposal accepted"
+  },
+  "107_FIG.35.10_p105.jpg": {
+   "box": [
+    30,
+    0,
+    650,
+    522
+   ],
+   "was": [
+    711,
+    661
+   ],
+   "why": "proposal accepted"
+  },
+  "108_FIG.35.11_p106.jpg": {
+   "box": [
+    21,
+    0,
+    949,
+    783
+   ],
+   "was": [
+    982,
+    921
+   ],
+   "why": "proposal accepted"
+  },
+  "109_EFIG.35.5_p107.jpg": {
+   "box": [
+    30,
+    0,
+    960,
+    799
+   ],
+   "was": [
+    982,
+    938
+   ],
+   "why": "proposal accepted"
+  },
+  "110_FIG.35.12_p108.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    837
+   ],
+   "was": [
+    982,
+    911
+   ],
+   "why": "proposal accepted"
+  },
+  "111_FIG.35.13_p109.jpg": {
+   "box": [
+    0,
+    0,
+    510,
+    678
+   ],
+   "was": [
+    544,
+    1025
+   ],
+   "why": "proposal accepted"
+  },
+  "112_FIG.35.14_p110.jpg": {
+   "box": [
+    33,
+    0,
+    486,
+    907
+   ],
+   "was": [
+    547,
+    1047
+   ],
+   "why": "proposal accepted"
+  },
+  "113_FIG.35.15_p111.jpg": {
+   "box": [
+    19,
+    0,
+    949,
+    696
+   ],
+   "was": [
+    982,
+    904
+   ],
+   "why": "proposal accepted"
+  },
+  "114_FIG.35.16_p113.jpg": {
+   "box": [
+    21,
+    0,
+    949,
+    737
+   ],
+   "was": [
+    982,
+    889
+   ],
+   "why": "proposal accepted"
+  },
+  "115_TABLE35.5_p114.jpg": {
+   "box": [
+    32,
+    58,
+    465,
+    693
+   ],
+   "was": [
+    648,
+    755
+   ],
+   "why": "drawn by hand"
+  },
+  "116_FIG.35.17_p114.jpg": {
+   "box": [
+    33,
+    175,
+    959,
+    782
+   ],
+   "was": [
+    982,
+    853
+   ],
+   "why": "proposal accepted"
+  },
+  "117_EFIG.35.6_p115.jpg": {
+   "box": [
+    56,
+    0,
+    497,
+    382
+   ],
+   "was": [
+    558,
+    521
+   ],
+   "why": "proposal accepted"
+  },
+  "118_FIG.35.18_p116.jpg": {
+   "box": [
+    18,
+    0,
+    549,
+    935
+   ],
+   "was": [
+    605,
+    1009
+   ],
+   "why": "proposal accepted"
+  },
+  "119_TABLE35.6_p118.jpg": {
+   "box": [
+    22,
+    51,
+    477,
+    418
+   ],
+   "was": [
+    645,
+    748
+   ],
+   "why": "second-pass proposal"
+  },
+  "120_TABLE35.7_p118.jpg": {
+   "box": [
+    22,
+    143,
+    475,
+    455
+   ],
+   "was": [
+    641,
+    830
+   ],
+   "why": "proposal accepted"
+  },
+  "121_TABLE35.8_p118.jpg": {
+   "box": [
+    22,
+    143,
+    587,
+    397
+   ],
+   "was": [
+    587,
+    522
+   ],
+   "why": "proposal accepted"
+  },
+  "122_FIG.35.19_p119.jpg": {
+   "box": [
+    33,
+    215,
+    550,
+    797
+   ],
+   "was": [
+    611,
+    867
+   ],
+   "why": "proposal accepted"
+  },
+  "123_FIG.35.20_p120.jpg": {
+   "box": [
+    56,
+    0,
+    773,
+    810
+   ],
+   "was": [
+    800,
+    881
+   ],
+   "why": "proposal accepted"
+  },
+  "124_TABLE35.9_p121.jpg": {
+   "box": [
+    20,
+    144,
+    971,
+    684
+   ],
+   "was": [
+    971,
+    684
+   ],
+   "why": "drawn by hand"
+  },
+  "125_TABLE35.9_p122.jpg": {
+   "box": [
+    22,
+    67,
+    949,
+    738
+   ],
+   "was": [
+    982,
+    738
+   ],
+   "why": "proposal accepted"
+  },
+  "126_FIG.35.21_p123.jpg": {
+   "box": [
+    0,
+    590,
+    675,
+    885
+   ],
+   "was": [
+    675,
+    977
+   ],
+   "why": "drawn by hand"
+  },
+  "127_FIG.35.22_p124.jpg": {
+   "box": [
+    19,
+    0,
+    949,
+    775
+   ],
+   "was": [
+    982,
+    921
+   ],
+   "why": "proposal accepted"
+  },
+  "128_FIG.35.23_p125.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    768
+   ],
+   "was": [
+    982,
+    907
+   ],
+   "why": "proposal accepted"
+  },
+  "129_FIG.35.24_p126.jpg": {
+   "box": [
+    23,
+    0,
+    948,
+    726
+   ],
+   "was": [
+    982,
+    921
+   ],
+   "why": "proposal accepted"
+  },
+  "130_FIG.35.25_p127.jpg": {
+   "box": [
+    29,
+    0,
+    486,
+    400
+   ],
+   "was": [
+    547,
+    581
+   ],
+   "why": "proposal accepted"
+  },
+  "131_FIG.35.26_p128.jpg": {
+   "box": [
+    23,
+    0,
+    949,
+    771
+   ],
+   "was": [
+    982,
+    880
+   ],
+   "why": "proposal accepted"
+  },
+  "132_FIG.35.27_p129.jpg": {
+   "box": [
+    0,
+    90,
+    664,
+    569
+   ],
+   "was": [
+    682,
+    569
+   ],
+   "why": "drawn by hand"
+  },
+  "133_FIG.35.28_p130.jpg": {
+   "box": [
+    25,
+    202,
+    545,
+    740
+   ],
+   "was": [
+    546,
+    871
+   ],
+   "why": "drawn by hand"
+  },
+  "134_TABLE35.10_p130.jpg": {
+   "box": [
+    22,
+    134,
+    949,
+    563
+   ],
+   "was": [
+    982,
+    723
+   ],
+   "why": "second-pass proposal"
+  },
+  "135_EFIG.35.7_p131.jpg": {
+   "box": [
+    57,
+    0,
+    832,
+    494
+   ],
+   "was": [
+    890,
+    633
+   ],
+   "why": "proposal accepted"
+  },
+  "136_FIG.35.29_p132.jpg": {
+   "box": [
+    33,
+    319,
+    959,
+    740
+   ],
+   "was": [
+    982,
+    839
+   ],
+   "why": "proposal accepted"
+  },
+  "137_EFIG.35.8_p133.jpg": {
+   "box": [
+    21,
+    0,
+    949,
+    462
+   ],
+   "was": [
+    982,
+    615
+   ],
+   "why": "proposal accepted"
+  },
+  "138_FIG.35.30_p134.jpg": {
+   "box": [
+    21,
+    0,
+    477,
+    583
+   ],
+   "was": [
+    647,
+    722
+   ],
+   "why": "proposal accepted"
+  },
+  "139_FIG.35.31_p134.jpg": {
+   "box": [
+    20,
+    311,
+    477,
+    782
+   ],
+   "was": [
+    647,
+    921
+   ],
+   "why": "proposal accepted"
+  },
+  "140_FIG.35.32_p134.jpg": {
+   "box": [
+    56,
+    0,
+    511,
+    675
+   ],
+   "was": [
+    544,
+    814
+   ],
+   "why": "proposal accepted"
+  },
+  "141_TABLE35.11_p135.jpg": {
+   "box": [
+    33,
+    68,
+    740,
+    642
+   ],
+   "was": [
+    740,
+    739
+   ],
+   "why": "proposal accepted"
+  },
+  "142_FIG.35.33_p136.jpg": {
+   "box": [
+    20,
+    0,
+    476,
+    810
+   ],
+   "was": [
+    647,
+    950
+   ],
+   "why": "proposal accepted"
+  },
+  "143_TABLE35.12_p137.jpg": {
+   "box": [
+    33,
+    67,
+    724,
+    663
+   ],
+   "was": [
+    724,
+    738
+   ],
+   "why": "proposal accepted"
+  },
+  "144_EFIG.35.9_p142.jpg": {
+   "box": [
+    30,
+    0,
+    959,
+    797
+   ],
+   "was": [
+    982,
+    949
+   ],
+   "why": "proposal accepted"
+  },
+  "145_FIG.35.34_p144.jpg": {
+   "box": [
+    31,
+    0,
+    546,
+    935
+   ],
+   "was": [
+    546,
+    1087
+   ],
+   "why": "proposal accepted"
+  },
+  "146_FIG.35.35_p145.jpg": {
+   "box": [
+    22,
+    0,
+    643,
+    758
+   ],
+   "was": [
+    643,
+    921
+   ],
+   "why": "proposal accepted"
+  },
+  "147_EFIG.35.10_p147.jpg": {
+   "box": [
+    33,
+    0,
+    960,
+    775
+   ],
+   "was": [
+    982,
+    921
+   ],
+   "why": "proposal accepted"
+  },
+  "148_EFIG.35G.1_p151.jpg": {
+   "box": [
+    22,
+    0,
+    948,
+    742
+   ],
+   "was": [
+    982,
+    879
+   ],
+   "why": "proposal accepted"
+  },
+  "149_EFIG.G35.2_p152.jpg": {
+   "box": [
+    20,
+    195,
+    965,
+    790
+   ],
+   "was": [
+    982,
+    921
+   ],
+   "why": "drawn by hand"
+  },
+  "150_EFIG.35G.3_p153.jpg": {
+   "box": [
+    22,
+    0,
+    949,
+    768
+   ],
+   "was": [
+    982,
+    920
+   ],
+   "why": "proposal accepted"
+  },
+  "151_EFIG.35G.4_p154.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    823
+   ],
+   "was": [
+    982,
+    894
+   ],
+   "why": "proposal accepted"
+  },
+  "152_FIG.36.1_p157.jpg": {
+   "box": [
+    31,
+    0,
+    959,
+    779
+   ],
+   "was": [
+    982,
+    916
+   ],
+   "why": "proposal accepted"
+  },
+  "153_FIG.36.2_p159.jpg": {
+   "box": [
+    57,
+    0,
+    674,
+    635
+   ],
+   "was": [
+    695,
+    774
+   ],
+   "why": "proposal accepted"
+  },
+  "154_TABLE36.1_p159.jpg": {
+   "box": [
+    25,
+    110,
+    785,
+    792
+   ],
+   "was": [
+    785,
+    802
+   ],
+   "why": "drawn by hand"
+  },
+  "155_FIG.36.3_p160.jpg": {
+   "box": [
+    23,
+    0,
+    948,
+    740
+   ],
+   "was": [
+    982,
+    921
+   ],
+   "why": "proposal accepted"
+  },
+  "156_TABLE36.3_p162.jpg": {
+   "box": [
+    23,
+    66,
+    929,
+    753
+   ],
+   "was": [
+    929,
+    753
+   ],
+   "why": "proposal accepted"
+  },
+  "157_TABLE36.4_p164.jpg": {
+   "box": [
+    22,
+    66,
+    713,
+    737
+   ],
+   "was": [
+    713,
+    737
+   ],
+   "why": "proposal accepted"
+  },
+  "158_FIG.36.4_p165.jpg": {
+   "box": [
+    32,
+    105,
+    959,
+    796
+   ],
+   "was": [
+    982,
+    867
+   ],
+   "why": "proposal accepted"
+  },
+  "159_FIG.36.5_p168.jpg": {
+   "box": [
+    19,
+    0,
+    950,
+    825
+   ],
+   "was": [
+    982,
+    963
+   ],
+   "why": "proposal accepted"
+  },
+  "160_FIG.36.6_p169.jpg": {
+   "box": [
+    31,
+    0,
+    763,
+    754
+   ],
+   "was": [
+    820,
+    907
+   ],
+   "why": "proposal accepted"
+  },
+  "161_FIG.36.7_p170.jpg": {
+   "box": [
+    27,
+    50,
+    693,
+    881
+   ],
+   "was": [
+    757,
+    1015
+   ],
+   "why": "drawn by hand"
+  },
+  "162_TABLE36.5_p171.jpg": {
+   "box": [
+    171,
+    135,
+    625,
+    550
+   ],
+   "was": [
+    648,
+    725
+   ],
+   "why": "second-pass proposal"
+  },
+  "163_FIG.36.8_p172.jpg": {
+   "box": [
+    23,
+    172,
+    949,
+    782
+   ],
+   "was": [
+    982,
+    867
+   ],
+   "why": "proposal accepted"
+  },
+  "164_FIG.36.9_p174.jpg": {
+   "box": [
+    19,
+    0,
+    580,
+    797
+   ],
+   "was": [
+    639,
+    867
+   ],
+   "why": "proposal accepted"
+  },
+  "165_FIG.36.10_p175.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    908
+   ],
+   "was": [
+    982,
+    1016
+   ],
+   "why": "proposal accepted"
+  },
+  "166_TABLE36.6_p178.jpg": {
+   "box": [
+    26,
+    67,
+    626,
+    418
+   ],
+   "was": [
+    626,
+    738
+   ],
+   "why": "second-pass proposal"
+  },
+  "167_FIG.37.1_p191.jpg": {
+   "box": [
+    19,
+    5,
+    715,
+    891
+   ],
+   "was": [
+    715,
+    893
+   ],
+   "why": "proposal accepted"
+  },
+  "168_EFIG.37.1_p192.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    581
+   ],
+   "was": [
+    982,
+    734
+   ],
+   "why": "proposal accepted"
+  },
+  "169_FIG.37.2_p195.jpg": {
+   "box": [
+    22,
+    0,
+    699,
+    518
+   ],
+   "was": [
+    760,
+    656
+   ],
+   "why": "proposal accepted"
+  },
+  "170_FIG.37.3_p196.jpg": {
+   "box": [
+    33,
+    0,
+    960,
+    795
+   ],
+   "was": [
+    982,
+    934
+   ],
+   "why": "proposal accepted"
+  },
+  "171_FIG.37.4_p197.jpg": {
+   "box": [
+    19,
+    0,
+    477,
+    907
+   ],
+   "was": [
+    647,
+    1047
+   ],
+   "why": "proposal accepted"
+  },
+  "172_FIG.37.5_p198.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    627
+   ],
+   "was": [
+    982,
+    766
+   ],
+   "why": "proposal accepted"
+  },
+  "173_TABLE37.1_p199.jpg": {
+   "box": [
+    22,
+    134,
+    897,
+    375
+   ],
+   "was": [
+    897,
+    831
+   ],
+   "why": "second-pass proposal"
+  },
+  "174_FIG.37.6_p199.jpg": {
+   "box": [
+    20,
+    310,
+    982,
+    825
+   ],
+   "was": [
+    982,
+    839
+   ],
+   "why": "drawn by hand"
+  },
+  "175_TABLE37.2_p200.jpg": {
+   "box": [
+    33,
+    143,
+    486,
+    403
+   ],
+   "was": [
+    638,
+    538
+   ],
+   "why": "proposal accepted"
+  },
+  "176_TABLE37.3_p200.jpg": {
+   "box": [
+    177,
+    115,
+    635,
+    792
+   ],
+   "was": [
+    649,
+    814
+   ],
+   "why": "drawn by hand"
+  },
+  "177_FIG.37.7_p201.jpg": {
+   "box": [
+    62,
+    262,
+    669,
+    804
+   ],
+   "was": [
+    669,
+    881
+   ],
+   "why": "drawn by hand"
+  },
+  "178_EFIG.37.2_p203.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    755
+   ],
+   "was": [
+    982,
+    844
+   ],
+   "why": "proposal accepted"
+  },
+  "179_EFIG.37.3_p204.jpg": {
+   "box": [
+    21,
+    0,
+    949,
+    541
+   ],
+   "was": [
+    982,
+    677
+   ],
+   "why": "proposal accepted"
+  },
+  "180_EFIG.37.4_p207.jpg": {
+   "box": [
+    19,
+    0,
+    949,
+    831
+   ],
+   "was": [
+    982,
+    977
+   ],
+   "why": "proposal accepted"
+  },
+  "181_FIG.37.8_p208.jpg": {
+   "box": [
+    31,
+    0,
+    792,
+    715
+   ],
+   "was": [
+    792,
+    716
+   ],
+   "why": "proposal accepted"
+  },
+  "182_FIG.37.9_p209.jpg": {
+   "box": [
+    19,
+    415,
+    477,
+    810
+   ],
+   "was": [
+    647,
+    881
+   ],
+   "why": "proposal accepted"
+  },
+  "183_FIG.37.10_p211.jpg": {
+   "box": [
+    18,
+    0,
+    477,
+    437
+   ],
+   "was": [
+    647,
+    576
+   ],
+   "why": "proposal accepted"
+  },
+  "184_FIG.37.11_p211.jpg": {
+   "box": [
+    0,
+    311,
+    765,
+    811
+   ],
+   "was": [
+    798,
+    881
+   ],
+   "why": "proposal accepted"
+  },
+  "185_FIG.37.12_p213.jpg": {
+   "box": [
+    23,
+    0,
+    950,
+    782
+   ],
+   "was": [
+    982,
+    935
+   ],
+   "why": "proposal accepted"
+  },
+  "186_FIG.37.14_p214.jpg": {
+   "box": [
+    29,
+    161,
+    959,
+    811
+   ],
+   "was": [
+    982,
+    923
+   ],
+   "why": "proposal accepted"
+  },
+  "187_FIG.37.13_p214.jpg": {
+   "box": [
+    194,
+    0,
+    594,
+    599
+   ],
+   "was": [
+    675,
+    808
+   ],
+   "why": "proposal accepted"
+  },
+  "188_TABLE37.4_p217.jpg": {
+   "box": [
+    32,
+    59,
+    797,
+    530
+   ],
+   "was": [
+    797,
+    739
+   ],
+   "why": "second-pass proposal"
+  },
+  "189_FIG.37.15_p217.jpg": {
+   "box": [
+    30,
+    260,
+    500,
+    800
+   ],
+   "was": [
+    547,
+    935
+   ],
+   "why": "drawn by hand"
+  },
+  "190_TABLE37.5_p217.jpg": {
+   "box": [
+    175,
+    135,
+    647,
+    655
+   ],
+   "was": [
+    647,
+    814
+   ],
+   "why": "drawn by hand"
+  },
+  "191_TABLE37.6_p218.jpg": {
+   "box": [
+    20,
+    66,
+    773,
+    737
+   ],
+   "was": [
+    773,
+    737
+   ],
+   "why": "proposal accepted"
+  },
+  "192_TABLE37.7_p220.jpg": {
+   "box": [
+    24,
+    67,
+    474,
+    543
+   ],
+   "was": [
+    637,
+    755
+   ],
+   "why": "proposal accepted"
+  },
+  "193_TABLE37.8_p220.jpg": {
+   "box": [
+    22,
+    143,
+    709,
+    787
+   ],
+   "was": [
+    709,
+    814
+   ],
+   "why": "proposal accepted"
+  },
+  "194_TABLE37.9_p221.jpg": {
+   "box": [
+    33,
+    143,
+    487,
+    566
+   ],
+   "was": [
+    656,
+    639
+   ],
+   "why": "proposal accepted"
+  },
+  "195_EFIG.37.5_p222.jpg": {
+   "box": [
+    20,
+    195,
+    965,
+    735
+   ],
+   "was": [
+    982,
+    853
+   ],
+   "why": "drawn by hand"
+  },
+  "196_TABLE37.10_p223.jpg": {
+   "box": [
+    178,
+    55,
+    645,
+    611
+   ],
+   "was": [
+    661,
+    772
+   ],
+   "why": "drawn by hand"
+  },
+  "197_EFIG.37.6_p224.jpg": {
+   "box": [
+    33,
+    304,
+    961,
+    839
+   ],
+   "was": [
+    982,
+    977
+   ],
+   "why": "proposal accepted"
+  },
+  "199_ETABLE37.2_p228.jpg": {
+   "box": [
+    33,
+    143,
+    937,
+    799
+   ],
+   "was": [
+    937,
+    831
+   ],
+   "why": "proposal accepted"
+  },
+  "200_EFIG.37.7_p230.jpg": {
+   "box": [
+    30,
+    0,
+    959,
+    768
+   ],
+   "was": [
+    982,
+    875
+   ],
+   "why": "proposal accepted"
+  },
+  "201_FIG.37.16_p232.jpg": {
+   "box": [
+    22,
+    269,
+    477,
+    796
+   ],
+   "was": [
+    647,
+    881
+   ],
+   "why": "proposal accepted"
+  },
+  "202_FIG.37.17_p232.jpg": {
+   "box": [
+    56,
+    428,
+    510,
+    894
+   ],
+   "was": [
+    544,
+    966
+   ],
+   "why": "proposal accepted"
+  },
+  "203_EFIG.37.8_p235.jpg": {
+   "box": [
+    30,
+    0,
+    957,
+    494
+   ],
+   "was": [
+    982,
+    633
+   ],
+   "why": "proposal accepted"
+  },
+  "204_EFIG.37.9_p237.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    729
+   ],
+   "was": [
+    982,
+    881
+   ],
+   "why": "proposal accepted"
+  },
+  "205_EFIG.37.10_p238.jpg": {
+   "box": [
+    19,
+    0,
+    950,
+    837
+   ],
+   "was": [
+    982,
+    977
+   ],
+   "why": "proposal accepted"
+  },
+  "206_EFIG.37.11_p240.jpg": {
+   "box": [
+    20,
+    188,
+    965,
+    921
+   ],
+   "was": [
+    982,
+    921
+   ],
+   "why": "drawn by hand"
+  },
+  "207_FIG.37.18_p242.jpg": {
+   "box": [
+    16,
+    20,
+    982,
+    400
+   ],
+   "was": [
+    982,
+    580
+   ],
+   "why": "drawn by hand"
+  },
+  "208_FIG.37.19_p244.jpg": {
+   "box": [
+    30,
+    430,
+    959,
+    810
+   ],
+   "was": [
+    982,
+    881
+   ],
+   "why": "proposal accepted"
+  },
+  "209_EFIG.37.12_p245.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    645
+   ],
+   "was": [
+    982,
+    783
+   ],
+   "why": "proposal accepted"
+  },
+  "210_EFIG.37.13_p246.jpg": {
+   "box": [
+    22,
+    0,
+    949,
+    823
+   ],
+   "was": [
+    982,
+    963
+   ],
+   "why": "proposal accepted"
+  },
+  "211_EFIG.37.14_p248.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    780
+   ],
+   "was": [
+    982,
+    921
+   ],
+   "why": "proposal accepted"
+  },
+  "212_EFIG.37.15_p252.jpg": {
+   "box": [
+    19,
+    0,
+    950,
+    629
+   ],
+   "was": [
+    982,
+    767
+   ],
+   "why": "proposal accepted"
+  },
+  "213_ETABLE38.1_p260.jpg": {
+   "box": [
+    30,
+    143,
+    609,
+    737
+   ],
+   "was": [
+    609,
+    814
+   ],
+   "why": "drawn by hand"
+  },
+  "214_TABLE38.1_p261.jpg": {
+   "box": [
+    22,
+    143,
+    640,
+    814
+   ],
+   "was": [
+    640,
+    814
+   ],
+   "why": "proposal accepted"
+  },
+  "215_TABLE38.1_p263.jpg": {
+   "box": [
+    33,
+    67,
+    709,
+    738
+   ],
+   "was": [
+    709,
+    738
+   ],
+   "why": "proposal accepted"
+  },
+  "216_FIG.38.2_p265.jpg": {
+   "box": [
+    0,
+    60,
+    530,
+    400
+   ],
+   "was": [
+    553,
+    526
+   ],
+   "why": "drawn by hand"
+  },
+  "217_EFIG.38.1_p267.jpg": {
+   "box": [
+    20,
+    50,
+    965,
+    745
+   ],
+   "was": [
+    982,
+    836
+   ],
+   "why": "drawn by hand"
+  },
+  "218_EFIG.38.2_p270.jpg": {
+   "box": [
+    21,
+    0,
+    949,
+    578
+   ],
+   "was": [
+    982,
+    724
+   ],
+   "why": "proposal accepted"
+  },
+  "219_FIG.38.3_p273.jpg": {
+   "box": [
+    0,
+    0,
+    565,
+    533
+   ],
+   "was": [
+    587,
+    685
+   ],
+   "why": "proposal accepted"
+  },
+  "220_TABLE38.2_p274.jpg": {
+   "box": [
+    205,
+    142,
+    658,
+    478
+   ],
+   "was": [
+    692,
+    544
+   ],
+   "why": "proposal accepted"
+  },
+  "221_EFIG.38.3_p275.jpg": {
+   "box": [
+    32,
+    0,
+    959,
+    697
+   ],
+   "was": [
+    982,
+    843
+   ],
+   "why": "proposal accepted"
+  },
+  "222_ETABLE38.2_p276.jpg": {
+   "box": [
+    22,
+    142,
+    949,
+    459
+   ],
+   "was": [
+    979,
+    813
+   ],
+   "why": "proposal accepted"
+  },
+  "223_EFIG.38.5_p276.jpg": {
+   "box": [
+    21,
+    0,
+    949,
+    594
+   ],
+   "was": [
+    982,
+    732
+   ],
+   "why": "proposal accepted"
+  },
+  "224_FIG.38.4_p277.jpg": {
+   "box": [
+    28,
+    0,
+    959,
+    606
+   ],
+   "was": [
+    982,
+    745
+   ],
+   "why": "proposal accepted"
+  },
+  "225_FIG.38.5_p277.jpg": {
+   "box": [
+    33,
+    119,
+    959,
+    796
+   ],
+   "was": [
+    982,
+    867
+   ],
+   "why": "proposal accepted"
+  },
+  "226_FIG.38.6_p278.jpg": {
+   "box": [
+    23,
+    179,
+    949,
+    769
+   ],
+   "was": [
+    982,
+    839
+   ],
+   "why": "proposal accepted"
+  },
+  "227_EFIG.38.6_p280.jpg": {
+   "box": [
+    33,
+    0,
+    959,
+    768
+   ],
+   "was": [
+    982,
+    858
+   ],
+   "why": "proposal accepted"
+  },
+  "228_EFIG.38.6_p281.jpg": {
+   "box": [
+    20,
+    0,
+    793,
+    720
+   ],
+   "was": [
+    793,
+    855
+   ],
+   "why": "drawn by hand"
+  },
+  "229_EFIG.38.7_p282.jpg": {
+   "box": [
+    33,
+    0,
+    956,
+    733
+   ],
+   "was": [
+    982,
+    893
+   ],
+   "why": "proposal accepted"
+  },
+  "230_ETABLE38.5_p288.jpg": {
+   "box": [
+    175,
+    60,
+    635,
+    491
+   ],
+   "was": [
+    652,
+    737
+   ],
+   "why": "drawn by hand"
+  },
+  "231_ETABLE38.4_p288.jpg": {
+   "box": [
+    35,
+    65,
+    495,
+    372
+   ],
+   "was": [
+    646,
+    771
+   ],
+   "why": "drawn by hand"
+  },
+  "232_EFIG.38.8_p290.jpg": {
+   "box": [
+    33,
+    0,
+    962,
+    753
+   ],
+   "was": [
+    982,
+    893
+   ],
+   "why": "proposal accepted"
+  },
+  "234_EFIG.38G.2_p299.jpg": {
+   "box": [
+    19,
+    432,
+    949,
+    757
+   ],
+   "was": [
+    982,
+    893
+   ],
+   "why": "proposal accepted"
+  }
+ },
+ "_checked_and_left_alone": {
+  "051_EFIG.33.12_p052.jpg": "the extraction holds no figure, only page text; left for re-extraction from the source page",
+  "198_FIG.37.8_p225.jpg": "the extraction holds no figure, only page text; left for re-extraction from the source page",
+  "233_EFIG.38G.1_p297.jpg": "the extraction holds no figure, only page text; left for re-extraction from the source page"
+ }
+}
