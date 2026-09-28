@@ -209,7 +209,7 @@ head('echo-patch is where it says it is');
      simply where a restyle of every control belongs.
 
      phrase(91) is the third, and its argument is glass's: it touches nothing
-     echo reads or emits. Its three anchors are text prefixrank(76) emits in
+     echo reads or emits. Its five anchors are text prefixrank(76) emits in
      buildIndex() and search(), which no later step rewrites — replayed below
      from prefixrank to step 91, so a step that ever does rewrite them fails
      here, not in the owner's build. */
@@ -265,10 +265,10 @@ function stepAnchors(step, atLeast) {
 
 const ambientResults = stepAnchors('ambient', 1);
 const echoResults = stepAnchors('echo', 4);
-const phraseResults = stepAnchors('phrase', 3);
+const phraseResults = stepAnchors('phrase', 5);
 /* Emitted by prefixrank and by nothing else: an anchor some other step also
    produced could survive here while the search() it points at had moved. */
-ok('and phrase\'s anchors are all prefixrank\'s own text', phraseResults.length === 3 && phraseResults.every(x => /^prefixrank\(/.test(x.r.producer || '')),
+ok('and phrase\'s anchors are all prefixrank\'s own text', phraseResults.length === 5 && phraseResults.every(x => /^prefixrank\(/.test(x.r.producer || '')),
    phraseResults.map(x => x.r.producer).join(', '));
 
 /* The replay has to have DONE something, or every "survives" above is just a

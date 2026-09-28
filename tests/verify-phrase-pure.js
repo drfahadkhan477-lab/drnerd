@@ -87,7 +87,9 @@ const DOCS = [
   { key: 'r:half', text: `warfarin bridging increases major ${filler('h', 110)} surgery thromboembolism reducing without bleeding`, meta: { kind: 'r', id: 'half' } },
   { key: 'q:1', text: `A question about warfarin and bleeding ${filler('q1', 30)}`, meta: { kind: 'q', id: 'q1' } },
   { key: 'q:2', text: `Another question on major surgery and thromboembolism ${filler('q2', 30)}`, meta: { kind: 'q', id: 'q2' } },
-  ...Array.from({ length: 30 }, (_, i) => ({ key: 'r:o' + i, text: `Unrelated note ${i} ${filler('o' + i, 50)}`, meta: { kind: 'r', id: 'o' + i } })),
+  /* "heart failure": a pair nearly every note on this shelf has */
+  ...Array.from({ length: 30 }, (_, i) => ({ key: 'r:o' + i, text: `Unrelated note ${i} on heart failure ${filler('o' + i, 50)}`, meta: { kind: 'r', id: 'o' + i } })),
+  { key: 'r:common', text: `cmzz note on heart failure ${filler('cm', 60)}`, meta: { kind: 'r', id: 'common' } },
 ];
 
 function load(html) {
@@ -126,8 +128,22 @@ const SQ = 'warfa bridging increases';
 const gain = score(after, SQ, 'target') - score(before, SQ, 'target');
 ok('and a stub does not dilute the credit of the pair beside it — the whole credit, not half', Math.abs(gain - 6) < 1e-9, `+${gain.toFixed(3)}`);
 
+/* A query opening on the common pair. Unweighted, holding it alone would earn
+   1/nb of the credit, the same as holding any rare pair; weighed by rarity it
+   earns a small part of that. */
+/* "cmzz" is the common note's own rare word, so it is returned; the only
+   query pair it holds is heart-failure (it has cmzz-note, not cmzz-heart). */
+const HQ = 'cmzz heart failure warfarin';
+const nb = 3;   // cmzz-heart, heart-failure, failure-warfarin
+/* Both scores must exist: a note cut from the results scores null in both,
+   and null minus null is 0 — which reads as "earned almost nothing". */
+const cb = score(before, HQ, 'common'), ca = score(after, HQ, 'common');
+const commonGain = ca - cb;
+ok('a pair nearly every note holds earns a small part of an equal share, not the share', cb !== null && ca !== null && commonGain > 0 && commonGain < 0.5 * 6 / nb,
+   cb === null || ca === null ? 'the note was not returned — nothing measured' : `+${commonGain.toFixed(3)} (an equal share would be +${(6 / nb).toFixed(3)})`);
+
 head('the patch is applied as the chain applies it');
-ok('three edits, each matching once', (patched.match(/PHRASE_W/g) || []).length >= 2 && patched.includes('bg[ts[i]') && patched !== page);
+ok('five edits, each matching once', (patched.match(/PHRASE_W/g) || []).length >= 2 && patched.includes('bg[ts[i]') && patched.includes('post,bgdf}') && patched !== page);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
