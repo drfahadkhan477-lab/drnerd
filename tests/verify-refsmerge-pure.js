@@ -80,7 +80,7 @@ head('what it writes is what the importer reads');
 const out = M.renderSelected(r.kept);
 const back = M.parseNotes(out, 'x');
 ok('it splits back into the kept sections, one note each', back.sections.length === r.kept.length && back.sections.every((s, i) => s.heading === r.kept[i].heading), `${back.sections.length} of ${r.kept.length}`);
-ok('under the source file\'s front matter', /^---\ntitle: Heart failure pages 1-2\n---/.test(out) || /^---\ntitle: Heart failure unit/.test(out), out.split('\n')[1]);
+ok('under the source file\'s title', /^---\ntitle: Heart failure (pages 1-2|unit)\n/.test(out), out.split('\n')[1]);
 ok('with the figure link exactly as the unit wrote it, for add-unit to resolve', out.includes(FIG));
 ok('and not a word altered', back.sections[0] && back.sections[0].body === r.kept[0].body.trim());
 
@@ -130,7 +130,63 @@ const flatSizes = flat.map(c => M.words(c.body).length);
 ok('a page with no blank lines at all is still cut, at sentence ends', flat.length >= 3 && flatSizes.every(n => n >= 120 && n <= 350) && flat.every(c => /\.$/.test(c.body)),
    flatSizes.join(', '));
 ok('and cutting at sentences loses and changes nothing', flat.map(c => c.body).join(' ') === oneBlock);
+/* Decimals, doses and file names put dots inside sentences; none is an end. */
+const dotted = Array.from({ length: 60 }, (_, i) => `An LVEF of 4${i}.5% on 2.5 mg, see ![f](<visuals/0${i}_FIG.5.${i}_p1.jpg>) and ${prose('dt' + i, 10)}.`).join(' ');
+const dch = M.chunks({ heading: 'PDF Page 41', body: dotted });
+ok('nor do dots inside a sentence — decimals, doses, figure file names', dch.length >= 3 && dch.map(c => c.body).join(' ').replace(/\s+/g, ' ') === dotted,
+   `${dch.length} chunks, ${M.tokens(dch.map(c => c.body).join(' '))} of ${M.tokens(dotted)} tokens`);
 ok('and no paragraph is lost or reworded on the way', ch.map(c => c.body).join('\n\n').replace(/!\[[^\]]*\]\([^)]*\)\s*/g, '').trim() === paras);
+
+head('what check-refs will ask of every staged file');
+/* check-refs' floors, read the way check-refs reads them. The constants are
+   compared against check-refs' own source (comments blanked), so a floor
+   moved there and not here fails this suite rather than the owner's run. */
+const { blankComments } = require('./_source.js');
+const crSrc = blankComments(fs.readFileSync(path.join(__dirname, '..', 'tools', 'check-refs.js'), 'utf8'));
+const crBack = /const BACKREF = (\/.+\/[a-z]*);/.exec(crSrc);
+ok('the "see above" pattern is check-refs\' own, character for character', !!crBack && crBack[1] === String(M.BACKREF), crBack ? crBack[1] : 'no BACKREF in check-refs');
+ok('the ceiling is check-refs\' own', new RegExp(`words > ${M.MAX_WORDS}\\)`).test(crSrc), `MAX_WORDS ${M.MAX_WORDS}`);
+ok('the tag count is check-refs\' own', new RegExp(`tags\\.length < ${M.MIN_TAGS}\\)`).test(crSrc), `MIN_TAGS ${M.MIN_TAGS}`);
+const crFront = text => {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text), front = fm ? fm[1] : '';
+  const field = k => ((new RegExp('^' + k + ':\\s*(.+)$', 'm').exec(front) || [, ''])[1] || '').trim();
+  return { title: field('title'), source: field('source'), tags: field('tags').split(',').map(t => t.trim()).filter(Boolean) };
+};
+/* The pages file has a title and nothing else — the laptop run's three
+   failing files were exactly this. */
+const bare = M.renderSelected(M.selectUnit([files[1]], new Set(), { minScore: 2 }).kept, { unit: 'bw-heart-failure', kind: 'text' });
+const bf = crFront(bare);
+ok('a source file with only a title still gets a title, a source and four tags', !!bf.title && !!bf.source && bf.tags.length >= M.MIN_TAGS, JSON.stringify(bf));
+ok('the title it had is kept', bf.title === 'Heart failure pages 1-2', bf.title);
+const ff = crFront(M.renderSelected(M.selectUnit([files[0]], new Set(), { minScore: 2 }).kept, { unit: 'bw-heart-failure', kind: 'figure' }));
+ok('and a source file\'s own source and tags are kept, not replaced', ff.tags.includes('hf') && ff.source === 'a textbook' && / — figures$/.test(ff.title), JSON.stringify(ff));
+
+const BACK = ` As discussed above, the same applies here. `;
+const backAtlas = atlasRaw.replace(prose('cap3', 60), prose('cap3', 60) + BACK);
+const rb = M.selectUnit([{ name: 'atlas.md', raw: backAtlas }], new Set(), { minScore: 2 });
+ok('a figure caption that points elsewhere ("as discussed above") is dropped', rb.dropped.some(c => c.heading === 'FIG. 54.3 — figure 3' && c.why === 'backref'),
+   (rb.dropped.find(c => c.heading === 'FIG. 54.3 — figure 3') || {}).why || 'kept');
+const backUnit = unitFull.replace(HIGH, HIGH + BACK);
+const rt = M.selectUnit([{ name: 'full.md', raw: backUnit }], new Set(), { minScore: 2 });
+ok('and so is a text section that does', rt.dropped.some(c => c.heading === 'Treatment thresholds' && c.why === 'backref'),
+   (rt.dropped.find(c => c.heading === 'Treatment thresholds') || {}).why || 'kept');
+
+/* Sizes chosen against the ceiling: entry 2 is 700 words (the 611-word
+   FIG.59.9 of the laptop run, and then some); entry 4 is 590, so the 10-word
+   caption before it cannot join it; entries 5-6 are 10 words each after
+   another 580 — the last-of-all join must find a note with room. */
+const sizes2 = [60, 700, 10, 590, 10, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 580, 10, 10];
+const bigAtlas = `---\ntitle: HF visual atlas\n---\n\n## Figure Atlas\n\n` + sizes2.map((n, i) => entry(i + 1, n)).join('\n\n') + '\n';
+const rg = M.selectUnit([{ name: 'atlas.md', raw: bigAtlas }], new Set(), { minScore: 2 });
+const rendered = M.parseNotes(M.renderSelected(rg.kept, { unit: 'bw-heart-failure', kind: 'figure' }), 'x').sections;
+const fat = rendered.map(s => M.tokens(s.body)).filter(n => n > M.MAX_WORDS);
+ok(`no note written is over check-refs' ${M.MAX_WORDS} words, counted its way`, fat.length === 0 && rendered.length > 0, fat.join(', ') || `${rendered.length} notes, largest ${Math.max(...rendered.map(s => M.tokens(s.body)))}`);
+const big = rg.kept.filter(c => c.body.includes('002_FIG.54.2'));
+ok('an entry over the ceiling is cut, its figure in the first piece', big.length >= 1 && /\(1\/\d\)/.test(big[0].heading) && rg.kept.some(c => /FIG\. 54\.2 — figure 2 \(2\/\d\)/.test(c.heading)),
+   big.map(c => c.heading).join(' | ') || 'figure 2 in no kept note');
+const figsOut = rg.kept.reduce((n, c) => n + c.figures, 0);
+ok('and no figure is lost to the ceiling', figsOut === sizes2.length && !rg.dropped.length, `${figsOut} of ${sizes2.length} figures kept, ${rg.dropped.length} dropped`);
+ok('nor any note left thin by it', rendered.every(s => M.tokens(s.body) >= M.MIN_WORDS), rendered.map(s => M.tokens(s.body)).filter(n => n < M.MIN_WORDS).join(', ') || 'none');
 
 head('finding the units wherever the zip was unpacked');
 const zroot = fs.mkdtempSync(path.join(os.tmpdir(), 'refsmerge-units-'));
