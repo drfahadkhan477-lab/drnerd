@@ -1359,23 +1359,120 @@ function program(gl, vs, fs) {
   return p;
 }
 
+/* ── the two meshed surfaces, and a copy baked at build time ──────────────
+   The muscle and the chambers are the same on every launch: the same fields
+   meshed on the same grid. Meshing them was 78% of the app's launch — 6.3 s of
+   main thread on the owner's laptop with the CPU slowed to an iPad's pace, all
+   of it before the home screen could appear. So scripts/apex-patch.js runs
+   buildSurfaces() below in Node during the build and embeds the result, and
+   create() takes that copy instead of meshing again.
+
+   Nothing is approximated: the baked copy is these functions' own output,
+   stored as the Float32 and index values makeMesh() would have uploaded anyway.
+   It is used only if it says it was made from this code (the key apex-patch
+   derives from this file's text) on this grid, and is exactly as long as that
+   implies. Anything else — no copy, an old copy, a truncated one — and the
+   surfaces are meshed here as they always were. */
+const MESH_RES = [72, 92, 58];
+/* Tight enough that the grid is not spent on empty space, loose enough that
+   nothing touches a face — surface nets leaves an open edge where it does. */
+const MESH_LO = [-5.4, -6.9, -5.3], MESH_HI = [5.1, 9.7, 4.5];
+
+function buildSurfaces(res, lo, hi) {
+  const one = fn => {
+    const net = surfaceNets(fn, lo, hi, res);
+    const normals = gradientNormals(fn, net.positions);
+    const a = attributesFor(net.positions, normals, fn);
+    return { positions: net.positions, normals, weights: a.weights, color: a.color, extra: a.extra, indices: net.indices };
+  };
+  return { outer: one(sdOuter), cav: one(sdCavities) };
+}
+
+/* One ArrayBuffer: a 72-byte header, then per surface its five Float32 blocks,
+   then both index lists as Uint32.
+     0  'HM01'           4  key, 16 ASCII bytes     20  res, 3 × Uint32
+     32 lo, hi, 6 × Float32                          56  vertices, indices × 2 surfaces */
+const MESH_MAGIC = 0x31304d48;   // 'HM01', little-endian
+const MESH_HEADER = 72, MESH_FLOATS = 16;   // 3 position + 3 normal + 4 weight + 3 colour + 3 extra
+const MESH_PARTS = [['positions', 3], ['normals', 3], ['weights', 4], ['color', 3], ['extra', 3]];
+
+function packSurfaces(s, key, res, lo, hi) {
+  const surf = [s.outer, s.cav];
+  const nv = surf.map(x => x.positions.length / 3), ni = surf.map(x => x.indices.length);
+  const bytes = MESH_HEADER + 4 * MESH_FLOATS * (nv[0] + nv[1]) + 4 * (ni[0] + ni[1]);
+  const buf = new ArrayBuffer(bytes);
+  const u32 = new Uint32Array(buf, 0, MESH_HEADER / 4), f32 = new Float32Array(buf, 0, MESH_HEADER / 4);
+  u32[0] = MESH_MAGIC;
+  const k = String(key || '').padEnd(16, ' ').slice(0, 16);
+  const kb = new Uint8Array(buf, 4, 16);
+  for (let i = 0; i < 16; i++) kb[i] = k.charCodeAt(i) & 0x7f;
+  for (let i = 0; i < 3; i++) { u32[5 + i] = res[i]; f32[8 + i] = lo[i]; f32[11 + i] = hi[i]; }
+  u32[14] = nv[0]; u32[15] = ni[0]; u32[16] = nv[1]; u32[17] = ni[1];
+  let at = MESH_HEADER;
+  for (let i = 0; i < 2; i++) for (const [name, w] of MESH_PARTS) {
+    new Float32Array(buf, at, nv[i] * w).set(surf[i][name]);
+    at += 4 * nv[i] * w;
+  }
+  for (let i = 0; i < 2; i++) { new Uint32Array(buf, at, ni[i]).set(surf[i].indices); at += 4 * ni[i]; }
+  return buf;
+}
+
+/* Views into the buffer, not copies. null for anything that is not a copy of
+   exactly these surfaces from exactly this code. */
+function unpackSurfaces(buf, key, res, lo, hi) {
+  if (!buf || typeof buf.byteLength !== 'number' || buf.byteLength < MESH_HEADER) return null;
+  const u32 = new Uint32Array(buf, 0, MESH_HEADER / 4), f32 = new Float32Array(buf, 0, MESH_HEADER / 4);
+  if (u32[0] !== MESH_MAGIC || typeof key !== 'string' || !key) return null;
+  const kb = new Uint8Array(buf, 4, 16);
+  const want = key.padEnd(16, ' ').slice(0, 16);
+  for (let i = 0; i < 16; i++) if (kb[i] !== (want.charCodeAt(i) & 0x7f)) return null;
+  for (let i = 0; i < 3; i++) {
+    if (u32[5 + i] !== res[i] || f32[8 + i] !== Math.fround(lo[i]) || f32[11 + i] !== Math.fround(hi[i])) return null;
+  }
+  const nv = [u32[14], u32[16]], ni = [u32[15], u32[17]];
+  if (buf.byteLength !== MESH_HEADER + 4 * MESH_FLOATS * (nv[0] + nv[1]) + 4 * (ni[0] + ni[1])) return null;
+  const out = [{}, {}];
+  let at = MESH_HEADER;
+  for (let i = 0; i < 2; i++) for (const [name, w] of MESH_PARTS) {
+    out[i][name] = new Float32Array(buf, at, nv[i] * w);
+    at += 4 * nv[i] * w;
+  }
+  for (let i = 0; i < 2; i++) { out[i].indices = new Uint32Array(buf, at, ni[i]); at += 4 * ni[i]; }
+  return { outer: out[0], cav: out[1] };
+}
+
+/* The baked copy arrives one of two ways: as an ArrayBuffer the split build's
+   loader fetched (root.HEART3D_MESH), or as base64 inside the single file
+   (root.HEART3D_MESH_B64), decoded once here and kept, so the second heart
+   on a page — the lab's, the ambient one — does not decode it again. */
+function bakedSurfaces(res, lo, hi) {
+  let buf = root.HEART3D_MESH || null;
+  if (!buf && typeof root.HEART3D_MESH_B64 === 'string' && typeof atob === 'function') {
+    try {
+      const bin = atob(root.HEART3D_MESH_B64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      buf = root.HEART3D_MESH = bytes.buffer;
+    } catch (_) { buf = null; }
+  }
+  /* A bad copy costs the copy, never the heart: whatever unpacking makes of it,
+     a throw included, the answer is null and create() meshes as it always did. */
+  try { return buf ? unpackSurfaces(buf, root.HEART3D_MESH_KEY, res, lo, hi) : null; }
+  catch (_) { return null; }
+}
+
 function create(canvas, opts) {
   opts = opts || {};
   const gl = canvas.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: false });
   if (!gl) return null;
 
-  const RES = opts.resolution || [72, 92, 58];
-  /* Tight enough that the grid is not spent on empty space, loose enough that
-     nothing touches a face — surface nets leaves an open edge where it does. */
-  const LO = [-5.4, -6.9, -5.3], HI = [5.1, 9.7, 4.5];
+  const RES = opts.resolution || MESH_RES;
+  const LO = MESH_LO, HI = MESH_HI;
 
   const t0 = performance.now();
-  const outer = surfaceNets(sdOuter, LO, HI, RES);
-  const outerN = gradientNormals(sdOuter, outer.positions);
-  const outerA = attributesFor(outer.positions, outerN, sdOuter);
-  const cav = surfaceNets(sdCavities, LO, HI, RES);
-  const cavN = gradientNormals(sdCavities, cav.positions);
-  const cavA = attributesFor(cav.positions, cavN, sdCavities);
+  const baked = bakedSurfaces(RES, LO, HI);
+  const { outer, cav } = baked || buildSurfaces(RES, LO, HI);
+  const meshSource = baked ? 'baked' : 'computed';
   const buildMs = performance.now() - t0;
 
   const valves = buildValves();
@@ -1408,8 +1505,8 @@ function create(canvas, opts) {
     return { vao, count: indices.length, type: arr instanceof Uint32Array ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT };
   }
 
-  const mOuter = makeMesh(outer.positions, outerN, outerA.weights, outerA.color, outerA.extra, outer.indices);
-  const mCav = makeMesh(cav.positions, cavN, cavA.weights, cavA.color, cavA.extra, cav.indices);
+  const mOuter = makeMesh(outer.positions, outer.normals, outer.weights, outer.color, outer.extra, outer.indices);
+  const mCav = makeMesh(cav.positions, cav.normals, cav.weights, cav.color, cav.extra, cav.indices);
   const mCoron = makeMesh(coron.positions, coron.normals, coron.weights, coron.color, coron.extra, coron.indices);
   const mCond = makeMesh(cond.positions, cond.normals, cond.weights, cond.color, cond.extra, cond.indices);
 
@@ -1882,6 +1979,7 @@ void main(){
     phase() { return cycle(S.t, S.rhythm, S.cyc); },
     stats: {
       buildMs: Math.round(buildMs),
+      meshSource,
       triangles: Math.round((outer.indices.length + cav.indices.length +
                   coron.indices.length + cond.indices.length + valves.indices.length) / 3),
       vertices: (outer.positions.length + cav.positions.length) / 3,
@@ -1969,6 +2067,8 @@ void main(){
    frame takes its per-vertex weights from the very same fields the procedural
    heart uses, and the existing vertex shader then animates it unchanged. */
 root.Heart3D = { create, cycle, RHYTHM_HR, VALVES, anatomy: A,
-                 chamberWeights, activationAt, sdOuter };
+                 chamberWeights, activationAt, sdOuter,
+                 mesh: { RES: MESH_RES, LO: MESH_LO, HI: MESH_HI, build: buildSurfaces,
+                         pack: packSurfaces, unpack: unpackSurfaces, take: bakedSurfaces } };
 
 })(typeof window !== 'undefined' ? window : this);

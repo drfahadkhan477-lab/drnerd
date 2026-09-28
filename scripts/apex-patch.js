@@ -59,6 +59,10 @@ const ROOT = path.join(__dirname, '..');
 const heart3d = fs.readFileSync(path.join(ROOT, 'src', 'core', 'heart3d.js'), 'utf8');
 const apex = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'apex.js'), 'utf8');
 
+/* THE HEART'S MESH, BAKED HERE — see scripts/heart-bake.js. The split build
+   moves the base64 out of the shell into a file of its own (build-pwa). */
+const bakedHeart = require('./heart-bake.js').bake(heart3d);
+
 patch('embed: heart3d.js and apex.js',
 `function icon(name, cls){
   return \`<svg class="icon\${cls?' '+cls:''}" aria-hidden="true"><use href="#i-\${name}"></use></svg>\`;
@@ -69,7 +73,10 @@ patch('embed: heart3d.js and apex.js',
 
 /* ═══════════ Heart3D + Apex — embedded, see src/core/heart3d.js and src/ui/apex.js ═══════════ */
 ${heart3d}
-${apex}`);
+${apex}
+/* the heart's surfaces, baked by scripts/apex-patch.js — build-pwa moves the base64 into content/ */
+window.HEART3D_MESH_KEY='${bakedHeart.key}';
+window.HEART3D_MESH_B64='${bakedHeart.b64}';`);
 
 /* ────────────────────────────────────────────────────────────────────────────
  * 2. CSS: room for the live avatar canvas and the lab's heart panel
@@ -368,5 +375,6 @@ fs.writeFileSync(OUT, html);
 const before = fs.statSync(SRC).size, after = fs.statSync(OUT).size;
 console.log(`Apex integration applied — ${applied.length} edits`);
 applied.forEach(a => console.log('  ✓ ' + a));
-console.log(`\n${(before / 1048576).toFixed(2)} MB → ${(after / 1048576).toFixed(2)} MB  (+${((after - before) / 1024).toFixed(0)} KB: heart3d.js + apex.js embedded)`);
+console.log(`\n${(before / 1048576).toFixed(2)} MB → ${(after / 1048576).toFixed(2)} MB  (+${((after - before) / 1024).toFixed(0)} KB: heart3d.js + apex.js embedded, `+
+            `and the heart's mesh baked, ${(bakedHeart.bytes / 1e6).toFixed(2)} MB before base64)`);
 console.log(`written: ${OUT}`);
