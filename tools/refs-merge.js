@@ -191,7 +191,7 @@ function unitFolders(root) {
   return out.sort((a, b) => a.unit.localeCompare(b.unit));
 }
 
-module.exports = { unitFolders, parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
+module.exports = { words, unitFolders, parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
                    MIN_WORDS, DUP_WITHIN, COVERED, DEFAULT_MIN_SCORE, LOW_YIELD_HEADING };
 
 /* ── the command ─────────────────────────────────────────────────────────── */
@@ -203,6 +203,41 @@ if (require.main === module) {
   const EXISTING = path.join(__dirname, '..', 'content', 'refs');
   if (!FROM || !fs.existsSync(FROM)) { console.error('usage: node tools/refs-merge.js --from <folder of unit folders> [--min-score N] [--out dir]'); process.exit(1); }
   if (/^content[\\/]/.test(path.relative(path.join(__dirname, '..'), path.resolve(OUT)))) { console.error('--out must not be under content/: add-unit writes there'); process.exit(1); }
+
+  /* --shape: how the unit's markdown is organised, without a word of it —
+     so a split finer than "## " can be chosen from the facts. Headings by
+     level, bold-only lines, and for each level the first few headings as
+     shapes (letters to A/a, digits to 9); section sizes and figures per
+     section. */
+  if (args.includes('--shape')) {
+    const shapeOf = t => t.trim().slice(0, 14).replace(/[A-Z]/g, 'A').replace(/[a-z]/g, 'a').replace(/[0-9]/g, '9').replace(/ /g, '␣');
+    const q = (arr, f) => { const b = [...arr].sort((x, y) => x - y); return b.length ? b[Math.min(b.length - 1, Math.floor(b.length * f))] : 0; };
+    for (const u of unitFolders(FROM)) {
+      console.log(`\n${u.unit}`);
+      for (const name of fs.readdirSync(u.dir).filter(f => /\.md$/i.test(f)).sort()) {
+        const raw = fs.readFileSync(path.join(u.dir, name), 'utf8').replace(/\r\n/g, '\n');
+        const lines = raw.split('\n');
+        const lv = {}, first = {};
+        let bold = 0, boldShapes = [];
+        for (const l of lines) {
+          const m = /^(#{1,6})\s+(.*)$/.exec(l);
+          if (m) { const k = m[1].length; lv[k] = (lv[k] || 0) + 1; (first[k] = first[k] || []).length < 6 && first[k].push(shapeOf(m[2])); }
+          else if (/^\*\*[^*].*\*\*\s*$/.test(l.trim())) { bold++; if (boldShapes.length < 6) boldShapes.push(shapeOf(l.replace(/\*/g, ''))); }
+        }
+        const secs = parseNotes(raw, name).sections;
+        const w = secs.map(x => words(x.body).length), f = secs.map(x => (x.body.match(IMG) || []).length);
+        const linkDirs = {};
+        for (const m of raw.matchAll(/!\[[^\]]*\]\((<[^>\n]+>|[^)\s]+)\)/g)) { const d = m[1].replace(/[<>]/g, '').split('/').slice(0, -1).join('/') || '.'; linkDirs[d] = (linkDirs[d] || 0) + 1; }
+        console.log(`  ${name}`);
+        console.log(`    headings by level: ${Object.keys(lv).sort().map(k => '#'.repeat(k) + ' ' + lv[k]).join('   ') || 'none'}   bold-only lines ${bold}`);
+        for (const k of Object.keys(first).sort()) console.log(`      ${'#'.repeat(k).padEnd(6)} e.g. ${first[k].join('  |  ')}`);
+        if (boldShapes.length) console.log(`      bold   e.g. ${boldShapes.join('  |  ')}`);
+        console.log(`    "## " sections ${secs.length}: words median ${q(w, 0.5)}, 90th pct ${q(w, 0.9)}, max ${q(w, 1)};  figures per section max ${q(f, 1)}, sections with over 10: ${f.filter(n => n > 10).length}`);
+        console.log(`    figure links point into: ${Object.entries(linkDirs).map(([d, n]) => d + ' ' + n).join(', ') || 'none'}`);
+      }
+    }
+    process.exit(0);
+  }
 
   const existing = indexNotes(EXISTING, name => /^bw-/.test(name));
   console.log(`\nexisting notes: ${existing.notes} in ${path.relative(process.cwd(), EXISTING) || EXISTING}  (bw-* units staged by this tool are not counted)`);
