@@ -217,6 +217,19 @@ const sk = M.selectUnit([{ name: 'p.md', raw: `---\ntitle: t\n---\n\n${shared}\n
 const sh2 = M.parseNotes(M.renderSelected(sk, { unit: 'bw-x' }), 'x').sections.map(x => x.heading);
 ok('titled by what sets a passage apart, not the opening its neighbours share', sh2.length === 8 && clash(sh2) === 0 && sh2.every((h, k) => h.includes(`Therapy${k}drug`) || h.includes(`therapy${k}drug`)),
    `${sh2.length} titles, ${clash(sh2)} pairs mostly alike; e.g. "${sh2[0]}"`);
+/* The owner's --why after that: in 156 of 165 misses the winner held every
+   term of the missed title — a shorter note from the same file repeating
+   the passage's rarest words (a caption, also printed in the page text). */
+const cap = 'Sacubitrilzz valsartanzz angioedemazz paradigmzz neprilysinzz';
+const pair = [{ kind: 'text', heading: 'PDF Page 9 (1/2)', body: `${cap} ${prose('lg', 90)} renalqq kaliumqq with ${cap}.` },
+              { kind: 'figure', heading: 'FIG.9.1 — PDF page 9', body: `![f](<visuals/001_FIG.9.1_p9.jpg>)\n${cap} ${cap}` }]
+  .concat(Array.from({ length: 6 }, (_, i) => ({ kind: 'text', heading: `PDF Page ${20 + i}`, body: prose('ot' + i, 80) })));
+M.keyTerms(pair);
+const capWords = new Set(cap.toLowerCase().split(' '));
+ok('the longer passage is titled by terms the shorter note repeating it does not have',
+   pair[0].terms.length >= 2 && pair[0].terms.every(t => !capWords.has(t.toLowerCase())), pair[0].terms.join(', '));
+ok('and a hyphenated or dotted term is never a title term', (() => { const x = [{ kind: 'text', heading: 'PDF Page 1', body: 'NT-proBNP NT-proBNP 2.5mg alphaone betaone' },
+   ...Array.from({ length: 4 }, (_, i) => ({ kind: 'text', heading: 'PDF Page 2', body: prose('hy' + i, 20) }))]; M.keyTerms(x); return x[0].terms.every(t => /^[a-z][a-z0-9]*$/i.test(t)); })());
 ok('a source titled only by its file name reads as words', /^---\ntitle: Braunwald 13th HF full\n/.test(M.renderSelected(
    M.selectUnit([{ name: 'Braunwald_13th_HF_full.md', raw: unitFull.replace(/^---\ntitle: [^\n]*\n/, '---\n') }], new Set(), { minScore: 2 }).kept, { unit: 'bw-x' })));
 const figKept = M.selectUnit([{ name: 'atlas.md', raw: figUnit }], new Set(), { minScore: 2 }).kept;

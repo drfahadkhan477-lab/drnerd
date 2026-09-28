@@ -294,7 +294,10 @@ function lead(body, n) {
 const STOP = new Set(('with that this from which were have been also into than more such these their other there when where while ' +
   'after before about between during however both each most some only over under within without among because being does used using ' +
   'shown figure page table include including includes associated patients patient').split(' '));
-const termable = w => w.length >= 4 && /[a-z]/.test(w) && !/^\d/.test(w) && !STOP.has(w);
+/* Plain letters and digits only: the app's own tokenizer may split
+   "NT-proBNP" or "2.5mg" into pieces that are common on their own, so a term
+   unique here would not be unique there. */
+const termable = w => w.length >= 4 && /^[a-z][a-z0-9]*$/.test(w) && !STOP.has(w);
 function keyTerms(notes, n = 5) {
   const df = Object.create(null);
   const bags = notes.map(c => {
@@ -306,9 +309,18 @@ function keyTerms(notes, n = 5) {
   const N = notes.length;
   notes.forEach((c, i) => {
     const tf = bags[i];
-    /* A term in half the unit's notes or more tells none of them apart. */
-    const ranked = Object.keys(tf).map(w => [w, (1 + Math.log(tf[w])) * Math.log((N + 1) / df[w])])
-      .filter(([w]) => df[w] * 2 <= N).sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
+    /* A term in half the unit's notes or more tells none of them apart.
+       And a term in only two is not enough either: the owner's run showed the
+       winner holding EVERY term of the missed note's title in 156 of 165
+       misses — same file, shorter (median 65 words against 102): a caption
+       repeated in the page text around it, which wins on length. So terms no
+       other note in the unit has come first, and when there are two or more
+       of them the title is made of those alone — then no other note can hold
+       the whole title. */
+    const scored = Object.keys(tf).map(w => [w, (1 + Math.log(tf[w])) * Math.log((N + 1) / df[w])])
+      .filter(([w]) => df[w] * 2 <= N).sort((a, b) => b[1] - a[1]);
+    const own = scored.filter(([w]) => df[w] === 1);
+    const ranked = (own.length >= 2 ? own : own.concat(scored.filter(([w]) => df[w] > 1))).slice(0, n).map(([w]) => w);
     /* Shown as the note spells it, in the order it uses them. */
     const shown = Object.create(null), order = [];
     for (const raw of c.body.replace(IMG, ' ').split(/\s+/)) {
