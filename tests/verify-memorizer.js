@@ -2533,9 +2533,22 @@ function kindOf(user) {
     await p4.locator('#pack-copy').click();
     await p4.waitForFunction(() => /Copied|copy it/.test(document.querySelector('#pack-copy-status').textContent), null, T);
     const want = await p4.evaluate(() => MemPack.prompt(Memorizer.ui.docRec));
-    const got = await p4.evaluate(() => navigator.clipboard.readText().catch(e => 'unreadable: ' + e.message));
+    const raw = await p4.evaluate(() => navigator.clipboard.readText().catch(e => 'unreadable: ' + e.message));
+    /* THE CLIPBOARD ON WINDOWS SPEAKS CRLF. Chromium hands text back from the
+       Windows clipboard with every \n as \r\n, so on the owner's laptop this
+       compared unequal on every run while Linux CI passed — the same prompt,
+       read back through a different operating system. Line endings are the
+       OS's business, not the copy's: they are normalised in what was read
+       back and nowhere else. Every other character must still match, so a
+       prompt cut short, reordered or missing a section still fails — and if
+       one does, the detail says where the two first differ. */
+    const got = raw.replace(/\r\n/g, '\n');
+    let diffAt = 0; while (diffAt < want.length && got[diffAt] === want[diffAt]) diffAt++;
     ok('the prompt is copied whole: the rules, the shape, every section and its text', got === want && /THE CHAPTER TEXT/.test(want) &&
-       /1\. "Section One Preload"/.test(want) && /\[p\.1\] .*Diuretics reduce preload/.test(want), got.slice(0, 80));
+       /1\. "Section One Preload"/.test(want) && /\[p\.1\] .*Diuretics reduce preload/.test(want),
+       got === want ? `${want.length} chars` + (raw !== got ? ', read back with CRLF line ends' : '')
+                    : `differs at char ${diffAt} of ${want.length} (read back ${got.length}${/\r/.test(raw) ? ', with \\r' : ''}): ` +
+                      JSON.stringify(got.slice(Math.max(0, diffAt - 20), diffAt + 40)) + ' vs ' + JSON.stringify(want.slice(Math.max(0, diffAt - 20), diffAt + 40)));
     ok('and the card stays open while it is used', await p4.evaluate(() => document.querySelector('#pack-card').open));
     await p4.locator('#pack-show').click();
     ok('the prompt can be shown, to select by hand', (await p4.locator('#pack-prompt').inputValue()) === want);
