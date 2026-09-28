@@ -93,7 +93,13 @@ const DOCS = [
 ];
 
 function load(html) {
-  const js = /<script>([\s\S]*)<\/script>/.exec(html)[1];
+  /* The page is this file's own, opened and closed exactly as written above,
+     so the script is cut out between those two markers — no pattern that
+     reads like filtering HTML it did not write. */
+  const open = '<script>', close = '</script>';
+  const a = html.indexOf(open), b = html.lastIndexOf(close);
+  if (a < 0 || b < a) throw new Error('the page lost its script markers');
+  const js = html.slice(a + open.length, b);
   const ctx = { __DOCS: DOCS, console };
   vm.runInNewContext(js + '\n;this.search=search;this.buildIndex=buildIndex;', ctx);
   return ctx;
