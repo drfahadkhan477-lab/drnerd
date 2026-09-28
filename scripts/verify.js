@@ -14,7 +14,7 @@
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 114 suites and roughly 4951 checks, and they
+ * WHY THIS EXISTS. There are 118 suites and roughly 5088 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -353,8 +353,13 @@ const SUITES = [
    Emptied a fifth time by the full green run with --pwa on the owner's
    Windows laptop at 9f57fa2 (recorded in 6c3bd7a: 4951 checks across 114
    suites, 133 on the split build), which measured the three that had been
-   waiting: memorizer-pack-pure, heartbake-pure and stripcomments-pure. */
-const PENDING_RECORD = ['refimgdefer-pure', 'glass', 'refsmerge-pure', 'phrase-pure'];
+   waiting: memorizer-pack-pure, heartbake-pure and stripcomments-pure.
+
+   Emptied a sixth time by the full green run with --pwa on the owner's
+   Windows laptop at 43b53db (5088 checks across 118 suites, 133 on the split
+   build), which measured the four that had been waiting: refimgdefer-pure,
+   glass, refsmerge-pure and phrase-pure. */
+const PENDING_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
