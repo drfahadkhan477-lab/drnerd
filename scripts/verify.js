@@ -259,6 +259,7 @@ const SUITES = [
      screen driven in a browser over a scaffold, the way echo is. */
   ['notesearch-pure','a note titled with the words is found first, quoted and escaped'],
   ['heartbake-pure', 'the heart is loaded from a mesh baked at build time, value for value, and any other copy is refused'],
+  ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
   ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
   /* Retrieval quality as a number rather than an impression. It exists because
@@ -350,7 +351,7 @@ const SUITES = [
    Windows laptop at 9f57fa2 (recorded in 6c3bd7a: 4951 checks across 114
    suites, 133 on the split build), which measured the three that had been
    waiting: memorizer-pack-pure, heartbake-pure and stripcomments-pure. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['refimgdefer-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
