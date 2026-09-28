@@ -9,7 +9,7 @@
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
- * WHY THIS EXISTS. The app is built by applying 90 patch scripts to the
+ * WHY THIS EXISTS. The app is built by applying 91 patch scripts to the
  * ACCSAP export, each one asserting that every edit it makes matches exactly
  * once. That design is deliberate — a patch that silently matches zero times is
  * a feature that quietly disappeared — but it left the ORDER of the chain
@@ -346,8 +346,11 @@ const CHAIN = [
   'echo',
   /* After echo, on text echo emits — see notesearch-patch.js. */
   'notesearch',
-  /* Last: restyles controls every earlier step has built — see glass-patch.js. */
+  /* Restyles controls every earlier step has built — see glass-patch.js. */
   'glass',
+  /* Word order in the ranker, on prefixrank's search() and buildIndex — text
+     no later step rewrites; see phrase-patch.js. */
+  'phrase',
 ];
 
 /* ── arguments ───────────────────────────────────────────────────────────── */

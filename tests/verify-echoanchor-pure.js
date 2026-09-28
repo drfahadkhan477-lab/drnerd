@@ -206,8 +206,14 @@ head('echo-patch is where it says it is');
      notesearch prepend to themselves and leave intact (verify-glass asserts
      both survive), and it never touches the nav's button row or anything echo
      emits. Its selectors match whatever is on the page, so after echo is
-     simply where a restyle of every control belongs. */
-  const AFTER_ECHO = ['notesearch', 'glass'];
+     simply where a restyle of every control belongs.
+
+     phrase(91) is the third, and its argument is glass's: it touches nothing
+     echo reads or emits. Its three anchors are text prefixrank(76) emits in
+     buildIndex() and search(), which no later step rewrites — replayed below
+     from prefixrank to step 91, so a step that ever does rewrite them fails
+     here, not in the owner's build. */
+  const AFTER_ECHO = ['notesearch', 'glass', 'phrase'];
   ok('and it runs after focusmode, the last step to rewrite the nav',
      CHAIN.indexOf('focusmode') > -1 && CHAIN.indexOf('echo') > CHAIN.indexOf('focusmode'),
      `focusmode at ${CHAIN.indexOf('focusmode') + 1}, echo at ${CHAIN.indexOf('echo') + 1}`);
@@ -259,6 +265,11 @@ function stepAnchors(step, atLeast) {
 
 const ambientResults = stepAnchors('ambient', 1);
 const echoResults = stepAnchors('echo', 4);
+const phraseResults = stepAnchors('phrase', 3);
+/* Emitted by prefixrank and by nothing else: an anchor some other step also
+   produced could survive here while the search() it points at had moved. */
+ok('and phrase\'s anchors are all prefixrank\'s own text', phraseResults.length === 3 && phraseResults.every(x => /^prefixrank\(/.test(x.r.producer || '')),
+   phraseResults.map(x => x.r.producer).join(', '));
 
 /* The replay has to have DONE something, or every "survives" above is just a
    seed handed straight back. JUDGED ACROSS BOTH STEPS, and on purpose: echo's

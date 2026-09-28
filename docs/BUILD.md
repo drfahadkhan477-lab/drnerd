@@ -94,7 +94,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-The chain is 90 patch scripts, run in order against the export. Each applies a list of
+The chain is 91 patch scripts, run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -196,6 +196,7 @@ The cost is that order matters, and the dependencies are real:
 | 88 | `echo` | Echo Studio: a reference you can browse and a calculator you can drive, as two tabs over one set of tables. The thinking is in `src/core/echo.js` (12 views with window, position, index mark and angle; 14 measurements; 9 severity tables as ordered bands; 9 disease profiles; the continuity, PISA, Bernoulli, Simpson and Devereux arithmetic) and `src/ui/echo.js` (strings in, strings out — no DOM, no timers), so both are held by `verify-echo-pure` and `verify-echoui-pure` without a browser. The calculator's rule is that a derived row appears only when every input it names is a finite number: never defaulted, never guessed, never `NaN`, because a plausible wrong number on a study screen gets memorised while an absent one gets investigated. **Four anchors, and three more deliberately avoided**: Echo's state lives in a closure here rather than on `S`, which drops the state-object anchor, the save-tail anchor and any concern about `SCHEMA_KEYS`; interaction is delegated from `document` once, which drops the mount anchor. Each of the four was replayed through the chain before it was written down — `verify-echoanchor-pure` does that replay as a check, seeding from the step that emits each region and applying every later step that touches it. It carries the focusmode bug as a fixture: `<div id="app">` is emitted by `fullbleed`(34) and destroyed by `disclaimer`(64), and must be reported REWRITTEN rather than merely absent, so a replay that goes blind is caught by its own self-test. **Build-verified**: the full green run recorded in `94823e0` built step 87, so `patch()` found all four anchors unique in the whole document. The replay alone could not show that. It proves each anchor SURVIVES to step 87, not that it is UNIQUE, because the rest of the document is the licensed export |
 | 89 | `notesearch` | Search your notes: a book button beside Echo opens a field over `search()`'s own index, filtered to notes, with notes titled by every word typed moved first. A tap opens the whole note with its figures through `md()`. The top-bar search is the export's and answers from questions only; this repository does not read that code, so the notes got a screen of their own. Anchored only on text echo emits, straight after it. |
 | 90 | `glass` | the buttons and cards become frosted, lit glass, and a light glides across a pane on hover or press — designed from `tools/button-census.js` run on a build in three themes, not from the export's stylesheet, which is not read. Neutral controls paint `var(--card)`, so each gets `--card: var(--card-glass)`, a see-through copy of the current theme's own card colour derived at runtime by `glassSync()`: every answer state, the destructive button and a selected chip paint other colours and are untouched by construction, since no rule here names a background. Frosted except `.chip` (the notes screen carries two thousand); a pane in `::after` (free on every button — `::before` is taken on `.opt` and `.ch-tile`) draws the highlight, rim and moving light beneath the label. High contrast is scoped out entirely, reduced motion stops every movement, and nothing Safari 13.4 lacks is used. `tests/verify-glass.js` runs the patch's own output against a page built with the census's names; not yet built against the export |
+| 91 | `phrase` | word order counts in the ranker: `buildIndex` also records each document's adjacent pairs of `tok()` terms, and `search()` credits a reference note with the fraction of the query's adjacent known-term pairs it holds, weighted like the coverage credit beside it. Questions rank exactly as before (the credit is in the note branch only), and a one-term query or a stub earns nothing. Added when the Braunwald units took "prose from the note" to 96.3% against its 98% floor: of 42 misses the winner held the 12-word phrase word for word in none — the right note had the phrase, a neighbour only its words. `tests/verify-phrase-pure.js` runs prefixrank's own search() before and after this patch |
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
 
@@ -214,9 +215,9 @@ It needs those earlier steps to still be on disk, and a normal build cleans them
 up. So the iterating loop is:
 
 ```bash
-node scripts/build.js --keep              # once, keeps all 90 intermediates
+node scripts/build.js --keep              # once, keeps all 91 intermediates
 # ...edit scripts/theme-patch.js...
-node scripts/build.js --keep --from theme # only steps 14-90 rerun
+node scripts/build.js --keep --from theme # only steps 14-91 rerun
 ```
 
 ---
@@ -569,8 +570,8 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
-scripts/      build · verify · 90 *-patch · build-pwa · serve · shots
-tests/        114 suites · 62 need no browser · + pwa
+scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
+tests/        114 suites · 63 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
