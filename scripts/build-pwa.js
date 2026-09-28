@@ -588,9 +588,11 @@ function refLatePaint(){
   if((!card && wantPearl) || missingFig) render();
 }
 /* ── reference seed, fetched (see build-pwa.js) ───────────────────────────── */
-(function(){
-  if(typeof REF === 'undefined' || typeof refSeedApply !== 'function') return;
-  fetch('content/refs-seed.json').then(function(r){ return r.json(); }).then(function(seed){
+/* REF_SEED_READY settles once the seed is applied or has failed — never left
+   pending — so the note figures, which wait on it, cannot be stranded. */
+var REF_SEED_READY = (function(){
+  if(typeof REF === 'undefined' || typeof refSeedApply !== 'function') return Promise.resolve();
+  return fetch('content/refs-seed.json').then(function(r){ return r.json(); }).then(function(seed){
     REF = refSeedApply(REF, seed);
     if(typeof invalidateIndex === 'function') invalidateIndex();
     refLatePaint();
@@ -637,23 +639,8 @@ step('pull the reference figures out of the app code, one file per unit', () => 
   if (!Object.keys(refImgParts).length) { refImgParts = null; return; }
   const urls = Object.keys(refImgParts).sort().map(u => 'content/refs-images/' + u + '.json');
   appCode = appCode.replace(re, '{}');
-  appCode += `
-/* ── reference figures, fetched one unit at a time (see build-pwa.js) ─────── */
-(function(){
-  if(typeof REF_IMGS === 'undefined') return;
-  var parts = ${JSON.stringify(urls)};
-  parts.forEach(function(u){
-    fetch(u).then(function(r){ return r.json(); }).then(function(imgs){
-      /* Merged into the binding, never assigned over it: the units land in
-         any order, and each must add to what the others brought. */
-      for(var k in imgs) REF_IMGS[k] = imgs[k];
-      /* The pearl may already be on screen quoting a note whose figure only
-         just landed. */
-      if(typeof refLatePaint === 'function') refLatePaint();
-    }).catch(function(){ /* that unit's notes still render — just without their figures */ });
-  });
-})();
-`;
+  /* After the home screen, one unit at a time: scripts/ref-images-loader.js. */
+  appCode += require('./ref-images-loader.js').REF_IMG_LOADER.replace('__PARTS__', () => JSON.stringify(urls));
 });
 
 /* THE HEART'S BAKED MESH comes out of app.js the same way. apex-patch embeds it

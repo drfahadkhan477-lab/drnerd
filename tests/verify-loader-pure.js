@@ -232,30 +232,31 @@ const splitChecks = async () => {
      Object.values(parts).reduce((n, p) => n + Object.keys(p).length, 0) === 5);
   ok('a folder name that is not URL-safe is made so', !!parts.Braunwald_HF && !parts['Braunwald HF']);
 
-  /* The runtime half, as the build appends it to app.js. */
-  const at = SRC.indexOf('reference figures, fetched one unit at a time');
-  const runtime = at > -1 ? SRC.slice(at, SRC.indexOf('`;', at)) : '';
-  ok('the app fetches every unit file the build wrote', /parts\.forEach\(function\(u\)\{\s*fetch\(u\)/.test(runtime));
+  /* The runtime half, as the build appends it to app.js: since the figures
+     moved after the home screen it lives in scripts/ref-images-loader.js, and
+     build-pwa appends that string with the unit list in place of __PARTS__. */
+  const { REF_IMG_LOADER: runtime } = require('../scripts/ref-images-loader.js');
+  ok('the app fetches every unit file the build wrote',
+     /require\('\.\/ref-images-loader\.js'\)\.REF_IMG_LOADER\.replace\('__PARTS__', \(\) => JSON\.stringify\(urls\)\)/.test(SRC) &&
+     /var parts = __PARTS__;/.test(runtime) && /fetch\(u\)/.test(runtime));
   ok('and merges each into REF_IMGS rather than replacing it',
      /REF_IMGS\[k\]\s*=\s*imgs\[k\]/.test(runtime) && !/REF_IMGS\s*=\s*imgs/.test(runtime));
-  /* And RUN it, rather than only reading it: the appended code, with the
-     build's placeholder filled in, against a stand-in fetch that delivers the
-     units out of order. Every unit's figures must be there at the end. */
+  /* And RUN it, rather than only reading it: the shipped string, with the
+     unit list filled in, against a stand-in fetch and timers that fire at
+     once. Every unit's figures must be there at the end. */
   const ran = await (async () => {
-    const body = runtime.slice(runtime.indexOf('(function(){'));
-    if (!body.includes('${JSON.stringify(urls)}')) return { err: 'placeholder moved' };
-    const code = body.replace('${JSON.stringify(urls)}',
+    if (!runtime.includes('__PARTS__')) return { err: 'placeholder moved' };
+    const code = runtime.replace('__PARTS__',
       JSON.stringify(['content/refs-images/arrhythmias.json', 'content/refs-images/hf.json']));
     const files = { 'content/refs-images/arrhythmias.json': { 'arrhythmias/page_308.jpg': 'A' },
                     'content/refs-images/hf.json': { 'hf/054_FIG.jpg': 'H' } };
-    const REF_IMGS = {}; let paints = 0; const pending = [];
-    const fetch = u => new Promise(res => pending.push(() => res({ json: () => Promise.resolve(files[u]) })));
-    new Function('REF_IMGS', 'fetch', 'refLatePaint', code)(REF_IMGS, fetch, () => { paints++; });
-    for (const go of pending.reverse()) { go(); await new Promise(r => setTimeout(r, 0)); }
-    await new Promise(r => setTimeout(r, 0));
-    return { keys: Object.keys(REF_IMGS).sort(), paints, asked: pending.length };
+    const REF_IMGS = {}; let paints = 0, asked = 0;
+    const fetch = u => { asked++; return Promise.resolve({ json: () => Promise.resolve(files[u]) }); };
+    new Function('REF_IMGS', 'fetch', 'refLatePaint', 'setTimeout', code)(REF_IMGS, fetch, () => { paints++; }, f => f());
+    for (let i = 0; i < 50; i++) await new Promise(r => setImmediate(r));
+    return { keys: Object.keys(REF_IMGS).sort(), paints, asked };
   })();
-  ok('run with the units arriving out of order, every unit\'s figures are present',
+  ok('run with every unit delivered, every unit\'s figures are present',
      !ran.err && JSON.stringify(ran.keys) === JSON.stringify(['arrhythmias/page_308.jpg', 'hf/054_FIG.jpg']),
      ran.err || ran.keys.join(', '));
   ok('and the page is repainted as each unit lands', ran.paints === 2 && ran.asked === 2, `${ran.paints} repaints, ${ran.asked} fetches`);
