@@ -93,6 +93,31 @@ ok('the owner\'s notes are read', idx.notes === 1, `${idx.notes} note(s)`);
 ok('and a unit this tool staged before is not, so a rerun is not measured against itself',
    M.containment(M.shingles(HIGH), idx.idx) === 0 && M.containment(M.shingles(EXISTING_BODY), idx.idx) === 1);
 
+head('an atlas becomes one note per figure; a page becomes paragraph-sized notes');
+const entry = (i, words) => `### FIG. 54.${i} — figure ${i}\n![Fig 54.${i}](<visuals/${String(i).padStart(3, '0')}_FIG.54.${i}_p00${i % 9}.jpg>)\n${prose('cap' + i, words)}`;
+const atlasRaw = `---\ntitle: HF visual atlas\n---\n\n# Atlas\n\n## Figure Atlas\n\n` +
+  Array.from({ length: 24 }, (_, i) => entry(i + 1, i === 23 ? 10 : i === 4 ? 260 : 60)).join('\n\n') + '\n';   // 5: a long caption, scoring under 2
+const atlasParsed = M.parseNotes(atlasRaw, 'atlas');
+ok('a file of "### " entries most carrying a figure is an atlas', M.isAtlas(atlasParsed) && M.atlasEntries(atlasParsed).length === 24, `${M.atlasEntries(atlasParsed).length} entries`);
+ok('and an ordinary unit file is not', !M.isAtlas(M.parseNotes(unitFull, 'full')));
+const owned = new Set(['002_FIG.54.2_p002.jpg']);
+const ra = M.selectUnit([{ name: 'atlas.md', raw: atlasRaw }], new Set(), { minScore: 2, existingFigures: owned });
+const figNotes = ra.kept.filter(c => c.kind === 'figure');
+ok('each figure is its own note, headed by its entry', figNotes.length === 22 && figNotes[0].heading === 'FIG. 54.1 — figure 1' && figNotes.every(c => c.figures === 1),
+   `${figNotes.length} kept, first "${figNotes[0] && figNotes[0].heading}"`);
+ok('a figure the owner\'s notes already cite is covered, by its file name', ra.dropped.some(c => c.heading === 'FIG. 54.2 — figure 2' && c.why === 'covered'));
+ok('a caption under the importer\'s floor is dropped rather than failing the build', ra.dropped.some(c => c.heading === 'FIG. 54.24 — figure 24' && c.why === 'thin'));
+ok('figures are not cut on score: a caption is what it is', figNotes.some(c => c.score < 2));
+
+const paras = Array.from({ length: 9 }, (_, i) => prose('pg' + i, 100)).join('\n\n');
+const page = { heading: 'PDF Page 12', body: `![page](<pages/page_012.jpg>)\n\n${paras}\n\n![Fig 54.9](<visuals/009_FIG.54.9_p012.jpg>)` };
+const ch = M.chunks(page);
+const sizes = ch.map(c => M.words(c.body).length);
+ok('a 900-word page becomes notes of 120 to 350 words', ch.length >= 3 && sizes.every(n => n >= 120 && n <= 350), sizes.join(', '));
+ok('each headed by its page and its place', ch.every((c, i) => c.heading === `PDF Page 12 (${i + 1}/${ch.length})`), ch[0] && ch[0].heading);
+ok('the whole-page scan is removed, the cropped figure kept', !ch.some(c => c.body.includes('pages/page_012.jpg')) && ch.some(c => c.body.includes('visuals/009_FIG.54.9_p012.jpg')));
+ok('and no paragraph is lost or reworded on the way', ch.map(c => c.body).join('\n\n').replace(/!\[[^\]]*\]\([^)]*\)\s*/g, '').trim() === paras);
+
 head('finding the units wherever the zip was unpacked');
 const zroot = fs.mkdtempSync(path.join(os.tmpdir(), 'refsmerge-units-'));
 for (const d of ['some-zip/references/heart-failure/visuals', 'some-zip/references/heart-failure/pages', 'some-zip/references/ischemia/images', 'some-zip/__MACOSX/x'])

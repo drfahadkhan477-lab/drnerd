@@ -120,17 +120,62 @@ function scoreSection(body) {
 }
 
 /* ── the whole decision, for one unit ────────────────────────────────────── */
-function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE } = {}) {
+/* A figure link into visuals/ is a cropped figure (the crop records cover
+   those); any other local image link in a unit is a whole-page scan (pages/,
+   images/), which is removed rather than baked. */
+const isFigureLink = link => /\((?:<)?(?:\.\/)?visuals\//i.test(link);
+function stripScans(body) {
+  return body.replace(IMG, m => isFigureLink(m) ? m : '').replace(/\n{3,}/g, '\n\n').trim();
+}
+/* An atlas: a file whose entries are "### " headings, most carrying a figure. */
+function atlasEntries(parsed) {
+  const out = [];
+  for (const s of parsed.sections) {
+    /* The body usually opens WITH the first "### " (trimmed, no newline before
+       it); splitting on "\n### " alone dropped that first figure as preamble. */
+    const parts = ('\n' + s.body).split(/\n### /);
+    parts.slice(1).forEach(p => { const l = p.split('\n'); out.push({ heading: l[0].trim(), body: l.slice(1).join('\n').trim() }); });
+  }
+  return out;
+}
+function isAtlas(parsed) {
+  const e = atlasEntries(parsed);
+  return e.length >= 20 && e.filter(x => IMG.test(x.body) && (IMG.lastIndex = 0, true)).length >= e.length / 2;
+}
+/* A page is ~850 words with no subheadings; notes of that size are neither
+   findable nor quotable. Paragraphs are gathered into chunks of CHUNK_MIN to
+   CHUNK_MAX words, each its own candidate, headed by its page. */
+const CHUNK_MIN = 120, CHUNK_MAX = 350;
+function chunks(section) {
+  const body = stripScans(section.body);
+  if (words(body).length <= CHUNK_MAX) return [{ heading: section.heading, body }];
+  const paras = body.split(/\n\s*\n/).filter(p => p.trim());
+  const out = []; let cur = [], n = 0;
+  for (const p of paras) {
+    const w = words(p).length;
+    if (n && n + w > CHUNK_MAX && n >= CHUNK_MIN) { out.push(cur.join('\n\n')); cur = []; n = 0; }
+    cur.push(p.trim()); n += w;
+  }
+  if (cur.length) { if (out.length && n < CHUNK_MIN) out[out.length - 1] += '\n\n' + cur.join('\n\n'); else out.push(cur.join('\n\n')); }
+  return out.map((b, i) => ({ heading: out.length > 1 ? `${section.heading} (${i + 1}/${out.length})` : section.heading, body: b }));
+}
+const linkName = m => { const d = /\((<[^>\n]+>|[^)\s]+)\)$/.exec(m); return d ? path.basename(d[1].replace(/[<>]/g, '')) : ''; };
+
+function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE, existingFigures = new Set() } = {}) {
   const cands = [];
   for (const f of files) {
     const parsed = parseNotes(f.raw, f.name.replace(/\.md$/i, ''));
-    parsed.sections.forEach((s, i) => {
+    const atlas = isAtlas(parsed);
+    const pieces = atlas ? atlasEntries(parsed) : [].concat(...parsed.sections.map(chunks));
+    pieces.forEach((s, i) => {
       const sh = shingles(s.body);
-      cands.push({ file: f.name, index: i, meta: parsed.meta, title: parsed.title, ...s, sh,
-                   figures: (s.body.match(IMG) || []).length, ...scoreSection(s.body) });
+      const figs = s.body.match(IMG) || [];
+      cands.push({ file: f.name, index: i, meta: parsed.meta, title: parsed.title, kind: atlas ? 'figure' : 'text', ...s, sh,
+                   figures: figs.length, figNames: figs.map(linkName), ...scoreSection(s.body) });
     });
   }
-  const tally = { sections: cands.length, repeat: 0, covered: 0, thin: 0, lowHeading: 0, lowScore: 0, kept: 0, figures: 0 };
+  const tally = { sections: cands.length, repeat: 0, covered: 0, thin: 0, lowHeading: 0, lowScore: 0, kept: 0, figures: 0, keptFigures: 0,
+                  figureEntries: cands.filter(c => c.kind === 'figure').length };
   const kept = [], keptIndex = new Set(), dropped = [];
   /* The unit's own repeats first: richest copy wins. */
   const order = [...cands].sort((a, b) => b.figures - a.figures || b.words - a.words);
@@ -141,6 +186,13 @@ function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE } = {})
   }
   for (const c of unique) {
     let why = '';
+    if (c.kind === 'figure') {
+      if (c.figNames.some(n => existingFigures.has(n)) || containment(c.sh, existingIndex) >= COVERED) why = 'covered';
+      else if (c.words < MIN_WORDS) why = 'thin';
+      if (why) { tally[why]++; dropped.push({ ...c, why }); continue; }
+      kept.push(c); tally.kept++; tally.figures += c.figures; tally.keptFigures++;
+      continue;
+    }
     if (containment(c.sh, existingIndex) >= COVERED) why = 'covered';
     else if (c.words < MIN_WORDS) why = 'thin';
     else if (LOW_YIELD_HEADING.test(c.heading)) why = 'lowHeading';
@@ -151,7 +203,7 @@ function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE } = {})
   /* Back into reading order: by file, then by position in it. */
   const byFile = f => files.findIndex(x => x.name === f);
   kept.sort((a, b) => byFile(a.file) - byFile(b.file) || a.index - b.index);
-  return { tally, kept, dropped, scores: unique.map(c => c.score) };
+  return { tally, kept, dropped, scores: unique.filter(c => c.kind === 'text').map(c => c.score) };
 }
 
 function renderSelected(kept) {
@@ -162,20 +214,22 @@ function renderSelected(kept) {
 }
 
 function indexNotes(dir, skip) {
-  const idx = new Set();
+  const idx = new Set(), figs = new Set();
   let notes = 0;
-  if (!fs.existsSync(dir)) return { idx, notes };
+  if (!fs.existsSync(dir)) return { idx, notes, figs };
   const walk = d => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       const p = path.join(d, e.name);
       if (e.isDirectory()) walk(p);
       else if (/\.md$/i.test(e.name) && !/^readme\.md$/i.test(e.name) && !(skip && skip(e.name))) {
-        for (const s of parseNotes(fs.readFileSync(p, 'utf8'), e.name).sections) { notes++; for (const h of shingles(s.body)) idx.add(h); }
+        const raw = fs.readFileSync(p, 'utf8');
+        for (const m of raw.matchAll(/refimg:\/\/[^)\s>]+/g)) figs.add(path.basename(m[0]));
+        for (const s of parseNotes(raw, e.name).sections) { notes++; for (const h of shingles(s.body)) idx.add(h); }
       }
     }
   };
   walk(dir);
-  return { idx, notes };
+  return { idx, notes, figs };
 }
 
 function unitFolders(root) {
@@ -191,7 +245,7 @@ function unitFolders(root) {
   return out.sort((a, b) => a.unit.localeCompare(b.unit));
 }
 
-module.exports = { words, unitFolders, parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
+module.exports = { chunks, stripScans, isAtlas, atlasEntries, words, unitFolders, parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
                    MIN_WORDS, DUP_WITHIN, COVERED, DEFAULT_MIN_SCORE, LOW_YIELD_HEADING };
 
 /* ── the command ─────────────────────────────────────────────────────────── */
@@ -255,23 +309,25 @@ if (require.main === module) {
     const files = fs.readdirSync(u.dir).filter(f => /\.md$/i.test(f) && !/^readme\.md$/i.test(f)).sort()
       .map(name => ({ name, raw: fs.readFileSync(path.join(u.dir, name), 'utf8') }));
     const perFile = files.map(f => `${f.name.length > 44 ? f.name.slice(0, 41) + '…' : f.name} ${parseNotes(f.raw, f.name).sections.length}`);
-    const r = selectUnit(files, existing.idx, { minScore: MIN });
+    const r = selectUnit(files, existing.idx, { minScore: MIN, existingFigures: existing.figs });
     const t = r.tally;
     const bucket = [0, 0.5, 1, 2, 3, 5, 8].map((lo, i, a) => `${lo}${a[i + 1] !== undefined ? '–' + a[i + 1] : '+'}: ${r.scores.filter(s => s >= lo && (a[i + 1] === undefined || s < a[i + 1])).length}`);
     console.log(`\n${u.unit}   (${files.length} files: ${perFile.join(', ')})`);
-    console.log(`  sections ${t.sections}   repeats of each other ${t.repeat}   already in your notes ${t.covered}`);
+    console.log(`  candidates ${t.sections} (${t.figureEntries} atlas figures, ${t.sections - t.figureEntries} text chunks)   repeats of each other ${t.repeat}   already in your notes ${t.covered}`);
     console.log(`  dropped: under ${MIN_WORDS} words ${t.thin}, low-yield heading ${t.lowHeading}, score under ${MIN} ${t.lowScore}`);
-    console.log(`  KEPT ${t.kept} sections, citing ${t.figures} figures`);
+    console.log(`  KEPT ${t.keptFigures} figure notes and ${t.kept - t.keptFigures} text notes, citing ${t.figures} figures`);
     console.log(`  score of the unique sections (signals per 100 words): ${bucket.join('   ')}`);
     const outDir = path.join(OUT, u.unit);
     fs.rmSync(outDir, { recursive: true, force: true });
     fs.mkdirSync(outDir, { recursive: true });
-    if (r.kept.length) fs.writeFileSync(path.join(outDir, `${u.unit}-selected.md`), renderSelected(r.kept));
+    const figs = r.kept.filter(c => c.kind === 'figure'), text = r.kept.filter(c => c.kind === 'text');
+    if (figs.length) fs.writeFileSync(path.join(outDir, `${u.unit}-figures.md`), renderSelected(figs));
+    if (text.length) fs.writeFileSync(path.join(outDir, `${u.unit}-text.md`), renderSelected(text));
     review.push(`# ${u.unit}\n\n## Kept (${r.kept.length})\n` + r.kept.map(c => `- ${c.heading}  — score ${c.score.toFixed(1)}, ${c.words} words, ${c.figures} fig`).join('\n') +
       `\n\n## Just under the cut (score ${(MIN / 2).toFixed(1)}–${MIN}) — look at these\n` +
       r.dropped.filter(c => c.why === 'lowScore' && c.score >= MIN / 2).map(c => `- ${c.heading}  — score ${c.score.toFixed(1)}, ${c.words} words`).join('\n') + '\n');
-    const figs = ['visuals', 'images', 'pages'].map(d => path.join(u.dir, d)).filter(d => fs.existsSync(d));
-    console.log(`  next: python tools/add-unit.py --unit ${u.unit} --notes "${outDir}" --figures "${figs[0] || u.dir}"` +
+    const figDir = path.join(u.dir, 'visuals');
+    console.log(`  next: python tools/add-unit.py --unit ${u.unit} --notes "${outDir}" --figures "${fs.existsSync(figDir) ? figDir : u.dir}"` +
       (fs.existsSync(path.join(__dirname, `figure-crops.${u.unit.replace(/^bw-/, '').replace('heart-failure', 'hf')}.json`))
         ? ` --crops tools/figure-crops.${u.unit.replace(/^bw-/, '').replace('heart-failure', 'hf')}.json` : ''));
   }
