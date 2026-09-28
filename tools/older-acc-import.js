@@ -30,8 +30,9 @@
  *      and counted; so are images too small to be a figure and images the
  *      size of the page (a scan behind OCR text, not a figure).
  *   2. Parses questions (tools/older-acc.js): stem, options, answer, the
- *      explanation after it, the layout it was set in; attaches each figure
- *      to the question it sits under.
+ *      explanation after it, the layout it was set in; maps answer-key
+ *      entries ("12. a. …") back to the questions they answer; attaches each
+ *      figure to the question it sits under.
  *   3. Drops a question whose stem is mostly inside ONE existing stem (word
  *      5-gram containment, the house measure from tools/refs-merge.js) — or
  *      inside one already imported from these PDFs.
@@ -190,6 +191,7 @@ async function readPage({ p, scale, maxW, quality }) {
     return 'rgb~' + [0, 1, 2].map(c => Math.round(core.reduce((n, q) => n + q[c], 0) / core.length / 32) * 32).join(',');
   };
 
+  const isBold = f => /bold|black|heavy|semibold|demi/i.test(f) || /,B/.test(f);
   const fontOf = id => {
     try { const fo = page.commonObjs.get(id); return String((fo && (fo.name || fo.loadedName)) || id).replace(/^[A-Z]{6}\+/, ''); }
     catch (_) { return String(id); }
@@ -219,7 +221,12 @@ async function readPage({ p, scale, maxW, quality }) {
     const firstFont = l.parts.find(q => q.s.trim()) || l.parts[0];
     const font = fontOf(firstFont.font);
     const x0 = l.parts[0].x, x1 = Math.max(...l.parts.map(q => q.x + q.w));
-    lines.push({ y: l.y, x0, x1, size: l.size, font, bold: /bold|black|heavy|semibold|demi/i.test(font) || /,B/.test(font), ink: ink(x0, l.y - l.size * 0.2, x1, l.y + l.size * 0.8), text });
+    /* bf: the share of the line's characters set in a bold face — an option
+       emphasised as the answer shows up here, the letter alone does not. */
+    let boldChars = 0, allChars = 0;
+    for (const q of l.parts) { const n = q.s.replace(/\s/g, '').length; allChars += n; if (isBold(fontOf(q.font))) boldChars += n; }
+    lines.push({ y: l.y, x0, x1, size: l.size, font, bold: isBold(font), bf: allChars ? Math.round(boldChars / allChars * 100) / 100 : 0,
+                 ink: ink(x0, l.y - l.size * 0.2, x1, l.y + l.size * 0.8), text });
   }
   lines.sort((a, b) => b.y - a.y || a.x0 - b.x0);
 

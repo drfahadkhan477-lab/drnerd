@@ -371,6 +371,134 @@ head('merged into a single-file build');
   ok('the merged questions pass the build\'s own structural checks', findings.length === 0, findings.map(f => f.rule).join(',') || 'none');
 }
 
+/* ── answer keys (FIRST.pdf, the owner's second run) ───────────────────────
+   The first real run showed ~400 lines shaped "99.␣a." straight after
+   questions' options, and black all-caps headings: answer-key sections.
+   Here: a key page after each question page, numbers restarting per chapter,
+   a key whose rationale discusses each option on its own lettered line, an
+   entry for a question the key follows but that has fewer options, one for a
+   number no question has, a key that disagrees and one that agrees with the
+   page's own answer, two questions sharing a number, and one key at the end
+   answering two chapters. */
+const Q16 = (y, n, tag, nOpts = 3, o = {}) => [
+  L(y, `${n}. A ${tag} stem for the key to answer.`, C16),
+  ...Array.from({ length: nOpts }, (_, i) => L(y - 24 - 20 * i, `${'abcd'[i]}.  ${tag}opt${i}`, { ...C16, ...(o.bf ? { bf: o.bf[i] } : {}) })),
+];
+const keyed = [
+  page(1, [...Q16(700, 1, 'zqkone'), ...Q16(600, 2, 'zqktwo')]),
+  page(2, [L(700, 'ANSWERS', B), L(680, '1. b. Zqrationale one begins here'), L(666, 'and carries on zqwrapped.'),
+           L(640, '2. c. Zqrationale two.'), L(626, 'a. Incorrect, zqwhy one.'), L(612, 'b. Incorrect, zqwhy two.')]),
+  page(3, [...Q16(700, 1, 'zqctwoone'), ...Q16(600, 2, 'zqctwotwo'), ...Q16(500, 3, 'zqctwothree')]),
+  page(4, [L(700, 'ANSWERS', B), L(680, '1. a. Zqr.'), L(666, '2. b. Zqr.'), L(652, '3. d. Zqr past.'), L(638, '4. a. Zqr nobody.')]),
+  page(5, [...Q16(700, 5, 'zqpagea'), L(616, 'Answer: A'), ...Q16(580, 6, 'zqpageb'), L(496, 'Answer: B')]),
+  page(6, [L(700, 'ANSWERS', B), L(680, '5. b. Zqr.'), L(666, '6. b. Zqr.')]),
+  page(7, [...Q16(700, 7, 'zqtwinone'), ...Q16(600, 7, 'zqtwintwo')]),
+  page(8, [L(700, 'Answers and explanations', B), L(680, '7. a. Zqr twin.')]),
+  page(9, [...Q16(700, 1, 'zqendaone'), ...Q16(600, 2, 'zqendatwo')]),
+  page(10, [...Q16(700, 1, 'zqendbone'), ...Q16(600, 2, 'zqendbtwo')]),
+  page(11, [L(700, 'ANSWER KEY', B), L(680, '1. a.'), L(666, '2. b.'), L(652, '1. c.'), L(638, '2. a.')]),
+  page(12, [...Q16(700, 8, 'zqsaid'), L(616, 'Explanation: option C is correct, zqsays.'),
+            ...Q16(580, 9, 'zqbold', 4, { bf: [0, 1, 0.1, 0] })]),
+];
+const K = A.parseDocument(keyed);
+const kq = tag => K.questions.find(q => q.stem.includes(tag + ' stem'));
+head('the kind of an answer-key line');
+{
+  const k = t => A.lineKind(t);
+  ok('"12. a. Because …", "12) (c)" and "7. Ans: b" are key entries, lettered from zero',
+     k('12. a. Because').k === 'KEYENTRY' && k('12. a. Because').n === 12 && k('12. a. Because').L === 0 &&
+     k('12) (c)').L === 2 && k('7. Ans: b').L === 1, JSON.stringify(k('7. Ans: b')));
+  ok('"12. A 45-year-old man" is a stem, not a key entry', k('12. A 45-year-old man').k === 'NUM', k('12. A 45-year-old man').k);
+  ok('"ANSWERS", "Answer key", "Answers and explanations", "EXPLANATIONS" head a key section',
+     ['ANSWERS', 'Answer key', 'Answers and explanations', 'EXPLANATIONS'].every(t => k(t).k === 'KEYHEAD'),
+     ['ANSWERS', 'Answer key', 'Answers and explanations', 'EXPLANATIONS'].map(t => k(t).k).join(','));
+  ok('but a single "Explanation" heads one question\'s explanation', k('Explanation').k === 'KEY', k('Explanation').k);
+  ok('"Question 9: …" is a stem, "10:30" is not', k('Question 9: A man').k === 'NUM' && k('10:30 in the clinic').k !== 'NUM');
+}
+head('answer keys, mapped back to their questions');
+{
+  ok('no key entry is taken for a question, even one whose rationale letters each option',
+     K.questions.length === 15 && !K.questions.some(q => /Zqr|zqwhy/.test(q.stem + q.options.map(o => o.t).join(' '))),
+     `${K.questions.length} questions`);
+  ok('and none is even considered as a stem: no anchor was turned down anywhere in the file',
+     Object.keys(K.stats.rejectsByReason).length === 0, JSON.stringify(K.stats.rejectsByReason));
+  const q1 = kq('zqkone'), q2 = kq('zqktwo');
+  ok('a key page after a question page keys each question by its number', !!q1 && q1.ci === 1 && q1.answerBy === 'key' && !!q2 && q2.ci === 2,
+     `${q1 && q1.ci} ${q1 && q1.answerBy} ${q2 && q2.ci}`);
+  ok('the entry\'s rationale, wrapped lines and lettered lines too, becomes the commentary',
+     !!q1 && q1.ex.join(' ').includes('begins here and carries on zqwrapped') && !!q2 && q2.ex.join(' ').includes('Incorrect, zqwhy two'),
+     q1 && JSON.stringify(q1.ex.map(p => p.length)));
+  ok('the key is not left in the explanation of the question above it', !!q2 && q2.ex.length === 1 && q2.ex[0].startsWith('Zqrationale two'),
+     q2 && JSON.stringify(q2.ex.map(p => p.length)));
+  ok('lettered lines inside a key section are not a page that failed to parse', K.stats.unparsedPages.length === 0, A.ranges(K.stats.unparsedPages));
+  const c1 = kq('zqctwoone'), c2 = kq('zqctwotwo'), c3 = kq('zqctwothree');
+  ok('numbers that restart go to the questions the key follows, not to earlier ones', !!c1 && c1.ci === 0 && !!c2 && c2.ci === 1 && q1.ci === 1,
+     `${c1 && c1.ci} ${c2 && c2.ci}`);
+  ok('an entry lettered past its question\'s options keys nothing, and is counted', !!c3 && c3.ci === -1 && K.stats.key.pastOptions === 1,
+     `${c3 && c3.ci} ${K.stats.key.pastOptions}`);
+  ok('an entry no question in scope carries is counted as unmatched, by page', K.stats.key.unmatched === 1 && K.stats.key.unmatchedPages.join(',') === '4',
+     `${K.stats.key.unmatched} ${K.stats.key.unmatchedPages}`);
+  const pa = kq('zqpagea'), pb = kq('zqpageb');
+  ok('a key never overrides the answer the page states — it is compared and counted',
+     !!pa && pa.ci === 0 && pa.answerBy === 'answer-line' && !!pb && pb.ci === 1 && K.stats.key.disagree === 1 && K.stats.key.agree === 1,
+     `${pa && pa.ci} ${K.stats.key.disagree}/${K.stats.key.agree}`);
+  const t1 = kq('zqtwinone'), t2 = kq('zqtwintwo');
+  ok('two questions sharing a number for one entry: ambiguous, neither keyed', !!t1 && t1.ci === -1 && !!t2 && t2.ci === -1 && K.stats.key.ambiguous === 1,
+     `${t1 && t1.ci} ${t2 && t2.ci} ${K.stats.key.ambiguous}`);
+  const e = ['zqendaone', 'zqendatwo', 'zqendbone', 'zqendbtwo'].map(t => (kq(t) || {}).ci);
+  ok('one key after two chapters answers each chapter in order', e.join(',') === '0,1,2,0', e.join(','));
+  ok('and the counts add up: 13 entries in 5 runs, 8 keyed',
+     K.stats.key.entries === 13 && K.stats.key.runs === 5 && K.stats.key.keyed === 8, JSON.stringify({ e: K.stats.key.entries, r: K.stats.key.runs, k: K.stats.key.keyed }));
+}
+
+head('more ways a page states its answer');
+{
+  const h = t => A.sentenceHit(t, 4);
+  ok('"The best answer is (c)" and "(C) is the best answer"', h('The best answer is (c).').i === 2 && h('(C) is the best answer.').i === 2);
+  ok('"Option B is correct" and a sentence opening "D is correct", named for how they were found',
+     h('Option B is correct.').i === 1 && h('Option B is correct.').how === 'sentence-is-correct' && h('It fits. D is correct.').i === 3 &&
+     h('The correct answer is B.').how === 'sentence');
+  ok('but "Vitamin B is the correct answer" and "hepatitis a is correct" are not options',
+     h('Vitamin B is the correct answer here.').i === -1 && h('hepatitis a is correct in this case').i === -1);
+  const s8 = kq('zqsaid');
+  ok('found in a question\'s explanation, and reported as such', !!s8 && s8.ci === 2 && s8.answerBy === 'sentence-is-correct', s8 && `${s8.ci} ${s8.answerBy}`);
+  ok('one option mostly bold, the rest not, is the bold answer', A.boldAnswer([0, 0.9, 0.1, 0]) === 1);
+  ok('but not two bold, one half-bold beside it, or bold not measured',
+     A.boldAnswer([0.9, 0.9, 0, 0]) === -1 && A.boldAnswer([0, 0.9, 0.5, 0]) === -1 && A.boldAnswer([undefined, 1, 0, 0]) === -1);
+  const b9 = kq('zqbold');
+  ok('a question answered only by a bold option is found by bold', !!b9 && b9.ci === 1 && b9.answerBy === 'bold', b9 && `${b9.ci} ${b9.answerBy}`);
+  const q10 = S.questions.find(q => q.n === 10);
+  ok('an unanswered question records how its options differ, as a pattern', !!q10 && q10.emphasis === 'ink 3, bold 0/3', q10 && q10.emphasis);
+}
+
+/* ── why a page did not parse ──────────────────────────────────────────── */
+const HB = { ...B, ink: 'rgb~224,0,0' };
+const rej = [
+  page(1, [L(690, '5. A zqlonely stem that the next stem interrupts.'), L(670, '6. A zqreal stem.'), L(650, 'A. Zqx'), L(636, 'B. Zqy'), L(610, 'Answer: A')]),
+  page(2, [L(690, 'Question', HB), L(670, 'A zqstem whose options start at B.'), L(650, 'B. Zqx'), L(636, 'C. Zqy')]),
+  page(3, [L(690, 'Question', HB), L(670, '9. A zqstem with one option.'), L(650, 'A. Zqonly'), L(620, 'Answer: A')]),
+  page(4, [L(690, 'Question', HB), L(670, 'A zqstem that runs into a key.'), L(650, 'ANSWERS')]),
+  page(5, [L(690, 'Stem without a number zqorph', { font: 'Helvetica' }), L(670, 'a. Zqorphan one'), L(650, 'b. Zqorphan two')]),
+  page(6, [L(740, 'Question', HB), L(670, 'A zqstem with nothing after it at all.'), L(650, 'Zqmore words.')]),
+];
+const RJ = A.parseDocument(rej);
+head('why a page did not parse, by rule');
+{
+  const by = RJ.stats.unparsedByReason;
+  const pages = r => (by[r] || []).join(',');
+  ok('options starting at B: not-A-first, on its page', pages('not-A-first') === '2', JSON.stringify(by));
+  ok('an option A with no B: A-without-B, on its page', pages('A-without-B') === '3', pages('A-without-B'));
+  ok('a key section before any option: key-before-A', pages('key-before-A') === '4', pages('key-before-A'));
+  ok('no option at all: no-option', pages('no-option') === '6', pages('no-option'));
+  ok('options no stem reached: A-without-anchor, with the shape and font of the line above',
+     pages('A-without-anchor') === '5' && RJ.stats.aboveOrphanA['Aaaa␣a Helvetica'] === 1, JSON.stringify(RJ.stats.aboveOrphanA));
+  ok('a stem interrupted by the next is counted though its page parsed', RJ.stats.rejectsByReason['anchor-before-A'] === 1 && !RJ.stats.unparsedPages.includes(1),
+     JSON.stringify(RJ.stats.rejectsByReason));
+  ok('a heading and the numbered stem under it are turned down once, not twice', RJ.stats.rejectsByReason['A-without-B'] === 1,
+     String(RJ.stats.rejectsByReason['A-without-B']));
+  ok('a "Question" heading in the top eighth of a page is counted', RJ.stats.headingsAtTop === 1, String(RJ.stats.headingsAtTop));
+}
+
 head('what the importer prints');
 {
   const t1 = A.tallyFile('SECOND.pdf', S), t2 = A.tallyFile('FIRST.pdf', F);
@@ -381,8 +509,17 @@ head('what the importer prints');
   ok('per-layout counts for each file', /layout heading\s+parsed\s+5\s+missing an answer 1/.test(text) && /layout spaced\s+parsed\s+1/.test(text) && /layout large\s+parsed\s+3/.test(text));
   ok('the pages of questions missing an answer, and of pages that did not parse', /missing an answer 1 — pages 4/.test(text) && /did not parse: 4/.test(text));
   ok('how each answer was found', /answer-line×3/.test(text) && /short-line×1/.test(text) && /ink×1/.test(text));
-  const leaked = (text.match(/zq[a-z]+/gi) || []);
-  ok('and not one word of any question, option or explanation', leaked.length === 0 && text.length > 400, leaked.slice(0, 5).join(', ') || `${text.length} chars, none`);
+  ok('each layout names the fonts its stems are set in', /layout heading\s+parsed\s+5\s+missing an answer 1\s+stem fonts Times-Bold×5/.test(text));
+  const t3 = A.tallyFile('KEYED.pdf', K), t4 = A.tallyFile('REJECTS.pdf', RJ);
+  const text2 = A.formatReport([t3, t4], null);
+  ok('the answer key\'s counts are printed', /answer key: entries 13 in 5 runs\s+keyed 8\s+agreeing with the page 1\s+disagreeing 1\s+unmatched 1\s+ambiguous 1\s+letter past the options 1/.test(text2) &&
+     /unmatched entries on pages 4/.test(text2), (text2.match(/answer key:.*/) || [''])[0]);
+  ok('and every rule with the pages it turned down', /not-A-first\s+1 pages — 2/.test(text2) && /A-without-anchor\s+1 pages — 5/.test(text2) &&
+     /anchors turned down, by rule: .*no-option×1/.test(text2) && /the line above an option A no stem reached, as shape and font: Aaaa␣a Helvetica×1/.test(text2));
+  ok('and how the options of an unanswered question differ', /how their options differ: ink 3, bold 0\/3×1/.test(text));
+  const leaked = (text + text2).match(/zq[a-z]+/gi) || [];
+  ok('and not one word of any question, option, explanation or key', leaked.length === 0 && text.length > 400 && text2.length > 400,
+     leaked.slice(0, 5).join(', ') || `${text.length + text2.length} chars, none`);
   ok('page lists are ranges', A.ranges([1, 2, 3, 7, 9, 10]) === '1-3, 7, 9-10' && A.ranges([]) === 'none');
 }
 

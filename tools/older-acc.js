@@ -26,6 +26,13 @@
  *   large     stem "99. " set large (16 pt Calibri), options "a.  "
  *             (FIRST.pdf, the other)
  *   other     a question that parsed but matches none of the three
+ * ANSWER KEYS, from the owner's first real run: FIRST.pdf keeps its answers in
+ * key sections — an "ANSWERS"-type heading, then entries "12. a. rationale" —
+ * which showed up as ~400 lines shaped "99.␣a." right after questions'
+ * options. A key entry is its own kind of line: never a stem anchor, never
+ * part of the explanation above it, and mapped back by number to the
+ * questions the key follows (applyKey). Every stem anchor that does not
+ * start a question is recorded with the rule that turned it down.
  * These are heuristics measured from a report, not from the text, so every
  * rule here is tolerant, and the importer reports per-layout counts, the
  * pages it could not parse, and the SHAPES of the lines where it looked for
@@ -51,8 +58,18 @@ const TRAIL_PAGES = 2;                 // an explanation ends this many pages pa
 const HEAD_RE = /^question\s*(\d{1,4})?\s*[:.]?\s*$/i;
 const ANS_RE = /^(?:the\s+)?(?:correct\s+)?(?:answer|ans)\b\.?\s*(?:is\b)?\s*[:.\-–]?\s*(.*)$/i;
 const KEY_RE = /^(?:key\s*points?|explanation|rationale|discussion|commentary|educational\s+objective|learning\s+objective|take[\s-]*home(?:\s+message)?)\b\s*[:.\-–]?\s*(.*)$/i;
-/* "9. A …", "9 . A …", "12) …", "Question 9. …" — but not "2.5 mg". */
-const NUM_RE = /^(?:q(?:uestion)?\s*)?(\d{1,4})\s?[.)](?!\d)\s*(\S.*)$/i;
+/* "9. A …", "9 . A …", "12) …", "Question 9: …" — but not "2.5 mg" or "10:30". */
+const NUM_RE = /^(?:q(?:uestion)?\s*)?(\d{1,4})\s?[.):](?!\d)\s*(\S.*)$/i;
+/* An ANSWER-KEY entry: a number, then one option letter set off by a point or
+   bracket, then (maybe) the rationale — "12. a. Because …", "12) (c)",
+   "7. Ans: b". Never a stem: a stem opens with a word, and "12. A 45-year-old"
+   has no point after its A. The owner's first run showed these as the lines
+   right after questions' options, shaped "99.␣a.", some 400 of them. */
+const KEYENTRY_RE = /^(\d{1,4})\s?[.):]\s*(?:(?:[Aa]ns(?:wer)?|ANS(?:WER)?|[Kk]ey|KEY)\s*[:.\-–]?\s*\(?([A-Ha-h])\)?\.?|\(?([A-Ha-h])\s?[.)])(?=\s|$)\s*(.*)$/;
+/* The heading over an answer-key section: "ANSWERS", "Answer key",
+   "Answers and explanations", "EXPLANATIONS". Singular "Explanation" is not
+   one — that heads the explanation under a single question. */
+const KEYHEAD_RE = /^(?:answers(?:\s+(?:and|&)\s+explanations?)?|answers?\s+key|explanations|rationales)\s*:?$/i;
 /* "A. …", "a . …", "(b) …" — but not "A.V. block", whose rest opens "V.". */
 const OPT_RE = /^\(?([A-Ha-h])\s?[.)]\s*(.*)$/;
 
@@ -61,6 +78,8 @@ function lineKind(text) {
   if (!t) return { k: 'BLANK' };
   let m;
   if ((m = HEAD_RE.exec(t))) return { k: 'HEAD', n: m[1] ? +m[1] : null };
+  if (KEYHEAD_RE.test(t)) return { k: 'KEYHEAD' };
+  if ((m = KEYENTRY_RE.exec(t))) return { k: 'KEYENTRY', n: +m[1], L: (m[2] || m[3]).toLowerCase().charCodeAt(0) - 97, rest: m[4] || '' };
   if ((m = ANS_RE.exec(t))) return { k: 'ANS', rest: m[1] };
   if ((m = KEY_RE.exec(t))) return { k: 'KEY', rest: m[1] };
   if ((m = NUM_RE.exec(t))) return { k: 'NUM', n: +m[1], rest: m[2] };
@@ -109,15 +128,25 @@ function letterFrom(rest, nOpts) {
   const i = m[1].toLowerCase().charCodeAt(0) - 97;
   return i < nOpts ? i : -1;
 }
-/* "The correct answer is B." — upper case, or in brackets, or named as an
-   option; "the correct answer is a beta-blocker" is not option A. */
-function sentenceAnswer(text, nOpts) {
-  const re = /[Cc]orrect\s+(?:[Aa]nswer|[Cc]hoice|[Rr]esponse|[Oo]ption)\s*(?:is|IS|:|=)?\s*(?:(?:[Oo]ption|[Cc]hoice)\s+([A-Ha-h])\b|\(([A-Ha-h])\)|([A-H])(?=$|[\s.):,;]))/;
-  const m = re.exec(clean(text));
-  if (!m) return -1;
-  const i = (m[1] || m[2] || m[3]).toLowerCase().charCodeAt(0) - 97;
-  return i < nOpts ? i : -1;
+/* "The correct answer is B." / "The best answer is (c)." — the letter upper
+   case, or in brackets, or named as an option; "the correct answer is a
+   beta-blocker" is not option A. */
+const SENT_ANSWER_IS = /(?:[Cc]orrect|[Bb]est|[Rr]ight)\s+(?:[Aa]nswer|[Cc]hoice|[Rr]esponse|[Oo]ption)\s*(?:is|IS|:|=)?\s*(?:(?:[Oo]ption|[Cc]hoice|[Aa]nswer)\s+([A-Ha-h])\b|\(([A-Ha-h])\)|([A-H])(?=$|[\s.):,;]))/;
+/* "Option B is correct." / "(C) is the best answer." / "…. D is correct." —
+   a bare letter only in brackets or at a sentence start, so "Vitamin B is
+   the correct answer" is not option B. */
+const SENT_IS_CORRECT = /(?:(?:[Oo]ption|[Cc]hoice|[Aa]nswer|[Rr]esponse)\s+\(?([A-Ha-h])\)?|(?:^|[.;:]\s+)([A-H])|\(([A-Ha-h])\))\s+is\s+(?:the\s+)?(?:correct|best|right)\b/;
+function sentenceHit(text, nOpts) {
+  const t = clean(text);
+  for (const [re, how] of [[SENT_ANSWER_IS, 'sentence'], [SENT_IS_CORRECT, 'sentence-is-correct']]) {
+    const m = re.exec(t);
+    if (!m) continue;
+    const i = (m[1] || m[2] || m[3]).toLowerCase().charCodeAt(0) - 97;
+    if (i < nOpts) return { i, how };
+  }
+  return { i: -1, how: '' };
 }
+const sentenceAnswer = (text, nOpts) => sentenceHit(text, nOpts).i;
 /* "Answer: amiodarone" — the option's own words, matched whole or as a prefix,
    and only when exactly one option matches. */
 function answerByText(rest, options) {
@@ -136,6 +165,22 @@ function inkAnswer(inks) {
   const odd = kinds.find(k => count[k] === 1);
   if (!odd || count[kinds.find(k => k !== odd)] !== inks.length - 1) return -1;
   return inks.indexOf(odd);
+}
+
+/* One option set in bold (most of its characters), every other not. */
+function boldAnswer(fracs) {
+  if (fracs.length < 3 || fracs.some(f => typeof f !== 'number')) return -1;
+  const strong = fracs.map((f, i) => [f, i]).filter(([f]) => f >= 0.6);
+  if (strong.length !== 1 || fracs.some((f, i) => i !== strong[0][1] && f > 0.3)) return -1;
+  return strong[0][1];
+}
+/* How the options of an unanswered question differ, as a pattern and never
+   words: ink groups by size ("3+1"), and how many are mostly bold. */
+function emphasisPattern(options) {
+  const g = {};
+  for (const o of options) g[o.ink || '?'] = (g[o.ink || '?'] || 0) + 1;
+  const bold = options.filter(o => typeof o.bf === 'number' && o.bf >= 0.6).length;
+  return `ink ${Object.values(g).sort((a, b) => b - a).join('+')}, bold ${bold}/${options.length}`;
 }
 
 /* ── running headers and footers ────────────────────────────────────────── */
@@ -175,35 +220,137 @@ function stripRunning(pages) {
    follows that. So a numbered reference list in an explanation, or "2. …" in
    the middle of a paragraph, is not a question: no options come after it
    before the real next stem does. */
+/* Every anchor that does NOT start a question is recorded with the rule that
+   turned it down, so a run on the real PDFs says why a page did not parse:
+     anchor-before-A   another stem or heading came before any option
+     key-before-A      an answer-key heading or entry came first
+     not-A-first       the first option-like line was lettered B or later
+     no-option         no option-like line within 80 lines
+     A-without-B       option A, but no B after it
+   and an option-A line no anchor ever reached is recorded as A-without-anchor,
+   with the shape and font of the line above it — where a stem should end. */
+const REASONS = ['anchor-before-A', 'key-before-A', 'not-A-first', 'no-option', 'A-without-B', 'A-without-anchor'];
 function segment(lines) {
   const kinds = lines.map(l => l.kind || lineKind(l.text));
   const starts = [];
   const orphanHeads = [];
+  const rejects = [];
+  const reached = new Set();
   for (let a = 0; a < lines.length; a++) {
     const ka = kinds[a];
     if (ka.k !== 'NUM' && ka.k !== 'HEAD') continue;
-    let stemAt = a, optAt = -1;
+    let stemAt = a, optAt = -1, why = 'no-option';
     if (ka.k === 'HEAD' && kinds[a + 1] && kinds[a + 1].k === 'NUM') stemAt = a + 1;
     for (let j = stemAt + 1; j < lines.length && j < a + 80; j++) {
       const k = kinds[j];
-      if (k.k === 'HEAD' || k.k === 'NUM') break;
-      if (k.k === 'OPT') { if (k.L === 0) optAt = j; break; }
+      if (k.k === 'HEAD' || k.k === 'NUM') { why = 'anchor-before-A'; break; }
+      if (k.k === 'KEYHEAD' || k.k === 'KEYENTRY') { why = 'key-before-A'; break; }
+      if (k.k === 'OPT') { if (k.L === 0) { optAt = j; reached.add(j); } else why = 'not-A-first'; break; }
     }
     let good = false;
     if (optAt > 0) {
+      why = 'A-without-B';
       const first = splitOptions(kinds[optAt].rest, 0);
       if (first.length > 1) good = true;
       for (let j = optAt + 1; !good && j < lines.length && j < optAt + 40; j++) {
         const k = kinds[j];
-        if (k.k === 'HEAD' || k.k === 'NUM' || k.k === 'ANS' || k.k === 'KEY') break;
+        if (k.k === 'HEAD' || k.k === 'NUM' || k.k === 'ANS' || k.k === 'KEY' || k.k === 'KEYHEAD' || k.k === 'KEYENTRY') break;
         if (k.k === 'OPT') { good = k.L === 1; break; }
       }
     }
-    if (good) { starts.push({ at: a, stemAt, optAt }); a = stemAt; }
-    else if (ka.k === 'HEAD') orphanHeads.push(lines[a].page);
+    if (good) { starts.push({ at: a, stemAt, optAt }); a = stemAt; continue; }
+    rejects.push({ page: lines[a].page, optPage: optAt > 0 ? lines[optAt].page : null, reason: why });
+    if (ka.k === 'HEAD') { orphanHeads.push(lines[a].page); a = stemAt; }
   }
+  const inKey = keySpans(kinds, starts.map(s => s.at), lines);
+  lines.forEach((l, i) => {
+    if (kinds[i].k !== 'OPT' || kinds[i].L !== 0 || reached.has(i) || inKey[i]) return;
+    const above = i > 0 ? lines[i - 1] : null;
+    rejects.push({ page: l.page, optPage: l.page, reason: 'A-without-anchor', above: above ? `${shapeOf(above.text)} ${above.font || '?'}` : '(top)' });
+  });
   const blocks = starts.map((s, i) => ({ ...s, end: i + 1 < starts.length ? starts[i + 1].at : lines.length }));
-  return { kinds, blocks, orphanHeads };
+  return { kinds, blocks, orphanHeads, rejects, inKey };
+}
+
+/* Which lines sit inside an answer-key section: from a key heading or entry
+   up to the next question start, stem-like line or "Question" heading — and
+   no further than its page, so a key does not hide the next page's options
+   (the next entry turns it back on). */
+function keySpans(kinds, startIdx, lines) {
+  const starts = new Set(startIdx), out = new Array(kinds.length).fill(false);
+  let on = false;
+  for (let i = 0; i < kinds.length; i++) {
+    const k = kinds[i].k;
+    if (i > 0 && lines[i].page !== lines[i - 1].page) on = false;
+    if (k === 'KEYHEAD' || k === 'KEYENTRY') on = true;
+    else if (starts.has(i) || k === 'HEAD' || k === 'NUM') on = false;
+    out[i] = on;
+  }
+  return out;
+}
+
+/* ── answer keys ────────────────────────────────────────────────────────── */
+/* Each entry of an answer-key section, with its rationale: the lines after it
+   up to the next entry, key heading, stem-like line, "Question" heading or
+   question start. `block` is the last question started before it. */
+function keyEntries(lines, kinds, blocks) {
+  const startAt = blocks.map(b => b.at), isStart = new Set(startAt);
+  const out = [];
+  let bi = -1;
+  for (let i = 0; i < lines.length; i++) {
+    while (bi + 1 < startAt.length && startAt[bi + 1] <= i) bi++;
+    const k = kinds[i];
+    if (k.k !== 'KEYENTRY') continue;
+    const parts = [k.rest];
+    for (let j = i + 1; j < lines.length && j < i + 40; j++) {
+      if (isStart.has(j) || ['KEYENTRY', 'KEYHEAD', 'HEAD', 'NUM'].includes(kinds[j].k)) break;
+      parts.push(lines[j].text);
+    }
+    out.push({ n: k.n, L: k.L, page: lines[i].page, block: bi, rationale: clean(parts.filter(Boolean).reduce((a, x) => (a ? joinWrapped(a, x) : x), '')) });
+  }
+  return out;
+}
+
+/* Maps key entries to questions. Entries after the same question form a RUN;
+   a run answers the questions since the previous run (numbers restart per
+   chapter, so the scope is what the key follows, never the whole book). In
+   that scope the k-th entry numbered n goes to the k-th question numbered n
+   — which covers a key page after each question page and a key section after
+   each chapter or at the end alike. If the scope holds a different number of
+   questions numbered n than the run has entries, every entry for n is
+   AMBIGUOUS and none is used. A key never overrides an answer the question's
+   own page states: it is compared, agreeing or disagreeing, and counted. */
+function applyKey(questions, entries) {
+  const t = { entries: entries.length, runs: 0, keyed: 0, agree: 0, disagree: 0, unmatched: 0, ambiguous: 0, pastOptions: 0,
+              unmatchedPages: [], ambiguousPages: [] };
+  const runs = [];
+  for (const e of entries) {
+    const r = runs[runs.length - 1];
+    if (r && r.block === e.block) r.list.push(e); else runs.push({ block: e.block, list: [e] });
+  }
+  t.runs = runs.length;
+  let last = -1;
+  for (const r of runs) {
+    const scope = r.block < 0 ? [] : questions.slice(last + 1, r.block + 1);
+    last = Math.max(last, r.block);
+    const byN = new Map(), inRun = new Map(), seen = new Map();
+    for (const q of scope) if (q.n != null) { if (!byN.has(q.n)) byN.set(q.n, []); byN.get(q.n).push(q); }
+    for (const e of r.list) inRun.set(e.n, (inRun.get(e.n) || 0) + 1);
+    for (const e of r.list) {
+      const o = seen.get(e.n) || 0;
+      seen.set(e.n, o + 1);
+      const cands = byN.get(e.n) || [];
+      if (!cands.length) { t.unmatched++; t.unmatchedPages.push(e.page); continue; }
+      if (cands.length !== inRun.get(e.n)) { t.ambiguous++; t.ambiguousPages.push(e.page); continue; }
+      const q = cands[o];
+      if (e.L >= q.options.length) { t.pastOptions++; continue; }
+      if (q.ci >= 0) { if (q.ci === e.L) t.agree++; else t.disagree++; continue; }
+      q.ci = e.L; q.answerBy = 'key'; q.noAnswerShapes = []; q.emphasis = '';
+      if (e.rationale) q.ex = q.ex.concat([e.rationale]);
+      t.keyed++;
+    }
+  }
+  return t;
 }
 
 function layoutOf(lines, kinds, b) {
@@ -237,7 +384,7 @@ function parseBlock(lines, kinds, b) {
     const want = options.length;
     if (k.k === 'OPT' && k.L === want) {
       const split = splitOptions(k.rest, k.L);
-      for (const o of split) options.push({ t: o.t, ink: lines[j].ink || '' });
+      for (const o of split) options.push({ t: o.t, ink: lines[j].ink || '', bf: lines[j].bf });
       lastLine = lines[j]; j++; continue;
     }
     if (options.length && lastLine && continues(lastLine, lines[j], k, 8)) {
@@ -251,7 +398,8 @@ function parseBlock(lines, kinds, b) {
      "Question" heading that started none, which is never explanation. */
   const trail = [];
   const lastPage = lines[b.optAt].page + TRAIL_PAGES;
-  for (; j < b.end && kinds[j].k !== 'HEAD' && lines[j].page <= lastPage; j++) trail.push(j);
+  const STOP = new Set(['HEAD', 'KEYHEAD', 'KEYENTRY']);   // an answer-key section is nobody's explanation
+  for (; j < b.end && !STOP.has(kinds[j].k) && lines[j].page <= lastPage; j++) trail.push(j);
 
   /* The answer, in the order of how directly the page states it. */
   let ci = -1, by = '';
@@ -265,7 +413,7 @@ function parseBlock(lines, kinds, b) {
     for (let u = t + 1; ci < 0 && u < Math.min(trail.length, t + 4); u++) {
       const txt = lines[trail[u]].text;
       ci = letterFrom(txt, nOpts); if (ci >= 0) { by = 'answer-line'; break; }
-      ci = sentenceAnswer(txt, nOpts); if (ci >= 0) { by = 'answer-line'; break; }
+      ci = sentenceHit(txt, nOpts).i; if (ci >= 0) { by = 'answer-line'; break; }
       ci = answerByText(txt, options); if (ci >= 0) { by = 'answer-text'; break; }
     }
   }
@@ -275,13 +423,17 @@ function parseBlock(lines, kinds, b) {
     if (s >= 0) { ci = s; by = 'short-line'; shortAt = trail[t]; }
   }
   if (ci < 0) {
-    const all = trail.map(i => lines[i].text).join(' ');
-    ci = sentenceAnswer(all, nOpts);
-    if (ci >= 0) by = 'sentence';
+    const hit = sentenceHit(trail.map(i => lines[i].text).join(' '), nOpts);
+    ci = hit.i;
+    if (ci >= 0) by = hit.how;
   }
   if (ci < 0) {
     ci = inkAnswer(options.map(o => o.ink));
     if (ci >= 0) by = 'ink';
+  }
+  if (ci < 0) {
+    ci = boldAnswer(options.map(o => o.bf));
+    if (ci >= 0) by = 'bold';
   }
 
   /* The explanation: every trailing line but a bare answer letter, a new
@@ -304,13 +456,16 @@ function parseBlock(lines, kinds, b) {
   return {
     n: n == null ? null : n,
     stem: clean(stemParts.reduce((a, s) => (a ? joinWrapped(a, s) : s), '')),
-    options: options.map(o => ({ t: clean(o.t), ink: o.ink })),
+    options: options.map(o => ({ t: clean(o.t), ink: o.ink, bf: o.bf })),
     ci, answerBy: by,
     ex: paras.filter(Boolean),
     layout: layoutOf(lines, kinds, b),
     page: lines[b.at].page,
     pos: { page: lines[b.at].page, top: lines[b.at].y + (lines[b.at].size || 10) },
     noAnswerShapes,
+    emphasis: ci >= 0 ? '' : emphasisPattern(options),
+    stemFont: lines[b.stemAt].font || '?',
+    at: b.at,
   };
 }
 
@@ -330,16 +485,34 @@ function parseDocument(pages) {
   const { pages: kept, dropped } = stripRunning(pages);
   const lines = [];
   for (const pg of kept) for (const l of (pg.lines || [])) lines.push({ ...l, page: pg.p });
-  const { kinds, blocks, orphanHeads } = segment(lines);
-  const questions = blocks.map(b => parseBlock(lines, kinds, b)).filter(q => q.options.length >= 2);
+  const { kinds, blocks, orphanHeads, rejects } = segment(lines);
+  const parsed = blocks.map(b => parseBlock(lines, kinds, b));
+  const key = applyKey(parsed, keyEntries(lines, kinds, blocks));
+  const questions = parsed.filter(q => q.options.length >= 2);
 
   const used = new Set();
   for (const b of blocks) { used.add(lines[b.at].page); used.add(lines[b.optAt].page); }
   const firstPage = blocks.length ? lines[blocks[0].at].page : Infinity;
   const questionish = new Set();
   lines.forEach((l, i) => { if (kinds[i].k === 'HEAD' || (kinds[i].k === 'OPT' && kinds[i].L === 0)) questionish.add(l.page); });
+  const inKey = keySpans(kinds, blocks.map(b => b.at), lines);
+  lines.forEach((l, i) => { if (inKey[i] && kinds[i].k === 'OPT') questionish.delete(l.page); });
   const unparsed = [...questionish].filter(p => !used.has(p)).sort((a, b) => a - b);
   const textPages = kept.filter(pg => pg.lines && pg.lines.length).map(pg => pg.p);
+  /* Why: every rejection by rule, and each unparsed page under the rules
+     that turned down an anchor or option on it. */
+  const rejectsByReason = {}, unparsedByReason = {}, aboveOrphanA = {};
+  for (const r of rejects) {
+    rejectsByReason[r.reason] = (rejectsByReason[r.reason] || 0) + 1;
+    if (r.above) aboveOrphanA[r.above] = (aboveOrphanA[r.above] || 0) + 1;
+  }
+  for (const p of unparsed) {
+    const rs = new Set(rejects.filter(r => r.page === p || r.optPage === p).map(r => r.reason));
+    if (!rs.size) rs.add('unexplained');
+    for (const r of rs) (unparsedByReason[r] = unparsedByReason[r] || []).push(p);
+  }
+  let headingsAtTop = 0;
+  for (const pg of kept) for (const l of (pg.lines || [])) if (HEAD_RE.test(clean(l.text)) && l.y > pg.y0 + pg.h * 0.88) headingsAtTop++;
   return {
     questions,
     stats: {
@@ -350,6 +523,7 @@ function parseDocument(pages) {
       unparsedPages: unparsed,
       beforeFirstQuestion: textPages.filter(p => p < firstPage).length,
       orphanHeadings: orphanHeads,
+      key, rejectsByReason, unparsedByReason, aboveOrphanA, headingsAtTop,
     },
   };
 }
@@ -539,12 +713,14 @@ const top = (o, n) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n).
 /* One file's tally, from its parse. Every value is a number, a layout name,
    a page number or a line shape. */
 function tallyFile(name, parsed) {
-  const t = { name, layouts: {}, answerBy: {}, noAnswerPages: [], noAnswerShapes: {}, parsed: parsed.questions.length, ...parsed.stats };
+  const t = { name, layouts: {}, answerBy: {}, noAnswerPages: [], noAnswerShapes: {}, emphasis: {}, parsed: parsed.questions.length, ...parsed.stats };
   for (const q of parsed.questions) {
-    const L = t.layouts[q.layout] || (t.layouts[q.layout] = { parsed: 0, noAnswer: 0 });
+    const L = t.layouts[q.layout] || (t.layouts[q.layout] = { parsed: 0, noAnswer: 0, fonts: {} });
     L.parsed++;
+    L.fonts[q.stemFont || '?'] = (L.fonts[q.stemFont || '?'] || 0) + 1;
     if (q.ci < 0) {
       L.noAnswer++; t.noAnswerPages.push(q.page);
+      if (q.emphasis) t.emphasis[q.emphasis] = (t.emphasis[q.emphasis] || 0) + 1;
       for (const s of q.noAnswerShapes) { const k = `${s.shape} ${s.ink || '-'}${s.bold ? ' bold' : ''}`; t.noAnswerShapes[k] = (t.noAnswerShapes[k] || 0) + 1; }
     } else t.answerBy[q.answerBy] = (t.answerBy[q.answerBy] || 0) + 1;
   }
@@ -558,11 +734,22 @@ function formatReport(files, totals) {
     out.push(`  pages ${t.pages}   with a text layer ${t.textPages}   without one (skipped) ${t.noTextPages.length}${t.noTextPages.length ? ` — pages ${ranges(t.noTextPages)}` : ''}`);
     out.push(`  running header/footer lines dropped ${t.runningLinesDropped}   text pages before the first question ${t.beforeFirstQuestion}`);
     out.push(`  questions parsed ${t.parsed}`);
-    for (const [k, L] of Object.entries(t.layouts)) out.push(`    layout ${k.padEnd(8)} parsed ${String(L.parsed).padStart(4)}   missing an answer ${L.noAnswer}`);
+    for (const [k, L] of Object.entries(t.layouts)) out.push(`    layout ${k.padEnd(8)} parsed ${String(L.parsed).padStart(4)}   missing an answer ${L.noAnswer}   stem fonts ${top(L.fonts || {}, 3)}`);
     out.push(`  answer found by: ${top(t.answerBy, 8)}`);
     out.push(`  missing an answer ${t.noAnswerPages.length}${t.noAnswerPages.length ? ` — pages ${ranges(t.noAnswerPages)}` : ''}`);
     if (t.noAnswerPages.length) out.push(`    the first lines after their options, as shapes: ${top(t.noAnswerShapes, 8)}`);
+    if (t.noAnswerPages.length) out.push(`    how their options differ: ${top(t.emphasis || {}, 6)}`);
+    const K = t.key || {};
+    out.push(`  answer key: entries ${K.entries || 0} in ${K.runs || 0} runs   keyed ${K.keyed || 0}   agreeing with the page ${K.agree || 0}   disagreeing ${K.disagree || 0}` +
+             `   unmatched ${K.unmatched || 0}   ambiguous ${K.ambiguous || 0}   letter past the options ${K.pastOptions || 0}`);
+    if (K.unmatched) out.push(`    unmatched entries on pages ${ranges(K.unmatchedPages)}`);
+    if (K.ambiguous) out.push(`    ambiguous entries on pages ${ranges(K.ambiguousPages)}`);
+    out.push(`  anchors turned down, by rule: ${top(t.rejectsByReason || {}, 8)}`);
     out.push(`  pages that look like questions but did not parse: ${ranges(t.unparsedPages)}`);
+    for (const [r, ps] of Object.entries(t.unparsedByReason || {}).sort((a, b) => b[1].length - a[1].length))
+      out.push(`    ${r.padEnd(16)} ${String(ps.length).padStart(4)} pages — ${ranges(ps)}`);
+    if (Object.keys(t.aboveOrphanA || {}).length) out.push(`    the line above an option A no stem reached, as shape and font: ${top(t.aboveOrphanA, 6)}`);
+    if (t.headingsAtTop) out.push(`  "Question" headings in the top eighth of a page: ${t.headingsAtTop}`);
     if (t.orphanHeadings.length) out.push(`  "Question" headings with no question parsed under them: ${t.orphanHeadings.length} — pages ${ranges(t.orphanHeadings)}`);
     out.push(`  figures: ${t.figures || 0} kept, ${t.tiny || 0} too small to be one, ${t.pageSized || 0} page-sized (a scan, not a figure), ${t.unassigned || 0} above the first question`);
   }
@@ -579,7 +766,8 @@ function formatReport(files, totals) {
 
 module.exports = {
   CATEGORY, ID_PREFIX, DUP_THRESHOLD, REVERSE_MIN, TRAIL_PAGES,
-  lineKind, splitOptions, shortAnswer, letterFrom, sentenceAnswer, answerByText, inkAnswer,
+  lineKind, splitOptions, shortAnswer, letterFrom, sentenceAnswer, sentenceHit, answerByText, inkAnswer, boldAnswer, emphasisPattern,
+  keySpans, keyEntries, applyKey, REASONS,
   stripRunning, segment, parseBlock, parseDocument, attachImages, joinWrapped, shapeOf,
   norm, stemShingles, buildIndex, addToIndex, bestOverlap, isOurs, bankStems, dedupe,
   inferShape, toBankQuestion, idFor, mergeBank, ranges, tallyFile, formatReport,
