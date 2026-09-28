@@ -72,6 +72,7 @@
 const fs = require('fs');
 const path = require('path');
 const A = require('./older-acc.js');
+const { keyVsProse } = require('./key-prose.js');
 
 const ROOT = path.join(__dirname, '..');
 const args = process.argv.slice(2);
@@ -310,19 +311,25 @@ async function readPdf(browser, file) {
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(path.join(OUT, 'figures'), { recursive: true });
   fs.writeFileSync(path.join(OUT, MARKER), 'written by tools/older-acc-import.js\n');
-  const staged = [];
+  const staged = [], proseDisagrees = [];
   let figures = 0;
   for (const q of d.kept) {
     const id = A.idFor(q.stem);
-    const figs = q.images.map((im, i) => { const n = `${id}_${i + 1}.jpg`; fs.writeFileSync(path.join(OUT, 'figures', n), Buffer.from(im.jpg, 'base64')); return n; });
-    figures += figs.length;
-    staged.push(A.toBankQuestion(q, shape, { from: `${q.file} p${q.page}`, figs }));
+    const names = q.images.map((im, i) => `${id}_${i + 1}.jpg`);
+    const bq = A.toBankQuestion(q, shape, { from: `${q.file} p${q.page}`, figs: names });
+    /* Its key against its own commentary — the check tests/verify-keys.js
+       runs on the built bank, from the same module. Two records of the answer
+       that disagree cannot be settled here, so the question is not staged. */
+    if (keyVsProse(bq).disagrees) { proseDisagrees.push(`${q.file.replace(/\.pdf$/i, '')} p${q.page}`); continue; }
+    q.images.forEach((im, i) => fs.writeFileSync(path.join(OUT, 'figures', names[i]), Buffer.from(im.jpg, 'base64')));
+    figures += names.length;
+    staged.push(bq);
   }
   if (new Set(staged.map(q => q.id)).size !== staged.length) { console.error('two staged questions share an id — nothing usable was written'); process.exit(1); }
   fs.writeFileSync(path.join(OUT, 'questions.json'), JSON.stringify(staged));
 
   const totals = { parsed: candidates.length, noAnswer: candidates.length - answered.length, dupBank: d.dupBank, dupSelf: d.dupSelf,
-    added: staged.length, figures, hist: d.hist, threshold: THRESHOLD, bankStems: stems.length, stemKey: key };
+    added: staged.length, proseDisagrees, figures, hist: d.hist, threshold: THRESHOLD, bankStems: stems.length, stemKey: key };
   const report = { files: tallies, totals };
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2));
   console.log(A.formatReport(tallies, totals));

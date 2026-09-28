@@ -755,7 +755,9 @@ function formatReport(files, totals) {
   }
   if (totals) {
     out.push('', 'all files');
-    out.push(`  parsed ${totals.parsed}   missing an answer (not staged) ${totals.noAnswer}   already in the bank ${totals.dupBank}   repeated within these PDFs ${totals.dupSelf}   ADDED ${totals.added}`);
+    out.push(`  parsed ${totals.parsed}   missing an answer (not staged) ${totals.noAnswer}   already in the bank ${totals.dupBank}   repeated within these PDFs ${totals.dupSelf}` +
+             `   key disagrees with its own commentary (not staged) ${(totals.proseDisagrees || []).length}   ADDED ${totals.added}`);
+    if ((totals.proseDisagrees || []).length) out.push(`    key against commentary, disagreeing: ${totals.proseDisagrees.join(', ')}`);
     out.push(`  added figures ${totals.figures}`);
     out.push(`  best overlap with the bank, by tenths (0.0-0.1 … 0.9-1.0): ${totals.hist.bank.join(' ')}`);
     out.push(`  best overlap with an earlier import, by tenths: ${totals.hist.self.join(' ')}`);

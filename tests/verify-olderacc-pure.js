@@ -552,5 +552,30 @@ head('the built bank, split: the export part exact, the older part exactly its s
   ok('and a staging is counted, question for question and figure for figure', !!rs && rs.count === 3 && rs.figs === 2, JSON.stringify(rs));
 }
 
+head('a key its own commentary contradicts is not staged');
+{
+  /* tools/key-prose.js, the matcher tests/verify-keys.js runs on the built
+     bank. The owner's first merged build failed there on one imported
+     question whose commentary named a different option from its key. */
+  const { keyVsProse } = require('../tools/key-prose.js');
+  const o = ['Beta blocker therapy.', 'Coronary angiography.', 'Exercise stress test.', 'Reassurance only.'].map(t => ({ t }));
+  const agree = keyVsProse({ o, ci: 1, ex: 'Background. The correct answer is coronary angiography. More.' });
+  const clash = keyVsProse({ o, ci: 0, ex: 'Background. The correct answer is coronary angiography. More.' });
+  const negated = keyVsProse({ o, ci: 0, ex: 'Coronary angiography is not the correct answer choice here.' });
+  const silent = keyVsProse({ o, ci: 0, ex: 'Nothing here names an answer.' });
+  ok('a commentary naming the keyed option agrees', agree.checkable && !agree.disagrees);
+  ok('a commentary naming another option is caught', clash.checkable && clash.disagrees);
+  ok('an argument against a distractor is not read as a claim', !negated.checkable && !negated.disagrees);
+  ok('and a commentary naming nothing is not judged at all', !silent.checkable && !silent.disagrees);
+  const rep = A.formatReport([], { parsed: 5, noAnswer: 1, dupBank: 1, dupSelf: 0, added: 2, figures: 0, proseDisagrees: ['SECOND p12'],
+    hist: { bank: Array(10).fill(0), self: Array(10).fill(0) }, threshold: 0.5, bankStems: 9, stemKey: 's' });
+  ok('the report counts them and names their pages', /key disagrees with its own commentary \(not staged\) 1/.test(rep) && /disagreeing: SECOND p12/.test(rep),
+     rep.split('\n').find(l => /commentary/.test(l)) || 'no such line');
+  /* Read blanked, per CLAUDE.md: a comment quoting the pattern must not pass for the code. */
+  const { blankComments } = require('./_source.js');
+  const src = blankComments(require('fs').readFileSync(require('path').join(__dirname, '..', 'tools', 'older-acc-import.js'), 'utf8'));
+  ok('and the importer checks every question before staging it', /if \(keyVsProse\(bq\)\.disagrees\)\s*\{[\s\S]{0,160}?continue;/.test(src));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
