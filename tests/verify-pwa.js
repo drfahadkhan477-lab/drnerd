@@ -15,6 +15,7 @@
  */
 'use strict';
 const path = require('path');
+const { splitBank, readStaging } = require('./_olderbank.js');
 const { launch, heapUsedBytes, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
@@ -368,9 +369,13 @@ async function heapAfterBoot(page, url) {
   head('content is served intact');
   {
     const qs = await (await fetch(ORIGIN + '/content/questions.json')).json();
-    ok('all 639 questions present', qs.length === 639, String(qs.length));
+    /* The export's part is held to the export's own totals; a merged older
+       bank is held to the staging it came from — see tests/_olderbank.js. */
+    const bank = splitBank(qs, q => (q.figs ? q.figs.length : 0), readStaging());
+    ok('all 639 questions of the export present', bank.exportCount === 639, String(bank.exportCount));
     const figs = qs.reduce((a, q) => a + (q.figs ? q.figs.length : 0), 0);
-    ok('all 408 figures referenced', figs === 408, String(figs));
+    ok('all 408 of the export\'s figures referenced', bank.exportFigs === 408, String(bank.exportFigs));
+    ok('and an older bank, if merged, is exactly its staging', bank.ok, bank.why);
     const declared = qs.reduce((a, q) => a + (q.img || 0), 0);
     ok('q.img and the extracted figure lists agree', declared === figs, `${declared} vs ${figs}`);
 

@@ -523,5 +523,34 @@ head('what the importer prints');
   ok('page lists are ranges', A.ranges([1, 2, 3, 7, 9, 10]) === '1-3, 7, 9-10' && A.ranges([]) === 'none');
 }
 
+head('the built bank, split: the export part exact, the older part exactly its staging');
+{
+  /* tests/_olderbank.js — what verify-pwa and verify-chapters hold a merged
+     build to. Invented banks: two export questions (one with a figure) and,
+     when merged, two older ones (three figures). */
+  const OB = require('./_olderbank.js');
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const figsOf = q => (q.figs || []).length;
+  const exp = [{ id: 'VAL_1', ch: 'Valves', figs: ['a'] }, { id: 'COR_2', ch: 'Coronary' }];
+  const older = [{ id: 'OAB_1', ch: OB.CATEGORY, figs: ['x', 'y'] }, { id: 'OAB_2', ch: OB.CATEGORY, figs: ['z'] }];
+  const staged = { count: 2, figs: 3 };
+  const none = OB.splitBank(exp, figsOf, staged);
+  ok('an unmerged build passes, the export counted whole', none.ok && none.exportCount === 2 && none.exportFigs === 1 && none.olderCount === 0, none.why);
+  const whole = OB.splitBank(exp.concat(older), figsOf, staged);
+  ok('a build carrying exactly the staging passes, and the export part is unchanged by it', whole.ok && whole.exportCount === 2 && whole.exportFigs === 1, whole.why);
+  const part = OB.splitBank(exp.concat(older.slice(0, 1)), figsOf, staged);
+  ok('a partial merge fails', !part.ok, part.why);
+  const extraFig = OB.splitBank(exp.concat([older[0], { ...older[1], figs: ['z', 'w'] }]), figsOf, staged);
+  ok('so does one whose figures differ from the staging', !extraFig.ok, extraFig.why);
+  const blind = OB.splitBank(exp.concat(older), figsOf, null);
+  ok('and an older bank with no staging here to compare is refused, not passed', !blind.ok, blind.why);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olderbank-'));
+  const f = path.join(dir, 'questions.json');
+  ok('no staging reads as none', OB.readStaging(f) === null);
+  fs.writeFileSync(f, JSON.stringify([{ figs: ['a', 'b'] }, { figs: [] }, {}]));
+  const rs = OB.readStaging(f);
+  ok('and a staging is counted, question for question and figure for figure', !!rs && rs.count === 3 && rs.figs === 2, JSON.stringify(rs));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

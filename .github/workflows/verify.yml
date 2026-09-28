@@ -238,7 +238,7 @@ jobs:
         run: node tests/verify-refsmerge-pure.js
       - name: word order counts in the ranker — the note holding the phrase outranks one holding its words scattered, and questions rank as before (9 checks)
         run: node tests/verify-phrase-pure.js
-      - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, and no word of it is printed (125 checks)
+      - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, no word of it is printed, and a merged build carries exactly the staging (132 checks)
         run: node tests/verify-olderacc-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
         run: node tests/verify-memorizer-chunk-pure.js
