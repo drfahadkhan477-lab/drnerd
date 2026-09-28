@@ -261,6 +261,7 @@ const SUITES = [
   ['heartbake-pure', 'the heart is loaded from a mesh baked at build time, value for value, and any other copy is refused'],
   ['refsmerge-pure', 'a reference unit adds only sections that are new and high yield, and what it writes splits back into notes'],
   ['phrase-pure', 'a note holding the query\'s words in the query\'s order outranks one holding them scattered; questions, one-word queries and stubs rank as before'],
+  ['olderacc-pure', 'an older ACC bank\'s questions parse in each layout, keep their answer or are left out, skip what the bank has, and print no word of it'],
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
@@ -359,7 +360,7 @@ const SUITES = [
    Windows laptop at 43b53db (5088 checks across 118 suites, 133 on the split
    build), which measured the four that had been waiting: refimgdefer-pure,
    glass, refsmerge-pure and phrase-pure. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['olderacc-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
