@@ -321,13 +321,19 @@ function keyTerms(notes, n = 5) {
       .filter(([w]) => df[w] * 2 <= N).sort((a, b) => b[1] - a[1]);
     const own = scored.filter(([w]) => df[w] === 1);
     const ranked = (own.length >= 2 ? own : own.concat(scored.filter(([w]) => df[w] > 1))).slice(0, n).map(([w]) => w);
-    /* Shown as the note spells it, in the order it uses them. */
+    /* Shown as the note spells it, in the order it uses them. Found by
+       splitting on everything that is not a letter or digit — a title term is
+       only letters and digits — and not on spaces: the first version split on
+       spaces, so a term inside "sacubitril/valsartan" or "(LVEF)," was never
+       found, silently dropped, and a note that lost them all fell back to its
+       opening words. */
     const shown = Object.create(null), order = [];
-    for (const raw of c.body.replace(IMG, ' ').split(/\s+/)) {
-      const k = raw.toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9%]+$/g, '');
-      if (ranked.includes(k) && !(k in shown)) { shown[k] = raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9%]+$/g, ''); order.push(k); }
+    for (const raw of c.body.replace(IMG, ' ').split(/[^A-Za-z0-9]+/)) {
+      const k = raw.toLowerCase();
+      if (ranked.includes(k) && !(k in shown)) { shown[k] = raw; order.push(k); }
     }
     c.terms = order.map(k => shown[k]);
+    c.basis = !ranked.length ? 'opening' : own.length >= 2 ? 'own' : 'shared';
   });
 }
 const about = (c, n) => (c.terms && c.terms.length ? c.terms.slice(0, n).join(', ') : lead(c.body, n + 3));
@@ -469,6 +475,22 @@ if (require.main === module) {
     console.log(`  candidates ${t.sections} (${t.figureEntries} atlas figures, ${t.sections - t.figureEntries} text chunks)   repeats of each other ${t.repeat}   already in your notes ${t.covered}`);
     console.log(`  dropped: under ${MIN_WORDS} words ${t.thin}, pointing elsewhere ("see above"…) ${t.backref}, low-yield heading ${t.lowHeading}, score under ${MIN} ${t.lowScore}`);
     console.log(`  KEPT ${t.keptFigures} figure notes and ${t.kept - t.keptFigures} text notes, citing ${t.figures} figures`);
+    {
+      /* How the titles came out, as counts: what each was made of, and how many
+         another kept note holds every title term of — the shape that loses a
+         title search. */
+      const by = { own: 0, shared: 0, opening: 0, heading: 0 };
+      const sets = r.kept.map(c => new Set(words(c.body)));
+      let held = 0;
+      r.kept.forEach((c, i) => {
+        const titled = c.terms && c.terms.length && noteTitle(c) !== c.heading;
+        by[titled ? c.basis : (noteTitle(c) === c.heading ? 'heading' : 'opening')]++;
+        const ts = (c.terms || []).map(x => x.toLowerCase());
+        if (ts.length && sets.some((s2, j) => j !== i && ts.every(x => s2.has(x)))) held++;
+      });
+      console.log(`  titles: ${by.own} by terms only they have, ${by.shared} by rarer shared terms, ${by.opening} by opening words, ${by.heading} their own heading;` +
+                  ` ${held} whose every title term another note also has`);
+    }
     console.log(`  score of the unique sections (signals per 100 words): ${bucket.join('   ')}`);
     const outDir = path.join(OUT, u.unit);
     fs.rmSync(outDir, { recursive: true, force: true });

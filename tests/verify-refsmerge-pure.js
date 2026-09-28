@@ -228,6 +228,11 @@ M.keyTerms(pair);
 const capWords = new Set(cap.toLowerCase().split(' '));
 ok('the longer passage is titled by terms the shorter note repeating it does not have',
    pair[0].terms.length >= 2 && pair[0].terms.every(t => !capWords.has(t.toLowerCase())), pair[0].terms.join(', '));
+const slashed = [{ kind: 'text', heading: 'PDF Page 1', body: 'Given as sacubitril/valsartan (entrestozz), then (entrestozz), with sacubitril/valsartan again.' },
+  ...Array.from({ length: 4 }, (_, i) => ({ kind: 'text', heading: 'PDF Page 2', body: prose('sl' + i, 20) }))];
+M.keyTerms(slashed);
+ok('a title term inside punctuation — "a/b", "(term)," — is still found and shown', ['sacubitril', 'valsartan', 'entrestozz'].every(t => slashed[0].terms.includes(t)) && slashed[0].basis === 'own',
+   `${slashed[0].terms.join(', ') || 'no terms'} (${slashed[0].basis})`);
 ok('and a hyphenated or dotted term is never a title term', (() => { const x = [{ kind: 'text', heading: 'PDF Page 1', body: 'NT-proBNP NT-proBNP 2.5mg alphaone betaone' },
    ...Array.from({ length: 4 }, (_, i) => ({ kind: 'text', heading: 'PDF Page 2', body: prose('hy' + i, 20) }))]; M.keyTerms(x); return x[0].terms.every(t => /^[a-z][a-z0-9]*$/i.test(t)); })());
 ok('a source titled only by its file name reads as words', /^---\ntitle: Braunwald 13th HF full\n/.test(M.renderSelected(
