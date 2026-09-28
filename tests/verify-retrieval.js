@@ -122,7 +122,11 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
      rather than guessed at. Titles only — every result is filtered to
      kind 'r' before ranking, so no question text can reach this output. */
   const MISSES = process.argv.includes('--misses');
-  const r = await page.evaluate((MISSES) => {
+  /* --why counts what kind of note each shape missed, and what beat it —
+     numbers only, no titles, so it can be pasted from a machine whose notes
+     are licensed. Off by default and changes nothing measured. */
+  const WHY = process.argv.includes('--why');
+  const r = await page.evaluate(({ MISSES, WHY }) => {
     const notes = REF.filter(x => x && x.title && x.title.trim().length > 6);
     const transpose = s => {
       const w = s.split(/\s+/);
@@ -152,28 +156,53 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
     const run = q => search(q, { limit: 40 })
       .filter(h => h.meta.kind === 'r').slice(0, 10).map(h => h.meta.id);
 
+    const byId = Object.create(null);
+    for (const x of notes) byId[x.id] = x;
+    const bw = x => !!x && /(^|,)\s*braunwald\s*(,|$)/i.test(String(x.tags || ''));
+    const wordset = x => new Set(String(x && x.body || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3));
+    const titleCount = Object.create(null);
+    for (const x of notes) titleCount[x.title] = (titleCount[x.title] || 0) + 1;
+    /* For each miss: is the note a Braunwald one, is the winner, does the
+       winner hold most of the missed note's words (a near-copy), and is the
+       missed title one another note also has (unfindable by title at all). */
+    const tallyWhy = pairs => {
+      const t = { misses: pairs.length, missedBW: 0, winnerBW: 0, bwBeatenByBW: 0, nearCopy: 0, sharedTitle: 0, noWinner: 0 };
+      for (const [id, win] of pairs) {
+        const a = byId[id], b = byId[win];
+        if (bw(a)) t.missedBW++;
+        if (!b) { t.noWinner++; continue; }
+        if (bw(b)) t.winnerBW++;
+        if (bw(a) && bw(b)) t.bwBeatenByBW++;
+        const A = wordset(a), B = wordset(b);
+        let shared = 0; for (const w of A) if (B.has(w)) shared++;
+        if (A.size && shared / A.size >= 0.5) t.nearCopy++;
+        if (titleCount[a.title] > 1) t.sharedTitle++;
+      }
+      return t;
+    };
     const titleOf = Object.create(null);
     for (const x of notes) titleOf[x.id] = x.title;
     const measure = set => {
       let r1 = 0, r5 = 0, mrr = 0, empty = 0;
-      const missed = [];
+      const missed = [], why = [];
       for (const { q, id } of set) {
         let ids; try { ids = run(q); } catch (e) { ids = []; }
         if (!ids.length) empty++;
         const k = ids.indexOf(id);
         if (k === 0) r1++;
         else if (MISSES) missed.push(titleOf[id] + '  ->  ' + (ids.length ? titleOf[ids[0]] : '(nothing)'));
+        if (WHY && k !== 0) why.push([id, ids[0]]);
         if (k > -1 && k < 5) r5++;
         if (k > -1) mrr += 1 / (k + 1);
       }
       const n = set.length;
-      return { n, r1: r1 / n, r5: r5 / n, mrr: mrr / n, empty, missed };
+      return { n, r1: r1 / n, r5: r5 / n, mrr: mrr / n, empty, missed, why: WHY ? tallyWhy(why) : null };
     };
 
-    const out = { notes: notes.length, docs: notes.length + ALL_Q.length };
+    const out = { notes: notes.length, docs: notes.length + ALL_Q.length, bwNotes: notes.filter(bw).length };
     for (const k of Object.keys(sets)) out[k] = measure(sets[k]);
     return out;
-  }, MISSES);
+  }, { MISSES, WHY });
 
   head('the corpus is the one production searches');
   ok('the reference library is loaded', r.notes > 100, `${r.notes} notes`);
@@ -321,6 +350,10 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
 
   console.log(`\n  measured: exact ${pct(r.exact.r1)} · typo ${pct(r.typo.r1)} · ` +
               `prefix ${pct(r.prefix.r1)} · body ${pct(r.body.r1)}  (R@1)`);
+  if (WHY) {
+    console.log(`\n  why (counts only): ${r.notes} notes, ${r.bwNotes} of them Braunwald`);
+    for (const k of ['exact', 'typo', 'prefix', 'body']) console.log(`    ${k.padEnd(6)} ${JSON.stringify(r[k].why)}`);
+  }
   if (MISSES) for (const k of ['exact', 'typo', 'prefix', 'body']) {
     console.log(`\n  missed at R@1, ${k} (${r[k].missed.length}):`);
     for (const m of r[k].missed) console.log('    ' + m);
