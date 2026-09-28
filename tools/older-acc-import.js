@@ -331,19 +331,24 @@ async function readPdf(browser, file) {
 function merge() {
   const target = path.resolve(opt('--merge', path.join(ROOT, 'build', 'systole.html')));
   const qFile = path.join(OUT, 'questions.json');
-  if (!fs.existsSync(target)) { console.error(`${target}: no build there — run node scripts/build.js first`); process.exit(1); }
-  if (!fs.existsSync(qFile)) { console.error(`${qFile}: nothing staged — run the import first`); process.exit(1); }
-  const staged = JSON.parse(fs.readFileSync(qFile, 'utf8'));
+  /* Read, not checked-then-read: a missing file is reported from the read
+     itself, so nothing can change between a check and the use it guards. */
+  const readOr = (f, why) => { try { return fs.readFileSync(f, 'utf8'); } catch (e) { if (e.code === 'ENOENT') { console.error(`${f}: ${why}`); process.exit(1); } throw e; } };
+  let html = readOr(target, 'no build there — run node scripts/build.js first');
+  const staged = JSON.parse(readOr(qFile, 'nothing staged — run the import first'));
   const figData = {};
   for (const q of staged) figData[q.id] = (q.figs || []).map(n => 'data:image/jpeg;base64,' + fs.readFileSync(path.join(OUT, 'figures', n)).toString('base64'));
-  let html = fs.readFileSync(target, 'utf8');
   const QRE = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/, IRE = /\nconst IMGS=(\{[\s\S]*?\});\n/;
   const qm = QRE.exec(html), im = IRE.exec(html);
   if (!qm || !im) { console.error('could not find "const ALL_Q=" and "const IMGS=" in the build — is it a single-file build from scripts/build.js?'); process.exit(1); }
   const r = A.mergeBank(JSON.parse(qm[1]), JSON.parse(im[1]), staged, figData);
   html = html.replace(QRE, () => '\nconst ALL_Q=' + JSON.stringify(r.bank) + ';\n');
   html = html.replace(IRE, () => '\nconst IMGS=' + JSON.stringify(r.imgs) + ';\n');
-  fs.writeFileSync(target, html);
+  /* Written beside the build and renamed over it: a merge that fails part
+     way leaves the build as it was, never half-written. */
+  const tmp = target + '.merge-' + process.pid;
+  fs.writeFileSync(tmp, html);
+  fs.renameSync(tmp, target);
   console.log(`merged into ${path.relative(process.cwd(), target)}: ${r.added} questions under "${A.CATEGORY}" with ${r.figures} figures` +
               (r.removed ? `, replacing the ${r.removed} merged before` : '') + `; the bank is now ${r.bank.length}`);
   console.log('next: node scripts/extract-content.js build/systole.html');
