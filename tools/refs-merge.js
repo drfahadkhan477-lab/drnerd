@@ -138,18 +138,38 @@ function atlasEntries(parsed) {
   }
   return out;
 }
+/* Most entries must carry a CROPPED figure (visuals/). A file of one "### "
+   per page each linking its page scan (images/) looked like an atlas to the
+   first version of this test — 302 page scans counted as figures. */
 function isAtlas(parsed) {
   const e = atlasEntries(parsed);
-  return e.length >= 20 && e.filter(x => IMG.test(x.body) && (IMG.lastIndex = 0, true)).length >= e.length / 2;
+  return e.length >= 20 && e.filter(x => (x.body.match(IMG) || []).some(isFigureLink)).length >= e.length / 2;
 }
 /* A page is ~850 words with no subheadings; notes of that size are neither
    findable nor quotable. Paragraphs are gathered into chunks of CHUNK_MIN to
    CHUNK_MAX words, each its own candidate, headed by its page. */
 const CHUNK_MIN = 120, CHUNK_MAX = 350;
+/* A paragraph longer than a chunk is cut at sentence ends. The owner's run
+   showed the pages have no blank lines at all: ~650 chunks from ~650 pages. */
+function units(body) {
+  const out = [];
+  for (const p of body.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean)) {
+    if (words(p).length <= CHUNK_MAX) { out.push(p); continue; }
+    const sentences = p.replace(/\n+/g, ' ').match(/[^.!?]+(?:[.!?]+(?=\s+[A-Z(\[]|\s*$)|$)/g) || [p];
+    let cur = '', n = 0;
+    for (const t of sentences.map(x => x.trim()).filter(Boolean)) {
+      const w = words(t).length;
+      if (n && n + w > CHUNK_MAX) { out.push(cur); cur = ''; n = 0; }
+      cur = cur ? cur + ' ' + t : t; n += w;
+    }
+    if (cur) out.push(cur);
+  }
+  return out;
+}
 function chunks(section) {
   const body = stripScans(section.body);
   if (words(body).length <= CHUNK_MAX) return [{ heading: section.heading, body }];
-  const paras = body.split(/\n\s*\n/).filter(p => p.trim());
+  const paras = units(body);
   const out = []; let cur = [], n = 0;
   for (const p of paras) {
     const w = words(p).length;
@@ -184,15 +204,29 @@ function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE, existi
     if (containment(c.sh, keptIndex) >= DUP_WITHIN) { tally.repeat++; continue; }
     unique.push(c); for (const s of c.sh) keptIndex.add(s);
   }
+  /* Figures in atlas order, so a short caption joins the figure beside it. */
+  const figureOrder = unique.filter(c => c.kind === 'figure').sort((a, b) => a.file.localeCompare(b.file) || a.index - b.index);
+  let group = null;
+  const closeGroup = () => { if (group) { kept.push(group); tally.kept++; tally.keptFigures++; group = null; } };
+  for (const c of figureOrder) {
+    if (c.figNames.some(n => existingFigures.has(n)) || containment(c.sh, existingIndex) >= COVERED) { tally.covered++; dropped.push({ ...c, why: 'covered' }); continue; }
+    tally.figures += c.figures;
+    /* A caption under the importer's floor is not dropped — the figure would
+       be lost for want of words. It joins the next figure (or, last of all,
+       the one before) in one note, until that note clears the floor. */
+    if (!group) group = { ...c, joined: 0 };
+    else { group.body += `\n\n### ${c.heading}\n${c.body}`; group.words += c.words; group.figures += c.figures; group.joined++; group.figNames = group.figNames.concat(c.figNames); }
+    if (group.words >= MIN_WORDS) closeGroup();
+  }
+  if (group) {
+    const prev = [...kept].reverse().find(k => k.kind === 'figure');
+    if (prev) { prev.body += `\n\n### ${group.heading}\n${group.body}`; prev.words += group.words; prev.figures += group.figures; prev.joined = (prev.joined || 0) + 1 + group.joined; group = null; }
+    else { tally.thin++; dropped.push({ ...group, why: 'thin' }); group = null; }
+  }
+  for (const c of kept) if (c.joined) c.heading += ` (with ${c.joined} more figure${c.joined > 1 ? 's' : ''})`;
   for (const c of unique) {
+    if (c.kind === 'figure') continue;
     let why = '';
-    if (c.kind === 'figure') {
-      if (c.figNames.some(n => existingFigures.has(n)) || containment(c.sh, existingIndex) >= COVERED) why = 'covered';
-      else if (c.words < MIN_WORDS) why = 'thin';
-      if (why) { tally[why]++; dropped.push({ ...c, why }); continue; }
-      kept.push(c); tally.kept++; tally.figures += c.figures; tally.keptFigures++;
-      continue;
-    }
     if (containment(c.sh, existingIndex) >= COVERED) why = 'covered';
     else if (c.words < MIN_WORDS) why = 'thin';
     else if (LOW_YIELD_HEADING.test(c.heading)) why = 'lowHeading';

@@ -103,10 +103,18 @@ ok('and an ordinary unit file is not', !M.isAtlas(M.parseNotes(unitFull, 'full')
 const owned = new Set(['002_FIG.54.2_p002.jpg']);
 const ra = M.selectUnit([{ name: 'atlas.md', raw: atlasRaw }], new Set(), { minScore: 2, existingFigures: owned });
 const figNotes = ra.kept.filter(c => c.kind === 'figure');
-ok('each figure is its own note, headed by its entry', figNotes.length === 22 && figNotes[0].heading === 'FIG. 54.1 — figure 1' && figNotes.every(c => c.figures === 1),
-   `${figNotes.length} kept, first "${figNotes[0] && figNotes[0].heading}"`);
+ok('each figure is its own note, headed by its entry', figNotes.length === 22 && figNotes[0].heading === 'FIG. 54.1 — figure 1' &&
+   figNotes.filter(c => c.figures === 1).length === 21, `${figNotes.length} kept, first "${figNotes[0] && figNotes[0].heading}"`);
 ok('a figure the owner\'s notes already cite is covered, by its file name', ra.dropped.some(c => c.heading === 'FIG. 54.2 — figure 2' && c.why === 'covered'));
-ok('a caption under the importer\'s floor is dropped rather than failing the build', ra.dropped.some(c => c.heading === 'FIG. 54.24 — figure 24' && c.why === 'thin'));
+/* The last entry's caption is 10 words: under the importer's floor. It must
+   neither fail the build (a thin note) nor be lost (a dropped figure): it
+   joins the figure before it, in one note that clears the floor. */
+const joined = figNotes.find(c => c.body.includes('024_FIG.54.24'));
+ok('a caption under the importer\'s floor joins the figure beside it — not lost, not thin',
+   !!joined && joined.figures === 2 && joined.words >= 40 && /\(with 1 more figure\)$/.test(joined.heading) && !ra.dropped.some(c => /54\.24/.test(c.heading)),
+   joined ? `"${joined.heading}", ${joined.figures} figures, ${joined.words} words` : 'figure 24 in no kept note');
+const scansRaw = `---\ntitle: unit complete\n---\n\n` + Array.from({ length: 24 }, (_, i) => `## PDF Page ${i + 1}\n### Page image\n![p](<images/page_${i + 1}.jpg>)\n${prose('sc' + i, 80)}`).join('\n\n');
+ok('a file of one "### " per page, each linking its page scan, is not an atlas', !M.isAtlas(M.parseNotes(scansRaw, 'complete')));
 ok('figures are not cut on score: a caption is what it is', figNotes.some(c => c.score < 2));
 
 const paras = Array.from({ length: 9 }, (_, i) => prose('pg' + i, 100)).join('\n\n');
@@ -116,6 +124,12 @@ const sizes = ch.map(c => M.words(c.body).length);
 ok('a 900-word page becomes notes of 120 to 350 words', ch.length >= 3 && sizes.every(n => n >= 120 && n <= 350), sizes.join(', '));
 ok('each headed by its page and its place', ch.every((c, i) => c.heading === `PDF Page 12 (${i + 1}/${ch.length})`), ch[0] && ch[0].heading);
 ok('the whole-page scan is removed, the cropped figure kept', !ch.some(c => c.body.includes('pages/page_012.jpg')) && ch.some(c => c.body.includes('visuals/009_FIG.54.9_p012.jpg')));
+const oneBlock = Array.from({ length: 60 }, (_, i) => `Sentence ${i} has ${prose('sn' + i, 12)} in it.`).join(' ');
+const flat = M.chunks({ heading: 'PDF Page 40', body: oneBlock });
+const flatSizes = flat.map(c => M.words(c.body).length);
+ok('a page with no blank lines at all is still cut, at sentence ends', flat.length >= 3 && flatSizes.every(n => n >= 120 && n <= 350) && flat.every(c => /\.$/.test(c.body)),
+   flatSizes.join(', '));
+ok('and cutting at sentences loses and changes nothing', flat.map(c => c.body).join(' ') === oneBlock);
 ok('and no paragraph is lost or reworded on the way', ch.map(c => c.body).join('\n\n').replace(/!\[[^\]]*\]\([^)]*\)\s*/g, '').trim() === paras);
 
 head('finding the units wherever the zip was unpacked');
