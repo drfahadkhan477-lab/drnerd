@@ -123,6 +123,16 @@ async function heapAfterBoot(page, url) {
        headroom is on the order of 165 KB of source — room for several real
        features, and far more than the whole adoption plan asks for.
 
+       ONE PREMISE ABOVE WAS WRONG, AND THE BUDGET IS UNCHANGED. "Comments are
+       close to free once compressed" was never measured. It was at 7947642:
+       comments were 76 of the 149 KB src/'s modules gzip to, and the shell had
+       reached 287 KB with no change to blame — each feature paid its way, and
+       its documentation rode along into every download. build-pwa now ships
+       src/'s modules without their comments (scripts/strip-comments.js,
+       guarded by tests/verify-stripcomments-pure.js); the source and the
+       single-file build keep every one. So the conclusion stands — do not
+       delete comments to fit — for a different reason: they no longer ship.
+
        The uncompressed figure is still reported, because it is not
        meaningless — it drives parse and compile time on the device. It is
        simply not the thing a download budget should be denominated in. */

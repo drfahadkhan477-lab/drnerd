@@ -43,6 +43,7 @@
  */
 'use strict';
 const fs = require('fs');
+const { HERO_RES } = require('./heart-bake.js');
 
 const SRC = process.argv[2], OUT = process.argv[3];
 if (!SRC || !OUT) { console.error('usage: node scripts/heroart-patch.js <in.html> <out.html>'); process.exit(1); }
@@ -171,8 +172,10 @@ patch('hero: the specimen style, turning, on the rhythm the strip is drawing',
        ventricular wall, and the coronary tree — seventeen vessels since the
        branches were added — was landing on a surface too blocky to sit on.
        Roughly 2.6x the cells and about a third of a second at mount, which
-       happens once, behind the splash. */
-    resolution:[58,76,48], distance:26, yaw:0.32, pitch:0.10, autoRotate:true,`);
+       happens once, behind the splash — or did, until the mesh was baked at
+       build time on this same grid: HERO_RES in scripts/heart-bake.js is the
+       one number both read. */
+    resolution:[${HERO_RES.join(',')}], distance:26, yaw:0.32, pitch:0.10, autoRotate:true,`);
 
 /* ── 4. the guard ───────────────────────────────────────────────────────── */
 /* The style has to survive into the build, not just into this file. A typo in
