@@ -198,8 +198,16 @@ head('echo-patch is where it says it is');
      (verify-notesearch-pure holds that for notesearch). So both halves are
      asserted, and a new step appended after echo fails here until it is
      either moved before focusmode's successors or added to AFTER_ECHO with
-     the same argument made for it. */
-  const AFTER_ECHO = ['notesearch'];
+     the same argument made for it.
+
+     glass(90) is the second, and its argument is a different one: it is not
+     built on echo's text, it rewrites nothing at all. It only PREPENDS, at two
+     anchors — the .nav{…} rule and the Durable-memory banner — that echo and
+     notesearch prepend to themselves and leave intact (verify-glass asserts
+     both survive), and it never touches the nav's button row or anything echo
+     emits. Its selectors match whatever is on the page, so after echo is
+     simply where a restyle of every control belongs. */
+  const AFTER_ECHO = ['notesearch', 'glass'];
   ok('and it runs after focusmode, the last step to rewrite the nav',
      CHAIN.indexOf('focusmode') > -1 && CHAIN.indexOf('echo') > CHAIN.indexOf('focusmode'),
      `focusmode at ${CHAIN.indexOf('focusmode') + 1}, echo at ${CHAIN.indexOf('echo') + 1}`);
