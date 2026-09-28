@@ -425,6 +425,11 @@ head('a destroyed heart gives its context back');
 }
 
   head('reduced motion holds the fallback still');
+  /* The main page is done with. Left open, it is a second copy of the app —
+     96 MB of document on the owner's build, still pulling in the deferred
+     note figures — competing with this one while it parses: the hero took
+     11 s there and over 60 s here. A user never has two. */
+  await page.close();
   const rm = watch(await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' }), events, 'reduced-motion');
   rm.on('pageerror', e => errors.push('reduced-motion: ' + e.message));
   const t0 = Date.now();

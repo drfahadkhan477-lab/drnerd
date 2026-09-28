@@ -263,6 +263,7 @@ function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE, existi
     if (why) { tally[why]++; dropped.push({ ...c, why }); continue; }
     kept.push(c); tally.kept++; tally.figures += c.figures;
   }
+  keyTerms(kept);
   /* Back into reading order: by file, then by position in it. */
   const byFile = f => files.findIndex(x => x.name === f);
   kept.sort((a, b) => byFile(a.file) - byFile(b.file) || a.index - b.index);
@@ -284,6 +285,40 @@ function lead(body, n) {
   const w = text.split(/\s+/).filter(t => /[a-z]/i.test(t)).slice(0, n).join(' ');
   return w.replace(/[\s,;:.(—-]+$/, '');
 }
+/* Opening words were not enough: the owner's --why run put 181 of 203
+   title misses on Braunwald notes beaten by other Braunwald notes, none of
+   them near-copies and no title shared. A passage's first words are mostly
+   its topic's common words, which its neighbours share. So each note is
+   titled by the terms that set it apart from the rest of its unit — tf-idf
+   over the notes kept, sublinear in tf — in the order the note uses them. */
+const STOP = new Set(('with that this from which were have been also into than more such these their other there when where while ' +
+  'after before about between during however both each most some only over under within without among because being does used using ' +
+  'shown figure page table include including includes associated patients patient').split(' '));
+const termable = w => w.length >= 4 && /[a-z]/.test(w) && !/^\d/.test(w) && !STOP.has(w);
+function keyTerms(notes, n = 5) {
+  const df = Object.create(null);
+  const bags = notes.map(c => {
+    const tf = Object.create(null);
+    for (const w of words(c.body.split('\n').filter(l => !/^#{1,6}\s/.test(l)).join(' '))) if (termable(w)) tf[w] = (tf[w] || 0) + 1;
+    for (const w in tf) df[w] = (df[w] || 0) + 1;
+    return tf;
+  });
+  const N = notes.length;
+  notes.forEach((c, i) => {
+    const tf = bags[i];
+    /* A term in half the unit's notes or more tells none of them apart. */
+    const ranked = Object.keys(tf).map(w => [w, (1 + Math.log(tf[w])) * Math.log((N + 1) / df[w])])
+      .filter(([w]) => df[w] * 2 <= N).sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
+    /* Shown as the note spells it, in the order it uses them. */
+    const shown = Object.create(null), order = [];
+    for (const raw of c.body.replace(IMG, ' ').split(/\s+/)) {
+      const k = raw.toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9%]+$/g, '');
+      if (ranked.includes(k) && !(k in shown)) { shown[k] = raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9%]+$/g, ''); order.push(k); }
+    }
+    c.terms = order.map(k => shown[k]);
+  });
+}
+const about = (c, n) => (c.terms && c.terms.length ? c.terms.slice(0, n).join(', ') : lead(c.body, n + 3));
 function noteTitle(c) {
   const h = c.heading.replace(/\s*\(with \d+ more figures?\)$/, '');
   const more = c.heading.slice(h.length);
@@ -292,9 +327,9 @@ function noteTitle(c) {
   const fig = FIGNO.exec(h);
   const base = h.replace(/\s*\(\d+\/\d+\)$/, '');
   let t;
-  if (c.kind === 'figure' && fig) t = `Fig. ${fig[1]} — ${lead(c.body, 8)}${at}`;
-  else if (GENERIC.test(base)) t = `${lead(c.body, 9)}${at}`;
-  else if (base !== h) t = `${base} — ${lead(c.body, 6)}`;
+  if (c.kind === 'figure' && fig) t = `Fig. ${fig[1]} — ${about(c, 5)}${at}`;
+  else if (GENERIC.test(base)) t = `${about(c, 5)}${at}`;
+  else if (base !== h) t = `${base} — ${about(c, 3)}`;
   else return c.heading;
   return t + more;
 }
@@ -309,7 +344,10 @@ function renderSelected(kept, { unit = 'unit', kind = 'text' } = {}) {
   const topic = unit.replace(/^bw-/, '');
   const tags = [...new Set(pick('tags').split(',').map(t => t.trim()).filter(Boolean)
     .concat(['braunwald', topic, kind === 'figure' ? 'figures' : 'text', 'high-yield', 'cardiology']))];
-  const head = `---\ntitle: ${kept[0].title}${kind === 'figure' ? ' — figures' : ''}\n` +
+  /* A source file with no title of its own is titled by its file name —
+     "Braunwald_13th_HF_full", one unbreakable word that no search splits. */
+  const fileTitle = kept[0].title.replace(/_+/g, ' ').trim();
+  const head = `---\ntitle: ${fileTitle}${kind === 'figure' ? ' — figures' : ''}\n` +
     `tags: ${tags.join(', ')}\nsource: ${pick('source') || "Braunwald's Heart Disease, 13th edition"}\n---\n\n`;
   const seen = Object.create(null);
   const title = c => { const t = noteTitle(c); seen[t] = (seen[t] || 0) + 1; return seen[t] > 1 ? `${t} (${seen[t]})` : t; };
@@ -348,7 +386,7 @@ function unitFolders(root) {
   return out.sort((a, b) => a.unit.localeCompare(b.unit));
 }
 
-module.exports = { BACKREF, MAX_WORDS, MIN_TAGS, tokens, noteTitle, chunks, stripScans, isAtlas, atlasEntries, words, unitFolders, parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
+module.exports = { BACKREF, MAX_WORDS, MIN_TAGS, tokens, noteTitle, keyTerms, chunks, stripScans, isAtlas, atlasEntries, words, unitFolders, parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
                    MIN_WORDS, DUP_WITHIN, COVERED, DEFAULT_MIN_SCORE, LOW_YIELD_HEADING };
 
 /* ── the command ─────────────────────────────────────────────────────────── */

@@ -206,6 +206,19 @@ const pageHeads = M.parseNotes(M.renderSelected(pageKept, { unit: 'bw-heart-fail
 ok('page chunks are titled by what they say, not by a page number', pageHeads.length >= 12 && clash(pageHeads) === 0 && !pageHeads.some(h => /^PDF Page/i.test(h)),
    `${pageHeads.length} titles, ${clash(pageHeads)} pairs mostly alike; e.g. "${pageHeads[1]}"`);
 ok('and keep their page, last', pageHeads.every(h => /\(p\. 16\d\)$/.test(h)), pageHeads.find(h => !/\(p\. 16\d\)$/.test(h)) || 'all');
+/* The shape of the real miss (--why: 181 of 203 were Braunwald notes beaten
+   by Braunwald notes, no near-copies, no shared titles): passages that open
+   on the same common words and differ in what they are about. */
+const COMMON = 'In patients with chronic heart failure and reduced ejection fraction the clinical course depends on';
+const shared = Array.from({ length: 8 }, (_, k) => `## PDF Page ${200 + k}\n${COMMON} several factors. ` +
+  `Therapy${k}drug is given and therapy${k}drug is titrated, with monitor${k}level checked; therapy${k}drug again. ` +
+  `${COMMON} renal function, blood pressure and potassium, which are measured in every clinic visit and again after each dose change of any agent.`).join('\n\n');
+const sk = M.selectUnit([{ name: 'p.md', raw: `---\ntitle: t\n---\n\n${shared}\n` }], new Set(), { minScore: 0 }).kept;
+const sh2 = M.parseNotes(M.renderSelected(sk, { unit: 'bw-x' }), 'x').sections.map(x => x.heading);
+ok('titled by what sets a passage apart, not the opening its neighbours share', sh2.length === 8 && clash(sh2) === 0 && sh2.every((h, k) => h.includes(`Therapy${k}drug`) || h.includes(`therapy${k}drug`)),
+   `${sh2.length} titles, ${clash(sh2)} pairs mostly alike; e.g. "${sh2[0]}"`);
+ok('a source titled only by its file name reads as words', /^---\ntitle: Braunwald 13th HF full\n/.test(M.renderSelected(
+   M.selectUnit([{ name: 'Braunwald_13th_HF_full.md', raw: unitFull.replace(/^---\ntitle: [^\n]*\n/, '---\n') }], new Set(), { minScore: 2 }).kept, { unit: 'bw-x' })));
 const figKept = M.selectUnit([{ name: 'atlas.md', raw: figUnit }], new Set(), { minScore: 2 }).kept;
 const figHeads = M.parseNotes(M.renderSelected(figKept, { unit: 'bw-heart-failure', kind: 'figure' }), 'x').sections.map(x => x.heading);
 ok('a figure keeps its number and gains its caption\'s words', figHeads.length === 21 && clash(figHeads) === 0 && figHeads.every(h => /^Fig\. 59\.\d+ — \S+/.test(h)),
