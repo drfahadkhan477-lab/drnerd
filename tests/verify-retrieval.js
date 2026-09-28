@@ -167,7 +167,13 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
        missed title one another note also has (unfindable by title at all). */
     const tallyWhy = pairs => {
       const t = { misses: pairs.length, missedBW: 0, winnerBW: 0, bwBeatenByBW: 0, nearCopy: 0, sharedTitle: 0, noWinner: 0,
-                  sameFile: 0, winnerHoldsAllQuery: 0, winnerHoldsAllHeading: 0 };
+                  sameFile: 0, winnerHoldsAllQuery: 0, winnerHoldsAllHeading: 0,
+                  /* Which kinds met (figure note or text note, target then
+                     winner), and how often the query appears word for word in
+                     the winner — a shared passage, not shared vocabulary. */
+                  kinds: { ff: 0, ft: 0, tf: 0, tt: 0 }, verbatimInWinner: 0 };
+      const isFig = x => /(^| — )Figs?\. \d/.test(String(x.title)) || /figures/i.test(String(x.title).split(' — ')[0]);
+      const flat = x => String(x || '').toLowerCase().replace(/\s+/g, ' ');
       /* Medians over the misses: how much of the query each side holds (in
          the app's own tokens), the query's length, and each side's length —
          to tell "the winner matched as much and was shorter" from "the
@@ -185,6 +191,7 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
         const ht = [...new Set(tok(String(a.title).split(' — ').slice(1).join(' ')))];
         hLen.push(ht.length);
         if (b && ht.length) { const d = new Set(tok(b.title + ' ' + (b.tags || '') + ' ' + (b.body || ''))); if (ht.every(w => d.has(w))) t.winnerHoldsAllHeading++; }
+        if (b) { t.kinds[(isFig(a) ? 'f' : 't') + (isFig(b) ? 'f' : 't')]++; if (q && flat(b.body).includes(flat(q))) t.verbatimInWinner++; }
         if (b) { const cw = holds(b); covW.push(cw); if (cw === 1) t.winnerHoldsAllQuery++; lenW.push(tok(b.body || '').length); if (fileOf(a) === fileOf(b)) t.sameFile++; }
         if (bw(a)) t.missedBW++;
         if (!b) { t.noWinner++; continue; }
