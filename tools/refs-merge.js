@@ -263,6 +263,37 @@ function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE, existi
     if (why) { tally[why]++; dropped.push({ ...c, why }); continue; }
     kept.push(c); tally.kept++; tally.figures += c.figures;
   }
+  /* Each passage once. A caption kept as its figure's note is often printed
+     again in the page text around it, and the twin copies of a unit cut their
+     pages at different places, so two kept notes can share whole sentences
+     without either being a repeat of the other. The owner's run: a phrase
+     from a note found some other note first 61 times, and that note held the
+     whole phrase in 42. Sentences already in a figure note, or in a text note
+     kept before (richest first), are taken out of the later text note; one
+     left under the floor was a repeat after all. A sentence carrying a figure
+     link is never taken out. */
+  {
+    const seen = new Set();
+    for (const c of kept) if (c.kind === 'figure') for (const h of c.sh) seen.add(h);
+    const drop = new Set();
+    for (const c of kept) {
+      if (c.kind === 'figure') continue;
+      let cut = 0;
+      const body = c.body.split(/\n\s*\n/).map(par => {
+        if (/!\[[^\]]*\]\(/.test(par)) return par;
+        const ss = par.split(/(?<=[.!?])\s+(?=[A-Z(\[])/);
+        const keep = ss.filter(t => { const sh = shingles(t); if (words(t).length >= SHINGLE && containment(sh, seen) >= DUP_WITHIN) { cut++; return false; } return true; });
+        return keep.join(' ');
+      }).filter(x => x.trim()).join('\n\n');
+      if (cut) {
+        c.body = body; c.words = words(body).length; c.sh = shingles(body); c.trimmed = cut;
+        tally.trimmedSentences = (tally.trimmedSentences || 0) + cut;
+        if (c.words < MIN_WORDS) { drop.add(c); tally.repeat++; tally.kept--; tally.figures -= c.figures; dropped.push({ ...c, why: 'repeat' }); continue; }
+      }
+      for (const h of c.sh) seen.add(h);
+    }
+    for (let i = kept.length - 1; i >= 0; i--) if (drop.has(kept[i])) kept.splice(i, 1);
+  }
   keyTerms(kept);
   /* Back into reading order: by file, then by position in it. */
   const byFile = f => files.findIndex(x => x.name === f);
@@ -494,6 +525,7 @@ if (require.main === module) {
         const ts = (c.terms || []).map(x => x.toLowerCase());
         if (ts.length && sets.some((s2, j) => j !== i && ts.every(x => s2.has(x)))) held++;
       });
+      console.log(`  sentences already in another kept note, taken out of text notes: ${t.trimmedSentences || 0}`);
       console.log(`  titles: ${by.own} by terms only they have, ${by.shared} by rarer shared terms, ${by.opening} by opening words, ${by.heading} their own heading;` +
                   ` ${held} whose every title term another note also has`);
     }

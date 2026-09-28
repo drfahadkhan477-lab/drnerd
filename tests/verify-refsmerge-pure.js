@@ -210,9 +210,9 @@ ok('and keep their page, last', pageHeads.every(h => /\(p\. 16\d\)$/.test(h)), p
    by Braunwald notes, no near-copies, no shared titles): passages that open
    on the same common words and differ in what they are about. */
 const COMMON = 'In patients with chronic heart failure and reduced ejection fraction the clinical course depends on';
-const shared = Array.from({ length: 8 }, (_, k) => `## PDF Page ${200 + k}\n${COMMON} several factors. ` +
+const shared = Array.from({ length: 8 }, (_, k) => `## PDF Page ${200 + k}\n${COMMON} several factors, ${prose('ta' + k, 14)}. ` +
   `Therapy${k}drug is given and therapy${k}drug is titrated, with monitor${k}level checked; therapy${k}drug again. ` +
-  `${COMMON} renal function, blood pressure and potassium, which are measured in every clinic visit and again after each dose change of any agent.`).join('\n\n');
+  `${COMMON} renal function, blood pressure and potassium, ${prose('tb' + k, 14)}.`).join('\n\n');
 const sk = M.selectUnit([{ name: 'p.md', raw: `---\ntitle: t\n---\n\n${shared}\n` }], new Set(), { minScore: 0 }).kept;
 const sh2 = M.parseNotes(M.renderSelected(sk, { unit: 'bw-x' }), 'x').sections.map(x => x.heading);
 ok('titled by what sets a passage apart, not the opening its neighbours share', sh2.length === 8 && clash(sh2) === 0 && sh2.every((h, k) => h.includes(`Therapy${k}drug`) || h.includes(`therapy${k}drug`)),
@@ -255,6 +255,34 @@ ok('a real section heading is kept as it was, even one word', M.noteTitle({ kind
    && M.noteTitle({ kind: 'text', heading: 'Diuretics', body: HIGH }) === 'Diuretics');
 const twice = M.parseNotes(M.renderSelected([pageKept[0], { ...pageKept[0] }], { unit: 'bw-x' }), 'x').sections.map(x => x.heading);
 ok('and no two notes in a file share a title', twice.length === 2 && twice[0] !== twice[1], twice.join(' | '));
+
+head('each passage once');
+/* The owner's run after the titles: a phrase from a note found another note
+   first 61 times, and that note held the whole phrase in 42 — a caption kept
+   as its figure's note and printed again in the page text, or the unit's twin
+   copies cutting their pages at different places. */
+const CAPTION = `Kaplan-Meier curves show capzz mortality falling with capyy therapy across capxx subgroups over thirty six months of follow up in the trial.`;
+const S = i => `Sentence${i} ${prose('ov' + i, 14)} ends here.`;
+const onceUnit = `---\ntitle: t\n---\n\n## Figure Atlas\n\n` + Array.from({ length: 20 }, (_, i) => i === 0
+    ? `### FIG.9.1 — PDF page 9\n![f](<visuals/001_FIG.9.1_p9.jpg>)\n${CAPTION} ${prose('fcap', 30)}`
+    : `### FIG.9.${i + 1} — PDF page ${9 + i}\n![f](<visuals/0${i + 1}_FIG.9.${i + 1}_p9.jpg>)\n${prose('fo' + i, 50)}`).join('\n\n') + '\n';
+const pagesA = `---\ntitle: t\n---\n\n## PDF Page 9\n${S(1)} ${S(2)} ${CAPTION} ${S(3)} ${S(4)}\n\n## PDF Page 10\n${[5, 6, 7, 8, 9, 10, 11, 12].map(S).join(' ')}\n`;
+const pagesB = `---\ntitle: t\n---\n\n## PDF Page 10 (as cut in the other copy)\n${[9, 10, 11, 12, 13, 14, 15, 16].map(S).join(' ')}\n\n## PDF Page 11\n${[11, 12, 17].map(S).join(' ')}\n`;
+const ro = M.selectUnit([{ name: 'atlas.md', raw: onceUnit }, { name: 'a.md', raw: pagesA }, { name: 'b.md', raw: pagesB }], new Set(), { minScore: 0 });
+const textOut = ro.kept.filter(c => c.kind === 'text');
+const holding = frag => ro.kept.filter(c => c.body.includes(frag)).length;
+ok('a caption kept with its figure is taken out of the page text around it', holding('capzz mortality') === 1 && ro.kept.find(c => c.body.includes('capzz mortality')).kind === 'figure'
+   && textOut.some(c => c.body.includes(S(1)) && c.body.includes(S(4))), `${holding('capzz mortality')} notes hold the caption`);
+ok('a sentence two copies of the unit both kept is in one note, not two', [9, 10, 11, 12].every(i => holding(S(i)) === 1) && [13, 16].every(i => holding(S(i)) === 1),
+   [9, 10, 11, 12, 13].map(i => `S${i}×${holding(S(i))}`).join(' '));
+ok('and a note left under the floor by it was a repeat after all', ro.dropped.some(c => /PDF Page 11/.test(c.heading) && c.why === 'repeat'),
+   (ro.dropped.find(c => /PDF Page 11/.test(c.heading)) || {}).why || 'kept');
+/* A page paragraph whose figure link sits beside a caption another note
+   already has: the caption would be cut, and the link with it. */
+const pagesC = `---\ntitle: t\n---\n\n## PDF Page 30\n${S(20)} ${S(21)} ${S(22)}\n\n![g](<visuals/0100_FIG.9.50_p30.jpg>) ${CAPTION}\n`;
+const rl = M.selectUnit([{ name: 'atlas.md', raw: onceUnit }, { name: 'c.md', raw: pagesC }], new Set(), { minScore: 0 });
+ok('a paragraph carrying a figure link is never cut, though its caption is elsewhere', rl.kept.some(c => c.kind === 'text' && c.body.includes('0100_FIG.9.50_p30.jpg')),
+   rl.kept.filter(c => c.kind === 'text').map(c => c.body.includes('FIG.9.50') ? 'link kept' : 'no link').join(', ') || 'no text note kept');
 
 head('finding the units wherever the zip was unpacked');
 const zroot = fs.mkdtempSync(path.join(os.tmpdir(), 'refsmerge-units-'));

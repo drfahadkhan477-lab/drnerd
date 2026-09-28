@@ -234,7 +234,7 @@ jobs:
         run: node tests/verify-stripcomments-pure.js
       - name: the note figures load after the home screen, one unit at a time (27 checks)
         run: node tests/verify-refimgdefer-pure.js
-      - name: a reference unit adds only what is new and high yield, and what it writes the importer reads and check-refs passes, under titles someone could search by (57 checks)
+      - name: a reference unit adds only what is new and high yield, and what it writes the importer reads and check-refs passes, under titles someone could search by, each passage once (61 checks)
         run: node tests/verify-refsmerge-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
         run: node tests/verify-memorizer-chunk-pure.js
