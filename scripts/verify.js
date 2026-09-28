@@ -259,6 +259,7 @@ const SUITES = [
      screen driven in a browser over a scaffold, the way echo is. */
   ['notesearch-pure','a note titled with the words is found first, quoted and escaped'],
   ['heartbake-pure', 'the heart is loaded from a mesh baked at build time, value for value, and any other copy is refused'],
+  ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
   ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
@@ -344,7 +345,7 @@ const SUITES = [
    laptop, which measured the twenty-one that had been waiting: notesearch-pure,
    notesearch, coronaryview, ambient, and the seventeen Memorizer suites. That
    run predates memorizer-pack-pure, which master registered meanwhile. */
-const PENDING_RECORD = ['memorizer-pack-pure', 'heartbake-pure'];
+const PENDING_RECORD = ['memorizer-pack-pure', 'heartbake-pure', 'stripcomments-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
