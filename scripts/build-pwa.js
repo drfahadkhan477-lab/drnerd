@@ -684,6 +684,30 @@ step('move the heart\'s baked mesh out of the app code', () => {
   if (heartMesh) appCode = heartMesh.code;
 });
 
+/* ── 3.75. the comments in src/'s modules ────────────────────────────────
+   The shell budget below was set on the reasoning that comments are close to
+   free once compressed. Measured, they are half of what src/ gzips to — 76 of
+   149 KB at 7947642 — and the shell had crept to 287 KB against 280 with no
+   single change to blame. They stay in src/ and in the single-file build;
+   the split build ships each module that app.js carries verbatim through
+   scripts/strip-comments.js, which checks every one still compiles. */
+let strippedModules = null;
+step('ship src/\'s modules without their comments', () => {
+  const { stripEmbedded } = require('./strip-comments.js');
+  const listSrc = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? (e.name === 'worker' ? [] : listSrc(path.join(dir, e.name)))
+                    : /\.js$/.test(e.name) ? [path.join(dir, e.name)] : []);
+  const mods = listSrc(path.join(ROOT, 'src')).sort()
+    .map(f => [path.relative(ROOT, f).split(path.sep).join('/'), fs.readFileSync(f, 'utf8')]);
+  strippedModules = stripEmbedded(appCode, mods);
+  appCode = strippedModules.code;
+  console.log(`  comments out of ${strippedModules.stripped.length} src/ modules` +
+    (strippedModules.skipped.length ? `; left as they are (not verbatim in app.js): ${strippedModules.skipped.join(', ')}` : ''));
+  if (!strippedModules.stripped.includes('src/core/heart3d.js')) {
+    throw new Error('the heart\'s module was not found verbatim in app.js — a chain step edited it after its mesh was baked');
+  }
+});
+
 /* ── 3.8. the fonts ───────────────────────────────────────────────────────
    Four woff2 faces are inlined as base64 in the single-file build — 250 KB of
    the 802 KB shell, and correctly so there: one file that works offline cannot
