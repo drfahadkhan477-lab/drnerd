@@ -5,7 +5,9 @@
  * already has — decided on the owner's laptop, by rules, without anyone
  * reading the unit.
  *
- *   node tools/refs-merge.js --from "C:\Users\…\Downloads\older\references" [--min-score 2] [--out source/refs-staging]
+ *   node tools/refs-merge.js --from source/braunwald [--min-score 2] [--out source/refs-staging]
+ *
+ * --from is wherever the zip was unpacked: units are found at any depth.
  *
  * WHY. The owner has Braunwald units (heart failure, ischemia — a transcription
  * of the textbook with its page figures) and asked for what is new and high
@@ -176,7 +178,20 @@ function indexNotes(dir, skip) {
   return { idx, notes };
 }
 
-module.exports = { parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
+function unitFolders(root) {
+  const out = [];
+  const walk = d => {
+    const ents = fs.readdirSync(d, { withFileTypes: true });
+    const hasNotes = ents.some(e => e.isFile() && /\.md$/i.test(e.name) && !/^readme\.md$/i.test(e.name));
+    const hasFigs = ents.some(e => e.isDirectory() && /^(visuals|images|pages)$/i.test(e.name));
+    if (hasNotes && hasFigs) out.push({ dir: d, unit: 'bw-' + path.basename(d).toLowerCase().replace(/[^a-z0-9]+/g, '-') });
+    for (const e of ents) if (e.isDirectory() && !/^(visuals|images|pages|__macosx)$/i.test(e.name) && !e.name.startsWith('.')) walk(path.join(d, e.name));
+  };
+  walk(root);
+  return out.sort((a, b) => a.unit.localeCompare(b.unit));
+}
+
+module.exports = { unitFolders, parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
                    MIN_WORDS, DUP_WITHIN, COVERED, DEFAULT_MIN_SCORE, LOW_YIELD_HEADING };
 
 /* ── the command ─────────────────────────────────────────────────────────── */
@@ -193,10 +208,12 @@ if (require.main === module) {
   console.log(`\nexisting notes: ${existing.notes} in ${path.relative(process.cwd(), EXISTING) || EXISTING}  (bw-* units staged by this tool are not counted)`);
   if (!existing.notes) console.log('  — none found: everything will count as new. Is this the drnerd folder, with content/refs in it?');
 
-  const units = fs.readdirSync(FROM, { withFileTypes: true }).filter(e => e.isDirectory())
-    .map(e => ({ dir: path.join(FROM, e.name), unit: 'bw-' + e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') }))
-    .filter(u => fs.readdirSync(u.dir).some(f => /\.md$/i.test(f)));
-  if (!units.length) { console.error(`no folder under ${FROM} holds .md files`); process.exit(1); }
+  /* A unit is a folder holding notes AND a folder of their figures (visuals,
+     images or pages), found at any depth under --from — so --from can be
+     wherever the zip was unpacked, and a folder holding only a guide .md is
+     not mistaken for a unit. */
+  const units = unitFolders(FROM);
+  if (!units.length) { console.error(`no folder under ${FROM} holds .md notes beside a visuals/, images/ or pages/ folder`); process.exit(1); }
 
   const review = [];
   for (const u of units) {

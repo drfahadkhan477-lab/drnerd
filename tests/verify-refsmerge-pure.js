@@ -93,5 +93,14 @@ ok('the owner\'s notes are read', idx.notes === 1, `${idx.notes} note(s)`);
 ok('and a unit this tool staged before is not, so a rerun is not measured against itself',
    M.containment(M.shingles(HIGH), idx.idx) === 0 && M.containment(M.shingles(EXISTING_BODY), idx.idx) === 1);
 
+head('finding the units wherever the zip was unpacked');
+const zroot = fs.mkdtempSync(path.join(os.tmpdir(), 'refsmerge-units-'));
+for (const d of ['some-zip/references/heart-failure/visuals', 'some-zip/references/heart-failure/pages', 'some-zip/references/ischemia/images', 'some-zip/__MACOSX/x'])
+  fs.mkdirSync(path.join(zroot, d), { recursive: true });
+for (const f of ['some-zip/references/heart-failure/a.md', 'some-zip/references/ischemia/b.md', 'some-zip/references/guide.md', 'some-zip/README.md'])
+  fs.writeFileSync(path.join(zroot, f), '');
+const found = M.unitFolders(zroot).map(u => u.unit);
+ok('each folder of notes beside its figures is a unit, however deep', JSON.stringify(found) === JSON.stringify(['bw-heart-failure', 'bw-ischemia']), found.join(', '));
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
