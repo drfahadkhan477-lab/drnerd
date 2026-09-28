@@ -269,6 +269,36 @@ function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE, existi
   return { tally, kept, dropped, scores: unique.filter(c => c.kind === 'text').map(c => c.score) };
 }
 
+/* A title someone could search by. The importer titles each note
+   "<file title> — <heading>", and the headings these units carry are
+   "PDF Page 162 (2/3)" and "FIG.59.9 — PDF page 162": hundreds of notes a
+   digit apart, so a search for one lands on its neighbours. The owner's run
+   measured it: R@1 from a note's own title fell to 50%. A page heading gives
+   way to the passage's opening words; a figure keeps its number and gains its
+   caption's; a real section heading is kept. The page stays, last. */
+const GENERIC = /^(pdf )?page \d+\b/i;
+const FIGNO = /\bfig(?:ure)?\.?\s*(\d+\.\d+)/i;
+function lead(body, n) {
+  const text = body.split('\n').filter(l => !/^#{1,6}\s/.test(l)).join(' ')
+    .replace(IMG, ' ').replace(/[#*_`>|\[\]]/g, ' ').replace(FIGNO, ' ');
+  const w = text.split(/\s+/).filter(t => /[a-z]/i.test(t)).slice(0, n).join(' ');
+  return w.replace(/[\s,;:.(—-]+$/, '');
+}
+function noteTitle(c) {
+  const h = c.heading.replace(/\s*\(with \d+ more figures?\)$/, '');
+  const more = c.heading.slice(h.length);
+  const page = /\bpage (\d+)/i.exec(h);
+  const at = page ? ` (p. ${page[1]})` : '';
+  const fig = FIGNO.exec(h);
+  const base = h.replace(/\s*\(\d+\/\d+\)$/, '');
+  let t;
+  if (c.kind === 'figure' && fig) t = `Fig. ${fig[1]} — ${lead(c.body, 8)}${at}`;
+  else if (GENERIC.test(base)) t = `${lead(c.body, 9)}${at}`;
+  else if (base !== h) t = `${base} — ${lead(c.body, 6)}`;
+  else return c.heading;
+  return t + more;
+}
+
 /* Front matter of its own rather than the unit file's, which may lack what
    check-refs requires of every file: a title, a source and four tags. The
    source's own values are kept where it has them. */
@@ -281,7 +311,9 @@ function renderSelected(kept, { unit = 'unit', kind = 'text' } = {}) {
     .concat(['braunwald', topic, kind === 'figure' ? 'figures' : 'text', 'high-yield', 'cardiology']))];
   const head = `---\ntitle: ${kept[0].title}${kind === 'figure' ? ' — figures' : ''}\n` +
     `tags: ${tags.join(', ')}\nsource: ${pick('source') || "Braunwald's Heart Disease, 13th edition"}\n---\n\n`;
-  return head + kept.map(c => `## ${c.heading}\n${c.body}\n`).join('\n');
+  const seen = Object.create(null);
+  const title = c => { const t = noteTitle(c); seen[t] = (seen[t] || 0) + 1; return seen[t] > 1 ? `${t} (${seen[t]})` : t; };
+  return head + kept.map(c => `## ${title(c)}\n${c.body}\n`).join('\n');
 }
 
 function indexNotes(dir, skip) {
@@ -316,7 +348,7 @@ function unitFolders(root) {
   return out.sort((a, b) => a.unit.localeCompare(b.unit));
 }
 
-module.exports = { BACKREF, MAX_WORDS, MIN_TAGS, tokens, chunks, stripScans, isAtlas, atlasEntries, words, unitFolders, parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
+module.exports = { BACKREF, MAX_WORDS, MIN_TAGS, tokens, noteTitle, chunks, stripScans, isAtlas, atlasEntries, words, unitFolders, parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
                    MIN_WORDS, DUP_WITHIN, COVERED, DEFAULT_MIN_SCORE, LOW_YIELD_HEADING };
 
 /* ── the command ─────────────────────────────────────────────────────────── */
@@ -394,7 +426,7 @@ if (require.main === module) {
     const figs = r.kept.filter(c => c.kind === 'figure'), text = r.kept.filter(c => c.kind === 'text');
     if (figs.length) fs.writeFileSync(path.join(outDir, `${u.unit}-figures.md`), renderSelected(figs, { unit: u.unit, kind: 'figure' }));
     if (text.length) fs.writeFileSync(path.join(outDir, `${u.unit}-text.md`), renderSelected(text, { unit: u.unit, kind: 'text' }));
-    review.push(`# ${u.unit}\n\n## Kept (${r.kept.length})\n` + r.kept.map(c => `- ${c.heading}  — score ${c.score.toFixed(1)}, ${c.words} words, ${c.figures} fig`).join('\n') +
+    review.push(`# ${u.unit}\n\n## Kept (${r.kept.length})\n` + r.kept.map(c => `- ${noteTitle(c)}  — score ${c.score.toFixed(1)}, ${c.words} words, ${c.figures} fig`).join('\n') +
       `\n\n## Just under the cut (score ${(MIN / 2).toFixed(1)}–${MIN}) — look at these\n` +
       r.dropped.filter(c => c.why === 'lowScore' && c.score >= MIN / 2).map(c => `- ${c.heading}  — score ${c.score.toFixed(1)}, ${c.words} words`).join('\n') + '\n');
     const figDir = path.join(u.dir, 'visuals');

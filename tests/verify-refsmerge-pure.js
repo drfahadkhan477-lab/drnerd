@@ -188,6 +188,33 @@ const figsOut = rg.kept.reduce((n, c) => n + c.figures, 0);
 ok('and no figure is lost to the ceiling', figsOut === sizes2.length && !rg.dropped.length, `${figsOut} of ${sizes2.length} figures kept, ${rg.dropped.length} dropped`);
 ok('nor any note left thin by it', rendered.every(s => M.tokens(s.body) >= M.MIN_WORDS), rendered.map(s => M.tokens(s.body)).filter(n => n < M.MIN_WORDS).join(', ') || 'none');
 
+head('a title someone could search by');
+/* The owner's full run: R@1 from a note's own title 50%, because the titles
+   were "<unit> — PDF Page 162 (2/3)" and "<unit> — FIG.59.9 — PDF page 162",
+   hundreds of them a digit apart. Measured here the way it failed: how many
+   pairs of titles share most of their words. */
+const pageUnit = `---\ntitle: HF pages\n---\n\n` + Array.from({ length: 6 }, (_, p) =>
+  `## PDF Page ${160 + p}\n` + Array.from({ length: 60 }, (_, i) => `Topic${p}n${i} ${prose('pp' + p + 's' + i, 11)}.`).join(' ')).join('\n\n') + '\n';
+const figUnit = `---\ntitle: HF atlas\n---\n\n## Figure Atlas\n\n` + Array.from({ length: 22 }, (_, i) =>
+  `### FIG.59.${i + 1} — PDF page ${150 + i}\n![Fig 59.${i + 1}](<visuals/${String(i + 1).padStart(3, '0')}_FIG.59.${i + 1}_p${150 + i}.jpg>)\n` +
+  `Figure 59.${i + 1} ${prose('fc' + i, i === 21 ? 8 : 50)}`).join('\n\n') + '\n';
+const tk = t => t.toLowerCase().split(/[^a-z0-9.]+/).filter(Boolean);
+const clash = hs => { let n = 0; for (let i = 0; i < hs.length; i++) for (let j = i + 1; j < hs.length; j++) {
+  const a = new Set(tk(hs[i])), b = tk(hs[j]); if (b.filter(x => a.has(x)).length * 2 >= Math.max(a.size, b.length)) n++; } return n; };
+const pageKept = M.selectUnit([{ name: 'pages.md', raw: pageUnit }], new Set(), { minScore: 0 }).kept;
+const pageHeads = M.parseNotes(M.renderSelected(pageKept, { unit: 'bw-heart-failure' }), 'x').sections.map(x => x.heading);
+ok('page chunks are titled by what they say, not by a page number', pageHeads.length >= 12 && clash(pageHeads) === 0 && !pageHeads.some(h => /^PDF Page/i.test(h)),
+   `${pageHeads.length} titles, ${clash(pageHeads)} pairs mostly alike; e.g. "${pageHeads[1]}"`);
+ok('and keep their page, last', pageHeads.every(h => /\(p\. 16\d\)$/.test(h)), pageHeads.find(h => !/\(p\. 16\d\)$/.test(h)) || 'all');
+const figKept = M.selectUnit([{ name: 'atlas.md', raw: figUnit }], new Set(), { minScore: 2 }).kept;
+const figHeads = M.parseNotes(M.renderSelected(figKept, { unit: 'bw-heart-failure', kind: 'figure' }), 'x').sections.map(x => x.heading);
+ok('a figure keeps its number and gains its caption\'s words', figHeads.length === 21 && clash(figHeads) === 0 && figHeads.every(h => /^Fig\. 59\.\d+ — \S+/.test(h)),
+   `${figHeads.length} titles, ${clash(figHeads)} pairs mostly alike; e.g. "${figHeads[0]}"`);
+ok('with its page, and the figures it carries', /\(p\. 170\) \(with 1 more figure\)$/.test(figHeads[figHeads.length - 1]), figHeads[figHeads.length - 1]);
+ok('a real section heading is kept as it was', M.noteTitle({ kind: 'text', heading: 'Treatment thresholds', body: HIGH }) === 'Treatment thresholds');
+const twice = M.parseNotes(M.renderSelected([pageKept[0], { ...pageKept[0] }], { unit: 'bw-x' }), 'x').sections.map(x => x.heading);
+ok('and no two notes in a file share a title', twice.length === 2 && twice[0] !== twice[1], twice.join(' | '));
+
 head('finding the units wherever the zip was unpacked');
 const zroot = fs.mkdtempSync(path.join(os.tmpdir(), 'refsmerge-units-'));
 for (const d of ['some-zip/references/heart-failure/visuals', 'some-zip/references/heart-failure/pages', 'some-zip/references/ischemia/images', 'some-zip/__MACOSX/x'])

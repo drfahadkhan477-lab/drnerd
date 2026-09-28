@@ -147,8 +147,11 @@ patch('refs: typography for rendered note bodies',
 .ref-body pre{margin:0 0 12px;padding:10px 12px;overflow-x:auto;
   background:var(--card);border:1px solid var(--border);border-radius:8px}
 .ref-body pre code{border:0;background:none;padding:0}
-/* Tables scroll sideways inside their own frame rather than squeezing. */
-.ref-body .tw{overflow-x:auto;margin:0 0 14px;
+/* Tables scroll sideways inside their own frame rather than squeezing.
+   contain:inline-size so the frame's width never comes from the table: a
+   scroll box still reports its content's width upward, and a Braunwald
+   table's no-wrap header row pushed the whole page 25px sideways on a phone. */
+.ref-body .tw{overflow-x:auto;contain:inline-size;margin:0 0 14px;
   border:1px solid var(--border);border-radius:10px;-webkit-overflow-scrolling:touch}
 .ref-body table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.5}
 .ref-body th{text-align:left;font-weight:700;color:var(--text);background:var(--card);
