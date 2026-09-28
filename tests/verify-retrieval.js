@@ -104,6 +104,10 @@ const errors = [], events = [];
 const died = onDeath(() => ({ section, checks: passed + failed, errors,
                               events: events.length ? events.join(', ') : 'none' }));
 const pct = x => (x * 100).toFixed(1) + '%';
+/* The count beside the rounding: at one decimal 1122/1145 (97.99%, under a
+   0.98 floor) and 1123/1145 (98.08%, over it) both print "98.0%", and a
+   failing check that reads as its own floor tells the reader nothing. */
+const frac = (x, n) => `${pct(x)} (${Math.round(x * n)}/${n})`;
 
 const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join(__dirname, '..', 'build', 'systole.html');
 
@@ -237,16 +241,16 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
      `exact ${r.exact.n}, typo ${r.typo.n}, prefix ${r.prefix.n}, body ${r.body.n}`);
 
   head('a note is found from its own title');
-  ok('R@1 at or above 0.95', r.exact.r1 >= 0.95, pct(r.exact.r1));
-  ok('R@5 at or above 0.99', r.exact.r5 >= 0.99, pct(r.exact.r5));
+  ok('R@1 at or above 0.95', r.exact.r1 >= 0.95, frac(r.exact.r1, r.exact.n));
+  ok('R@5 at or above 0.99', r.exact.r5 >= 0.99, frac(r.exact.r5, r.exact.n));
   ok('and nothing comes back empty', r.exact.empty === 0, String(r.exact.empty));
 
   head('a typed-in-a-hurry title still finds it');
-  ok('R@1 at or above 0.90 with one transposition', r.typo.r1 >= 0.90, pct(r.typo.r1));
-  ok('R@5 at or above 0.97', r.typo.r5 >= 0.97, pct(r.typo.r5));
+  ok('R@1 at or above 0.90 with one transposition', r.typo.r1 >= 0.90, frac(r.typo.r1, r.typo.n));
+  ok('R@5 at or above 0.97', r.typo.r5 >= 0.97, frac(r.typo.r5, r.typo.n));
 
   head('a half-typed title completes to the note');
-  ok('R@1 at or above 0.86 on truncated terms', r.prefix.r1 >= 0.86, pct(r.prefix.r1));
+  ok('R@1 at or above 0.86 on truncated terms', r.prefix.r1 >= 0.86, frac(r.prefix.r1, r.prefix.n));
   /* Zero, not "few". Returning nothing at all is a different failure from
      ranking badly: it tells the fellow their library does not cover something
      it does cover. Ten of 146 did that before step 72. */
@@ -254,8 +258,8 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
      `${r.prefix.empty} empty of ${r.prefix.n}`);
 
   head('prose from the note itself — the shape production actually sends');
-  ok('R@1 at or above 0.98', r.body.r1 >= 0.98, pct(r.body.r1));
-  ok('R@5 at or above 0.99', r.body.r5 >= 0.99, pct(r.body.r5));
+  ok('R@1 at or above 0.98', r.body.r1 >= 0.98, frac(r.body.r1, r.body.n));
+  ok('R@5 at or above 0.99', r.body.r5 >= 0.99, frac(r.body.r5, r.body.n));
   ok('and nothing comes back empty', r.body.empty === 0, String(r.body.empty));
 
   head('prefix matching fires only where there was nothing to match');
