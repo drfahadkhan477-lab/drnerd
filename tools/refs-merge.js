@@ -294,10 +294,30 @@ function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE, existi
     }
     for (let i = kept.length - 1; i >= 0; i--) if (drop.has(kept[i])) kept.splice(i, 1);
   }
-  keyTerms(kept);
   /* Back into reading order: by file, then by position in it. */
   const byFile = f => files.findIndex(x => x.name === f);
   kept.sort((a, b) => byFile(a.file) - byFile(b.file) || a.index - b.index);
+  /* No short passage left to outrank its neighbours. Trimming repeated
+     sentences leaves some text notes under the chunker's own floor
+     (CHUNK_MIN) — notes it would never have cut that small. Search favours a
+     shorter note holding the same words, and the owner's run lost 23 phrase
+     searches that way (winners a median 121 words against 156, with the full
+     phrase credit already on the right note). Such a note joins the text
+     note before it in the same file, or the one after, when the join stays
+     within check-refs' ceiling (defensive: chunks top out near 470 words and
+     a joining note is under 120, so today no join can reach it). */
+  for (let i = 0; i < kept.length; i++) {
+    const c = kept[i];
+    if (c.kind !== 'text' || c.words >= CHUNK_MIN) continue;
+    const fits = n => n && n.kind === 'text' && n.file === c.file && tokens(n.body) + tokens(c.body) + 2 <= MAX_WORDS;
+    const into = fits(kept[i - 1]) ? kept[i - 1] : fits(kept[i + 1]) ? kept[i + 1] : null;
+    if (!into) continue;
+    into.body = into === kept[i - 1] ? `${into.body}\n\n${c.body}` : `${c.body}\n\n${into.body}`;
+    into.words = words(into.body).length; into.sh = shingles(into.body); into.figures += c.figures;
+    kept.splice(i, 1); i--;
+    tally.kept--; tally.mergedShort = (tally.mergedShort || 0) + 1;
+  }
+  keyTerms(kept);
   return { tally, kept, dropped, scores: unique.filter(c => c.kind === 'text').map(c => c.score) };
 }
 
@@ -526,6 +546,7 @@ if (require.main === module) {
         if (ts.length && sets.some((s2, j) => j !== i && ts.every(x => s2.has(x)))) held++;
       });
       console.log(`  sentences already in another kept note, taken out of text notes: ${t.trimmedSentences || 0}`);
+      console.log(`  text notes under ${CHUNK_MIN} words joined to the one beside them: ${t.mergedShort || 0}`);
       console.log(`  titles: ${by.own} by terms only they have, ${by.shared} by rarer shared terms, ${by.opening} by opening words, ${by.heading} their own heading;` +
                   ` ${held} whose every title term another note also has`);
     }

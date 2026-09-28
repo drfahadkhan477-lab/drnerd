@@ -210,9 +210,9 @@ ok('and keep their page, last', pageHeads.every(h => /\(p\. 16\d\)$/.test(h)), p
    by Braunwald notes, no near-copies, no shared titles): passages that open
    on the same common words and differ in what they are about. */
 const COMMON = 'In patients with chronic heart failure and reduced ejection fraction the clinical course depends on';
-const shared = Array.from({ length: 8 }, (_, k) => `## PDF Page ${200 + k}\n${COMMON} several factors, ${prose('ta' + k, 14)}. ` +
+const shared = Array.from({ length: 8 }, (_, k) => `## PDF Page ${200 + k}\n${COMMON} several factors, ${prose('ta' + k, 50)}. ` +
   `Therapy${k}drug is given and therapy${k}drug is titrated, with monitor${k}level checked; therapy${k}drug again. ` +
-  `${COMMON} renal function, blood pressure and potassium, ${prose('tb' + k, 14)}.`).join('\n\n');
+  `${COMMON} renal function, blood pressure and potassium, ${prose('tb' + k, 50)}.`).join('\n\n');
 const sk = M.selectUnit([{ name: 'p.md', raw: `---\ntitle: t\n---\n\n${shared}\n` }], new Set(), { minScore: 0 }).kept;
 const sh2 = M.parseNotes(M.renderSelected(sk, { unit: 'bw-x' }), 'x').sections.map(x => x.heading);
 ok('titled by what sets a passage apart, not the opening its neighbours share', sh2.length === 8 && clash(sh2) === 0 && sh2.every((h, k) => h.includes(`Therapy${k}drug`) || h.includes(`therapy${k}drug`)),
@@ -283,6 +283,31 @@ const pagesC = `---\ntitle: t\n---\n\n## PDF Page 30\n${S(20)} ${S(21)} ${S(22)}
 const rl = M.selectUnit([{ name: 'atlas.md', raw: onceUnit }, { name: 'c.md', raw: pagesC }], new Set(), { minScore: 0 });
 ok('a paragraph carrying a figure link is never cut, though its caption is elsewhere', rl.kept.some(c => c.kind === 'text' && c.body.includes('0100_FIG.9.50_p30.jpg')),
    rl.kept.filter(c => c.kind === 'text').map(c => c.body.includes('FIG.9.50') ? 'link kept' : 'no link').join(', ') || 'no text note kept');
+
+head('no short passage left to outrank its neighbours');
+/* The owner's run: 23 phrase searches lost to a shorter note holding the
+   same words (median 121 words against 156). A text note left under the
+   chunker's floor joins the one beside it in the same file. */
+const para = (seed, n) => Array.from({ length: Math.ceil(n / 12) }, (_, i) => `Sent${seed}n${i} ${prose(seed + i, 10)} ends.`).join(' ');
+const mergeUnit = `---\ntitle: t\n---\n\n## Alpha section\n${para('ma', 200)}\n\n## Beta section\n${para('mb', 60)}\n\n## Gamma section\n${para('mc', 200)}\n`;
+const otherFile = `---\ntitle: t\n---\n\n## Delta section\n${para('md', 60)}\n\n## Epsilon section\n${para('me', 590)}\n`;
+const rm = M.selectUnit([{ name: 'm.md', raw: mergeUnit }, { name: 'o.md', raw: otherFile }], new Set(), { minScore: 0 });
+const holder = frag => rm.kept.filter(c => c.body.includes(frag));
+ok('a text note under the floor joins the one before it in its file', holder('Sentmbn0').length === 1 && holder('Sentmbn0')[0] === holder('Sentman0')[0] && !rm.kept.some(c => c.heading === 'Beta section'),
+   holder('Sentmbn0').map(c => c.heading).join(', ') || 'lost');
+ok('and the first note of a file, having none before it, joins the one after', holder('Sentmdn0').length === 1 && holder('Sentmdn0')[0] === holder('Sentmen0')[0],
+   holder('Sentmdn0').map(c => c.heading).join(', ') || 'lost');
+/* Never across files. (The merge also refuses to pass check-refs' ceiling,
+   but that guard is defensive: the chunker's pieces top out near 470 words
+   and the note joining them is under 120, so no fixture built through
+   selectUnit can reach 600 — removing the guard stays green here, and this
+   check does not claim it.) */
+ok('never across files', !rm.kept.some(c => c.body.includes('Sentmdn0') && c.body.includes('Sentmcn0')),
+   rm.kept.map(c => `${c.heading}:${M.tokens(c.body)}`).join(' '));
+ok('and nothing is lost on the way', ['Sentman0', 'Sentmbn0', 'Sentmcn0', 'Sentmdn0', 'Sentmen0'].every(f => holder(f).length === 1),
+   ['Sentman0', 'Sentmbn0', 'Sentmcn0', 'Sentmdn0', 'Sentmen0'].map(f => `${f}×${holder(f).length}`).join(' '));
+const figShort = M.selectUnit([{ name: 'atlas.md', raw: atlasRaw }], new Set(), { minScore: 2, existingFigures: owned });
+ok('a figure note is never merged — only text notes', figShort.kept.filter(c => c.kind === 'figure').length === figNotes.length, `${figShort.kept.filter(c => c.kind === 'figure').length} of ${figNotes.length}`);
 
 head('finding the units wherever the zip was unpacked');
 const zroot = fs.mkdtempSync(path.join(os.tmpdir(), 'refsmerge-units-'));
