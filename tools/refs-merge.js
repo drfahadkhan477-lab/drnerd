@@ -1,0 +1,229 @@
+#!/usr/bin/env node
+'use strict';
+/*
+ * Which sections of a reference unit are worth adding to the notes the app
+ * already has — decided on the owner's laptop, by rules, without anyone
+ * reading the unit.
+ *
+ *   node tools/refs-merge.js --from "C:\Users\…\Downloads\older\references" [--min-score 2] [--out source/refs-staging]
+ *
+ * WHY. The owner has Braunwald units (heart failure, ischemia — a transcription
+ * of the textbook with its page figures) and asked for what is new and high
+ * yield to be added to Systole's notes. That text is licensed exactly as the
+ * ACCSAP export is: it is not read in a Claude session and none of it is
+ * quoted into one. So the choosing is done here, by measurable rules, and what
+ * this prints is counts. The headings it kept and the borderline ones go to a
+ * review file under --out, on the laptop, for the owner to read.
+ *
+ * WHAT IT DOES, per unit (each folder under --from that holds .md files):
+ *
+ *   1. Splits every .md into notes exactly as the importer and refs-patch do —
+ *      one note per "## " section, titled by the file's front-matter title.
+ *   2. Collapses the unit's own repeats. A unit ships its text more than once
+ *      (a whole-unit file and the same pages split into ranges); a section
+ *      whose word shingles are mostly inside one already kept is dropped,
+ *      keeping the copy with more figures, then the longer.
+ *   3. Drops what the app already has: a section whose shingles are mostly
+ *      found in the existing notes (content/refs, less any bw-* unit this tool
+ *      staged before, so a rerun compares against the owner's own notes).
+ *   4. Keeps what is high yield by counting, per 100 words, the things board
+ *      questions are made of: numeric thresholds with units, guideline classes
+ *      and levels of evidence, trial effect sizes, first-line/contraindicated
+ *      language, tables, and figures. Sections under the importer's 40-word
+ *      floor, and sections headed History, Introduction, References and the
+ *      like, are dropped. The score distribution is printed, so the cut can be
+ *      moved with --min-score without reading anything.
+ *   5. Writes the kept sections, unchanged and in their original order, to
+ *      --out/<unit>/<unit>-selected.md under the source file's front matter,
+ *      ready for tools/add-unit.py to bake with the unit's crop record.
+ *
+ * UNIT NAMES are bw-<folder> (bw-heart-failure, bw-ischemia), never an existing
+ * unit's: add-unit replaces content/refs/<unit>-*.md wholesale, so baking a
+ * selection under an existing name would delete the notes it was measured
+ * against.
+ *
+ * The rules are plain functions, exported, and tests/verify-refsmerge-pure.js
+ * runs them on synthetic notes.
+ */
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const MIN_WORDS = 40;          // the importer's own floor (refs-patch rejects thinner notes)
+const SHINGLE = 5;             // words per shingle
+const DUP_WITHIN = 0.8;        // a section this much inside one already kept is the same section
+const COVERED = 0.6;           // this much of a section already in the notes is covered
+const DEFAULT_MIN_SCORE = 2;   // high-yield signals per 100 words
+
+const LOW_YIELD_HEADING = /\b(history|historical|introduction|overview of (the )?chapter|references?|classic references|key references|acknowledg\w*|future (directions|perspectives)|conclusions?|summary of changes|disclosures?|abbreviations)\b/i;
+
+/* ── parsing, as the importer does it ────────────────────────────────────── */
+function field(fm, key) {
+  const m = new RegExp('^' + key + ':\\s*(.+)$', 'm').exec(fm);
+  return m ? m[1].trim() : '';
+}
+function parseNotes(raw, fallbackTitle) {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
+  const meta = fm ? fm[1] : '';
+  const body = (fm ? raw.slice(fm[0].length) : raw).replace(/\r\n/g, '\n');
+  const title = field(meta, 'title') || fallbackTitle;
+  const sections = body.split('\n## ').slice(1).map(sec => {
+    const lines = sec.split('\n');
+    return { heading: lines[0].trim(), body: lines.slice(1).join('\n').trim() };
+  });
+  return { meta, title, sections };
+}
+
+/* ── comparing ───────────────────────────────────────────────────────────── */
+const IMG = /!\[[^\]]*\]\((?:<[^>\n]+>|[^)\s]+)\)/g;
+function words(text) {
+  return text.replace(IMG, ' ').replace(/[#*_`>|\[\]()]/g, ' ').toLowerCase()
+    .replace(/[^a-z0-9%.\- ]+/g, ' ').split(/\s+/).filter(w => w && w !== '-' && w !== '.');
+}
+function shingles(text) {
+  const w = words(text), out = new Set();
+  if (w.length < SHINGLE) { if (w.length) out.add(hash(w.join(' '))); return out; }
+  for (let i = 0; i + SHINGLE <= w.length; i++) out.add(hash(w.slice(i, i + SHINGLE).join(' ')));
+  return out;
+}
+function hash(s) { return crypto.createHash('sha1').update(s).digest('base64').slice(0, 12); }
+/* How much of `set` is inside `index` (another set, or a Set of many notes' shingles). */
+function containment(set, index) {
+  if (!set.size) return 0;
+  let n = 0;
+  for (const s of set) if (index.has(s)) n++;
+  return n / set.size;
+}
+
+/* ── high yield, by counting ─────────────────────────────────────────────── */
+const SIGNALS = [
+  ['threshold', /\b\d+(?:\.\d+)?\s?(?:mm ?hg|%|ms|msec|mg|µg|mcg|g\/dl|mg\/dl|mmol\/l|meq|ng\/ml|pg\/ml|ml\/kg|ml\/min|ml|l\/min|kg\/m2|m\/s|cm\/s|cm2|mm2|cm|mm|bpm|beats\/min|joules|j\b|hours?|days?|weeks?|months?|years?)\b/gi],
+  ['comparator', /(?:[<>≤≥]\s?\d)|\b(?:greater|less|more|fewer) than \d/gi],
+  ['guideline', /\bclass (?:i{1,3}|iia|iib|1|2a|2b|3)\b|\blevel of evidence\b|\bloe\b|\b(?:cor|coe)\s?[:\-]?\s?(?:i|ii|iii|1|2|3)|\brecommended\b|\bshould (?:be|not)\b|\bis (?:reasonable|not recommended)\b/gi],
+  ['effect', /\b(?:hazard ratio|relative risk|odds ratio|absolute risk|nnt|number needed to treat|hr|rr|or)\s?[=:,]?\s?0?\.\d+|\breduc(?:ed|tion) (?:in )?(?:all-cause )?(?:mortality|death|hospitali[sz]ation|events)\b|\b\d+(?:\.\d+)?% (?:relative )?(?:reduction|increase)\b/gi],
+  ['decision', /\bfirst[- ]line\b|\bcontraindicat\w*\b|\bdrug of choice\b|\bgold standard\b|\bdiagnostic of\b|\bpathognomonic\b|\bhallmark\b|\bmost common\b|\bindicated\b/gi],
+  ['table', /^\|.*\|\s*$/gm],
+  ['figure', IMG],
+];
+function scoreSection(body) {
+  const n = words(body).length;
+  const hits = {};
+  let total = 0;
+  for (const [name, re] of SIGNALS) {
+    const c = (body.match(re) || []).length;
+    hits[name] = c;
+    total += name === 'table' ? Math.min(c, 12) / 4 : name === 'figure' ? c * 2 : c;   // a table row is worth less than a threshold; a figure more
+  }
+  return { words: n, hits, score: n ? (total * 100) / n : 0 };
+}
+
+/* ── the whole decision, for one unit ────────────────────────────────────── */
+function selectUnit(files, existingIndex, { minScore = DEFAULT_MIN_SCORE } = {}) {
+  const cands = [];
+  for (const f of files) {
+    const parsed = parseNotes(f.raw, f.name.replace(/\.md$/i, ''));
+    parsed.sections.forEach((s, i) => {
+      const sh = shingles(s.body);
+      cands.push({ file: f.name, index: i, meta: parsed.meta, title: parsed.title, ...s, sh,
+                   figures: (s.body.match(IMG) || []).length, ...scoreSection(s.body) });
+    });
+  }
+  const tally = { sections: cands.length, repeat: 0, covered: 0, thin: 0, lowHeading: 0, lowScore: 0, kept: 0, figures: 0 };
+  const kept = [], keptIndex = new Set(), dropped = [];
+  /* The unit's own repeats first: richest copy wins. */
+  const order = [...cands].sort((a, b) => b.figures - a.figures || b.words - a.words);
+  const unique = [];
+  for (const c of order) {
+    if (containment(c.sh, keptIndex) >= DUP_WITHIN) { tally.repeat++; continue; }
+    unique.push(c); for (const s of c.sh) keptIndex.add(s);
+  }
+  for (const c of unique) {
+    let why = '';
+    if (containment(c.sh, existingIndex) >= COVERED) why = 'covered';
+    else if (c.words < MIN_WORDS) why = 'thin';
+    else if (LOW_YIELD_HEADING.test(c.heading)) why = 'lowHeading';
+    else if (c.score < minScore) why = 'lowScore';
+    if (why) { tally[why]++; dropped.push({ ...c, why }); continue; }
+    kept.push(c); tally.kept++; tally.figures += c.figures;
+  }
+  /* Back into reading order: by file, then by position in it. */
+  const byFile = f => files.findIndex(x => x.name === f);
+  kept.sort((a, b) => byFile(a.file) - byFile(b.file) || a.index - b.index);
+  return { tally, kept, dropped, scores: unique.map(c => c.score) };
+}
+
+function renderSelected(kept) {
+  if (!kept.length) return '';
+  const meta = kept[0].meta;
+  return (meta ? `---\n${meta}\n---\n\n` : `---\ntitle: ${kept[0].title}\n---\n\n`) +
+    kept.map(c => `## ${c.heading}\n${c.body}\n`).join('\n');
+}
+
+function indexNotes(dir, skip) {
+  const idx = new Set();
+  let notes = 0;
+  if (!fs.existsSync(dir)) return { idx, notes };
+  const walk = d => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.md$/i.test(e.name) && !/^readme\.md$/i.test(e.name) && !(skip && skip(e.name))) {
+        for (const s of parseNotes(fs.readFileSync(p, 'utf8'), e.name).sections) { notes++; for (const h of shingles(s.body)) idx.add(h); }
+      }
+    }
+  };
+  walk(dir);
+  return { idx, notes };
+}
+
+module.exports = { parseNotes, shingles, containment, scoreSection, selectUnit, renderSelected, indexNotes,
+                   MIN_WORDS, DUP_WITHIN, COVERED, DEFAULT_MIN_SCORE, LOW_YIELD_HEADING };
+
+/* ── the command ─────────────────────────────────────────────────────────── */
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const opt = (k, d) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : d; };
+  const FROM = opt('--from'), OUT = opt('--out', path.join('source', 'refs-staging'));
+  const MIN = +opt('--min-score', DEFAULT_MIN_SCORE);
+  const EXISTING = path.join(__dirname, '..', 'content', 'refs');
+  if (!FROM || !fs.existsSync(FROM)) { console.error('usage: node tools/refs-merge.js --from <folder of unit folders> [--min-score N] [--out dir]'); process.exit(1); }
+  if (/^content[\\/]/.test(path.relative(path.join(__dirname, '..'), path.resolve(OUT)))) { console.error('--out must not be under content/: add-unit writes there'); process.exit(1); }
+
+  const existing = indexNotes(EXISTING, name => /^bw-/.test(name));
+  console.log(`\nexisting notes: ${existing.notes} in ${path.relative(process.cwd(), EXISTING) || EXISTING}  (bw-* units staged by this tool are not counted)`);
+  if (!existing.notes) console.log('  — none found: everything will count as new. Is this the drnerd folder, with content/refs in it?');
+
+  const units = fs.readdirSync(FROM, { withFileTypes: true }).filter(e => e.isDirectory())
+    .map(e => ({ dir: path.join(FROM, e.name), unit: 'bw-' + e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') }))
+    .filter(u => fs.readdirSync(u.dir).some(f => /\.md$/i.test(f)));
+  if (!units.length) { console.error(`no folder under ${FROM} holds .md files`); process.exit(1); }
+
+  const review = [];
+  for (const u of units) {
+    const files = fs.readdirSync(u.dir).filter(f => /\.md$/i.test(f) && !/^readme\.md$/i.test(f)).sort()
+      .map(name => ({ name, raw: fs.readFileSync(path.join(u.dir, name), 'utf8') }));
+    const perFile = files.map(f => `${f.name.length > 44 ? f.name.slice(0, 41) + '…' : f.name} ${parseNotes(f.raw, f.name).sections.length}`);
+    const r = selectUnit(files, existing.idx, { minScore: MIN });
+    const t = r.tally;
+    const bucket = [0, 0.5, 1, 2, 3, 5, 8].map((lo, i, a) => `${lo}${a[i + 1] !== undefined ? '–' + a[i + 1] : '+'}: ${r.scores.filter(s => s >= lo && (a[i + 1] === undefined || s < a[i + 1])).length}`);
+    console.log(`\n${u.unit}   (${files.length} files: ${perFile.join(', ')})`);
+    console.log(`  sections ${t.sections}   repeats of each other ${t.repeat}   already in your notes ${t.covered}`);
+    console.log(`  dropped: under ${MIN_WORDS} words ${t.thin}, low-yield heading ${t.lowHeading}, score under ${MIN} ${t.lowScore}`);
+    console.log(`  KEPT ${t.kept} sections, citing ${t.figures} figures`);
+    console.log(`  score of the unique sections (signals per 100 words): ${bucket.join('   ')}`);
+    const outDir = path.join(OUT, u.unit);
+    fs.rmSync(outDir, { recursive: true, force: true });
+    fs.mkdirSync(outDir, { recursive: true });
+    if (r.kept.length) fs.writeFileSync(path.join(outDir, `${u.unit}-selected.md`), renderSelected(r.kept));
+    review.push(`# ${u.unit}\n\n## Kept (${r.kept.length})\n` + r.kept.map(c => `- ${c.heading}  — score ${c.score.toFixed(1)}, ${c.words} words, ${c.figures} fig`).join('\n') +
+      `\n\n## Just under the cut (score ${(MIN / 2).toFixed(1)}–${MIN}) — look at these\n` +
+      r.dropped.filter(c => c.why === 'lowScore' && c.score >= MIN / 2).map(c => `- ${c.heading}  — score ${c.score.toFixed(1)}, ${c.words} words`).join('\n') + '\n');
+    const figs = ['visuals', 'images', 'pages'].map(d => path.join(u.dir, d)).filter(d => fs.existsSync(d));
+    console.log(`  next: python tools/add-unit.py --unit ${u.unit} --notes "${outDir}" --figures "${figs[0] || u.dir}"` +
+      (fs.existsSync(path.join(__dirname, `figure-crops.${u.unit.replace(/^bw-/, '').replace('heart-failure', 'hf')}.json`))
+        ? ` --crops tools/figure-crops.${u.unit.replace(/^bw-/, '').replace('heart-failure', 'hf')}.json` : ''));
+  }
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'review.md'), review.join('\n'));
+  console.log(`\nheadings kept, and the ones just under the cut: ${path.join(OUT, 'review.md')} (on this laptop only — ${OUT} is gitignored)`);
+}

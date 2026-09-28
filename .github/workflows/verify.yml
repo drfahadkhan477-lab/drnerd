@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 61 suites that are pure Node with no Playwright and no
+#   logic        the 62 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -234,6 +234,8 @@ jobs:
         run: node tests/verify-stripcomments-pure.js
       - name: the note figures load after the home screen, one unit at a time (27 checks)
         run: node tests/verify-refimgdefer-pure.js
+      - name: a reference unit adds only what is new and high yield, and what it writes the importer reads (17 checks)
+        run: node tests/verify-refsmerge-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
