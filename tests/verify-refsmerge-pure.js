@@ -242,7 +242,17 @@ const figHeads = M.parseNotes(M.renderSelected(figKept, { unit: 'bw-heart-failur
 ok('a figure keeps its number and gains its caption\'s words', figHeads.length === 21 && clash(figHeads) === 0 && figHeads.every(h => /^Fig\. 59\.\d+ — \S+/.test(h)),
    `${figHeads.length} titles, ${clash(figHeads)} pairs mostly alike; e.g. "${figHeads[0]}"`);
 ok('with its page, and the figures it carries', /\(p\. 170\) \(with 1 more figure\)$/.test(figHeads[figHeads.length - 1]), figHeads[figHeads.length - 1]);
-ok('a real section heading is kept as it was', M.noteTitle({ kind: 'text', heading: 'Treatment thresholds', body: HIGH }) === 'Treatment thresholds');
+/* The owner's count after that: 198 of 615 headings still "PDF Page…" or
+   "FIG…" — forms the first test did not recognise as placeholders. */
+const places = ['PDF Pages 161–162', 'PDF page 88 (continued)', 'FIG. 59.9', 'Figure 12.3 — PDF page 40', 'Page image', 'PDF Page 7'];
+const placeNotes = places.map((h, i) => ({ kind: 'text', heading: h, body: `Uniqword${i}a uniqword${i}b ${prose('pl' + i, 30)}` }));
+M.keyTerms(placeNotes);
+const retitled = placeNotes.map(M.noteTitle);
+ok('every placeholder heading is retitled — "Pages 161–162", "(continued)", a figure number on a text note',
+   retitled.every((t, i) => t !== places[i] && !/^(pdf|page|fig)/i.test(t.replace(/^Fig\. \d+\.\d+ — /, ''))), retitled.find((t, i) => t === places[i]) || retitled[2]);
+ok('keeping its figure number and page', retitled[2].startsWith('Fig. 59.9 — ') && /\(p\. 161\)$/.test(retitled[0]) && /^Fig\. 12\.3 — .*\(p\. 40\)$/.test(retitled[3]), `${retitled[2]} | ${retitled[0]} | ${retitled[3]}`);
+ok('a real section heading is kept as it was, even one word', M.noteTitle({ kind: 'text', heading: 'Treatment thresholds', body: HIGH }) === 'Treatment thresholds'
+   && M.noteTitle({ kind: 'text', heading: 'Diuretics', body: HIGH }) === 'Diuretics');
 const twice = M.parseNotes(M.renderSelected([pageKept[0], { ...pageKept[0] }], { unit: 'bw-x' }), 'x').sections.map(x => x.heading);
 ok('and no two notes in a file share a title', twice.length === 2 && twice[0] !== twice[1], twice.join(' | '));
 

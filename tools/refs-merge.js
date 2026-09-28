@@ -337,19 +337,25 @@ function keyTerms(notes, n = 5) {
   });
 }
 const about = (c, n) => (c.terms && c.terms.length ? c.terms.slice(0, n).join(', ') : lead(c.body, n + 3));
+/* A heading is the note's own only if it says something: a word or more
+   besides pdf/page/figure and numbers. The first version recognised only
+   "PDF Page 162" on a page and "FIG.59.9" on a figure; the owner's run left
+   198 of 615 headings as "PDF Page…"/"FIG…" — "PDF Pages 161–162", a text
+   note headed by a figure — kept as if they were section titles, and those
+   were the notes a title search could not find. */
+const PLACE = /^(pdf|pages?|figs?|figures?|images?|visuals?|atlas|panels?|scan|continued|cont)$/;
+function saysSomething(h) {
+  return words(h.replace(FIGNO, ' ')).filter(w => termable(w) && !PLACE.test(w)).length >= 1;
+}
 function noteTitle(c) {
   const h = c.heading.replace(/\s*\(with \d+ more figures?\)$/, '');
   const more = c.heading.slice(h.length);
-  const page = /\bpage (\d+)/i.exec(h);
+  const page = /\bpages?\s+(\d+)/i.exec(h);
   const at = page ? ` (p. ${page[1]})` : '';
   const fig = FIGNO.exec(h);
   const base = h.replace(/\s*\(\d+\/\d+\)$/, '');
-  let t;
-  if (c.kind === 'figure' && fig) t = `Fig. ${fig[1]} — ${about(c, 5)}${at}`;
-  else if (GENERIC.test(base)) t = `${about(c, 5)}${at}`;
-  else if (base !== h) t = `${base} — ${about(c, 3)}`;
-  else return c.heading;
-  return t + more;
+  if (saysSomething(base)) return base !== h ? `${base} — ${about(c, 3)}${more}` : c.heading;
+  return `${fig ? `Fig. ${fig[1]} — ` : ''}${about(c, 5)}${at}${more}`;
 }
 
 /* Front matter of its own rather than the unit file's, which may lack what
