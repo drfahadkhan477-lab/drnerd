@@ -166,9 +166,21 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
        winner hold most of the missed note's words (a near-copy), and is the
        missed title one another note also has (unfindable by title at all). */
     const tallyWhy = pairs => {
-      const t = { misses: pairs.length, missedBW: 0, winnerBW: 0, bwBeatenByBW: 0, nearCopy: 0, sharedTitle: 0, noWinner: 0 };
-      for (const [id, win] of pairs) {
+      const t = { misses: pairs.length, missedBW: 0, winnerBW: 0, bwBeatenByBW: 0, nearCopy: 0, sharedTitle: 0, noWinner: 0,
+                  sameFile: 0, winnerHoldsAllQuery: 0 };
+      /* Medians over the misses: how much of the query each side holds (in
+         the app's own tokens), the query's length, and each side's length —
+         to tell "the winner matched as much and was shorter" from "the
+         target did not hold its own title's terms". */
+      const med = xs => { const v = xs.filter(Number.isFinite).sort((p, q) => p - q); return v.length ? +v[v.length >> 1].toFixed(2) : null; };
+      const covT = [], covW = [], qLen = [], lenT = [], lenW = [];
+      const fileOf = x => String(x.title).split(' — ')[0];
+      for (const [id, win, q] of pairs) {
         const a = byId[id], b = byId[win];
+        const qt = [...new Set(tok(q || ''))];
+        const holds = x => { const d = new Set(tok(x.title + ' ' + (x.tags || '') + ' ' + (x.body || ''))); return qt.length ? qt.filter(w => d.has(w)).length / qt.length : NaN; };
+        qLen.push(qt.length); covT.push(holds(a)); lenT.push(tok(a.body || '').length);
+        if (b) { const cw = holds(b); covW.push(cw); if (cw === 1) t.winnerHoldsAllQuery++; lenW.push(tok(b.body || '').length); if (fileOf(a) === fileOf(b)) t.sameFile++; }
         if (bw(a)) t.missedBW++;
         if (!b) { t.noWinner++; continue; }
         if (bw(b)) t.winnerBW++;
@@ -178,6 +190,7 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
         if (A.size && shared / A.size >= 0.5) t.nearCopy++;
         if (titleCount[a.title] > 1) t.sharedTitle++;
       }
+      Object.assign(t, { medQueryTerms: med(qLen), medTargetHolds: med(covT), medWinnerHolds: med(covW), medTargetLen: med(lenT), medWinnerLen: med(lenW) });
       return t;
     };
     const titleOf = Object.create(null);
@@ -191,7 +204,7 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
         const k = ids.indexOf(id);
         if (k === 0) r1++;
         else if (MISSES) missed.push(titleOf[id] + '  ->  ' + (ids.length ? titleOf[ids[0]] : '(nothing)'));
-        if (WHY && k !== 0) why.push([id, ids[0]]);
+        if (WHY && k !== 0) why.push([id, ids[0], q]);
         if (k > -1 && k < 5) r5++;
         if (k > -1) mrr += 1 / (k + 1);
       }
