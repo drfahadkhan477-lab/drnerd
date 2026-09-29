@@ -460,14 +460,28 @@ onDeath(() => ({ section, checks: passed + failed, errors,
        .pearl-card contain:size) rather than growing the row. The height floor
        is the precondition: without it, a pearl that failed to get taller
        would pass this by being short, which is the check above's problem
-       again. Reading scrollHeight forces layout, so no wait is needed. */
+       again. Reading scrollHeight forces layout, so no wait is needed.
+
+       REPEATED UNTIL, not a fixed count. It was `.repeat(8)`, and a pearl
+       can be as short as 90 characters (src/core/pearl.js MIN): eight of
+       those at this width is ~300px, under the floor. So the precondition
+       itself failed on a short draw — on the owner's run with 727 older
+       questions merged, which change no pearl — and the check read red for
+       the dice again, the other way round. Doubling until past 600px, up to
+       256 copies, takes the draw out of it. The precondition and the claim
+       are two checks now, so a red one says which. */
     const tall = await page.evaluate(() => {
       const pb = document.getElementById('pearlBody');
       if (!pb) return null;
-      pb.textContent = (pb.textContent.trim() + ' ').repeat(8);
+      const one = pb.textContent.trim() + ' ';
+      let n = 8;
+      do { pb.textContent = one.repeat(n); n *= 2; }
+      while (pb.getBoundingClientRect().height <= 600 && n <= 256);
       return { over: document.documentElement.scrollHeight - innerHeight,
-               h: Math.round(pb.getBoundingClientRect().height) };
+               h: Math.round(pb.getBoundingClientRect().height), copies: n / 2 };
     });
+    ok('a pearl made far taller than any in the library (precondition)',
+       !!tall && tall.h > 600, tall ? `${tall.h}px from ${tall.copies} copies` : 'no pearl on screen');
     ok('and a pearl far taller than any in the library still does not push it',
        !!tall && tall.h > 600 && tall.over <= 0,
        tall ? `${tall.over}px over, with a ${tall.h}px pearl` : 'no pearl on screen');

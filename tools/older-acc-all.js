@@ -4,6 +4,8 @@
  * The whole older-ACC round in one command, on the owner's laptop:
  *
  *   node tools/older-acc-all.js
+ *   node tools/older-acc-all.js --verify-only    step 5 alone, on the build already
+ *                                                merged — the same one file out
  *
  *   1. node tools/older-acc-import.js            read both PDFs, stage what is new
  *   2. node scripts/build.js                     a fresh single-file build
@@ -56,7 +58,10 @@ function step(title, args, { keep = true } = {}) {
   return { ok: r.status === 0, out };
 }
 
+const VERIFY_ONLY = process.argv.includes('--verify-only');
 const readAdded = () => { try { return JSON.parse(fs.readFileSync(REPORT, 'utf8')).totals.added; } catch (_) { return null; } };
+if (!VERIFY_ONLY) prepare();
+function prepare() {
 const before = readAdded();
 
 let s = step('import', ['tools/older-acc-import.js']);
@@ -77,10 +82,18 @@ if (!s.ok) { say('merge failed.'); finish(1); }
 s = step('extract', ['scripts/extract-content.js', 'build/systole.html'], { keep: false });
 if (!s.ok) { say(s.out.split('\n').filter(Boolean).slice(-3).join('\n')); say('extract failed.'); finish(1); }
 say('extract ok');
+}
+if (VERIFY_ONLY) {
+  const b = path.join(ROOT, 'build', 'systole.html');
+  if (!fs.existsSync(b)) { say('--verify-only: no build/systole.html — run without --verify-only'); finish(1); }
+  const m = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/.exec(fs.readFileSync(b, 'utf8'));
+  const n = m ? JSON.parse(m[1]).filter(q => /^OAB_/.test(q.id)).length : 0;
+  say(`=== verify only, on the build as it stands: ${n} older-bank questions merged in it`);
+}
 
 const stats = path.join(ROOT, 'tests', 'test-stats.json');
 const statsBefore = fs.existsSync(stats) ? fs.statSync(stats).mtimeMs : 0;
-s = step('verify --pwa', ['scripts/verify.js', '--pwa'], { keep: false });
+const s = step('verify --pwa', ['scripts/verify.js', '--pwa'], { keep: false });
 /* From the verify output, only what counts: each suite's row (name, ✓/✗,
    passed/failed), the totals, and each failing check's LABEL — cut before its
    "→", which is where a suite quotes the data it looked at. Never the notes a
