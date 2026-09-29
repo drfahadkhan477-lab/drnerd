@@ -8,6 +8,7 @@
  *                                  [--out source/older-staging] [--threshold 0.5]
  *   node tools/older-acc-import.js --merge [build/systole.html] [--out source/older-staging]
  *   node tools/older-acc-import.js SECOND.pdf --shapes 70,134-135,226-228
+ *   node tools/older-acc-import.js --probe
  *
  * With no PDFs named it reads source/older/SECOND.pdf, then source/older/FIRST.pdf
  * — SECOND first because its text layer is clean, so where the two banks
@@ -74,6 +75,13 @@
  * redirection would have written. It is how a page the report lists as
  * unparsed gets a rule: the owner uploads the shapes, not the page.
  *
+ * --probe stages nothing and needs no bank either: it parses both PDFs and,
+ * for every question left without an answer, counts how its explanation
+ * treats each option letter — called correct, called incorrect, neither —
+ * with the wording around each mention as a shape (older-acc.js
+ * letterStances). To source/older-probe.txt, UTF-8. It is how a rule for
+ * the unanswered could be earned from the page rather than guessed.
+ *
  * source/ is gitignored and scripts/leak-guard.js refuses it: nothing staged
  * here is ever committed.
  */
@@ -92,6 +100,7 @@ const MARKER = '.older-acc-import';
 
 if (args.includes('--merge')) { merge(); process.exit(0); }
 const SHAPES = args.includes('--shapes') ? pageSet(opt('--shapes', '')) : null;
+const PROBE = args.includes('--probe');
 if (SHAPES && !SHAPES.size) { console.error('--shapes needs pages: --shapes 70,134-135,226'); process.exit(1); }
 function pageSet(spec) {
   const out = new Set();
@@ -290,7 +299,7 @@ async function readPdf(browser, file) {
   const n = await page.evaluate(openDoc, { lib: LIB, worker: WORKER });
   const pages = [];
   for (let p = 1; p <= n; p++) {
-    try { pages.push(await page.evaluate(readPage, { p, scale: 2, maxW: 1400, quality: 0.85, noImages: !!SHAPES })); }
+    try { pages.push(await page.evaluate(readPage, { p, scale: 2, maxW: 1400, quality: 0.85, noImages: !!SHAPES || PROBE })); }
     catch (e) { pages.push({ p, noText: true, failed: true, w: 1, h: 1, y0: 0 }); }
     if (p % 50 === 0 || p === n) process.stderr.write(`  ${path.basename(file)}  page ${p}/${n}\r`);
   }
@@ -302,6 +311,7 @@ async function readPdf(browser, file) {
 /* ── the command ───────────────────────────────────────────────────────── */
 (async () => {
   if (SHAPES) return shapes();
+  if (PROBE) return probe();
   const { from: bankFrom, bank } = readBank();
   const shape = A.inferShape(bank);
   const { key, stems } = A.bankStems(bank);
@@ -388,6 +398,23 @@ async function shapes() {
   fs.writeFileSync(file, rows.join('\n'), 'utf8');
   console.log(rows.filter(r => /^\S+\.pdf /i.test(r)).join('\n'));
   console.log(`shapes written to ${path.relative(process.cwd(), file)} (source/ is gitignored) — upload that file`);
+}
+
+/* ── --probe ──────────────────────────────────────────────────────────── */
+async function probe() {
+  const { launch } = require('../tests/_engine.js');
+  const browser = await launch();
+  const rows = [];
+  for (const f of FILES) {
+    const parsed = A.parseDocument(await readPdf(browser, f));
+    rows.push(...A.probeReport(path.basename(f), parsed.questions), '');
+  }
+  await browser.close();
+  const file = path.join(ROOT, 'source', 'older-probe.txt');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, rows.join('\n'), 'utf8');
+  console.log(rows.join('\n'));
+  console.log(`probe written to ${path.relative(process.cwd(), file)} (source/ is gitignored) — upload that file`);
 }
 
 /* ── --merge ───────────────────────────────────────────────────────────── */

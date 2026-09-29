@@ -626,6 +626,36 @@ head('what an unanswered question\'s explanation holds, counted');
      !/zq/i.test(rep), line.trim() || 'no such line');
 }
 
+head('--probe: how an unanswered explanation treats each option letter');
+{
+  const st = (t, n = 4) => A.letterStances([t], n);
+  const all = st('Zqa. Option (C) is correct because zqb. (A) is incorrect since zqc. Choice B is not indicated, and (d) is wrong for zqd.');
+  ok('one option called correct and every other called incorrect is told apart', all.one === 2 && all.rest === true && all.pos === 1 && all.neg === 3, JSON.stringify({ ...all, shapes: undefined }));
+  const partial = st('The correct answer is (b). Zqe (a) is discussed but never judged.');
+  ok('"the correct answer is (b)" counts as correct; an unjudged mention is neither', partial.one === 1 && partial.rest === false && partial.neg === 0, JSON.stringify({ ...partial, shapes: undefined }));
+  const argue = st('Zqf. (A) is incorrect. (B) is not the best. (C) is wrong. (D) is contraindicated.');
+  ok('an explanation arguing only against distractors names no answer', argue.one === -1 && argue.pos === 0 && argue.neg === 4);
+  const two = st('(A) is correct in one sense; (B) is the best in zqg another.');
+  ok('two called correct is not one answer', two.one === -1 && two.pos === 2);
+  ok('a letter past the options is not an option', st('Zqh (e) is correct.', 4).pos === 0);
+  const probeDoc = [
+    page(1, [L(700, 'Question', HB), L(686, '3. A zqpstem one.', B), L(660, 'A.  Zqp1', B), L(646, 'B.  Zqp2', B), L(632, 'C.  Zqp3', B),
+      L(600, 'Zqexp (b) would be the most appropriate; (a) is incorrect and (c) is wrong.')]),
+    page(2, [L(700, 'Question', HB), L(686, '4. A zqpstem two.', B), L(660, 'A.  Zqq1', B), L(646, 'B.  Zqq2', B),
+      L(600, 'Zqsilent words with no letter in them.')]),
+    page(3, [L(700, 'Question', HB), L(686, '5. A zqpstem three.', B), L(660, 'A.  Zqr1', B), L(646, 'B.  Zqr2', B), L(632, 'C.  Zqr3', B),
+      L(600, 'Zqarg (a) is incorrect; (b) is not indicated.')]),
+  ];
+  const PR = A.parseDocument(probeDoc);
+  const unanswered = PR.questions.filter(q => q.ci < 0).length;
+  const rows = A.probeReport('PROBE.pdf', PR.questions), txt = rows.join('\n');
+  ok('the fixture\'s three questions are all unanswered — nothing here is a stated key the parser reads', PR.questions.length === 3 && unanswered === 3,
+     PR.questions.map(q => q.answerBy || '-').join(','));
+  ok('the report counts each kind', /unanswered 3 — pages 1-3/.test(txt) && /every other called incorrect\s+1$/m.test(txt) &&
+     /letters mentioned, none called correct\s+1$/m.test(txt) && /no lettered mention at all\s+1$/m.test(txt) && /two or more called correct\s+0$/m.test(txt), txt.split('\n').slice(0, 6).join(' | '));
+  ok('with the wording as shapes, and not one word', /called correct, as shapes: \(a\)␣aaaaa␣aa␣aaa×1/.test(txt) && !/zq/i.test(txt), (txt.match(/called correct, as shapes: .*/) || [''])[0]);
+}
+
 head('--shapes: how a page is laid out, one row per line, as shapes');
 {
   const rows = A.shapeRows(second, new Set([1, 5]));
