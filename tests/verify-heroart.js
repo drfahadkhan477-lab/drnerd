@@ -84,7 +84,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   page.on('console', m => { if (/too many active webgl/i.test(m.text())) glWarnings.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'commit', timeout: 250000 });
+  const tMain = Date.now();
   await page.waitForFunction(() => !!document.getElementById('heroHeart'), null, { timeout: 60000 });
+  events.push(`main page hero after ${Math.round((Date.now() - tMain) / 1000)}s`);
   /* Wait for a mounted instance rather than a duration — the mesh is built by
      surface nets at mount and how long that takes is a property of the machine
      this happens to run on. Bounded, so a mount that never happens fails
@@ -423,9 +425,26 @@ head('a destroyed heart gives its context back');
 }
 
   head('reduced motion holds the fallback still');
+  /* The main page is done with. Left open, it is a second copy of the app —
+     96 MB of document on the owner's build, still pulling in the deferred
+     note figures — competing with this one while it parses: the hero took
+     11 s there and over 60 s here. A user never has two. */
+  await page.close();
   const rm = watch(await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' }), events, 'reduced-motion');
+  rm.on('pageerror', e => errors.push('reduced-motion: ' + e.message));
+  const t0 = Date.now();
   await rm.goto(URL, { waitUntil: 'commit', timeout: 250000 });
-  await rm.waitForFunction(() => !!document.querySelector('#heroHeart .h-beat'), null, { timeout: 60000 });
+  /* The owner's run died here twice, "page events: none", with nothing said
+     about why. What the page had got to goes into the death note first. */
+  await rm.waitForFunction(() => !!document.querySelector('#heroHeart .h-beat'), null, { timeout: 60000 })
+    .catch(async e => {
+      const at = await rm.evaluate(() => ({ ready: document.readyState, hero: !!document.getElementById('heroHeart'),
+        beat: document.querySelectorAll('.h-beat').length, app: !!document.getElementById('app'),
+        appKids: (document.getElementById('app') || { children: [] }).children.length,
+        S: typeof S, render: typeof render, bytes: document.documentElement.outerHTML.length })).catch(x => 'unreadable: ' + x.message);
+      errors.push(`reduced-motion page after ${Math.round((Date.now() - t0) / 1000)}s: ${JSON.stringify(at)}`);
+      throw e;
+    });
   const r1 = await rm.evaluate(() => getComputedStyle(document.querySelector('#heroHeart .h-beat')).transform);
   await rm.waitForTimeout(140);
   const r2 = await rm.evaluate(() => getComputedStyle(document.querySelector('#heroHeart .h-beat')).transform);

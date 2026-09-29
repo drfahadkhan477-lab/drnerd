@@ -40,7 +40,8 @@ import argparse, io, json, os, re, shutil, sys, zipfile
 
 from PIL import Image
 
-LINK = re.compile(r'(!\[[^\]]*\]\()([^)\s]+)(\))')
+# CommonMark lets a link destination be wrapped in <...>; the visual atlases do.
+LINK = re.compile(r'(!\[[^\]]*\]\()(<[^>\n]+>|[^)\s]+)(\))')
 MARKER = '.add-unit'
 IMAGE_EXT = ('.jpg', '.jpeg', '.png', '.webp')
 
@@ -126,7 +127,7 @@ def main():
     for rel in sorted(notes):
         raw = notes[rel]().decode('utf-8')
         for m in LINK.finditer(raw):
-            ref = m.group(2)
+            ref = m.group(2).strip('<>')
             if not local_ref(ref):
                 continue
             name = os.path.basename(ref)
@@ -183,7 +184,7 @@ def main():
     open(os.path.join(img_dir, MARKER), 'w').write('written by tools/add-unit.py\n')
 
     def rewrite(m):
-        ref = m.group(2)
+        ref = m.group(2).strip('<>')
         if not local_ref(ref):
             return m.group(0)
         return f'{m.group(1)}refimg://{a.unit}/{os.path.basename(ref)}{m.group(3)}'

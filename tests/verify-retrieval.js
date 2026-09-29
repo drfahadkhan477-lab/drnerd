@@ -104,6 +104,10 @@ const errors = [], events = [];
 const died = onDeath(() => ({ section, checks: passed + failed, errors,
                               events: events.length ? events.join(', ') : 'none' }));
 const pct = x => (x * 100).toFixed(1) + '%';
+/* The count beside the rounding: at one decimal 1122/1145 (97.99%, under a
+   0.98 floor) and 1123/1145 (98.08%, over it) both print "98.0%", and a
+   failing check that reads as its own floor tells the reader nothing. */
+const frac = (x, n) => `${pct(x)} (${Math.round(x * n)}/${n})`;
 
 const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join(__dirname, '..', 'build', 'systole.html');
 
@@ -122,7 +126,11 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
      rather than guessed at. Titles only — every result is filtered to
      kind 'r' before ranking, so no question text can reach this output. */
   const MISSES = process.argv.includes('--misses');
-  const r = await page.evaluate((MISSES) => {
+  /* --why counts what kind of note each shape missed, and what beat it —
+     numbers only, no titles, so it can be pasted from a machine whose notes
+     are licensed. Off by default and changes nothing measured. */
+  const WHY = process.argv.includes('--why');
+  const r = await page.evaluate(({ MISSES, WHY }) => {
     const notes = REF.filter(x => x && x.title && x.title.trim().length > 6);
     const transpose = s => {
       const w = s.split(/\s+/);
@@ -152,28 +160,78 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
     const run = q => search(q, { limit: 40 })
       .filter(h => h.meta.kind === 'r').slice(0, 10).map(h => h.meta.id);
 
+    const byId = Object.create(null);
+    for (const x of notes) byId[x.id] = x;
+    const bw = x => !!x && /(^|,)\s*braunwald\s*(,|$)/i.test(String(x.tags || ''));
+    const wordset = x => new Set(String(x && x.body || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3));
+    const titleCount = Object.create(null);
+    for (const x of notes) titleCount[x.title] = (titleCount[x.title] || 0) + 1;
+    /* For each miss: is the note a Braunwald one, is the winner, does the
+       winner hold most of the missed note's words (a near-copy), and is the
+       missed title one another note also has (unfindable by title at all). */
+    const tallyWhy = pairs => {
+      const t = { misses: pairs.length, missedBW: 0, winnerBW: 0, bwBeatenByBW: 0, nearCopy: 0, sharedTitle: 0, noWinner: 0,
+                  sameFile: 0, winnerHoldsAllQuery: 0, winnerHoldsAllHeading: 0,
+                  /* Which kinds met (figure note or text note, target then
+                     winner), and how often the query appears word for word in
+                     the winner — a shared passage, not shared vocabulary. */
+                  kinds: { ff: 0, ft: 0, tf: 0, tt: 0 }, verbatimInWinner: 0 };
+      const isFig = x => /(^| — )Figs?\. \d/.test(String(x.title)) || /figures/i.test(String(x.title).split(' — ')[0]);
+      const flat = x => String(x || '').toLowerCase().replace(/\s+/g, ' ');
+      /* Medians over the misses: how much of the query each side holds (in
+         the app's own tokens), the query's length, and each side's length —
+         to tell "the winner matched as much and was shorter" from "the
+         target did not hold its own title's terms". */
+      const med = xs => { const v = xs.filter(Number.isFinite).sort((p, q) => p - q); return v.length ? +v[v.length >> 1].toFixed(2) : null; };
+      const covT = [], covW = [], qLen = [], lenT = [], lenW = [], hLen = [];
+      const fileOf = x => String(x.title).split(' — ')[0];
+      for (const [id, win, q] of pairs) {
+        const a = byId[id], b = byId[win];
+        const qt = [...new Set(tok(q || ''))];
+        const holds = x => { const d = new Set(tok(x.title + ' ' + (x.tags || '') + ' ' + (x.body || ''))); return qt.length ? qt.filter(w => d.has(w)).length / qt.length : NaN; };
+        qLen.push(qt.length); covT.push(holds(a)); lenT.push(tok(a.body || '').length);
+        /* The title's own part, after the file title every note of that file
+           shares: the part meant to tell it apart. */
+        const ht = [...new Set(tok(String(a.title).split(' — ').slice(1).join(' ')))];
+        hLen.push(ht.length);
+        if (b && ht.length) { const d = new Set(tok(b.title + ' ' + (b.tags || '') + ' ' + (b.body || ''))); if (ht.every(w => d.has(w))) t.winnerHoldsAllHeading++; }
+        if (b) { t.kinds[(isFig(a) ? 'f' : 't') + (isFig(b) ? 'f' : 't')]++; if (q && flat(b.body).includes(flat(q))) t.verbatimInWinner++; }
+        if (b) { const cw = holds(b); covW.push(cw); if (cw === 1) t.winnerHoldsAllQuery++; lenW.push(tok(b.body || '').length); if (fileOf(a) === fileOf(b)) t.sameFile++; }
+        if (bw(a)) t.missedBW++;
+        if (!b) { t.noWinner++; continue; }
+        if (bw(b)) t.winnerBW++;
+        if (bw(a) && bw(b)) t.bwBeatenByBW++;
+        const A = wordset(a), B = wordset(b);
+        let shared = 0; for (const w of A) if (B.has(w)) shared++;
+        if (A.size && shared / A.size >= 0.5) t.nearCopy++;
+        if (titleCount[a.title] > 1) t.sharedTitle++;
+      }
+      Object.assign(t, { medQueryTerms: med(qLen), medTargetHolds: med(covT), medWinnerHolds: med(covW), medHeadingTerms: med(hLen), medTargetLen: med(lenT), medWinnerLen: med(lenW) });
+      return t;
+    };
     const titleOf = Object.create(null);
     for (const x of notes) titleOf[x.id] = x.title;
     const measure = set => {
       let r1 = 0, r5 = 0, mrr = 0, empty = 0;
-      const missed = [];
+      const missed = [], why = [];
       for (const { q, id } of set) {
         let ids; try { ids = run(q); } catch (e) { ids = []; }
         if (!ids.length) empty++;
         const k = ids.indexOf(id);
         if (k === 0) r1++;
         else if (MISSES) missed.push(titleOf[id] + '  ->  ' + (ids.length ? titleOf[ids[0]] : '(nothing)'));
+        if (WHY && k !== 0) why.push([id, ids[0], q]);
         if (k > -1 && k < 5) r5++;
         if (k > -1) mrr += 1 / (k + 1);
       }
       const n = set.length;
-      return { n, r1: r1 / n, r5: r5 / n, mrr: mrr / n, empty, missed };
+      return { n, r1: r1 / n, r5: r5 / n, mrr: mrr / n, empty, missed, why: WHY ? tallyWhy(why) : null };
     };
 
-    const out = { notes: notes.length, docs: notes.length + ALL_Q.length };
+    const out = { notes: notes.length, docs: notes.length + ALL_Q.length, bwNotes: notes.filter(bw).length };
     for (const k of Object.keys(sets)) out[k] = measure(sets[k]);
     return out;
-  }, MISSES);
+  }, { MISSES, WHY });
 
   head('the corpus is the one production searches');
   ok('the reference library is loaded', r.notes > 100, `${r.notes} notes`);
@@ -183,16 +241,16 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
      `exact ${r.exact.n}, typo ${r.typo.n}, prefix ${r.prefix.n}, body ${r.body.n}`);
 
   head('a note is found from its own title');
-  ok('R@1 at or above 0.95', r.exact.r1 >= 0.95, pct(r.exact.r1));
-  ok('R@5 at or above 0.99', r.exact.r5 >= 0.99, pct(r.exact.r5));
+  ok('R@1 at or above 0.95', r.exact.r1 >= 0.95, frac(r.exact.r1, r.exact.n));
+  ok('R@5 at or above 0.99', r.exact.r5 >= 0.99, frac(r.exact.r5, r.exact.n));
   ok('and nothing comes back empty', r.exact.empty === 0, String(r.exact.empty));
 
   head('a typed-in-a-hurry title still finds it');
-  ok('R@1 at or above 0.90 with one transposition', r.typo.r1 >= 0.90, pct(r.typo.r1));
-  ok('R@5 at or above 0.97', r.typo.r5 >= 0.97, pct(r.typo.r5));
+  ok('R@1 at or above 0.90 with one transposition', r.typo.r1 >= 0.90, frac(r.typo.r1, r.typo.n));
+  ok('R@5 at or above 0.97', r.typo.r5 >= 0.97, frac(r.typo.r5, r.typo.n));
 
   head('a half-typed title completes to the note');
-  ok('R@1 at or above 0.86 on truncated terms', r.prefix.r1 >= 0.86, pct(r.prefix.r1));
+  ok('R@1 at or above 0.86 on truncated terms', r.prefix.r1 >= 0.86, frac(r.prefix.r1, r.prefix.n));
   /* Zero, not "few". Returning nothing at all is a different failure from
      ranking badly: it tells the fellow their library does not cover something
      it does cover. Ten of 146 did that before step 72. */
@@ -200,8 +258,8 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
      `${r.prefix.empty} empty of ${r.prefix.n}`);
 
   head('prose from the note itself — the shape production actually sends');
-  ok('R@1 at or above 0.98', r.body.r1 >= 0.98, pct(r.body.r1));
-  ok('R@5 at or above 0.99', r.body.r5 >= 0.99, pct(r.body.r5));
+  ok('R@1 at or above 0.98', r.body.r1 >= 0.98, frac(r.body.r1, r.body.n));
+  ok('R@5 at or above 0.99', r.body.r5 >= 0.99, frac(r.body.r5, r.body.n));
   ok('and nothing comes back empty', r.body.empty === 0, String(r.body.empty));
 
   head('prefix matching fires only where there was nothing to match');
@@ -321,6 +379,10 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
 
   console.log(`\n  measured: exact ${pct(r.exact.r1)} · typo ${pct(r.typo.r1)} · ` +
               `prefix ${pct(r.prefix.r1)} · body ${pct(r.body.r1)}  (R@1)`);
+  if (WHY) {
+    console.log(`\n  why (counts only): ${r.notes} notes, ${r.bwNotes} of them Braunwald`);
+    for (const k of ['exact', 'typo', 'prefix', 'body']) console.log(`    ${k.padEnd(6)} ${JSON.stringify(r[k].why)}`);
+  }
   if (MISSES) for (const k of ['exact', 'typo', 'prefix', 'body']) {
     console.log(`\n  missed at R@1, ${k} (${r[k].missed.length}):`);
     for (const m of r[k].missed) console.log('    ' + m);
