@@ -190,7 +190,9 @@ you ever share this URL with someone else, put a KV-backed limiter in first.
 The platform limit that binds is Cloudflare Pages' per-file ceiling — labelled
 "25 MiB" but enforced at **25,000,000 bytes**. The note figures are the files
 that approach it, so they ship **one file per unit** (`content/refs-images/<unit>.json`):
-adding a unit adds a file rather than growing a shared one. `build-pwa.js`
+adding a unit adds a file rather than growing a shared one, and a unit that
+outgrows one file continues in `<unit>.2.json`, `<unit>.3.json` (a unit that
+fits keeps its one file and its URL). `build-pwa.js`
 refuses a `dist/` with any file over the ceiling and prints the largest file on
 every build, so the margin is on screen before a deploy rather than discovered
 after one. (This used to be one `refs-images.json` for the whole shelf; it

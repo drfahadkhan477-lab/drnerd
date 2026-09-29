@@ -619,13 +619,35 @@ var REF_SEED_READY = (function(){
    Kept as a plain function of the parsed map so tests/verify-loader-pure.js
    can drive it without a build. A key with no folder goes to "loose"; a folder
    name that is not URL-safe is made so, and two that collapse to the same safe
-   name simply share a file, which costs nothing. */
-function splitRefImages(imgs) {
-  const parts = {};
-  for (const key of Object.keys(imgs)) {
+   name simply share a file, which costs nothing.
+
+   AND A UNIT THAT OUTGROWS ONE FILE CONTINUES IN THE NEXT. One file per unit
+   moved the ceiling to the unit, and a unit can reach it too: the Braunwald
+   heart-failure unit's file was ~21.7 MB against 25,000,000 bytes, room for a
+   handful more figures. So a unit's figures, in key order, fill "unit" up to
+   `budget` bytes of JSON and carry on in "unit.2", "unit.3", …. The dot
+   cannot occur in a unit name (the name is made of [A-Za-z0-9_-]), so a
+   continuation can never be mistaken for another unit, and a unit under the
+   budget keeps exactly the file name it always had — nothing already cached
+   on a device changes URL. A single figure larger than the budget still gets
+   a file to itself; pagesLimitReport is what refuses one over the host's
+   ceiling. The budget is a parameter so the suite can drive it small. */
+function splitRefImages(imgs, budget = 12 * 1000 * 1000) {
+  const byUnit = {};
+  for (const key of Object.keys(imgs).sort()) {
     const slash = key.indexOf('/');
     const unit = slash > 0 ? key.slice(0, slash).replace(/[^A-Za-z0-9_-]/g, '_') : 'loose';
-    (parts[unit] || (parts[unit] = {}))[key] = imgs[key];
+    (byUnit[unit] || (byUnit[unit] = [])).push(key);
+  }
+  const parts = {};
+  for (const unit of Object.keys(byUnit)) {
+    let n = 1, name = unit, bytes = 2;
+    for (const key of byUnit[unit]) {
+      const size = JSON.stringify(key).length + JSON.stringify(imgs[key]).length + 2;
+      if (parts[name] && bytes + size > budget) { n++; name = unit + '.' + n; bytes = 2; }
+      (parts[name] || (parts[name] = {}))[key] = imgs[key];
+      bytes += size;
+    }
   }
   return parts;
 }
