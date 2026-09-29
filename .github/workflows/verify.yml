@@ -266,7 +266,7 @@ jobs:
         run: node tests/verify-memorizer-provenance-pure.js
       - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (103 checks)
         run: node tests/verify-memorizer-pack-pure.js
-      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text (23 checks)
+      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text (37 checks)
         run: node tests/verify-memorizer-studyimport-pure.js
 
   # ── Memorizer in a real browser ────────────────────────────────────────────
@@ -284,11 +284,12 @@ jobs:
   # pages, from jsDelivr at pinned versions and checks them against their
   # integrity hashes, as the app does. verify-memorizer-hardening uses pasted
   # notes only and fails any request that leaves the page other than to the
-  # stubbed model.
+  # stubbed model. verify-memorizer-studyimport fetches nothing: its HTML pages
+  # are written in the suite.
   #
   # Chromium only, on purpose, for now: the suites run on WebKit through
   # SYSTOLE_ENGINE=webkit, and adding that here is one more matrix entry once
-  # a WebKit run of both has been seen green.
+  # a WebKit run of each has been seen green.
   memorizer-browser:
     name: memorizer-browser — the whole app, in Chromium, on documents made for the test
     runs-on: ubuntu-latest
@@ -306,6 +307,8 @@ jobs:
         run: node tests/verify-memorizer.js
       - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
+      - name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (32 checks)
+        run: node tests/verify-memorizer-studyimport.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

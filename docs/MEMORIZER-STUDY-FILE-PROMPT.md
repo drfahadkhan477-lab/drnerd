@@ -6,16 +6,25 @@ a study file for it. Save Claude's reply as a `.md` file and add it with
 same way).
 
 **What Memorizer takes from the file** (`memorizer/src/studyImport.js`,
-checked by `tests/verify-memorizer-studyimport-pure.js`):
+checked by `tests/verify-memorizer-studyimport-pure.js` and, for HTML and the dialog,
+`tests/verify-memorizer-studyimport.js`):
 
 - the prose, bullets and table rows under every heading, as the unit's text,
   which the built-in coach, Ask and the on-device AI work from;
 - each `- **Term**: explanation` line as a lesson point, and each table as a
-  lesson table;
+  lesson table, in the unit section its own heading's text landed in;
+- a citation such as `[p. 1452]`, kept as written in the point and the text;
+- the front matter's `source_book`, `source_page_range`, `difficulty_level`
+  and `estimated_study_time_minutes`, shown under the unit's title;
 - each question under the quiz heading that has **exactly four options A–D**
   and a `**Correct Answer**:` line, with its explanation and the reasons listed
   under "Why the distractors are wrong". A question with no marked answer is
-  left out and counted in the import note, never guessed.
+  left out and counted in the import note, never guessed. A question written
+  under a content heading stays with that section; a quiz at the end is
+  placed by what its answer and explanation say.
+
+A section of the unit that gets questions or tables but no `**Term**:` points
+is taught from the built-in coach's points on its own text.
 
 Points, tables and questions then go through the same check as a study pack:
 anything carrying a number that the file's own text does not have is flagged.
@@ -58,7 +67,7 @@ learning_objectives:
 ---
 
 ### B. TEACHING POINTS
-Extract 8-12 fundamental teaching points. Format each as:
+Write 5 to 10 teaching points, most important first, each at most 25 words (the same rule as Memorizer's own study-pack prompt). When you know the source page, end the point with it as [p. N]. Format each as:
 - **[KEY TERM]**: [Clear 1-2 sentence definition/explanation]
 
 Guidelines:
@@ -166,7 +175,7 @@ Then generate the SVG code directly below, or provide ASCII art if appropriate.
 Important: Generate original diagrams that match the source material's style but are your own creation. Do not copy original figures.
 
 ### H. QUIZ QUESTIONS
-Generate 3-5 high-quality multiple-choice questions. Format:
+Generate 3-5 high-quality multiple-choice questions. Each has exactly four options, A to D, and one **Correct Answer** line; put a line of three dashes (---) after each question. Format:
 
 #### Question [N]: [Topic being tested]
 **Stem**: [A realistic clinical scenario or concept question, typically 2-4 sentences]

@@ -7,8 +7,8 @@
  *
  * Pure Node: the unit is cut from the file's study text by the real chunker
  * and the pack goes through the real Pack.check, as ui.js importStudyUnit
- * does. HTML parsing needs a DOM, so htmlToMarkdown is not reached here; what
- * it writes is the markdown read below.
+ * does. HTML needs a DOM: tests/verify-memorizer-studyimport.js reads real
+ * HTML files in a browser.
  */
 'use strict';
 const path = require('path');
@@ -24,6 +24,7 @@ const SRC = path.join(__dirname, '..', 'memorizer', 'src');
 const Chunk = require(path.join(SRC, 'chunk.js'));
 const Pack = require(path.join(SRC, 'pack.js'));
 const SI = require(path.join(SRC, 'studyImport.js'));
+const Coach = require(path.join(SRC, 'coach.js'));
 
 const MD = [
   '---', 'unit: Ventricular Loading', '---', '',
@@ -99,7 +100,7 @@ ok('code blocks and SVG are left out of it', !/-->/.test(text) && !/diagram labe
 head('the pack, held to that text');
 const clusters = Chunk.clusterBlocks(Chunk.blocksFromPages(Chunk.pagesFromText(text)).blocks);
 const doc = { id: 'u1', name: p.title, clusters };
-const got = SI.packFor(p, doc, Pack);
+const got = SI.packFor(p, doc, Pack, Coach);
 ok('the unit has sections', clusters.length >= 1, String(clusters.length));
 ok('the question with no marked answer is counted and left out of the pack', got.unanswered === 1, String(got.unanswered));
 const checked = got.pack ? Pack.check([got.pack], doc) : { sections: [], refused: [], dropped: [] };
@@ -111,6 +112,71 @@ ok('the three answered questions reach the unit, with their right answers', nq =
 const packedQ4 = [].concat(...checked.sections.map(s => s.quiz.questions)).find(q => /contractility/.test(q.question)) || {};
 ok('a question with reasons carries one per option, "" for the right one', JSON.stringify(packedQ4.why) === JSON.stringify(['Venous return sets preload.', '', 'Bradycardia is a rate.', 'Compliance is stiffness.']), JSON.stringify(packedQ4.why));
 ok('all three teaching points reach the lesson', checked.sections.reduce((n, s) => n + s.lesson.points.length, 0) === 3);
+
+head('two sections: each item goes where it was written');
+const MD2 = [
+  '---', 'unit: Aortic Stenosis', 'source_book: Braunwald 12e, chapter 72', 'source_page_range: 1450-1470', 'difficulty_level: advanced',
+  'learning_objectives:', '  - Grade severity', '  - Time valve replacement', '---', '',
+  '## Diagnosis and grading', '',
+  'Aortic stenosis is graded by echocardiography using the peak jet velocity and the mean gradient across the valve. A peak velocity of 4 m/s or more marks severe stenosis [p. 1452]. A mean gradient of 40 mmHg or more also marks severe stenosis. The valve area falls below 1.0 cm2 in severe disease. Low flow low gradient stenosis needs dobutamine echocardiography to separate true stenosis from pseudostenosis. Calcium scoring on CT helps when the echo is discordant.',
+  '',
+  '- **Peak velocity**: the fastest jet through the valve, 4 m/s or more in severe stenosis [p. 1452].',
+  '',
+  '## Treatment and timing', '',
+  'Valve replacement is indicated once symptoms appear, whether angina, syncope or heart failure. Transcatheter replacement suits older patients and those at high surgical risk. Surgical replacement suits younger patients with a long life expectancy. Balloon valvotomy is only a bridge. Medical therapy does not change the natural history of severe stenosis. Asymptomatic patients with a falling ejection fraction below 50 percent are also referred.',
+  '',
+  '| Approach | Best suited to |', '|---|---|', '| Transcatheter | older or high surgical risk |', '| Surgical | younger, long life expectancy |',
+  '',
+  '### Question 1',
+  '**Stem**: Which echocardiographic finding grades aortic stenosis as severe?',
+  '- A) A peak jet velocity of 4 m/s or more', '- B) A valve area above 2 cm2', '- C) A mean gradient of 10 mmHg', '- D) A normal calcium score',
+  '**Correct Answer**: A',
+  '**Explanation**: A peak jet velocity of 4 m/s or more on echocardiography marks severe stenosis, graded with the mean gradient across the valve.',
+  '',
+  '### Question 2',
+  '**Stem**: A question with three options only?',
+  '- A) One', '- B) Two', '- C) Three',
+  '**Correct Answer**: A',
+].join('\n');
+const p2 = SI.parseMarkdown(MD2), text2 = SI.studyText(p2);
+const doc2 = { id: 'u2', name: p2.title, clusters: Chunk.clusterBlocks(Chunk.blocksFromPages(Chunk.pagesFromText(text2)).blocks) };
+ok('the fixture is cut into its two sections', doc2.clusters.length === 2, doc2.clusters.map(c => c.title).join(' | '));
+const got2 = SI.packFor(p2, doc2, Pack, Coach), secs2 = got2.pack ? got2.pack.sections : [];
+const s2 = secs2.find(s => s.section === 2) || { lesson: { points: [], tables: [] }, quiz: { questions: [] } };
+ok('a section with a table and a question but no "**Term**:" points is still sent', !!secs2.find(s => s.section === 2), JSON.stringify(secs2.map(s => s.section)));
+ok('its lesson points are the built-in coach’s, from its own text', s2.pointsBy === 'coach' && s2.lesson.points.length > 0 && s2.lesson.points.every(x => text2.includes(x.text)), JSON.stringify(s2.lesson.points.map(x => x.text)));
+ok('its table stays with it', s2.lesson.tables.length === 1);
+ok('a question written under "Treatment" stays there, though its words are "Diagnosis"’s', s2.quiz.questions.some(q => /echocardiographic finding/.test(q.question)) && !secs2.some(s => s.section === 1 && s.quiz.questions.length), JSON.stringify(secs2.map(s => [s.section, s.quiz.questions.length])));
+const checked2 = Pack.check([got2.pack], doc2);
+ok('Pack.check accepts both sections', checked2.sections.length === 2 && checked2.refused.length === 0, JSON.stringify(checked2.refused));
+const pt1 = ((checked2.sections.find(s => s.index === 0) || {}).lesson || { points: [] }).points.map(x => x.text).join(' ');
+ok('a citation in the file, [p. 1452], is kept in the lesson point as written', /\[p\. 1452\]/.test(pt1), pt1);
+ok('and in the unit’s text, where Ask quotes from', /severe stenosis \[p\. 1452\]/.test(text2));
+ok('the three-option question is dropped by the check, with its reason', checked2.dropped.some(d => /3 options/.test(d.why)), JSON.stringify(checked2.dropped));
+const sum2 = SI.parseStudyFile(MD2, 'as.md').summary;
+ok('the preview counts it as not usable before import', sum2.questions === 2 && sum2.answered === 2 && sum2.malformed === 1, JSON.stringify(sum2));
+const meta2 = SI.studyMeta(p2);
+ok('the front matter the prompt asks for is kept: source, pages, level, objectives',
+   meta2.sourceBook === 'Braunwald 12e, chapter 72' && meta2.pageRange === '1450-1470' && meta2.difficulty === 'advanced' &&
+   JSON.stringify(meta2.objectives) === '["Grade severity","Time valve replacement"]', JSON.stringify(meta2));
+
+head('placing a point by where its words are, not by how many it shares');
+const MD3 = MD2.replace('| Approach |', '- **Valve area**: graded by the mean gradient and peak velocity on echocardiography.\n\n| Approach |');
+const p3 = SI.parseMarkdown(MD3), text3 = SI.studyText(p3);
+const doc3 = { id: 'u3', name: p3.title, clusters: Chunk.clusterBlocks(Chunk.blocksFromPages(Chunk.pagesFromText(text3)).blocks) };
+const secs3 = (SI.packFor(p3, doc3, Pack, Coach).pack || { sections: [] }).sections;
+const where3 = secs3.filter(s => s.lesson.points.some(x => /^Valve area: graded/.test(x.text))).map(s => s.section);
+ok('a point written under "Treatment" goes to Treatment, though every word of it is in "Diagnosis" too (a tie that overlap gives to the earlier section)', JSON.stringify(where3) === '[2]', JSON.stringify(where3));
+
+head('prose after a question');
+const MD4 = ['# Loading', '', 'Preload is the stretch on the wall at the end of filling.', '', '## Quiz', '', '### Question 1', '**Stem**: Which term names the stretch?',
+  '- A) Preload', '- B) Afterload', '- C) Inotropy', '- D) Compliance', '**Correct Answer**: A', '', '---', '',
+  'Summary: afterload rises with aortic pressure and falls with vasodilators.'].join('\n');
+const p4 = SI.parseMarkdown(MD4), text4 = SI.studyText(p4);
+ok('a "---" rule ends a question, and the prose after it is study text', p4.questions.length === 1 && p4.questions[0].options.length === 4 && /afterload rises with aortic pressure/.test(text4), text4);
+
+head('size');
+ok('a file over the limit is refused with a way forward, not parsed', (r => !r.success && /too large/.test(r.error) && /Split/.test(r.error))(SI.parseStudyFile('x'.repeat(SI.MAX_BYTES + 1), 'big.md')));
 
 head('which reader');
 ok('.html is read as HTML, .md as markdown', SI.detectFormat('a.html', '') === 'html' && SI.detectFormat('a.md', '<html>') === 'markdown');

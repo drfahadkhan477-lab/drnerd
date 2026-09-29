@@ -539,21 +539,35 @@ function readText(file) {
 
 /* ── a study file (.md or .html, studyImport.js) ─────────────────────────
    Its text becomes a unit as pasted notes do; its own points, tables and
-   questions become the unit's pack, checked against that text. */
+   questions become the unit's pack, checked against that text. All or
+   nothing: if the pack or the source details cannot be stored, the unit
+   just written is deleted again, so no half-imported unit is left behind. */
 function importStudyUnit(study) {
   ui.importing = 'Splitting into sections…'; ui.error = ''; render();
   return finishImport(Prov.fingerprint(study.text).then(function (fp) {
     if (duplicate(fp)) throw DUPLICATE;
     return saveUnit(study.name, 'text', Chunk.pagesFromText(study.text), { fingerprint: fp, emptyMessage: 'There was no text to learn from in that file.' });
   }).then(function (rec) {
-    var got = root.MemStudyImport.packFor(study.parsed, rec, Pack);
-    var skipped = got.unanswered ? ' ' + Home.count(got.unanswered, 'question') + ' with no marked answer left out.' : '';
-    if (!got.pack) { ui.notice = 'Imported as study text; the built-in coach teaches it.' + skipped; return rec; }
-    var checked = Pack.check([got.pack], rec);
-    ui.notice = Pack.report(checked).line + skipped;
-    if (!checked.sections.length) return rec;
-    return Store.put('packs', Pack.merge(null, checked, rec, Date.now())).then(function () { return rec; });
+    return studyPackFor(study, rec).catch(function (e) {
+      return Store.deleteDoc(rec.id).then(function () { throw e; }, function () { throw e; });
+    });
   }));
+}
+function studyPackFor(study, rec) {
+  var got = root.MemStudyImport.packFor(study.parsed, rec, Pack, Coach);
+  var skipped = got.unanswered ? ' ' + Home.count(got.unanswered, 'question') + ' with no marked answer left out.' : '';
+  rec.study = Object.assign({ file: study.fileName || '', importedAt: Date.now() }, study.meta || {});
+  var checked = got.pack ? Pack.check([got.pack], rec) : null;
+  ui.notice = (checked ? Pack.report(checked).line : 'Imported as study text; the built-in coach teaches it.') + skipped;
+  var writes = [Store.put('docs', rec)];
+  if (checked && checked.sections.length) writes.push(Store.put('packs', Pack.merge(null, checked, rec, Date.now())));
+  return Promise.all(writes).then(function () { return rec; });
+}
+function studyLine(d) {
+  var st = d.study;
+  if (!st) return null;
+  var bits = [st.sourceBook, st.pageRange && (/^p/i.test(st.pageRange) ? st.pageRange : 'pp. ' + st.pageRange), st.difficulty, st.minutes && '~' + st.minutes + ' min'].filter(Boolean);
+  return h('p.muted.unit-meta', { id: 'unit-source' }, 'Imported study file' + (st.file ? ' \u201C' + st.file + '\u201D' : '') + (bits.length ? ' · ' + bits.join(' · ') : ''));
 }
 
 function showStudyImportDialog() {
@@ -1171,6 +1185,7 @@ function viewUnit() {
         ring(Math.round(100 * doneN / Math.max(1, n)), 'unit'),
         h('div.unit-hero-text',
           h('p.muted.unit-meta', Home.count(n, 'section') + ' · ' + Home.count(d.pages, 'page') + ' · ' + doneN + ' drilled'),
+          studyLine(d),
           h('p.unit-next', { id: 'unit-states' }, allDone ? 'Every section drilled — the final exam is open.' : (function () {
             var taughtN = d.clusters.filter(function (_, i) { return !s.per[i].done && s.per[i].lesson; }).length;
             return [h('strong', String(doneN)), ' drilled · ', h('strong', String(taughtN)), ' taught · ', h('strong', String(n - doneN - taughtN)), ' to learn'];

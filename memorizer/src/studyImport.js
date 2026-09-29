@@ -2,17 +2,26 @@
    studyImport.js — a study file (.md written by Claude, or a saved .html page)
    made into a unit.
 
-   The file is not stored as a unit of its own shape. It becomes two things
-   the app already knows how to check and teach:
-     · study text, imported the way pasted notes are (ui.js importText), so
-       the unit has sections, the built-in coach, Ask and the AI to ground on;
-     · a study pack (pack.js) holding the file's own teaching points, tables
-       and questions, put through Pack.check against that text like any other.
+   The file is read once into one intermediate, the StudyFile:
+     { title, meta, sections: [{ heading, quiz, lines, points, tables,
+       questions, emitted }], points, tables, questions }
+   where every point, table and question stays in the section it was written
+   under (the flat lists are views of the same objects). From it come the two
+   things the app already knows how to check and teach:
+     · study text, imported the way pasted notes are (ui.js saveUnit), so the
+       unit has sections, the built-in coach, Ask and the AI to ground on;
+     · a study pack (pack.js) with the file's points, tables and questions,
+       put through Pack.check against that text like any other.
    HTML is turned into the same markdown shape first, so there is one parser.
+
+   A citation written in the file — "[p. 123]", "(pp. 12–13)" — is kept in
+   the text it sits in, so it reaches the lesson and Ask as written. The
+   pack's own `page` is the unit's page, which is a different thing.
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
 'use strict';
 
+var MAX_BYTES = 2 * 1024 * 1024;
 var QUIZ_HEAD = /^(?:quiz|questions?|practice questions?|self[- ]?(?:test|assessment)|mcqs?|test yourself|review questions?)\b/i;
 var Q_HEAD = /^(?:q(?:uestion)?\s*\d+\b|q\d+\b)/i;
 var OPTION = /^\s*(?:[-*]\s+)?\(?([A-Ea-e])[).:]\s+(.+)$/;
@@ -22,36 +31,55 @@ var STEM = /^\s*(?:\*\*)?stem(?:\*\*)?\s*:\s*(?:\*\*)?\s*(.*)$/i;
 var OPTIONS_HEAD = /^\s*(?:\*\*)?(?:options|choices)(?:\*\*)?\s*:?\s*(?:\*\*)?\s*:?\s*$/i;
 var WHY_HEAD = /^\s*(?:\*\*)?why (?:the )?(?:distractors|other options|others|wrong options)\b/i;
 var OTHER_HEAD = /^\s*(?:\*\*)?(?:clinical pearl|pearl|high[- ]yield|key point|takeaway|tip)s?(?:\*\*)?\s*:/i;
-var POINT =/^\s*[-*]\s+\*\*([^*]+?)\*\*\s*[:\-–—]\s*(.+)$/;
+var POINT = /^\s*[-*]\s+\*\*([^*]+?)\*\*\s*[:\-–—]\s*(.+)$/;
+var CITE = /[[(]\s*pp?\.\s*\d+(?:\s*[–—-]\s*\d+)?\s*[\])]/i;
 
 function plain(t) {
   return String(t || '')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, ' $1 ')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/<[^>]+>/g, ' ')
     .replace(/\*\*|__|`/g, '')
     .replace(/(^|\s)[*_](\S[^*_]*?)[*_](?=\s|$|[.,;:])/g, '$1$2')
     .replace(/\s+/g, ' ').trim();
 }
-function sentence(t) { t = plain(t); return t && !/[.!?:]$/.test(t) ? t + '.' : t; }
+function sentence(t) { t = plain(t); return t && !/[.!?:\])]$/.test(t) ? t + '.' : t; }
+function norm(t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
 
-/* ── markdown ─────────────────────────────────────────────────────────────
-   → { title, sections: [{ heading, lines }], points: [{ term, text }],
-       tables: [{ title, columns, rows }], questions: [{ question, options,
-       answer (index, -1 when the file marks none), explain, why: [per option] }] } */
+/* ── front matter: "key: value" and "key:" followed by "  - item" lines ── */
+function frontMatter(block) {
+  var meta = {}, list = null;
+  block.split('\n').forEach(function (l) {
+    var item = l.match(/^\s+-\s+(.*)$/);
+    if (item && list) { meta[list].push(item[1].replace(/^["']|["']$/g, '').trim()); return; }
+    var m = l.match(/^\s*([\w -]+?)\s*:\s*(.*)$/);
+    if (!m) return;
+    var k = m[1].toLowerCase().replace(/[\s-]+/g, '_'), v = m[2].replace(/^["']|["']$/g, '').trim();
+    if (v) { meta[k] = v; list = null; } else { meta[k] = []; list = k; }
+  });
+  return meta;
+}
+
+/* ── markdown → StudyFile ─────────────────────────────────────────────── */
 function parseMarkdown(text) {
   var src = String(text || '').replace(/\r\n?/g, '\n'), meta = {};
   var fm = src.match(/^---\n([\s\S]*?)\n---\s*(?:\n|$)/);
-  if (fm) {
-    fm[1].split('\n').forEach(function (l) { var m = l.match(/^\s*([\w -]+?)\s*:\s*(.*)$/); if (m) meta[m[1].toLowerCase()] = m[2].replace(/^["']|["']$/g, '').trim(); });
-    src = src.slice(fm[0].length);
-  }
+  if (fm) { meta = frontMatter(fm[1]); src = src.slice(fm[0].length); }
   src = src.replace(/```[\s\S]*?(?:```|$)/g, '\n').replace(/<svg[\s\S]*?<\/svg>/gi, '\n').replace(/<!--[\s\S]*?-->/g, '\n');
-  var out = { title: meta.unit || meta.title || '', sections: [], points: [], tables: [], questions: [] };
-  var sec = null, quiz = false, q = null, lines = src.split('\n');
-  function newSection(h) { sec = { heading: h, lines: [] }; out.sections.push(sec); }
+  var out = { title: typeof meta.unit === 'string' ? meta.unit : typeof meta.title === 'string' ? meta.title : '', meta: meta,
+              sections: [], points: [], tables: [], questions: [] };
+  var sec = null, q = null, lines = src.split('\n');
+  function newSection(h, quiz) {
+    sec = { heading: h, quiz: !!quiz, lines: [], points: [], tables: [], questions: [], emitted: [] };
+    out.sections.push(sec);
+  }
   function endQ() {
-    if (q && q.question && q.options.length) out.questions.push(q);
+    if (q && (q.question || q.title) && q.options.length) {
+      if (!q.question) q.question = q.title;
+      delete q.title; delete q.mode;
+      if (!sec) newSection('', true);
+      q.section = sec; sec.questions.push(q); out.questions.push(q);
+    }
     q = null;
   }
   for (var i = 0; i < lines.length; i++) {
@@ -59,15 +87,14 @@ function parseMarkdown(text) {
     if (hm) {
       var level = hm[1].length, h = plain(hm[2]);
       if (level === 1 && !out.title) { out.title = h; continue; }
-      if (Q_HEAD.test(h) || (quiz && level >= 3)) {
+      if (Q_HEAD.test(h) || (sec && sec.quiz && level >= 3)) {
         endQ();
         var rest = h.replace(Q_HEAD, '').replace(/^\s*[:.)\-–—]\s*/, '').trim();
         q = { question: '', title: rest, options: [], answer: -1, explain: '', why: [], mode: '' };
         continue;
       }
       endQ();
-      quiz = QUIZ_HEAD.test(h);
-      if (!quiz) newSection(h);
+      newSection(h, QUIZ_HEAD.test(h));
       continue;
     }
     if (q) {
@@ -87,73 +114,108 @@ function parseMarkdown(text) {
         }
       }
       if ((m = l.match(STEM))) { q.question = plain(m[1]); continue; }
-      if (!l.trim() || /^\s*(?:-{3,}|\*{3,})\s*$/.test(l)) continue;
+      if (/^\s*(?:-{3,}|\*{3,})\s*$/.test(l)) { endQ(); continue; }
+      if (!l.trim()) continue;
       if (q.mode === 'explain') q.explain = plain(q.explain + ' ' + l);
       else if (!q.mode && !q.options.length) q.question = plain(q.question + ' ' + l);
       continue;
     }
-    if (quiz) continue;
+    if (sec && sec.quiz) {
+      if (!l.trim() || /^\s*(?:-{3,}|\*{3,})\s*$/.test(l)) continue;
+      newSection('');
+    }
+    if (!sec) newSection('');
     if (/^\s*\|/.test(l)) {
       var rows = [];
       while (i < lines.length && /^\s*\|/.test(lines[i])) { rows.push(lines[i]); i++; }
       i--;
       var cells = rows.map(function (r) { return r.trim().replace(/^\||\|$/g, '').split('|').map(plain); });
-      var body = cells.filter(function (c, k) { return k > 0 && !c.every(function (x) { return /^:?-{2,}:?$/.test(x) || !x; }); });
+      var body = cells.filter(function (c, j) { return j > 0 && !c.every(function (x) { return /^:?-{2,}:?$/.test(x) || !x; }); });
       if (cells.length >= 2 && body.length) {
         var cols = cells[0], ok = body.filter(function (r) { return r.length === cols.length; });
-        if (ok.length) out.tables.push({ title: sec ? sec.heading : out.title, columns: cols, rows: ok, section: sec });
+        if (ok.length) { var t = { title: sec.heading || out.title, columns: cols, rows: ok, section: sec }; sec.tables.push(t); out.tables.push(t); }
       }
       continue;
     }
-    if (!sec) newSection('');
     var pm = l.match(POINT);
-    if (pm) out.points.push({ term: plain(pm[1]), text: plain(pm[2]) });
+    if (pm) { var pt = { term: plain(pm[1]), text: plain(pm[2]), section: sec }; sec.points.push(pt); out.points.push(pt); }
     sec.lines.push(l);
   }
   endQ();
-  out.questions.forEach(function (x) { if (!x.question) x.question = x.title; delete x.title; delete x.mode; });
   if (!out.title) out.title = 'Imported study unit';
   return out;
 }
 
 /* ── HTML → the same markdown ─────────────────────────────────────────────
-   Takes a Document (DOMParser's). Script, style, svg and navigation are
-   dropped; what reads as a question (a .question block, or a heading
-   "Question N") keeps its options and, when the page marks one, its answer
-   (data-answer, a .correct option, or an "Answer: B" line). */
+   Takes a Document (DOMParser's). A question is a .question or
+   [data-question] block, or a <fieldset> of radio buttons. Its answer is
+   read BEFORE form controls are dropped, from: data-answer (a letter or a
+   0-based index), an option marked .correct / data-correct / aria-checked,
+   a checked or selected control, or an "Answer: B" line. Its options are the
+   .option / [data-option] elements, else the items of its first list, else
+   its radio labels — never a list inside its explanation. */
+var EXPLAINISH = '.explanation,.rationale,.why-wrong,.why,.feedback,.answer-explanation,[data-explanation]';
+function optionEls(e) {
+  function mine(x) { var c = x.parentElement && x.parentElement.closest(EXPLAINISH); return !c || !e.contains(c) || c === e; }
+  var marked = Array.prototype.filter.call(e.querySelectorAll('.option,[data-option]'), mine);
+  if (marked.length) return marked;
+  var list = Array.prototype.filter.call(e.querySelectorAll('ol,ul'), function (x) { return mine(x) && !x.matches(EXPLAINISH); })[0];
+  if (list) return Array.prototype.filter.call(list.children, function (x) { return x.tagName.toLowerCase() === 'li'; });
+  return Array.prototype.filter.call(e.querySelectorAll('label'), function (x) { return mine(x) && x.querySelector('input[type=radio],input[type=checkbox]') || (x.htmlFor && e.querySelector('#' + CSS.escape(x.htmlFor))); });
+}
+function letterOf(v, n) {
+  v = String(v || '').trim();
+  if (/^[A-Ea-e]$/.test(v)) return v.toUpperCase();
+  if (/^\d+$/.test(v) && +v < n) return String.fromCharCode(65 + (+v));
+  return '';
+}
+function answerOf(e, opts) {
+  var a = letterOf(e.getAttribute('data-answer') || e.getAttribute('data-correct'), opts.length);
+  if (a) return a;
+  for (var k = 0; k < opts.length; k++) {
+    var o = opts[k];
+    if (o.matches('.correct,.is-correct,[data-correct="true"],[data-correct=""],[aria-checked="true"]') ||
+        o.querySelector('input:checked,input[checked],input[data-correct="true"],option[selected],.correct')) return String.fromCharCode(65 + k);
+  }
+  var tail = String(e.textContent).match(/(?:correct\s+answer|answer)\s*[:\-–]\s*\(?([A-E])\b/i);
+  return tail ? tail[1].toUpperCase() : '';
+}
 function htmlToMarkdown(doc) {
-  var out = [], title = (doc.querySelector('h1') || doc.querySelector('title') || {}).textContent || '';
-  if (title.trim()) out.push('# ' + plain(title));
-  var skip = 'script,style,svg,nav,header nav,footer,noscript,button,input,select,textarea,template';
-  Array.prototype.forEach.call(doc.querySelectorAll(skip), function (e) { e.remove(); });
-  var qn = 0;
+  var out = [], titleEl = doc.querySelector('h1') || doc.querySelector('title'), title = titleEl ? plain(titleEl.textContent) : '';
+  if (title) out.push('# ' + title);
   function text(e) { return plain(e.textContent); }
+  var qs = Array.prototype.filter.call(doc.querySelectorAll('.question,[data-question],fieldset'), function (e) {
+    return !e.parentElement || !e.parentElement.closest('.question,[data-question]');
+  });
+  qs.forEach(function (e) {
+    var opts = optionEls(e);
+    if (opts.length < 2) return;
+    e.setAttribute('data-mz-q', '');
+    e.setAttribute('data-mz-answer', answerOf(e, opts));
+    opts.forEach(function (o) { o.setAttribute('data-mz-opt', ''); });
+  });
+  Array.prototype.forEach.call(doc.querySelectorAll('script,style,svg,nav,footer,noscript,button,input,select,textarea,template,iframe,object'), function (e) { e.remove(); });
+  var qn = 0;
   function question(e) {
-    var stemEl = e.querySelector('.stem,[data-stem],.question-text,.q-text,p');
-    var optEls = e.querySelectorAll('.option,[data-option],li,label');
+    var opts = e.querySelectorAll('[data-mz-opt]');
+    var stemEl = e.querySelector('.stem,[data-stem],.question-text,.q-text,legend');
+    if (!stemEl) stemEl = Array.prototype.filter.call(e.querySelectorAll('p,h2,h3,h4,h5,h6'), function (p) { return !p.closest('[data-mz-opt]') && !p.closest(EXPLAINISH); })[0];
     var stem = stemEl ? text(stemEl) : '';
-    if (!stem || optEls.length < 2) return false;
-    out.push('### Question ' + (++qn), stem);
-    var answer = e.getAttribute('data-answer') || '';
-    Array.prototype.forEach.call(optEls, function (o, k) {
-      var t = text(o).replace(/^\(?[A-Ea-e][).:]\s+/, '');
-      out.push(String.fromCharCode(65 + k) + ') ' + t);
-      if (!answer && (o.matches('.correct,[data-correct="true"],[data-correct=""]'))) answer = String.fromCharCode(65 + k);
-    });
-    if (/^\d+$/.test(answer)) answer = String.fromCharCode(65 + (+answer));
-    var ex = e.querySelector('.explanation,.rationale,[data-explanation]');
-    var tail = text(e).match(/(?:correct\s+answer|answer)\s*[:\-–]\s*\(?([A-E])\b/i);
-    if (!answer && tail) answer = tail[1];
-    if (answer) out.push('Answer: ' + answer.toUpperCase());
+    if (!stem) return false;
+    out.push('', '### Question ' + (++qn), stem);
+    Array.prototype.forEach.call(opts, function (o, k) { out.push(String.fromCharCode(65 + k) + ') ' + text(o).replace(/^\(?[A-Ea-e][).:]\s+/, '')); });
+    var a = e.getAttribute('data-mz-answer');
+    if (a) out.push('Answer: ' + a);
+    var ex = e.querySelector('.explanation,.rationale,.answer-explanation,[data-explanation]');
     if (ex) out.push('Explanation: ' + text(ex));
-    out.push('');
+    out.push('', '---', '');
     return true;
   }
   function walk(e) {
     var tag = e.tagName ? e.tagName.toLowerCase() : '';
     if (!tag) return;
-    if (e.matches('.question,[data-question]') && question(e)) return;
-    if (/^h[1-6]$/.test(tag)) { if (tag !== 'h1' || plain(e.textContent) !== plain(title)) out.push('', '#'.repeat(Math.max(2, +tag[1])) + ' ' + text(e)); return; }
+    if (e.hasAttribute('data-mz-q') && question(e)) return;
+    if (/^h[1-6]$/.test(tag)) { var ht = text(e); if (ht && !(tag === 'h1' && ht === title)) out.push('', '#'.repeat(Math.max(2, +tag[1])) + ' ' + ht); return; }
     if (tag === 'table') {
       var rows = Array.prototype.map.call(e.querySelectorAll('tr'), function (tr) {
         return Array.prototype.map.call(tr.querySelectorAll('th,td'), function (c) { return text(c).replace(/\|/g, '/'); });
@@ -168,13 +230,20 @@ function htmlToMarkdown(doc) {
     if (tag === 'dl') {
       var term = '';
       Array.prototype.forEach.call(e.children, function (c) {
-        if (c.tagName.toLowerCase() === 'dt') term = text(c);
-        else if (c.tagName.toLowerCase() === 'dd' && term) out.push('- **' + term + '**: ' + text(c));
+        var ct = c.tagName.toLowerCase();
+        if (ct === 'dt') term = text(c);
+        else if (ct === 'dd' && term) out.push('- **' + term + '**: ' + text(c));
       });
       return;
     }
-    if (tag === 'li') { if (!e.querySelector('ul,ol,table')) { out.push('- ' + text(e)); return; } }
-    if (tag === 'p' || tag === 'blockquote' || tag === 'figcaption') { var t = text(e); if (t) out.push('', t); return; }
+    if (tag === 'img') { var alt = plain(e.getAttribute('alt')); if (alt.split(' ').length >= 3) out.push('', 'Figure: ' + sentence(alt)); return; }
+    if (tag === 'li' && !e.querySelector('ul,ol,table,p,div')) { var lt = text(e); if (lt) out.push('- ' + lt); return; }
+    if (/^(?:p|blockquote|figcaption|pre)$/.test(tag)) {
+      var t = text(e);
+      if (t) out.push('', tag === 'figcaption' ? 'Figure: ' + sentence(t) : t);
+      Array.prototype.forEach.call(e.querySelectorAll('img'), walk);
+      return;
+    }
     Array.prototype.forEach.call(e.children, walk);
   }
   walk(doc.body || doc.documentElement);
@@ -184,10 +253,12 @@ function parseHTML(html) {
   return parseMarkdown(htmlToMarkdown(new root.DOMParser().parseFromString(String(html || ''), 'text/html')));
 }
 
-/* ── study text for importText ──────────────────────────────────────────── */
+/* ── study text for saveUnit; each section remembers the lines it gave ── */
 function studyText(p) {
   var out = [];
   p.sections.forEach(function (s) {
+    s.emitted = [];
+    if (s.quiz) return;
     var body = [], para = [];
     function flush() { if (para.length) { body.push(plain(para.join(' '))); para = []; } }
     s.lines.forEach(function (l) {
@@ -199,54 +270,75 @@ function studyText(p) {
       para.push(l.replace(/^\s*>\s?/, ''));
     });
     flush();
-    p.tables.filter(function (t) { return t.section === s; }).forEach(function (t) {
-      t.rows.forEach(function (r) { body.push(sentence(r.map(function (v, k) { return (k ? t.columns[k] + ': ' : '') + v; }).join('; '))); });
-    });
+    s.tables.forEach(function (t) { t.rows.forEach(function (r) { body.push(tableRow(t, r)); }); });
     body = body.filter(Boolean);
     if (!body.length) return;
+    s.emitted = body;
     if (s.heading) out.push(s.heading);
     out.push(body.join('\n'));
   });
   return out.join('\n\n');
 }
+function tableRow(t, r) { return sentence(r.map(function (v, k) { return (k ? t.columns[k] + ': ' : '') + v; }).join('; ')); }
 
 /* ── the pack ─────────────────────────────────────────────────────────────
-   Each point, table and question goes to the section whose text shares
-   the most of its words; the pack then goes through Pack.check like one
-   pasted from a chat. Questions with no marked answer are left out here,
-   and counted: a question whose right answer is guessed teaches the guess. */
+   Where each item goes is read, not guessed: a point or table row is in
+   the unit's text word for word, so it goes to the section whose text holds
+   it, looked for first among the sections its own heading's text landed in.
+   A question written under a content heading goes with that heading's text.
+   Only a question in a quiz section at the end has no place of its own; it
+   goes where its right answer and explanation share the most words, a tie
+   to the section holding its citation if it has one, else to the earlier.
+
+   A section is sent when anything reached it. One with questions or tables
+   but no "**Term**:" points takes the built-in coach's points from its own
+   text, since Pack.check refuses a lesson with none. Questions without a
+   marked answer are left out here, and counted. */
 function words(t) { return String(t || '').toLowerCase().match(/[a-z0-9]{3,}/g) || []; }
-function overlap(a, set) { var n = 0; words(a).forEach(function (w) { if (set[w]) n++; }); return n; }
-function sectionSets(doc, segText) {
-  return doc.clusters.map(function (c) {
-    var s = {}; words(c.segments.map(segText).join(' ')).forEach(function (w) { s[w] = true; }); return s;
-  });
-}
-function best(t, sets) {
-  var at = 0, top = -1;
-  sets.forEach(function (s, i) { var n = overlap(t, s); if (n > top) { top = n; at = i; } });
-  return at;
-}
-function packFor(p, doc, Pack) {
-  var sets = sectionSets(doc, Pack.segText), per = doc.clusters.map(function () { return { points: [], tables: [], questions: [] }; });
-  p.points.forEach(function (x) { per[best(x.term + ' ' + x.text, sets)].points.push(x); });
-  p.tables.forEach(function (t) { per[best(t.columns.concat.apply(t.columns, t.rows).join(' '), sets)].tables.push(t); });
+function packFor(p, doc, Pack, Coach) {
+  studyText(p);
+  var C = doc.clusters.map(function (c) { return norm(c.segments.map(Pack.segText).join(' ')); });
+  var all = C.map(function (_, i) { return i; });
+  var sets = C.map(function (t) { var s = {}; words(t).forEach(function (w) { s[w] = true; }); return s; });
+  function holding(t, among) { var n = norm(t); if (!n) return -1; for (var k = 0; k < among.length; k++) if (C[among[k]].indexOf(n) !== -1) return among[k]; return -1; }
+  function closest(t, among) {
+    var at = among[0], top = -1, cite = (String(t).match(CITE) || [''])[0];
+    among.forEach(function (i) {
+      var n = 0; words(t).forEach(function (w) { if (sets[i][w]) n++; });
+      if (n > top || (n === top && cite && C[i].indexOf(norm(cite)) !== -1 && C[at].indexOf(norm(cite)) === -1)) { top = n; at = i; }
+    });
+    return at;
+  }
+  var landed = new Map();
+  function sectionClusters(s) {
+    if (landed.has(s)) return landed.get(s);
+    var got = [];
+    s.emitted.forEach(function (line) { var i = holding(line, all); if (i !== -1 && got.indexOf(i) === -1) got.push(i); });
+    got.sort(function (a, b) { return a - b; });
+    landed.set(s, got.length ? got : all);
+    return landed.get(s);
+  }
+  function place(t, s) { var among = s ? sectionClusters(s) : all, i = holding(t, among); return i !== -1 ? i : closest(t, among); }
+  var per = doc.clusters.map(function () { return { points: [], tables: [], questions: [] }; });
+  p.points.forEach(function (x) { per[place(sentence(x.term + ': ' + x.text), x.section)].points.push(x); });
+  p.tables.forEach(function (t) { per[place(tableRow(t, t.rows[0]), t.section)].tables.push(t); });
   var unanswered = 0;
   p.questions.forEach(function (q) {
     if (q.answer < 0 || q.answer >= q.options.length) { unanswered++; return; }
-    per[best(q.options[q.answer] + ' ' + q.explain + ' ' + q.question, sets)].questions.push(q);
+    var among = q.section && !q.section.quiz ? sectionClusters(q.section) : all;
+    per[closest([q.options[q.answer], q.explain, q.question].join(' '), among)].questions.push(q);
   });
   var sections = [];
   per.forEach(function (x, i) {
-    if (!x.points.length) return;
+    if (!x.points.length && !x.tables.length && !x.questions.length) return;
     var c = doc.clusters[i], pg = c.pageStart;
+    var points = x.points.map(function (pt) { return { text: sentence(pt.term + ': ' + pt.text), page: pg }; });
+    var by = 'file';
+    if (!points.length) { points = Coach.lesson(c).points.map(function (pt) { return { text: pt.text, page: pt.page }; }); by = 'coach'; }
     sections.push({
-      section: i + 1, title: c.title,
-      lesson: {
-        overview: '',
-        points: x.points.map(function (pt) { return { text: sentence(pt.term + ': ' + pt.text), page: pg }; }),
-        tables: x.tables.map(function (t) { return { title: t.title || 'Table', columns: t.columns, rows: t.rows, page: pg }; }),
-      },
+      section: i + 1, title: c.title, pointsBy: by,
+      lesson: { overview: '', points: points,
+                tables: x.tables.map(function (t) { return { title: t.title || 'Table', columns: t.columns, rows: t.rows, page: pg }; }) },
       quiz: { questions: x.questions.map(function (q) {
         var why = q.why.some(Boolean) ? q.options.map(function (_, k) { return k === q.answer ? '' : q.why[k] || ''; }) : [];
         return { question: q.question, quote: '', options: q.options, answer: q.answer, explain: q.explain, page: pg, why: why, trap: '' };
@@ -256,33 +348,48 @@ function packFor(p, doc, Pack) {
   return { pack: sections.length ? { format: Pack.FORMAT, version: Pack.VERSION, unit: doc.name, sections: sections } : null, unanswered: unanswered };
 }
 
+/* What the unit keeps of the front matter: the fields the study-file prompt
+   asks for, when they are there. */
+var META = { source_book: 'sourceBook', source_page_range: 'pageRange', difficulty_level: 'difficulty',
+             estimated_study_time_minutes: 'minutes', prerequisites: 'prerequisites', learning_objectives: 'objectives' };
+function studyMeta(p) {
+  var out = {};
+  Object.keys(META).forEach(function (k) { var v = p.meta[k]; if (v && (typeof v === 'string' || v.length)) out[META[k]] = v; });
+  return out;
+}
+
+var ACCEPT = '.md,.markdown,.txt,.html,.htm';
 function detectFormat(name, content) {
-  if (/\.(?:html?|xhtml)$/i.test(name || '')) return 'html';
+  if (/\.html?$/i.test(name || '')) return 'html';
   if (/\.(?:md|markdown|txt)$/i.test(name || '')) return 'markdown';
   return /^\s*(?:<!doctype html|<html|<head|<body)/i.test(content || '') ? 'html' : 'markdown';
 }
 
-/* → { success, format, study: { name, text, parsed }, summary } */
+/* → { success, format, study: { name, text, parsed, meta }, summary } */
 function parseStudyFile(content, name) {
   try {
+    if (String(content || '').length > MAX_BYTES) return { success: false, error: 'This file is too large to import at once (over ' + (MAX_BYTES / 1048576) + ' MB). Split it into smaller study units' };
     var format = detectFormat(name, content);
     var parsed = format === 'html' ? parseHTML(content) : parseMarkdown(content);
     var text = studyText(parsed);
     if (!words(text).length) return { success: false, error: 'No study text was found in this file' };
-    var answered = parsed.questions.filter(function (q) { return q.answer >= 0 && q.answer < q.options.length; }).length;
+    var qs = parsed.questions;
+    var answered = qs.filter(function (q) { return q.answer >= 0 && q.answer < q.options.length; });
+    var usable = answered.filter(function (q) { return q.options.length === 4; }).length;
     return {
       success: true, format: format,
-      study: { name: parsed.title, text: text, parsed: parsed },
-      summary: { unit: parsed.title, teaching_points: parsed.points.length, questions: answered,
-                 unanswered: parsed.questions.length - answered, tables: parsed.tables.length, words: words(text).length },
+      study: { name: parsed.title, text: text, parsed: parsed, meta: studyMeta(parsed) },
+      summary: { unit: parsed.title, words: words(text).length, teaching_points: parsed.points.length, tables: parsed.tables.length,
+                 questions: qs.length, answered: answered.length, unanswered: qs.length - answered.length,
+                 malformed: answered.length - usable },
     };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-var api = { parseMarkdown: parseMarkdown, htmlToMarkdown: htmlToMarkdown, parseHTML: parseHTML, studyText: studyText,
-            packFor: packFor, detectFormat: detectFormat, parseStudyFile: parseStudyFile };
+var api = { MAX_BYTES: MAX_BYTES, ACCEPT: ACCEPT, parseMarkdown: parseMarkdown, htmlToMarkdown: htmlToMarkdown, parseHTML: parseHTML,
+            studyText: studyText, packFor: packFor, studyMeta: studyMeta, detectFormat: detectFormat, parseStudyFile: parseStudyFile };
 root.MemStudyImport = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : this);
