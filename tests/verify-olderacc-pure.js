@@ -509,6 +509,25 @@ head('why a page did not parse, by rule');
   ok('a "Question" heading in the top eighth of a page is counted', RJ.stats.headingsAtTop === 1, String(RJ.stats.headingsAtTop));
 }
 
+head('--shapes: how a page is laid out, one row per line, as shapes');
+{
+  const rows = A.shapeRows(second, new Set([1, 5]));
+  const onPage = p => rows.filter(r => r.startsWith(`p${p} `));
+  ok('only the pages asked about, every line of them but the running footer',
+     onPage(1).length === 12 && onPage(5).length === 10 && rows.length === 22 && !onPage(2).length, `${onPage(1).length} + ${onPage(5).length} of ${rows.length}`);
+  /* Page 5's first line follows page 4's last in the stream: a gap measured
+     across the page break would be a number, and meaningless. */
+  ok('the gap to the line above: "top" for a page\'s first line, then points',
+     /gap\s+top/.test(onPage(1)[0]) && /gap\s+top/.test(onPage(5)[0]) && /gap\s+14\.0\s/.test(onPage(1)[1]) && /gap\s+22\.0\s/.test(onPage(1)[3]), onPage(1).slice(0, 2).join(' | '));
+  ok('each line\'s kind, option letter included, and its font and ink',
+     /\sHEAD\s/.test(onPage(1)[0]) && /\sOPT:A\s/.test(onPage(1)[3]) && /Times-Bold/.test(onPage(1)[1]) && /ink rgb~224,0,0/.test(onPage(1)[0]));
+  ok('where segment() began a question, and where its option A is',
+     /<start$/.test(onPage(1)[0]) && /<stem$/.test(onPage(1)[1]) && /<optA$/.test(onPage(1)[3]) && onPage(5).filter(r => /<start$/.test(r)).length === 1,
+     onPage(5).filter(r => /</.test(r)).length + ' marked on page 5');
+  const leaked = rows.join('\n').match(/zq[a-z]+|quimbly|mimble|frizzle/gi) || [];
+  ok('and not one word of any line', leaked.length === 0 && rows.join('').length > 1000, leaked.slice(0, 5).join(', ') || 'none');
+}
+
 head('what the importer prints');
 {
   const t1 = A.tallyFile('SECOND.pdf', S), t2 = A.tallyFile('FIRST.pdf', F);

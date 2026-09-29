@@ -482,6 +482,34 @@ function joinWrapped(a, b) {
 const shapeOf = t => clean(t).slice(0, 6).replace(/[A-Z]/g, 'A').replace(/[a-z]/g, 'a').replace(/[0-9]/g, '9')
   .replace(/[^\x20-\x7e]/g, '·').replace(/ /g, '␣');
 
+/* ONE ROW PER LINE, for the pages asked about, as shapes — the importer's
+   --shapes. The report above says WHICH pages failed and by which rule; this
+   says how those pages are laid out, so a rule for them can be designed
+   without reading them: the gap to the line above (points, or "top"), the
+   indent, size, font, bold share, ink, background, the kind lineKind() gave
+   it, its length, the shapeOf() its first six characters, and "<start",
+   "<stem" or "<optA" where segment() began a question. Words never: the only
+   text-derived fields are the kind, a length and the shape. */
+function shapeRows(pages, want) {
+  const { pages: kept } = stripRunning(pages);
+  const lines = [];
+  for (const pg of kept) for (const l of (pg.lines || [])) lines.push({ ...l, page: pg.p });
+  const { kinds, blocks } = segment(lines);
+  const role = new Map();
+  for (const b of blocks) { role.set(b.optAt, 'optA'); if (!role.has(b.stemAt)) role.set(b.stemAt, 'stem'); role.set(b.at, 'start'); }
+  const out = [];
+  lines.forEach((l, i) => {
+    if (!want.has(l.page)) return;
+    const prev = lines[i - 1];
+    const gap = prev && prev.page === l.page ? (prev.y - l.y).toFixed(1) : 'top';
+    const k = kinds[i], kind = k.k + (typeof k.L === 'number' && k.L >= 0 ? ':' + (LETTER[k.L] || '?') : '');
+    out.push(`p${l.page}  gap ${gap.padStart(6)}  x ${String(Math.round(l.x0 || 0)).padStart(4)}  ${String(l.size).padStart(4)}pt  ${l.font || '?'}  ` +
+      `bf ${typeof l.bf === 'number' ? l.bf.toFixed(2) : '-'}  ink ${l.ink || '-'}  bg ${l.bg || '-'}  ${kind.padEnd(10)}  len ${String(clean(l.text).length).padStart(3)}  ` +
+      shapeOf(l.text) + (role.has(i) ? '  <' + role.get(i) : ''));
+  });
+  return out;
+}
+
 /* The whole of one PDF: pages in, questions and the counts out. */
 function parseDocument(pages) {
   const { pages: kept, dropped } = stripRunning(pages);
@@ -780,7 +808,7 @@ module.exports = {
   CATEGORY, ID_PREFIX, NO_EXPLANATION, DUP_THRESHOLD, REVERSE_MIN, TRAIL_PAGES,
   lineKind, splitOptions, shortAnswer, letterFrom, sentenceAnswer, sentenceHit, answerByText, inkAnswer, boldAnswer, emphasisPattern,
   keySpans, keyEntries, applyKey, REASONS,
-  stripRunning, segment, parseBlock, parseDocument, attachImages, joinWrapped, shapeOf,
+  stripRunning, segment, parseBlock, parseDocument, attachImages, joinWrapped, shapeOf, shapeRows,
   norm, stemShingles, buildIndex, addToIndex, bestOverlap, isOurs, bankStems, dedupe,
   inferShape, toBankQuestion, idFor, mergeBank, ranges, tallyFile, formatReport,
 };
