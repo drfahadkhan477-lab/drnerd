@@ -645,6 +645,28 @@ head('--shapes: how a page is laid out, one row per line, as shapes');
   ok('and not one word of any line', leaked.length === 0 && rows.join('').length > 1000, leaked.slice(0, 5).join(', ') || 'none');
 }
 
+head('every figure type the split build writes is served as an image');
+{
+  /* The owner's run with 727 older questions: the split build's offline
+     download finished short, and a reload found the same gap. The older
+     bank's figures are the only JPEGs in the bank; extract-content.js named
+     them .jpg and scripts/serve.js had no type for .jpg, so they went out as
+     application/octet-stream and offlineIsImage() refused every one. Read
+     blanked, per CLAUDE.md, from both files' own tables. */
+  const fs = require('fs'), path = require('path');
+  const { blankComments } = require('./_source.js');
+  const src = f => blankComments(fs.readFileSync(path.join(__dirname, '..', 'scripts', f), 'utf8'));
+  const ext = src('extract-content.js'), srv = src('serve.js');
+  const written = [...(/const EXT = \{([^}]*)\}/.exec(ext) || [, ''])[1].matchAll(/'([a-z0-9]+)'\s*(?=[,}\s]*(?:'|$))/g)]
+    .map(m => m[1]).filter(e => !e.includes('/'));
+  const types = {};
+  for (const m of ((/const TYPES = \{([^}]*)\}/.exec(srv) || [, ''])[1]).matchAll(/'\.([a-z0-9]+)':\s*'([^']+)'/g)) types[m[1]] = m[2];
+  const bad = written.filter(e => !/^image\//.test(types[e] || ''));
+  ok('extract-content.js writes the figure types it says (webp, png, jpg)', written.sort().join(',') === 'jpg,png,webp', written.join(','));
+  ok('and scripts/serve.js serves each of them as image/*', written.length === 3 && bad.length === 0,
+     bad.length ? bad.map(e => `.${e} → ${types[e] || 'no type (octet-stream)'}`).join(', ') : written.map(e => `.${e} ${types[e]}`).join(', '));
+}
+
 head('what the importer prints');
 {
   const t1 = A.tallyFile('SECOND.pdf', S), t2 = A.tallyFile('FIRST.pdf', F);

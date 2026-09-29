@@ -26,6 +26,12 @@ const TYPES = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.webp': 'image/webp',
   '.png': 'image/png',
+  /* The older ACC bank's figures are JPEG (tools/older-acc-import.js), and
+     extract-content.js names them .jpg. Without these they went out as
+     application/octet-stream, which the offline downloader rightly refuses
+     as not-an-image — so they never reached the device. */
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
   '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2',
   '.ico': 'image/x-icon',
