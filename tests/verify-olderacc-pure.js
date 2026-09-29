@@ -509,6 +509,123 @@ head('why a page did not parse, by rule');
   ok('a "Question" heading in the top eighth of a page is counted', RJ.stats.headingsAtTop === 1, String(RJ.stats.headingsAtTop));
 }
 
+/* ── the bold-heading layout (SECOND pp. 226-377, from --shapes) ──────── */
+/* As the owner's shapes showed it: a short bold Calibri line naming no
+   "Question", the stem in plain Calibri (here across a page break), options,
+   the explanation, then "Answer" after it and a "Key Point". */
+const CAL = { font: 'Calibri', bf: 0 }, CALB = { font: 'Calibri-Bold', bold: true, bf: 1, ink: 'none' }, HEL = { font: 'Helvetica', size: 10.5, bf: 0 };
+const boldDoc = [
+  page(1, [
+    L(700, 'Question', { ...B, ink: 'rgb~224,0,0' }),
+    L(686, '7. A zqheadstem in the red-heading layout, before the others.', B),
+    L(660, 'A.  Zqha', B), L(646, 'B.  Zqhb', B), L(632, 'C.  Zqhc', B),
+    L(610, 'Answer: A'),
+    L(590, 'Zqheadexplain words for the heading question.', HEL),
+    L(540, 'Zqbhead one of 9', CALB),
+    L(518, 'A zqbstem1 patient in the bold layout whose stem runs', CAL),
+    L(504, 'on down the page and over the break to the next one', CAL),
+  ]),
+  page(2, [
+    L(700, 'where zqbcont finishes the vignette in the same font.', CAL),
+    L(678, 'Which zqbask is best?', CAL),
+    L(656, 'A. Zqb1a', CAL), L(634, 'B. Zqb1b', CAL), L(612, 'C. Zqb1c', CAL), L(590, 'D. Zqb1d', CAL),
+    L(546, 'Zqb1explain in Calibri, a paragraph of it.', CAL),
+    L(524, 'Answer: B', CAL),
+    L(502, 'Key Point', HEL),
+    L(489, 'Zqb1key point words.', HEL),
+    L(446, 'Zqbhead two of 9', CALB),
+    L(424, 'A second zqbstem2 vignette, all on one page.', CAL),
+    L(402, 'A. Zqb2a', CAL), L(380, 'B. Zqb2b', CAL), L(358, 'C. Zqb2c', CAL),
+    L(336, 'Zqb2explain in Helvetica this time.', HEL),
+  ]),
+  page(3, [
+    L(700, 'Answer: C', CAL),
+    L(678, 'Key Point', HEL),
+    L(665, 'Zqb2key words.', HEL),
+  ]),
+  /* Not this layout: the bold line is too long to be a heading. */
+  page(4, [
+    L(700, 'A zqlongbold line that runs well past any heading length at all', CALB),
+    L(678, 'Zqlongstem in plain Calibri.', CAL),
+    L(656, 'A. Zql1', CAL), L(634, 'B. Zql2', CAL),
+  ]),
+  /* Nor this: the stem changes font on the way up, before any heading. */
+  page(5, [
+    L(700, 'Zqbhead three of 9', CALB),
+    L(678, 'Zqfontbreak in Helvetica between the heading and the stem.', HEL),
+    L(656, 'Zqbstem5 in plain Calibri.', CAL),
+    L(634, 'A. Zqf1', CAL), L(612, 'B. Zqf2', CAL),
+  ]),
+  /* And a red-heading question after them all: bold starts are found after
+     the others and must still be put in reading order among them. */
+  page(6, [
+    L(700, 'Question', { ...B, ink: 'rgb~224,0,0' }),
+    L(686, '8. A zqlaststem after the bold ones.', B),
+    L(660, 'A.  Zqla', B), L(646, 'B.  Zqlb', B),
+    L(620, 'Answer: B'),
+  ]),
+];
+const BD = A.parseDocument(boldDoc);
+head('the bold-heading layout: a heading that names no "Question"');
+{
+  const bq = t => BD.questions.find(q => q.stem.includes(t));
+  const q1 = bq('zqbstem1'), q2 = bq('zqbstem2'), qh = bq('zqheadstem');
+  ok('a short bold line, then prose in one font, then A and B, starts a question — two of them here',
+     !!q1 && !!q2 && q1.layout === 'bold-heading' && q2.layout === 'bold-heading', BD.questions.map(q => q.layout).join(','));
+  ok('its stem is the prose under the heading, across the page break, without the heading',
+     !!q1 && q1.stem.includes('zqbcont') && q1.stem.includes('zqbask') && !/zqbhead/i.test(q1.stem) && q1.options.length === 4, q1 && `${q1.options.length} options`);
+  ok('its answer is the "Answer" line after the explanation, on its page or the next',
+     !!q1 && !!q2 && q1.ci === 1 && q1.answerBy === 'answer-line' && q2.ci === 2, q1 && q2 && `${q1.ci} ${q2.ci}`);
+  ok('and the question before it no longer takes its stem as explanation',
+     !!qh && qh.ci === 0 && !qh.ex.join(' ').includes('zqbstem1') && /zqheadexplain/i.test(qh.ex.join(' ')), qh && qh.ex.length + ' paragraphs');
+  const orph = (BD.stats.unparsedByReason['A-without-anchor'] || []).join(',');
+  ok('a bold line longer than a heading is not one; the option stays A-without-anchor', /(^|,)4(,|$)/.test(orph) && !bq('zqlongstem'), orph);
+  ok('nor is a heading the stem\'s font does not reach unbroken', /(^|,)5(,|$)/.test(orph) && !bq('zqbstem5'), orph);
+  const lay = A.tallyFile('BOLD.pdf', BD).layouts;
+  ok('and the layout is counted as its own', (lay['bold-heading'] || {}).parsed === 2, JSON.stringify(Object.keys(lay)));
+  const ql = bq('zqlaststem');
+  ok('in reading order among the others: each question keeps its own answer and explanation',
+     BD.questions.map(q => q.page).join(',') === '1,1,2,6' && !!ql && ql.ci === 1 && !!q2 && /zqb2key/i.test(q2.ex.join(' ')),
+     BD.questions.map(q => q.page).join(','));
+}
+
+head('what an unanswered question\'s explanation holds, counted');
+{
+  const probeDoc = [
+    page(1, [
+      L(700, 'Question', { ...B, ink: 'rgb~224,0,0' }),
+      L(686, '3. A zqprobestem one.', B),
+      L(660, 'A.  Zqamiodarone drip', B), L(646, 'B.  Zqdigoxin load', B), L(632, 'C.  Zqwait', B),
+      L(600, 'The zqamiodarone drip settles it, and option (c) would be the wrong call; the best reasoning follows.'),
+    ]),
+    page(2, [
+      L(700, 'Question', { ...B, ink: 'rgb~224,0,0' }),
+      L(686, '4. A zqprobestem two.', B),
+      L(660, 'A.  Zqone', B), L(646, 'B.  Zqtwo', B),
+      L(600, 'Zqsilent words naming nothing.'),
+    ]),
+    /* Says "correct" and letters nothing: the counts differ, so a report
+       printing one in the other's place is caught. */
+    page(3, [
+      L(700, 'Question', { ...B, ink: 'rgb~224,0,0' }),
+      L(686, '5. A zqprobestem three.', B),
+      L(660, 'A.  Zqred', B), L(646, 'B.  Zqblue', B),
+      L(600, 'Zqprose on what is correct practice, naming no choice.'),
+    ]),
+  ];
+  const PD = A.parseDocument(probeDoc);
+  const [p1, p2] = PD.questions;
+  ok('both are unanswered — nothing here states a key', PD.questions.length === 3 && PD.questions.every(q => q.ci < 0), PD.questions.map(q => q.ci).join(','));
+  ok('one explanation says "best", letters an option and names one option in full',
+     !!p1.probe && p1.probe.says === true && p1.probe.lettered === true && p1.probe.named === 1, JSON.stringify(p1.probe));
+  ok('the other, none of the three', !!p2.probe && p2.probe.says === false && p2.probe.lettered === false && p2.probe.named === 0, JSON.stringify(p2.probe));
+  ok('an answered question carries no probe', S.questions.filter(q => q.ci >= 0).every(q => q.probe === null));
+  const rep = A.formatReport([A.tallyFile('PROBE.pdf', PD)], null);
+  const line = rep.split('\n').find(l => /their explanations:/.test(l)) || '';
+  ok('the report counts them, and quotes nothing', /saying answer\/correct\/best 2\s+naming a letter as "\(c\)" or "option c" 1\s+options named in full 0×2  1×1  2×0  3\+×0/.test(line) &&
+     !/zq/i.test(rep), line.trim() || 'no such line');
+}
+
 head('--shapes: how a page is laid out, one row per line, as shapes');
 {
   const rows = A.shapeRows(second, new Set([1, 5]));
