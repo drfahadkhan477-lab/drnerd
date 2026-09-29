@@ -43,8 +43,12 @@ const REF_IMG_LOADER = `
   };
   var ordered = function(){
     var fig = (typeof pearlCurrent !== 'undefined' && pearlCurrent && pearlCurrent.figKey) || '';
-    var first = fig ? 'content/refs-images/' + unitOf(fig) + '.json' : '';
-    return parts.filter(function(u){ return u === first; }).concat(parts.filter(function(u){ return u !== first; }));
+    /* A unit too big for one file continues in unit.2.json, unit.3.json
+       (build-pwa splitRefImages); the pearl's figure may be in any of them,
+       so all of that unit's files go first. */
+    var base = fig ? 'content/refs-images/' + unitOf(fig) : '';
+    var mine = function(u){ return !!base && (u === base + '.json' || u.indexOf(base + '.') === 0); };
+    return parts.filter(mine).concat(parts.filter(function(u){ return !mine(u); }));
   };
   var next = function(queue){
     if(!queue.length) return;

@@ -41,7 +41,7 @@ const settle = async () => { for (let i = 0; i < 30; i++) await new Promise(r =>
 const UNITS = ['arrhythmias', 'hf', 'ischemia', 'valv'].map(u => `content/refs-images/${u}.json`);
 
 /* A page whose every asynchronous step is a queue this suite drains. */
-function page({ seed = 'pending', idleApi = true, pearl = null, failing = [] } = {}) {
+function page({ seed = 'pending', idleApi = true, pearl = null, failing = [], units = UNITS } = {}) {
   const frames = [], idles = [], timers = [], inflight = [], asked = [];
   let resolveSeed, rejectSeed, paints = 0;
   const REF_IMGS = {};
@@ -57,7 +57,7 @@ function page({ seed = 'pending', idleApi = true, pearl = null, failing = [] } =
     .concat(idleApi ? ['requestIdleCallback'] : []);
   const args = [REF_IMGS, fetch, () => { paints++; }, f => frames.push(f), (f, ms) => timers.push({ f, ms }), seedPromise, pearl]
     .concat(idleApi ? [(f, o) => idles.push({ f, o })] : []);
-  new Function(...names, REF_IMG_LOADER.replace('__PARTS__', JSON.stringify(UNITS)))(...args);
+  new Function(...names, REF_IMG_LOADER.replace('__PARTS__', JSON.stringify(units)))(...args);
   const drain = q => { const fs = q.splice(0); fs.forEach(x => (x.f || x)()); return fs.length; };
   return {
     asked, REF_IMGS, get paints() { return paints; }, get inflight() { return inflight.length; }, timers, idles,
@@ -109,6 +109,21 @@ function page({ seed = 'pending', idleApi = true, pearl = null, failing = [] } =
     ok('the unit holding the pearl\'s figure is fetched first', p.asked[0] === 'content/refs-images/valv.json', p.asked[0]);
     await p.land(); await p.land(); await p.land(); await p.land();
     ok('and the rest still follow, each once', JSON.stringify([...p.asked].sort()) === JSON.stringify(UNITS), p.asked.join(', '));
+  }
+
+  head('a unit split across files fills in first as a whole');
+  {
+    /* build-pwa continues a unit too big for one file in unit.2.json, …
+       (splitRefImages). "hf-x" is a different unit whose name merely starts
+       with "hf": it must not be taken for a continuation. */
+    const units = ['arrhythmias', 'hf', 'hf-x', 'hf.2', 'valv'].map(u => `content/refs-images/${u}.json`);
+    const p = page({ pearl: { figKey: 'hf/049_FIG.jpg' }, units });
+    await p.seedOk(); await p.frame(); await p.frame(); await p.idle();
+    for (let i = 0; i < units.length; i++) await p.land();
+    ok('every file of the pearl\'s unit is fetched before any other unit',
+       p.asked.slice(0, 2).join(',') === 'content/refs-images/hf.json,content/refs-images/hf.2.json', p.asked.join(', '));
+    ok('a unit that only shares the prefix is not one of them, and everything is still fetched once',
+       p.asked.indexOf('content/refs-images/hf-x.json') > 1 && JSON.stringify([...p.asked].sort()) === JSON.stringify([...units].sort()), p.asked.join(', '));
   }
 
   head('a failure costs only itself');

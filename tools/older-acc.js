@@ -825,6 +825,74 @@ function tallyFile(name, parsed) {
   return t;
 }
 
+/* ── how an unanswered explanation treats each option letter ─────────────
+   The importer's --probe. For SECOND.pdf's unanswered questions the report
+   counted explanations that say "correct" (63 of 66) and name a letter as
+   "(c)" or "option c" (60), which fits a key stated in words no rule reads
+   — and fits equally a paragraph arguing through every distractor. This
+   tells the two apart without a word leaving the laptop: for each lettered
+   mention, is the option called correct, called incorrect, or neither, by
+   the few words right after it (or, for "the correct answer is (c)", right
+   before). Counted per question; never acted on here.
+
+   WHAT IT FOUND on the owner's PDFs (2026-09-29): SECOND 66 unanswered —
+   60 mention letters, NONE calls any option correct or incorrect; 41 of
+   them share one templated shape ("aaaaaa␣a␣aaa␣aaaaa␣aaa": a six-letter
+   word, the letter, then three neutral words), 6 mention no letter.
+   FIRST 14 unanswered — no lettered mention at all. So the text states no
+   key for them in any form this reads, and they stay unstaged. The probe
+   is kept so the question is not re-asked from scratch; a rule for them
+   would need the page to state the answer, not a better guess. */
+const POS_AFTER = /^\s*(?:\)|\.)?\s*(?:is|was|would be|remains)\s+(?:the\s+)?(?:correct|best|right|most appropriate|preferred|true)\b/;
+const POS_BEFORE = /\b(?:correct|best|right)\s+(?:answer|choice|option|response)\s*(?:is|was|:|=)?\s*$/;
+const NEG_AFTER = /^\s*(?:\)|\.)?\s*(?:is|was|would be|are)\s+(?:not\b|incorrect\b|wrong\b|false\b|inappropriate\b|contraindicated\b|less\b|unlikely\b)/;
+const MENTION = /(?:\b(?:option|choice|answer|response)s?\s+\(?([a-h])\)?(?![a-z0-9])|\(([a-h])\))/g;
+function letterStances(ex, nOpts) {
+  const t = norm(Array.isArray(ex) ? ex.join(' ') : ex);
+  const pos = new Set(), neg = new Set(), shapes = [];
+  let m;
+  MENTION.lastIndex = 0;
+  while ((m = MENTION.exec(t))) {
+    const L = (m[1] || m[2]).charCodeAt(0) - 97;
+    if (L >= nOpts) continue;
+    const after = t.slice(m.index + m[0].length, m.index + m[0].length + 40), before = t.slice(Math.max(0, m.index - 40), m.index);
+    const isNeg = NEG_AFTER.test(after);
+    const isPos = !isNeg && (POS_AFTER.test(after) || POS_BEFORE.test(before));
+    if (isPos) pos.add(L); else if (isNeg) neg.add(L);
+    /* The mention and what follows it, as a shape: how the page words it. */
+    shapes.push({ kind: isPos ? 'pos' : isNeg ? 'neg' : 'none', shape: clean(t.slice(m.index, m.index + m[0].length + 14)).replace(/[a-z]/g, 'a').replace(/[0-9]/g, '9').replace(/ /g, '␣') });
+  }
+  for (const L of pos) neg.delete(L);
+  const one = pos.size === 1 ? [...pos][0] : -1;
+  return { pos: pos.size, neg: neg.size, mentions: shapes.length, one,
+           rest: one >= 0 && neg.size === nOpts - 1, shapes };
+}
+function probeReport(name, questions) {
+  const un = questions.filter(q => q.ci < 0);
+  const h = { rest: 0, one: 0, many: 0, none: 0, silent: 0 }, sh = { pos: {}, neg: {}, none: {} };
+  for (const q of un) {
+    const s = letterStances(q.ex, q.options.length);
+    if (!s.mentions) h.silent++;
+    else if (s.rest) h.rest++;
+    else if (s.one >= 0) h.one++;
+    else if (s.pos > 1) h.many++;
+    else h.none++;
+    for (const x of s.shapes) sh[x.kind][x.shape] = (sh[x.kind][x.shape] || 0) + 1;
+  }
+  const top = (o, n) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => `${k}×${v}`).join('  ') || 'none';
+  return [
+    `${name}  unanswered ${un.length}` + (un.length ? ` — pages ${ranges(un.map(q => q.page))}` : ''),
+    `  one option called correct and every other called incorrect  ${h.rest}`,
+    `  one option called correct, the others not all called incorrect  ${h.one}`,
+    `  two or more called correct  ${h.many}`,
+    `  letters mentioned, none called correct  ${h.none}`,
+    `  no lettered mention at all  ${h.silent}`,
+    `  mentions called correct, as shapes: ${top(sh.pos, 8)}`,
+    `  mentions called incorrect, as shapes: ${top(sh.neg, 8)}`,
+    `  mentions called neither, as shapes: ${top(sh.none, 10)}`,
+  ];
+}
+
 function formatReport(files, totals) {
   const out = [];
   for (const t of files) {
@@ -872,5 +940,5 @@ module.exports = {
   keySpans, keyEntries, applyKey, REASONS, boldAnchor, HEADING_MAX,
   stripRunning, segment, parseBlock, parseDocument, attachImages, joinWrapped, shapeOf, shapeRows,
   norm, stemShingles, buildIndex, addToIndex, bestOverlap, isOurs, bankStems, dedupe,
-  inferShape, toBankQuestion, idFor, mergeBank, ranges, tallyFile, formatReport,
+  inferShape, toBankQuestion, idFor, mergeBank, ranges, tallyFile, formatReport, letterStances, probeReport,
 };

@@ -231,6 +231,25 @@ const splitChecks = async () => {
   ok('no figure is lost or duplicated in the split',
      Object.values(parts).reduce((n, p) => n + Object.keys(p).length, 0) === 5);
   ok('a folder name that is not URL-safe is made so', !!parts.Braunwald_HF && !parts['Braunwald HF']);
+  /* A unit past the byte budget continues in unit.2, unit.3 — driven with a
+     small budget. The Braunwald heart-failure unit was ~21.7 MB of 25. */
+  const big = {}; for (let i = 0; i < 10; i++) big[`hf/fig${i}.jpg`] = 'x'.repeat(100);
+  big['valv/a.jpg'] = 'y'; big['huge/one.jpg'] = 'z'.repeat(1000);
+  const cut = split ? split(big, 400) : {};
+  const hfFiles = Object.keys(cut).filter(k => k === 'hf' || k.startsWith('hf.')).sort();
+  ok('a unit past the budget continues in unit.2, unit.3 …', hfFiles.length >= 3 && hfFiles[0] === 'hf' && hfFiles[1] === 'hf.2', Object.keys(cut).sort().join(', '));
+  /* And each is FILLED before the next begins: 117 bytes a figure, three to
+     a 400-byte part, so ten make exactly four parts — not one a file. */
+  ok('each part is filled before the next begins — ten figures, four parts', hfFiles.length === 4 &&
+     hfFiles.map(k => Object.keys(cut[k]).length).join(',') === '3,3,3,1', hfFiles.map(k => Object.keys(cut[k]).length).join(','));
+  ok('each continuation stays within the budget', hfFiles.every(k => JSON.stringify(cut[k]).length <= 400),
+     hfFiles.map(k => `${k} ${JSON.stringify(cut[k]).length}`).join(', '));
+  ok('a unit under the budget keeps exactly the name it had', !!cut.valv && !Object.keys(cut).some(k => k.startsWith('valv.')));
+  ok('one figure larger than the budget gets a file to itself, not dropped', !!cut.huge && Object.keys(cut.huge).length === 1 && !cut['huge.2']);
+  ok('and no figure is lost or duplicated across the continuations',
+     Object.values(cut).reduce((n, p) => n + Object.keys(p).length, 0) === 12 &&
+     new Set(Object.values(cut).flatMap(p => Object.keys(p))).size === 12);
+  ok('at the real budget nothing below it splits', split ? Object.keys(split(big)).sort().join(',') === 'hf,huge,valv' : false);
 
   /* The runtime half, as the build appends it to app.js: since the figures
      moved after the home screen it lives in scripts/ref-images-loader.js, and
