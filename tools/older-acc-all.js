@@ -59,6 +59,9 @@ function step(title, args, { keep = true } = {}) {
 }
 
 const VERIFY_ONLY = process.argv.includes('--verify-only');
+/* Read, not checked-then-read: a missing file is null from the read itself,
+   so nothing can change between a check and the use it guards. */
+const readOr = f => { try { return fs.readFileSync(f, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } };
 const readAdded = () => { try { return JSON.parse(fs.readFileSync(REPORT, 'utf8')).totals.added; } catch (_) { return null; } };
 if (!VERIFY_ONLY) prepare();
 function prepare() {
@@ -85,14 +88,15 @@ say('extract ok');
 }
 if (VERIFY_ONLY) {
   const b = path.join(ROOT, 'build', 'systole.html');
-  if (!fs.existsSync(b)) { say('--verify-only: no build/systole.html — run without --verify-only'); finish(1); }
-  const m = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/.exec(fs.readFileSync(b, 'utf8'));
+  const built = readOr(b);
+  if (built === null) { say('--verify-only: no build/systole.html — run without --verify-only'); finish(1); }
+  const m = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/.exec(built);
   const n = m ? JSON.parse(m[1]).filter(q => /^OAB_/.test(q.id)).length : 0;
   say(`=== verify only, on the build as it stands: ${n} older-bank questions merged in it`);
 }
 
 const stats = path.join(ROOT, 'tests', 'test-stats.json');
-const statsBefore = fs.existsSync(stats) ? fs.statSync(stats).mtimeMs : 0;
+const statsBefore = readOr(stats);
 const s = step('verify --pwa', ['scripts/verify.js', '--pwa'], { keep: false });
 /* From the verify output, only what counts: each suite's row (name, ✓/✗,
    passed/failed), the totals, and each failing check's LABEL — cut before its
@@ -109,8 +113,11 @@ if (fails.length) {
   say(`\nfailing checks (labels only, ${fails.length}):`);
   for (const f of fails.slice(0, 80)) say('  ' + f);
 }
-if (fs.existsSync(stats) && fs.statSync(stats).mtimeMs > statsBefore) {
+/* Compared by content, read once: a record rewritten with identical counts
+   reads as unchanged, which for the upload is the same answer. */
+const statsAfter = readOr(stats);
+if (statsAfter !== null && statsAfter !== statsBefore) {
   say('\n=== tests/test-stats.json (written by this run)');
-  say(fs.readFileSync(stats, 'utf8').trimEnd());
+  say(statsAfter.trimEnd());
 } else say('\ntests/test-stats.json was not rewritten by this run');
 finish(s.ok ? 0 : 1);
