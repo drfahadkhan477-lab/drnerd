@@ -25,7 +25,10 @@
  *             probably the answer (FIRST.pdf, one of its two layouts)
  *   large     stem "99. " set large (16 pt Calibri), options "a.  "
  *             (FIRST.pdf, the other)
- *   other     a question that parsed but matches none of the three
+ *   bold-heading  a short bold line naming no "Question", the stem as plain
+ *             prose, options, explanation, then "Answer" (SECOND pp. 226-377;
+ *             from --shapes, see boldAnchor)
+ *   other     a question that parsed but matches none of the above
  * ANSWER KEYS, from the owner's first real run: FIRST.pdf keeps its answers in
  * key sections — an "ANSWERS"-type heading, then entries "12. a. rationale" —
  * which showed up as ~400 lines shaped "99.␣a." right after questions'
@@ -250,20 +253,21 @@ function segment(lines) {
       if (k.k === 'OPT') { if (k.L === 0) { optAt = j; reached.add(j); } else why = 'not-A-first'; break; }
     }
     let good = false;
-    if (optAt > 0) {
-      why = 'A-without-B';
-      const first = splitOptions(kinds[optAt].rest, 0);
-      if (first.length > 1) good = true;
-      for (let j = optAt + 1; !good && j < lines.length && j < optAt + 40; j++) {
-        const k = kinds[j];
-        if (k.k === 'HEAD' || k.k === 'NUM' || k.k === 'ANS' || k.k === 'KEY' || k.k === 'KEYHEAD' || k.k === 'KEYENTRY') break;
-        if (k.k === 'OPT') { good = k.L === 1; break; }
-      }
-    }
+    if (optAt > 0) { why = 'A-without-B'; good = bFollows(kinds, optAt); }
     if (good) { starts.push({ at: a, stemAt, optAt }); a = stemAt; continue; }
     rejects.push({ page: lines[a].page, optPage: optAt > 0 ? lines[optAt].page : null, reason: why });
     if (ka.k === 'HEAD') { orphanHeads.push(lines[a].page); a = stemAt; }
   }
+  /* An option A no anchor reached may still sit under a bold heading that
+     names no "Question" (boldAnchor, below): those start questions too, and
+     only the rest are recorded as A-without-anchor. */
+  const inKey0 = keySpans(kinds, starts.map(s => s.at), lines);
+  lines.forEach((l, i) => {
+    if (kinds[i].k !== 'OPT' || kinds[i].L !== 0 || reached.has(i) || inKey0[i] || !bFollows(kinds, i)) return;
+    const at = boldAnchor(lines, kinds, i);
+    if (at >= 0) { starts.push({ at, stemAt: at, optAt: i, via: 'bold' }); reached.add(i); }
+  });
+  starts.sort((x, y) => x.at - y.at);
   const inKey = keySpans(kinds, starts.map(s => s.at), lines);
   lines.forEach((l, i) => {
     if (kinds[i].k !== 'OPT' || kinds[i].L !== 0 || reached.has(i) || inKey[i]) return;
@@ -272,6 +276,42 @@ function segment(lines) {
   });
   const blocks = starts.map((s, i) => ({ ...s, end: i + 1 < starts.length ? starts[i + 1].at : lines.length }));
   return { kinds, blocks, orphanHeads, rejects, inKey };
+}
+
+/* Option A is an option only with B after it — on its own line, or set
+   beside it — before any anchor, answer or key line. */
+function bFollows(kinds, optAt) {
+  if (splitOptions(kinds[optAt].rest, 0).length > 1) return true;
+  for (let j = optAt + 1; j < kinds.length && j < optAt + 40; j++) {
+    const k = kinds[j];
+    if (k.k === 'HEAD' || k.k === 'NUM' || k.k === 'ANS' || k.k === 'KEY' || k.k === 'KEYHEAD' || k.k === 'KEYENTRY') return false;
+    if (k.k === 'OPT') return k.L === 1;
+  }
+  return false;
+}
+
+/* THE BOLD-HEADING LAYOUT, from --shapes on the owner's SECOND.pdf (pages
+   226-377, 61 of them unparsed): a short bold line whose words match no
+   "Question" pattern, then the stem as plain prose in one font — across a
+   page break if need be — then options A, B, …, the explanation, and an
+   "Answer" line after it. So from an option A no anchor reached, walk up:
+   every line plain text, not bold, in the font and size of the line just
+   above A, until a bold line of at most 40 characters — that is the heading,
+   and the question starts there. Anything else on the way up (another font,
+   an answer, key or option line, 40 lines with no heading) and it is not
+   this layout: the option stays A-without-anchor, as before. Measured on
+   layout, never on the heading's words, which were never read. */
+const isBoldLine = l => (typeof l.bf === 'number' ? l.bf >= 0.6 : !!l.bold);
+const HEADING_MAX = 40;
+function boldAnchor(lines, kinds, optAt) {
+  const body = lines[optAt - 1];
+  if (!body || kinds[optAt - 1].k !== 'TEXT' || isBoldLine(body)) return -1;
+  for (let j = optAt - 1; j >= 0 && j >= optAt - 40; j--) {
+    const l = lines[j], k = kinds[j];
+    if (isBoldLine(l)) return j < optAt - 1 && clean(l.text).length <= HEADING_MAX && (k.k === 'TEXT' || k.k === 'HEAD') ? j : -1;
+    if (k.k !== 'TEXT' || l.font !== body.font || Math.abs((l.size || 0) - (body.size || 0)) > 0.5) return -1;
+  }
+  return -1;
 }
 
 /* Which lines sit inside an answer-key section: from a key heading or entry
@@ -356,6 +396,7 @@ function applyKey(questions, entries) {
 }
 
 function layoutOf(lines, kinds, b) {
+  if (b.via === 'bold') return 'bold-heading';
   if (kinds[b.at].k === 'HEAD') return 'heading';
   const stem = lines[b.stemAt], opt = lines[b.optAt];
   if (/^\d{1,4}\s[.)]/.test(clean(stem.text)) || /^\(?[A-Ha-h]\s[.)]/.test(clean(opt.text))) return 'spaced';
@@ -454,6 +495,19 @@ function parseBlock(lines, kinds, b) {
   }
   if (cur) paras.push(clean(cur));
 
+  /* For a question left unanswered, what its explanation holds — as three
+     counts, for the report. SECOND.pdf's 64 have no Answer line and no
+     option set apart (--shapes, pp. 134-138), so whether the explanation
+     names the answer in some form no rule reads yet is the open question.
+     Measured here, not acted on: a key guessed from prose is not staged. */
+  const probe = ci >= 0 ? null : (() => {
+    const ex = norm(trail.map(i => lines[i].text).join(' '));
+    return {
+      says: /\b(?:answer|correct|best)\b/.test(ex),
+      lettered: /\((?:[a-h])\)|\b(?:option|choice|answer)\s+\(?[a-h]\)?(?=$|[\s.,;:)])/.test(ex),
+      named: options.filter(o => { const t = norm(o.t); return t.length >= 4 && ex.includes(t); }).length,
+    };
+  })();
   const noAnswerShapes = ci >= 0 ? [] : trail.slice(0, 2).map(i => ({ shape: shapeOf(lines[i].text), ink: lines[i].ink || '', bold: !!lines[i].bold }));
   return {
     n: n == null ? null : n,
@@ -464,7 +518,7 @@ function parseBlock(lines, kinds, b) {
     layout: layoutOf(lines, kinds, b),
     page: lines[b.at].page,
     pos: { page: lines[b.at].page, top: lines[b.at].y + (lines[b.at].size || 10) },
-    noAnswerShapes,
+    noAnswerShapes, probe,
     emphasis: ci >= 0 ? '' : emphasisPattern(options),
     stemFont: lines[b.stemAt].font || '?',
     at: b.at,
@@ -481,6 +535,34 @@ function joinWrapped(a, b) {
 /* Letters to A/a, digits to 9, space to ␣: the start of a line as a shape. */
 const shapeOf = t => clean(t).slice(0, 6).replace(/[A-Z]/g, 'A').replace(/[a-z]/g, 'a').replace(/[0-9]/g, '9')
   .replace(/[^\x20-\x7e]/g, '·').replace(/ /g, '␣');
+
+/* ONE ROW PER LINE, for the pages asked about, as shapes — the importer's
+   --shapes. The report above says WHICH pages failed and by which rule; this
+   says how those pages are laid out, so a rule for them can be designed
+   without reading them: the gap to the line above (points, or "top"), the
+   indent, size, font, bold share, ink, background, the kind lineKind() gave
+   it, its length, the shapeOf() its first six characters, and "<start",
+   "<stem" or "<optA" where segment() began a question. Words never: the only
+   text-derived fields are the kind, a length and the shape. */
+function shapeRows(pages, want) {
+  const { pages: kept } = stripRunning(pages);
+  const lines = [];
+  for (const pg of kept) for (const l of (pg.lines || [])) lines.push({ ...l, page: pg.p });
+  const { kinds, blocks } = segment(lines);
+  const role = new Map();
+  for (const b of blocks) { role.set(b.optAt, 'optA'); if (!role.has(b.stemAt)) role.set(b.stemAt, 'stem'); role.set(b.at, 'start'); }
+  const out = [];
+  lines.forEach((l, i) => {
+    if (!want.has(l.page)) return;
+    const prev = lines[i - 1];
+    const gap = prev && prev.page === l.page ? (prev.y - l.y).toFixed(1) : 'top';
+    const k = kinds[i], kind = k.k + (typeof k.L === 'number' && k.L >= 0 ? ':' + (LETTER[k.L] || '?') : '');
+    out.push(`p${l.page}  gap ${gap.padStart(6)}  x ${String(Math.round(l.x0 || 0)).padStart(4)}  ${String(l.size).padStart(4)}pt  ${l.font || '?'}  ` +
+      `bf ${typeof l.bf === 'number' ? l.bf.toFixed(2) : '-'}  ink ${l.ink || '-'}  bg ${l.bg || '-'}  ${kind.padEnd(10)}  len ${String(clean(l.text).length).padStart(3)}  ` +
+      shapeOf(l.text) + (role.has(i) ? '  <' + role.get(i) : ''));
+  });
+  return out;
+}
 
 /* The whole of one PDF: pages in, questions and the counts out. */
 function parseDocument(pages) {
@@ -723,7 +805,7 @@ const top = (o, n) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n).
 /* One file's tally, from its parse. Every value is a number, a layout name,
    a page number or a line shape. */
 function tallyFile(name, parsed) {
-  const t = { name, layouts: {}, answerBy: {}, noAnswerPages: [], noAnswerShapes: {}, emphasis: {}, parsed: parsed.questions.length, ...parsed.stats };
+  const t = { name, layouts: {}, answerBy: {}, noAnswerPages: [], noAnswerShapes: {}, emphasis: {}, probe: { says: 0, lettered: 0, named: {} }, parsed: parsed.questions.length, ...parsed.stats };
   for (const q of parsed.questions) {
     const L = t.layouts[q.layout] || (t.layouts[q.layout] = { parsed: 0, noAnswer: 0, fonts: {} });
     L.parsed++;
@@ -731,6 +813,12 @@ function tallyFile(name, parsed) {
     if (q.ci < 0) {
       L.noAnswer++; t.noAnswerPages.push(q.page);
       if (q.emphasis) t.emphasis[q.emphasis] = (t.emphasis[q.emphasis] || 0) + 1;
+      if (q.probe) {
+        if (q.probe.says) t.probe.says++;
+        if (q.probe.lettered) t.probe.lettered++;
+        const k = q.probe.named >= 3 ? '3+' : String(q.probe.named);
+        t.probe.named[k] = (t.probe.named[k] || 0) + 1;
+      }
       for (const s of q.noAnswerShapes) { const k = `${s.shape} ${s.ink || '-'}${s.bold ? ' bold' : ''}`; t.noAnswerShapes[k] = (t.noAnswerShapes[k] || 0) + 1; }
     } else t.answerBy[q.answerBy] = (t.answerBy[q.answerBy] || 0) + 1;
   }
@@ -749,6 +837,8 @@ function formatReport(files, totals) {
     out.push(`  missing an answer ${t.noAnswerPages.length}${t.noAnswerPages.length ? ` — pages ${ranges(t.noAnswerPages)}` : ''}`);
     if (t.noAnswerPages.length) out.push(`    the first lines after their options, as shapes: ${top(t.noAnswerShapes, 8)}`);
     if (t.noAnswerPages.length) out.push(`    how their options differ: ${top(t.emphasis || {}, 6)}`);
+    if (t.noAnswerPages.length && t.probe) out.push(`    their explanations: saying answer/correct/best ${t.probe.says}   naming a letter as "(c)" or "option c" ${t.probe.lettered}   ` +
+      `options named in full ${['0', '1', '2', '3+'].map(k => `${k}×${t.probe.named[k] || 0}`).join('  ')}`);
     const K = t.key || {};
     out.push(`  answer key: entries ${K.entries || 0} in ${K.runs || 0} runs   keyed ${K.keyed || 0}   agreeing with the page ${K.agree || 0}   disagreeing ${K.disagree || 0}` +
              `   unmatched ${K.unmatched || 0}   ambiguous ${K.ambiguous || 0}   letter past the options ${K.pastOptions || 0}`);
@@ -779,8 +869,8 @@ function formatReport(files, totals) {
 module.exports = {
   CATEGORY, ID_PREFIX, NO_EXPLANATION, DUP_THRESHOLD, REVERSE_MIN, TRAIL_PAGES,
   lineKind, splitOptions, shortAnswer, letterFrom, sentenceAnswer, sentenceHit, answerByText, inkAnswer, boldAnswer, emphasisPattern,
-  keySpans, keyEntries, applyKey, REASONS,
-  stripRunning, segment, parseBlock, parseDocument, attachImages, joinWrapped, shapeOf,
+  keySpans, keyEntries, applyKey, REASONS, boldAnchor, HEADING_MAX,
+  stripRunning, segment, parseBlock, parseDocument, attachImages, joinWrapped, shapeOf, shapeRows,
   norm, stemShingles, buildIndex, addToIndex, bestOverlap, isOurs, bankStems, dedupe,
   inferShape, toBankQuestion, idFor, mergeBank, ranges, tallyFile, formatReport,
 };

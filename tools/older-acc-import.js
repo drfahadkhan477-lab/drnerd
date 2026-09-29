@@ -7,6 +7,7 @@
  *   node tools/older-acc-import.js [SECOND.pdf FIRST.pdf …] [--bank content/questions.json]
  *                                  [--out source/older-staging] [--threshold 0.5]
  *   node tools/older-acc-import.js --merge [build/systole.html] [--out source/older-staging]
+ *   node tools/older-acc-import.js SECOND.pdf --shapes 70,134-135,226-228
  *
  * With no PDFs named it reads source/older/SECOND.pdf, then source/older/FIRST.pdf
  * — SECOND first because its text layer is clean, so where the two banks
@@ -66,6 +67,13 @@
  * verify-chapters' chapter count. They are right to fail until they are
  * taught the older bank's count from the staging — not by moving a number.
  *
+ * --shapes PAGES stages nothing and needs no bank: for the pages named it
+ * writes one row per line (tools/older-acc.js shapeRows — gap, indent, size,
+ * font, bold share, ink, background, kind, length, a six-character shape,
+ * never a word) to source/older-shapes.txt, in UTF-8 whatever the shell's
+ * redirection would have written. It is how a page the report lists as
+ * unparsed gets a rule: the owner uploads the shapes, not the page.
+ *
  * source/ is gitignored and scripts/leak-guard.js refuses it: nothing staged
  * here is ever committed.
  */
@@ -77,12 +85,23 @@ const { keyVsProse } = require('./key-prose.js');
 const ROOT = path.join(__dirname, '..');
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i > -1 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : d; };
-const VALUED = ['--bank', '--out', '--threshold', '--merge'];
+const VALUED = ['--bank', '--out', '--threshold', '--merge', '--shapes'];
 const positional = args.filter((a, i) => !a.startsWith('--') && !VALUED.includes(args[i - 1]));
 const OUT = path.resolve(opt('--out', path.join(ROOT, 'source', 'older-staging')));
 const MARKER = '.older-acc-import';
 
 if (args.includes('--merge')) { merge(); process.exit(0); }
+const SHAPES = args.includes('--shapes') ? pageSet(opt('--shapes', '')) : null;
+if (SHAPES && !SHAPES.size) { console.error('--shapes needs pages: --shapes 70,134-135,226'); process.exit(1); }
+function pageSet(spec) {
+  const out = new Set();
+  for (const part of String(spec).split(',')) {
+    const m = /^\s*(\d+)\s*(?:-\s*(\d+))?\s*$/.exec(part);
+    if (!m) continue;
+    for (let p = +m[1]; p <= +(m[2] || m[1]) && p - +m[1] < 1000; p++) out.add(p);
+  }
+  return out;
+}
 
 const THRESHOLD = +opt('--threshold', A.DUP_THRESHOLD);
 const FILES = positional.length ? positional : [path.join(ROOT, 'source', 'older', 'SECOND.pdf'), path.join(ROOT, 'source', 'older', 'FIRST.pdf')];
@@ -122,7 +141,7 @@ async function openDoc({ lib, worker }) {
 
 /* Returns one page's lines (with text — this goes to the Node side, into
    memory and the staging file, never to the console) and its figures. */
-async function readPage({ p, scale, maxW, quality }) {
+async function readPage({ p, scale, maxW, quality, noImages }) {
   const page = await window.__doc.getPage(p);
   const view = page.view, W = view[2] - view[0], H = view[3] - view[1];
   const tc = await page.getTextContent();
@@ -191,6 +210,15 @@ async function readPage({ p, scale, maxW, quality }) {
     const core = px.slice(0, Math.max(1, Math.ceil(px.length * 0.3)));
     return 'rgb~' + [0, 1, 2].map(c => Math.round(core.reduce((n, q) => n + q[c], 0) / core.length / 32) * 32).join(',');
   };
+  /* The line's background: its commonest colour, in the same 32 steps. An
+     answer shaded behind its option shows here and nowhere in the text. */
+  const bgOf = (x0, y0, x1, y1) => {
+    const [X, Y, Wd, Ht] = box(x0, y0, x1, y1);
+    if (Wd < 1 || Ht < 1) return '?';
+    const d = cx.getImageData(X, Y, Wd, Ht).data, n = {};
+    for (let i = 0; i < d.length; i += 4) { const k = [d[i], d[i + 1], d[i + 2]].map(c => Math.round(c / 32) * 32).join(','); n[k] = (n[k] || 0) + 1; }
+    return 'rgb~' + Object.keys(n).sort((a, b) => n[b] - n[a])[0];
+  };
 
   const isBold = f => /bold|black|heavy|semibold|demi/i.test(f) || /,B/.test(f);
   const fontOf = id => {
@@ -227,12 +255,12 @@ async function readPage({ p, scale, maxW, quality }) {
     let boldChars = 0, allChars = 0;
     for (const q of l.parts) { const n = q.s.replace(/\s/g, '').length; allChars += n; if (isBold(fontOf(q.font))) boldChars += n; }
     lines.push({ y: l.y, x0, x1, size: l.size, font, bold: isBold(font), bf: allChars ? Math.round(boldChars / allChars * 100) / 100 : 0,
-                 ink: ink(x0, l.y - l.size * 0.2, x1, l.y + l.size * 0.8), text });
+                 ink: ink(x0, l.y - l.size * 0.2, x1, l.y + l.size * 0.8), bg: bgOf(x0, l.y - l.size * 0.3, x1, l.y + l.size), text });
   }
   lines.sort((a, b) => b.y - a.y || a.x0 - b.x0);
 
   const images = [];
-  for (const r of rects) {
+  for (const r of noImages ? [] : rects) {
     const [X, Y, Wd, Ht] = box(r[0], r[1], r[2], r[3]);
     if (Wd < 8 || Ht < 8) continue;
     const k = Math.min(1, maxW / Wd);
@@ -262,7 +290,7 @@ async function readPdf(browser, file) {
   const n = await page.evaluate(openDoc, { lib: LIB, worker: WORKER });
   const pages = [];
   for (let p = 1; p <= n; p++) {
-    try { pages.push(await page.evaluate(readPage, { p, scale: 2, maxW: 1400, quality: 0.85 })); }
+    try { pages.push(await page.evaluate(readPage, { p, scale: 2, maxW: 1400, quality: 0.85, noImages: !!SHAPES })); }
     catch (e) { pages.push({ p, noText: true, failed: true, w: 1, h: 1, y0: 0 }); }
     if (p % 50 === 0 || p === n) process.stderr.write(`  ${path.basename(file)}  page ${p}/${n}\r`);
   }
@@ -273,6 +301,7 @@ async function readPdf(browser, file) {
 
 /* ── the command ───────────────────────────────────────────────────────── */
 (async () => {
+  if (SHAPES) return shapes();
   const { from: bankFrom, bank } = readBank();
   const shape = A.inferShape(bank);
   const { key, stems } = A.bankStems(bank);
@@ -340,6 +369,26 @@ async function readPdf(browser, file) {
   console.log(`\nstaged in ${path.relative(process.cwd(), OUT)}${underSource ? ' (source/ is gitignored)' : ''}.  To put them in a build:`);
   console.log('  node scripts/build.js  then  node tools/older-acc-import.js --merge  then  node scripts/extract-content.js build/systole.html');
 })().catch(e => { console.error(String(e && e.message || e).split('\n')[0]); process.exit(1); });
+
+/* ── --shapes ─────────────────────────────────────────────────────────── */
+async function shapes() {
+  const { launch } = require('../tests/_engine.js');
+  const browser = await launch();
+  const rows = [];
+  for (const f of FILES) {
+    const pages = await readPdf(browser, f);
+    const got = A.shapeRows(pages, SHAPES);
+    const bare = pages.filter(pg => SHAPES.has(pg.p) && pg.noText).map(pg => pg.p);
+    rows.push(`${path.basename(f)}  pages ${A.ranges([...SHAPES])}  rows ${got.length}` + (bare.length ? `  no text layer: ${A.ranges(bare)}` : ''));
+    rows.push(...got, '');
+  }
+  await browser.close();
+  const file = path.join(ROOT, 'source', 'older-shapes.txt');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, rows.join('\n'), 'utf8');
+  console.log(rows.filter(r => /^\S+\.pdf /i.test(r)).join('\n'));
+  console.log(`shapes written to ${path.relative(process.cwd(), file)} (source/ is gitignored) — upload that file`);
+}
 
 /* ── --merge ───────────────────────────────────────────────────────────── */
 function merge() {
