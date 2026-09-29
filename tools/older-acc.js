@@ -833,7 +833,16 @@ function tallyFile(name, parsed) {
    tells the two apart without a word leaving the laptop: for each lettered
    mention, is the option called correct, called incorrect, or neither, by
    the few words right after it (or, for "the correct answer is (c)", right
-   before). Counted per question; never acted on here. */
+   before). Counted per question; never acted on here.
+
+   WHAT IT FOUND on the owner's PDFs (2026-09-29): SECOND 66 unanswered —
+   60 mention letters, NONE calls any option correct or incorrect; 41 of
+   them share one templated shape ("aaaaaa␣a␣aaa␣aaaaa␣aaa": a six-letter
+   word, the letter, then three neutral words), 6 mention no letter.
+   FIRST 14 unanswered — no lettered mention at all. So the text states no
+   key for them in any form this reads, and they stay unstaged. The probe
+   is kept so the question is not re-asked from scratch; a rule for them
+   would need the page to state the answer, not a better guess. */
 const POS_AFTER = /^\s*(?:\)|\.)?\s*(?:is|was|would be|remains)\s+(?:the\s+)?(?:correct|best|right|most appropriate|preferred|true)\b/;
 const POS_BEFORE = /\b(?:correct|best|right)\s+(?:answer|choice|option|response)\s*(?:is|was|:|=)?\s*$/;
 const NEG_AFTER = /^\s*(?:\)|\.)?\s*(?:is|was|would be|are)\s+(?:not\b|incorrect\b|wrong\b|false\b|inappropriate\b|contraindicated\b|less\b|unlikely\b)/;
