@@ -319,6 +319,16 @@ head('in the bank\'s own shape');
     { id: 'A_1', ch: 'A', s: words('plainstem', 12), o: ['one', 'two'], ci: 0, ex: 'plain words' },
     { id: 'A_2', ch: 'A', s: words('plainstemb', 12), o: ['one', 'two'], ci: 0, ex: 'plain words' },
   ]);
+  /* verify-content's own rule: a question with empty commentary must carry
+     a bad/flag notice. The owner's first merged build shipped one without. */
+  const silentPlain = A.toBankQuestion({ ...q, ex: [] }, plain, {});
+  const silentHtml = A.toBankQuestion({ ...q, ex: [] }, shape, {});
+  const rule = x => !(x.ex === '' && !x.bad && !x.flag);
+  ok('a question with no explanation is told to the fellow, not shipped silent', rule(silentPlain) && silentPlain.flag === A.NO_EXPLANATION && silentHtml.flag === A.NO_EXPLANATION,
+     JSON.stringify({ plain: silentPlain.flag ? 'flagged' : 'SILENT', html: silentHtml.flag ? 'flagged' : 'SILENT' }));
+  ok('and one with an explanation carries no such notice', !A.toBankQuestion(q, plain, {}).flag && !out.flag);
+  const blankParas = A.toBankQuestion({ ...q, ex: ['  '] }, shape, {});
+  ok('nor does an explanation of empty paragraphs pass for one', blankParas.flag === A.NO_EXPLANATION, blankParas.ex);
   const po = A.toBankQuestion(q, plain, {});
   ok('a bank of string options and plain commentary gets the same', JSON.stringify(po.o) === '["Zq one","Zq two"]' && po.ex === 'Para zqone\n\nPara <two>', JSON.stringify(po.o));
   const named = A.inferShape([

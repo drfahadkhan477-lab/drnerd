@@ -48,6 +48,8 @@ const { shingles } = require('./refs-merge.js');
 const { stemKey } = require('../scripts/content-checks.js');
 
 const CATEGORY = 'Older ACC bank';     // the chapter every imported question is filed under
+const NO_EXPLANATION = 'This question comes from an older ACC question bank that gives no explanation for it. ' +
+  'The keyed answer is the one that bank gives.';
 const ID_PREFIX = 'OAB_';              // and the id prefix that marks it as ours
 const DUP_THRESHOLD = 0.5;             // this much of a stem inside ONE existing stem is that question
 const REVERSE_MIN = 8;                 // a bank stem needs this many shingles to count as inside a longer one
@@ -660,6 +662,12 @@ function toBankQuestion(q, shape, { from = '', figs = [] } = {}) {
   out.img = figs.length;
   out.figs = figs;
   out.from = from;
+  /* A question the older bank gives no explanation for is kept — its answer
+     came from the bank's own key or answer line — but the fellow is told, as
+     the app tells them about every other item with a known gap
+     (verify-content: no question ships with empty commentary and no notice).
+     The owner's first merged build shipped one such question silently. */
+  if (!String(ex).replace(/<[^>]*>/g, '').trim()) out.flag = NO_EXPLANATION;
   return out;
 }
 
@@ -767,7 +775,7 @@ function formatReport(files, totals) {
 }
 
 module.exports = {
-  CATEGORY, ID_PREFIX, DUP_THRESHOLD, REVERSE_MIN, TRAIL_PAGES,
+  CATEGORY, ID_PREFIX, NO_EXPLANATION, DUP_THRESHOLD, REVERSE_MIN, TRAIL_PAGES,
   lineKind, splitOptions, shortAnswer, letterFrom, sentenceAnswer, sentenceHit, answerByText, inkAnswer, boldAnswer, emphasisPattern,
   keySpans, keyEntries, applyKey, REASONS,
   stripRunning, segment, parseBlock, parseDocument, attachImages, joinWrapped, shapeOf,
