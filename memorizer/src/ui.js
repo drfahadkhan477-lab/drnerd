@@ -480,7 +480,7 @@ function recut(book, chapters, method) {
 
 function openDoc(id, section) {
   return Promise.all([Store.get('docs', id), Store.get('sessions', id), Store.get('packs', id)]).then(function (r) {
-    ui.docRec = r[0];
+    ui.docRec = r[0]; ui.recall = null;
     if (ui.docRec) retitleDoc(ui.docRec);
     ui.docId = id;
     ui.pack = r[2] || null; ui.packReport = null; ui.packText = ''; ui.packOpen = false; ui.packShow = false;
@@ -500,6 +500,7 @@ function openDoc(id, section) {
    step is being stored, taps are ignored. */
 function go(event) {
   if (ui.moving) return Promise.resolve();
+  if (event && /^(?:open|toUnit|toExam)$/.test(event.type)) ui.recall = null;
   ui.moving = true;
   ui.choice = null; ui.sure = false; ui.error = ''; ui.back = 0; ui.notice = '';
   var p;
@@ -767,8 +768,8 @@ function folds() {
   if (!ui.folds) { try { ui.folds = JSON.parse(root.localStorage.getItem(FOLD_KEY) || '{}') || {}; } catch (_) { ui.folds = {}; } }
   return ui.folds;
 }
-function fold(key, title, n, body) {
-  var shut = folds()[key] === false;
+function fold(key, title, n, body, closedFirst) {
+  var shut = folds()[key] === false || (closedFirst && folds()[key] !== true);
   /* The tap sets both the element and the remembered state at once; the
      browser's own 'toggle' event comes later, after a redraw may already
      have read the old state. */
@@ -1194,6 +1195,8 @@ function viewUnit() {
     allDone ? h('div.exam-go', button(examMode() ? '\u2713 Exam conditions' : 'Exam conditions', function () { setExamMode(!examMode()); render(); }, examMode() ? 'chip sure-on' : 'chip quiet',
         { id: 'exam-mode', 'aria-pressed': String(examMode()), title: 'Timed at a board\u2019s pace, answers shown at the end' }),
       button(s.exam.score != null ? 'Retake' : 'Start', function () { go({ type: 'toExam' }); }, 'primary', { id: 'to-exam' })) : h('span.lock', { 'aria-hidden': 'true' }, '🔒'));
+  var pendingN = Session.pending(s).length;
+  var step = Home.nextStep(n, doneN, pendingN, d.clusters[nxt] ? d.clusters[nxt].title : '', s.exam.score);
   return h('main.wrap.unit',
     backBar(d.name, function () { if (d.bookId) openBook(d.bookId); else leave('shelf'); }),
     d.bookId ? h('p.muted.book-of', d.bookName + (d.chapter ? ' · chapter ' + d.chapter : ' · front matter') + ' · pp. ' + d.pageStart + '–' + d.pageEnd) : null,
@@ -1210,18 +1213,23 @@ function viewUnit() {
             return [h('strong', String(doneN)), ' drilled · ', h('strong', String(taughtN)), ' taught · ', h('strong', String(n - doneN - taughtN)), ' to learn'];
           })()))),
       h('div.bar', h('i', { style: 'width:' + Math.round(100 * doneN / Math.max(1, n)) + '%' })),
+      /* WHAT TO DO NOW, and why (home.js nextStep): the one next step leads
+         the page, then the progress, the weak spots, and the tools. */
+      h('div.unit-now', { id: 'unit-now', 'data-kind': step.kind }, h('p.eyebrow', 'What to do now'), h('p.unit-why', step.why)),
       /* Where to go next, at the top: it floated over the foot of the page
          and covered the last sections (the owner's screenshot). */
-      h('div.unit-cta', allDone
-        ? button('Take the final exam', function () { go({ type: 'toExam' }); }, 'primary big', { id: 'learn-unit' })
-        : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, 'primary big', { id: 'learn-unit' }),
+      h('div.unit-cta',
+        step.kind === 'review' ? button('Review round (' + pendingN + ')', function () { go({ type: 'toReview' }); }, 'primary big', { id: 'next-review' }) : null,
+        allDone
+        ? button('Take the final exam', function () { go({ type: 'toExam' }); }, step.kind === 'review' ? '' : 'primary big', { id: 'learn-unit' })
+        : button(doneN ? 'Continue: ' + d.clusters[nxt].title : 'Learn unit', function () { go({ type: 'open', section: nxt }); }, step.kind === 'review' ? '' : 'primary big', { id: 'learn-unit' }),
         /* the owner could not find the prompt for Claude: folded to one line
            below, it read as missing — so a way to it sits beside the next step */
         button('\u2726 Study pack — the prompt for Claude', function () { ui.packOpen = true; ui.packFocus = true; render(); }, 'tonal', { id: 'pack-go' }))),
     ui.notice ? h('p.card.note', { id: 'notice', role: 'status' }, ui.notice) : null,
-    packCard(d),
     weakCard(s),
     missesCard(s),
+    packCard(d),
     /* The chapters as a row of round icons, as Systole's topics are: a tap
        opens that chapter's card and brings it into view. */
     chapters >= 2 ? h('nav.ch-icons', { id: 'ch-icons', 'aria-label': 'Chapters' }, groups.filter(function (g) { return g.title; }).map(function (g, k) {
@@ -1277,7 +1285,7 @@ function packCard(d) {
   /* folded to its one line until opened; open after an import, for its
      report. Every tap redraws the page, so the fold is remembered. */
   var card = h('details.card.pack-card', { id: 'pack-card', open: ui.packOpen || r ? true : null, ontoggle: function () { ui.packOpen = card.open; } },
-    h('summary', h('span.eyebrow', '\u2726 Study pack \u00B7 written with Claude'),
+    h('summary', h('span.eyebrow', d.study ? '\u2726 Study pack \u00B7 from your study file' : '\u2726 Study pack \u00B7 written with Claude'),
       h('span.muted.pack-status', { id: 'pack-status' }, cov.have ? cov.have + ' of ' + cov.of + ' sections' + (cov.flagged ? ' \u00B7 ' + cov.flagged + ' flagged' : '') : 'none yet')),
     h('p', 'Have Claude write this unit\u2019s lessons and questions, with your Braunwald and Memorizer skills, and import its reply here. ' +
       'Memorizer checks every number, page and quoted sentence, and the conditions, tests and treatments it names, against your book; what it cannot find is flagged where it is shown.'),
@@ -1893,9 +1901,68 @@ function packCards(L) {
       })) : null,
   };
 }
+/* EXPLAIN IT FIRST (study.js recallFirst): the lesson hidden until the
+   learner has said what they remember; then what they left out is taught
+   first, what they explained is folded, and the rest of the lesson waits
+   under one fold. Shown by itself on a section already drilled, offered on
+   a first visit. */
+function lessonPoints(L) {
+  var points = Sheet.sheetOf(L).groups.reduce(function (a, g) { return a.concat(g.points); }, []);
+  return L.by === 'pack' ? Study.rubricOf(points, L) : points;
+}
+/* What a recall is marked against: the big idea, the key points and the
+   numbers to know, each once. (Without an overview the big idea is the
+   lesson's first point, which the key points then leave out.) */
+function recallPoints(L) {
+  var seen = {}, out = [], sh = Sheet.sheetOf(L);
+  var bigPoint = (L.points || []).filter(function (p) { return p.text === sh.bigIdea; })[0];
+  (sh.bigIdea ? [{ text: sh.bigIdea, page: bigPoint ? bigPoint.page : null }] : []).concat(lessonPoints(L)).concat(sh.numbers.map(function (n) { return { text: n.text, page: n.page }; })).forEach(function (p) {
+    if (p && p.text && !seen[p.text]) { seen[p.text] = true; out.push(p); }
+  });
+  return out;
+}
+function recallGate(c, L, key) {
+  var rc = ui.recall;
+  var area = h('textarea', { id: 'recall-text', rows: '6', 'aria-label': 'What you remember',
+    placeholder: 'What it is, why it happens, the numbers. Anything you remember counts.', oninput: function () { rc.draft = area.value; } });
+  area.value = rc.draft || '';
+  var check = function () {
+    var points = recallPoints(L), r = Study.recallFirst(area.value, points.map(function (p) { return p.text; }), c.text);
+    if (r.tooShort) { rc.tooShort = true; render(); return; }
+    ui.recall = { key: key, phase: 'done', r: r, points: points, said: area.value }; render(); root.scrollTo(0, 0);
+  };
+  return h('div.card.recall-first', { id: 'recall-first' },
+    h('span.eyebrow', 'Before the lesson'),
+    h('h2', 'What do you remember about \u201C' + c.title + '\u201D?'),
+    h('p.muted', 'Say it or type it; the lesson stays hidden until you do. What you leave out is taught first, and what you already have is folded away.'),
+    area,
+    rc.tooShort ? h('p.warn', { id: 'recall-short' }, 'Say a little more \u2014 at least ' + Study.RECALL_MIN_WORDS + ' words \u2014 or skip to the lesson.') : null,
+    h('div.row', micButton(function (t) { rc.draft = ((rc.draft || '') + ' ' + t).trim(); render(); }, 'recall-mic'),
+      button('Check what I remember', check, 'primary', { id: 'recall-check' }),
+      button('Skip \u2014 show me the lesson', function () { ui.recall = { key: key, phase: 'skipped' }; render(); }, 'quiet', { id: 'recall-skip' })));
+}
+function recallResult(rc) {
+  var r = rc.r, n = r.known.length + r.gaps.length, item = function (i) { return h('li', marked(rc.points[i].text), rc.points[i].page ? [' ', page(rc.points[i].page)] : null); };
+  return h('div.card.recall-result', { id: 'recall-result' },
+    h('span.eyebrow', 'From memory'),
+    h('h2', 'You remembered ' + r.known.length + ' of ' + n + ' key point' + (n === 1 ? '' : 's') + '.'),
+    r.wrong.length ? h('p.warn', { id: 'recall-wrong' }, 'You gave ' + r.wrong.join(', ') + ' \u2014 this section has no such number. Check it against the page.') : null,
+    r.gaps.length ? [h('h3', 'Taught first: what you left out'), h('ul.recall-gaps', { id: 'recall-gaps' }, r.gaps.map(item))]
+      : h('p', { id: 'recall-all' }, '\u2713 You had every key point. The drill is at the end of the lesson.'),
+    r.known.length ? h('details.recall-known', { id: 'recall-known' }, h('summary', 'What you already explained (' + r.known.length + ')'), h('ul', r.known.map(item))) : null);
+}
 function viewLesson() {
   var s = ui.state, c = cluster(), L = s.per[s.section].lesson;
   if (!L) return [sectionBar('teach'), ui.error ? errorCard(pump) : busyCard()];
+  var rkey = ui.docId + ':' + s.section;
+  if (ui.recall && ui.recall.key !== rkey) ui.recall = null;
+  var canRecall = recallPoints(L).length > 0;
+  if (!ui.recall && canRecall && Study.recallDue(s.per[s.section], today())) ui.recall = { key: rkey, phase: 'ask' };
+  if (ui.recall && ui.recall.phase === 'ask') return [sectionBar('teach'), ocrNote(c), recallGate(c, L, rkey)];
+  /* studied today: kept with the session at its next save */
+  s.per[s.section].seenDay = today();
+  var recalled = ui.recall && ui.recall.phase === 'done' ? recallResult(ui.recall) : null;
+  var recallOffer = !ui.recall && canRecall ? button('\uD83E\uDDE0 Try explaining it first', function () { ui.recall = { key: rkey, phase: 'ask' }; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'recall-offer' }) : null;
   var sh = Sheet.sheetOf(L);
   var analogies = L.analogies || [];
   var mnemonics = (L.mnemonics || []).map(function (m) {
@@ -1941,6 +2008,7 @@ function viewLesson() {
        mnemonics, a check, teaching it back, rounds; then what else the
        section has. The drill at the end. */
     var parts = [{ label: 'The big idea', stage: 'orient', nodes: [pk.label, bigIdea, analogies.length ? analogyCard(analogies[0], true) : null] }];
+    if (recalled) parts.unshift({ label: 'From memory', stage: 'orient', nodes: [recalled] });
     if (mapC) parts.push({ label: 'Clinical map', stage: 'orient', nodes: [mapC] });
     if (pk.mechanism) parts.push({ label: 'The mechanism', stage: 'mechanism', nodes: [pk.mechanism] });
     if (gl && gl.pathway.length >= 2) parts.push({ label: 'How it works', stage: 'mechanism', nodes: [pathwayPlay(gl.pathway)] });
@@ -1982,32 +2050,30 @@ function viewLesson() {
       h('div.step-head', { id: 'lesson-steps' },
         h('div.step-count', h('strong', 'Slide ' + (i + 1) + '/' + parts.length), h('span', ' · ' + parts[i].label)),
         button('↻ Replay', function () { replay(); }, 'quiet', { id: 'replay' }),
-        button('Show the whole lesson', function () { setStepMode(false); render(); }, 'quiet', { id: 'whole-page' })),
+        button('Show the whole lesson', function () { setStepMode(false); render(); }, 'quiet', { id: 'whole-page' }), recallOffer),
       h('div.bar.step-bar', h('i', { style: 'width:' + Math.round(100 * (i + 1) / parts.length) + '%' })),
       parts[i].nodes,
       h('div.step-nav', button('← Back', function () { move(-1); }, 'quiet', { id: 'step-back', disabled: i === 0 ? true : null }),
         last ? drill : button('Next →', function () { move(1); }, 'primary big', { id: 'step-next' })),
     ];
   }
-  return [
-    sectionBar('teach'),
-    ocrNote(c),
-    h('div.row.lesson-mode', button('▶ Play this section', function () { setStepMode(true); ui.step = null; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'step-mode' })),
-    pk.label,
-    /* THE WHOLE LESSON on one screen's width (the owner: "not too much
-       scrolling"): what to understand in the main column — the idea, how it
-       works, the points — and beside it on an iPad, below it on a phone,
-       what to memorise at a glance: the numbers, the pairs not to confuse,
-       the pearls, the hooks, the map. */
+  /* THE FIRST SCREEN, as the owner's review asked: the big idea, the first
+     Sheet.KEY_FACTS points, the mechanism, one visual. The other points wait
+     under a fold that starts closed (and remembers being opened); numbers,
+     pairs, pearls and hooks sit beside it to memorise; practice after. */
+  var split = Sheet.splitPoints(sh.groups), firstGroups = split.first, restGroups = split.rest, restN = split.restN;
+  var lesson = [
     h('div.lesson-grid', { id: 'lesson-grid' },
       h('div.lesson-main',
         bigIdea,
-        pk.mechanism,
-        glanceCard(c, L),
         h('div.card', { id: 'points' },
           h('div.card-head', h('h2', 'Key points'), tools),
-          sh.groups.map(group),
+          firstGroups.map(group),
+          restN ? fold('more-points', 'The other points', restN, restGroups.map(group), true) : null,
           h('p.muted.arranged-note', fromPack ? 'Headings arranged by Memorizer; the points written with Claude from your book.' : 'Headings arranged by Memorizer; the points are your book’s.')),
+        pk.mechanism,
+        glanceCard(c, L),
+        flowCard,
         pk.tables,
         analogies.length ? analogyCard(analogies[0], true) : null,
         soc),
@@ -2025,10 +2091,17 @@ function viewLesson() {
       fixCard(c),
       moreAnalogies,
       /* the on-device AI tutor is in the robot's window now (robot()) */
-      flowCard,
       tablesCard(c),
       visualsCard(c),
-      full),
+      full)];
+  var gaps = recalled && ui.recall.r.gaps.length;
+  return [
+    sectionBar('teach'),
+    ocrNote(c),
+    h('div.row.lesson-mode', button('▶ Play this section', function () { setStepMode(true); ui.step = null; render(); root.scrollTo(0, 0); }, 'quiet', { id: 'step-mode' }), recallOffer),
+    recalled,
+    pk.label,
+    gaps ? h('details.recall-rest', { id: 'recall-rest' }, h('summary', 'The whole lesson'), lesson) : lesson,
     drill,
   ];
 }
@@ -2314,6 +2387,7 @@ function closingCard(s) {
 
 function viewResult() {
   var s = ui.state, c = s.per[s.section], d = ui.docRec;
+  c.seenDay = today();
   var qs = c.quiz.questions, firsts = c.answers.filter(function (a) { return a.first; });
   if (!qs.length) {
     var nx = Session.nextSection(s);

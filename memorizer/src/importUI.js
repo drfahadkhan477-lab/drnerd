@@ -57,6 +57,9 @@ function show(onImport) {
   var strictRow = el('label', { 'for': 'import-strict', className: 'import-strict' }, [strict,
     el('span', { text: 'Strict check: also hold the numbers and conditions in each question\u2019s scenario to the file\u2019s text, and flag any it does not have' })]);
   summary.hidden = true;
+  var copyNote = el('span', { id: 'import-copy-status', role: 'status', className: 'muted' });
+  var copy = el('button', { type: 'button', id: 'import-copy-prompt', className: 'btn tonal', text: '\u2726 Copy the prompt for Claude' });
+  var promptRow = el('div', { className: 'row import-prompt' }, [copy, copyNote]);
   var go = el('button', { type: 'button', id: 'import-go', className: 'btn primary', text: 'Import' });
   go.disabled = true;
   var cancel = el('button', { type: 'button', id: 'import-cancel', className: 'btn', text: 'Cancel' });
@@ -64,7 +67,7 @@ function show(onImport) {
   var box = el('div', { className: 'lightbox import-view', id: 'import-dialog', 'aria-labelledby': 'import-title' }, [
     el('div', { className: 'card import-card' }, [
       el('div', { className: 'import-head' }, [el('h2', { id: 'import-title', text: 'Import a study file' }), x]),
-      input, drop, status, summary, strictRow,
+      promptRow, input, drop, status, summary, strictRow,
       el('div', { className: 'row import-foot' }, [cancel, go]),
     ]),
   ]);
@@ -99,6 +102,17 @@ function show(onImport) {
   ['dragenter', 'dragover'].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
   ['dragleave', 'drop'].forEach(function (t) { drop.addEventListener(t, function () { drop.classList.remove('over'); }); });
   drop.addEventListener('drop', function (e) { e.preventDefault(); take(e.dataTransfer && e.dataTransfer.files[0]); });
+  copy.addEventListener('click', function () {
+    var text = SI.studyFilePrompt(), done = function () { copyNote.textContent = 'Copied. Paste it into Claude with your chapter, and save the reply as a .md file.'; };
+    var fallback = function () {
+      var ta = el('textarea', { className: 'sr-only', readonly: '' }); ta.value = text; box.appendChild(ta); ta.select();
+      var ok = false; try { ok = doc.execCommand('copy'); } catch (_) {}
+      ta.remove();
+      if (ok) done(); else copyNote.textContent = 'This browser would not copy it. The same prompt is in docs/MEMORIZER-STUDY-FILE-PROMPT.md.';
+    };
+    if (root.navigator.clipboard && root.navigator.clipboard.writeText) root.navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  });
   function close() { if (closeFn) closeFn(); }
   x.addEventListener('click', close);
   cancel.addEventListener('click', close);

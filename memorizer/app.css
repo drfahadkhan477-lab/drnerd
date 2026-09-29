@@ -1329,3 +1329,18 @@ main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation:
 .miss-step.ok { background: var(--good-soft); color: var(--good); }
 .offline-list { list-style: none; margin: 0 0 var(--s-2); padding: 0; display: grid; gap: var(--s-1); font-size: var(--t-meta); }
 .offline-list li[data-ready="true"] { color: var(--good); }
+.import-prompt { gap: var(--s-2); align-items: center; flex-wrap: wrap; }
+
+/* Explain it first (lesson) */
+.recall-first h2, .recall-result h2 { margin: var(--s-1) 0 var(--s-2); font-size: var(--t-h4); }
+.recall-first textarea { width: 100%; box-sizing: border-box; }
+.recall-result h3 { font-size: var(--t-body); margin: var(--s-3) 0 var(--s-1); color: var(--bad); }
+.recall-gaps { margin: 0; padding-left: 1.2rem; display: grid; gap: var(--s-1); }
+.recall-known summary, .recall-rest > summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.recall-rest > summary { margin: var(--s-3) 0; font-size: var(--t-lead); color: var(--ink); }
+
+/* What to do now (unit page) */
+.unit-now { margin: var(--s-3) 0 var(--s-2); }
+.unit-now .eyebrow { margin: 0; }
+.unit-why { margin: var(--s-1) 0 0; font-size: var(--t-lead); color: var(--ink); font-weight: 600; }
+.unit-now[data-kind="review"] .unit-why { color: var(--bad); }

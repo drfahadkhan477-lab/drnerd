@@ -39,6 +39,7 @@
 'use strict';
 
 var Prompts = root.MemPrompts || (typeof require === 'function' ? require('./prompts.js') : null);
+var Spec = root.MemSpec || (typeof require === 'function' ? require('./spec.js') : null);
 var Ground = root.MemGround || (typeof require === 'function' ? require('./ground.js') : null);
 var Ask = root.MemAsk || (typeof require === 'function' ? require('./ask.js') : null);
 
@@ -160,7 +161,7 @@ function prompt(doc) {
     '3. Memorizer checks your reply against my book before it uses it: every number, every page, every quoted ' +
     'sentence, table cell and flowchart label, and the conditions, tests and treatments you name. Anything it ' +
     'cannot find is shown to me flagged "not found in your book". Copy numbers exactly as printed (value, unit, ' +
-    'direction: >, <, ≥, ≤); never round, convert or combine them; name things in the text’s own words.',
+    'direction: >, <, ≥, ≤); never round, convert or combine them; name things in the text’s own words. ' + Spec.RULES.numbers,
     '4. ' + Prompts.ANALOGY_RULE,
     '5. Reply with JSON only, in one code block, in exactly the shape shown below. Every field is required: ' +
     'write "" or [] when there is nothing to put.',
@@ -180,34 +181,25 @@ function prompt(doc) {
     '- lesson.overview: the big idea — what this section is about and why it matters — in one or two plain sentences.',
     '- lesson.mechanism: the chain of cause and effect that makes the section make sense, as "A → B → C" in two ' +
     'to four sentences ("" if it has none).',
-    '- lesson.points: 5 to 10 high-yield points, most important first, each at most 25 words and starting ' +
-    'with its key term.',
+    '- lesson.points: ' + Spec.RULES.points,
     '- lesson.numbers: every threshold, cut-off, dose, percentage or duration worth memorising, one to an ' +
     'item, as "what it measures: value unit".',
-    '- lesson.distinctions: the pairs a student confuses — two conditions, drugs, signs or criteria — ' +
-    'and how to tell them apart, in one sentence naming the one feature that separates them.',
+    '- lesson.distinctions: the pairs a student confuses — two conditions, drugs, signs or criteria. ' + Spec.RULES.distinction,
     '- lesson.tables: 0 to 2 tables that make a comparison or classification visible at a glance — e.g. the ' +
-    'causes, grades, criteria or treatments side by side. "columns" are the headers (the first names what each ' +
-    'row is); every row has one cell per column; at most 6 rows and 5 columns; cells a few words, numbers exactly ' +
-    'as printed; a cell the text does not fill is "—". [] if nothing in the section compares.',
-    '- lesson.flowchart: a Mermaid "flowchart TD" for the section’s pathway, sequence or decision (diagnosis, ' +
-    'management, cause and effect); else "". At most 12 nodes; every label in double quotes and a few words from ' +
-    'the text; decisions as {"question?"} with the answers on the arrows (-->|"yes"|); no styling, no subgraphs.',
+    'causes, grades, criteria or treatments side by side; "columns" are the headers. ' + Spec.RULES.table + ' [] if nothing in the section compares.',
+    '- lesson.flowchart: the section’s pathway, sequence or decision (diagnosis, management, cause and effect), ' +
+    'else "". ' + Spec.RULES.flowchart,
     '- lesson.pearls: one to three exam pearls, the facts most likely to be asked.',
     '- lesson.cases: one or two oral-exam cases for rounds: a short clinical "stem" and two to four "asks" an ' +
     'examiner would put on it, each {q, a} with the model answer from the text ([] if the section has no clinical material).',
     '- lesson.mnemonics: for every list of three or more items, an acrostic: "words" are the items in order ' +
     'and "letters" their first letters.',
     '- lesson.analogies: one everyday analogy for a mechanism, or [] if none fits.',
-    '- quiz.questions: 6 to 8 board-style questions, the most important material first. ' + Prompts.MCQ_RULE +
-    ' Exactly ' + Prompts.OPTIONS + ' options; "answer" is the index (0 to ' + (Prompts.OPTIONS - 1) + ') of ' +
-    'the right one. Prefer clinical vignettes, "most likely", "next best step" and "all EXCEPT"; test ' +
-    'reasoning, not recall of wording. "explain": ' +
-    'why the answer is right, in the book’s words. "why": ' + Prompts.OPTIONS + ' strings, one per ' +
-    'option in order — for each wrong option the exact reason it is wrong by the book, and "" for the ' +
-    'right one. "trap": the confusion the question tests (e.g. "stenosis vs regurgitation"), or "". "quote": ' +
-    '"" unless the question completes a sentence of the text, then that sentence with the gap as _____. No ' +
-    '"all of the above" or "none of the above".',
+    '- quiz.questions: ' + Spec.QUESTIONS.section[0] + ' to ' + Spec.QUESTIONS.section[1] + ' board-style questions, the most important material first. ' + Prompts.MCQ_RULE + ' ' + Spec.RULES.mcq +
+    ' ' + Spec.RULES.options + ' "answer" is the index (0 to ' + (Spec.OPTIONS - 1) + ') of the right one. ' + Spec.RULES.style +
+    ' "explain": ' + Spec.RULES.explain + ' "why": ' + Spec.OPTIONS + ' strings, one per option in order. ' + Spec.RULES.why +
+    ' (Write "" for the right one.) "trap": the confusion the question tests (e.g. "stenosis vs regurgitation"), or "". "quote": ' +
+    '"" unless the question completes a sentence of the text, then that sentence with the gap as _____.',
     '',
     'BEFORE YOU REPLY, check: every number and page against the text; every table row has as many cells as ' +
     'columns; every flowchart label is in quotes; every mnemonic has one letter per word; the JSON is complete ' +

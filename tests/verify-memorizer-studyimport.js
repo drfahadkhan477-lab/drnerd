@@ -141,6 +141,11 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
     ok('the × has a spoken name', a.closeLabel === 'Close');
     ok('the whole drop area opens the file picker (it is the input’s label)', a.dropOpens);
     ok('it accepts every kind it reads: .md .markdown .txt .html .htm', ['.md', '.markdown', '.txt', '.html', '.htm'].every(x => a.accept.split(',').includes(x)), a.accept);
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await p.click('#import-copy-prompt');
+    await p.waitForFunction(() => /Copied/.test(document.getElementById('import-copy-status').textContent), null, T);
+    const clip = await p.evaluate(() => navigator.clipboard.readText().then(t => t === MemStudyImport.studyFilePrompt() && /MEMORIZER STUDY FILE/.test(t)));
+    ok('Copy puts the study-file prompt, exactly as spec.js builds it, on the clipboard', clip);
     await p.click('#import-cancel');
     ok('the footer Cancel closes it', await p.$('#import-dialog') === null);
     await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);
@@ -272,6 +277,92 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
       hist: [...document.querySelectorAll('#miss-history li')].map(li => li.textContent) }));
     ok('the unit page shows the pair taken for one another, both ways as one, twice', m.pairs.length === 1 && /Preload/.test(m.pairs[0]) && /Afterload/.test(m.pairs[0]) && /2 times/.test(m.pairs[0]), JSON.stringify(m.pairs));
     ok('and each missed item’s attempts: a confusion put right on its retry', m.hist.length === 2 && m.hist.every(t => /✗ R/.test(t) && /pulling it back cold/.test(t)), JSON.stringify(m.hist));
+
+    head('explain it first, coming back to a drilled section on a later day');
+    await p.click('#sections .section-card');
+    await p.waitForSelector('#big-idea', T);
+    ok('the same day as the drill, the lesson opens as usual', await p.$('#recall-first') === null);
+    await p.click('button[aria-label="Back"]');
+    /* precondition: a day has passed since the section was studied */
+    await p.evaluate(() => { Memorizer.ui.state.per[0].seenDay = '2000-01-01'; });
+    /* the unit is fully drilled, so its main button is the exam; the
+       section is opened from its own card */
+    await p.waitForSelector('#sections .section-card', T);
+    await p.click('#sections .section-card');
+    await p.waitForSelector('#recall-first', T);
+    ok('the lesson is hidden until you have said what you remember', await p.$('#big-idea') === null && await p.$('ol.points') === null);
+    await p.fill('#recall-text', 'preload stretch');
+    await p.click('#recall-check');
+    await p.waitForSelector('#recall-short', T);
+    ok('two words are not marked: it asks for more, and the lesson stays hidden', await p.$('#recall-result') === null && await p.$('#big-idea') === null);
+    await p.fill('#recall-text', 'Preload is the stretch on the ventricular wall at the end of filling, set by venous return.');
+    await p.click('#recall-check');
+    await p.waitForSelector('#recall-result', T);
+    const rr = await p.evaluate(() => ({ head: document.querySelector('#recall-result h2').textContent,
+      gaps: [...document.querySelectorAll('#recall-gaps li')].map(li => li.textContent),
+      known: document.querySelector('#recall-known') ? document.querySelector('#recall-known').textContent : '',
+      restOpen: document.querySelector('#recall-rest') ? document.querySelector('#recall-rest').open : null,
+      firstIsResult: document.querySelector('#recall-rest') ? !!(document.querySelector('#recall-result').compareDocumentPosition(document.querySelector('#recall-rest')) & Node.DOCUMENT_POSITION_FOLLOWING) : false }));
+    ok('what was said is folded as known; what was not is taught first', /^You remembered 1 of 4/.test(rr.head) && rr.gaps.length === 3 &&
+       rr.gaps.some(g => /Afterload/.test(g)) && !rr.gaps.some(g => /^Preload/.test(g)) && /already explained \(1\)/.test(rr.known), JSON.stringify(rr));
+    ok('and the rest of the lesson waits, folded, below it', rr.restOpen === false && rr.firstIsResult);
+    await p.click('button[aria-label="Back"]');
+    await p.waitForSelector('#sections .section-card', T);
+    await p.click('#sections .section-card');
+    await p.waitForSelector('#big-idea', T);
+    ok('once answered, it does not ask again the same day', await p.$('#recall-first') === null);
+    await p.click('button[aria-label="Back"]');
+    await p.evaluate(() => { Memorizer.ui.state.per[0].seenDay = '2000-01-01'; });
+    await p.waitForSelector('#sections .section-card', T);
+    await p.click('#sections .section-card');
+    await p.waitForSelector('#recall-first', T);
+    await p.click('#recall-skip');
+    await p.waitForSelector('#big-idea', T);
+    ok('Skip shows the whole lesson at once, with nothing folded', await p.$('#recall-rest') === null && await p.$('#recall-result') === null);
+    await ctx.close();
+
+    head('the lesson’s first screen, and the unit’s next step');
+    ({ ctx, p } = await fresh('layout'));
+    const MD7 = ['---', 'unit: Loading', '---', '', '## Teaching Points',
+      '- **Preload**: the stretch on the ventricular wall at the end of filling.',
+      '- **Afterload**: the load the ventricle pumps against during ejection.',
+      '- **Inotropy**: the force of contraction at a given preload.',
+      '- **Compliance**: how easily the ventricle fills.',
+      '- **Venous return**: the flow back to the heart that sets preload.',
+      '- **Wall stress**: the load on the wall, rising with radius by the law of Laplace.',
+      '- **Stroke volume**: the blood ejected with each beat.', '',
+      '```mermaid', 'flowchart TD', '  A["Venous return"] --> B["Preload"]', '  B --> C["Stroke volume"]', '```'].join('\n');
+    await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);
+    await p.setInputFiles('#import-file', { name: 'loading.md', mimeType: 'text/markdown', buffer: Buffer.from(MD7) });
+    await p.waitForFunction(() => !document.getElementById('import-go').disabled, null, T);
+    await p.click('#import-go');
+    await p.waitForSelector('#unit-now', T);
+    const now1 = await p.evaluate(() => ({ kind: document.getElementById('unit-now').dataset.kind, why: document.querySelector('#unit-now .unit-why').textContent,
+      first: !!(document.getElementById('unit-now').compareDocumentPosition(document.getElementById('learn-unit')) & Node.DOCUMENT_POSITION_FOLLOWING) }));
+    ok('the unit page leads with what to do now, and why, above its button', now1.kind === 'start' && /^Start with/.test(now1.why) && now1.first, JSON.stringify(now1));
+    await p.click('#learn-unit');
+    await p.waitForSelector('#points', T);
+    const ls = await p.evaluate(() => {
+      const shown = [...document.querySelectorAll('#points ol.points > li')].filter(li => li.checkVisibility()).length;
+      const fold = document.getElementById('fold-more-points');
+      const after = (a, b) => !!(document.querySelector(a).compareDocumentPosition(document.querySelector(b)) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return { shown, foldOpen: fold ? fold.open : null, inFold: fold ? fold.querySelectorAll('ol.points > li').length : 0,
+        flowBeforePractice: !!document.getElementById('flow') && after('#flow', '.lesson-practice'), pointsBeforeFlow: after('#points', '#flow') };
+    });
+    ok('the first screen shows the big idea and the next five points; the last one waits in a closed fold', ls.shown === 5 && ls.foldOpen === false && ls.inFold === 1, JSON.stringify(ls));
+    ok('the flowchart comes up with the points, before the practice', ls.pointsBeforeFlow && ls.flowBeforePractice, JSON.stringify(ls));
+    await p.click('#fold-more-points > summary');
+    ok('opening the fold shows them', await p.evaluate(() => [...document.querySelectorAll('#fold-more-points ol.points > li')].every(li => li.checkVisibility())));
+    await p.click('button[aria-label="Back"]');
+    await p.waitForSelector('#unit-now', T);
+    /* precondition: three missed items waiting (a two-question drill cannot make them) */
+    await p.evaluate(() => { const s = Memorizer.ui.state, q = { question: 'q', options: ['a', 'b', 'c', 'd'], answer: 0, explain: '', page: 1 };
+      ['x', 'y', 'z'].forEach((id, i) => { s.weak[id] = { id, cluster: 0, source: 'drill', q, label: id, misses: 1, streak: 1, hits: [], types: ['C'], confusedWith: 'b', order: i }; });
+      Memorizer.render(); });
+    await p.waitForSelector('#next-review', T);
+    const now2 = await p.evaluate(() => ({ kind: document.getElementById('unit-now').dataset.kind, why: document.querySelector('#unit-now .unit-why').textContent,
+      primary: document.getElementById('next-review').classList.contains('primary'), learnPrimary: document.getElementById('learn-unit').classList.contains('primary') }));
+    ok('with three misses waiting, a review round is the next step, and the one primary button', now2.kind === 'review' && /^3 items you missed/.test(now2.why) && now2.primary && !now2.learnPrimary, JSON.stringify(now2));
     await ctx.close();
 
     head('all or nothing');

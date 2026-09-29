@@ -24,6 +24,7 @@
 (function (root) {
 'use strict';
 
+var Spec = root.MemSpec || (typeof require === 'function' ? require('./spec.js') : null);
 var MAX_BYTES = 2 * 1024 * 1024;
 var QUIZ_HEAD = /^(?:quiz|questions?|practice questions?|self[- ]?(?:test|assessment)|mcqs?|test yourself|review questions?)\b/i;
 var Q_HEAD = /^(?:q(?:uestion)?\s*\d+\b|q\d+\b)/i;
@@ -134,9 +135,17 @@ function sanitizeSvg(svg) {
   return new root.XMLSerializer().serializeToString(top);
 }
 
+/* A reply copied with the code fence it came in (```markdown … ```) is the
+   file inside it: the fence's first and last lines are dropped, whatever
+   fences the file itself holds. */
+function unwrap(src) {
+  var m = src.trim().match(/^(`{3,}|~{3,})\s*(?:markdown|md)?\s*\n([\s\S]*)\n\1\s*$/i);
+  return m ? m[2] : src;
+}
+
 /* ── markdown → StudyFile ─────────────────────────────────────────────── */
 function parseMarkdown(text) {
-  var src = String(text || '').replace(/\r\n?/g, '\n'), meta = {};
+  var src = unwrap(String(text || '').replace(/\r\n?/g, '\n')), meta = {};
   var fm = src.match(/^---\n([\s\S]*?)\n---\s*(?:\n|$)/);
   if (fm) { meta = frontMatter(fm[1]); src = src.slice(fm[0].length); }
   var blocks = [];
@@ -480,6 +489,115 @@ function studyMeta(p) {
   return out;
 }
 
+/* ── the study-file prompt, built from spec.js ────────────────────────────
+   What the owner pastes into Claude with their chapter. Its rules are
+   spec.js's, word for word, as the study-pack prompt's are; its format is the
+   one parseMarkdown reads, and STUDY_EXAMPLE, which the prompt shows, is
+   parsed by the suite: a prompt that asks for a shape this file cannot read
+   fails there. docs/MEMORIZER-STUDY-FILE-PROMPT.md is this, written by
+   scripts/study-file-prompt.js. */
+var FENCE = '```';
+var STUDY_EXAMPLE = [
+  '---',
+  'unit: Aortic Stenosis',
+  'source_book: Braunwald 12e, chapter 72',
+  'source_page_range: 1450-1470',
+  'difficulty_level: advanced',
+  'estimated_study_time_minutes: 40',
+  '---',
+  '',
+  '## Diagnosis and grading',
+  '',
+  'Aortic stenosis is graded on echocardiography by the peak jet velocity and the mean gradient across the valve [p. 1452].',
+  '',
+  '- **Peak velocity**: 4 m/s or more marks severe aortic stenosis [p. 1452].',
+  '- **Mean gradient**: 40 mmHg or more marks severe aortic stenosis [p. 1452].',
+  '- **Aortic stenosis vs aortic sclerosis**: sclerosis thickens the leaflets without obstructing flow; stenosis raises the peak velocity [p. 1451].',
+  '',
+  '| Measure | Severe aortic stenosis |',
+  '|---|---|',
+  '| Peak velocity | 4 m/s or more |',
+  '| Mean gradient | 40 mmHg or more |',
+  '',
+  '## Treatment and timing',
+  '',
+  'Valve replacement is indicated once symptoms appear [p. 1460].',
+  '',
+  FENCE + 'mermaid',
+  'flowchart TD',
+  '  A["Severe aortic stenosis"] --> B{"Symptoms?"}',
+  '  B -->|"yes"| C["Valve replacement"]',
+  '  B -->|"no"| D["Follow-up echocardiography"]',
+  FENCE,
+  '',
+  '## Practice Questions',
+  '',
+  '### Question 1: timing',
+  '**Stem**: A patient with severe aortic stenosis on echocardiography develops exertional syncope. What is the next best step?',
+  '',
+  '**Options**:',
+  '- A) Follow-up echocardiography',
+  '- B) Valve replacement',
+  '- C) Medical therapy alone',
+  '- D) Balloon valvotomy as definitive treatment',
+  '',
+  '**Correct Answer**: B',
+  '',
+  '**Explanation**: Valve replacement is indicated once symptoms appear [p. 1460].',
+  '',
+  '**Why the distractors are wrong**:',
+  '- A) Follow-up is for severe stenosis without symptoms.',
+  '- C) Medical therapy does not relieve the obstruction.',
+  '- D) Balloon valvotomy is only a bridge.',
+  '',
+  '---',
+].join('\n');
+function studyFilePrompt() {
+  var R = Spec.RULES, Q = Spec.QUESTIONS.file;
+  return [
+    'MEMORIZER STUDY FILE',
+    '',
+    'You are a master clinician and a medical educator preparing a candidate for boards and oral exams. From the ' +
+    'chapter I give you (pasted below, or attached as a PDF), write ONE markdown study file for my Memorizer app. ' +
+    'After one pass through it I should understand why, recall every high-yield fact, and defend it under questioning.',
+    '',
+    'RULES',
+    '1. ' + R.onlySource + ' Where something is needed and the chapter does not have it, leave it out.',
+    '2. Write in your own words; do not copy the chapter’s sentences. ' + R.numbers,
+    '3. Cite the chapter’s page for every point, table and explanation as [p. N].',
+    '4. Memorizer checks the file against its own text: a number in a point, table, answer or explanation that the ' +
+    'file’s text does not have is flagged. So every number you use in a question’s answer must also be in a point or table.',
+    '5. Reply with the file itself, as plain markdown, not inside a code block, and nothing before or after it, in ' +
+    'exactly the shape shown under THE SHAPE.',
+    '',
+    'WHAT GOES IN IT',
+    '- The front matter: unit, source_book, source_page_range, difficulty_level (beginner, intermediate or ' +
+    'advanced), estimated_study_time_minutes.',
+    '- One "## " heading per topic of the chapter, in its order. Under each: one or two plain sentences on the big ' +
+    'idea, then its points, one per line as "- **Key term**: the fact [p. N]". Points: ' + R.points,
+    '- ' + R.distinction + ' Write it as a point: "- **A vs B**: the feature that tells them apart [p. N]".',
+    '- ' + R.table + ' Write it as a markdown table under the heading it belongs to.',
+    '- ' + R.flowchart + ' Write it in a ' + FENCE + 'mermaid code block under the heading it belongs to.',
+    '- A diagram, if a figure would teach what words cannot: an <svg> drawn by you, labelled, under its heading. ' +
+    'Memorizer shows it as a picture and does not check it.',
+    '- Last, "## Practice Questions": ' + Q[0] + ' to ' + Q[1] + ' board-style questions, the most important material ' +
+    'first, each as "### Question N: what it tests", then **Stem**, **Options** (A to D), **Correct Answer**, ' +
+    '**Explanation** and **Why the distractors are wrong**, and a line of three dashes after it. ' +
+    R.mcq + ' ' + R.options + ' ' + R.style + ' ' + R.explain + ' ' + R.why,
+    '',
+    'BEFORE YOU REPLY, check: every number against the chapter; every table row has one cell per column; every ' +
+    'flowchart label is in quotes; every question has exactly ' + Spec.OPTIONS + ' options and one Correct Answer line.',
+    '',
+    'THE SHAPE — a short example; yours covers the whole chapter:',
+    '````markdown',
+    STUDY_EXAMPLE,
+    '````',
+    '',
+    'THE CHAPTER',
+    '[Paste the chapter here, or attach its PDF.]',
+  ].join('\n');
+}
+
 var ACCEPT = '.md,.markdown,.txt,.html,.htm';
 function detectFormat(name, content) {
   if (/\.html?$/i.test(name || '')) return 'html';
@@ -497,7 +615,7 @@ function parseStudyFile(content, name) {
     if (!words(text).length) return { success: false, error: 'No study text was found in this file' };
     var qs = parsed.questions;
     var answered = qs.filter(function (q) { return q.answer >= 0 && q.answer < q.options.length; });
-    var usable = answered.filter(function (q) { return q.options.length === 4; }).length;
+    var usable = answered.filter(function (q) { return q.options.length === Spec.OPTIONS; }).length;
     return {
       success: true, format: format,
       study: { name: parsed.title, text: text, parsed: parsed, meta: studyMeta(parsed) },
@@ -511,7 +629,7 @@ function parseStudyFile(content, name) {
   }
 }
 
-var api = { MAX_BYTES: MAX_BYTES, ACCEPT: ACCEPT, parseMarkdown: parseMarkdown, htmlToMarkdown: htmlToMarkdown, parseHTML: parseHTML,
+var api = { MAX_BYTES: MAX_BYTES, ACCEPT: ACCEPT, STUDY_EXAMPLE: STUDY_EXAMPLE, studyFilePrompt: studyFilePrompt, parseMarkdown: parseMarkdown, htmlToMarkdown: htmlToMarkdown, parseHTML: parseHTML,
             studyText: studyText, packFor: packFor, asciiFlow: asciiFlow, sanitizeSvg: sanitizeSvg, DIAGRAMS_MAX: DIAGRAMS_MAX, strictQuestions: strictQuestions, studyMeta: studyMeta, detectFormat: detectFormat, parseStudyFile: parseStudyFile };
 root.MemStudyImport = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

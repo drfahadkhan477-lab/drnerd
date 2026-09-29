@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 63 suites that are pure Node with no Playwright and no
+#   logic        the 66 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -270,6 +270,12 @@ jobs:
         run: node tests/verify-memorizer-studyimport-pure.js
       - name: Memorizer — what the misses say — the pairs taken for one another, each missed item's attempts in order, a lapse named (13 checks)
         run: node tests/verify-memorizer-misses-pure.js
+      - name: Memorizer — one study format for both Claude prompts — spec.js's rules in each word for word, the enforced counts, the study-file prompt's example read and passed, the doc generated (37 checks)
+        run: node tests/verify-memorizer-spec-pure.js
+      - name: Memorizer — explain it first — on a later day the lesson waits for what you remember, the gaps taught first (8 checks)
+        run: node tests/verify-memorizer-recall-pure.js
+      - name: Memorizer — the review's layout rules — a lesson's first five points, a unit's one next step and why (9 checks)
+        run: node tests/verify-memorizer-layout-pure.js
 
   # ── Memorizer in a real browser ────────────────────────────────────────────
   #
@@ -310,7 +316,7 @@ jobs:
         run: node tests/verify-memorizer.js
       - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
-      - name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (44 checks)
+      - name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (57 checks)
         run: node tests/verify-memorizer-studyimport.js
       - name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served with the network cut (7 checks)
         run: node tests/verify-memorizer-offline.js

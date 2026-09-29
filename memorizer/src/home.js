@@ -742,9 +742,21 @@ function shortName(title) {
   return two.length > 14 ? two.slice(0, 13) + '…' : two || String(title || '').slice(0, 14);
 }
 
+/* What to do now, on a unit's page (the owner's review): one next step and
+   why. Items missed and not yet put right come first once there are
+   REVIEW_FIRST of them, because a miss left alone is the one forgotten;
+   then the next section to learn; then, with every section drilled, the
+   exam. weakN: items pending review (session.js pending). */
+var REVIEW_FIRST = 3;
+function nextStep(n, doneN, weakN, nextTitle, examScore) {
+  if (weakN >= REVIEW_FIRST) return { kind: 'review', why: count(weakN, 'item') + ' you missed ' + (weakN === 1 ? 'is' : 'are') + ' waiting to be put right. A short review round first, while they are fresh.' };
+  if (doneN >= n) return { kind: 'exam', why: examScore == null ? 'Every section is drilled. The final exam mixes the whole unit, weighted to your weakest sections.' : 'Every section is drilled. Retake the exam to see what has held.' };
+  return { kind: doneN ? 'continue' : 'start', why: (doneN ? 'Next in order: ' : 'Start with ') + '\u201C' + nextTitle + '\u201D \u2014 learn it, memorise it, then drill it.' };
+}
+
 var MemHome = { BRAIN: BRAIN, brainLayout: brainLayout, LIVE: LIVE, axonCtrl: axonCtrl, brainNet: brainNet, liveInit: liveInit, liveFire: liveFire, liveStep: liveStep, sparkAt: sparkAt, smoothPath: smoothPath, inPoly: inPoly, edgeDist: edgeDist, pearlVisual: pearlVisual, recallParts: recallParts, recallStreak: recallStreak, PEARL_ROWS: PEARL_ROWS, unitPct: unitPct, sectionPct: sectionPct, started: started, recent: recent, nextTitle: nextTitle, streak: streak,
   HELD: HELD, WEAK: WEAK, weakSpots: weakSpots, greeting: greeting, studiedOf: studiedOf, isHeld: isHeld, progress: progress, current: current,
-  notesOf: notesOf, harvest: harvest, readout: readout, leans: leans, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath, unglue: unglue, outline: outline, topicOf: topicOf, shortName: shortName, TOPICS: TOPICS };
+  notesOf: notesOf, harvest: harvest, readout: readout, leans: leans, seeded: seeded, pearlOf: pearlOf, pageOf: pageOf, headingOf: headingOf, marks: marks, count: count, tracePath: tracePath, unglue: unglue, outline: outline, topicOf: topicOf, shortName: shortName, TOPICS: TOPICS, REVIEW_FIRST: REVIEW_FIRST, nextStep: nextStep };
 root.MemHome = MemHome;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemHome;
 })(typeof window !== 'undefined' ? window : this);
