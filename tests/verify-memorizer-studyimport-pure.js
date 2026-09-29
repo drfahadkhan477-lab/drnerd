@@ -168,6 +168,36 @@ const secs3 = (SI.packFor(p3, doc3, Pack, Coach).pack || { sections: [] }).secti
 const where3 = secs3.filter(s => s.lesson.points.some(x => /^Valve area: graded/.test(x.text))).map(s => s.section);
 ok('a point written under "Treatment" goes to Treatment, though every word of it is in "Diagnosis" too (a tie that overlap gives to the earlier section)', JSON.stringify(where3) === '[2]', JSON.stringify(where3));
 
+head('strict import: the question’s scenario is held to the text too');
+const MD5 = MD2.replace('**Stem**: Which echocardiographic finding grades aortic stenosis as severe?',
+  '**Stem**: A 72-year-old has a peak velocity of 4 m/s and a pressure of 210 mmHg. Which echocardiographic finding grades aortic stenosis as severe?');
+const p5 = SI.parseMarkdown(MD5), t5 = SI.studyText(p5);
+const d5 = { id: 'u5', name: p5.title, clusters: Chunk.clusterBlocks(Chunk.blocksFromPages(Chunk.pagesFromText(t5)).blocks) };
+const plain5 = Pack.check([SI.packFor(p5, d5, Pack, Coach).pack], d5);
+const q5 = c => [].concat(...c.sections.map(s => s.quiz.questions)).find(q => /72-year-old/.test(q.question)) || {};
+ok('without strict, a vignette’s numbers are not checked (Pack.check holds only the answer and explanation)', !q5(plain5).flag, q5(plain5).flag);
+const strict5 = Pack.check([SI.packFor(p5, d5, Pack, Coach).pack], d5);
+const nFlag = SI.strictQuestions(strict5, d5, Pack);
+ok('with strict, a number in the scenario that the text does not have flags the question', /in its scenario/.test(q5(strict5).flag || '') && /(72|210)/.test(q5(strict5).flag || '') && nFlag === 1, q5(strict5).flag);
+ok('and the flag is counted in the import note', /1 item not found/.test(Pack.report(strict5).line), Pack.report(strict5).line);
+const strict2 = Pack.check([SI.packFor(p2, doc2, Pack, Coach).pack], doc2);
+ok('a scenario whose numbers are all in the text is not flagged', SI.strictQuestions(strict2, doc2, Pack) === 0);
+
+head('flowcharts and diagrams');
+const MD6 = MD2
+  .replace('- **Peak velocity**:', '```mermaid\nflowchart TD\n  A["Aortic stenosis"] --> B["Peak velocity and mean gradient"]\n  B --> C["Severe stenosis"]\n```\n\n<svg viewBox="0 0 10 10"><rect/><rect/><text>svgonlylabel</text></svg>\n\n- **Peak velocity**:')
+  .replace('| Approach |', '```\nSymptoms appear\n    ↓\nValve replacement\n    ├─→ Transcatheter replacement\n    └─→ Surgical replacement\n```\n\n```js\nconst notAFlowchart = x => x + 1;\nlist.map(notAFlowchart);\ndone();\n```\n\n| Approach |');
+const p6 = SI.parseMarkdown(MD6), t6 = SI.studyText(p6);
+const d6 = { id: 'u6', name: p6.title, clusters: Chunk.clusterBlocks(Chunk.blocksFromPages(Chunk.pagesFromText(t6)).blocks) };
+ok('a mermaid block and an arrow-drawn block are flowcharts; a js block is not', p6.flowcharts.length === 2, JSON.stringify(p6.flowcharts.map(f => f.code.split('\n')[0])));
+ok('the arrow-drawn block keeps its shape: both branches leave "Valve replacement"', /N1 --> N2/.test((p6.flowcharts[1] || { code: '' }).code) && /N1 --> N3/.test(p6.flowcharts[1].code) && /N0 --> N1/.test(p6.flowcharts[1].code), (p6.flowcharts[1] || {}).code);
+const got6 = SI.packFor(p6, d6, Pack, Coach), c6 = Pack.check([got6.pack], d6);
+const fc = i => ((c6.sections.find(s => s.index === i) || {}).lesson || {}).flowchart || '';
+ok('each flowchart is the lesson flowchart of the section it was drawn in', /Peak velocity and mean gradient/.test(fc(0)) && /Transcatheter replacement/.test(fc(1)), JSON.stringify([fc(0).slice(0, 40), fc(1).slice(0, 40)]));
+ok('neither is dropped by the check', !c6.dropped.some(d => d.where === 'flowchart'), JSON.stringify(c6.dropped));
+ok('the drawing goes with its section, raw here, to be cleaned where there is a DOM', got6.diagrams.length === 1 && got6.diagrams[0].index === 0 && /<svg/.test(got6.diagrams[0].svg));
+ok('and none of it is study text', !/svgonlylabel|notAFlowchart|-->/.test(t6));
+
 head('prose after a question');
 const MD4 = ['# Loading', '', 'Preload is the stretch on the wall at the end of filling.', '', '## Quiz', '', '### Question 1', '**Stem**: Which term names the stretch?',
   '- A) Preload', '- B) Afterload', '- C) Inotropy', '- D) Compliance', '**Correct Answer**: A', '', '---', '',

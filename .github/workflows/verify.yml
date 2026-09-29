@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 62 suites that are pure Node with no Playwright and no
+#   logic        the 63 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -266,8 +266,10 @@ jobs:
         run: node tests/verify-memorizer-provenance-pure.js
       - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (103 checks)
         run: node tests/verify-memorizer-pack-pure.js
-      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text (37 checks)
+      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text (47 checks)
         run: node tests/verify-memorizer-studyimport-pure.js
+      - name: Memorizer — what the misses say — the pairs taken for one another, each missed item's attempts in order, a lapse named (13 checks)
+        run: node tests/verify-memorizer-misses-pure.js
 
   # ── Memorizer in a real browser ────────────────────────────────────────────
   #
@@ -285,7 +287,8 @@ jobs:
   # integrity hashes, as the app does. verify-memorizer-hardening uses pasted
   # notes only and fails any request that leaves the page other than to the
   # stubbed model. verify-memorizer-studyimport fetches nothing: its HTML pages
-  # are written in the suite.
+  # are written in the suite. verify-memorizer-offline fetches the pinned
+  # readers from jsDelivr, as verify-memorizer does.
   #
   # Chromium only, on purpose, for now: the suites run on WebKit through
   # SYSTOLE_ENGINE=webkit, and adding that here is one more matrix entry once
@@ -307,8 +310,10 @@ jobs:
         run: node tests/verify-memorizer.js
       - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
-      - name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (32 checks)
+      - name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (44 checks)
         run: node tests/verify-memorizer-studyimport.js
+      - name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served with the network cut (7 checks)
+        run: node tests/verify-memorizer-offline.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

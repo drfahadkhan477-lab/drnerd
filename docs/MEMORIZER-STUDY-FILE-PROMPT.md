@@ -29,8 +29,16 @@ is taught from the built-in coach's points on its own text.
 Points, tables and questions then go through the same check as a study pack:
 anything carrying a number that the file's own text does not have is flagged.
 
-**What stays in the file only:** ASCII flowcharts (code blocks) and SVG
-diagrams are not imported. Keep them for reading the file itself.
+**Flowcharts and diagrams:** a ```mermaid block, or a flowchart drawn in text
+with arrows (`↓`, `├─→`, `└─→`) in a code block, becomes the lesson's
+flowchart for the section it is under. An SVG diagram is cleaned (no script,
+event handler, link out or embedded HTML) and kept with the unit, shown as a
+picture under "Diagrams from your study file"; it is shown as written and not
+checked. Other code blocks are left out.
+
+**Strict check (a box in the Import Study dialog):** also holds the numbers
+and named conditions in each question's scenario to the file's text, and
+flags a question whose scenario has one the text does not.
 
 ---
 

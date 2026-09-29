@@ -35,6 +35,8 @@ function previewLines(s) {
     ['Words of study text', String(s.words)],
     ['Teaching points', String(s.teaching_points)],
     ['Tables', String(s.tables)],
+    ['Flowcharts', String(s.flowcharts)],
+    ['Diagrams', String(s.diagrams)],
     ['Questions', s.questions ? s.answered - s.malformed + ' of ' + s.questions + ' usable' : '0'],
   ];
   if (s.unanswered) out.push(['Left out', plural(s.unanswered, 'question') + ' with no marked answer']);
@@ -51,6 +53,9 @@ function show(onImport) {
   ]);
   var status = el('p', { id: 'import-status', role: 'status', 'aria-live': 'polite', className: 'import-status' });
   var summary = el('dl', { id: 'import-summary', className: 'import-summary' });
+  var strict = el('input', { type: 'checkbox', id: 'import-strict' });
+  var strictRow = el('label', { 'for': 'import-strict', className: 'import-strict' }, [strict,
+    el('span', { text: 'Strict check: also hold the numbers and conditions in each question\u2019s scenario to the file\u2019s text, and flag any it does not have' })]);
   summary.hidden = true;
   var go = el('button', { type: 'button', id: 'import-go', className: 'btn primary', text: 'Import' });
   go.disabled = true;
@@ -59,7 +64,7 @@ function show(onImport) {
   var box = el('div', { className: 'lightbox import-view', id: 'import-dialog', 'aria-labelledby': 'import-title' }, [
     el('div', { className: 'card import-card' }, [
       el('div', { className: 'import-head' }, [el('h2', { id: 'import-title', text: 'Import a study file' }), x]),
-      input, drop, status, summary,
+      input, drop, status, summary, strictRow,
       el('div', { className: 'row import-foot' }, [cancel, go]),
     ]),
   ]);
@@ -85,7 +90,7 @@ function show(onImport) {
         previewLines(got.summary).forEach(function (l) { summary.appendChild(el('dt', { text: l[0] })); summary.appendChild(el('dd', { text: l[1] })); });
         summary.hidden = false;
         go.disabled = false;
-        say('Ready to import. Diagrams and flowcharts are not imported; they stay in the file.', 'good');
+        say('Ready to import. Flowcharts become the lesson\u2019s flowchart; diagrams are kept as pictures, cleaned first.', 'good');
       }, 0);
     };
     r.readAsText(file);
@@ -97,7 +102,7 @@ function show(onImport) {
   function close() { if (closeFn) closeFn(); }
   x.addEventListener('click', close);
   cancel.addEventListener('click', close);
-  go.addEventListener('click', function () { if (!study) return; var s = study; close(); onImport(s); });
+  go.addEventListener('click', function () { if (!study) return; var s = study; s.strict = strict.checked; close(); onImport(s); });
 
   closeFn = Dialog.open(box, doc.getElementById('app'));
   return close;

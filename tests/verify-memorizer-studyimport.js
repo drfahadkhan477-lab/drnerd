@@ -21,6 +21,11 @@
  *   · the dialog is a modal (dialog.js): both Cancel and × close it, Escape
  *     closes it and gives focus back, the whole drop area opens the picker,
  *     and a file over the limit is refused before it is read;
+ *   · an SVG is cleaned to an allowlist and shown only as an image; a
+ *     flowchart becomes the lesson's; the strict box flags a scenario's
+ *     number the text lacks; the lesson names the study file as its source;
+ *   · after a real drill, the unit page shows the pair taken for one another
+ *     and each missed item's attempts;
  *   · an import becomes a unit that opens, with its file and front-matter
  *     source shown under its title; and when
  *     the pack cannot be stored, no unit is left behind.
@@ -181,6 +186,92 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
     const src = await p.$eval('#unit-source', e => e.textContent);
     ok('the unit shows the file, source book, pages, level and time from its front matter',
        /loading\.md/.test(src) && /Braunwald 12e, chapter 22/.test(src) && /pp\. 450-470/.test(src) && /advanced/.test(src) && /~35 min/.test(src), src);
+    await ctx.close();
+
+    head('diagrams, flowcharts and strict mode');
+    ({ ctx, p } = await fresh('diagrams'));
+    const bad = '<svg viewBox="0 0 100 40" onload="alert(1)"><script>alert(2)</script><rect width="10" height="10" onclick="x()"/>' +
+      '<rect x="20" width="10" height="10" style="fill:url(https://evil.example/x)"/><a href="https://evil.example"><text x="40" y="20">Gradient</text></a>' +
+      '<image href="https://evil.example/p.png"/><foreignObject><div>html</div></foreignObject><use href="#r"/></svg>';
+    const clean = await p.evaluate(svg => ({ out: MemStudyImport.sanitizeSvg(svg), icon: MemStudyImport.sanitizeSvg('<svg viewBox="0 0 8 8"><path d="M0 0h8"/></svg>') }), bad);
+    ok('an SVG is cleaned: no script, handler, foreign HTML, image, link out or fetching style',
+       clean.out && !/script|onload|onclick|foreignObject|<image|evil\.example|<a[\s>]|<use/i.test(clean.out) && /<rect/.test(clean.out), clean.out);
+    ok('an icon-sized drawing (under three shapes) is not kept', clean.icon === '');
+    const MDD = ['---', 'unit: Aortic Stenosis', '---', '', '## Diagnosis and grading', '',
+      'Aortic stenosis is graded by echocardiography using the peak jet velocity and the mean gradient across the valve. A peak velocity of 4 m/s or more marks severe stenosis. A mean gradient of 40 mmHg or more also marks severe stenosis.',
+      '', '```mermaid', 'flowchart TD', '  A["Aortic stenosis"] --> B["Peak velocity and mean gradient"]', '  B --> C["Severe stenosis"]', '```', '', bad, '',
+      '- **Peak velocity**: the fastest jet through the valve, 4 m/s or more in severe stenosis.', '',
+      '## Quiz', '', '### Question 1', '**Stem**: A 72-year-old has a pressure of 210 mmHg. Which finding marks severe stenosis?',
+      '- A) A peak velocity of 4 m/s or more', '- B) A valve area of 3 cm2', '- C) A gradient of 5 mmHg', '- D) A normal valve', '**Correct Answer**: A'].join('\n');
+    await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);
+    await p.check('#import-strict');
+    await p.setInputFiles('#import-file', { name: 'as.md', mimeType: 'text/markdown', buffer: Buffer.from(MDD) });
+    await p.waitForFunction(() => !document.getElementById('import-go').disabled, null, T);
+    const pv = await p.$eval('#import-summary', e => e.textContent);
+    ok('the preview counts the flowchart and the diagram', /Flowcharts1/.test(pv) && /Diagrams1/.test(pv), pv);
+    await p.click('#import-go');
+    await p.waitForSelector('#learn-unit', T);
+    const st = await p.evaluate(() => ({ src: document.getElementById('unit-source').textContent, notice: document.getElementById('notice').textContent,
+      flag: Object.values(Memorizer.ui.pack.sections).map(s => s.quiz.questions.map(q => q.flag || '').join('')).join(''),
+      stored: JSON.stringify(Memorizer.ui.docRec.diagrams) }));
+    ok('the strict box reaches the import: the unit says so, and the vignette’s number is flagged', /strict check/.test(st.src) && /in its scenario/.test(st.flag), st.src + ' | ' + st.flag);
+    ok('the note counts the diagram kept', /1 diagram kept from the file/.test(st.notice), st.notice);
+    ok('what is stored is the cleaned drawing', /Gradient/.test(st.stored) && !/script|onload|evil/.test(st.stored), st.stored.slice(0, 120));
+    await p.click('#learn-unit');
+    await p.waitForSelector('#diagrams img', T);
+    const lv = await p.evaluate(() => ({ src: document.querySelector('#diagrams img').getAttribute('src'), flow: !!document.getElementById('flow'),
+      label: (document.getElementById('pack-label') || {}).textContent || '' }));
+    ok('the lesson shows the diagram, as an image', /^data:image\/svg\+xml/.test(lv.src));
+    ok('and the flowchart from the file, drawn', lv.flow);
+    ok('and says the lesson is from the study file, checked against its text', /From your study file · checked against its text/.test(lv.label), lv.label);
+    await ctx.close();
+
+    head('your misses, after a real drill');
+    ({ ctx, p } = await fresh('misses'));
+    const MDQ = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
+      '- **Preload**: the stretch on the ventricular wall at the end of filling, set by venous return.',
+      '- **Afterload**: the load the ventricle pumps against during ejection, raised by high aortic pressure.',
+      '- **Inotropy**: the force of contraction at a given preload, raised by sympathetic drive.',
+      '- **Compliance**: how easily the ventricle fills, lowered by a stiff wall.', '', '## Quiz', '',
+      '### Question 1', '**Stem**: Which term names the wall stretch at the end of filling?',
+      '- A) Preload', '- B) Afterload', '- C) Inotropy', '- D) Compliance', '**Correct Answer**: A', '', '---', '',
+      '### Question 2', '**Stem**: Which term names the load during ejection?',
+      '- A) Preload', '- B) Afterload', '- C) Inotropy', '- D) Compliance', '**Correct Answer**: B'].join('\n');
+    await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);
+    await p.setInputFiles('#import-file', { name: 'loading.md', mimeType: 'text/markdown', buffer: Buffer.from(MDQ) });
+    await p.waitForFunction(() => !document.getElementById('import-go').disabled, null, T);
+    await p.click('#import-go');
+    await p.waitForSelector('#learn-unit', T);
+    ok('before any drill, there is no misses card', await p.$('#misses') === null);
+    await p.click('#learn-unit');
+    await p.waitForSelector('#to-drill', T);
+    await p.click('#to-drill');
+    const settled = () => p.waitForFunction(() => !Memorizer.ui.moving && !Memorizer.ui.rating, null, T);
+    while (await p.evaluate(() => Memorizer.ui.state.phase === 'memorize')) {
+      const at = await p.evaluate(() => Memorizer.ui.state.per[0].memo.pos);
+      await p.click('#recall-show'); await p.click('#recall-knew');
+      await p.waitForFunction(k => Memorizer.ui.state.phase !== 'memorize' || Memorizer.ui.state.per[0].memo.pos === k + 1, at, T);
+      await settled();
+    }
+    /* first pass: each taken for the other; the retries at the end, right */
+    let guard = 0;
+    while (await p.evaluate(() => Memorizer.ui.state.phase === 'drill') && guard++ < 12) {
+      await p.waitForSelector('#mcq', T);
+      const q = await p.evaluate(() => { const c = Memorizer.ui.state.per[0], q = c.quiz.questions[c.order[c.pos]];
+        return { answer: q.answer, first: c.order.indexOf(c.order[c.pos]) === c.pos, opts: q.options }; });
+      const other = q.opts.indexOf(q.opts[q.answer] === 'Preload' ? 'Afterload' : 'Preload');
+      const n = await p.evaluate(() => Memorizer.ui.state.per[0].answers.length);
+      await p.click(`.option[data-i="${q.first ? other : q.answer}"]`);
+      await p.click('#next');
+      await p.waitForFunction(k => Memorizer.ui.state.phase !== 'drill' || Memorizer.ui.state.per[0].answers.length === k + 1, n, T);
+      await settled();
+    }
+    await p.click('button[aria-label="Back"]');
+    await p.waitForSelector('#misses', T);
+    const m = await p.evaluate(() => ({ pairs: [...document.querySelectorAll('#confuse-pairs li')].map(li => li.textContent),
+      hist: [...document.querySelectorAll('#miss-history li')].map(li => li.textContent) }));
+    ok('the unit page shows the pair taken for one another, both ways as one, twice', m.pairs.length === 1 && /Preload/.test(m.pairs[0]) && /Afterload/.test(m.pairs[0]) && /2 times/.test(m.pairs[0]), JSON.stringify(m.pairs));
+    ok('and each missed item’s attempts: a confusion put right on its retry', m.hist.length === 2 && m.hist.every(t => /✗ R/.test(t) && /pulling it back cold/.test(t)), JSON.stringify(m.hist));
     await ctx.close();
 
     head('all or nothing');

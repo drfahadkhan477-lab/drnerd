@@ -297,6 +297,10 @@ Files app's own preview, do not appear under another; add the PDFs again once.
 A study file written by Claude (`.md`) or a saved study page (`.html`) goes in
 with **Import Study** on the home screen; `docs/MEMORIZER-STUDY-FILE-PROMPT.md`
 is the prompt that writes one, and says what the app takes from it.
+
+Before a trip without Wi-Fi, **Settings → Prepare for offline** fetches the PDF
+reader, the text reader for scans and the flowchart drawer, and says when each
+is kept. It works only from the web address, where the service worker runs.
 Your book never leaves the iPad: the zip holds only the app.
 
 ### On a laptop

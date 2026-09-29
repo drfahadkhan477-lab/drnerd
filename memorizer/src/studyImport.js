@@ -14,6 +14,9 @@
        put through Pack.check against that text like any other.
    HTML is turned into the same markdown shape first, so there is one parser.
 
+   Flowcharts (```mermaid, or drawn in text with arrows) become the lesson's
+   flowchart; SVG drawings are cleaned and kept with the unit as diagrams.
+
    A citation written in the file — "[p. 123]", "(pp. 12–13)" — is kept in
    the text it sits in, so it reaches the lesson and Ask as written. The
    pack's own `page` is the unit's page, which is a different thing.
@@ -60,17 +63,92 @@ function frontMatter(block) {
   return meta;
 }
 
+/* ── flowcharts ───────────────────────────────────────────────────────────
+   A ```mermaid block (or one that starts "flowchart"/"graph") is kept as it
+   is. A block drawn in text with arrows — the study-file prompt asks for
+   these — is turned into the same thing: each line a step, "↓" lines
+   dropped, and a "├─"/"└─" line a branch from the nearest step to its left.
+   Anything else in a code block is not a flowchart and is left out. */
+var MAX_NODES = 30;
+function flowLabel(t) {
+  return plain(t).replace(/^[\s→>\-–—]+/, '').replace(/"/g, "'").replace(/\[/g, '(').replace(/\]/g, ')').trim();
+}
+function asciiFlow(body) {
+  if (!/[↓→├└]|-->|->/.test(body)) return '';
+  var nodes = [], edges = [], stack = [];
+  body.split('\n').forEach(function (raw) {
+    var line = raw.replace(/\s+$/, '');
+    if (!line.trim() || /^[\s↓↑|v│▼⬇→]+$/.test(line)) return;
+    if (nodes.length >= MAX_NODES) return;
+    var b = line.match(/^([\s│|]*)[├└+`][─—\-]*\s*(?:→|->|>)?\s*(.+)$/);
+    var label = flowLabel(b ? b[2] : line);
+    if (!label) return;
+    var id = 'N' + nodes.length;
+    nodes.push('  ' + id + '["' + label + '"]');
+    if (b) {
+      var depth = b[1].length;
+      while (stack.length > 1 && stack[stack.length - 1].depth >= depth) stack.pop();
+      if (stack.length) edges.push('  ' + stack[stack.length - 1].id + ' --> ' + id);
+      stack.push({ depth: depth, id: id });
+    } else {
+      if (stack.length) edges.push('  ' + stack[0].id + ' --> ' + id);
+      stack = [{ depth: -1, id: id }];
+    }
+  });
+  return nodes.length >= 3 && edges.length >= 2 ? 'flowchart TD\n' + nodes.join('\n') + '\n' + edges.join('\n') : '';
+}
+function flowchartOf(b) {
+  var body = String(b.body || '').trim();
+  if (b.lang === 'mermaid' || /^(?:flowchart|graph)\s+(?:TD|TB|LR|RL|BT)\b/.test(body)) return /-->|==>|-\.->/.test(body) ? body : '';
+  return asciiFlow(body);
+}
+
+/* ── diagrams ─────────────────────────────────────────────────────────────
+   An SVG from the file is shown only as an <img> (where SVG runs no script
+   and loads nothing), and is cleaned first all the same: elements and
+   attributes from an allowlist, no event handlers, no link that leaves the
+   drawing, no style that fetches. Tiny icons and oversize drawings are
+   dropped. Needs a DOM (DOMParser, XMLSerializer). */
+var SVG_MAX = 200 * 1024, DIAGRAMS_MAX = 12;
+var SVG_TAGS = ['svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan', 'title', 'desc', 'defs', 'marker', 'lineargradient', 'radialgradient', 'stop', 'clippath', 'pattern', 'mask', 'symbol'];
+function sanitizeSvg(svg) {
+  svg = String(svg || '');
+  if (!svg || svg.length > SVG_MAX || !root.DOMParser) return '';
+  var d = new root.DOMParser().parseFromString(svg, 'image/svg+xml'), top = d.documentElement;
+  if (!top || top.nodeName.toLowerCase() !== 'svg' || d.getElementsByTagName('parsererror').length) return '';
+  (function clean(el) {
+    Array.prototype.slice.call(el.children).forEach(function (c) {
+      var tag = c.nodeName.toLowerCase();
+      if (tag === 'a') { while (c.firstChild) el.insertBefore(c.firstChild, c); c.remove(); return; }
+      if (SVG_TAGS.indexOf(tag) === -1) { c.remove(); return; }
+    });
+    Array.prototype.slice.call(el.children).forEach(clean);
+    Array.prototype.slice.call(el.attributes).forEach(function (a) {
+      var n = a.name.toLowerCase(), v = a.value;
+      if (/^on/.test(n) || ((n === 'href' || n === 'xlink:href') && !/^#/.test(v)) || /url\(\s*['"]?(?!#)/i.test(v) || /javascript:|expression\(|@import/i.test(v)) el.removeAttribute(a.name);
+    });
+  })(top);
+  var shapes = top.querySelectorAll('path,rect,circle,ellipse,line,polyline,polygon,text').length;
+  if (shapes < 3) return '';
+  if (!top.getAttribute('xmlns')) top.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  return new root.XMLSerializer().serializeToString(top);
+}
+
 /* ── markdown → StudyFile ─────────────────────────────────────────────── */
 function parseMarkdown(text) {
   var src = String(text || '').replace(/\r\n?/g, '\n'), meta = {};
   var fm = src.match(/^---\n([\s\S]*?)\n---\s*(?:\n|$)/);
   if (fm) { meta = frontMatter(fm[1]); src = src.slice(fm[0].length); }
-  src = src.replace(/```[\s\S]*?(?:```|$)/g, '\n').replace(/<svg[\s\S]*?<\/svg>/gi, '\n').replace(/<!--[\s\S]*?-->/g, '\n');
+  var blocks = [];
+  function hold(b) { blocks.push(b); return '\n@@MZBLOCK' + (blocks.length - 1) + '@@\n'; }
+  src = src.replace(/<!--[\s\S]*?-->/g, '\n')
+    .replace(/```([\w-]*)[^\n]*\n([\s\S]*?)(?:```|$)/g, function (_, lang, body) { return hold({ kind: 'code', lang: lang.toLowerCase(), body: body }); })
+    .replace(/<svg[\s\S]*?<\/svg>/gi, function (svg) { return hold({ kind: 'svg', body: svg }); });
   var out = { title: typeof meta.unit === 'string' ? meta.unit : typeof meta.title === 'string' ? meta.title : '', meta: meta,
-              sections: [], points: [], tables: [], questions: [] };
+              sections: [], points: [], tables: [], questions: [], flowcharts: [], diagrams: [] };
   var sec = null, q = null, lines = src.split('\n');
   function newSection(h, quiz) {
-    sec = { heading: h, quiz: !!quiz, lines: [], points: [], tables: [], questions: [], emitted: [] };
+    sec = { heading: h, quiz: !!quiz, lines: [], points: [], tables: [], questions: [], flowcharts: [], diagrams: [], emitted: [] };
     out.sections.push(sec);
   }
   function endQ() {
@@ -83,7 +161,15 @@ function parseMarkdown(text) {
     q = null;
   }
   for (var i = 0; i < lines.length; i++) {
-    var l = lines[i], hm = l.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
+    var l = lines[i], hm = l.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/), bm = l.match(/^@@MZBLOCK(\d+)@@$/);
+    if (bm) {
+      if (q) continue;
+      if (!sec) newSection('');
+      var blk = blocks[+bm[1]], item;
+      if (blk.kind === 'svg') { item = { title: sec.heading || out.title, svg: blk.body, section: sec }; sec.diagrams.push(item); out.diagrams.push(item); }
+      else if ((item = flowchartOf(blk))) { item = { code: item, section: sec }; sec.flowcharts.push(item); out.flowcharts.push(item); }
+      continue;
+    }
     if (hm) {
       var level = hm[1].length, h = plain(hm[2]);
       if (level === 1 && !out.title) { out.title = h; continue; }
@@ -194,7 +280,7 @@ function htmlToMarkdown(doc) {
     e.setAttribute('data-mz-answer', answerOf(e, opts));
     opts.forEach(function (o) { o.setAttribute('data-mz-opt', ''); });
   });
-  Array.prototype.forEach.call(doc.querySelectorAll('script,style,svg,nav,footer,noscript,button,input,select,textarea,template,iframe,object'), function (e) { e.remove(); });
+  Array.prototype.forEach.call(doc.querySelectorAll('script,style,nav,footer,noscript,button,input,select,textarea,template,iframe,object'), function (e) { e.remove(); });
   var qn = 0;
   function question(e) {
     var opts = e.querySelectorAll('[data-mz-opt]');
@@ -236,9 +322,15 @@ function htmlToMarkdown(doc) {
       });
       return;
     }
+    if (tag === 'svg') { out.push('', e.outerHTML.replace(/\s*\n\s*/g, ' '), ''); return; }
+    if (tag === 'pre') {
+      var code = e.querySelector('code'), lang = ((code && code.className || e.className).match(/language-([\w-]+)/) || ['', ''])[1];
+      out.push('', '```' + lang, e.textContent.replace(/\n$/, ''), '```', '');
+      return;
+    }
     if (tag === 'img') { var alt = plain(e.getAttribute('alt')); if (alt.split(' ').length >= 3) out.push('', 'Figure: ' + sentence(alt)); return; }
     if (tag === 'li' && !e.querySelector('ul,ol,table,p,div')) { var lt = text(e); if (lt) out.push('- ' + lt); return; }
-    if (/^(?:p|blockquote|figcaption|pre)$/.test(tag)) {
+    if (/^(?:p|blockquote|figcaption)$/.test(tag)) {
       var t = text(e);
       if (t) out.push('', tag === 'figcaption' ? 'Figure: ' + sentence(t) : t);
       Array.prototype.forEach.call(e.querySelectorAll('img'), walk);
@@ -315,13 +407,21 @@ function packFor(p, doc, Pack, Coach) {
     var got = [];
     s.emitted.forEach(function (line) { var i = holding(line, all); if (i !== -1 && got.indexOf(i) === -1) got.push(i); });
     got.sort(function (a, b) { return a - b; });
+    /* a section that gave no text of its own (a figure heading with only
+       its drawing) belongs where the section before it landed */
+    if (!got.length) {
+      var at = p.sections.indexOf(s);
+      for (var k = at - 1; k >= 0 && !got.length; k--) if (p.sections[k].emitted.length) got = sectionClusters(p.sections[k]);
+    }
     landed.set(s, got.length ? got : all);
     return landed.get(s);
   }
   function place(t, s) { var among = s ? sectionClusters(s) : all, i = holding(t, among); return i !== -1 ? i : closest(t, among); }
-  var per = doc.clusters.map(function () { return { points: [], tables: [], questions: [] }; });
+  var per = doc.clusters.map(function () { return { points: [], tables: [], questions: [], flowchart: '' }; }), diagrams = [];
   p.points.forEach(function (x) { per[place(sentence(x.term + ': ' + x.text), x.section)].points.push(x); });
   p.tables.forEach(function (t) { per[place(tableRow(t, t.rows[0]), t.section)].tables.push(t); });
+  p.flowcharts.forEach(function (f) { var i = sectionClusters(f.section)[0]; if (!per[i].flowchart) per[i].flowchart = f.code; });
+  p.diagrams.forEach(function (g) { if (diagrams.length < DIAGRAMS_MAX) diagrams.push({ index: sectionClusters(g.section)[0], title: g.title, svg: g.svg }); });
   var unanswered = 0;
   p.questions.forEach(function (q) {
     if (q.answer < 0 || q.answer >= q.options.length) { unanswered++; return; }
@@ -330,14 +430,14 @@ function packFor(p, doc, Pack, Coach) {
   });
   var sections = [];
   per.forEach(function (x, i) {
-    if (!x.points.length && !x.tables.length && !x.questions.length) return;
+    if (!x.points.length && !x.tables.length && !x.questions.length && !x.flowchart) return;
     var c = doc.clusters[i], pg = c.pageStart;
     var points = x.points.map(function (pt) { return { text: sentence(pt.term + ': ' + pt.text), page: pg }; });
     var by = 'file';
     if (!points.length) { points = Coach.lesson(c).points.map(function (pt) { return { text: pt.text, page: pt.page }; }); by = 'coach'; }
     sections.push({
       section: i + 1, title: c.title, pointsBy: by,
-      lesson: { overview: '', points: points,
+      lesson: { overview: '', points: points, flowchart: x.flowchart,
                 tables: x.tables.map(function (t) { return { title: t.title || 'Table', columns: t.columns, rows: t.rows, page: pg }; }) },
       quiz: { questions: x.questions.map(function (q) {
         var why = q.why.some(Boolean) ? q.options.map(function (_, k) { return k === q.answer ? '' : q.why[k] || ''; }) : [];
@@ -345,7 +445,29 @@ function packFor(p, doc, Pack, Coach) {
       }) },
     });
   });
-  return { pack: sections.length ? { format: Pack.FORMAT, version: Pack.VERSION, unit: doc.name, sections: sections } : null, unanswered: unanswered };
+  return { pack: sections.length ? { format: Pack.FORMAT, version: Pack.VERSION, unit: doc.name, sections: sections } : null, unanswered: unanswered, diagrams: diagrams };
+}
+
+/* Strict import: a question's scenario is held to the text too. Pack.check
+   holds what a question claims (its right answer and its explanation) and
+   leaves the stem alone, because a vignette's age or pressure is set up,
+   not asserted. A study file's question is not the model's, though, and in
+   strict mode every number and named condition in its stem must be in the
+   unit's text, or the question is flagged where it is shown. */
+function strictQuestions(checked, doc, Pack) {
+  var book = Pack.bookOf(doc), n = 0;
+  checked.sections.forEach(function (s) {
+    var c = doc.clusters[s.index], sec = { text: c.segments.map(Pack.segText).join(' ') };
+    s.quiz.questions.forEach(function (q) {
+      if (q.flag) return;
+      var why = Pack.claimFlag(q.question, sec, book, q.page);
+      if (!why) return;
+      q.flag = 'in its scenario, ' + why;
+      s.flags.push({ where: 'question stem', text: q.question, why: q.flag });
+      n++;
+    });
+  });
+  return n;
 }
 
 /* What the unit keeps of the front matter: the fields the study-file prompt
@@ -380,6 +502,7 @@ function parseStudyFile(content, name) {
       success: true, format: format,
       study: { name: parsed.title, text: text, parsed: parsed, meta: studyMeta(parsed) },
       summary: { unit: parsed.title, words: words(text).length, teaching_points: parsed.points.length, tables: parsed.tables.length,
+                 flowcharts: parsed.flowcharts.length, diagrams: Math.min(parsed.diagrams.length, DIAGRAMS_MAX),
                  questions: qs.length, answered: answered.length, unanswered: qs.length - answered.length,
                  malformed: answered.length - usable },
     };
@@ -389,7 +512,7 @@ function parseStudyFile(content, name) {
 }
 
 var api = { MAX_BYTES: MAX_BYTES, ACCEPT: ACCEPT, parseMarkdown: parseMarkdown, htmlToMarkdown: htmlToMarkdown, parseHTML: parseHTML,
-            studyText: studyText, packFor: packFor, studyMeta: studyMeta, detectFormat: detectFormat, parseStudyFile: parseStudyFile };
+            studyText: studyText, packFor: packFor, asciiFlow: asciiFlow, sanitizeSvg: sanitizeSvg, DIAGRAMS_MAX: DIAGRAMS_MAX, strictQuestions: strictQuestions, studyMeta: studyMeta, detectFormat: detectFormat, parseStudyFile: parseStudyFile };
 root.MemStudyImport = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : this);

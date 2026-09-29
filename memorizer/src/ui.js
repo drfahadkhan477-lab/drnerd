@@ -556,9 +556,13 @@ function importStudyUnit(study) {
 function studyPackFor(study, rec) {
   var got = root.MemStudyImport.packFor(study.parsed, rec, Pack, Coach);
   var skipped = got.unanswered ? ' ' + Home.count(got.unanswered, 'question') + ' with no marked answer left out.' : '';
-  rec.study = Object.assign({ file: study.fileName || '', importedAt: Date.now() }, study.meta || {});
+  rec.study = Object.assign({ file: study.fileName || '', importedAt: Date.now(), strict: !!study.strict }, study.meta || {});
   var checked = got.pack ? Pack.check([got.pack], rec) : null;
+  if (checked && study.strict) root.MemStudyImport.strictQuestions(checked, rec, Pack);
   ui.notice = (checked ? Pack.report(checked).line : 'Imported as study text; the built-in coach teaches it.') + skipped;
+  rec.diagrams = (got.diagrams || []).map(function (g) { return { index: g.index, title: g.title, svg: root.MemStudyImport.sanitizeSvg(g.svg) }; })
+    .filter(function (g) { return g.svg; });
+  if (rec.diagrams.length) ui.notice += ' ' + Home.count(rec.diagrams.length, 'diagram') + ' kept from the file.';
   var writes = [Store.put('docs', rec)];
   if (checked && checked.sections.length) writes.push(Store.put('packs', Pack.merge(null, checked, rec, Date.now())));
   return Promise.all(writes).then(function () { return rec; });
@@ -567,7 +571,7 @@ function studyLine(d) {
   var st = d.study;
   if (!st) return null;
   var bits = [st.sourceBook, st.pageRange && (/^p/i.test(st.pageRange) ? st.pageRange : 'pp. ' + st.pageRange), st.difficulty, st.minutes && '~' + st.minutes + ' min'].filter(Boolean);
-  return h('p.muted.unit-meta', { id: 'unit-source' }, 'Imported study file' + (st.file ? ' \u201C' + st.file + '\u201D' : '') + (bits.length ? ' · ' + bits.join(' · ') : ''));
+  return h('p.muted.unit-meta', { id: 'unit-source' }, 'Imported study file' + (st.file ? ' \u201C' + st.file + '\u201D' : '') + (st.strict ? ', strict check' : '') + (bits.length ? ' · ' + bits.join(' · ') : ''));
 }
 
 function showStudyImportDialog() {
@@ -714,8 +718,22 @@ function figuresOf(c) {
   if (ui.figsFor !== d) { ui.figsFor = d; ui.figs = Chunk.assignFigures(d.clusters, d.figures || []); }
   return ui.figs[c.index] || [];
 }
+/* Drawings from an imported study file (studyImport.js): cleaned when they
+   were imported, and shown only as images. */
+function diagramsCard(c) {
+  var d = ui.docRec, at = d.clusters.indexOf(c);
+  var mine = (d.diagrams || []).filter(function (g) { return g.index === at; });
+  if (!mine.length) return null;
+  return h('div.card', { id: 'diagrams' }, fold('diagrams', 'Diagrams from your study file', mine.length, h('div.figs', mine.map(function (g, k) {
+    var name = g.title || 'Diagram ' + (k + 1);
+    return h('figure.fig', h('button', { type: 'button', 'aria-label': 'Enlarge ' + name,
+        onclick: function () { showFigure(g.svg, name, 'Drawn in your study file. Memorizer shows it as it was written and has not checked it.'); } },
+      h('img', { src: svgUrl(g.svg), alt: name, loading: 'lazy' })), h('figcaption', name));
+  }))));
+}
 function visualsCard(c) {
   var d = ui.docRec;
+  if (!d.hasFile && d.diagrams && d.diagrams.length) return diagramsCard(c);
   if (!d.hasFile) {
     /* photos and pasted text have no PDF pages to show */
     if (d.source && d.source !== 'pdf') return null;
@@ -1102,6 +1120,7 @@ function deleteSection(i) {
   var st;
   try { st = Session.dropSection(st0, i); } catch (e) { ui.notice = 'Not deleted: ' + e.message + '.'; render(); return Promise.resolve(); }
   var doc2 = Object.assign({}, d, { clusters: d.clusters.filter(function (_, k) { return k !== i; }) });
+  if (d.diagrams) doc2.diagrams = d.diagrams.filter(function (g) { return g.index !== i; }).map(function (g) { return g.index > i ? Object.assign({}, g, { index: g.index - 1 }) : g; });
   var cards = Session.dropCards(ui.cards, d.id, i), pack2 = Pack.dropSection(ui.pack, i);
   docsChanged();
   return Promise.all([Store.put('docs', doc2), Store.del('vectors', d.id), pack2 ? Store.put('packs', pack2) : null]
@@ -1202,6 +1221,7 @@ function viewUnit() {
     ui.notice ? h('p.card.note', { id: 'notice', role: 'status' }, ui.notice) : null,
     packCard(d),
     weakCard(s),
+    missesCard(s),
     /* The chapters as a row of round icons, as Systole's topics are: a tap
        opens that chapter's card and brings it into view. */
     chapters >= 2 ? h('nav.ch-icons', { id: 'ch-icons', 'aria-label': 'Chapters' }, groups.filter(function (g) { return g.title; }).map(function (g, k) {
@@ -1346,6 +1366,31 @@ function weakCard(s) {
     button('Review round (' + n + ')', function () { go({ type: 'toReview' }); }, 'quiet', { id: 'unit-review' }));
 }
 
+/* What the misses say (session.js confusions, history): the pairs taken for
+   one another, and each missed item's attempts in order, with what the
+   pattern of its misses means. */
+function missesCard(s) {
+  var pairs = Session.confusions(s).slice(0, 6);
+  var items = Object.keys(s.weak || {}).map(function (k) { return s.weak[k]; })
+    .sort(function (a, b) { return b.misses - a.misses || a.order - b.order; }).slice(0, 6);
+  if (!items.length) return null;
+  var mark = function (x) {
+    return h('span.miss-step' + (x.ok ? '.ok' : '.miss'), { title: x.ok ? 'right' : (Skill.ERRORS[x.t] ? Skill.ERRORS[x.t].name : 'missed') },
+      x.ok ? '\u2713' : '\u2717' + (x.t ? ' ' + x.t : ''));
+  };
+  return h('div.card.misses', { id: 'misses' },
+    h('span.eyebrow', 'Your misses'),
+    pairs.length ? [h('h3', 'What you confuse'), h('ul.confuse-pairs', { id: 'confuse-pairs' }, pairs.map(function (p) {
+      return h('li', h('strong', p.a), h('span.vs', ' \u2194 '), h('strong', p.b),
+        h('span.muted', ' \u00B7 ' + (p.times === 1 ? 'once' : p.times + ' times') + (p.sections.length ? ' \u00B7 ' + p.sections.join(', ') : '')));
+    }))] : null,
+    h('h3', 'How each miss went'),
+    h('ul.miss-history', { id: 'miss-history' }, items.map(function (w) {
+      var hi = Session.history(w);
+      return h('li', h('p', h('strong', w.label), ' ', h('span.miss-steps', hi.steps.map(mark))), hi.says ? h('p.muted', hi.says) : null);
+    })));
+}
+
 /* ── BOOK: its chapters, and how they were found ─────────────────────────── */
 function viewBook() {
   var b = ui.books.filter(function (x) { return x.id === ui.bookId; })[0];
@@ -1448,6 +1493,10 @@ function pointCard(c, p, i) {
 }
 /* What a pack's check could not find in the book (pack.js), said on the
    item itself. */
+/* Who wrote a pack's lesson and questions, and what they were checked
+   against: a study file's are its own, held to the file's text. */
+function packBy() { return ui.docRec && ui.docRec.study ? '\u2726 From your study file' : '\u2726 Written with Claude'; }
+function packAgainst() { return ui.docRec && ui.docRec.study ? 'checked against its text' : 'checked against your book'; }
 function flagLine(why) {
   return why ? h('p.flag', { 'data-flag': why }, '\u26A0 ' + why.charAt(0).toUpperCase() + why.slice(1) + '.') : null;
 }
@@ -1823,7 +1872,7 @@ function packCards(L) {
   var flagged = (L.points || []).concat(L.numbers || [], L.pearls || [], L.distinctions || [], asks).filter(function (x) { return x.flag; }).length +
     Object.keys(L.flags || {}).length;
   return {
-    label: h('p.pack-label', { id: 'pack-label' }, h('strong', '\u2726 Written with Claude'), ' \u00B7 checked against your book',
+    label: h('p.pack-label', { id: 'pack-label' }, h('strong', packBy()), ' \u00B7 ' + packAgainst(),
       flagged ? h('span.pack-flagged', ' \u00B7 ' + flagged + ' not found in it, flagged') : null),
     mechanism: L.mechanism ? h('div.card.mechanism', { id: 'mechanism' }, h('span.eyebrow', 'The mechanism'), h('p', marked(L.mechanism)),
       flagLine(L.flags && L.flags.mechanism)) : null,
@@ -2166,7 +2215,7 @@ function viewDrill() {
   if (v) q = v;
   var meta = [h('span', retry ? (v ? 'Again, in new words — you missed this one' : 'Again — you missed this one') : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
     q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · its answer checked against your book') : null,
-    v ? rewordTag() : q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, q.flag ? '\u2726 Written with Claude \u00B7 \u26A0 not all of it found in your book' : '\u2726 Written with Claude \u00B7 checked against your book') : null,
+    v ? rewordTag() : q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, packBy() + ' \u00B7 ' + (q.flag ? '\u26A0 not all of it found in ' + (ui.docRec && ui.docRec.study ? 'its text' : 'your book') : packAgainst())) : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
   /* The kind of miss, read from what happened (skill.js); a second miss in
      a row is re-taught on the spot with a different kind of hook. */
@@ -3566,6 +3615,7 @@ function viewSettings() {
         saved.textContent = ok ? 'Saved on this device.' : 'This browser refused to save it (private mode?).';
       }, 'primary', { id: 'save-settings' }), clearKey, saved)),
     aiSettingsCard(),
+    offlineCard(),
     h('div.card', h('h2', 'What leaves this device'),
       h('p', 'Your PDF, photos and notes are read here, in the browser, and never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages and photos, the first time it is needed; they are read on this device too.'),
       h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')),
@@ -3573,6 +3623,58 @@ function viewSettings() {
        the owner's screenshots were of a build two releases old. */
     h('p.muted.build-line', { id: 'build' }, 'Memorizer build ' + (doc.documentElement.getAttribute('data-build') || 'unbuilt (running from source)') +
       '. When you are online the newest build loads each time the app opens.'));
+}
+
+/* ── Prepare for offline ──────────────────────────────────────────────────
+   The readers the app fetches from jsDelivr (pinned, integrity-checked) are
+   kept by the service worker the first time they are fetched (sw.js). Here
+   they are fetched all at once, before the Wi-Fi is gone, and each group is
+   called ready only when every one of its files is found in the cache
+   afterwards — not because a fetch returned. The on-device AI's model is not
+   among them: it is large, and it is downloaded when the AI is turned on. */
+var OFFLINE_GROUPS = [
+  { key: 'pdf', name: 'The PDF reader', files: function () { return [Pdf.LIB, Pdf.WORKER]; } },
+  { key: 'ocr', name: 'The text reader for scanned pages and photos', files: function () { return [Ocr.TESS.lib, Ocr.TESS.worker, Ocr.TESS.coreSimd, Ocr.TESS.core, Ocr.TESS.eng]; } },
+  { key: 'mermaid', name: 'Flowcharts', files: function () { return [MERMAID]; } },
+];
+var CACHE_WAIT_MS = 8000;
+function cachedUrl(url) { return root.caches ? root.caches.match(url).then(function (r) { return !!r; }, function () { return false; }) : Promise.resolve(false); }
+function offlineStatus() {
+  return Promise.all(OFFLINE_GROUPS.map(function (g) {
+    return Promise.all(g.files().map(function (f) { return cachedUrl(f.url); })).then(function (have) {
+      return { key: g.key, name: g.name, ready: have.filter(Boolean).length, of: have.length };
+    });
+  }));
+}
+function offlineUsable() { return !!(root.caches && root.navigator.serviceWorker && root.navigator.serviceWorker.controller); }
+function prepareOffline() {
+  if (!offlineUsable()) { ui.offline = { error: 'This needs Memorizer opened from its web address (your Cloudflare Pages link), where its service worker can keep files. Opened as a file, nothing can be kept.' }; render(); return Promise.resolve(); }
+  ui.offline = { busy: true, groups: ui.offline && ui.offline.groups || null }; render();
+  var all = [].concat.apply([], OFFLINE_GROUPS.map(function (g) { return g.files(); }));
+  return Promise.all(all.map(function (f) {
+    return cachedUrl(f.url).then(function (have) {
+      if (have) return;
+      return fetch(f.url, { integrity: f.sri, mode: 'cors' }).then(function (r) { return r.ok ? r.arrayBuffer() : null; }).then(null, function () { return null; })
+        .then(function () {
+          /* the service worker stores what it fetched without holding up the page; wait for it */
+          var until = Date.now() + CACHE_WAIT_MS;
+          return (function look() { return cachedUrl(f.url).then(function (ok) { return ok || Date.now() > until ? ok : new Promise(function (res) { setTimeout(res, 200); }).then(look); }); })();
+        });
+    });
+  })).then(offlineStatus).then(function (groups) { ui.offline = { groups: groups }; render(); });
+}
+function offlineCard() {
+  var o = ui.offline;
+  if (!o && offlineUsable()) { ui.offline = { checking: true }; offlineStatus().then(function (g) { ui.offline = { groups: g }; render(); }); }
+  var groups = o && o.groups, allReady = groups && groups.every(function (g) { return g.ready === g.of; });
+  return h('div.card.settings', { id: 'offline-card' }, h('h2', 'Prepare for offline'),
+    h('p', 'Before you lose the connection: fetch the PDF reader, the text reader for scans (about 7 MB) and the flowchart drawer now, so adding a PDF, reading a scan and drawing a flowchart all work offline. Your units and progress are already on this device.'),
+    o && o.error ? h('p.warn', { id: 'offline-status', role: 'status' }, o.error) : null,
+    groups ? h('ul.offline-list', { id: 'offline-status', role: 'status' }, groups.map(function (g) {
+      return h('li', { 'data-ready': String(g.ready === g.of) }, (g.ready === g.of ? '\u2713 ' : '\u25CB ') + g.name + (g.ready === g.of ? ' \u2014 ready offline' : ' \u2014 ' + g.ready + ' of ' + g.of + ' files kept'));
+    })) : null,
+    h('div.row', button(o && o.busy ? 'Fetching\u2026' : allReady ? 'Check again' : 'Prepare for offline', function () { prepareOffline(); }, allReady ? '' : 'primary', { id: 'prep-offline', disabled: o && o.busy ? true : null })),
+    h('p.muted', 'The on-device AI\u2019s model is not included: it is downloaded when you turn the AI on, and kept by the browser.'));
 }
 
 function aiSettingsCard() {

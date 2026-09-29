@@ -303,6 +303,8 @@ const SUITES = [
   ['memorizer-pack-pure',   'a study pack written with Claude: the prompt carries the chapter, and the reply is held to the book \u2014 numbers, pages, names and quotes \u2014 before any of it is used'],
   ['memorizer-studyimport-pure', 'a study file, markdown or a saved HTML page: every question read, an unmarked answer never guessed, and its points and questions held to the unit\u2019s own text'],
   ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
+  ['memorizer-misses-pure',  'what the misses say: the pairs taken for one another, and each missed item\u2019s attempts in order, with a lapse named'],
+  ['memorizer-offline',       'Prepare for offline, with the app\u2019s service worker: nothing called ready before, every pinned reader kept after, and served with the network cut'],
   ['memorizer-studyimport',  'a saved HTML page read in the browser, and the Import Study dialog driven: right options and answers, a real modal, too large refused, no half-imported unit'],
   ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
 ];
@@ -353,7 +355,7 @@ const SUITES = [
    Windows laptop at 9f57fa2 (recorded in 6c3bd7a: 4951 checks across 114
    suites, 133 on the split build), which measured the three that had been
    waiting: memorizer-pack-pure, heartbake-pure and stripcomments-pure. */
-const PENDING_RECORD = ['refimgdefer-pure', 'memorizer-studyimport-pure', 'memorizer-studyimport'];
+const PENDING_RECORD = ['refimgdefer-pure', 'memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
