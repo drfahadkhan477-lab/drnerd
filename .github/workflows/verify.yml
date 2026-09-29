@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 5088 checks in
-# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 3450.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 5229 checks in
+# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 3591.
 # The other 1771 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
@@ -72,7 +72,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                3450 real checks, up
+#                3591 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
