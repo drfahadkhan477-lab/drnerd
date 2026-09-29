@@ -667,7 +667,9 @@ function toBankQuestion(q, shape, { from = '', figs = [] } = {}) {
      the app tells them about every other item with a known gap
      (verify-content: no question ships with empty commentary and no notice).
      The owner's first merged build shipped one such question silently. */
-  if (!String(ex).replace(/<[^>]*>/g, '').trim()) out.flag = NO_EXPLANATION;
+  /* Judged on the paragraphs themselves, before any HTML wraps them — so
+     no markup has to be stripped to see whether anything was said. */
+  if (!q.ex.some(p => String(p).trim())) out.flag = NO_EXPLANATION;
   return out;
 }
 
