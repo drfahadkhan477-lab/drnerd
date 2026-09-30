@@ -64,11 +64,14 @@ async function save(verdict, opts) {
     const old = await req(meta.get('active'));
     bank.put({ questions: verdict.questions, manifest: verdict.manifest }, gen);
     for (const f of verdict.figures) figs.put(new root.Blob([f.bytes], { type: f.type }), gen + '/' + f.name);
+    /* The notes' seed and figure files, beside the figures and in the same
+       generation, so they commit, replace and roll back with the bank. */
+    for (const x of (verdict.extras || [])) figs.put(new root.Blob([x.bytes], { type: x.type }), gen + '/extra/' + x.name);
     if (o.failAfterWrites) { t.abort(); await finished; }   // for the suite: an interrupted import changes nothing
-    meta.put({ gen, questions: verdict.questions.length, figures: verdict.figures.length }, 'active');
+    meta.put({ gen, questions: verdict.questions.length, figures: verdict.figures.length, extras: (verdict.extras || []).length }, 'active');
     if (old && old.gen && old.gen !== gen) { bank.delete(old.gen); figs.delete(range(old.gen)); }
     await finished;
-    return { gen, questions: verdict.questions.length, figures: verdict.figures.length };
+    return { gen, questions: verdict.questions.length, figures: verdict.figures.length, extras: (verdict.extras || []).length };
   } finally { db.close(); }
 }
 
@@ -86,11 +89,15 @@ async function load(opts) {
     const keys = await req(fs.getAllKeys(range(active.gen)));
     const blobs = await req(fs.getAll(range(active.gen)));
     const makeURL = o.makeURL || (b => root.URL.createObjectURL(b));
-    const url = {};
-    keys.forEach((k, i) => { url[String(k).slice(active.gen.length + 1)] = makeURL(blobs[i]); });
+    const url = {}, extras = {};
+    keys.forEach((k, i) => {
+      const name = String(k).slice(active.gen.length + 1);
+      if (name.indexOf('extra/') === 0) extras[name.slice(6)] = blobs[i];   // kept as Blobs: served by the loader, not as <img>
+      else url[name] = makeURL(blobs[i]);
+    });
     const imgs = {};
     for (const q of rec.questions) if (q.figs && q.figs.length) imgs[q.id] = q.figs.map(f => url[f]).filter(Boolean);
-    return { questions: rec.questions, imgs, figures: keys.length, manifest: rec.manifest || null };
+    return { questions: rec.questions, imgs, figures: Object.keys(url).length, extras, manifest: rec.manifest || null };
   } finally { db.close(); }
 }
 
