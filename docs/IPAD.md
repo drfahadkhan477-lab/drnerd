@@ -27,8 +27,9 @@ now compares the digest `extract-content.js` wrote into `content/manifest.json`
 against the file it is splitting and refuses the pair when they disagree,
 naming both. This sequence is what the refusal is asking for.
 
-`dist/` is a plain static folder, about 23 MB — the bank, 408 figures, the
-shell and the fonts, and nothing else. Nothing in it needs a server that can run
+`dist/` is a plain static folder — the bank, its figures, the reference notes'
+figures, the shell and the fonts, and nothing else (`build-pwa.js` prints its
+largest file on every build). Nothing in it needs a server that can run
 code, so any static host will do.
 
 ---
@@ -91,8 +92,8 @@ just a web page that stops working when you close the laptop.
 **Press "Download the rest" first.** Figures are otherwise fetched one at a
 time, as you meet the questions that use them — which would mean every figure
 you had not already seen was a broken image the moment the laptop slept. The
-card under the doors on the home screen pulls all 408 down in one go, about
-19 MB over the wifi you are already on. After that the tablet holds the whole
+card on the Progress screen pulls every figure down in one go, over the wifi you
+are already on. After that the tablet holds the whole
 bank whether or not the machine that served it still exists.
 
 ## 2. Cloudflare Pages + Access — works from anywhere, and needs no computer
@@ -199,7 +200,7 @@ after one. (This used to be one `refs-images.json` for the whole shelf; it
 reached 25.7 MiB with the arrhythmias unit and a deploy broke under it.)
 
 Fully offline afterwards, and reachable from a hospital wifi. The trade is that
-`dist/content/` — the bank and 408 figures — sits on Cloudflare's storage.
+`dist/content/` — the bank and its figures — sits on Cloudflare's storage.
 
 **An authenticating proxy does not answer with an error.** Access with an
 expired session replies `200 OK` and a sign-in page, which is exactly what a
@@ -221,10 +222,12 @@ Fine for a look. No service worker (see above), so no offline and no install.
 ## Putting the whole bank on the tablet
 
 The split build streams figures on demand — the right default for a web app,
-and the wrong one for a ward round. So the home screen carries a card:
+and the wrong one for a ward round. So the Progress screen carries a card (it
+lived under the doors on the home screen until that screen had to fit an 11-inch
+iPad held sideways):
 
 ```
-ON THIS DEVICE                        0 of 408 figures here
+ON THIS DEVICE                          0 of N figures here
 ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
 Pull every figure down once and the bank works
 with no network at all.              [ Download the rest ]
@@ -234,7 +237,9 @@ It does not keep a cache of its own: it only *requests* each figure, and the
 service worker's ordinary fetch handler does the storing — the same cache, with
 the same name and the same eviction, that a figure met the normal way goes
 through. Six requests at a time, about ten seconds on a laptop over Tailscale,
-and a reload afterwards finds all 408 without fetching one of them again.
+and a reload afterwards finds every one without fetching one of them again.
+(N is every figure the bank references: the export's, plus the older ACC bank's
+when it is merged.)
 
 The card appears only in the split build. In the single file every figure is
 already inline, and a button offering to download them would be a lie.
