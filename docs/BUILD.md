@@ -137,7 +137,7 @@ The cost is that order matters, and the dependencies are real:
 | 29 | `pearl` | one sentence from your own notes, on the home screen |
 | 30 | `homeflow` | home cut to the trace, the pearl and the progress bar; everything else behind a door — last, so it moves finished markup |
 | 31 | `pearlcard` | the pearl as a numbered ladder on ECG paper, and the `-webkit-` spellings Safari needs |
-| 32 | `offline` | one press pulls all 408 figures onto the device — under `homeflow`'s door row, and only alive in the split build |
+| 32 | `offline` | one press pulls every figure onto the device — on the Progress screen since step 85 (it began under `homeflow`'s door row), and only alive in the split build |
 | 33 | `pvloop` | the pearl's strip becomes the pressure–volume loop the cardiac-cycle screen already computes |
 | 34 | `fullbleed` | the navigation bar leaves the reading column so its colour reaches both edges of an iPad, and reserves the strip the status bar sits in |
 | 35 | `figview` | a figure opens full size and closes four ways |

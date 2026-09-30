@@ -3,7 +3,7 @@
  * The reference figures, fetched after the home screen — not during it.
  *
  * build-pwa splits the note figures into one file per unit under
- * content/refs-images/ (about 19 MB in all; valv.json alone is 7.2 MB) and
+ * content/refs-images/ (about 19 MB in all when this was written; valv.json alone was 7.2 MB) and
  * appends this to app.js. It used to fetch all four the moment app.js ran:
  * on the owner's boot-probe (split build, CPU slowed 4×) they started just
  * before the hero appeared and took until 5.2 s to land, each one parsed as
