@@ -198,6 +198,20 @@ ok('neither is dropped by the check', !c6.dropped.some(d => d.where === 'flowcha
 ok('the drawing goes with its section, raw here, to be cleaned where there is a DOM', got6.diagrams.length === 1 && got6.diagrams[0].index === 0 && /<svg/.test(got6.diagrams[0].svg));
 ok('and none of it is study text', !/svgonlylabel|notAFlowchart|-->/.test(t6));
 
+head('where each item came from');
+const pe = SI.parseMarkdown(SI.STUDY_EXAMPLE), te = SI.studyText(pe);
+const de = { id: 'ue', name: pe.title, clusters: Chunk.clusterBlocks(Chunk.blocksFromPages(Chunk.pagesFromText(te)).blocks) };
+const qe = [].concat(...Pack.check([SI.packFor(pe, de, Pack, Coach).pack], de).sections.map(s => s.quiz.questions))[0] || {};
+ok('a question keeps its source: the file, the heading it was written under, the page it cites', qe.source === 'Your study file, “Practice Questions”, p. 1460', qe.source);
+ok('and the page the unit shows for it is still the unit’s own', typeof qe.page === 'number');
+const MDG = ['## Grading', '', 'Aortic stenosis raises the gradient across the valve.', '', 'Description: Pressure in the ventricle and the aorta in systole [p. 1452]',
+  '<svg viewBox="0 0 10 10"><title>LV and aortic pressure</title><rect/><rect/><path d="M0 0"/></svg>'].join('\n');
+const pg = SI.parseMarkdown(MDG), tg = SI.studyText(pg);
+const dg = { id: 'ug', name: 'G', clusters: Chunk.clusterBlocks(Chunk.blocksFromPages(Chunk.pagesFromText(tg)).blocks) };
+const gd = (SI.packFor(pg, dg, Pack, Coach).diagrams || [])[0] || {};
+ok('a diagram keeps its section, caption, alt text and the page its caption cites',
+   gd.section === 'Grading' && /^Pressure in the ventricle/.test(gd.caption) && gd.alt === 'LV and aortic pressure' && gd.cite === 'p. 1452' && gd.kind === 'svg', JSON.stringify(Object.assign({}, gd, { svg: '…' })));
+
 head('prose after a question');
 const MD4 = ['# Loading', '', 'Preload is the stretch on the wall at the end of filling.', '', '## Quiz', '', '### Question 1', '**Stem**: Which term names the stretch?',
   '- A) Preload', '- B) Afterload', '- C) Inotropy', '- D) Compliance', '**Correct Answer**: A', '', '---', '',

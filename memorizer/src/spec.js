@@ -14,12 +14,25 @@
 'use strict';
 
 var VERSION = 1;
+/* GENERATION TARGETS: what the prompts ask Claude for. Pedagogy, not
+   enforcement: a file with eleven points or a fourteen-node flowchart is
+   still read. The one exception is OPTIONS, which is both asked for and
+   enforced (Prompts.mcqError), on purpose: a question is scored by option. */
 var OPTIONS = 4;
 var POINTS = { min: 5, max: 10, words: 25 };
 var TABLE = { rows: 6, cols: 5 };
 var FLOW_NODES = 12;
 /* A pack is written per section; a study file per unit. */
 var QUESTIONS = { section: [6, 8], file: [5, 10] };
+/* IMPORT LIMITS: what the importer refuses or cuts, for safety and to keep
+   an iPad responsive. Never a teaching choice, and each is well above its
+   target where one exists, so a good file never meets them. */
+var LIMITS = {
+  fileBytes: 2 * 1024 * 1024,   /* a study file, read whole on the main thread */
+  svgBytes: 200 * 1024,         /* one diagram */
+  diagrams: 12,                 /* diagrams kept from one file */
+  flowNodes: 30,                /* nodes read from one text-drawn flowchart */
+};
 
 var RULES = {
   points: POINTS.min + ' to ' + POINTS.max + ' high-yield points, most important first, each at most ' + POINTS.words +
@@ -44,7 +57,7 @@ var RULES = {
     'it; add nothing from your own knowledge, however correct.',
 };
 
-var MemSpec = { VERSION: VERSION, OPTIONS: OPTIONS, POINTS: POINTS, TABLE: TABLE, FLOW_NODES: FLOW_NODES, QUESTIONS: QUESTIONS, RULES: RULES };
+var MemSpec = { VERSION: VERSION, LIMITS: LIMITS, OPTIONS: OPTIONS, POINTS: POINTS, TABLE: TABLE, FLOW_NODES: FLOW_NODES, QUESTIONS: QUESTIONS, RULES: RULES };
 root.MemSpec = MemSpec;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemSpec;
 })(typeof window !== 'undefined' ? window : this);

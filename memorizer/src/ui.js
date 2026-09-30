@@ -290,6 +290,7 @@ function saveUnit(name, source, pages, extra) {
               scanned: (extra && extra.scanned) || [], figures: (extra && extra.figures) || [], figuresV: Pdf.FIGURES_V, hasFile: !!(extra && extra.bytes),
               ocr: (extra && extra.ocr) || [], ocrError: (extra && extra.ocrError) || '', ocrConf: (extra && extra.ocrConf) || {},
               fingerprint: (extra && extra.fingerprint) || '', fileName: (extra && extra.fileName) || '', processing: processing() };
+  if (extra && extra.defer) return Promise.resolve(rec);
   var first = extra && extra.bytes ? Store.put('files', { id: rec.id, bytes: extra.bytes }) : Promise.resolve();
   return first.then(function () { return Store.put('docs', rec); }).then(function () { return rec; });
 }
@@ -541,18 +542,14 @@ function readText(file) {
 /* ── a study file (.md or .html, studyImport.js) ─────────────────────────
    Its text becomes a unit as pasted notes do; its own points, tables and
    questions become the unit's pack, checked against that text. All or
-   nothing: if the pack or the source details cannot be stored, the unit
-   just written is deleted again, so no half-imported unit is left behind. */
+   nothing: the unit and its pack are written in one transaction
+   (Store.putAll), so a failed import leaves neither behind. */
 function importStudyUnit(study) {
   ui.importing = 'Splitting into sections…'; ui.error = ''; render();
   return finishImport(Prov.fingerprint(study.text).then(function (fp) {
     if (duplicate(fp)) throw DUPLICATE;
-    return saveUnit(study.name, 'text', Chunk.pagesFromText(study.text), { fingerprint: fp, emptyMessage: 'There was no text to learn from in that file.' });
-  }).then(function (rec) {
-    return studyPackFor(study, rec).catch(function (e) {
-      return Store.deleteDoc(rec.id).then(function () { throw e; }, function () { throw e; });
-    });
-  }));
+    return saveUnit(study.name, 'text', Chunk.pagesFromText(study.text), { fingerprint: fp, emptyMessage: 'There was no text to learn from in that file.', defer: true });
+  }).then(function (rec) { return studyPackFor(study, rec); }));
 }
 function studyPackFor(study, rec) {
   var got = root.MemStudyImport.packFor(study.parsed, rec, Pack, Coach);
@@ -560,19 +557,19 @@ function studyPackFor(study, rec) {
   rec.study = Object.assign({ file: study.fileName || '', importedAt: Date.now(), strict: !!study.strict }, study.meta || {});
   var checked = got.pack ? Pack.check([got.pack], rec) : null;
   if (checked && study.strict) root.MemStudyImport.strictQuestions(checked, rec, Pack);
-  ui.notice = (checked ? Pack.report(checked).line : 'Imported as study text; the built-in coach teaches it.') + skipped;
-  rec.diagrams = (got.diagrams || []).map(function (g) { return { index: g.index, title: g.title, svg: root.MemStudyImport.sanitizeSvg(g.svg) }; })
+  ui.notice = (checked ? Pack.report(checked, 'the file\u2019s own text').line : 'Imported as study text; the built-in coach teaches it.') + skipped;
+  rec.diagrams = (got.diagrams || []).map(function (g) { return Object.assign({}, g, { svg: root.MemStudyImport.sanitizeSvg(g.svg) }); })
     .filter(function (g) { return g.svg; });
   if (rec.diagrams.length) ui.notice += ' ' + Home.count(rec.diagrams.length, 'diagram') + ' kept from the file.';
-  var writes = [Store.put('docs', rec)];
-  if (checked && checked.sections.length) writes.push(Store.put('packs', Pack.merge(null, checked, rec, Date.now())));
-  return Promise.all(writes).then(function () { return rec; });
+  var writes = [{ store: 'docs', value: rec }];
+  if (checked && checked.sections.length) writes.push({ store: 'packs', value: Pack.merge(null, checked, rec, Date.now()) });
+  return Store.putAll(writes).then(function () { return rec; });
 }
 function studyLine(d) {
   var st = d.study;
   if (!st) return null;
   var bits = [st.sourceBook, st.pageRange && (/^p/i.test(st.pageRange) ? st.pageRange : 'pp. ' + st.pageRange), st.difficulty, st.minutes && '~' + st.minutes + ' min'].filter(Boolean);
-  return h('p.muted.unit-meta', { id: 'unit-source' }, 'Imported study file' + (st.file ? ' \u201C' + st.file + '\u201D' : '') + (st.strict ? ', strict check' : '') + (bits.length ? ' · ' + bits.join(' · ') : ''));
+  return h('p.muted.unit-meta', { id: 'unit-source' }, 'Imported study file' + (st.file ? ' \u201C' + st.file + '\u201D' : '') + (st.strict ? ', strict consistency check' : '') + (bits.length ? ' · ' + bits.join(' · ') : ''));
 }
 
 function showStudyImportDialog() {
@@ -726,10 +723,11 @@ function diagramsCard(c) {
   var mine = (d.diagrams || []).filter(function (g) { return g.index === at; });
   if (!mine.length) return null;
   return h('div.card', { id: 'diagrams' }, fold('diagrams', 'Diagrams from your study file', mine.length, h('div.figs', mine.map(function (g, k) {
-    var name = g.title || 'Diagram ' + (k + 1);
+    var name = g.caption || g.title || 'Diagram ' + (k + 1);
+    var from = 'From your study file' + (g.section ? ', \u201C' + g.section + '\u201D' : '') + (g.cite ? ', ' + g.cite : '');
     return h('figure.fig', h('button', { type: 'button', 'aria-label': 'Enlarge ' + name,
-        onclick: function () { showFigure(g.svg, name, 'Drawn in your study file. Memorizer shows it as it was written and has not checked it.'); } },
-      h('img', { src: svgUrl(g.svg), alt: name, loading: 'lazy' })), h('figcaption', name));
+        onclick: function () { showFigure(g.svg, name, from + '. Shown as it was written; not checked.'); } },
+      h('img', { src: svgUrl(g.svg), alt: g.alt || name, loading: 'lazy' })), h('figcaption', name, h('span.muted.fig-from', ' \u00B7 ' + from)));
   }))));
 }
 function visualsCard(c) {
@@ -2215,7 +2213,7 @@ function whyNot(q, chosen, right) {
     h('ul', q.options.map(function (o, i) {
       return h('li' + (i === q.answer ? '.right' : ''), h('strong', LETTERS[i] + '. ' + o), ' \u2014 ', i === q.answer ? 'the answer.' : marked(why[i] || ''));
     }))) : null;
-  return [mine, q.trap ? h('p.trap', { id: 'trap' }, h('span.why-label', 'The trap: '), q.trap) : null, flagLine(q.flag), all];
+  return [mine, q.trap ? h('p.trap', { id: 'trap' }, h('span.why-label', 'The trap: '), q.trap) : null, flagLine(q.flag), q.source ? h('p.muted.q-source', { id: 'q-source' }, q.source) : null, all];
 }
 /* Sure or not, said before answering (study.js rateWith). */
 function sureToggle() {
@@ -4075,7 +4073,7 @@ function focusTeach() {
   el.focus();
 }
 function start() {
-  Store.open().then(refresh).then(render, function (e) {
+  Store.open().then(function () { return Store.sweep().then(null, function () {}); }).then(refresh).then(render, function (e) {
     ui.error = 'Could not open storage: ' + (e && e.message); render();
   });
 }

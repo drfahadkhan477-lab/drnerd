@@ -23,8 +23,9 @@ cleaned and shown as pictures; the front matter, shown under the unit's title;
 and each practice question with exactly 4 options and a Correct Answer line. A
 question with no marked answer is left out and counted, never guessed. Points,
 tables and questions are checked against the file's own text, and anything with
-a number the text does not have is flagged. The **Strict check** box also holds
-each question's scenario to the text.
+a number the text does not have is flagged. The **Strict consistency check** box also holds
+each question's scenario to the text. All of this checks the file against itself: it
+does not check it against your book or the medical facts.
 
 ## The prompt
 

@@ -55,7 +55,7 @@ function show(onImport) {
   var summary = el('dl', { id: 'import-summary', className: 'import-summary' });
   var strict = el('input', { type: 'checkbox', id: 'import-strict' });
   var strictRow = el('label', { 'for': 'import-strict', className: 'import-strict' }, [strict,
-    el('span', { text: 'Strict check: also hold the numbers and conditions in each question\u2019s scenario to the file\u2019s text, and flag any it does not have' })]);
+    el('span', { text: 'Strict consistency check: also hold the numbers and conditions in each question\u2019s scenario to this file\u2019s own text, and flag any it does not have. It checks the file against itself, not against your book or the medical facts.' })]);
   summary.hidden = true;
   var copyNote = el('span', { id: 'import-copy-status', role: 'status', className: 'muted' });
   var copy = el('button', { type: 'button', id: 'import-copy-prompt', className: 'btn tonal', text: '\u2726 Copy the prompt for Claude' });

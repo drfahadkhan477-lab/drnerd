@@ -25,7 +25,7 @@
 'use strict';
 
 var Spec = root.MemSpec || (typeof require === 'function' ? require('./spec.js') : null);
-var MAX_BYTES = 2 * 1024 * 1024;
+var MAX_BYTES = Spec.LIMITS.fileBytes;
 var QUIZ_HEAD = /^(?:quiz|questions?|practice questions?|self[- ]?(?:test|assessment)|mcqs?|test yourself|review questions?)\b/i;
 var Q_HEAD = /^(?:q(?:uestion)?\s*\d+\b|q\d+\b)/i;
 var OPTION = /^\s*(?:[-*]\s+)?\(?([A-Ea-e])[).:]\s+(.+)$/;
@@ -37,6 +37,8 @@ var WHY_HEAD = /^\s*(?:\*\*)?why (?:the )?(?:distractors|other options|others|wr
 var OTHER_HEAD = /^\s*(?:\*\*)?(?:clinical pearl|pearl|high[- ]yield|key point|takeaway|tip)s?(?:\*\*)?\s*:/i;
 var POINT = /^\s*[-*]\s+\*\*([^*]+?)\*\*\s*[:\-–—]\s*(.+)$/;
 var CITE = /[[(]\s*pp?\.\s*\d+(?:\s*[–—-]\s*\d+)?\s*[\])]/i;
+/* "[p. 1452]" in a text → "p. 1452" (the first citation it carries), else "". */
+function citeOf(t) { var m = String(t || '').match(CITE); return m ? m[0].replace(/^[[(]\s*|\s*[\])]$/g, '').replace(/\s+/g, ' ') : ''; }
 
 function plain(t) {
   return String(t || '')
@@ -70,7 +72,7 @@ function frontMatter(block) {
    these — is turned into the same thing: each line a step, "↓" lines
    dropped, and a "├─"/"└─" line a branch from the nearest step to its left.
    Anything else in a code block is not a flowchart and is left out. */
-var MAX_NODES = 30;
+var MAX_NODES = Spec.LIMITS.flowNodes;
 function flowLabel(t) {
   return plain(t).replace(/^[\s→>\-–—]+/, '').replace(/"/g, "'").replace(/\[/g, '(').replace(/\]/g, ')').trim();
 }
@@ -110,11 +112,16 @@ function flowchartOf(b) {
    attributes from an allowlist, no event handlers, no link that leaves the
    drawing, no style that fetches. Tiny icons and oversize drawings are
    dropped. Needs a DOM (DOMParser, XMLSerializer). */
-var SVG_MAX = 200 * 1024, DIAGRAMS_MAX = 12;
+var SVG_MAX = Spec.LIMITS.svgBytes, DIAGRAMS_MAX = Spec.LIMITS.diagrams;
 var SVG_TAGS = ['svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan', 'title', 'desc', 'defs', 'marker', 'lineargradient', 'radialgradient', 'stop', 'clippath', 'pattern', 'mask', 'symbol'];
 function sanitizeSvg(svg) {
   svg = String(svg || '');
   if (!svg || svg.length > SVG_MAX || !root.DOMParser) return '';
+  /* An SVG taken from an HTML page carries prefixed attributes (xlink:href,
+     sodipodi:*) without the namespace they need, and XML refuses the whole
+     drawing for one of them. xlink:href becomes href, which is judged below
+     like any link; any other prefixed attribute (xml:* aside) is dropped. */
+  svg = svg.replace(/\sxlink:href\s*=/gi, ' href=').replace(/\s(?!xml:|xmlns)[\w-]+:[\w.-]+\s*=\s*("[^"]*"|'[^']*')/gi, '');
   var d = new root.DOMParser().parseFromString(svg, 'image/svg+xml'), top = d.documentElement;
   if (!top || top.nodeName.toLowerCase() !== 'svg' || d.getElementsByTagName('parsererror').length) return '';
   (function clean(el) {
@@ -175,7 +182,15 @@ function parseMarkdown(text) {
       if (q) continue;
       if (!sec) newSection('');
       var blk = blocks[+bm[1]], item;
-      if (blk.kind === 'svg') { item = { title: sec.heading || out.title, svg: blk.body, section: sec }; sec.diagrams.push(item); out.diagrams.push(item); }
+      if (blk.kind === 'svg') {
+        /* its caption: the line just before it, when that describes it */
+        var prev = '';
+        for (var pl = sec.lines.length - 1; pl >= 0 && !prev; pl--) prev = sec.lines[pl].trim();
+        var caption = /^(?:\*\*)?(?:description|figure|caption)\b/i.test(prev) ? plain(prev).replace(/^(?:description|caption)\s*:\s*/i, '') : '';
+        var alt = plain((blk.body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || ['', ''])[1] || (blk.body.match(/aria-label="([^"]*)"/i) || ['', ''])[1]);
+        item = { title: sec.heading || out.title, svg: blk.body, section: sec, caption: caption, alt: alt, cite: citeOf(caption) || citeOf(sec.heading) };
+        sec.diagrams.push(item); out.diagrams.push(item);
+      }
       else if ((item = flowchartOf(blk))) { item = { code: item, section: sec }; sec.flowcharts.push(item); out.flowcharts.push(item); }
       continue;
     }
@@ -311,6 +326,9 @@ function htmlToMarkdown(doc) {
     if (!tag) return;
     if (e.hasAttribute('data-mz-q') && question(e)) return;
     if (/^h[1-6]$/.test(tag)) { var ht = text(e); if (ht && !(tag === 'h1' && ht === title)) out.push('', '#'.repeat(Math.max(2, +tag[1])) + ' ' + ht); return; }
+    /* a quiz laid out in a table (Word and Notion do this) is read as its
+       questions, not flattened into rows */
+    if (tag === 'table' && e.querySelector('[data-mz-q]')) { Array.prototype.forEach.call(e.querySelectorAll('[data-mz-q]'), function (q) { if (!q.parentElement.closest('[data-mz-q]')) walk(q); }); return; }
     if (tag === 'table') {
       var rows = Array.prototype.map.call(e.querySelectorAll('tr'), function (tr) {
         return Array.prototype.map.call(tr.querySelectorAll('th,td'), function (c) { return text(c).replace(/\|/g, '/'); });
@@ -430,7 +448,7 @@ function packFor(p, doc, Pack, Coach) {
   p.points.forEach(function (x) { per[place(sentence(x.term + ': ' + x.text), x.section)].points.push(x); });
   p.tables.forEach(function (t) { per[place(tableRow(t, t.rows[0]), t.section)].tables.push(t); });
   p.flowcharts.forEach(function (f) { var i = sectionClusters(f.section)[0]; if (!per[i].flowchart) per[i].flowchart = f.code; });
-  p.diagrams.forEach(function (g) { if (diagrams.length < DIAGRAMS_MAX) diagrams.push({ index: sectionClusters(g.section)[0], title: g.title, svg: g.svg }); });
+  p.diagrams.forEach(function (g) { if (diagrams.length < DIAGRAMS_MAX) diagrams.push({ index: sectionClusters(g.section)[0], title: g.title, svg: g.svg, section: g.section.heading || '', caption: g.caption || '', alt: g.alt || '', cite: g.cite || '', kind: 'svg' }); });
   var unanswered = 0;
   p.questions.forEach(function (q) {
     if (q.answer < 0 || q.answer >= q.options.length) { unanswered++; return; }
@@ -450,7 +468,9 @@ function packFor(p, doc, Pack, Coach) {
                 tables: x.tables.map(function (t) { return { title: t.title || 'Table', columns: t.columns, rows: t.rows, page: pg }; }) },
       quiz: { questions: x.questions.map(function (q) {
         var why = q.why.some(Boolean) ? q.options.map(function (_, k) { return k === q.answer ? '' : q.why[k] || ''; }) : [];
-        return { question: q.question, quote: '', options: q.options, answer: q.answer, explain: q.explain, page: pg, why: why, trap: '' };
+        var head = q.section && q.section.heading, cite = citeOf(q.explain) || citeOf(q.question);
+        var source = 'Your study file' + (head ? ', \u201C' + head + '\u201D' : '') + (cite ? ', ' + cite : '');
+        return { question: q.question, quote: '', options: q.options, answer: q.answer, explain: q.explain, page: pg, why: why, trap: '', source: source };
       }) },
     });
   });
@@ -630,7 +650,7 @@ function parseStudyFile(content, name) {
 }
 
 var api = { MAX_BYTES: MAX_BYTES, ACCEPT: ACCEPT, STUDY_EXAMPLE: STUDY_EXAMPLE, studyFilePrompt: studyFilePrompt, parseMarkdown: parseMarkdown, htmlToMarkdown: htmlToMarkdown, parseHTML: parseHTML,
-            studyText: studyText, packFor: packFor, asciiFlow: asciiFlow, sanitizeSvg: sanitizeSvg, DIAGRAMS_MAX: DIAGRAMS_MAX, strictQuestions: strictQuestions, studyMeta: studyMeta, detectFormat: detectFormat, parseStudyFile: parseStudyFile };
+            studyText: studyText, citeOf: citeOf, packFor: packFor, asciiFlow: asciiFlow, sanitizeSvg: sanitizeSvg, DIAGRAMS_MAX: DIAGRAMS_MAX, strictQuestions: strictQuestions, studyMeta: studyMeta, detectFormat: detectFormat, parseStudyFile: parseStudyFile };
 root.MemStudyImport = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : this);

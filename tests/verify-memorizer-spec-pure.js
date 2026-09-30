@@ -54,6 +54,14 @@ ok('a question with one option fewer or more is refused', Prompts.mcqError(q(Spe
 const three = '## T\n\nSome text about grading here.\n\n## Practice Questions\n\n### Question 1\n**Stem**: Which?\n- A) a\n- B) b\n- C) c\n**Correct Answer**: A\n';
 ok('the import preview counts such a question as not usable', SI.parseStudyFile(three, 't.md').summary.malformed === 1);
 
+head('targets and limits are different numbers');
+ok('the importer\u2019s limits are spec.js\u2019s LIMITS', SI.MAX_BYTES === Spec.LIMITS.fileBytes && SI.DIAGRAMS_MAX === Spec.LIMITS.diagrams);
+ok('each limit is above its target, so a file written to the prompt never meets it', Spec.LIMITS.flowNodes > Spec.FLOW_NODES);
+const big = Array.from({ length: Spec.FLOW_NODES + 4 }, (_, i) => 'Step ' + i).join('\n    \u2193\n');
+ok('a flowchart past the target but inside the limit is still read, whole', (SI.asciiFlow(big).match(/\["Step/g) || []).length === Spec.FLOW_NODES + 4);
+const huge = Array.from({ length: Spec.LIMITS.flowNodes + 5 }, (_, i) => 'Step ' + i).join('\n    \u2193\n');
+ok('one past the limit is cut at the limit', (SI.asciiFlow(huge).match(/\["Step/g) || []).length === Spec.LIMITS.flowNodes);
+
 head('the example the study-file prompt shows');
 const shown = filePrompt.slice(filePrompt.indexOf('````markdown\n') + '````markdown\n'.length, filePrompt.lastIndexOf('\n````'));
 ok('the prompt shows STUDY_EXAMPLE exactly', shown === SI.STUDY_EXAMPLE);

@@ -107,7 +107,43 @@ function del(store, id) {
   });
 }
 
-/* Removing a document removes everything that came from it. */
+/* Several records in one transaction: all of them stored, or none. writes:
+   [{ store, value }]. A value that cannot be stored (a DataCloneError) aborts
+   the whole transaction, so what was put before it in the same call is
+   undone by the browser, not by us. */
+function putAll(writes) {
+  var names = writes.map(function (w) { return w.store; }).filter(function (n, i, a) { return a.indexOf(n) === i; });
+  return open().then(function (db) {
+    if (!db) { writes.forEach(function (w) { mem[w.store][w.value.id] = JSON.parse(JSON.stringify(w.value)); }); return writes.length; }
+    return new Promise(function (resolve, reject) {
+      var t = db.transaction(names, 'readwrite');
+      t.oncomplete = function () { resolve(writes.length); };
+      t.onerror = function () { reject(t.error); };
+      t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+      try { writes.forEach(function (w) { t.objectStore(w.store).put(w.value); }); }
+      catch (e) { try { t.abort(); } catch (_) {} reject(e); }
+    });
+  });
+}
+
+/* What no unit owns any more — a pack, a session, search vectors or review
+   cards whose unit is gone (an import or a delete cut short in an older
+   build, say) — is removed when the app opens. Only records keyed by a
+   unit's id are looked at; books, their pages and PDF bytes are not. */
+function sweep() {
+  return all('docs').then(function (docs) {
+    var have = {};
+    docs.forEach(function (d) { have[d.id] = true; });
+    var gone = [];
+    return Promise.all(['packs', 'sessions', 'vectors'].map(function (st) {
+      return all(st).then(function (rows) { rows.forEach(function (r) { if (!have[r.id]) gone.push(del(st, r.id).then(function () { return st; })); }); });
+    })).then(function () {
+      return all('cards').then(function (cards) { cards.forEach(function (c) { if (c.docId && !have[c.docId]) gone.push(del('cards', c.id).then(function () { return 'cards'; })); }); });
+    }).then(function () { return Promise.all(gone); });
+  });
+}
+
+/* Removing a document removes everything that came from it. *//* Removing a document removes everything that came from it. */
 function deleteDoc(id) {
   return all('cards').then(function (cards) {
     return Promise.all(cards.filter(function (c) { return c.docId === id; }).map(function (c) { return del('cards', c.id); }));
@@ -179,7 +215,7 @@ function saveStep(session, cards) {
   });
 }
 
-api.open = open; api.put = put; api.get = get; api.all = all; api.del = del;
+api.open = open; api.put = put; api.putAll = putAll; api.sweep = sweep; api.get = get; api.all = all; api.del = del;
 api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards; api.saveStep = saveStep;
 root.MemStore = api;
 })(typeof window !== 'undefined' ? window : this);

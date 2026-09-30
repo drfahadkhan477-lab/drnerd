@@ -76,13 +76,15 @@ var LESSON = extend(Prompts.SCHEMAS.lesson, {
   tables: arr(extend({ properties: {} }, { title: S, columns: arr(S), rows: arr(arr(S)), page: I })),
 });
 var TABLE = LESSON.properties.tables.items;
-var QUESTION = extend(Prompts.SCHEMAS.quiz.properties.questions.items, { why: arr(S), trap: S });
+/* source: where a study file's question came from (its section, and the page it
+   cites); "" for a pack written in a chat, which cites a page per item instead. */
+var QUESTION = extend(Prompts.SCHEMAS.quiz.properties.questions.items, { why: arr(S), trap: S, source: S });
 /* What may be left out of a reply, and reads as nothing to say when it is:
    a chat that writes no pearls for a section has not written a wrong one.
    What may not: a lesson's points, and a question's stem, options, answer,
    explanation and page. Keys a reply adds that are not here are left out. */
 var LESSON_EMPTY = { overview: '', mechanism: '', numbers: [], distinctions: [], pearls: [], cases: [], mnemonics: [], analogies: [], flowchart: '', tables: [] };
-var QUESTION_EMPTY = { quote: '', why: [], trap: '' };
+var QUESTION_EMPTY = { quote: '', why: [], trap: '', source: '' };
 function filled(v, schema, empty) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return v;
   var o = {};
@@ -121,6 +123,7 @@ var EXAMPLE = {
     page: 12,
     why: ['Why the first option is wrong.', '', 'Why the third option is wrong.', 'Why the fourth option is wrong.'],
     trap: 'the confusion this question tests',
+    source: '',
   }] },
 };
 
@@ -448,7 +451,8 @@ function dropSection(rec, i) {
 }
 function sectionOf(rec, i) { return rec && rec.sections && rec.sections[i] || null; }
 /* What the owner is told, in counts that come from the check itself. */
-function report(checked) {
+function report(checked, against) {
+  against = against || 'your book';
   var s = checked.sections, q = 0, f = 0;
   s.forEach(function (x) { q += x.quiz.questions.length; f += x.flags.length; });
   var nums = s.map(function (x) { return x.index + 1; });
@@ -456,7 +460,7 @@ function report(checked) {
     imported: s.length, questions: q, flagged: f, refused: checked.refused.length, dropped: checked.dropped.length,
     line: s.length ? 'Imported ' + (s.length === 1 ? 'section ' : 'sections ') + nums.join(', ') + ': ' +
       s.length + (s.length === 1 ? ' lesson, ' : ' lessons, ') + q + (q === 1 ? ' question' : ' questions') + '. ' +
-      (f ? f + (f === 1 ? ' item' : ' items') + ' not found in your book, flagged where it is shown.' : 'Everything checked was found in your book.')
+      (f ? f + (f === 1 ? ' item' : ' items') + ' not found in ' + against + ', flagged where it is shown.' : 'Everything checked was found in ' + against + '.')
       : 'Nothing was imported.',
   };
 }

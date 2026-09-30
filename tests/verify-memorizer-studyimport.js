@@ -219,7 +219,7 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
     const st = await p.evaluate(() => ({ src: document.getElementById('unit-source').textContent, notice: document.getElementById('notice').textContent,
       flag: Object.values(Memorizer.ui.pack.sections).map(s => s.quiz.questions.map(q => q.flag || '').join('')).join(''),
       stored: JSON.stringify(Memorizer.ui.docRec.diagrams) }));
-    ok('the strict box reaches the import: the unit says so, and the vignette’s number is flagged', /strict check/.test(st.src) && /in its scenario/.test(st.flag), st.src + ' | ' + st.flag);
+    ok('the strict box reaches the import: the unit says so, and the vignette’s number is flagged', /strict consistency check/.test(st.src) && /in its scenario/.test(st.flag), st.src + ' | ' + st.flag);
     ok('the note counts the diagram kept', /1 diagram kept from the file/.test(st.notice), st.notice);
     ok('what is stored is the cleaned drawing', /Gradient/.test(st.stored) && !/script|onload|evil/.test(st.stored), st.stored.slice(0, 120));
     await p.click('#learn-unit');
@@ -365,17 +365,73 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
     ok('with three misses waiting, a review round is the next step, and the one primary button', now2.kind === 'review' && /^3 items you missed/.test(now2.why) && now2.primary && !now2.learnPrimary, JSON.stringify(now2));
     await ctx.close();
 
+    head('messy real-world HTML');
+    ({ ctx, p } = await fresh('messy'));
+    const MESSY = `<html xmlns:o="urn:schemas-microsoft-com:office:office"><head><!--[if gte mso 9]><xml><o:OfficeDocumentSettings></o:OfficeDocumentSettings></xml><![endif]-->
+<style>p.MsoNormal{margin:0}</style></head><body>
+<h1>Heart Failure</h1>
+<p class="MsoNormal">Heart failure with reduced ejection fraction has an ejection fraction of 40 percent or less.<o:p></o:p></p>
+<p class="MsoListParagraph">· Loop diuretics relieve congestion.<o:p></o:p></p>
+<img src="x" onerror="window.__pwned = 1">
+<script>window.__pwned = 2</script>
+<svg viewBox="0 0 10 10" onload="window.__pwned=3"><style>rect{fill:url(https://evil.example/x)}</style><a xlink:href="javascript:window.__pwned=4"><text>HF</text></a><rect/><rect/><circle r="1"/></svg>
+<table><tr><td><div class="question"><p class="stem">Which ejection fraction defines HFrEF?</p>
+  <ul class="options"><li aria-checked="false">50 percent or more</li><li aria-checked="true">40 percent or less</li><li aria-checked="false">60 percent</li><li aria-checked="false">70 percent</li></ul>
+  <div class="explanation">HFrEF is 40 percent or less.</div><div class="explanation">A second note.</div></div></td></tr></table>
+<div class="question"><p class="stem">Which drug relieves congestion?</p><ol><li>Loop diuretics</li><li>Digoxin</li><li>Ivabradine</li><li>Statins</li></ol>
+  <p class="answer" style="display:none">Answer: A</p></div>
+<fieldset><legend>Which is not a first-line HFrEF therapy?</legend>
+  <label><input type="checkbox"> ACE inhibitor</label><label><input type="checkbox"> Beta blocker</label><label><input type="checkbox" checked> Calcium channel blocker</label><label><input type="checkbox"> MRA</label></fieldset>
+<div class="question"><p class="stem">An unmarked one?</p><ul><li>a</li><li>b</li><li>c</li><li>d</li></ul></div>
+<p>Unclosed <b>tail about <i>congestion`;
+    const mr = await p.evaluate(html => { const r = MemStudyImport.parseStudyFile(html, 'hf.html');
+      return { ok: r.success, err: r.error, text: r.study && r.study.text, qs: r.study && r.study.parsed.questions.map(q => ({ q: q.question, o: q.options, a: q.answer, e: q.explain })),
+        svg: r.study && r.study.parsed.diagrams.map(d => MemStudyImport.sanitizeSvg(d.svg)), pwned: window.__pwned === undefined ? 'no' : window.__pwned }; }, MESSY);
+    ok('Word-style markup is read: its paragraphs are study text, its Office tags and conditional comments are not', mr.ok && /40 percent or less/.test(mr.text) && /Loop diuretics relieve congestion/.test(mr.text) && !/OfficeDocumentSettings|MsoNormal/.test(mr.text), mr.err || (mr.text || '').slice(0, 200));
+    ok('nothing in the page runs while it is read', mr.pwned === 'no', String(mr.pwned));
+    const byStem = t => (mr.qs || []).find(q => q.q.indexOf(t) !== -1) || { o: [] };
+    const m1 = byStem('ejection fraction defines');
+    ok('a question inside a table is still a question, its answer marked by aria-checked', m1.o.length === 4 && m1.o[m1.a] === '40 percent or less', JSON.stringify(m1));
+    ok('its first explanation is kept', /40 percent or less/.test(m1.e || ''), m1.e);
+    const m2 = byStem('relieves congestion');
+    ok('an answer the page hides until asked ("Answer: A") is still its answer', m2.o[m2.a] === 'Loop diuretics', JSON.stringify(m2));
+    const m3 = byStem('not a first-line');
+    ok('a checked checkbox marks the answer as a radio does', m3.o[m3.a] === 'Calcium channel blocker', JSON.stringify(m3));
+    ok('an unmarked question is never given an answer', byStem('unmarked').a === -1);
+    ok('the SVG loses its style block, handler and javascript: link', (mr.svg || []).length === 1 && !/style|onload|javascript|evil/i.test(mr.svg[0]) && /<text>HF<\/text>/.test(mr.svg[0]), JSON.stringify(mr.svg));
+    ok('the unclosed tail is still read', /tail about congestion/.test(mr.text || ''));
+    await ctx.close();
+
     head('all or nothing');
     ({ ctx, p } = await fresh('rollback'));
-    await p.evaluate(() => { const put = MemStore.put; MemStore.put = (s, v) => s === 'packs' ? Promise.reject(new Error('disk full (test)')) : put(s, v); });
+    /* the pack record carries a function, which IndexedDB cannot store: the
+       browser aborts the transaction the unit was written in */
+    await p.evaluate(() => { const merge = MemPack.merge; MemPack.merge = (...a) => Object.assign(merge(...a), { unstorable: () => 1 }); });
     const before = await p.evaluate(() => MemStore.all('docs').then(d => d.length));
     await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);
     await p.setInputFiles('#import-file', { name: 'valves.html', mimeType: 'text/html', buffer: Buffer.from(PAGE) });
     await p.waitForFunction(() => !document.getElementById('import-go').disabled, null, T);
     await p.click('#import-go');
-    await p.waitForFunction(() => /disk full \(test\)/.test(document.body.textContent), null, T);
-    const after = await p.evaluate(() => MemStore.all('docs').then(d => d.length));
-    ok('when the pack cannot be stored, the error is shown and no unit is left behind', after === before, before + ' units before, ' + after + ' after');
+    await p.waitForFunction(() => /could not be cloned|DataCloneError|not be cloned/i.test(document.body.textContent), null, T);
+    const after = await p.evaluate(() => Promise.all([MemStore.all('docs'), MemStore.all('packs')]).then(([d, k]) => ({ docs: d.length, packs: k.length })));
+    ok('when the pack cannot be stored, the error is shown and neither the unit nor its pack is left: one transaction', after.docs === before && after.packs === 0, JSON.stringify({ before, after }));
+    await ctx.close();
+
+    head('what no unit owns is swept away when the app opens');
+    ({ ctx, p } = await fresh('sweep'));
+    await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);
+    await p.setInputFiles('#import-file', { name: 'valves.html', mimeType: 'text/html', buffer: Buffer.from(PAGE) });
+    await p.waitForFunction(() => !document.getElementById('import-go').disabled, null, T);
+    await p.click('#import-go');
+    await p.waitForSelector('#learn-unit', T);
+    await p.evaluate(() => Promise.all([MemStore.put('packs', { id: 'gone-unit', sections: {} }), MemStore.put('sessions', { id: 'gone-unit', state: {} }),
+      MemStore.put('vectors', { id: 'gone-unit' }), MemStore.put('cards', { id: 'gone-card', docId: 'gone-unit' })]));
+    await p.reload();
+    /* the app has opened, swept and read its units */
+    await p.waitForFunction(() => window.Memorizer && Array.isArray(Memorizer.ui.docs) && Memorizer.ui.docs.length === 1, null, T);
+    const kept = await p.evaluate(() => Promise.all(['docs', 'packs', 'sessions', 'vectors', 'cards'].map(s => MemStore.all(s).then(r => [s, r.map(x => x.id)]))).then(Object.fromEntries));
+    ok('a pack, session, vectors and card whose unit is gone are removed', !['packs', 'sessions', 'vectors'].some(s => kept[s].includes('gone-unit')) && !kept.cards.includes('gone-card'), JSON.stringify(kept));
+    ok('and the real unit keeps its pack', kept.docs.length === 1 && kept.packs.includes(kept.docs[0]), JSON.stringify(kept));
     await ctx.close();
   } finally {
     await browser.close();
