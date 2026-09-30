@@ -1076,7 +1076,24 @@ async function startLoop() {
        r.model_lib === 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/' + MANIFEST.libCommit + '/' + MANIFEST.models[id].lib.path)(cfg.model_list.find(x => x.model_id === id))) &&
        /^[0-9a-f]{40}$/.test(MANIFEST.libCommit), JSON.stringify(cfg.model_list[0]));
   ok('a model the manifest does not know is left as the engine has it', JSON.stringify(cfg.model_list.find(x => x.model_id === 'Other-MLC')) === JSON.stringify({ model_id: 'Other-MLC', model: 'https://huggingface.co/x/Other-MLC', model_lib: 'https://x/lib.wasm' }));
-  ok('the manifest was written for the engine version the app loads', new RegExp('web-llm@' + MANIFEST.engine.replace(/\./g, '\\.') + '/').test(L.WEBLLM.url), MANIFEST.engine + ' vs ' + L.WEBLLM.url);
+  ok('the manifest was written for the engine version the app loads', L.WEBLLM.url.includes('/web-llm@' + MANIFEST.engine + '/'), MANIFEST.engine + ' vs ' + L.WEBLLM.url);
+  /* what the generator fetched is written into code the app runs: every
+     field held to its shape (scripts/model-manifest.js check), here on the
+     committed file, and refused out of shape */
+  const MM = require(path.join(ROOT, 'scripts', 'model-manifest.js'));
+  const refuses = f => { const m = JSON.parse(JSON.stringify(MANIFEST)); f(m); try { MM.check(m); return false; } catch (e) { return /^refusing /.test(e.message); } };
+  let shaped = false; try { shaped = MM.check(MANIFEST); } catch (e) { shaped = e.message; }
+  ok('the committed manifest is every field the shape it should be', shaped === true, String(shaped));
+  const QQ = 'Qwen3-0.6B-q4f16_1-MLC';
+  const bad = { 'a repository that closes the script': m => { m.models[QQ].repo = 'mlc-ai/x</script><script>alert(1)//'; },
+    'a commit that is not a hash': m => { m.models[QQ].rev = 'main'; },
+    'a file name that climbs out': m => { m.models[QQ].files['../../x.bin'] = 'a'.repeat(64); },
+    'a hash that is not one': m => { m.models[QQ].files['tokenizer.json'] = '"; alert(1); "'; },
+    'a runtime from elsewhere': m => { m.models[QQ].lib.path = 'https://evil.example/x.wasm'; },
+    'a repository not mlc-ai\u2019s': m => { m.models[QQ].repo = 'someone/Qwen3-0.6B-q4f16_1-MLC'; },
+    'no models': m => { m.models = {}; } };
+  const let_in = Object.keys(bad).filter(k => !refuses(bad[k]));
+  ok('and refused: ' + Object.keys(bad).join('; '), let_in.length === 0, let_in.join(', ') || 'all refused');
   ok('and it holds a hash for every file, not a placeholder', Object.values(MANIFEST.models).every(m => /^[0-9a-f]{64}$/.test(m.lib.sha256) && Object.keys(m.files).length >= 5 &&
        Object.values(m.files).every(h => /^[0-9a-f]{64}$/.test(h)) && Object.keys(m.files).some(f => /^params_shard_0\.bin$/.test(f))));
 
