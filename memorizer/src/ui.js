@@ -3814,16 +3814,28 @@ function offlineCard() {
     h('p.muted', 'The on-device AI\u2019s model is not included: it is downloaded when you turn the AI on, and kept by the browser.'));
 }
 
+/* Where the chosen model comes from, and what is checked (llm.js verify). */
+function modelSourceNote(id) {
+  var m = LLM.modelSource(id);
+  if (!m) return null;
+  return h('p.muted', { id: 'ai-source' }, 'The model comes from Hugging Face, ' + m.repo + ' at commit ' + m.rev +
+    ', never a newer upload. Before it answers anything, its ' + m.files + ' files are checked against the SHA-256 hashes this app was built with (engine ' + m.engine +
+    '); a file that does not match and the model is deleted, not used. It is kept in this browser\u2019s storage.');
+}
 function aiSettingsCard() {
   var c = LLM.loadConfig();
-  var model = h('select', { id: 'ai-model' }, LLM.MODELS.map(function (m) {
+  var model = h('select', { id: 'ai-model', onchange: function () {
+    var was = document.getElementById('ai-source'), now = modelSourceNote(model.value);
+    if (was && now) was.replaceWith(now);
+  } }, LLM.MODELS.map(function (m) {
     return h('option', { value: m.id, selected: m.id === c.model }, m.label + ' — about ' + (m.mb >= 1000 ? (m.mb / 1000).toFixed(1) + ' GB' : m.mb + ' MB') + ' · ' + m.licence);
   }));
   return h('div.card.settings.ai-card', { id: 'ai-card' }, h('h2', '✨ On-device AI tutor'),
     h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. With a study pack written with Claude, it works from Claude\u2019s notes: a pack question you missed comes back in new words (its answer and reasons still Claude\u2019s), it can explain a mistake from Claude\u2019s reasons, mark your teach-back point by point (a verdict only with your own words to show for it), and ask follow-up questions from Claude\u2019s notes. It also runs your Coach as an agent: it can use several of the Coach’s tools on your book before it answers, and what it says is checked against what they found. It needs no key and, once downloaded, no connection.'),
     h('p', h('strong', 'It is not a source of facts. '), 'Every sentence it writes is checked against your book before you see it: no number and no disease, test or drug the book passage does not have, and a question is kept only when your book states its answer — and the book\u2019s own sentence is shown as the explanation. What fails the check is dropped and counted.'),
     h('label', 'Model', model),
-    h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr; the model itself comes from Hugging Face through that engine, which does not check it against a hash, and is kept in this browser\u2019s cache.'),
+    h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr.'),
+    modelSourceNote(model.value),
     h('div.row', button(c.on ? 'Turn off' : 'Turn on', function () {
       var on = !c.on;
       LLM.saveConfig({ on: on, model: model.value, meaning: c.meaning });

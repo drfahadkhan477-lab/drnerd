@@ -311,6 +311,16 @@ reader, the text reader for scans and the flowchart drawer, and says when each
 is kept. It works only from the web address, where the service worker runs.
 Your book never leaves the iPad: the zip holds only the app.
 
+**Settings → Back up** saves your units, packs and progress to one file (not
+the PDFs); **Restore** brings them back on another iPad or after Safari clears
+its storage. Home reminds you when a backup is due.
+
+The on-device AI downloads its model from a fixed commit and checks every
+file against the hashes the app was built with before the model answers; a
+file that does not match and the model is deleted, not used. When the
+WebLLM version changes, `node scripts/model-manifest.js` (needs the network)
+rewrites `memorizer/src/models.js`.
+
 ### On a laptop
 
 The same app runs in a laptop's browser, which is the easier place to bring

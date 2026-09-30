@@ -252,7 +252,13 @@ model (Qwen3 0.6B, 1.7B or 4B, Apache-2.0, through WebLLM on WebGPU) is download
 once and runs on the iPad with no key and no connection. Where the GPU has no
 16-bit shaders (many iPads), the 32-bit build of the same model is fetched
 instead; a download that breaks is retried, then moved to the browser's other
-store, and a failure says what went wrong. Settings can delete the model. It explains a
+store, and a failure says what went wrong. Each model is downloaded from a
+named Hugging Face commit and its runtime from a named commit, never a newer
+upload (`memorizer/src/models.js`, written by `scripts/model-manifest.js`):
+the engine checks the runtime, config and tokenizer against their SHA-256
+before it uses them, and on the first load every stored file, the weights
+with them, is checked before the model answers; a file that does not match
+and the model is deleted, not used. Settings can delete the model. It explains a
 section in plain words, suggests an analogy, summarises what the book says in
 answer to a question, and writes harder questions. It is not a source of
 facts, and nothing it writes is shown unchecked (`memorizer/src/ground.js`):

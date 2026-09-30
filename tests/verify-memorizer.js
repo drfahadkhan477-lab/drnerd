@@ -2186,12 +2186,31 @@ function kindOf(user) {
     ok('Settings offers it, off, with three Qwen3 models — 0.6B, 1.7B and 4B — all Apache-2.0', (await p2.locator('#ai-toggle').innerText()) === 'Turn on' &&
        JSON.stringify(await p2.$$eval('#ai-model option', os => os.map(o => /^Qwen3 /.test(o.textContent) && /Apache-2\.0/.test(o.textContent)))) === '[true,true,true]' &&
        /^Qwen3 4B/.test(await p2.locator('#ai-model option').nth(2).innerText()));
+    const src = async () => p2.locator('#ai-source').innerText();
+    const s0 = await src();
+    ok('it says where the model comes from — a named commit — and that its files are checked before it answers', /mlc-ai\/Qwen3-0\.6B-q4f16_1-MLC at commit [0-9a-f]{10}/.test(s0) &&
+       s0.includes(await p2.evaluate(() => MemModels.models['Qwen3-0.6B-q4f16_1-MLC'].rev.slice(0, 10))) && /checked against the SHA-256 hashes/.test(s0), s0);
+    await p2.selectOption('#ai-model', 'Qwen3-4B-q4f16_1-MLC');
+    ok('and choosing another model says that one\u2019s', /mlc-ai\/Qwen3-4B-q4f16_1-MLC at commit/.test(await src()), await src());
+    await p2.selectOption('#ai-model', 'Qwen3-0.6B-q4f16_1-MLC');
     ok('the real AI engine downloads, passes its integrity check, and loads from a local file', await p2.evaluate(() => MemLLM.loadLib().then(m => typeof m.CreateMLCEngine, e => 'failed: ' + e.message)) === 'function');
     const known = await p2.evaluate(() => MemLLM.loadLib().then(m => MemLLM.MODELS.map(x => x.id).concat(MemLLM.MODELS.map(x => MemLLM.variantFor(x.id, false)), [MemLLM.EMBED.id])
       .filter(id => !m.prebuiltAppConfig.model_list.some(r => r.model_id === id))));
     ok('every model offered is one the pinned engine knows — and so is its 32-bit build, the fallback without 16-bit GPU maths', known.length === 0, JSON.stringify(known));
     ok('and it has what "Delete the downloaded model" calls, and a Cache API default the loader can switch from', await p2.evaluate(() => MemLLM.loadLib().then(m =>
        typeof m.deleteModelAllInfoInCache === 'function' && m.prebuiltAppConfig.cacheBackend === 'cache')));
+    /* the pin, on the engine's own list, and its hashes in the form the
+       engine's own pre-use check reads (a wrong form throws "Invalid SRI
+       hash format", not IntegrityError) */
+    const pin = await p2.evaluate(() => MemLLM.loadLib().then(async m => {
+      const ids = MemLLM.MODELS.map(x => x.id).concat(MemLLM.MODELS.map(x => MemLLM.variantFor(x.id, false)), [MemLLM.EMBED.id]);
+      const list = MemLLM.pinnedConfig(m.prebuiltAppConfig, 'cache').model_list.filter(r => ids.includes(r.model_id));
+      const r = list[0];
+      const said = await m.verifyIntegrity(new Uint8Array([1, 2, 3]).buffer, r.integrity.model_lib, r.model_lib).then(() => 'passed', e => e.name + (e.url === r.model_lib ? ' naming the file' : ' ' + e.message));
+      return { n: list.length, of: ids.length, pinned: list.every(x => /\/resolve\/[0-9a-f]{40}\/$/.test(x.model) && x.integrity && x.integrity.onFailure === 'error'), said };
+    }));
+    ok('every model offered, on the engine’s own list, comes from a pinned commit with the hashes the engine checks before use', pin.n === pin.of && pin.pinned, JSON.stringify(pin));
+    ok('the real engine reads those hashes: a file that is not the one pinned is its IntegrityError, naming the file', pin.said === 'IntegrityError naming the file', pin.said);
     /* A stand-in for the model, answering each job with faithful sentences
        and made-up ones, the way a small model does. */
     await p2.evaluate(() => {

@@ -14,7 +14,14 @@
  *   · a file that is not a backup, or is from a newer Memorizer, is refused
  *     with its reason and changes nothing;
  *   · under the page's Content-Security-Policy the browser refuses a request
- *     to any host but the ones the app uses; the policy never grants eval.
+ *     to any host but the ones the app uses; the policy never grants eval;
+ *   · the on-device model's files are read back from the browser's own
+ *     stores, laid out as WebLLM 0.2.85 lays them out (Cache API, and
+ *     IndexedDB with { url, data } records), one at a time, hashed, and a
+ *     changed file refuses the model; a store the engine has not made is not
+ *     made by reading it. (The download and the engine's own pre-use check
+ *     need WebGPU and the network: tests/verify-memorizer.js holds the real
+ *     engine to the hash format, verify-memorizer-chunk-pure.js the rest.)
  */
 'use strict';
 const fs = require('fs');
@@ -152,6 +159,42 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
     const own = fs.readdirSync(path.join(ROOT, 'memorizer', 'src')).filter(f => f.endsWith('.js'))
       .filter(f => /new Function\(|[^.\w]eval\(/.test(blankComments(fs.readFileSync(path.join(ROOT, 'memorizer', 'src', f), 'utf8'))));
     ok('and the app\u2019s own code builds no function from a string', own.length === 0, own.join(', '));
+    await ctx.close();
+
+    head('the on-device model’s files, read back where the engine keeps them');
+    ({ ctx, p } = await fresh('model-files'));
+    const Q = 'Qwen3-0.6B-q4f16_1-MLC';
+    const crypto = require('crypto');
+    const sha = t => crypto.createHash('sha256').update(t).digest('hex');
+    const mf = await p.evaluate(async Q => {
+      const r = MemLLM.pinnedConfig({ model_list: [{ model_id: Q, model: 'x', model_lib: 'x' }] }, 'cache').model_list[0];
+      const files = { [r.model + 'params_shard_0.bin']: 'W0', [r.model + 'mlc-chat-config.json']: 'C', [r.model_lib]: 'LIB',
+                      [r.model.replace(/resolve\/[0-9a-f]+\//, 'resolve/main/') + 'params_shard_0.bin']: 'OLD' };
+      const store = u => /\.wasm$/.test(u) ? 'webllm/wasm' : /\.json$/.test(u) ? 'webllm/config' : 'webllm/model';
+      for (const u of Object.keys(files)) await (await caches.open(store(u))).put(u, new Response(files[u]));
+      const got = await MemLLM.storedFiles(Q, 'cache');
+      const v = await MemLLM.verify(Q, 'cache');
+      /* IndexedDB as the engine makes it: version 1, store "urls", keyed by url */
+      const db = await new Promise((res, rej) => { const o = indexedDB.open('webllm/model', 1);
+        o.onupgradeneeded = () => o.result.createObjectStore('urls', { keyPath: 'url' }); o.onsuccess = () => res(o.result); o.onerror = () => rej(o.error); });
+      await new Promise((res, rej) => { const t = db.transaction('urls', 'readwrite');
+        t.objectStore('urls').put({ url: r.model + 'params_shard_1.bin', data: new TextEncoder().encode('W1').buffer });
+        t.objectStore('urls').put({ url: r.model + 'ndarray-cache.json', data: { records: [] } });
+        t.oncomplete = res; t.onerror = () => rej(t.error); });
+      db.close();
+      const idb = await MemLLM.storedFiles(Q, 'indexeddb');
+      const made = (await indexedDB.databases()).map(d => d.name).sort();
+      const vi = await MemLLM.verify(Q, 'indexeddb');
+      return { got, v, idb, made, vi, left: localStorage.getItem('memorizer.llm.verified.' + Q) };
+    }, Q);
+    const name = u => u.slice(u.lastIndexOf('/') + 1);
+    ok('from the Cache API: each pinned file, hashed as it is stored', JSON.stringify(mf.got.map(f => [name(f.url), f.sha256]).sort()) ===
+       JSON.stringify([['Qwen3-0.6B-q4f16_1_cs1k-webgpu.wasm', sha('LIB')], ['mlc-chat-config.json', sha('C')], ['params_shard_0.bin', sha('W0')]]), JSON.stringify(mf.got.map(f => name(f.url))));
+    ok('a copy from before the pin is not one of them', !mf.got.some(f => /resolve\/main/.test(f.url)));
+    ok('files that are not the manifest’s: refused, each named', mf.v.ok === false && JSON.stringify(mf.v.bad.slice().sort()) === JSON.stringify(['Qwen3-0.6B-q4f16_1_cs1k-webgpu.wasm', 'mlc-chat-config.json', 'params_shard_0.bin']), JSON.stringify(mf.v));
+    ok('from IndexedDB: the bytes hashed, the parsed index left out as it cannot be', JSON.stringify(mf.idb.map(f => [name(f.url), f.sha256])) === JSON.stringify([['params_shard_1.bin', sha('W1')]]), JSON.stringify(mf.idb));
+    ok('reading the engine’s stores makes none it had not made', JSON.stringify(mf.made.filter(n => /^webllm/.test(n))) === '["webllm/model"]', JSON.stringify(mf.made));
+    ok('and a refusal is not remembered as a pass', mf.vi.ok === false && mf.left === null, JSON.stringify([mf.vi, mf.left]));
     await ctx.close();
   } finally {
     await browser.close();
