@@ -168,6 +168,15 @@ const sse = text => [
            30px left-hand overhang as the cause of a 9px sideways scroll. */
         const by = Math.round(r.right - w);
         if (by < 2) continue;
+        /* Nor is a box an ancestor clips. A table header inside its own
+           scrolling frame reaches 251px past the edge and grows nothing; named
+           here, it hid the real 25px (the owner's run, refs on an iPhone). A
+           clipping ancestor that itself ends on screen contains it. */
+        let clipped = false;
+        for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+          if (getComputedStyle(a).overflowX !== 'visible' && a.getBoundingClientRect().right <= w + 1) { clipped = true; break; }
+        }
+        if (clipped) continue;
         let depth = 0; for (let n = el.parentElement; n; n = n.parentElement) depth++;
         if (by > worstBy || (by === worstBy && depth > worstDepth)) {
           worst = el; worstBy = by; worstDepth = depth;

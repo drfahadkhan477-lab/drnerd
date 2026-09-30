@@ -78,39 +78,16 @@ ok('and the six that changed are exactly the difference', withStats.length - mod
    `${withStats.length - modal} now differ from the popular answer`);
 
 head('no seventh question disagrees with its own commentary');
-const AFTER  = /\b(?:the\s+)?(?:correct|best)\s+(?:answer|response)(?:\s+choice)?\s*(?:is|:)\s*/i;
-const BEFORE = /\b(?:is|are|would\s+be|remains)\s+(?:\w+\s+){0,2}?the\s+(?:correct|best|preferred)\s+(?:answer|response)(?:\s+choice)?\b/i;
-const STOP = new Set(('a an the is are was were be been being of in on at to for with by from as that this these those ' +
-  'and or but not no it its his her their there which who whom whose would should could may might can will shall ' +
-  'patient patients most likely best next step following one because since due given about after before during ' +
-  'choice answer correct measurement level levels').split(/\s+/));
-const words = s => (s || '').toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !STOP.has(w));
-const firstSentence = t => { const r = /[.!?](?=\s+[A-Z(])/.exec(t); return (r ? t.slice(0, r.index) : t).slice(0, 170); };
-const lastSentence = t => { const re = /[.!?]\s+(?=[A-Z(])/g; let s = 0, r; while ((r = re.exec(t))) s = r.index + r[0].length; return t.slice(s).slice(-170); };
-const NEGATED = /\b(?:not|never|neither|nor|rather\s+than|incorrect)\b/i;
-const covers = (claim, option) => {
-  const C = new Set(words(claim)), O = words(option);
-  if (!O.length) return 0;
-  let hit = 0; for (const w of O) if (C.has(w)) hit++;
-  return hit / O.length;
-};
+/* The matcher lives in tools/key-prose.js, shared with the older-bank
+   importer so the two can never drift apart. */
+const { keyVsProse } = require('../tools/key-prose.js');
 
 const checkable = [], disagree = [];
 for (const q of bank) {
-  const ex = q.ex || '';
-  const a = AFTER.exec(ex), b = BEFORE.exec(ex);
-  let claim = null, at = -1;
-  if (a && (!b || a.index <= b.index)) { claim = firstSentence(ex.slice(a.index + a[0].length)); at = a.index; }
-  else if (b) { claim = lastSentence(ex.slice(0, b.index)); at = b.index; }
-  if (!claim || !words(claim).length) continue;
-  /* "Prinzmetal angina is not the correct answer choice" is an argument about a
-     distractor, not a statement of the key. Read as a claim it accuses the
-     right answer of being wrong. */
-  if (NEGATED.test(ex.slice(Math.max(0, at - 90), at + 60))) continue;
+  const r = keyVsProse(q);
+  if (!r.checkable) continue;
   checkable.push(q.id);
-  const sc = q.o.map(o => covers(claim, o.t));
-  const best = sc.indexOf(Math.max(...sc));
-  if (sc[q.ci] < 0.6 && sc[best] >= 0.6 && best !== q.ci) disagree.push(q.id);
+  if (r.disagrees) disagree.push(q.id);
 }
 
 ok('the cross-check still has something to check', checkable.length > 300,

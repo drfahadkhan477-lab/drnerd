@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 4951 + 133 checks
+node scripts/verify.js --pwa                           # → 5258 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -61,8 +61,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 113
-  run normally — it is 35 of the 4951 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 118
+  run normally — it is 35 of the 5258 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -94,7 +94,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-The chain is 89 patch scripts, run in order against the export. Each applies a list of
+The chain is 91 patch scripts, run in order against the export. Each applies a list of
 exact-match find/replace edits and **throws unless every edit matches exactly
 once**.
 
@@ -137,7 +137,7 @@ The cost is that order matters, and the dependencies are real:
 | 29 | `pearl` | one sentence from your own notes, on the home screen |
 | 30 | `homeflow` | home cut to the trace, the pearl and the progress bar; everything else behind a door — last, so it moves finished markup |
 | 31 | `pearlcard` | the pearl as a numbered ladder on ECG paper, and the `-webkit-` spellings Safari needs |
-| 32 | `offline` | one press pulls all 408 figures onto the device — under `homeflow`'s door row, and only alive in the split build |
+| 32 | `offline` | one press pulls every figure onto the device — on the Progress screen since step 85 (it began under `homeflow`'s door row), and only alive in the split build |
 | 33 | `pvloop` | the pearl's strip becomes the pressure–volume loop the cardiac-cycle screen already computes |
 | 34 | `fullbleed` | the navigation bar leaves the reading column so its colour reaches both edges of an iPad, and reserves the strip the status bar sits in |
 | 35 | `figview` | a figure opens full size and closes four ways |
@@ -195,6 +195,8 @@ The cost is that order matters, and the dependencies are real:
 | 87 | `ambient` | the Living Diagram's ambient mode. `livingDiagram.js` has decided since the Conduction Wave branch *when* ambient mode may run — the home screen only, after two minutes with no interaction, never with the Apex panel open, in Focus Mode or under `prefers-reduced-motion` — and *which* view comes next, never the same twice running; this step draws it. The views are the repository's own: `Heart3D` (whose `destroy()` and WebGL budget `verify-heartreuse` already holds), `ECG12` and `Wiggers`' PV loop. The earlier deferral was about `ECGMonitor`, which lives only inside the licensed export; this does not touch it. **One anchor**, the Durable memory banner, re-emitted so `echo` still finds it once; no state on `S`, no mount, the stylesheet injected on first use. A tap closes the overlay through its own `click`, so waking the screen never presses what was under the finger; a mouse closes it by moving a real distance, not a jitter. A change of screen counts as activity, so returning home after time elsewhere does not raise it at once. `verify-ambient` drives the shipped step over a scaffold: every promise above, and twenty visits to the heart view with no WebGL context discarded |
 | 88 | `echo` | Echo Studio: a reference you can browse and a calculator you can drive, as two tabs over one set of tables. The thinking is in `src/core/echo.js` (12 views with window, position, index mark and angle; 14 measurements; 9 severity tables as ordered bands; 9 disease profiles; the continuity, PISA, Bernoulli, Simpson and Devereux arithmetic) and `src/ui/echo.js` (strings in, strings out — no DOM, no timers), so both are held by `verify-echo-pure` and `verify-echoui-pure` without a browser. The calculator's rule is that a derived row appears only when every input it names is a finite number: never defaulted, never guessed, never `NaN`, because a plausible wrong number on a study screen gets memorised while an absent one gets investigated. **Four anchors, and three more deliberately avoided**: Echo's state lives in a closure here rather than on `S`, which drops the state-object anchor, the save-tail anchor and any concern about `SCHEMA_KEYS`; interaction is delegated from `document` once, which drops the mount anchor. Each of the four was replayed through the chain before it was written down — `verify-echoanchor-pure` does that replay as a check, seeding from the step that emits each region and applying every later step that touches it. It carries the focusmode bug as a fixture: `<div id="app">` is emitted by `fullbleed`(34) and destroyed by `disclaimer`(64), and must be reported REWRITTEN rather than merely absent, so a replay that goes blind is caught by its own self-test. **Build-verified**: the full green run recorded in `94823e0` built step 87, so `patch()` found all four anchors unique in the whole document. The replay alone could not show that. It proves each anchor SURVIVES to step 87, not that it is UNIQUE, because the rest of the document is the licensed export |
 | 89 | `notesearch` | Search your notes: a book button beside Echo opens a field over `search()`'s own index, filtered to notes, with notes titled by every word typed moved first. A tap opens the whole note with its figures through `md()`. The top-bar search is the export's and answers from questions only; this repository does not read that code, so the notes got a screen of their own. Anchored only on text echo emits, straight after it. |
+| 90 | `glass` | the buttons and cards become frosted, lit glass, and a light glides across a pane on hover or press — designed from `tools/button-census.js` run on a build in three themes, not from the export's stylesheet, which is not read. Neutral controls paint `var(--card)`, so each gets `--card: var(--card-glass)`, a see-through copy of the current theme's own card colour derived at runtime by `glassSync()`: every answer state, the destructive button and a selected chip paint other colours and are untouched by construction, since no rule here names a background. Frosted except `.chip` (the notes screen carries two thousand); a pane in `::after` (free on every button — `::before` is taken on `.opt` and `.ch-tile`) draws the highlight, rim and moving light beneath the label. High contrast is scoped out entirely, reduced motion stops every movement, and nothing Safari 13.4 lacks is used. `tests/verify-glass.js` runs the patch's own output against a page built with the census's names; not yet built against the export |
+| 91 | `phrase` | word order counts in the ranker: `buildIndex` also records each document's adjacent pairs of `tok()` terms, and `search()` credits a reference note with the fraction of the query's adjacent known-term pairs it holds — each pair weighed by its rarity across the index, as BM25 weighs a term — weighted like the coverage credit beside it. Questions rank exactly as before (the credit is in the note branch only), and a one-term query or a stub earns nothing. Added when the Braunwald units took "prose from the note" to 96.3% against its 98% floor: of 42 misses the winner held the 12-word phrase word for word in none — the right note had the phrase, a neighbour only its words. `tests/verify-phrase-pure.js` runs prefixrank's own search() before and after this patch |
 `node scripts/build.js --list` prints this. The order lives in `CHAIN` in
 `scripts/build.js` and nowhere else.
 
@@ -213,9 +215,9 @@ It needs those earlier steps to still be on disk, and a normal build cleans them
 up. So the iterating loop is:
 
 ```bash
-node scripts/build.js --keep              # once, keeps all 89 intermediates
+node scripts/build.js --keep              # once, keeps all 91 intermediates
 # ...edit scripts/theme-patch.js...
-node scripts/build.js --keep --from theme # only steps 14-89 rerun
+node scripts/build.js --keep --from theme # only steps 14-91 rerun
 ```
 
 ---
@@ -269,7 +271,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 114 suites, 4951 checks, plus 133 more on the split build. Those numbers are
+Across 119 suites, 5258 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
@@ -568,8 +570,8 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
-scripts/      build · verify · 89 *-patch · build-pwa · serve · shots
-tests/        114 suites · 66 need no browser · + pwa
+scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
+tests/        119 suites · 69 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

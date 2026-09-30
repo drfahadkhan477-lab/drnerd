@@ -209,7 +209,10 @@ patch('read: the peek panel at body size',
 
 patch('read: note titles carry the card',
 `.ref-title{flex:1;font-weight:700;font-size:13px;letter-spacing:-.01em}`,
-`.ref-title{flex:1;font-weight:700;font-size:16px;letter-spacing:-.01em;line-height:1.35}`);
+/* min-width:0 and a break anywhere, because a flex item will not shrink below
+   its longest word: a title that was one 22-letter file name pushed the
+   card's action chips 25px off an iPhone screen. */
+`.ref-title{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700;font-size:16px;letter-spacing:-.01em;line-height:1.35}`);
 
 patch('read: the citation line is readable, not a footnote',
 `.ref-src{font-family:var(--font-mono);font-size:11px;color:var(--dim);margin-top:3px}`,

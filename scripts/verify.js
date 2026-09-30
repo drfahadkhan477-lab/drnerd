@@ -14,7 +14,7 @@
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 114 suites and roughly 4951 checks, and they
+ * WHY THIS EXISTS. There are 119 suites and roughly 5258 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -259,6 +259,10 @@ const SUITES = [
      screen driven in a browser over a scaffold, the way echo is. */
   ['notesearch-pure','a note titled with the words is found first, quoted and escaped'],
   ['heartbake-pure', 'the heart is loaded from a mesh baked at build time, value for value, and any other copy is refused'],
+  ['refsmerge-pure', 'a reference unit adds only sections that are new and high yield, and what it writes splits back into notes'],
+  ['phrase-pure', 'a note holding the query\'s words in the query\'s order outranks one holding them scattered; questions, one-word queries and stubs rank as before'],
+  ['olderacc-pure', 'an older ACC bank\'s questions parse in each layout, keep their answer or are left out, skip what the bank has, and print no word of it'],
+  ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
   ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
@@ -357,8 +361,18 @@ const SUITES = [
    Emptied a fifth time by the full green run with --pwa on the owner's
    Windows laptop at 9f57fa2 (recorded in 6c3bd7a: 4951 checks across 114
    suites, 133 on the split build), which measured the three that had been
-   waiting: memorizer-pack-pure, heartbake-pure and stripcomments-pure. */
-const PENDING_RECORD = ['refimgdefer-pure', 'memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure'];
+   waiting: memorizer-pack-pure, heartbake-pure and stripcomments-pure.
+
+   Emptied a sixth time by the full green run with --pwa on the owner's
+   Windows laptop at 43b53db (5088 checks across 118 suites, 133 on the split
+   build), which measured the four that had been waiting: refimgdefer-pure,
+   glass, refsmerge-pure and phrase-pure.
+
+   Emptied a seventh time by the full green run with --pwa on the owner's
+   Windows laptop at 491e183 with the older ACC bank merged (681 questions,
+   173 figures; 5229 checks across 119 suites, 133 on the split build), which
+   measured the one that had been waiting: olderacc-pure. */
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

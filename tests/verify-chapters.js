@@ -20,6 +20,7 @@
  */
 'use strict';
 const path = require('path');
+const { CATEGORY } = require('./_olderbank.js');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
@@ -80,13 +81,18 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('the eleven tiles stagger in, they do not all fire on the same frame');
   {
-    const r = await page.evaluate(async () => {
+    const r = await page.evaluate(async (OLDER) => {
       goStudy(); render();
       await new Promise(res => setTimeout(res, 100));
       const tiles = [...document.querySelectorAll('.ch-tiles>*')];
-      return { count: tiles.length, delays: tiles.map(t => getComputedStyle(t).animationDelay) };
-    });
-    ok('all eleven chapters are present', r.count === 11, String(r.count));
+      return { count: tiles.length, delays: tiles.map(t => getComputedStyle(t).animationDelay),
+               older: typeof ALL_Q !== 'undefined' && ALL_Q.some(q => q && q.ch === OLDER) };
+    }, CATEGORY);
+    /* The export's eleven, plus one for the older ACC bank when a merge has put
+       it in this build — decided from the bank itself, not assumed. Whether
+       that bank is the staging, whole, is verify-pwa's check (_olderbank.js). */
+    const want = 11 + (r.older ? 1 : 0);
+    ok(r.older ? 'all eleven chapters are present, and the older ACC bank as a twelfth' : 'all eleven chapters are present', r.count === want, `${r.count} of ${want}`);
     const parsed = r.delays.map(d => parseFloat(d));
     const allZero = parsed.every(d => d === 0);
     const strictlyIncreasing = parsed.every((d, i) => i === 0 || d >= parsed[i - 1]);

@@ -21,14 +21,14 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 4951 checks in
-# `node scripts/verify.js` plus 133 more under `--pwa`, this workflow runs 3344.
-# The other 1740 all drive a real build of the app in a real browser
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 5258 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 3619.
+# The other 1773 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 1740 checks here. See docs/BUILD.md and the
+# there is no way to run those 1773 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 66 suites that are pure Node with no Playwright and no
+#   logic        the 69 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -72,7 +72,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                3344 real checks, up
+#                3619 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -85,7 +85,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 1740 checks to this file is possible — GitHub Actions
+# Adding the other 1773 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -224,7 +224,7 @@ jobs:
         run: node tests/verify-echo-pure.js
       - name: Echo Studio computes only what was measured (58 checks)
         run: node tests/verify-echoui-pure.js
-      - name: echo-patch's anchors still exist where it runs (20 checks)
+      - name: echo-patch's anchors still exist where it runs (24 checks)
         run: node tests/verify-echoanchor-pure.js
       - name: the notes search ranks, quotes and escapes (41 checks)
         run: node tests/verify-notesearch-pure.js
@@ -234,6 +234,12 @@ jobs:
         run: node tests/verify-stripcomments-pure.js
       - name: the note figures load after the home screen, one unit at a time (27 checks)
         run: node tests/verify-refimgdefer-pure.js
+      - name: a reference unit adds only what is new and high yield, and what it writes the importer reads and check-refs passes, under titles someone could search by, each passage once (66 checks)
+        run: node tests/verify-refsmerge-pure.js
+      - name: word order counts in the ranker — the note holding the phrase outranks one holding its words scattered, and questions rank as before (9 checks)
+        run: node tests/verify-phrase-pure.js
+      - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, no word of it is printed, a key its own commentary contradicts is refused, a question with no explanation says so, a merged build carries exactly the staging, a bold heading naming no "Question" starts one, every figure type is served as an image, and an unanswered explanation is probed letter by letter (169 checks)
+        run: node tests/verify-olderacc-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
