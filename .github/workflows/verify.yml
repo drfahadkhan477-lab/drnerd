@@ -35,7 +35,7 @@
 # What DOES run here needs no source file, and is genuinely worth having on
 # every push. All of it needs no browser either, except the memorizer-browser
 # job, which drives the Memorizer — a second app that carries no licensed
-# content — in Chromium:
+# content — in Chromium and in WebKit:
 #
 #   syntax       every .js and .py file in the repo parses, and the two
 #                listing commands (which patch chain steps exist, which test
@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 66 suites that are pure Node with no Playwright and no
+#   logic        the 67 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -244,6 +244,8 @@ jobs:
         run: node tests/verify-extract-pure.js
       - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing; the reference notes travel in it too, and the written schema names the version the code enforces (28 checks)
         run: node tests/verify-bankpack-pure.js
+      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (20 checks)
+        run: node tests/verify-testpublic-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
@@ -294,22 +296,39 @@ jobs:
   # notes only and fails any request that leaves the page other than to the
   # stubbed model.
   #
-  # Chromium only, on purpose, for now: the suites run on WebKit through
-  # SYSTOLE_ENGINE=webkit, and adding that here is one more matrix entry once
-  # a WebKit run of both has been seen green.
+  # IN WEBKIT TOO, because the device this is for is an iPad and an iPad is
+  # WebKit. Every suite here launches through tests/_engine.js, so the engine
+  # is SYSTOLE_ENGINE and nothing else changes between the two entries. The
+  # Chromium entry keeps its name exactly, so nothing that looks a check up
+  # by name loses it. fail-fast is off: a WebKit-only failure must not cancel
+  # the Chromium run that would show it is WebKit-only.
+  #
+  # Playwright's WebKit on Linux is WebKitGTK, not Safari on iPadOS. It shares
+  # the engine, the JavaScript core and IndexedDB, which is what these suites
+  # exercise; it is not a substitute for opening the app on the iPad.
   memorizer-browser:
-    name: memorizer-browser — the whole app, in Chromium, on documents made for the test
+    name: memorizer-browser — the whole app, in ${{ matrix.label }}, on documents made for the test
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: chromium
+            label: Chromium
+          - engine: webkit
+            label: WebKit
+    env:
+      SYSTOLE_ENGINE: ${{ matrix.engine }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
-      - name: install the pinned test tools, and Chromium
+      - name: install the pinned test tools, and the browser
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps ${{ matrix.engine }}
       - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (478 checks)
         run: node tests/verify-memorizer.js
       - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
