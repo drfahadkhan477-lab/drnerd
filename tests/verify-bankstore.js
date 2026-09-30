@@ -57,18 +57,22 @@ function page(noContent) {
     loaderText().replace('__BUILD_ID__', 'B1').replace('__COMMIT__', 'c1').replace('__HEART_MESH__', '').replace('__NO_CONTENT__', noContent ? 'true' : 'false') +
     '</body></html>';
 }
-const APP = "var APP_BUILD_ID='B1'; window.__appRan = { q: ALL_Q.length, ids: ALL_Q.map(function(q){return q.id;}), imgs: IMGS, split: window.SPLIT_BUILD, bank: window.SYSTOLE_BANK || null };";
+/* The stand-in app does what the real one does with the notes: fetches the
+   reference seed and a unit's figure file from content/. */
+const APP = "var APP_BUILD_ID='B1'; window.__appRan = { q: ALL_Q.length, ids: ALL_Q.map(function(q){return q.id;}), imgs: IMGS, split: window.SPLIT_BUILD, bank: window.SYSTOLE_BANK || null };" +
+  "Promise.all(['content/refs-seed.json','./content/refs-images/hf.json'].map(function(u){ return fetch(u).then(function(r){ return r.ok ? r.json() : 'status ' + r.status; }).catch(function(e){ return 'error'; }); }))" +
+  ".then(function(v){ window.__refs = v; });";
 
 const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.from([20, 0, 0, 0]), Buffer.from('WEBPVP8 '), Buffer.alloc(8, 1)]);
 const JPG = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.alloc(8, 3)]);
-function makePackage(tmp, name, questions, figs) {
+function makePackage(tmp, name, questions, figs, extras) {
   const c = path.join(tmp, name);
   fs.mkdirSync(path.join(c, 'figures'), { recursive: true });
   fs.writeFileSync(path.join(c, 'questions.json'), JSON.stringify(questions));
   fs.writeFileSync(path.join(c, 'manifest.json'), JSON.stringify({ sourceDigest: 'zz', questions: questions.length, figures: Object.keys(figs).length }));
   for (const [f, b] of Object.entries(figs)) fs.writeFileSync(path.join(c, 'figures', f), b);
   const out = path.join(tmp, name + '.zip');
-  pack(c, out);
+  pack(c, out, extras);
   return fs.readFileSync(out);
 }
 
@@ -82,7 +86,10 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
   const GOOD = makePackage(TMP, 'good', [
     { id: 'ZQ_1', ch: 'C', o: ['Zqa', 'Zqb'], ci: 1, img: 1, figs: ['ZQ_1_1.webp'] },
     { id: 'OAB_2', ch: 'Older ACC bank', o: [{ l: 'A', t: 'Zqx' }, { l: 'B', t: 'Zqy' }], ci: 0, img: 1, figs: ['OAB_2_1.jpg'] },
-  ], { 'ZQ_1_1.webp': WEBP, 'OAB_2_1.jpg': JPG });
+  ], { 'ZQ_1_1.webp': WEBP, 'OAB_2_1.jpg': JPG }, {
+    'refs-seed.json': Buffer.from(JSON.stringify([{ id: 'zq-note' }])),
+    'refs-images/hf.json': Buffer.from(JSON.stringify({ 'hf/zq.jpg': 'data:image/jpeg;base64,AAAA' })),
+  });
   const ONE = makePackage(TMP, 'one', [{ id: 'ZQ_9', ch: 'C', o: ['Zqa', 'Zqb'], ci: 0, img: 1, figs: ['ZQ_9_1.webp'] }], { 'ZQ_9_1.webp': WEBP });
   /* A package the packer refuses cannot be made WITH it, so the bad one is
      zipped by the same writer directly: the good files, one figure's bytes
@@ -157,7 +164,11 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
   ok('its figures are blob: URLs that fetch back byte for byte', /^blob:/.test(ran.url) && Buffer.from(ran.bytes).equals(JPG), ran.url.slice(0, 20));
   ok('the offline downloader is told this is not the split build (nothing to download)', ran.split === false);
   ok('and the page can say where its bank came from, in counts', ran.bank && ran.bank.source === 'imported' && ran.bank.questions === 2 && ran.bank.figures === 2, JSON.stringify(ran.bank));
-  ok('still no request to content/', contentHits.length === 0, contentHits.join(','));
+  await settle(pg, () => window.__refs);
+  const refs = await pg.evaluate(() => window.__refs || null);
+  ok('the notes\' seed and a unit\'s figure file are served from the package', !!refs && Array.isArray(refs[0]) && refs[0][0].id === 'zq-note' &&
+     refs[1] && refs[1]['hf/zq.jpg'] === 'data:image/jpeg;base64,AAAA', JSON.stringify(refs).slice(0, 80));
+  ok('still no request to content/ — not for the bank, not for the notes', contentHits.length === 0, contentHits.join(','));
 
   section = 'replacement';
   head('replacing a bank: whole or not at all');

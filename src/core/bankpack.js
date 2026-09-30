@@ -20,7 +20,10 @@
      · a figure name that could climb out of its folder, a figure the bank
        names that the zip does not carry, or bytes that are not the image
        their extension claims;
-     · counts that disagree with the manifest the packer wrote.
+     · counts that disagree with the manifest the packer wrote;
+     · an extra file (the reference notes' seed and figure files, under
+       extra/) that the manifest lists and the zip lacks, whose name is not
+       one this app asks for, or that is plainly not JSON.
 
    NOTHING HERE LOGS OR RETURNS QUESTION TEXT. Problems name ids, file names
    and counts only.
@@ -32,6 +35,9 @@ const SCHEMA = 1;
 const SAFE_ID = /^[A-Za-z0-9_.-]{1,120}$/;
 const SAFE_FIG = /^[A-Za-z0-9_.-]{1,160}\.(webp|png|jpg)$/;
 const TYPE = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg' };
+/* The only extra files the app fetches: the reference seed and the notes'
+   figure files, one per unit (unit.2.json … for a large unit). */
+const EXTRA = /^(refs-seed\.json|refs-images\/[A-Za-z0-9_-]+(\.[0-9]+)?\.json)$/;
 const ascii = (b, from, to) => String.fromCharCode.apply(null, Array.prototype.slice.call(b, from, to));
 const MAGIC = {
   webp: b => b.length > 12 && ascii(b, 0, 4) === 'RIFF' && ascii(b, 8, 12) === 'WEBP',
@@ -92,12 +98,28 @@ function validate(files) {
       problems.push(`the manifest says ${manifest.figures} figures, the bank names ${wanted.size}`);
   }
 
+  /* Extras are optional; a package without the notes is still a bank. What
+     the manifest lists must be there, named as the app names them, and look
+     like JSON — parsed only when the app asks for it, not here, because a
+     unit's figure file is megabytes and an iPad pays for every parse. */
+  const extras = [];
+  const listed = manifest && Array.isArray(manifest.extras) ? manifest.extras : [];
+  for (const name of listed) {
+    if (typeof name !== 'string' || !EXTRA.test(name)) { problems.push(`extra ${JSON.stringify(String(name).slice(0, 60))} is not a file this app reads`); continue; }
+    const bytes = byName.get('extra/' + name);
+    if (!bytes) { problems.push(`extra/${name} is listed in the manifest but not in the package`); continue; }
+    let i = 0; while (i < bytes.length && (bytes[i] === 0x20 || bytes[i] === 0x0a || bytes[i] === 0x0d || bytes[i] === 0x09)) i++;
+    if (bytes[i] !== 0x7b && bytes[i] !== 0x5b) { problems.push(`extra/${name} is not JSON`); continue; }
+    extras.push({ name, bytes, type: 'application/json' });
+  }
+
   return {
     ok: problems.length === 0,
     problems: problems.slice(0, 50),
     problemCount: problems.length,
     questions: problems.length ? null : questions,
     figures: problems.length ? null : figures,
+    extras: problems.length ? null : extras,
     manifest: manifest || null,
   };
 }

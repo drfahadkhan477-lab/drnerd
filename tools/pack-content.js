@@ -39,13 +39,18 @@ function bankPack() {
   return sandbox.BankPack;
 }
 
-function pack(dir, out) {
+/* extras: { 'refs-seed.json': Buffer, 'refs-images/hf.json': Buffer, … } —
+   the reference notes' files, which build-pwa.js --no-content passes so the
+   notes stay off the host too. Listed in the manifest; stored under extra/. */
+function pack(dir, out, extras) {
   const read = f => { try { return fs.readFileSync(path.join(dir, f)); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } };
   const q = read('questions.json'), m = read('manifest.json');
   if (!q || !m) throw new Error(`${dir} has no ${!q ? 'questions.json' : 'manifest.json'} — run scripts/extract-content.js first`);
   const manifest = JSON.parse(m.toString('utf8'));
   manifest.schemaVersion = bankPack().SCHEMA;
   delete manifest.source;      // the export's file name is a local path detail, not something to carry around
+  const extraNames = Object.keys(extras || {}).sort();
+  if (extraNames.length) manifest.extras = extraNames; else delete manifest.extras;
   const figs = fs.readdirSync(path.join(dir, 'figures')).filter(f => /\.(webp|png|jpg)$/.test(f)).sort();
 
   /* Staged in a folder zipOf can read from, so the zip is built by the same
@@ -57,14 +62,18 @@ function pack(dir, out) {
     fs.writeFileSync(path.join(stage, 'manifest.json'), JSON.stringify(manifest, null, 2));
     fs.writeFileSync(path.join(stage, 'questions.json'), q);
     for (const f of figs) fs.copyFileSync(path.join(dir, 'figures', f), path.join(stage, 'figures', f));
-    const names = ['manifest.json', 'questions.json'].concat(figs.map(f => 'figures/' + f));
+    for (const n of extraNames) {
+      fs.mkdirSync(path.dirname(path.join(stage, 'extra', n)), { recursive: true });
+      fs.writeFileSync(path.join(stage, 'extra', n), extras[n]);
+    }
+    const names = ['manifest.json', 'questions.json'].concat(figs.map(f => 'figures/' + f), extraNames.map(n => 'extra/' + n));
     const verdict = bankPack().validate(names.map(n => ({ name: n, bytes: new Uint8Array(fs.readFileSync(path.join(stage, n))) })));
     if (!verdict.ok) throw new Error(`the package would be refused on the iPad (${verdict.problemCount} problem(s)):\n  ` + verdict.problems.slice(0, 10).join('\n  '));
     fs.mkdirSync(path.dirname(out), { recursive: true });
     const tmp = out + '.tmp-' + process.pid;
     fs.writeFileSync(tmp, zipOf(stage, names));
     fs.renameSync(tmp, out);
-    return { questions: verdict.questions.length, figures: verdict.figures.length, bytes: fs.statSync(out).size };
+    return { questions: verdict.questions.length, figures: verdict.figures.length, extras: verdict.extras.length, bytes: fs.statSync(out).size };
   } finally { fs.rmSync(stage, { recursive: true, force: true }); }
 }
 

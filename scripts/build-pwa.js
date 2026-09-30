@@ -47,9 +47,9 @@ const { execFileSync } = require('child_process');
    digest checks and the build stamp: the build is the same build, it only
    ships less. Without the flag nothing below changes. */
 const NO_CONTENT = process.argv.includes('--no-content');
-const SRC = process.argv.slice(2).find(a => !a.startsWith('--'));
+const SRC = process.argv.slice(2).find((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--package');
 if (!SRC) {
-  console.error('usage: node scripts/build-pwa.js <standalone.html> [--no-content]');
+  console.error('usage: node scripts/build-pwa.js <standalone.html> [--no-content [--package out.zip]]');
   process.exit(1);
 }
 const ROOT = path.join(__dirname, '..');
@@ -363,7 +363,25 @@ const LOADER = `<script>
     /* Not the split build's downloader: every figure is already on the
        device, so its card has nothing to offer. */
     window.SPLIT_BUILD = false;
-    window.SYSTOLE_BANK = { source: 'imported', questions: imported.questions.length, figures: imported.figures };
+    window.SYSTOLE_BANK = { source: 'imported', questions: imported.questions.length, figures: imported.figures,
+                            extras: Object.keys(imported.extras || {}).length };
+    /* THE NOTES CAME IN THE PACKAGE TOO. The app fetches its reference seed
+       and each unit's figure file from content/ as it always has; in this
+       build the host has none of them, so those two kinds of request are
+       answered from the imported package and everything else goes to the
+       network untouched. The app's own code does not change. */
+    var extras = imported.extras || {};
+    if(Object.keys(extras).length && typeof window.fetch === 'function'){
+      var realFetch = window.fetch.bind(window);
+      window.fetch = function(input, init){
+        var u = typeof input === 'string' ? input : (input && input.url) || '';
+        if(u.indexOf(location.origin + '/') === 0) u = u.slice(location.origin.length + 1);
+        u = u.replace(/^[.]?[/]/, '').split('?')[0];
+        var hit = u.indexOf('content/') === 0 ? extras[u.slice(8)] : null;
+        if(hit) return Promise.resolve(new Response(hit, { status: 200, headers: { 'content-type': 'application/json' } }));
+        return realFetch(input, init);
+      };
+    }
   }
   /* The import screen: its own layer over the splash, a file picker, and a
      line that says what happened in counts — never a word of the bank. On a
@@ -989,12 +1007,6 @@ step('every answer key matches the single-file build', () => {
   console.log(`      ✓ ${shipped.length} keys agree across both builds`);
 });
 
-/* The code-only deploy: every check above ran on the real bank, locally;
-   now it comes out of what is uploaded. */
-if (NO_CONTENT) step('take the bank out of the upload (--no-content)', () => {
-  for (const name of SHIPPED) fs.rmSync(path.join(DIST, 'content', name), { recursive: true, force: true });
-  console.log('      ✓ dist/content carries no questions.json, manifest.json or figures/ — import the package on the device');
-});
 
 const splashDir = path.join(DIST, 'content', 'splash-heart');
 fs.mkdirSync(splashDir, { recursive: true });
@@ -1065,7 +1077,8 @@ step('every content path the code names is on disk', () => {
   for (const m of code.matchAll(/['"`](content\/[A-Za-z0-9_.-]+)/g)) wanted.add(m[1]);
   /* The code-only deploy names the bank's path for a normal build's sake and
      never fetches it (NO_CONTENT gates the fetch); it is meant to be absent. */
-  const absentByDesign = NO_CONTENT ? new Set(['content/questions.json', 'content/figures']) : new Set();
+  const absentByDesign = NO_CONTENT
+    ? new Set(['content/questions.json', 'content/figures', 'content/refs-seed.json', 'content/refs-images']) : new Set();
   const missing = [...wanted].filter(rel => !absentByDesign.has(rel) && !fs.existsSync(path.join(DIST, rel)));
   if (missing.length) throw new Error(`the code fetches ${missing.join(', ')}, which was not copied`);
 });
@@ -1286,6 +1299,26 @@ function pagesLimitReport(files, limit) {
   for (const f of files) if (!largest || f.bytes > largest.bytes) largest = f;
   return { over, largest };
 }
+/* THE CODE-ONLY DEPLOY'S OTHER HALF. Every check above ran on the real bank
+   and the real notes, here; now they are packed into the one file the iPad
+   imports — the bank as it SHIPS (dist's copy, with its flags applied, not
+   content/'s) plus the reference seed and every unit's figure file — and
+   taken out of what is uploaded. The package is written under source/,
+   gitignored and refused by the leak guard. */
+if (NO_CONTENT) step('pack the bank and the notes for the device, and take them out of the upload', () => {
+  const dc = path.join(DIST, 'content');
+  const extras = {};
+  if (fs.existsSync(path.join(dc, 'refs-seed.json'))) extras['refs-seed.json'] = fs.readFileSync(path.join(dc, 'refs-seed.json'));
+  const ri = path.join(dc, 'refs-images');
+  if (fs.existsSync(ri)) for (const f of fs.readdirSync(ri).filter(f => f.endsWith('.json')).sort()) extras['refs-images/' + f] = fs.readFileSync(path.join(ri, f));
+  const argAt = process.argv.indexOf('--package');
+  const out = path.resolve(argAt > -1 && process.argv[argAt + 1] ? process.argv[argAt + 1] : path.join(ROOT, 'source', 'systole-content-v1.zip'));
+  const r = require('../tools/pack-content.js').pack(dc, out, extras);
+  for (const name of SHIPPED.concat(['refs-seed.json', 'refs-images'])) fs.rmSync(path.join(dc, name), { recursive: true, force: true });
+  console.log(`      ✓ packed ${r.questions} questions, ${r.figures} figures and ${r.extras} note file(s) → ${path.relative(ROOT, out)}`);
+  console.log('      ✓ dist/content carries none of them — import the package on the device');
+});
+
 const distFiles = [];
 (function walk(dir) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {

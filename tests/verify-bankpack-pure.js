@@ -66,6 +66,32 @@ async function run() {
      v.manifest && v.manifest.schemaVersion === 1 && !('source' in v.manifest), JSON.stringify(v.manifest));
   ok('no staging folder is left beside the zip', fs.readdirSync(path.dirname(zipPath)).join(',') === 'systole-content-v1.zip', fs.readdirSync(path.dirname(zipPath)).join(','));
 
+  head('the reference notes travel in the same package');
+  const SEED = Buffer.from(JSON.stringify([{ id: 'zq-note', md: 'Zqnote text' }]));
+  const HF = Buffer.from(JSON.stringify({ 'hf/zq.jpg': 'data:image/jpeg;base64,AAAA' }));
+  const zx = path.join(TMP, 'out', 'with-notes.zip');
+  const rx = pack(content, zx, { 'refs-seed.json': SEED, 'refs-images/hf.json': HF, 'refs-images/hf.2.json': HF });
+  const bx = fs.readFileSync(zx);
+  const zipX = await ZipRead.read(bx.buffer.slice(bx.byteOffset, bx.byteOffset + bx.length));
+  const vx = BankPack.validate(zipX.files);
+  ok('they are packed under extra/, listed in the manifest, and validate', rx.extras === 3 && vx.ok && vx.extras.length === 3 &&
+     JSON.stringify(vx.manifest.extras) === JSON.stringify(['refs-images/hf.2.json', 'refs-images/hf.json', 'refs-seed.json']), JSON.stringify(vx.manifest && vx.manifest.extras));
+  ok('and come back byte for byte', vx.extras && Buffer.from(vx.extras.find(x => x.name === 'refs-seed.json').bytes).equals(SEED));
+  const xf = () => zipX.files.map(f => ({ name: f.name, bytes: f.bytes }));
+  const drop = (files, name) => files.filter(f => f.name !== name);
+  const swapMan = (files, extrasList) => files.filter(f => f.name !== 'manifest.json').concat([{ name: 'manifest.json',
+    bytes: new TextEncoder().encode(JSON.stringify(Object.assign({}, vx.manifest, { extras: extrasList }))) }]);
+  const xcases = [
+    ['a listed note file the zip lacks', drop(xf(), 'extra/refs-images/hf.json'), /listed in the manifest but not in the package/],
+    ['a note file with a name the app never asks for', swapMan(xf(), ['../zq.json']), /not a file this app reads/],
+    ['a note file that is not JSON', xf().map(f => f.name === 'extra/refs-seed.json' ? { name: f.name, bytes: new TextEncoder().encode('<html>zq') } : f), /extra\/refs-seed\.json is not JSON/],
+  ];
+  for (const [label, files, re] of xcases) {
+    const got = BankPack.validate(files);
+    ok(`${label}: refused, and says why`, !got.ok && got.extras === null && got.problems.some(p => re.test(p)), got.problems[0] || 'accepted');
+  }
+  ok('a package with no notes at all is still a bank', v.ok && v.extras && v.extras.length === 0);
+
   head('what the checker refuses');
   const good = () => zip.files.map(f => ({ name: f.name, bytes: f.bytes }));
   const withFile = (files, name, bytes) => files.filter(f => f.name !== name).concat(bytes === null ? [] : [{ name, bytes }]);
