@@ -78,6 +78,7 @@ function validate(files) {
       if (!q || typeof q.id !== 'string' || !SAFE_ID.test(q.id) || q.id.includes('..')) { problems.push(`${where}: no usable id`); return; }
       if (seen.has(q.id)) problems.push(`${q.id}: the id appears twice`);
       seen.add(q.id);
+      if (typeof q.ch !== 'string' || !q.ch) problems.push(`${q.id}: no chapter`);
       if (!Array.isArray(q.o) || q.o.length < 2) problems.push(`${q.id}: its options are not a list`);
       else if (!Number.isInteger(q.ci) || q.ci < 0 || q.ci >= q.o.length) problems.push(`${q.id}: its key is outside its options`);
       for (const f of (q.figs || [])) {
