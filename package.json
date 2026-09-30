@@ -5,7 +5,7 @@
   "description": "Systole \u2014 a single-file cardiology board-review app built by patching a personal ACCSAP 12 export. The question bank itself is licensed content and is never committed.",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "build": "node scripts/build.js",

@@ -42,7 +42,17 @@ if (!SRC) {
   process.exit(1);
 }
 
-const FIG_DIR = path.join(OUT_DIR, 'figures');
+/* WRITTEN BESIDE, SWAPPED IN AT THE END. This used to empty content/figures
+   first and write into it as it went, so an extraction that failed half way —
+   a bad figure, a mismatch — left content/ half old and half new, and the last
+   good bank gone. Now everything is written to a work folder beside it and
+   the three things this script owns (questions.json, manifest.json,
+   figures/) are moved into content/ only when every check has passed. On any
+   problem the work folder is removed and content/ is exactly as it was.
+   content/ holds other things too (refs-images/, the notes' figures), so it is
+   never swapped whole. */
+const WORK = OUT_DIR.replace(/[\\/]+$/, '') + '.tmp-' + process.pid;
+const FIG_DIR = path.join(WORK, 'figures');
 
 /* ── pull the two payloads out of the build ──────────────────────────────── */
 function extractConst(html, name) {
@@ -65,8 +75,8 @@ const questions = extractConst(html, 'ALL_Q');
 const imgs = extractConst(html, 'IMGS');
 
 /* ── figures: decode, name, verify ───────────────────────────────────────── */
+fs.rmSync(WORK, { recursive: true, force: true });
 fs.mkdirSync(FIG_DIR, { recursive: true });
-for (const f of fs.readdirSync(FIG_DIR)) fs.unlinkSync(path.join(FIG_DIR, f));
 
 const EXT = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg' };
 /* WebP is a RIFF container: "RIFF" ....  "WEBP". Checking the magic rather
@@ -76,6 +86,21 @@ function looksLikeWebp(buf) {
   return buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF'
                          && buf.toString('ascii', 8, 12) === 'WEBP';
 }
+/* And the other two it accepts: the older ACC bank's figures are JPEG. A mime
+   string is only a claim; the first bytes are the file. */
+const MAGIC = {
+  webp: looksLikeWebp,
+  png: b => b.length > 8 && b[0] === 0x89 && b.toString('ascii', 1, 4) === 'PNG',
+  jpg: b => b.length > 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF,
+};
+/* Buffer.from(x, 'base64') is lenient: it skips characters outside the
+   alphabet and ignores bad padding, so a damaged payload decodes to a
+   different, shorter file without a word. Strict here: the alphabet, a length
+   that is a multiple of four, and the round trip back to the same text. */
+const strictBase64 = t => typeof t === 'string' && t.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(t);
+/* A question id becomes a file name. Nothing that can climb out of figures/
+   or name a second file: letters, digits, _ . - only, and never "..". */
+const safeId = id => typeof id === 'string' && /^[A-Za-z0-9_.-]{1,120}$/.test(id) && !id.includes('..');
 
 const figuresByQ = {};
 const seen = new Set();
@@ -85,6 +110,7 @@ const problems = [];
 for (const qid of Object.keys(imgs)) {
   const list = imgs[qid];
   figuresByQ[qid] = [];
+  if (!safeId(qid)) { problems.push(`question id ${JSON.stringify(String(qid).slice(0, 40))} is not safe as a file name`); continue; }
   list.forEach((dataUrl, i) => {
     const m = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl);
     if (!m) { problems.push(`${qid}[${i}]: not a base64 data URL`); return; }
@@ -92,10 +118,12 @@ for (const qid of Object.keys(imgs)) {
     const ext = EXT[mime];
     if (!ext) { problems.push(`${qid}[${i}]: unexpected mime ${mime}`); return; }
 
+    if (!strictBase64(m[2])) { problems.push(`${qid}[${i}]: the base64 is malformed`); return; }
     const buf = Buffer.from(m[2], 'base64');
     if (!buf.length) { problems.push(`${qid}[${i}]: decoded to zero bytes`); return; }
-    if (ext === 'webp' && !looksLikeWebp(buf)) {
-      problems.push(`${qid}[${i}]: mime says webp but the bytes are not a RIFF/WEBP container`);
+    if (buf.toString('base64') !== m[2]) { problems.push(`${qid}[${i}]: the base64 does not round-trip`); return; }
+    if (!MAGIC[ext](buf)) {
+      problems.push(`${qid}[${i}]: mime says ${mime} but the bytes are not a ${ext} file`);
       return;
     }
 
@@ -130,7 +158,7 @@ const out = questions.map(q => {
   return { ...q, figs };
 });
 
-fs.writeFileSync(path.join(OUT_DIR, 'questions.json'), JSON.stringify(out));
+fs.writeFileSync(path.join(WORK, 'questions.json'), JSON.stringify(out));
 
 /* Which commit did the extracting. sourceDigest already says which BUILD the
    content came from — that is what build-pwa.js compares against — but a
@@ -154,7 +182,9 @@ const commit = (() => {
 })();
 
 const manifest = {
-  generated: new Date().toISOString(),
+  /* SOURCE_DATE_EPOCH, where set, so two extractions of one export compare
+     byte for byte (the reproducible-builds convention); the clock otherwise. */
+  generated: new Date(process.env.SOURCE_DATE_EPOCH ? +process.env.SOURCE_DATE_EPOCH * 1000 : Date.now()).toISOString(),
   source: path.basename(SRC),
   sourceDigest,
   commit,
@@ -165,10 +195,10 @@ const manifest = {
   base64Bytes,
   chapters: [...new Set(out.map(q => q.ch))].sort(),
 };
-fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));
+fs.writeFileSync(path.join(WORK, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
 /* ── report ──────────────────────────────────────────────────────────────── */
-const qJsonBytes = fs.statSync(path.join(OUT_DIR, 'questions.json')).size;
+const qJsonBytes = fs.statSync(path.join(WORK, 'questions.json')).size;
 const mb = b => (b / 1048576).toFixed(2) + ' MB';
 console.log(`Extracted from ${path.basename(SRC)}  (sha256:${sourceDigest})\n`);
 console.log(`  questions            ${out.length}`);
@@ -186,6 +216,17 @@ if (problems.length) {
   console.error(`\n${problems.length} problem(s):`);
   problems.slice(0, 25).forEach(p => console.error('  ✗ ' + p));
   if (problems.length > 25) console.error(`  … and ${problems.length - 25} more`);
+  fs.rmSync(WORK, { recursive: true, force: true });
+  console.error(`\nNothing in ${OUT_DIR} was changed.`);
   process.exit(1);
 }
+/* Every check passed: move the three into place. figures/ goes aside first and
+   is removed only after the new one is in, so there is no moment with none. */
+fs.mkdirSync(OUT_DIR, { recursive: true });
+const oldFigs = path.join(OUT_DIR, 'figures.old-' + process.pid);
+if (fs.existsSync(path.join(OUT_DIR, 'figures'))) fs.renameSync(path.join(OUT_DIR, 'figures'), oldFigs);
+fs.renameSync(FIG_DIR, path.join(OUT_DIR, 'figures'));
+for (const f of ['questions.json', 'manifest.json']) fs.renameSync(path.join(WORK, f), path.join(OUT_DIR, f));
+fs.rmSync(oldFigs, { recursive: true, force: true });
+fs.rmSync(WORK, { recursive: true, force: true });
 console.log('\nAll figures decoded, written and read back byte-identical.');
