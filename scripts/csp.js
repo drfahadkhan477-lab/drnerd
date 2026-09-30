@@ -53,7 +53,11 @@
 /* Everything the app is known to contact. Nothing may be added here without a
    call site in the shipped chain to justify it; tests/verify-csp.js re-derives
    the list from the source and fails when the two disagree. */
-const CONNECT = ["'self'", 'https://generativelanguage.googleapis.com'];
+/* blob: — the code-only deploy (build-pwa.js --no-content) keeps the bank's
+   figures in IndexedDB and hands them out as blob: URLs (src/core/bankstore.js);
+   the tutor's figure path fetches one to send it. A blob: URL is made by this
+   tab from bytes it already holds, so it opens no route to any other host. */
+const CONNECT = ["'self'", 'blob:', 'https://generativelanguage.googleapis.com'];
 
 /* Each of these is a thing the app provably does not do, so denying it cannot
    cost anything and closes a real exfiltration or hijack route:

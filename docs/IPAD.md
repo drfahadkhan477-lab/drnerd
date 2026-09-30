@@ -244,6 +244,43 @@ when it is merged.)
 The card appears only in the split build. In the single file every figure is
 already inline, and a button offering to download them would be a lie.
 
+## A code-only deploy: the bank never leaves your devices
+
+Every route above hosts the bank somewhere — on your laptop, or on
+Cloudflare's storage behind Access. There is a fourth arrangement where the
+host carries **no licensed content at all**: the app is deployed as code, and
+the bank lives only in the iPad's own storage, imported once from Files.
+
+On the laptop, after the usual build and extract:
+
+```
+node tools/pack-content.js
+node scripts/build-pwa.js build/systole.html --no-content
+```
+
+The first writes `source/systole-content-v1.zip` — the bank, its figures and a
+manifest, checked with the very code the iPad runs, so a package the iPad
+would refuse is refused here instead. `source/` is gitignored and the leak
+guard refuses it; keep the zip on your own devices (AirDrop it to the iPad, or
+put it in Files). The second builds `dist/` without `content/questions.json`,
+`manifest.json` or `figures/` — deploy that by any route above; there is
+nothing licensed in it to protect.
+
+On the iPad, the first launch shows **Import your study content** instead of
+the home screen. Pick the zip. It is read, checked (a bad package is refused,
+naming the problem in counts and file names, and changes nothing) and stored
+in the browser's IndexedDB in one transaction; the app then opens on it, fully
+offline, figures included. Re-importing a newer package replaces the old one
+whole; your progress, ink, notes and chats live in a separate store and are
+untouched, keyed by question id.
+
+What this does not change: the app itself is still built from your export on
+the laptop, by the patch chain. What changes is where the bank lives
+afterwards — nowhere but on your devices. **Not covered yet:** the reference
+notes and their figures (`content/refs-seed.json`, `content/refs-images/`,
+including the Braunwald crops) still ship with the code. Keeping those off the
+host too would be the same move made for the notes, and is a separate change.
+
 ## What "installed" gets you
 
 The shell is 559 KB and the head already declares everything Safari needs:
