@@ -13,7 +13,7 @@
  *
  *   node scripts/build-memorizer.js --zip [memorizer-cloudflare.zip]
  *
- * also writes those four files as one zip, the upload for Cloudflare Pages
+ * also writes those files, and the _headers Cloudflare Pages reads, as one zip, the upload for Cloudflare Pages
  * ("Upload assets"; docs/IPAD.md). WHY A HOSTED COPY AT ALL: the iPad's
  * Files app opens an .html in Safari as a data: URL, which gets no storage —
  * the app opens, but nothing added is kept. From an https address it keeps
@@ -47,6 +47,20 @@ const SRC = path.join(ROOT, 'memorizer');
 const argOut = process.argv.indexOf('--out');
 const OUT = path.resolve(argOut !== -1 ? process.argv[argOut + 1] : path.join(ROOT, 'dist-memorizer'));
 
+const HEADERS = [
+  '/*',
+  "  Content-Security-Policy: frame-ancestors 'none'",
+  '  X-Frame-Options: DENY',
+  '  X-Content-Type-Options: nosniff',
+  '  Referrer-Policy: no-referrer',
+  '  Permissions-Policy: camera=(), geolocation=(), microphone=(self)',
+  '/',
+  '  Cache-Control: no-cache',
+  '/index.html',
+  '  Cache-Control: no-cache',
+  '/sw.js',
+  '  Cache-Control: no-cache',
+  ''].join('\n');
 function build(out) {
   out = out || OUT;
   let html = fs.readFileSync(path.join(SRC, 'index.html'), 'utf8');
@@ -151,16 +165,21 @@ self.addEventListener('fetch', function (e) {
   fs.writeFileSync(path.join(out, 'manifest.webmanifest'), manifest);
   fs.writeFileSync(path.join(out, 'sw.js'), sw);
   fs.writeFileSync(path.join(out, 'icon.svg'), icon);
+  /* Cloudflare Pages sets these headers from _headers. A page's own meta
+     Content-Security-Policy cannot say who may frame it, so frame-ancestors
+     is here; the page and the service worker are revalidated on every load
+     so a new build is what opens. */
+  fs.writeFileSync(path.join(out, '_headers'), HEADERS);
   return { out, inlined, bytes: Buffer.byteLength(html), stamp };
 }
 
-/* ── the zip: four files, deflated, at the root ─────────────────────────────
+/* ── the zip: the app's files and _headers, deflated, at the root ─────────────────────────────
    The smallest writer that Cloudflare, Safari's Files app and unzip all read:
    one local header + data per file, a central directory, its end record. No
    dates worth keeping (a fixed 1980-01-01, so the same build zips to the same
    bytes), no extra fields, UTF-8 names. */
 const zlib = require('zlib');
-const ZIP_FILES = ['index.html', 'sw.js', 'icon.svg', 'manifest.webmanifest'];
+const ZIP_FILES = ['index.html', 'sw.js', 'icon.svg', 'manifest.webmanifest', '_headers'];
 function zipOf(dir, names) {
   const parts = [], central = [];
   let at = 0;
@@ -205,4 +224,4 @@ if (require.main === module) {
     process.exit(1);
   }
 }
-module.exports = { build, zipOf, ZIP_FILES };
+module.exports = { build, zipOf, ZIP_FILES, HEADERS };

@@ -946,8 +946,9 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
     entries.push({ name, same: data.equals(fs.readFileSync(path.join(out, name))), crc: (zlib.crc32(data) >>> 0) === zip.readUInt32LE(o + 16) && zip.readUInt32LE(lo + 14) === zip.readUInt32LE(o + 16) });
     o += 46 + zip.readUInt16LE(o + 28) + zip.readUInt16LE(o + 30) + zip.readUInt16LE(o + 32);
   }
-  ok('the Cloudflare upload holds the four files at its root, each byte for byte, its checksum right', eocd > 0 &&
-     JSON.stringify(entries.map(e => e.name)) === JSON.stringify(['index.html', 'sw.js', 'icon.svg', 'manifest.webmanifest']) && entries.every(e => e.same && e.crc),
+  ok('the Cloudflare upload holds the app\u2019s four files and its _headers at its root, each byte for byte, its checksum right', eocd > 0 &&
+     JSON.stringify(entries.map(e => e.name)) === JSON.stringify(['index.html', 'sw.js', 'icon.svg', 'manifest.webmanifest', '_headers']) && entries.every(e => e.same && e.crc) &&
+     /frame-ancestors 'none'/.test(fs.readFileSync(path.join(out, '_headers'), 'utf8')),
      JSON.stringify(entries));
   ok('with no backslash in any name (docs/IPAD.md: a hand-made zip with them served nothing), and the same build zips to the same bytes',
      entries.every(e => e.name.indexOf('\\') === -1) && zipOf(out).equals(zip) && (() => {

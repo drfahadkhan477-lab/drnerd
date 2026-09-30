@@ -313,6 +313,7 @@ const SUITES = [
   ['memorizer-recall-pure',  'explain it first: on a later day the lesson waits for what you remember, marked point by point, the gaps taught first'],
   ['memorizer-layout-pure',  'the review\u2019s layout rules: a lesson\u2019s first five points and the rest folded, and a unit\u2019s one next step with why'],
   ['memorizer-studyimport',  'a saved HTML page read in the browser, and the Import Study dialog driven: right options and answers, a real modal, too large refused, no half-imported unit'],
+  ['memorizer-data',         'your data and what the page may do: a backup holds units, packs and progress and restores into an empty browser, a bad file is refused, and the browser refuses any host but the app\u2019s'],
   ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
 ];
 
@@ -372,7 +373,7 @@ const SUITES = [
    Windows laptop at 491e183 with the older ACC bank merged (681 questions,
    173 figures; 5229 checks across 119 suites, 133 on the split build), which
    measured the one that had been waiting: olderacc-pure. */
-const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure'];
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

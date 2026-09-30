@@ -143,7 +143,59 @@ function sweep() {
   });
 }
 
-/* Removing a document removes everything that came from it. *//* Removing a document removes everything that came from it. */
+/* ── a backup of everything studied ─────────────────────────────────────
+   Units, books and their text, sessions, cards, packs and the app's own
+   notes (meta), as one JSON file. Left out: the PDFs' bytes (large, and
+   the owner has them) and search vectors (worked out again on demand).
+   A restore is checked first and written in one transaction; a unit whose
+   PDF is not on this device is marked so, and shows its text without its
+   pages. */
+var BACKUP = 'memorizer-backup', BACKUP_V = 1;
+var BACKUP_STORES = ['docs', 'sessions', 'cards', 'books', 'bookpages', 'meta', 'packs'];
+function dump() {
+  return Promise.all(BACKUP_STORES.map(function (s) { return all(s); })).then(function (rows) {
+    var stores = {};
+    BACKUP_STORES.forEach(function (s, i) { stores[s] = rows[i]; });
+    return { format: BACKUP, version: BACKUP_V, at: new Date().toISOString(), stores: stores };
+  });
+}
+/* → '' when it is a backup this build can restore, else why not. */
+function checkBackup(b) {
+  if (!b || typeof b !== 'object' || b.format !== BACKUP) return 'this is not a Memorizer backup';
+  if (typeof b.version !== 'number' || b.version > BACKUP_V) return 'it was made by a newer Memorizer (version ' + b.version + ')';
+  if (!b.stores || typeof b.stores !== 'object') return 'it holds no data';
+  for (var k in b.stores) {
+    if (BACKUP_STORES.indexOf(k) === -1) return 'it holds an unknown kind of record (' + k + ')';
+    if (!Array.isArray(b.stores[k])) return 'its ' + k + ' are not a list';
+    for (var i = 0; i < b.stores[k].length; i++) {
+      var r = b.stores[k][i];
+      if (!r || typeof r !== 'object' || typeof r.id !== 'string' || !r.id) return 'a record in its ' + k + ' has no id';
+    }
+  }
+  return '';
+}
+function restore(b) {
+  var why = checkBackup(b);
+  if (why) return Promise.reject(new Error(why));
+  return all('files').then(function (files) {
+    var have = {};
+    files.forEach(function (f) { have[f.id] = true; });
+    var pdfHere = function (d) {
+      if (d.parts && d.parts.length) return d.parts.every(function (pt) { return have[pt.fileId]; });
+      return !!have[d.id];
+    };
+    var writes = [];
+    Object.keys(b.stores).forEach(function (s) {
+      b.stores[s].forEach(function (r) {
+        if (s === 'docs' && r.hasFile && !pdfHere(r)) r = Object.assign({}, r, { hasFile: false });
+        writes.push({ store: s, value: r });
+      });
+    });
+    return putAll(writes).then(function () { return Object.keys(b.stores).reduce(function (o, s) { o[s] = b.stores[s].length; return o; }, {}); });
+  });
+}
+
+/* Removing a document removes everything that came from it. */
 function deleteDoc(id) {
   return all('cards').then(function (cards) {
     return Promise.all(cards.filter(function (c) { return c.docId === id; }).map(function (c) { return del('cards', c.id); }));
@@ -216,6 +268,7 @@ function saveStep(session, cards) {
 }
 
 api.open = open; api.put = put; api.putAll = putAll; api.sweep = sweep; api.get = get; api.all = all; api.del = del;
+api.dump = dump; api.restore = restore; api.checkBackup = checkBackup; api.BACKUP_STORES = BACKUP_STORES;
 api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards; api.saveStep = saveStep;
 root.MemStore = api;
 })(typeof window !== 'undefined' ? window : this);

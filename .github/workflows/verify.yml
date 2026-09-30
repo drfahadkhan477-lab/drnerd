@@ -326,6 +326,8 @@ jobs:
         run: node tests/verify-memorizer-studyimport.js
       - name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served with the network cut (7 checks)
         run: node tests/verify-memorizer-offline.js
+      - name: Memorizer — your data and what the page may do — back up and restore, a bad backup refused, the policy keeping requests to the app's own hosts (18 checks)
+        run: node tests/verify-memorizer-data.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

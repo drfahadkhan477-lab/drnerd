@@ -3688,6 +3688,7 @@ function viewSettings() {
       }, 'primary', { id: 'save-settings' }), clearKey, saved)),
     aiSettingsCard(),
     offlineCard(),
+    dataCard(),
     h('div.card', h('h2', 'What leaves this device'),
       h('p', 'Your PDF, photos and notes are read here, in the browser, and never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages and photos, the first time it is needed; they are read on this device too.'),
       h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')),
@@ -3695,6 +3696,56 @@ function viewSettings() {
        the owner's screenshots were of a build two releases old. */
     h('p.muted.build-line', { id: 'build' }, 'Memorizer build ' + (doc.documentElement.getAttribute('data-build') || 'unbuilt (running from source)') +
       '. When you are online the newest build loads each time the app opens.'));
+}
+
+/* ── your data: kept or not, a backup, a restore (store.js dump/restore) ── */
+function backupNow() {
+  return Store.dump().then(function (b) {
+    var day = today(), a = doc.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(b)], { type: 'application/json' }));
+    a.download = 'memorizer-backup-' + day + '.json';
+    doc.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+    ui.lastBackup = day;
+    return Store.put('meta', { id: 'last-backup', day: day });
+  }).then(function () { ui.dataNote = 'Backup saved to your downloads (Files \u2192 Downloads on an iPad).'; render(); },
+    function (e) { ui.dataNote = 'Not backed up: ' + (e && e.message) + '.'; render(); });
+}
+function restoreFrom(file) {
+  if (!file) return;
+  var r = new root.FileReader();
+  r.onload = function () {
+    var b = null;
+    try { b = JSON.parse(String(r.result)); } catch (_) {}
+    var why = Store.checkBackup(b);
+    if (why) { ui.dataNote = 'Not restored: ' + why + '.'; render(); return; }
+    var n = function (k) { return (b.stores[k] || []).length; };
+    if (!root.confirm('Restore ' + Home.count(n('docs'), 'unit') + ', ' + Home.count(n('cards'), 'review card') + ' and your progress from ' + String(b.at || '').slice(0, 10) +
+        '? Anything already here with the same unit is replaced by the backup\u2019s copy; nothing else is removed.')) return;
+    Store.restore(b).then(function (got) {
+      docsChanged();
+      ui.dataNote = 'Restored ' + Home.count(got.docs || 0, 'unit') + ' and ' + Home.count(got.cards || 0, 'review card') + '. PDFs are not in a backup: add a PDF again to see its pages.';
+      return refresh();
+    }).then(render, function (e) { ui.dataNote = 'Not restored: ' + (e && e.message) + '.'; render(); });
+  };
+  r.readAsText(file);
+}
+function dataCard() {
+  if (ui.lastBackup === undefined) { ui.lastBackup = null; Store.get('meta', 'last-backup').then(function (m) { ui.lastBackup = m ? m.day : null; render(); }, function () {}); }
+  if (ui.usage === undefined) {
+    ui.usage = null;
+    try { if (root.navigator.storage && root.navigator.storage.estimate) root.navigator.storage.estimate().then(function (e) { ui.usage = e.usage || 0; render(); }, function () {}); } catch (_) {}
+  }
+  var file = h('input', { type: 'file', id: 'restore-file', accept: '.json,application/json', class: 'sr-only', onchange: function () { restoreFrom(file.files && file.files[0]); file.value = ''; } });
+  return h('div.card.settings', { id: 'data-card' }, h('h2', 'Your data'),
+    h('p', { id: 'data-kept' }, ui.persisted
+      ? 'This browser has agreed to keep Memorizer\u2019s data. It lives only on this device.'
+      : 'Everything lives only on this device, and this browser may clear it when space runs low \u2014 Safari does after a week unused unless Memorizer is on your Home Screen. Back up now and then.'),
+    h('p.muted', { id: 'data-last' }, (ui.lastBackup ? 'Last backup: ' + ui.lastBackup + '.' : 'No backup yet.') + (ui.usage ? ' Using about ' + Math.max(1, Math.round(ui.usage / 1048576)) + ' MB.' : '')),
+    h('div.row', button('Back up my study', function () { backupNow(); }, 'primary', { id: 'backup-go' }),
+      h('label.btn', { 'for': 'restore-file', id: 'restore-go' }, 'Restore from a backup'), file),
+    ui.dataNote ? h('p', { id: 'data-note', role: 'status' }, ui.dataNote) : null,
+    h('p.muted', 'A backup is one file with your units, their text, your progress, review cards and study packs. PDFs themselves are not in it.'));
 }
 
 /* ── Prepare for offline ──────────────────────────────────────────────────
@@ -4073,6 +4124,9 @@ function focusTeach() {
   el.focus();
 }
 function start() {
+  /* ask the browser to keep this app's storage rather than clear it when
+     space runs low; Safari grants it to an app on the Home Screen */
+  try { if (root.navigator.storage && root.navigator.storage.persist) root.navigator.storage.persist().then(function (v) { ui.persisted = v; }, function () {}); } catch (_) {}
   Store.open().then(function () { return Store.sweep().then(null, function () {}); }).then(refresh).then(render, function (e) {
     ui.error = 'Could not open storage: ' + (e && e.message); render();
   });

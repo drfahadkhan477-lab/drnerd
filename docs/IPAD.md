@@ -280,7 +280,8 @@ and says so, but every unit, card and day of progress is gone when the tab
 closes. It needs an `https` address.
 
 1. `node scripts/build-memorizer.js --zip` writes `dist-memorizer/` and
-   `memorizer-cloudflare.zip` next to it: the app's files at the zip's root,
+   `memorizer-cloudflare.zip` next to it: the app's files, and a `_headers` file
+   Cloudflare Pages reads (no framing by other sites, fresh page on each visit), at the zip's root,
    forward slashes by construction (the backslash trap above cannot happen),
    and the same build always zips to the same bytes.
 2. Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →

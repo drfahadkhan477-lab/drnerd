@@ -64,8 +64,9 @@ function loadLib() {
     return r.text();
   }).then(function (src) {
     var url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
-    /* An indirect import(): a bundler, or an old parser, never sees it. */
-    return new Function('u', 'return import(u)')(url);
+    /* A plain dynamic import: the page's Content-Security-Policy forbids eval,
+       and new Function() is eval. */
+    return import(url);
   });
   libP.catch(function () { libP = null; });
   return libP;
