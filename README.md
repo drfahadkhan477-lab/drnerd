@@ -81,6 +81,22 @@ python3 tools/figure-review.py                      # → build/figure-review.ht
 python3 tools/trim-figure.py --apply-crops content/refs-images
 ```
 
+The Braunwald units in the private `content/refs-repo` submodule are baked the
+same way, each with its reviewed crop record (`tools/figure-crops.<unit>.json`).
+`content/refs` is a real folder that add-unit writes into, not a symlink into
+the submodule:
+
+```bash
+git submodule update --init content/refs-repo
+python3 tools/add-unit.py --unit hf --quality 70 --crops tools/figure-crops.hf.json \
+  --notes content/refs-repo/references/heart-failure --figures content/refs-repo/references/heart-failure/visuals
+python3 tools/add-unit.py --unit ischemia --crops tools/figure-crops.ischemia.json \
+  --notes content/refs-repo/references/ischemia --figures content/refs-repo/references/ischemia/visuals
+```
+
+`--quality 70` on hf keeps `content/refs-images/hf.json` under the host's 25 MB
+per-file limit; add-unit prints the projected size of each unit's file.
+
 **Why a person decides.** Every automatic cropper tried on this corpus has been
 wrong in a way that destroys information: the colour-based one cut TABLE 56.5
 down to 5% of its page, and the ink-profile detector scores clean multi-panel

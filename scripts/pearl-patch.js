@@ -73,7 +73,12 @@ function pearlAll(){
 function pearlNow(){
   if(pearlCurrent) return pearlCurrent;
   const all=pearlAll();
-  if(!all.length) return null;
+  if(!all.length) {
+    /* Provide a placeholder pearl when the library is empty, so the pearl-card
+       still renders on the home screen. This maintains the UI structure during
+       builds without seeded reference content. */
+    return { text: 'Your pearls will appear here', chapter: 'Add references', id: null };
+  }
   try{ pearlCurrent=Pearl.pick(all, null); }catch(_){ pearlCurrent=all[0]; }
   return pearlCurrent;
 }
