@@ -182,6 +182,9 @@ const commit = (() => {
 })();
 
 const manifest = {
+  /* The content schema this writes — docs/CONTENT-SCHEMA.md. The same number
+     the iPad's importer checks (src/core/bankpack.js SCHEMA). */
+  schemaVersion: 1,
   /* SOURCE_DATE_EPOCH, where set, so two extractions of one export compare
      byte for byte (the reproducible-builds convention); the clock otherwise. */
   generated: new Date(process.env.SOURCE_DATE_EPOCH ? +process.env.SOURCE_DATE_EPOCH * 1000 : Date.now()).toISOString(),
@@ -196,6 +199,21 @@ const manifest = {
   chapters: [...new Set(out.map(q => q.ch))].sort(),
 };
 fs.writeFileSync(path.join(WORK, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
+/* ONE RULE AT BOTH ENDS. What was just written is checked by the very
+   function the iPad runs on an imported package (src/core/bankpack.js):
+   ids, options, the key inside its options, every named figure present with
+   the right bytes, counts against this manifest. So a bank the device would
+   refuse is refused here, at build time, before it replaces anything — not
+   discovered on a tablet. Only when nothing else has already failed: the
+   figures it reads are the ones written above. */
+if (!problems.length) {
+  const sandbox = {};
+  new Function(fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'bankpack.js'), 'utf8')).call(sandbox);
+  const names = ['manifest.json', 'questions.json'].concat(fs.readdirSync(FIG_DIR).map(f => 'figures/' + f));
+  const verdict = sandbox.BankPack.validate(names.map(n => ({ name: n, bytes: new Uint8Array(fs.readFileSync(path.join(WORK, n))) })));
+  if (!verdict.ok) for (const pr of verdict.problems) problems.push('schema: ' + pr);
+}
 
 /* ── report ──────────────────────────────────────────────────────────────── */
 const qJsonBytes = fs.statSync(path.join(WORK, 'questions.json')).size;

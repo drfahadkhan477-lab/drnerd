@@ -107,6 +107,7 @@ async function run() {
     ['a duplicate id', f => withFile(f, 'questions.json', bank(q => { q[1].id = 'ZQ_1'; return q; })), /appears twice/],
     ['a key outside its options', f => withFile(f, 'questions.json', bank(q => { q[0].ci = 3; return q; })), /key is outside/],
     ['options that are not a list', f => withFile(f, 'questions.json', bank(q => { q[0].o = 'zq'; return q; })), /options are not a list/],
+    ['a question with no chapter', f => withFile(f, 'questions.json', bank(q => { delete q[0].ch; return q; })), /ZQ_1: no chapter/],
     ['a figure name that climbs out', f => withFile(f, 'questions.json', bank(q => { q[0].figs = ['../zq.webp']; return q; })), /figure name that is not safe/],
     ['a figure the bank names but the zip lacks', f => withFile(f, 'figures/ZQ_1_1.webp', null), /not in the package/],
     ['bytes that are not the image their name claims', f => withFile(f, 'figures/OAB_2_1.jpg', new Uint8Array(WEBP)), /not a jpg file/],
@@ -119,6 +120,11 @@ async function run() {
   }
   const leak = cases.map(([, mutate]) => BankPack.validate(mutate(good())).problems.join(' ')).join(' ');
   ok('no refusal quotes a word of the bank', !/Zq(stem|a|b|c|x|y)\b/.test(leak), (leak.match(/Zq\w+/) || [''])[0]);
+
+  head('the written schema says what the code enforces');
+  const doc = fs.readFileSync(path.join(ROOT, 'docs', 'CONTENT-SCHEMA.md'), 'utf8');
+  const docVer = (doc.match(/\*\*Schema version: (\d+)\.\*\*/) || [])[1];
+  ok('docs/CONTENT-SCHEMA.md names the schema version the checker enforces', +docVer === BankPack.SCHEMA, `doc ${docVer}, code ${BankPack.SCHEMA}`);
 
   head('the packer refuses what the iPad would refuse');
   fs.writeFileSync(path.join(content, 'figures', 'OAB_2_1.jpg'), WEBP);

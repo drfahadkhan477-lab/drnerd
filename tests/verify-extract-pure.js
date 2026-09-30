@@ -48,11 +48,8 @@ const url = (mime, buf) => `data:${mime};base64,${buf.toString('base64')}`;
 function build(questions, imgs) {
   return `<!doctype html><script>\nconst ALL_Q=${JSON.stringify(questions)};\nconst IMGS=${JSON.stringify(imgs)};\nfunction app(){}\n</script>`;
 }
-const GOOD_Q = [
-  { id: 'ZQ_1', ch: 'Zqchapter', img: 1 },
-  { id: 'ZQ_2', ch: 'Zqchapter', img: 1 },
-  { id: 'ZQ_3', ch: 'Zqother', img: 1 },
-];
+const Q = (id, ch, extra) => Object.assign({ id, ch, img: 1, o: ['Zqa', 'Zqb', 'Zqc'], ci: 0 }, extra);
+const GOOD_Q = [Q('ZQ_1', 'Zqchapter'), Q('ZQ_2', 'Zqchapter'), Q('ZQ_3', 'Zqother')];
 const GOOD_I = { ZQ_1: [url('image/webp', WEBP)], ZQ_2: [url('image/png', PNG)], ZQ_3: [url('image/jpeg', JPG)] };
 
 function run(name, html, out, env = {}) {
@@ -78,6 +75,7 @@ const man = g.code === 0 ? JSON.parse(fs.readFileSync(path.join(OUT, 'manifest.j
 ok('manifest.generated is SOURCE_DATE_EPOCH when that is set', man.generated === '2023-11-14T22:13:20.000Z', man.generated);
 ok('content/ keeps what it holds besides the bank (the notes\' figures)', fs.existsSync(path.join(OUT, 'refs-images', 'hf', 'keep.jpg')));
 ok('and no work folder is left behind', leftovers(OUT).length === 0, leftovers(OUT).join(','));
+ok('the manifest names the content schema it was written to', man.schemaVersion === 1, String(man.schemaVersion));
 
 /* A marker of "the last good bank", to see whether a failure touches it. */
 /* Read only if it exists: a first run that failed is reported above, not
@@ -89,13 +87,18 @@ const intact = () => before !== null && fs.readFileSync(qPath, 'utf8') === befor
 
 head('what it refuses, and that a refusal changes nothing');
 const cases = [
-  ['an id that climbs out of figures/', [{ id: '../zqescape', ch: 'C', img: 1 }], { '../zqescape': [url('image/webp', WEBP)] }, /not safe as a file name/],
-  ['an id with a slash in it', [{ id: 'a/zq', ch: 'C', img: 1 }], { 'a/zq': [url('image/webp', WEBP)] }, /not safe as a file name/],
-  ['an id with a backslash in it', [{ id: 'a\\zq', ch: 'C', img: 1 }], { 'a\\zq': [url('image/webp', WEBP)] }, /not safe as a file name/],
-  ['a "png" whose bytes are a JPEG', [{ id: 'ZQ_9', ch: 'C', img: 1 }], { ZQ_9: [url('image/png', JPG)] }, /mime says image\/png but the bytes are not a png/],
-  ['a "jpeg" whose bytes are nothing of the kind', [{ id: 'ZQ_9', ch: 'C', img: 1 }], { ZQ_9: [url('image/jpeg', Buffer.from('zqnotanimage!'))] }, /not a jpg/],
-  ['base64 with characters outside the alphabet', [{ id: 'ZQ_9', ch: 'C', img: 1 }], { ZQ_9: ['data:image/webp;base64,' + WEBP.toString('base64').slice(0, 8) + '$$$$' + WEBP.toString('base64').slice(8)] }, /base64 is malformed/],
-  ['one bad figure among good ones — the whole run refuses', GOOD_Q.concat([{ id: 'ZQ_4', ch: 'C', img: 1 }]), { ...GOOD_I, ZQ_4: [url('image/png', WEBP)] }, /not a png/],
+  ['an id that climbs out of figures/', [Q('../zqescape', 'C')], { '../zqescape': [url('image/webp', WEBP)] }, /not safe as a file name/],
+  ['an id with a slash in it', [Q('a/zq', 'C')], { 'a/zq': [url('image/webp', WEBP)] }, /not safe as a file name/],
+  ['an id with a backslash in it', [Q('a\\zq', 'C')], { 'a\\zq': [url('image/webp', WEBP)] }, /not safe as a file name/],
+  ['a "png" whose bytes are a JPEG', [Q('ZQ_9', 'C')], { ZQ_9: [url('image/png', JPG)] }, /mime says image\/png but the bytes are not a png/],
+  ['a "jpeg" whose bytes are nothing of the kind', [Q('ZQ_9', 'C')], { ZQ_9: [url('image/jpeg', Buffer.from('zqnotanimage!'))] }, /not a jpg/],
+  ['base64 with characters outside the alphabet', [Q('ZQ_9', 'C')], { ZQ_9: ['data:image/webp;base64,' + WEBP.toString('base64').slice(0, 8) + '$$$$' + WEBP.toString('base64').slice(8)] }, /base64 is malformed/],
+  /* The content schema (docs/CONTENT-SCHEMA.md), checked by the importer's
+     own function before anything is swapped in. */
+  ['a key outside its options (schema)', [Q('ZQ_8', 'C', { ci: 5 })], { ZQ_8: [url('image/webp', WEBP)] }, /schema: ZQ_8: its key is outside its options/],
+  ['two questions with one id (schema)', GOOD_Q.concat([Q('ZQ_8', 'C', { img: 0 }), Q('ZQ_8', 'C', { img: 0 })]), GOOD_I, /schema: ZQ_8: the id appears twice/],
+  ['options that are not a list (schema)', [Q('ZQ_8', 'C', { o: 'zq' })], { ZQ_8: [url('image/webp', WEBP)] }, /schema: ZQ_8: its options are not a list/],
+  ['one bad figure among good ones — the whole run refuses', GOOD_Q.concat([Q('ZQ_4', 'C')]), { ...GOOD_I, ZQ_4: [url('image/png', WEBP)] }, /not a png/],
 ];
 for (const [label, q, i, re] of cases) {
   const r = run('bad', build(q, i), OUT);
