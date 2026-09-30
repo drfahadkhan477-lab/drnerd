@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 64 suites that are pure Node with no Playwright and no
+#   logic        the 66 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -240,6 +240,10 @@ jobs:
         run: node tests/verify-phrase-pure.js
       - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, no word of it is printed, a key its own commentary contradicts is refused, a question with no explanation says so, a merged build carries exactly the staging, a bold heading naming no "Question" starts one, every figure type is served as an image, and an unanswered explanation is probed letter by letter (169 checks)
         run: node tests/verify-olderacc-pure.js
+      - name: extraction refuses an unsafe id, an image whose bytes are not its mime, and damaged base64, and a refusal leaves the last good content untouched (23 checks)
+        run: node tests/verify-extract-pure.js
+      - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing (20 checks)
+        run: node tests/verify-bankpack-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
@@ -310,6 +314,8 @@ jobs:
         run: node tests/verify-memorizer.js
       - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
+      - name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, a replacement is whole or not at all, and a normal build is untouched (17 checks)
+        run: node tests/verify-bankstore.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

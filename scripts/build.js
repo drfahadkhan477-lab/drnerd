@@ -390,6 +390,16 @@ function findSource() {
   /* Newest first: successive exports sort sensibly and you almost always want
      the one you just downloaded. */
   candidates.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  /* BUT NEVER SILENTLY. With two exports lying about, "the newest" is a
+     guess about which bank ends up in the build; say which one was taken and
+     what was passed over, every time, so a stale file cannot win unseen.
+     (Refusing outright would break a working setup that keeps an old export
+     beside the new one; naming the choice is what removes the surprise.) */
+  if (candidates.length > 1) {
+    console.log(`\n  ${candidates.length} exports found — building from the newest: ${path.basename(candidates[0])}`);
+    for (const c of candidates.slice(1)) console.log(`    passed over: ${path.basename(c)}`);
+    console.log('  To choose, name it or set SYSTOLE_SRC.\n');
+  }
   return candidates[0] || null;
 }
 

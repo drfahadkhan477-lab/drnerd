@@ -357,7 +357,7 @@ const SECURITY_HEADERS = {
      not hypothetical — it is what the first version of this did, and the build
      guard would have thrown on every build. */
   // eslint-disable-next-line max-len
-  'Content-Security-Policy': "base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; connect-src 'self' https://generativelanguage.googleapis.com; frame-ancestors 'none'",
+  'Content-Security-Policy': "base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; connect-src 'self' blob: https://generativelanguage.googleapis.com; frame-ancestors 'none'",
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
 };
