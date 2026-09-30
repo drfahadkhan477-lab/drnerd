@@ -44,5 +44,14 @@ ok('enough misses waiting: a review round first, and it says how many', (s => s.
 ok('misses come before the exam too', Home.nextStep(4, 4, 5, '').kind === 'review');
 ok('every section drilled and few misses: the exam', Home.nextStep(4, 4, 0, '').kind === 'exam' && /Retake/.test(Home.nextStep(4, 4, 0, '', 0.8).why));
 
+head('the backup reminder');
+const Study = require(path.join(SRC, 'study.js'));
+const due = (n, last, snooze, day) => Home.backupDue(n, last, snooze, day, Study.daysFrom);
+ok('nothing studied, nothing to lose: no reminder', due(0, null, null, '2026-09-30').due === false);
+ok('units and no backup yet: reminded', due(1, null, null, '2026-09-30').due === true);
+ok('a backup ' + (Home.BACKUP_EVERY - 1) + ' days old: not yet', due(1, '2026-09-24', null, '2026-09-30').due === false);
+ok('a backup ' + Home.BACKUP_EVERY + ' days old: reminded, with how old', (b => b.due && /7 days ago/.test(b.why))(due(1, '2026-09-23', null, '2026-09-30')));
+ok('"Later" puts it off for the day, and only the day', due(1, null, '2026-09-30', '2026-09-30').due === false && due(1, null, '2026-09-29', '2026-09-30').due === true);
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

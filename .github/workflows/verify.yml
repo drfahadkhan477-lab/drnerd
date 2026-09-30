@@ -280,7 +280,7 @@ jobs:
         run: node tests/verify-memorizer-spec-pure.js
       - name: Memorizer — explain it first — on a later day the lesson waits for what you remember, the gaps taught first (8 checks)
         run: node tests/verify-memorizer-recall-pure.js
-      - name: Memorizer — the review's layout rules — a lesson's first five points, a unit's one next step and why (9 checks)
+      - name: Memorizer — the review's layout rules — a lesson's first five points, a unit's one next step and why (14 checks)
         run: node tests/verify-memorizer-layout-pure.js
 
   # ── Memorizer in a real browser ────────────────────────────────────────────
@@ -326,7 +326,7 @@ jobs:
         run: node tests/verify-memorizer-studyimport.js
       - name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served with the network cut (7 checks)
         run: node tests/verify-memorizer-offline.js
-      - name: Memorizer — your data and what the page may do — back up and restore, a bad backup refused, the policy keeping requests to the app's own hosts (18 checks)
+      - name: Memorizer — your data and what the page may do — back up and restore, a bad backup refused, the policy keeping requests to the app's own hosts (20 checks)
         run: node tests/verify-memorizer-data.js
 
   build-guard:

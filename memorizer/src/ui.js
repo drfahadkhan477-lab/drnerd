@@ -1045,6 +1045,7 @@ function viewHome() {
   return h('main.wrap.home',
     P.top, P.inputs,
     ui.error ? errorCard(null) : null, P.keyNote,
+    backupNudge(),
     brain,
     brain ? null : P.pearl,
     none ? [P.add, P.paste, P.empty] : null);
@@ -3729,6 +3730,19 @@ function restoreFrom(file) {
     }).then(render, function (e) { ui.dataNote = 'Not restored: ' + (e && e.message) + '.'; render(); });
   };
   r.readAsText(file);
+}
+/* The home screen's reminder (home.js backupDue). */
+function backupNudge() {
+  if (ui.lastBackup === undefined || ui.backupSnooze === undefined) {
+    if (ui.lastBackup === undefined) { ui.lastBackup = null; Store.get('meta', 'last-backup').then(function (m) { ui.lastBackup = m ? m.day : null; render(); }, function () {}); }
+    if (ui.backupSnooze === undefined) { ui.backupSnooze = null; Store.get('meta', 'backup-snooze').then(function (m) { ui.backupSnooze = m ? m.day : null; render(); }, function () {}); }
+  }
+  var b = Home.backupDue(ui.docs.length, ui.lastBackup, ui.backupSnooze, today(), Study.daysFrom);
+  if (!b.due) return null;
+  return h('div.card.note.backup-nudge', { id: 'backup-nudge', role: 'status' },
+    h('p', h('strong', 'Back up your study. '), b.why),
+    h('div.row', button('Back up now', function () { backupNow(); }, 'primary', { id: 'nudge-backup' }),
+      button('Later', function () { ui.backupSnooze = today(); Store.put('meta', { id: 'backup-snooze', day: ui.backupSnooze }).then(null, function () {}); render(); }, 'quiet', { id: 'nudge-later' })));
 }
 function dataCard() {
   if (ui.lastBackup === undefined) { ui.lastBackup = null; Store.get('meta', 'last-backup').then(function (m) { ui.lastBackup = m ? m.day : null; render(); }, function () {}); }

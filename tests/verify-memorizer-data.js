@@ -69,6 +69,13 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
     await p.waitForFunction(() => !document.getElementById('import-go').disabled, null, T);
     await p.click('#import-go');
     await p.waitForSelector('#learn-unit', T);
+    await p.click('button[aria-label="Back"]').catch(() => {});
+    await p.evaluate(() => { const b = [...document.querySelectorAll('nav button, .nav-btn')].find(x => /Home/.test(x.textContent)); b.click(); });
+    await p.waitForSelector('#backup-nudge', T);
+    ok('with a unit and no backup, home says to back up, and why', /not backed up yet/.test(await p.$eval('#backup-nudge', e => e.textContent)));
+    await p.click('#nudge-later');
+    await p.waitForFunction(() => !document.getElementById('backup-nudge'), null, T);
+    ok('"Later" puts it away for the day, remembered', await p.evaluate(() => MemStore.get('meta', 'backup-snooze').then(m => !!m && /^\d{4}-/.test(m.day))));
     /* some progress to carry: the section marked as studied */
     await p.evaluate(() => { Memorizer.ui.state.per[0].seenDay = '2026-01-02'; return MemStore.put('sessions', { id: Memorizer.ui.docId, state: Memorizer.ui.state }); });
     await p.evaluate(() => MemStore.put('files', { id: 'stray-pdf', bytes: new Uint8Array([1, 2, 3]) }));

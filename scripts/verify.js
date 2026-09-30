@@ -311,7 +311,7 @@ const SUITES = [
   ['memorizer-offline',       'Prepare for offline, with the app\u2019s service worker: nothing called ready before, every pinned reader kept after, and served with the network cut'],
   ['memorizer-spec-pure',    'one study format for both Claude prompts: spec.js\u2019s rules word for word in each, the counts the checker enforces, the prompt\u2019s own example read and passed, the doc the app\u2019s prompt'],
   ['memorizer-recall-pure',  'explain it first: on a later day the lesson waits for what you remember, marked point by point, the gaps taught first'],
-  ['memorizer-layout-pure',  'the review\u2019s layout rules: a lesson\u2019s first five points and the rest folded, and a unit\u2019s one next step with why'],
+  ['memorizer-layout-pure',  'the review\u2019s layout rules: a lesson\u2019s first five points, a unit\u2019s one next step, and when to remind about a backup'],
   ['memorizer-studyimport',  'a saved HTML page read in the browser, and the Import Study dialog driven: right options and answers, a real modal, too large refused, no half-imported unit'],
   ['memorizer-data',         'your data and what the page may do: a backup holds units, packs and progress and restores into an empty browser, a bad file is refused, and the browser refuses any host but the app\u2019s'],
   ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
