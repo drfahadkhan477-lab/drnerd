@@ -27,7 +27,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch } = require('./_engine.js');
+const { launch, engineName } = require('./_engine.js');
 const { onDeath, watch } = require('./_deathnote.js');
 const { pack } = require('../tools/pack-content.js');
 
@@ -108,9 +108,10 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
   onDeath(() => ({ section, checks: passed + failed, errors, events: events.length ? events.join(', ') : 'none' }));
   const browser = await launch();
   const contentHits = [];
-  async function open(noContent, content) {
+  async function open(noContent, content, init) {
     const ctx = await browser.newContext();
     const pg = watch(await ctx.newPage(), events, noContent ? 'no-content' : 'normal', errors);
+    if (init) await pg.addInitScript(init);
     await pg.route('http://bank.test/**', r => {
       const u = new URL(r.request().url());
       if (u.pathname.startsWith('/content/')) {
@@ -172,7 +173,10 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
 
   section = 'replacement';
   head('replacing a bank: whole or not at all');
-  const swap = await pg.evaluate(async (one) => {
+  /* Bounded: a save that never settles must fail these checks, not hold the
+     suite until the job is killed. */
+  const within = (pr, ms) => Promise.race([pr, new Promise(res => setTimeout(() => res(null), ms))]);
+  const swap = (await within(pg.evaluate(async (one) => {
     if (typeof BankStore === 'undefined') return { interrupted: '', rawFigs: -1 };
     const zip = await ZipRead.read(new Uint8Array(one).buffer);
     const v = BankPack.validate(zip.files);
@@ -187,12 +191,74 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
       const q = r.result.transaction('figs').objectStore('figs').count(); q.onsuccess = () => { res(q.result); r.result.close(); }; q.onerror = rej; }; r.onerror = rej; });
     return { rawFigs, interrupted, failQ: afterFail && afterFail.questions.length, failF: afterFail && afterFail.figures,
              newIds: afterNew && afterNew.questions.map(q => q.id), newF: afterNew && afterNew.figures };
-  }, Array.from(ONE));
+  }, Array.from(ONE)), 30000)) || { interrupted: '', rawFigs: -1, failQ: null, failF: null, newIds: null, newF: null };
   ok('an import interrupted mid-transaction throws', swap.interrupted.length > 0, swap.interrupted);
   ok('and leaves the previous bank active, all of it', swap.failQ === 2 && swap.failF === 2, `${swap.failQ} questions, ${swap.failF} figures`);
   ok('a completed import replaces it whole — the old figures go with it, none left in the store', swap.newIds && swap.newIds.join(',') === 'ZQ_9' && swap.newF === 1 && swap.rawFigs === 1,
      `${swap.newIds} · ${swap.newF} active figure(s), ${swap.rawFigs} in the store`);
+  /* Which form the store took, read from its own meta record. */
+  /* Bounded like the save above: a read queued behind a transaction that
+     never ends would otherwise wait with it. */
+  const storedAs = pg2 => within(pg2.evaluate(() => new Promise(res => { const r = indexedDB.open('systole-bank');
+    r.onsuccess = () => { const q = r.result.transaction('meta').objectStore('meta').get('active'); q.onsuccess = () => { res(q.result && q.result.stored); r.result.close(); }; q.onerror = () => res(null); };
+    r.onerror = () => res(null); })), 5000);
+  if (engineName() === 'chromium')
+    ok('where the browser stores Blobs, the figures are stored as Blobs', await storedAs(pg) === 'blobs', String(await storedAs(pg)));
   await ctx.close();
+
+  section = 'blobs refused';
+  head('a browser that will not store a Blob in IndexedDB still imports');
+  /* WebKit in an ephemeral session (Private Browsing; every Playwright WebKit
+     context) fails the transaction when a Blob is put. Emulated here on any
+     engine by aborting the transaction a Blob is put into — the shape of the
+     refusal, so the fallback is proven where Blobs work too. The probe's own
+     store is spared, so this exercises the retry after a refused import, not
+     the probe (which the next section does). */
+  const refuse = () => { const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (v, k) { const r = put.call(this, v, k);
+      if (v instanceof Blob && this.name !== 'probe') { try { this.transaction.abort(); } catch (_) {} } return r; }; };
+  const rb = await open(true, null, refuse);
+  await settle(rb.pg, () => document.getElementById('bankFile'));
+  const navB = rb.pg.waitForNavigation({ timeout: 15000 }).catch(() => null);
+  if (await rb.pg.$('#bankFile')) await rb.pg.setInputFiles('#bankFile', { name: 'systole-content-v1.zip', mimeType: 'application/zip', buffer: GOOD });
+  const saidB = await rb.pg.waitForFunction(() => { const s = document.getElementById('bankStatus'); return s && /Imported|Not imported|could not|failed/i.test(s.textContent) && s.textContent; }, null, { timeout: 15000 }).then(h => h.jsonValue()).catch(() => '');
+  ok('the import still reports what it stored', /^Imported 2 questions and 2 figures/.test(saidB), saidB);
+  await navB;
+  await settle(rb.pg, () => window.__appRan);
+  const ranB = await rb.pg.evaluate(async () => {
+    const r = window.__appRan || { q: 0, imgs: {} };
+    const url = r.imgs.OAB_2 && r.imgs.OAB_2[0];
+    const bytes = url ? Array.from(new Uint8Array(await (await fetch(url)).arrayBuffer())) : [];
+    return { q: r.q, url: url || '', bytes };
+  });
+  ok('it was stored as plain bytes, the form every engine keeps', await storedAs(rb.pg) === 'buffers', String(await storedAs(rb.pg)));
+  ok('and the app starts on it, its figures blob: URLs that fetch back byte for byte',
+     ranB.q === 2 && /^blob:/.test(ranB.url) && Buffer.from(ranB.bytes).equals(JPG), JSON.stringify({ q: ranB.q, url: ranB.url.slice(0, 12) }));
+  await settle(rb.pg, () => window.__refs);
+  const refsB = await rb.pg.evaluate(() => window.__refs || null);
+  ok('and the notes are served from it too', !!refsB && Array.isArray(refsB[0]) && refsB[0][0].id === 'zq-note', JSON.stringify(refsB).slice(0, 60));
+  await rb.ctx.close();
+
+  section = 'blobs hang';
+  head('a browser where a Blob put never finishes still imports');
+  /* The other shape WebKit showed: no error, no completion, the import
+     silent until the job was killed. Emulated by keeping the transaction a
+     Blob is put into busy forever, so it can neither commit nor fail. */
+  const hang = () => { const put = IDBObjectStore.prototype.put;
+    const busy = s => { try { const r = s.count(); r.onsuccess = () => busy(s); } catch (_) {} };
+    IDBObjectStore.prototype.put = function (v, k) { if (v instanceof Blob) { busy(this); return {}; } return put.call(this, v, k); }; };
+  const hb = await open(true, null, hang);
+  await settle(hb.pg, () => document.getElementById('bankFile'));
+  const navH = hb.pg.waitForNavigation({ timeout: 20000 }).catch(() => null);
+  if (await hb.pg.$('#bankFile')) await hb.pg.setInputFiles('#bankFile', { name: 'systole-content-v1.zip', mimeType: 'application/zip', buffer: GOOD });
+  const saidH = await hb.pg.waitForFunction(() => { const s = document.getElementById('bankStatus'); return s && /Imported|Not imported/.test(s.textContent) && s.textContent; }, null, { timeout: 20000 }).then(h => h.jsonValue()).catch(() => '');
+  ok('the import reports what it stored, instead of waiting for ever', /^Imported 2 questions and 2 figures/.test(saidH), saidH || '(nothing within 20 s)');
+  await navH;
+  await settle(hb.pg, () => window.__appRan);
+  const hs = await storedAs(hb.pg);
+  ok('stored as plain bytes, and the app starts on it', hs === 'buffers' &&
+     await within(hb.pg.evaluate(() => !!window.__appRan && window.__appRan.q === 2), 5000) === true, String(hs));
+  await within(hb.ctx.close(), 5000);
 
   section = 'normal build';
   head('a normal build\'s loader is exactly as it was');

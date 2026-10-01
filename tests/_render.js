@@ -213,6 +213,40 @@ async function resized(page, width, height, opts = {}) {
   await page.setViewportSize({ width, height });
 }
 
-module.exports = { booted, settled, onScreen, quiet, afterRender,
+/* ── waiting on something only a Promise can answer ────────────────────────
+   page.waitForFunction DOES NOT AWAIT WHAT ITS PREDICATE RETURNS. A Promise is
+   an object, so it is truthy, and the wait ends on its first poll whatever
+   the Promise later says. Measured with playwright 1.56 in Chromium: a
+   predicate resolving false after 50 ms "waited" 73 ms and returned.
+
+   Four waits in verify-memorizer had that shape — MemStore.get(…).then(…) —
+   and so measured nothing. They held on file:// only because the work they
+   "waited" for usually finished first; served over http, as WebKit runs it,
+   one did not, and the next line read null and killed the suite 441 checks
+   in. It is the same disguise CLAUDE.md lists, a check that passes without
+   measuring, arriving through a wait.
+
+   resolved() polls page.evaluate, which does await, until the answer is
+   truthy. A predicate that throws counts as not yet. On timeout it throws,
+   naming the last error if there was one, as waitForFunction would. A
+   precondition, like every wait here: what follows it still asserts. */
+async function resolved(page, fn, arg, { timeout = 30000, interval = 100 } = {}) {
+  const end = Date.now() + timeout;
+  let last = '';
+  for (;;) {
+    try {
+      const v = await page.evaluate(fn, arg);
+      if (v) return v;
+      last = '';
+    } catch (e) {
+      if (page.isClosed()) throw e;
+      last = String(e && e.message || e).split('\n')[0];
+    }
+    if (Date.now() >= end) throw new Error(`resolved(): still not true after ${timeout} ms` + (last ? ` (last error: ${last})` : ''));
+    await new Promise(r => setTimeout(r, interval));
+  }
+}
+
+module.exports = { booted, settled, onScreen, quiet, afterRender, resolved,
                    watchTransitions, resized,
                    BOOT_TIMEOUT, SETTLE_TIMEOUT, QUIET_FRAMES };

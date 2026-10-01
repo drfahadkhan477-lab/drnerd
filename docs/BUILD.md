@@ -264,6 +264,14 @@ exists to prevent, arriving through the convenience alias.
 
 ### The suites on their own
 
+Without the export, `npm test` runs every suite CI runs: the pure-Node ones,
+then the browser suites that make their own documents (the Memorizer and the
+code-only deploy's import). It reads that list from
+`.github/workflows/verify.yml`, so the two cannot drift apart.
+`npm run test:pure` skips the browser suites and says which ones it skipped.
+`SYSTOLE_ENGINE=webkit npm test` runs the browser half on WebKit. The full
+registry below needs your build, and is `npm run test:private`.
+
 ```bash
 node scripts/verify.js                       # everything, ~4 min
 node scripts/verify.js --only physio,theme   # just these
@@ -571,7 +579,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        119 suites · 66 need no browser · + pwa
+tests/        119 suites · 67 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

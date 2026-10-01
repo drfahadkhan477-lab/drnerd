@@ -21,6 +21,7 @@ the bank you are,
 and a row of glass doors to everything else.
 
 ```bash
+npm test                                            # no export needed: every suite CI runs
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
 node scripts/verify.js                              # 5258 checks, 119 suites
 node scripts/verify.js --pwa                        # + 134 more on the split build
@@ -40,7 +41,7 @@ GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 66 suites that need neither a browser nor a build all stay
+present, and the 67 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
 the exact scope and why the other 1773 checks can't run here.
 
