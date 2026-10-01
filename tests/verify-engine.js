@@ -664,5 +664,19 @@ head('a reload is not a boot, and the split build is why');
      /!!npmCli, npmCli \|\| 'not found/.test(rel));
 }
 
+head('clipboard permissions are asked for by engine, never by a Chromium-only name');
+{
+  ok('chromium is granted read and write', JSON.stringify(E.clipboardPermissions('chromium')) === '["clipboard-read","clipboard-write"]');
+  ok('webkit is never asked for clipboard-write, which it refuses outright',
+     JSON.stringify(E.clipboardPermissions('webkit')) === '["clipboard-read"]', JSON.stringify(E.clipboardPermissions('webkit')));
+  ok('firefox is asked for neither', E.clipboardPermissions('firefox').length === 0);
+  /* The rule, held across every suite: a permission list that names a
+     clipboard permission outright is a Chromium list, and it kills the
+     context on WebKit. */
+  const hard = fs.readdirSync(TESTS).filter(n => /^verify-.+\.js$/.test(n))
+    .filter(f => /permissions\s*:\s*\[[^\]]*clipboard-/.test(blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8'))));
+  ok('no suite writes a clipboard permission into a context itself', hard.length === 0, hard.join(', ') || 'none');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

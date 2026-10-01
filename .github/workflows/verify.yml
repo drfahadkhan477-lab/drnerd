@@ -301,7 +301,9 @@ jobs:
   # is SYSTOLE_ENGINE and nothing else changes between the two entries. The
   # Chromium entry keeps its name exactly, so nothing that looks a check up
   # by name loses it. fail-fast is off: a WebKit-only failure must not cancel
-  # the Chromium run that would show it is WebKit-only.
+  # the Chromium run that would show it is WebKit-only. Each suite runs even
+  # when the one before it failed (!cancelled()), so one run shows every
+  # failure on an engine, not only the first; the job is still red.
   #
   # Playwright's WebKit on Linux is WebKitGTK, not Safari on iPadOS. It shares
   # the engine, the JavaScript core and IndexedDB, which is what these suites
@@ -329,11 +331,14 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps ${{ matrix.engine }}
-      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (478 checks)
+      - if: ${{ !cancelled() }}
+        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (478 checks)
         run: node tests/verify-memorizer.js
-      - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
+      - if: ${{ !cancelled() }}
+        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
-      - name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (18 checks)
+      - if: ${{ !cancelled() }}
+        name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (18 checks)
         run: node tests/verify-bankstore.js
 
   build-guard:

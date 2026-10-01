@@ -34,7 +34,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, clipboardPermissions } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 
 let passed = 0, failed = 0;
@@ -2509,7 +2509,7 @@ function kindOf(user) {
     /* A fresh profile on the built-in coach, as the owner uses it: the pack
        is how Claude's work reaches the app without a key. The clipboard is
        granted so the copy can be read back. */
-    const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block', permissions: ['clipboard-read', 'clipboard-write'] });
+    const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block', permissions: clipboardPermissions() });
     const p4 = watch(await ctx.newPage(), events, 'pack', errors);
     await wire(p4);
     const aiBefore = stub.requests.length;

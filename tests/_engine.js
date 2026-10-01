@@ -84,6 +84,19 @@ async function cpuThrottle(page, rate) {
   return true;
 }
 
+/* -- clipboard permissions, which each engine names differently -------------
+   Chromium takes 'clipboard-read' and 'clipboard-write'. Playwright's WebKit
+   knows only 'clipboard-read' (a write from a click needs no grant there),
+   and refuses the whole context on a name it does not know: "Unknown
+   permission: clipboard-write". verify-memorizer asked for both, and the
+   first WebKit run in CI died 363 checks in on that one line. Firefox knows
+   neither, so it gets none and its readText() check reports what it reads. */
+function clipboardPermissions(name = engineName()) {
+  if (name === 'chromium') return ['clipboard-read', 'clipboard-write'];
+  if (name === 'webkit') return ['clipboard-read'];
+  return [];
+}
+
 /* Resolves to a heap size in bytes, or null where the engine cannot say.
    NULL IS THE POINT. performance.memory is also Chromium-only, so a caller
    that read it directly on WebKit got `undefined`, coalesced it to 0, and
@@ -187,4 +200,4 @@ async function routablePage(browser, opts = {}) {
 }
 
 module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch, routablePage,
-                   cpuThrottle, heapUsedBytes, isEngineNoise };
+                   cpuThrottle, heapUsedBytes, isEngineNoise, clipboardPermissions };
