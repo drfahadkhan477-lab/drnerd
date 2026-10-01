@@ -90,6 +90,15 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     const dirAsFile = path.join(TMP, 'a-folder'); fs.mkdirSync(dirAsFile);
     const nr = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--report-json', dirAsFile]);
     ok('a report that cannot be written fails the run', nr.status !== 0 && /could not write --report-json/.test(nr.stderr), `exit ${nr.status}`);
+    /* --pwa's phases run outside the suite loop and must be in the report
+       too. The stand-in target is not a build, so build-pwa refuses it: the
+       report must show that phase failed, not only the suites that passed. */
+    const rp = path.join(TMP, 'pwa-report.json');
+    const pw = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--pwa', '--report-json', rp]);
+    let pd = null; try { pd = JSON.parse(fs.readFileSync(rp, 'utf8')); } catch (_) {}
+    const bp = pd && pd.suites.find(x => x.suite === 'build-pwa');
+    ok('with --pwa, a split build that fails is in the report as failed', pw.status !== 0 && !!bp && bp.status === 'fail' && JSON.stringify(bp.tags) === '["pwa"]',
+       pd ? pd.suites.map(x => x.suite + ':' + x.status).join(', ') : `no report (exit ${pw.status})`);
     /* A failing suite is reported as failing: a stand-in suite in a copy of
        the registry would need a copy of the repository, so this reads the
        mapping from the source instead. */

@@ -627,6 +627,17 @@ if (JOBS > 1) {
 }
 
 const results = [];
+/* The --pwa phases, which run outside the suite loop. Recorded here so the
+   report covers everything the invocation measured: without them a run whose
+   split build failed reported every suite it listed as passing, and only
+   exitCode said otherwise (found by review). */
+const phases = [];
+const phase = (name, out, status, ms) => {
+  const m = String(out || '').match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
+  const p = m ? +m[1] : 0, f = m ? +m[2] : null;
+  phases.push({ suite: name, tags: ['pwa'], status: f === null ? (status === 0 ? 'pass' : 'died') : (status === 0 && f === 0 ? 'pass' : 'fail'),
+                checks: p + (f || 0), passed: p, failed: f, durationMs: ms });
+};
 const t0 = Date.now();
 /* --report-json: written on the way out, whatever the exit — a red run is
    the one most worth having as data. Names, tags, counts and times only:
@@ -639,7 +650,7 @@ if (REPORT_JSON) process.on('exit', code => {
     suite: r.name, tags: tagsFor(r.name),
     status: r.failed === null ? 'died' : (r.ok ? 'pass' : 'fail'),
     checks: r.checks, passed: r.passed, failed: r.failed, durationMs: r.ms,
-  }));
+  })).concat(phases);
   const doc = {
     format: 'systole-verify-report', version: 1,
     commit: git('git rev-parse --short=12 HEAD') || 'unknown', engine: ENGINE,
@@ -947,7 +958,9 @@ if (bad.length) {
 if (flag('--pwa')) {
   const PORT = 8137;
   console.log('── the Stage 1 split build, over HTTP ──\n');
+  let pt = Date.now();
   const b = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'build-pwa.js'), TARGET], { encoding: 'utf8' });
+  phases.push({ suite: 'build-pwa', tags: ['pwa'], status: b.status === 0 ? 'pass' : 'fail', checks: 0, passed: 0, failed: b.status === 0 ? 0 : null, durationMs: Date.now() - pt });
   if (b.status !== 0) { console.error(b.stdout + b.stderr); process.exit(1); }
   console.log((b.stdout.match(/shell total.*/) || ['  (built)'])[0].trim());
 
@@ -960,11 +973,16 @@ if (flag('--pwa')) {
   const wait = spawnSync(process.execPath, ['-e',
     `const t=Date.now();(function p(){require('http').get('http://localhost:${PORT}/',r=>{r.destroy();process.exit(0)})
      .on('error',()=>{if(Date.now()-t>15000)process.exit(1);setTimeout(p,200)})})()`], { encoding: 'utf8' });
-  if (wait.status !== 0) { console.error('  the static server never came up'); done(); process.exit(1); }
+  if (wait.status !== 0) {
+    phases.push({ suite: 'pwa', tags: ['pwa'], status: 'died', checks: 0, passed: 0, failed: null, durationMs: 0 });
+    console.error('  the static server never came up'); done(); process.exit(1);
+  }
+  pt = Date.now();
 
   const r = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
                       { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE } });
   const out = (r.stdout || '') + (r.stderr || '');
+  phase('pwa', out, r.status, Date.now() - pt);
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
   for (const ln of out.split('\n')) if (/^\s*(PASS|FAIL)\s/.test(ln)) console.log(ln);
   /* AND WHY IT STOPPED, when it stopped. The filter above prints check lines
@@ -991,9 +1009,11 @@ if (flag('--pwa')) {
      fresh — verify-pwa serves that directory with a plain static server and
      never touches _worker.js, which in advanced mode owns every request to the
      project. A deployment went down once while that path had no test at all. */
+  pt = Date.now();
   const wk = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pages.js'),
                                           path.join(ROOT, 'dist')], { encoding: 'utf8' });
   const wout = (wk.stdout || '') + (wk.stderr || '');
+  phase('pages', wout, wk.status, Date.now() - pt);
   const wm = wout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
   for (const ln of wout.split('\n')) if (/^\s*FAIL\s/.test(ln)) console.log(ln);
   if (!wm || +wm[2] > 0 || wk.status !== 0) {
@@ -1007,9 +1027,11 @@ if (flag('--pwa')) {
      under test, and reading a stale one would report on a deploy that is not
      the one being verified. It drives no browser — the failure it guards is
      two deploys apart and is decidable from the worker's own source. */
+  pt = Date.now();
   const cb = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-cachebuckets.js'),
                                           path.join(ROOT, 'dist')], { encoding: 'utf8' });
   const cout = (cb.stdout || '') + (cb.stderr || '');
+  phase('cachebuckets', cout, cb.status, Date.now() - pt);
   const cm = cout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
   for (const ln of cout.split('\n')) if (/^\s*FAIL\s/.test(ln)) console.log(ln);
   if (!cm || +cm[2] > 0 || cb.status !== 0) {
