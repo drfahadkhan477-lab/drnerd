@@ -56,7 +56,8 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('a suite that launches a browser and reads a build is browser and build', JSON.stringify(tagsOf('home')) === '["browser","build"]', JSON.stringify(tagsOf('home')));
     ok('one that only launches a browser is browser', JSON.stringify(tagsOf('bankstore')) === '["browser"]', JSON.stringify(tagsOf('bankstore')));
     ok('one that does neither is pure — verify-engine requires _engine and launches nothing', JSON.stringify(tagsOf('engine')) === '["pure"]', JSON.stringify(tagsOf('engine')));
-    ok('and so is this one', JSON.stringify(tagsOf('devtools-pure')) === '["pure"]');
+    ok('and so is this one, which runs verify.js and build.js but launches nothing', JSON.stringify(tagsOf('devtools-pure')) === '["pure"]', JSON.stringify(tagsOf('devtools-pure')));
+    ok('a suite that spawns a tool which launches a browser is a browser suite', tagsOf('figprobe').includes('browser'), JSON.stringify(tagsOf('figprobe')));
     /* The CI logic job is the set of pure suites CI can run: every one of
        them must be tagged pure, or the tag and the job disagree. */
     const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
@@ -79,6 +80,16 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('and no line of output and no path', !!doc && !/PASS|FAIL|→/.test(JSON.stringify(doc)) && !JSON.stringify(doc).includes(TMP) && doc.target === 'file');
     const bad = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--tag', 'zqtag']);
     ok('a tag that is not one is refused before anything runs', bad.status === 1 && /is not a tag/.test(bad.stderr), bad.stderr.trim().split('\n')[0]);
+    /* No browser installed: a pure selection still runs. PLAYWRIGHT_BROWSERS_PATH
+       pointed at an empty folder makes every engine's executable missing. */
+    const empty = path.join(TMP, 'no-browsers'); fs.mkdirSync(empty);
+    const nb = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--tag', 'pure'], { PLAYWRIGHT_BROWSERS_PATH: empty });
+    ok('with no browser installed, a pure selection still runs', nb.status === 0 && !/no browser installed/.test(nb.stderr), (nb.stderr || '').trim().split('\n')[0] || `exit ${nb.status}`);
+    const nbb = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'bankstore'], { PLAYWRIGHT_BROWSERS_PATH: empty });
+    ok('and a browser selection is still refused, naming the install', nbb.status === 1 && /npx playwright install/.test(nbb.stderr), (nbb.stderr || '').trim().split('\n')[0]);
+    const dirAsFile = path.join(TMP, 'a-folder'); fs.mkdirSync(dirAsFile);
+    const nr = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--report-json', dirAsFile]);
+    ok('a report that cannot be written fails the run', nr.status !== 0 && /could not write --report-json/.test(nr.stderr), `exit ${nr.status}`);
     /* A failing suite is reported as failing: a stand-in suite in a copy of
        the registry would need a copy of the repository, so this reads the
        mapping from the source instead. */

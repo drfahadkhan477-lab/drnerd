@@ -505,8 +505,12 @@ if (!ENGINES.includes(ENGINE)) {
    fifty-four suites that each launch, each fail with
    "Executable doesn't exist at .../firefox-1495/firefox/firefox", and take
    fifteen minutes to say one thing once. Checked by path rather than by
-   launching, so it costs nothing on the ordinary run. */
-(() => {
+   launching, so it costs nothing on the ordinary run.
+   AND ONLY WHEN A CHOSEN SUITE NEEDS ONE. It ran before --tag and --only
+   were applied, so `--tag pure` on a machine with playwright but no browser
+   downloaded refused to run suites that launch nothing (found by review on
+   the PR that added --tag). Called below, once the selection is known. */
+function requireBrowser() {
   let exe = null;
   try { exe = require('playwright')[ENGINE].executablePath(); } catch (_) { return; }
   if (exe && !fs.existsSync(exe)) {
@@ -515,7 +519,7 @@ if (!ENGINES.includes(ENGINE)) {
     console.error(`  install    npx playwright install ${ENGINE}\n`);
     process.exit(1);
   }
-})();
+}
 /* WHICH SUITES CAN BE POINTED AT A URL. The first version of this asked the
    wrong question: it looked for the `^https?:` guard and called that the
    answer. Three suites have that guard AND read the target off disk as text
@@ -544,6 +548,7 @@ const chosen = SUITES
   });
 
 if (!chosen.length) { console.error('No suites selected.'); process.exit(1); }
+if (chosen.some(([n]) => tagsFor(n).includes('browser'))) requireBrowser();
 
 /* Playwright is installed globally in this environment; the suites require it
    by bare name, so NODE_PATH has to point at the global root. Resolved once
@@ -631,7 +636,9 @@ if (REPORT_JSON) process.on('exit', code => {
     suites,
   };
   try { fs.mkdirSync(path.dirname(path.resolve(REPORT_JSON)), { recursive: true }); fs.writeFileSync(REPORT_JSON, JSON.stringify(doc, null, 2) + '\n'); }
-  catch (e) { console.error(`  could not write --report-json ${REPORT_JSON}: ${e.message}`); }
+  /* A report asked for and not written fails the run: automation that
+     wanted the file must not read exit 0 as "it is there". */
+  catch (e) { console.error(`  could not write --report-json ${REPORT_JSON}: ${e.message}`); process.exitCode = 1; }
 });
 let stopScheduling = false;
 
