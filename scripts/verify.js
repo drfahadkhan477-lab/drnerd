@@ -18,7 +18,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 123 suites and roughly 5387 checks, and they
+ * WHY THIS EXISTS. There are 124 suites and roughly 5432 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -378,8 +378,12 @@ const SUITES = [
    Emptied an eighth time by the full green run with --pwa on the owner's
    laptop at 573e571 (5387 checks across 123 suites, 134 on the split build),
    which measured the four that had been waiting: extract-pure, bankpack-pure,
-   bankstore and testpublic-pure. */
-const PENDING_RECORD = ['devtools-pure'];
+   bankstore and testpublic-pure.
+
+   Emptied a ninth time by the full green run with --pwa on the owner's
+   laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
+   which measured the one that had been waiting: devtools-pure (38 checks). */
+const PENDING_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
