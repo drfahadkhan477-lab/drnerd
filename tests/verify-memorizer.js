@@ -675,6 +675,18 @@ function kindOf(user) {
   ok('and Escape closes it', await page.locator('.lightbox').count() === 0);
   ok('giving focus back to the page it was opened from', await page.evaluate(() => (document.activeElement.getAttribute('aria-label') || '') === 'Open page 1' && !document.getElementById('app').inert),
      await page.evaluate(() => document.activeElement.getAttribute('aria-label') || document.activeElement.tagName));
+  /* As Safari does it: a click that does not focus the button. Emulated on
+     any engine by refusing mousedown's default, which is what moves focus;
+     the click itself still lands. Found by a WebKit run on the owner's
+     laptop, where the check above failed. */
+  await page.evaluate(() => { document.activeElement && document.activeElement.blur();
+    window.__noFocus = e => e.preventDefault(); document.addEventListener('mousedown', window.__noFocus, true); });
+  await page.locator('#visuals .pages button').first().click();
+  await page.locator('.lightbox').waitFor(T);
+  await page.keyboard.press('Escape');
+  const backTo = await page.evaluate(() => { document.removeEventListener('mousedown', window.__noFocus, true);
+    return document.activeElement.getAttribute('aria-label') || document.activeElement.tagName; });
+  ok('and gives it back when the click did not focus the button, as on an iPad', backTo === 'Open page 1', backTo);
   await page.locator('#fold-pages > summary').click();
   const shut = await page.evaluate(() => !document.querySelector('#fold-pages').open && !document.querySelector('#visuals .pages').checkVisibility());
   /* precondition: the lesson has been drawn again — a new #fold-pages, not the old one */
