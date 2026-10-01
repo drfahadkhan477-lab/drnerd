@@ -14,7 +14,7 @@
  *   --engine <e>   chromium (default), webkit or firefox
  *   --list         print the suites and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 119 suites and roughly 5258 checks, and they
+ * WHY THIS EXISTS. There are 123 suites and roughly 5387 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -368,8 +368,13 @@ const SUITES = [
    Emptied a seventh time by the full green run with --pwa on the owner's
    Windows laptop at 491e183 with the older ACC bank merged (681 questions,
    173 figures; 5229 checks across 119 suites, 133 on the split build), which
-   measured the one that had been waiting: olderacc-pure. */
-const PENDING_RECORD = ['extract-pure', 'bankpack-pure', 'bankstore', 'testpublic-pure'];
+   measured the one that had been waiting: olderacc-pure.
+
+   Emptied an eighth time by the full green run with --pwa on the owner's
+   laptop at 573e571 (5387 checks across 123 suites, 134 on the split build),
+   which measured the four that had been waiting: extract-pure, bankpack-pure,
+   bankstore and testpublic-pure. */
+const PENDING_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
