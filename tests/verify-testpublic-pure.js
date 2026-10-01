@@ -84,7 +84,9 @@ const go = (logic, br, opts) => {
      /browser suites NOT run: verify-c/.test(last) && !/\ball\b/.test(last), last);
 }
 {
-  const r = go(['verify-a'], ['verify-c'], { executablePath: path.join(TMP, 'no-such-browser') });
+  /* engine pinned: the hint names the engine asked for, so an ambient
+     SYSTOLE_ENGINE=webkit would otherwise make it say webkit. */
+  const r = go(['verify-a'], ['verify-c'], { engine: 'chromium', executablePath: path.join(TMP, 'no-such-browser') });
   ok('with no browser installed, nothing runs and the run fails', r.code === 1 && r.ran.length === 0, JSON.stringify(r.ran));
   ok('and it says how to install one, or to run the pure half', /npx playwright install chromium/.test(r.text) && /test:pure/.test(r.text));
 }
