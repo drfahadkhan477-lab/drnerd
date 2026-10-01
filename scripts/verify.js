@@ -578,8 +578,10 @@ try {
     nodePath = nodePath ? `${nodePath}${path.delimiter}${globalRoot}` : globalRoot;
   }
 } catch (_) { /* a local node_modules will do just as well */ }
-if (chosen.some(([n]) => tagsFor(n).includes('browser'))) requireBrowser();
+/* The build first: with neither, "build one first" is the step that comes
+   first, and it is the answer on a runner with no playwright at all. */
 if (flag('--pwa') || chosen.some(([n]) => tagsFor(n).includes('build'))) requireBuild();
+if (chosen.some(([n]) => tagsFor(n).includes('browser'))) requireBrowser();
 
 /* ── how many at once ─────────────────────────────────────────────────────────
    One, unless asked otherwise: the default has to stay the arrangement every
