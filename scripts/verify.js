@@ -455,8 +455,13 @@ const TARGET_IS_URL = /^https?:\/\//.test(rawTarget);
 const TARGET = TARGET_IS_URL ? rawTarget : path.resolve(rawTarget);
 const shortTarget = TARGET_IS_URL ? TARGET : path.relative(process.cwd(), TARGET);
 
-if (!TARGET_IS_URL && !fs.existsSync(TARGET)) {
-  console.error(`\nNo build at ${TARGET}\n\n  Build one first:  node scripts/build.js\n`);
+/* A build is needed only by suites that read one, and by --pwa. Checked once
+   the selection is known (below): checked here, it refused `--tag pure` on a
+   clean checkout, where the export and so the build cannot exist (found by
+   review). */
+function requireBuild() {
+  if (TARGET_IS_URL || fs.existsSync(TARGET)) return;
+  console.error(`\nNo build at ${TARGET}\n\n  Build one first:  node scripts/build.js\n  or run only the suites that need none:  --tag pure\n`);
   process.exit(1);
 }
 /* --pwa builds dist/ from a standalone file and serves it. Handed a URL it has
@@ -574,6 +579,7 @@ try {
   }
 } catch (_) { /* a local node_modules will do just as well */ }
 if (chosen.some(([n]) => tagsFor(n).includes('browser'))) requireBrowser();
+if (flag('--pwa') || chosen.some(([n]) => tagsFor(n).includes('build'))) requireBuild();
 
 /* ── how many at once ─────────────────────────────────────────────────────────
    One, unless asked otherwise: the default has to stay the arrangement every

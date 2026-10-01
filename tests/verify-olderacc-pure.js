@@ -683,6 +683,18 @@ head('--shapes: how a page is laid out, one row per line, as shapes');
   ok('one over no line says so', /annot Square .* over no line$/.test(ar[1] || ''), ar[1] || 'none');
   ok('its text is never printed', !/zqsecret|answer note/.test(ar.join('\n')));
   ok('and pages without annotations add no rows', A.shapeRows(second, new Set([1, 5])).length === rows.length);
+  /* An image-only page: no text layer, and its mark the only key there is. */
+  const scan = second.concat([{ p: 9, noText: true, w: 612, h: 792, y0: 0, annots: [{ subtype: 'Ink', rect: [70, 400, 90, 420] }] }]);
+  const sr = A.shapeRows(scan, new Set([9]));
+  ok('an annotation on a page with no text layer is still reported', sr.length === 1 && /^p9\s+annot Ink\s+.*over no line$/.test(sr[0]), sr.join(' | ') || 'none');
+  /* And the importer collects them before it gives up on such a page. Read
+     from its source (blanked): readPage runs in a browser on a real PDF,
+     which this suite has neither of. Narrow on purpose — it holds the order
+     of two statements, nothing more. */
+  const imp = require('./_source.js').blankComments(require('fs').readFileSync(require('path').join(__dirname, '..', 'tools', 'older-acc-import.js'), 'utf8'));
+  const at = imp.indexOf('page.getAnnotations()'), early = imp.indexOf('if (chars <= 40)');
+  ok('the importer reads a page\'s annotations before returning early for a page with no text layer',
+     at > 0 && early > at && /if \(chars <= 40\)[^\n]*annots \}/.test(imp), `annotations at ${at}, early return at ${early}`);
 }
 
 head('every figure type the split build writes is served as an image');

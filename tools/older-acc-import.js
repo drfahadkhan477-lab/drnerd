@@ -158,7 +158,13 @@ async function readPage({ p, scale, maxW, quality, noImages }) {
   const tc = await page.getTextContent();
   const ops = await page.getOperatorList();
   const chars = tc.items.reduce((n, it) => n + (it.str ? it.str.trim().length : 0), 0);
-  if (chars <= 40) { page.cleanup(); return { p, noText: true, w: W, h: H, y0: view[1] }; }
+  /* Annotations first: an image-only page — no text layer — is exactly
+     where a highlight or pen mark might be the only key there is, and the
+     early return below used to skip them (found by review). Type and box
+     only; their contents stay in the PDF; links are navigation. */
+  const annots = (await page.getAnnotations()).filter(a => a.subtype && a.subtype !== 'Link')
+    .map(a => ({ subtype: a.subtype, rect: Array.isArray(a.rect) ? a.rect.map(Number) : null })).filter(a => a.rect);
+  if (chars <= 40) { page.cleanup(); return { p, noText: true, w: W, h: H, y0: view[1], annots }; }
 
   /* Where each image is drawn: the unit square under the transform in force
      when it is painted, tracked through save/restore/transform and form
@@ -280,10 +286,6 @@ async function readPage({ p, scale, maxW, quality, noImages }) {
     images.push({ top: r[3], bottom: r[1], jpg: out.toDataURL('image/jpeg', quality).split(',')[1] });
   }
   page.cleanup();
-  /* Annotations: type and box only. Their contents (a comment's text) stay
-     in the PDF; links are navigation, not marks. */
-  const annots = (await page.getAnnotations()).filter(a => a.subtype && a.subtype !== 'Link')
-    .map(a => ({ subtype: a.subtype, rect: Array.isArray(a.rect) ? a.rect.map(Number) : null })).filter(a => a.rect);
   return { p, w: W, h: H, y0: view[1], lines, images, tiny, pageSized, annots };
 }
 

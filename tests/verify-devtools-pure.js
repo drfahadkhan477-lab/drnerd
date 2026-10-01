@@ -93,6 +93,11 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('with no browser installed, a pure selection still runs', nb.status === 0 && !/no browser installed/.test(nb.stderr), (nb.stderr || '').trim().split('\n')[0] || `exit ${nb.status}`);
     const nbb = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'bankstore'], { PLAYWRIGHT_BROWSERS_PATH: empty });
     ok('and a browser selection is still refused, naming the install', nbb.status === 1 && /npx playwright install/.test(nbb.stderr), (nbb.stderr || '').trim().split('\n')[0]);
+    /* No build at all — a clean checkout, no export — and a pure selection. */
+    const nobuild = node([path.join(ROOT, 'scripts', 'verify.js'), path.join(TMP, 'no-such-build.html'), '--only', 'engine', '--tag', 'pure']);
+    ok('with no build, a pure selection still runs', nobuild.status === 0 && !/No build at/.test(nobuild.stderr), (nobuild.stderr || '').trim().split('\n')[0] || `exit ${nobuild.status}`);
+    const nobuild2 = node([path.join(ROOT, 'scripts', 'verify.js'), path.join(TMP, 'no-such-build.html'), '--only', 'keys']);
+    ok('and a suite that reads a build is refused without one, saying how to make it', nobuild2.status === 1 && /No build at/.test(nobuild2.stderr) && /--tag pure/.test(nobuild2.stderr), (nobuild2.stderr || '').trim().split('\n')[0]);
     const dirAsFile = path.join(TMP, 'a-folder'); fs.mkdirSync(dirAsFile);
     const nr = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--report-json', dirAsFile]);
     ok('a report that cannot be written fails the run', nr.status !== 0 && /could not write --report-json/.test(nr.stderr), `exit ${nr.status}`);
