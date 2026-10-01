@@ -8,6 +8,8 @@
  *                                  [--out source/older-staging] [--threshold 0.5]
  *   node tools/older-acc-import.js --merge [build/systole.html] [--out source/older-staging]
  *   node tools/older-acc-import.js SECOND.pdf --shapes 70,134-135,226-228
+ *     (also lists each annotation on those pages — a highlight, box or pen
+ *     tick — by type, box and the line it covers, never its text)
  *   node tools/older-acc-import.js --probe
  *
  * With no PDFs named it reads source/older/SECOND.pdf, then source/older/FIRST.pdf
@@ -278,7 +280,11 @@ async function readPage({ p, scale, maxW, quality, noImages }) {
     images.push({ top: r[3], bottom: r[1], jpg: out.toDataURL('image/jpeg', quality).split(',')[1] });
   }
   page.cleanup();
-  return { p, w: W, h: H, y0: view[1], lines, images, tiny, pageSized };
+  /* Annotations: type and box only. Their contents (a comment's text) stay
+     in the PDF; links are navigation, not marks. */
+  const annots = (await page.getAnnotations()).filter(a => a.subtype && a.subtype !== 'Link')
+    .map(a => ({ subtype: a.subtype, rect: Array.isArray(a.rect) ? a.rect.map(Number) : null })).filter(a => a.rect);
+  return { p, w: W, h: H, y0: view[1], lines, images, tiny, pageSized, annots };
 }
 
 async function readPdf(browser, file) {

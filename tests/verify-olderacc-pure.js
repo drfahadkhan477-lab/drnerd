@@ -673,6 +673,16 @@ head('--shapes: how a page is laid out, one row per line, as shapes');
      onPage(5).filter(r => /</.test(r)).length + ' marked on page 5');
   const leaked = rows.join('\n').match(/zq[a-z]+|quimbly|mimble|frizzle/gi) || [];
   ok('and not one word of any line', leaked.length === 0 && rows.join('').length > 1000, leaked.slice(0, 5).join(', ') || 'none');
+  /* The page-134 question: a key drawn on top of the page, not in its text. */
+  const marked = second.map(pg => pg.p !== 1 ? pg : { ...pg, annots: [
+    { subtype: 'Highlight', rect: [60, 604, 400, 620], contents: 'zqsecret answer note' },
+    { subtype: 'Square', rect: [60, 200, 120, 240] },
+  ] });
+  const ar = A.shapeRows(marked, new Set([1, 5])).filter(r => / annot /.test(r));
+  ok('an annotation on an option is reported with the option it covers', ar.length === 2 && /^p1\s+annot Highlight\s+x 60-400\s+y 604-620\s+over OPT:C$/.test(ar[0]), ar[0] || 'none');
+  ok('one over no line says so', /annot Square .* over no line$/.test(ar[1] || ''), ar[1] || 'none');
+  ok('its text is never printed', !/zqsecret|answer note/.test(ar.join('\n')));
+  ok('and pages without annotations add no rows', A.shapeRows(second, new Set([1, 5])).length === rows.length);
 }
 
 head('every figure type the split build writes is served as an image');

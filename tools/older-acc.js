@@ -561,6 +561,29 @@ function shapeRows(pages, want) {
       `bf ${typeof l.bf === 'number' ? l.bf.toFixed(2) : '-'}  ink ${l.ink || '-'}  bg ${l.bg || '-'}  ${kind.padEnd(10)}  len ${String(clean(l.text).length).padStart(3)}  ` +
       shapeOf(l.text) + (role.has(i) ? '  <' + role.get(i) : ''));
   });
+  /* AND WHAT IS DRAWN ON TOP. Ink, bold and background are read from the
+     lines themselves, and for the 80 unanswered questions none of them
+     singles out an option. A key can also live in an annotation — a
+     highlight, a box, a tick drawn with a pen tool — which is not part of
+     the text layer at all. Each one is reported by its type, its box, and
+     the kind of the line it covers (OPT:B, HEAD…), never by any text it
+     carries. A row that says "over OPT:C" on every unanswered question is
+     a key, and tells the parser where to look. */
+  for (const pg of kept) {
+    if (!want.has(pg.p) || !Array.isArray(pg.annots)) continue;
+    for (const a of pg.annots) {
+      const r = a.rect || [0, 0, 0, 0];
+      const x0 = Math.min(r[0], r[2]), x1 = Math.max(r[0], r[2]), y0 = Math.min(r[1], r[3]), y1 = Math.max(r[1], r[3]);
+      const over = [];
+      lines.forEach((l, i) => {
+        if (l.page !== pg.p || l.y < y0 - 2 || l.y > y1 + 2) return;
+        if (typeof l.x0 === 'number' && typeof l.x1 === 'number' && (l.x1 < x0 - 2 || l.x0 > x1 + 2)) return;
+        const k = kinds[i];
+        over.push(k.k + (typeof k.L === 'number' && k.L >= 0 ? ':' + (LETTER[k.L] || '?') : ''));
+      });
+      out.push(`p${pg.p}  annot ${String(a.subtype || '?').padEnd(10)}  x ${Math.round(x0)}-${Math.round(x1)}  y ${Math.round(y0)}-${Math.round(y1)}  over ${over.length ? over.join(',') : 'no line'}`);
+    }
+  }
   return out;
 }
 
