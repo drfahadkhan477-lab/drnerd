@@ -199,4 +199,25 @@ function runsInCI(name) {
   return { able: true, reason: '' };
 }
 
-module.exports = { classify, classifySource, takesUrl, allSuiteNames, runsInCI };
+/* WHAT KIND OF SUITE THIS IS, read from its code rather than kept in a list.
+   The audit asked for a registry of hand-set flags (needsBrowser,
+   needsBuild, …); this repository's experience is that a list kept by hand
+   beside the thing it describes drifts — verify.yml's "the nine suites" said
+   nine at eighteen. So the tags are derived, by the rules already in use:
+     browser  it launches one: launch( in statement position, or
+              require('playwright') — verify-stats' and verify-engine's rule
+     build    it takes a built app as its target (process.argv[2])
+     pure     neither
+   'serial' is verify.js's SERIAL set, added there. */
+const LAUNCHES = src => /^[^'"`\n]*require\(\s*'playwright'\s*\)/m.test(src) || /^[^'"`\n]*\blaunch\(/m.test(src);
+function tagsOf(name) {
+  let src;
+  try { src = stripComments(fs.readFileSync(suitePath(name), 'utf8')); } catch (_) { return []; }
+  const tags = [];
+  if (LAUNCHES(src)) tags.push('browser');
+  if (ARGV.test(src)) tags.push('build');
+  if (!tags.length) tags.push('pure');
+  return tags;
+}
+
+module.exports = { classify, classifySource, takesUrl, allSuiteNames, runsInCI, tagsOf };

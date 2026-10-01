@@ -272,6 +272,18 @@ code-only deploy's import). It reads that list from
 `SYSTOLE_ENGINE=webkit npm test` runs the browser half on WebKit. The full
 registry below needs your build, and is `npm run test:private`.
 
+`npm run doctor` says whether this machine is ready (Node, the test tools,
+the browsers, the git hooks, whether the export is here) and the command that
+fixes each gap. `npm run clean` removes what any clone can make again;
+`npm run clean:private -- --yes` also removes what is built from the export
+(build/, dist/, and what extract-content writes into content/). Neither ever
+touches source/ or your notes in content/refs.
+
+`--tag pure|browser|build|serial` selects suites by kind, read from each
+suite's code (`node scripts/verify.js --list` shows them).
+`--report-json <file>` writes the results as data: suite, tags, status,
+counts and time, and no line of suite output.
+
 ```bash
 node scripts/verify.js                       # everything, ~4 min
 node scripts/verify.js --only physio,theme   # just these
@@ -579,7 +591,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        123 suites · 67 need no browser · + pwa
+tests/        123 suites · 68 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

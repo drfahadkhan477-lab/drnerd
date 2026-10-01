@@ -12,7 +12,11 @@
  *                  at 4). The suites that measure wall-clock time or WebGL
  *                  contexts always run alone — see SERIAL below.
  *   --engine <e>   chromium (default), webkit or firefox
- *   --list         print the suites and what each covers, then exit
+ *   --tag <a,b>    run only suites with these tags: pure, browser, build, serial
+ *                  (read from each suite's code — tests/_targets.js tagsOf)
+ *   --report-json <file>  also write the results as JSON: suite, tags, status,
+ *                  counts and time. No output text, so nothing licensed.
+ *   --list         print the suites, their tags and what each covers, then exit
  *
  * WHY THIS EXISTS. There are 123 suites and roughly 5387 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
@@ -265,6 +269,7 @@ const SUITES = [
   ['extract-pure', 'extraction refuses an id that could leave figures/, bytes that are not the image their mime claims, and damaged base64 — and a refusal leaves the last good content/ untouched'],
   ['bankpack-pure', 'the code-only deploy\'s package: packed, read back through the page\'s own reader and checker, and every bad package refused, naming why'],
   ['bankstore', 'the code-only deploy in a browser: import screen with no bank and no request to content/, a refused package changes nothing, a good one launches the app, a replacement is atomic, a normal build unchanged'],
+  ['devtools-pure', 'each build in its own workspace, suite tags read from the code, a JSON report with no output text, doctor, and a clean that cannot reach the export'],
   ['testpublic-pure', '`npm test` runs every suite CI runs, pure and browser, from the workflow\'s own list — a failure, a missing file or a missing browser fails it, and a pure-only run says what it left out'],
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
@@ -374,7 +379,7 @@ const SUITES = [
    laptop at 573e571 (5387 checks across 123 suites, 134 on the split build),
    which measured the four that had been waiting: extract-pure, bankpack-pure,
    bankstore and testpublic-pure. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['devtools-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -422,15 +427,17 @@ const flag = n => argv.includes(n);
 const opt = (n, fb) => { const i = argv.indexOf(n); return i > -1 && argv[i + 1] ? argv[i + 1] : fb; };
 const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 
+const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
+const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : []);
 if (flag('--list')) {
-  console.log('\nSuites, and what each defends:\n');
-  for (const [name, claim] of SUITES) console.log(`  ${name.padEnd(14)} ${claim}`);
+  console.log('\nSuites, their tags, and what each defends:\n');
+  for (const [name, claim] of SUITES) console.log(`  ${name.padEnd(14)} ${('[' + tagsFor(name).join(',') + ']').padEnd(18)} ${claim}`);
   console.log(`\n  pwa            the Stage 1 split build over HTTP — needs a server, so:`);
   console.log(`                 node scripts/verify.js --pwa\n`);
   process.exit(0);
 }
 
-const VALUED = ['--only', '--skip', '--engine'];
+const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
 /* A PATH OR A URL. Every suite already takes either — `file://` is just how a
    path reaches them — and the split build can only be driven over HTTP,
@@ -461,6 +468,14 @@ if (TARGET_IS_URL && flag('--pwa')) {
 }
 
 const only = list(opt('--only')), skip = list(opt('--skip'));
+const TAGS = ['pure', 'browser', 'build', 'serial'];
+const wantTags = list(opt('--tag'));
+for (const t of wantTags) if (!TAGS.includes(t)) {
+  console.error(`\n  --tag ${JSON.stringify(t)} is not a tag. Use one of: ${TAGS.join(', ')}.\n`);
+  process.exit(1);
+}
+const REPORT_JSON = opt('--report-json', null);
+if (flag('--report-json') && !REPORT_JSON) { console.error('\n  --report-json needs a file to write.\n'); process.exit(1); }
 
 /* The engine, resolved once here and handed to every suite through the
    environment. Validated before a single browser starts: a typo discovered on
@@ -513,6 +528,7 @@ const { classify } = require(path.join(ROOT, 'tests', '_targets.js'));
 const urlIncapable = [];
 const chosen = SUITES
   .filter(([n]) => (!only.length || only.includes(n)) && !skip.includes(n))
+  .filter(([n]) => !wantTags.length || tagsFor(n).some(t => wantTags.includes(t)))
   .filter(([n]) => {
     const f = path.join(ROOT, 'tests', `verify-${n}.js`);
     if (fs.existsSync(f)) return true;
@@ -593,6 +609,30 @@ if (JOBS > 1) {
 
 const results = [];
 const t0 = Date.now();
+/* --report-json: written on the way out, whatever the exit — a red run is
+   the one most worth having as data. Names, tags, counts and times only:
+   never a line of suite output, which can quote the licensed corpus (that
+   is why tests/last-run.log is gitignored), and the target is named by its
+   kind, not its path, because an export's file name can carry its title. */
+if (REPORT_JSON) process.on('exit', code => {
+  const git = c => { try { return execSync(c, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch (_) { return ''; } };
+  const suites = results.map(r => ({
+    suite: r.name, tags: tagsFor(r.name),
+    status: r.failed === null ? 'died' : (r.ok ? 'pass' : 'fail'),
+    checks: r.checks, passed: r.passed, failed: r.failed, durationMs: r.ms,
+  }));
+  const doc = {
+    format: 'systole-verify-report', version: 1,
+    commit: git('git rev-parse --short=12 HEAD') || 'unknown', engine: ENGINE,
+    target: TARGET_IS_URL ? 'url' : 'file', exitCode: code,
+    selected: chosen.length, ran: suites.length,
+    passed: suites.filter(s => s.status === 'pass').length,
+    checks: suites.reduce((n, s) => n + s.checks, 0),
+    suites,
+  };
+  try { fs.mkdirSync(path.dirname(path.resolve(REPORT_JSON)), { recursive: true }); fs.writeFileSync(REPORT_JSON, JSON.stringify(doc, null, 2) + '\n'); }
+  catch (e) { console.error(`  could not write --report-json ${REPORT_JSON}: ${e.message}`); }
+});
 let stopScheduling = false;
 
 function runSuite(name, claim) {
@@ -610,7 +650,7 @@ function runSuite(name, claim) {
       const passed = m ? +m[1] : 0, failed = m ? +m[2] : null;
       resolve({
         name, claim, passed, failed, checks: passed + (failed || 0),
-        secs: ((Date.now() - t) / 1000).toFixed(0),
+        secs: ((Date.now() - t) / 1000).toFixed(0), ms: Date.now() - t,
         ok: status === 0 && failed === 0, out,
       });
     });
