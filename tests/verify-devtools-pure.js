@@ -51,6 +51,12 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('the finished file is put in place whole', fs.readFileSync(dest, 'utf8') === 'whole' && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)));
     const asDir = path.join(TMP, 'out-is-a-folder'); fs.mkdirSync(asDir); fs.writeFileSync(path.join(asDir, 'x'), 'x');
     let threw = false; try { replaceWhole(asDir, 'zqlicensed'); } catch (_) { threw = true; }
+    /* A write that fails after the file exists (a full disk): the partial file goes. */
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = (f, b) => { realWrite(f, String(b).slice(0, 3)); throw new Error('ENOSPC: no space left'); };
+    let threwW = false; try { replaceWhole(path.join(TMP, 'full-disk.html'), 'zqlicensed bytes'); } catch (_) { threwW = true; }
+    fs.writeFileSync = realWrite;
+    ok('a write that fails part-way leaves no partial copy either', threwW && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).filter(f => /\.tmp-/.test(f)).join(', ') || 'none');
     ok('and when it cannot be, no copy of it is left beside the destination', threw && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).filter(f => /\.tmp-/.test(f)).join(', ') || 'none');
     ok('a normal run\'s workspace is build/.work/run-<pid>-<time>, and only --keep or --from share build/',
        /const SHARED = KEEP \|\| !!FROM;/.test(src) && /'\.work', `run-\$\{process\.pid\}-\$\{Date\.now\(\)\}`/.test(src));
@@ -98,6 +104,9 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('with no build, a pure selection still runs', nobuild.status === 0 && !/No build at/.test(nobuild.stderr), (nobuild.stderr || '').trim().split('\n')[0] || `exit ${nobuild.status}`);
     const nobuild2 = node([path.join(ROOT, 'scripts', 'verify.js'), path.join(TMP, 'no-such-build.html'), '--only', 'keys']);
     ok('and a suite that reads a build is refused without one, saying how to make it', nobuild2.status === 1 && /No build at/.test(nobuild2.stderr) && /--tag pure/.test(nobuild2.stderr), (nobuild2.stderr || '').trim().split('\n')[0]);
+    const nbp = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--tag', 'pure', '--pwa'], { PLAYWRIGHT_BROWSERS_PATH: empty });
+    ok('--pwa needs a browser whatever the selection, and says so before running anything', nbp.status === 1 && /npx playwright install|playwright is not installed/.test(nbp.stderr) && !/passed/.test(nbp.stdout),
+       (nbp.stderr || '').trim().split('\n')[0]);
     const dirAsFile = path.join(TMP, 'a-folder'); fs.mkdirSync(dirAsFile);
     const nr = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--report-json', dirAsFile]);
     ok('a report that cannot be written fails the run', nr.status !== 0 && /could not write --report-json/.test(nr.stderr), `exit ${nr.status}`);

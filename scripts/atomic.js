@@ -14,8 +14,9 @@ const fs = require('fs');
 
 function replaceWhole(out, bytes) {
   const tmp = out + '.tmp-' + process.pid;
-  fs.writeFileSync(tmp, bytes);
-  try { fs.renameSync(tmp, out); }
+  /* The write too, not only the rename: a full disk can fail it after the
+     file exists, leaving part of the build behind (found by review). */
+  try { fs.writeFileSync(tmp, bytes); fs.renameSync(tmp, out); }
   catch (e) { try { fs.unlinkSync(tmp); } catch (_) {} throw e; }
 }
 

@@ -695,6 +695,7 @@ head('--shapes: how a page is laid out, one row per line, as shapes');
   const at = imp.indexOf('page.getAnnotations()'), early = imp.indexOf('if (chars <= 40)');
   ok('the importer reads a page\'s annotations before returning early for a page with no text layer',
      at > 0 && early > at && /if \(chars <= 40\)[^\n]*annots \}/.test(imp), `annotations at ${at}, early return at ${early}`);
+  ok('and an annotation that cannot be read costs the page nothing', /page\.getAnnotations\(\)\.catch\(\(\) => \[\]\)/.test(imp));
 }
 
 head('every figure type the split build writes is served as an image');

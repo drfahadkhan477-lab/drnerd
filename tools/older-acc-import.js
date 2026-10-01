@@ -162,7 +162,9 @@ async function readPage({ p, scale, maxW, quality, noImages }) {
      where a highlight or pen mark might be the only key there is, and the
      early return below used to skip them (found by review). Type and box
      only; their contents stay in the PDF; links are navigation. */
-  const annots = (await page.getAnnotations()).filter(a => a.subtype && a.subtype !== 'Link')
+  /* A page whose annotations cannot be read is still a page: an error here
+     must never cost its text and figures (found by review). */
+  const annots = (await page.getAnnotations().catch(() => [])).filter(a => a.subtype && a.subtype !== 'Link')
     .map(a => ({ subtype: a.subtype, rect: Array.isArray(a.rect) ? a.rect.map(Number) : null })).filter(a => a.rect);
   if (chars <= 40) { page.cleanup(); return { p, noText: true, w: W, h: H, y0: view[1], annots }; }
 
