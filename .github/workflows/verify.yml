@@ -246,7 +246,7 @@ jobs:
         run: node tests/verify-bankpack-pure.js
       - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (20 checks)
         run: node tests/verify-testpublic-pure.js
-      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (29 checks)
+      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (34 checks)
         run: node tests/verify-devtools-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
         run: node tests/verify-memorizer-chunk-pure.js

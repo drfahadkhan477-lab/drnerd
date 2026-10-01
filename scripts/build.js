@@ -554,9 +554,8 @@ function gitCommit() {
   /* No "--" inside: a hex digest and a hex commit with an optional -dirty.
      Nothing here can close the comment early. */
   const stamp = Buffer.from(`<!-- systole-build ${digest} commit ${commit} -->\n`);
-  const tmp = OUT + '.tmp-' + process.pid;
-  fs.writeFileSync(tmp, Buffer.concat([built.subarray(0, at), stamp, built.subarray(at)]));
-  fs.renameSync(tmp, OUT);
+  try { require('./atomic.js').replaceWhole(OUT, Buffer.concat([built.subarray(0, at), stamp, built.subarray(at)])); }
+  catch (e) { console.error(`could not write ${OUT}: ${e.message}`); process.exit(1); }
   console.log(`\n  build ${digest}   from commit ${commit}`);
 }
 if (!KEEP) for (const s of CHAIN) { const f = stepFile(s); if (f !== OUT && fs.existsSync(f)) fs.unlinkSync(f); }

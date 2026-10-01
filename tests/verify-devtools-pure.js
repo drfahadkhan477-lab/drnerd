@@ -46,6 +46,12 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
        or --from must not share build/<step>.html. Read blanked, as the rule is. */
     const { blankComments } = require('./_source.js');
     const src = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'build.js'), 'utf8'));
+    const { replaceWhole } = require('../scripts/atomic.js');
+    const dest = path.join(TMP, 'dest.html'); replaceWhole(dest, 'whole');
+    ok('the finished file is put in place whole', fs.readFileSync(dest, 'utf8') === 'whole' && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)));
+    const asDir = path.join(TMP, 'out-is-a-folder'); fs.mkdirSync(asDir); fs.writeFileSync(path.join(asDir, 'x'), 'x');
+    let threw = false; try { replaceWhole(asDir, 'zqlicensed'); } catch (_) { threw = true; }
+    ok('and when it cannot be, no copy of it is left beside the destination', threw && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).filter(f => /\.tmp-/.test(f)).join(', ') || 'none');
     ok('a normal run\'s workspace is build/.work/run-<pid>-<time>, and only --keep or --from share build/',
        /const SHARED = KEEP \|\| !!FROM;/.test(src) && /'\.work', `run-\$\{process\.pid\}-\$\{Date\.now\(\)\}`/.test(src));
   }
@@ -105,6 +111,12 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     const { blankComments } = require('./_source.js');
     const vsrc = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8'));
     ok('a suite that died is "died", one that failed is "fail" — never "pass"', /status: r\.failed === null \? 'died' : \(r\.ok \? 'pass' : 'fail'\)/.test(vsrc));
+    const { countsOf } = require('../scripts/cause.js');
+    const died = countsOf('  PASS  a\n  PASS  b\n  FAIL  c\nTypeError: x\n');
+    ok('a suite that died after some checks is counted for what it ran, and marked as never reporting',
+       died.passed === 2 && died.checks === 3 && died.failed === null && died.reported === false, JSON.stringify(died));
+    ok('and one that reported is counted from its summary', JSON.stringify(countsOf('  PASS  a\n5 passed, 1 failed\n')) === '{"passed":5,"failed":1,"checks":6,"reported":true}');
+    ok('the report takes its counts from that, for suites and for the --pwa phases', /const c = countsOf\(r\.out\)/.test(vsrc) && /\.countsOf\(out\)/.test(vsrc));
   }
 
   head('npm run doctor');

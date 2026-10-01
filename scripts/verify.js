@@ -633,10 +633,9 @@ const results = [];
    exitCode said otherwise (found by review). */
 const phases = [];
 const phase = (name, out, status, ms) => {
-  const m = String(out || '').match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
-  const p = m ? +m[1] : 0, f = m ? +m[2] : null;
-  phases.push({ suite: name, tags: ['pwa'], status: f === null ? (status === 0 ? 'pass' : 'died') : (status === 0 && f === 0 ? 'pass' : 'fail'),
-                checks: p + (f || 0), passed: p, failed: f, durationMs: ms });
+  const c = require(path.join(ROOT, 'scripts', 'cause.js')).countsOf(out);
+  phases.push({ suite: name, tags: ['pwa'], status: !c.reported ? 'died' : (status === 0 && c.failed === 0 ? 'pass' : 'fail'),
+                checks: c.checks, passed: c.passed, failed: c.failed, durationMs: ms });
 };
 const t0 = Date.now();
 /* --report-json: written on the way out, whatever the exit — a red run is
@@ -646,11 +645,11 @@ const t0 = Date.now();
    kind, not its path, because an export's file name can carry its title. */
 if (REPORT_JSON) process.on('exit', code => {
   const git = c => { try { return execSync(c, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch (_) { return ''; } };
-  const suites = results.map(r => ({
-    suite: r.name, tags: tagsFor(r.name),
-    status: r.failed === null ? 'died' : (r.ok ? 'pass' : 'fail'),
-    checks: r.checks, passed: r.passed, failed: r.failed, durationMs: r.ms,
-  })).concat(phases);
+  const suites = results.map(r => {
+    const c = countsOf(r.out);   // a suite that died still ran what it printed
+    return { suite: r.name, tags: tagsFor(r.name), status: r.failed === null ? 'died' : (r.ok ? 'pass' : 'fail'),
+             checks: c.checks, passed: c.passed, failed: c.failed, durationMs: r.ms };
+  }).concat(phases);
   const doc = {
     format: 'systole-verify-report', version: 1,
     commit: git('git rev-parse --short=12 HEAD') || 'unknown', engine: ENGINE,
@@ -709,7 +708,7 @@ function runSuite(name, claim) {
    The extraction itself lives in scripts/cause.js, with tests/verify-cause-pure.js
    over it: the first version of it scanned from the wrong end of the output and
    reported a check's own wrapped detail as the cause of a crash. */
-const { causeOf, noteOf } = require(path.join(ROOT, 'scripts', 'cause.js'));
+const { causeOf, noteOf, countsOf } = require(path.join(ROOT, 'scripts', 'cause.js'));
 
 function report(r) {
   const head = JOBS > 1 ? `  ${r.name.padEnd(14)} ` : '';
