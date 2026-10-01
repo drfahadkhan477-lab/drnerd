@@ -511,8 +511,22 @@ if (!ENGINES.includes(ENGINE)) {
    downloaded refused to run suites that launch nothing (found by review on
    the PR that added --tag). Called below, once the selection is known. */
 function requireBrowser() {
+  /* Resolved where the suites will resolve it: this checkout's node_modules,
+     then NODE_PATH with the global root added below. It used to try only a
+     plain require() and return quietly when that threw — so with no
+     playwright at all (CI's logic job never runs npm ci) every browser suite
+     was spawned to die on the same missing module, the case this check
+     exists to stop. */
+  let pw = null;
+  try { pw = require(require.resolve('playwright', { paths: [ROOT].concat(nodePath.split(path.delimiter).filter(Boolean)) })); }
+  catch (_) {
+    console.error(`\n  The chosen suites need a browser, and playwright is not installed.`);
+    console.error(`  install    npm ci && npx playwright install ${ENGINE}`);
+    console.error(`  or         node scripts/verify.js … --tag pure   (the suites that need no browser)\n`);
+    process.exit(1);
+  }
   let exe = null;
-  try { exe = require('playwright')[ENGINE].executablePath(); } catch (_) { return; }
+  try { exe = pw[ENGINE].executablePath(); } catch (_) { return; }
   if (exe && !fs.existsSync(exe)) {
     console.error(`\n  --engine ${ENGINE}: playwright has no browser installed for it.`);
     console.error(`  expected   ${exe}`);
@@ -548,7 +562,6 @@ const chosen = SUITES
   });
 
 if (!chosen.length) { console.error('No suites selected.'); process.exit(1); }
-if (chosen.some(([n]) => tagsFor(n).includes('browser'))) requireBrowser();
 
 /* Playwright is installed globally in this environment; the suites require it
    by bare name, so NODE_PATH has to point at the global root. Resolved once
@@ -560,6 +573,7 @@ try {
     nodePath = nodePath ? `${nodePath}${path.delimiter}${globalRoot}` : globalRoot;
   }
 } catch (_) { /* a local node_modules will do just as well */ }
+if (chosen.some(([n]) => tagsFor(n).includes('browser'))) requireBrowser();
 
 /* ── how many at once ─────────────────────────────────────────────────────────
    One, unless asked otherwise: the default has to stay the arrangement every
