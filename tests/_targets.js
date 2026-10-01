@@ -199,4 +199,38 @@ function runsInCI(name) {
   return { able: true, reason: '' };
 }
 
-module.exports = { classify, classifySource, takesUrl, allSuiteNames, runsInCI };
+/* WHAT KIND OF SUITE THIS IS, read from its code rather than kept in a list.
+   The audit asked for a registry of hand-set flags (needsBrowser,
+   needsBuild, …); this repository's experience is that a list kept by hand
+   beside the thing it describes drifts — verify.yml's "the nine suites" said
+   nine at eighteen. So the tags are derived, by the rules already in use:
+     browser  it launches one: launch( in statement position, or
+              require('playwright') — verify-stats' and verify-engine's rule
+     build    it takes a built app as its target (process.argv[2])
+     pure     neither
+   'serial' is verify.js's SERIAL set, added there.
+   A SUITE THAT RUNS A TOOL WHICH LAUNCHES IS A BROWSER SUITE. The first
+   version read only the suite's own code, and verify-figprobe — which
+   spawns tools/figure-probe.js, which launches — came out pure (found by
+   review). So the tools and scripts a suite spawns or requires are read too,
+   by reaches(), for a launch( in statement position. Not for
+   require('playwright'): verify.js and test-public.js load it only to ask
+   whether a browser is installed, and the suites that run them launch
+   nothing. */
+const LAUNCHES = src => /^[^'"`\n]*require\(\s*'playwright'\s*\)/m.test(src) || /^[^'"`\n]*\blaunch\(/m.test(src);
+function tagsOf(name) {
+  let src;
+  try { src = stripComments(fs.readFileSync(suitePath(name), 'utf8')); } catch (_) { return []; }
+  const tags = [];
+  const root = path.join(SUITE_DIR, '..');
+  const viaTool = () => reaches(suitePath(name), src).some(p => {
+    if (!/^(tools|scripts)\//.test(path.relative(root, p).split(path.sep).join('/'))) return false;
+    try { return /^[^'"`\n]*\blaunch\(/m.test(stripComments(fs.readFileSync(p, 'utf8'))); } catch (_) { return false; }
+  });
+  if (LAUNCHES(src) || viaTool()) tags.push('browser');
+  if (ARGV.test(src)) tags.push('build');
+  if (!tags.length) tags.push('pure');
+  return tags;
+}
+
+module.exports = { classify, classifySource, takesUrl, allSuiteNames, runsInCI, tagsOf };

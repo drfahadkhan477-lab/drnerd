@@ -673,6 +673,29 @@ head('--shapes: how a page is laid out, one row per line, as shapes');
      onPage(5).filter(r => /</.test(r)).length + ' marked on page 5');
   const leaked = rows.join('\n').match(/zq[a-z]+|quimbly|mimble|frizzle/gi) || [];
   ok('and not one word of any line', leaked.length === 0 && rows.join('').length > 1000, leaked.slice(0, 5).join(', ') || 'none');
+  /* The page-134 question: a key drawn on top of the page, not in its text. */
+  const marked = second.map(pg => pg.p !== 1 ? pg : { ...pg, annots: [
+    { subtype: 'Highlight', rect: [60, 604, 400, 620], contents: 'zqsecret answer note' },
+    { subtype: 'Square', rect: [60, 200, 120, 240] },
+  ] });
+  const ar = A.shapeRows(marked, new Set([1, 5])).filter(r => / annot /.test(r));
+  ok('an annotation on an option is reported with the option it covers', ar.length === 2 && /^p1\s+annot Highlight\s+x 60-400\s+y 604-620\s+over OPT:C$/.test(ar[0]), ar[0] || 'none');
+  ok('one over no line says so', /annot Square .* over no line$/.test(ar[1] || ''), ar[1] || 'none');
+  ok('its text is never printed', !/zqsecret|answer note/.test(ar.join('\n')));
+  ok('and pages without annotations add no rows', A.shapeRows(second, new Set([1, 5])).length === rows.length);
+  /* An image-only page: no text layer, and its mark the only key there is. */
+  const scan = second.concat([{ p: 9, noText: true, w: 612, h: 792, y0: 0, annots: [{ subtype: 'Ink', rect: [70, 400, 90, 420] }] }]);
+  const sr = A.shapeRows(scan, new Set([9]));
+  ok('an annotation on a page with no text layer is still reported', sr.length === 1 && /^p9\s+annot Ink\s+.*over no line$/.test(sr[0]), sr.join(' | ') || 'none');
+  /* And the importer collects them before it gives up on such a page. Read
+     from its source (blanked): readPage runs in a browser on a real PDF,
+     which this suite has neither of. Narrow on purpose — it holds the order
+     of two statements, nothing more. */
+  const imp = require('./_source.js').blankComments(require('fs').readFileSync(require('path').join(__dirname, '..', 'tools', 'older-acc-import.js'), 'utf8'));
+  const at = imp.indexOf('page.getAnnotations()'), early = imp.indexOf('if (chars <= 40)');
+  ok('the importer reads a page\'s annotations before returning early for a page with no text layer',
+     at > 0 && early > at && /if \(chars <= 40\)[^\n]*annots \}/.test(imp), `annotations at ${at}, early return at ${early}`);
+  ok('and an annotation that cannot be read costs the page nothing', /page\.getAnnotations\(\)\.catch\(\(\) => \[\]\)/.test(imp));
 }
 
 head('every figure type the split build writes is served as an image');

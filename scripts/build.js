@@ -5,7 +5,7 @@
  *   node scripts/build.js [source.html] [options]
  *
  *   --out <path>   where the finished single file goes   (default build/systole.html)
- *   --keep         keep every intermediate step on disk   (default: only the last)
+ *   --keep         keep every intermediate step on disk, in build/
  *   --from <step>  resume from a step, reusing build/ from a previous --keep run
  *   --list         print the chain and exit
  *
@@ -368,9 +368,20 @@ if (flag('--list')) {
 }
 
 const OUT = path.resolve(opt('--out', path.join(ROOT, 'build', 'systole.html')));
-const WORK = path.join(ROOT, 'build');
 const KEEP = flag('--keep');
 const FROM = opt('--from', null);
+/* EACH RUN ITS OWN WORKSPACE. Every step used to write build/<step>.html, so
+   two builds at once (a second terminal, an editor's task, another tool in
+   the same checkout — which the owner's laptop saw happen mid-run) wrote
+   over each other's intermediates and could stitch one build out of two.
+   A normal run now works in build/.work/run-<pid>-<time>/ and removes it
+   when it ends, success or not; the finished file reaches --out by rename,
+   so a reader never sees half of it. --keep and --from keep the fixed
+   build/ they have always used: --from exists to reuse a --keep run's
+   intermediates, which needs a place both runs can name. */
+const SHARED = KEEP || !!FROM;
+const WORK = SHARED ? path.join(ROOT, 'build') : path.join(ROOT, 'build', '.work', `run-${process.pid}-${Date.now()}`);
+if (!SHARED) process.on('exit', () => { try { fs.rmSync(WORK, { recursive: true, force: true }); } catch (_) {} });
 if (FROM && !CHAIN.includes(FROM)) {
   console.error(`--from ${FROM}: not a step. Run with --list to see the chain.`);
   process.exit(1);
@@ -543,7 +554,8 @@ function gitCommit() {
   /* No "--" inside: a hex digest and a hex commit with an optional -dirty.
      Nothing here can close the comment early. */
   const stamp = Buffer.from(`<!-- systole-build ${digest} commit ${commit} -->\n`);
-  fs.writeFileSync(OUT, Buffer.concat([built.subarray(0, at), stamp, built.subarray(at)]));
+  try { require('./atomic.js').replaceWhole(OUT, Buffer.concat([built.subarray(0, at), stamp, built.subarray(at)])); }
+  catch (e) { console.error(`could not write ${OUT}: ${e.message}`); process.exit(1); }
   console.log(`\n  build ${digest}   from commit ${commit}`);
 }
 if (!KEEP) for (const s of CHAIN) { const f = stepFile(s); if (f !== OUT && fs.existsSync(f)) fs.unlinkSync(f); }
