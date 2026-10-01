@@ -114,7 +114,16 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
        too. The stand-in target is not a build, so build-pwa refuses it: the
        report must show that phase failed, not only the suites that passed. */
     const rp = path.join(TMP, 'pwa-report.json');
-    const pw = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--pwa', '--report-json', rp]);
+    /* --pwa asks for a browser before anything runs, and CI's logic job has
+       no playwright. A stand-in module on NODE_PATH answers that check (its
+       "browser" is node itself, a file that exists), so the run reaches the
+       split build on every machine; where a real playwright is installed,
+       that one is found first and answers just the same. */
+    const fakeMods = path.join(TMP, 'fake_modules', 'playwright');
+    fs.mkdirSync(fakeMods, { recursive: true });
+    fs.writeFileSync(path.join(fakeMods, 'index.js'), `const e = { executablePath: () => ${JSON.stringify(process.execPath)} }; module.exports = { chromium: e, webkit: e, firefox: e };`);
+    const pw = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--pwa', '--report-json', rp],
+                    { NODE_PATH: path.join(TMP, 'fake_modules') });
     let pd = null; try { pd = JSON.parse(fs.readFileSync(rp, 'utf8')); } catch (_) {}
     const bp = pd && pd.suites.find(x => x.suite === 'build-pwa');
     ok('with --pwa, a split build that fails is in the report as failed', pw.status !== 0 && !!bp && bp.status === 'fail' && JSON.stringify(bp.tags) === '["pwa"]',
