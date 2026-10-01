@@ -127,3 +127,18 @@ rebuild it.
 After merging, sync the working branch onto the merge commit **and push it** —
 otherwise it sits one commit behind its own remote ref and the stop hook
 catches what you should have.
+
+## Spending tokens
+
+Full guide for the owner: `docs/CLAUDE-USAGE.md`. The rules Claude acts on:
+
+- Read selectively: grep or read line ranges, not whole large files. Never
+  dump suite output or build logs into the transcript — tail the relevant lines.
+- Subagents only when asked; when used, give them the cheapest model that fits
+  (`haiku` for lookups/mechanical edits, `sonnet` for routine coding, `opus`
+  only for hard design or debugging).
+- For changes touching more than two or three files, state the plan (files and
+  what changes in each) before editing.
+- When a task is finished and the next request is unrelated, suggest `/clear`;
+  in a long task, suggest `/compact`. If the work is routine and the session is
+  on Opus, say once that Sonnet would do (`/model`).
