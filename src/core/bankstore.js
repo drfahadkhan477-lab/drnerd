@@ -35,18 +35,27 @@
    can store; load() turns either shape into a Blob. The Blob form stays
    first, because it keeps figures out of the tab's heap on the device that
    matters, and the fallback costs that only where the Blob form cannot work.
+
+   AND A REFUSAL CAN BE SILENCE. On a later WebKit run the Blob transaction
+   neither completed nor failed: the import never reported, and the next
+   save waited on it until the job was killed at its time limit. A retry on
+   failure cannot help with a failure that never arrives. So before an
+   import, one byte is written as a Blob in a store of its own ('probe', so
+   a hung probe blocks nothing the import needs), and if that has not
+   committed within a few seconds the import is made as plain bytes. The
+   retry on a refused transaction stays, for a refusal that does arrive.
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
 'use strict';
 
-const DB = 'systole-bank', VERSION = 1;
+const DB = 'systole-bank', VERSION = 2;
 
 function open(idb) {
   return new Promise((resolve, reject) => {
     const r = (idb || root.indexedDB).open(DB, VERSION);
     r.onupgradeneeded = () => {
       const d = r.result;
-      for (const s of ['meta', 'bank', 'figs']) if (!d.objectStoreNames.contains(s)) d.createObjectStore(s);
+      for (const s of ['meta', 'bank', 'figs', 'probe']) if (!d.objectStoreNames.contains(s)) d.createObjectStore(s);
     };
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error || new Error('could not open the bank database'));
@@ -65,11 +74,30 @@ async function save(verdict, opts) {
   if (!verdict || !verdict.ok) throw new Error('refusing to store a package that did not validate');
   const o = opts || {};
   if (o.buffers) return saveAs(verdict, o, true);
+  if (!(await blobsCommit(o))) return saveAs(verdict, o, true);
   try { return await saveAs(verdict, o, false); }
   catch (e) {
     if (o.failAfterWrites) throw e;           // an interruption the caller asked for is not a refused Blob
     return saveAs(verdict, o, true);
   }
+}
+/* Does a Blob put commit here, within o.probeMs (default 4 s)? A failure, an
+   abort or silence all answer no. */
+async function blobsCommit(o) {
+  const db = await open(o.idb);
+  try {
+    return await new Promise(resolve => {
+      let t, timer;
+      const end = v => { clearTimeout(timer); resolve(v); };
+      try { t = db.transaction('probe', 'readwrite'); } catch (_) { return resolve(false); }
+      timer = setTimeout(() => { try { t.abort(); } catch (_) {} resolve(false); }, o.probeMs || 4000);
+      t.oncomplete = () => end(true);
+      t.onerror = () => end(false);
+      t.onabort = () => end(false);
+      try { const s = t.objectStore('probe'); s.put(new root.Blob([new Uint8Array([1])]), 'p'); s.delete('p'); }
+      catch (_) { end(false); }
+    });
+  } finally { db.close(); }
 }
 const asStored = (bytes, type, buffers) => buffers
   ? { t: type, b: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) }
