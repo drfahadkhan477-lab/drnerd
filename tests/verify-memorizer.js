@@ -446,9 +446,11 @@ function kindOf(user) {
   const wire = async page => {
   if (!FILE) await page.route(ORIGIN + '/**', route => {
     const rel = decodeURIComponent(new (require('url').URL)(route.request().url()).pathname).replace(/^\/+/, '') || 'index.html';
-    const f = path.join(dir, rel);
-    if (!f.startsWith(dir) || !fs.existsSync(f) || !fs.statSync(f).isFile()) return route.fulfill({ status: 404, body: '' });
-    return route.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
+    const f = path.resolve(dir, rel);
+    if (!f.startsWith(path.resolve(dir) + path.sep)) return route.fulfill({ status: 404, body: '' });
+    let body;      // read, not checked then read: a missing file or a folder is simply a 404
+    try { body = fs.readFileSync(f); } catch (_) { return route.fulfill({ status: 404, body: '' }); }
+    return route.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body });
   });
   await page.route('https://cdn.jsdelivr.net/**', async route => {
     cdnHits++;
