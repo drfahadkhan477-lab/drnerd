@@ -496,10 +496,21 @@ function parseBlock(lines, kinds, b) {
   if (cur) paras.push(clean(cur));
 
   /* For a question left unanswered, what its explanation holds — as three
-     counts, for the report. SECOND.pdf's 64 have no Answer line and no
-     option set apart (--shapes, pp. 134-138), so whether the explanation
-     names the answer in some form no rule reads yet is the open question.
-     Measured here, not acted on: a key guessed from prose is not staged. */
+     counts, for the report. Measured here, not acted on: a key guessed from
+     prose is not staged.
+
+     SETTLED for SECOND.pdf (--shapes on the owner's laptop, 2026-10-01,
+     pp. 134-135 and 138-140): its unanswered questions are printed without
+     an answer. An answered one there ends its explanation with an Answer
+     line, then an invisible "Key Point" box — p138's top half, which the
+     parser already reads. The unanswered ones have neither: 134 and 135 end
+     with a quarter of the page still empty, so nothing was cut at a page
+     break; the question opening on 138 runs onto 139 and stops there,
+     inside TRAIL_PAGES; no option differs in ink or weight, and no
+     annotation is drawn on any of these pages. With --probe's finding below
+     (no explanation calls an option correct), the page has no answer to
+     earn. Recovering them would mean inferring a key, which this does not
+     do — re-check here before re-opening it. */
   const probe = ci >= 0 ? null : (() => {
     const ex = norm(trail.map(i => lines[i].text).join(' '));
     return {
