@@ -162,6 +162,24 @@ function isEngineNoise(text, name = engineName()) {
   return false;
 }
 
+/* AND ONE PAGE ERROR, BY ITS STACK, NOT ITS WORDS. WebKit reports a Worker
+   it would not start from a blob: URL — "Cannot load blob:… due to access
+   control checks" — as an uncaught page error, even though pdf.js's
+   PDFWorker._initialize wraps `new Worker` in try/catch and falls back to
+   parsing on the main thread. Seen in verify-memorizer once per WebKit run,
+   on the first PDF opened after a page.reload(); every PDF check in that
+   suite still passes, because the fallback is real. Chromium never raises it.
+
+   Matched on all three: the engine, that exact sentence as the stack's first
+   line, and a PDFWorker frame. The same words from anywhere else, or on
+   Chromium, are still an error. It is not dropped either: watch() files it
+   as an event, so a run that saw it says so. */
+function isEngineNoiseError(err, name = engineName()) {
+  if (name === 'chromium' || !err) return false;
+  const stack = String(err.stack || '');
+  return /^Cannot load blob:\S+ due to access control checks\.$/.test(stack.split('\n')[0]) && /\bPDFWorker\b/.test(stack);
+}
+
 function launch(opts = {}) {
   const name = engineName();
   const playwright = require('playwright');
@@ -200,4 +218,4 @@ async function routablePage(browser, opts = {}) {
 }
 
 module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch, routablePage,
-                   cpuThrottle, heapUsedBytes, isEngineNoise, clipboardPermissions };
+                   cpuThrottle, heapUsedBytes, isEngineNoise, isEngineNoiseError, clipboardPermissions };

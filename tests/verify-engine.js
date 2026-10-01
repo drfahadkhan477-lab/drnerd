@@ -684,6 +684,32 @@ head('no waitForFunction predicate returns a Promise, which it never awaits');
   ok('no suite passes waitForFunction a predicate that returns a Promise — resolved() in tests/_render.js awaits one', bad.length === 0, bad.join(', ') || 'none');
 }
 
+head('one WebKit page error is engine noise, and only that one');
+{
+  const err = (first, frame) => ({ message: 'x', stack: first + '\n    at ' + frame + ' (https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js:22:1)' });
+  const pdfw = err('Cannot load blob:http://localhost:8137/0a1b due to access control checks.', '_initialize') ;
+  pdfw.stack += '\n    at PDFWorker (pdf.min.js:22:2)';
+  ok('pdf.js\u2019s refused blob: worker on WebKit is noise', E.isEngineNoiseError(pdfw, 'webkit') === true);
+  ok('the same error on Chromium is still an error', E.isEngineNoiseError(pdfw, 'chromium') === false);
+  const other = err('Cannot load blob:http://localhost:8137/0a1b due to access control checks.', 'loadFigure');
+  ok('the same sentence from code that is not pdf.js\u2019s worker is still an error', E.isEngineNoiseError(other, 'webkit') === false);
+  const near = err('Cannot load blob:http://localhost:8137/0a1b due to access control checks. And more', '_initialize');
+  near.stack += '\n    at PDFWorker (pdf.min.js:22:2)';
+  ok('a different message from the same place is still an error', E.isEngineNoiseError(near, 'webkit') === false);
+  /* And watch() applies it: a stand-in page, its pageerror handler fired by hand. */
+  const { watch } = require('./_deathnote.js');
+  const fire = (engine, e) => withEnv(engine, () => {
+    const on = {}, events = [], errors = [];
+    watch({ on: (k, f) => { on[k] = f; } }, events, 't', errors);
+    on.pageerror(e);
+    return { events, errors };
+  });
+  const wk = fire('webkit', pdfw);
+  ok('watch() files it as an event, not an error, on WebKit', wk.errors.length === 0 && wk.events.length === 1 && /engine notice \(not counted\)/.test(wk.events[0]), JSON.stringify(wk));
+  const cr = fire('chromium', pdfw), ot = fire('webkit', other);
+  ok('and counts it on Chromium, and counts every other error on WebKit', cr.errors.length === 1 && ot.errors.length === 1, JSON.stringify({ cr: cr.errors, ot: ot.errors }));
+}
+
 head('clipboard permissions are asked for by engine, never by a Chromium-only name');
 {
   ok('chromium is granted read and write', JSON.stringify(E.clipboardPermissions('chromium')) === '["clipboard-read","clipboard-write"]');

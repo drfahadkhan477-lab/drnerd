@@ -1907,13 +1907,12 @@ function kindOf(user) {
     ok('the garbled prefix is gone and “(cont.)” is its part', shown[0] === base && shown[1] === base + ' (part 2)', JSON.stringify(shown));
     ok('and the session’s copy of the titles follows', await page.evaluate(b => Memorizer.ui.state.titles[1] === b + ' (part 2)', base));
     ok('the store is untouched: the repair is made on every load', (await page.evaluate(id => MemStore.get('docs', id), planId)).clusters[1].title === 'hy = rly: ' + base + ' (cont.)');
-    /* openDoc started a figure search (ensureFigures), which loads pdf.js and
-       starts its worker. Reloading under it left WebKit starting that worker
-       from a blob: URL the dying page had already let go — "Cannot load
-       blob:… due to access control checks", raised from PDFWorker._initialize
-       and counted by every later "no errors" check. The search also writes
-       the doc back when it ends, which would race the restore below. So the
-       search finishes first: a precondition, not a claim. */
+    /* openDoc started a figure search (ensureFigures), which writes the doc
+       back when it ends; restoring the doc under it would race that write.
+       So the search finishes first: a precondition, not a claim. (This was
+       first added for WebKit's "Cannot load blob:…" page error, wrongly: that
+       comes ~20 ms after openDoc, before any reload, and is tests/_engine.js's
+       isEngineNoiseError.) */
     await page.waitForFunction(() => !Memorizer.ui.figuresBusy, null, T);
     await page.evaluate(d => MemStore.put('docs', d), orig);
     await page.reload();

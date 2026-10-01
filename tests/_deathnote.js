@@ -149,7 +149,12 @@ function watch(page, events, tag = '', errors = null) {
     const why = (r.failure() || {}).errorText || '';
     if (why) events.push(at + 'request failed ' + String(r.url()).slice(-40) + ' — ' + why);
   });
-  if (errors) page.on('pageerror', e => errors.push(at + e.message));
+  if (errors) page.on('pageerror', e => {
+    /* Required here, not at the top: _engine reads the environment, and this
+       file is loaded by suites that never launch a browser. */
+    if (require('./_engine.js').isEngineNoiseError(e)) { events.push(at + 'engine notice (not counted): ' + String(e.stack).split('\n')[0]); return; }
+    errors.push(at + e.message);
+  });
   return page;
 }
 
