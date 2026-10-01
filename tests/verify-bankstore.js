@@ -27,7 +27,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch } = require('./_engine.js');
+const { launch, engineName } = require('./_engine.js');
 const { onDeath, watch } = require('./_deathnote.js');
 const { pack } = require('../tools/pack-content.js');
 
@@ -108,9 +108,10 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
   onDeath(() => ({ section, checks: passed + failed, errors, events: events.length ? events.join(', ') : 'none' }));
   const browser = await launch();
   const contentHits = [];
-  async function open(noContent, content) {
+  async function open(noContent, content, init) {
     const ctx = await browser.newContext();
     const pg = watch(await ctx.newPage(), events, noContent ? 'no-content' : 'normal', errors);
+    if (init) await pg.addInitScript(init);
     await pg.route('http://bank.test/**', r => {
       const u = new URL(r.request().url());
       if (u.pathname.startsWith('/content/')) {
@@ -192,7 +193,44 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
   ok('and leaves the previous bank active, all of it', swap.failQ === 2 && swap.failF === 2, `${swap.failQ} questions, ${swap.failF} figures`);
   ok('a completed import replaces it whole — the old figures go with it, none left in the store', swap.newIds && swap.newIds.join(',') === 'ZQ_9' && swap.newF === 1 && swap.rawFigs === 1,
      `${swap.newIds} · ${swap.newF} active figure(s), ${swap.rawFigs} in the store`);
+  /* Which form the store took, read from its own meta record. */
+  const storedAs = pg2 => pg2.evaluate(() => new Promise(res => { const r = indexedDB.open('systole-bank');
+    r.onsuccess = () => { const q = r.result.transaction('meta').objectStore('meta').get('active'); q.onsuccess = () => { res(q.result && q.result.stored); r.result.close(); }; q.onerror = () => res(null); };
+    r.onerror = () => res(null); }));
+  if (engineName() === 'chromium')
+    ok('where the browser stores Blobs, the figures are stored as Blobs', await storedAs(pg) === 'blobs', String(await storedAs(pg)));
   await ctx.close();
+
+  section = 'blobs refused';
+  head('a browser that will not store a Blob in IndexedDB still imports');
+  /* WebKit in an ephemeral session (Private Browsing; every Playwright WebKit
+     context) fails the transaction when a Blob is put. Emulated here on any
+     engine by aborting the transaction a Blob is put into — the shape of the
+     refusal, so the fallback is proven where Blobs work too. */
+  const refuse = () => { const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (v, k) { const r = put.call(this, v, k);
+      if (v instanceof Blob) { try { this.transaction.abort(); } catch (_) {} } return r; }; };
+  const rb = await open(true, null, refuse);
+  await settle(rb.pg, () => document.getElementById('bankFile'));
+  const navB = rb.pg.waitForNavigation({ timeout: 15000 }).catch(() => null);
+  if (await rb.pg.$('#bankFile')) await rb.pg.setInputFiles('#bankFile', { name: 'systole-content-v1.zip', mimeType: 'application/zip', buffer: GOOD });
+  const saidB = await rb.pg.waitForFunction(() => { const s = document.getElementById('bankStatus'); return s && /Imported|Not imported|could not|failed/i.test(s.textContent) && s.textContent; }, null, { timeout: 15000 }).then(h => h.jsonValue()).catch(() => '');
+  ok('the import still reports what it stored', /^Imported 2 questions and 2 figures/.test(saidB), saidB);
+  await navB;
+  await settle(rb.pg, () => window.__appRan);
+  const ranB = await rb.pg.evaluate(async () => {
+    const r = window.__appRan || { q: 0, imgs: {} };
+    const url = r.imgs.OAB_2 && r.imgs.OAB_2[0];
+    const bytes = url ? Array.from(new Uint8Array(await (await fetch(url)).arrayBuffer())) : [];
+    return { q: r.q, url: url || '', bytes };
+  });
+  ok('it was stored as plain bytes, the form every engine keeps', await storedAs(rb.pg) === 'buffers', String(await storedAs(rb.pg)));
+  ok('and the app starts on it, its figures blob: URLs that fetch back byte for byte',
+     ranB.q === 2 && /^blob:/.test(ranB.url) && Buffer.from(ranB.bytes).equals(JPG), JSON.stringify({ q: ranB.q, url: ranB.url.slice(0, 12) }));
+  await settle(rb.pg, () => window.__refs);
+  const refsB = await rb.pg.evaluate(() => window.__refs || null);
+  ok('and the notes are served from it too', !!refsB && Array.isArray(refsB[0]) && refsB[0][0].id === 'zq-note', JSON.stringify(refsB).slice(0, 60));
+  await rb.ctx.close();
 
   section = 'normal build';
   head('a normal build\'s loader is exactly as it was');

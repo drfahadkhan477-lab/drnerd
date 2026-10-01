@@ -264,6 +264,29 @@ head('no wait passes its options where the argument goes');
   ok('and says which screen it was probably reading',
      /previous one/.test(msg));
 
+  head('waitForFunction does not await a Promise; resolved() does');
+  {
+    const pp = watch(await (await browser.newContext()).newPage(), events, 'blank/resolved');
+    await pp.setContent('<!doctype html><html><body><p>x</p></body></html>');
+    /* The trap, asserted so it is not rediscovered: a predicate whose Promise
+       resolves FALSE still ends the wait. If Playwright ever starts awaiting
+       it, this goes red and the rule in verify-engine can be retired. */
+    let trap = 'timed out';
+    await pp.waitForFunction(() => new Promise(r => setTimeout(() => r(false), 50)), null, { timeout: 1500 }).then(() => { trap = 'returned'; }, () => {});
+    ok('a waitForFunction predicate resolving false still ends the wait — the trap is real', trap === 'returned', trap);
+    let msg = '';
+    const t0 = Date.now();
+    try { await R.resolved(pp, () => new Promise(r => setTimeout(() => r(false), 20)), null, { timeout: 600 }); } catch (e) { msg = e.message; }
+    ok('resolved() does not end on a Promise of false: it times out, and says so', /still not true after 600 ms/.test(msg) && Date.now() - t0 >= 600, msg.slice(0, 60));
+    await pp.evaluate(() => { window.__at = Date.now() + 300; });
+    const got = await R.resolved(pp, () => new Promise(r => setTimeout(() => r(Date.now() >= window.__at ? 'ready' : false), 10)), null, { timeout: 3000 }).catch(e => e.message);
+    const late = await pp.evaluate(() => Date.now() >= window.__at);
+    ok('and returns the answer once the Promise resolves true, not before', got === 'ready' && late, String(got));
+    let thrown = '';
+    try { await R.resolved(pp, () => Promise.resolve(null).then(d => d.figures), null, { timeout: 300 }); } catch (e) { thrown = e.message; }
+    ok('a predicate that throws counts as not yet, and its error is named at the end', /last error: .*figures/.test(thrown), thrown.slice(0, 90));
+  }
+
   head('booted() is a real wait, not an immediate true');
   const blank = watch(await (await browser.newContext()).newPage(), events, 'blank/booted');
   await blank.setContent('<!doctype html><html><body><p>nothing here</p></body></html>');

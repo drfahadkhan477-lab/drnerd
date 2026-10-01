@@ -25,6 +25,16 @@
    id → [url] shape it always had, so buildFigures() is untouched. The tutor's
    figure path fetches those URLs to send them — scripts/csp.js lists blob: in
    connect-src for exactly that.
+
+   UNLESS THE BROWSER WILL NOT STORE A BLOB. WebKit refuses Blobs in IndexedDB
+   in an ephemeral session — Safari's Private Browsing, and every Playwright
+   WebKit context — and the transaction fails rather than the put. The first
+   WebKit run of verify-bankstore found it: "the import did not commit", on a
+   package Chromium stores. So a refused Blob import is retried once, whole,
+   with each file stored as { t: type, b: ArrayBuffer }, which every engine
+   can store; load() turns either shape into a Blob. The Blob form stays
+   first, because it keeps figures out of the tab's heap on the device that
+   matters, and the fallback costs that only where the Blob form cannot work.
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -54,6 +64,19 @@ const range = gen => root.IDBKeyRange.bound(gen + '/', gen + '/￿');
 async function save(verdict, opts) {
   if (!verdict || !verdict.ok) throw new Error('refusing to store a package that did not validate');
   const o = opts || {};
+  if (o.buffers) return saveAs(verdict, o, true);
+  try { return await saveAs(verdict, o, false); }
+  catch (e) {
+    if (o.failAfterWrites) throw e;           // an interruption the caller asked for is not a refused Blob
+    return saveAs(verdict, o, true);
+  }
+}
+const asStored = (bytes, type, buffers) => buffers
+  ? { t: type, b: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) }
+  : new root.Blob([bytes], { type });
+const asBlob = v => (v && v.b !== undefined && !(v instanceof root.Blob)) ? new root.Blob([v.b], { type: v.t || '' }) : v;
+
+async function saveAs(verdict, o, buffers) {
   const db = await open(o.idb);
   try {
     const gen = 'g' + (o.now || Date.now());
@@ -63,15 +86,15 @@ async function save(verdict, opts) {
     const meta = t.objectStore('meta'), bank = t.objectStore('bank'), figs = t.objectStore('figs');
     const old = await req(meta.get('active'));
     bank.put({ questions: verdict.questions, manifest: verdict.manifest }, gen);
-    for (const f of verdict.figures) figs.put(new root.Blob([f.bytes], { type: f.type }), gen + '/' + f.name);
+    for (const f of verdict.figures) figs.put(asStored(f.bytes, f.type, buffers), gen + '/' + f.name);
     /* The notes' seed and figure files, beside the figures and in the same
        generation, so they commit, replace and roll back with the bank. */
-    for (const x of (verdict.extras || [])) figs.put(new root.Blob([x.bytes], { type: x.type }), gen + '/extra/' + x.name);
+    for (const x of (verdict.extras || [])) figs.put(asStored(x.bytes, x.type, buffers), gen + '/extra/' + x.name);
     if (o.failAfterWrites) { t.abort(); await finished; }   // for the suite: an interrupted import changes nothing
-    meta.put({ gen, questions: verdict.questions.length, figures: verdict.figures.length, extras: (verdict.extras || []).length }, 'active');
+    meta.put({ gen, questions: verdict.questions.length, figures: verdict.figures.length, extras: (verdict.extras || []).length, stored: buffers ? 'buffers' : 'blobs' }, 'active');
     if (old && old.gen && old.gen !== gen) { bank.delete(old.gen); figs.delete(range(old.gen)); }
     await finished;
-    return { gen, questions: verdict.questions.length, figures: verdict.figures.length, extras: (verdict.extras || []).length };
+    return { gen, questions: verdict.questions.length, figures: verdict.figures.length, extras: (verdict.extras || []).length, stored: buffers ? 'buffers' : 'blobs' };
   } finally { db.close(); }
 }
 
@@ -92,8 +115,9 @@ async function load(opts) {
     const url = {}, extras = {};
     keys.forEach((k, i) => {
       const name = String(k).slice(active.gen.length + 1);
-      if (name.indexOf('extra/') === 0) extras[name.slice(6)] = blobs[i];   // kept as Blobs: served by the loader, not as <img>
-      else url[name] = makeURL(blobs[i]);
+      const b = asBlob(blobs[i]);
+      if (name.indexOf('extra/') === 0) extras[name.slice(6)] = b;   // kept as Blobs: served by the loader, not as <img>
+      else url[name] = makeURL(b);
     });
     const imgs = {};
     for (const q of rec.questions) if (q.figs && q.figs.length) imgs[q.id] = q.figs.map(f => url[f]).filter(Boolean);

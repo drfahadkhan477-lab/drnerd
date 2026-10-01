@@ -664,6 +664,26 @@ head('a reload is not a boot, and the split build is why');
      /!!npmCli, npmCli \|\| 'not found/.test(rel));
 }
 
+head('no waitForFunction predicate returns a Promise, which it never awaits');
+{
+  /* page.waitForFunction treats a returned Promise as truthy and stops on the
+     first poll (tests/_render.js, above resolved(), has the measurement). Four
+     waits in verify-memorizer were MemStore.get(…).then(…) and waited for
+     nothing. Narrow on purpose: it catches an async predicate, and an arrow
+     whose expression body is a call chain ending in .then(, new Promise or
+     fetch( — the shapes that were there. A block body that returns a Promise
+     is not caught. */
+  const PROMISE_PRED = /waitForFunction\(\s*(?:async\b|(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*(?:new\s+Promise\b|fetch\(|[\w$.]+\([^()]*\)\s*\.then\())/;
+  ok('the scan recognises the shape it hunts', PROMISE_PRED.test("p.waitForFunction(id => MemStore.get('docs', id).then(d => d.ok), x, T)") &&
+     PROMISE_PRED.test('p.waitForFunction(async () => 1)') && !PROMISE_PRED.test("p.waitForFunction(() => document.querySelector('#x'), null, T)"));
+  /* Two files hold the shape on purpose, as data: verify-render runs the trap
+     to prove it is real, and this file tests the scan on samples. */
+  const EXEMPT = ['verify-render.js', 'verify-engine.js'];
+  const bad = fs.readdirSync(TESTS).filter(n => /^verify-.+\.js$/.test(n) && !EXEMPT.includes(n))
+    .filter(f => PROMISE_PRED.test(blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8'))));
+  ok('no suite passes waitForFunction a predicate that returns a Promise — resolved() in tests/_render.js awaits one', bad.length === 0, bad.join(', ') || 'none');
+}
+
 head('clipboard permissions are asked for by engine, never by a Chromium-only name');
 {
   ok('chromium is granted read and write', JSON.stringify(E.clipboardPermissions('chromium')) === '["clipboard-read","clipboard-write"]');

@@ -34,8 +34,9 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch, clipboardPermissions } = require('./_engine');
+const { launch, clipboardPermissions, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
+const { resolved } = require('./_render.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -430,7 +431,25 @@ function kindOf(user) {
      (NODE_EXTRA_CA_CERTS). Measured: in this repository's cloud sandbox the
      browser failed pdf.min.js with ERR_CERT_AUTHORITY_INVALID. */
   let cdnHits = 0;
+  /* ON WEBKIT THE APP IS SERVED, NOT OPENED AS A FILE. The first WebKit run
+     opened it from file:// as Chromium does, and WebKit gives a file page the
+     origin "null": the pdf.js worker's blob: URL then fails "due to access
+     control checks", and a book's figure finder came back with nothing. No
+     WebKit user meets that page — an iPad cannot run a local HTML file at
+     all; the Memorizer reaches it over https. So on WebKit the same built
+     files are served from http://localhost (a secure context, as https is),
+     answered by page.route from the build folder, and Chromium keeps the
+     local-file test it has always had. */
+  const FILE = engineName() === 'chromium';
+  const ORIGIN = 'http://localhost:8137';
+  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
   const wire = async page => {
+  if (!FILE) await page.route(ORIGIN + '/**', route => {
+    const rel = decodeURIComponent(new (require('url').URL)(route.request().url()).pathname).replace(/^\/+/, '') || 'index.html';
+    const f = path.join(dir, rel);
+    if (!f.startsWith(dir) || !fs.existsSync(f) || !fs.statSync(f).isFile()) return route.fulfill({ status: 404, body: '' });
+    return route.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
+  });
   await page.route('https://cdn.jsdelivr.net/**', async route => {
     cdnHits++;
     const res = await fetch(route.request().url());
@@ -460,7 +479,7 @@ function kindOf(user) {
   });
   };
   await wire(page);
-  const URL = 'file://' + path.join(dir, 'index.html');
+  const URL = FILE ? 'file://' + path.join(dir, 'index.html') : ORIGIN + '/index.html';
   const T = { timeout: 60000 };
   const text = async (p, sel) => (await p.locator(sel).innerText()).replace(/\s+/g, ' ').trim();
   /* Home is the hero, the brain and the pearl; the chapters, and everything
@@ -496,7 +515,7 @@ function kindOf(user) {
      !/<script src="(?!https:)/.test(html) && !/<link rel="stylesheet" href="(?!https:)/.test(html));
   await page.goto(URL);
   await page.locator('#home-hero').waitFor(T);
-  ok('opens as a local file on the home screen: what shall we learn, and a box to add it', (await page.locator('h1.learn').innerText()) === 'Learn?' &&
+  ok(`opens ${FILE ? 'as a local file' : 'over http'} on the home screen: what shall we learn, and a box to add it`, (await page.locator('h1.learn').innerText()) === 'Learn?' &&
      await page.locator('label.learn-box#door-add[for="pdf-input"]').count() === 1);
   ok('with chips to upload a PDF, add photos or paste notes',
      await page.locator('.chips label.chip[for="pdf-input"]').count() === 1 && await page.locator('.chips label.chip[for="photo-input"]').count() === 1 &&
@@ -1619,7 +1638,7 @@ function kindOf(user) {
     /* every section of the test unit is drilled by now: a second unit, not begun, to plan */
     const body = t => Array.from({ length: 12 }, (_, i) => `${t} note ${i} says what ${t.toLowerCase()} does to the heart.`).join('\n');
     await page.evaluate(b => Memorizer.importText('Plan notes', b), `Contractility\n\n${body('Contractility')}\n\nHeart Rate\n\n${body('Heart Rate')}`);
-    await page.waitForFunction(() => MemStore.all('docs').then(ds => ds.some(d => d.name === 'Plan notes')), null, T);
+    await resolved(page, () => MemStore.all('docs').then(ds => ds.some(d => d.name === 'Plan notes')), null, T);
     await page.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await page.locator('#exam-plan').waitFor(T);
     await page.fill('#exam-date', await plus(10));
@@ -2512,6 +2531,17 @@ function kindOf(user) {
     const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block', permissions: clipboardPermissions() });
     const p4 = watch(await ctx.newPage(), events, 'pack', errors);
     await wire(p4);
+    /* WebKit will not let a page read the clipboard back, permission or not
+       ("The request is not allowed by the user agent"). There the read-back
+       is the text the browser ACCEPTED from the app's writeText — recorded
+       only when the write resolves, so a refused copy still reads as nothing.
+       Narrower than Chromium's, which reads the operating system's clipboard. */
+    if (!FILE) await p4.addInitScript(() => {
+      const c = navigator.clipboard; if (!c || !c.writeText) return;
+      const write = c.writeText.bind(c); let last = null;
+      c.writeText = t => write(t).then(v => { last = String(t); return v; });
+      c.readText = () => last === null ? Promise.reject(new Error('nothing was copied')) : Promise.resolve(last);
+    });
     const aiBefore = stub.requests.length;
     await p4.goto(URL);
     await p4.locator('#door-add').waitFor(T);
@@ -2907,9 +2937,9 @@ function kindOf(user) {
     await p5.locator('#chapters .chapter-row').nth(2).locator('button.unit-open').click();
     await p5.locator('#sections .section-card').first().waitFor(T);
     ok('a chapter opens as a unit, naming its book and pages', /Book · chapter 2 · pp\. 4–5/.test(await p5.locator('.book-of').innerText()), await p5.locator('.book-of').innerText());
-    await p5.waitForFunction(id => MemStore.get('docs', id).then(d => Array.isArray(d.figures)), ch2.id, T);
+    await resolved(p5, id => MemStore.get('docs', id).then(d => Array.isArray(d.figures)), ch2.id, T).catch(() => {});
     const figs = await p5.evaluate(id => MemStore.get('docs', id).then(d => d.figures), ch2.id);
-    ok('its figure is found the first time it is opened, at its book page, from the second PDF', figs.length === 1 && figs[0].page === BOOK_FIG.page &&
+    ok('its figure is found the first time it is opened, at its book page, from the second PDF', !!figs && figs.length === 1 && figs[0].page === BOOK_FIG.page &&
        figs[0].caption === BOOK_FIG.caption && figs[0].box.every((v, i) => Math.abs(v - BOOK_FIG.box[i]) <= 1), JSON.stringify(figs));
     await p5.locator('#learn-unit').click();
     await p5.locator('ol.points > li').first().waitFor(T);
@@ -2935,7 +2965,7 @@ function kindOf(user) {
     /* Chapter 1 opened, so it has a session to keep. */
     await p5.locator('#chapters .chapter-row').nth(1).locator('button.unit-open').click();
     await p5.locator('#sections').waitFor(T);
-    await p5.waitForFunction(() => MemStore.all('docs').then(ds => Array.isArray(ds.find(d => d.pageStart === 2).figures)), null, T);
+    await resolved(p5, () => MemStore.all('docs').then(ds => Array.isArray(ds.find(d => d.pageStart === 2).figures)), null, T).catch(() => {});
     await p5.locator('header.topbar button[aria-label="Back"]').click();
     await p5.locator('#chapters').waitFor(T);
     const keptId = (await p5.evaluate(() => MemStore.all('books').then(x => x[0].chapters))).find(c => c.pageStart === 2).docId;
@@ -3039,7 +3069,7 @@ function kindOf(user) {
     const was = await p3.locator('#fix-text textarea[data-si="' + fixSi + '"]').inputValue();
     await p3.fill('#fix-text textarea[data-si="' + fixSi + '"]', was.replace('preload rises with volume', 'preload rises with volume load'));
     await p3.locator('#fix-text button[data-fix="' + fixSi + '"]').click();
-    await p3.waitForFunction(id => MemStore.get('docs', id).then(d => (d.corrections || []).length === 1), srec.id, T).catch(() => {});
+    await resolved(p3, id => MemStore.get('docs', id).then(d => (d.corrections || []).length === 1), srec.id, T).catch(() => {});
     const fixed = await p3.evaluate(id => MemStore.get('docs', id), srec.id);
     ok('a paragraph recognition read can be corrected: the section keeps your text, and the correction with what it said before', fixed.corrections && fixed.corrections.length === 1 &&
        fixed.corrections[0].was === was && /volume load/.test(fixed.clusters[onScan].text) && fixed.clusters[onScan].segments[+fixSi].corrected === true, JSON.stringify(fixed.corrections));
