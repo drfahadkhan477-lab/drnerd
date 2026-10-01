@@ -444,6 +444,11 @@ function kindOf(user) {
   const ORIGIN = 'http://localhost:8137';
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
   const wire = async page => {
+  /* On WebKit a page error arrived as a bare "…due to access control checks"
+     whose first characters were lost before the log. Printed whole, with
+     its stack, so the next run names the code that raised it. Diagnostic
+     only: the checks that count errors are unchanged. */
+  if (!FILE) page.on('pageerror', e => console.log('  [pageerror] ' + JSON.stringify({ message: e.message, stack: String(e.stack || '').slice(0, 400) })));
   if (!FILE) await page.route(ORIGIN + '/**', route => {
     const rel = decodeURIComponent(new (require('url').URL)(route.request().url()).pathname).replace(/^\/+/, '') || 'index.html';
     const f = path.resolve(dir, rel);
