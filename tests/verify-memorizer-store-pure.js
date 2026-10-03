@@ -81,5 +81,14 @@ module.exports = (async () => {
   assert.equal(closed, true);
   console.log('PASS blocked then late-success stays honestly in fallback and closes the unused connection');
 
+  const deck = root.MemStore;
+  await deck.put('cards', { id: 'card', errorType: 'C', hazard: false, srs: { due: '2026-10-10', reps: 4 } });
+  await deck.saveStep({ id: 'unit', state: {} }, [{ id: 'card', errorType: 'R', hazard: true, srs: null }]);
+  const card = await deck.get('cards', 'card');
+  assert.equal(card.errorType, 'R'); assert.equal(card.hazard, true);
+  assert.equal(card.srs.due, '2026-10-10'); assert.equal(card.srs.reps, 4);
+  assert.equal((await deck.all('cards')).length, 1);
+  console.log('PASS existing card metadata updates without resetting its SRS history');
+
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });

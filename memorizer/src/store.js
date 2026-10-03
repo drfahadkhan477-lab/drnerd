@@ -178,8 +178,7 @@ function deleteBook(id) {
   });
 }
 
-/* Cards from a session are merged in, never overwritten: a card already in
-   the deck keeps its review history. */
+/* Merge learning metadata while keeping the deck’s review history. */
 function mergeCards(cards) {
   return all('cards').then(function (have) {
     var ids = {};
@@ -197,9 +196,13 @@ function mergeCards(cards) {
    Resolves with every card in the deck, as mergeCards + all('cards') did. */
 function saveStep(session, cards) {
   var fresh = function (have) {
-    var ids = {};
-    have.forEach(function (c) { ids[c.id] = true; });
-    return (cards || []).filter(function (c) { return !ids[c.id]; }).map(function (c) { return JSON.parse(JSON.stringify(c)); });
+    var byId = {};
+    have.forEach(function (c) { byId[c.id] = c; });
+    return (cards || []).map(function (c) {
+      var old = byId[c.id], next = clone(c);
+      if (old) { next = Object.assign({}, old, next); next.srs = old.srs; next.hazard = !!(old.hazard || c.hazard); }
+      return next;
+    });
   };
   return open().then(function (db) {
     if (!db) {
@@ -224,7 +227,9 @@ function saveStep(session, cards) {
           try {
             var add = fresh(req.result);
             add.forEach(function (c) { cs.put(c); });
-            out = req.result.concat(add);
+            var byId = {};
+            add.forEach(function (c) { byId[c.id] = c; });
+            out = req.result.filter(function (c) { return !byId[c.id]; }).concat(add);
           } catch (e) { try { t.abort(); } catch (_) {} reject(e); }
         };
       } catch (e) { try { t.abort(); } catch (_) {} reject(e); }
