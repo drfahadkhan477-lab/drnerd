@@ -98,6 +98,10 @@ name: verify (source-independent subset)
 on:
   push:
   pull_request:
+  # The `full` job's own `if:` asks for this event, and GitHub only offers the
+  # "Run workflow" button for a workflow that declares it on the default
+  # branch. Without this line the job could never be selected.
+  workflow_dispatch:
 
 # Read-only, for every job. Nothing here writes to the repository, comments,
 # or publishes; each job checks out and runs Node. Without this block the jobs
