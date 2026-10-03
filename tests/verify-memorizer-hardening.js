@@ -306,6 +306,29 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
        /removed/.test(await r.locator('#settings-status').innerText()));
   }
 
+  head('section deletion commits its associated records together');
+  {
+    const r = await context('deletion');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Deletion');
+    await r.locator('#learn-unit').waitFor(T);
+    await r.evaluate(async () => {
+      const u = Memorizer.ui, id = u.docId;
+      u.notes = { [id + ':0']: { text: 'Alpha' }, [id + ':1']: { text: 'Beta' } };
+      u.checks = { [id + ':1']: { start: '2026-01-01', done: [] } };
+      await MemStore.batch([{ store: 'meta', value: { id: 'notes', recs: u.notes } }, { store: 'meta', value: { id: 'checks', recs: u.checks } }]);
+    });
+    r.on('dialog', dialog => dialog.accept());
+    await r.locator('#sections .section-del').first().click();
+    await r.waitForFunction(() => Memorizer.ui.docRec.clusters.length === 1, null, T);
+    const got = await r.evaluate(async () => {
+      const id = Memorizer.ui.docId, d = await MemStore.get('docs', id), n = await MemStore.get('meta', 'notes'), c = await MemStore.get('meta', 'checks'), ss = await MemStore.get('sessions', id);
+      return { index: d.clusters[0].index, identity: d.clusters[0].identity, note: n.recs[id + ':0'].text, checks: !!c.recs[id + ':0'], titles: ss.state.titles.length };
+    });
+    ok('surviving section, note, checks and session agree', got.index === 0 && got.identity === 1 && got.note === 'Beta' && got.checks && got.titles === 1, JSON.stringify(got));
+    await r.reload(); await r.locator('#door-add').waitFor(T);
+    ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
+  }
+
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));
   await browser.close();

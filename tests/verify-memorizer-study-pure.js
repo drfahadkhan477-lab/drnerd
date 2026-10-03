@@ -397,5 +397,17 @@ head('teach it back, marked by the on-device model: a judge held to what was sai
   ok('a reply that is not JSON changes nothing', JSON.stringify(S.teachJudge('I think they did well', pts, said, base).covered) === JSON.stringify(base.covered));
 }
 
+head('section deletion preserves identity and remaps associated records');
+{
+  const d = { id: 'unit', clusters: [0, 1, 2].map(i => ({ index: i, title: 'Section ' + i })), corrections: [{ ci: 0 }, { ci: 2 }] };
+  const next = S.dropDocSection(d, 0);
+  ok('positions change while historical identities survive', JSON.stringify(next.clusters.map(c => [c.index, c.identity])) === '[[0,1],[1,2]]');
+  ok('corrections follow their surviving section', next.corrections.length === 1 && next.corrections[0].ci === 1);
+  const recs = S.dropSectionRecords({ 'unit:0': 'Alpha', 'unit:1': 'Beta', 'unit:2': 'Gamma', 'other:0': 'Other' }, 'unit', 0);
+  ok('notes and checks follow content rather than old positions', recs['unit:0'] === 'Beta' && recs['unit:1'] === 'Gamma' && !recs['unit:2'] && recs['other:0'] === 'Other');
+  ok('deleting the middle retains both neighbors', JSON.stringify(S.dropDocSection(d, 1).clusters.map(c => c.identity)) === '[0,2]');
+  ok('the original document is untouched', d.clusters.length === 3 && d.corrections[1].ci === 2);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

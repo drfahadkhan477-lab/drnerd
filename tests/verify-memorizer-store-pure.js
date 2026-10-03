@@ -60,5 +60,16 @@ module.exports = (async () => {
       console.log(`PASS fallback ${failure}, structuredClone ${nativeClone ? 'available' : 'unavailable'}: PDF bytes and copy isolation`);
     }
   }
+  const root = {};
+  vm.runInNewContext(source, { window: root, ArrayBuffer, DataView });
+  await root.MemStore.batch([{ store: 'docs', value: { id: 'unit', name: 'Original' } }, { store: 'notes', value: { id: 'invalid' } }]).then(() => assert.fail('invalid batch accepted'), () => {});
+  assert.equal(await root.MemStore.get('docs', 'unit'), null);
+  const ops = [{ store: 'docs', value: { id: 'unit', name: 'Saved' } }, { store: 'meta', value: { id: 'notes', recs: { 'unit:0': 'Note' } } }];
+  await root.MemStore.batch(ops);
+  ops[0].value.name = 'Changed';
+  assert.equal((await root.MemStore.get('docs', 'unit')).name, 'Saved');
+  assert.equal((await root.MemStore.get('meta', 'notes')).recs['unit:0'], 'Note');
+  console.log('PASS batch validation and copy isolation');
+
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });

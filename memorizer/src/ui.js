@@ -485,7 +485,7 @@ function openDoc(id, section) {
     ui.docId = id;
     ui.pack = r[2] || null; ui.packReport = null; ui.packText = ''; ui.packOpen = false; ui.packShow = false;
     var st = r[1] && r[1].state;
-    ui.state = Session.resumable(st) ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }));
+    ui.state = Session.resumable(st) ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }), ui.docRec.clusters.map(function (c, i) { return c.identity == null ? i : c.identity; }));
     if (ui.state.titles && ui.state.titles.length === ui.docRec.clusters.length) ui.state.titles = ui.docRec.clusters.map(function (c) { return c.title; });
     ui.state = Session.next(ui.state, { type: 'toUnit' });
     if (typeof section === 'number') ui.state = Session.next(ui.state, { type: 'open', section: section });
@@ -1062,20 +1062,19 @@ function deleteSection(i) {
   if (!root.confirm('Delete section ' + (i + 1) + ', \u201C' + c.title + '\u201D, from this unit? Its progress and review cards go with it; every other section keeps its own.')) return Promise.resolve();
   var st;
   try { st = Session.dropSection(st0, i); } catch (e) { ui.notice = 'Not deleted: ' + e.message + '.'; render(); return Promise.resolve(); }
-  var doc2 = Object.assign({}, d, { clusters: d.clusters.filter(function (_, k) { return k !== i; }) });
+  var doc2 = Study.dropDocSection(d, i);
   var cards = Session.dropCards(ui.cards, d.id, i), pack2 = Pack.dropSection(ui.pack, i);
-  docsChanged();
-  return Promise.all([Store.put('docs', doc2), Store.del('vectors', d.id), pack2 ? Store.put('packs', pack2) : null]
-      .concat(cards.drop.map(function (id) { return Store.del('cards', id); }), cards.renumbered.map(function (x) { return Store.put('cards', x); })))
-    .then(function () {
-      var gone = {}, moved = {};
-      cards.drop.forEach(function (id) { gone[id] = true; });
-      cards.renumbered.forEach(function (x) { moved[x.id] = x; });
-      ui.cards = ui.cards.filter(function (x) { return !gone[x.id]; }).map(function (x) { return moved[x.id] || x; });
-      ui.docRec = doc2; ui.state = st; ui.pack = pack2; ui.figsFor = null; ui.packReport = null;
-      return save();
-    })
-    .then(function () { ui.notice = 'Deleted \u201C' + c.title + '\u201D.'; render(); }, function (e) { saveFailed(e); render(); });
+  var notes = Study.dropSectionRecords(ui.notes, d.id, i), checks = Study.dropSectionRecords(ui.checks, d.id, i);
+  var ops = [{ store: 'docs', value: doc2 }, { store: 'sessions', value: { id: d.id, state: st, at: Date.now() } },
+    { store: 'vectors', id: d.id, delete: true }, { store: 'meta', value: { id: 'notes', recs: notes } }, { store: 'meta', value: { id: 'checks', recs: checks } }];
+  if (pack2) ops.push({ store: 'packs', value: pack2 });
+  cards.drop.forEach(function (id) { ops.push({ store: 'cards', id: id, delete: true }); });
+  cards.renumbered.forEach(function (x) { ops.push({ store: 'cards', value: x }); });
+  return Store.batch(ops).then(function () {
+    docsChanged(); ui.docRec = doc2; ui.state = st; ui.pack = pack2; ui.notes = notes; ui.checks = checks;
+    ui.figsFor = null; ui.packReport = null; ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} };
+    return refresh();
+  }).then(function () { ui.notice = 'Deleted “' + c.title + '”.'; render(); }, function (e) { saveFailed(e); render(); });
 }
 function trashIcon() {
   return svg('svg', { viewBox: '0 0 24 24', 'class': 'trash-icon', 'aria-hidden': 'true' }, [

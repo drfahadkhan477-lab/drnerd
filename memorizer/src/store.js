@@ -122,6 +122,37 @@ function del(store, id) {
   });
 }
 
+/* A bounded change across stores commits completely or not at all. */
+function batch(ops) {
+  var snapshot;
+  try {
+    snapshot = clone(ops);
+    snapshot.forEach(function (o) {
+      if (STORES.indexOf(o.store) < 0 || (!o.delete && (!o.value || typeof o.value.id !== 'string'))) throw new Error('invalid storage operation');
+    });
+  } catch (e) { return Promise.reject(e); }
+  if (!snapshot.length) return Promise.resolve();
+  return open().then(function (db) {
+    if (!db) {
+      var next = Object.assign({}, mem);
+      snapshot.forEach(function (o) {
+        if (next[o.store] === mem[o.store]) next[o.store] = Object.assign({}, mem[o.store]);
+        if (o.delete) delete next[o.store][o.id]; else next[o.store][o.value.id] = o.value;
+      });
+      mem = next; return;
+    }
+    return new Promise(function (resolve, reject) {
+      var t;
+      try {
+        t = db.transaction(snapshot.map(function (o) { return o.store; }).filter(function (s, i, a) { return a.indexOf(s) === i; }), 'readwrite');
+        t.oncomplete = function () { resolve(); };
+        t.onerror = t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+        snapshot.forEach(function (o) { var os = t.objectStore(o.store); if (o.delete) os.delete(o.id); else os.put(o.value); });
+      } catch (e) { if (t) try { t.abort(); } catch (_) {} reject(e); }
+    });
+  });
+}
+
 /* Removing a document removes everything that came from it. */
 function deleteDoc(id) {
   return all('cards').then(function (cards) {
@@ -194,7 +225,7 @@ function saveStep(session, cards) {
   });
 }
 
-api.open = open; api.put = put; api.get = get; api.all = all; api.del = del;
+api.batch = batch; api.open = open; api.put = put; api.get = get; api.all = all; api.del = del;
 api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards; api.saveStep = saveStep;
 root.MemStore = api;
 })(typeof window !== 'undefined' ? window : this);
