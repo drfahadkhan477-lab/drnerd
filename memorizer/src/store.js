@@ -82,21 +82,36 @@ function tx(store, mode, fn) {
   });
 }
 
+/* Copy Memorizer's records, including PDF bytes, without requiring newer
+   browser APIs on older WebKit. */
+function clone(value) {
+  if (value == null || typeof value !== 'object') return value;
+  if (value instanceof ArrayBuffer) return value.slice(0);
+  if (ArrayBuffer.isView(value)) {
+    var buffer = value.buffer.slice(0);
+    return value instanceof DataView ? new DataView(buffer, value.byteOffset, value.byteLength) :
+      new value.constructor(buffer, value.byteOffset, value.length);
+  }
+  var copy = Array.isArray(value) ? [] : {};
+  Object.keys(value).forEach(function (k) { copy[k] = clone(value[k]); });
+  return copy;
+}
+
 function put(store, value) {
   return tx(store, 'readwrite', function (os) {
-    if (!os) { mem[store][value.id] = JSON.parse(JSON.stringify(value)); return value; }
+    if (!os) { mem[store][value.id] = clone(value); return value; }
     os.put(value); return value;
   });
 }
 function get(store, id) {
   return tx(store, 'readonly', function (os) {
-    if (!os) return mem[store][id] ? JSON.parse(JSON.stringify(mem[store][id])) : null;
+    if (!os) return mem[store][id] ? clone(mem[store][id]) : null;
     return os.get(id);
   }).then(function (v) { return v == null ? null : v; });
 }
 function all(store) {
   return tx(store, 'readonly', function (os) {
-    if (!os) return Object.keys(mem[store]).map(function (k) { return mem[store][k]; });
+    if (!os) return Object.keys(mem[store]).map(function (k) { return clone(mem[store][k]); });
     return os.getAll();
   }).then(function (v) { return v || []; });
 }
