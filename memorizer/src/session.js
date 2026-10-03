@@ -73,8 +73,8 @@ function hash(str) {
 }
 
 function cardId(s, source, section, q) { return s.docId + ':' + source + ':' + (s.sectionIds ? s.sectionIds[section] : section) + ':' + hash(q.question + '|' + (q.quote || '')); }
-function addCard(s, source, section, q) {
-  var id = cardId(s, source, section, q);
+function addCard(s, source, section, q, existingId) {
+  var id = existingId || cardId(s, source, section, q);
   for (var i = 0; i < s.cards.length; i++) if (s.cards[i].id === id) return id;
   s.cards.push({ id: id, docId: s.docId, source: source, cluster: section, title: s.titles[section] || '',
                  front: q.question, quote: q.quote || '', options: q.options.slice(), answer: q.answer,
@@ -578,6 +578,16 @@ function dropSection(state, i) {
   else if (qs) qs.forEach(function (q) { if (typeof q.cluster === 'number') q.cluster = shift(q.cluster); });
   return s;
 }
+/* Practice/check misses enter remediation without applying an FSRS review. */
+function practiceMiss(state, section, q, choice, existingId, sure) {
+  var s = clone(state);
+  if (choice === q.answer) return s;
+  if (!s.per[section]) throw new Error('practice section is missing');
+  var id = addCard(s, 'drill', section, q, existingId), mt = missType(q, choice);
+  weakMiss(s, id, section, 'drill', q, mt.t, mt.w);
+  if (sure) s.cards.forEach(function (c) { if (c.id === id) c.hazard = true; });
+  return s;
+}
 /* Changed source text retires derived questions, not unrelated progress. */
 function invalidateSection(state, i) {
   var s = clone(state);
@@ -606,7 +616,7 @@ var MemSession = {
   VERSION: VERSION, init: init, next: next, mastery: mastery, weakest: weakest, examSize: examSize, asked: asked,
   nextSection: nextSection, allDone: allDone, isDue: isDue, dueCards: dueCards, review: review,
   NOT_SURE: NOT_SURE, resumable: resumable, pending: pending, interleave: interleave, reviewItem: reviewItem, needsReteach: needsReteach,
-  closing: closing, closingText: closingText, missType: missType, invalidateSection: invalidateSection, dropSection: dropSection, dropCards: dropCards,
+  closing: closing, closingText: closingText, missType: missType, practiceMiss: practiceMiss, invalidateSection: invalidateSection, dropSection: dropSection, dropCards: dropCards,
 };
 root.MemSession = MemSession;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemSession;

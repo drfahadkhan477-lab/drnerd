@@ -170,6 +170,8 @@ function dispatch(event) {
    a second drill of the same sentences. */
 function afterDrill(d, ci) {
   var key = d.id + ':' + ci;
+  var per = ui.state && ui.state.per[ci];
+  if (!per || !per.quiz || !per.quiz.questions.length) return Promise.resolve([]);
   if (!ui.checks[key]) { ui.checks[key] = { start: today(), done: [], scores: [] }; saveChecks(); }
   return makeStudyCards(d, ci);
 }
@@ -2832,12 +2834,13 @@ function startCheck(x) {
   var st = ui.sessions[x.doc.id], per = st && st.per && st.per[x.ci];
   var qs = per && per.quiz && per.quiz.questions && per.quiz.questions.length ? per.quiz.questions
     : Coach.quiz(x.doc.clusters[x.ci], lessonFor(x.doc, x.ci), x.doc.clusters).questions;
-  ui.check = { key: x.key, title: x.title, qs: Study.checkQuestions(qs, (x.rec.done || []).length), pos: 0, right: 0, done: false };
+  ui.check = { docId: x.doc.id, ci: x.ci, key: x.key, title: x.title, qs: Study.checkQuestions(qs, (x.rec.done || []).length), pos: 0, right: 0, done: false };
   ui.view = 'check'; ui.choice = null; render(); root.scrollTo(0, 0);
 }
 function viewCheck() {
   var k = ui.check, back = backBar('Section check', function () { leave('library'); });
   if (!k) return h('main.wrap', back);
+  if (!k.qs.length) return h('main.wrap', back, h('div.card', h('h2', 'No questions for this check'), h('p', 'This section has no usable questions. Re-read its source or add more text.')));
   if (k.done) {
     var rec = ui.checks[k.key], nx = Study.nextCheck(rec);
     return h('main.wrap', back, h('div.card.result', { id: 'check-result' }, ring(Math.round(100 * k.right / k.qs.length), 'big'),
@@ -2848,6 +2851,7 @@ function viewCheck() {
   }
   var q = k.qs[k.pos];
   return h('main.wrap', back, mcqCard(q, [h('span', 'Check · ' + (k.pos + 1) + ' of ' + k.qs.length + ' · ' + k.title)], function () {
+    recordPracticeMiss(k.docId, k.ci, q, ui.choice);
     logActivity('answer', { correct: ui.choice === q.answer, title: k.title, source: 'check' });
     if (ui.choice === q.answer) k.right++;
     k.pos++; ui.choice = null;
@@ -2869,19 +2873,28 @@ function practiceCard() {
     h('div.chips', [10, 20, 30].map(function (m) { return button(m + ' min', function () { startPractice(m); }, 'chip', { id: 'practice-' + m }); })));
 }
 function cardQ(c) { return { question: c.front, quote: c.quote || '', options: c.options, answer: c.answer, explain: c.explain || c.back, page: c.page }; }
+function recordPracticeMiss(docId, ci, q, choice, existingId) {
+  if (choice === q.answer || !docId) return Promise.resolve();
+  var d = ui.docs.filter(function (x) { return x.id === docId; })[0];
+  if (!d) return Promise.resolve();
+  var st = ui.sessions[docId] || Session.init(docId, d.clusters.map(function (c) { return c.title; }), d.clusters.map(function (c, i) { return c.identity == null ? i : c.identity; }));
+  st = Session.practiceMiss(st, ci, q, choice, existingId, ui.sure);
+  ui.sessions[docId] = st;
+  return Store.saveStep({ id: docId, state: st, at: Date.now() }, st.cards).then(function (cards) { ui.cards = cards; ui.saveError = Store.failureMessage(); render(); }, function (e) { saveFailed(e); render(); });
+}
 function practicePool() {
   var due = Session.dueCards(ui.cards, today()).filter(function (c) { return c.options && c.options.length && c.kind !== 'occlusion'; })
-    .map(function (c) { return { id: c.id, kind: 'due', q: cardQ(c), title: c.title }; });
+    .map(function (c) { return { id: c.id, docId: c.docId, ci: c.cluster, existingId: c.id, kind: 'due', q: cardQ(c), title: c.title }; });
   var weak = [], hard = [];
   ui.docs.forEach(function (d) {
     var st = ui.sessions[d.id];
     if (!st || !st.per) return;
-    Session.pending(st).forEach(function (w) { weak.push({ id: w.id, kind: 'weak', q: w.q, title: st.titles[w.cluster] || '' }); });
+    Session.pending(st).forEach(function (w) { weak.push({ id: w.id, docId: d.id, ci: w.cluster, existingId: w.id, kind: 'weak', q: w.q, title: st.titles[w.cluster] || '' }); });
     /* the unit's hardest: its lowest-scored drilled section's questions */
     /* per is keyed by section number, not an array */
     var drilled = (st.titles || []).map(function (_, i) { return { i: i, p: st.per[i] || {} }; }).filter(function (x) { return x.p.quiz && x.p.quiz.questions && x.p.quiz.questions.length && x.p.score != null; })
       .sort(function (a, b) { return a.p.score - b.p.score || a.i - b.i; });
-    if (drilled[0]) drilled[0].p.quiz.questions.forEach(function (q, k) { hard.push({ id: d.id + ':hard:' + drilled[0].i + ':' + k, kind: 'hard', q: q, title: st.titles[drilled[0].i] }); });
+    if (drilled[0]) drilled[0].p.quiz.questions.forEach(function (q, k) { hard.push({ id: d.id + ':hard:' + drilled[0].i + ':' + k, docId: d.id, ci: drilled[0].i, kind: 'hard', q: q, title: st.titles[drilled[0].i] }); });
   });
   return { due: due, weak: weak, hard: hard };
 }
@@ -2921,6 +2934,7 @@ function viewPractice() {
   return h('main.wrap', back, mcqCard(it.q, [h('span.practice-clock', { id: 'practice-clock', role: 'timer' }, clockOf(p.ends - Date.now())),
       h('span', 'Question ' + (p.pos + 1) + ' of ' + p.qs.length + (it.title ? ' · ' + it.title : '')), h('span.tag', it.kind === 'due' ? 'due card' : it.kind === 'weak' ? 'weak item' : 'hardest')],
     function () {
+      recordPracticeMiss(it.docId, it.ci, it.q, ui.choice, it.existingId);
       logActivity('answer', { correct: ui.choice === it.q.answer, title: it.title || '', source: 'practice' });
       if (ui.choice === it.q.answer) p.right++;
       p.pos++; ui.choice = null;
