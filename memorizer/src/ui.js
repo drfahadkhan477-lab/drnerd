@@ -677,19 +677,32 @@ function tablesCard(c) {
 function where(d, pageNo) {
   return d && d.parts ? Book.locate(d.parts, pageNo) : { fileId: d ? d.id : ui.docId, page: pageNo };
 }
+var byteLoads = {};
 function withBytes(fileId) {
   if (ui.bytesFor === fileId) return Promise.resolve(ui.bytes);
-  return Store.get('files', fileId).then(function (f) { ui.bytesFor = fileId; ui.bytes = f && f.bytes; return ui.bytes; });
+  if (byteLoads[fileId]) return byteLoads[fileId];
+  var p = Store.get('files', fileId).then(function (f) { ui.bytesFor = fileId; ui.bytes = f && f.bytes; return ui.bytes; });
+  byteLoads[fileId] = p; p.then(function () { delete byteLoads[fileId]; }, function () { delete byteLoads[fileId]; }); return p;
 }
+var imageObserver = null;
 function lazyImage(alt, pageNo, box, scale, d) {
-  var img = h('img', { alt: alt });
-  var at = where(d || ui.docRec, pageNo);
-  (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
-    if (!bytes) throw new Error('no file');
-    return Pdf.renderBox(at.fileId, bytes, at.page, box, scale);
-  }).then(function (url) { img.src = url; }, function () { img.alt = alt + ' (could not be drawn)'; });
+  var img = h('img', { alt: alt, loading: 'lazy' }), at = where(d || ui.docRec, pageNo);
+  function load() {
+    (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
+      if (!img.isConnected) return null;
+      if (!bytes) throw new Error('no file');
+      return Pdf.renderBox(at.fileId, bytes, at.page, box, scale);
+    }).then(function (url) { if (url && img.isConnected) img.src = url; }, function () { img.alt = alt + ' (could not be drawn)'; });
+  }
+  if (root.IntersectionObserver) {
+    if (!imageObserver) imageObserver = new root.IntersectionObserver(function (entries, observer) {
+      entries.forEach(function (entry) { if (entry.isIntersecting) { observer.unobserve(entry.target); entry.target._draw(); delete entry.target._draw; } });
+    }, { rootMargin: '400px' });
+    img._draw = load; imageObserver.observe(img);
+  } else load();
   return img;
 }
+
 /* A book's chapter finds its figures the first time it is opened: looking
    through 1,500 pages at import would take far longer than the text. And
    any PDF whose figures were found by an older finder (figuresV behind
@@ -711,7 +724,7 @@ function ensureFigures(d) {
     }).then(function (fs) { fs.forEach(function (f) { f.page = f.page + first - 1; found.push(f); }); });
   }, Promise.resolve()).then(function () {
     return Store.update('docs', d.id, function (latest) {
-      if (!latest) return null; latest.figures = found; latest.figuresV = Pdf.FIGURES_V; return latest;
+      if (!latest || (latest.fingerprint || '') !== (d.fingerprint || '') || JSON.stringify(latest.parts || null) !== JSON.stringify(d.parts || null)) return null; latest.figures = found; latest.figuresV = Pdf.FIGURES_V; return latest;
     });
   }).then(function (latest) {
     if (!latest) { ui.figuresBusy = null; return; }
@@ -3592,7 +3605,7 @@ function storageCard() {
         h('div.row', button('Cancel', function () { close(); }, 'quiet'), button('Replace study data', function () {
           close(); ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; render();
           root.MemBackup.restore(text).then(function () {
-            ui.docId = null; ui.docRec = null; ui.state = null; ui.drafts = {}; ui.actionError = ''; ui.saveError = ''; ui.askIdx = null; ui.secVecs = null; ui.storageHealth = null;
+            ui.docId = null; ui.docRec = null; ui.state = null; ui.bytesFor = null; ui.bytes = null; byteLoads = {}; Pdf.release(); ui.drafts = {}; ui.actionError = ''; ui.saveError = ''; ui.askIdx = null; ui.secVecs = null; ui.storageHealth = null;
             docsChanged(); ui.view = 'library'; ui.notice = 'Backup restored.'; return refresh();
           }).then(render, function (err) { ui.backupStatus = err.message; render(); });
         }, 'primary', { id: 'backup-restore' })));
@@ -3970,6 +3983,7 @@ function bindRadios(app) {
   });
 }
 function render() {
+  if (imageObserver) { imageObserver.disconnect(); imageObserver = null; }
   releaseStale();
   applyFocus();
   var app = doc.getElementById('app');

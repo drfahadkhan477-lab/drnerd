@@ -22,7 +22,8 @@ module.exports = (async () => {
   });
   await verified.MemPdf.read(new ArrayBuffer(0));
   assert.equal(destroyed, 1);
-  await Promise.all([verified.MemPdf.figuresOn('a', new ArrayBuffer(0), []), verified.MemPdf.figuresOn('a', new ArrayBuffer(0), [])]);
+  const storedBytes = new ArrayBuffer(0);
+  await Promise.all([verified.MemPdf.figuresOn('a', storedBytes, []), verified.MemPdf.figuresOn('a', storedBytes, [])]);
   assert.equal(opened, 2);
   await verified.MemPdf.figuresOn('b', new ArrayBuffer(0), []);
   assert.equal(destroyed, 2);
@@ -35,6 +36,24 @@ module.exports = (async () => {
   await assert.rejects(cancelPdf.MemPdf.read(new ArrayBuffer(0), null, null, { figures: false, cancelled: () => cancelled }), /cancelled/);
   assert.equal(pagesRead, 1); assert.equal(cancelledDestroyed, 1);
   console.log('PASS PDF integrity failure closes the path; completed and evicted documents are destroyed');
+  let rasterized = 0, renderDestroyed = 0;
+  const renderCanvases = [];
+  const renderDoc = { createElement: kind => {
+    if (kind === 'script') return {};
+    const c = { width: 0, height: 0, getContext: () => ({}), toDataURL: () => 'data:image/png;base64,synthetic' }; renderCanvases.push(c); return c;
+  }, head: { appendChild: script => queueMicrotask(() => script.onload()) } };
+  const renderRoot = { pdfjsLib: { GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.resolve({ destroy: async () => { renderDestroyed++; },
+    getPage: async () => ({ getViewport: () => ({ width: 10, height: 10 }), render: () => { rasterized++; return { promise: Promise.resolve() }; } }) }) }) } };
+  vm.runInNewContext(pdfSource, { window: renderRoot, document: renderDoc, fetch: async () => ({ ok: true, text: async () => '// verified' }), URL, Blob, ArrayBuffer, Uint8Array });
+  const renderBytes = new ArrayBuffer(0), pdf = renderRoot.MemPdf;
+  await Promise.all([pdf.renderBox('a', renderBytes, 1), pdf.renderBox('a', renderBytes, 1)]); assert.equal(rasterized, 1);
+  await pdf.renderBox('a', renderBytes, 1); assert.equal(rasterized, 1);
+  for (let i = 2; i <= 10; i++) await pdf.renderBox('a', renderBytes, i);
+  await pdf.renderBox('a', renderBytes, 1); assert.equal(rasterized, 11);
+  assert.equal(renderCanvases.every(c => c.width === 0 && c.height === 0), true);
+  await pdf.renderBox('a', new ArrayBuffer(0), 1); assert.equal(renderDestroyed, 1);
+  await pdf.release(); assert.equal(renderDestroyed, 2);
+  console.log('PASS repeated renders share a promise; raster cache is bounded and byte replacement invalidates the PDF');
   let workerTerminated = 0, timerCleared = 0, revoked = 0;
   const canvases = [];
   const ocrRoot = { MemPdf: { loadScript: async () => {} }, Tesseract: { createWorker: async () => ({ recognize: async () => ({ data: { blocks: [] } }), terminate: async () => { workerTerminated++; } }) } };

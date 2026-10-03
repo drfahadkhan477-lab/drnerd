@@ -656,6 +656,7 @@ function kindOf(user) {
     const b = document.querySelector('#to-drill'), wrap = b.parentElement;
     return getComputedStyle(wrap).position === 'static' && wrap === wrap.parentElement.lastElementChild; }));
   /* The picture found at import is drawn from the stored PDF, cropped. */
+  await page.locator('#visuals .figs img').first().scrollIntoViewIfNeeded();
   await page.waitForFunction(() => { const i = document.querySelector('#visuals .figs img'); return i && /^data:image\/png/.test(i.src) && i.naturalWidth > 0; }, null, T);
   const fig = await page.evaluate(() => { const i = document.querySelector('#visuals .figs img'); return { w: i.naturalWidth, h: i.naturalHeight }; });
   const M = await page.evaluate(() => MemPdf.CROP_MARGIN), B = pdf.IMG_BOX, shape = (B[2] - B[0] + 2 * M) / (B[3] - B[1] + 2 * M);
@@ -663,6 +664,7 @@ function kindOf(user) {
   const figCap = await page.locator('#visuals .figs figcaption').first().innerText();
   ok('under its own caption, and named by it to a screen reader', figCap.indexOf(pdf.CAPTION) === 0 &&
      await page.locator('#visuals .figs button[aria-label="Enlarge Figure 4"]').count() === 1, figCap);
+  await page.locator('#visuals .pages img').last().scrollIntoViewIfNeeded();
   await page.waitForFunction(() => [...document.querySelectorAll('#visuals .pages img')].every(i => /^data:image\/png/.test(i.src)) &&
     document.querySelectorAll('#visuals .pages img').length >= 1, null, T);
   ok('and every page of the section is there to open', (await page.locator('#visuals .pages img').count()) >= 1);
@@ -1181,6 +1183,7 @@ function kindOf(user) {
      the pearl is shown beside it — drawn from the stored PDF, not a
      placeholder. The wait is for the drawing to arrive; what it drew is
      the check. */
+    await page.locator('#pearl-visual img').scrollIntoViewIfNeeded();
   await page.waitForFunction(() => { const i = document.querySelector('#pearl-visual img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
   const pv = await page.evaluate(() => { const f = document.querySelector('#pearl-visual'); const i = f && f.querySelector('img');
     return f ? { kind: f.getAttribute('data-kind'), src: i ? i.src.slice(0, 15) : '', w: i ? i.naturalWidth : 0, cap: f.querySelector('figcaption').textContent.replace(/\s+/g, ' ').trim(),
@@ -1592,6 +1595,7 @@ function kindOf(user) {
     await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await page.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
     await page.locator('#occlusion').waitFor(T);
+    await page.locator('#occlusion img').scrollIntoViewIfNeeded();
     await page.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
     const mask = await page.evaluate(() => { const m = document.querySelector('#occlusion .occlusion-mask'), i = document.querySelector('#occlusion img');
       return { style: m.getAttribute('style'), drawn: !!i && /^data:image/.test(i.src) && i.naturalWidth > 0 }; });
@@ -2980,7 +2984,9 @@ function kindOf(user) {
        figs[0].caption === BOOK_FIG.caption && figs[0].box.every((v, i) => Math.abs(v - BOOK_FIG.box[i]) <= 1), JSON.stringify(figs));
     await p5.locator('#learn-unit').click();
     await p5.locator('ol.points > li').first().waitFor(T);
+    await p5.locator('#visuals .figs img').first().scrollIntoViewIfNeeded();
     await p5.waitForFunction(() => { const i = document.querySelector('#visuals .figs img'); return i && /^data:image\/png/.test(i.src) && i.naturalWidth > 0; }, null, T);
+    await p5.locator('#visuals .pages img').last().scrollIntoViewIfNeeded();
     await p5.waitForFunction(() => [...document.querySelectorAll('#visuals .pages img')].length === 2 && [...document.querySelectorAll('#visuals .pages img')].every(i => /^data:image\/png/.test(i.src)), null, T);
     ok('and drawn, with both its pages — one from each PDF', (await p5.locator('#visuals .figs figcaption').first().innerText()).indexOf(BOOK_FIG.caption) === 0 &&
        JSON.stringify(await p5.$$eval('#visuals .pages figcaption', fs => fs.map(f => f.textContent))) === '["Page 4","Page 5"]');

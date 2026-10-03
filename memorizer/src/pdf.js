@@ -547,28 +547,28 @@ function padBox(box, view, m) {
 }
 var docCache = { key: null, doc: null };
 function openStored(key, buffer) {
-  if (docCache.key === key && docCache.doc) return Promise.resolve(docCache.doc);
+  if (docCache.key === key && docCache.buffer === buffer && docCache.doc) return Promise.resolve(docCache.doc);
   var old = docCache.doc; docCache = { key: null, doc: null };
   return dispose(old).then(lib).then(function (L) {
     return L.getDocument({ data: new Uint8Array(buffer.slice(0)), isEvalSupported: false }).promise;
-  }).then(function (doc) { docCache = { key: key, doc: doc }; return doc; });
+  }).then(function (doc) { docCache = { key: key, buffer: buffer, doc: doc }; return doc; });
 }
 function renderBoxNow(key, buffer, pageNo, box, scale) {
   scale = scale || 2;
   return openStored(key, buffer).then(function (doc) { return doc.getPage(pageNo); }).then(function (page) {
     var vp = page.getViewport({ scale: scale });
-    var canvas = document.createElement('canvas');
+    var canvas = document.createElement('canvas'), out;
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
     return page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise.then(function () {
       if (!box) { var full = canvas.toDataURL('image/png'); canvas.width = canvas.height = 0; return full; }
       var r = vp.convertToViewportRectangle(padBox(box, page.view));
       var x = Math.max(0, Math.floor(Math.min(r[0], r[2]))), y = Math.max(0, Math.floor(Math.min(r[1], r[3])));
       var w = Math.min(canvas.width - x, Math.ceil(Math.abs(r[2] - r[0]))), hh = Math.min(canvas.height - y, Math.ceil(Math.abs(r[3] - r[1])));
-      var out = document.createElement('canvas');
+      out = document.createElement('canvas');
       out.width = Math.max(1, w); out.height = Math.max(1, hh);
       out.getContext('2d').drawImage(canvas, x, y, w, hh, 0, 0, w, hh);
       var result = out.toDataURL('image/png'); canvas.width = canvas.height = out.width = out.height = 0; return result;
-    });
+    }).then(function (v) { canvas.width = canvas.height = 0; if (out) out.width = out.height = 0; return v; }, function (e) { canvas.width = canvas.height = 0; if (out) out.width = out.height = 0; throw e; });
   });
 }
 
@@ -576,8 +576,21 @@ function renderBoxNow(key, buffer, pageNo, box, scale) {
 var storedQueue = Promise.resolve();
 function storedJob(run) { var p = storedQueue.then(run); storedQueue = p.catch(function () {}); return p; }
 function figuresOn(key, buffer, pageNos) { return storedJob(function () { return figuresOnNow(key, buffer, pageNos); }); }
-function renderBox(key, buffer, pageNo, box, scale) { return storedJob(function () { return renderBoxNow(key, buffer, pageNo, box, scale); }); }
-function release() { return storedJob(function () { var d = docCache.doc; docCache = { key: null, doc: null }; return dispose(d); }); }
+var renders = [], renderBuffer = null, renderFile = null, RENDER_LIMIT = 8, RENDER_CHARS = 4 * 1024 * 1024;
+function renderBox(key, buffer, pageNo, box, scale) {
+  if (renderBuffer !== buffer || renderFile !== key) { renders = []; renderBuffer = buffer; renderFile = key; }
+  var id = [key, pageNo, JSON.stringify(box), scale || 2].join('|');
+  var at = renders.findIndex(function (r) { return r.id === id; });
+  if (at >= 0) { var hit = renders.splice(at, 1)[0]; renders.push(hit); return hit.promise; }
+  var entry = { id: id, chars: 0 }, p = storedJob(function () { return renderBoxNow(key, buffer, pageNo, box, scale); });
+  entry.promise = p.then(function (url) {
+    entry.chars = url.length;
+    while (renders.length > RENDER_LIMIT || renders.reduce(function (n, r) { return n + r.chars; }, 0) > RENDER_CHARS) renders.shift();
+    return url;
+  }, function (e) { renders = renders.filter(function (r) { return r !== entry; }); throw e; });
+  renders.push(entry); return entry.promise;
+}
+function release() { renders = []; renderBuffer = null; renderFile = null; return storedJob(function () { var d = docCache.doc; docCache = { key: null, doc: null }; return dispose(d); }); }
 
 root.MemPdf = { release: release, labelsIn: labelsIn, LABEL_MAX_WORDS: LABEL_MAX_WORDS, LABEL_MAX: LABEL_MAX, TABLE_TOP: TABLE_TOP, tableTitleFor: tableTitleFor, PDFJS_V: /pdfjs-dist@([\d.]+)/.exec(BASE)[1], FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
