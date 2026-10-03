@@ -3849,9 +3849,10 @@ function bindDrafts(app, scope) {
   Array.prototype.forEach.call(draftFields(app), function (el) {
     var id = draftKey(el); if (!id) return;
     var key = scope + ':' + id, saved = ui.drafts[key];
-    if (saved) el.value = saved.value;
-    el.addEventListener('input', function () { ui.drafts[key] = { value: el.value }; });
-    el.addEventListener('change', function () { ui.drafts[key] = { value: el.value }; });
+    var base = el.value;
+    if (saved && base === saved.base) el.value = saved.value; else delete ui.drafts[key];
+    el.addEventListener('input', function () { ui.drafts[key] = { value: el.value, base: base }; });
+    el.addEventListener('change', function () { ui.drafts[key] = { value: el.value, base: base }; });
   });
 }
 function clearDraft(id) { delete ui.drafts[draftScope() + ':' + id]; }
