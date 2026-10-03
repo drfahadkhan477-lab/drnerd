@@ -29,10 +29,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { launch } = require('./_engine');
+const { launch, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 
-let passed = 0, failed = 0;
+let passed = 0, failed = 0, unmeasured = 0;
+/* A third outcome, as verify-pwa.js has it: a claim this engine cannot weigh
+   is neither passed nor failed, but printed, counted and named. */
+const unmeasurable = (label, why) => { unmeasured++; console.log('  ----  ' + label + '  → not measurable here: ' + why); };
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
@@ -103,25 +106,51 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascr
     const kept = await p.evaluate(us => Promise.all(us.map(u => caches.match(u).then(r => !!r))), urls);
     ok('every pinned reader file is in the cache', kept.every(Boolean), JSON.stringify(urls.filter((_, i) => !kept[i])));
 
+    head('with the network answering something else');
+    /* Served from the cache, measured without any offline emulation: the
+       network now answers every reader file with other bytes, so the page
+       gets the kept bytes only if the service worker serves them from its
+       cache. (A route is not consulted for what a service worker answers.) */
+    await ctx.unroute('https://cdn.jsdelivr.net/**');
+    await ctx.route('https://cdn.jsdelivr.net/**', route => route.fulfill({ status: 200, body: 'NOT FROM THE CACHE', headers: { 'content-type': 'text/plain', 'access-control-allow-origin': '*' } }));
+    /* the kept bytes are read BEFORE the fetch: a worker that went to the
+       network would also write the network's answer into its cache, and a
+       comparison made after would agree with it */
+    const same = await p.evaluate(us => Promise.all(us.map(async u => {
+      const b = new Uint8Array(await (await caches.match(u)).arrayBuffer());
+      const a = new Uint8Array(await (await fetch(u, { mode: 'cors' })).arrayBuffer());
+      return new TextDecoder().decode(a) !== 'NOT FROM THE CACHE' && a.length === b.length && a.every((x, i) => x === b[i]);
+    })), urls);
+    const fromCache = same.every(Boolean);
+    ok('every one is served from the cache, not the network, byte for byte', fromCache, JSON.stringify(urls.filter((_, i) => !same[i])));
+
     head('with the network cut');
-    /* The network is cut by setOffline alone. A route that aborts would be
-       consulted before the service worker on WebKit, refusing what the
-       worker serves from its cache, so it would measure Playwright rather
-       than the app. Proven cut by a file that was never kept. */
+    /* The network cut by setOffline, proven cut by a file never kept. On
+       Playwright's WebKit nothing is served this way, not even what the
+       worker has just served from its cache above: there the offline switch
+       stops requests before the worker sees them. So on WebKit, when the
+       section above passed, this is not measurable rather than a failure;
+       if the section above failed, it fails too. */
     await ctx.unroute('https://cdn.jsdelivr.net/**');
     await ctx.setOffline(true);
     const never = await p.evaluate(() => fetch('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/package.json', { mode: 'cors' }).then(r => r.ok, () => false));
     ok('the network really is cut: a file never kept is not served', never === false);
     const served = await p.evaluate(us => Promise.all(us.map(u => fetch(u, { mode: 'cors' }).then(r => r.ok, () => false))), urls);
-    ok('every one of them is still served, from the cache', served.every(Boolean), JSON.stringify(urls.filter((_, i) => !served[i])));
     const flow = await p.evaluate(() => fetch('https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js', { mode: 'cors' }).then(r => r.ok, () => false));
-    ok('and so is the flowchart drawer', flow);
+    const emulationStops = engineName() === 'webkit' && fromCache && !served.some(Boolean) && !flow;
+    if (emulationStops) {
+      unmeasurable('every one of them is still served, from the cache', 'WebKit\u2019s offline switch stops every request before the worker (none was served, though the worker served all of them from its cache above)');
+      unmeasurable('and so is the flowchart drawer', 'the same');
+    } else {
+      ok('every one of them is still served, from the cache', served.every(Boolean), JSON.stringify(urls.filter((_, i) => !served[i])));
+      ok('and so is the flowchart drawer', flow);
+    }
     await ctx.close();
   } finally {
     await browser.close();
     server.close();
   }
   ok('no page errors', !errors.length, errors.join(' | '));
-  console.log('\n' + passed + ' passed, ' + failed + ' failed');
+  console.log('\n' + passed + ' passed, ' + failed + ' failed' + (unmeasured ? ', ' + unmeasured + ' not measurable on this engine' : ''));
   process.exit(failed ? 1 : 0);
 })();

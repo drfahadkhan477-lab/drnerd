@@ -34,7 +34,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch, clipboardPermissions } = require('./_engine');
+const { launch, clipboardPermissions, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 
 let passed = 0, failed = 0;
@@ -143,10 +143,21 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
     ok('it accepts every kind it reads: .md .markdown .txt .html .htm', ['.md', '.markdown', '.txt', '.html', '.htm'].every(x => a.accept.split(',').includes(x)), a.accept);
     /* each engine names its clipboard grants differently (tests/_engine.js) */
     await ctx.grantPermissions(clipboardPermissions());
+    /* WebKit will not let a page read the clipboard back, permission or not
+       (NotAllowedError). There the read-back is the text the browser
+       ACCEPTED from the app's writeText, recorded only when the write
+       resolves (as verify-memorizer does): narrower than Chromium's, which
+       reads the clipboard itself. */
+    const webkit = engineName() === 'webkit';
+    if (webkit) await p.evaluate(() => {
+      const c = navigator.clipboard, write = c.writeText.bind(c); let last = null;
+      c.writeText = t => write(t).then(v => { last = String(t); return v; });
+      c.readText = () => last === null ? Promise.reject(new Error('nothing was copied')) : Promise.resolve(last);
+    });
     await p.click('#import-copy-prompt');
     await p.waitForFunction(() => /Copied/.test(document.getElementById('import-copy-status').textContent), null, T);
-    const clip = await p.evaluate(() => navigator.clipboard.readText().then(t => t === MemStudyImport.studyFilePrompt() && /MEMORIZER STUDY FILE/.test(t)));
-    ok('Copy puts the study-file prompt, exactly as spec.js builds it, on the clipboard', clip);
+    const clip = await p.evaluate(() => navigator.clipboard.readText().then(t => t === MemStudyImport.studyFilePrompt() && /MEMORIZER STUDY FILE/.test(t), e => 'unreadable: ' + e.message));
+    ok('Copy puts the study-file prompt, exactly as spec.js builds it, on the clipboard' + (webkit ? ' (WebKit: as the browser accepted it)' : ''), clip === true, String(clip));
     await p.click('#import-cancel');
     ok('the footer Cancel closes it', await p.$('#import-dialog') === null);
     await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);
