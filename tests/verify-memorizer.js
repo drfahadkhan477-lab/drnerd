@@ -2835,7 +2835,7 @@ function kindOf(user) {
     await p4.waitForFunction(() => Memorizer.ui.state.per[0].pos === 1 && /Diuretics reduce/.test((document.querySelector('#mcq blockquote') || {}).textContent || ''), null, T);
     await p4.locator('.option[data-i="1"]').click();
     await p4.locator('#next').click();
-    await p4.waitForFunction(s => (document.querySelector('#mcq h2.q') || {}).textContent === s, 'Complete the quoted source sentence.', T).catch(() => {});
+    await p4.waitForFunction(() => Memorizer.ui.state.per[0].pos === 2 && /Again/.test((document.querySelector('#mcq .mcq-meta') || {}).textContent || '') && !document.querySelector('#mcq .option.right'), null, T);
     const again = await p4.evaluate(() => ({ q: (document.querySelector('#mcq h2.q') || {}).textContent, tag: !!document.querySelector('#reworded-tag'),
       meta: (document.querySelector('.mcq-meta') || {}).textContent || '', opts: [...document.querySelectorAll('#mcq .option .opt-text')].map(o => o.textContent) }));
     ok('the retry at the end of the drill is that new wording, labelled: the answer and its reasons Claude’s', again.q === 'Complete the quoted source sentence.' && again.tag && /Again, in new words/.test(again.meta), JSON.stringify(again));
@@ -2861,7 +2861,7 @@ function kindOf(user) {
     await p4.waitForFunction(() => /Review round/.test((document.querySelector('#mcq .mcq-meta') || {}).textContent || ''), null, T);
     const cold = await p4.evaluate(() => ({ q: document.querySelector('#mcq h2.q').textContent, tag: !!document.querySelector('#reworded-tag'), a: MemSession.reviewItem(Memorizer.ui.state).q.answer,
       opts: [...document.querySelectorAll('#mcq .option .opt-text')].map(o => o.textContent) }));
-    ok('a review round’s cold retest asks it in the new words too', cold.q === NEW1 && cold.tag, JSON.stringify(cold));
+    ok('a review round’s cold retest asks it in the new words too', cold.q === 'Complete the quoted source sentence.' && cold.tag, JSON.stringify(cold));
     const atR = cold.opts.indexOf('Greater than 18 mmHg');
     await p4.locator('.option[data-i="' + atR + '"]').click();
     await p4.locator('#next').click();
