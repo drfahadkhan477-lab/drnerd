@@ -445,6 +445,29 @@ function bookPages(book) {
   return Promise.all(book.parts.map(function (_, i) { return Store.get('bookpages', book.id + ':' + i); }))
     .then(function (r) { return r.reduce(function (all, x) { return all.concat(x ? x.pages : []); }, []); });
 }
+function previewBook(fileList) {
+  var picked = Array.prototype.slice.call(fileList || []); if (!picked.length) return;
+  if (ui.importJob) { ui.notice = 'An import is already running.'; render(); return; }
+  var files = Book.orderParts(picked.map(function (f) { return f.name; })).map(function (i) { return picked[i]; });
+  var list = h('ol', { id: 'import-order' }), warnings = h('p.warn', { id: 'import-order-warning' }), close;
+  function draw() {
+    list.textContent = '';
+    files.forEach(function (f, i) {
+      function move(delta) { var at = i + delta, tmp = files[at]; files[at] = f; files[i] = tmp; draw(); }
+      list.appendChild(h('li', h('span', f.name + ' · ' + (f.size / 1048576).toFixed(1) + ' MB '),
+        button('↑', function () { move(-1); }, 'quiet', { 'aria-label': 'Move ' + f.name + ' up', disabled: i === 0 ? true : null }),
+        button('↓', function () { move(1); }, 'quiet', { 'aria-label': 'Move ' + f.name + ' down', disabled: i === files.length - 1 ? true : null })));
+    }); warnings.textContent = Book.partWarnings(files.map(function (f) { return f.name; })).join(' ');
+  }
+  draw();
+  var size = files.reduce(function (n, f) { return n + f.size; }, 0);
+  var body = h('div.card', { role: 'dialog', 'aria-label': 'Book import order' }, h('h2', 'Check the part order'),
+    h('p', 'Parts will be joined in this order. Reorder them if their filenames do not match the reading order.'), list, warnings,
+    h('p', (size / 1048576).toFixed(1) + ' MB of PDFs; extracted text and study data need additional space.'),
+    h('div.row', button('Cancel', function () { close(); }, 'quiet', { id: 'import-order-cancel' }),
+      button('Import in this order', function () { close(); importBook(files, true); }, 'primary', { id: 'import-order-go' })));
+  close = Dialog.open(body, doc.getElementById('app'));
+}
 function importBook(fileList, ordered) {
   var files = Array.prototype.slice.call(fileList || []);
   if (!files.length) return;
@@ -858,7 +881,7 @@ function homeParts() {
   var photoIn = h('input', { type: 'file', accept: 'image/*', multiple: true, id: 'photo-input', class: 'visually-hidden',
     onchange: function (e) { importPhotos(e.target.files); e.target.value = ''; } });
   var bookIn = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, id: 'book-input', class: 'visually-hidden',
-    onchange: function (e) { importBook(e.target.files); e.target.value = ''; } });
+    onchange: function (e) { previewBook(e.target.files); e.target.value = ''; } });
 
   /* The hero band: who it is for, today, and three numbers that matter —
      days in a row, cards due, and how much of what you have studied is held

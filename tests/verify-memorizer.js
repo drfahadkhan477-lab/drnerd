@@ -2950,6 +2950,7 @@ function kindOf(user) {
        await p5.locator('#book-input[multiple]').count() === 1);
     /* Chosen in the wrong order: the second part first. */
     await p5.setInputFiles('#book-input', [{ name: 'Book_5-8.pdf', mimeType: 'application/pdf', buffer: bk.b }, { name: 'Book_1-4.pdf', mimeType: 'application/pdf', buffer: bk.a }]);
+    await p5.locator('#import-order-go').click();
     await p5.locator('#chapters .chapter-row').first().waitFor(T);
     const b = await p5.evaluate(() => MemStore.all('books').then(x => x[0]));
     ok('the parts are put in order and their pages numbered straight through', b.name === 'Book' && b.pages === 8 &&

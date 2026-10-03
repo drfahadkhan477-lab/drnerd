@@ -398,6 +398,22 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
   }
 
+  head('multipart order is reviewable before importing');
+  {
+    const r = await context('part-preview'); await r.goto(URL); await r.locator('#door-add').waitFor(T);
+    await r.locator('#book-input').setInputFiles([
+      { name: 'Book12_1001-1500.pdf', mimeType: 'application/pdf', buffer: Buffer.from('third') },
+      { name: 'Book12_1-500.pdf', mimeType: 'application/pdf', buffer: Buffer.from('first') },
+      { name: 'Book12_501-1000.pdf', mimeType: 'application/pdf', buffer: Buffer.from('second') }
+    ]);
+    await r.locator('#import-order').waitFor(T);
+    ok('the preview sorts by page ranges and has not stored any PDF', /1-500/.test(await r.locator('#import-order li').first().innerText()) && await r.evaluate(async () => (await MemStore.all('files')).length === 0));
+    await r.getByRole('button', { name: 'Move Book12_501-1000.pdf up', exact: true }).click();
+    ok('manual reordering changes the proposed order and warns about the overlap', /501-1000/.test(await r.locator('#import-order li').first().innerText()) && /out of order/.test(await r.locator('#import-order-warning').innerText()));
+    await r.locator('#import-order-cancel').click();
+    ok('cancelling the preview makes no import records', await r.evaluate(async () => (await MemStore.all('meta')).every(v => v.kind !== 'pending-import')));
+  }
+
   head('cancelled imports never publish partial data');
   {
     const r = await context('cancel-import'); await r.goto(URL); await r.locator('#door-add').waitFor(T);
