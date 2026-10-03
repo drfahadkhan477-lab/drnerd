@@ -306,6 +306,22 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
        /removed/.test(await r.locator('#settings-status').innerText()));
   }
 
+  head('a slow unit-open cannot replace the newer selection');
+  {
+    const r = await context('navigation');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Navigation'); await r.locator('#learn-unit').waitFor(T);
+    const got = await r.evaluate(async () => {
+      const a = Memorizer.ui.docId, b = a + '-other', other = JSON.parse(JSON.stringify(Memorizer.ui.docRec)); other.id = b;
+      await MemStore.put('docs', other);
+      const get = MemStore.get; let release;
+      MemStore.get = function (store, id) { if (store === 'docs' && id === a) return new Promise(resolve => { release = () => get(store, id).then(resolve); }); return get(store, id); };
+      const slow = Memorizer.openDoc(a); await Memorizer.openDoc(b); const newer = Memorizer.ui.docId;
+      release(); await slow; MemStore.get = get;
+      return { newer, final: Memorizer.ui.docId, b };
+    });
+    ok('the latest selection stays active', got.newer === got.b && got.final === got.b, JSON.stringify(got));
+  }
+
   head('source corrections retire stale learning records');
   {
     const r = await context('correction');

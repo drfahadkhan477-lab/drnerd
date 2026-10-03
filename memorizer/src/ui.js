@@ -25,6 +25,7 @@ var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.m
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
 
 var ui = {
+  openSeq: 0, drafts: {},
   view: 'library',      /* library | book | session | ask | review | settings */
   askIdx: null, askFor: null, askQ: '', askR: null, askKind: 'chapters', askBusy: false,
   ai: { status: '', busy: '', summary: null, lesson: {}, miss: {} },
@@ -463,6 +464,7 @@ function importBook(fileList) {
   });
 }
 function openBook(id) {
+  ui.openSeq++;
   ui.view = 'book'; ui.bookId = id; ui.error = ''; ui.state = null;
   refresh().then(function () { render(); root.scrollTo(0, 0); });
 }
@@ -479,7 +481,10 @@ function recut(book, chapters, method) {
 }
 
 function openDoc(id, section) {
+  var seq = ++ui.openSeq;
   return Promise.all([Store.get('docs', id), Store.get('sessions', id), Store.get('packs', id)]).then(function (r) {
+    if (seq !== ui.openSeq) return false;
+    if (!r[0]) throw new Error('This unit was removed. Return to Chapters.');
     ui.docRec = r[0];
     if (ui.docRec) retitleDoc(ui.docRec);
     ui.docId = id;
@@ -492,7 +497,7 @@ function openDoc(id, section) {
     ui.view = 'session'; ui.error = ''; ui.choice = null;
     ensureFigures(ui.docRec);
     return save();
-  }).then(function () { render(); root.scrollTo(0, 0); });
+  }).then(function () { if (seq === ui.openSeq) { render(); root.scrollTo(0, 0); } }, function (e) { if (seq === ui.openSeq) { ui.error = e.message; render(); } });
 }
 /* One transition at a time. A second tap before the first has been stored
    and drawn lands on the OLD screen's button: on "I knew it" that skipped a
@@ -2366,6 +2371,7 @@ function viewSession() {
 }
 
 function leave(view) {
+  ui.openSeq++;
   stopPractice();
   ui.drill = null; ui.choice = null;
   ui.view = view; ui.error = ''; ui.notice = '';
@@ -2374,6 +2380,7 @@ function leave(view) {
 
 /* ── REVIEW ──────────────────────────────────────────────────────────────── */
 function startReview() {
+  ui.openSeq++;
   ui.view = 'review'; ui.reviewShown = false; ui.reviewDone = 0; ui.drill = null; ui.choice = null;
   refresh().then(render);
 }
@@ -3585,7 +3592,7 @@ function nav() {
       h('span.nav-icon', { 'aria-hidden': 'true' }, '\u25B6'), h('span.nav-label', ctx.label)) : null,
     tab('library', '⌂', 'Home', function () { leave('library'); }),
     tab('shelf', '📚', 'Chapters', function () { leave('shelf'); }),
-    tab('ask', '🎓', 'Coach', function () { ui.view = 'ask'; ui.error = ''; refresh().then(function () { render(); if (ui.docs.length) askIndex().then(render); }); }),
+    tab('ask', '🎓', 'Coach', function () { ui.openSeq++; ui.view = 'ask'; ui.error = ''; refresh().then(function () { render(); if (ui.docs.length) askIndex().then(render); }); }),
     tab('review', '↻', 'Review', function () { startReview(); }, due),
     tab('settings', '⚙', 'Settings', function () { leave('settings'); }));
 }
