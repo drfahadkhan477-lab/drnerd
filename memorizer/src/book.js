@@ -53,12 +53,16 @@ var CHAPTER_LINE = /^(?:chapter|chap\.|ch\.)\s*(\d{1,3})\b\s*[.:—–-]?\s*(.*)
 function words(t) { return String(t || '').split(/\s+/).filter(Boolean); }
 function clean(t) { return String(t || '').replace(/\s+/g, ' ').trim(); }
 
-/* Parts in reading order: by the first number in each name ("Topol_1-500",
+/* Parts in reading order: by a trailing page range or explicit part number ("Topol_1-500",
    "Topol_501-1000", "Topol_1001_-_1500", "Topol_1501"), then by name.
    Returns the indices of `names` in that order. */
 function orderParts(names) {
   var idx = (names || []).map(function (_, i) { return i; });
-  var num = function (s) { var m = /(\d+)/.exec(String(s)); return m ? +m[1] : Infinity; };
+  var num = function (s) {
+    var name = String(s).replace(/\.pdf$/i, '');
+    var m = /(?:^|[^\d])(\d+)\s*[_ ]*[-–—]\s*[_ ]*\d+\s*$/.exec(name) || /\b(?:part|pt|volume|vol)[\s_.-]*(\d+)\b/i.exec(name) || /(?:^|[_ -])(\d+)\s*$/.exec(name);
+    return m ? +m[1] : Infinity;
+  };
   idx.sort(function (a, b) { return num(names[a]) - num(names[b]) || String(names[a]).localeCompare(String(names[b])) || a - b; });
   return idx;
 }
