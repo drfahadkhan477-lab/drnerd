@@ -121,11 +121,12 @@ function save() {
   var at = Date.now();
   ui.sessions[ui.docId] = ui.state; ui.at[ui.docId] = at;
   return Store.saveStep({ id: ui.docId, state: ui.state, at: at }, ui.state.cards)
-    .then(function (c) { ui.cards = c; ui.saveError = Store.failureMessage(); }, saveFailed);
+    .then(function (c) { ui.cards = c; ui.saveError = Store.failureMessage() || ui.actionError; }, saveFailed);
 }
 function saveFailed(e) {
   var name = e && e.name, msg = (e && e.message) || String(e || 'unknown error');
   ui.saveError = name === 'QuotaExceededError' ? 'this device is out of space for Memorizer' : msg;
+  if (!Store.failureMessage()) ui.actionError = ui.saveError;
 }
 
 /* Days studied, for the streak, in IndexedDB with the units and cards.
@@ -1585,7 +1586,7 @@ function noteCard(c) {
     h('p.muted', 'Yours, not the book’s — shown with this section’s cards and in the Coach, labelled as yours. Mark a key point with ☆ to have it asked as a card.'),
     area, h('div.row', button('Save note', function () {
       ui.notes[key] = { text: area.value.trim(), marks: rec.marks || [] };
-      saveNotes().then(function (ok) { if (ok !== false) { clearDraft('note-text'); ui.notice = 'Note saved.'; ui.saveError = Store.failureMessage(); } render(); });
+      saveNotes().then(function (ok) { if (ok !== false) { clearDraft('note-text'); ui.notice = 'Note saved.'; ui.saveError = Store.failureMessage() || ui.actionError; } render(); });
     }, 'quiet', { id: 'note-save' }), (rec.marks || []).length ? h('span.muted', { id: 'mark-count' }, rec.marks.length + ' point' + (rec.marks.length === 1 ? '' : 's') + ' marked') : null));
 }
 /* A key point marked: kept, and made a cloze card (study.js markCard) from
@@ -2441,7 +2442,7 @@ function viewReview() {
     Store.put('cards', upd).then(function () {
       if (dr) dr.done[card.id] = true;
       if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id);
-      ui.saveError = Store.failureMessage(); ui.reviewDone++;
+      ui.saveError = Store.failureMessage() || ui.actionError; ui.reviewDone++;
       return refresh();
     }, saveFailed).then(next);
   };
@@ -2887,7 +2888,7 @@ function recordPracticeMiss(docId, ci, q, choice, existingId) {
   var st = ui.sessions[docId] || Session.init(docId, d.clusters.map(function (c) { return c.title; }), d.clusters.map(function (c, i) { return c.identity == null ? i : c.identity; }));
   st = Session.practiceMiss(st, ci, q, choice, existingId, ui.sure);
   ui.sessions[docId] = st;
-  return Store.saveStep({ id: docId, state: st, at: Date.now() }, st.cards).then(function (cards) { ui.cards = cards; ui.saveError = Store.failureMessage(); render(); }, function (e) { saveFailed(e); render(); });
+  return Store.saveStep({ id: docId, state: st, at: Date.now() }, st.cards).then(function (cards) { ui.cards = cards; ui.saveError = Store.failureMessage() || ui.actionError; render(); }, function (e) { saveFailed(e); render(); });
 }
 function practicePool() {
   var due = Session.dueCards(ui.cards, today()).filter(function (c) { return c.options && c.options.length && c.kind !== 'occlusion'; })
@@ -3548,7 +3549,7 @@ function storageCard() {
         h('div.row', button('Cancel', function () { close(); }, 'quiet'), button('Replace study data', function () {
           close(); ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; render();
           root.MemBackup.restore(text).then(function () {
-            ui.docId = null; ui.docRec = null; ui.state = null; ui.drafts = {}; ui.saveError = ''; ui.askIdx = null; ui.secVecs = null; ui.storageHealth = null;
+            ui.docId = null; ui.docRec = null; ui.state = null; ui.drafts = {}; ui.actionError = ''; ui.saveError = ''; ui.askIdx = null; ui.secVecs = null; ui.storageHealth = null;
             docsChanged(); ui.view = 'library'; ui.notice = 'Backup restored.'; return refresh();
           }).then(render, function (err) { ui.backupStatus = err.message; render(); });
         }, 'primary', { id: 'backup-restore' })));
@@ -3843,10 +3844,11 @@ function storageBanner() {
   if (ui.saveError) {
     return h('div.card.error.store-banner', { id: 'store-banner', role: 'alert' },
       h('strong', 'Your last step was not saved. '), 'The browser said: ' + ui.saveError + '. ',
-      'The failed write is kept for retry during this visit. Retry before closing the tab; if space is full, export a backup before freeing space.',
-      h('div.row', button('Try saving again', function () {
-        Store.retryFailures().then(function () { ui.saveError = Store.failureMessage(); docsChanged(); return refresh(); }).then(render, function (e) { saveFailed(e); render(); });
-      }, 'primary', { id: 'store-retry' })));
+      Store.failureMessage() ? 'The failed write is kept for retry during this visit. Retry before closing the tab; if space is full, export a backup before freeing space.' : 'This change was not applied. Repeat the original action after resolving the error; other successful saves do not apply it.',
+      h('div.row', Store.failureMessage() ? button('Try saving again', function () {
+        Store.retryFailures().then(function () { ui.saveError = Store.failureMessage() || ui.actionError; docsChanged(); return refresh(); }).then(render, function (e) { saveFailed(e); render(); });
+      }, 'primary', { id: 'store-retry' }) : null,
+      ui.actionError ? button('Dismiss this error', function () { ui.actionError = ''; ui.saveError = Store.failureMessage(); render(); }, 'quiet', { id: 'store-dismiss' }) : null));
   }
   /* Opened from the iPad's Files app, Safari shows the file as a data: URL:
      no origin, so no storage of any kind, and no "normal window" fixes it. */

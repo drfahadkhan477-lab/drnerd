@@ -398,6 +398,24 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
   }
 
+  head('failed atomic edits cannot be acknowledged by a session save');
+  {
+    const r = await context('atomic-failure');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Atomic failure'); await r.locator('#learn-unit').waitFor(T);
+    r.on('dialog', dl => dl.accept());
+    await r.evaluate(() => {
+      window.__atomicPut = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (v) { if (this.name === 'docs') throw new Error('synthetic edit failure'); return window.__atomicPut.apply(this, arguments); };
+    });
+    await r.locator('#sections .section-del').first().click(); await r.locator('#store-banner').waitFor(T);
+    ok('failed deletion keeps both sections and offers repeat-action advice', await r.evaluate(() => Memorizer.ui.docRec.clusters.length === 2) && /Repeat the original action/.test(await r.locator('#store-banner').innerText()) && await r.locator('#store-retry').count() === 0);
+    await r.evaluate(() => { IDBObjectStore.prototype.put = window.__atomicPut; return Memorizer.openDoc(Memorizer.ui.docId); });
+    ok('an unrelated successful save retains the atomic edit warning', await r.locator('#store-banner').count() === 1);
+    await r.locator('#store-dismiss').click();
+    await r.locator('#sections .section-del').first().click(); await r.waitForFunction(() => Memorizer.ui.docRec.clusters.length === 1, null, T);
+    ok('repeating the action applies the deletion once', await r.evaluate(async () => (await MemStore.get('docs', Memorizer.ui.docId)).clusters.length === 1));
+  }
+
   head('backup rescue and transactional restore');
   {
     const r = await context('backup');
