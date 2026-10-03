@@ -144,8 +144,9 @@ function engine(onStatus) {
          passed the core as its own blob: URL and Chromium refused it. The
          worker only imports its core when TesseractCore is not yet defined,
          and here the core has already defined it, so nothing is imported. */
+      var workerUrl = blobUrl(new Blob([r[1], '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript');
       var started = T.createWorker([{ code: 'eng', data: new Uint8Array(r[2]) }], 1, {
-        workerPath: blobUrl(new Blob([r[1], '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript'), workerBlobURL: false,
+        workerPath: workerUrl, workerBlobURL: false,
         cacheMethod: 'none', gzip: true,
         /* tesseract.js 5.1.1 rejects a failed job AND, unless given this,
            throws the same error on the page (src/createWorker.js, the
@@ -154,6 +155,12 @@ function engine(onStatus) {
            recognize() below retries or passes it on, so nothing is lost. */
         errorHandler: function () {},
       });
+      /* The blob holds the core and the worker, several MB. Once the worker
+         has started — or failed to — nothing reads the URL again, and a
+         faulted worker is replaced by a new start with a new blob, so each
+         is released here rather than pinned until the page closes. */
+      function release() { URL.revokeObjectURL(workerUrl); }
+      started.then(release, release);
       return Promise.race([started, new Promise(function (_, reject) {
         setTimeout(function () { reject(new Error('the text reader did not start')); }, START_TIMEOUT_MS);
       })]);

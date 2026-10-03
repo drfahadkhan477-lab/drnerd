@@ -1121,9 +1121,15 @@ async function ocrRetry() {
   const READ = () => Promise.resolve({ data: { blocks: [{ paragraphs: [{ lines: [{ bbox: { y0: 0, y1: 24 }, words: [{ text: 'Preload', confidence: 95, bbox: { x0: 10, x1: 80, y0: 0, y1: 24 } }] }] }] }] } });
   /* plan: what each recognize() call does, in order, across every worker */
   function sandbox(plan) {
-    const made = [], log = { recognize: [], thrown: [] };
+    const made = [], log = { recognize: [], thrown: [], scripts: [], live: new Set() };
+    /* the page's object URLs, so a worker's multi-MB script blob left
+       unreleased after the worker started is seen */
+    const url = Object.assign(Object.create(URL), {
+      createObjectURL: b => { const u = URL.createObjectURL(b); if (b.type === 'text/javascript') { log.scripts.push(u); log.live.add(u); } return u; },
+      revokeObjectURL: u => { log.live.delete(u); URL.revokeObjectURL(u); },
+    });
     const win = {
-      Blob, URL, TextDecoder, Uint8Array, WebAssembly, Promise, Error, String,
+      Blob, URL: url, TextDecoder, Uint8Array, WebAssembly, Promise, Error, String,
       setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref(); return t; },
       fetch: () => Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['x;' + require(path.join(ROOT, 'memorizer', 'src', 'ocr.js')).WORKER_FIX.find])) }),
       FileReader: class { readAsArrayBuffer(b) { b.arrayBuffer().then(r => { this.result = r; this.onload(); }); } },
@@ -1162,6 +1168,8 @@ async function ocrRetry() {
     const r2 = await settle(t.O.readPage(t.page));
     ok('and the next page goes to the fresh reader, not the faulted one', !r2.e && t.made.length === 2 && t.log.recognize.join() === '0,1,1', JSON.stringify(t.log.recognize));
     ok('and the fault is not also thrown on the page (the reader is given an error handler)', t.log.thrown.length === 0, JSON.stringify(t.log.thrown).slice(0, 80));
+    ok('each reader’s script blob is released once it has started, the faulted one’s included', t.log.scripts.length === 2 && t.log.live.size === 0,
+       JSON.stringify({ made: t.log.scripts.length, unreleased: t.log.live.size }));
   }
   {
     const t = sandbox([FAULT, FAULT]);
