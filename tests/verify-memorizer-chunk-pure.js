@@ -1210,7 +1210,7 @@ async function ocrRetry() {
     while (!t.log.recognize.length) await new Promise(resolve => setTimeout(resolve, 1));
     await t.O.release(); const r = await pending;
     const next = await settle(t.O.readPage(t.page));
-    ok('releasing the reader waits for its current page and the next page gets a new worker', !r.e && r.v.items.length === 1 && t.made[0].ended && !next.e && t.made.length === 2);
+    ok('releasing the reader waits for its current page and the next page gets a new worker', !r.e && r.v.length === 1 && t.made[0].ended && !next.e && t.made.length === 2);
     await t.O.release();
   }
   const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
