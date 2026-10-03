@@ -188,7 +188,7 @@ jobs:
         run: node tests/verify-claude-agents.js
       - name: the Claude Code skills are found and cite only what exists (37 checks)
         run: node tests/verify-claude-skills.js
-      - name: a study file is checked by Memorizer's own import code (25 checks)
+      - name: a study file is checked by Memorizer's own import code (26 checks)
         run: node tests/verify-study-file-check.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js

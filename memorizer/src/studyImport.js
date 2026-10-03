@@ -558,7 +558,7 @@ var STUDY_EXAMPLE = [
   '## Practice Questions',
   '',
   '### Question 1: timing',
-  '**Stem**: A patient with severe aortic stenosis on echocardiography develops exertional syncope. What is the next best step?',
+  '**Stem**: A patient with severe aortic stenosis on echocardiography develops symptoms. What is the next best step?',
   '',
   '**Options**:',
   '- A) Follow-up echocardiography',
