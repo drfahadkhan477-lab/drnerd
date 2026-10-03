@@ -291,8 +291,9 @@ function saveUnit(name, source, pages, extra) {
               scanned: (extra && extra.scanned) || [], figures: (extra && extra.figures) || [], figuresV: Pdf.FIGURES_V, hasFile: !!(extra && extra.bytes),
               ocr: (extra && extra.ocr) || [], ocrError: (extra && extra.ocrError) || '', ocrConf: (extra && extra.ocrConf) || {},
               fingerprint: (extra && extra.fingerprint) || '', fileName: (extra && extra.fileName) || '', processing: processing() };
-  var first = extra && extra.bytes ? Store.put('files', { id: rec.id, bytes: extra.bytes }) : Promise.resolve();
-  return first.then(function () { return Store.put('docs', rec); }).then(function () { return rec; });
+  var ops = [{ store: 'docs', value: rec }];
+  if (extra && extra.bytes) ops.push({ store: 'files', value: { id: rec.id, bytes: extra.bytes } });
+  return Store.batch(ops).then(function () { return rec; });
 }
 /* What read this unit: the build of Memorizer (its data-build stamp, set
    by scripts/build-memorizer.js; 'dev' when run from the repository), the
@@ -383,13 +384,13 @@ function bookName(files) {
 function applyChapters(book, chapters, pages) {
   var old = {};
   (book.chapters || []).forEach(function (c) { if (c.docId) old[c.pageStart + ':' + c.pageEnd] = c.docId; });
-  var keep = {}, now = Date.now(), num = 0;
+  var keep = {}, now = Date.now(), num = 0, ops = [];
   var puts = chapters.map(function (c, i) {
     var k = c.pageStart + ':' + c.pageEnd, label = c.front ? 0 : ++num;
     if (old[k]) {
       keep[old[k]] = true;
       return Store.get('docs', old[k]).then(function (d) {
-        return d && (d.name !== c.title || d.chapter !== label) ? Store.put('docs', Object.assign(d, { name: c.title, chapter: label })) : null;
+        if (d && (d.name !== c.title || d.chapter !== label)) ops.push({ store: 'docs', value: Object.assign(d, { name: c.title, chapter: label }) });
       }).then(function () { return Object.assign({}, c, { docId: old[k] }); });
     }
     var mine = pages.filter(function (p) { return p.page >= c.pageStart && p.page <= c.pageEnd; });
@@ -401,14 +402,14 @@ function applyChapters(book, chapters, pages) {
                 pageStart: c.pageStart, pageEnd: c.pageEnd, source: 'pdf', clusters: clusters, hasFile: true, parts: book.parts, figures: null,
                 scanned: (book.scanned || []).filter(function (n) { return n >= c.pageStart && n <= c.pageEnd; }),
                 ocr: (book.ocr || []).filter(function (n) { return n >= c.pageStart && n <= c.pageEnd; }), ocrError: book.ocrError || '' };
-    return Store.put('docs', rec).then(function () { return Object.assign({}, c, { docId: id }); });
+    ops.push({ store: 'docs', value: rec });
+    return Promise.resolve(Object.assign({}, c, { docId: id }));
   });
   return Promise.all(puts).then(function (list) {
     var gone = Object.keys(old).map(function (k) { return old[k]; }).filter(function (id) { return !keep[id]; });
-    return Promise.all(gone.map(function (id) { return Store.deleteDoc(id); })).then(function () {
-      book.chapters = list;
-      docsChanged();
-      return Store.put('books', book);
+    return Store.removalOps(gone).then(function (drops) {
+      var next = Object.assign({}, book, { chapters: list });
+      return Store.batch(ops.concat(drops, [{ store: 'books', value: next }, { store: 'meta', id: 'import:' + book.id, delete: true }])).then(function () { book.chapters = list; docsChanged(); });
     });
   });
 }
@@ -423,7 +424,8 @@ function importBook(fileList) {
   var book = { id: 'b' + newId().slice(1), name: bookName(files), addedAt: Date.now(), parts: [], scanned: [], ocr: [], ocrError: '', outline: [] };
   var all = [], offset = 0;
   ui.error = '';
-  var chain = Promise.resolve();
+  var stage = { id: 'import:' + book.id, kind: 'pending-import', at: Date.now(), files: files.map(function (_, i) { return book.id + ':f' + i; }), pages: files.map(function (_, i) { return book.id + ':' + i; }) };
+  var chain = Store.batch([{ store: 'meta', value: stage }]);
   files.forEach(function (f, k) {
     var bytes;
     chain = chain.then(function () {
@@ -445,7 +447,7 @@ function importBook(fileList) {
       if (r.ocrError) book.ocrError = r.ocrError;
       all = all.concat(pages);
       offset += r.numPages;
-      return Promise.all([Store.put('files', { id: fileId, bytes: bytes }), Store.put('bookpages', { id: book.id + ':' + k, pages: pages })]);
+      return Store.batch([{ store: 'files', value: { id: fileId, bytes: bytes } }, { store: 'bookpages', value: { id: book.id + ':' + k, pages: pages } }]);
     });
   });
   chain.then(function () {
@@ -460,7 +462,8 @@ function importBook(fileList) {
   }).then(function () {
     ui.importing = ''; return refresh().then(function () { openBook(book.id); });
   }, function (e) {
-    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+    ui.importing = ''; ui.error = (e && e.message) || String(e);
+    Store.cleanImports(book.id).then(render, function (err) { saveFailed(err); render(); });
   });
 }
 function openBook(id) {
@@ -654,9 +657,12 @@ function ensureFigures(d) {
       return bytes ? Pdf.figuresOn(fileId, bytes, byFile[fileId]) : [];
     }).then(function (fs) { fs.forEach(function (f) { f.page = f.page + first - 1; found.push(f); }); });
   }, Promise.resolve()).then(function () {
-    d.figures = found; d.figuresV = Pdf.FIGURES_V;
-    return Store.put('docs', d);
-  }).then(function () {
+    return Store.update('docs', d.id, function (latest) {
+      if (!latest) return null; latest.figures = found; latest.figuresV = Pdf.FIGURES_V; return latest;
+    });
+  }).then(function (latest) {
+    if (!latest) { ui.figuresBusy = null; return; }
+    d = latest;
     ui.figuresBusy = null; ui.figsFor = null;
     ui.docs.forEach(function (x, i) { if (x.id === d.id) ui.docs[i] = d; });
     if (ui.docRec && ui.docRec.id === d.id) { ui.docRec = d; render(); }
@@ -3896,7 +3902,7 @@ function focusTeach() {
   el.focus();
 }
 function start() {
-  Store.open().then(refresh).then(render, function (e) {
+  Store.open().then(function () { return Store.cleanImports(); }).then(refresh).then(render, function (e) {
     ui.error = 'Could not open storage: ' + (e && e.message); render();
   });
 }

@@ -160,21 +160,56 @@ function batch(ops) {
   });
 }
 
-/* Removing a document removes everything that came from it. */
-function deleteDoc(id) {
-  return all('cards').then(function (cards) {
-    return Promise.all(cards.filter(function (c) { return c.docId === id; }).map(function (c) { return del('cards', c.id); }));
-  }).then(function () { return del('sessions', id); }).then(function () { return del('files', id); }).then(function () { return del('vectors', id); }).then(function () { return del('packs', id); }).then(function () { return del('docs', id); });
+/* Build cleanup with metadata so manifests and their content agree. */
+function removalOps(ids) {
+  ids = ids.filter(Boolean);
+  return Promise.all([all('cards'), get('meta', 'notes'), get('meta', 'checks')]).then(function (r) {
+    var ops = [];
+    ids.forEach(function (id) { ['docs', 'sessions', 'files', 'vectors', 'packs'].forEach(function (store) { ops.push({ store: store, id: id, delete: true }); }); });
+    r[0].filter(function (c) { return ids.indexOf(c.docId) !== -1; }).forEach(function (c) { ops.push({ store: 'cards', id: c.id, delete: true }); });
+    ['notes', 'checks'].forEach(function (id, i) {
+      var rec = r[i + 1]; if (!rec) return;
+      Object.keys(rec.recs || {}).forEach(function (key) { if (ids.some(function (d) { return key.indexOf(d + ':') === 0; })) delete rec.recs[key]; });
+      ops.push({ store: 'meta', value: rec });
+    });
+    return ops;
+  });
 }
-
-/* Removing a book removes its chapters (and everything from them), its
-   parts' bytes, its stored text and itself. */
+function deleteDoc(id) { return removalOps([id]).then(batch); }
 function deleteBook(id) {
   return get('books', id).then(function (b) {
-    if (!b) return null;
-    return b.chapters.reduce(function (p, c) { return p.then(function () { return c.docId ? deleteDoc(c.docId) : null; }); }, Promise.resolve())
-      .then(function () { return Promise.all(b.parts.map(function (pt, i) { return Promise.all([del('files', pt.fileId), del('bookpages', id + ':' + i)]); })); })
-      .then(function () { return del('books', id); });
+    if (!b) return;
+    return removalOps(b.chapters.map(function (c) { return c.docId; })).then(function (ops) {
+      b.parts.forEach(function (p, i) { ops.push({ store: 'files', id: p.fileId, delete: true }, { store: 'bookpages', id: id + ':' + i, delete: true }); });
+      ops.push({ store: 'books', id: id, delete: true }); return batch(ops);
+    });
+  });
+}
+/* Unfinished imports are invisible; their marker is removed with the book
+   commit. A crash leaves the marker for startup cleanup. */
+function cleanImports(bookId) {
+  return all('meta').then(function (recs) {
+    var ops = [];
+    recs.filter(function (r) { return r.kind === 'pending-import' && (bookId ? r.id === 'import:' + bookId : Date.now() - (r.at || 0) > 86400000); }).forEach(function (r) {
+      (r.files || []).forEach(function (id) { ops.push({ store: 'files', id: id, delete: true }); });
+      (r.pages || []).forEach(function (id) { ops.push({ store: 'bookpages', id: id, delete: true }); });
+      ops.push({ store: 'meta', id: r.id, delete: true });
+    });
+    return batch(ops);
+  });
+}
+/* Read-modify-write inside one transaction prevents a late figure task
+   from overwriting a corrected document or resurrecting a deleted one. */
+function update(store, id, change) {
+  return open().then(function (db) {
+    if (!db) { var next = change(mem[store][id] ? clone(mem[store][id]) : null); if (next) mem[store][id] = clone(next); return clone(next); }
+    return new Promise(function (resolve, reject) {
+      var t = db.transaction(store, 'readwrite'), out;
+      t.oncomplete = function () { resolve(out); };
+      t.onerror = t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+      var req = t.objectStore(store).get(id);
+      req.onsuccess = function () { try { out = change(req.result || null); if (out) t.objectStore(store).put(out); } catch (e) { t.abort(); reject(e); } };
+    });
   });
 }
 
@@ -260,7 +295,7 @@ function retryFailures() {
   return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta); }));
 }
 api.failureMessage = failureMessage; api.retryFailures = retryFailures;
-api.batch = batch; api.open = open; api.put = function (store, value) {
+api.update = update; api.removalOps = removalOps; api.cleanImports = cleanImports; api.batch = batch; api.open = open; api.put = function (store, value) {
   var v = clone(value);
   return tracked(store + ':' + v.id, function () { return put(store, v); }, store === 'meta' ? v : null);
 }; api.get = function (store, id) {

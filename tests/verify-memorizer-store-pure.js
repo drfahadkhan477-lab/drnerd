@@ -90,5 +90,21 @@ module.exports = (async () => {
   assert.equal((await deck.all('cards')).length, 1);
   console.log('PASS existing card metadata updates without resetting its SRS history');
 
+  await deck.batch([{ store: 'docs', value: { id: 'cleanup', revision: 2 } }, { store: 'meta', value: { id: 'notes', recs: { 'cleanup:0': 'Gone', 'keep:0': 'Keep' } } }, { store: 'cards', value: { id: 'gone-card', docId: 'cleanup' } }]);
+  await deck.update('docs', 'cleanup', d => Object.assign(d, { figures: [1] }));
+  assert.equal((await deck.get('docs', 'cleanup')).revision, 2);
+  await deck.deleteDoc('cleanup');
+  assert.equal(await deck.get('docs', 'cleanup'), null);
+  assert.equal(await deck.get('cards', 'gone-card'), null);
+  assert.equal((await deck.get('meta', 'notes')).recs['cleanup:0'], undefined);
+  assert.equal((await deck.get('meta', 'notes')).recs['keep:0'], 'Keep');
+  await deck.update('docs', 'cleanup', d => d && Object.assign(d, { figures: [2] }));
+  assert.equal(await deck.get('docs', 'cleanup'), null);
+  await deck.batch([{ store: 'meta', value: { id: 'import:test', kind: 'pending-import', files: ['orphan'], pages: ['orphan-pages'] } }, { store: 'files', value: { id: 'orphan', bytes: Uint8Array.from([1]).buffer } }, { store: 'bookpages', value: { id: 'orphan-pages', pages: [] } }]);
+  await deck.cleanImports();
+  assert.equal(await deck.get('files', 'orphan'), null);
+  assert.equal(await deck.get('bookpages', 'orphan-pages'), null);
+  console.log('PASS atomic cleanup, abandoned-import recovery and late figure updates');
+
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });
