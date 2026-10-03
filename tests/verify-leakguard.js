@@ -218,6 +218,40 @@ head('and it does not refuse this repository');
   ok('and it actually looked at them — not an empty list', n > 100, `${n} files`);
 }
 
+head('the pre-commit route: what is staged');
+{
+  /* Every case above names its files. The hook names none, so the guard asks
+     git what is staged, and that path had no test. A submodule pointer is a
+     commit id, not content: --all-tracked skipped it, the staged route did
+     not, so every commit that moved content/refs-repo was refused by the
+     hook and passed by CI. Both routes now agree. A throwaway repository,
+     so nothing here touches this one's index. */
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'leakguard-git-'));
+  const git = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a],
+                                     { cwd: repo, encoding: 'utf8' });
+  const inRepo = () => {
+    try { return { code: 0, out: execFileSync(process.execPath, [GUARD], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+  };
+  git('init', '-q');
+  git('update-index', '--add', '--cacheinfo', '160000,' + '1'.repeat(40) + ',content/refs-repo');
+  fs.writeFileSync(path.join(repo, 'notes.md'), 'ordinary\n');
+  git('add', 'notes.md');
+  let r = inRepo();
+  ok('a staged submodule pointer under content/ is not refused', r.code === 0, r.out.trim().slice(0, 90));
+  /* Not an empty list read as clean: the ordinary file staged beside the
+     pointer was checked, so git was asked and answered. */
+  ok('and the file staged beside it was checked, the pointer not counted', /\b1 file\(s\) checked/.test(r.out), r.out.trim().slice(0, 60));
+  fs.mkdirSync(path.join(repo, 'content'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'content', 'questions.json'), '{}');
+  git('add', '-f', 'content/questions.json');
+  r = inRepo();
+  ok('while a real file staged beside it is still refused', r.code === 1 && /PATH\s+content\/questions\.json/.test(r.out),
+     r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 60));
+  ok('and the pointer is not what it names', !/refs-repo/.test(r.out));
+  fs.rmSync(repo, { recursive: true, force: true });
+}
+
 head('the knowledge graph cannot read what leak-guard refuses');
 {
   /* graphify reads .gitignore and then .graphifyignore — and under

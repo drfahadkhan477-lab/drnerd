@@ -321,7 +321,15 @@ const SUITES = [
   ['memorizer-study-pure',  'studying beyond the drill: recall and figure cards from the book, checks days apart, timed practice, an exam plan, teach-back, corrections, notes, progress'],
   ['memorizer-provenance-pure', 'where a unit came from: a real SHA-256 of its bytes, a duplicate recognised, and an import report that counts what happened'],
   ['memorizer-pack-pure',   'a study pack written with Claude: the prompt carries the chapter, and the reply is held to the book \u2014 numbers, pages, names and quotes \u2014 before any of it is used'],
+  ['memorizer-studyimport-pure', 'a study file, markdown or a saved HTML page: every question read, an unmarked answer never guessed, and its points and questions held to the unit\u2019s own text'],
   ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
+  ['memorizer-misses-pure',  'what the misses say: the pairs taken for one another, and each missed item\u2019s attempts in order, with a lapse named'],
+  ['memorizer-offline',       'Prepare for offline, with the app\u2019s service worker: nothing called ready before, every pinned reader kept after, and served with the network cut'],
+  ['memorizer-spec-pure',    'one study format for both Claude prompts: spec.js\u2019s rules word for word in each, the counts the checker enforces, the prompt\u2019s own example read and passed, the doc the app\u2019s prompt'],
+  ['memorizer-recall-pure',  'explain it first: on a later day the lesson waits for what you remember, marked point by point, the gaps taught first'],
+  ['memorizer-layout-pure',  'the review\u2019s layout rules: a lesson\u2019s first five points, a unit\u2019s one next step, and when to remind about a backup'],
+  ['memorizer-studyimport',  'a saved HTML page read in the browser, and the Import Study dialog driven: right options and answers, a real modal, too large refused, no half-imported unit'],
+  ['memorizer-data',         'your data and what the page may do: a backup holds units, packs and progress and restores into an empty browser, a bad file is refused, and the browser refuses any host but the app\u2019s'],
   ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
 ];
 
@@ -390,7 +398,7 @@ const SUITES = [
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
    which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['claude-guard', 'claude-agents'];
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

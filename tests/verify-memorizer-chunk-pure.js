@@ -946,8 +946,9 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
     entries.push({ name, same: data.equals(fs.readFileSync(path.join(out, name))), crc: (zlib.crc32(data) >>> 0) === zip.readUInt32LE(o + 16) && zip.readUInt32LE(lo + 14) === zip.readUInt32LE(o + 16) });
     o += 46 + zip.readUInt16LE(o + 28) + zip.readUInt16LE(o + 30) + zip.readUInt16LE(o + 32);
   }
-  ok('the Cloudflare upload holds the four files at its root, each byte for byte, its checksum right', eocd > 0 &&
-     JSON.stringify(entries.map(e => e.name)) === JSON.stringify(['index.html', 'sw.js', 'icon.svg', 'manifest.webmanifest']) && entries.every(e => e.same && e.crc),
+  ok('the Cloudflare upload holds the app\u2019s four files and its _headers at its root, each byte for byte, its checksum right', eocd > 0 &&
+     JSON.stringify(entries.map(e => e.name)) === JSON.stringify(['index.html', 'sw.js', 'icon.svg', 'manifest.webmanifest', '_headers']) && entries.every(e => e.same && e.crc) &&
+     /frame-ancestors 'none'/.test(fs.readFileSync(path.join(out, '_headers'), 'utf8')),
      JSON.stringify(entries));
   ok('with no backslash in any name (docs/IPAD.md: a hand-made zip with them served nothing), and the same build zips to the same bytes',
      entries.every(e => e.name.indexOf('\\') === -1) && zipOf(out).equals(zip) && (() => {
@@ -1014,14 +1015,22 @@ async function startLoop() {
   global.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
   L.WAIT.ms = 0;
   /* a stand-in engine library: fails with the given errors in turn, then works */
-  const lib = errs => { const calls = [], deleted = []; return { calls, deleted, prebuiltAppConfig: { model_list: [], cacheBackend: 'cache' },
-    CreateMLCEngine: async (id, o) => { calls.push({ id, backend: o.appConfig.cacheBackend }); o.initProgressCallback({ progress: 1, text: 'done' });
-      const e = errs.shift(); if (e) throw new Error(e); return { chat: {} }; },
-    deleteModelAllInfoInCache: async (id, cfg) => { deleted.push(id + '@' + cfg.cacheBackend); } }; };
+  /* the engine's own records, at the addresses it would use unpinned */
+  const MANIFEST = require(path.join(ROOT, 'memorizer', 'src', 'models.js'));
+  const RECORDS = Object.keys(MANIFEST.models).map(id => ({ model_id: id, model: 'https://huggingface.co/' + MANIFEST.models[id].repo,
+    model_lib: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/' + MANIFEST.models[id].lib.path }));
+  const where = (id, cfg) => (r => !r ? 'none' : /\/resolve\/[0-9a-f]{40}\/$/.test(r.model) ? 'pinned' : 'unpinned')(cfg.model_list.find(r => r.model_id === id));
+  const lib = errs => { const calls = [], deleted = [], unloaded = []; return { calls, deleted, unloaded, prebuiltAppConfig: { model_list: RECORDS, cacheBackend: 'cache' },
+    CreateMLCEngine: async (id, o) => { calls.push({ id, backend: o.appConfig.cacheBackend, from: where(id, o.appConfig) }); o.initProgressCallback({ progress: 1, text: 'done' });
+      const e = errs.shift(); if (e) throw new Error(e); return { chat: {}, unload: async () => { unloaded.push(id); } }; },
+    deleteModelAllInfoInCache: async (id, cfg) => { deleted.push(id + '@' + cfg.cacheBackend + '@' + where(id, cfg)); } }; };
+  let passes = 0; const allCalls = [];
+  L.useVerify(async () => { passes++; return { ok: true, checked: 1, bad: [], unknown: [] }; });
   const run = async (errs, f16, model = 'Qwen3-0.6B-q4f16_1-MLC') => {
     const lb = lib(errs); L.useLib(lb); L.useGpu(() => ({ ok: true, f16 })); L.useEngine(null, null);
     const said = []; let err = null;
     try { await L.start(model, (p, t) => said.push(t)); } catch (e) { err = e.message; }
+    allCalls.push(...lb.calls);
     return { calls: lb.calls, said, err, lb };
   };
   let r = await run([], false);
@@ -1051,9 +1060,124 @@ async function startLoop() {
   ok('an error it cannot name is shown as it came, not retried', r.calls.length === 1 && r.err === 'some other failure', r.err);
   const lb = lib([]); L.useLib(lb);
   await L.clearModel('Qwen3-1.7B-q4f16_1-MLC');
-  ok('Delete the downloaded model: both builds, from both stores', JSON.stringify(lb.deleted.sort()) === JSON.stringify(['Qwen3-1.7B-q4f16_1-MLC@cache', 'Qwen3-1.7B-q4f16_1-MLC@indexeddb', 'Qwen3-1.7B-q4f32_1-MLC@cache', 'Qwen3-1.7B-q4f32_1-MLC@indexeddb']), JSON.stringify(lb.deleted));
+  ok('Delete the downloaded model: both builds, from both stores, at the pinned addresses and at the ones from before the pin',
+     JSON.stringify(lb.deleted.sort()) === JSON.stringify(['Qwen3-1.7B-q4f16_1-MLC', 'Qwen3-1.7B-q4f32_1-MLC'].flatMap(id => ['cache', 'indexeddb'].flatMap(b => [id + '@' + b + '@pinned', id + '@' + b + '@unpinned']))), JSON.stringify(lb.deleted));
   ok('every model offered has a 32-bit build in the list the app carries', L.MODELS.every(m => /-q4f16_1-MLC$/.test(m.id) && L.variantFor(m.id, false) !== m.id));
-  L.useLib(null); L.useGpu(null); L.useEngine(null, null); delete global.localStorage;
+
+  head('the on-device model: downloaded from pinned commits, and checked before it is used');
+  /* six of the starts above end in a loaded model: each is checked once */
+  ok('every start above asked the engine for the pinned files, and each load was checked', allCalls.length > 10 && allCalls.every(c => c.from === 'pinned') && passes === 6, allCalls.length + ' starts, ' + passes + ' checks');
+  const offered = L.MODELS.map(m => m.id).concat(L.MODELS.map(m => L.variantFor(m.id, false)), [L.EMBED.id]);
+  const cfg = L.pinnedConfig({ model_list: RECORDS.concat([{ model_id: 'Other-MLC', model: 'https://huggingface.co/x/Other-MLC', model_lib: 'https://x/lib.wasm' }]) }, 'cache');
+  const missing = offered.filter(id => !MANIFEST.models[id]);
+  ok('the manifest pins every model offered, its 32-bit build and the search model', missing.length === 0, missing.join(', '));
+  ok('each to a Hugging Face commit, and its runtime to a commit of the runtime repository', offered.every(id => (r => r &&
+       /^https:\/\/huggingface\.co\/mlc-ai\/[\w.-]+\/resolve\/[0-9a-f]{40}\/$/.test(r.model) && r.model.indexOf(MANIFEST.models[id].rev) !== -1 &&
+       r.model_lib === 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/' + MANIFEST.libCommit + '/' + MANIFEST.models[id].lib.path)(cfg.model_list.find(x => x.model_id === id))) &&
+       /^[0-9a-f]{40}$/.test(MANIFEST.libCommit), JSON.stringify(cfg.model_list[0]));
+  ok('a model the manifest does not know is left as the engine has it', JSON.stringify(cfg.model_list.find(x => x.model_id === 'Other-MLC')) === JSON.stringify({ model_id: 'Other-MLC', model: 'https://huggingface.co/x/Other-MLC', model_lib: 'https://x/lib.wasm' }));
+  ok('the manifest was written for the engine version the app loads', L.WEBLLM.url.includes('/web-llm@' + MANIFEST.engine + '/'), MANIFEST.engine + ' vs ' + L.WEBLLM.url);
+  /* what the generator fetched is written into code the app runs: every
+     field held to its shape (scripts/model-manifest.js check), here on the
+     committed file, and refused out of shape */
+  const MM = require(path.join(ROOT, 'scripts', 'model-manifest.js'));
+  const refuses = f => { const m = JSON.parse(JSON.stringify(MANIFEST)); f(m); try { MM.check(m); return false; } catch (e) { return /^refusing /.test(e.message); } };
+  let shaped = false; try { shaped = MM.check(MANIFEST); } catch (e) { shaped = e.message; }
+  ok('the committed manifest is every field the shape it should be', shaped === true, String(shaped));
+  const QQ = 'Qwen3-0.6B-q4f16_1-MLC';
+  const bad = { 'a repository that closes the script': m => { m.models[QQ].repo = 'mlc-ai/x</script><script>alert(1)//'; },
+    'a commit that is not a hash': m => { m.models[QQ].rev = 'main'; },
+    'a file name that climbs out': m => { m.models[QQ].files['../../x.bin'] = 'a'.repeat(64); },
+    'a hash that is not one': m => { m.models[QQ].files['tokenizer.json'] = '"; alert(1); "'; },
+    'a runtime from elsewhere': m => { m.models[QQ].lib.path = 'https://evil.example/x.wasm'; },
+    'a repository not mlc-ai\u2019s': m => { m.models[QQ].repo = 'someone/Qwen3-0.6B-q4f16_1-MLC'; },
+    'no models': m => { m.models = {}; } };
+  const let_in = Object.keys(bad).filter(k => !refuses(bad[k]));
+  ok('and refused: ' + Object.keys(bad).join('; '), let_in.length === 0, let_in.join(', ') || 'all refused');
+  ok('and it holds a hash for every file, not a placeholder', Object.values(MANIFEST.models).every(m => /^[0-9a-f]{64}$/.test(m.lib.sha256) && Object.keys(m.files).length >= 5 &&
+       Object.values(m.files).every(h => /^[0-9a-f]{64}$/.test(h)) && Object.keys(m.files).some(f => /^params_shard_0\.bin$/.test(f))));
+
+  /* what the engine checks itself, before use: runtime, config, tokenizer */
+  const b64hex = x => Buffer.from(String(x).replace(/^sha256-/, ''), 'base64').toString('hex');
+  ok('the engine is given the hashes to check the runtime, the config and the tokenizer against, before it uses them', offered.every(id => (r => {
+       const m = MANIFEST.models[id], i = r.integrity || {};
+       return i.onFailure === 'error' && /^sha256-[A-Za-z0-9+/]+=*$/.test(i.model_lib) && b64hex(i.model_lib) === m.lib.sha256 &&
+         b64hex(i.config) === m.files['mlc-chat-config.json'] && b64hex((i.tokenizer || {})['tokenizer.json']) === m.files['tokenizer.json'];
+     })(cfg.model_list.find(x => x.model_id === id))), JSON.stringify(cfg.model_list[0].integrity));
+
+  /* the check itself, on files read back as the browser would hand them */
+  const Q = 'Qwen3-0.6B-q4f16_1-MLC', QM = MANIFEST.models[Q];
+  const qr = cfg.model_list.find(x => x.model_id === Q);
+  const stored = Object.keys(QM.files).map(f => ({ url: qr.model + f, sha256: QM.files[f] })).concat([{ url: qr.model_lib, sha256: QM.lib.sha256 }]);
+  let v = L.verifyFiles(Q, stored);
+  ok('every file as the manifest says: used', v.ok && v.checked === stored.length && !v.bad.length && !v.unknown.length, JSON.stringify(v));
+  v = L.verifyFiles(Q, stored.map(f => /params_shard_3\.bin$/.test(f.url) ? Object.assign({}, f, { sha256: 'f'.repeat(64) }) : f));
+  ok('one weight file changed: refused, and it says which', !v.ok && JSON.stringify(v.bad) === '["params_shard_3.bin"]', JSON.stringify(v));
+  v = L.verifyFiles(Q, stored.map(f => /\.wasm$/.test(f.url) ? Object.assign({}, f, { sha256: '0'.repeat(64) }) : f));
+  ok('the runtime changed: refused', !v.ok && v.bad.length === 1 && /\.wasm$/.test(v.bad[0]), JSON.stringify(v));
+  v = L.verifyFiles(Q, stored.concat([{ url: qr.model + 'extra.bin', sha256: 'a'.repeat(64) }]));
+  ok('a file at the pinned address the manifest does not know: refused', !v.ok && JSON.stringify(v.unknown) === '["extra.bin"]', JSON.stringify(v));
+  v = L.verifyFiles(Q, stored.map(f => /params_shard_0\.bin$/.test(f.url) ? { url: f.url.replace(QM.rev, 'main'), sha256: f.sha256 } : f));
+  ok('a file from another commit is not the pinned file', !v.ok && v.unknown.includes('params_shard_0.bin'), JSON.stringify(v));
+  ok('nothing to check is not a pass', !L.verifyFiles(Q, []).ok && !L.verifyFiles('Unknown-MLC', stored).ok);
+
+  /* read back from the Cache API, one file at a time (a stand-in: the
+     bytes of each file are its name, so their hashes are known here) */
+  const crypto = require('crypto');
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex');
+  const files = { [qr.model + 'params_shard_0.bin']: 'W0', [qr.model + 'tokenizer.json']: 'T', [qr.model_lib]: 'LIB',
+                  ['https://huggingface.co/' + QM.repo + '/resolve/main/params_shard_0.bin']: 'OLD', 'https://huggingface.co/mlc-ai/Other/resolve/x/a.bin': 'X' };
+  let live = 0, most = 0;
+  global.caches = { has: async n => /^webllm\//.test(n), open: async n => ({
+    /* the engine's three stores: the runtime, the configs, the weights */
+    keys: async () => Object.keys(files).filter(u => n === (/\.wasm$/.test(u) ? 'webllm/wasm' : /\.json$/.test(u) ? 'webllm/config' : 'webllm/model')).map(url => ({ url })),
+    match: async k => ({ blob: async () => { live++; most = Math.max(most, live); await new Promise(r => setTimeout(r, 1)); live--; return new Blob([files[k.url]]); } }) }) };
+  const got = await L.storedFiles(Q, 'cache');
+  ok('the stored files are hashed as they are', JSON.stringify(got.map(f => [f.url.slice(f.url.lastIndexOf('/') + 1), f.sha256]).sort()) ===
+     JSON.stringify([['Qwen3-0.6B-q4f16_1_cs1k-webgpu.wasm', sha('LIB')], ['params_shard_0.bin', sha('W0')], ['tokenizer.json', sha('T')]]), JSON.stringify(got));
+  ok('only the pinned ones: an older copy and another model are not looked at', !got.some(f => /resolve\/main|Other/.test(f.url)));
+  ok('one file at a time — a model is gigabytes, and an iPad tab holds little', most === 1, 'at most ' + most + ' at once');
+  delete global.caches;
+  ok('with no store to read (no Cache API), there is nothing to check, and so no pass', (await L.verify(Q, 'cache')).ok === false);
+
+  /* and what is done with a refusal */
+  const lb2 = lib([]); L.useLib(lb2); L.useGpu(() => ({ ok: true, f16: true })); L.useEngine(null, null);
+  L.useVerify(async () => ({ ok: false, checked: 9, bad: ['params_shard_3.bin'], unknown: [] }));
+  /* a refusal happens inside a start; clearModel waits for a start to end,
+     so a refusal that went through it would never end: held to a limit, so
+     that shows as a failure here and not as a suite that hangs */
+  const within = (pr, ms = 5000) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('still waiting after ' + ms + ' ms')), ms))]);
+  let refused = null;
+  try { await within(L.start(Q, () => {})); } catch (e) { refused = e; }
+  ok('a model that fails the check is not used: the start fails, and says why', refused && refused.integrity === true && /does not match the one Memorizer expects: 1 file not what it should be \(params_shard_3\.bin\)/.test(refused.message), refused && refused.message);
+  ok('it is unloaded and deleted, both builds, both stores', lb2.unloaded.includes(Q) && [Q, L.variantFor(Q, false)].every(id => ['cache', 'indexeddb'].every(b => lb2.deleted.includes(id + '@' + b + '@pinned'))), JSON.stringify([lb2.unloaded, lb2.deleted]));
+  ok('and nothing is left ready to answer', !L.ready(), 'ready: ' + L.ready());
+  /* the engine's own refusal (a runtime, config or tokenizer that fails its
+     hash): the same, and not retried — a retry loads the same cached file */
+  const lb3 = lib([]); L.useLib(lb3); L.useEngine(null, null); L.useVerify(async () => ({ ok: true, checked: 1, bad: [], unknown: [] }));
+  lb3.CreateMLCEngine = async (id, o) => { lb3.calls.push({ id }); const e = new Error('Integrity verification failed for ' + o.appConfig.model_list.find(x => x.model_id === id).model_lib);
+    e.name = 'IntegrityError'; e.url = o.appConfig.model_list.find(x => x.model_id === id).model_lib; throw e; };
+  refused = null;
+  try { await within(L.start(Q, () => {})); } catch (e) { refused = e; }
+  ok('the engine refusing a file before use: not retried, deleted, and it says which file', lb3.calls.length === 1 && refused && refused.integrity === true &&
+     /does not match the one Memorizer expects: Qwen3-0\.6B-q4f16_1_cs1k-webgpu\.wasm not what it should be/.test(refused.message) &&
+     lb3.deleted.includes(Q + '@cache@pinned') && lb3.deleted.includes(Q + '@indexeddb@pinned'), JSON.stringify([lb3.calls.length, refused && refused.message, lb3.deleted.length]));
+  /* Delete, when there is no copy from before the pin to delete (the engine
+     fails to find what it would remove, or is offline for its index): not an
+     error — that copy is extra, the pinned one is what was asked for */
+  const lb5 = lib([]); L.useLib(lb5); L.useEngine(null, null);
+  lb5.deleteModelAllInfoInCache = async (id, cfg) => { if (where(id, cfg) === 'unpinned') throw new Error('Failed to fetch'); lb5.deleted.push(id + '@' + cfg.cacheBackend); };
+  const gone = await L.clearModel(Q).then(() => 'deleted', e => e.message);
+  ok('Delete the downloaded model, with no older copy to remove: done, not an error', gone === 'deleted' && lb5.deleted.length === 4, gone + ' ' + JSON.stringify(lb5.deleted));
+  /* and when the bad model cannot be deleted, it is still not used, and the
+     message does not say it was deleted */
+  const lb4 = lib([]); L.useLib(lb4); L.useEngine(null, null); L.useVerify(async () => ({ ok: false, checked: 9, bad: ['params_shard_3.bin'], unknown: [] }));
+  lb4.deleteModelAllInfoInCache = async (id, cfg) => { if (where(id, cfg) === 'pinned') throw new Error('storage busy'); };
+  refused = null;
+  try { await within(L.start(Q, () => {})); } catch (e) { refused = e; }
+  ok('a refused model that cannot be deleted: not used, and it says it could not be deleted', refused && refused.integrity === true &&
+     /It was not used, and could not be deleted \(Could not delete .*storage busy\); delete it in Settings/.test(refused.message) && !L.ready(), refused && refused.message);
+  L.useVerify(null); L.useLib(null); L.useGpu(null); L.useEngine(null, null); delete global.localStorage;
 }
 
 /* THE PAGE COMES FROM THE NETWORK FIRST. The service worker served the page

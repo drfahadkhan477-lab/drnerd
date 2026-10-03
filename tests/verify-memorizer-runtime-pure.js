@@ -100,6 +100,9 @@ module.exports = (async () => {
   const llm = require('../memorizer/src/llm.js');
   let created = 0, unloaded = 0;
   llm.useGpu(() => ({ ok: true, f16: true }));
+  /* a stand-in engine downloads nothing, so the check of its files against
+     models.js (llm.js verify) stands in too: this is about the lifecycle */
+  llm.useVerify(async () => ({ ok: true, checked: 1, bad: [], unknown: [] }));
   llm.useLib({ CreateMLCEngine: async () => { created++; return { unload: async () => { unloaded++; } }; }, deleteModelAllInfoInCache: async () => { throw new Error('synthetic cache refusal'); } });
   await Promise.all([llm.start('first'), llm.start('first')]); assert.equal(created, 1);
   await llm.start('second'); assert.equal(created, 2); assert.equal(unloaded, 1);

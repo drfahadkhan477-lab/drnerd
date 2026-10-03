@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 70 suites that are pure Node with no Playwright and no
+#   logic        the 75 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -284,6 +284,16 @@ jobs:
         run: node tests/verify-memorizer-provenance-pure.js
       - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (103 checks)
         run: node tests/verify-memorizer-pack-pure.js
+      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text, a deleted section's diagrams with it (52 checks)
+        run: node tests/verify-memorizer-studyimport-pure.js
+      - name: Memorizer — what the misses say — the pairs taken for one another, each missed item's attempts in order, a lapse named (13 checks)
+        run: node tests/verify-memorizer-misses-pure.js
+      - name: Memorizer — one study format for both Claude prompts — spec.js's rules in each word for word, the enforced counts, the study-file prompt's example read and passed, the doc generated, a decision flowchart's yes and no not read as claims (44 checks)
+        run: node tests/verify-memorizer-spec-pure.js
+      - name: Memorizer — explain it first — on a later day the lesson waits for what you remember, the gaps taught first (8 checks)
+        run: node tests/verify-memorizer-recall-pure.js
+      - name: Memorizer — the review's layout rules — a lesson's first five points, a unit's one next step and why (14 checks)
+        run: node tests/verify-memorizer-layout-pure.js
 
   # ── Memorizer in a real browser ────────────────────────────────────────────
   #
@@ -300,7 +310,9 @@ jobs:
   # pages, from jsDelivr at pinned versions and checks them against their
   # integrity hashes, as the app does. verify-memorizer-hardening uses pasted
   # notes only and fails any request that leaves the page other than to the
-  # stubbed model.
+  # stubbed model. verify-memorizer-studyimport fetches nothing: its HTML pages
+  # are written in the suite. verify-memorizer-offline fetches the pinned
+  # readers from jsDelivr, as verify-memorizer does.
   #
   # IN WEBKIT TOO, because the device this is for is an iPad and an iPad is
   # WebKit. Every suite here launches through tests/_engine.js, so the engine
@@ -343,6 +355,15 @@ jobs:
       - if: ${{ !cancelled() }}
         name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
+      - if: ${{ !cancelled() }}
+        name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (68 checks)
+        run: node tests/verify-memorizer-studyimport.js
+      - if: ${{ !cancelled() }}
+        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut (9 checks)
+        run: node tests/verify-memorizer-offline.js
+      - if: ${{ !cancelled() }}
+        name: Memorizer — your data and what the page may do — the backup reminder on the app's own backup, an orphan that would spoil a backup removed, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (18 checks)
+        run: node tests/verify-memorizer-data.js
       - if: ${{ !cancelled() }}
         name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (25 checks)
         run: node tests/verify-bankstore.js

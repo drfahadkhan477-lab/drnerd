@@ -105,17 +105,18 @@ function weakMiss(s, id, section, source, q, type, confusedWith) {
   var w = s.weak[id];
   if (!w) {
     w = s.weak[id] = { id: id, cluster: section, source: source, q: clone(q), label: label(q.options[q.answer]),
-      misses: 0, streak: 0, hits: [], types: [], confusedWith: '', order: Object.keys(s.weak).length };
+      misses: 0, streak: 0, hits: [], types: [], confusedWith: '', confusions: [], log: [], order: Object.keys(s.weak).length };
   }
   w.misses++; w.streak++; w.hits = [];
   w.types.push(type);
-  if ((type === 'C' || type === 'V') && confusedWith) w.confusedWith = confusedWith;
+  (w.log = w.log || []).push({ round: s.round, ok: false, t: type });
+  if ((type === 'C' || type === 'V') && confusedWith) { w.confusedWith = confusedWith; (w.confusions = w.confusions || []).push(confusedWith); }
   setCardType(s, id, type, type === 'C' || type === 'V' ? confusedWith : w.confusedWith);
   return w;
 }
 function weakHit(s, id) {
   var w = s.weak[id];
-  if (w) { w.hits.push(s.round); w.streak = 0; }
+  if (w) { w.hits.push(s.round); w.streak = 0; (w.log = w.log || []).push({ round: s.round, ok: true, t: '' }); }
 }
 function pending(s) {
   return Object.keys(s.weak || {}).map(function (k) { return s.weak[k]; })
@@ -289,7 +290,10 @@ function next(state, event) {
            towards graduating. Right, the memory was there (R); wrong
            again, nothing stuck (E). */
         var w = s.weak[id];
-        if (a.correct) { w.types[w.types.length - 1] = 'R'; w.streak = 0; setCardType(s, id, 'R', w.confusedWith); }
+        if (a.correct) {
+          w.types[w.types.length - 1] = 'R'; w.streak = 0; setCardType(s, id, 'R', w.confusedWith);
+          if (w.log && w.log.length) w.log[w.log.length - 1].t = 'R';
+        }
         else weakMiss(s, id, s.section, 'drill', a.q, 'E', '');
       }
       c.pos++;
@@ -532,6 +536,45 @@ function closingText(state) {
   return out.join('\n');
 }
 
+/* ── what the misses say (the unit page's "Your misses" card) ─────────────
+   confusions: each pair of things taken for one another, however many ways
+   round, with how often — "Preload ↔ Afterload, 3 times" — most first. A
+   session saved before w.confusions existed has only the latest confusion,
+   and is counted from that.
+   history: one weak item's attempts in order (a miss with its type, or a
+   right answer in a later round), and what the pattern says. */
+function confusions(state) {
+  var pairs = {};
+  Object.keys(state.weak || {}).forEach(function (k) {
+    var w = state.weak[k], right = w.q && w.q.options[w.q.answer];
+    var list = w.confusions && w.confusions.length ? w.confusions : w.confusedWith ? [w.confusedWith] : [];
+    list.forEach(function (picked) {
+      if (!right || !picked) return;
+      var a = String(right), b = String(picked), key = [a.toLowerCase(), b.toLowerCase()].sort().join('\u0000');
+      var p = pairs[key] || (pairs[key] = { a: a, b: b, times: 0, sections: [], ids: [] });
+      p.times++;
+      var sec = state.titles[w.cluster] || '';
+      if (sec && p.sections.indexOf(sec) === -1) p.sections.push(sec);
+      if (p.ids.indexOf(w.id) === -1) p.ids.push(w.id);
+    });
+  });
+  return Object.keys(pairs).map(function (k) { return pairs[k]; }).sort(function (x, y) { return y.times - x.times || (x.a < y.a ? -1 : 1); });
+}
+function history(w) {
+  var steps = w.log && w.log.length ? w.log.map(function (e) { return { ok: e.ok, t: e.t }; })
+    : (w.types || []).map(function (t) { return { ok: false, t: t }; });
+  var misses = steps.filter(function (x) { return !x.ok; }), count = {};
+  misses.forEach(function (x) { count[x.t] = (count[x.t] || 0) + 1; });
+  var top = Object.keys(count).sort(function (a, b) { return count[b] - count[a]; })[0] || '';
+  var lapse = false;
+  for (var i = 1; i < steps.length; i++) if (!steps[i].ok && steps[i - 1].ok) lapse = true;
+  var what = { C: 'telling it apart from something close', V: 'the number, not the idea', N: 'it was new each time', E: 'it did not stick when first learned', R: 'pulling it back cold' }[top] || '';
+  return { steps: steps, top: top, lapse: lapse,
+           says: !misses.length ? '' : (misses.length === 1 ? (what ? 'The miss was ' + what + '.' : '')
+             : count[top] * 2 > misses.length && what ? 'Mostly ' + what + '.' : 'Mixed misses: no one kind leads.') +
+             (lapse ? ' Right once, then missed again later: a lapse, so it is on your review schedule.' : '') };
+}
+
 /* ── review ──────────────────────────────────────────────────────────────── */
 /* A card never reviewed is due at once — unless it was made to start
    later (study.js's cloze and occlusion cards start tomorrow, so a drill
@@ -617,6 +660,7 @@ var MemSession = {
   nextSection: nextSection, allDone: allDone, isDue: isDue, dueCards: dueCards, review: review,
   NOT_SURE: NOT_SURE, resumable: resumable, pending: pending, interleave: interleave, reviewItem: reviewItem, needsReteach: needsReteach,
   closing: closing, closingText: closingText, missType: missType, practiceMiss: practiceMiss, invalidateSection: invalidateSection, dropSection: dropSection, dropCards: dropCards,
+  confusions: confusions, history: history,
 };
 root.MemSession = MemSession;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemSession;

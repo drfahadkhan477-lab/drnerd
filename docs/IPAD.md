@@ -318,7 +318,8 @@ and says so, but every unit, card and day of progress is gone when the tab
 closes. It needs an `https` address.
 
 1. `node scripts/build-memorizer.js --zip` writes `dist-memorizer/` and
-   `memorizer-cloudflare.zip` next to it: the app's files at the zip's root,
+   `memorizer-cloudflare.zip` next to it: the app's files, and a `_headers` file
+   Cloudflare Pages reads (no framing by other sites, fresh page on each visit), at the zip's root,
    forward slashes by construction (the backslash trap above cannot happen),
    and the same build always zips to the same bytes.
 2. Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
@@ -338,7 +339,27 @@ closes. It needs an `https` address.
 
 Each address has its own storage. Units added under one address, or in the
 Files app's own preview, do not appear under another; add the PDFs again once.
+
+A study file written by Claude (`.md`) or a saved study page (`.html`) goes in
+with **Import Study** on the home screen; `docs/MEMORIZER-STUDY-FILE-PROMPT.md`
+is the prompt that writes one, and says what the app takes from it.
+
+Before a trip without Wi-Fi, **Settings → Prepare for offline** fetches the PDF
+reader, the text reader for scans and the flowchart drawer, and says when each
+is kept. It works only from the web address, where the service worker runs.
 Your book never leaves the iPad: the zip holds only the app.
+
+**Settings → Export backup** saves everything studied, the PDFs with it, to
+one checksummed file; **Restore a backup** checks that file and replaces this
+device's study data with it, on another iPad or after Safari clears its
+storage. Home reminds you when a backup is due, and its **Back up now** makes
+the same file.
+
+The on-device AI downloads its model from a fixed commit and checks every
+file against the hashes the app was built with before the model answers; a
+file that does not match and the model is deleted, not used. When the
+WebLLM version changes, `node scripts/model-manifest.js` (needs the network)
+rewrites `memorizer/src/models.js`.
 
 ### On a laptop
 
