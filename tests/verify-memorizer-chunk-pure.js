@@ -1105,7 +1105,84 @@ async function swFetch() {
   ok('everything else is still cache-first: the icon comes from the cache, with no request made', r && r.body === 'cached ' + ORIGIN + 'icon.svg' && w.fetched.length === 0, JSON.stringify(w.fetched));
 }
 
-startLoop().then(swFetch).then(() => {
+/* A faulted text reader is replaced, and the page read again — once.
+   tesseract.js's WebAssembly faults now and then under WebKit ("RuntimeError:
+   Out of bounds memory access" inside Recognize, seen in CI's WebKit job);
+   the faulted worker used to be kept for every later scanned page. This runs
+   the REAL ocr.js — engine(), its download checks and the worker it builds —
+   in a sandbox whose Tesseract is a stand-in that faults on cue, so the
+   retry, the worker thrown away and the fresh one started are all measured,
+   not assumed. */
+async function ocrRetry() {
+  head('scanned pages: a text reader whose WebAssembly faults is replaced, and the page read again — once');
+  const vm = require('vm');
+  const SRC = fs.readFileSync(path.join(ROOT, 'memorizer', 'src', 'ocr.js'), 'utf8');
+  const FAULT = () => Promise.reject(new Error("RuntimeError: Out of bounds memory access (evaluating '(Tf=b._emscripten_bind_TessBaseAPI_Recognize_1=b.asm.Id).apply(null,arguments)')"));
+  const READ = () => Promise.resolve({ data: { blocks: [{ paragraphs: [{ lines: [{ bbox: { y0: 0, y1: 24 }, words: [{ text: 'Preload', confidence: 95, bbox: { x0: 10, x1: 80, y0: 0, y1: 24 } }] }] }] }] } });
+  /* plan: what each recognize() call does, in order, across every worker */
+  function sandbox(plan) {
+    const made = [], log = { recognize: [] };
+    const win = {
+      Blob, URL, TextDecoder, Uint8Array, WebAssembly, Promise, Error, String,
+      setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref(); return t; },
+      fetch: () => Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['x;' + require(path.join(ROOT, 'memorizer', 'src', 'ocr.js')).WORKER_FIX.find])) }),
+      FileReader: class { readAsArrayBuffer(b) { b.arrayBuffer().then(r => { this.result = r; this.onload(); }); } },
+      document: { createElement: () => ({ getContext: () => ({ fillRect() {}, drawImage() {} }) }) },
+      Image: class { set src(_) { this.naturalWidth = 40; this.naturalHeight = 30; setTimeout(() => this.onload(), 0); } },
+      MemPdf: { loadScript: () => Promise.resolve() },
+      Tesseract: { createWorker: () => {
+        const n = made.length, w = { n, ended: false,
+          recognize: () => { log.recognize.push(n); return (plan.shift() || READ)(); },
+          terminate: () => { w.ended = true; return Promise.resolve(); } };
+        made.push(w);
+        return Promise.resolve(w);
+      } },
+    };
+    win.window = win;
+    vm.runInNewContext(SRC, win);
+    const page = { getViewport: ({ scale }) => ({ width: 100 * scale, height: 100 * scale }), render: () => ({ promise: Promise.resolve() }) };
+    return { O: win.MemOcr, made, log, page, photo: new Blob(['not decoded by the stand-in Image']) };
+  }
+  const settle = p => p.then(v => ({ v }), e => ({ e }));
+
+  {
+    const t = sandbox([FAULT]);
+    const r = await settle(t.O.readPage(t.page));
+    ok('a scanned page whose first reading faults is read again, and its words come back', !r.e && r.v.length === 1 && r.v[0].str === 'Preload ', r.e ? r.e.message : JSON.stringify(r.v));
+    ok('by a fresh text reader, the faulted one ended', t.made.length === 2 && t.made[0].ended && !t.made[1].ended && t.log.recognize.join() === '0,1',
+       JSON.stringify({ made: t.made.length, ended: t.made.map(w => w.ended), calls: t.log.recognize }));
+    const r2 = await settle(t.O.readPage(t.page));
+    ok('and the next page goes to the fresh reader, not the faulted one', !r2.e && t.made.length === 2 && t.log.recognize.join() === '0,1,1', JSON.stringify(t.log.recognize));
+  }
+  {
+    const t = sandbox([FAULT, FAULT]);
+    const r = await settle(t.O.readPage(t.page));
+    ok('a page that faults twice is reported with the fault, not read a third time', r.e && /RuntimeError: Out of bounds memory access/.test(r.e.message) && t.made.length === 2 && t.log.recognize.join() === '0,1',
+       JSON.stringify({ err: r.e && r.e.message.slice(0, 50), made: t.made.length, calls: t.log.recognize }));
+    const r2 = await settle(t.O.readPage(t.page));
+    ok('and the page after it starts a third reader, never reusing a faulted one', !r2.e && t.made.length === 3 && t.made[1].ended && t.log.recognize.join() === '0,1,2',
+       JSON.stringify({ made: t.made.length, ended: t.made.map(w => w.ended), calls: t.log.recognize }));
+  }
+  {
+    const t = sandbox([() => Promise.reject(new Error('the image could not be read'))]);
+    const r = await settle(t.O.readPage(t.page));
+    ok('an error that is not a WebAssembly fault is reported at once, the reader kept', r.e && r.e.message === 'the image could not be read' && t.made.length === 1 && !t.made[0].ended && t.log.recognize.join() === '0',
+       JSON.stringify({ err: r.e && r.e.message, made: t.made.length, calls: t.log.recognize }));
+  }
+  {
+    const t = sandbox([FAULT]);
+    const r = await settle(t.O.readImage(t.photo));
+    ok('a photo of a page is retried the same way', !r.e && r.v.items.length === 1 && t.made.length === 2 && t.made[0].ended && t.log.recognize.join() === '0,1',
+       r.e ? r.e.message : JSON.stringify({ made: t.made.length, calls: t.log.recognize }));
+  }
+  const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+  ok('the fault is recognised in WebKit’s words, Chromium’s, and as a thrown RuntimeError, and nothing else is',
+     O.isWasmFault(new Error('RuntimeError: Out of bounds memory access (evaluating …)')) && O.isWasmFault(new Error('RuntimeError: memory access out of bounds')) &&
+     O.isWasmFault(Object.assign(new Error('unreachable'), { name: 'RuntimeError' })) && O.isWasmFault('RuntimeError: unreachable') &&
+     !O.isWasmFault(new Error('the image could not be read')) && !O.isWasmFault(new Error('the text reader did not start')) && !O.isWasmFault(null));
+}
+
+startLoop().then(swFetch).then(ocrRetry).then(() => {
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 }, e => { console.error(e); process.exit(1); });

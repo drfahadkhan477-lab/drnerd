@@ -128,7 +128,7 @@ function fixWorker(text) {
   return String(text).replace(WORKER_FIX.find, WORKER_FIX.replace);
 }
 
-var starting = null;
+var starting = null, current = null;
 function engine(onStatus) {
   if (starting) return starting;
   var core = hasSimd() ? TESS.coreSimd : TESS.core;
@@ -151,21 +151,57 @@ function engine(onStatus) {
       return Promise.race([started, new Promise(function (_, reject) {
         setTimeout(function () { reject(new Error('the text reader did not start')); }, START_TIMEOUT_MS);
       })]);
-    });
+    })
+    .then(function (worker) { current = worker; return worker; });
   starting.catch(function () { starting = null; });
   return starting;
 }
 
+/* ── a worker whose WebAssembly has faulted is thrown away ───────────────
+   tesseract.js's WebAssembly sometimes faults mid-page under WebKit — the
+   engine Safari on the iPad runs — with "RuntimeError: Out of bounds memory
+   access" inside Recognize (seen in CI's WebKit job, at random, on the same
+   page that passes the next run). A WebAssembly instance that has faulted
+   is not safe to call again, and the worker is kept for every later page,
+   so one fault used to cost the page AND every scanned page after it. Now
+   the faulted worker is ended, the next engine() starts a fresh one, and
+   the page is read once more. Once: a second fault is reported as before,
+   so a page that faults every time names its error rather than looping.
+   Only a WebAssembly fault is retried — a bad image or a refused download
+   fails the same way twice and is reported at once. */
+function isWasmFault(e) {
+  return !!e && (e.name === 'RuntimeError' || /\bRuntimeError\b/.test(String(e.message || e)));
+}
+function discard(worker) {
+  if (current === worker) { current = null; starting = null; }
+  try { Promise.resolve(worker && worker.terminate && worker.terminate()).catch(function () {}); } catch (_) { /* already gone */ }
+}
+var RECOGNIZE_OUT = { text: false, blocks: true, hocr: false, tsv: false };
+function recognize(canvas, onStatus) {
+  /* a worker that faults is discarded whether or not the page is retried,
+     so the page after a second fault never inherits the faulted instance */
+  function run(worker) {
+    return worker.recognize(canvas, {}, RECOGNIZE_OUT).catch(function (e) {
+      if (isWasmFault(e)) discard(worker);
+      throw e;
+    });
+  }
+  return engine(onStatus).then(run).catch(function (e) {
+    if (!isWasmFault(e)) throw e;
+    return engine(onStatus).then(run);
+  });
+}
+
 /* Read one pdf.js page: draw it, recognise it, return pdf.js-shaped items. */
 function readPage(page, onStatus) {
-  return engine(onStatus).then(function (worker) {
+  return engine(onStatus).then(function () {
     var vp = page.getViewport({ scale: SCALE });
     var canvas = document.createElement('canvas');
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
     var ctx = canvas.getContext('2d');
     ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
-      return worker.recognize(canvas, {}, { text: false, blocks: true, hocr: false, tsv: false });
+      return recognize(canvas, onStatus);
     }).then(function (res) {
       return ocrItems(res.data.blocks, SCALE, page.getViewport({ scale: 1 }).height);
     });
@@ -197,13 +233,11 @@ function imageCanvas(blob) {
 }
 function readImage(blob, onStatus) {
   var canvas;
-  return imageCanvas(blob).then(function (c) { canvas = c; return engine(onStatus); }).then(function (worker) {
-    return worker.recognize(canvas, {}, { text: false, blocks: true, hocr: false, tsv: false });
-  }).then(function (res) {
+  return imageCanvas(blob).then(function (c) { canvas = c; return recognize(canvas, onStatus); }).then(function (res) {
     return { items: ocrItems(res.data.blocks, 1, canvas.height), height: canvas.height };
   });
 }
 
-root.MemOcr = { readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd };
+root.MemOcr = { readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemOcr;
 })(typeof window !== 'undefined' ? window : this);
