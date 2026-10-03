@@ -960,8 +960,8 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
           So the check fails on the defect either way, on every OS. */
        try { zipOf(out, ['a\\b.html']); return false; } catch (e) { return /not a bare relative name/.test(e.message); } })());
   fs.rmSync(out, { recursive: true, force: true });
-  const m = /var pinnedCdn = (.*);/.exec(sw);
-  const pinned = new Function('u', 'return ' + m[1]);
+  const m = /function pinned\(u\) \{ (.*) \}/.exec(sw);
+  const pinned = new Function('u', m[1]);
   const urls = Object.keys(O.TESS).map(k => O.TESS[k].url).concat([Pdf.LIB.url]);
   ok('the service worker keeps every file the text reader fetches, for offline use', urls.every(u => pinned(new URL(u))),
      urls.filter(u => !pinned(new URL(u))).join(', ') || urls.length + ' files');
@@ -1077,7 +1077,7 @@ async function swFetch() {
     new Function('self', 'caches', 'fetch', 'location', 'setTimeout', SW_SRC)(self, caches, fetch, new URL(ORIGIN), timers || (() => {}));
     /* A response that never comes, or an error, is a result to report, not
        a hang or a crash that ends the suite before its summary. */
-    const go = req => new Promise(resolve => { let p = null; handlers.fetch({ request: Object.assign({ method: 'GET' }, req), respondWith: x => { p = x; } });
+    const go = req => new Promise(resolve => { let p = null; handlers.fetch({ request: Object.assign({ method: 'GET' }, req), respondWith: x => { p = x; }, waitUntil: p => p.catch(() => {}) });
       if (!p) return resolve('passed through'); p.then(resolve, e => resolve({ body: 'error: ' + e.message }));
       setTimeout(() => resolve({ body: 'no answer in 2 s' }), 2000); });
     const install = () => new Promise(resolve => handlers.install({ waitUntil: p => p.then(resolve) }));
@@ -1130,7 +1130,7 @@ async function ocrRetry() {
     });
     const win = {
       Blob, URL: url, TextDecoder, Uint8Array, WebAssembly, Promise, Error, String,
-      setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref(); return t; },
+      setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref(); return t; }, clearTimeout,
       fetch: () => Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['x;' + require(path.join(ROOT, 'memorizer', 'src', 'ocr.js')).WORKER_FIX.find])) }),
       FileReader: class { readAsArrayBuffer(b) { b.arrayBuffer().then(r => { this.result = r; this.onload(); }); } },
       document: { createElement: () => ({ getContext: () => ({ fillRect() {}, drawImage() {} }) }) },
@@ -1204,6 +1204,14 @@ async function ocrRetry() {
     const r = await settle(t.O.readImage(t.photo));
     ok('a photo of a page is retried the same way', !r.e && r.v.items.length === 1 && t.made.length === 2 && t.made[0].ended && t.log.recognize.join() === '0,1',
        r.e ? String(r.e.message || r.e) : JSON.stringify({ made: t.made.length, calls: t.log.recognize }));
+  }
+  {
+    const t = sandbox([]), pending = settle(t.O.readPage(t.page));
+    while (!t.log.recognize.length) await new Promise(resolve => setTimeout(resolve, 1));
+    await t.O.release(); const r = await pending;
+    const next = await settle(t.O.readPage(t.page));
+    ok('releasing the reader waits for its current page and the next page gets a new worker', !r.e && r.v.length === 1 && t.made[0].ended && !next.e && t.made.length === 2);
+    await t.O.release();
   }
   const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
   ok('the fault is recognised in WebKit’s words, Chromium’s, and as a thrown RuntimeError, and nothing else is',

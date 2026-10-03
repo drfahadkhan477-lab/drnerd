@@ -25,6 +25,7 @@ var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.m
                 sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
 
 var ui = {
+  openSeq: 0, drafts: {},
   view: 'library',      /* library | book | session | ask | review | settings */
   askIdx: null, askFor: null, askQ: '', askR: null, askKind: 'chapters', askBusy: false,
   ai: { status: '', busy: '', summary: null, lesson: {}, miss: {} },
@@ -120,12 +121,16 @@ function save() {
   var at = Date.now();
   ui.sessions[ui.docId] = ui.state; ui.at[ui.docId] = at;
   return Store.saveStep({ id: ui.docId, state: ui.state, at: at }, ui.state.cards)
-    .then(function (c) { ui.cards = c; ui.saveError = ''; }, saveFailed);
+    .then(function (c) { ui.cards = c; ui.saveError = Store.failureMessage() || ui.actionError; }, saveFailed);
 }
-function saveFailed(e) {
+function saveFailed(e, untracked) {
   var name = e && e.name, msg = (e && e.message) || String(e || 'unknown error');
   ui.saveError = name === 'QuotaExceededError' ? 'this device is out of space for Memorizer' : msg;
+  if (untracked || !Store.failureMessage()) ui.actionError = ui.saveError;
 }
+
+function writeFailed(e) { saveFailed(e); render(); }
+function actionFailed(e) { saveFailed(e, true); render(); }
 
 /* Days studied, for the streak, in IndexedDB with the units and cards.
    They were in localStorage, and the browser suite measured a whole
@@ -139,7 +144,7 @@ function studyDays() { return ui.days || []; }
 /* The week's log (study.js logActivity): what was done, when. */
 function logActivity(kind, info) {
   ui.activity = Study.logActivity(ui.activity, today(), kind, Object.assign({ now: Date.now() }, info || {}));
-  Store.put('meta', { id: 'activity', log: ui.activity }).then(null, function () {});
+  Store.put('meta', { id: 'activity', log: ui.activity }).then(null, writeFailed);
 }
 function markStudied() {
   var t = today();
@@ -169,6 +174,8 @@ function dispatch(event) {
    a second drill of the same sentences. */
 function afterDrill(d, ci) {
   var key = d.id + ':' + ci;
+  var per = ui.state && ui.state.per[ci];
+  if (!per || !per.quiz || !per.quiz.questions.length) return Promise.resolve([]);
   if (!ui.checks[key]) { ui.checks[key] = { start: today(), done: [], scores: [] }; saveChecks(); }
   return makeStudyCards(d, ci);
 }
@@ -213,7 +220,13 @@ function ask(label, kind, local, remote) {
         if (err) throw new Error('the built-in coach produced a malformed ' + kind + ': ' + err);
         resolve(v);
       })
-    : Provider.call(c, Prompts[kind].apply(null, remote), kind);
+    : Provider.call(c, Prompts[kind].apply(null, remote), kind).then(function (v) {
+        if (kind === 'lesson') return Ground.sourceLesson(v, local[0], Coach.lesson(local[0]));
+        var clusters = kind === 'quiz' ? [local[0]] : local[0];
+        var qs = v.questions.map(function (q) { var cl = kind === 'exam' ? clusters[q.cluster] : clusters[0]; return cl ? Ground.gradeQuestion(q, Ground.sourcesOf(cl)).q : null; }).filter(Boolean);
+        if (!qs.length) throw new Error('No questions had exact source evidence. Use the built-in coach or revise the generated reply.');
+        return { questions: qs };
+      });
   return step.then(function (v) {
     if (!current(seq, key)) throw STALE;
     ui.busy = ''; return v;
@@ -239,7 +252,7 @@ function pump() {
   var c = s.per[s.section];
   /* The unit's pack (pack.js), where it has this section: already checked
      against the book when it was imported, so nothing to ask for. */
-  var fromPack = Pack.sectionOf(ui.pack, s.section);
+  var fromPack = Pack.safeSection(ui.pack, s.section, ui.docRec);
   if (s.phase === 'teach' && !c.lesson && fromPack) {
     dispatch({ type: 'taught', value: JSON.parse(JSON.stringify(fromPack.lesson)) }).then(render);
   } else if (s.phase === 'drill' && !c.quiz && fromPack && fromPack.quiz.questions.length) {
@@ -270,7 +283,7 @@ function pump() {
     /* With a pack, the exam asks its questions for the sections it covers
        (pack.js exam) and the built-in coach's for the rest. */
     if (builtin() && Pack.coverage(ui.pack, ui.docRec).have) {
-      dispatch({ type: 'examReady', value: Pack.exam(ui.pack, Coach.exam(ui.docRec.clusters, Session.asked(s), weak, n), weak, n) }).then(render);
+      dispatch({ type: 'examReady', value: Pack.exam(Pack.safeRecord(ui.pack, ui.docRec), Coach.exam(ui.docRec.clusters, Session.asked(s), weak, n), weak, n) }).then(render);
       return;
     }
     ask('Setting your final exam…', 'exam', [ui.docRec.clusters, Session.asked(s), weak, n], [ui.docRec.clusters, lessons, weak, n])
@@ -290,8 +303,9 @@ function saveUnit(name, source, pages, extra) {
               scanned: (extra && extra.scanned) || [], figures: (extra && extra.figures) || [], figuresV: Pdf.FIGURES_V, hasFile: !!(extra && extra.bytes),
               ocr: (extra && extra.ocr) || [], ocrError: (extra && extra.ocrError) || '', ocrConf: (extra && extra.ocrConf) || {},
               fingerprint: (extra && extra.fingerprint) || '', fileName: (extra && extra.fileName) || '', processing: processing() };
-  var first = extra && extra.bytes ? Store.put('files', { id: rec.id, bytes: extra.bytes }) : Promise.resolve();
-  return first.then(function () { return Store.put('docs', rec); }).then(function () { return rec; });
+  var ops = [{ store: 'docs', value: rec }];
+  if (extra && extra.bytes) ops.push({ store: 'files', value: { id: rec.id, bytes: extra.bytes } });
+  return Store.batch(ops).then(function () { return rec; });
 }
 /* What read this unit: the build of Memorizer (its data-build stamp, set
    by scripts/build-memorizer.js; 'dev' when run from the repository), the
@@ -310,17 +324,32 @@ function duplicate(fp) {
   openDoc(dup.id);
   return true;
 }
+/* Only one import owns progress and staged records at a time. Cancellation
+   is checked between pages and immediately before the final transaction. */
+function beginImport() {
+  if (ui.importJob) { ui.notice = 'An import is already running. Finish or cancel it first.'; render(); return null; }
+  var job = { cancelled: false, committing: false }; ui.importJob = job; return job;
+}
+function checkImport(job) { if (job && job.cancelled) { var e = new Error('Import cancelled.'); e.cancelled = true; throw e; } }
+function endImport(job) { if (ui.importJob === job) ui.importJob = null; ui.importing = ''; if (Ocr.release) Ocr.release().catch(function () {}); }
+function importBanner() {
+  var job = ui.importJob; if (!job) return null;
+  return h('div.card.busy', { id: 'import-progress', role: 'status' }, h('span', job.cancelled ? 'Cancelling after the current page finishes…' : ui.importing || 'Preparing import…'),
+    button('Cancel import', function () { job.cancelled = true; render(); }, 'quiet', { id: 'import-cancel', disabled: job.cancelled || job.committing ? true : null }));
+}
 var DUPLICATE = { duplicate: true };
-function finishImport(p) {
+function finishImport(p, job) {
   return p.then(function (rec) {
-    ui.importing = ''; docsChanged(); return refresh().then(function () { return openDoc(rec.id); });
+    endImport(job); docsChanged(); return refresh().then(function () { return openDoc(rec.id); });
   }, function (e) {
+    endImport(job);
     if (e === DUPLICATE) return;
-    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+    ui.error = e && e.cancelled ? '' : (e && e.message) || String(e); if (e && e.cancelled) ui.notice = 'Import cancelled; no unit was added.'; render();
   });
 }
 function importFile(file) {
   if (!file) return;
+  var job = beginImport(); if (!job) return;
   ui.importing = 'Opening ' + file.name + '…'; ui.error = ''; render();
   var bytes = null, fp = '';
   finishImport(readBuffer(file).then(function (buf) {
@@ -332,8 +361,9 @@ function importFile(file) {
     return Pdf.read(bytes, function (n, total, pass) {
       ui.importing = pass === 'ocr' ? 'Reading scanned page ' + n + ' of ' + total + ' with text recognition…' : 'Reading page ' + n + ' of ' + total + '…';
       render();
-    }, function (msg) { ui.importing = msg; render(); });
+    }, function (msg) { ui.importing = msg; render(); }, { cancelled: function () { return job.cancelled; } });
   }).then(function (r) {
+    checkImport(job); job.committing = true;
     ui.importing = 'Splitting into sections…'; render();
     return saveUnit(file.name.replace(/\.pdf$/i, ''), 'pdf', r.pages, {
       fingerprint: fp, fileName: file.name, bytes: bytes, figures: r.figures || [], scanned: Chunk.scannedPages(r.wordCounts), ocr: r.ocr, ocrError: r.ocrError, ocrConf: r.ocrConf || {},
@@ -341,29 +371,32 @@ function importFile(file) {
         ? 'No readable text in this PDF. It looks like a scan (pictures of pages), and the text reader for scans could not run: ' + r.ocrError
         : 'No readable text in this PDF, even with text recognition. If it is a scan, it may be too faint or too small to read.',
     });
-  }));
+  }), job);
 }
 /* Photos of pages, in the order chosen: each read by text recognition. */
 function importPhotos(files) {
   var list = Array.prototype.slice.call(files || []);
   if (!list.length) return;
+  var job = beginImport(); if (!job) return;
   ui.error = '';
   var pages = [], conf = {}, chain = Promise.resolve();
   list.forEach(function (f, i) {
-    chain = chain.then(function () { ui.importing = 'Reading photo ' + (i + 1) + ' of ' + list.length + '…'; render(); return Ocr.readImage(f, function (m) { ui.importing = m; render(); }); })
+    chain = chain.then(function () { checkImport(job); ui.importing = 'Reading photo ' + (i + 1) + ' of ' + list.length + '…'; render(); return Ocr.readImage(f, function (m) { ui.importing = m; render(); }); })
       .then(function (r) { if (r.items.confidence) conf[i + 1] = r.items.confidence; pages.push({ page: i + 1, lines: Pdf.linesOf(r.items, r.height) }); });
   });
   finishImport(chain.then(function () {
+    checkImport(job); job.committing = true;
     return saveUnit('Photos ' + new Date().toLocaleDateString(), 'photo', pages,
       { ocr: pages.map(function (p) { return p.page; }), ocrConf: conf, emptyMessage: 'No text could be read from those photos. Try a sharper, well-lit photo of the page.' });
-  }));
+  }), job);
 }
 function importText(name, text) {
+  var job = beginImport(); if (!job) return;
   ui.importing = 'Splitting into sections…'; ui.error = ''; render();
   finishImport(Prov.fingerprint(String(text || '')).then(function (fp) {
-    if (duplicate(fp)) throw DUPLICATE;
-    return saveUnit(name || 'Pasted notes', 'text', Chunk.pagesFromText(text), { fingerprint: fp, emptyMessage: 'There was no text to learn from.' });
-  }));
+    checkImport(job); if (duplicate(fp)) throw DUPLICATE;
+    job.committing = true; return saveUnit(name || 'Pasted notes', 'text', Chunk.pagesFromText(text), { fingerprint: fp, emptyMessage: 'There was no text to learn from.' });
+  }), job);
 }
 
 /* ── a whole book ────────────────────────────────────────────────────────── */
@@ -382,13 +415,13 @@ function bookName(files) {
 function applyChapters(book, chapters, pages) {
   var old = {};
   (book.chapters || []).forEach(function (c) { if (c.docId) old[c.pageStart + ':' + c.pageEnd] = c.docId; });
-  var keep = {}, now = Date.now(), num = 0;
+  var keep = {}, now = Date.now(), num = 0, ops = [];
   var puts = chapters.map(function (c, i) {
     var k = c.pageStart + ':' + c.pageEnd, label = c.front ? 0 : ++num;
     if (old[k]) {
       keep[old[k]] = true;
       return Store.get('docs', old[k]).then(function (d) {
-        return d && (d.name !== c.title || d.chapter !== label) ? Store.put('docs', Object.assign(d, { name: c.title, chapter: label })) : null;
+        if (d && (d.name !== c.title || d.chapter !== label)) ops.push({ store: 'docs', value: Object.assign(d, { name: c.title, chapter: label }) });
       }).then(function () { return Object.assign({}, c, { docId: old[k] }); });
     }
     var mine = pages.filter(function (p) { return p.page >= c.pageStart && p.page <= c.pageEnd; });
@@ -400,14 +433,14 @@ function applyChapters(book, chapters, pages) {
                 pageStart: c.pageStart, pageEnd: c.pageEnd, source: 'pdf', clusters: clusters, hasFile: true, parts: book.parts, figures: null,
                 scanned: (book.scanned || []).filter(function (n) { return n >= c.pageStart && n <= c.pageEnd; }),
                 ocr: (book.ocr || []).filter(function (n) { return n >= c.pageStart && n <= c.pageEnd; }), ocrError: book.ocrError || '' };
-    return Store.put('docs', rec).then(function () { return Object.assign({}, c, { docId: id }); });
+    ops.push({ store: 'docs', value: rec });
+    return Promise.resolve(Object.assign({}, c, { docId: id }));
   });
   return Promise.all(puts).then(function (list) {
     var gone = Object.keys(old).map(function (k) { return old[k]; }).filter(function (id) { return !keep[id]; });
-    return Promise.all(gone.map(function (id) { return Store.deleteDoc(id); })).then(function () {
-      book.chapters = list;
-      docsChanged();
-      return Store.put('books', book);
+    return Store.removalOps(gone).then(function (drops) {
+      var next = Object.assign({}, book, { chapters: list });
+      return Store.batch(ops.concat(drops, [{ store: 'books', value: next }, { store: 'meta', id: 'import:' + book.id, delete: true }])).then(function () { book.chapters = list; docsChanged(); });
     });
   });
 }
@@ -415,27 +448,52 @@ function bookPages(book) {
   return Promise.all(book.parts.map(function (_, i) { return Store.get('bookpages', book.id + ':' + i); }))
     .then(function (r) { return r.reduce(function (all, x) { return all.concat(x ? x.pages : []); }, []); });
 }
-function importBook(fileList) {
+function previewBook(fileList) {
+  var picked = Array.prototype.slice.call(fileList || []); if (!picked.length) return;
+  if (ui.importJob) { ui.notice = 'An import is already running.'; render(); return; }
+  var files = Book.orderParts(picked.map(function (f) { return f.name; })).map(function (i) { return picked[i]; });
+  var list = h('ol', { id: 'import-order' }), warnings = h('p.warn', { id: 'import-order-warning' }), close;
+  function draw() {
+    list.textContent = '';
+    files.forEach(function (f, i) {
+      function move(delta) { var at = i + delta, tmp = files[at]; files[at] = f; files[i] = tmp; draw(); }
+      list.appendChild(h('li', h('span', f.name + ' · ' + (f.size / 1048576).toFixed(1) + ' MB '),
+        button('↑', function () { move(-1); }, 'quiet', { 'aria-label': 'Move ' + f.name + ' up', disabled: i === 0 ? true : null }),
+        button('↓', function () { move(1); }, 'quiet', { 'aria-label': 'Move ' + f.name + ' down', disabled: i === files.length - 1 ? true : null })));
+    }); warnings.textContent = Book.partWarnings(files.map(function (f) { return f.name; })).join(' ');
+  }
+  draw();
+  var size = files.reduce(function (n, f) { return n + f.size; }, 0);
+  var body = h('div.card', { role: 'dialog', 'aria-label': 'Book import order' }, h('h2', 'Check the part order'),
+    h('p', 'Parts will be joined in this order. Reorder them if their filenames do not match the reading order.'), list, warnings,
+    h('p', (size / 1048576).toFixed(1) + ' MB of PDFs; extracted text and study data need additional space.'),
+    h('div.row', button('Cancel', function () { close(); }, 'quiet', { id: 'import-order-cancel' }),
+      button('Import in this order', function () { close(); importBook(files, true); }, 'primary', { id: 'import-order-go' })));
+  close = Dialog.open(body, doc.getElementById('app'));
+}
+function importBook(fileList, ordered) {
   var files = Array.prototype.slice.call(fileList || []);
   if (!files.length) return;
-  files = Book.orderParts(files.map(function (f) { return f.name; })).map(function (i) { return files[i]; });
+  var job = beginImport(); if (!job) return;
+  if (!ordered) files = Book.orderParts(files.map(function (f) { return f.name; })).map(function (i) { return files[i]; });
   var book = { id: 'b' + newId().slice(1), name: bookName(files), addedAt: Date.now(), parts: [], scanned: [], ocr: [], ocrError: '', outline: [] };
   var all = [], offset = 0;
   ui.error = '';
-  var chain = Promise.resolve();
+  var stage = { id: 'import:' + book.id, kind: 'pending-import', at: Date.now(), files: files.map(function (_, i) { return book.id + ':f' + i; }), pages: files.map(function (_, i) { return book.id + ':' + i; }) };
+  var chain = Store.batch([{ store: 'meta', value: stage }]);
   files.forEach(function (f, k) {
     var bytes;
     chain = chain.then(function () {
-      ui.importing = 'Part ' + (k + 1) + ' of ' + files.length + ': opening ' + f.name + '…'; render();
+      checkImport(job); ui.importing = 'Part ' + (k + 1) + ' of ' + files.length + ': opening ' + f.name + '…'; render();
       return readBuffer(f);
     }).then(function (buf) {
-      bytes = buf;
+      checkImport(job); bytes = buf;
       return Pdf.read(buf, function (n, total, pass) {
         ui.importing = 'Part ' + (k + 1) + ' of ' + files.length + ': ' + (pass === 'ocr' ? 'text recognition, scanned page ' : 'reading page ') + n + ' of ' + total + '…';
         render();
-      }, function (msg) { ui.importing = msg; render(); }, { figures: false });
+      }, function (msg) { ui.importing = msg; render(); }, { figures: false, cancelled: function () { return job.cancelled; } });
     }).then(function (r) {
-      var fileId = book.id + ':f' + k;
+      checkImport(job); var fileId = book.id + ':f' + k;
       var pages = r.pages.map(function (p) { return { page: p.page + offset, lines: p.lines }; });
       book.parts.push({ fileId: fileId, name: f.name, first: offset + 1, last: offset + r.numPages });
       r.outline.forEach(function (e) { book.outline.push({ title: e.title, page: e.page + offset, depth: e.depth }); });
@@ -444,10 +502,11 @@ function importBook(fileList) {
       if (r.ocrError) book.ocrError = r.ocrError;
       all = all.concat(pages);
       offset += r.numPages;
-      return Promise.all([Store.put('files', { id: fileId, bytes: bytes }), Store.put('bookpages', { id: book.id + ':' + k, pages: pages })]);
+      return Store.batch([{ store: 'files', value: { id: fileId, bytes: bytes } }, { store: 'bookpages', value: { id: book.id + ':' + k, pages: pages } }]);
     });
   });
   chain.then(function () {
+    checkImport(job); job.committing = true;
     ui.importing = 'Finding the chapters…'; render();
     book.pages = offset;
     var c = Book.candidates(all, book.outline, offset);
@@ -457,12 +516,14 @@ function importBook(fileList) {
     ui.importing = 'Splitting ' + c[book.method].length + ' chapters into sections…'; render();
     return applyChapters(book, c[book.method], all);
   }).then(function () {
-    ui.importing = ''; return refresh().then(function () { openBook(book.id); });
+    endImport(job); return refresh().then(function () { openBook(book.id); });
   }, function (e) {
-    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+    endImport(job); ui.error = e && e.cancelled ? '' : (e && e.message) || String(e); if (e && e.cancelled) ui.notice = 'Import cancelled; staged files removed.';
+    Store.cleanImports(book.id).then(render, function (err) { saveFailed(err); render(); });
   });
 }
 function openBook(id) {
+  ui.openSeq++;
   ui.view = 'book'; ui.bookId = id; ui.error = ''; ui.state = null;
   refresh().then(function () { render(); root.scrollTo(0, 0); });
 }
@@ -471,28 +532,31 @@ function openBook(id) {
 function recut(book, chapters, method) {
   ui.importing = 'Cutting the chapters again…'; render();
   return bookPages(book).then(function (pages) {
-    if (method) book.method = method;
-    return applyChapters(book, chapters || Book.candidates(pages, book.outline, book.pages)[book.method], pages);
+    var next = Object.assign({}, book, { method: method || book.method });
+    return applyChapters(next, chapters || Book.candidates(pages, book.outline, book.pages)[next.method], pages);
   }).then(function () { ui.importing = ''; return refresh(); }).then(render, function (e) {
     ui.importing = ''; ui.error = (e && e.message) || String(e); render();
   });
 }
 
 function openDoc(id, section) {
+  var seq = ++ui.openSeq;
   return Promise.all([Store.get('docs', id), Store.get('sessions', id), Store.get('packs', id)]).then(function (r) {
+    if (seq !== ui.openSeq) return false;
+    if (!r[0]) throw new Error('This unit was removed. Return to Chapters.');
     ui.docRec = r[0];
     if (ui.docRec) retitleDoc(ui.docRec);
     ui.docId = id;
     ui.pack = r[2] || null; ui.packReport = null; ui.packText = ''; ui.packOpen = false; ui.packShow = false;
     var st = r[1] && r[1].state;
-    ui.state = Session.resumable(st) ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }));
+    ui.state = Session.resumable(st) ? st : Session.init(id, ui.docRec.clusters.map(function (c) { return c.title; }), ui.docRec.clusters.map(function (c, i) { return c.identity == null ? i : c.identity; }));
     if (ui.state.titles && ui.state.titles.length === ui.docRec.clusters.length) ui.state.titles = ui.docRec.clusters.map(function (c) { return c.title; });
     ui.state = Session.next(ui.state, { type: 'toUnit' });
     if (typeof section === 'number') ui.state = Session.next(ui.state, { type: 'open', section: section });
     ui.view = 'session'; ui.error = ''; ui.choice = null;
     ensureFigures(ui.docRec);
     return save();
-  }).then(function () { render(); root.scrollTo(0, 0); });
+  }).then(function () { if (seq === ui.openSeq) { render(); root.scrollTo(0, 0); } }, function (e) { if (seq === ui.openSeq) { ui.error = e.message; render(); } });
 }
 /* One transition at a time. A second tap before the first has been stored
    and drawn lands on the OLD screen's button: on "I knew it" that skipped a
@@ -616,19 +680,32 @@ function tablesCard(c) {
 function where(d, pageNo) {
   return d && d.parts ? Book.locate(d.parts, pageNo) : { fileId: d ? d.id : ui.docId, page: pageNo };
 }
+var byteLoads = {};
 function withBytes(fileId) {
   if (ui.bytesFor === fileId) return Promise.resolve(ui.bytes);
-  return Store.get('files', fileId).then(function (f) { ui.bytesFor = fileId; ui.bytes = f && f.bytes; return ui.bytes; });
+  if (byteLoads[fileId]) return byteLoads[fileId];
+  var p = Store.get('files', fileId).then(function (f) { ui.bytesFor = fileId; ui.bytes = f && f.bytes; return ui.bytes; });
+  byteLoads[fileId] = p; p.then(function () { delete byteLoads[fileId]; }, function () { delete byteLoads[fileId]; }); return p;
 }
+var imageObserver = null;
 function lazyImage(alt, pageNo, box, scale, d) {
-  var img = h('img', { alt: alt });
-  var at = where(d || ui.docRec, pageNo);
-  (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
-    if (!bytes) throw new Error('no file');
-    return Pdf.renderBox(at.fileId, bytes, at.page, box, scale);
-  }).then(function (url) { img.src = url; }, function () { img.alt = alt + ' (could not be drawn)'; });
+  var img = h('img', { alt: alt, loading: 'lazy' }), at = where(d || ui.docRec, pageNo);
+  function load() {
+    (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
+      if (!img.isConnected) return null;
+      if (!bytes) throw new Error('no file');
+      return Pdf.renderBox(at.fileId, bytes, at.page, box, scale);
+    }).then(function (url) { if (url && img.isConnected) img.src = url; }, function () { img.alt = alt + ' (could not be drawn)'; });
+  }
+  if (root.IntersectionObserver) {
+    if (!imageObserver) imageObserver = new root.IntersectionObserver(function (entries, observer) {
+      entries.forEach(function (entry) { if (entry.isIntersecting) { observer.unobserve(entry.target); entry.target._draw(); delete entry.target._draw; } });
+    }, { rootMargin: '400px' });
+    img._draw = load; imageObserver.observe(img);
+  } else load();
   return img;
 }
+
 /* A book's chapter finds its figures the first time it is opened: looking
    through 1,500 pages at import would take far longer than the text. And
    any PDF whose figures were found by an older finder (figuresV behind
@@ -649,9 +726,12 @@ function ensureFigures(d) {
       return bytes ? Pdf.figuresOn(fileId, bytes, byFile[fileId]) : [];
     }).then(function (fs) { fs.forEach(function (f) { f.page = f.page + first - 1; found.push(f); }); });
   }, Promise.resolve()).then(function () {
-    d.figures = found; d.figuresV = Pdf.FIGURES_V;
-    return Store.put('docs', d);
-  }).then(function () {
+    return Store.update('docs', d.id, function (latest) {
+      if (!latest || (latest.fingerprint || '') !== (d.fingerprint || '') || JSON.stringify(latest.parts || null) !== JSON.stringify(d.parts || null)) return null; latest.figures = found; latest.figuresV = Pdf.FIGURES_V; return latest;
+    });
+  }).then(function (latest) {
+    if (!latest) { ui.figuresBusy = null; return; }
+    d = latest;
     ui.figuresBusy = null; ui.figsFor = null;
     ui.docs.forEach(function (x, i) { if (x.id === d.id) ui.docs[i] = d; });
     if (ui.docRec && ui.docRec.id === d.id) { ui.docRec = d; render(); }
@@ -817,7 +897,7 @@ function homeParts() {
   var photoIn = h('input', { type: 'file', accept: 'image/*', multiple: true, id: 'photo-input', class: 'visually-hidden',
     onchange: function (e) { importPhotos(e.target.files); e.target.value = ''; } });
   var bookIn = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: true, id: 'book-input', class: 'visually-hidden',
-    onchange: function (e) { importBook(e.target.files); e.target.value = ''; } });
+    onchange: function (e) { previewBook(e.target.files); e.target.value = ''; } });
 
   /* The hero band: who it is for, today, and three numbers that matter —
      days in a row, cards due, and how much of what you have studied is held
@@ -952,11 +1032,11 @@ function homeParts() {
           button('\u2726 Study pack for Claude', function () { openPack(d.id); }, 'quiet', { 'data-pack': d.id }),
           button('Start over', function () {
             if (!root.confirm('Start "' + d.name + '" from the beginning? Your review cards are kept.')) return;
-            Store.del('sessions', d.id).then(function () { return openDoc(d.id); });
+            Store.del('sessions', d.id).then(function () { return openDoc(d.id); }, writeFailed);
           }, 'quiet'),
           button('Delete', function () {
             if (!root.confirm('Delete "' + d.name + '" and its review cards from this device?')) return;
-            docsChanged(); Store.deleteDoc(d.id).then(refresh).then(render);
+            docsChanged(); Store.deleteDoc(d.id).then(refresh).then(render, actionFailed);
           }, 'quiet danger'))),
       d.ocr && d.ocr.length ? h('p.muted.ocr-note', 'Read by text recognition: ' + (d.source === 'photo' ? 'every photo' : 'pages ' + d.ocr.slice(0, 12).join(', ') + (d.ocr.length > 12 ? '…' : '')) + '. Check anything surprising against the page.') : null,
       d.scanned && d.scanned.length ? h('p.warn', 'Pages with no readable text: ' + d.scanned.slice(0, 12).join(', ') + (d.scanned.length > 12 ? '…' : '') + '. They are not in any section' +
@@ -1062,20 +1142,19 @@ function deleteSection(i) {
   if (!root.confirm('Delete section ' + (i + 1) + ', \u201C' + c.title + '\u201D, from this unit? Its progress and review cards go with it; every other section keeps its own.')) return Promise.resolve();
   var st;
   try { st = Session.dropSection(st0, i); } catch (e) { ui.notice = 'Not deleted: ' + e.message + '.'; render(); return Promise.resolve(); }
-  var doc2 = Object.assign({}, d, { clusters: d.clusters.filter(function (_, k) { return k !== i; }) });
+  var doc2 = Study.dropDocSection(d, i);
   var cards = Session.dropCards(ui.cards, d.id, i), pack2 = Pack.dropSection(ui.pack, i);
-  docsChanged();
-  return Promise.all([Store.put('docs', doc2), Store.del('vectors', d.id), pack2 ? Store.put('packs', pack2) : null]
-      .concat(cards.drop.map(function (id) { return Store.del('cards', id); }), cards.renumbered.map(function (x) { return Store.put('cards', x); })))
-    .then(function () {
-      var gone = {}, moved = {};
-      cards.drop.forEach(function (id) { gone[id] = true; });
-      cards.renumbered.forEach(function (x) { moved[x.id] = x; });
-      ui.cards = ui.cards.filter(function (x) { return !gone[x.id]; }).map(function (x) { return moved[x.id] || x; });
-      ui.docRec = doc2; ui.state = st; ui.pack = pack2; ui.figsFor = null; ui.packReport = null;
-      return save();
-    })
-    .then(function () { ui.notice = 'Deleted \u201C' + c.title + '\u201D.'; render(); }, function (e) { saveFailed(e); render(); });
+  var notes = Study.dropSectionRecords(ui.notes, d.id, i), checks = Study.dropSectionRecords(ui.checks, d.id, i);
+  var ops = [{ store: 'docs', value: doc2 }, { store: 'sessions', value: { id: d.id, state: st, at: Date.now() } },
+    { store: 'vectors', id: d.id, delete: true }, { store: 'meta', value: { id: 'notes', recs: notes } }, { store: 'meta', value: { id: 'checks', recs: checks } }];
+  if (pack2) ops.push({ store: 'packs', value: pack2 });
+  cards.drop.forEach(function (id) { ops.push({ store: 'cards', id: id, delete: true }); });
+  cards.renumbered.forEach(function (x) { ops.push({ store: 'cards', value: x }); });
+  return Store.batch(ops).then(function () {
+    docsChanged(); ui.docRec = doc2; ui.state = st; ui.pack = pack2; ui.notes = notes; ui.checks = checks;
+    ui.figsFor = null; ui.packReport = null; ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} };
+    return refresh();
+  }).then(function () { ui.notice = 'Deleted “' + c.title + '”.'; render(); }, function (e) { saveFailed(e, true); render(); });
 }
 function trashIcon() {
   return svg('svg', { viewBox: '0 0 24 24', 'class': 'trash-icon', 'aria-hidden': 'true' }, [
@@ -1258,7 +1337,8 @@ function importPack(text) {
   var rec = Pack.merge(ui.pack, checked, d, Date.now());
   return Store.put('packs', rec).then(function () {
     ui.pack = rec; ui.packText = '';
-    return dispatch({ type: 'packed', value: { sections: checked.sections } });
+    clearDraft('pack-text');
+    return dispatch({ type: 'packed', value: { sections: checked.sections.map(function (s) { return Pack.safeSection(rec, s.index, d); }).filter(Boolean) } });
   }).then(render, function (e) { saveFailed(e); render(); });
 }
 
@@ -1284,7 +1364,7 @@ function sourceCard(d) {
     h('p.muted.src-meta', 'From ', h('strong', from), when ? ' \u00B7 added ' + when : '',
       d.fingerprint ? [' \u00B7 ', h('span', { title: d.fingerprint }, Prov.shortPrint(d.fingerprint))] : '',
       pr ? ' \u00B7 read by Memorizer ' + pr.build + (d.source === 'pdf' ? ', PDF reader ' + pr.pdfjs : '') : ''),
-    h('p.muted', 'Everything Memorizer teaches from this unit is this source\u2019s own text. It is what your book says, as of its edition \u2014 not a check against current guidelines.'));
+    h('p.muted', 'Extracted facts and graded source completions use this edition’s text. Generated notes need your review against the cited page; not a check against current guidelines.'));
 }
 
 /* The scanned pages text recognition was least sure of (study.js
@@ -1355,7 +1435,7 @@ function viewBook() {
     b.scanned.length ? h('p.warn', 'Pages with no readable text: ' + b.scanned.slice(0, 12).join(', ') + (b.scanned.length > 12 ? '…' : '') + '.') : null,
     h('div.row', button('Delete this book', function () {
       if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
-      docsChanged(); Store.deleteBook(b.id).then(function () { leave('shelf'); });
+      docsChanged(); Store.deleteBook(b.id).then(function () { leave('shelf'); }, actionFailed);
     }, 'quiet danger', { id: 'delete-book' })));
 }
 
@@ -1457,10 +1537,10 @@ function teachCard(c, L) {
     ui.teach = { key: key, said: area.value, r: r, points: points }; render();
   };
   var res = got ? h('div', { id: 'teach-result' },
-    h('p', h('strong', 'You covered ' + got.r.covered.length + ' of ' + (got.r.covered.length + got.r.missed.length) + ' key points.')),
+    h('p', h('strong', 'Your words matched ' + got.r.covered.length + ' of ' + (got.r.covered.length + got.r.missed.length) + ' key points.')),
     got.r.wrong.length ? h('p.warn', { id: 'teach-wrong' }, 'You gave ' + got.r.wrong.join(', ') + ' — this section has no such number. Check it against the page.') : null,
     got.r.missed.length ? [h('p.muted', L.by === 'pack' ? 'What you left out, in the lesson\u2019s words:' : 'What you left out, in your book’s words:'), h('ul.teach-missed', got.r.missed.map(function (i) { return h('li', marked(got.points[i].text), ' ', page(got.points[i].page)); })),
-      button('Make cards of what I left out', function () { teachCards(c, got); }, 'quiet', { id: 'teach-cards' })] : h('p', '✓ Everything the section’s key points say.'),
+      button('Make cards of what I left out', function () { teachCards(c, got); }, 'quiet', { id: 'teach-cards' })] : h('p', 'All key points had matching words. Check the meaning against the source; this is not a correctness grade.'),
     ui.teachMade != null ? h('p.muted', { id: 'teach-made' }, ui.teachMade + ' card' + (ui.teachMade === 1 ? '' : 's') + ' made, from tomorrow.') : null,
     teachAi(got)) : null;
   return h('div.card.teach-card', { id: 'teach-back' }, h('span.eyebrow', '🗣 Teach it back'),
@@ -1507,7 +1587,7 @@ function micButton(onText, id) {
   var SR = root.SpeechRecognition || root.webkitSpeechRecognition;
   if (!SR) return null;
   var on = ui.listening === id;
-  return button(on ? '■ Stop' : '🎙 Speak', function () {
+  return h('span.mic-control', button(on ? '■ Stop' : '🎙 Speak', function () {
     if (on) { if (ui.rec) ui.rec.stop(); return; }
     var r = new SR();
     r.lang = (root.navigator && root.navigator.language) || 'en-US'; r.interimResults = false; r.continuous = false;
@@ -1519,7 +1599,7 @@ function micButton(onText, id) {
     r.onend = function () { ui.listening = null; ui.rec = null; render(); };
     ui.rec = r; ui.listening = id; ui.voiceError = '';
     r.start(); render();
-  }, on ? 'chip sure-on' : 'chip quiet', { id: id, 'aria-pressed': String(on), title: 'Speak instead of typing (your device’s dictation)' });
+  }, on ? 'chip sure-on' : 'chip quiet', { id: id, 'aria-pressed': String(on), title: 'Browser dictation may send audio to a platform service', 'aria-describedby': id + '-privacy' }), h('small.muted', { id: id + '-privacy' }, 'Dictation may send audio to your browser’s speech service.'));
 }
 /* CORRECT THE TEXT: a paragraph of a section read by text recognition,
    corrected by you (study.js correctSegment) and kept with what it said
@@ -1539,19 +1619,25 @@ function fixCard(c) {
     fixes.length ? h('p.muted', { id: 'fix-log' }, fixes.length + ' correction' + (fixes.length === 1 ? '' : 's') + ' in this section, each kept with what it said before.') : null);
 }
 function saveFix(ci, si, text) {
-  var fixed = Study.correctSegment(ui.docRec, ci, si, text, today());
+  var original = ui.docRec, id = original.id, fixed = Study.correctSegment(original, ci, si, text, today());
   if (!fixed) return;
-  ui.fixOpen = true;
-  Store.put('docs', fixed).then(function () {
-    ui.docRec = fixed; docsChanged();
-    ui.notice = 'Corrected. The lesson is taught again from your text.';
-    if (ui.state.phase !== 'teach') return;
-    return ask('Preparing the lesson…', 'lesson', [fixed.clusters[ci]], [fixed.clusters[ci]]).then(function (v) { return dispatch({ type: 'taught', value: v }); });
-  }).then(function () { return refresh(); }).then(render, function (e) { saveFailed(e); render(); });
+  var st = Session.invalidateSection(ui.state, ci), checks = Object.assign({}, ui.checks), pack = ui.pack && JSON.parse(JSON.stringify(ui.pack));
+  delete checks[Study.noteKey(id, ci)];
+  if (pack) delete pack.sections[ci];
+  var ops = [{ store: 'docs', value: fixed }, { store: 'sessions', value: { id: id, state: st, at: Date.now() } },
+    { store: 'vectors', id: id, delete: true }, { store: 'meta', value: { id: 'checks', recs: checks } }];
+  if (pack) ops.push({ store: 'packs', value: pack });
+  ui.cards.filter(function (x) { return x.docId === id && x.cluster === ci; }).forEach(function (x) { ops.push({ store: 'cards', id: x.id, delete: true }); });
+  ui.stepSeq++; ui.busy = ''; ui.fixOpen = true;
+  return Store.batch(ops).then(function () {
+    clearDraft('fix:' + si); docsChanged(); ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} }; ui.askIdx = null; ui.secVecs = null;
+    if (ui.docId === id) { ui.docRec = fixed; ui.state = st; ui.pack = pack; ui.checks = checks; ui.notice = 'Corrected. Questions and review cards from the changed section were retired; study it again from the corrected text.'; }
+    return refresh();
+  }).then(render, function (e) { saveFailed(e, true); render(); });
 }
 /* YOUR NOTES: kept per section as yours, never mixed with the book's words. */
 function notesFor(docId, ci) { return ui.notes[Study.noteKey(docId, ci)] || null; }
-function saveNotes() { return Store.put('meta', { id: 'notes', recs: ui.notes }).then(null, function (e) { saveFailed(e); render(); }); }
+function saveNotes() { return Store.put('meta', { id: 'notes', recs: ui.notes }).then(null, function (e) { saveFailed(e); render(); return false; }); }
 function noteCard(c) {
   var key = Study.noteKey(ui.docId, ui.state.section), rec = ui.notes[key] || { text: '', marks: [] };
   var area = h('textarea', { id: 'note-text', rows: '3', 'aria-label': 'Your note on this section', placeholder: 'Your own words: a link to a case you saw, a way you remember it.' });
@@ -1559,7 +1645,8 @@ function noteCard(c) {
   return h('div.card.note-card', { id: 'notes' }, h('span.eyebrow', '📝 Your notes'),
     h('p.muted', 'Yours, not the book’s — shown with this section’s cards and in the Coach, labelled as yours. Mark a key point with ☆ to have it asked as a card.'),
     area, h('div.row', button('Save note', function () {
-      ui.notes[key] = { text: area.value.trim(), marks: rec.marks || [] }; saveNotes(); ui.notice = 'Note saved.'; render();
+      ui.notes[key] = { text: area.value.trim(), marks: rec.marks || [] };
+      saveNotes().then(function (ok) { if (ok !== false) { clearDraft('note-text'); ui.notice = 'Note saved.'; ui.saveError = Store.failureMessage() || ui.actionError; } render(); });
     }, 'quiet', { id: 'note-save' }), (rec.marks || []).length ? h('span.muted', { id: 'mark-count' }, rec.marks.length + ' point' + (rec.marks.length === 1 ? '' : 's') + ' marked') : null));
 }
 /* A key point marked: kept, and made a cloze card (study.js markCard) from
@@ -1571,8 +1658,8 @@ function toggleMark(c, text) {
   var card = Study.markCard(d, ci, text);
   if (!card) { render(); return; }
   var have = ui.cards.filter(function (x) { return x.id === card.id; })[0];
-  if (on && !have) { card.dueFrom = Study.addDays(today(), 1); Store.put('cards', card).then(function () { ui.cards.push(card); render(); }); return; }
-  if (!on && have && !have.srs) { Store.del('cards', card.id).then(function () { ui.cards = ui.cards.filter(function (x) { return x.id !== card.id; }); render(); }); return; }
+  if (on && !have) { card.dueFrom = Study.addDays(today(), 1); Store.put('cards', card).then(function () { ui.cards.push(card); render(); }, writeFailed); return; }
+  if (!on && have && !have.srs) { Store.del('cards', card.id).then(function () { ui.cards = ui.cards.filter(function (x) { return x.id !== card.id; }); render(); }, writeFailed); return; }
   render();
 }
 function quickCheck(c, L) {
@@ -1735,7 +1822,7 @@ function socraticAi(L) {
   };
   return h('div.soc-ai', { id: 'soc-ai' },
     soc.ai.length ? h('ol.soc-steps.soc-ai-list', { id: 'soc-ai-list' }, soc.ai.map(function (x, k) {
-      return h('li', h('p.soc-ask', '\u2728 ' + x.question), x.shown ? [h('p.soc-answer', x.answer), h('p.muted.ai-label', 'From Claude\u2019s notes, checked against your book')]
+      return h('li', h('p.soc-ask', '\u2728 ' + x.question), x.shown ? [h('p.soc-answer', x.answer), h('p.muted.ai-label', 'From Claude\u2019s notes, compare with the cited source')]
         : button('Show', function () { x.shown = true; render(); }, 'quiet', { id: 'soc-ai-show-' + k }));
     })) : null,
     soc.aiWhy ? h('p.muted', { id: 'soc-ai-dropped' }, 'Its question was not asked: ' + soc.aiWhy + '.') : null,
@@ -1783,7 +1870,7 @@ function packCards(L) {
   var flagged = (L.points || []).concat(L.numbers || [], L.pearls || [], L.distinctions || [], asks).filter(function (x) { return x.flag; }).length +
     Object.keys(L.flags || {}).length;
   return {
-    label: h('p.pack-label', { id: 'pack-label' }, h('strong', '\u2726 Written with Claude'), ' \u00B7 checked against your book',
+    label: h('p.pack-label', { id: 'pack-label' }, h('strong', '\u2726 Written with Claude'), ' \u00B7 compare with the cited source',
       flagged ? h('span.pack-flagged', ' \u00B7 ' + flagged + ' not found in it, flagged') : null),
     mechanism: L.mechanism ? h('div.card.mechanism', { id: 'mechanism' }, h('span.eyebrow', 'The mechanism'), h('p', marked(L.mechanism)),
       flagLine(L.flags && L.flags.mechanism)) : null,
@@ -2028,7 +2115,7 @@ function mcqCard(q, meta, onNext, reveal, nav, after, opts) {
   return h('div.card.mcq', { id: 'mcq' },
     h('div.mcq-meta', meta),
     quote,
-    h('h2.q', q.question),
+    h('h2.q', q.sourceCompletion ? 'Complete the quoted source sentence.' : q.question),
     opts,
     notSure,
     answered && blind ? h('div.why.blind', { role: 'status', id: 'blind-note' }, h('p.muted', 'Answer held \u2014 you will see how you did at the end.'),
@@ -2125,8 +2212,8 @@ function viewDrill() {
   var orig = q;
   if (v) q = v;
   var meta = [h('span', retry ? (v ? 'Again, in new words — you missed this one' : 'Again — you missed this one') : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
-    q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · its answer checked against your book') : null,
-    v ? rewordTag() : q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, q.flag ? '\u2726 Written with Claude \u00B7 \u26A0 not all of it found in your book' : '\u2726 Written with Claude \u00B7 checked against your book') : null,
+    q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · source completion') : null,
+    v ? rewordTag() : q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, q.flag ? '\u2726 Written with Claude \u00B7 \u26A0 not all of it found in your book' : '\u2726 Written with Claude \u00B7 compare with the cited source') : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
   /* The kind of miss, read from what happened (skill.js); a second miss in
      a row is re-taught on the spot with a different kind of hook. */
@@ -2271,7 +2358,7 @@ function aiCase(d, ci) {
       if (!v) return { q: null, why: 'its reply was not a case with four options' };
       var bad = Ground.claimError(v.quote, [c.text], 0);
       if (bad && !/too little|says nothing|nothing in it/.test(bad)) return { q: null, why: 'the case ' + bad };
-      var g = Ground.question(v, sents);
+      var g = Ground.gradeQuestion(v, sents);
       return g.q ? { q: g.q, why: '' } : { q: null, why: g.why };
     });
 }
@@ -2284,7 +2371,7 @@ function caseCard(d, ci) {
     }, 'quiet', { id: 'ai-case' }));
   if (!got.q) return h('div.card.case-card', { id: 'case-card' }, h('span.eyebrow', '✨ A case'), h('p', { id: 'case-dropped' }, 'Not shown: ' + got.why + '. Your book stays the source.'),
     button('Try another', function () { delete ui.ai.cases[key]; render(); }, 'quiet'));
-  return h('div', { id: 'case-card' }, mcqCard(got.q, [h('span.tag.ai-tag', '✨ A case by the on-device AI · its answer checked against your book')],
+  return h('div', { id: 'case-card' }, mcqCard(got.q, [h('span.tag.ai-tag', '✨ A case by the on-device AI · source completion')],
     function () { delete ui.ai.cases[key]; ui.choice = null; render(); }, null, null, function () { return null; }));
 }
 function viewExam() {
@@ -2360,6 +2447,7 @@ function viewSession() {
 }
 
 function leave(view) {
+  ui.openSeq++;
   stopPractice();
   ui.drill = null; ui.choice = null;
   ui.view = view; ui.error = ''; ui.notice = '';
@@ -2368,6 +2456,7 @@ function leave(view) {
 
 /* ── REVIEW ──────────────────────────────────────────────────────────────── */
 function startReview() {
+  ui.openSeq++;
   ui.view = 'review'; ui.reviewShown = false; ui.reviewDone = 0; ui.drill = null; ui.choice = null;
   refresh().then(render);
 }
@@ -2413,7 +2502,7 @@ function viewReview() {
     Store.put('cards', upd).then(function () {
       if (dr) dr.done[card.id] = true;
       if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id);
-      ui.saveError = ''; ui.reviewDone++;
+      ui.saveError = Store.failureMessage() || ui.actionError; ui.reviewDone++;
       return refresh();
     }, saveFailed).then(next);
   };
@@ -2425,7 +2514,7 @@ function viewReview() {
   if (card.options && card.options.length) {
     /* A multiple-choice card grades itself: right is Good (Hard if you were
        not sure), wrong is Again — and asked again if you were sure. */
-    var q = { question: card.front, quote: card.quote || '', options: card.options, answer: card.answer, explain: card.explain || card.back, page: card.page };
+    var q = { question: card.front, quote: card.quote || '', sourceCompletion: !!card.sourceCompletion, options: card.options, answer: card.answer, explain: card.explain || card.back, page: card.page };
     return h('main.wrap', back, head, mcqCard(q, [tag, card.kind === 'occlusion' ? occlusionFigure(card) : null], function () {
       var how = Study.rateWith(ui.choice === card.answer, !!ui.sure);
       rate(how.rating, how);
@@ -2813,12 +2902,13 @@ function startCheck(x) {
   var st = ui.sessions[x.doc.id], per = st && st.per && st.per[x.ci];
   var qs = per && per.quiz && per.quiz.questions && per.quiz.questions.length ? per.quiz.questions
     : Coach.quiz(x.doc.clusters[x.ci], lessonFor(x.doc, x.ci), x.doc.clusters).questions;
-  ui.check = { key: x.key, title: x.title, qs: Study.checkQuestions(qs, (x.rec.done || []).length), pos: 0, right: 0, done: false };
+  ui.check = { docId: x.doc.id, ci: x.ci, key: x.key, title: x.title, qs: Study.checkQuestions(qs, (x.rec.done || []).length), pos: 0, right: 0, done: false };
   ui.view = 'check'; ui.choice = null; render(); root.scrollTo(0, 0);
 }
 function viewCheck() {
   var k = ui.check, back = backBar('Section check', function () { leave('library'); });
   if (!k) return h('main.wrap', back);
+  if (!k.qs.length) return h('main.wrap', back, h('div.card', h('h2', 'No questions for this check'), h('p', 'This section has no usable questions. Re-read its source or add more text.')));
   if (k.done) {
     var rec = ui.checks[k.key], nx = Study.nextCheck(rec);
     return h('main.wrap', back, h('div.card.result', { id: 'check-result' }, ring(Math.round(100 * k.right / k.qs.length), 'big'),
@@ -2829,6 +2919,7 @@ function viewCheck() {
   }
   var q = k.qs[k.pos];
   return h('main.wrap', back, mcqCard(q, [h('span', 'Check · ' + (k.pos + 1) + ' of ' + k.qs.length + ' · ' + k.title)], function () {
+    recordPracticeMiss(k.docId, k.ci, q, ui.choice);
     logActivity('answer', { correct: ui.choice === q.answer, title: k.title, source: 'check' });
     if (ui.choice === q.answer) k.right++;
     k.pos++; ui.choice = null;
@@ -2849,20 +2940,29 @@ function practiceCard() {
     tr.pct.length > 1 ? h('div.trend', { 'aria-label': 'Recent practice scores' }, tr.pct.map(function (p, i) { return h('i', { title: tr.days[i] + ': ' + p + '%', style: 'height:' + Math.max(6, p) + '%' }); })) : null,
     h('div.chips', [10, 20, 30].map(function (m) { return button(m + ' min', function () { startPractice(m); }, 'chip', { id: 'practice-' + m }); })));
 }
-function cardQ(c) { return { question: c.front, quote: c.quote || '', options: c.options, answer: c.answer, explain: c.explain || c.back, page: c.page }; }
+function cardQ(c) { return { question: c.front, quote: c.quote || '', sourceCompletion: !!c.sourceCompletion, options: c.options, answer: c.answer, explain: c.explain || c.back, page: c.page }; }
+function recordPracticeMiss(docId, ci, q, choice, existingId) {
+  if (choice === q.answer || !docId) return Promise.resolve();
+  var d = ui.docs.filter(function (x) { return x.id === docId; })[0];
+  if (!d) return Promise.resolve();
+  var st = ui.sessions[docId] || Session.init(docId, d.clusters.map(function (c) { return c.title; }), d.clusters.map(function (c, i) { return c.identity == null ? i : c.identity; }));
+  st = Session.practiceMiss(st, ci, q, choice, existingId, ui.sure);
+  ui.sessions[docId] = st;
+  return Store.saveStep({ id: docId, state: st, at: Date.now() }, st.cards).then(function (cards) { ui.cards = cards; ui.saveError = Store.failureMessage() || ui.actionError; render(); }, function (e) { saveFailed(e); render(); });
+}
 function practicePool() {
   var due = Session.dueCards(ui.cards, today()).filter(function (c) { return c.options && c.options.length && c.kind !== 'occlusion'; })
-    .map(function (c) { return { id: c.id, kind: 'due', q: cardQ(c), title: c.title }; });
+    .map(function (c) { return { id: c.id, docId: c.docId, ci: c.cluster, existingId: c.id, kind: 'due', q: cardQ(c), title: c.title }; });
   var weak = [], hard = [];
   ui.docs.forEach(function (d) {
     var st = ui.sessions[d.id];
     if (!st || !st.per) return;
-    Session.pending(st).forEach(function (w) { weak.push({ id: w.id, kind: 'weak', q: w.q, title: st.titles[w.cluster] || '' }); });
+    Session.pending(st).forEach(function (w) { weak.push({ id: w.id, docId: d.id, ci: w.cluster, existingId: w.id, kind: 'weak', q: w.q, title: st.titles[w.cluster] || '' }); });
     /* the unit's hardest: its lowest-scored drilled section's questions */
     /* per is keyed by section number, not an array */
     var drilled = (st.titles || []).map(function (_, i) { return { i: i, p: st.per[i] || {} }; }).filter(function (x) { return x.p.quiz && x.p.quiz.questions && x.p.quiz.questions.length && x.p.score != null; })
       .sort(function (a, b) { return a.p.score - b.p.score || a.i - b.i; });
-    if (drilled[0]) drilled[0].p.quiz.questions.forEach(function (q, k) { hard.push({ id: d.id + ':hard:' + drilled[0].i + ':' + k, kind: 'hard', q: q, title: st.titles[drilled[0].i] }); });
+    if (drilled[0]) drilled[0].p.quiz.questions.forEach(function (q, k) { hard.push({ id: d.id + ':hard:' + drilled[0].i + ':' + k, docId: d.id, ci: drilled[0].i, kind: 'hard', q: q, title: st.titles[drilled[0].i] }); });
   });
   return { due: due, weak: weak, hard: hard };
 }
@@ -2902,6 +3002,7 @@ function viewPractice() {
   return h('main.wrap', back, mcqCard(it.q, [h('span.practice-clock', { id: 'practice-clock', role: 'timer' }, clockOf(p.ends - Date.now())),
       h('span', 'Question ' + (p.pos + 1) + ' of ' + p.qs.length + (it.title ? ' · ' + it.title : '')), h('span.tag', it.kind === 'due' ? 'due card' : it.kind === 'weak' ? 'weak item' : 'hardest')],
     function () {
+      recordPracticeMiss(it.docId, it.ci, it.q, ui.choice, it.existingId);
       logActivity('answer', { correct: ui.choice === it.q.answer, title: it.title || '', source: 'practice' });
       if (ui.choice === it.q.answer) p.right++;
       p.pos++; ui.choice = null;
@@ -2913,8 +3014,8 @@ function viewPractice() {
 /* ── ON-DEVICE AI (llm.js), every word it writes checked by ground.js ───── */
 function aiOn() { return LLM.loadConfig().on; }
 function aiEnsure() {
-  if (LLM.ready()) return Promise.resolve();
   var c = LLM.loadConfig();
+  if (LLM.ready(c.model)) return Promise.resolve();
   return LLM.supported().then(function (s) {
     if (!s.ok) throw new Error(s.why);
     return LLM.start(c.model, function (p, text) { ui.ai.status = 'Starting the on-device AI: ' + Math.round(100 * p) + '%' + (text ? ' — ' + text : ''); render(); });
@@ -2928,7 +3029,7 @@ function aiJob(label, fn) {
   });
 }
 function aiNote(kept, dropped) {
-  return h('p.muted.ai-label', '✨ On-device AI, checked against your book' + (dropped ? ' — ' + dropped + ' sentence' + (dropped === 1 ? '' : 's') + ' dropped for saying what the book does not' : ''));
+  return h('p.muted.ai-label', '✨ On-device AI, compare with the cited source' + (dropped ? ' — ' + dropped + ' sentence' + (dropped === 1 ? '' : 's') + ' dropped for saying what the book does not' : ''));
 }
 /* A drill's harder questions: the model's, each kept only when its answer
    is in the section — explained by the book's sentence, not the model's. */
@@ -2940,7 +3041,7 @@ function aiQuestions(c) {
   return aiEnsure().then(function () {
     return Promise.race([LLM.chat(LLM.SYSTEM, LLM.questionsPrompt(c.title, sents), LLM.QUESTIONS_SCHEMA, 700), timeout]);
   }).then(function (text) {
-    return LLM.parseQuestions(text || '').map(function (q) { return Ground.question(q, sents).q; }).filter(Boolean).slice(0, 4);
+    return LLM.parseQuestions(text || '').map(function (q) { if (!q.page) delete q.page; return Ground.gradeQuestion(q, sents).q; }).filter(Boolean).slice(0, 4);
   }, function () { return []; });
 }
 
@@ -2991,7 +3092,7 @@ function explainMiss(q, chosen, i) {
     });
   }, 'quiet', { id: 'ai-miss-go' }), ui.ai.busy ? h('span.muted', { role: 'status' }, ui.ai.busy) : null);
   return h('div.ai-miss', { id: 'ai-miss' }, got.kept.length ? [got.kept.map(function (t) { return h('p', t); }), aiNote(got.kept, got.dropped.length)]
-    : h('p.muted', { id: 'ai-miss-dropped' }, 'Its explanation was not shown: ' + got.why + '. The reasons above are Claude\u2019s, checked against your book.'));
+    : h('p.muted', { id: 'ai-miss-dropped' }, 'Its explanation was not shown: ' + got.why + '. The reasons above are Claude\u2019s, compare with the cited source.'));
 }
 
 /* ── ASK YOUR BOOK ───────────────────────────────────────────────────────── */
@@ -3009,12 +3110,12 @@ function askIndex() {
   ui.askBusy = true; ui.askBusyText = ''; render();
   var docs = ui.docs;
   ui.askBuildFor = docs;
-  ui.askBuild = new Promise(function (resolve) {
-    setTimeout(function () {                      /* let "Indexing…" paint first */
-      ui.askIdx = Ask.build(docs); ui.askFor = docs; ui.askBusy = false; ui.askBuild = null;
-      resolve(ui.askIdx);
-    }, 30);
+  var work = root.MemIndexer.build(docs).then(function (idx) {
+    if (ui.askBuild === work) { ui.askBuild = null; ui.askBusy = false; }
+    if (ui.docs !== docs || ui.docsStale) return askIndex();
+    ui.askIdx = idx; ui.askFor = docs; return idx;
   });
+  ui.askBuild = work;
   return ui.askBuild;
 }
 function meaningOn() { return !!LLM.loadConfig().meaning; }
@@ -3026,7 +3127,7 @@ function sectionVectors(idx) {
   return Promise.all(ui.docs.map(function (d) { return Store.get('vectors', d.id); })).then(function (recs) {
     ui.docs.forEach(function (d, k) {
       var r = recs[k];
-      if (r && r.model === LLM.EMBED.id && r.vecs.length === d.clusters.length) byDoc[d.id] = r.vecs;
+      if (r && r.model === LLM.EMBED.id && r.revision === (d.revision || 0) && r.vecs.length === d.clusters.length) byDoc[d.id] = r.vecs;
       else need.push(d);
     });
     var total = need.reduce(function (n, d) { return n + d.clusters.length; }, 0), done = 0;
@@ -3037,7 +3138,7 @@ function sectionVectors(idx) {
         });
       }).then(function (vecs) {
         done += vecs.length; byDoc[d.id] = vecs;
-        return Store.put('vectors', { id: d.id, model: LLM.EMBED.id, vecs: vecs });
+        return Store.put('vectors', { id: d.id, model: LLM.EMBED.id, revision: d.revision || 0, vecs: vecs });
       });
     }, Promise.resolve());
   }).then(function () {
@@ -3146,7 +3247,7 @@ function titlesOf(t) {
    book's section titles they landed on — never what was typed. */
 function recordTurn(tool, titles) {
   ui.profile = Agent.remember(ui.profile, tool, titles);
-  Store.put('meta', { id: 'coach-profile', profile: ui.profile });
+  Store.put('meta', { id: 'coach-profile', profile: ui.profile }).then(null, writeFailed);
 }
 function coachProfileLine() {
   var w = Agent.weakItems(ui.docs, ui.sessions || {}, 3)[0];
@@ -3419,10 +3520,10 @@ function viewAsk() {
     h('div.coach-intro',
       h('div.coach-avatar', mascot()),
       h('div.bubble', h('p', h('strong', 'I’m your coach. '), 'Ask me anything about your book, or tell me what to do — “explain preload”, “quiz me on heart failure”, “compare aortic stenosis and regurgitation”, “what should I study?”. I answer from your book, with the page, or say it isn’t there. ' +
-        (ai ? 'My on-device AI can summarise and explain, and everything it says is checked against the book.' : 'Turn on the on-device AI in Settings and I can also summarise and explain.')),
+        (ai ? 'My on-device AI can summarise and explain, and everything it says is compared with source text; check the meaning yourself.' : 'Turn on the on-device AI in Settings and I can also summarise and explain.')),
         h('p.muted', 'Search: ' + (meaning ? 'by words and by meaning.' : 'by words. Turn on search by meaning in Settings to find ideas phrased differently.')),
         ui.profile && ui.profile.turns ? h('p.muted', { id: 'coach-memory' }, 'What I remember, on this iPad only: ' + (Agent.profileLine(ui.profile, '') || 'nothing yet') + ' ',
-          button('Forget', function () { ui.profile = null; Store.del('meta', 'coach-profile').then(function () { render(); }); }, 'quiet', { id: 'coach-forget' })) : null,
+          button('Forget', function () { ui.profile = null; Store.del('meta', 'coach-profile').then(function () { render(); }, writeFailed); }, 'quiet', { id: 'coach-forget' })) : null,
         h('div.chips.suggest', suggest))),
     h('div.card.ask-card', h('div.row.ask-row', input, micButton(function (t) { ui.askQ = t; askNow(t); }, 'ask-mic'), button('Ask', function () { askNow(doc.getElementById('ask-q').value); }, 'primary', { id: 'ask-go' })),
       h('p.muted', 'Found on this device, never sent anywhere.')),
@@ -3476,8 +3577,7 @@ function appearanceCard() {
     h('p.muted', 'Daylight by day and Clinical at night; Paper, Ice and Butter in the light; Neuron, Mint Night, Graphite and Grape in the dark; or Systole\u2019s Contrast. Systole\u2019s type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
     h('div.group-label', { id: 'lbl-theme' }, 'Theme'),
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' },
-      swatch('auto', 'Auto', [mini(Look.byId(Look.AUTO.light)), mini(Look.byId(Look.AUTO.dark))], 'Follows the device'), themes('light')),
-    h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' }, themes('dark')),
+      swatch('auto', 'Auto', [mini(Look.byId(Look.AUTO.light)), mini(Look.byId(Look.AUTO.dark))], 'Follows the device'), themes('light'), themes('dark')),
     seg('size', 'Text size'), seg('width', 'Reading width'), seg('spacing', 'Line spacing'),
     seg('contrast', 'Contrast'), seg('bright', 'Brightness'),
     seg('font', 'Font'),
@@ -3485,6 +3585,48 @@ function appearanceCard() {
       h('strong', 'Preload'), ' — the stretch on ventricular myocytes at the end of diastole.', page(4))));
 }
 
+function downloadBackup(text) {
+  var url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = doc.createElement('a');
+  a.href = url; a.download = 'memorizer-backup-' + today() + '.json'; a.click();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+function storageCard() {
+  if (!ui.storageLoading && !ui.storageHealth) {
+    ui.storageLoading = true;
+    Store.health().then(function (v) { ui.storageLoading = false; ui.storageHealth = v; if (ui.view === 'settings') render(); }, function () { ui.storageLoading = false; ui.storageHealth = {}; });
+  }
+  var st = ui.storageHealth || {}, size = function (n) { return (n / (1024 * 1024)).toFixed(1) + ' MB'; };
+  var file = h('input', { id: 'backup-file', type: 'file', accept: '.json,application/json', class: 'visually-hidden', onchange: function (e) {
+    var f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+    ui.backupStatus = 'Checking backup…'; render();
+    readText(f).then(function (text) { return root.MemBackup.inspect(text).then(function (r) {
+      ui.backupStatus = '';
+      var close;
+      var el = h('div.card', { role: 'dialog', 'aria-label': 'Restore study backup' }, h('h2', 'Restore this backup?'),
+        h('p', r.docs + ' units, ' + r.books + ' books and ' + r.cards + ' cards. Created ' + r.created + '.'),
+        h('p', 'This replaces all study data on this device. Export the current data first if you need to keep it. Provider keys and model downloads stay on this device.'),
+        h('div.row', button('Cancel', function () { close(); }, 'quiet'), button('Replace study data', function () {
+          close(); ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; render();
+          root.MemBackup.restore(text).then(function () {
+            ui.docId = null; ui.docRec = null; ui.state = null; ui.bytesFor = null; ui.bytes = null; byteLoads = {}; Pdf.release(); ui.drafts = {}; ui.actionError = ''; ui.saveError = ''; ui.askIdx = null; ui.secVecs = null; ui.storageHealth = null;
+            docsChanged(); ui.view = 'library'; ui.notice = 'Backup restored.'; return refresh();
+          }).then(render, function (err) { ui.backupStatus = err.message; render(); });
+        }, 'primary', { id: 'backup-restore' })));
+      close = Dialog.open(el, doc.getElementById('app'));
+    }); }).catch(function (err) { ui.backupStatus = 'Not restored: ' + err.message; render(); });
+  } });
+  return h('div.card', { id: 'storage-settings' }, h('h2', 'Study data and backups'),
+    h('p', Store.persistent ? 'Saved in this browser.' : 'Kept only for this visit. Export before closing the tab.'),
+    h('p.muted', st.quota ? size(st.usage) + ' used of about ' + size(st.quota) + ' available to this browser.' : 'Storage size is unavailable in this browser.'),
+    h('p.muted', st.durable ? 'Persistent storage granted.' : 'The browser may reclaim storage. Keep a backup of important study data.'),
+    h('div.row', button('Export backup', function () {
+      ui.backupStatus = 'Preparing backup…'; render();
+      root.MemBackup.exportText().then(function (text) { downloadBackup(text); ui.backupStatus = 'Backup prepared. Save the downloaded file privately; it contains your books and notes.'; render(); }, function (err) { ui.backupStatus = err.message; render(); });
+    }, 'primary', { id: 'backup-export' }), file, h('label.chip', { for: 'backup-file' }, 'Restore a backup'),
+    button('Keep storage', function () { Store.persist().then(function (yes) { ui.backupStatus = yes ? 'Persistent storage granted.' : 'The browser did not grant persistent storage; backups still work.'; ui.storageHealth = null; render(); }, function (err) { ui.backupStatus = err.message; render(); }); }, 'quiet', { id: 'storage-persist' })),
+    h('p.muted', 'PDF bytes, notes, progress and cards are included, along with saved changes waiting for retry. API keys and model downloads are excluded.'),
+    ui.backupStatus ? h('p', { id: 'backup-status', role: 'status' }, ui.backupStatus) : null);
+}
 function viewSettings() {
   var c = cfg();
   var prov = h('select', { id: 'provider', onchange: function () { fillModels(); } },
@@ -3497,7 +3639,7 @@ function viewSettings() {
     h('strong', 'The built-in coach '), 'teaches from your book’s own sentences — the big idea, key points, numbers to know and a mnemonic for every list — ',
     'adds everyday analogies for common cardiology ideas (labelled as Memorizer’s, not your book’s), and drills you with multiple-choice questions built from the book: ',
     'the right answer and its explanation are the book’s words, and the wrong options are real terms, causes and values from elsewhere in the same unit. ',
-    'It needs no key and no account, and nothing leaves this device. Claude writes deeper lessons, analogies for any topic and clinical-vignette questions.');
+    'It needs no key and no account, and studies your text on this device. Claude writes deeper lessons, analogies for any topic and clinical-vignette questions.');
   function fillModels() {
     var P = Provider.PROVIDERS[prov.value];
     model.textContent = '';
@@ -3512,23 +3654,24 @@ function viewSettings() {
     var ok = Provider.saveConfig({ provider: c.provider, model: c.model, key: '' });
     key.value = '';
     saved.textContent = ok ? 'Key removed from this device.' : 'This browser refused to change it (private mode?).';
-    if (ok) clearKey.remove();
+    if (ok) { clearDraft('key'); key.value = ''; clearKey.remove(); }
   }, 'quiet danger', { id: 'clear-key' }) : null;
   keyed.appendChild(h('p.muted.key-warn', { id: 'key-warn' }, 'Your key is kept in this browser\u2019s storage on this device, unencrypted, and sent only to the provider. Any browser extension or script allowed to run on this page could read it: use a key with a spending limit, and clear it when you stop using Claude here.'));
   return h('main.wrap',
     backBar('Settings', function () { leave('library'); }),
-    appearanceCard(),
+    appearanceCard(), storageCard(),
     h('div.card.settings', h('h2', 'Coach'),
       h('label', 'Coach', prov), about, keyed,
       h('div.row', button('Save', function () {
         var P = Provider.PROVIDERS[prov.value];
         var ok = Provider.saveConfig({ provider: prov.value, model: model.value, key: P.noKey ? '' : key.value.trim() });
+        if (ok) clearDraft('key');
         saved.textContent = ok ? 'Saved on this device.' : 'This browser refused to save it (private mode?).';
       }, 'primary', { id: 'save-settings' }), clearKey, saved)),
     aiSettingsCard(),
     h('div.card', h('h2', 'What leaves this device'),
       h('p', 'Your PDF, photos and notes are read here, in the browser, and never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages and photos, the first time it is needed; they are read on this device too.'),
-      h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')),
+      h('p', 'The built-in coach processes your text on this device. Browser dictation may send audio to a platform service; check your browser’s privacy settings before speaking. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')),
     /* Which build is running, so an update can be checked on the device:
        the owner's screenshots were of a build two releases old. */
     h('p.muted.build-line', { id: 'build' }, 'Memorizer build ' + (doc.documentElement.getAttribute('data-build') || 'unbuilt (running from source)') +
@@ -3540,21 +3683,27 @@ function aiSettingsCard() {
   var model = h('select', { id: 'ai-model' }, LLM.MODELS.map(function (m) {
     return h('option', { value: m.id, selected: m.id === c.model }, m.label + ' — about ' + (m.mb >= 1000 ? (m.mb / 1000).toFixed(1) + ' GB' : m.mb + ' MB') + ' · ' + m.licence);
   }));
+  model.addEventListener('change', function () {
+    LLM.saveConfig({ on: c.on, model: model.value, meaning: c.meaning });
+    ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} };
+    if (c.on) aiJob('Switching the on-device model…', function () { return true; });
+  });
   return h('div.card.settings.ai-card', { id: 'ai-card' }, h('h2', '✨ On-device AI tutor'),
     h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. With a study pack written with Claude, it works from Claude\u2019s notes: a pack question you missed comes back in new words (its answer and reasons still Claude\u2019s), it can explain a mistake from Claude\u2019s reasons, mark your teach-back point by point (a verdict only with your own words to show for it), and ask follow-up questions from Claude\u2019s notes. It also runs your Coach as an agent: it can use several of the Coach’s tools on your book before it answers, and what it says is checked against what they found. It needs no key and, once downloaded, no connection.'),
-    h('p', h('strong', 'It is not a source of facts. '), 'Every sentence it writes is checked against your book before you see it: no number and no disease, test or drug the book passage does not have, and a question is kept only when your book states its answer — and the book\u2019s own sentence is shown as the explanation. What fails the check is dropped and counted.'),
+    h('p', h('strong', 'It is not a source of facts. '), 'Generated explanations are screened for unsupported names, numbers and obvious contradictions. These checks do not prove medical correctness: compare meaning with the source. Graded AI questions complete a literal source quote, and facts used for memorisation are extracted from your text.'),
     h('label', 'Model', model),
     h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr; the model itself comes from Hugging Face through that engine, which does not check it against a hash, and is kept in this browser\u2019s cache.'),
     h('div.row', button(c.on ? 'Turn off' : 'Turn on', function () {
       var on = !c.on;
       LLM.saveConfig({ on: on, model: model.value, meaning: c.meaning });
-      if (on) aiJob('Downloading and starting the model (once)…', function () { return true; }); else render();
+      if (on) aiJob('Downloading and starting the model (once)…', function () { return true; }); else LLM.stop().then(render, function (e) { ui.ai.error = e.message; render(); });
     }, c.on ? 'quiet' : 'primary', { id: 'ai-toggle' }), h('span.muted', { id: 'ai-status', role: 'status' }, ui.ai.busy || ui.ai.status || (c.on ? (LLM.ready() ? 'Ready.' : 'On — starts when first used.') : 'Off.'))),
     h('h3', 'Search by meaning'),
     h('p', 'Ask finds your book\u2019s sentences by their words; this finds them by what they mean too — "why do people pass out" finds "exertional syncope". A small model (' + LLM.EMBED.label + ', about ' + LLM.EMBED.mb + ' MB, ' + LLM.EMBED.licence +
       ') reads each section once, on this device. The answers are still your book\u2019s own sentences with their pages.'),
     h('div.row', button(c.meaning ? 'Turn off' : 'Turn on', function () {
-      LLM.saveConfig({ on: c.on, model: c.model, meaning: !c.meaning }); render();
+      LLM.saveConfig({ on: c.on, model: c.model, meaning: !c.meaning });
+      if (c.meaning) LLM.stopEmbed().then(render, function (e) { ui.ai.error = e.message; render(); }); else render();
     }, c.meaning ? 'quiet' : 'primary', { id: 'meaning-toggle' }), h('span.muted', c.meaning ? 'On.' : 'Off.')),
     ui.ai.error ? h('p.warn', { id: 'ai-error' }, 'The on-device AI could not run: ' + ui.ai.error) : null,
     h('div.row', button('Delete the downloaded model', function () {
@@ -3579,7 +3728,7 @@ function nav() {
       h('span.nav-icon', { 'aria-hidden': 'true' }, '\u25B6'), h('span.nav-label', ctx.label)) : null,
     tab('library', '⌂', 'Home', function () { leave('library'); }),
     tab('shelf', '📚', 'Chapters', function () { leave('shelf'); }),
-    tab('ask', '🎓', 'Coach', function () { ui.view = 'ask'; ui.error = ''; refresh().then(function () { render(); if (ui.docs.length) askIndex().then(render); }); }),
+    tab('ask', '🎓', 'Coach', function () { ui.openSeq++; ui.view = 'ask'; ui.error = ''; refresh().then(function () { render(); if (ui.docs.length) askIndex().then(render); }); }),
     tab('review', '↻', 'Review', function () { startReview(); }, due),
     tab('settings', '⚙', 'Settings', function () { leave('settings'); }));
 }
@@ -3754,10 +3903,11 @@ function storageBanner() {
   if (ui.saveError) {
     return h('div.card.error.store-banner', { id: 'store-banner', role: 'alert' },
       h('strong', 'Your last step was not saved. '), 'The browser said: ' + ui.saveError + '. ',
-      'It stays on screen and is saved with your next step; if this keeps happening, delete a unit you have finished to free space.',
-      h('div.row', button('Try saving again', function () {
-        (ui.state ? save() : Promise.resolve()).then(render);
-      }, 'primary', { id: 'store-retry' })));
+      Store.failureMessage() ? 'The failed write is kept for retry during this visit. Retry before closing the tab; if space is full, export a backup before freeing space.' : 'This change was not applied. Repeat the original action after resolving the error; other successful saves do not apply it.',
+      h('div.row', Store.failureMessage() ? button('Try saving again', function () {
+        Store.retryFailures().then(function () { ui.saveError = Store.failureMessage() || ui.actionError; docsChanged(); return refresh(); }).then(render, function (e) { saveFailed(e); render(); });
+      }, 'primary', { id: 'store-retry' }) : null,
+      ui.actionError ? button('Dismiss this error', function () { ui.actionError = ''; ui.saveError = Store.failureMessage(); render(); }, 'quiet', { id: 'store-dismiss' }) : null));
   }
   /* Opened from the iPad's Files app, Safari shows the file as a data: URL:
      no origin, so no storage of any kind, and no "normal window" fixes it. */
@@ -3798,10 +3948,51 @@ doc.addEventListener('pointerup', function (e) { if (e.pointerType !== 'mouse') 
 doc.addEventListener('pointercancel', unlight, { passive: true });
 doc.addEventListener('pointerout', function (e) { if (!e.relatedTarget) unlight(); }, { passive: true });
 
+/* Drafts belong to a specific screen and section, and remain in memory.
+   In particular, API-key drafts are never included in storage or backups. */
+function draftScope() {
+  return ui.view + (ui.view === 'session' && ui.state ? ':' + ui.docId + ':' + ui.state.section + ':' + ui.state.phase : '');
+}
+function draftFields(app) { return app.querySelectorAll('textarea, input:not([type=checkbox]):not([type=radio]):not([type=file]), select'); }
+function draftKey(el) { return el.id || (el.getAttribute('data-si') != null ? 'fix:' + el.getAttribute('data-si') : el.getAttribute('aria-label')); }
+function bindDrafts(app, scope) {
+  Array.prototype.forEach.call(draftFields(app), function (el) {
+    var id = draftKey(el); if (!id) return;
+    var key = scope + ':' + id, saved = ui.drafts[key];
+    var base = el.value;
+    if (saved && base === saved.base) el.value = saved.value; else delete ui.drafts[key];
+    el.addEventListener('input', function () { ui.drafts[key] = { value: el.value, base: base }; });
+    el.addEventListener('change', function () { ui.drafts[key] = { value: el.value, base: base }; });
+  });
+}
+function clearDraft(id) { delete ui.drafts[draftScope() + ':' + id]; }
+/* One tab stop per radio group, with the standard arrow/Home/End keys.
+   Reacquire the selected control after its click redraws the page. */
+function bindRadios(app) {
+  var groups = app.querySelectorAll('[role=radiogroup]');
+  Array.prototype.forEach.call(groups, function (group, gi) {
+    var radios = group.querySelectorAll('[role=radio]'), selected = group.querySelector('[aria-checked=true]') || radios[0];
+    Array.prototype.forEach.call(radios, function (radio, ri) {
+      radio.tabIndex = radio === selected ? 0 : -1;
+      radio.addEventListener('keydown', function (e) {
+        var i = e.key === 'Home' ? 0 : e.key === 'End' ? radios.length - 1 :
+          /^(ArrowRight|ArrowDown)$/.test(e.key) ? (ri + 1) % radios.length :
+          /^(ArrowLeft|ArrowUp)$/.test(e.key) ? (ri + radios.length - 1) % radios.length : -1;
+        if (i < 0) return; e.preventDefault(); radios[i].click();
+        var next = app.querySelectorAll('[role=radiogroup]')[gi];
+        var checked = next && next.querySelector('[aria-checked=true]'); if (checked) checked.focus();
+      });
+    });
+  });
+}
 function render() {
+  if (imageObserver) { imageObserver.disconnect(); imageObserver = null; }
   releaseStale();
   applyFocus();
   var app = doc.getElementById('app');
+  var active = doc.activeElement, selection = active && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
+  var scope = draftScope(), same = scope === ui.drawnScope;
+  var activeKey = same && active ? draftKey(active) : null;
   var view = ui.view === 'session' && ui.state ? viewSession()
     : ui.view === 'book' ? viewBook()
     : ui.view === 'ask' ? viewAsk()
@@ -3816,15 +4007,19 @@ function render() {
   var had = ui.view === lastView && doc.activeElement && doc.activeElement !== doc.body ? doc.activeElement.id : '';
   if (ui.view !== lastView) { view.setAttribute('data-enter', ''); lastView = ui.view; }
   app.textContent = '';
+  var progress = importBanner(); if (progress) view.insertBefore(progress, view.firstChild && view.firstChild.nextSibling);
   var banner = storageBanner();
   if (banner) view.insertBefore(banner, view.firstChild && view.firstChild.nextSibling);
   app.appendChild(view);
   app.appendChild(nav());
+  bindDrafts(app, scope); bindRadios(app); ui.drawnScope = scope;
   var rb = robot();
   if (rb) app.appendChild(rb);
   Array.prototype.forEach.call(app.querySelectorAll('[data-comp]'), play);
   var back = had && doc.getElementById(had);
+  if (!back && activeKey) Array.prototype.forEach.call(draftFields(app), function (el) { if (draftKey(el) === activeKey) back = el; });
   if (back && doc.activeElement !== back && back.focus) back.focus({ preventScroll: true });
+  if (back && selection && back.setSelectionRange) try { back.setSelectionRange(selection[0], selection[1]); } catch (_) {}
   if (ui.view === 'session') { pump(); focusTeach(); focusPack(); focusChapter(); }
 }
 /* Asked for the study pack: its card, open, at the top, its Copy focused. */
@@ -3859,7 +4054,7 @@ function focusTeach() {
   el.focus();
 }
 function start() {
-  Store.open().then(refresh).then(render, function (e) {
+  Store.open().then(function () { return Store.cleanImports(); }).then(refresh).then(render, function (e) {
     ui.error = 'Could not open storage: ' + (e && e.message); render();
   });
 }

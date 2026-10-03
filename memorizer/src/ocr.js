@@ -155,18 +155,17 @@ function engine(onStatus) {
            recognize() below retries or passes it on, so nothing is lost. */
         errorHandler: function () {},
       });
-      /* The blob holds the core and the worker, several MB. Once the worker
-         has started — or failed to — nothing reads the URL again, and a
-         faulted worker is replaced by a new start with a new blob, so each
-         is released here rather than pinned until the page closes. */
-      function release() { URL.revokeObjectURL(workerUrl); }
-      started.then(release, release);
-      return Promise.race([started, new Promise(function (_, reject) {
-        setTimeout(function () { reject(new Error('the text reader did not start')); }, START_TIMEOUT_MS);
-      })]);
-    })
-    .then(function (worker) { current = worker; return worker; });
-  starting.catch(function () { starting = null; });
+      return new Promise(function (resolve, reject) {
+        var settled = false, timer = setTimeout(function () {
+          settled = true; URL.revokeObjectURL(workerUrl); reject(new Error('the text reader did not start'));
+        }, START_TIMEOUT_MS);
+        started.then(function (worker) {
+          if (settled) { discard(worker); return; }
+          settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); resolve(worker);
+        }, function (e) { if (!settled) { settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); reject(e); } });
+      });
+    }).then(function (worker) { current = worker; return worker; });
+  var attempt = starting; attempt.catch(function () { if (starting === attempt) starting = null; });
   return starting;
 }
 
@@ -229,7 +228,7 @@ function readPage(page, onStatus) {
       return recognize(canvas, onStatus);
     }).then(function (res) {
       return ocrItems(res.data.blocks, SCALE, page.getViewport({ scale: 1 }).height);
-    });
+    }).then(function (v) { canvas.width = canvas.height = 0; return v; }, function (e) { canvas.width = canvas.height = 0; throw e; });
   });
 }
 
@@ -260,9 +259,20 @@ function readImage(blob, onStatus) {
   var canvas;
   return imageCanvas(blob).then(function (c) { canvas = c; return recognize(canvas, onStatus); }).then(function (res) {
     return { items: ocrItems(res.data.blocks, 1, canvas.height), height: canvas.height };
-  });
+  }).then(function (v) { if (canvas) canvas.width = canvas.height = 0; return v; }, function (e) { if (canvas) canvas.width = canvas.height = 0; throw e; });
 }
 
-root.MemOcr = { readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
+function release() {
+  var job = queue.then(function () {
+    var p = starting; starting = null;
+    return p ? p.then(function (worker) {
+      if (current === worker) current = null;
+      return worker.terminate();
+    }, function () {}) : undefined;
+  });
+  queue = job.then(function () {}, function () {}); return job;
+}
+
+root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemOcr;
 })(typeof window !== 'undefined' ? window : this);

@@ -113,7 +113,7 @@ function clozeCards(doc, ci, max) {
   });
   made.sort(function (a, b) { return (/\d/.test(b.answer) ? 1 : 0) - (/\d/.test(a.answer) ? 1 : 0); });
   made.slice(0, max == null ? CLOZE_PER_SECTION : max).forEach(function (x) {
-    out.push({ id: doc.id + ':cloze:' + ci + ':' + hash(x.sentence), docId: doc.id, source: 'cloze', kind: 'cloze', cluster: ci, title: c.title,
+    out.push({ id: doc.id + ':cloze:' + identity(doc, ci) + ':' + hash(x.sentence), docId: doc.id, source: 'cloze', kind: 'cloze', cluster: ci, title: c.title,
       front: x.front, back: x.answer, explain: x.sentence, page: x.page, srs: null, errorType: '', confusedWith: '' });
   });
   return out;
@@ -199,7 +199,7 @@ function occlusionCards(doc, ci, figures, max) {
     if (out.length >= (max == null ? 1 : max)) return;
     var o = occlusionOf(f, fi);
     if (!o) return;
-    out.push({ id: doc.id + ':occlude:' + ci + ':' + hash(f.page + ':' + f.box.join(',') + ':' + o.hidden.text), docId: doc.id, source: 'occlusion', kind: 'occlusion',
+    out.push({ id: doc.id + ':occlude:' + identity(doc, ci) + ':' + hash(f.page + ':' + f.box.join(',') + ':' + o.hidden.text), docId: doc.id, source: 'occlusion', kind: 'occlusion',
       cluster: ci, title: c ? c.title : '', front: 'Which label is hidden?', options: o.options, answer: o.answer, back: o.options[o.answer],
       explain: (f.caption || 'Figure') + ' — the hidden label reads “' + o.options[o.answer] + '”.', page: f.page, figure: { page: f.page, box: f.box }, mask: o.mask,
       srs: null, errorType: '', confusedWith: '' });
@@ -406,7 +406,10 @@ function teachBack(said, points, sectionText) {
     var ws = contentWords(p).filter(function (w, j, all) { return all.indexOf(w) === j; });
     if (!ws.length) return;
     var hit = ws.filter(function (w) { return have[w]; }).length / ws.length;
-    (hit >= TEACH_SHARE ? covered : missed).push(i);
+    var G = root.MemGround || (typeof require === 'function' ? require('./ground.js') : null);
+    var clauses = String(said).split(/[.;]\s+/);
+    var relevant = clauses.sort(function (a, b) { return contentWords(b).filter(function (w) { return ws.indexOf(w) !== -1; }).length - contentWords(a).filter(function (w) { return ws.indexOf(w) !== -1; }).length; })[0] || '';
+    (hit >= TEACH_SHARE && (!G || !G.relationError(relevant, [p])) ? covered : missed).push(i);
   });
   var nums = function (t) { return (String(t || '').match(/\d+(?:[.,]\d+)?/g) || []).map(function (n) { return n.replace(',', '.'); }); };
   var book = nums(sectionText);
@@ -497,6 +500,26 @@ function claimSources(kept, steps) {
    recorded (which section, which paragraph, when, and what it said
    before), so it can be seen and undone. Returns a new unit; the old is
    not changed. */
+/* Keep historical card identities while positions change. */
+function dropDocSection(doc, i) {
+  var d = JSON.parse(JSON.stringify(doc));
+  d.clusters = d.clusters.filter(function (c, k) { if (c.identity == null) c.identity = k; return k !== i; });
+  d.clusters.forEach(function (c, k) { c.index = k; });
+  d.corrections = (d.corrections || []).filter(function (x) { return x.ci !== i; }).map(function (x) { if (x.ci > i) x.ci--; return x; });
+  return d;
+}
+function dropSectionRecords(recs, docId, i) {
+  var out = {}, prefix = docId + ':';
+  Object.keys(recs || {}).forEach(function (key) {
+    var tail = key.slice(prefix.length);
+    if (key.indexOf(prefix) !== 0 || !/^\d+$/.test(tail)) { out[key] = recs[key]; return; }
+    var k = +tail;
+    if (k !== i) out[prefix + (k > i ? k - 1 : k)] = recs[key];
+  });
+  return out;
+}
+function identity(doc, ci) { var c = doc.clusters[ci]; return c && c.identity != null ? c.identity : ci; }
+
 function correctSegment(doc, ci, si, text, at) {
   var d = JSON.parse(JSON.stringify(doc));
   var c = d.clusters[ci], seg = c && c.segments[si];
@@ -504,7 +527,11 @@ function correctSegment(doc, ci, si, text, at) {
   if (!seg || seg.heading || seg.table || !t || t === seg.text) return null;
   (d.corrections = d.corrections || []).push({ ci: ci, si: si, at: at || '', was: seg.text, now: t });
   seg.text = t; seg.corrected = true;
-  c.text = c.segments.filter(function (s) { return !s.table; }).map(function (s) { return s.text; }).join(' ');
+  c.text = c.segments.map(function (s) { return s.text; }).join(' ');
+  c.words = c.text.split(/\s+/).filter(Boolean).length;
+  c.gist = c.segments.filter(function (s) { return !s.heading && !s.table; }).map(function (s) { return s.text; }).join(' ').split(/\s+/).slice(0, 25).join(' ');
+  d.revision = (d.revision || 0) + 1;
+  c.revision = (c.revision || 0) + 1;
   return d;
 }
 /* How sure text recognition was of a page: the mean of its words'
@@ -533,7 +560,7 @@ function markCard(doc, ci, text) {
   var c = doc.clusters[ci], C = coachMod();
   var x = c ? clozeOf({ text: text, page: pageOfText(c, text) }, C.frequencies(c)) : null;
   if (!x) return null;
-  return { id: doc.id + ':mark:' + ci + ':' + hash(x.sentence), docId: doc.id, source: 'mark', kind: 'cloze', cluster: ci, title: c.title,
+  return { id: doc.id + ':mark:' + identity(doc, ci) + ':' + hash(x.sentence), docId: doc.id, source: 'mark', kind: 'cloze', cluster: ci, title: c.title,
     front: x.front, back: x.answer, explain: x.sentence, page: x.page, srs: null, errorType: '', confusedWith: '' };
 }
 function pageOfText(c, text) {
@@ -735,7 +762,7 @@ function reviewOrder(cards, today) {
 function sectionKey(c) { return c.docId + ':' + c.cluster; }
 
 var MemStudy = {
-  correctSegment: correctSegment, LOW_CONFIDENCE: LOW_CONFIDENCE, pageConfidence: pageConfidence,
+  dropDocSection: dropDocSection, dropSectionRecords: dropSectionRecords, correctSegment: correctSegment, LOW_CONFIDENCE: LOW_CONFIDENCE, pageConfidence: pageConfidence,
   noteKey: noteKey, toggleMark: toggleMark, markCard: markCard, TABLE_ROUND: TABLE_ROUND, tableRound: tableRound,
   SOLID: SOLID, FADING: FADING, masteryMap: masteryMap, IDLE_MS: IDLE_MS, logActivity: logActivity, weekly: weekly, weekOf: weekOf, streak: streak,
   MONTHS: MONTHS, parseExamDate: parseExamDate, REVIEW_SHARE: REVIEW_SHARE, studyPlan: studyPlan,

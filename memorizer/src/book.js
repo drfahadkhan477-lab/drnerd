@@ -53,14 +53,33 @@ var CHAPTER_LINE = /^(?:chapter|chap\.|ch\.)\s*(\d{1,3})\b\s*[.:—–-]?\s*(.*)
 function words(t) { return String(t || '').split(/\s+/).filter(Boolean); }
 function clean(t) { return String(t || '').replace(/\s+/g, ' ').trim(); }
 
-/* Parts in reading order: by the first number in each name ("Topol_1-500",
+/* Parts in reading order: by a trailing page range or explicit part number ("Topol_1-500",
    "Topol_501-1000", "Topol_1001_-_1500", "Topol_1501"), then by name.
    Returns the indices of `names` in that order. */
 function orderParts(names) {
   var idx = (names || []).map(function (_, i) { return i; });
-  var num = function (s) { var m = /(\d+)/.exec(String(s)); return m ? +m[1] : Infinity; };
+  var num = function (s) {
+    var name = String(s).replace(/\.pdf$/i, '');
+    var m = /(?:^|[^\d])(\d+)\s*[_ ]*[-–—]\s*[_ ]*\d+\s*$/.exec(name) || /\b(?:part|pt|volume|vol)[\s_.-]*(\d+)\b/i.exec(name) || /(?:^|[_ -])(\d+)\s*$/.exec(name);
+    return m ? +m[1] : Infinity;
+  };
   idx.sort(function (a, b) { return num(names[a]) - num(names[b]) || String(names[a]).localeCompare(String(names[b])) || a - b; });
   return idx;
+}
+
+/* Filename ranges are hints: surface gaps/overlaps without claiming they
+   prove that actual PDF pages are missing. */
+function partWarnings(names) {
+  var warnings = [], previous = null;
+  (names || []).forEach(function (name) {
+    var m = /(?:^|[^\d])(\d+)\s*[_ ]*[-–—]\s*[_ ]*(\d+)\s*\.pdf$/i.exec(String(name));
+    if (!m) { previous = null; return; }
+    var start = +m[1], end = +m[2];
+    if (end < start) warnings.push('Reversed range in ' + name + '.');
+    if (previous && start <= previous.end) warnings.push('Filename ranges overlap or are out of order: ' + previous.name + ' and ' + name + '.');
+    else if (previous && start > previous.end + 1) warnings.push('Possible gap between filename ranges: ' + previous.name + ' and ' + name + '.');
+    previous = { end: end, name: name };
+  }); return warnings;
 }
 
 /* Where a book page lives: parts are [{ fileId, first, last }] in book
@@ -283,7 +302,7 @@ function merge(chapters, i) {
 var MemBook = {
   MIN_CHAPTERS: MIN_CHAPTERS, MIN_COVERAGE: MIN_COVERAGE, MIN_MEAN_PAGES: MIN_MEAN_PAGES, MAX_MEAN_PAGES: MAX_MEAN_PAGES,
   FALLBACK_PAGES: FALLBACK_PAGES, NUMBERED_MAX_WORDS: NUMBERED_MAX_WORDS, METHODS: METHODS, LABELS: LABELS,
-  orderParts: orderParts, locate: locate, stripHeaders: stripHeaders, numbered: numbered, bySize: bySize, fromOutline: fromOutline,
+  partWarnings: partWarnings, orderParts: orderParts, locate: locate, stripHeaders: stripHeaders, numbered: numbered, bySize: bySize, fromOutline: fromOutline,
   chaptersOf: chaptersOf, candidates: candidates, usable: usable, pick: pick, merge: merge,
 };
 root.MemBook = MemBook;

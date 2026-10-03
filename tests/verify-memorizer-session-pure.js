@@ -481,5 +481,22 @@ head('skip: a card to the back of the pile, a question to the end of the drill')
      /in the drill/.test(refused(m1, { type: 'skipped' })), refused(oneLeft, { type: 'skipped' }));
 }
 
+{
+  const st = S.init('revision', ['First', 'Second']);
+  st.per[0] = { quiz: { questions: [{ answer: 0 }] }, memorized: true, done: true };
+  st.per[1].done = true;
+  st.cards = [{ id: 'old', cluster: 0 }, { id: 'other', cluster: 1 }];
+  st.weak = { old: { cluster: 0 }, other: { cluster: 1 } }; st.exam.questions = [{ cluster: 0 }];
+  const next = S.invalidateSection(st, 0);
+  ok('source revision retires stale quiz, memorization, cards and exam', !next.per[0].quiz && !next.per[0].memorized && !next.per[0].done && next.cards.length === 1 && !next.weak.old && !next.exam.questions);
+  ok('unchanged sections keep their learning progress', next.per[1].done && next.weak.other && st.cards.length === 2);
+}
+{
+  const st = S.init('practice', ['Section']), q = quiz(1, 'practice').questions[0];
+  const miss = S.practiceMiss(st, 0, q, (q.answer + 1) % 4, null, true);
+  ok('a first practice miss enters cards and the weak list', miss.cards.length === 1 && Object.keys(miss.weak).length === 1 && miss.cards[0].hazard);
+  const again = S.practiceMiss(miss, 0, q, S.NOT_SURE, miss.cards[0].id);
+  ok('repeated practice misses deduplicate without applying FSRS', again.cards.length === 1 && again.cards[0].srs === null && again.phase === st.phase);
+}
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
