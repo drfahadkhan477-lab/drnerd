@@ -1527,7 +1527,7 @@ function micButton(onText, id) {
   var SR = root.SpeechRecognition || root.webkitSpeechRecognition;
   if (!SR) return null;
   var on = ui.listening === id;
-  return button(on ? '■ Stop' : '🎙 Speak', function () {
+  return h('span.mic-control', button(on ? '■ Stop' : '🎙 Speak', function () {
     if (on) { if (ui.rec) ui.rec.stop(); return; }
     var r = new SR();
     r.lang = (root.navigator && root.navigator.language) || 'en-US'; r.interimResults = false; r.continuous = false;
@@ -1539,7 +1539,7 @@ function micButton(onText, id) {
     r.onend = function () { ui.listening = null; ui.rec = null; render(); };
     ui.rec = r; ui.listening = id; ui.voiceError = '';
     r.start(); render();
-  }, on ? 'chip sure-on' : 'chip quiet', { id: id, 'aria-pressed': String(on), title: 'Speak instead of typing (your device’s dictation)' });
+  }, on ? 'chip sure-on' : 'chip quiet', { id: id, 'aria-pressed': String(on), title: 'Browser dictation may send audio to a platform service', 'aria-describedby': id + '-privacy' }), h('small.muted', { id: id + '-privacy' }, 'Dictation may send audio to your browser’s speech service.'));
 }
 /* CORRECT THE TEXT: a paragraph of a section read by text recognition,
    corrected by you (study.js correctSegment) and kept with what it said
@@ -3517,8 +3517,7 @@ function appearanceCard() {
     h('p.muted', 'Daylight by day and Clinical at night; Paper, Ice and Butter in the light; Neuron, Mint Night, Graphite and Grape in the dark; or Systole\u2019s Contrast. Systole\u2019s type scale. Contrast and brightness adjust whichever theme you pick, and every setting keeps text at WCAG AA or better.'),
     h('div.group-label', { id: 'lbl-theme' }, 'Theme'),
     h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' },
-      swatch('auto', 'Auto', [mini(Look.byId(Look.AUTO.light)), mini(Look.byId(Look.AUTO.dark))], 'Follows the device'), themes('light')),
-    h('div.swatches', { role: 'radiogroup', 'aria-labelledby': 'lbl-theme' }, themes('dark')),
+      swatch('auto', 'Auto', [mini(Look.byId(Look.AUTO.light)), mini(Look.byId(Look.AUTO.dark))], 'Follows the device'), themes('light'), themes('dark')),
     seg('size', 'Text size'), seg('width', 'Reading width'), seg('spacing', 'Line spacing'),
     seg('contrast', 'Contrast'), seg('bright', 'Brightness'),
     seg('font', 'Font'),
@@ -3580,7 +3579,7 @@ function viewSettings() {
     h('strong', 'The built-in coach '), 'teaches from your book’s own sentences — the big idea, key points, numbers to know and a mnemonic for every list — ',
     'adds everyday analogies for common cardiology ideas (labelled as Memorizer’s, not your book’s), and drills you with multiple-choice questions built from the book: ',
     'the right answer and its explanation are the book’s words, and the wrong options are real terms, causes and values from elsewhere in the same unit. ',
-    'It needs no key and no account, and nothing leaves this device. Claude writes deeper lessons, analogies for any topic and clinical-vignette questions.');
+    'It needs no key and no account, and studies your text on this device. Claude writes deeper lessons, analogies for any topic and clinical-vignette questions.');
   function fillModels() {
     var P = Provider.PROVIDERS[prov.value];
     model.textContent = '';
@@ -3612,7 +3611,7 @@ function viewSettings() {
     aiSettingsCard(),
     h('div.card', h('h2', 'What leaves this device'),
       h('p', 'Your PDF, photos and notes are read here, in the browser, and never uploaded. The PDF reader itself is downloaded once from jsDelivr, and so is the text reader for scanned pages and photos, the first time it is needed; they are read on this device too.'),
-      h('p', 'With the built-in coach, nothing else leaves the device. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')),
+      h('p', 'The built-in coach processes your text on this device. Browser dictation may send audio to a platform service; check your browser’s privacy settings before speaking. With Claude, each lesson and drill sends only the text of the section you are studying to Anthropic, with your key; the final exam sends the key points of every section and the full text of your two weakest. Your key is kept in this browser’s storage and sent only to Anthropic.')),
     /* Which build is running, so an update can be checked on the device:
        the owner's screenshots were of a build two releases old. */
     h('p.muted.build-line', { id: 'build' }, 'Memorizer build ' + (doc.documentElement.getAttribute('data-build') || 'unbuilt (running from source)') +
@@ -3907,6 +3906,25 @@ function bindDrafts(app, scope) {
   });
 }
 function clearDraft(id) { delete ui.drafts[draftScope() + ':' + id]; }
+/* One tab stop per radio group, with the standard arrow/Home/End keys.
+   Reacquire the selected control after its click redraws the page. */
+function bindRadios(app) {
+  var groups = app.querySelectorAll('[role=radiogroup]');
+  Array.prototype.forEach.call(groups, function (group, gi) {
+    var radios = group.querySelectorAll('[role=radio]'), selected = group.querySelector('[aria-checked=true]') || radios[0];
+    Array.prototype.forEach.call(radios, function (radio, ri) {
+      radio.tabIndex = radio === selected ? 0 : -1;
+      radio.addEventListener('keydown', function (e) {
+        var i = e.key === 'Home' ? 0 : e.key === 'End' ? radios.length - 1 :
+          /^(ArrowRight|ArrowDown)$/.test(e.key) ? (ri + 1) % radios.length :
+          /^(ArrowLeft|ArrowUp)$/.test(e.key) ? (ri + radios.length - 1) % radios.length : -1;
+        if (i < 0) return; e.preventDefault(); radios[i].click();
+        var next = app.querySelectorAll('[role=radiogroup]')[gi];
+        var checked = next && next.querySelector('[aria-checked=true]'); if (checked) checked.focus();
+      });
+    });
+  });
+}
 function render() {
   releaseStale();
   applyFocus();
@@ -3932,7 +3950,7 @@ function render() {
   if (banner) view.insertBefore(banner, view.firstChild && view.firstChild.nextSibling);
   app.appendChild(view);
   app.appendChild(nav());
-  bindDrafts(app, scope); ui.drawnScope = scope;
+  bindDrafts(app, scope); bindRadios(app); ui.drawnScope = scope;
   var rb = robot();
   if (rb) app.appendChild(rb);
   Array.prototype.forEach.call(app.querySelectorAll('[data-comp]'), play);

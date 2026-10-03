@@ -398,6 +398,24 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
   }
 
+  head('radio controls and speech privacy');
+  {
+    const r = await context('keyboard', () => { window.SpeechRecognition = function () {}; });
+    await r.goto(URL); await r.locator('#door-add').waitFor(T);
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    ok('each radio group has exactly one tab stop', await r.evaluate(() => [...document.querySelectorAll('[role=radiogroup]')].every(g => g.querySelectorAll('[role=radio][tabindex="0"]').length === 1)));
+    const theme = r.locator('[role=radiogroup]').first();
+    await theme.locator('[tabindex="0"]').focus(); await r.keyboard.press('End');
+    ok('End selects the last theme and keeps keyboard focus', await r.evaluate(() => {
+      const g = document.querySelector('[role=radiogroup]'), radios = [...g.querySelectorAll('[role=radio]')];
+      return document.activeElement === radios[radios.length - 1] && document.activeElement.getAttribute('aria-checked') === 'true';
+    }));
+    await r.keyboard.press('ArrowRight');
+    ok('arrows wrap to the first theme', await theme.locator('[role=radio]').first().getAttribute('aria-checked') === 'true');
+    await r.locator('nav.dock').getByRole('button', { name: 'Coach' }).click(); await r.locator('#ask-mic').waitFor(T);
+    ok('the microphone names possible off-device audio processing at the action', await r.locator('#ask-mic-privacy').isVisible() && /send audio/.test(await r.locator('#ask-mic-privacy').innerText()) && await r.locator('#ask-mic').getAttribute('aria-describedby') === 'ask-mic-privacy');
+  }
+
   head('failed atomic edits cannot be acknowledged by a session save');
   {
     const r = await context('atomic-failure');
