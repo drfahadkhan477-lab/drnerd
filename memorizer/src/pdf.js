@@ -41,12 +41,7 @@ function lib() {
       .then(function (code) {
         L.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
         return L;
-      }, function () {
-        /* No worker: pdf.js falls back to parsing on the main thread. Slower,
-           still correct. */
-        L.GlobalWorkerOptions.workerSrc = WORKER.url;
-        return L;
-      });
+      }, function () { throw new Error('The PDF worker could not be verified or downloaded. Retry when connected.'); });
   });
   loading.catch(function () { loading = null; });
   return loading;
@@ -417,13 +412,14 @@ function textBoxesOf(items) {
    them one chapter at a time, when the chapter is opened (figuresOn). */
 function wordsIn(lines) { return lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0); }
 function read(buffer, onProgress, onStatus, opts) {
-  var Lib, withFigures = !(opts && opts.figures === false);
+  var Lib, opened, withFigures = !(opts && opts.figures === false);
   return lib().then(function (L) {
     Lib = L;
     /* pdf.js may take ownership of the buffer it is given, so it gets a copy:
        the caller keeps the original to store. */
     return L.getDocument({ data: new Uint8Array(buffer.slice(0)), isEvalSupported: false }).promise;
   }).then(function (doc) {
+    opened = doc;
     var pages = [], counts = [], figures = [];
     var chain = Promise.resolve();
     for (var i = 1; i <= doc.numPages; i++) {
@@ -474,8 +470,10 @@ function read(buffer, onProgress, onStatus, opts) {
     var outline = [];
     chain = chain.then(function () { return outlineOf(doc); }).then(function (o) { outline = o; });
     return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures, ocr: ocr, ocrError: ocrError, ocrConf: ocrConf, outline: outline }; });
-  });
+  }).then(function (value) { return dispose(opened).then(function () { return value; }); }, function (e) { return dispose(opened).then(function () { throw e; }); });
 }
+
+function dispose(doc) { return doc && doc.destroy ? Promise.resolve(doc.destroy()).catch(function () {}) : Promise.resolve(); }
 
 /* The PDF's own bookmarks, flattened: [{ title, page, depth }], depth 0 at
    the top. An entry whose destination cannot be resolved to a page is left
@@ -507,7 +505,7 @@ function outlineOf(doc) {
 /* Figures on some pages of a stored PDF, found as read() finds them —
    for a book, a chapter at a time. pageNos are this file's own page
    numbers; each figure found is returned with that page. */
-function figuresOn(key, buffer, pageNos) {
+function figuresOnNow(key, buffer, pageNos) {
   var figures = [];
   return Promise.all([lib(), openStored(key, buffer)]).then(function (r) {
     var L = r[0], doc = r[1];
@@ -549,29 +547,37 @@ function padBox(box, view, m) {
 var docCache = { key: null, doc: null };
 function openStored(key, buffer) {
   if (docCache.key === key && docCache.doc) return Promise.resolve(docCache.doc);
-  return lib().then(function (L) {
+  var old = docCache.doc; docCache = { key: null, doc: null };
+  return dispose(old).then(lib).then(function (L) {
     return L.getDocument({ data: new Uint8Array(buffer.slice(0)), isEvalSupported: false }).promise;
   }).then(function (doc) { docCache = { key: key, doc: doc }; return doc; });
 }
-function renderBox(key, buffer, pageNo, box, scale) {
+function renderBoxNow(key, buffer, pageNo, box, scale) {
   scale = scale || 2;
   return openStored(key, buffer).then(function (doc) { return doc.getPage(pageNo); }).then(function (page) {
     var vp = page.getViewport({ scale: scale });
     var canvas = document.createElement('canvas');
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
     return page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise.then(function () {
-      if (!box) return canvas.toDataURL('image/png');
+      if (!box) { var full = canvas.toDataURL('image/png'); canvas.width = canvas.height = 0; return full; }
       var r = vp.convertToViewportRectangle(padBox(box, page.view));
       var x = Math.max(0, Math.floor(Math.min(r[0], r[2]))), y = Math.max(0, Math.floor(Math.min(r[1], r[3])));
       var w = Math.min(canvas.width - x, Math.ceil(Math.abs(r[2] - r[0]))), hh = Math.min(canvas.height - y, Math.ceil(Math.abs(r[3] - r[1])));
       var out = document.createElement('canvas');
       out.width = Math.max(1, w); out.height = Math.max(1, hh);
       out.getContext('2d').drawImage(canvas, x, y, w, hh, 0, 0, w, hh);
-      return out.toDataURL('image/png');
+      var result = out.toDataURL('image/png'); canvas.width = canvas.height = out.width = out.height = 0; return result;
     });
   });
 }
 
-root.MemPdf = { labelsIn: labelsIn, LABEL_MAX_WORDS: LABEL_MAX_WORDS, LABEL_MAX: LABEL_MAX, TABLE_TOP: TABLE_TOP, tableTitleFor: tableTitleFor, PDFJS_V: /pdfjs-dist@([\d.]+)/.exec(BASE)[1], FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+/* One stored PDF in memory; serialized uses prevent eviction mid-render. */
+var storedQueue = Promise.resolve();
+function storedJob(run) { var p = storedQueue.then(run); storedQueue = p.catch(function () {}); return p; }
+function figuresOn(key, buffer, pageNos) { return storedJob(function () { return figuresOnNow(key, buffer, pageNos); }); }
+function renderBox(key, buffer, pageNo, box, scale) { return storedJob(function () { return renderBoxNow(key, buffer, pageNo, box, scale); }); }
+function release() { return storedJob(function () { var d = docCache.doc; docCache = { key: null, doc: null }; return dispose(d); }); }
+
+root.MemPdf = { release: release, labelsIn: labelsIn, LABEL_MAX_WORDS: LABEL_MAX_WORDS, LABEL_MAX: LABEL_MAX, TABLE_TOP: TABLE_TOP, tableTitleFor: tableTitleFor, PDFJS_V: /pdfjs-dist@([\d.]+)/.exec(BASE)[1], FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);

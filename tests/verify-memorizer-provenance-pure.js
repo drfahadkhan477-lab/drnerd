@@ -36,6 +36,7 @@ const P = require(path.join(__dirname, '..', 'memorizer', 'src', 'provenance.js'
   /* Imported PDF bytes must survive storage before they can be fingerprinted
      or rendered again. Also runs in CI through this existing pure suite. */
   await require('./verify-memorizer-store-pure.js');
+  await require('./verify-memorizer-runtime-pure.js');
   head('the fingerprint is SHA-256 of exactly what was imported');
   /* FIPS 180-2 test vectors. */
   const abc = await P.fingerprint('abc', webcrypto.subtle);
