@@ -306,6 +306,17 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
        /removed/.test(await r.locator('#settings-status').innerText()));
   }
 
+  head('redraw preserves a note draft and its caret');
+  {
+    const r = await context('draft');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Draft'); await r.locator('#learn-unit').waitFor(T);
+    await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+    await r.fill('#note-text', 'A draft still being typed');
+    await r.evaluate(() => { const el = document.querySelector('#note-text'); el.focus(); el.setSelectionRange(4, 9); Memorizer.render(); });
+    const got = await r.locator('#note-text').evaluate(el => ({ value: el.value, start: el.selectionStart, end: el.selectionEnd, focused: document.activeElement === el }));
+    ok('draft, selection and focus survive background redraw', got.value === 'A draft still being typed' && got.start === 4 && got.end === 9 && got.focused, JSON.stringify(got));
+  }
+
   head('a slow unit-open cannot replace the newer selection');
   {
     const r = await context('navigation');

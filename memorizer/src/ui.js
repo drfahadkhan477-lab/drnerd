@@ -1554,7 +1554,7 @@ function saveFix(ci, si, text) {
   ui.cards.filter(function (x) { return x.docId === id && x.cluster === ci; }).forEach(function (x) { ops.push({ store: 'cards', id: x.id, delete: true }); });
   ui.stepSeq++; ui.busy = ''; ui.fixOpen = true;
   return Store.batch(ops).then(function () {
-    docsChanged(); ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} }; ui.askIdx = null; ui.secVecs = null;
+    clearDraft('fix:' + si); docsChanged(); ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} }; ui.askIdx = null; ui.secVecs = null;
     if (ui.docId === id) { ui.docRec = fixed; ui.state = st; ui.pack = pack; ui.checks = checks; ui.notice = 'Corrected. Questions and review cards from the changed section were retired; study it again from the corrected text.'; }
     return refresh();
   }).then(render, function (e) { saveFailed(e); render(); });
@@ -1570,7 +1570,7 @@ function noteCard(c) {
     h('p.muted', 'Yours, not the book’s — shown with this section’s cards and in the Coach, labelled as yours. Mark a key point with ☆ to have it asked as a card.'),
     area, h('div.row', button('Save note', function () {
       ui.notes[key] = { text: area.value.trim(), marks: rec.marks || [] };
-      saveNotes().then(function (ok) { if (ok !== false) { ui.notice = 'Note saved.'; ui.saveError = Store.failureMessage(); } render(); });
+      saveNotes().then(function (ok) { if (ok !== false) { clearDraft('note-text'); ui.notice = 'Note saved.'; ui.saveError = Store.failureMessage(); } render(); });
     }, 'quiet', { id: 'note-save' }), (rec.marks || []).length ? h('span.muted', { id: 'mark-count' }, rec.marks.length + ' point' + (rec.marks.length === 1 ? '' : 's') + ' marked') : null));
 }
 /* A key point marked: kept, and made a cloze card (study.js markCard) from
@@ -3525,7 +3525,7 @@ function viewSettings() {
     var ok = Provider.saveConfig({ provider: c.provider, model: c.model, key: '' });
     key.value = '';
     saved.textContent = ok ? 'Key removed from this device.' : 'This browser refused to change it (private mode?).';
-    if (ok) clearKey.remove();
+    if (ok) { clearDraft('key'); key.value = ''; clearKey.remove(); }
   }, 'quiet danger', { id: 'clear-key' }) : null;
   keyed.appendChild(h('p.muted.key-warn', { id: 'key-warn' }, 'Your key is kept in this browser\u2019s storage on this device, unencrypted, and sent only to the provider. Any browser extension or script allowed to run on this page could read it: use a key with a spending limit, and clear it when you stop using Claude here.'));
   return h('main.wrap',
@@ -3536,6 +3536,7 @@ function viewSettings() {
       h('div.row', button('Save', function () {
         var P = Provider.PROVIDERS[prov.value];
         var ok = Provider.saveConfig({ provider: prov.value, model: model.value, key: P.noKey ? '' : key.value.trim() });
+        if (ok) clearDraft('key');
         saved.textContent = ok ? 'Saved on this device.' : 'This browser refused to save it (private mode?).';
       }, 'primary', { id: 'save-settings' }), clearKey, saved)),
     aiSettingsCard(),
@@ -3811,10 +3812,30 @@ doc.addEventListener('pointerup', function (e) { if (e.pointerType !== 'mouse') 
 doc.addEventListener('pointercancel', unlight, { passive: true });
 doc.addEventListener('pointerout', function (e) { if (!e.relatedTarget) unlight(); }, { passive: true });
 
+/* Drafts belong to a specific screen and section, and remain in memory.
+   In particular, API-key drafts are never included in storage or backups. */
+function draftScope() {
+  return ui.view + (ui.view === 'session' && ui.state ? ':' + ui.docId + ':' + ui.state.section + ':' + ui.state.phase : '');
+}
+function draftFields(app) { return app.querySelectorAll('textarea, input:not([type=checkbox]):not([type=radio]):not([type=file]), select'); }
+function draftKey(el) { return el.id || (el.getAttribute('data-si') != null ? 'fix:' + el.getAttribute('data-si') : el.getAttribute('aria-label')); }
+function bindDrafts(app, scope) {
+  Array.prototype.forEach.call(draftFields(app), function (el) {
+    var id = draftKey(el); if (!id) return;
+    var key = scope + ':' + id, saved = ui.drafts[key];
+    if (saved) el.value = saved.value;
+    el.addEventListener('input', function () { ui.drafts[key] = { value: el.value }; });
+    el.addEventListener('change', function () { ui.drafts[key] = { value: el.value }; });
+  });
+}
+function clearDraft(id) { delete ui.drafts[draftScope() + ':' + id]; }
 function render() {
   releaseStale();
   applyFocus();
   var app = doc.getElementById('app');
+  var active = doc.activeElement, selection = active && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
+  var scope = draftScope(), same = scope === ui.drawnScope;
+  var activeKey = same && active ? draftKey(active) : null;
   var view = ui.view === 'session' && ui.state ? viewSession()
     : ui.view === 'book' ? viewBook()
     : ui.view === 'ask' ? viewAsk()
@@ -3833,11 +3854,14 @@ function render() {
   if (banner) view.insertBefore(banner, view.firstChild && view.firstChild.nextSibling);
   app.appendChild(view);
   app.appendChild(nav());
+  bindDrafts(app, scope); ui.drawnScope = scope;
   var rb = robot();
   if (rb) app.appendChild(rb);
   Array.prototype.forEach.call(app.querySelectorAll('[data-comp]'), play);
   var back = had && doc.getElementById(had);
+  if (!back && activeKey) Array.prototype.forEach.call(draftFields(app), function (el) { if (draftKey(el) === activeKey) back = el; });
   if (back && doc.activeElement !== back && back.focus) back.focus({ preventScroll: true });
+  if (back && selection && back.setSelectionRange) try { back.setSelectionRange(selection[0], selection[1]); } catch (_) {}
   if (ui.view === 'session') { pump(); focusTeach(); focusPack(); focusChapter(); }
 }
 /* Asked for the study pack: its card, open, at the top, its Copy focused. */
