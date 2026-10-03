@@ -28,5 +28,34 @@ module.exports = (async () => {
   assert.equal(destroyed, 2);
   await verified.MemPdf.release(); assert.equal(destroyed, 3);
   console.log('PASS PDF integrity failure closes the path; completed and evicted documents are destroyed');
+  const os = require('node:os'), { build } = require('../scripts/build-memorizer.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'memorizer-runtime-'));
+  try {
+    build(dir);
+    const listeners = {}, cacheData = new Map();
+    const key = r => typeof r === 'string' ? r : r.url;
+    const cache = name => {
+      if (!cacheData.has(name)) cacheData.set(name, new Map());
+      const data = cacheData.get(name);
+      return { match: r => Promise.resolve(data.get(key(r))?.clone()), put: (r, v) => { data.set(key(r), v.clone()); return Promise.resolve(); }, keys: () => Promise.resolve([...data.keys()].map(url => ({ url }))), addAll: () => Promise.resolve() };
+    };
+    const cdn = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    await cache('memorizer-abcdef').put(cdn, new Response('verified worker'));
+    await cache('memorizer-old').put('index.html', new Response('cached app'));
+    const caches = { open: name => Promise.resolve(cache(name)), keys: () => Promise.resolve([...cacheData.keys()]), delete: name => Promise.resolve(cacheData.delete(name)), match: async r => {
+      for (const name of cacheData.keys()) { const hit = await cache(name).match(r); if (hit) return hit; }
+    } };
+    const self = { addEventListener: (name, fn) => { listeners[name] = fn; }, clients: { claim: () => Promise.resolve() } };
+    vm.runInNewContext(fs.readFileSync(path.join(dir, 'sw.js'), 'utf8'), { self, caches, location: { origin: 'https://memorizer.test' }, URL,
+      fetch: () => Promise.resolve(new Response('server error', { status: 503 })), setTimeout: () => 0 });
+    let response; const waits = [];
+    listeners.fetch({ request: { method: 'GET', mode: 'navigate', url: 'https://memorizer.test/index.html' }, respondWith: p => { response = p; }, waitUntil: p => waits.push(p) });
+    assert.equal(await (await response).text(), 'cached app'); await Promise.all(waits);
+    listeners.activate({ waitUntil: p => waits.push(p) }); await Promise.all(waits);
+    assert.equal(cacheData.has('memorizer-abcdef'), false);
+    assert.equal(await (await cache('memorizer-deps-v1').match(cdn)).text(), 'verified worker');
+    console.log('PASS offline shell recovers from HTTP 503 and updates preserve pinned dependencies');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });
