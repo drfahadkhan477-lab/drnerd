@@ -181,6 +181,10 @@ const SUITES = [
   /* The skills in .claude/skills: each where Claude Code looks for it, granting
      no tools, and citing only files, scripts, sections and agents that exist. */
   ['claude-skills', 'the Claude Code skills are found, widen no permissions, and cite only what exists'],
+  /* tools/study-file-check.js, which the memorizer-study-file skill trusts:
+     it runs Memorizer's own import path and reports what the app would drop,
+     refuse or flag, without printing the file's text. */
+  ['study-file-check', 'a study file is checked by the app\u2019s own import code before it is handed over'],
   /* Guards the release gate's one job: never printing CERTIFIED over something
      it did not check. The permissive direction is the dangerous one here, so
      the checks are mostly about what it REFUSES to claim. */
@@ -401,7 +405,7 @@ const SUITES = [
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
    which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills'];
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
