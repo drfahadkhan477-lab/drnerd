@@ -232,7 +232,39 @@ function saveStep(session, cards) {
   });
 }
 
-api.batch = batch; api.open = open; api.put = put; api.get = get; api.all = all; api.del = del;
-api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards; api.saveStep = saveStep;
+/* Retain failed writes for this visit. Unrelated successful writes cannot
+   acknowledge them, and refresh must not overwrite a pending note. */
+var failures = {}, latest = {}, ticket = 0;
+function tracked(key, run, meta) {
+  var seq = ++ticket; latest[key] = seq;
+  return Promise.resolve().then(run).then(function (v) {
+    if (latest[key] === seq) delete failures[key];
+    return v;
+  }, function (e) {
+    if (latest[key] === seq) failures[key] = { run: run, meta: meta, error: e };
+    throw e;
+  });
+}
+function failureMessage() {
+  return Object.keys(failures).map(function (k) {
+    var e = failures[k].error;
+    return e && e.name === 'QuotaExceededError' ? 'this device is out of space for Memorizer' : (e && e.message) || 'write failed';
+  }).join('; ');
+}
+function retryFailures() {
+  return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta); }));
+}
+api.failureMessage = failureMessage; api.retryFailures = retryFailures;
+api.batch = batch; api.open = open; api.put = function (store, value) {
+  var v = clone(value);
+  return tracked(store + ':' + v.id, function () { return put(store, v); }, store === 'meta' ? v : null);
+}; api.get = function (store, id) {
+  var f = failures[store + ':' + id];
+  return store === 'meta' && f && f.meta ? Promise.resolve(clone(f.meta)) : get(store, id);
+}; api.all = all; api.del = function (store, id) { return tracked(store + ':' + id, function () { return del(store, id); }); };
+api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards; api.saveStep = function (session, cards) {
+  var s = clone(session), cs = clone(cards);
+  return tracked('sessions:' + s.id, function () { return saveStep(s, cs); });
+};
 root.MemStore = api;
 })(typeof window !== 'undefined' ? window : this);

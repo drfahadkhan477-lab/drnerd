@@ -120,7 +120,7 @@ function save() {
   var at = Date.now();
   ui.sessions[ui.docId] = ui.state; ui.at[ui.docId] = at;
   return Store.saveStep({ id: ui.docId, state: ui.state, at: at }, ui.state.cards)
-    .then(function (c) { ui.cards = c; ui.saveError = ''; }, saveFailed);
+    .then(function (c) { ui.cards = c; ui.saveError = Store.failureMessage(); }, saveFailed);
 }
 function saveFailed(e) {
   var name = e && e.name, msg = (e && e.message) || String(e || 'unknown error');
@@ -1550,7 +1550,7 @@ function saveFix(ci, si, text) {
 }
 /* YOUR NOTES: kept per section as yours, never mixed with the book's words. */
 function notesFor(docId, ci) { return ui.notes[Study.noteKey(docId, ci)] || null; }
-function saveNotes() { return Store.put('meta', { id: 'notes', recs: ui.notes }).then(null, function (e) { saveFailed(e); render(); }); }
+function saveNotes() { return Store.put('meta', { id: 'notes', recs: ui.notes }).then(null, function (e) { saveFailed(e); render(); return false; }); }
 function noteCard(c) {
   var key = Study.noteKey(ui.docId, ui.state.section), rec = ui.notes[key] || { text: '', marks: [] };
   var area = h('textarea', { id: 'note-text', rows: '3', 'aria-label': 'Your note on this section', placeholder: 'Your own words: a link to a case you saw, a way you remember it.' });
@@ -1558,7 +1558,8 @@ function noteCard(c) {
   return h('div.card.note-card', { id: 'notes' }, h('span.eyebrow', '📝 Your notes'),
     h('p.muted', 'Yours, not the book’s — shown with this section’s cards and in the Coach, labelled as yours. Mark a key point with ☆ to have it asked as a card.'),
     area, h('div.row', button('Save note', function () {
-      ui.notes[key] = { text: area.value.trim(), marks: rec.marks || [] }; saveNotes(); ui.notice = 'Note saved.'; render();
+      ui.notes[key] = { text: area.value.trim(), marks: rec.marks || [] };
+      saveNotes().then(function (ok) { if (ok !== false) { ui.notice = 'Note saved.'; ui.saveError = Store.failureMessage(); } render(); });
     }, 'quiet', { id: 'note-save' }), (rec.marks || []).length ? h('span.muted', { id: 'mark-count' }, rec.marks.length + ' point' + (rec.marks.length === 1 ? '' : 's') + ' marked') : null));
 }
 /* A key point marked: kept, and made a cloze card (study.js markCard) from
@@ -2412,7 +2413,7 @@ function viewReview() {
     Store.put('cards', upd).then(function () {
       if (dr) dr.done[card.id] = true;
       if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id);
-      ui.saveError = ''; ui.reviewDone++;
+      ui.saveError = Store.failureMessage(); ui.reviewDone++;
       return refresh();
     }, saveFailed).then(next);
   };
@@ -3753,9 +3754,9 @@ function storageBanner() {
   if (ui.saveError) {
     return h('div.card.error.store-banner', { id: 'store-banner', role: 'alert' },
       h('strong', 'Your last step was not saved. '), 'The browser said: ' + ui.saveError + '. ',
-      'It stays on screen and is saved with your next step; if this keeps happening, delete a unit you have finished to free space.',
+      'The failed write is kept for retry during this visit. Retry before closing the tab; if space is full, export a backup before freeing space.',
       h('div.row', button('Try saving again', function () {
-        (ui.state ? save() : Promise.resolve()).then(render);
+        Store.retryFailures().then(function () { ui.saveError = Store.failureMessage(); docsChanged(); return refresh(); }).then(render, function (e) { saveFailed(e); render(); });
       }, 'primary', { id: 'store-retry' })));
   }
   /* Opened from the iPad's Files app, Safari shows the file as a data: URL:

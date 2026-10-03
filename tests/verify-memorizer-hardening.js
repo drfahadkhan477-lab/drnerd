@@ -306,6 +306,28 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
        /removed/.test(await r.locator('#settings-status').innerText()));
   }
 
+  head('failed notes survive refresh and retry the exact write');
+  {
+    const r = await context('note-retry');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Retry notes');
+    await r.locator('#learn-unit').waitFor(T); await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+    await r.evaluate(() => {
+      window.__put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (v) {
+        if (this.name === 'meta' && v.id === 'notes') throw new Error('synthetic notes failure');
+        return window.__put.apply(this, arguments);
+      };
+    });
+    await r.fill('#note-text', 'Keep this note'); await r.locator('#note-save').click(); await r.locator('#store-banner').waitFor(T);
+    await r.evaluate(() => Memorizer.openDoc(Memorizer.ui.docId, 0));
+    ok('a session save leaves the failed note warning visible', await r.locator('#store-banner').count() === 1);
+    await r.evaluate(() => { IDBObjectStore.prototype.put = window.__put; });
+    await r.locator('#store-retry').click();
+    await r.waitForFunction(() => !Memorizer.ui.saveError, null, T);
+    await r.reload(); await r.waitForFunction(() => Memorizer.ui.docs.length === 1, null, T);
+    ok('retry persisted the note across reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Keep this note')));
+  }
+
   head('section deletion commits its associated records together');
   {
     const r = await context('deletion');
@@ -325,7 +347,7 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
       return { index: d.clusters[0].index, identity: d.clusters[0].identity, note: n.recs[id + ':0'].text, checks: !!c.recs[id + ':0'], titles: ss.state.titles.length };
     });
     ok('surviving section, note, checks and session agree', got.index === 0 && got.identity === 1 && got.note === 'Beta' && got.checks && got.titles === 1, JSON.stringify(got));
-    await r.reload(); await r.locator('#door-add').waitFor(T);
+    await r.reload(); await r.waitForFunction(() => Memorizer.ui.docs.length === 1, null, T);
     ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
   }
 
