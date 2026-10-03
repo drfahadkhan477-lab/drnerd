@@ -55,15 +55,22 @@ var api = { persistent: false };
 function open() {
   if (dbp) return dbp;
   dbp = new Promise(function (resolve) {
-    var req;
-    try { req = root.indexedDB.open(DB_NAME, DB_VERSION); } catch (_) { resolve(null); return; }
+    var req, settled = false;
+    function fallback() { settled = true; resolve(null); }
+    try { req = root.indexedDB.open(DB_NAME, DB_VERSION); } catch (_) { fallback(); return; }
     req.onupgradeneeded = function () {
       var db = req.result;
       STORES.forEach(function (s) { if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' }); });
     };
-    req.onsuccess = function () { api.persistent = true; resolve(req.result); };
-    req.onerror = function () { resolve(null); };
-    req.onblocked = function () { resolve(null); };
+    req.onsuccess = function () {
+      if (settled) { req.result.close(); return; }
+      settled = true;
+      var db = req.result;
+      db.onversionchange = function () { db.close(); api.persistent = false; };
+      api.persistent = true; resolve(db);
+    };
+    req.onerror = fallback;
+    req.onblocked = fallback;
   });
   return dbp;
 }

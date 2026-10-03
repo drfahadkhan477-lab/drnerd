@@ -71,5 +71,15 @@ module.exports = (async () => {
   assert.equal((await root.MemStore.get('meta', 'notes')).recs['unit:0'], 'Note');
   console.log('PASS batch validation and copy isolation');
 
+  let req, closed = false;
+  const blockedRoot = { indexedDB: { open() { req = {}; queueMicrotask(() => req.onblocked()); return req; } } };
+  vm.runInNewContext(source, { window: blockedRoot, ArrayBuffer, DataView });
+  assert.equal(await blockedRoot.MemStore.open(), null);
+  req.result = { close() { closed = true; } }; req.onsuccess();
+  assert.equal(blockedRoot.MemStore.persistent, false);
+  assert.equal(await blockedRoot.MemStore.open(), null);
+  assert.equal(closed, true);
+  console.log('PASS blocked then late-success stays honestly in fallback and closes the unused connection');
+
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });
