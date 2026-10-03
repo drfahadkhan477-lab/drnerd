@@ -431,6 +431,35 @@ function kindOf(user) {
      (NODE_EXTRA_CA_CERTS). Measured: in this repository's cloud sandbox the
      browser failed pdf.min.js with ERR_CERT_AUTHORITY_INVALID. */
   let cdnHits = 0;
+  /* ONE FETCH PER FILE, RETRIED, AND A FAILURE SAID. Each request used to
+     refetch from Node, unhandled: one dropped Node fetch threw inside the
+     route, the request was never answered, and WebKit reported that as
+     "Fetch API cannot load …pdf.worker.min.js due to access control checks".
+     A page error, which "with no errors" counts. It failed two sections of one
+     run on 0b9613b while the parallel run of the same commit passed. The
+     bytes are still jsDelivr's own and still checked against the pinned
+     hashes; what changes is that the network between this machine and the
+     CDN is not what the assertions measure. Three tries. A file that still
+     cannot be had is a logged 502, so the page's own error path is what runs
+     next, not a hung request. */
+  const cdnCache = new Map();
+  const cdnGet = url => {
+    if (!cdnCache.has(url)) cdnCache.set(url, (async () => {
+      let last = '';
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) return { body: Buffer.from(await res.arrayBuffer()), type: res.headers.get('content-type') || 'application/javascript' };
+          last = 'HTTP ' + res.status;
+        } catch (e) { last = e.message; }
+        await new Promise(r => setTimeout(r, 500 * attempt));
+      }
+      console.log(`  [cdn] ${url} failed three times: ${last}`);
+      cdnCache.delete(url);
+      return null;
+    })());
+    return cdnCache.get(url);
+  };
   /* ON WEBKIT THE APP IS SERVED, NOT OPENED AS A FILE. The first WebKit run
      opened it from file:// as Chromium does, and WebKit gives a file page the
      origin "null": the pdf.js worker's blob: URL then fails "due to access
@@ -459,11 +488,10 @@ function kindOf(user) {
   });
   await page.route('https://cdn.jsdelivr.net/**', async route => {
     cdnHits++;
-    const res = await fetch(route.request().url());
-    const body = Buffer.from(await res.arrayBuffer());
-    return route.fulfill({ status: res.status, body, headers: {
-      'content-type': res.headers.get('content-type') || 'application/javascript',
-      'access-control-allow-origin': '*' } });
+    const got = await cdnGet(route.request().url());
+    return route.fulfill(got ? { status: 200, body: got.body, headers: {
+      'content-type': got.type, 'access-control-allow-origin': '*' } }
+      : { status: 502, body: '', headers: { 'access-control-allow-origin': '*' } });
   });
   /* The hook's handwriting face comes from Google Fonts, which this sandbox's
      browser cannot reach; the app falls back to the device's own script
