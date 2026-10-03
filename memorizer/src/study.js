@@ -406,7 +406,10 @@ function teachBack(said, points, sectionText) {
     var ws = contentWords(p).filter(function (w, j, all) { return all.indexOf(w) === j; });
     if (!ws.length) return;
     var hit = ws.filter(function (w) { return have[w]; }).length / ws.length;
-    (hit >= TEACH_SHARE ? covered : missed).push(i);
+    var G = root.MemGround || (typeof require === 'function' ? require('./ground.js') : null);
+    var clauses = String(said).split(/[.;]\s+/);
+    var relevant = clauses.sort(function (a, b) { return contentWords(b).filter(function (w) { return ws.indexOf(w) !== -1; }).length - contentWords(a).filter(function (w) { return ws.indexOf(w) !== -1; }).length; })[0] || '';
+    (hit >= TEACH_SHARE && (!G || !G.relationError(relevant, [p])) ? covered : missed).push(i);
   });
   var nums = function (t) { return (String(t || '').match(/\d+(?:[.,]\d+)?/g) || []).map(function (n) { return n.replace(',', '.'); }); };
   var book = nums(sectionText);
@@ -524,7 +527,7 @@ function correctSegment(doc, ci, si, text, at) {
   if (!seg || seg.heading || seg.table || !t || t === seg.text) return null;
   (d.corrections = d.corrections || []).push({ ci: ci, si: si, at: at || '', was: seg.text, now: t });
   seg.text = t; seg.corrected = true;
-  c.text = c.segments.map(function (s) { return s.text; }).join('\n\n');
+  c.text = c.segments.map(function (s) { return s.text; }).join(' ');
   c.words = c.text.split(/\s+/).filter(Boolean).length;
   c.gist = c.segments.filter(function (s) { return !s.heading && !s.table; }).map(function (s) { return s.text; }).join(' ').split(/\s+/).slice(0, 25).join(' ');
   d.revision = (d.revision || 0) + 1;

@@ -409,5 +409,6 @@ head('section deletion preserves identity and remaps associated records');
   ok('the original document is untouched', d.clusters.length === 3 && d.corrections[1].ci === 2);
 }
 
+ok('a negated teach-back is not counted as coverage', S.teachBack('Diuretics do not reduce preload.', ['Diuretics reduce preload.'], 'Diuretics reduce preload.').covered.length === 0);
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

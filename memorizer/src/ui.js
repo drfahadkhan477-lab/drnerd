@@ -216,7 +216,13 @@ function ask(label, kind, local, remote) {
         if (err) throw new Error('the built-in coach produced a malformed ' + kind + ': ' + err);
         resolve(v);
       })
-    : Provider.call(c, Prompts[kind].apply(null, remote), kind);
+    : Provider.call(c, Prompts[kind].apply(null, remote), kind).then(function (v) {
+        if (kind === 'lesson') return Ground.sourceLesson(v, local[0], Coach.lesson(local[0]));
+        var clusters = kind === 'quiz' ? [local[0]] : local[0];
+        var qs = v.questions.map(function (q) { var cl = kind === 'exam' ? clusters[q.cluster] : clusters[0]; return cl ? Ground.gradeQuestion(q, Ground.sourcesOf(cl)).q : null; }).filter(Boolean);
+        if (!qs.length) throw new Error('No questions had exact source evidence. Use the built-in coach or revise the generated reply.');
+        return { questions: qs };
+      });
   return step.then(function (v) {
     if (!current(seq, key)) throw STALE;
     ui.busy = ''; return v;
@@ -242,7 +248,7 @@ function pump() {
   var c = s.per[s.section];
   /* The unit's pack (pack.js), where it has this section: already checked
      against the book when it was imported, so nothing to ask for. */
-  var fromPack = Pack.sectionOf(ui.pack, s.section);
+  var fromPack = Pack.safeSection(ui.pack, s.section, ui.docRec);
   if (s.phase === 'teach' && !c.lesson && fromPack) {
     dispatch({ type: 'taught', value: JSON.parse(JSON.stringify(fromPack.lesson)) }).then(render);
   } else if (s.phase === 'drill' && !c.quiz && fromPack && fromPack.quiz.questions.length) {
@@ -273,7 +279,7 @@ function pump() {
     /* With a pack, the exam asks its questions for the sections it covers
        (pack.js exam) and the built-in coach's for the rest. */
     if (builtin() && Pack.coverage(ui.pack, ui.docRec).have) {
-      dispatch({ type: 'examReady', value: Pack.exam(ui.pack, Coach.exam(ui.docRec.clusters, Session.asked(s), weak, n), weak, n) }).then(render);
+      dispatch({ type: 'examReady', value: Pack.exam(Pack.safeRecord(ui.pack, ui.docRec), Coach.exam(ui.docRec.clusters, Session.asked(s), weak, n), weak, n) }).then(render);
       return;
     }
     ask('Setting your final exam…', 'exam', [ui.docRec.clusters, Session.asked(s), weak, n], [ui.docRec.clusters, lessons, weak, n])
@@ -1270,7 +1276,8 @@ function importPack(text) {
   var rec = Pack.merge(ui.pack, checked, d, Date.now());
   return Store.put('packs', rec).then(function () {
     ui.pack = rec; ui.packText = '';
-    return dispatch({ type: 'packed', value: { sections: checked.sections } });
+    clearDraft('pack-text');
+    return dispatch({ type: 'packed', value: { sections: checked.sections.map(function (s) { return Pack.safeSection(rec, s.index, d); }).filter(Boolean) } });
   }).then(render, function (e) { saveFailed(e); render(); });
 }
 
@@ -1296,7 +1303,7 @@ function sourceCard(d) {
     h('p.muted.src-meta', 'From ', h('strong', from), when ? ' \u00B7 added ' + when : '',
       d.fingerprint ? [' \u00B7 ', h('span', { title: d.fingerprint }, Prov.shortPrint(d.fingerprint))] : '',
       pr ? ' \u00B7 read by Memorizer ' + pr.build + (d.source === 'pdf' ? ', PDF reader ' + pr.pdfjs : '') : ''),
-    h('p.muted', 'Everything Memorizer teaches from this unit is this source\u2019s own text. It is what your book says, as of its edition \u2014 not a check against current guidelines.'));
+    h('p.muted', 'Extracted facts and graded source completions use this edition’s text. Generated notes need your review against the cited page; not a check against current guidelines.'));
 }
 
 /* The scanned pages text recognition was least sure of (study.js
@@ -1469,10 +1476,10 @@ function teachCard(c, L) {
     ui.teach = { key: key, said: area.value, r: r, points: points }; render();
   };
   var res = got ? h('div', { id: 'teach-result' },
-    h('p', h('strong', 'You covered ' + got.r.covered.length + ' of ' + (got.r.covered.length + got.r.missed.length) + ' key points.')),
+    h('p', h('strong', 'Your words matched ' + got.r.covered.length + ' of ' + (got.r.covered.length + got.r.missed.length) + ' key points.')),
     got.r.wrong.length ? h('p.warn', { id: 'teach-wrong' }, 'You gave ' + got.r.wrong.join(', ') + ' — this section has no such number. Check it against the page.') : null,
     got.r.missed.length ? [h('p.muted', L.by === 'pack' ? 'What you left out, in the lesson\u2019s words:' : 'What you left out, in your book’s words:'), h('ul.teach-missed', got.r.missed.map(function (i) { return h('li', marked(got.points[i].text), ' ', page(got.points[i].page)); })),
-      button('Make cards of what I left out', function () { teachCards(c, got); }, 'quiet', { id: 'teach-cards' })] : h('p', '✓ Everything the section’s key points say.'),
+      button('Make cards of what I left out', function () { teachCards(c, got); }, 'quiet', { id: 'teach-cards' })] : h('p', 'All key points had matching words. Check the meaning against the source; this is not a correctness grade.'),
     ui.teachMade != null ? h('p.muted', { id: 'teach-made' }, ui.teachMade + ' card' + (ui.teachMade === 1 ? '' : 's') + ' made, from tomorrow.') : null,
     teachAi(got)) : null;
   return h('div.card.teach-card', { id: 'teach-back' }, h('span.eyebrow', '🗣 Teach it back'),
@@ -1754,7 +1761,7 @@ function socraticAi(L) {
   };
   return h('div.soc-ai', { id: 'soc-ai' },
     soc.ai.length ? h('ol.soc-steps.soc-ai-list', { id: 'soc-ai-list' }, soc.ai.map(function (x, k) {
-      return h('li', h('p.soc-ask', '\u2728 ' + x.question), x.shown ? [h('p.soc-answer', x.answer), h('p.muted.ai-label', 'From Claude\u2019s notes, checked against your book')]
+      return h('li', h('p.soc-ask', '\u2728 ' + x.question), x.shown ? [h('p.soc-answer', x.answer), h('p.muted.ai-label', 'From Claude\u2019s notes, compare with the cited source')]
         : button('Show', function () { x.shown = true; render(); }, 'quiet', { id: 'soc-ai-show-' + k }));
     })) : null,
     soc.aiWhy ? h('p.muted', { id: 'soc-ai-dropped' }, 'Its question was not asked: ' + soc.aiWhy + '.') : null,
@@ -1802,7 +1809,7 @@ function packCards(L) {
   var flagged = (L.points || []).concat(L.numbers || [], L.pearls || [], L.distinctions || [], asks).filter(function (x) { return x.flag; }).length +
     Object.keys(L.flags || {}).length;
   return {
-    label: h('p.pack-label', { id: 'pack-label' }, h('strong', '\u2726 Written with Claude'), ' \u00B7 checked against your book',
+    label: h('p.pack-label', { id: 'pack-label' }, h('strong', '\u2726 Written with Claude'), ' \u00B7 compare with the cited source',
       flagged ? h('span.pack-flagged', ' \u00B7 ' + flagged + ' not found in it, flagged') : null),
     mechanism: L.mechanism ? h('div.card.mechanism', { id: 'mechanism' }, h('span.eyebrow', 'The mechanism'), h('p', marked(L.mechanism)),
       flagLine(L.flags && L.flags.mechanism)) : null,
@@ -2047,7 +2054,7 @@ function mcqCard(q, meta, onNext, reveal, nav, after, opts) {
   return h('div.card.mcq', { id: 'mcq' },
     h('div.mcq-meta', meta),
     quote,
-    h('h2.q', q.question),
+    h('h2.q', q.sourceCompletion ? 'Complete the quoted source sentence.' : q.question),
     opts,
     notSure,
     answered && blind ? h('div.why.blind', { role: 'status', id: 'blind-note' }, h('p.muted', 'Answer held \u2014 you will see how you did at the end.'),
@@ -2144,8 +2151,8 @@ function viewDrill() {
   var orig = q;
   if (v) q = v;
   var meta = [h('span', retry ? (v ? 'Again, in new words — you missed this one' : 'Again — you missed this one') : 'Question ' + (Math.min(c.pos, firsts - 1) + 1) + ' of ' + firsts),
-    q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · its answer checked against your book') : null,
-    v ? rewordTag() : q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, q.flag ? '\u2726 Written with Claude \u00B7 \u26A0 not all of it found in your book' : '\u2726 Written with Claude \u00B7 checked against your book') : null,
+    q.by === 'ai' ? h('span.tag.ai-tag', '✨ AI question · source completion') : null,
+    v ? rewordTag() : q.by === 'pack' ? h('span.tag.pack-tag', { 'data-flagged': q.flag ? 'true' : 'false' }, q.flag ? '\u2726 Written with Claude \u00B7 \u26A0 not all of it found in your book' : '\u2726 Written with Claude \u00B7 compare with the cited source') : null,
     h('div.bar', h('i', { style: 'width:' + Math.round(100 * c.pos / c.order.length) + '%' }))];
   /* The kind of miss, read from what happened (skill.js); a second miss in
      a row is re-taught on the spot with a different kind of hook. */
@@ -2290,7 +2297,7 @@ function aiCase(d, ci) {
       if (!v) return { q: null, why: 'its reply was not a case with four options' };
       var bad = Ground.claimError(v.quote, [c.text], 0);
       if (bad && !/too little|says nothing|nothing in it/.test(bad)) return { q: null, why: 'the case ' + bad };
-      var g = Ground.question(v, sents);
+      var g = Ground.gradeQuestion(v, sents);
       return g.q ? { q: g.q, why: '' } : { q: null, why: g.why };
     });
 }
@@ -2303,7 +2310,7 @@ function caseCard(d, ci) {
     }, 'quiet', { id: 'ai-case' }));
   if (!got.q) return h('div.card.case-card', { id: 'case-card' }, h('span.eyebrow', '✨ A case'), h('p', { id: 'case-dropped' }, 'Not shown: ' + got.why + '. Your book stays the source.'),
     button('Try another', function () { delete ui.ai.cases[key]; render(); }, 'quiet'));
-  return h('div', { id: 'case-card' }, mcqCard(got.q, [h('span.tag.ai-tag', '✨ A case by the on-device AI · its answer checked against your book')],
+  return h('div', { id: 'case-card' }, mcqCard(got.q, [h('span.tag.ai-tag', '✨ A case by the on-device AI · source completion')],
     function () { delete ui.ai.cases[key]; ui.choice = null; render(); }, null, null, function () { return null; }));
 }
 function viewExam() {
@@ -2446,7 +2453,7 @@ function viewReview() {
   if (card.options && card.options.length) {
     /* A multiple-choice card grades itself: right is Good (Hard if you were
        not sure), wrong is Again — and asked again if you were sure. */
-    var q = { question: card.front, quote: card.quote || '', options: card.options, answer: card.answer, explain: card.explain || card.back, page: card.page };
+    var q = { question: card.front, quote: card.quote || '', sourceCompletion: !!card.sourceCompletion, options: card.options, answer: card.answer, explain: card.explain || card.back, page: card.page };
     return h('main.wrap', back, head, mcqCard(q, [tag, card.kind === 'occlusion' ? occlusionFigure(card) : null], function () {
       var how = Study.rateWith(ui.choice === card.answer, !!ui.sure);
       rate(how.rating, how);
@@ -2872,7 +2879,7 @@ function practiceCard() {
     tr.pct.length > 1 ? h('div.trend', { 'aria-label': 'Recent practice scores' }, tr.pct.map(function (p, i) { return h('i', { title: tr.days[i] + ': ' + p + '%', style: 'height:' + Math.max(6, p) + '%' }); })) : null,
     h('div.chips', [10, 20, 30].map(function (m) { return button(m + ' min', function () { startPractice(m); }, 'chip', { id: 'practice-' + m }); })));
 }
-function cardQ(c) { return { question: c.front, quote: c.quote || '', options: c.options, answer: c.answer, explain: c.explain || c.back, page: c.page }; }
+function cardQ(c) { return { question: c.front, quote: c.quote || '', sourceCompletion: !!c.sourceCompletion, options: c.options, answer: c.answer, explain: c.explain || c.back, page: c.page }; }
 function recordPracticeMiss(docId, ci, q, choice, existingId) {
   if (choice === q.answer || !docId) return Promise.resolve();
   var d = ui.docs.filter(function (x) { return x.id === docId; })[0];
@@ -2961,7 +2968,7 @@ function aiJob(label, fn) {
   });
 }
 function aiNote(kept, dropped) {
-  return h('p.muted.ai-label', '✨ On-device AI, checked against your book' + (dropped ? ' — ' + dropped + ' sentence' + (dropped === 1 ? '' : 's') + ' dropped for saying what the book does not' : ''));
+  return h('p.muted.ai-label', '✨ On-device AI, compare with the cited source' + (dropped ? ' — ' + dropped + ' sentence' + (dropped === 1 ? '' : 's') + ' dropped for saying what the book does not' : ''));
 }
 /* A drill's harder questions: the model's, each kept only when its answer
    is in the section — explained by the book's sentence, not the model's. */
@@ -2973,7 +2980,7 @@ function aiQuestions(c) {
   return aiEnsure().then(function () {
     return Promise.race([LLM.chat(LLM.SYSTEM, LLM.questionsPrompt(c.title, sents), LLM.QUESTIONS_SCHEMA, 700), timeout]);
   }).then(function (text) {
-    return LLM.parseQuestions(text || '').map(function (q) { return Ground.question(q, sents).q; }).filter(Boolean).slice(0, 4);
+    return LLM.parseQuestions(text || '').map(function (q) { if (!q.page) delete q.page; return Ground.gradeQuestion(q, sents).q; }).filter(Boolean).slice(0, 4);
   }, function () { return []; });
 }
 
@@ -3024,7 +3031,7 @@ function explainMiss(q, chosen, i) {
     });
   }, 'quiet', { id: 'ai-miss-go' }), ui.ai.busy ? h('span.muted', { role: 'status' }, ui.ai.busy) : null);
   return h('div.ai-miss', { id: 'ai-miss' }, got.kept.length ? [got.kept.map(function (t) { return h('p', t); }), aiNote(got.kept, got.dropped.length)]
-    : h('p.muted', { id: 'ai-miss-dropped' }, 'Its explanation was not shown: ' + got.why + '. The reasons above are Claude\u2019s, checked against your book.'));
+    : h('p.muted', { id: 'ai-miss-dropped' }, 'Its explanation was not shown: ' + got.why + '. The reasons above are Claude\u2019s, compare with the cited source.'));
 }
 
 /* ── ASK YOUR BOOK ───────────────────────────────────────────────────────── */
@@ -3452,7 +3459,7 @@ function viewAsk() {
     h('div.coach-intro',
       h('div.coach-avatar', mascot()),
       h('div.bubble', h('p', h('strong', 'I’m your coach. '), 'Ask me anything about your book, or tell me what to do — “explain preload”, “quiz me on heart failure”, “compare aortic stenosis and regurgitation”, “what should I study?”. I answer from your book, with the page, or say it isn’t there. ' +
-        (ai ? 'My on-device AI can summarise and explain, and everything it says is checked against the book.' : 'Turn on the on-device AI in Settings and I can also summarise and explain.')),
+        (ai ? 'My on-device AI can summarise and explain, and everything it says is compared with source text; check the meaning yourself.' : 'Turn on the on-device AI in Settings and I can also summarise and explain.')),
         h('p.muted', 'Search: ' + (meaning ? 'by words and by meaning.' : 'by words. Turn on search by meaning in Settings to find ideas phrased differently.')),
         ui.profile && ui.profile.turns ? h('p.muted', { id: 'coach-memory' }, 'What I remember, on this iPad only: ' + (Agent.profileLine(ui.profile, '') || 'nothing yet') + ' ',
           button('Forget', function () { ui.profile = null; Store.del('meta', 'coach-profile').then(function () { render(); }); }, 'quiet', { id: 'coach-forget' })) : null,
@@ -3581,7 +3588,7 @@ function aiSettingsCard() {
   });
   return h('div.card.settings.ai-card', { id: 'ai-card' }, h('h2', '✨ On-device AI tutor'),
     h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. With a study pack written with Claude, it works from Claude\u2019s notes: a pack question you missed comes back in new words (its answer and reasons still Claude\u2019s), it can explain a mistake from Claude\u2019s reasons, mark your teach-back point by point (a verdict only with your own words to show for it), and ask follow-up questions from Claude\u2019s notes. It also runs your Coach as an agent: it can use several of the Coach’s tools on your book before it answers, and what it says is checked against what they found. It needs no key and, once downloaded, no connection.'),
-    h('p', h('strong', 'It is not a source of facts. '), 'Every sentence it writes is checked against your book before you see it: no number and no disease, test or drug the book passage does not have, and a question is kept only when your book states its answer — and the book\u2019s own sentence is shown as the explanation. What fails the check is dropped and counted.'),
+    h('p', h('strong', 'It is not a source of facts. '), 'Generated explanations are screened for unsupported names, numbers and obvious contradictions. These checks do not prove medical correctness: compare meaning with the source. Graded AI questions complete a literal source quote, and facts used for memorisation are extracted from your text.'),
     h('label', 'Model', model),
     h('p.muted', 'Needs WebGPU (iPadOS 26 or later). The engine comes pinned and integrity-checked from jsDelivr; the model itself comes from Hugging Face through that engine, which does not check it against a hash, and is kept in this browser\u2019s cache.'),
     h('div.row', button(c.on ? 'Turn off' : 'Turn on', function () {

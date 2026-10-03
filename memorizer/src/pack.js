@@ -295,7 +295,7 @@ function claimFlag(text, sec, book, pg) {
   if (newNum.length) return 'a number not in your book: ' + newNum[0];
   var newName = idsOf(text).filter(function (id) { return book.names.indexOf(id) === -1; });
   if (newName.length) return 'names what your chapter does not: ' + labelOf(newName[0]);
-  return '';
+  return Ground.relationError(unpaged(text), [src]);
 }
 function pageFlag(pg, c) {
   return pg >= c.pageStart && pg <= c.pageEnd ? '' : 'p. ' + pg + ' is not in this section (' + pages(c) + ')';
@@ -455,6 +455,26 @@ function dropSection(rec, i) {
   return r;
 }
 function sectionOf(rec, i) { return rec && rec.sections && rec.sections[i] || null; }
+/* Unverified pack questions never enter a graded drill or exam. */
+function safeSection(rec, i, doc) {
+  var sec = sectionOf(rec, i), c = doc && doc.clusters[i]; if (!sec || !c) return null;
+  var out = JSON.parse(JSON.stringify(sec));
+  out.quiz.questions = out.quiz.questions.map(function (q) { return Ground.gradeQuestion(q, Ground.sourcesOf(c)).q; }).filter(Boolean);
+  var sents = Ground.sourcesOf(c), exact = function (text) { return !!text && sents.some(function (s) { return Ground.normal(s.text).indexOf(Ground.normal(text)) !== -1; }); };
+  var pts = out.lesson.points.filter(function (p) { return !p.flag && exact(p.text); });
+  out.lesson.sourceMemory = {
+    points: pts.length ? pts : sents.slice(0, 6).map(function (s) { return { text: s.text, page: s.page }; }),
+    overview: exact(out.lesson.overview) ? out.lesson.overview : '',
+    numbers: out.lesson.numbers.filter(function (p) { return !p.flag && exact(p.text); }),
+    mnemonics: out.lesson.mnemonics.filter(function (m) { return m.words.every(exact); }), analogies: [], flowchart: ''
+  };
+  return out;
+}
+function safeRecord(rec, doc) {
+  if (!rec) return null; var out = { id: rec.id, sections: {} };
+  Object.keys(rec.sections || {}).forEach(function (i) { var s = safeSection(rec, +i, doc); if (s) out.sections[i] = s; });
+  return out;
+}
 /* What the owner is told, in counts that come from the check itself. */
 function report(checked) {
   var s = checked.sections, q = 0, f = 0;
@@ -464,7 +484,7 @@ function report(checked) {
     imported: s.length, questions: q, flagged: f, refused: checked.refused.length, dropped: checked.dropped.length,
     line: s.length ? 'Imported ' + (s.length === 1 ? 'section ' : 'sections ') + nums.join(', ') + ': ' +
       s.length + (s.length === 1 ? ' lesson, ' : ' lessons, ') + q + (q === 1 ? ' question' : ' questions') + '. ' +
-      (f ? f + (f === 1 ? ' item' : ' items') + ' not found in your book, flagged where it is shown.' : 'Everything checked was found in your book.')
+      (f ? f + (f === 1 ? ' item' : ' items') + ' not found in your book, flagged where it is shown.' : 'Source checks passed; compare generated explanations with the cited pages.')
       : 'Nothing was imported.',
   };
 }
@@ -513,7 +533,7 @@ function coverage(rec, doc) {
 
 var MemPack = { FORMAT: FORMAT, VERSION: VERSION, PER_REPLY: PER_REPLY, LESSON: LESSON, QUESTION: QUESTION, EXAMPLE: EXAMPLE,
                 prompt: prompt, replies: replies, unitName: unitName, packsIn: packsIn, parse: parse, check: check, merge: merge,
-                sectionOf: sectionOf, dropSection: dropSection, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam };
+                sectionOf: sectionOf, safeSection: safeSection, safeRecord: safeRecord, dropSection: dropSection, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam };
 root.MemPack = MemPack;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemPack;
 })(typeof window !== 'undefined' ? window : this);

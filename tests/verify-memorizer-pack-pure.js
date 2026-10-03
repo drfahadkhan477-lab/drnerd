@@ -170,7 +170,7 @@ head('what is not in the book is flagged where it is shown');
   s = run(withLesson(L => { L.pearls[0].text = 'Beta-blockers relieve atrial fibrillation in aortic stenosis.'; })).sections[0];
   ok('a condition the chapter never names', s.lesson.pearls[0].flag === 'names what your chapter does not: Atrial fibrillation', s.lesson.pearls[0].flag);
   s = run(withLesson(L => { L.distinctions[0].how = 'Mitral regurgitation gives a holosystolic murmur; stenosis does not.'; })).sections[0];
-  ok('a condition named elsewhere in the chapter is the chapter’s', !s.lesson.distinctions[0].flag, s.lesson.distinctions[0].flag);
+  ok('a named condition does not prove a negated relationship', /negation/.test(s.lesson.distinctions[0].flag), s.lesson.distinctions[0].flag);
   s = run(withLesson(L => { L.points[1].text = 'Severe stenosis — a mean gradient above 40 mmHg (see p. 99, pp. 10–11)'; })).sections[0];
   ok('a page citation’s number is not a claim', !s.lesson.points[1].flag, s.lesson.points[1].flag);
   s = run(withLesson(L => { L.overview = 'Aortic stenosis kills 50 percent within two years of symptoms.'; })).sections[0];
@@ -287,7 +287,7 @@ head('the import report counts what the check found');
   const r = P.report(c);
   ok('sections, questions, flagged, refused', r.imported === 1 && r.questions === 1 && r.flagged === 1 && r.refused === 1, JSON.stringify(r));
   ok('and says so in a line', r.line === 'Imported section 1: 1 lesson, 1 question. 1 item not found in your book, flagged where it is shown.', r.line);
-  ok('a clean import says everything checked was found', /Everything checked was found in your book\./.test(P.report(run(honest())).line));
+  ok('a clean import asks the reader to compare generated explanations', /Source checks passed; compare generated explanations/.test(P.report(run(honest())).line));
   ok('nothing imported is said as nothing', P.report(run(Object.assign(honest(), { title: 'Nope' }))).line === 'Nothing was imported.');
 }
 
@@ -357,5 +357,11 @@ head('tables written with Claude: every cell held to the book, a bad one left ou
      /lesson\.tables: 0 to 2 tables/.test(pr) && /At most 12 nodes/.test(pr) && /HOW TO DESIGN IT/.test(pr) && /BEFORE YOU REPLY/.test(pr) && /TABLE/.test(pr));
 }
 
+{
+  const checked = run(withQ(q => { q.options[q.answer] = '45 mmHg'; }));
+  const rec = P.merge(null, checked, DOC, 0), safe = P.safeSection(rec, 0, DOC);
+  ok('flagged pack questions are quarantined from drills and exams', safe.quiz.questions.length === 0 && P.exam(P.safeRecord(rec, DOC), { questions: [] }, [], 5).questions.length === 0);
+  ok('source memory facts cannot contain a generated changed threshold', safe.lesson.sourceMemory.points.every(p => !p.flag && !/45/.test(p.text)));
+}
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

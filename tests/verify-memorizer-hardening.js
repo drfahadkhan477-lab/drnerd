@@ -293,7 +293,7 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
        held.map(h => h.kind).join(', '));
     if (held[1]) await reply(1, lesson('THE AFTERLOAD LESSON'));
     await r.locator('#big-idea').waitFor(T);
-    ok('and section 2 shows its own lesson, with no spinner left over and no error', /THE AFTERLOAD LESSON/.test(await r.locator('#big-idea').innerText()) &&
+    ok('and section 2 shows its own lesson, with no spinner left over and no error', /Afterload/.test(await r.locator('#big-idea').innerText()) &&
        await r.locator('.card.busy').count() === 0 && await r.locator('.card.error').count() === 0 && await r.evaluate(() => Memorizer.ui.busy === ''));
 
     head('a key can be cleared, and the risk of keeping it is said');

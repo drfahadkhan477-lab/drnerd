@@ -1393,7 +1393,7 @@ function valueIn(text) {
   return null;
 }
 function recallCards(cluster, lessonValue) {
-  var L = lessonValue || {}, out = [];
+  var L = lessonValue && lessonValue.sourceMemory || lessonValue || {}, out = [];
   var norm = function (t) { return String(t).replace(/\s+/g, ' ').replace(/[.\s]+$/, '').toLowerCase(); };
   var points = (L.points || []).map(function (p) { return p.text; });
   if (L.overview && points.map(norm).indexOf(norm(L.overview)) === -1) {

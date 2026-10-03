@@ -46,6 +46,21 @@ function numbersIn(text) {
 function entryIds(text) { return Ask.entriesIn(text).map(function (e) { return e.kind + ':' + e.id; }); }
 function uniq(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); }
 
+/* These checks catch common contradictions; they are not entailment proof. */
+function normal(text) { return String(text || '').toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim(); }
+function polarity(text) { return /\b(?:not|no|never|without|except|false|incorrect)\b|n['’]t\b/i.test(text); }
+function relationError(text, sources) {
+  var src = [].concat(sources).join(' '), ns = normal(src);
+  if (polarity(text) && !polarity(src) && !/\b(?:correct|right|wrong) answer\b/i.test(text)) return 'negation not supported by the passage';
+  var pairs = [['above|greater than|more than|over', 'below|less than|under'], ['increase[sd]?|raise[sd]?|higher', 'decrease[sd]?|reduce[sd]?|lower[sd]?']];
+  for (var i = 0; i < pairs.length; i++) for (var k = 0; k < 2; k++) {
+    var re = new RegExp('\\b(?:' + pairs[i][k] + ')\\b', 'i'), opposite = new RegExp('\\b(?:' + pairs[i][1-k] + ')\\b', 'i');
+    if (re.test(text) && !re.test(src) && opposite.test(src)) return 'a direction reversed from the passage';
+  }
+  var quantities = String(text).match(/\d+(?:\.\d+)?\s*(?:mmHg|mL|mg|mcg|mmol\/L|mEq\/L|bpm|%|cm2)(?![A-Za-z])/gi) || [];
+  if (quantities.some(function (q) { return ns.replace(/\s+/g, '').indexOf(normal(q).replace(/\s+/g, '')) === -1; })) return 'a quantity or unit not in the passage';
+  return '';
+}
 /* One claim against its sources. Returns '' when it may be shown, else why
    not — the reason is kept for the tests and for a count on screen. */
 function claimError(text, sources, share) {
@@ -53,6 +68,7 @@ function claimError(text, sources, share) {
   var have = numbersIn(src);
   var newNum = numbersIn(text).filter(function (n) { return have.indexOf(n) === -1; });
   if (newNum.length) return 'a number not in the book: ' + newNum[0];
+  var relation = relationError(text, sources); if (relation) return relation;
   var named = entryIds(src);
   var newName = uniq(entryIds(text)).filter(function (id) { return named.indexOf(id) === -1; });
   if (newName.length) return 'names something the book passage does not: ' + newName[0].split(':')[1];
@@ -145,6 +161,48 @@ function question(q, sentences) {
   return { q: { question: q.question, quote: q.quote || '', options: q.options.slice(), answer: q.answer, explain: best.s.text, page: best.s.page, by: 'ai' }, why: '' };
 }
 
+/* Grading is an extractive completion, not an AI judgment about a vignette.
+   The filled quote must occur literally in the source at the cited page. */
+function sourcesOf(c) {
+  return (c.segments || []).filter(function (s) { return !s.heading; }).reduce(function (out, s) { return out.concat(sentencesOf(s.text).map(function (text) { return { text: text, page: s.page }; })); }, []);
+}
+function gradeQuestion(q, sentences) {
+  var err = Prompts.mcqError(q, 'q'); if (err || q.flag) return { q: null, why: err || q.flag };
+  var candidates = sentences.filter(function (s) { return q.page == null || s.page === q.page; });
+  if (!candidates.length) return { q: null, why: 'the cited page is not in this section' };
+  var right = String(q.options[q.answer]).trim(), filled = q.quote && normal(q.quote.replace(/_{3,}/g, right));
+  var hit = candidates.filter(function (s) {
+    var text = normal(s.text);
+    if (filled && /_{3,}/.test(q.quote)) return text.indexOf(filled) !== -1;
+    var at = text.indexOf(normal(right));
+    return at !== -1 && !/[a-z0-9]/i.test(text.charAt(at - 1)) && !/[a-z0-9]/i.test(text.charAt(at + right.length)) && !relationError(q.question, [s.text]);
+  })[0];
+  if (!hit) return { q: null, why: 'no exact source evidence for the answer' };
+  var quoted = filled && /_{3,}/.test(q.quote) ? q.quote : hit.text;
+  if (!/_{3,}/.test(quoted)) {
+    var at = normal(quoted).indexOf(normal(right));
+    // Sentence whitespace is already normalized; case changes preserve offsets.
+    quoted = quoted.slice(0, at) + '_____' + quoted.slice(at + right.length);
+  }
+  var filledQuote = normal(quoted.replace(/_{3,}/g, right));
+  if (normal(hit.text).indexOf(filledQuote) === -1 || (quoted.match(/_{3,}/g) || []).length !== 1) return { q: null, why: 'the completed quote is not in the source' };
+  if (q.options.some(function (o, i) { return i !== q.answer && candidates.some(function (s) { return normal(s.text).indexOf(normal(quoted.replace(/_{3,}/g, o))) !== -1; }); })) return { q: null, why: 'another option also completes the source' };
+  var out = Object.assign({}, q, { by: q.by || 'ai', quote: quoted, page: hit.page, explain: hit.text, sourceCompletion: true });
+  return { q: out, why: '' };
+}
+/* A remote lesson contributes only verbatim, correctly cited facts. Creative
+   model notes do not become the authoritative points memorised or graded. */
+function sourceLesson(v, c, fallback) {
+  var sents = sourcesOf(c);
+  function found(p) { return sents.some(function (s) { return s.page === p.page && normal(s.text).indexOf(normal(p.text)) !== -1; }); }
+  if (v.points.concat(v.numbers).some(function (p) { return !sents.some(function (s) { return s.page === p.page; }); })) throw new Error('The lesson cites a page outside this section.');
+  var points = v.points.filter(found), nums = v.numbers.filter(found);
+  return Object.assign({}, fallback, { points: points.length ? points : fallback.points, numbers: nums.length ? nums : fallback.numbers, by: 'source',
+    mnemonics: v.mnemonics.filter(function (m) { return m.words.every(function (w) { return normal(c.text).indexOf(normal(w)) !== -1; }); }),
+    analogies: v.analogies.filter(function (a) { return !analogyError(a.text, c.text); }),
+    overview: sents.some(function (s) { return normal(s.text).indexOf(normal(v.overview)) !== -1; }) ? v.overview : fallback.overview });
+}
+
 /* ── the study pack as the model's notes ────────────────────────────────────
    CLAUDE WRITES, THE DEVICE TUTORS. A pack (pack.js) is Claude's work on
    the whole chapter, checked against the book when it was imported. The
@@ -201,6 +259,7 @@ function variant(q, stem, sources) {
   if (s.length > 400) return { q: null, why: 'too long for a question' };
   var norm = function (t) { return String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
   if (norm(s) === norm(q.question)) return { q: null, why: 'the same words as the original' };
+  if (NEGATION.test(s) !== NEGATION.test(q.question)) return { q: null, why: NEGATION.test(q.question) ? 'it dropped the original’s \"not\"' : 'it added a \"not\" the original does not have' };
   var err = claimError(s, [q.question, q.explain].concat(sources || []), 0);
   if (err) return { q: null, why: 'the question ' + err };
   if (NEGATION.test(s) !== NEGATION.test(q.question)) return { q: null, why: NEGATION.test(q.question) ? 'it dropped the original’s "not"' : 'it added a "not" the original does not have' };
@@ -216,7 +275,7 @@ function variant(q, stem, sources) {
   var n = q.options.length, k = rotation(s, n), map = [], options = [], why = [];
   for (var i = 0; i < n; i++) { map[(i + k) % n] = i; }
   map.forEach(function (from, at) { options[at] = q.options[from]; why[at] = (q.why || [])[from] || ''; });
-  return { q: { question: s, quote: '', options: options, answer: (q.answer + k) % n, explain: q.explain, page: q.page,
+  return { q: { question: s, quote: q.sourceCompletion ? q.quote : '', sourceCompletion: !!q.sourceCompletion, options: options, answer: (q.answer + k) % n, explain: q.explain, page: q.page,
                 why: q.why && q.why.length === n ? why : [], trap: q.trap || '', flag: q.flag || '', by: q.by, reworded: true, map: map }, why: '' };
 }
 
@@ -266,7 +325,7 @@ function followUp(question, answer, notes, sources, asked) {
   return { q: { question: qs, answer: an }, why: '' };
 }
 
-var MemGround = { SUMMARY_SHARE: SUMMARY_SHARE, numbersIn: numbersIn, claimError: claimError, sentencesOf: sentencesOf,
+var MemGround = { SUMMARY_SHARE: SUMMARY_SHARE, numbersIn: numbersIn, normal: normal, relationError: relationError, sourcesOf: sourcesOf, gradeQuestion: gradeQuestion, sourceLesson: sourceLesson, claimError: claimError, sentencesOf: sentencesOf,
                   summary: summary, plain: plain, analogyError: analogyError, question: question,
                   CONTEXT_WORDS: CONTEXT_WORDS, packContext: packContext, variant: variant, missExplain: missExplain, followUp: followUp };
 root.MemGround = MemGround;

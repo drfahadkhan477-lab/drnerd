@@ -77,7 +77,7 @@ function addCard(s, source, section, q, existingId) {
   var id = existingId || cardId(s, source, section, q);
   for (var i = 0; i < s.cards.length; i++) if (s.cards[i].id === id) return id;
   s.cards.push({ id: id, docId: s.docId, source: source, cluster: section, title: s.titles[section] || '',
-                 front: q.question, quote: q.quote || '', options: q.options.slice(), answer: q.answer,
+                 front: q.question, quote: q.quote || '', sourceCompletion: !!q.sourceCompletion, options: q.options.slice(), answer: q.answer,
                  back: q.options[q.answer], explain: q.explain || '', page: q.page, srs: null, errorType: '', confusedWith: '' });
   return id;
 }
