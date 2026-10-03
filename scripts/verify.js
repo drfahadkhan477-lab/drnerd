@@ -175,6 +175,9 @@ const SUITES = [
      read of the licensed paths and a commit leak-guard would refuse, before
      the tool runs, and lets a suite run on build/ through. */
   ['claude-guard', 'a Claude Code session cannot read the licensed export, or commit what leak-guard refuses'],
+  /* The subagents in .claude/agents: each well formed, on a cheap model, and
+     granted no tool that edits a file. */
+  ['claude-agents', 'the Claude Code subagents are cheap, explicit about their tools, and cannot edit files'],
   /* Guards the release gate's one job: never printing CERTIFIED over something
      it did not check. The permissive direction is the dangerous one here, so
      the checks are mostly about what it REFUSES to claim. */
@@ -387,7 +390,7 @@ const SUITES = [
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
    which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['claude-guard'];
+const PENDING_RECORD = ['claude-guard', 'claude-agents'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
