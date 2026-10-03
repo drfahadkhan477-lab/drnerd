@@ -517,7 +517,9 @@ jobs:
       # if something was skipped, which is not a pass. Its stdout is the
       # verdict and the failing step ids, and that is all this log will hold.
       - name: release-check
-        run: npm run release-check -- "$SYSTOLE_SOURCE"
+        # --silent: npm otherwise prints the expanded command, path and
+        # filename included, before release-check.js can sanitise anything.
+        run: npm run --silent release-check -- "$SYSTOLE_SOURCE"
 
       # Runs even when the gate failed, because "which step" is the one thing
       # worth having here and a failed run is when you want it. Still ids only:
