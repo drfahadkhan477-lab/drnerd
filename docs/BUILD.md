@@ -656,8 +656,10 @@ the defaults:
 Run it with `./run.sh` when you want it, or install the service to have it
 always on.
 
-On Windows the same two things apply, with `run.cmd` for `run.sh` and a
-Windows path in `.env`. One more thing must be true there: the job's steps run
+On Windows the same two things apply, with `run.cmd` for `run.sh`. Write the
+path in `.env` with forward slashes (`SYSTOLE_SOURCE=C:/Users/you/Downloads/export.html`):
+the first step tests it with bash's `[ -f ]`, and a backslash path is not a
+valid path to bash. One more thing must be true there: the job's steps run
 in bash, and the runner finds bash by searching `PATH`. Windows ships
 `C:\Windows\System32\bash.exe`, which is the WSL launcher and not a shell, so
 Git for Windows' `bin` directory has to come before `System32` in the `.path`
@@ -675,7 +677,7 @@ it bounds execution, not the wait for a runner.
 Once a dispatched run has gone green end to end, make it automatic by adding
 the push arm back to the job's `if:`:
 
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref == 'refs/heads/master'
 
 Do that when the runner is proven and not before. Checks that are usually
 yellow are checks people stop reading.

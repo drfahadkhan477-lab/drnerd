@@ -464,7 +464,11 @@ jobs:
     #
     # and it becomes automatic. Not before: an unregistered runner turning
     # master's checks yellow is how a team learns to ignore them.
-    if: github.event_name == 'workflow_dispatch'
+    #
+    # master only. A manual run can name any branch or tag, and checkout would
+    # then execute that ref here, beside the export. Anyone with write access
+    # could dispatch it. The ref check keeps "manual" from meaning "any code".
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
     # A queued run holding build/ while another starts is how two release
     # checks overwrite each other's artifacts. One at a time, and let the
     # running one finish rather than cancelling it mid-build.
