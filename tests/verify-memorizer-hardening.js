@@ -398,6 +398,22 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
   }
 
+  head('search indexing runs off the UI thread');
+  {
+    const r = await context('index-worker'); await r.goto(URL); await r.locator('#door-add').waitFor(T);
+    const got = await r.evaluate(async () => {
+      const docs = Array.from({ length: 120 }, (_, i) => ({ id: 'index-' + i, name: 'Synthetic ' + i,
+        clusters: [{ title: 'Preload', text: 'Preload changes ventricular filling.', segments: [{ page: 1, text: Array.from({ length: 20 }, (_, j) => 'Preload changes ventricular filling by ' + (j + 1) + ' percent.').join(' ') }] }] }));
+      const expected = JSON.stringify(MemAsk.build(docs));
+      const original = MemAsk.build; let ticks = 0;
+      MemAsk.build = () => { throw new Error('must use the worker'); };
+      const timer = setInterval(() => { ticks++; }, 1), start = performance.now();
+      try { const idx = await MemIndexer.build(docs); return { equal: JSON.stringify(idx) === expected, ticks, ms: Math.round(performance.now() - start), sentences: idx.sents.length }; }
+      finally { clearInterval(timer); MemAsk.build = original; }
+    });
+    ok('worker output matches the existing index and the page can process events', got.equal && got.ticks > 0 && got.sentences === 2400, JSON.stringify(got));
+  }
+
   head('multipart order is reviewable before importing');
   {
     const r = await context('part-preview'); await r.goto(URL); await r.locator('#door-add').waitFor(T);

@@ -3094,12 +3094,12 @@ function askIndex() {
   ui.askBusy = true; ui.askBusyText = ''; render();
   var docs = ui.docs;
   ui.askBuildFor = docs;
-  ui.askBuild = new Promise(function (resolve) {
-    setTimeout(function () {                      /* let "Indexing…" paint first */
-      ui.askIdx = Ask.build(docs); ui.askFor = docs; ui.askBusy = false; ui.askBuild = null;
-      resolve(ui.askIdx);
-    }, 30);
+  var work = root.MemIndexer.build(docs).then(function (idx) {
+    if (ui.askBuild === work) { ui.askBuild = null; ui.askBusy = false; }
+    if (ui.docs !== docs || ui.docsStale) return askIndex();
+    ui.askIdx = idx; ui.askFor = docs; return idx;
   });
+  ui.askBuild = work;
   return ui.askBuild;
 }
 function meaningOn() { return !!LLM.loadConfig().meaning; }

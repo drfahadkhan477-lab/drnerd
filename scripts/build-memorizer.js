@@ -70,6 +70,12 @@ function build(out) {
     throw new Error('a data-inline tag survived the build — its markup does not match the pattern this script inlines');
   }
 
+  const workerMarker = '/* @memorizer-index-worker */ null';
+  if (html.split(workerMarker).length !== 2) throw new Error('expected one Memorizer index-worker marker');
+  const worker = ['analogies', 'coach', 'vec', 'ask'].map(name => fs.readFileSync(path.join(SRC, 'src', name + '.js'), 'utf8')).join('\n') +
+    '\nonmessage = function(e) { try { postMessage({index: MemAsk.build(e.data)}); } catch(err) { postMessage({error: err.message}); } };';
+  html = html.replace(workerMarker, () => JSON.stringify(worker).replace(/<\/script/gi, '<\\/script'));
+
   /* The service worker only registers over http(s): opened as a file, the
      page is already on the device and there is nothing to install. */
   const pwa = [
