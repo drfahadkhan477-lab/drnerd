@@ -147,6 +147,12 @@ function engine(onStatus) {
       var started = T.createWorker([{ code: 'eng', data: new Uint8Array(r[2]) }], 1, {
         workerPath: blobUrl(new Blob([r[1], '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript'), workerBlobURL: false,
         cacheMethod: 'none', gzip: true,
+        /* tesseract.js 5.1.1 rejects a failed job AND, unless given this,
+           throws the same error on the page (src/createWorker.js, the
+           'reject' branch) — an uncaught error even when the rejection is
+           handled and the page read again. The rejection is the report:
+           recognize() below retries or passes it on, so nothing is lost. */
+        errorHandler: function () {},
       });
       return Promise.race([started, new Promise(function (_, reject) {
         setTimeout(function () { reject(new Error('the text reader did not start')); }, START_TIMEOUT_MS);

@@ -1121,7 +1121,7 @@ async function ocrRetry() {
   const READ = () => Promise.resolve({ data: { blocks: [{ paragraphs: [{ lines: [{ bbox: { y0: 0, y1: 24 }, words: [{ text: 'Preload', confidence: 95, bbox: { x0: 10, x1: 80, y0: 0, y1: 24 } }] }] }] }] } });
   /* plan: what each recognize() call does, in order, across every worker */
   function sandbox(plan) {
-    const made = [], log = { recognize: [] };
+    const made = [], log = { recognize: [], thrown: [] };
     const win = {
       Blob, URL, TextDecoder, Uint8Array, WebAssembly, Promise, Error, String,
       setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref(); return t; },
@@ -1130,9 +1130,17 @@ async function ocrRetry() {
       document: { createElement: () => ({ getContext: () => ({ fillRect() {}, drawImage() {} }) }) },
       Image: class { set src(_) { this.naturalWidth = 40; this.naturalHeight = 30; setTimeout(() => this.onload(), 0); } },
       MemPdf: { loadScript: () => Promise.resolve() },
-      Tesseract: { createWorker: () => {
+      /* as tesseract.js 5.1.1 does: a failed job is rejected, then handed to
+         options.errorHandler — or, without one, thrown on the page as well */
+      Tesseract: { createWorker: (langs, oem, opts) => {
         const n = made.length, w = { n, ended: false,
-          recognize: () => { log.recognize.push(n); return (plan.shift() || READ)(); },
+          recognize: () => {
+            log.recognize.push(n);
+            return (plan.shift() || READ)().catch(e => {
+              if (opts && typeof opts.errorHandler === 'function') opts.errorHandler(e.message); else log.thrown.push(e.message);
+              throw e.message;   // 5.1.1 rejects with the message string, not an Error
+            });
+          },
           terminate: () => { w.ended = true; return Promise.resolve(); } };
         made.push(w);
         return Promise.resolve(w);
@@ -1148,17 +1156,18 @@ async function ocrRetry() {
   {
     const t = sandbox([FAULT]);
     const r = await settle(t.O.readPage(t.page));
-    ok('a scanned page whose first reading faults is read again, and its words come back', !r.e && r.v.length === 1 && r.v[0].str === 'Preload ', r.e ? r.e.message : JSON.stringify(r.v));
+    ok('a scanned page whose first reading faults is read again, and its words come back', !r.e && r.v.length === 1 && r.v[0].str === 'Preload ', r.e ? String(r.e.message || r.e) : JSON.stringify(r.v));
     ok('by a fresh text reader, the faulted one ended', t.made.length === 2 && t.made[0].ended && !t.made[1].ended && t.log.recognize.join() === '0,1',
        JSON.stringify({ made: t.made.length, ended: t.made.map(w => w.ended), calls: t.log.recognize }));
     const r2 = await settle(t.O.readPage(t.page));
     ok('and the next page goes to the fresh reader, not the faulted one', !r2.e && t.made.length === 2 && t.log.recognize.join() === '0,1,1', JSON.stringify(t.log.recognize));
+    ok('and the fault is not also thrown on the page (the reader is given an error handler)', t.log.thrown.length === 0, JSON.stringify(t.log.thrown).slice(0, 80));
   }
   {
     const t = sandbox([FAULT, FAULT]);
     const r = await settle(t.O.readPage(t.page));
-    ok('a page that faults twice is reported with the fault, not read a third time', r.e && /RuntimeError: Out of bounds memory access/.test(r.e.message) && t.made.length === 2 && t.log.recognize.join() === '0,1',
-       JSON.stringify({ err: r.e && r.e.message.slice(0, 50), made: t.made.length, calls: t.log.recognize }));
+    ok('a page that faults twice is reported with the fault, not read a third time', r.e && /RuntimeError: Out of bounds memory access/.test(String(r.e.message || r.e)) && t.made.length === 2 && t.log.recognize.join() === '0,1',
+       JSON.stringify({ err: r.e && String(r.e.message || r.e).slice(0, 50), made: t.made.length, calls: t.log.recognize }));
     const r2 = await settle(t.O.readPage(t.page));
     ok('and the page after it starts a third reader, never reusing a faulted one', !r2.e && t.made.length === 3 && t.made[1].ended && t.log.recognize.join() === '0,1,2',
        JSON.stringify({ made: t.made.length, ended: t.made.map(w => w.ended), calls: t.log.recognize }));
@@ -1166,14 +1175,14 @@ async function ocrRetry() {
   {
     const t = sandbox([() => Promise.reject(new Error('the image could not be read'))]);
     const r = await settle(t.O.readPage(t.page));
-    ok('an error that is not a WebAssembly fault is reported at once, the reader kept', r.e && r.e.message === 'the image could not be read' && t.made.length === 1 && !t.made[0].ended && t.log.recognize.join() === '0',
-       JSON.stringify({ err: r.e && r.e.message, made: t.made.length, calls: t.log.recognize }));
+    ok('an error that is not a WebAssembly fault is reported at once, the reader kept', r.e && String(r.e.message || r.e) === 'the image could not be read' && t.made.length === 1 && !t.made[0].ended && t.log.recognize.join() === '0',
+       JSON.stringify({ err: r.e && String(r.e.message || r.e), made: t.made.length, calls: t.log.recognize }));
   }
   {
     const t = sandbox([FAULT]);
     const r = await settle(t.O.readImage(t.photo));
     ok('a photo of a page is retried the same way', !r.e && r.v.items.length === 1 && t.made.length === 2 && t.made[0].ended && t.log.recognize.join() === '0,1',
-       r.e ? r.e.message : JSON.stringify({ made: t.made.length, calls: t.log.recognize }));
+       r.e ? String(r.e.message || r.e) : JSON.stringify({ made: t.made.length, calls: t.log.recognize }));
   }
   const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
   ok('the fault is recognised in WebKit’s words, Chromium’s, and as a thrown RuntimeError, and nothing else is',
