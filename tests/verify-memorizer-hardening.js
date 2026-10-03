@@ -306,6 +306,26 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
        /removed/.test(await r.locator('#settings-status').innerText()));
   }
 
+  head('source corrections retire stale learning records');
+  {
+    const r = await context('correction');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Correction');
+    await r.locator('#learn-unit').waitFor(T); await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+    const old = await r.evaluate(async () => {
+      const u = Memorizer.ui, d = u.docRec; d.source = 'photo'; u.fixOpen = true;
+      u.state.per[0].quiz = { questions: [{ question: 'Old question', options: ['old', 'other', 'third', 'fourth'], answer: 0 }] }; u.state.per[0].memorized = true;
+      const card = { id: d.id + ':old', docId: d.id, cluster: 0, front: 'Old card', srs: null }; u.cards.push(card);
+      await MemStore.batch([{ store: 'docs', value: d }, { store: 'vectors', value: { id: d.id, vecs: [[1]] } }, { store: 'cards', value: card }]);
+      Memorizer.render(); return d.clusters[0].segments.find(s => !s.heading && !s.table).text;
+    });
+    await r.locator('#fix-text textarea').first().fill(old.replace('2 percent', '20 percent'));
+    await r.locator('#fix-text [data-fix]').first().click();
+    await r.waitForFunction(() => Memorizer.ui.docRec.revision === 1, null, T);
+    const got = await r.evaluate(async () => ({ quiz: Memorizer.ui.state.per[0].quiz, memorized: Memorizer.ui.state.per[0].memorized,
+      vec: await MemStore.get('vectors', Memorizer.ui.docId), old: (await MemStore.all('cards')).some(c => c.id.endsWith(':old')) }));
+    ok('old quiz, memorization, vector and review card are gone', !got.quiz && !got.memorized && !got.vec && !got.old, JSON.stringify(got));
+  }
+
   head('failed notes survive refresh and retry the exact write');
   {
     const r = await context('note-retry');

@@ -578,6 +578,18 @@ function dropSection(state, i) {
   else if (qs) qs.forEach(function (q) { if (typeof q.cluster === 'number') q.cluster = shift(q.cluster); });
   return s;
 }
+/* Changed source text retires derived questions, not unrelated progress. */
+function invalidateSection(state, i) {
+  var s = clone(state);
+  s.per[i] = freshSection();
+  s.cards = s.cards.filter(function (c) { return c.cluster !== i; });
+  Object.keys(s.weak || {}).forEach(function (id) { if (s.weak[id].cluster === i) delete s.weak[id]; });
+  s.exam = { questions: null, order: [], pos: 0, results: [], score: null };
+  s.review = null;
+  if (s.section === i) s.phase = 'teach';
+  else if (s.phase === 'exam' || s.phase === 'done' || s.phase === 'review') s.phase = 'unit';
+  return s;
+}
 /* The review cards kept on the device, for the same deletion: those of the
    deleted section to remove, the later ones renumbered. */
 function dropCards(cards, docId, i) {
@@ -594,7 +606,7 @@ var MemSession = {
   VERSION: VERSION, init: init, next: next, mastery: mastery, weakest: weakest, examSize: examSize, asked: asked,
   nextSection: nextSection, allDone: allDone, isDue: isDue, dueCards: dueCards, review: review,
   NOT_SURE: NOT_SURE, resumable: resumable, pending: pending, interleave: interleave, reviewItem: reviewItem, needsReteach: needsReteach,
-  closing: closing, closingText: closingText, missType: missType, dropSection: dropSection, dropCards: dropCards,
+  closing: closing, closingText: closingText, missType: missType, invalidateSection: invalidateSection, dropSection: dropSection, dropCards: dropCards,
 };
 root.MemSession = MemSession;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemSession;

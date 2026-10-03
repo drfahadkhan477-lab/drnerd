@@ -524,7 +524,11 @@ function correctSegment(doc, ci, si, text, at) {
   if (!seg || seg.heading || seg.table || !t || t === seg.text) return null;
   (d.corrections = d.corrections || []).push({ ci: ci, si: si, at: at || '', was: seg.text, now: t });
   seg.text = t; seg.corrected = true;
-  c.text = c.segments.filter(function (s) { return !s.table; }).map(function (s) { return s.text; }).join(' ');
+  c.text = c.segments.map(function (s) { return s.text; }).join('\n\n');
+  c.words = c.text.split(/\s+/).filter(Boolean).length;
+  c.gist = c.segments.filter(function (s) { return !s.heading && !s.table; }).map(function (s) { return s.text; }).join(' ').split(/\s+/).slice(0, 25).join(' ');
+  d.revision = (d.revision || 0) + 1;
+  c.revision = (c.revision || 0) + 1;
   return d;
 }
 /* How sure text recognition was of a page: the mean of its words'

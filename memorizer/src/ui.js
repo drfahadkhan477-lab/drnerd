@@ -1538,15 +1538,21 @@ function fixCard(c) {
     fixes.length ? h('p.muted', { id: 'fix-log' }, fixes.length + ' correction' + (fixes.length === 1 ? '' : 's') + ' in this section, each kept with what it said before.') : null);
 }
 function saveFix(ci, si, text) {
-  var fixed = Study.correctSegment(ui.docRec, ci, si, text, today());
+  var original = ui.docRec, id = original.id, fixed = Study.correctSegment(original, ci, si, text, today());
   if (!fixed) return;
-  ui.fixOpen = true;
-  Store.put('docs', fixed).then(function () {
-    ui.docRec = fixed; docsChanged();
-    ui.notice = 'Corrected. The lesson is taught again from your text.';
-    if (ui.state.phase !== 'teach') return;
-    return ask('Preparing the lesson…', 'lesson', [fixed.clusters[ci]], [fixed.clusters[ci]]).then(function (v) { return dispatch({ type: 'taught', value: v }); });
-  }).then(function () { return refresh(); }).then(render, function (e) { saveFailed(e); render(); });
+  var st = Session.invalidateSection(ui.state, ci), checks = Object.assign({}, ui.checks), pack = ui.pack && JSON.parse(JSON.stringify(ui.pack));
+  delete checks[Study.noteKey(id, ci)];
+  if (pack) delete pack.sections[ci];
+  var ops = [{ store: 'docs', value: fixed }, { store: 'sessions', value: { id: id, state: st, at: Date.now() } },
+    { store: 'vectors', id: id, delete: true }, { store: 'meta', value: { id: 'checks', recs: checks } }];
+  if (pack) ops.push({ store: 'packs', value: pack });
+  ui.cards.filter(function (x) { return x.docId === id && x.cluster === ci; }).forEach(function (x) { ops.push({ store: 'cards', id: x.id, delete: true }); });
+  ui.stepSeq++; ui.busy = ''; ui.fixOpen = true;
+  return Store.batch(ops).then(function () {
+    docsChanged(); ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} }; ui.askIdx = null; ui.secVecs = null;
+    if (ui.docId === id) { ui.docRec = fixed; ui.state = st; ui.pack = pack; ui.checks = checks; ui.notice = 'Corrected. Questions and review cards from the changed section were retired; study it again from the corrected text.'; }
+    return refresh();
+  }).then(render, function (e) { saveFailed(e); render(); });
 }
 /* YOUR NOTES: kept per section as yours, never mixed with the book's words. */
 function notesFor(docId, ci) { return ui.notes[Study.noteKey(docId, ci)] || null; }
@@ -3026,7 +3032,7 @@ function sectionVectors(idx) {
   return Promise.all(ui.docs.map(function (d) { return Store.get('vectors', d.id); })).then(function (recs) {
     ui.docs.forEach(function (d, k) {
       var r = recs[k];
-      if (r && r.model === LLM.EMBED.id && r.vecs.length === d.clusters.length) byDoc[d.id] = r.vecs;
+      if (r && r.model === LLM.EMBED.id && r.revision === (d.revision || 0) && r.vecs.length === d.clusters.length) byDoc[d.id] = r.vecs;
       else need.push(d);
     });
     var total = need.reduce(function (n, d) { return n + d.clusters.length; }, 0), done = 0;
@@ -3037,7 +3043,7 @@ function sectionVectors(idx) {
         });
       }).then(function (vecs) {
         done += vecs.length; byDoc[d.id] = vecs;
-        return Store.put('vectors', { id: d.id, model: LLM.EMBED.id, vecs: vecs });
+        return Store.put('vectors', { id: d.id, model: LLM.EMBED.id, revision: d.revision || 0, vecs: vecs });
       });
     }, Promise.resolve());
   }).then(function () {
