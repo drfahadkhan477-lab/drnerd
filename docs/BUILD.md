@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
-node scripts/verify.js --pwa                           # → 5258 + 134 checks
+node scripts/verify.js --pwa                           # → 5432 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -61,8 +61,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 118
-  run normally — it is 35 of the 5258 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 123
+  run normally — it is 35 of the 5432 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -264,6 +264,26 @@ exists to prevent, arriving through the convenience alias.
 
 ### The suites on their own
 
+Without the export, `npm test` runs every suite CI runs: the pure-Node ones,
+then the browser suites that make their own documents (the Memorizer and the
+code-only deploy's import). It reads that list from
+`.github/workflows/verify.yml`, so the two cannot drift apart.
+`npm run test:pure` skips the browser suites and says which ones it skipped.
+`SYSTOLE_ENGINE=webkit npm test` runs the browser half on WebKit. The full
+registry below needs your build, and is `npm run test:private`.
+
+`npm run doctor` says whether this machine is ready (Node, the test tools,
+the browsers, the git hooks, whether the export is here) and the command that
+fixes each gap. `npm run clean` removes what any clone can make again;
+`npm run clean:private -- --yes` also removes what is built from the export
+(build/, dist/, and what extract-content writes into content/). Neither ever
+touches source/ or your notes in content/refs.
+
+`--tag pure|browser|build|serial` selects suites by kind, read from each
+suite's code (`node scripts/verify.js --list` shows them).
+`--report-json <file>` writes the results as data: suite, tags, status,
+counts and time, and no line of suite output.
+
 ```bash
 node scripts/verify.js                       # everything, ~4 min
 node scripts/verify.js --only physio,theme   # just these
@@ -271,7 +291,7 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
-Across 119 suites, 5258 checks, plus 134 more on the split build. Those numbers are
+Across 124 suites, 5432 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
 full green run and `verify-stats` fails if this sentence, the README or the CI
 header disagrees with it. They used to be maintained from memory in three files,
@@ -571,7 +591,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        119 suites · 69 need no browser · + pwa
+tests/        124 suites · 73 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

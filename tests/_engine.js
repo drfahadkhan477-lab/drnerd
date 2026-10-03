@@ -84,6 +84,19 @@ async function cpuThrottle(page, rate) {
   return true;
 }
 
+/* -- clipboard permissions, which each engine names differently -------------
+   Chromium takes 'clipboard-read' and 'clipboard-write'. Playwright's WebKit
+   knows only 'clipboard-read' (a write from a click needs no grant there),
+   and refuses the whole context on a name it does not know: "Unknown
+   permission: clipboard-write". verify-memorizer asked for both, and the
+   first WebKit run in CI died 363 checks in on that one line. Firefox knows
+   neither, so it gets none and its readText() check reports what it reads. */
+function clipboardPermissions(name = engineName()) {
+  if (name === 'chromium') return ['clipboard-read', 'clipboard-write'];
+  if (name === 'webkit') return ['clipboard-read'];
+  return [];
+}
+
 /* Resolves to a heap size in bytes, or null where the engine cannot say.
    NULL IS THE POINT. performance.memory is also Chromium-only, so a caller
    that read it directly on WebKit got `undefined`, coalesced it to 0, and
@@ -149,6 +162,24 @@ function isEngineNoise(text, name = engineName()) {
   return false;
 }
 
+/* AND ONE PAGE ERROR, BY ITS STACK, NOT ITS WORDS. WebKit reports a Worker
+   it would not start from a blob: URL — "Cannot load blob:… due to access
+   control checks" — as an uncaught page error, even though pdf.js's
+   PDFWorker._initialize wraps `new Worker` in try/catch and falls back to
+   parsing on the main thread. Seen in verify-memorizer once per WebKit run,
+   on the first PDF opened after a page.reload(); every PDF check in that
+   suite still passes, because the fallback is real. Chromium never raises it.
+
+   Matched on all three: the engine, that exact sentence as the stack's first
+   line, and a PDFWorker frame. The same words from anywhere else, or on
+   Chromium, are still an error. It is not dropped either: watch() files it
+   as an event, so a run that saw it says so. */
+function isEngineNoiseError(err, name = engineName()) {
+  if (name === 'chromium' || !err) return false;
+  const stack = String(err.stack || '');
+  return /^Cannot load blob:\S+ due to access control checks\.$/.test(stack.split('\n')[0]) && /\bPDFWorker\b/.test(stack);
+}
+
 function launch(opts = {}) {
   const name = engineName();
   const playwright = require('playwright');
@@ -187,4 +218,4 @@ async function routablePage(browser, opts = {}) {
 }
 
 module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch, routablePage,
-                   cpuThrottle, heapUsedBytes, isEngineNoise };
+                   cpuThrottle, heapUsedBytes, isEngineNoise, isEngineNoiseError, clipboardPermissions };

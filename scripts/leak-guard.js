@@ -167,8 +167,10 @@ function staged() {
 }
 function tracked() {
   try {
-    return execFileSync('git', ['ls-files'], { encoding: 'utf8' })
-      .split('\n').map(s => s.trim()).filter(Boolean);
+    return execFileSync('git', ['ls-files', '--stage'], { encoding: 'utf8' })
+      .split('\n').map(s => s.trim()).filter(Boolean)
+      .filter(line => !line.startsWith('160000')) // skip submodules (mode 160000)
+      .map(line => line.split('\t')[1]); // extract path from "mode hash stage<tab>path" format
   } catch (_) { return []; }
 }
 

@@ -215,17 +215,25 @@ function loadLib() {
   return libP;
 }
 
-var embedder = null;
+var embedder = null, embedEngine = null, embedStarting = null;
 /* Tests hand in a function from texts to vectors. */
 function useEmbedder(fn) { embedder = fn; }
 function embedReady() { return !!embedder; }
 function startEmbed(onProgress) {
   if (embedder) return Promise.resolve();
-  return persist().then(loadLib).then(function (lib) {
+  if (embedStarting) return embedStarting;
+  embedStarting = persist().then(loadLib).then(function (lib) {
     return create(lib, EMBED.id, onProgress);
   }).then(function (e) {
+    embedEngine = e;
     embedder = function (texts) { return e.embeddings.create({ input: texts }).then(function (r) { return r.data.map(function (d) { return d.embedding; }); }); };
   });
+  embedStarting.then(function () { embedStarting = null; }, function () { embedStarting = null; });
+  return embedStarting;
+}
+function stopEmbed() {
+  var pending = embedStarting;
+  return Promise.resolve(pending).catch(function () {}).then(function () { var old = embedEngine; embedder = null; embedEngine = null; return unload(old); });
 }
 /* Texts → vectors, a batch at a time, each text cut to the model's reach. */
 function embed(texts, onBatch) {
@@ -325,10 +333,11 @@ function create(lib, id, onProgress) {
   /* a model that is not the one the manifest names: not used, not kept (a
      retry would only load the same cached file again) */
   function refuse(e, what) {
-    return Promise.resolve(e && e.unload && e.unload()).catch(function () {}).then(function () {
-      return clearModel(id).catch(function () {});
-    }).then(function () {
-      var err = new Error('the downloaded model does not match the one Memorizer expects: ' + what + '. It has been deleted and was not used');
+    return unload(e).catch(function () {}).then(function () {
+      return deleteFiles(lib, id).then(function () { return 'It has been deleted and was not used'; },
+        function (d) { return 'It was not used, and could not be deleted (' + d.message + '); delete it in Settings'; });
+    }).then(function (done) {
+      var err = new Error('the downloaded model does not match the one Memorizer expects: ' + what + '. ' + done);
       err.integrity = true;
       throw err;
     });
@@ -358,41 +367,60 @@ function create(lib, id, onProgress) {
   return attempt(0);
 }
 
-var engine = null, engineModel = null;
+var engine = null, engineModel = null, engineStarting = null, startingModel = null, generation = 0;
+function unload(e) { return e && e.unload ? Promise.resolve().then(function () { return e.unload(); }) : Promise.resolve(); }
+function stop() { generation++; var old = engine; engine = null; engineModel = null; return unload(old); }
 /* Tests hand in a stand-in with the same chat.completions.create(). */
 function useEngine(e, model) { engine = e; engineModel = model || 'stub'; }
-function ready() { return !!engine; }
+function ready(model) { return !!engine && (!model || engineModel === model || engineModel === 'stub'); }
 function start(model, onProgress) {
-  if (engine && engineModel === model) return Promise.resolve(engine);
-  var id = model;
-  return persist().then(gpu).then(function (g) {
+  if (ready(model)) return Promise.resolve(engine);
+  if (engineStarting) return startingModel === model ? engineStarting : engineStarting.catch(function () {}).then(function () { return start(model, onProgress); });
+  var id = model, gen = generation, old = engine;
+  engine = null; engineModel = null; startingModel = model;
+  var pending = unload(old).then(persist).then(gpu).then(function (g) {
     id = variantFor(model, g.f16);
     if (id !== model && onProgress) onProgress(0, 'this browser has no 16-bit GPU maths, so the 32-bit build of the same model is used');
     return loadLib();
   }).then(function (lib) { return create(lib, id, onProgress); })
-    .then(function (e) { engine = e; engineModel = model; return e; });
+    .then(function (e) {
+      if (gen !== generation) return unload(e).then(function () { throw new Error('model start cancelled'); });
+      engine = e; engineModel = model; return e;
+    });
+  engineStarting = pending;
+  pending.then(function () { if (engineStarting === pending) engineStarting = null; }, function () { if (engineStarting === pending) engineStarting = null; });
+  return pending;
 }
 /* Delete a model's downloaded files — both builds, both stores — so a
    broken download starts clean. */
 function clearModel(model) {
   return loadLib().then(function (lib) {
-    var jobs = [];
-    [model, variantFor(model, false)].forEach(function (id) {
-      ['cache', 'indexeddb'].forEach(function (b) {
-        jobs.push(Promise.resolve().then(function () {
-          try { ls().removeItem(VERIFIED_KEY + id); } catch (_) {}
-          return lib.deleteModelAllInfoInCache(id, pinnedConfig(lib.prebuiltAppConfig, b));
-        }).catch(function () {}));
-        /* and a copy from before the pin, at the engine's own addresses:
-           nothing loads it any more, and it holds the same gigabytes */
-        jobs.push(Promise.resolve().then(function () {
-          return lib.deleteModelAllInfoInCache(id, Object.assign({}, lib.prebuiltAppConfig || {}, { cacheBackend: b }));
-        }).catch(function () {}));
-      });
+    var pending = engineStarting, matching = engineModel === model || startingModel === model;
+    return (matching ? stop().then(function () { return pending; }).catch(function () {}) : Promise.resolve()).then(function () {
+      return deleteFiles(lib, model);
     });
-    engine = null; engineModel = null;
-    return Promise.all(jobs).then(function () { return true; });
   });
+}
+/* The files themselves, both builds, both stores. A copy at the pinned
+   addresses that cannot be deleted is said so; a copy from before the pin,
+   at the engine's own addresses, is removed if it is there (nothing loads
+   it any more, and it holds the same gigabytes) and is not an error if it
+   is not. Called by clearModel once nothing is starting, and directly by a
+   refusal inside a start (create), which clearModel would wait on. */
+function deleteFiles(lib, model) {
+  var jobs = [];
+  [model, variantFor(model, false)].forEach(function (id) {
+    try { ls().removeItem(VERIFIED_KEY + id); } catch (_) {}
+    ['cache', 'indexeddb'].forEach(function (b) {
+      jobs.push(Promise.resolve().then(function () {
+        return lib.deleteModelAllInfoInCache(id, pinnedConfig(lib.prebuiltAppConfig, b));
+      }).catch(function (e) { throw new Error('Could not delete ' + id + ' from ' + b + ': ' + ((e && e.message) || e)); }));
+      jobs.push(Promise.resolve().then(function () {
+        return lib.deleteModelAllInfoInCache(id, Object.assign({}, lib.prebuiltAppConfig || {}, { cacheBackend: b }));
+      }).catch(function () {}));
+    });
+  });
+  return Promise.all(jobs).then(function () { return true; });
 }
 
 function stripThinking(t) { return String(t).replace(/<think>[\s\S]*?(?:<\/think>|$)/g, '').trim(); }
@@ -489,7 +517,7 @@ function parseQuestions(text) {
   } catch (_) { return []; }
 }
 
-var MemLLM = { pinnedConfig: pinnedConfig, verifyFiles: verifyFiles, verify: verify, storedFiles: storedFiles, useVerify: useVerify, modelSource: modelSource, WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
+var MemLLM = { pinnedConfig: pinnedConfig, verifyFiles: verifyFiles, verify: verify, storedFiles: storedFiles, useVerify: useVerify, modelSource: modelSource, stop: stop, stopEmbed: stopEmbed, WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
                loadLib: loadLib, useEngine: useEngine, ready: ready, start: start, chat: chat, SYSTEM: SYSTEM,
                summaryPrompt: summaryPrompt, plainPrompt: plainPrompt, analogyPrompt: analogyPrompt, questionsPrompt: questionsPrompt,
                QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions, stripThinking: stripThinking,

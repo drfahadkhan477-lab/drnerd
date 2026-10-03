@@ -74,20 +74,36 @@ function notesFromFile(file) {
   });
 }
 
-if (!fs.existsSync(REFS_DIR)) {
-  console.error(`refs: ${path.relative(process.cwd(), REFS_DIR)} does not exist — nothing to seed.`);
-  process.exit(1);
-}
-const files = fs.readdirSync(REFS_DIR)
-  .filter(f => f.endsWith('.md') && f.toLowerCase() !== 'readme.md')
-  .sort();
-if (!files.length) {
-  console.error(`refs: no .md files in ${path.relative(process.cwd(), REFS_DIR)} — nothing to seed.`);
-  process.exit(1);
+function findMarkdownFiles(dir) {
+  const mdFiles = [];
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        mdFiles.push(...findMarkdownFiles(fullPath));
+      } else if (entry.isFile() && entry.name.endsWith('.md') && entry.name.toLowerCase() !== 'readme.md') {
+        mdFiles.push(fullPath);
+      }
+    }
+  } catch (_) {}
+  return mdFiles;
 }
 
-const notes = [];
-for (const f of files) notes.push(...notesFromFile(path.join(REFS_DIR, f)));
+let notes = [];
+let files = [];
+
+if (!fs.existsSync(REFS_DIR)) {
+  console.error(`refs: ${path.relative(process.cwd(), REFS_DIR)} does not exist — nothing to seed.`);
+  // Continue with empty seed to keep patch chain intact
+} else {
+  files = findMarkdownFiles(REFS_DIR);
+  if (!files.length) {
+    console.error(`refs: no .md files in ${path.relative(process.cwd(), REFS_DIR)} — nothing to seed.`);
+  } else {
+    for (const f of files) notes.push(...notesFromFile(f));
+  }
+}
 
 /* A note the importer would reject is a note that will never be retrieved.
    Fail loudly here rather than shipping dead weight. */

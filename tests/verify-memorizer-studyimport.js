@@ -228,7 +228,7 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
       label: (document.getElementById('pack-label') || {}).textContent || '' }));
     ok('the lesson shows the diagram, as an image', /^data:image\/svg\+xml/.test(lv.src));
     ok('and the flowchart from the file, drawn', lv.flow);
-    ok('and says the lesson is from the study file, checked against its text', /From your study file · checked against its text/.test(lv.label), lv.label);
+    ok('and says the lesson is from the study file, to compare with its text', /From your study file · compare with the file’s text/.test(lv.label), lv.label);
     await ctx.close();
 
     head('your misses, after a real drill');

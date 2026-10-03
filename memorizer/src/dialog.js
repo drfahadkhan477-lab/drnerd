@@ -16,6 +16,13 @@
        itself often (a figure finishing, a save landing), so "what opened
        it" may have been replaced by an identical new button; that one, found
        by its id or its label, gets focus instead.
+     · and "what opened it" is the control that was pressed, even where a
+       click does not focus it. Safari (so every iPad) and WebKit do not
+       focus a button on click, so document.activeElement was <body> and
+       focus fell to the top of the document on close: found by a WebKit run
+       of verify-memorizer on the owner's laptop. The last pressed control is
+       noted on the way down (a capture listener) and used when nothing
+       else has focus.
 
    One dialog at a time: opening a second closes the first.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -25,6 +32,11 @@
 var doc = root.document;
 var FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 var openNow = null;
+var pressed = null;
+if (doc && doc.addEventListener) doc.addEventListener('click', function (e) {
+  var t = e.target && e.target.closest ? e.target.closest(FOCUSABLE) : null;
+  pressed = t || null;
+}, true);
 
 function focusables(el) {
   return Array.prototype.slice.call(el.querySelectorAll(FOCUSABLE)).filter(function (x) { return !x.hidden; });
@@ -49,6 +61,8 @@ function open(el, app, opts) {
   opts = opts || {};
   if (openNow) openNow();
   var opener = doc.activeElement;
+  if ((!opener || opener === doc.body) && pressed && pressed.isConnected) opener = pressed;
+  pressed = null;
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
   if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');

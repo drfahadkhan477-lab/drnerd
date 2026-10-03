@@ -227,5 +227,13 @@ ok('.html is read as HTML, .md as markdown', SI.detectFormat('a.html', '') === '
 ok('with no telling name, a page that starts as HTML is HTML', SI.detectFormat('a', '<!DOCTYPE html><html>') === 'html' && SI.detectFormat('a', '# Title') === 'markdown');
 ok('a file with no study text is refused, not made an empty unit', SI.parseStudyFile('---\nunit: x\n---\n', 'x.md').success === false);
 
+head('a section deleted: its diagrams with it, later ones moved up');
+const Study = require(path.join(SRC, 'study.js'));
+const withDiagrams = { clusters: [{ text: 'a' }, { text: 'b' }, { text: 'c' }], diagrams: [{ index: 0, svg: 'A' }, { index: 1, svg: 'B' }, { index: 2, svg: 'C' }] };
+const cut = Study.dropDocSection(withDiagrams, 1);
+ok('the dropped section\u2019s diagram goes, and the one after it now belongs to the section that moved up',
+   JSON.stringify(cut.diagrams) === JSON.stringify([{ index: 0, svg: 'A' }, { index: 1, svg: 'C' }]) && cut.clusters.length === 2, JSON.stringify(cut.diagrams));
+ok('and the unit it was given is left as it was', withDiagrams.diagrams.length === 3 && withDiagrams.diagrams[2].index === 2);
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

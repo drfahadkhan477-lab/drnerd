@@ -21,8 +21,9 @@ the bank you are,
 and a row of glass doors to everything else.
 
 ```bash
+npm test                                            # no export needed: every suite CI runs
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 5258 checks, 119 suites
+node scripts/verify.js                              # 5432 checks, 124 suites
 node scripts/verify.js --pwa                        # + 134 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
@@ -33,16 +34,16 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 5258 + 134 checks above — read it as 3619, not 5392.**
+**That badge is not the 5432 + 134 checks above — read it as 3789, not 5566.**
 CI has no way to build the app at all: a real build needs the licensed
 export, which is deliberately never committed here and never will be, on
 GitHub or anywhere else that isn't your own devices. What CI *can* and does
 run on every push, with no browser and no source file: every script parses,
 the patch chain and the test-suite list both still list without crashing,
 `scripts/build.js` still refuses to run and explains why when no source is
-present, and the 69 suites that need neither a browser nor a build all stay
+present, and the 73 suites that need neither a browser nor a build all stay
 green. See [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for
-the exact scope and why the other 1773 checks can't run here.
+the exact scope and why the other 1777 checks can't run here.
 
 ### The device this is for
 
@@ -80,6 +81,22 @@ in the split build, one per unit).
 python3 tools/figure-review.py                      # → build/figure-review.html
 python3 tools/trim-figure.py --apply-crops content/refs-images
 ```
+
+The Braunwald units in the private `content/refs-repo` submodule are baked the
+same way, each with its reviewed crop record (`tools/figure-crops.<unit>.json`).
+`content/refs` is a real folder that add-unit writes into, not a symlink into
+the submodule:
+
+```bash
+git submodule update --init content/refs-repo
+python3 tools/add-unit.py --unit hf --quality 70 --crops tools/figure-crops.hf.json \
+  --notes content/refs-repo/references/heart-failure --figures content/refs-repo/references/heart-failure/visuals
+python3 tools/add-unit.py --unit ischemia --crops tools/figure-crops.ischemia.json \
+  --notes content/refs-repo/references/ischemia --figures content/refs-repo/references/ischemia/visuals
+```
+
+`--quality 70` on hf keeps `content/refs-images/hf.json` under the host's 25 MB
+per-file limit; add-unit prints the projected size of each unit's file.
 
 **Why a person decides.** Every automatic cropper tried on this corpus has been
 wrong in a way that destroys information: the colour-based one cut TABLE 56.5

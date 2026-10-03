@@ -208,5 +208,9 @@ head('chapters: every page in exactly one, the best method chosen');
   ok('bookmarks are preferred when they are usable', B.pick({ outline: B.chaptersOf([{ title: 'a', start: 1 }, { title: 'b', start: 10 }, { title: 'c', start: 20 }], 30), numbered: cands.numbered, size: [], pages: [] }, 30) === 'outline');
 }
 
+ok('edition numbers cannot reorder trailing page ranges', JSON.stringify(B.orderParts(['Braunwald12_1-500.pdf', 'Braunwald12_1001-1500.pdf', 'Braunwald12_501-1000.pdf'])) === '[0,2,1]');
+ok('explicit part numbers take precedence over dates and editions', JSON.stringify(B.orderParts(['Text2026 part 10.pdf', 'Text2026 part 2.pdf', 'Text2026 part 1.pdf'])) === '[2,1,0]');
+ok('part preview identifies filename range gaps and overlaps', B.partWarnings(['Book12_1-500.pdf', 'Book12_600-1000.pdf', 'Book12_900-1500.pdf']).length === 2);
+ok('contiguous ranges produce no warnings', B.partWarnings(['Book12_1-500.pdf', 'Book12_501-1000.pdf']).length === 0);
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

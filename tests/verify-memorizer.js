@@ -34,8 +34,9 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, clipboardPermissions, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
+const { resolved } = require('./_render.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -381,7 +382,7 @@ const makeScanJpeg = (lines) => {
 
 /* ── the model, stubbed at the network ────────────────────────────────── */
 const EVIL = '<img src=x onerror="window.__pwned=1">';
-const Q_WHAT = { question: 'What is preload?', quote: '', options: ['End-diastolic stretch', 'Wall stress in ejection', 'Heart rate', 'Contractility'],
+const Q_WHAT = { question: 'What reduces preload?', quote: '', options: ['Diuretics', 'Wall stress in ejection', 'Heart rate', 'Contractility'],
                  answer: 0, explain: 'Preload is the stretch at end-diastole.', page: 1 };
 const Q_GAP = { question: 'Which does a diuretic lower?', quote: 'Diuretics reduce _____ by lowering circulating volume.',
                 options: ['afterload', 'preload', 'contractility', 'heart rate'], answer: 1, explain: 'Diuretics reduce preload.', page: 1 };
@@ -391,15 +392,15 @@ const stub = {
   reply(kind) {
     switch (kind) {
       case 'lesson': return {
-        overview: 'Preload is how full the ventricle is before it squeezes.',
-        points: [{ text: 'Preload — end-diastolic stretch ' + EVIL, page: 1 }, { text: 'Venous return is the most common thing that sets preload', page: 2 }],
-        numbers: [{ text: 'An LVEDP greater than 18 mmHg prompts a search for overload', page: 1 }],
-        mnemonics: [{ title: 'What sets preload', letters: 'VVC', words: ['Venous return', 'Volume', 'Compliance'] }],
+        overview: 'Excessive preload raises venous pressure and causes pulmonary congestion.',
+        points: [{ text: 'Diuretics reduce preload by lowering circulating volume.', page: 1 }, { text: 'A left ventricular end-diastolic pressure greater than 18 mmHg should prompt a search for volume overload', page: 1 }, { text: 'Preload — end-diastolic stretch ' + EVIL, page: 1 }],
+        numbers: [{ text: 'left ventricular end-diastolic pressure greater than 18 mmHg', page: 1 }],
+        mnemonics: [{ title: 'What sets preload', letters: 'DPL', words: ['Diuretics', 'Preload', 'Lowering'] }],
         analogies: [{ title: 'A balloon', text: 'The more you fill a balloon, the harder it snaps back.', source: 'Claude' }],
         flowchart: '' };
       case 'quiz': return { questions: [Q_WHAT, Q_GAP] };
       case 'exam': return { questions: [Object.assign({ cluster: 0 }, Q_WHAT, { question: 'In the exam: what is preload?' }),
-                                        Object.assign({ cluster: 1 }, Q_GAP, { question: 'In the exam: which does a diuretic lower?' })] };
+                                        Object.assign({ cluster: 1 }, Q_GAP, { question: 'In the exam: which LVEDP is in the table?', quote: '', options: ['8', '12', '18', '4'], page: 3 })] };
       default: return null;
     }
   },
@@ -430,7 +431,32 @@ function kindOf(user) {
      (NODE_EXTRA_CA_CERTS). Measured: in this repository's cloud sandbox the
      browser failed pdf.min.js with ERR_CERT_AUTHORITY_INVALID. */
   let cdnHits = 0;
+  /* ON WEBKIT THE APP IS SERVED, NOT OPENED AS A FILE. The first WebKit run
+     opened it from file:// as Chromium does, and WebKit gives a file page the
+     origin "null": the pdf.js worker's blob: URL then fails "due to access
+     control checks", and a book's figure finder came back with nothing. No
+     WebKit user meets that page — an iPad cannot run a local HTML file at
+     all; the Memorizer reaches it over https. So on WebKit the same built
+     files are served from http://localhost (a secure context, as https is),
+     answered by page.route from the build folder, and Chromium keeps the
+     local-file test it has always had. */
+  const FILE = engineName() === 'chromium';
+  const ORIGIN = 'http://localhost:8137';
+  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
   const wire = async page => {
+  /* On WebKit a page error arrived as a bare "…due to access control checks"
+     whose first characters were lost before the log. Printed whole, with
+     its stack, so the next run names the code that raised it. Diagnostic
+     only: the checks that count errors are unchanged. */
+  if (!FILE) page.on('pageerror', e => console.log('  [pageerror] ' + JSON.stringify({ message: e.message, stack: String(e.stack || '').slice(0, 400) })));
+  if (!FILE) await page.route(ORIGIN + '/**', route => {
+    const rel = decodeURIComponent(new (require('url').URL)(route.request().url()).pathname).replace(/^\/+/, '') || 'index.html';
+    const f = path.resolve(dir, rel);
+    if (!f.startsWith(path.resolve(dir) + path.sep)) return route.fulfill({ status: 404, body: '' });
+    let body;      // read, not checked then read: a missing file or a folder is simply a 404
+    try { body = fs.readFileSync(f); } catch (_) { return route.fulfill({ status: 404, body: '' }); }
+    return route.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body });
+  });
   await page.route('https://cdn.jsdelivr.net/**', async route => {
     cdnHits++;
     const res = await fetch(route.request().url());
@@ -454,13 +480,22 @@ function kindOf(user) {
       return route.fulfill({ status: 200, contentType: 'application/json',
         body: JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: '{"points": [ oops' }] }) });
     }
-    const v = stub.reply(kind);
+    const v = await page.evaluate(({ kind, v }) => {
+      const d = Memorizer.ui.docRec; if (!d) return v;
+      const norm = t => String(t).toLowerCase().replace(/\s+/g, ' ').trim();
+      const at = (text, ci) => { const cl = d.clusters[ci]; const seg = cl && cl.segments.find(s => norm(s.text).includes(norm(text))); return seg ? seg.page : 1; };
+      if (kind === 'lesson' && Memorizer.ui.state.section > 0) v = MemCoach.lesson(d.clusters[Memorizer.ui.state.section]);
+      if (kind === 'quiz' && Memorizer.ui.state.section > 0) v = MemCoach.quiz(d.clusters[Memorizer.ui.state.section], null, d.clusters);
+      if (kind === 'lesson') v.points.concat(v.numbers).forEach(p => { p.page = at(p.text, Memorizer.ui.state.section); });
+      if (kind === 'quiz' || kind === 'exam') v.questions.forEach(q => { q.page = at(q.quote ? q.quote.replace(/_{3,}/g, q.options[q.answer]) : q.options[q.answer], kind === 'exam' ? q.cluster : Memorizer.ui.state.section); });
+      return v;
+    }, { kind, v: stub.reply(kind) });
     return route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(v) }] }) });
   });
   };
   await wire(page);
-  const URL = 'file://' + path.join(dir, 'index.html');
+  const URL = FILE ? 'file://' + path.join(dir, 'index.html') : ORIGIN + '/index.html';
   const T = { timeout: 60000 };
   const text = async (p, sel) => (await p.locator(sel).innerText()).replace(/\s+/g, ' ').trim();
   /* Home is the hero, the brain and the pearl; the chapters, and everything
@@ -496,7 +531,7 @@ function kindOf(user) {
      !/<script src="(?!https:)/.test(html) && !/<link rel="stylesheet" href="(?!https:)/.test(html));
   await page.goto(URL);
   await page.locator('#home-hero').waitFor(T);
-  ok('opens as a local file on the home screen: what shall we learn, and a box to add it', (await page.locator('h1.learn').innerText()) === 'Learn?' &&
+  ok(`opens ${FILE ? 'as a local file' : 'over http'} on the home screen: what shall we learn, and a box to add it`, (await page.locator('h1.learn').innerText()) === 'Learn?' &&
      await page.locator('label.learn-box#door-add[for="pdf-input"]').count() === 1);
   ok('with chips to upload a PDF, add photos or paste notes',
      await page.locator('.chips label.chip[for="pdf-input"]').count() === 1 && await page.locator('.chips label.chip[for="photo-input"]').count() === 1 &&
@@ -580,7 +615,7 @@ function kindOf(user) {
      les[0].user.indexOf('The ONLY thing you may write that is not from the excerpt is an analogy') !== -1);
   ok('and the browser-access header Anthropic requires', les[0].headers['anthropic-dangerous-direct-browser-access'] === 'true');
   ok('the step says Learn', (await page.locator('.stepper li.now').textContent()) === 'Learn');
-  ok('the big idea comes first', (await text(page, '#big-idea .big')) === 'Preload is how full the ventricle is before it squeezes.' &&
+  ok('the big idea comes first', (await text(page, '#big-idea .big')) === 'Excessive preload raises venous pressure and causes pulmonary congestion.' &&
      await page.evaluate(() => document.querySelector('#big-idea').compareDocumentPosition(document.querySelector('#points')) & Node.DOCUMENT_POSITION_FOLLOWING));
   /* The glass's sheen is a background image; laid over every card it took
      the big idea's dark band away and left its light text on light glass. */
@@ -589,14 +624,14 @@ function kindOf(user) {
     return { want: want, got: getComputedStyle(document.querySelector('#big-idea')).backgroundImage }; });
   ok('the big idea keeps its dark band, so its light text reads', /gradient/.test(band.want) && band.got === band.want, JSON.stringify(band));
   const pointText = await page.locator('ol.points > li').first().innerText();
-  ok('the key points are numbered cards, a definition leading with its term',
-     await page.locator('ol.points > li').count() === 2 && (await page.locator('ol.points > li .lead').first().innerText()) === 'Preload' &&
+  ok('the key points are numbered cards containing cited source text',
+     await page.locator('ol.points > li').count() === 2 && pointText.includes('Diuretics reduce preload by lowering circulating volume') &&
      (await page.locator('ol.points > li .point-n').first().innerText()) === '1', pointText.replace(/\s+/g, ' '));
   /* A point that says what an exam asks is marked high-yield, with why; a
      plain one is not. */
   const hyShown = await page.$$eval('ol.points > li', ls => ls.map(l => [...l.querySelectorAll('.hy-tags span')].map(x => x.textContent)));
   ok('a high-yield point says so, and why; a plain one is not marked', hyShown.length === 2 && hyShown[0].length === 0 &&
-     JSON.stringify(hyShown[1]) === JSON.stringify(['High yield', 'Most common']), JSON.stringify(hyShown));
+     hyShown[1].includes('High yield') && hyShown[1].some(t => /Threshold|Guideline/.test(t)), JSON.stringify(hyShown));
   /* The ☆ that marks a point made it a third item in a two-column grid, and
      the text fell into the 2.25rem number column, a word to a line. Widths
      as laid out: the text has the room, the star sits at the end, all on
@@ -605,15 +640,15 @@ function kindOf(user) {
     const n = w('.point-n'), b = w('.point-body'), m = li.querySelector('.mark-btn') ? w('.mark-btn') : null;
     return { n: Math.round(n.width), body: Math.round(b.width), star: !!m, row: !!m && Math.abs(m.top - b.top) < 12 && m.left >= b.right - 1 }; });
   ok('each point’s text has the width, with its star beside it on the same row', pointBox.star && pointBox.body > 6 * pointBox.n && pointBox.row, JSON.stringify(pointBox));
-  ok('model text is shown as text — the tag is visible, not run', pointText.indexOf('<img') !== -1 &&
+  ok('unsupported model markup cannot become a lesson fact or execute', pointText.indexOf('<img') === -1 &&
      await page.locator('ol.points img').count() === 0 && await page.evaluate(() => window.__pwned) === undefined);
   ok('an analogy from Claude is shown, and labelled as not from the book',
      /A balloon/.test(await page.locator('.analogy h3').innerText()) && /written by Claude — not from your book/.test(await page.locator('.analogy .label').innerText()),
      await text(page, '.analogy'));
   ok('the numbers to know are value tiles: the value large, what it measures under it', (await page.locator('#numbers .tile-value').first().textContent()) === '> 18 mmHg' &&
-     (await page.locator('#numbers .tile-label').first().textContent()) === 'LVEDP', await text(page, '#numbers .tiles'));
-  ok('the mnemonic is big letters, each named', (await text(page, '.hook .hook-script')) === 'V · V · C' &&
-     JSON.stringify(await page.$$eval('.hook .acrostic .word', ws => ws.map(w => w.textContent))) === '["Venous return","Volume","Compliance"]');
+     /end-diastolic pressure/.test(await page.locator('#numbers .tile-label').first().textContent()), await text(page, '#numbers .tiles'));
+  ok('the mnemonic is big letters, each named', (await text(page, '.hook .hook-script')) === 'D · P · L' &&
+     JSON.stringify(await page.$$eval('.hook .acrostic .word', ws => ws.map(w => w.textContent))) === '["Diuretics","Preload","Lowering"]');
   ok('and the whole section is one tap away', /s1wab/.test(await page.locator('details.source').textContent()));
   /* The owner's screenshots showed the drill button floating over the key
      points. It is the lesson's last thing now, in the flow of the page. */
@@ -621,6 +656,7 @@ function kindOf(user) {
     const b = document.querySelector('#to-drill'), wrap = b.parentElement;
     return getComputedStyle(wrap).position === 'static' && wrap === wrap.parentElement.lastElementChild; }));
   /* The picture found at import is drawn from the stored PDF, cropped. */
+  await page.locator('#visuals .figs img').first().scrollIntoViewIfNeeded();
   await page.waitForFunction(() => { const i = document.querySelector('#visuals .figs img'); return i && /^data:image\/png/.test(i.src) && i.naturalWidth > 0; }, null, T);
   const fig = await page.evaluate(() => { const i = document.querySelector('#visuals .figs img'); return { w: i.naturalWidth, h: i.naturalHeight }; });
   const M = await page.evaluate(() => MemPdf.CROP_MARGIN), B = pdf.IMG_BOX, shape = (B[2] - B[0] + 2 * M) / (B[3] - B[1] + 2 * M);
@@ -628,6 +664,7 @@ function kindOf(user) {
   const figCap = await page.locator('#visuals .figs figcaption').first().innerText();
   ok('under its own caption, and named by it to a screen reader', figCap.indexOf(pdf.CAPTION) === 0 &&
      await page.locator('#visuals .figs button[aria-label="Enlarge Figure 4"]').count() === 1, figCap);
+  await page.locator('#visuals .pages img').last().scrollIntoViewIfNeeded();
   await page.waitForFunction(() => [...document.querySelectorAll('#visuals .pages img')].every(i => /^data:image\/png/.test(i.src)) &&
     document.querySelectorAll('#visuals .pages img').length >= 1, null, T);
   ok('and every page of the section is there to open', (await page.locator('#visuals .pages img').count()) >= 1);
@@ -649,6 +686,18 @@ function kindOf(user) {
   ok('and Escape closes it', await page.locator('.lightbox').count() === 0);
   ok('giving focus back to the page it was opened from', await page.evaluate(() => (document.activeElement.getAttribute('aria-label') || '') === 'Open page 1' && !document.getElementById('app').inert),
      await page.evaluate(() => document.activeElement.getAttribute('aria-label') || document.activeElement.tagName));
+  /* As Safari does it: a click that does not focus the button. Emulated on
+     any engine by refusing mousedown's default, which is what moves focus;
+     the click itself still lands. Found by a WebKit run on the owner's
+     laptop, where the check above failed. */
+  await page.evaluate(() => { document.activeElement && document.activeElement.blur();
+    window.__noFocus = e => e.preventDefault(); document.addEventListener('mousedown', window.__noFocus, true); });
+  await page.locator('#visuals .pages button').first().click();
+  await page.locator('.lightbox').waitFor(T);
+  await page.keyboard.press('Escape');
+  const backTo = await page.evaluate(() => { document.removeEventListener('mousedown', window.__noFocus, true);
+    return document.activeElement.getAttribute('aria-label') || document.activeElement.tagName; });
+  ok('and gives it back when the click did not focus the button, as on an iPad', backTo === 'Open page 1', backTo);
   await page.locator('#fold-pages > summary').click();
   const shut = await page.evaluate(() => !document.querySelector('#fold-pages').open && !document.querySelector('#visuals .pages').checkVisibility());
   /* precondition: the lesson has been drawn again — a new #fold-pages, not the old one */
@@ -816,7 +865,7 @@ function kindOf(user) {
   head('the drill: multiple choice, and a miss comes back');
   await page.locator('#mcq .option').first().waitFor(T);
   const qz = stub.requests.filter(r => r.kind === 'quiz');
-  ok('one drill request, carrying the lesson’s key points and section 1 only', qz.length === 1 && /1\. Preload — end-diastolic stretch/.test(qz[0].user) &&
+  ok('one drill request, carrying the lesson’s key points and section 1 only', qz.length === 1 && /1\. Diuretics reduce preload/.test(qz[0].user) &&
      !/s[23]w[a-z]/.test(qz[0].user), qz.map(r => r.user.length).join());
   ok('the step says Drill, with Learn and Memorize done', (await page.locator('.stepper li.now').textContent()) === 'Drill' &&
      JSON.stringify(await page.$$eval('.stepper li.done', ls => ls.map(l => l.textContent))) === '["Learn","Memorize"]');
@@ -832,10 +881,10 @@ function kindOf(user) {
   await page.locator('.option[data-i="0"]').click();
   ok('and once answered, why — every option explained, the answer marked', /\bWhy\b/i.test(await text(page, '#robot-panel')) &&
      await page.locator('#robot-panel .rb-options li').count() === 4 && await page.locator('#robot-panel .rb-options li.right').count() === 1 &&
-     /stretch at end-diastole/.test(await text(page, '#robot-panel')));
+     /lowering circulating volume/.test(await text(page, '#robot-panel')));
   await page.locator('#robot-panel .rb-close').click();
   ok('a right choice turns green, with the book’s reason and page', await page.locator('.option.right[data-i="0"]').count() === 1 &&
-     /Correct/.test(await page.locator('.why.good strong').innerText()) && /stretch at end-diastole/.test(await page.locator('.why').innerText()) &&
+     /Correct/.test(await page.locator('.why.good strong').innerText()) && /lowering circulating volume/.test(await page.locator('.why').innerText()) &&
      await page.locator('.why .pg').count() === 1);
   ok('and every option is closed once one is chosen', await page.locator('.option:not([disabled])').count() === 0);
   ok('but nothing is recorded until Next', await page.evaluate(() => Memorizer.ui.state.per[0].answers.length === 0));
@@ -871,7 +920,7 @@ function kindOf(user) {
   await page.waitForFunction(() => /Again/.test(document.querySelector('.mcq-meta').innerText), null, T);
   ok('and the miss is filed as one: its weak item and its card are flagged', await page.evaluate(() => { const s = Memorizer.ui.state, w = Object.values(s.weak)[0];
     return !!w && w.hazard === true && s.cards.some(c => c.id === w.id && c.hazard === true) && s.per[0].answers[s.per[0].answers.length - 1].sure === true; }));
-  ok('the miss is asked again at the end', (await page.locator('#mcq h2.q').innerText()) === Q_GAP.question && /you missed this one/.test(await meta(page)));
+  ok('the miss is asked again at the end', (await page.locator('#mcq h2.q').innerText()) === 'Complete the quoted source sentence.' && /you missed this one/.test(await meta(page)));
   await page.locator('.option[data-i="1"]').click();
   await page.locator('#next').click();
   await page.locator('#result').waitFor(T);
@@ -887,7 +936,7 @@ function kindOf(user) {
      cloze and occlusion) do, and are checked on their own below. */
   const allCards1 = await page.evaluate(() => MemStore.all('cards'));
   const cards1 = allCards1.filter(c => !c.kind);
-  ok('the miss is one review card, carrying its options', cards1.length === 1 && cards1[0].source === 'drill' && cards1[0].front === Q_GAP.question &&
+  ok('the miss is one review card, carrying its options', cards1.length === 1 && cards1[0].source === 'drill' && cards1[0].front === Q_GAP.question && cards1[0].sourceCompletion &&
      cards1[0].options.length === 4 && cards1[0].answer === 1, cards1.map(c => c.source + ':' + c.front).join(' | '));
   const recall1 = allCards1.filter(c => c.kind === 'cloze');
   const tomorrow1 = await page.evaluate(() => MemStudy.addDays(FSRS.todayISO(), 1));
@@ -1134,6 +1183,7 @@ function kindOf(user) {
      the pearl is shown beside it — drawn from the stored PDF, not a
      placeholder. The wait is for the drawing to arrive; what it drew is
      the check. */
+    await page.locator('#pearl-visual img').scrollIntoViewIfNeeded();
   await page.waitForFunction(() => { const i = document.querySelector('#pearl-visual img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
   const pv = await page.evaluate(() => { const f = document.querySelector('#pearl-visual'); const i = f && f.querySelector('img');
     return f ? { kind: f.getAttribute('data-kind'), src: i ? i.src.slice(0, 15) : '', w: i ? i.naturalWidth : 0, cap: f.querySelector('figcaption').textContent.replace(/\s+/g, ' ').trim(),
@@ -1205,7 +1255,7 @@ function kindOf(user) {
   const drillHead = await page.locator('.review-head').textContent();
   const dueNow = await page.evaluate(() => MemSession.dueCards(Memorizer.ui.cards, FSRS.todayISO()).length);
   ok('a drill opens that section’s cards, due or not, as the same multiple choice', dueNow === 0 && /Drill · 1 left/.test(drillHead) && /Section One Preload/.test(drillHead) &&
-     (await page.locator('#mcq h2.q').innerText()) === Q_GAP.question && await page.locator('#mcq .option').count() === 4,
+     (await page.locator('#mcq h2.q').innerText()) === 'Complete the quoted source sentence.' && await page.locator('#mcq .option').count() === 4,
      drillHead + ' · ' + dueNow + ' due');
   await page.locator('.option[data-i="1"]').click();
   await page.locator('#next').click();
@@ -1289,7 +1339,7 @@ function kindOf(user) {
   await page.locator('#fwd-q').click();
   await page.waitForFunction(() => /^Question 2 of/.test(document.querySelector('.mcq-meta').innerText), null, T);
   await page.waitForFunction(() => /Question 2 of 2/.test(document.querySelector('.mcq-meta').innerText), null, T);
-  ok('an exam miss is not asked again: the exam moves on', (await page.locator('#mcq h2.q').innerText()) === 'In the exam: which does a diuretic lower?');
+  ok('an exam miss is not asked again: the exam moves on', (await page.locator('#mcq h2.q').innerText()) === 'Complete the quoted source sentence.');
   await answer(page, 1);
   await page.locator('#result').waitFor(T);
   ok('the exam is scored, by section', /Final exam: 50%/.test(await page.locator('#result h2').innerText()) &&
@@ -1438,7 +1488,7 @@ function kindOf(user) {
   const cmpText = cmp.replace(/<\/text><text[^>]*>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
   ok('every taught section is a row, in order, with its big idea from its lesson', /^<svg /.test(cmp) &&
      pdf.titles.every((t, i) => cmpText.indexOf(t) !== -1 && (i === 0 || cmpText.indexOf(t) > cmpText.indexOf(pdf.titles[i - 1]))) &&
-     /Preload is how full the ventricle is before it squeezes\./.test(cmpText), cmpText.slice(0, 200));
+     /Excessive preload raises venous pressure and causes pulmonary congestion\./.test(cmpText), cmpText.slice(0, 200));
   ok('its buttons can both be pressed: neither covers the other', await page.evaluate(() => {
     const a = document.querySelector('#save-figure').getBoundingClientRect(), b = [...document.querySelectorAll('.figure-view .btn')].find(x => x.textContent === 'Close').getBoundingClientRect();
     return a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top; }));
@@ -1461,7 +1511,8 @@ function kindOf(user) {
   ok('a review card is the question again, as multiple choice', /2 due/.test(await page.locator('.review-head').textContent()) && await page.locator('#mcq .option').count() === 4,
      await text(page, '.review-head') + ' · ' + await page.locator('#mcq .option').count() + ' options');
   const shown = await page.locator('#mcq h2.q').innerText();
-  const card = cards2.find(c => c.front === shown);
+  const shownId = await page.evaluate(() => MemStudy.reviewOrder(MemSession.dueCards(Memorizer.ui.cards, FSRS.todayISO()), FSRS.todayISO())[0].id);
+  const card = cards2.find(c => c.id === shownId);
   /* the smart order (study.js reviewOrder): what is asked first is what it
      puts first — here the exam's miss or the drill's, by their kinds */
   const firstId = await page.evaluate(() => MemStudy.reviewOrder(MemSession.dueCards(Memorizer.ui.cards, FSRS.todayISO()), FSRS.todayISO())[0].id);
@@ -1544,6 +1595,7 @@ function kindOf(user) {
     await page.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await page.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
     await page.locator('#occlusion').waitFor(T);
+    await page.locator('#occlusion img').scrollIntoViewIfNeeded();
     await page.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
     const mask = await page.evaluate(() => { const m = document.querySelector('#occlusion .occlusion-mask'), i = document.querySelector('#occlusion img');
       return { style: m.getAttribute('style'), drawn: !!i && /^data:image/.test(i.src) && i.naturalWidth > 0 }; });
@@ -1619,7 +1671,7 @@ function kindOf(user) {
     /* every section of the test unit is drilled by now: a second unit, not begun, to plan */
     const body = t => Array.from({ length: 12 }, (_, i) => `${t} note ${i} says what ${t.toLowerCase()} does to the heart.`).join('\n');
     await page.evaluate(b => Memorizer.importText('Plan notes', b), `Contractility\n\n${body('Contractility')}\n\nHeart Rate\n\n${body('Heart Rate')}`);
-    await page.waitForFunction(() => MemStore.all('docs').then(ds => ds.some(d => d.name === 'Plan notes')), null, T);
+    await resolved(page, () => MemStore.all('docs').then(ds => ds.some(d => d.name === 'Plan notes')), null, T);
     await page.locator('nav.dock').getByRole('button', { name: 'Chapters' }).click();
     await page.locator('#exam-plan').waitFor(T);
     await page.fill('#exam-date', await plus(10));
@@ -1638,14 +1690,14 @@ function kindOf(user) {
     /* teach it back */
     await page.evaluate(id => Memorizer.openDoc(id, 0), unitId);
     await page.locator('#teach-back').waitFor(T);
-    const said = 'Preload is the stretch on the ventricle at the end of diastole, and 19 mmHg means overload.';
+    const said = 'Diuretics reduce preload by lowering circulating volume. A pressure of 19 mmHg means overload.';
     await page.fill('#teach-text', said);
     await page.locator('#teach-check').click();
     await page.locator('#teach-result').waitFor(T);
     const want = await page.evaluate(said => { const s = Memorizer.ui.state, c = Memorizer.ui.docRec.clusters[s.section];
       const pts = MemSheet.sheetOf(s.per[s.section].lesson).groups.reduce((a, g) => a.concat(g.points), []).map(p => p.text);
       return MemStudy.teachBack(said, pts, c.text); }, said);
-    ok('teaching it back: how many key points were covered, and the rest in the book’s words', new RegExp('You covered ' + want.covered.length + ' of ' + (want.covered.length + want.missed.length)).test(await text(page, '#teach-result')) &&
+    ok('teaching it back: how many key points were covered, and the rest in the book’s words', new RegExp('Your words matched ' + want.covered.length + ' of ' + (want.covered.length + want.missed.length)).test(await text(page, '#teach-result')) &&
        want.missed.length > 0 && await page.locator('#teach-result .teach-missed li').count() === want.missed.length, await text(page, '#teach-result'));
     ok('a number given that the section does not have is named', /You gave 19/.test(await text(page, '#teach-wrong')));
     await page.locator('#teach-cards').click();
@@ -1881,6 +1933,13 @@ function kindOf(user) {
     ok('the garbled prefix is gone and “(cont.)” is its part', shown[0] === base && shown[1] === base + ' (part 2)', JSON.stringify(shown));
     ok('and the session’s copy of the titles follows', await page.evaluate(b => Memorizer.ui.state.titles[1] === b + ' (part 2)', base));
     ok('the store is untouched: the repair is made on every load', (await page.evaluate(id => MemStore.get('docs', id), planId)).clusters[1].title === 'hy = rly: ' + base + ' (cont.)');
+    /* openDoc started a figure search (ensureFigures), which writes the doc
+       back when it ends; restoring the doc under it would race that write.
+       So the search finishes first: a precondition, not a claim. (This was
+       first added for WebKit's "Cannot load blob:…" page error, wrongly: that
+       comes ~20 ms after openDoc, before any reload, and is tests/_engine.js's
+       isEngineNoiseError.) */
+    await page.waitForFunction(() => !Memorizer.ui.figuresBusy, null, T);
     await page.evaluate(d => MemStore.put('docs', d), orig);
     await page.reload();
     await page.locator('#home-hero').waitFor(T);
@@ -2310,11 +2369,11 @@ function kindOf(user) {
     const Q = { question: 'What do diuretics reduce by lowering circulating volume?', options: ['Preload', 'Afterload', 'Contractility', 'Heart rate'], answer: 0 };
     const good = await caseOf(Object.assign({ case: 'A patient’s ventricle is overfilled, and the team lowers the circulating volume.' }, Q));
     ok('a case whose answer the section states is kept, the case as its opening, explained by the book’s sentence', !!good.q && good.q.by === 'ai' &&
-       /overfilled/.test(good.q.quote) && /Diuretics reduce preload by lowering circulating volume\./.test(good.q.explain) && good.q.page === 1, JSON.stringify(good));
+       good.q.sourceCompletion && /Diuretics reduce/.test(good.q.quote) && /Diuretics reduce preload by lowering circulating volume\./.test(good.q.explain) && good.q.page === 1, JSON.stringify(good));
     const dose = await caseOf(Object.assign({ case: 'A patient is given 40 mg of a diuretic to lower the circulating volume.' }, Q));
     ok('a case that adds a number the section does not have is not shown, and says why', !dose.q && /number not in the book: 40/.test(dose.why), JSON.stringify(dose));
     const off = await caseOf({ case: 'A patient arrives breathless.', question: 'Which drug is first-line for acute pulmonary edema?', options: ['Morphine', 'Digoxin', 'Aspirin', 'Heparin'], answer: 0 });
-    ok('a case whose answer the section does not state is not shown', !off.q && /answer is not in the section/.test(off.why), JSON.stringify(off));
+    ok('a case whose answer the section does not state is not shown', !off.q && /no exact source evidence for the answer/.test(off.why), JSON.stringify(off));
     /* and on the section's result, as a question to answer */
     for (let k = 0; k < 30 && !(await p2.locator('#result').count()); k++) {
       await p2.locator('#mcq .option').first().waitFor(T);
@@ -2327,7 +2386,7 @@ function kindOf(user) {
     await p2.locator('#ai-case').click();
     await p2.locator('#case-card #mcq').waitFor(T).catch(() => {});
     ok('the section’s result offers a case, and shows it as a question with its story', await p2.locator('#case-card #mcq blockquote.quote').count() === 1 &&
-       /overfilled/.test(await text(p2, '#case-card #mcq')) && /A case by the on-device AI/i.test(await text(p2, '#case-card')), await p2.locator('#case-card').count() ? await text(p2, '#case-card') : 'no case card');
+       /Diuretics reduce/.test(await text(p2, '#case-card #mcq')) && /A case by the on-device AI/i.test(await text(p2, '#case-card')), await p2.locator('#case-card').count() ? await text(p2, '#case-card') : 'no case card');
     await p2.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
     await p2.locator('#ai-toggle').click();
     await p2.locator('nav.dock').getByRole('button', { name: 'Coach' }).click();
@@ -2528,9 +2587,20 @@ function kindOf(user) {
     /* A fresh profile on the built-in coach, as the owner uses it: the pack
        is how Claude's work reaches the app without a key. The clipboard is
        granted so the copy can be read back. */
-    const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block', permissions: ['clipboard-read', 'clipboard-write'] });
+    const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block', permissions: clipboardPermissions() });
     const p4 = watch(await ctx.newPage(), events, 'pack', errors);
     await wire(p4);
+    /* WebKit will not let a page read the clipboard back, permission or not
+       ("The request is not allowed by the user agent"). There the read-back
+       is the text the browser ACCEPTED from the app's writeText — recorded
+       only when the write resolves, so a refused copy still reads as nothing.
+       Narrower than Chromium's, which reads the operating system's clipboard. */
+    if (!FILE) await p4.addInitScript(() => {
+      const c = navigator.clipboard; if (!c || !c.writeText) return;
+      const write = c.writeText.bind(c); let last = null;
+      c.writeText = t => write(t).then(v => { last = String(t); return v; });
+      c.readText = () => last === null ? Promise.reject(new Error('nothing was copied')) : Promise.resolve(last);
+    });
     const aiBefore = stub.requests.length;
     await p4.goto(URL);
     await p4.locator('#door-add').waitFor(T);
@@ -2608,7 +2678,7 @@ function kindOf(user) {
 
     await p4.locator('#learn-unit').click();
     await p4.locator('#pack-label').waitFor(T);
-    ok('the lesson says who wrote it', /Written with Claude · checked against your book · 1 not found in it, flagged/.test(await text(p4, '#pack-label')), await text(p4, '#pack-label'));
+    ok('the lesson says who wrote it', /Written with Claude · compare with the cited source · 1 not found in it, flagged/.test(await text(p4, '#pack-label')), await text(p4, '#pack-label'));
     /* innerText is the text as shown, and "vs" is set in capitals */
     const extra = [await text(p4, '#mechanism'), await text(p4, '#distinctions'), await text(p4, '#pearls')];
     ok('and shows what only a pack has: the mechanism, the pair confused, the pearl',
@@ -2693,7 +2763,7 @@ function kindOf(user) {
     ok('it asks a why the notes answer, its answer hidden', f1.length === 1 && f1[0].ask === '✨ ' + FOLLOW1 && !f1[0].answered, JSON.stringify(f1));
     if (f1.length) await p4.locator('#soc-ai-show-0').click();
     const f1a = f1.length ? await text(p4, '#soc-ai-list') : '';
-    ok('and shows it on request: the notes’ own sentence, labelled', /raises venous pressure, which leads to oedema of the lungs/.test(f1a) && /From Claude’s notes, checked against your book/.test(f1a), f1a);
+    ok('and shows it on request: the notes’ own sentence, labelled', /raises venous pressure, which leads to oedema of the lungs/.test(f1a) && /From Claude’s notes, compare with the cited source/.test(f1a), f1a);
     if (hasFollow) { await p4.locator('#soc-ai-go').click(); await p4.locator('#soc-ai-dropped').waitFor(T).catch(() => {}); }
     const f2 = await p4.evaluate(() => ({ dropped: (document.querySelector('#soc-ai-dropped') || {}).textContent || '', n: document.querySelectorAll('#soc-ai-list li').length,
       sent: window.__tut.filter(u => /ONE new "why"/.test(u)) }));
@@ -2708,7 +2778,7 @@ function kindOf(user) {
     const rub = await p4.evaluate(() => { const L = Memorizer.ui.state.per[0].lesson, pts = MemSheet.sheetOf(L).groups.reduce((a, g) => a.concat(g.points), []);
       return { points: pts.length, rubric: MemStudy.rubricOf(pts, L).length }; });
     ok('a pack\u2019s teach-back is scored against its rubric, pearls and mechanism included', rub.rubric > rub.points &&
-       new RegExp('You covered \\d+ of ' + rub.rubric + ' key points').test(await text(p4, '#teach-result')), JSON.stringify(rub) + ' ' + (await text(p4, '#teach-result')).slice(0, 60));
+       new RegExp('Your words matched \\d+ of ' + rub.rubric + ' key points').test(await text(p4, '#teach-result')), JSON.stringify(rub) + ' ' + (await text(p4, '#teach-result')).slice(0, 60));
     /* marked by the on-device model: a point in other words counted, one said backwards caught, a verdict on words never said set aside */
     const SAID = 'Water pills take fluid off the circulation, so the ventricle fills less. Excess preload lowers venous pressure.';
     await p4.fill('#teach-text', SAID);
@@ -2753,8 +2823,8 @@ function kindOf(user) {
     await p4.locator('#dock-context').click();
     await memorize(p4);
     await p4.locator('#mcq .option').first().waitFor(T);
-    ok('the drill asks the pack’s questions, labelled', /Which LVEDP should prompt a search for volume overload\?/.test(await text(p4, '#mcq h2.q')) &&
-       /Written with Claude · checked against your book/i.test(await text(p4, '.pack-tag')), await text(p4, '.pack-tag'));
+    ok('the drill asks the pack’s questions, labelled', /Complete the quoted source sentence/.test(await text(p4, '#mcq h2.q')) &&
+       /Written with Claude · compare with the cited source/i.test(await text(p4, '.pack-tag')), await text(p4, '.pack-tag'));
     await p4.locator('.option[data-i="0"]').click();
     await p4.locator('#why-not').waitFor(T);
     ok('a wrong answer is told why that option is wrong, and the trap it fell into',
@@ -2785,13 +2855,13 @@ function kindOf(user) {
     ok('and it was asked with the choice, the answer, Claude’s reason and the trap', await p4.evaluate(() => window.__tut.some(u => /The student chose: 8 mmHg/.test(u) &&
        /The answer is: Greater than 18 mmHg/.test(u) && /Why their choice is wrong: 8 mmHg is inside the normal 8 to 12\./.test(u) && /The trap: the normal range/.test(u))));
     await p4.locator('#next').click();
-    await p4.waitForFunction(() => /What do diuretics reduce/.test((document.querySelector('#mcq h2.q') || {}).textContent || ''), null, T);
+    await p4.waitForFunction(() => Memorizer.ui.state.per[0].pos === 1 && /Diuretics reduce/.test((document.querySelector('#mcq blockquote') || {}).textContent || ''), null, T);
     await p4.locator('.option[data-i="1"]').click();
     await p4.locator('#next').click();
-    await p4.waitForFunction(s => (document.querySelector('#mcq h2.q') || {}).textContent === s, NEW1, T).catch(() => {});
+    await p4.waitForFunction(() => Memorizer.ui.state.per[0].pos === 2 && /Again/.test((document.querySelector('#mcq .mcq-meta') || {}).textContent || '') && !document.querySelector('#mcq .option.right'), null, T);
     const again = await p4.evaluate(() => ({ q: (document.querySelector('#mcq h2.q') || {}).textContent, tag: !!document.querySelector('#reworded-tag'),
       meta: (document.querySelector('.mcq-meta') || {}).textContent || '', opts: [...document.querySelectorAll('#mcq .option .opt-text')].map(o => o.textContent) }));
-    ok('the retry at the end of the drill is that new wording, labelled: the answer and its reasons Claude’s', again.q === NEW1 && again.tag && /Again, in new words/.test(again.meta), JSON.stringify(again));
+    ok('the retry at the end of the drill is that new wording, labelled: the answer and its reasons Claude’s', again.q === 'Complete the quoted source sentence.' && again.tag && /Again, in new words/.test(again.meta), JSON.stringify(again));
     ok('with the pack’s own options, every one in a new place', JSON.stringify([...again.opts].sort()) === JSON.stringify(['12 mmHg', '4 mmHg', '8 mmHg', 'Greater than 18 mmHg']) &&
        again.opts.every((o, i) => o !== ['8 mmHg', '12 mmHg', 'Greater than 18 mmHg', '4 mmHg'][i]), JSON.stringify(again.opts));
     const at = again.opts.indexOf('Greater than 18 mmHg');
@@ -2802,7 +2872,7 @@ function kindOf(user) {
     await p4.evaluate(k => { const v = Memorizer.ui.tutor.v[k]; Memorizer.ui.tutor.v[k] = Object.assign({}, v, { question: 'A late rewording', options: v.options.slice().reverse() }); Memorizer.render(); }, Q1);
     await p4.waitForFunction(() => !!document.querySelector('#mcq .option.right'), null, T);
     const held = await p4.evaluate(() => ({ q: document.querySelector('#mcq h2.q').textContent, right: document.querySelector('#mcq .option.right').getAttribute('data-i') }));
-    ok('and a rewording that arrives while it is on screen changes nothing under the answer given', held.q === NEW1 && held.right === String(at), JSON.stringify(held));
+    ok('and a rewording that arrives while it is on screen changes nothing under the answer given', held.q === 'Complete the quoted source sentence.' && held.right === String(at), JSON.stringify(held));
     await p4.evaluate(a => { Memorizer.ui.tutor.v[a.k] = a.v; }, { k: Q1, v: tut.v });
     await p4.locator('#next').click();
     await p4.waitForFunction(() => Memorizer.ui.state.phase === 'result', null, T);
@@ -2814,7 +2884,7 @@ function kindOf(user) {
     await p4.waitForFunction(() => /Review round/.test((document.querySelector('#mcq .mcq-meta') || {}).textContent || ''), null, T);
     const cold = await p4.evaluate(() => ({ q: document.querySelector('#mcq h2.q').textContent, tag: !!document.querySelector('#reworded-tag'), a: MemSession.reviewItem(Memorizer.ui.state).q.answer,
       opts: [...document.querySelectorAll('#mcq .option .opt-text')].map(o => o.textContent) }));
-    ok('a review round’s cold retest asks it in the new words too', cold.q === NEW1 && cold.tag, JSON.stringify(cold));
+    ok('a review round’s cold retest asks it in the new words too', cold.q === 'Complete the quoted source sentence.' && cold.tag, JSON.stringify(cold));
     const atR = cold.opts.indexOf('Greater than 18 mmHg');
     await p4.locator('.option[data-i="' + atR + '"]').click();
     await p4.locator('#next').click();
@@ -2832,7 +2902,7 @@ function kindOf(user) {
     await p4.locator('#to-drill').click();
     await memorize(p4);
     await p4.locator('#mcq .option').first().waitFor(T);
-    ok('and drilled from it', /Which LVEDP should prompt/.test(await text(p4, '#mcq h2.q')) &&
+    ok('and drilled from it', /Complete the quoted source sentence/.test(await text(p4, '#mcq h2.q')) &&
        await p4.evaluate(() => Memorizer.ui.state.per[0].quiz.questions.every(q => q.by === 'pack')));
     /* EXAM CONDITIONS, from the pack. Precondition, not proposition: every
        section counted as drilled, so the exam opens. */
@@ -2903,6 +2973,7 @@ function kindOf(user) {
        await p5.locator('#book-input[multiple]').count() === 1);
     /* Chosen in the wrong order: the second part first. */
     await p5.setInputFiles('#book-input', [{ name: 'Book_5-8.pdf', mimeType: 'application/pdf', buffer: bk.b }, { name: 'Book_1-4.pdf', mimeType: 'application/pdf', buffer: bk.a }]);
+    await p5.locator('#import-order-go').click();
     await p5.locator('#chapters .chapter-row').first().waitFor(T);
     const b = await p5.evaluate(() => MemStore.all('books').then(x => x[0]));
     ok('the parts are put in order and their pages numbered straight through', b.name === 'Book' && b.pages === 8 &&
@@ -2926,13 +2997,15 @@ function kindOf(user) {
     await p5.locator('#chapters .chapter-row').nth(2).locator('button.unit-open').click();
     await p5.locator('#sections .section-card').first().waitFor(T);
     ok('a chapter opens as a unit, naming its book and pages', /Book · chapter 2 · pp\. 4–5/.test(await p5.locator('.book-of').innerText()), await p5.locator('.book-of').innerText());
-    await p5.waitForFunction(id => MemStore.get('docs', id).then(d => Array.isArray(d.figures)), ch2.id, T);
+    await resolved(p5, id => MemStore.get('docs', id).then(d => Array.isArray(d.figures)), ch2.id, T).catch(() => {});
     const figs = await p5.evaluate(id => MemStore.get('docs', id).then(d => d.figures), ch2.id);
-    ok('its figure is found the first time it is opened, at its book page, from the second PDF', figs.length === 1 && figs[0].page === BOOK_FIG.page &&
+    ok('its figure is found the first time it is opened, at its book page, from the second PDF', !!figs && figs.length === 1 && figs[0].page === BOOK_FIG.page &&
        figs[0].caption === BOOK_FIG.caption && figs[0].box.every((v, i) => Math.abs(v - BOOK_FIG.box[i]) <= 1), JSON.stringify(figs));
     await p5.locator('#learn-unit').click();
     await p5.locator('ol.points > li').first().waitFor(T);
+    await p5.locator('#visuals .figs img').first().scrollIntoViewIfNeeded();
     await p5.waitForFunction(() => { const i = document.querySelector('#visuals .figs img'); return i && /^data:image\/png/.test(i.src) && i.naturalWidth > 0; }, null, T);
+    await p5.locator('#visuals .pages img').last().scrollIntoViewIfNeeded();
     await p5.waitForFunction(() => [...document.querySelectorAll('#visuals .pages img')].length === 2 && [...document.querySelectorAll('#visuals .pages img')].every(i => /^data:image\/png/.test(i.src)), null, T);
     ok('and drawn, with both its pages — one from each PDF', (await p5.locator('#visuals .figs figcaption').first().innerText()).indexOf(BOOK_FIG.caption) === 0 &&
        JSON.stringify(await p5.$$eval('#visuals .pages figcaption', fs => fs.map(f => f.textContent))) === '["Page 4","Page 5"]');
@@ -2954,7 +3027,7 @@ function kindOf(user) {
     /* Chapter 1 opened, so it has a session to keep. */
     await p5.locator('#chapters .chapter-row').nth(1).locator('button.unit-open').click();
     await p5.locator('#sections').waitFor(T);
-    await p5.waitForFunction(() => MemStore.all('docs').then(ds => Array.isArray(ds.find(d => d.pageStart === 2).figures)), null, T);
+    await resolved(p5, () => MemStore.all('docs').then(ds => Array.isArray(ds.find(d => d.pageStart === 2).figures)), null, T).catch(() => {});
     await p5.locator('header.topbar button[aria-label="Back"]').click();
     await p5.locator('#chapters').waitFor(T);
     const keptId = (await p5.evaluate(() => MemStore.all('books').then(x => x[0].chapters))).find(c => c.pageStart === 2).docId;
@@ -3058,7 +3131,7 @@ function kindOf(user) {
     const was = await p3.locator('#fix-text textarea[data-si="' + fixSi + '"]').inputValue();
     await p3.fill('#fix-text textarea[data-si="' + fixSi + '"]', was.replace('preload rises with volume', 'preload rises with volume load'));
     await p3.locator('#fix-text button[data-fix="' + fixSi + '"]').click();
-    await p3.waitForFunction(id => MemStore.get('docs', id).then(d => (d.corrections || []).length === 1), srec.id, T).catch(() => {});
+    await resolved(p3, id => MemStore.get('docs', id).then(d => (d.corrections || []).length === 1), srec.id, T).catch(() => {});
     const fixed = await p3.evaluate(id => MemStore.get('docs', id), srec.id);
     ok('a paragraph recognition read can be corrected: the section keeps your text, and the correction with what it said before', fixed.corrections && fixed.corrections.length === 1 &&
        fixed.corrections[0].was === was && /volume load/.test(fixed.clusters[onScan].text) && fixed.clusters[onScan].segments[+fixSi].corrected === true, JSON.stringify(fixed.corrections));

@@ -293,7 +293,7 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
        held.map(h => h.kind).join(', '));
     if (held[1]) await reply(1, lesson('THE AFTERLOAD LESSON'));
     await r.locator('#big-idea').waitFor(T);
-    ok('and section 2 shows its own lesson, with no spinner left over and no error', /THE AFTERLOAD LESSON/.test(await r.locator('#big-idea').innerText()) &&
+    ok('and section 2 shows its own lesson, with no spinner left over and no error', /Afterload/.test(await r.locator('#big-idea').innerText()) &&
        await r.locator('.card.busy').count() === 0 && await r.locator('.card.error').count() === 0 && await r.evaluate(() => Memorizer.ui.busy === ''));
 
     head('a key can be cleared, and the risk of keeping it is said');
@@ -304,6 +304,250 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     await r.locator('#clear-key').click();
     ok('Clear key removes it from this device', await r.evaluate(() => MemProvider.loadConfig().key === '' && Object.keys(localStorage).every(k => localStorage.getItem(k).indexOf('sk-ant-stub') === -1)) &&
        /removed/.test(await r.locator('#settings-status').innerText()));
+  }
+
+  head('redraw preserves a note draft and its caret');
+  {
+    const r = await context('draft');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Draft'); await r.locator('#learn-unit').waitFor(T);
+    await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+    await r.fill('#note-text', 'A draft still being typed');
+    await r.evaluate(() => { const el = document.querySelector('#note-text'); el.focus(); el.setSelectionRange(4, 9); Memorizer.render(); });
+    const got = await r.locator('#note-text').evaluate(el => ({ value: el.value, start: el.selectionStart, end: el.selectionEnd, focused: document.activeElement === el }));
+    ok('draft, selection and focus survive background redraw', got.value === 'A draft still being typed' && got.start === 4 && got.end === 9 && got.focused, JSON.stringify(got));
+  }
+
+  head('a slow unit-open cannot replace the newer selection');
+  {
+    const r = await context('navigation');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Navigation'); await r.locator('#learn-unit').waitFor(T);
+    const got = await r.evaluate(async () => {
+      const a = Memorizer.ui.docId, b = a + '-other', other = JSON.parse(JSON.stringify(Memorizer.ui.docRec)); other.id = b;
+      await MemStore.put('docs', other);
+      const get = MemStore.get; let release;
+      MemStore.get = function (store, id) { if (store === 'docs' && id === a) return new Promise(resolve => { release = () => get(store, id).then(resolve); }); return get(store, id); };
+      const slow = Memorizer.openDoc(a); await Memorizer.openDoc(b); const newer = Memorizer.ui.docId;
+      release(); await slow; MemStore.get = get;
+      return { newer, final: Memorizer.ui.docId, b };
+    });
+    ok('the latest selection stays active', got.newer === got.b && got.final === got.b, JSON.stringify(got));
+  }
+
+  head('source corrections retire stale learning records');
+  {
+    const r = await context('correction');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Correction');
+    await r.locator('#learn-unit').waitFor(T); await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+    const old = await r.evaluate(async () => {
+      const u = Memorizer.ui, d = u.docRec; d.source = 'photo'; u.fixOpen = true;
+      u.state.per[0].quiz = { questions: [{ question: 'Old question', options: ['old', 'other', 'third', 'fourth'], answer: 0 }] }; u.state.per[0].memorized = true;
+      const card = { id: d.id + ':old', docId: d.id, cluster: 0, front: 'Old card', srs: null }; u.cards.push(card);
+      await MemStore.batch([{ store: 'docs', value: d }, { store: 'vectors', value: { id: d.id, vecs: [[1]] } }, { store: 'cards', value: card }]);
+      Memorizer.render(); return d.clusters[0].segments.find(s => !s.heading && !s.table).text;
+    });
+    await r.locator('#fix-text textarea').first().fill(old.replace('2 percent', '20 percent'));
+    await r.locator('#fix-text [data-fix]').first().click();
+    await r.waitForFunction(() => Memorizer.ui.docRec.revision === 1, null, T);
+    const got = await r.evaluate(async () => ({ quiz: Memorizer.ui.state.per[0].quiz, memorized: Memorizer.ui.state.per[0].memorized,
+      vec: await MemStore.get('vectors', Memorizer.ui.docId), old: (await MemStore.all('cards')).some(c => c.id.endsWith(':old')) }));
+    ok('old quiz, memorization, vector and review card are gone', !got.quiz && !got.memorized && !got.vec && !got.old, JSON.stringify(got));
+  }
+
+  head('failed notes survive refresh and retry the exact write');
+  {
+    const r = await context('note-retry');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Retry notes');
+    await r.locator('#learn-unit').waitFor(T); await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+    await r.evaluate(() => {
+      window.__put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (v) {
+        if (this.name === 'meta' && v.id === 'notes') throw new Error('synthetic notes failure');
+        return window.__put.apply(this, arguments);
+      };
+    });
+    await r.fill('#note-text', 'Keep this note'); await r.locator('#note-save').click(); await r.locator('#store-banner').waitFor(T);
+    await r.evaluate(() => Memorizer.openDoc(Memorizer.ui.docId, 0));
+    ok('a session save leaves the failed note warning visible', await r.locator('#store-banner').count() === 1);
+    await r.evaluate(() => { IDBObjectStore.prototype.put = window.__put; });
+    await r.locator('#store-retry').click();
+    await r.waitForFunction(() => !Memorizer.ui.saveError, null, T);
+    await r.reload(); await r.waitForFunction(() => Memorizer.ui.docs.length === 1, null, T);
+    ok('retry persisted the note across reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Keep this note')));
+  }
+
+  head('section deletion commits its associated records together');
+  {
+    const r = await context('deletion');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Deletion');
+    await r.locator('#learn-unit').waitFor(T);
+    await r.evaluate(async () => {
+      const u = Memorizer.ui, id = u.docId;
+      u.notes = { [id + ':0']: { text: 'Alpha' }, [id + ':1']: { text: 'Beta' } };
+      u.checks = { [id + ':1']: { start: '2026-01-01', done: [] } };
+      await MemStore.batch([{ store: 'meta', value: { id: 'notes', recs: u.notes } }, { store: 'meta', value: { id: 'checks', recs: u.checks } }]);
+    });
+    r.on('dialog', dialog => dialog.accept());
+    await r.locator('#sections .section-del').first().click();
+    await r.waitForFunction(() => Memorizer.ui.docRec.clusters.length === 1, null, T);
+    const got = await r.evaluate(async () => {
+      const id = Memorizer.ui.docId, d = await MemStore.get('docs', id), n = await MemStore.get('meta', 'notes'), c = await MemStore.get('meta', 'checks'), ss = await MemStore.get('sessions', id);
+      return { index: d.clusters[0].index, identity: d.clusters[0].identity, note: n.recs[id + ':0'].text, checks: !!c.recs[id + ':0'], titles: ss.state.titles.length };
+    });
+    ok('surviving section, note, checks and session agree', got.index === 0 && got.identity === 1 && got.note === 'Beta' && got.checks && got.titles === 1, JSON.stringify(got));
+    await r.reload(); await r.waitForFunction(() => Memorizer.ui.docs.length === 1, null, T);
+    ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
+  }
+
+  head('failed recuts keep the original chapter manifest in memory');
+  {
+    const r = await context('recut-failure'); await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Recut'); await r.locator('#learn-unit').waitFor(T);
+    await r.evaluate(async () => {
+      const id = Memorizer.ui.docId, b = { id: 'synthetic-book', name: 'Synthetic book', pages: 1, method: 'numbered', scanned: [], outline: [],
+        parts: [{ fileId: 'synthetic-part', first: 1, last: 1 }], chapters: [{ title: 'One', pageStart: 1, pageEnd: 1, docId: id }], found: {} };
+      await MemStore.batch([{ store: 'books', value: b }, { store: 'bookpages', value: { id: b.id + ':0', pages: [{ page: 1, lines: [{ text: 'A synthetic paragraph with enough readable words to retain this source during chapter cutting.', size: 10, y: 10 }] }] } }]);
+      window.__recutBatch = MemStore.batch;
+      MemStore.batch = ops => ops.some(o => o.store === 'books') ? Promise.reject(new Error('synthetic recut failure')) : window.__recutBatch(ops);
+      Memorizer.openBook(b.id);
+    });
+    await r.locator('#methods').waitFor(T); r.on('dialog', dl => dl.accept()); await r.locator('#methods [data-method=pages]').click();
+    await r.waitForFunction(() => Memorizer.ui.error === 'synthetic recut failure', null, T);
+    ok('the original method remains selected and stored after rejection', await r.locator('#methods [data-method=numbered]').getAttribute('aria-checked') === 'true' && await r.evaluate(async () => (await MemStore.get('books', 'synthetic-book')).method === 'numbered'));
+    await r.evaluate(() => { MemStore.batch = window.__recutBatch; });
+  }
+
+  head('a first practice miss survives reload without an SRS review');
+  {
+    const r = await context('practice-miss'); await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Practice'); await r.locator('#learn-unit').waitFor(T);
+    await r.evaluate(async () => {
+      const u = Memorizer.ui, q = MemCoach.quiz(u.docRec.clusters[0], MemCoach.lesson(u.docRec.clusters[0]), u.docRec.clusters).questions[0];
+      u.state.per[0].quiz = { questions: [q] }; u.state.per[0].score = 0.5;
+      await MemStore.saveStep({ id: u.docId, state: u.state, at: Date.now() }, []); u.sessions[u.docId] = u.state;
+      Memorizer.startPractice(1);
+    });
+    await r.locator('#mcq .option').first().waitFor(T);
+    const answer = await r.evaluate(() => Memorizer.ui.practice.qs[0].q.answer);
+    await r.locator('.option[data-i="' + (answer + 1) % 4 + '"]').click(); await r.locator('#next').click();
+    await r.waitForFunction(() => Memorizer.ui.cards.length === 1, null, T);
+    await r.reload(); await r.waitForFunction(() => Memorizer.ui.cards.length === 1, null, T);
+    const got = await r.evaluate(() => { const card = Memorizer.ui.cards[0], st = Memorizer.ui.sessions[card.docId]; return { srs: card.srs, pending: MemSession.pending(st).length, due: MemSession.dueCards([card], FSRS.todayISO()).length }; });
+    ok('one weak card remains due, with no extra scheduler review', got.srs === null && got.pending === 1 && got.due === 1, JSON.stringify(got));
+  }
+
+  head('search indexing runs off the UI thread');
+  {
+    const r = await context('index-worker'); await r.goto(URL); await r.locator('#door-add').waitFor(T);
+    const got = await r.evaluate(async () => {
+      const docs = Array.from({ length: 120 }, (_, i) => ({ id: 'index-' + i, name: 'Synthetic ' + i,
+        clusters: [{ title: 'Preload', text: 'Preload changes ventricular filling.', segments: [{ page: 1, text: Array.from({ length: 20 }, (_, j) => 'Preload changes ventricular filling by ' + (j + 1) + ' percent.').join(' ') }] }] }));
+      const expected = JSON.stringify(MemAsk.build(docs));
+      const original = MemAsk.build; let ticks = 0;
+      MemAsk.build = () => { throw new Error('must use the worker'); };
+      const timer = setInterval(() => { ticks++; }, 1), start = performance.now();
+      try { const idx = await MemIndexer.build(docs); return { equal: JSON.stringify(idx) === expected, ticks, ms: Math.round(performance.now() - start), sentences: idx.sents.length }; }
+      finally { clearInterval(timer); MemAsk.build = original; }
+    });
+    ok('worker output matches the existing index and the page can process events', got.equal && got.ticks > 0 && got.sentences === 2400, JSON.stringify(got));
+  }
+
+  head('multipart order is reviewable before importing');
+  {
+    const r = await context('part-preview'); await r.goto(URL); await r.locator('#door-add').waitFor(T);
+    await r.locator('#book-input').setInputFiles([
+      { name: 'Book12_1001-1500.pdf', mimeType: 'application/pdf', buffer: Buffer.from('third') },
+      { name: 'Book12_1-500.pdf', mimeType: 'application/pdf', buffer: Buffer.from('first') },
+      { name: 'Book12_501-1000.pdf', mimeType: 'application/pdf', buffer: Buffer.from('second') }
+    ]);
+    await r.locator('#import-order').waitFor(T);
+    ok('the preview sorts by page ranges and has not stored any PDF', /1-500/.test(await r.locator('#import-order li').first().innerText()) && await r.evaluate(async () => (await MemStore.all('files')).length === 0));
+    await r.getByRole('button', { name: 'Move Book12_501-1000.pdf up', exact: true }).click();
+    ok('manual reordering changes the proposed order and warns about the overlap', /501-1000/.test(await r.locator('#import-order li').first().innerText()) && /out of order/.test(await r.locator('#import-order-warning').innerText()));
+    await r.locator('#import-order-cancel').click();
+    ok('cancelling the preview makes no import records', await r.evaluate(async () => (await MemStore.all('meta')).every(v => v.kind !== 'pending-import')));
+  }
+
+  head('cancelled imports never publish partial data');
+  {
+    const r = await context('cancel-import'); await r.goto(URL); await r.locator('#door-add').waitFor(T);
+    await r.evaluate(() => {
+      MemPdf.read = () => new Promise(resolve => { window.__finishCancelled = () => resolve({ pages: [], wordCounts: [], numPages: 1, figures: [], ocr: [], outline: [] }); });
+      Memorizer.importBook([new File(['synthetic'], 'Book12_1-500.pdf'), new File(['second'], 'Book12_501-1000.pdf')]);
+    });
+    await r.waitForFunction(() => typeof window.__finishCancelled === 'function', null, T);
+    await r.locator('#import-cancel').click();
+    await r.evaluate(() => { Memorizer.importText('Do not overlap', 'Synthetic source.'); window.__finishCancelled(); });
+    await r.waitForFunction(() => !Memorizer.ui.importJob && /staged files removed/.test(Memorizer.ui.notice), null, T);
+    const got = await r.evaluate(async () => ({ docs: (await MemStore.all('docs')).length, books: (await MemStore.all('books')).length, files: (await MemStore.all('files')).length, stages: (await MemStore.all('meta')).filter(v => v.kind === 'pending-import').length }));
+    ok('cancellation cleans staged PDF records and no overlapping import starts', Object.values(got).every(v => v === 0), JSON.stringify(got));
+    ok('the app remains usable for a new import', await r.locator('#door-add').isVisible());
+  }
+
+  head('radio controls and speech privacy');
+  {
+    const r = await context('keyboard', () => { window.SpeechRecognition = function () {}; });
+    await r.goto(URL); await r.locator('#door-add').waitFor(T);
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    ok('each radio group has exactly one tab stop', await r.evaluate(() => [...document.querySelectorAll('[role=radiogroup]')].every(g => g.querySelectorAll('[role=radio][tabindex="0"]').length === 1)));
+    const theme = r.locator('[role=radiogroup]').first();
+    await theme.locator('[tabindex="0"]').focus(); await r.keyboard.press('End');
+    ok('End selects the last theme and keeps keyboard focus', await r.evaluate(() => {
+      const g = document.querySelector('[role=radiogroup]'), radios = [...g.querySelectorAll('[role=radio]')];
+      return document.activeElement === radios[radios.length - 1] && document.activeElement.getAttribute('aria-checked') === 'true';
+    }));
+    await r.keyboard.press('ArrowRight');
+    ok('arrows wrap to the first theme', await theme.locator('[role=radio]').first().getAttribute('aria-checked') === 'true');
+    await r.locator('nav.dock').getByRole('button', { name: 'Coach' }).click(); await r.locator('#ask-mic').waitFor(T);
+    ok('the microphone names possible off-device audio processing at the action', await r.locator('#ask-mic-privacy').isVisible() && /send audio/.test(await r.locator('#ask-mic-privacy').innerText()) && await r.locator('#ask-mic').getAttribute('aria-describedby') === 'ask-mic-privacy');
+  }
+
+  head('failed atomic edits cannot be acknowledged by a session save');
+  {
+    const r = await context('atomic-failure');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Atomic failure'); await r.locator('#learn-unit').waitFor(T);
+    r.on('dialog', dl => dl.accept());
+    await r.evaluate(() => {
+      window.__atomicPut = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (v) { if (this.name === 'docs') throw new Error('synthetic edit failure'); return window.__atomicPut.apply(this, arguments); };
+    });
+    await r.locator('#sections .section-del').first().click(); await r.locator('#store-banner').waitFor(T);
+    ok('failed deletion keeps both sections and offers repeat-action advice', await r.evaluate(() => Memorizer.ui.docRec.clusters.length === 2) && /Repeat the original action/.test(await r.locator('#store-banner').innerText()) && await r.locator('#store-retry').count() === 0);
+    await r.evaluate(() => { IDBObjectStore.prototype.put = window.__atomicPut; return Memorizer.openDoc(Memorizer.ui.docId); });
+    ok('an unrelated successful save retains the atomic edit warning', await r.locator('#store-banner').count() === 1);
+    await r.locator('#store-dismiss').click();
+    await r.locator('#sections .section-del').first().click(); await r.waitForFunction(() => Memorizer.ui.docRec.clusters.length === 1, null, T);
+    ok('repeating the action applies the deletion once', await r.evaluate(async () => (await MemStore.get('docs', Memorizer.ui.docId)).clusters.length === 1));
+  }
+
+  head('backup rescue and transactional restore');
+  {
+    const r = await context('backup');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Backup');
+    await r.locator('#learn-unit').waitFor(T); await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+    await r.evaluate(() => {
+      window.__backupPut = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (v) {
+        if (this.name === 'meta' && v.id === 'notes') throw new Error('synthetic backup note failure');
+        return window.__backupPut.apply(this, arguments);
+      };
+    });
+    await r.fill('#note-text', 'Rescue this pending note'); await r.locator('#note-save').click(); await r.locator('#store-banner').waitFor(T);
+    const backup = await r.evaluate(() => MemBackup.exportText());
+    const rescued = await r.evaluate(text => MemBackup.inspect(text).then(v => Object.values(v.stores.meta.find(m => m.id === 'notes').recs).some(n => n.text === 'Rescue this pending note')), backup);
+    ok('export includes the exact failed note payload', rescued);
+    await r.evaluate(async text => {
+      IDBObjectStore.prototype.put = window.__backupPut;
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (v) { if (this.name === 'docs') throw new Error('synthetic restore failure'); return put.apply(this, arguments); };
+      try { await MemBackup.restore(text); } catch (_) {} finally { IDBObjectStore.prototype.put = put; }
+    }, backup);
+    ok('a failed restore rolls back every clear and retains pending writes', await r.evaluate(async () => (await MemStore.all('docs')).length === 1 && !!MemStore.failureMessage()));
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await r.locator('#backup-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+    await r.locator('#backup-restore').waitFor(T);
+    ok('restore previews the units and replacement before writing', /1 units/.test(await r.locator('[role=dialog]').innerText()) && /replaces all study data/.test(await r.locator('[role=dialog]').innerText()));
+    await r.locator('#backup-restore').click();
+    await r.waitForFunction(() => Memorizer.ui.notice === 'Backup restored.', null, T);
+    await r.reload(); await r.waitForFunction(() => Memorizer.ui.docs.length === 1, null, T);
+    ok('restored pending note survives reload and the warning clears', await r.evaluate(() => !MemStore.failureMessage() && Object.values(Memorizer.ui.notes).some(n => n.text === 'Rescue this pending note')));
   }
 
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');

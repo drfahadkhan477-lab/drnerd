@@ -244,6 +244,44 @@ when it is merged.)
 The card appears only in the split build. In the single file every figure is
 already inline, and a button offering to download them would be a lie.
 
+## A code-only deploy: the bank never leaves your devices
+
+Every route above hosts the bank somewhere — on your laptop, or on
+Cloudflare's storage behind Access. There is a fourth arrangement where the
+host carries **no licensed content at all**: the app is deployed as code, and
+the bank lives only in the iPad's own storage, imported once from Files.
+
+On the laptop, after the usual build and extract:
+
+```
+node scripts/build-pwa.js build/systole.html --no-content
+```
+
+That one command does both halves. It builds `dist/` exactly as usual — every
+check still runs on the real bank — then packs the bank as it ships, its
+figures, the reference notes' seed and every unit's figure file into
+`source/systole-content-v1.zip` (checked with the very code the iPad runs, so a
+package the iPad would refuse is refused here), and leaves all of them out of
+`dist/`. Deploy `dist/` by any route above; there is nothing licensed in it to
+protect. `source/` is gitignored and the leak guard refuses it; keep the zip on
+your own devices (AirDrop it to the iPad, or put it in Files).
+(`node tools/pack-content.js` makes a bank-only package from `content/` on its
+own, if you ever want one without the notes.)
+
+On the iPad, the first launch shows **Import your study content** instead of
+the home screen. Pick the zip. It is read, checked (a bad package is refused,
+naming the problem in counts and file names, and changes nothing) and stored
+in the browser's IndexedDB in one transaction; the app then opens on it, fully
+offline, figures included. Re-importing a newer package replaces the old one
+whole; your progress, ink, notes and chats live in a separate store and are
+untouched, keyed by question id.
+
+What this does not change: the app itself is still built from your export on
+the laptop, by the patch chain. What changes is where the bank and the notes
+live afterwards — nowhere but on your devices. The app asks for its notes from
+`content/` as it always has; in this build those requests are answered from the
+imported package, and nothing is asked of the host.
+
 ## What "installed" gets you
 
 The shell is 559 KB and the head already declares everything Safari needs:
@@ -311,9 +349,11 @@ reader, the text reader for scans and the flowchart drawer, and says when each
 is kept. It works only from the web address, where the service worker runs.
 Your book never leaves the iPad: the zip holds only the app.
 
-**Settings → Back up** saves your units, packs and progress to one file (not
-the PDFs); **Restore** brings them back on another iPad or after Safari clears
-its storage. Home reminds you when a backup is due.
+**Settings → Export backup** saves everything studied, the PDFs with it, to
+one checksummed file; **Restore a backup** checks that file and replaces this
+device's study data with it, on another iPad or after Safari clears its
+storage. Home reminds you when a backup is due, and its **Back up now** makes
+the same file.
 
 The on-device AI downloads its model from a fixed commit and checks every
 file against the hashes the app was built with before the model answers; a

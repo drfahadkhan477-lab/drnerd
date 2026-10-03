@@ -8,11 +8,14 @@
  * no network.
  *
  * WHAT IS PROVEN:
- *   · a backup holds the units, packs and progress and not the PDFs;
- *   · restored into an empty browser, the unit opens with its pack and its
- *     progress; a unit whose PDF is not on the device is marked so;
- *   · a file that is not a backup, or is from a newer Memorizer, is refused
- *     with its reason and changes nothing;
+ *   · home says when a backup is due; "Later" puts it off for the day, and
+ *     "Back up now" makes the app's own backup (backup.js) and records the
+ *     day, as Settings' export does;
+ *   · an orphan an older build could leave (a pack or card whose unit is
+ *     gone) is removed when the app opens, so a backup made afterwards is
+ *     one the app will restore. (Backup and restore themselves, refusals
+ *     included, are master's: verify-memorizer-backup-pure.js and
+ *     verify-memorizer-hardening.js.)
  *   · under the page's Content-Security-Policy the browser refuses a request
  *     to any host but the ones the app uses; the policy never grants eval;
  *   · the on-device model's files are read back from the browser's own
@@ -63,75 +66,63 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
   };
   const toSettings = async p => {
     await p.evaluate(() => { const b = [...document.querySelectorAll('nav button, .nav-btn')].find(x => /Settings/.test(x.textContent)); b.click(); });
-    await p.waitForSelector('#data-card', T);
+    await p.waitForSelector('#storage-settings', T);
   };
-  const restoreFile = async (p, name, obj) => {
-    await p.setInputFiles('#restore-file', { name, mimeType: 'application/json', buffer: Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj)) });
-  };
-  try {
-    head('a backup');
-    let { ctx, p } = await fresh('backup');
+  const toHome = p => p.evaluate(() => { const b = [...document.querySelectorAll('nav button, .nav-btn')].find(x => /Home/.test(x.textContent)); b.click(); });
+  const addUnit = async p => {
     await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);
     await p.setInputFiles('#import-file', { name: 'loading.md', mimeType: 'text/markdown', buffer: Buffer.from(MD) });
     await p.waitForFunction(() => !document.getElementById('import-go').disabled, null, T);
     await p.click('#import-go');
     await p.waitForSelector('#learn-unit', T);
-    await p.click('button[aria-label="Back"]').catch(() => {});
-    await p.evaluate(() => { const b = [...document.querySelectorAll('nav button, .nav-btn')].find(x => /Home/.test(x.textContent)); b.click(); });
+    await toHome(p);
+  };
+  const day = () => new Date().toISOString().slice(0, 10);
+  try {
+    head('the backup reminder');
+    let { ctx, p } = await fresh('nudge-later');
+    await addUnit(p);
     await p.waitForSelector('#backup-nudge', T);
     ok('with a unit and no backup, home says to back up, and why', /not backed up yet/.test(await p.$eval('#backup-nudge', e => e.textContent)));
     await p.click('#nudge-later');
     await p.waitForFunction(() => !document.getElementById('backup-nudge'), null, T);
     ok('"Later" puts it away for the day, remembered', await p.evaluate(() => MemStore.get('meta', 'backup-snooze').then(m => !!m && /^\d{4}-/.test(m.day))));
-    /* some progress to carry: the section marked as studied */
-    await p.evaluate(() => { Memorizer.ui.state.per[0].seenDay = '2026-01-02'; return MemStore.put('sessions', { id: Memorizer.ui.docId, state: Memorizer.ui.state }); });
-    await p.evaluate(() => MemStore.put('files', { id: 'stray-pdf', bytes: new Uint8Array([1, 2, 3]) }));
-    await toSettings(p);
-    ok('Settings says where the data lives and whether it is kept', /only on this device/.test(await p.$eval('#data-kept', e => e.textContent)));
-    const [dl] = await Promise.all([p.waitForEvent('download', T), p.click('#backup-go')]);
-    const file = path.join(dir, 'backup.json');
-    await dl.saveAs(file);
-    const b = JSON.parse(fs.readFileSync(file, 'utf8'));
-    ok('it is one file, named for the day', /^memorizer-backup-\d{4}-\d\d-\d\d\.json$/.test(dl.suggestedFilename()), dl.suggestedFilename());
-    ok('it holds the unit, its pack and its progress', b.format === 'memorizer-backup' && b.stores.docs.length === 1 && b.stores.packs.length === 1 &&
-       b.stores.sessions.length === 1 && b.stores.sessions[0].state.per[0].seenDay === '2026-01-02', JSON.stringify(Object.keys(b.stores).map(k => [k, b.stores[k].length])));
-    ok('and not the PDFs’ bytes, nor search vectors', !('files' in b.stores) && !('vectors' in b.stores));
-    await p.waitForSelector('#data-last', T);
-    ok('and the card remembers when', /Last backup: \d{4}-\d\d-\d\d/.test(await p.$eval('#data-last', e => e.textContent)));
     await ctx.close();
 
-    head('restored into an empty browser');
-    ({ ctx, p } = await fresh('restore'));
-    p.on('dialog', d => d.accept());
-    await toSettings(p);
-    await restoreFile(p, 'backup.json', b);
-    await p.waitForSelector('#data-note', T);
-    ok('it says what came back, and that PDFs are not in a backup', /Restored 1 unit/.test(await p.$eval('#data-note', e => e.textContent)) && /PDFs are not in a backup/.test(await p.$eval('#data-note', e => e.textContent)));
-    const back = await p.evaluate(() => Promise.all([MemStore.all('docs'), MemStore.all('packs'), MemStore.all('sessions')]).then(([d, k, s]) => ({ d: d.length, k: k.length, seen: s[0] && s[0].state.per[0].seenDay })));
-    ok('the unit, its pack and its progress are here', back.d === 1 && back.k === 1 && back.seen === '2026-01-02', JSON.stringify(back));
-    await p.evaluate(id => Memorizer.openDoc(id), b.stores.docs[0].id);
-    await p.waitForSelector('#learn-unit', T);
-    ok('and it opens', await p.$('#unit-now') !== null);
+    /* "Back up now" makes the app's own backup (backup.js), the one Settings
+       makes: not a second format */
+    ({ ctx, p } = await fresh('nudge-now'));
+    await addUnit(p);
+    await p.waitForSelector('#nudge-backup', T);
+    /* a download that never comes is a failure here, not a crash */
+    const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }).catch(() => null), p.click('#nudge-backup')]);
+    const file = path.join(dir, 'nudge.json');
+    if (dl) await dl.saveAs(file);
+    const nb = dl ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    ok('"Back up now" saves the app’s backup, named for the day', !!dl && /^memorizer-backup-\d{4}-\d\d-\d\d\.json$/.test(dl.suggestedFilename()) &&
+       nb.format === 'memorizer-backup' && /^(sha256|fnv1a64):/.test(nb.checksum) && typeof nb.payload === 'string', dl ? dl.suggestedFilename() + ' ' + Object.keys(nb).join(',') : 'no download');
+    await p.waitForFunction(() => !document.getElementById('backup-nudge'), null, { timeout: 5000 }).catch(() => {});
+    ok('and the reminder goes, the day remembered', await p.evaluate(() => MemStore.get('meta', 'last-backup').then(m => m && m.day)) === day());
     await ctx.close();
 
-    head('what is refused');
-    ({ ctx, p } = await fresh('refuse'));
-    let asked = 0;
-    p.on('dialog', d => { asked++; d.accept(); });
+    head('an orphan from an older build does not spoil a backup');
+    ({ ctx, p } = await fresh('orphan'));
+    await addUnit(p);
+    /* what an import or delete cut short in an older build could leave: a
+       pack and a card whose unit is gone */
+    await p.evaluate(() => Promise.all([MemStore.put('packs', { id: 'gone-unit', sections: {} }), MemStore.put('cards', { id: 'gone-unit:0:x', docId: 'gone-unit', cluster: 0 })]));
+    await p.reload();
+    await p.waitForFunction(() => window.Memorizer && Memorizer.ui.docs && Memorizer.ui.docs.length === 1, null, T);
+    const left = await p.evaluate(() => Promise.all([MemStore.get('packs', 'gone-unit'), MemStore.get('cards', 'gone-unit:0:x')]).then(r => r.filter(Boolean).length));
+    ok('opening the app removes what no unit owns', left === 0, left + ' left');
     await toSettings(p);
-    await restoreFile(p, 'notes.json', '{"hello": 1}');
-    await p.waitForFunction(() => /Not restored/.test((document.getElementById('data-note') || {}).textContent || ''), null, T);
-    ok('a file that is not a backup, with the reason', /not a Memorizer backup/.test(await p.$eval('#data-note', e => e.textContent)));
-    await restoreFile(p, 'future.json', Object.assign({}, b, { version: 99 }));
-    await p.waitForFunction(() => /newer Memorizer/.test((document.getElementById('data-note') || {}).textContent || ''), null, T);
-    ok('a backup from a newer Memorizer, with the reason', /version 99/.test(await p.$eval('#data-note', e => e.textContent)));
-    const direct = await p.evaluate(() => MemStore.restore({ format: 'memorizer-backup', version: 1, stores: { docs: [{ name: 'no id' }] } }).then(() => 'stored', e => e.message));
-    ok('the store itself refuses a bad backup, whoever calls it', /has no id/.test(direct), direct);
-    ok('neither asked to go ahead, and neither changed anything', asked === 0 && await p.evaluate(() => MemStore.all('docs').then(d => d.length)) === 0);
-    const withPdf = JSON.parse(JSON.stringify(b)); withPdf.stores.docs[0].hasFile = true;
-    await restoreFile(p, 'pdf.json', withPdf);
-    await p.waitForFunction(() => /Restored/.test((document.getElementById('data-note') || {}).textContent || ''), null, T);
-    ok('a unit whose PDF is not on this device is marked so, not left pointing at nothing', await p.evaluate(() => MemStore.all('docs').then(d => d[0].hasFile)) === false);
+    const [dl2] = await Promise.all([p.waitForEvent('download', T), p.click('#backup-export')]);
+    const text = fs.readFileSync(await dl2.path(), 'utf8');
+    ok('Settings’ export records the day too', await p.evaluate(() => MemStore.get('meta', 'last-backup').then(m => m && m.day)) === day());
+    await ctx.close();
+    ({ ctx, p } = await fresh('orphan-restore'));
+    const back = await p.evaluate(t => MemBackup.inspect(t).then(r => 'restorable: ' + r.docs + ' unit', e => e.message), text);
+    ok('so the backup made from it is one the app will restore (backup.js refuses data with no unit)', back === 'restorable: 1 unit', back);
     await ctx.close();
 
     head('what the page may do');

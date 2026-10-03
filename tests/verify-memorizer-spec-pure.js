@@ -79,6 +79,24 @@ const checked = Pack.check([SI.packFor(ex, unit, Pack, Coach).pack], unit);
 ok('it passes the pack check: nothing refused, dropped or flagged', checked.refused.length === 0 && checked.dropped.length === 0 &&
    checked.sections.every(s => !s.flags.length), JSON.stringify({ r: checked.refused, d: checked.dropped, f: checked.sections.map(s => s.flags) }));
 ok('its flowchart reaches the lesson', checked.sections.some(s => /Valve replacement/.test(s.lesson.flowchart || '')));
+/* a decision flowchart as Spec.RULES asks for it, held to a passage with
+   no negation in it: the arrows' yes and no are the answers to the
+   question, not claims (pack.js labels); a "not" in a step, or a number on
+   an arrow, still is a claim */
+const flowWith = f => {
+  const st = SI.parseMarkdown(['---', 'unit: Flow', '---', '', '## Management',
+    '- **Severe aortic stenosis**: with symptoms it is treated by valve replacement; when symptoms are absent it is followed with echocardiography.', '',
+    '```mermaid', f, '```'].join('\n'));
+  const u = { id: 'fl', name: st.title, clusters: Chunk.clusterBlocks(Chunk.blocksFromPages(Chunk.pagesFromText(SI.studyText(st))).blocks) };
+  return Pack.check([SI.packFor(st, u, Pack, Coach).pack], u);
+};
+const kept = flowWith('flowchart TD\n  A["Severe aortic stenosis"] --> B{"Symptoms?"}\n  B -->|"yes"| C["Valve replacement"]\n  B -->|"no"| D["Echocardiography"]');
+ok('a decision flowchart\u2019s yes and no arrows are not read as claims: kept, and in the lesson', !kept.dropped.some(d => d.where === 'flowchart') &&
+   kept.sections.some(x => /Echocardiography/.test(x.lesson.flowchart || '')), JSON.stringify(kept.dropped));
+const notStep = flowWith('flowchart TD\n  A["Severe aortic stenosis"] --> B["Do not replace the valve"]');
+ok('a step that says "not" where the passage does not is still dropped', notStep.dropped.some(d => d.where === 'flowchart' && /negation/.test(d.why)), JSON.stringify(notStep.dropped));
+const numArrow = flowWith('flowchart TD\n  A["Severe aortic stenosis"] -->|"gradient 64"| C["Valve replacement"]');
+ok('and a number on an arrow is still held to the passage', numArrow.dropped.some(d => d.where === 'flowchart' && /number/.test(d.why)), JSON.stringify(numArrow.dropped));
 const fenced = SI.parseMarkdown('```markdown\n' + SI.STUDY_EXAMPLE + '\n```');
 ok('a reply copied with its code fence still reads the same', fenced.points.length === 3 && fenced.questions.length === 1 && fenced.flowcharts.length === 1);
 

@@ -73,6 +73,11 @@ function pearlAll(){
 function pearlNow(){
   if(pearlCurrent) return pearlCurrent;
   const all=pearlAll();
+  /* No notes, no card. 25dbcd0 returned a placeholder object here so a home-
+     screen suite would not crash in a build with no reference notes; the one
+     caller already renders nothing for null, and verify-pearl ("no notes
+     means no card, rather than an empty one") caught the fake card on the
+     owner's next full run. A suite that needs a pearl needs notes. */
   if(!all.length) return null;
   try{ pearlCurrent=Pearl.pick(all, null); }catch(_){ pearlCurrent=all[0]; }
   return pearlCurrent;

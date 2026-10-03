@@ -39,9 +39,17 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
-const SRC = process.argv[2];
+/* --no-content: the CODE-ONLY DEPLOY. dist/ gets no questions.json, no
+   manifest.json and no figures/ — nothing licensed is uploaded to a host. The
+   bank reaches the iPad as a package the owner imports from Files
+   (tools/pack-content.js → src/core/bankstore.js), and the loader shows an
+   import screen until it has one. content/ is still read, locally, for the
+   digest checks and the build stamp: the build is the same build, it only
+   ships less. Without the flag nothing below changes. */
+const NO_CONTENT = process.argv.includes('--no-content');
+const SRC = process.argv.slice(2).find((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--package');
 if (!SRC) {
-  console.error('usage: node scripts/build-pwa.js <standalone.html>');
+  console.error('usage: node scripts/build-pwa.js <standalone.html> [--no-content [--package out.zip]]');
   process.exit(1);
 }
 const ROOT = path.join(__dirname, '..');
@@ -339,8 +347,82 @@ const LOADER = `<script>
       return 'content/questions.json loaded but is not the question bank — a sign-in page or an error page in its place will do this.';
     return 'Could not load content/questions.json.';
   }
+  /* THE CODE-ONLY DEPLOY (build-pwa.js --no-content). Replaced at build time
+     with true or false. Such a build ships no bank: the bank lives in this
+     browser's IndexedDB, imported from the owner's own package
+     (src/core/bankstore.js), so it is asked first; with none imported, the
+     import screen takes the splash's place. A normal build is exactly as it
+     was — false skips all of this. */
+  var NO_CONTENT = __NO_CONTENT__;
+  if(NO_CONTENT){
+    var imported = null;
+    try{ imported = (typeof BankStore !== 'undefined') ? await BankStore.load() : null; }catch(e){ console.error('bank store', e); }
+    if(!imported) return showImport();
+    window.ALL_Q = imported.questions;
+    window.IMGS = imported.imgs;
+    /* Not the split build's downloader: every figure is already on the
+       device, so its card has nothing to offer. */
+    window.SPLIT_BUILD = false;
+    window.SYSTOLE_BANK = { source: 'imported', questions: imported.questions.length, figures: imported.figures,
+                            extras: Object.keys(imported.extras || {}).length };
+    /* THE NOTES CAME IN THE PACKAGE TOO. The app fetches its reference seed
+       and each unit's figure file from content/ as it always has; in this
+       build the host has none of them, so those two kinds of request are
+       answered from the imported package and everything else goes to the
+       network untouched. The app's own code does not change. */
+    var extras = imported.extras || {};
+    if(Object.keys(extras).length && typeof window.fetch === 'function'){
+      var realFetch = window.fetch.bind(window);
+      window.fetch = function(input, init){
+        var u = typeof input === 'string' ? input : (input && input.url) || '';
+        if(u.indexOf(location.origin + '/') === 0) u = u.slice(location.origin.length + 1);
+        u = u.replace(/^[.]?[/]/, '').split('?')[0];
+        var hit = u.indexOf('content/') === 0 ? extras[u.slice(8)] : null;
+        if(hit) return Promise.resolve(new Response(hit, { status: 200, headers: { 'content-type': 'application/json' } }));
+        return realFetch(input, init);
+      };
+    }
+  }
+  /* The import screen: its own layer over the splash, a file picker, and a
+     line that says what happened in counts — never a word of the bank. On a
+     good import the page reloads into the app. */
+  function showImport(){
+    var sp = document.getElementById('splash');
+    if(sp) sp.style.display = 'none';
+    var box = document.createElement('div');
+    box.id = 'bankImport';
+    box.setAttribute('role', 'dialog');
+    box.style.cssText = 'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;background:#0b1512;color:#e8f2ee;font:16px/1.45 system-ui,-apple-system,sans-serif;text-align:center';
+    box.innerHTML = '<div style="font-size:24px;font-weight:600">Import your study content</div>' +
+      '<div style="max-width:30em;opacity:.8">This copy of Systole carries no question bank. Pick the package you made with tools/pack-content.js (systole-content-v1.zip). It stays on this device.</div>' +
+      '<label style="padding:12px 20px;border-radius:12px;background:#1f8a6a;color:#fff;cursor:pointer">Choose file<input id="bankFile" type="file" accept=".zip,application/zip" style="display:none"></label>' +
+      '<div id="bankStatus" aria-live="polite" style="min-height:3em;max-width:34em;opacity:.9"></div>';
+    document.body.appendChild(box);
+    var status = box.querySelector('#bankStatus');
+    box.querySelector('#bankFile').addEventListener('change', async function(ev){
+      var file = ev.target.files && ev.target.files[0];
+      if(!file) return;
+      try{
+        status.textContent = 'Reading the package…';
+        var zip = await ZipRead.read(await file.arrayBuffer());
+        status.textContent = 'Checking ' + zip.files.length + ' files…';
+        var verdict = BankPack.validate(zip.files);
+        if(!verdict.ok){
+          status.textContent = 'Not imported: ' + verdict.problemCount + ' problem(s). ' + verdict.problems.slice(0, 3).join('; ');
+          return;
+        }
+        status.textContent = 'Storing ' + verdict.questions.length + ' questions and ' + verdict.figures.length + ' figures…';
+        var saved = await BankStore.save(verdict);
+        status.textContent = 'Imported ' + saved.questions + ' questions and ' + saved.figures + ' figures. Opening…';
+        setTimeout(function(){ location.reload(); }, 400);
+      }catch(e){
+        console.error('import', e);
+        status.textContent = 'Not imported: ' + (e && e.message ? e.message : 'the file could not be read') + '. Nothing was changed.';
+      }
+    });
+  }
   var res = null, stage = 'network';
-  try{
+  if(!NO_CONTENT) try{
     res = await fetch('content/questions.json', {cache:'no-cache'});
     stage = 'status';
     if(!res.ok) throw new Error('HTTP '+res.status);
@@ -490,7 +572,14 @@ const LOADER = `<script>
 </script>`;
 
 step('swap the inline payloads for the content loader', () => {
-  html = html.slice(0, openAt) + LOADER + html.slice(closeAt + '</script>'.length);
+  /* The code-only deploy's loader needs the package reader, the checker and
+     the store before app.js exists — they run on the import screen, which is
+     shown INSTEAD of app.js. A normal build carries none of it. */
+  const bankModules = NO_CONTENT
+    ? '<script>\n' + ['zipread.js', 'bankpack.js', 'bankstore.js']
+        .map(f => fs.readFileSync(path.join(ROOT, 'src', 'core', f), 'utf8')).join('\n') + '\n</script>\n'
+    : '';
+  html = html.slice(0, openAt) + bankModules + LOADER + html.slice(closeAt + '</script>'.length);
 });
 
 step('link the manifest and the iOS icon', () => {
@@ -805,6 +894,9 @@ if (html.indexOf('__BUILD_ID__') >= 0) throw new Error('more than one build-stam
 if (html.indexOf('__HEART_MESH__') < 0) throw new Error('the loader lost its heart-mesh placeholder');
 html = html.replace('__HEART_MESH__', heartMesh ? heartMesh.name : '');
 if (html.indexOf('__HEART_MESH__') >= 0) throw new Error('more than one heart-mesh placeholder in the loader');
+if (html.indexOf('__NO_CONTENT__') < 0) throw new Error('the loader lost its no-content placeholder');
+html = html.replace('__NO_CONTENT__', NO_CONTENT ? 'true' : 'false');
+if (html.indexOf('__NO_CONTENT__') >= 0) throw new Error('more than one no-content placeholder in the loader');
 if (html.indexOf('__COMMIT__') < 0) throw new Error('the loader lost its commit placeholder');
 html = html.replace('__COMMIT__', COMMIT);
 if (html.indexOf('__COMMIT__') >= 0) throw new Error('more than one commit placeholder in the loader');
@@ -915,6 +1007,7 @@ step('every answer key matches the single-file build', () => {
   console.log(`      ✓ ${shipped.length} keys agree across both builds`);
 });
 
+
 const splashDir = path.join(DIST, 'content', 'splash-heart');
 fs.mkdirSync(splashDir, { recursive: true });
 for (const [name, body] of splashAssets) fs.writeFileSync(path.join(splashDir, name), body);
@@ -982,7 +1075,11 @@ step('every content path the code names is on disk', () => {
   const code = html + appCode;
   const wanted = new Set();
   for (const m of code.matchAll(/['"`](content\/[A-Za-z0-9_.-]+)/g)) wanted.add(m[1]);
-  const missing = [...wanted].filter(rel => !fs.existsSync(path.join(DIST, rel)));
+  /* The code-only deploy names the bank's path for a normal build's sake and
+     never fetches it (NO_CONTENT gates the fetch); it is meant to be absent. */
+  const absentByDesign = NO_CONTENT
+    ? new Set(['content/questions.json', 'content/figures', 'content/refs-seed.json', 'content/refs-images']) : new Set();
+  const missing = [...wanted].filter(rel => !absentByDesign.has(rel) && !fs.existsSync(path.join(DIST, rel)));
   if (missing.length) throw new Error(`the code fetches ${missing.join(', ')}, which was not copied`);
 });
 
@@ -1038,7 +1135,7 @@ const CONTENT = 'accsap-content-' + CONTENT_V;
    So: the files the app genuinely cannot start without are precached
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
-const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', 'content/questions.json'];
+const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest'${NO_CONTENT ? '' : ", 'content/questions.json'"}];
 /* Which bucket a precached URL belongs in. questions.json is precached because
    the app cannot start without it, and content-versioned because that is what
    it is — so install writes it to CONTENT while the shell files go to SHELL.
@@ -1202,6 +1299,26 @@ function pagesLimitReport(files, limit) {
   for (const f of files) if (!largest || f.bytes > largest.bytes) largest = f;
   return { over, largest };
 }
+/* THE CODE-ONLY DEPLOY'S OTHER HALF. Every check above ran on the real bank
+   and the real notes, here; now they are packed into the one file the iPad
+   imports — the bank as it SHIPS (dist's copy, with its flags applied, not
+   content/'s) plus the reference seed and every unit's figure file — and
+   taken out of what is uploaded. The package is written under source/,
+   gitignored and refused by the leak guard. */
+if (NO_CONTENT) step('pack the bank and the notes for the device, and take them out of the upload', () => {
+  const dc = path.join(DIST, 'content');
+  const extras = {};
+  if (fs.existsSync(path.join(dc, 'refs-seed.json'))) extras['refs-seed.json'] = fs.readFileSync(path.join(dc, 'refs-seed.json'));
+  const ri = path.join(dc, 'refs-images');
+  if (fs.existsSync(ri)) for (const f of fs.readdirSync(ri).filter(f => f.endsWith('.json')).sort()) extras['refs-images/' + f] = fs.readFileSync(path.join(ri, f));
+  const argAt = process.argv.indexOf('--package');
+  const out = path.resolve(argAt > -1 && process.argv[argAt + 1] ? process.argv[argAt + 1] : path.join(ROOT, 'source', 'systole-content-v1.zip'));
+  const r = require('../tools/pack-content.js').pack(dc, out, extras);
+  for (const name of SHIPPED.concat(['refs-seed.json', 'refs-images'])) fs.rmSync(path.join(dc, name), { recursive: true, force: true });
+  console.log(`      ✓ packed ${r.questions} questions, ${r.figures} figures and ${r.extras} note file(s) → ${path.relative(ROOT, out)}`);
+  console.log('      ✓ dist/content carries none of them — import the package on the device');
+});
+
 const distFiles = [];
 (function walk(dir) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {

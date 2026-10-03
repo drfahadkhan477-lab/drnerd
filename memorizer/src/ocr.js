@@ -128,7 +128,7 @@ function fixWorker(text) {
   return String(text).replace(WORKER_FIX.find, WORKER_FIX.replace);
 }
 
-var starting = null;
+var starting = null, current = null;
 function engine(onStatus) {
   if (starting) return starting;
   var core = hasSimd() ? TESS.coreSimd : TESS.core;
@@ -144,31 +144,91 @@ function engine(onStatus) {
          passed the core as its own blob: URL and Chromium refused it. The
          worker only imports its core when TesseractCore is not yet defined,
          and here the core has already defined it, so nothing is imported. */
+      var workerUrl = blobUrl(new Blob([r[1], '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript');
       var started = T.createWorker([{ code: 'eng', data: new Uint8Array(r[2]) }], 1, {
-        workerPath: blobUrl(new Blob([r[1], '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript'), workerBlobURL: false,
+        workerPath: workerUrl, workerBlobURL: false,
         cacheMethod: 'none', gzip: true,
+        /* tesseract.js 5.1.1 rejects a failed job AND, unless given this,
+           throws the same error on the page (src/createWorker.js, the
+           'reject' branch) — an uncaught error even when the rejection is
+           handled and the page read again. The rejection is the report:
+           recognize() below retries or passes it on, so nothing is lost. */
+        errorHandler: function () {},
       });
-      return Promise.race([started, new Promise(function (_, reject) {
-        setTimeout(function () { reject(new Error('the text reader did not start')); }, START_TIMEOUT_MS);
-      })]);
-    });
-  starting.catch(function () { starting = null; });
+      return new Promise(function (resolve, reject) {
+        var settled = false, timer = setTimeout(function () {
+          settled = true; URL.revokeObjectURL(workerUrl); reject(new Error('the text reader did not start'));
+        }, START_TIMEOUT_MS);
+        started.then(function (worker) {
+          if (settled) { discard(worker); return; }
+          settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); resolve(worker);
+        }, function (e) { if (!settled) { settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); reject(e); } });
+      });
+    }).then(function (worker) { current = worker; return worker; });
+  var attempt = starting; attempt.catch(function () { if (starting === attempt) starting = null; });
   return starting;
+}
+
+/* ── a worker whose WebAssembly has faulted is thrown away ───────────────
+   tesseract.js's WebAssembly sometimes faults mid-page under WebKit — the
+   engine Safari on the iPad runs — with "RuntimeError: Out of bounds memory
+   access" inside Recognize (seen in CI's WebKit job, at random, on the same
+   page that passes the next run). A WebAssembly instance that has faulted
+   is not safe to call again, and the worker is kept for every later page,
+   so one fault used to cost the page AND every scanned page after it. Now
+   the faulted worker is ended, the next engine() starts a fresh one, and
+   the page is read once more. Once: a second fault is reported as before,
+   so a page that faults every time names its error rather than looping.
+   Only a WebAssembly fault is retried — a bad image or a refused download
+   fails the same way twice and is reported at once. */
+function isWasmFault(e) {
+  return !!e && (e.name === 'RuntimeError' || /\bRuntimeError\b/.test(String(e.message || e)));
+}
+function discard(worker) {
+  if (current === worker) { current = null; starting = null; }
+  try { Promise.resolve(worker && worker.terminate && worker.terminate()).catch(function () {}); } catch (_) { /* already gone */ }
+}
+var RECOGNIZE_OUT = { text: false, blocks: true, hocr: false, tsv: false };
+/* One page at a time. Two imports can run at once (the file buttons stay
+   live), and tesseract.js 5.1.1's terminate() kills the worker without
+   settling the other jobs queued on it — so ending a faulted worker while a
+   second page waits on it would leave that import busy for ever. Queued
+   here, no page is ever in flight on a worker that is being ended. The
+   worker ran one page at a time anyway, so nothing is slower. */
+var queue = Promise.resolve();
+function recognize(canvas, onStatus) {
+  var job = queue.then(function () { return recognizeNow(canvas, onStatus); });
+  queue = job.then(function () {}, function () {});
+  return job;
+}
+function recognizeNow(canvas, onStatus) {
+  /* a worker that faults is discarded whether or not the page is retried,
+     so the page after a second fault never inherits the faulted instance */
+  function run(worker) {
+    return worker.recognize(canvas, {}, RECOGNIZE_OUT).catch(function (e) {
+      if (isWasmFault(e)) discard(worker);
+      throw e;
+    });
+  }
+  return engine(onStatus).then(run).catch(function (e) {
+    if (!isWasmFault(e)) throw e;
+    return engine(onStatus).then(run);
+  });
 }
 
 /* Read one pdf.js page: draw it, recognise it, return pdf.js-shaped items. */
 function readPage(page, onStatus) {
-  return engine(onStatus).then(function (worker) {
+  return engine(onStatus).then(function () {
     var vp = page.getViewport({ scale: SCALE });
     var canvas = document.createElement('canvas');
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
     var ctx = canvas.getContext('2d');
     ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
-      return worker.recognize(canvas, {}, { text: false, blocks: true, hocr: false, tsv: false });
+      return recognize(canvas, onStatus);
     }).then(function (res) {
       return ocrItems(res.data.blocks, SCALE, page.getViewport({ scale: 1 }).height);
-    });
+    }).then(function (v) { canvas.width = canvas.height = 0; return v; }, function (e) { canvas.width = canvas.height = 0; throw e; });
   });
 }
 
@@ -197,13 +257,22 @@ function imageCanvas(blob) {
 }
 function readImage(blob, onStatus) {
   var canvas;
-  return imageCanvas(blob).then(function (c) { canvas = c; return engine(onStatus); }).then(function (worker) {
-    return worker.recognize(canvas, {}, { text: false, blocks: true, hocr: false, tsv: false });
-  }).then(function (res) {
+  return imageCanvas(blob).then(function (c) { canvas = c; return recognize(canvas, onStatus); }).then(function (res) {
     return { items: ocrItems(res.data.blocks, 1, canvas.height), height: canvas.height };
-  });
+  }).then(function (v) { if (canvas) canvas.width = canvas.height = 0; return v; }, function (e) { if (canvas) canvas.width = canvas.height = 0; throw e; });
 }
 
-root.MemOcr = { readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd };
+function release() {
+  var job = queue.then(function () {
+    var p = starting; starting = null;
+    return p ? p.then(function (worker) {
+      if (current === worker) current = null;
+      return worker.terminate();
+    }, function () {}) : undefined;
+  });
+  queue = job.then(function () {}, function () {}); return job;
+}
+
+root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemOcr;
 })(typeof window !== 'undefined' ? window : this);

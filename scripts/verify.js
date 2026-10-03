@@ -12,9 +12,13 @@
  *                  at 4). The suites that measure wall-clock time or WebGL
  *                  contexts always run alone — see SERIAL below.
  *   --engine <e>   chromium (default), webkit or firefox
- *   --list         print the suites and what each covers, then exit
+ *   --tag <a,b>    run only suites with these tags: pure, browser, build, serial
+ *                  (read from each suite's code — tests/_targets.js tagsOf)
+ *   --report-json <file>  also write the results as JSON: suite, tags, status,
+ *                  counts and time. No output text, so nothing licensed.
+ *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 119 suites and roughly 5258 checks, and they
+ * WHY THIS EXISTS. There are 124 suites and roughly 5432 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -262,6 +266,11 @@ const SUITES = [
   ['refsmerge-pure', 'a reference unit adds only sections that are new and high yield, and what it writes splits back into notes'],
   ['phrase-pure', 'a note holding the query\'s words in the query\'s order outranks one holding them scattered; questions, one-word queries and stubs rank as before'],
   ['olderacc-pure', 'an older ACC bank\'s questions parse in each layout, keep their answer or are left out, skip what the bank has, and print no word of it'],
+  ['extract-pure', 'extraction refuses an id that could leave figures/, bytes that are not the image their mime claims, and damaged base64 — and a refusal leaves the last good content/ untouched'],
+  ['bankpack-pure', 'the code-only deploy\'s package: packed, read back through the page\'s own reader and checker, and every bad package refused, naming why'],
+  ['bankstore', 'the code-only deploy in a browser: import screen with no bank and no request to content/, a refused package changes nothing, a good one launches the app, a replacement is atomic, a normal build unchanged'],
+  ['devtools-pure', 'each build in its own workspace, suite tags read from the code, a JSON report with no output text, doctor, and a clean that cannot reach the export'],
+  ['testpublic-pure', '`npm test` runs every suite CI runs, pure and browser, from the workflow\'s own list — a failure, a missing file or a missing browser fails it, and a pure-only run says what it left out'],
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
@@ -372,7 +381,16 @@ const SUITES = [
    Emptied a seventh time by the full green run with --pwa on the owner's
    Windows laptop at 491e183 with the older ACC bank merged (681 questions,
    173 figures; 5229 checks across 119 suites, 133 on the split build), which
-   measured the one that had been waiting: olderacc-pure. */
+   measured the one that had been waiting: olderacc-pure.
+
+   Emptied an eighth time by the full green run with --pwa on the owner's
+   laptop at 573e571 (5387 checks across 123 suites, 134 on the split build),
+   which measured the four that had been waiting: extract-pure, bankpack-pure,
+   bankstore and testpublic-pure.
+
+   Emptied a ninth time by the full green run with --pwa on the owner's
+   laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
+   which measured the one that had been waiting: devtools-pure (38 checks). */
 const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
@@ -421,15 +439,17 @@ const flag = n => argv.includes(n);
 const opt = (n, fb) => { const i = argv.indexOf(n); return i > -1 && argv[i + 1] ? argv[i + 1] : fb; };
 const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 
+const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
+const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : []);
 if (flag('--list')) {
-  console.log('\nSuites, and what each defends:\n');
-  for (const [name, claim] of SUITES) console.log(`  ${name.padEnd(14)} ${claim}`);
+  console.log('\nSuites, their tags, and what each defends:\n');
+  for (const [name, claim] of SUITES) console.log(`  ${name.padEnd(14)} ${('[' + tagsFor(name).join(',') + ']').padEnd(18)} ${claim}`);
   console.log(`\n  pwa            the Stage 1 split build over HTTP — needs a server, so:`);
   console.log(`                 node scripts/verify.js --pwa\n`);
   process.exit(0);
 }
 
-const VALUED = ['--only', '--skip', '--engine'];
+const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
 /* A PATH OR A URL. Every suite already takes either — `file://` is just how a
    path reaches them — and the split build can only be driven over HTTP,
@@ -447,8 +467,13 @@ const TARGET_IS_URL = /^https?:\/\//.test(rawTarget);
 const TARGET = TARGET_IS_URL ? rawTarget : path.resolve(rawTarget);
 const shortTarget = TARGET_IS_URL ? TARGET : path.relative(process.cwd(), TARGET);
 
-if (!TARGET_IS_URL && !fs.existsSync(TARGET)) {
-  console.error(`\nNo build at ${TARGET}\n\n  Build one first:  node scripts/build.js\n`);
+/* A build is needed only by suites that read one, and by --pwa. Checked once
+   the selection is known (below): checked here, it refused `--tag pure` on a
+   clean checkout, where the export and so the build cannot exist (found by
+   review). */
+function requireBuild() {
+  if (TARGET_IS_URL || fs.existsSync(TARGET)) return;
+  console.error(`\nNo build at ${TARGET}\n\n  Build one first:  node scripts/build.js\n  or run only the suites that need none:  --tag pure\n`);
   process.exit(1);
 }
 /* --pwa builds dist/ from a standalone file and serves it. Handed a URL it has
@@ -460,6 +485,14 @@ if (TARGET_IS_URL && flag('--pwa')) {
 }
 
 const only = list(opt('--only')), skip = list(opt('--skip'));
+const TAGS = ['pure', 'browser', 'build', 'serial'];
+const wantTags = list(opt('--tag'));
+for (const t of wantTags) if (!TAGS.includes(t)) {
+  console.error(`\n  --tag ${JSON.stringify(t)} is not a tag. Use one of: ${TAGS.join(', ')}.\n`);
+  process.exit(1);
+}
+const REPORT_JSON = opt('--report-json', null);
+if (flag('--report-json') && !REPORT_JSON) { console.error('\n  --report-json needs a file to write.\n'); process.exit(1); }
 
 /* The engine, resolved once here and handed to every suite through the
    environment. Validated before a single browser starts: a typo discovered on
@@ -489,17 +522,35 @@ if (!ENGINES.includes(ENGINE)) {
    fifty-four suites that each launch, each fail with
    "Executable doesn't exist at .../firefox-1495/firefox/firefox", and take
    fifteen minutes to say one thing once. Checked by path rather than by
-   launching, so it costs nothing on the ordinary run. */
-(() => {
+   launching, so it costs nothing on the ordinary run.
+   AND ONLY WHEN A CHOSEN SUITE NEEDS ONE. It ran before --tag and --only
+   were applied, so `--tag pure` on a machine with playwright but no browser
+   downloaded refused to run suites that launch nothing (found by review on
+   the PR that added --tag). Called below, once the selection is known. */
+function requireBrowser() {
+  /* Resolved where the suites will resolve it: this checkout's node_modules,
+     then NODE_PATH with the global root added below. It used to try only a
+     plain require() and return quietly when that threw — so with no
+     playwright at all (CI's logic job never runs npm ci) every browser suite
+     was spawned to die on the same missing module, the case this check
+     exists to stop. */
+  let pw = null;
+  try { pw = require(require.resolve('playwright', { paths: [ROOT].concat(nodePath.split(path.delimiter).filter(Boolean)) })); }
+  catch (_) {
+    console.error(`\n  The chosen suites need a browser, and playwright is not installed.`);
+    console.error(`  install    npm ci && npx playwright install ${ENGINE}`);
+    console.error(`  or         node scripts/verify.js … --tag pure   (the suites that need no browser)\n`);
+    process.exit(1);
+  }
   let exe = null;
-  try { exe = require('playwright')[ENGINE].executablePath(); } catch (_) { return; }
+  try { exe = pw[ENGINE].executablePath(); } catch (_) { return; }
   if (exe && !fs.existsSync(exe)) {
     console.error(`\n  --engine ${ENGINE}: playwright has no browser installed for it.`);
     console.error(`  expected   ${exe}`);
     console.error(`  install    npx playwright install ${ENGINE}\n`);
     process.exit(1);
   }
-})();
+}
 /* WHICH SUITES CAN BE POINTED AT A URL. The first version of this asked the
    wrong question: it looked for the `^https?:` guard and called that the
    answer. Three suites have that guard AND read the target off disk as text
@@ -512,6 +563,7 @@ const { classify } = require(path.join(ROOT, 'tests', '_targets.js'));
 const urlIncapable = [];
 const chosen = SUITES
   .filter(([n]) => (!only.length || only.includes(n)) && !skip.includes(n))
+  .filter(([n]) => !wantTags.length || tagsFor(n).some(t => wantTags.includes(t)))
   .filter(([n]) => {
     const f = path.join(ROOT, 'tests', `verify-${n}.js`);
     if (fs.existsSync(f)) return true;
@@ -538,6 +590,11 @@ try {
     nodePath = nodePath ? `${nodePath}${path.delimiter}${globalRoot}` : globalRoot;
   }
 } catch (_) { /* a local node_modules will do just as well */ }
+/* The build first: with neither, "build one first" is the step that comes
+   first, and it is the answer on a runner with no playwright at all. */
+if (flag('--pwa') || chosen.some(([n]) => tagsFor(n).includes('build'))) requireBuild();
+/* --pwa launches one too (verify-pwa), whatever the selection. */
+if (flag('--pwa') || chosen.some(([n]) => tagsFor(n).includes('browser'))) requireBrowser();
 
 /* ── how many at once ─────────────────────────────────────────────────────────
    One, unless asked otherwise: the default has to stay the arrangement every
@@ -591,7 +648,43 @@ if (JOBS > 1) {
 }
 
 const results = [];
+/* The --pwa phases, which run outside the suite loop. Recorded here so the
+   report covers everything the invocation measured: without them a run whose
+   split build failed reported every suite it listed as passing, and only
+   exitCode said otherwise (found by review). */
+const phases = [];
+const phase = (name, out, status, ms) => {
+  const c = require(path.join(ROOT, 'scripts', 'cause.js')).countsOf(out);
+  phases.push({ suite: name, tags: ['pwa'], status: !c.reported ? 'died' : (status === 0 && c.failed === 0 ? 'pass' : 'fail'),
+                checks: c.checks, passed: c.passed, failed: c.failed, durationMs: ms });
+};
 const t0 = Date.now();
+/* --report-json: written on the way out, whatever the exit — a red run is
+   the one most worth having as data. Names, tags, counts and times only:
+   never a line of suite output, which can quote the licensed corpus (that
+   is why tests/last-run.log is gitignored), and the target is named by its
+   kind, not its path, because an export's file name can carry its title. */
+if (REPORT_JSON) process.on('exit', code => {
+  const git = c => { try { return execSync(c, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch (_) { return ''; } };
+  const suites = results.map(r => {
+    const c = countsOf(r.out);   // a suite that died still ran what it printed
+    return { suite: r.name, tags: tagsFor(r.name), status: r.failed === null ? 'died' : (r.ok ? 'pass' : 'fail'),
+             checks: c.checks, passed: c.passed, failed: c.failed, durationMs: r.ms };
+  }).concat(phases);
+  const doc = {
+    format: 'systole-verify-report', version: 1,
+    commit: git('git rev-parse --short=12 HEAD') || 'unknown', engine: ENGINE,
+    target: TARGET_IS_URL ? 'url' : 'file', exitCode: code,
+    selected: chosen.length, ran: suites.length,
+    passed: suites.filter(s => s.status === 'pass').length,
+    checks: suites.reduce((n, s) => n + s.checks, 0),
+    suites,
+  };
+  try { fs.mkdirSync(path.dirname(path.resolve(REPORT_JSON)), { recursive: true }); fs.writeFileSync(REPORT_JSON, JSON.stringify(doc, null, 2) + '\n'); }
+  /* A report asked for and not written fails the run: automation that
+     wanted the file must not read exit 0 as "it is there". */
+  catch (e) { console.error(`  could not write --report-json ${REPORT_JSON}: ${e.message}`); process.exitCode = 1; }
+});
 let stopScheduling = false;
 
 function runSuite(name, claim) {
@@ -609,7 +702,7 @@ function runSuite(name, claim) {
       const passed = m ? +m[1] : 0, failed = m ? +m[2] : null;
       resolve({
         name, claim, passed, failed, checks: passed + (failed || 0),
-        secs: ((Date.now() - t) / 1000).toFixed(0),
+        secs: ((Date.now() - t) / 1000).toFixed(0), ms: Date.now() - t,
         ok: status === 0 && failed === 0, out,
       });
     });
@@ -636,7 +729,7 @@ function runSuite(name, claim) {
    The extraction itself lives in scripts/cause.js, with tests/verify-cause-pure.js
    over it: the first version of it scanned from the wrong end of the output and
    reported a check's own wrapped detail as the cause of a crash. */
-const { causeOf, noteOf } = require(path.join(ROOT, 'scripts', 'cause.js'));
+const { causeOf, noteOf, countsOf } = require(path.join(ROOT, 'scripts', 'cause.js'));
 
 function report(r) {
   const head = JOBS > 1 ? `  ${r.name.padEnd(14)} ` : '';
@@ -885,7 +978,9 @@ if (bad.length) {
 if (flag('--pwa')) {
   const PORT = 8137;
   console.log('── the Stage 1 split build, over HTTP ──\n');
+  let pt = Date.now();
   const b = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'build-pwa.js'), TARGET], { encoding: 'utf8' });
+  phases.push({ suite: 'build-pwa', tags: ['pwa'], status: b.status === 0 ? 'pass' : 'fail', checks: 0, passed: 0, failed: b.status === 0 ? 0 : null, durationMs: Date.now() - pt });
   if (b.status !== 0) { console.error(b.stdout + b.stderr); process.exit(1); }
   console.log((b.stdout.match(/shell total.*/) || ['  (built)'])[0].trim());
 
@@ -898,11 +993,16 @@ if (flag('--pwa')) {
   const wait = spawnSync(process.execPath, ['-e',
     `const t=Date.now();(function p(){require('http').get('http://localhost:${PORT}/',r=>{r.destroy();process.exit(0)})
      .on('error',()=>{if(Date.now()-t>15000)process.exit(1);setTimeout(p,200)})})()`], { encoding: 'utf8' });
-  if (wait.status !== 0) { console.error('  the static server never came up'); done(); process.exit(1); }
+  if (wait.status !== 0) {
+    phases.push({ suite: 'pwa', tags: ['pwa'], status: 'died', checks: 0, passed: 0, failed: null, durationMs: 0 });
+    console.error('  the static server never came up'); done(); process.exit(1);
+  }
+  pt = Date.now();
 
   const r = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
                       { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE } });
   const out = (r.stdout || '') + (r.stderr || '');
+  phase('pwa', out, r.status, Date.now() - pt);
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
   for (const ln of out.split('\n')) if (/^\s*(PASS|FAIL)\s/.test(ln)) console.log(ln);
   /* AND WHY IT STOPPED, when it stopped. The filter above prints check lines
@@ -929,9 +1029,11 @@ if (flag('--pwa')) {
      fresh — verify-pwa serves that directory with a plain static server and
      never touches _worker.js, which in advanced mode owns every request to the
      project. A deployment went down once while that path had no test at all. */
+  pt = Date.now();
   const wk = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pages.js'),
                                           path.join(ROOT, 'dist')], { encoding: 'utf8' });
   const wout = (wk.stdout || '') + (wk.stderr || '');
+  phase('pages', wout, wk.status, Date.now() - pt);
   const wm = wout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
   for (const ln of wout.split('\n')) if (/^\s*FAIL\s/.test(ln)) console.log(ln);
   if (!wm || +wm[2] > 0 || wk.status !== 0) {
@@ -945,9 +1047,11 @@ if (flag('--pwa')) {
      under test, and reading a stale one would report on a deploy that is not
      the one being verified. It drives no browser — the failure it guards is
      two deploys apart and is decidable from the worker's own source. */
+  pt = Date.now();
   const cb = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-cachebuckets.js'),
                                           path.join(ROOT, 'dist')], { encoding: 'utf8' });
   const cout = (cb.stdout || '') + (cb.stderr || '');
+  phase('cachebuckets', cout, cb.status, Date.now() - pt);
   const cm = cout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
   for (const ln of cout.split('\n')) if (/^\s*FAIL\s/.test(ln)) console.log(ln);
   if (!cm || +cm[2] > 0 || cb.status !== 0) {

@@ -290,7 +290,7 @@ function claimFlag(text, sec, book, pg) {
   if (newNum.length) return 'a number not in your book: ' + newNum[0];
   var newName = idsOf(text).filter(function (id) { return book.names.indexOf(id) === -1; });
   if (newName.length) return 'names what your chapter does not: ' + labelOf(newName[0]);
-  return '';
+  return Ground.relationError(unpaged(text), [src]);
 }
 function pageFlag(pg, c) {
   return pg >= c.pageStart && pg <= c.pageEnd ? '' : 'p. ' + pg + ' is not in this section (' + pages(c) + ')';
@@ -302,9 +302,17 @@ function quoteFlag(q, sec) {
   return filled && sec.norm.indexOf(filled) !== -1 ? '' : 'the quoted sentence is not your book’s words';
 }
 function says(t) { return String(t || '').indexOf(NOT_IN_PDF) !== -1; }
+/* The text a flowchart claims: every quoted label, but not a bare yes or no
+   on an arrow (-->|"no"|). That is the answer to the decision node's
+   question, which is checked; read as a claim it is a negation the passage
+   never states, and every decision flowchart Spec.RULES asks for was
+   dropped. Any other arrow label (a threshold, say) is still checked. */
 function labels(flowchart) {
-  var out = [], re = /"([^"]*)"/g, m;
-  while ((m = re.exec(String(flowchart || '')))) out.push(m[1]);
+  var out = [], re = /(\|\s*)?"([^"]*)"/g, m;
+  while ((m = re.exec(String(flowchart || '')))) {
+    if (m[1] && /^\s*(?:yes|no)\s*$/i.test(m[2])) continue;
+    out.push(m[2]);
+  }
   return out.join(' ');
 }
 
@@ -450,6 +458,26 @@ function dropSection(rec, i) {
   return r;
 }
 function sectionOf(rec, i) { return rec && rec.sections && rec.sections[i] || null; }
+/* Unverified pack questions never enter a graded drill or exam. */
+function safeSection(rec, i, doc) {
+  var sec = sectionOf(rec, i), c = doc && doc.clusters[i]; if (!sec || !c) return null;
+  var out = JSON.parse(JSON.stringify(sec));
+  out.quiz.questions = out.quiz.questions.map(function (q) { return Ground.gradeQuestion(q, Ground.sourcesOf(c)).q; }).filter(Boolean);
+  var sents = Ground.sourcesOf(c), exact = function (text) { return !!text && sents.some(function (s) { return Ground.normal(s.text).indexOf(Ground.normal(text)) !== -1; }); };
+  var pts = out.lesson.points.filter(function (p) { return !p.flag && exact(p.text); });
+  out.lesson.sourceMemory = {
+    points: pts.length ? pts : sents.slice(0, 6).map(function (s) { return { text: s.text, page: s.page }; }),
+    overview: exact(out.lesson.overview) ? out.lesson.overview : '',
+    numbers: out.lesson.numbers.filter(function (p) { return !p.flag && exact(p.text); }),
+    mnemonics: out.lesson.mnemonics.filter(function (m) { return m.words.every(exact); }), analogies: [], flowchart: ''
+  };
+  return out;
+}
+function safeRecord(rec, doc) {
+  if (!rec) return null; var out = { id: rec.id, sections: {} };
+  Object.keys(rec.sections || {}).forEach(function (i) { var s = safeSection(rec, +i, doc); if (s) out.sections[i] = s; });
+  return out;
+}
 /* What the owner is told, in counts that come from the check itself. */
 function report(checked, against) {
   against = against || 'your book';
@@ -460,7 +488,7 @@ function report(checked, against) {
     imported: s.length, questions: q, flagged: f, refused: checked.refused.length, dropped: checked.dropped.length,
     line: s.length ? 'Imported ' + (s.length === 1 ? 'section ' : 'sections ') + nums.join(', ') + ': ' +
       s.length + (s.length === 1 ? ' lesson, ' : ' lessons, ') + q + (q === 1 ? ' question' : ' questions') + '. ' +
-      (f ? f + (f === 1 ? ' item' : ' items') + ' not found in ' + against + ', flagged where it is shown.' : 'Everything checked was found in ' + against + '.')
+      (f ? f + (f === 1 ? ' item' : ' items') + ' not found in ' + against + ', flagged where it is shown.' : 'Source checks passed; compare generated explanations with the cited pages.')
       : 'Nothing was imported.',
   };
 }
@@ -509,7 +537,7 @@ function coverage(rec, doc) {
 
 var MemPack = { FORMAT: FORMAT, VERSION: VERSION, PER_REPLY: PER_REPLY, LESSON: LESSON, QUESTION: QUESTION, EXAMPLE: EXAMPLE,
                 prompt: prompt, replies: replies, unitName: unitName, packsIn: packsIn, parse: parse, check: check, merge: merge,
-                sectionOf: sectionOf, dropSection: dropSection, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam, segText: segText };
+                sectionOf: sectionOf, safeSection: safeSection, safeRecord: safeRecord, dropSection: dropSection, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam, segText: segText };
 root.MemPack = MemPack;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemPack;
 })(typeof window !== 'undefined' ? window : this);

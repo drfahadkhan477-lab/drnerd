@@ -1,0 +1,119 @@
+#!/usr/bin/env node
+/*
+ * Every check that needs no licensed export — what `npm test` runs.
+ *
+ *   npm test                 the no-export suites: pure Node, then the browser
+ *                            suites that build their own documents
+ *   npm run test:pure        the pure-Node ones only, no browser needed
+ *   npm run test:private     the whole registry against your own build
+ *                            (scripts/verify.js; needs build/systole.html)
+ *
+ *   SYSTOLE_ENGINE=webkit npm test     the browser suites on WebKit
+ *
+ * WHY THIS EXISTS. `npm test` was scripts/verify.js, which starts by looking
+ * for build/systole.html and exits 1 without it. On a fresh clone, in a
+ * Codespace, or anywhere the export is not, the most obvious command in the
+ * repository did nothing but fail — while CI was running thousands of checks
+ * that need no export at all. Those are now what `npm test` means, and the
+ * full run keeps its own name.
+ *
+ * THE LIST IS THE WORKFLOW'S, NOT A COPY OF IT. The suites are read from
+ * .github/workflows/verify.yml: every `node tests/verify-*.js` step in the
+ * `logic` job (pure) and the `memorizer-browser` job (browser). So a suite
+ * added to CI is in `npm test` the same day, and "passes locally" and "passes
+ * in CI" name the same set. tests/verify-testpublic-pure.js holds the split
+ * to what the workflow says.
+ *
+ * NOTHING SKIPPED IS COUNTED AS PASSED. A suite file that is missing is a
+ * failure, not a skip. `--pure` says in its last line how many browser suites
+ * it did not run, and never prints "all green". Without `--pure`, a browser
+ * that is not installed stops the run before anything starts, rather than
+ * running the pure half and reporting it as the whole.
+ */
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const ROOT = path.join(__dirname, '..');
+
+/* The body of one top-level job: from "  <job>:" to the next line indented
+   exactly two spaces, or the end of the file. */
+function jobBody(yml, job) {
+  const start = yml.indexOf(`\n  ${job}:\n`);
+  if (start < 0) return null;
+  const rest = yml.slice(start + job.length + 5);
+  const next = rest.search(/\n  [A-Za-z0-9_-]+:\s*\n/);
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
+const invoked = body => [...(body || '').matchAll(/^\s*run:\s*node\s+tests\/(verify-[a-z0-9-]+)\.js\s*$/gm)].map(m => m[1]);
+
+function suitesFromWorkflow(yml) {
+  const logic = jobBody(yml, 'logic'), browser = jobBody(yml, 'memorizer-browser');
+  if (logic === null || browser === null)
+    throw new Error(`the workflow has no ${logic === null ? 'logic' : 'memorizer-browser'} job — nothing to take the suite list from`);
+  return { pure: invoked(logic), browser: invoked(browser) };
+}
+
+/* opts: { root, yml, pure, engine, executablePath, log } — the seams the
+   suite drives. Returns { code, ran, failed, notRun }. */
+function run(opts) {
+  const o = opts || {};
+  const root = o.root || ROOT;
+  const log = o.log || (s => console.log(s));
+  const yml = o.yml != null ? o.yml : fs.readFileSync(path.join(root, '.github', 'workflows', 'verify.yml'), 'utf8');
+  const { pure, browser } = suitesFromWorkflow(yml);
+  if (!pure.length) throw new Error('the logic job invokes no suites — refusing to report a run of nothing');
+
+  const { ENGINES, DEFAULT_ENGINE } = require(path.join(ROOT, 'tests', '_engine.js'));
+  const engine = (o.engine || process.env.SYSTOLE_ENGINE || DEFAULT_ENGINE).trim().toLowerCase();
+  if (!ENGINES.includes(engine)) throw new Error(`SYSTOLE_ENGINE ${JSON.stringify(engine)} is not an engine. Use one of: ${ENGINES.join(', ')}.`);
+  if (!o.pure) {
+    let exe = null;
+    try { exe = o.executablePath !== undefined ? o.executablePath : require('playwright')[engine].executablePath(); }
+    catch (e) { exe = null; }
+    if (!exe || !fs.existsSync(exe)) {
+      log(`\n  ${browser.length} browser suites need ${engine}, and playwright has no ${engine} installed.`);
+      log(`  install    npm ci && npx playwright install ${engine}`);
+      log(`  or run     npm run test:pure      (the ${pure.length} pure suites, and says what it left out)\n`);
+      return { code: 1, ran: [], failed: [], notRun: pure.concat(browser) };
+    }
+  }
+
+  const list = o.pure ? pure : pure.concat(browser);
+  const ran = [], failed = [];
+  for (const name of list) {
+    const file = path.join(root, 'tests', name + '.js');
+    const t0 = Date.now();
+    let status;
+    if (!fs.existsSync(file)) status = 'missing';
+    else {
+      const r = spawnSync(process.execPath, [file], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'],
+        env: Object.assign({}, process.env, { SYSTOLE_ENGINE: engine }), maxBuffer: 64 * 1048576 });
+      status = r.status === 0 ? 'pass' : (r.status === null ? `killed (${r.signal})` : `exit ${r.status}`);
+      if (status !== 'pass') {
+        const out = (String(r.stdout || '') + String(r.stderr || '')).split('\n').filter(l => /FAIL|Error|error/.test(l)).slice(0, 8);
+        if (out.length) log(out.map(l => '      ' + l).join('\n'));
+      }
+    }
+    ran.push(name);
+    if (status !== 'pass') failed.push(name);
+    log(`  ${status === 'pass' ? 'PASS' : 'FAIL'}  ${name.padEnd(40)} ${status === 'pass' ? '' : status + '  '}${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  }
+
+  const notRun = o.pure ? browser : [];
+  log('');
+  if (failed.length) log(`  ${failed.length} of ${ran.length} suites failed: ${failed.join(', ')}`);
+  else if (notRun.length) log(`  ${ran.length} pure suites passed. ${notRun.length} browser suites NOT run: ${notRun.join(', ')}`);
+  else log(`  all ${ran.length} no-export suites passed (${pure.length} pure, ${browser.length} in ${engine}).`);
+  log('  The suites that drive a real build need your export: npm run test:private');
+  return { code: failed.length ? 1 : 0, ran, failed, notRun };
+}
+
+module.exports = { suitesFromWorkflow, run, jobBody };
+
+if (require.main === module) {
+  try { process.exit(run({ pure: process.argv.includes('--pure') }).code); }
+  catch (e) { console.error('\n  ' + e.message + '\n'); process.exit(1); }
+}

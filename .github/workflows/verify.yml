@@ -21,21 +21,21 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 5258 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 3619.
-# The other 1773 all drive a real build of the app in a real browser
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 5432 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 3789.
+# The other 1777 all drive a real build of the app in a real browser
 # (Playwright), and a real build needs the ACCSAP 12 export — the licensed
 # question bank scripts/build.js refuses to run without, on purpose, and
 # which is deliberately never committed to this repository or to any secret
 # GitHub holds either. There is no way to build the app in this workflow, so
-# there is no way to run those 1773 checks here. See docs/BUILD.md and the
+# there is no way to run those 1777 checks here. See docs/BUILD.md and the
 # comment at the top of scripts/build.js for why, and README.md for how to
 # run the full suite yourself, locally, against your own copy.
 #
 # What DOES run here needs no source file, and is genuinely worth having on
 # every push. All of it needs no browser either, except the memorizer-browser
 # job, which drives the Memorizer — a second app that carries no licensed
-# content — in Chromium:
+# content — in Chromium and in WebKit:
 #
 #   syntax       every .js and .py file in the repo parses, and the two
 #                listing commands (which patch chain steps exist, which test
@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 69 suites that are pure Node with no Playwright and no
+#   logic        the 73 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -72,7 +72,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                3619 real checks, up
+#                3789 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -85,7 +85,7 @@
 #                is what would notice before a build silently shipped without
 #                the fellow's own realized intent.
 #
-# Adding the other 1773 checks to this file is possible — GitHub Actions
+# Adding the other 1777 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -178,7 +178,7 @@ jobs:
         run: node tests/verify-conductionwave-pure.js
       - name: the coronary tree's branch geometry and flow-glow curve (29 checks)
         run: node tests/verify-coronarytree-pure.js
-      - name: the engine is a flag, not thirty-four hardcoded copies of one (79 checks)
+      - name: the engine is a flag, not thirty-four hardcoded copies of one (91 checks)
         run: node tests/verify-engine.js
       - name: the licensed question bank cannot be committed (36 checks)
         run: node tests/verify-leakguard.js
@@ -210,7 +210,7 @@ jobs:
         run: node tests/verify-md-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
-      - name: a splash that cannot load the bank says which failure it was (44 checks)
+      - name: a splash that cannot load the bank says which failure it was (51 checks)
         run: node tests/verify-loader-pure.js
       - name: a split build cannot be half of one build and half of another (52 checks)
         run: node tests/verify-provenance-pure.js
@@ -232,14 +232,22 @@ jobs:
         run: node tests/verify-heartbake-pure.js
       - name: the split build ships src/ without its comments, and nothing else changes (28 checks)
         run: node tests/verify-stripcomments-pure.js
-      - name: the note figures load after the home screen, one unit at a time (27 checks)
+      - name: the note figures load after the home screen, one unit at a time (29 checks)
         run: node tests/verify-refimgdefer-pure.js
       - name: a reference unit adds only what is new and high yield, and what it writes the importer reads and check-refs passes, under titles someone could search by, each passage once (66 checks)
         run: node tests/verify-refsmerge-pure.js
       - name: word order counts in the ranker — the note holding the phrase outranks one holding its words scattered, and questions rank as before (9 checks)
         run: node tests/verify-phrase-pure.js
-      - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, no word of it is printed, a key its own commentary contradicts is refused, a question with no explanation says so, a merged build carries exactly the staging, a bold heading naming no "Question" starts one, every figure type is served as an image, and an unanswered explanation is probed letter by letter (169 checks)
+      - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, no word of it is printed, a key its own commentary contradicts is refused, a question with no explanation says so, a merged build carries exactly the staging, a bold heading naming no "Question" starts one, every figure type is served as an image, and an unanswered explanation is probed letter by letter (176 checks)
         run: node tests/verify-olderacc-pure.js
+      - name: extraction refuses an unsafe id, an image whose bytes are not its mime, damaged base64, and a bank that breaks the content schema, and a refusal leaves the last good content untouched (30 checks)
+        run: node tests/verify-extract-pure.js
+      - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing; the reference notes travel in it too, and the written schema names the version the code enforces (28 checks)
+        run: node tests/verify-bankpack-pure.js
+      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (20 checks)
+        run: node tests/verify-testpublic-pure.js
+      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (38 checks)
+        run: node tests/verify-devtools-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
@@ -272,11 +280,11 @@ jobs:
         run: node tests/verify-memorizer-provenance-pure.js
       - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (103 checks)
         run: node tests/verify-memorizer-pack-pure.js
-      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text (50 checks)
+      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text, a deleted section's diagrams with it (52 checks)
         run: node tests/verify-memorizer-studyimport-pure.js
       - name: Memorizer — what the misses say — the pairs taken for one another, each missed item's attempts in order, a lapse named (13 checks)
         run: node tests/verify-memorizer-misses-pure.js
-      - name: Memorizer — one study format for both Claude prompts — spec.js's rules in each word for word, the enforced counts, the study-file prompt's example read and passed, the doc generated (41 checks)
+      - name: Memorizer — one study format for both Claude prompts — spec.js's rules in each word for word, the enforced counts, the study-file prompt's example read and passed, the doc generated, a decision flowchart's yes and no not read as claims (44 checks)
         run: node tests/verify-memorizer-spec-pure.js
       - name: Memorizer — explain it first — on a later day the lesson waits for what you remember, the gaps taught first (8 checks)
         run: node tests/verify-memorizer-recall-pure.js
@@ -302,32 +310,59 @@ jobs:
   # are written in the suite. verify-memorizer-offline fetches the pinned
   # readers from jsDelivr, as verify-memorizer does.
   #
-  # Chromium only, on purpose, for now: the suites run on WebKit through
-  # SYSTOLE_ENGINE=webkit, and adding that here is one more matrix entry once
-  # a WebKit run of each has been seen green.
+  # IN WEBKIT TOO, because the device this is for is an iPad and an iPad is
+  # WebKit. Every suite here launches through tests/_engine.js, so the engine
+  # is SYSTOLE_ENGINE and nothing else changes between the two entries. The
+  # Chromium entry keeps its name exactly, so nothing that looks a check up
+  # by name loses it. fail-fast is off: a WebKit-only failure must not cancel
+  # the Chromium run that would show it is WebKit-only. Each suite runs even
+  # when the one before it failed (!cancelled()), so one run shows every
+  # failure on an engine, not only the first; the job is still red.
+  #
+  # Playwright's WebKit on Linux is WebKitGTK, not Safari on iPadOS. It shares
+  # the engine, the JavaScript core and IndexedDB, which is what these suites
+  # exercise; it is not a substitute for opening the app on the iPad.
   memorizer-browser:
-    name: memorizer-browser — the whole app, in Chromium, on documents made for the test
+    name: memorizer-browser — the whole app, in ${{ matrix.label }}, on documents made for the test
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: chromium
+            label: Chromium
+          - engine: webkit
+            label: WebKit
+    env:
+      SYSTOLE_ENGINE: ${{ matrix.engine }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
-      - name: install the pinned test tools, and Chromium
+      - name: install the pinned test tools, and the browser
         run: |
           npm ci
-          npx playwright install --with-deps chromium
-      - name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (478 checks)
+          npx playwright install --with-deps ${{ matrix.engine }}
+      - if: ${{ !cancelled() }}
+        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (479 checks)
         run: node tests/verify-memorizer.js
-      - name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
+      - if: ${{ !cancelled() }}
+        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
         run: node tests/verify-memorizer-hardening.js
-      - name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (68 checks)
+      - if: ${{ !cancelled() }}
+        name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (68 checks)
         run: node tests/verify-memorizer-studyimport.js
-      - name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served with the network cut (7 checks)
+      - if: ${{ !cancelled() }}
+        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served with the network cut (7 checks)
         run: node tests/verify-memorizer-offline.js
-      - name: Memorizer — your data and what the page may do — back up and restore, a bad backup refused, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (26 checks)
+      - if: ${{ !cancelled() }}
+        name: Memorizer — your data and what the page may do — the backup reminder on the app's own backup, an orphan that would spoil a backup removed, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (18 checks)
         run: node tests/verify-memorizer-data.js
+      - if: ${{ !cancelled() }}
+        name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (25 checks)
+        run: node tests/verify-bankstore.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

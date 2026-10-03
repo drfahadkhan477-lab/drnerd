@@ -123,4 +123,17 @@ function noteOf(out, cap = 12) {
   return body;
 }
 
-module.exports = { causeOf, noteOf, NOISE, FILE_POS, ERRORISH, HEADING };
+/* What a suite's output says it ran: the summary line when it printed one,
+   else its PASS and FAIL lines, with failed: null to mark that it never
+   reported. A suite that died after forty checks ran forty checks; recording
+   zero (what the summary regex alone gives) understated exactly the runs a
+   report most needs to carry (found by review of --report-json). */
+function countsOf(out) {
+  const s = String(out || '');
+  const m = s.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
+  if (m) return { passed: +m[1], failed: +m[2], checks: +m[1] + +m[2], reported: true };
+  const passed = (s.match(/^\s*PASS\s/gm) || []).length, fails = (s.match(/^\s*FAIL\s/gm) || []).length;
+  return { passed, failed: null, checks: passed + fails, reported: false };
+}
+
+module.exports = { causeOf, noteOf, countsOf, NOISE, FILE_POS, ERRORISH, HEADING };

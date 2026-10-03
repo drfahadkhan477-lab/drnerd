@@ -197,5 +197,24 @@ head('sentences');
   ok('numbers are read whole: 2.5 and 1,000', JSON.stringify(G.numbersIn('2.5 mg and 1,000 units')) === '["2.5","1000"]', JSON.stringify(G.numbersIn('2.5 mg and 1,000 units')));
 }
 
+head('contradictions and source-proof grading');
+{
+  const source = [{ text: 'Diuretics reduce preload by lowering circulating volume.', page: 1 }];
+  ok('negating a source sentence is refused', G.summary('Diuretics do not reduce preload by lowering circulating volume. [1]', source).kept.length === 0);
+  ok('reversing the threshold or changing its unit is refused', !!G.claimError('A gradient below 40 mmHg marks severity.', ['A gradient above 40 mmHg marks severity.'], 0) && !!G.claimError('A gradient above 40 mg marks severity.', ['A gradient above 40 mmHg marks severity.'], 0));
+  const q = { question: 'What do diuretics reduce?', quote: '', options: ['Preload', 'Afterload', 'Heart rate', 'Contractility'], answer: 0, page: 1, explain: 'The model says so.' };
+  const good = G.gradeQuestion(q, source).q;
+  ok('a graded model answer has a mechanically verifiable source completion', good && good.sourceCompletion && good.quote === 'Diuretics reduce _____ by lowering circulating volume.' && good.explain === source[0].text);
+  ok('invented pages and unsupported answers are not graded', !G.gradeQuestion({ ...q, page: 999 }, source).q && !G.gradeQuestion({ ...q, answer: 1 }, source).q);
+  ok('another valid completion is ambiguous and refused', !G.gradeQuestion(q, source.concat({ text: 'Diuretics reduce afterload by lowering circulating volume.', page: 1 })).q);
+}
+{
+  const c = { text: 'Diuretics reduce preload.', segments: [{ text: 'Diuretics reduce preload.', page: 1 }] };
+  const fallback = { overview: c.text, points: [{ text: c.text, page: 1 }], numbers: [], mnemonics: [], analogies: [], flowchart: '' };
+  const proposal = { ...fallback, points: [{ text: 'Diuretics increase preload.', page: 1 }] };
+  ok('unsupported generated lesson facts are replaced with source facts', G.sourceLesson(proposal, c, fallback).points[0].text === c.text);
+  let refused = false; try { G.sourceLesson({ ...proposal, points: [{ text: c.text, page: 999 }] }, c, fallback); } catch (_) { refused = true; }
+  ok('a remote lesson cannot cite an invented page', refused);
+}
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

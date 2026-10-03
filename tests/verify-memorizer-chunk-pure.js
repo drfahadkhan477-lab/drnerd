@@ -961,8 +961,8 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
           So the check fails on the defect either way, on every OS. */
        try { zipOf(out, ['a\\b.html']); return false; } catch (e) { return /not a bare relative name/.test(e.message); } })());
   fs.rmSync(out, { recursive: true, force: true });
-  const m = /var pinnedCdn = (.*);/.exec(sw);
-  const pinned = new Function('u', 'return ' + m[1]);
+  const m = /function pinned\(u\) \{ (.*) \}/.exec(sw);
+  const pinned = new Function('u', m[1]);
   const urls = Object.keys(O.TESS).map(k => O.TESS[k].url).concat([Pdf.LIB.url]);
   ok('the service worker keeps every file the text reader fetches, for offline use', urls.every(u => pinned(new URL(u))),
      urls.filter(u => !pinned(new URL(u))).join(', ') || urls.length + ' files');
@@ -1143,8 +1143,12 @@ async function startLoop() {
   /* and what is done with a refusal */
   const lb2 = lib([]); L.useLib(lb2); L.useGpu(() => ({ ok: true, f16: true })); L.useEngine(null, null);
   L.useVerify(async () => ({ ok: false, checked: 9, bad: ['params_shard_3.bin'], unknown: [] }));
+  /* a refusal happens inside a start; clearModel waits for a start to end,
+     so a refusal that went through it would never end: held to a limit, so
+     that shows as a failure here and not as a suite that hangs */
+  const within = (pr, ms = 5000) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('still waiting after ' + ms + ' ms')), ms))]);
   let refused = null;
-  try { await L.start(Q, () => {}); } catch (e) { refused = e; }
+  try { await within(L.start(Q, () => {})); } catch (e) { refused = e; }
   ok('a model that fails the check is not used: the start fails, and says why', refused && refused.integrity === true && /does not match the one Memorizer expects: 1 file not what it should be \(params_shard_3\.bin\)/.test(refused.message), refused && refused.message);
   ok('it is unloaded and deleted, both builds, both stores', lb2.unloaded.includes(Q) && [Q, L.variantFor(Q, false)].every(id => ['cache', 'indexeddb'].every(b => lb2.deleted.includes(id + '@' + b + '@pinned'))), JSON.stringify([lb2.unloaded, lb2.deleted]));
   ok('and nothing is left ready to answer', !L.ready(), 'ready: ' + L.ready());
@@ -1154,10 +1158,25 @@ async function startLoop() {
   lb3.CreateMLCEngine = async (id, o) => { lb3.calls.push({ id }); const e = new Error('Integrity verification failed for ' + o.appConfig.model_list.find(x => x.model_id === id).model_lib);
     e.name = 'IntegrityError'; e.url = o.appConfig.model_list.find(x => x.model_id === id).model_lib; throw e; };
   refused = null;
-  try { await L.start(Q, () => {}); } catch (e) { refused = e; }
+  try { await within(L.start(Q, () => {})); } catch (e) { refused = e; }
   ok('the engine refusing a file before use: not retried, deleted, and it says which file', lb3.calls.length === 1 && refused && refused.integrity === true &&
      /does not match the one Memorizer expects: Qwen3-0\.6B-q4f16_1_cs1k-webgpu\.wasm not what it should be/.test(refused.message) &&
      lb3.deleted.includes(Q + '@cache@pinned') && lb3.deleted.includes(Q + '@indexeddb@pinned'), JSON.stringify([lb3.calls.length, refused && refused.message, lb3.deleted.length]));
+  /* Delete, when there is no copy from before the pin to delete (the engine
+     fails to find what it would remove, or is offline for its index): not an
+     error — that copy is extra, the pinned one is what was asked for */
+  const lb5 = lib([]); L.useLib(lb5); L.useEngine(null, null);
+  lb5.deleteModelAllInfoInCache = async (id, cfg) => { if (where(id, cfg) === 'unpinned') throw new Error('Failed to fetch'); lb5.deleted.push(id + '@' + cfg.cacheBackend); };
+  const gone = await L.clearModel(Q).then(() => 'deleted', e => e.message);
+  ok('Delete the downloaded model, with no older copy to remove: done, not an error', gone === 'deleted' && lb5.deleted.length === 4, gone + ' ' + JSON.stringify(lb5.deleted));
+  /* and when the bad model cannot be deleted, it is still not used, and the
+     message does not say it was deleted */
+  const lb4 = lib([]); L.useLib(lb4); L.useEngine(null, null); L.useVerify(async () => ({ ok: false, checked: 9, bad: ['params_shard_3.bin'], unknown: [] }));
+  lb4.deleteModelAllInfoInCache = async (id, cfg) => { if (where(id, cfg) === 'pinned') throw new Error('storage busy'); };
+  refused = null;
+  try { await within(L.start(Q, () => {})); } catch (e) { refused = e; }
+  ok('a refused model that cannot be deleted: not used, and it says it could not be deleted', refused && refused.integrity === true &&
+     /It was not used, and could not be deleted \(Could not delete .*storage busy\); delete it in Settings/.test(refused.message) && !L.ready(), refused && refused.message);
   L.useVerify(null); L.useLib(null); L.useGpu(null); L.useEngine(null, null); delete global.localStorage;
 }
 
@@ -1182,7 +1201,7 @@ async function swFetch() {
     new Function('self', 'caches', 'fetch', 'location', 'setTimeout', SW_SRC)(self, caches, fetch, new URL(ORIGIN), timers || (() => {}));
     /* A response that never comes, or an error, is a result to report, not
        a hang or a crash that ends the suite before its summary. */
-    const go = req => new Promise(resolve => { let p = null; handlers.fetch({ request: Object.assign({ method: 'GET' }, req), respondWith: x => { p = x; } });
+    const go = req => new Promise(resolve => { let p = null; handlers.fetch({ request: Object.assign({ method: 'GET' }, req), respondWith: x => { p = x; }, waitUntil: p => p.catch(() => {}) });
       if (!p) return resolve('passed through'); p.then(resolve, e => resolve({ body: 'error: ' + e.message }));
       setTimeout(() => resolve({ body: 'no answer in 2 s' }), 2000); });
     const install = () => new Promise(resolve => handlers.install({ waitUntil: p => p.then(resolve) }));
@@ -1210,7 +1229,122 @@ async function swFetch() {
   ok('everything else is still cache-first: the icon comes from the cache, with no request made', r && r.body === 'cached ' + ORIGIN + 'icon.svg' && w.fetched.length === 0, JSON.stringify(w.fetched));
 }
 
-startLoop().then(swFetch).then(() => {
+/* A faulted text reader is replaced, and the page read again — once.
+   tesseract.js's WebAssembly faults now and then under WebKit ("RuntimeError:
+   Out of bounds memory access" inside Recognize, seen in CI's WebKit job);
+   the faulted worker used to be kept for every later scanned page. This runs
+   the REAL ocr.js — engine(), its download checks and the worker it builds —
+   in a sandbox whose Tesseract is a stand-in that faults on cue, so the
+   retry, the worker thrown away and the fresh one started are all measured,
+   not assumed. */
+async function ocrRetry() {
+  head('scanned pages: a text reader whose WebAssembly faults is replaced, and the page read again — once');
+  const vm = require('vm');
+  const SRC = fs.readFileSync(path.join(ROOT, 'memorizer', 'src', 'ocr.js'), 'utf8');
+  const FAULT = () => Promise.reject(new Error("RuntimeError: Out of bounds memory access (evaluating '(Tf=b._emscripten_bind_TessBaseAPI_Recognize_1=b.asm.Id).apply(null,arguments)')"));
+  const READ = () => Promise.resolve({ data: { blocks: [{ paragraphs: [{ lines: [{ bbox: { y0: 0, y1: 24 }, words: [{ text: 'Preload', confidence: 95, bbox: { x0: 10, x1: 80, y0: 0, y1: 24 } }] }] }] }] } });
+  /* plan: what each recognize() call does, in order, across every worker */
+  function sandbox(plan) {
+    const made = [], log = { recognize: [], thrown: [], scripts: [], live: new Set() };
+    /* the page's object URLs, so a worker's multi-MB script blob left
+       unreleased after the worker started is seen */
+    const url = Object.assign(Object.create(URL), {
+      createObjectURL: b => { const u = URL.createObjectURL(b); if (b.type === 'text/javascript') { log.scripts.push(u); log.live.add(u); } return u; },
+      revokeObjectURL: u => { log.live.delete(u); URL.revokeObjectURL(u); },
+    });
+    const win = {
+      Blob, URL: url, TextDecoder, Uint8Array, WebAssembly, Promise, Error, String,
+      setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref(); return t; }, clearTimeout,
+      fetch: () => Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['x;' + require(path.join(ROOT, 'memorizer', 'src', 'ocr.js')).WORKER_FIX.find])) }),
+      FileReader: class { readAsArrayBuffer(b) { b.arrayBuffer().then(r => { this.result = r; this.onload(); }); } },
+      document: { createElement: () => ({ getContext: () => ({ fillRect() {}, drawImage() {} }) }) },
+      Image: class { set src(_) { this.naturalWidth = 40; this.naturalHeight = 30; setTimeout(() => this.onload(), 0); } },
+      MemPdf: { loadScript: () => Promise.resolve() },
+      /* as tesseract.js 5.1.1 does: a failed job is rejected, then handed to
+         options.errorHandler — or, without one, thrown on the page as well */
+      Tesseract: { createWorker: (langs, oem, opts) => {
+        const n = made.length, w = { n, ended: false,
+          recognize: () => {
+            log.recognize.push(n);
+            /* a job takes a moment, so two can overlap; and, as 5.1.1's
+               terminate() does, ending the worker leaves its pending jobs
+               unsettled for ever */
+            const step = plan.shift() || READ;
+            return new Promise((res, rej) => setTimeout(() => { if (!w.ended) step().then(res, rej); }, 5)).catch(e => {
+              if (opts && typeof opts.errorHandler === 'function') opts.errorHandler(e.message); else log.thrown.push(e.message);
+              throw e.message;   // 5.1.1 rejects with the message string, not an Error
+            });
+          },
+          terminate: () => { w.ended = true; return Promise.resolve(); } };
+        made.push(w);
+        return Promise.resolve(w);
+      } },
+    };
+    win.window = win;
+    vm.runInNewContext(SRC, win);
+    const page = { getViewport: ({ scale }) => ({ width: 100 * scale, height: 100 * scale }), render: () => ({ promise: Promise.resolve() }) };
+    return { O: win.MemOcr, made, log, page, photo: new Blob(['not decoded by the stand-in Image']) };
+  }
+  const settle = p => p.then(v => ({ v }), e => ({ e }));
+
+  {
+    const t = sandbox([FAULT]);
+    const r = await settle(t.O.readPage(t.page));
+    ok('a scanned page whose first reading faults is read again, and its words come back', !r.e && r.v.length === 1 && r.v[0].str === 'Preload ', r.e ? String(r.e.message || r.e) : JSON.stringify(r.v));
+    ok('by a fresh text reader, the faulted one ended', t.made.length === 2 && t.made[0].ended && !t.made[1].ended && t.log.recognize.join() === '0,1',
+       JSON.stringify({ made: t.made.length, ended: t.made.map(w => w.ended), calls: t.log.recognize }));
+    const r2 = await settle(t.O.readPage(t.page));
+    ok('and the next page goes to the fresh reader, not the faulted one', !r2.e && t.made.length === 2 && t.log.recognize.join() === '0,1,1', JSON.stringify(t.log.recognize));
+    ok('and the fault is not also thrown on the page (the reader is given an error handler)', t.log.thrown.length === 0, JSON.stringify(t.log.thrown).slice(0, 80));
+    ok('each reader’s script blob is released once it has started, the faulted one’s included', t.log.scripts.length === 2 && t.log.live.size === 0,
+       JSON.stringify({ made: t.log.scripts.length, unreleased: t.log.live.size }));
+  }
+  {
+    const t = sandbox([FAULT, FAULT]);
+    const r = await settle(t.O.readPage(t.page));
+    ok('a page that faults twice is reported with the fault, not read a third time', r.e && /RuntimeError: Out of bounds memory access/.test(String(r.e.message || r.e)) && t.made.length === 2 && t.log.recognize.join() === '0,1',
+       JSON.stringify({ err: r.e && String(r.e.message || r.e).slice(0, 50), made: t.made.length, calls: t.log.recognize }));
+    const r2 = await settle(t.O.readPage(t.page));
+    ok('and the page after it starts a third reader, never reusing a faulted one', !r2.e && t.made.length === 3 && t.made[1].ended && t.log.recognize.join() === '0,1,2',
+       JSON.stringify({ made: t.made.length, ended: t.made.map(w => w.ended), calls: t.log.recognize }));
+  }
+  {
+    /* two imports at once, the first page faulting: neither may be left
+       waiting on the worker that is ended */
+    const t = sandbox([FAULT]);
+    const within = p => Promise.race([settle(p), new Promise(r => setTimeout(() => r({ hung: true }), 1000))]);
+    const [a, b] = await Promise.all([within(t.O.readPage(t.page)), within(t.O.readImage(t.photo))]);
+    ok('two imports at once, one faulting: both finish, neither left waiting on the ended reader', !a.hung && !b.hung && !a.e && !b.e && t.made[0].ended,
+       JSON.stringify({ page: a.hung ? 'hung' : a.e ? String(a.e.message || a.e).slice(0, 40) : 'read', photo: b.hung ? 'hung' : b.e ? String(b.e.message || b.e).slice(0, 40) : 'read', calls: t.log.recognize }));
+  }
+  {
+    const t = sandbox([() => Promise.reject(new Error('the image could not be read'))]);
+    const r = await settle(t.O.readPage(t.page));
+    ok('an error that is not a WebAssembly fault is reported at once, the reader kept', r.e && String(r.e.message || r.e) === 'the image could not be read' && t.made.length === 1 && !t.made[0].ended && t.log.recognize.join() === '0',
+       JSON.stringify({ err: r.e && String(r.e.message || r.e), made: t.made.length, calls: t.log.recognize }));
+  }
+  {
+    const t = sandbox([FAULT]);
+    const r = await settle(t.O.readImage(t.photo));
+    ok('a photo of a page is retried the same way', !r.e && r.v.items.length === 1 && t.made.length === 2 && t.made[0].ended && t.log.recognize.join() === '0,1',
+       r.e ? String(r.e.message || r.e) : JSON.stringify({ made: t.made.length, calls: t.log.recognize }));
+  }
+  {
+    const t = sandbox([]), pending = settle(t.O.readPage(t.page));
+    while (!t.log.recognize.length) await new Promise(resolve => setTimeout(resolve, 1));
+    await t.O.release(); const r = await pending;
+    const next = await settle(t.O.readPage(t.page));
+    ok('releasing the reader waits for its current page and the next page gets a new worker', !r.e && r.v.length === 1 && t.made[0].ended && !next.e && t.made.length === 2);
+    await t.O.release();
+  }
+  const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+  ok('the fault is recognised in WebKit’s words, Chromium’s, and as a thrown RuntimeError, and nothing else is',
+     O.isWasmFault(new Error('RuntimeError: Out of bounds memory access (evaluating …)')) && O.isWasmFault(new Error('RuntimeError: memory access out of bounds')) &&
+     O.isWasmFault(Object.assign(new Error('unreachable'), { name: 'RuntimeError' })) && O.isWasmFault('RuntimeError: unreachable') &&
+     !O.isWasmFault(new Error('the image could not be read')) && !O.isWasmFault(new Error('the text reader did not start')) && !O.isWasmFault(null));
+}
+
+startLoop().then(swFetch).then(ocrRetry).then(() => {
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 }, e => { console.error(e); process.exit(1); });
