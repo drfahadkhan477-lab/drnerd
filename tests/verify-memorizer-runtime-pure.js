@@ -57,5 +57,18 @@ module.exports = (async () => {
     console.log('PASS offline shell recovers from HTTP 503 and updates preserve pinned dependencies');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 
+  const llm = require('../memorizer/src/llm.js');
+  let created = 0, unloaded = 0;
+  llm.useGpu(() => ({ ok: true, f16: true }));
+  llm.useLib({ CreateMLCEngine: async () => { created++; return { unload: async () => { unloaded++; } }; }, deleteModelAllInfoInCache: async () => { throw new Error('synthetic cache refusal'); } });
+  await Promise.all([llm.start('first'), llm.start('first')]); assert.equal(created, 1);
+  await llm.start('second'); assert.equal(created, 2); assert.equal(unloaded, 1);
+  assert.equal(llm.ready('first'), false); assert.equal(llm.ready('second'), true);
+  await assert.rejects(llm.clearModel('second'), /synthetic cache refusal/);
+  assert.equal(unloaded, 2);
+  await Promise.all([llm.startEmbed(), llm.startEmbed()]); assert.equal(created, 3);
+  await llm.stopEmbed(); assert.equal(unloaded, 3);
+  console.log('PASS model starts are deduplicated, switching releases GPU memory, and cache failures are reported');
+
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });

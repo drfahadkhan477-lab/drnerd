@@ -2932,8 +2932,8 @@ function viewPractice() {
 /* ── ON-DEVICE AI (llm.js), every word it writes checked by ground.js ───── */
 function aiOn() { return LLM.loadConfig().on; }
 function aiEnsure() {
-  if (LLM.ready()) return Promise.resolve();
   var c = LLM.loadConfig();
+  if (LLM.ready(c.model)) return Promise.resolve();
   return LLM.supported().then(function (s) {
     if (!s.ok) throw new Error(s.why);
     return LLM.start(c.model, function (p, text) { ui.ai.status = 'Starting the on-device AI: ' + Math.round(100 * p) + '%' + (text ? ' — ' + text : ''); render(); });
@@ -3560,6 +3560,11 @@ function aiSettingsCard() {
   var model = h('select', { id: 'ai-model' }, LLM.MODELS.map(function (m) {
     return h('option', { value: m.id, selected: m.id === c.model }, m.label + ' — about ' + (m.mb >= 1000 ? (m.mb / 1000).toFixed(1) + ' GB' : m.mb + ' MB') + ' · ' + m.licence);
   }));
+  model.addEventListener('change', function () {
+    LLM.saveConfig({ on: c.on, model: model.value, meaning: c.meaning });
+    ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} };
+    if (c.on) aiJob('Switching the on-device model…', function () { return true; });
+  });
   return h('div.card.settings.ai-card', { id: 'ai-card' }, h('h2', '✨ On-device AI tutor'),
     h('p', 'Optional. A small language model (Qwen3, Apache-2.0), downloaded once and run on this iPad\u2019s GPU, that explains sections in plain words, suggests analogies, summarises what your book says in answer to a question, and writes harder questions. With a study pack written with Claude, it works from Claude\u2019s notes: a pack question you missed comes back in new words (its answer and reasons still Claude\u2019s), it can explain a mistake from Claude\u2019s reasons, mark your teach-back point by point (a verdict only with your own words to show for it), and ask follow-up questions from Claude\u2019s notes. It also runs your Coach as an agent: it can use several of the Coach’s tools on your book before it answers, and what it says is checked against what they found. It needs no key and, once downloaded, no connection.'),
     h('p', h('strong', 'It is not a source of facts. '), 'Every sentence it writes is checked against your book before you see it: no number and no disease, test or drug the book passage does not have, and a question is kept only when your book states its answer — and the book\u2019s own sentence is shown as the explanation. What fails the check is dropped and counted.'),
@@ -3568,13 +3573,14 @@ function aiSettingsCard() {
     h('div.row', button(c.on ? 'Turn off' : 'Turn on', function () {
       var on = !c.on;
       LLM.saveConfig({ on: on, model: model.value, meaning: c.meaning });
-      if (on) aiJob('Downloading and starting the model (once)…', function () { return true; }); else render();
+      if (on) aiJob('Downloading and starting the model (once)…', function () { return true; }); else LLM.stop().then(render, function (e) { ui.ai.error = e.message; render(); });
     }, c.on ? 'quiet' : 'primary', { id: 'ai-toggle' }), h('span.muted', { id: 'ai-status', role: 'status' }, ui.ai.busy || ui.ai.status || (c.on ? (LLM.ready() ? 'Ready.' : 'On — starts when first used.') : 'Off.'))),
     h('h3', 'Search by meaning'),
     h('p', 'Ask finds your book\u2019s sentences by their words; this finds them by what they mean too — "why do people pass out" finds "exertional syncope". A small model (' + LLM.EMBED.label + ', about ' + LLM.EMBED.mb + ' MB, ' + LLM.EMBED.licence +
       ') reads each section once, on this device. The answers are still your book\u2019s own sentences with their pages.'),
     h('div.row', button(c.meaning ? 'Turn off' : 'Turn on', function () {
-      LLM.saveConfig({ on: c.on, model: c.model, meaning: !c.meaning }); render();
+      LLM.saveConfig({ on: c.on, model: c.model, meaning: !c.meaning });
+      if (c.meaning) LLM.stopEmbed().then(render, function (e) { ui.ai.error = e.message; render(); }); else render();
     }, c.meaning ? 'quiet' : 'primary', { id: 'meaning-toggle' }), h('span.muted', c.meaning ? 'On.' : 'Off.')),
     ui.ai.error ? h('p.warn', { id: 'ai-error' }, 'The on-device AI could not run: ' + ui.ai.error) : null,
     h('div.row', button('Delete the downloaded model', function () {
