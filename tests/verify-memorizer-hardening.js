@@ -398,6 +398,41 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
   }
 
+  head('failed recuts keep the original chapter manifest in memory');
+  {
+    const r = await context('recut-failure'); await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Recut'); await r.locator('#learn-unit').waitFor(T);
+    await r.evaluate(async () => {
+      const id = Memorizer.ui.docId, b = { id: 'synthetic-book', name: 'Synthetic book', pages: 1, method: 'numbered', scanned: [], outline: [],
+        parts: [{ fileId: 'synthetic-part', first: 1, last: 1 }], chapters: [{ title: 'One', pageStart: 1, pageEnd: 1, docId: id }], found: {} };
+      await MemStore.batch([{ store: 'books', value: b }, { store: 'bookpages', value: { id: b.id + ':0', pages: [{ page: 1, lines: [{ text: 'A synthetic paragraph with enough readable words to retain this source during chapter cutting.', size: 10, y: 10 }] }] } }]);
+      window.__recutBatch = MemStore.batch;
+      MemStore.batch = ops => ops.some(o => o.store === 'books') ? Promise.reject(new Error('synthetic recut failure')) : window.__recutBatch(ops);
+      Memorizer.openBook(b.id);
+    });
+    await r.locator('#methods').waitFor(T); r.on('dialog', dl => dl.accept()); await r.locator('#methods [data-method=pages]').click();
+    await r.waitForFunction(() => Memorizer.ui.error === 'synthetic recut failure', null, T);
+    ok('the original method remains selected and stored after rejection', await r.locator('#methods [data-method=numbered]').getAttribute('aria-checked') === 'true' && await r.evaluate(async () => (await MemStore.get('books', 'synthetic-book')).method === 'numbered'));
+    await r.evaluate(() => { MemStore.batch = window.__recutBatch; });
+  }
+
+  head('a first practice miss survives reload without an SRS review');
+  {
+    const r = await context('practice-miss'); await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Practice'); await r.locator('#learn-unit').waitFor(T);
+    await r.evaluate(async () => {
+      const u = Memorizer.ui, q = MemCoach.quiz(u.docRec.clusters[0], MemCoach.lesson(u.docRec.clusters[0]), u.docRec.clusters).questions[0];
+      u.state.per[0].quiz = { questions: [q] }; u.state.per[0].score = 0.5;
+      await MemStore.saveStep({ id: u.docId, state: u.state, at: Date.now() }, []); u.sessions[u.docId] = u.state;
+      Memorizer.startPractice(1);
+    });
+    await r.locator('#mcq .option').first().waitFor(T);
+    const answer = await r.evaluate(() => Memorizer.ui.practice.qs[0].q.answer);
+    await r.locator('.option[data-i="' + (answer + 1) % 4 + '"]').click(); await r.locator('#next').click();
+    await r.waitForFunction(() => Memorizer.ui.cards.length === 1, null, T);
+    await r.reload(); await r.waitForFunction(() => Memorizer.ui.cards.length === 1, null, T);
+    const got = await r.evaluate(() => { const card = Memorizer.ui.cards[0], st = Memorizer.ui.sessions[card.docId]; return { srs: card.srs, pending: MemSession.pending(st).length, due: MemSession.dueCards([card], FSRS.todayISO()).length }; });
+    ok('one weak card remains due, with no extra scheduler review', got.srs === null && got.pending === 1 && got.due === 1, JSON.stringify(got));
+  }
+
   head('search indexing runs off the UI thread');
   {
     const r = await context('index-worker'); await r.goto(URL); await r.locator('#door-add').waitFor(T);

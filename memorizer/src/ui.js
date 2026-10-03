@@ -123,11 +123,14 @@ function save() {
   return Store.saveStep({ id: ui.docId, state: ui.state, at: at }, ui.state.cards)
     .then(function (c) { ui.cards = c; ui.saveError = Store.failureMessage() || ui.actionError; }, saveFailed);
 }
-function saveFailed(e) {
+function saveFailed(e, untracked) {
   var name = e && e.name, msg = (e && e.message) || String(e || 'unknown error');
   ui.saveError = name === 'QuotaExceededError' ? 'this device is out of space for Memorizer' : msg;
-  if (!Store.failureMessage()) ui.actionError = ui.saveError;
+  if (untracked || !Store.failureMessage()) ui.actionError = ui.saveError;
 }
+
+function writeFailed(e) { saveFailed(e); render(); }
+function actionFailed(e) { saveFailed(e, true); render(); }
 
 /* Days studied, for the streak, in IndexedDB with the units and cards.
    They were in localStorage, and the browser suite measured a whole
@@ -141,7 +144,7 @@ function studyDays() { return ui.days || []; }
 /* The week's log (study.js logActivity): what was done, when. */
 function logActivity(kind, info) {
   ui.activity = Study.logActivity(ui.activity, today(), kind, Object.assign({ now: Date.now() }, info || {}));
-  Store.put('meta', { id: 'activity', log: ui.activity }).then(null, function () {});
+  Store.put('meta', { id: 'activity', log: ui.activity }).then(null, writeFailed);
 }
 function markStudied() {
   var t = today();
@@ -529,8 +532,8 @@ function openBook(id) {
 function recut(book, chapters, method) {
   ui.importing = 'Cutting the chapters again…'; render();
   return bookPages(book).then(function (pages) {
-    if (method) book.method = method;
-    return applyChapters(book, chapters || Book.candidates(pages, book.outline, book.pages)[book.method], pages);
+    var next = Object.assign({}, book, { method: method || book.method });
+    return applyChapters(next, chapters || Book.candidates(pages, book.outline, book.pages)[next.method], pages);
   }).then(function () { ui.importing = ''; return refresh(); }).then(render, function (e) {
     ui.importing = ''; ui.error = (e && e.message) || String(e); render();
   });
@@ -1029,11 +1032,11 @@ function homeParts() {
           button('\u2726 Study pack for Claude', function () { openPack(d.id); }, 'quiet', { 'data-pack': d.id }),
           button('Start over', function () {
             if (!root.confirm('Start "' + d.name + '" from the beginning? Your review cards are kept.')) return;
-            Store.del('sessions', d.id).then(function () { return openDoc(d.id); });
+            Store.del('sessions', d.id).then(function () { return openDoc(d.id); }, writeFailed);
           }, 'quiet'),
           button('Delete', function () {
             if (!root.confirm('Delete "' + d.name + '" and its review cards from this device?')) return;
-            docsChanged(); Store.deleteDoc(d.id).then(refresh).then(render);
+            docsChanged(); Store.deleteDoc(d.id).then(refresh).then(render, actionFailed);
           }, 'quiet danger'))),
       d.ocr && d.ocr.length ? h('p.muted.ocr-note', 'Read by text recognition: ' + (d.source === 'photo' ? 'every photo' : 'pages ' + d.ocr.slice(0, 12).join(', ') + (d.ocr.length > 12 ? '…' : '')) + '. Check anything surprising against the page.') : null,
       d.scanned && d.scanned.length ? h('p.warn', 'Pages with no readable text: ' + d.scanned.slice(0, 12).join(', ') + (d.scanned.length > 12 ? '…' : '') + '. They are not in any section' +
@@ -1151,7 +1154,7 @@ function deleteSection(i) {
     docsChanged(); ui.docRec = doc2; ui.state = st; ui.pack = pack2; ui.notes = notes; ui.checks = checks;
     ui.figsFor = null; ui.packReport = null; ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} };
     return refresh();
-  }).then(function () { ui.notice = 'Deleted “' + c.title + '”.'; render(); }, function (e) { saveFailed(e); render(); });
+  }).then(function () { ui.notice = 'Deleted “' + c.title + '”.'; render(); }, function (e) { saveFailed(e, true); render(); });
 }
 function trashIcon() {
   return svg('svg', { viewBox: '0 0 24 24', 'class': 'trash-icon', 'aria-hidden': 'true' }, [
@@ -1432,7 +1435,7 @@ function viewBook() {
     b.scanned.length ? h('p.warn', 'Pages with no readable text: ' + b.scanned.slice(0, 12).join(', ') + (b.scanned.length > 12 ? '…' : '') + '.') : null,
     h('div.row', button('Delete this book', function () {
       if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
-      docsChanged(); Store.deleteBook(b.id).then(function () { leave('shelf'); });
+      docsChanged(); Store.deleteBook(b.id).then(function () { leave('shelf'); }, actionFailed);
     }, 'quiet danger', { id: 'delete-book' })));
 }
 
@@ -1630,7 +1633,7 @@ function saveFix(ci, si, text) {
     clearDraft('fix:' + si); docsChanged(); ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} }; ui.askIdx = null; ui.secVecs = null;
     if (ui.docId === id) { ui.docRec = fixed; ui.state = st; ui.pack = pack; ui.checks = checks; ui.notice = 'Corrected. Questions and review cards from the changed section were retired; study it again from the corrected text.'; }
     return refresh();
-  }).then(render, function (e) { saveFailed(e); render(); });
+  }).then(render, function (e) { saveFailed(e, true); render(); });
 }
 /* YOUR NOTES: kept per section as yours, never mixed with the book's words. */
 function notesFor(docId, ci) { return ui.notes[Study.noteKey(docId, ci)] || null; }
@@ -1655,8 +1658,8 @@ function toggleMark(c, text) {
   var card = Study.markCard(d, ci, text);
   if (!card) { render(); return; }
   var have = ui.cards.filter(function (x) { return x.id === card.id; })[0];
-  if (on && !have) { card.dueFrom = Study.addDays(today(), 1); Store.put('cards', card).then(function () { ui.cards.push(card); render(); }); return; }
-  if (!on && have && !have.srs) { Store.del('cards', card.id).then(function () { ui.cards = ui.cards.filter(function (x) { return x.id !== card.id; }); render(); }); return; }
+  if (on && !have) { card.dueFrom = Study.addDays(today(), 1); Store.put('cards', card).then(function () { ui.cards.push(card); render(); }, writeFailed); return; }
+  if (!on && have && !have.srs) { Store.del('cards', card.id).then(function () { ui.cards = ui.cards.filter(function (x) { return x.id !== card.id; }); render(); }, writeFailed); return; }
   render();
 }
 function quickCheck(c, L) {
@@ -3244,7 +3247,7 @@ function titlesOf(t) {
    book's section titles they landed on — never what was typed. */
 function recordTurn(tool, titles) {
   ui.profile = Agent.remember(ui.profile, tool, titles);
-  Store.put('meta', { id: 'coach-profile', profile: ui.profile });
+  Store.put('meta', { id: 'coach-profile', profile: ui.profile }).then(null, writeFailed);
 }
 function coachProfileLine() {
   var w = Agent.weakItems(ui.docs, ui.sessions || {}, 3)[0];
@@ -3520,7 +3523,7 @@ function viewAsk() {
         (ai ? 'My on-device AI can summarise and explain, and everything it says is compared with source text; check the meaning yourself.' : 'Turn on the on-device AI in Settings and I can also summarise and explain.')),
         h('p.muted', 'Search: ' + (meaning ? 'by words and by meaning.' : 'by words. Turn on search by meaning in Settings to find ideas phrased differently.')),
         ui.profile && ui.profile.turns ? h('p.muted', { id: 'coach-memory' }, 'What I remember, on this iPad only: ' + (Agent.profileLine(ui.profile, '') || 'nothing yet') + ' ',
-          button('Forget', function () { ui.profile = null; Store.del('meta', 'coach-profile').then(function () { render(); }); }, 'quiet', { id: 'coach-forget' })) : null,
+          button('Forget', function () { ui.profile = null; Store.del('meta', 'coach-profile').then(function () { render(); }, writeFailed); }, 'quiet', { id: 'coach-forget' })) : null,
         h('div.chips.suggest', suggest))),
     h('div.card.ask-card', h('div.row.ask-row', input, micButton(function (t) { ui.askQ = t; askNow(t); }, 'ask-mic'), button('Ask', function () { askNow(doc.getElementById('ask-q').value); }, 'primary', { id: 'ask-go' })),
       h('p.muted', 'Found on this device, never sent anywhere.')),
