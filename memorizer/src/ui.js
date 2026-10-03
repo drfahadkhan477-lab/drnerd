@@ -3525,6 +3525,48 @@ function appearanceCard() {
       h('strong', 'Preload'), ' — the stretch on ventricular myocytes at the end of diastole.', page(4))));
 }
 
+function downloadBackup(text) {
+  var url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = doc.createElement('a');
+  a.href = url; a.download = 'memorizer-backup-' + today() + '.json'; a.click();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+function storageCard() {
+  if (!ui.storageLoading && !ui.storageHealth) {
+    ui.storageLoading = true;
+    Store.health().then(function (v) { ui.storageLoading = false; ui.storageHealth = v; if (ui.view === 'settings') render(); }, function () { ui.storageLoading = false; ui.storageHealth = {}; });
+  }
+  var st = ui.storageHealth || {}, size = function (n) { return (n / (1024 * 1024)).toFixed(1) + ' MB'; };
+  var file = h('input', { id: 'backup-file', type: 'file', accept: '.json,application/json', class: 'visually-hidden', onchange: function (e) {
+    var f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+    ui.backupStatus = 'Checking backup…'; render();
+    readText(f).then(function (text) { return root.MemBackup.inspect(text).then(function (r) {
+      ui.backupStatus = '';
+      var close;
+      var el = h('div.card', { role: 'dialog', 'aria-label': 'Restore study backup' }, h('h2', 'Restore this backup?'),
+        h('p', r.docs + ' units, ' + r.books + ' books and ' + r.cards + ' cards. Created ' + r.created + '.'),
+        h('p', 'This replaces all study data on this device. Export the current data first if you need to keep it. Provider keys and model downloads stay on this device.'),
+        h('div.row', button('Cancel', function () { close(); }, 'quiet'), button('Replace study data', function () {
+          close(); ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; render();
+          root.MemBackup.restore(text).then(function () {
+            ui.docId = null; ui.docRec = null; ui.state = null; ui.drafts = {}; ui.saveError = ''; ui.askIdx = null; ui.secVecs = null; ui.storageHealth = null;
+            docsChanged(); ui.view = 'library'; ui.notice = 'Backup restored.'; return refresh();
+          }).then(render, function (err) { ui.backupStatus = err.message; render(); });
+        }, 'primary', { id: 'backup-restore' })));
+      close = Dialog.open(el, doc.getElementById('app'));
+    }); }).catch(function (err) { ui.backupStatus = 'Not restored: ' + err.message; render(); });
+  } });
+  return h('div.card', { id: 'storage-settings' }, h('h2', 'Study data and backups'),
+    h('p', Store.persistent ? 'Saved in this browser.' : 'Kept only for this visit. Export before closing the tab.'),
+    h('p.muted', st.quota ? size(st.usage) + ' used of about ' + size(st.quota) + ' available to this browser.' : 'Storage size is unavailable in this browser.'),
+    h('p.muted', st.durable ? 'Persistent storage granted.' : 'The browser may reclaim storage. Keep a backup of important study data.'),
+    h('div.row', button('Export backup', function () {
+      ui.backupStatus = 'Preparing backup…'; render();
+      root.MemBackup.exportText().then(function (text) { downloadBackup(text); ui.backupStatus = 'Backup prepared. Save the downloaded file privately; it contains your books and notes.'; render(); }, function (err) { ui.backupStatus = err.message; render(); });
+    }, 'primary', { id: 'backup-export' }), file, h('label.chip', { for: 'backup-file' }, 'Restore a backup'),
+    button('Keep storage', function () { Store.persist().then(function (yes) { ui.backupStatus = yes ? 'Persistent storage granted.' : 'The browser did not grant persistent storage; backups still work.'; ui.storageHealth = null; render(); }, function (err) { ui.backupStatus = err.message; render(); }); }, 'quiet', { id: 'storage-persist' })),
+    h('p.muted', 'PDF bytes, notes, progress and cards are included, along with saved changes waiting for retry. API keys and model downloads are excluded.'),
+    ui.backupStatus ? h('p', { id: 'backup-status', role: 'status' }, ui.backupStatus) : null);
+}
 function viewSettings() {
   var c = cfg();
   var prov = h('select', { id: 'provider', onchange: function () { fillModels(); } },
@@ -3557,7 +3599,7 @@ function viewSettings() {
   keyed.appendChild(h('p.muted.key-warn', { id: 'key-warn' }, 'Your key is kept in this browser\u2019s storage on this device, unencrypted, and sent only to the provider. Any browser extension or script allowed to run on this page could read it: use a key with a spending limit, and clear it when you stop using Claude here.'));
   return h('main.wrap',
     backBar('Settings', function () { leave('library'); }),
-    appearanceCard(),
+    appearanceCard(), storageCard(),
     h('div.card.settings', h('h2', 'Coach'),
       h('label', 'Coach', prov), about, keyed,
       h('div.row', button('Save', function () {

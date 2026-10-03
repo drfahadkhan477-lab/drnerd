@@ -398,6 +398,39 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
   }
 
+  head('backup rescue and transactional restore');
+  {
+    const r = await context('backup');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Backup');
+    await r.locator('#learn-unit').waitFor(T); await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+    await r.evaluate(() => {
+      window.__backupPut = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (v) {
+        if (this.name === 'meta' && v.id === 'notes') throw new Error('synthetic backup note failure');
+        return window.__backupPut.apply(this, arguments);
+      };
+    });
+    await r.fill('#note-text', 'Rescue this pending note'); await r.locator('#note-save').click(); await r.locator('#store-banner').waitFor(T);
+    const backup = await r.evaluate(() => MemBackup.exportText());
+    const rescued = await r.evaluate(text => MemBackup.inspect(text).then(v => Object.values(v.stores.meta.find(m => m.id === 'notes').recs).some(n => n.text === 'Rescue this pending note')), backup);
+    ok('export includes the exact failed note payload', rescued);
+    await r.evaluate(async text => {
+      IDBObjectStore.prototype.put = window.__backupPut;
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (v) { if (this.name === 'docs') throw new Error('synthetic restore failure'); return put.apply(this, arguments); };
+      try { await MemBackup.restore(text); } catch (_) {} finally { IDBObjectStore.prototype.put = put; }
+    }, backup);
+    ok('a failed restore rolls back every clear and retains pending writes', await r.evaluate(async () => (await MemStore.all('docs')).length === 1 && !!MemStore.failureMessage()));
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await r.locator('#backup-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+    await r.locator('#backup-restore').waitFor(T);
+    ok('restore previews the units and replacement before writing', /1 units/.test(await r.locator('[role=dialog]').innerText()) && /replaces all study data/.test(await r.locator('[role=dialog]').innerText()));
+    await r.locator('#backup-restore').click();
+    await r.waitForFunction(() => Memorizer.ui.notice === 'Backup restored.', null, T);
+    await r.reload(); await r.waitForFunction(() => Memorizer.ui.docs.length === 1, null, T);
+    ok('restored pending note survives reload and the warning clears', await r.evaluate(() => !MemStore.failureMessage() && Object.values(Memorizer.ui.notes).some(n => n.text === 'Rescue this pending note')));
+  }
+
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));
   await browser.close();

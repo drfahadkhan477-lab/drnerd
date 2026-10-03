@@ -135,7 +135,7 @@ function batch(ops) {
   try {
     snapshot = clone(ops);
     snapshot.forEach(function (o) {
-      if (STORES.indexOf(o.store) < 0 || (!o.delete && (!o.value || typeof o.value.id !== 'string'))) throw new Error('invalid storage operation');
+      if (STORES.indexOf(o.store) < 0 || (!o.delete && !o.clear && (!o.value || typeof o.value.id !== 'string'))) throw new Error('invalid storage operation');
     });
   } catch (e) { return Promise.reject(e); }
   if (!snapshot.length) return Promise.resolve();
@@ -144,7 +144,7 @@ function batch(ops) {
       var next = Object.assign({}, mem);
       snapshot.forEach(function (o) {
         if (next[o.store] === mem[o.store]) next[o.store] = Object.assign({}, mem[o.store]);
-        if (o.delete) delete next[o.store][o.id]; else next[o.store][o.value.id] = o.value;
+        if (o.clear) next[o.store] = {}; else if (o.delete) delete next[o.store][o.id]; else next[o.store][o.value.id] = o.value;
       });
       mem = next; return;
     }
@@ -154,7 +154,7 @@ function batch(ops) {
         t = db.transaction(snapshot.map(function (o) { return o.store; }).filter(function (s, i, a) { return a.indexOf(s) === i; }), 'readwrite');
         t.oncomplete = function () { resolve(); };
         t.onerror = t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
-        snapshot.forEach(function (o) { var os = t.objectStore(o.store); if (o.delete) os.delete(o.id); else os.put(o.value); });
+        snapshot.forEach(function (o) { var os = t.objectStore(o.store); if (o.clear) os.clear(); else if (o.delete) os.delete(o.id); else os.put(o.value); });
       } catch (e) { if (t) try { t.abort(); } catch (_) {} reject(e); }
     });
   });
@@ -272,16 +272,43 @@ function saveStep(session, cards) {
   });
 }
 
+/* A consistent snapshot for export, including writes still awaiting retry. */
+function snapshot() {
+  return open().then(function (db) {
+    if (!db) { var out = {}; STORES.forEach(function (s) { out[s] = Object.keys(mem[s]).map(function (k) { return clone(mem[s][k]); }); }); return out; }
+    return new Promise(function (resolve, reject) {
+      var t = db.transaction(STORES, 'readonly'), out = {};
+      t.oncomplete = function () { resolve(out); }; t.onerror = t.onabort = function () { reject(t.error || new Error('snapshot failed')); };
+      STORES.forEach(function (s) { var req = t.objectStore(s).getAll(); req.onsuccess = function () { out[s] = req.result; }; });
+    });
+  }).then(function (out) {
+    Object.keys(failures).sort(function (a, b) { return failures[a].seq - failures[b].seq; }).forEach(function (k) {
+      (failures[k].ops || []).forEach(function (o) {
+        var list = out[o.store], at = list.findIndex(function (v) { return v.id === (o.value ? o.value.id : o.id); });
+        if (o.delete) { if (at >= 0) list.splice(at, 1); return; }
+        var v = clone(o.value);
+        if (o.history && at >= 0) { v.srs = list[at].srs; v.hazard = !!(list[at].hazard || v.hazard); }
+        if (at >= 0) list[at] = v; else list.push(v);
+      });
+    }); return out;
+  });
+}
+function health() {
+  var st = root.navigator && root.navigator.storage;
+  return Promise.all([Promise.resolve().then(function () { return st && st.estimate ? st.estimate() : {}; }), Promise.resolve().then(function () { return st && st.persisted ? st.persisted() : false; })]).then(function (r) { return { persistent: api.persistent, durable: !!r[1], usage: r[0].usage || 0, quota: r[0].quota || 0 }; });
+}
+function persist() { var st = root.navigator && root.navigator.storage; return st && st.persist ? st.persist() : Promise.resolve(false); }
+
 /* Retain failed writes for this visit. Unrelated successful writes cannot
    acknowledge them, and refresh must not overwrite a pending note. */
 var failures = {}, latest = {}, ticket = 0;
-function tracked(key, run, meta) {
+function tracked(key, run, meta, ops) {
   var seq = ++ticket; latest[key] = seq;
   return Promise.resolve().then(run).then(function (v) {
     if (latest[key] === seq) delete failures[key];
     return v;
   }, function (e) {
-    if (latest[key] === seq) failures[key] = { run: run, meta: meta, error: e };
+    if (latest[key] === seq) failures[key] = { run: run, meta: meta, ops: ops, seq: seq, error: e };
     throw e;
   });
 }
@@ -292,19 +319,19 @@ function failureMessage() {
   }).join('; ');
 }
 function retryFailures() {
-  return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta); }));
+  return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta, f.ops); }));
 }
-api.failureMessage = failureMessage; api.retryFailures = retryFailures;
+api.forgetFailures = function () { failures = {}; latest = {}; }; api.snapshot = snapshot; api.STORES = STORES.slice(); api.health = health; api.persist = persist; api.failureMessage = failureMessage; api.retryFailures = retryFailures;
 api.update = update; api.removalOps = removalOps; api.cleanImports = cleanImports; api.batch = batch; api.open = open; api.put = function (store, value) {
   var v = clone(value);
-  return tracked(store + ':' + v.id, function () { return put(store, v); }, store === 'meta' ? v : null);
+  return tracked(store + ':' + v.id, function () { return put(store, v); }, store === 'meta' ? v : null, [{ store: store, value: v }]);
 }; api.get = function (store, id) {
   var f = failures[store + ':' + id];
   return store === 'meta' && f && f.meta ? Promise.resolve(clone(f.meta)) : get(store, id);
-}; api.all = all; api.del = function (store, id) { return tracked(store + ':' + id, function () { return del(store, id); }); };
+}; api.all = all; api.del = function (store, id) { return tracked(store + ':' + id, function () { return del(store, id); }, null, [{ store: store, id: id, delete: true }]); };
 api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards; api.saveStep = function (session, cards) {
   var s = clone(session), cs = clone(cards);
-  return tracked('sessions:' + s.id, function () { return saveStep(s, cs); });
+  return tracked('sessions:' + s.id, function () { return saveStep(s, cs); }, null, [{ store: 'sessions', value: s }].concat(cs.map(function (c) { return { store: 'cards', value: c, history: true }; })));
 };
 root.MemStore = api;
 })(typeof window !== 'undefined' ? window : this);
