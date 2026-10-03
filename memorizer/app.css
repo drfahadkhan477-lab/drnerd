@@ -1296,3 +1296,51 @@ main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation:
 @media (max-width: 480px) { .nav-context .nav-label { font-size: var(--t-tiny); } }
 .type-chip[data-type="V"] .type-badge { background: var(--mid-soft); }
 .pearl-steps .blank { display: inline-block; min-width: 2.5em; border-bottom: 2px solid var(--accent); text-align: center; color: var(--accent); }
+
+/* Import Study (importUI.js) */
+.import-card { width: 100%; max-width: 32rem; max-height: 90vh; overflow: auto; display: flex; flex-direction: column; gap: var(--s-3); }
+.import-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); }
+.import-head h2 { margin: 0; font-size: var(--t-h4); }
+.import-drop { display: flex; flex-direction: column; gap: var(--s-1); align-items: center; text-align: center; cursor: pointer;
+  padding: var(--s-5) var(--s-3); border: 2px dashed var(--line); border-radius: .75rem; background: var(--surface-2); }
+.import-drop:hover, .import-drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.import-drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.import-drop-main { font-weight: 600; color: var(--ink); }
+.import-drop-hint { font-size: var(--t-meta); }
+.import-status { margin: 0; font-size: var(--t-meta); color: var(--muted); }
+.import-status:empty { display: none; }
+.import-status.good { color: var(--good); }
+.import-status.bad { color: var(--bad); }
+.import-summary { display: grid; grid-template-columns: auto 1fr; gap: var(--s-1) var(--s-3); margin: 0; font-size: var(--t-meta); }
+.import-summary dt { color: var(--muted); }
+.import-summary dd { margin: 0; color: var(--ink); font-weight: 600; }
+.import-foot { justify-content: flex-end; gap: var(--s-2); }
+.import-strict { display: flex; gap: var(--s-2); align-items: flex-start; font-size: var(--t-meta); color: var(--ink); cursor: pointer; }
+.import-strict input { margin-top: .2rem; }
+
+/* Your misses (unit page) */
+.misses h3 { font-size: var(--t-body); margin: var(--s-3) 0 var(--s-1); }
+.confuse-pairs, .miss-history { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
+.confuse-pairs .vs { color: var(--muted); }
+.miss-history p { margin: 0; }
+.miss-steps { display: inline-flex; flex-wrap: wrap; gap: .25rem; vertical-align: middle; }
+.miss-step { font-size: var(--t-tiny); font-weight: 700; border-radius: 999px; padding: 0 .45rem; line-height: 1.5; }
+.miss-step.miss { background: var(--bad-soft); color: var(--bad); }
+.miss-step.ok { background: var(--good-soft); color: var(--good); }
+.offline-list { list-style: none; margin: 0 0 var(--s-2); padding: 0; display: grid; gap: var(--s-1); font-size: var(--t-meta); }
+.offline-list li[data-ready="true"] { color: var(--good); }
+.import-prompt { gap: var(--s-2); align-items: center; flex-wrap: wrap; }
+
+/* Explain it first (lesson) */
+.recall-first h2, .recall-result h2 { margin: var(--s-1) 0 var(--s-2); font-size: var(--t-h4); }
+.recall-first textarea { width: 100%; box-sizing: border-box; }
+.recall-result h3 { font-size: var(--t-body); margin: var(--s-3) 0 var(--s-1); color: var(--bad); }
+.recall-gaps { margin: 0; padding-left: 1.2rem; display: grid; gap: var(--s-1); }
+.recall-known summary, .recall-rest > summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.recall-rest > summary { margin: var(--s-3) 0; font-size: var(--t-lead); color: var(--ink); }
+
+/* What to do now (unit page) */
+.unit-now { margin: var(--s-3) 0 var(--s-2); }
+.unit-now .eyebrow { margin: 0; }
+.unit-why { margin: var(--s-1) 0 0; font-size: var(--t-lead); color: var(--ink); font-weight: 600; }
+.unit-now[data-kind="review"] .unit-why { color: var(--bad); }

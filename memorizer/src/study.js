@@ -418,6 +418,23 @@ function teachBack(said, points, sectionText) {
   return { covered: covered, missed: missed, wrong: wrong, score: n ? covered.length / n : 0 };
 }
 
+/* ── explain it first (before the lesson is shown) ───────────────────────
+   Coming back to a section, the lesson stays hidden until the learner has
+   said what they remember. It is marked as teach-back is, point by point;
+   what was left out is taught first, and what was explained is folded.
+   recallDue: shown by itself on a section already drilled, opened on a
+   later day than it was last studied (per.seenDay, an ISO date the app
+   keeps): recall pays after a gap, and minutes after a drill it is only in
+   the way. Offered, not imposed, at any other time. */
+var RECALL_MIN_WORDS = 5;
+function recallDue(per, today) { return !!(per && per.done && per.seenDay && today && per.seenDay < today); }
+function recallFirst(said, points, sectionText) {
+  var words = String(said || '').trim().split(/\s+/).filter(Boolean).length;
+  if (words < RECALL_MIN_WORDS) return { tooShort: true, known: [], gaps: [], wrong: [], score: 0 };
+  var r = teachBack(said, points, sectionText);
+  return { tooShort: false, known: r.covered, gaps: r.missed, wrong: r.wrong, score: r.score };
+}
+
 /* ── teach it back, marked by the on-device model ─────────────────────────
    The word check above counts a point as said when its words are said, so
    it misses a point put in other words and passes one said backwards
@@ -506,6 +523,9 @@ function dropDocSection(doc, i) {
   d.clusters = d.clusters.filter(function (c, k) { if (c.identity == null) c.identity = k; return k !== i; });
   d.clusters.forEach(function (c, k) { c.index = k; });
   d.corrections = (d.corrections || []).filter(function (x) { return x.ci !== i; }).map(function (x) { if (x.ci > i) x.ci--; return x; });
+  /* a study file's diagrams are kept by section (studyImport.js): the
+     dropped section's go with it, and later ones move up with theirs */
+  if (d.diagrams) d.diagrams = d.diagrams.filter(function (g) { return g.index !== i; }).map(function (g) { if (g.index > i) g.index--; return g; });
   return d;
 }
 function dropSectionRecords(recs, docId, i) {
@@ -766,7 +786,7 @@ var MemStudy = {
   noteKey: noteKey, toggleMark: toggleMark, markCard: markCard, TABLE_ROUND: TABLE_ROUND, tableRound: tableRound,
   SOLID: SOLID, FADING: FADING, masteryMap: masteryMap, IDLE_MS: IDLE_MS, logActivity: logActivity, weekly: weekly, weekOf: weekOf, streak: streak,
   MONTHS: MONTHS, parseExamDate: parseExamDate, REVIEW_SHARE: REVIEW_SHARE, studyPlan: studyPlan,
-  TEACH_SHARE: TEACH_SHARE, teachBack: teachBack, teachJudge: teachJudge, claimSources: claimSources,
+  TEACH_SHARE: TEACH_SHARE, teachBack: teachBack, recallDue: recallDue, recallFirst: recallFirst, RECALL_MIN_WORDS: RECALL_MIN_WORDS, teachJudge: teachJudge, claimSources: claimSources,
   addDays: addDays, daysFrom: daysFrom,
   socratic: socratic, rubricOf: rubricOf, TYPE_RANK: TYPE_RANK, reviewOrder: reviewOrder, EXAM_PACE_S: EXAM_PACE_S, examClock: examClock, contextAction: contextAction,
   BLANK: BLANK, NUMBER: NUMBER, CLOZE_WORDS: CLOZE_WORDS, CLOZE_PER_SECTION: CLOZE_PER_SECTION, clozeOf: clozeOf, clozeCards: clozeCards,

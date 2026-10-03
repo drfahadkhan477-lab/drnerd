@@ -93,7 +93,8 @@ var SCHEMAS = {
    options, all different, and an answer that points at one of them. A
    question that fails this is refused, whichever coach wrote it — a drill
    whose "right" answer is option 7 of 4 grades every reply wrong. */
-var OPTIONS = 4;
+var Spec = root.MemSpec || (typeof require === 'function' ? require('./spec.js') : null);
+var OPTIONS = Spec.OPTIONS;
 function mcqError(q, path) {
   if (q.options.length !== OPTIONS) return path + ' has ' + q.options.length + ' options, not ' + OPTIONS;
   var seen = {};

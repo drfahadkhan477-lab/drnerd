@@ -167,8 +167,24 @@ function reviewSheet(lesson) {
   };
 }
 
+/* The lesson's first screen (the owner's review): the first KEY_FACTS
+   points, under their headings, and the rest kept for a fold. Numbering
+   runs on across both, so point 6 is point 6 wherever it is shown. */
+var KEY_FACTS = 5;
+function splitPoints(groups, k) {
+  k = k == null ? KEY_FACTS : k;
+  var seen = 0, first = [], rest = [];
+  (groups || []).forEach(function (g) {
+    var a = [], b = [];
+    g.points.forEach(function (p) { (seen++ < k ? a : b).push(p); });
+    if (a.length) first.push({ heading: g.heading, points: a });
+    if (b.length) rest.push({ heading: g.heading, points: b });
+  });
+  return { first: first, rest: rest, restN: Math.max(0, seen - k) };
+}
+
 var MemSheet = { MAX_LABEL_WORDS: MAX_LABEL_WORDS, MAX_FACTS: MAX_FACTS, MAX_LISTS: MAX_LISTS, MAX_ITEMS: MAX_ITEMS, numberTiles: numberTiles, sheetOf: sheetOf, glance: glance,
-                 STAGES: STAGES, stages: stages, clinicalMap: clinicalMap, REVIEW_POINTS: REVIEW_POINTS, REVIEW_VALUES: REVIEW_VALUES, reviewSheet: reviewSheet };
+                 STAGES: STAGES, stages: stages, clinicalMap: clinicalMap, REVIEW_POINTS: REVIEW_POINTS, REVIEW_VALUES: REVIEW_VALUES, reviewSheet: reviewSheet, KEY_FACTS: KEY_FACTS, splitPoints: splitPoints };
 root.MemSheet = MemSheet;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemSheet;
 })(typeof window !== 'undefined' ? window : this);
