@@ -213,6 +213,9 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
     const clean = await p.evaluate(svg => ({ out: MemStudyImport.sanitizeSvg(svg), icon: MemStudyImport.sanitizeSvg('<svg viewBox="0 0 8 8"><path d="M0 0h8"/></svg>') }), bad);
     ok('an SVG is cleaned: no script, handler, foreign HTML, image, link out or fetching style',
        clean.out && !/script|onload|onclick|foreignObject|<image|evil\.example|<a[\s>]|<use/i.test(clean.out) && /<rect/.test(clean.out), clean.out);
+    const ns = await p.evaluate(out => { const d = new DOMParser().parseFromString(out || '', 'image/svg+xml');
+      return Array.prototype.map.call(d.getElementsByTagName('*'), e => e.localName + ':' + e.namespaceURI).filter(x => !/:http:\/\/www\.w3\.org\/2000\/svg$/.test(x)); }, clean.out);
+    ok('and every element of it is still SVG, so the <img> it is shown in draws it', clean.out && ns.length === 0, JSON.stringify(ns));
     ok('an icon-sized drawing (under three shapes) is not kept', clean.icon === '');
     const MDD = ['---', 'unit: Aortic Stenosis', '---', '', '## Diagnosis and grading', '',
       'Aortic stenosis is graded by echocardiography using the peak jet velocity and the mean gradient across the valve. A peak velocity of 4 m/s or more marks severe stenosis. A mean gradient of 40 mmHg or more also marks severe stenosis.',

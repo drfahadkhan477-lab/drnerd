@@ -122,6 +122,12 @@ function sanitizeSvg(svg) {
      drawing for one of them. xlink:href becomes href, which is judged below
      like any link; any other prefixed attribute (xml:* aside) is dropped. */
   svg = svg.replace(/\sxlink:href\s*=/gi, ' href=').replace(/\s(?!xml:|xmlns)[\w-]+:[\w.-]+\s*=\s*("[^"]*"|'[^']*')/gi, '');
+  /* An inline SVG's markup carries no xmlns either: HTML puts it in the SVG
+     namespace by tag, XML only by declaration. Parsed without one, every
+     element is in no namespace; Chromium serializes that as if it were SVG,
+     WebKit writes xmlns="" on each child, and an <img> of that draws nothing.
+     So the namespace is declared before parsing, not set on the root after. */
+  if (!/^\s*(<\?xml[^>]*>\s*)?<svg\b[^>]*\sxmlns\s*=/i.test(svg)) svg = svg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
   var d = new root.DOMParser().parseFromString(svg, 'image/svg+xml'), top = d.documentElement;
   if (!top || top.nodeName.toLowerCase() !== 'svg' || d.getElementsByTagName('parsererror').length) return '';
   (function clean(el) {
@@ -138,7 +144,6 @@ function sanitizeSvg(svg) {
   })(top);
   var shapes = top.querySelectorAll('path,rect,circle,ellipse,line,polyline,polygon,text').length;
   if (shapes < 3) return '';
-  if (!top.getAttribute('xmlns')) top.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   return new root.XMLSerializer().serializeToString(top);
 }
 
