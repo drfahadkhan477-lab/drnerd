@@ -35,7 +35,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
 const ROOT = path.join(__dirname, '..');
 const DIR = path.join(ROOT, '.claude', 'skills');
-const EXPECTED = ['prove-red', 'steward'];
+const EXPECTED = ['memorizer-study-file', 'prove-red', 'steward'];
 const LICENSED = /^(source|build|content|dist)\/|^tests\/last-run\.log$/;
 
 /* Front matter: the block between the first two `---` lines, one
@@ -106,7 +106,8 @@ for (const d of dirs) {
   const agents = [...body.matchAll(/`([a-z][a-z-]+)` agent\b/g)].map(m => m[1]);
   const noAgent = agents.filter(a => !fs.existsSync(path.join(ROOT, '.claude', 'agents', a + '.md')));
   ok(`${d}: every agent it names exists`, noAgent.length === 0, noAgent.join(', ') || agents.join(', ') || 'none cited');
-  const sections = [...body.matchAll(/section "([^"]+)"/g)].map(m => m[1]);
+  /* A cited name may wrap a line, as the span extractor above allows. */
+  const sections = [...body.matchAll(/section "([^"]+)"/g)].map(m => m[1].replace(/\s+/g, ' '));
   const noSection = sections.filter(s => !new RegExp('^## ' + esc(s) + '$', 'm').test(claude));
   ok(`${d}: every CLAUDE.md section it cites exists`, noSection.length === 0, noSection.join(', ') || sections.join(', ') || 'none cited');
 }

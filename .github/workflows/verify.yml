@@ -45,7 +45,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 76 suites that are pure Node with no Playwright and no
+#   logic        the 77 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -186,8 +186,10 @@ jobs:
         run: node tests/verify-claude-guard.js
       - name: the Claude Code subagents cannot edit files (26 checks)
         run: node tests/verify-claude-agents.js
-      - name: the Claude Code skills are found and cite only what exists (26 checks)
+      - name: the Claude Code skills are found and cite only what exists (37 checks)
         run: node tests/verify-claude-skills.js
+      - name: a study file is checked by Memorizer's own import code (25 checks)
+        run: node tests/verify-study-file-check.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
