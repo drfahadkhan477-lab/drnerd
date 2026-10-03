@@ -321,17 +321,32 @@ function duplicate(fp) {
   openDoc(dup.id);
   return true;
 }
+/* Only one import owns progress and staged records at a time. Cancellation
+   is checked between pages and immediately before the final transaction. */
+function beginImport() {
+  if (ui.importJob) { ui.notice = 'An import is already running. Finish or cancel it first.'; render(); return null; }
+  var job = { cancelled: false, committing: false }; ui.importJob = job; return job;
+}
+function checkImport(job) { if (job && job.cancelled) { var e = new Error('Import cancelled.'); e.cancelled = true; throw e; } }
+function endImport(job) { if (ui.importJob === job) ui.importJob = null; ui.importing = ''; if (Ocr.release) Ocr.release().catch(function () {}); }
+function importBanner() {
+  var job = ui.importJob; if (!job) return null;
+  return h('div.card.busy', { id: 'import-progress', role: 'status' }, h('span', job.cancelled ? 'Cancelling after the current page finishes…' : ui.importing || 'Preparing import…'),
+    button('Cancel import', function () { job.cancelled = true; render(); }, 'quiet', { id: 'import-cancel', disabled: job.cancelled || job.committing ? true : null }));
+}
 var DUPLICATE = { duplicate: true };
-function finishImport(p) {
+function finishImport(p, job) {
   return p.then(function (rec) {
-    ui.importing = ''; docsChanged(); return refresh().then(function () { return openDoc(rec.id); });
+    endImport(job); docsChanged(); return refresh().then(function () { return openDoc(rec.id); });
   }, function (e) {
+    endImport(job);
     if (e === DUPLICATE) return;
-    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+    ui.error = e && e.cancelled ? '' : (e && e.message) || String(e); if (e && e.cancelled) ui.notice = 'Import cancelled; no unit was added.'; render();
   });
 }
 function importFile(file) {
   if (!file) return;
+  var job = beginImport(); if (!job) return;
   ui.importing = 'Opening ' + file.name + '…'; ui.error = ''; render();
   var bytes = null, fp = '';
   finishImport(readBuffer(file).then(function (buf) {
@@ -343,8 +358,9 @@ function importFile(file) {
     return Pdf.read(bytes, function (n, total, pass) {
       ui.importing = pass === 'ocr' ? 'Reading scanned page ' + n + ' of ' + total + ' with text recognition…' : 'Reading page ' + n + ' of ' + total + '…';
       render();
-    }, function (msg) { ui.importing = msg; render(); });
+    }, function (msg) { ui.importing = msg; render(); }, { cancelled: function () { return job.cancelled; } });
   }).then(function (r) {
+    checkImport(job); job.committing = true;
     ui.importing = 'Splitting into sections…'; render();
     return saveUnit(file.name.replace(/\.pdf$/i, ''), 'pdf', r.pages, {
       fingerprint: fp, fileName: file.name, bytes: bytes, figures: r.figures || [], scanned: Chunk.scannedPages(r.wordCounts), ocr: r.ocr, ocrError: r.ocrError, ocrConf: r.ocrConf || {},
@@ -352,29 +368,32 @@ function importFile(file) {
         ? 'No readable text in this PDF. It looks like a scan (pictures of pages), and the text reader for scans could not run: ' + r.ocrError
         : 'No readable text in this PDF, even with text recognition. If it is a scan, it may be too faint or too small to read.',
     });
-  }));
+  }), job);
 }
 /* Photos of pages, in the order chosen: each read by text recognition. */
 function importPhotos(files) {
   var list = Array.prototype.slice.call(files || []);
   if (!list.length) return;
+  var job = beginImport(); if (!job) return;
   ui.error = '';
   var pages = [], conf = {}, chain = Promise.resolve();
   list.forEach(function (f, i) {
-    chain = chain.then(function () { ui.importing = 'Reading photo ' + (i + 1) + ' of ' + list.length + '…'; render(); return Ocr.readImage(f, function (m) { ui.importing = m; render(); }); })
+    chain = chain.then(function () { checkImport(job); ui.importing = 'Reading photo ' + (i + 1) + ' of ' + list.length + '…'; render(); return Ocr.readImage(f, function (m) { ui.importing = m; render(); }); })
       .then(function (r) { if (r.items.confidence) conf[i + 1] = r.items.confidence; pages.push({ page: i + 1, lines: Pdf.linesOf(r.items, r.height) }); });
   });
   finishImport(chain.then(function () {
+    checkImport(job); job.committing = true;
     return saveUnit('Photos ' + new Date().toLocaleDateString(), 'photo', pages,
       { ocr: pages.map(function (p) { return p.page; }), ocrConf: conf, emptyMessage: 'No text could be read from those photos. Try a sharper, well-lit photo of the page.' });
-  }));
+  }), job);
 }
 function importText(name, text) {
+  var job = beginImport(); if (!job) return;
   ui.importing = 'Splitting into sections…'; ui.error = ''; render();
   finishImport(Prov.fingerprint(String(text || '')).then(function (fp) {
-    if (duplicate(fp)) throw DUPLICATE;
-    return saveUnit(name || 'Pasted notes', 'text', Chunk.pagesFromText(text), { fingerprint: fp, emptyMessage: 'There was no text to learn from.' });
-  }));
+    checkImport(job); if (duplicate(fp)) throw DUPLICATE;
+    job.committing = true; return saveUnit(name || 'Pasted notes', 'text', Chunk.pagesFromText(text), { fingerprint: fp, emptyMessage: 'There was no text to learn from.' });
+  }), job);
 }
 
 /* ── a whole book ────────────────────────────────────────────────────────── */
@@ -426,10 +445,11 @@ function bookPages(book) {
   return Promise.all(book.parts.map(function (_, i) { return Store.get('bookpages', book.id + ':' + i); }))
     .then(function (r) { return r.reduce(function (all, x) { return all.concat(x ? x.pages : []); }, []); });
 }
-function importBook(fileList) {
+function importBook(fileList, ordered) {
   var files = Array.prototype.slice.call(fileList || []);
   if (!files.length) return;
-  files = Book.orderParts(files.map(function (f) { return f.name; })).map(function (i) { return files[i]; });
+  var job = beginImport(); if (!job) return;
+  if (!ordered) files = Book.orderParts(files.map(function (f) { return f.name; })).map(function (i) { return files[i]; });
   var book = { id: 'b' + newId().slice(1), name: bookName(files), addedAt: Date.now(), parts: [], scanned: [], ocr: [], ocrError: '', outline: [] };
   var all = [], offset = 0;
   ui.error = '';
@@ -438,16 +458,16 @@ function importBook(fileList) {
   files.forEach(function (f, k) {
     var bytes;
     chain = chain.then(function () {
-      ui.importing = 'Part ' + (k + 1) + ' of ' + files.length + ': opening ' + f.name + '…'; render();
+      checkImport(job); ui.importing = 'Part ' + (k + 1) + ' of ' + files.length + ': opening ' + f.name + '…'; render();
       return readBuffer(f);
     }).then(function (buf) {
-      bytes = buf;
+      checkImport(job); bytes = buf;
       return Pdf.read(buf, function (n, total, pass) {
         ui.importing = 'Part ' + (k + 1) + ' of ' + files.length + ': ' + (pass === 'ocr' ? 'text recognition, scanned page ' : 'reading page ') + n + ' of ' + total + '…';
         render();
-      }, function (msg) { ui.importing = msg; render(); }, { figures: false });
+      }, function (msg) { ui.importing = msg; render(); }, { figures: false, cancelled: function () { return job.cancelled; } });
     }).then(function (r) {
-      var fileId = book.id + ':f' + k;
+      checkImport(job); var fileId = book.id + ':f' + k;
       var pages = r.pages.map(function (p) { return { page: p.page + offset, lines: p.lines }; });
       book.parts.push({ fileId: fileId, name: f.name, first: offset + 1, last: offset + r.numPages });
       r.outline.forEach(function (e) { book.outline.push({ title: e.title, page: e.page + offset, depth: e.depth }); });
@@ -460,6 +480,7 @@ function importBook(fileList) {
     });
   });
   chain.then(function () {
+    checkImport(job); job.committing = true;
     ui.importing = 'Finding the chapters…'; render();
     book.pages = offset;
     var c = Book.candidates(all, book.outline, offset);
@@ -469,9 +490,9 @@ function importBook(fileList) {
     ui.importing = 'Splitting ' + c[book.method].length + ' chapters into sections…'; render();
     return applyChapters(book, c[book.method], all);
   }).then(function () {
-    ui.importing = ''; return refresh().then(function () { openBook(book.id); });
+    endImport(job); return refresh().then(function () { openBook(book.id); });
   }, function (e) {
-    ui.importing = ''; ui.error = (e && e.message) || String(e);
+    endImport(job); ui.error = e && e.cancelled ? '' : (e && e.message) || String(e); if (e && e.cancelled) ui.notice = 'Import cancelled; staged files removed.';
     Store.cleanImports(book.id).then(render, function (err) { saveFailed(err); render(); });
   });
 }
@@ -3946,6 +3967,7 @@ function render() {
   var had = ui.view === lastView && doc.activeElement && doc.activeElement !== doc.body ? doc.activeElement.id : '';
   if (ui.view !== lastView) { view.setAttribute('data-enter', ''); lastView = ui.view; }
   app.textContent = '';
+  var progress = importBanner(); if (progress) view.insertBefore(progress, view.firstChild && view.firstChild.nextSibling);
   var banner = storageBanner();
   if (banner) view.insertBefore(banner, view.firstChild && view.firstChild.nextSibling);
   app.appendChild(view);

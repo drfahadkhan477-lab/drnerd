@@ -27,7 +27,28 @@ module.exports = (async () => {
   await verified.MemPdf.figuresOn('b', new ArrayBuffer(0), []);
   assert.equal(destroyed, 2);
   await verified.MemPdf.release(); assert.equal(destroyed, 3);
+  let cancelled = false, pagesRead = 0, cancelledDestroyed = 0;
+  const cancelPdf = pdfRuntime(() => Promise.resolve({ ok: true, text: async () => '// verified synthetic' }), () => ({ promise: Promise.resolve({
+    numPages: 2, getPage: async () => { pagesRead++; return { getViewport: () => ({ height: 10 }), getTextContent: async () => { cancelled = true; return { items: [] }; } }; },
+    destroy: async () => { cancelledDestroyed++; }, getOutline: async () => []
+  }) }));
+  await assert.rejects(cancelPdf.MemPdf.read(new ArrayBuffer(0), null, null, { figures: false, cancelled: () => cancelled }), /cancelled/);
+  assert.equal(pagesRead, 1); assert.equal(cancelledDestroyed, 1);
   console.log('PASS PDF integrity failure closes the path; completed and evicted documents are destroyed');
+  let workerTerminated = 0, timerCleared = 0, revoked = 0;
+  const canvases = [];
+  const ocrRoot = { MemPdf: { loadScript: async () => {} }, Tesseract: { createWorker: async () => ({ recognize: async () => ({ data: { blocks: [] } }), terminate: async () => { workerTerminated++; } }) } };
+  const ocrDoc = { createElement: () => { const c = { width: 0, height: 0, getContext: () => ({ fillRect() {} }) }; canvases.push(c); return c; } };
+  class Reader { readAsArrayBuffer(blob) { blob.arrayBuffer().then(v => { this.result = v; this.onload(); }); } }
+  const ocrSrc = fs.readFileSync(path.join(__dirname, '../memorizer/src/ocr.js'), 'utf8');
+  const workerText = 'return"string"==typeof t?t:t.data})).join("+")';
+  vm.runInNewContext(ocrSrc, { window: ocrRoot, document: ocrDoc, Blob, FileReader: Reader, TextDecoder, Uint8Array,
+    fetch: async () => ({ ok: true, blob: async () => new Blob([workerText]) }), URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL: () => { revoked++; } },
+    setTimeout: () => 1, clearTimeout: () => { timerCleared++; } });
+  await ocrRoot.MemOcr.readPage({ getViewport: () => ({ width: 10, height: 10 }), render: () => ({ promise: Promise.resolve() }) });
+  assert.equal(canvases[0].width, 0); assert.equal(canvases[0].height, 0); assert.equal(timerCleared, 1); assert.equal(revoked, 1);
+  await ocrRoot.MemOcr.release(); assert.equal(workerTerminated, 1);
+  console.log('PASS import cancellation stops between pages and OCR releases workers, canvases, timers and blob URLs');
   const os = require('node:os'), { build } = require('../scripts/build-memorizer.js');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'memorizer-runtime-'));
   try {

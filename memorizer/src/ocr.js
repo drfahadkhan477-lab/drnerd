@@ -144,15 +144,22 @@ function engine(onStatus) {
          passed the core as its own blob: URL and Chromium refused it. The
          worker only imports its core when TesseractCore is not yet defined,
          and here the core has already defined it, so nothing is imported. */
+      var workerUrl = blobUrl(new Blob([r[1], '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript');
       var started = T.createWorker([{ code: 'eng', data: new Uint8Array(r[2]) }], 1, {
-        workerPath: blobUrl(new Blob([r[1], '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript'), workerBlobURL: false,
+        workerPath: workerUrl, workerBlobURL: false,
         cacheMethod: 'none', gzip: true,
       });
-      return Promise.race([started, new Promise(function (_, reject) {
-        setTimeout(function () { reject(new Error('the text reader did not start')); }, START_TIMEOUT_MS);
-      })]);
+      return new Promise(function (resolve, reject) {
+        var settled = false, timer = setTimeout(function () {
+          settled = true; URL.revokeObjectURL(workerUrl); reject(new Error('the text reader did not start'));
+        }, START_TIMEOUT_MS);
+        started.then(function (worker) {
+          if (settled) { worker.terminate(); return; }
+          settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); resolve(worker);
+        }, function (e) { if (!settled) { settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); reject(e); } });
+      });
     });
-  starting.catch(function () { starting = null; });
+  var attempt = starting; attempt.catch(function () { if (starting === attempt) starting = null; });
   return starting;
 }
 
@@ -168,7 +175,7 @@ function readPage(page, onStatus) {
       return worker.recognize(canvas, {}, { text: false, blocks: true, hocr: false, tsv: false });
     }).then(function (res) {
       return ocrItems(res.data.blocks, SCALE, page.getViewport({ scale: 1 }).height);
-    });
+    }).then(function (v) { canvas.width = canvas.height = 0; return v; }, function (e) { canvas.width = canvas.height = 0; throw e; });
   });
 }
 
@@ -201,9 +208,14 @@ function readImage(blob, onStatus) {
     return worker.recognize(canvas, {}, { text: false, blocks: true, hocr: false, tsv: false });
   }).then(function (res) {
     return { items: ocrItems(res.data.blocks, 1, canvas.height), height: canvas.height };
-  });
+  }).then(function (v) { if (canvas) canvas.width = canvas.height = 0; return v; }, function (e) { if (canvas) canvas.width = canvas.height = 0; throw e; });
 }
 
-root.MemOcr = { readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd };
+function release() {
+  var p = starting; starting = null;
+  return p ? p.then(function (worker) { return worker.terminate(); }, function () {}) : Promise.resolve();
+}
+
+root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemOcr;
 })(typeof window !== 'undefined' ? window : this);

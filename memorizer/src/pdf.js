@@ -413,8 +413,9 @@ function textBoxesOf(items) {
 function wordsIn(lines) { return lines.reduce(function (s, l) { return s + l.text.split(/\s+/).filter(Boolean).length; }, 0); }
 function read(buffer, onProgress, onStatus, opts) {
   var Lib, opened, withFigures = !(opts && opts.figures === false);
+  function check() { if (opts && opts.cancelled && opts.cancelled()) { var e = new Error('Import cancelled.'); e.cancelled = true; throw e; } }
   return lib().then(function (L) {
-    Lib = L;
+    check(); Lib = L;
     /* pdf.js may take ownership of the buffer it is given, so it gets a copy:
        the caller keeps the original to store. */
     return L.getDocument({ data: new Uint8Array(buffer.slice(0)), isEvalSupported: false }).promise;
@@ -424,7 +425,7 @@ function read(buffer, onProgress, onStatus, opts) {
     var chain = Promise.resolve();
     for (var i = 1; i <= doc.numPages; i++) {
       (function (n) {
-        chain = chain.then(function () { return doc.getPage(n); }).then(function (page) {
+        chain = chain.then(function () { check(); return doc.getPage(n); }).then(function (page) {
           var h = page.getViewport({ scale: 1 }).height;
           return page.getTextContent().then(function (tc) {
             var lines = linesOf(tc.items, h);
@@ -458,18 +459,18 @@ function read(buffer, onProgress, onStatus, opts) {
       var scanned = root.MemOcr ? root.MemChunk.scannedPages(counts) : [];
       var ocrChain = Promise.resolve();
       scanned.forEach(function (n, k) {
-        ocrChain = ocrChain.then(function () { if (onProgress) onProgress(k + 1, scanned.length, 'ocr'); return doc.getPage(n); })
+        ocrChain = ocrChain.then(function () { check(); if (onProgress) onProgress(k + 1, scanned.length, 'ocr'); return doc.getPage(n); })
           .then(function (page) { return root.MemOcr.readPage(page, onStatus).then(function (items) { if (items.confidence) ocrConf[n] = items.confidence; return linesOf(items, page.getViewport({ scale: 1 }).height); }); })
           .then(function (lines) {
             var wc = wordsIn(lines);
             if (!root.MemChunk.scannedPages([wc]).length) { pages[n - 1].lines = lines; counts[n - 1] = wc; ocr.push(n); }
           });
       });
-      return ocrChain.catch(function (e) { ocrError = (e && e.message) || String(e); });
+      return ocrChain.catch(function (e) { if (e.cancelled) throw e; ocrError = (e && e.message) || String(e); });
     });
     var outline = [];
     chain = chain.then(function () { return outlineOf(doc); }).then(function (o) { outline = o; });
-    return chain.then(function () { return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures, ocr: ocr, ocrError: ocrError, ocrConf: ocrConf, outline: outline }; });
+    return chain.then(function () { check(); return { pages: pages, wordCounts: counts, numPages: doc.numPages, figures: figures, ocr: ocr, ocrError: ocrError, ocrConf: ocrConf, outline: outline }; });
   }).then(function (value) { return dispose(opened).then(function () { return value; }); }, function (e) { return dispose(opened).then(function () { throw e; }); });
 }
 

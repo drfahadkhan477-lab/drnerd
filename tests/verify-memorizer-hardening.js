@@ -398,6 +398,22 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('the remapped note survives reload', await r.evaluate(() => Object.values(Memorizer.ui.notes).some(n => n.text === 'Beta')));
   }
 
+  head('cancelled imports never publish partial data');
+  {
+    const r = await context('cancel-import'); await r.goto(URL); await r.locator('#door-add').waitFor(T);
+    await r.evaluate(() => {
+      MemPdf.read = () => new Promise(resolve => { window.__finishCancelled = () => resolve({ pages: [], wordCounts: [], numPages: 1, figures: [], ocr: [], outline: [] }); });
+      Memorizer.importBook([new File(['synthetic'], 'Book12_1-500.pdf'), new File(['second'], 'Book12_501-1000.pdf')]);
+    });
+    await r.waitForFunction(() => typeof window.__finishCancelled === 'function', null, T);
+    await r.locator('#import-cancel').click();
+    await r.evaluate(() => { Memorizer.importText('Do not overlap', 'Synthetic source.'); window.__finishCancelled(); });
+    await r.waitForFunction(() => !Memorizer.ui.importJob && /staged files removed/.test(Memorizer.ui.notice), null, T);
+    const got = await r.evaluate(async () => ({ docs: (await MemStore.all('docs')).length, books: (await MemStore.all('books')).length, files: (await MemStore.all('files')).length, stages: (await MemStore.all('meta')).filter(v => v.kind === 'pending-import').length }));
+    ok('cancellation cleans staged PDF records and no overlapping import starts', Object.values(got).every(v => v === 0), JSON.stringify(got));
+    ok('the app remains usable for a new import', await r.locator('#door-add').isVisible());
+  }
+
   head('radio controls and speech privacy');
   {
     const r = await context('keyboard', () => { window.SpeechRecognition = function () {}; });
