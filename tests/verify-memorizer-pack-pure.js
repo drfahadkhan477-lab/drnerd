@@ -93,7 +93,7 @@ head('the prompt carries the chapter and asks for the shape the importer reads')
   ok('so are the question and analogy fences prompts.js holds every prompt to',
      pr.indexOf(Prompts.MCQ_RULE) !== -1 && pr.indexOf(Prompts.ANALOGY_RULE) !== -1);
   ok('and what it asks for beyond a lesson: why each option is wrong, the trap, the pairs confused',
-     /"why": 4 strings, one per\s+option/.test(pr) && /"trap"/.test(pr) && /lesson\.distinctions/.test(pr));
+     /"why": 4 strings, one per option/.test(pr) && /"trap"/.test(pr) && /lesson\.distinctions/.test(pr));
   const ex = pr.slice(pr.indexOf('where each section is like this one:\n') + 37, pr.indexOf('\n\nREPLIES'));
   let parsed = null;
   try { parsed = JSON.parse(ex); } catch (_) {}
@@ -354,7 +354,7 @@ head('tables written with Claude: every cell held to the book, a bad one left ou
   ok('a reply without tables reads as none', run(noTables).sections[0].lesson.tables.length === 0);
   const pr = P.prompt(DOC);
   ok('the prompt asks for tables, a flowchart drawn to rule, the design and a check before replying',
-     /lesson\.tables: 0 to 2 tables/.test(pr) && /At most 12 nodes/.test(pr) && /HOW TO DESIGN IT/.test(pr) && /BEFORE YOU REPLY/.test(pr) && /TABLE/.test(pr));
+     /lesson\.tables: 0 to 2 tables/.test(pr) && /at most 12 nodes/.test(pr) && /HOW TO DESIGN IT/.test(pr) && /BEFORE YOU REPLY/.test(pr) && /TABLE/.test(pr));
 }
 
 {

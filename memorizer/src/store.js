@@ -185,6 +185,23 @@ function deleteBook(id) {
     });
   });
 }
+/* What no unit owns any more: a pack, a session, search vectors or review
+   cards whose unit is gone, left by an import or a delete cut short in an
+   older build (deletes are one transaction now). Removed when the app
+   opens, in one batch: a backup refuses derived data with no document
+   (backup.js validate), so one orphan would make every backup of this
+   device unrestorable. Only records keyed by a unit are looked at. */
+function sweep() {
+  return Promise.all(['docs', 'packs', 'sessions', 'vectors', 'cards'].map(all)).then(function (r) {
+    var have = {}, ops = [];
+    r[0].forEach(function (d) { have[d.id] = true; });
+    ['packs', 'sessions', 'vectors'].forEach(function (st, i) {
+      r[i + 1].forEach(function (x) { if (!have[x.id]) ops.push({ store: st, id: x.id, delete: true }); });
+    });
+    r[4].forEach(function (c) { if (c.docId && !have[c.docId]) ops.push({ store: 'cards', id: c.id, delete: true }); });
+    return batch(ops).then(function () { return ops.map(function (o) { return o.store; }); });
+  });
+}
 /* Unfinished imports are invisible; their marker is removed with the book
    commit. A crash leaves the marker for startup cleanup. */
 function cleanImports(bookId) {
@@ -322,7 +339,7 @@ function retryFailures() {
   return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta, f.ops); }));
 }
 api.forgetFailures = function () { failures = {}; latest = {}; }; api.snapshot = snapshot; api.STORES = STORES.slice(); api.health = health; api.persist = persist; api.failureMessage = failureMessage; api.retryFailures = retryFailures;
-api.update = update; api.removalOps = removalOps; api.cleanImports = cleanImports; api.batch = batch; api.open = open; api.put = function (store, value) {
+api.update = update; api.removalOps = removalOps; api.cleanImports = cleanImports; api.sweep = sweep; api.batch = batch; api.open = open; api.put = function (store, value) {
   var v = clone(value);
   return tracked(store + ':' + v.id, function () { return put(store, v); }, store === 'meta' ? v : null, [{ store: store, value: v }]);
 }; api.get = function (store, id) {

@@ -39,6 +39,7 @@
 'use strict';
 
 var Prompts = root.MemPrompts || (typeof require === 'function' ? require('./prompts.js') : null);
+var Spec = root.MemSpec || (typeof require === 'function' ? require('./spec.js') : null);
 var Ground = root.MemGround || (typeof require === 'function' ? require('./ground.js') : null);
 var Ask = root.MemAsk || (typeof require === 'function' ? require('./ask.js') : null);
 
@@ -75,13 +76,15 @@ var LESSON = extend(Prompts.SCHEMAS.lesson, {
   tables: arr(extend({ properties: {} }, { title: S, columns: arr(S), rows: arr(arr(S)), page: I })),
 });
 var TABLE = LESSON.properties.tables.items;
-var QUESTION = extend(Prompts.SCHEMAS.quiz.properties.questions.items, { why: arr(S), trap: S });
+/* source: where a study file's question came from (its section, and the page it
+   cites); "" for a pack written in a chat, which cites a page per item instead. */
+var QUESTION = extend(Prompts.SCHEMAS.quiz.properties.questions.items, { why: arr(S), trap: S, source: S });
 /* What may be left out of a reply, and reads as nothing to say when it is:
    a chat that writes no pearls for a section has not written a wrong one.
    What may not: a lesson's points, and a question's stem, options, answer,
    explanation and page. Keys a reply adds that are not here are left out. */
 var LESSON_EMPTY = { overview: '', mechanism: '', numbers: [], distinctions: [], pearls: [], cases: [], mnemonics: [], analogies: [], flowchart: '', tables: [] };
-var QUESTION_EMPTY = { quote: '', why: [], trap: '' };
+var QUESTION_EMPTY = { quote: '', why: [], trap: '', source: '' };
 function filled(v, schema, empty) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return v;
   var o = {};
@@ -120,6 +123,7 @@ var EXAMPLE = {
     page: 12,
     why: ['Why the first option is wrong.', '', 'Why the third option is wrong.', 'Why the fourth option is wrong.'],
     trap: 'the confusion this question tests',
+    source: '',
   }] },
 };
 
@@ -160,7 +164,7 @@ function prompt(doc) {
     '3. Memorizer checks your reply against my book before it uses it: every number, every page, every quoted ' +
     'sentence, table cell and flowchart label, and the conditions, tests and treatments you name. Anything it ' +
     'cannot find is shown to me flagged "not found in your book". Copy numbers exactly as printed (value, unit, ' +
-    'direction: >, <, ≥, ≤); never round, convert or combine them; name things in the text’s own words.',
+    'direction: >, <, ≥, ≤); never round, convert or combine them; name things in the text’s own words. ' + Spec.RULES.numbers,
     '4. ' + Prompts.ANALOGY_RULE,
     '5. Reply with JSON only, in one code block, in exactly the shape shown below. Every field is required: ' +
     'write "" or [] when there is nothing to put.',
@@ -180,34 +184,25 @@ function prompt(doc) {
     '- lesson.overview: the big idea — what this section is about and why it matters — in one or two plain sentences.',
     '- lesson.mechanism: the chain of cause and effect that makes the section make sense, as "A → B → C" in two ' +
     'to four sentences ("" if it has none).',
-    '- lesson.points: 5 to 10 high-yield points, most important first, each at most 25 words and starting ' +
-    'with its key term.',
+    '- lesson.points: ' + Spec.RULES.points,
     '- lesson.numbers: every threshold, cut-off, dose, percentage or duration worth memorising, one to an ' +
     'item, as "what it measures: value unit".',
-    '- lesson.distinctions: the pairs a student confuses — two conditions, drugs, signs or criteria — ' +
-    'and how to tell them apart, in one sentence naming the one feature that separates them.',
+    '- lesson.distinctions: the pairs a student confuses — two conditions, drugs, signs or criteria. ' + Spec.RULES.distinction,
     '- lesson.tables: 0 to 2 tables that make a comparison or classification visible at a glance — e.g. the ' +
-    'causes, grades, criteria or treatments side by side. "columns" are the headers (the first names what each ' +
-    'row is); every row has one cell per column; at most 6 rows and 5 columns; cells a few words, numbers exactly ' +
-    'as printed; a cell the text does not fill is "—". [] if nothing in the section compares.',
-    '- lesson.flowchart: a Mermaid "flowchart TD" for the section’s pathway, sequence or decision (diagnosis, ' +
-    'management, cause and effect); else "". At most 12 nodes; every label in double quotes and a few words from ' +
-    'the text; decisions as {"question?"} with the answers on the arrows (-->|"yes"|); no styling, no subgraphs.',
+    'causes, grades, criteria or treatments side by side; "columns" are the headers. ' + Spec.RULES.table + ' [] if nothing in the section compares.',
+    '- lesson.flowchart: the section’s pathway, sequence or decision (diagnosis, management, cause and effect), ' +
+    'else "". ' + Spec.RULES.flowchart,
     '- lesson.pearls: one to three exam pearls, the facts most likely to be asked.',
     '- lesson.cases: one or two oral-exam cases for rounds: a short clinical "stem" and two to four "asks" an ' +
     'examiner would put on it, each {q, a} with the model answer from the text ([] if the section has no clinical material).',
     '- lesson.mnemonics: for every list of three or more items, an acrostic: "words" are the items in order ' +
     'and "letters" their first letters.',
     '- lesson.analogies: one everyday analogy for a mechanism, or [] if none fits.',
-    '- quiz.questions: 6 to 8 board-style questions, the most important material first. ' + Prompts.MCQ_RULE +
-    ' Exactly ' + Prompts.OPTIONS + ' options; "answer" is the index (0 to ' + (Prompts.OPTIONS - 1) + ') of ' +
-    'the right one. Prefer clinical vignettes, "most likely", "next best step" and "all EXCEPT"; test ' +
-    'reasoning, not recall of wording. "explain": ' +
-    'why the answer is right, in the book’s words. "why": ' + Prompts.OPTIONS + ' strings, one per ' +
-    'option in order — for each wrong option the exact reason it is wrong by the book, and "" for the ' +
-    'right one. "trap": the confusion the question tests (e.g. "stenosis vs regurgitation"), or "". "quote": ' +
-    '"" unless the question completes a sentence of the text, then that sentence with the gap as _____. No ' +
-    '"all of the above" or "none of the above".',
+    '- quiz.questions: ' + Spec.QUESTIONS.section[0] + ' to ' + Spec.QUESTIONS.section[1] + ' board-style questions, the most important material first. ' + Prompts.MCQ_RULE + ' ' + Spec.RULES.mcq +
+    ' ' + Spec.RULES.options + ' "answer" is the index (0 to ' + (Spec.OPTIONS - 1) + ') of the right one. ' + Spec.RULES.style +
+    ' "explain": ' + Spec.RULES.explain + ' "why": ' + Spec.OPTIONS + ' strings, one per option in order. ' + Spec.RULES.why +
+    ' (Write "" for the right one.) "trap": the confusion the question tests (e.g. "stenosis vs regurgitation"), or "". "quote": ' +
+    '"" unless the question completes a sentence of the text, then that sentence with the gap as _____.',
     '',
     'BEFORE YOU REPLY, check: every number and page against the text; every table row has as many cells as ' +
     'columns; every flowchart label is in quotes; every mnemonic has one letter per word; the JSON is complete ' +
@@ -307,9 +302,17 @@ function quoteFlag(q, sec) {
   return filled && sec.norm.indexOf(filled) !== -1 ? '' : 'the quoted sentence is not your book’s words';
 }
 function says(t) { return String(t || '').indexOf(NOT_IN_PDF) !== -1; }
+/* The text a flowchart claims: every quoted label, but not a bare yes or no
+   on an arrow (-->|"no"|). That is the answer to the decision node's
+   question, which is checked; read as a claim it is a negation the passage
+   never states, and every decision flowchart Spec.RULES asks for was
+   dropped. Any other arrow label (a threshold, say) is still checked. */
 function labels(flowchart) {
-  var out = [], re = /"([^"]*)"/g, m;
-  while ((m = re.exec(String(flowchart || '')))) out.push(m[1]);
+  var out = [], re = /(\|\s*)?"([^"]*)"/g, m;
+  while ((m = re.exec(String(flowchart || '')))) {
+    if (m[1] && /^\s*(?:yes|no)\s*$/i.test(m[2])) continue;
+    out.push(m[2]);
+  }
   return out.join(' ');
 }
 
@@ -476,7 +479,8 @@ function safeRecord(rec, doc) {
   return out;
 }
 /* What the owner is told, in counts that come from the check itself. */
-function report(checked) {
+function report(checked, against) {
+  against = against || 'your book';
   var s = checked.sections, q = 0, f = 0;
   s.forEach(function (x) { q += x.quiz.questions.length; f += x.flags.length; });
   var nums = s.map(function (x) { return x.index + 1; });
@@ -484,7 +488,7 @@ function report(checked) {
     imported: s.length, questions: q, flagged: f, refused: checked.refused.length, dropped: checked.dropped.length,
     line: s.length ? 'Imported ' + (s.length === 1 ? 'section ' : 'sections ') + nums.join(', ') + ': ' +
       s.length + (s.length === 1 ? ' lesson, ' : ' lessons, ') + q + (q === 1 ? ' question' : ' questions') + '. ' +
-      (f ? f + (f === 1 ? ' item' : ' items') + ' not found in your book, flagged where it is shown.' : 'Source checks passed; compare generated explanations with the cited pages.')
+      (f ? f + (f === 1 ? ' item' : ' items') + ' not found in ' + against + ', flagged where it is shown.' : 'Source checks passed; compare generated explanations with the cited pages.')
       : 'Nothing was imported.',
   };
 }
@@ -533,7 +537,7 @@ function coverage(rec, doc) {
 
 var MemPack = { FORMAT: FORMAT, VERSION: VERSION, PER_REPLY: PER_REPLY, LESSON: LESSON, QUESTION: QUESTION, EXAMPLE: EXAMPLE,
                 prompt: prompt, replies: replies, unitName: unitName, packsIn: packsIn, parse: parse, check: check, merge: merge,
-                sectionOf: sectionOf, safeSection: safeSection, safeRecord: safeRecord, dropSection: dropSection, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam };
+                sectionOf: sectionOf, safeSection: safeSection, safeRecord: safeRecord, dropSection: dropSection, report: report, coverage: coverage, claimFlag: claimFlag, bookOf: bookOf, exam: exam, segText: segText };
 root.MemPack = MemPack;
 if (typeof module !== 'undefined' && module.exports) module.exports = MemPack;
 })(typeof window !== 'undefined' ? window : this);
