@@ -104,9 +104,14 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascr
     ok('every pinned reader file is in the cache', kept.every(Boolean), JSON.stringify(urls.filter((_, i) => !kept[i])));
 
     head('with the network cut');
+    /* The network is cut by setOffline alone. A route that aborts would be
+       consulted before the service worker on WebKit, refusing what the
+       worker serves from its cache, so it would measure Playwright rather
+       than the app. Proven cut by a file that was never kept. */
     await ctx.unroute('https://cdn.jsdelivr.net/**');
-    await ctx.route('https://cdn.jsdelivr.net/**', route => route.abort('internetdisconnected'));
     await ctx.setOffline(true);
+    const never = await p.evaluate(() => fetch('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/package.json', { mode: 'cors' }).then(r => r.ok, () => false));
+    ok('the network really is cut: a file never kept is not served', never === false);
     const served = await p.evaluate(us => Promise.all(us.map(u => fetch(u, { mode: 'cors' }).then(r => r.ok, () => false))), urls);
     ok('every one of them is still served, from the cache', served.every(Boolean), JSON.stringify(urls.filter((_, i) => !served[i])));
     const flow = await p.evaluate(() => fetch('https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js', { mode: 'cors' }).then(r => r.ok, () => false));

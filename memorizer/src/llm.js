@@ -160,11 +160,17 @@ function storedFiles(id, backend) {
   var idb = root.indexedDB || (typeof indexedDB !== 'undefined' ? indexedDB : null);
   if (!idb) return Promise.resolve(out);
   var req = function (r) { return new Promise(function (res, rej) { r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); };
-  return each(STORES, function (n) {
+  /* A store that is not there is not made here: the engine makes it, with
+     its own schema, and would find an empty one in the way. Asked first
+     where the browser can say (indexedDB.databases(), Safari 14+): opening
+     to look would make it, and aborting that open undoes it on Chromium
+     but not on WebKit, which keeps the empty database. The abort stays for
+     a browser that cannot say. */
+  var listed = idb.databases ? idb.databases().then(function (ds) { return ds.map(function (d) { return d.name; }); }, function () { return null; }) : Promise.resolve(null);
+  return listed.then(function (names) { return each(STORES, function (n) {
+    if (names && names.indexOf(n) === -1) return;
     return new Promise(function (resolve) {
       var o = idb.open(n);
-      /* a store that is not there is not made here: the engine makes it,
-         with its own schema, and would find an empty one in the way */
       o.onupgradeneeded = function () { o.transaction.abort(); };
       o.onerror = function () { resolve(null); };
       o.onsuccess = function () { resolve(o.result); };
@@ -179,7 +185,7 @@ function storedFiles(id, backend) {
         });
       }).then(function () { db.close(); }, function () { db.close(); });
     });
-  }).then(function () { return out; });
+  }); }).then(function () { return out; });
 }
 function verify(id, backend) {
   var m = Models && Models.models[id];

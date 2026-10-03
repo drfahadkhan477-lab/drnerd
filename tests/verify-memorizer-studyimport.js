@@ -34,7 +34,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, clipboardPermissions } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 
 let passed = 0, failed = 0;
@@ -141,7 +141,8 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
     ok('the × has a spoken name', a.closeLabel === 'Close');
     ok('the whole drop area opens the file picker (it is the input’s label)', a.dropOpens);
     ok('it accepts every kind it reads: .md .markdown .txt .html .htm', ['.md', '.markdown', '.txt', '.html', '.htm'].every(x => a.accept.split(',').includes(x)), a.accept);
-    await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+    /* each engine names its clipboard grants differently (tests/_engine.js) */
+    await ctx.grantPermissions(clipboardPermissions());
     await p.click('#import-copy-prompt');
     await p.waitForFunction(() => /Copied/.test(document.getElementById('import-copy-status').textContent), null, T);
     const clip = await p.evaluate(() => navigator.clipboard.readText().then(t => t === MemStudyImport.studyFilePrompt() && /MEMORIZER STUDY FILE/.test(t)));

