@@ -160,9 +160,18 @@ const ALLOW = [
 ];
 
 function staged() {
+  /* --raw, not --name-only, to see each entry's mode: a submodule pointer
+     (160000) is a commit id, not content, and tracked() skips it. Reading
+     names alone, the hook refused every commit that moved content/refs-repo
+     while CI passed the same tree. -z output: ":old new sha sha status" NUL
+     path NUL, one path per entry since ACM has no renames. */
   try {
-    return execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACM'],
-      { encoding: 'utf8' }).split('\n').map(s => s.trim()).filter(Boolean);
+    const out = execFileSync('git', ['diff', '--cached', '--raw', '-z', '--diff-filter=ACM'],
+      { encoding: 'utf8' }).split('\0');
+    const files = [];
+    for (let i = 0; i + 1 < out.length; i += 2)
+      if (out[i].split(' ')[1] !== '160000' && out[i + 1]) files.push(out[i + 1]);
+    return files;
   } catch (_) { return []; }
 }
 function tracked() {
