@@ -35,11 +35,12 @@ const TOOL = path.join(ROOT, 'tools', 'study-file-check.js');
 const { checkStudyFile } = require(TOOL);
 const { STUDY_EXAMPLE } = require(path.join(ROOT, 'memorizer', 'src', 'studyImport.js'));
 
-/* The example, with its scenario held to its own text, so it is clean under
-   --strict too. The app's example names a symptom its text does not, which
-   is a finding about the example, not a defect in the checker. */
-const STEM = 'develops exertional syncope';
-const CLEAN = STUDY_EXAMPLE.replace(STEM, 'develops symptoms');
+/* The app's example is the clean fixture: it is what the prompt shows
+   Claude, so it must pass the strict check it asks a file to pass. It once
+   did not: its scenario named syncope, which its text never does. That
+   scenario is the strict fixture below. */
+const CLEAN = STUDY_EXAMPLE;
+const STEM = 'develops symptoms', DIRTY_STEM = 'develops exertional syncope';
 const edit = (from, to) => {
   if (CLEAN.split(from).length !== 2) throw new Error('fixture anchor not found exactly once: ' + from);
   return CLEAN.split(from).join(to);
@@ -49,10 +50,10 @@ const problems = r => r.lines.filter(l => /PROBLEM/.test(l));
 
 head('a clean file is clean, and was really read');
 {
-  ok('the fixture differs from the example only in the stem', CLEAN !== STUDY_EXAMPLE);
+  ok('the example\u2019s scenario is the one these fixtures edit', CLEAN.split(STEM).length === 2);
   const r = run(CLEAN, false), rs = run(CLEAN, true);
   ok('it passes', r.ok, problems(r).join(' | ') || 'no problems');
-  ok('and under --strict', rs.ok, problems(rs).join(' | ') || 'no problems');
+  ok('and under --strict: the app\u2019s own example passes its own strict check', rs.ok, problems(rs).join(' | ') || 'no problems');
   /* "clean" from a parse that read nothing is the hollow pass: the counts
      must be the example's. */
   ok('its points, table, flowchart and question were all read', /3 points, 1 tables, 1 flowcharts, 0 diagrams, 1 questions/.test(r.lines[0]), r.lines[0]);
@@ -65,7 +66,7 @@ const cases = [
   ['a question with three options', edit('- D) Balloon valvotomy as definitive treatment\n', ''), false, /exactly 4 options/],
   ['an explanation with a number the text does not have',
     edit('Valve replacement is indicated once symptoms appear [p. 1460].\n\n**Why', 'Valve replacement within 90 days of symptoms [p. 1460].\n\n**Why'), false, /flagged: .*number/],
-  ['under --strict, a scenario naming what the text does not', STUDY_EXAMPLE, true, /flagged: in its scenario/],
+  ['under --strict, a scenario naming what the text does not', edit(STEM, DIRTY_STEM), true, /flagged: in its scenario/],
   ['a file with no points', edit('- **Peak velocity**', '**Peak velocity**').replace('- **Mean gradient**', '**Mean gradient**').replace('- **Aortic stenosis vs', '**Aortic stenosis vs'), false, /PROBLEM/],
   ['an empty file', '', false, /PROBLEM  file/],
 ];
@@ -77,9 +78,9 @@ for (const [label, src, strict, want] of cases) {
 
 head('it never prints the text of an item');
 {
-  const r = run(STUDY_EXAMPLE, true), all = r.lines.join('\n');
+  const r = run(edit(STEM, DIRTY_STEM), true), all = r.lines.join('\n');
   ok('a flagged question is reported', !r.ok);
-  ok('without its stem', !/A patient with severe aortic stenosis/.test(all) && !all.includes(STEM));
+  ok('without its stem', !/A patient with severe aortic stenosis/.test(all) && !all.includes(DIRTY_STEM));
   const r2 = run(edit('**Correct Answer**: B\n', ''), false).lines.join('\n');
   ok('and an unanswered one without its options', !/Follow-up echocardiography|Balloon valvotomy/.test(r2));
 }
@@ -93,10 +94,11 @@ head('the command line exits as the skill relies on');
   const cli = args => spawnSync(process.execPath, [TOOL, ...args], { encoding: 'utf8' }).status;
   ok('0 for a clean file', cli([good]) === 0, String(cli([good])));
   ok('1 for a file with a problem', cli([bad]) === 1, String(cli([bad])));
-  const ex = path.join(dir, 'ex.md');
-  fs.writeFileSync(ex, STUDY_EXAMPLE);
-  ok('0 for the app\u2019s own example without --strict', cli([ex]) === 0, String(cli([ex])));
-  ok('1 for it with --strict: the flag reaches the exit code', cli([ex, '--strict']) === 1, String(cli([ex, '--strict'])));
+  const dirty = path.join(dir, 'dirty.md');
+  fs.writeFileSync(dirty, edit(STEM, DIRTY_STEM));
+  ok('0 for a strict-only problem without --strict', cli([dirty]) === 0, String(cli([dirty])));
+  ok('1 for it with --strict: the flag reaches the exit code', cli([dirty, '--strict']) === 1, String(cli([dirty, '--strict'])));
+  ok('0 for the app\u2019s own example with --strict', cli([good, '--strict']) === 0, String(cli([good, '--strict'])));
   ok('2 with no file named', cli([]) === 2, String(cli([])));
   fs.rmSync(dir, { recursive: true, force: true });
 }
