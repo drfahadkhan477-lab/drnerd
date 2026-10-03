@@ -36,4 +36,6 @@ EOF
 - Paste the whole log, or more than ~40 lines of it. Suite output can quote
   question text from the licensed bank; CLAUDE.md forbids quoting it into a
   transcript.
-- Guess a cause. Report what the log says; the main session diagnoses.
+- Guess a cause, or add a summary that names one. Report what the log says;
+  the main session diagnoses. (A WebKit "access control checks" error, for
+  one, has been an unanswered request in this suite, not CORS.)
