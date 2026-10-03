@@ -656,6 +656,13 @@ the defaults:
 Run it with `./run.sh` when you want it, or install the service to have it
 always on.
 
+On Windows the same two things apply, with `run.cmd` for `run.sh` and a
+Windows path in `.env`. One more thing must be true there: the job's steps run
+in bash, and the runner finds bash by searching `PATH`. Windows ships
+`C:\Windows\System32\bash.exe`, which is the WSL launcher and not a shell, so
+Git for Windows' `bin` directory has to come before `System32` in the `.path`
+file the runner writes beside `run.cmd` when it is configured.
+
 ### Turning it on properly, after the first green run
 
 The job is **manual only** to begin with: Actions → `full` → Run workflow. That

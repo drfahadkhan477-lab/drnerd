@@ -471,6 +471,13 @@ jobs:
     # slowest thing here. This bounds a run that HANGS; it does nothing about a
     # run that never starts, which is why the trigger above is manual.
     timeout-minutes: 90
+    # The steps below are POSIX sh. A Linux or macOS runner runs them in bash
+    # anyway; a Windows runner defaults to PowerShell, where `if [ -z ... ]` is
+    # a parse error and "$SYSTOLE_SOURCE" is an undefined variable rather than
+    # the environment. Saying bash makes the job the same on all three.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
