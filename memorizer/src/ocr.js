@@ -190,7 +190,19 @@ function discard(worker) {
   try { Promise.resolve(worker && worker.terminate && worker.terminate()).catch(function () {}); } catch (_) { /* already gone */ }
 }
 var RECOGNIZE_OUT = { text: false, blocks: true, hocr: false, tsv: false };
+/* One page at a time. Two imports can run at once (the file buttons stay
+   live), and tesseract.js 5.1.1's terminate() kills the worker without
+   settling the other jobs queued on it — so ending a faulted worker while a
+   second page waits on it would leave that import busy for ever. Queued
+   here, no page is ever in flight on a worker that is being ended. The
+   worker ran one page at a time anyway, so nothing is slower. */
+var queue = Promise.resolve();
 function recognize(canvas, onStatus) {
+  var job = queue.then(function () { return recognizeNow(canvas, onStatus); });
+  queue = job.then(function () {}, function () {});
+  return job;
+}
+function recognizeNow(canvas, onStatus) {
   /* a worker that faults is discarded whether or not the page is retried,
      so the page after a second fault never inherits the faulted instance */
   function run(worker) {

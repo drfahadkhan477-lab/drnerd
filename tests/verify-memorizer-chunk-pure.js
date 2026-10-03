@@ -1142,7 +1142,11 @@ async function ocrRetry() {
         const n = made.length, w = { n, ended: false,
           recognize: () => {
             log.recognize.push(n);
-            return (plan.shift() || READ)().catch(e => {
+            /* a job takes a moment, so two can overlap; and, as 5.1.1's
+               terminate() does, ending the worker leaves its pending jobs
+               unsettled for ever */
+            const step = plan.shift() || READ;
+            return new Promise((res, rej) => setTimeout(() => { if (!w.ended) step().then(res, rej); }, 5)).catch(e => {
               if (opts && typeof opts.errorHandler === 'function') opts.errorHandler(e.message); else log.thrown.push(e.message);
               throw e.message;   // 5.1.1 rejects with the message string, not an Error
             });
@@ -1179,6 +1183,15 @@ async function ocrRetry() {
     const r2 = await settle(t.O.readPage(t.page));
     ok('and the page after it starts a third reader, never reusing a faulted one', !r2.e && t.made.length === 3 && t.made[1].ended && t.log.recognize.join() === '0,1,2',
        JSON.stringify({ made: t.made.length, ended: t.made.map(w => w.ended), calls: t.log.recognize }));
+  }
+  {
+    /* two imports at once, the first page faulting: neither may be left
+       waiting on the worker that is ended */
+    const t = sandbox([FAULT]);
+    const within = p => Promise.race([settle(p), new Promise(r => setTimeout(() => r({ hung: true }), 1000))]);
+    const [a, b] = await Promise.all([within(t.O.readPage(t.page)), within(t.O.readImage(t.photo))]);
+    ok('two imports at once, one faulting: both finish, neither left waiting on the ended reader', !a.hung && !b.hung && !a.e && !b.e && t.made[0].ended,
+       JSON.stringify({ page: a.hung ? 'hung' : a.e ? String(a.e.message || a.e).slice(0, 40) : 'read', photo: b.hung ? 'hung' : b.e ? String(b.e.message || b.e).slice(0, 40) : 'read', calls: t.log.recognize }));
   }
   {
     const t = sandbox([() => Promise.reject(new Error('the image could not be read'))]);
