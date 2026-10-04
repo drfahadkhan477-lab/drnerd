@@ -5,10 +5,13 @@
 var Store = root.MemStore, Prov = root.MemProvenance;
 var VERSION = 1, FORMAT = 'memorizer-backup';
 var VIEWS = ['Uint8Array', 'Uint8ClampedArray', 'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array', 'Float32Array', 'Float64Array', 'DataView'];
+// Complete triples encode without padding, so chunk results can be joined
+// into the same version 1 base64 without a whole-PDF binary string.
+var BINARY_CHUNK = 8190, BASE64_CHUNK = BINARY_CHUNK / 3 * 4;
 function base64(buffer) {
   var bytes = new Uint8Array(buffer), parts = [];
-  for (var i = 0; i < bytes.length; i += 8192) parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + 8192)));
-  return root.btoa(parts.join(''));
+  for (var i = 0; i < bytes.length; i += BINARY_CHUNK) parts.push(root.btoa(String.fromCharCode.apply(null, bytes.subarray(i, i + BINARY_CHUNK))));
+  return parts.join('');
 }
 function bufferOf(text) {
   // Repeating four-character regex groups can exhaust the regex engine's
@@ -21,8 +24,11 @@ function bufferOf(text) {
     var c = text.charCodeAt(i);
     if (!(c >= 65 && c <= 90) && !(c >= 97 && c <= 122) && !(c >= 48 && c <= 57) && c !== 43 && c !== 47) throw new Error('Invalid binary payload.');
   }
-  var raw = root.atob(text), out = new Uint8Array(raw.length);
-  for (i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  var out = new Uint8Array(text.length / 4 * 3 - (text.length - end)), offset = 0;
+  for (i = 0; i < text.length; i += BASE64_CHUNK) {
+    var raw = root.atob(text.slice(i, i + BASE64_CHUNK));
+    for (var j = 0; j < raw.length; j++) out[offset++] = raw.charCodeAt(j);
+  }
   return out.buffer;
 }
 function map(value, decode) {

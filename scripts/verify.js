@@ -195,6 +195,9 @@ const SUITES = [
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
   ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],
+  /* The invented export CI builds the app from: in the app's shape, in the
+     sizes the browser suites read, and marked so it is never recorded. */
+  ['synthetic-pure', 'the synthetic export builds the real app, and is marked so its run is never recorded'],
   /* Guards the release gate's one job: never printing CERTIFIED over something
      it did not check. The permissive direction is the dangerous one here, so
      the checks are mostly about what it REFUSES to claim. */
@@ -415,7 +418,7 @@ const SUITES = [
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
    which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'carve-pure'];
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'carve-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -669,6 +672,11 @@ const parallelSet = chosen.filter(([n]) => !SERIAL.has(n)).sort((a, b) => cost(b
 const serialSet = chosen.filter(([n]) => SERIAL.has(n));
 
 console.log(`\nVerifying ${shortTarget}`);
+/* A build assembled around scripts/synthetic-export.js (CI's build) runs the
+   same suites, but its counts are of invented questions; writeStats will not
+   record them. Said up front so a long run does not end in a surprise. */
+const SYNTHETIC = !TARGET_IS_URL && require('./synthetic-export.js').isSyntheticBuild(TARGET);
+if (SYNTHETIC) console.log('  synthetic build: tests/test-stats.json will not be written');
 if (urlIncapable.length) {
   /* Named, counted, and NOT quietly re-pointed at the default build. Running
      them against a different artifact than the one on the command line would
@@ -871,6 +879,7 @@ function writeStats(pwaCount) {
      single-file build's. Same reason --engine webkit does not write: a true
      number about the wrong thing is still wrong in the sentence it lands in. */
   if (TARGET_IS_URL) return;
+  if (SYNTHETIC) return;
   if (ENGINE !== DEFAULT_ENGINE) return;
   if (chosen.length !== SUITES.length) return;
   const file = path.join(ROOT, 'tests', 'test-stats.json');

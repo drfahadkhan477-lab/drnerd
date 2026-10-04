@@ -80,7 +80,7 @@ function freeze({ input, appDir, payloadDir, root = ROOT, log = console.log, slo
   log(`        ${kinds('src').length} src modules, ${kinds('asset').length} assets read from the repository at assembly`);
   const repeated = kinds('asset').filter(s => s.times > 1);
   if (repeated.length) log(`        claimed at more than one site: ${repeated.map(s => `${s.name} ×${s.times}`).join(', ')}`);
-  if (report.inline.src.length) log(`inline  src not found verbatim (a later patch edited the embedded copy): ${report.inline.src.join(', ')}`);
+  if (report.inline.src.length) log(`inline  src not found verbatim (a patch edited the embedded copy, src/ changed since the build, or it is not embedded): ${report.inline.src.join(', ')}`);
   if (report.inline.asset.length) log(`inline  assets not found: ${report.inline.asset.join(', ')}`);
   if (kinds('app').length) log(`        ${kinds('app').length} pieces carved into app/ found as they stand`);
   log(`round trip ${same ? 'byte-identical' : 'DIFFERENT'}`);
