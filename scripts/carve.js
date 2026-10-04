@@ -150,7 +150,12 @@ function auditApp(root = ROOT) {
   /* The same rule carveFile holds a new piece to, held to the pieces already
      there: a tree can break it by hand or by two carves that each looked fine. */
   let assembled = null;
-  try { assembled = Slots.assemble(shell, withPayloadsLeft(root)); } catch (e) { /* what is missing is already named above */ }
+  try { assembled = Slots.assemble(shell, withPayloadsLeft(root)); } catch (e) {
+    /* A slot with nothing to fill it was named in the loop above. Any other
+       failure (a repeated slot, a malformed token) is one assemble-app would
+       stop on too, and the audit must not pass a shell that cannot assemble. */
+    if (!/has nothing to fill it/.test(e.message)) problems.push(`the shell does not assemble: ${e.message}`);
+  }
   if (assembled !== null) for (const name of pieces) {
     const n = countIn(assembled, fs.readFileSync(path.join(root, name), 'utf8'));
     if (n > 1) problems.push(`${name}'s text stands in the assembled app ${n} times: a freeze would find it once or twice by filename order`);

@@ -138,16 +138,22 @@ head('auditApp names each way app/ can be broken');
   ok('a whole app/ has no problem', a.problems.length === 0 && a.pieces.join() === 'app/css/a.css' && a.tokens === 3, JSON.stringify(a));
 
   const said = (r, re) => { const p = Carve.auditApp(r).problems; return p.length === 1 && re.test(p[0]); };
+  /* Two breaks that also stop assembly name both, and nothing else. */
+  const saidWithAssembly = (r, re) => { const p = Carve.auditApp(r).problems; return p.length === 2 && p.some(x => re.test(x)) && p.some(x => /the shell does not assemble/.test(x)); };
   const missing = root('missing', carved);
   ok('a token whose piece is gone', said(missing, /app:app\/css\/a\.css has no file/));
   const orphan = root('orphan'); put(orphan, 'app/css/left.css', '.z{}\n');
   ok('a file under app/ that no token cites', said(orphan, /left\.css is cited by 0 tokens/));
   const twice = root('twice', carved.replace('boot();', Slots.token('app', 'app/css/a.css') + 'boot();')); put(twice, 'app/css/a.css', '.a{}\n');
-  ok('a piece cited twice', said(twice, /a\.css is cited by 2 tokens/));
+  ok('a piece cited twice', saidWithAssembly(twice, /a\.css is cited by 2 tokens/));
   const nested = root('nested', carved); put(nested, 'app/css/a.css', '.a{}\n' + Slots.token('src', SRC) + '\n');
-  ok('a piece that holds a token', said(nested, /a\.css holds a slot token/));
+  ok('a piece that holds a token', saidWithAssembly(nested, /a\.css holds a slot token/));
   const crlf = root('crlf', carved); put(crlf, 'app/css/a.css', '.a{}\r\n');
   ok('a piece with a carriage return', said(crlf, /carriage return/));
+  const repeat = root('repeat', SHELL.replace('boot();', Slots.token('src', SRC) + 'boot();'));
+  ok('a src slot the shell repeats: the shell does not assemble', said(repeat, /the shell does not assemble: slot src:src\/core\/thing\.js appears more than once/));
+  const torn = root('torn', SHELL.replace('boot();', '@@SLOT[src:src/core/thing.js' + ' boot();'));
+  ok('a slot token that is malformed: the shell does not assemble', said(torn, /the shell does not assemble/));
   const nosrc = root('nosrc'); fs.rmSync(path.join(nosrc, SRC));
   ok('a src token whose module is gone', said(nosrc, /src:src\/core\/thing\.js has no file/));
   const badpay = root('badpay', SHELL.replace('payload:ALL_Q', 'payload:NOPE'));
