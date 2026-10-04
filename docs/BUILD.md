@@ -313,23 +313,14 @@ exists to prevent, arriving through the convenience alias.
 
 ### The suites on their own
 
-Without the export, `npm test` runs the suites of CI's `logic` and
-`memorizer-browser` jobs: the pure-Node ones, then the browser suites that
-make their own documents (the Memorizer and the code-only deploy's import).
-It reads that list from `.github/workflows/verify.yml`, so the two cannot
-drift apart. CI's `synthetic-browser` job is not part of `npm test`; to run
-the same suites on the same build:
-
-```bash
-node scripts/synthetic-export.js build/synthetic/export.html
-node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs \
-     --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
-node scripts/verify.js build/synthetic/systole.html --tag browser
-```
-
-The last line runs every browser suite, so `keys`, `retrieval` and `splash`
-fail there, as the job's comment says they must; the build is marked
-synthetic, so the run is never written to `tests/test-stats.json`.
+Without the export, `npm test` runs every suite CI runs: the pure-Node ones,
+then the browser suites that make their own documents (the Memorizer and the
+code-only deploy's import), then the app's browser suites on the synthetic
+build, which it makes first with the same commands as CI's
+`synthetic-browser` job (into `build/synthetic/`, never over your own
+`build/systole.html`). It reads all of that from
+`.github/workflows/verify.yml`, so the two cannot drift apart. That build is
+marked synthetic, so no run on it is ever written to `tests/test-stats.json`.
 `npm run test:pure` skips the browser suites and says which ones it skipped.
 `SYSTOLE_ENGINE=webkit npm test` runs the browser half on WebKit. The full
 registry below needs your build, and is `npm run test:private`.

@@ -29,7 +29,8 @@ const ROOT = path.join(__dirname, '..');
 
 head('the list is the workflow’s, split the way the suites actually are');
 const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
-const { pure, browser } = suitesFromWorkflow(yml);
+const { pure, browser, synthetic } = suitesFromWorkflow(yml);
+const synNames = synthetic.suites.map(x => x.name);
 /* The same "uses a browser" rule verify-stats and verify-engine apply. */
 const launches = n => {
   const code = blankComments(fs.readFileSync(path.join(__dirname, `${n}.js`), 'utf8'));
@@ -40,17 +41,27 @@ ok('and the browser suites', browser.length > 0, browser.join(', '));
 ok('no pure suite launches a browser', pure.every(n => !launches(n)), pure.filter(launches).join(', ') || 'none');
 ok('every browser suite does', browser.every(launches), browser.filter(n => !launches(n)).join(', ') || 'none');
 const all = [...yml.matchAll(/node\s+tests\/(verify-[a-z0-9-]+)\.js/g)].map(m => m[1]);
+ok('the synthetic job\u2019s suites are found, each with a target', synNames.length > 0 && synthetic.suites.every(x => /\.html$/.test(x.target)),
+   `${synNames.length} suites`);
+ok('and every one of them launches a browser', synNames.every(launches), synNames.filter(n => !launches(n)).join(', ') || 'none');
+ok('the commands that build their target are found, and each script exists',
+   synthetic.build.length >= 2 && synthetic.build.every(([s]) => fs.existsSync(path.join(ROOT, s))),
+   synthetic.build.map(c => c[0]).join(', '));
+ok('and the last of them writes the target the suites read',
+   synthetic.build.length > 0 && synthetic.suites.every(x => synthetic.build[synthetic.build.length - 1].includes(x.target)));
 ok('together they are every suite the workflow runs, each once',
-   JSON.stringify(pure.concat(browser).sort()) === JSON.stringify(all.slice().sort()), `${pure.length + browser.length} of ${all.length}`);
+   JSON.stringify(pure.concat(browser, synNames).sort()) === JSON.stringify(all.slice().sort()), `${pure.length + browser.length + synNames.length} of ${all.length}`);
 
 head('reading a workflow');
-const Y = (logic, browserJob, after) =>
+const SYN = syn => !syn ? '' : `  synthetic-browser:\n    steps:\n      - name: build\n        run: |\n${syn.build.map(c => `          node ${c.join(' ')}\n`).join('')}` +
+  syn.suites.map(n => `      - name: ${n} (1 checks)\n        run: node tests/${n}.js ${syn.target}\n`).join('');
+const Y = (logic, browserJob, after, syn) =>
   `jobs:\n  logic:\n    steps:\n${logic.map(n => `      - name: ${n} (1 checks)\n        run: node tests/${n}.js\n`).join('')}` +
   `  memorizer-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n${browserJob.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('')}` +
-  (after ? `  build-guard:\n    steps:\n      - run: node tests/${after}.js\n` : '');
+  SYN(syn) + (after ? `  build-guard:\n    steps:\n      - run: node tests/${after}.js\n` : '');
 {
   const s = suitesFromWorkflow(Y(['verify-a', 'verify-b'], ['verify-c'], 'verify-z'));
-  ok('a job’s suites end where the next job begins', JSON.stringify(s) === JSON.stringify({ pure: ['verify-a', 'verify-b'], browser: ['verify-c'] }), JSON.stringify(s));
+  ok('a job’s suites end where the next job begins', JSON.stringify(s) === JSON.stringify({ pure: ['verify-a', 'verify-b'], browser: ['verify-c'], synthetic: { build: [], suites: [] } }), JSON.stringify(s));
   let msg = '';
   try { suitesFromWorkflow('jobs:\n  logic:\n    steps: []\n'); } catch (e) { msg = e.message; }
   ok('a workflow without the browser job is refused, not read as zero browser suites', /no memorizer-browser job/.test(msg), msg || 'accepted');
@@ -63,9 +74,9 @@ const suite = (n, body) => fs.writeFileSync(path.join(TMP, 'tests', n + '.js'), 
 suite('verify-a', 'process.exit(0)');
 suite('verify-b', 'console.log("  FAIL  zq"); process.exit(1)');
 suite('verify-c', 'process.exit(process.env.SYSTOLE_ENGINE === "webkit" ? 0 : 3)');
-const go = (logic, br, opts) => {
+const go = (logic, br, opts, syn) => {
   const lines = [];
-  const r = run(Object.assign({ root: TMP, yml: Y(logic, br), log: s => lines.push(s) }, opts));
+  const r = run(Object.assign({ root: TMP, yml: Y(logic, br, null, syn), log: s => lines.push(s) }, opts));
   return Object.assign(r, { text: lines.join('\n') });
 };
 {
@@ -101,6 +112,33 @@ const go = (logic, br, opts) => {
   msg = '';
   try { go([], ['verify-c'], { pure: true }); } catch (e) { msg = e.message; }
   ok('a logic job with no suites is refused, not reported as a pass', /invokes no suites/.test(msg), msg || 'accepted');
+}
+head('the synthetic build, then its suites');
+{
+  /* A build that writes the target, a suite that passes only when handed a
+     target that exists, and a suite that leaves a mark when it runs at all. */
+  fs.mkdirSync(path.join(TMP, 'scripts'));
+  fs.writeFileSync(path.join(TMP, 'scripts', 'mk.js'), 'require("fs").writeFileSync(process.argv[2], "x")');
+  fs.writeFileSync(path.join(TMP, 'scripts', 'broken.js'), 'process.exit(1)');
+  suite('verify-s', 'const f = process.argv[2]; require("fs").writeFileSync(require("path").join(__dirname, "ran-s"), "1"); process.exit(f && require("fs").existsSync(f) ? 0 : 4)');
+  const T = path.join(TMP, 'syn.html');
+  const parsed = suitesFromWorkflow(Y(['verify-a'], ['verify-c'], null, { build: [['scripts/mk.js', T]], suites: ['verify-s'], target: T }));
+  ok('a synthetic job is read as its build and its suites, each with its target',
+     JSON.stringify(parsed.synthetic) === JSON.stringify({ build: [['scripts/mk.js', T]], suites: [{ name: 'verify-s', target: T }] }),
+     JSON.stringify(parsed.synthetic));
+  const good = go(['verify-a'], [], { executablePath: process.execPath, engine: 'chromium' },
+                  { build: [['scripts/mk.js', T]], suites: ['verify-s'], target: T });
+  ok('the build runs first, and each suite is handed the target', good.code === 0 && good.ran.includes('verify-s'),
+     good.failed.join(',') || JSON.stringify(good.ran));
+  fs.rmSync(T, { force: true }); fs.rmSync(path.join(TMP, 'tests', 'ran-s'), { force: true });
+  const bad = go(['verify-a'], [], { executablePath: process.execPath, engine: 'chromium' },
+                 { build: [['scripts/broken.js'], ['scripts/mk.js', T]], suites: ['verify-s'], target: T });
+  ok('a build that fails fails its suites, rather than skipping them', bad.code === 1 && bad.failed.includes('verify-s'), JSON.stringify(bad.failed));
+  ok('and they are not run against a build that is not there', !fs.existsSync(path.join(TMP, 'tests', 'ran-s')) && !fs.existsSync(T));
+  ok('and the run says the build is why', /synthetic build failed at scripts\/broken\.js/.test(bad.text));
+  fs.rmSync(T, { force: true });
+  const p = go(['verify-a'], [], { pure: true }, { build: [['scripts/mk.js', T]], suites: ['verify-s'], target: T });
+  ok('--pure names them among the suites it did not run', p.notRun.includes('verify-s') && !fs.existsSync(T), JSON.stringify(p.notRun));
 }
 fs.rmSync(TMP, { recursive: true, force: true });
 
