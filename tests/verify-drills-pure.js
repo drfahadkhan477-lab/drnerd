@@ -17,6 +17,11 @@
  * peak counter lies (an rSR' is two peaks, a peaked T is taller than the R), so those are
  * checked on exactly those strips.
  *
+ * What the Lab remembers (src/lab/progress.js) is held by what survives: a store that is
+ * missing, full, blocked or holds someone else's data still opens an empty Lab; a record
+ * round-trips; the streak counts consecutive days and is not lost by opening the app in
+ * the morning; the recent list and the days kept are bounded.
+ *
  * The drill engine is held by what it chooses: what is due first and most forgotten
  * first, never the item just shown, never empty, and wrong answers that are the
  * look-alikes, with the right answer in a different place each time.
@@ -28,6 +33,7 @@ const T = require('../src/lab/tracings.js').Tracings;
 const D = require('../src/lab/drill.js').Drill;
 const RX = require('../src/core/rhythms-extra.js').RhythmsExtra;
 const Strips = require('../src/lab/strips.js').Strips;
+const P = require('../src/lab/progress.js').LabProgress;
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -215,6 +221,56 @@ head('grading');
   const lapsed = D.grade({ card: reviewed, correct: false, today: day(first.ivl + reviewed.ivl) });
   ok('a wrong answer after that counts as a lapse and shortens it', lapsed.lapses > reviewed.lapses && lapsed.stability < reviewed.stability, `lapses ${reviewed.lapses}→${lapsed.lapses}`);
   ok('grading never throws on a damaged card', (() => { try { D.grade({ card: { stability: NaN, last: 5 }, correct: true, today: TODAY }); D.grade({}); D.grade(null); return true; } catch (_) { return false; } })());
+}
+
+head('what the Lab remembers');
+{
+  const mem = () => { const m = {}; return { getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, raw: m }; };
+  const day = n => { const d = new Date(2026, 9, 4 + n); return FSRS.localDateToISO(d); };
+  const T0 = day(0);
+
+  ok('nothing stored gives an empty Lab', JSON.stringify(P.load(mem())) === JSON.stringify(P.empty()) && JSON.stringify(P.load(null)) === JSON.stringify(P.empty()) && JSON.stringify(P.load(undefined)) === JSON.stringify(P.empty()));
+  const broken = { getItem: () => { throw new Error('SecurityError'); }, setItem: () => { throw new Error('QuotaExceededError'); } };
+  ok('storage that throws is an empty Lab, and a save that fails says so instead of throwing', JSON.stringify(P.load(broken)) === JSON.stringify(P.empty()) && P.save(broken, P.empty()) === false);
+  const junk = mem();
+  const leaked = ['{not json', '42', 'null', '[]', '"cards"', '{"cards":5}', '{"cards":{"x":{"stability":"a"}},"recent":7,"days":3}'].filter(bad => { junk.setItem(P.KEY, bad); return JSON.stringify(P.load(junk)) !== JSON.stringify(P.empty()); });
+  ok('anything stored that is not ours is an empty Lab', leaked.length === 0, leaked.join(' | ') || '7 kinds of junk');
+
+  let s = P.empty();
+  s = P.record(s, { id: 'as', correct: true, today: T0 });
+  ok('an answer makes a card for that item, due later, and a tally for the day', s.cards.as && s.cards.as.due > T0 && s.days[T0].n === 1 && s.days[T0].c === 1 && s.recent.join() === 'as', JSON.stringify(s.cards.as && s.cards.as.due));
+  const wrong = P.record(P.empty(), { id: 'as', correct: false, today: T0 });
+  ok('a wrong answer is due sooner than a right one, and counts as an attempt but not a success', wrong.cards.as.due < s.cards.as.due && wrong.days[T0].n === 1 && wrong.days[T0].c === 0);
+  const before = JSON.stringify(s); P.record(s, { id: 'mr', correct: true, today: T0 });
+  ok('recording leaves the state it was given alone', JSON.stringify(s) === before);
+  ok('a second answer to the same item reviews its card rather than starting over', P.record(s, { id: 'as', correct: true, today: day(3) }).cards.as.reps === s.cards.as.reps + 1);
+  ok('an answer with no id, or none that makes sense, changes nothing', JSON.stringify(P.record(s, { correct: true, today: T0 })) === before && JSON.stringify(P.record(s, null)) === before && JSON.stringify(P.record(s, { id: 5 })) === before);
+  ok('and an unreadable date falls back to today instead of writing garbage', Object.keys(P.record(P.empty(), { id: 'x', correct: true, today: 'soon' }).days).every(d => /^\d{4}-\d{2}-\d{2}$/.test(d)));
+
+  let many = P.empty(); for (let i = 0; i < 40; i++) many = P.record(many, { id: 'item' + i, correct: true, today: T0 });
+  ok('only the last dozen items shown are remembered as recent', many.recent.length === 12 && many.recent[11] === 'item39' && many.recent[0] === 'item28', many.recent.length + ' kept');
+  let years = P.empty(); for (let i = 0; i < 450; i++) years = P.record(years, { id: 'a', correct: true, today: day(i) });
+  ok('and only the last 400 days of tallies are kept', Object.keys(years.days).length === 400 && !years.days[day(0)] && years.days[day(449)], Object.keys(years.days).length + ' days');
+
+  const store = mem();
+  ok('a state saves and loads back the same', P.save(store, s) === true && JSON.stringify(P.load(store)) === JSON.stringify(P.sanitise(s)));
+  const cardless = P.sanitise({ cards: { good: s.cards.as, noStability: { due: T0, last: T0 }, badDate: Object.assign({}, s.cards.as, { due: 'tomorrow' }), nan: Object.assign({}, s.cards.as, { stability: NaN }) }, recent: ['a', 5, null, 'b'], days: { [T0]: { n: 2, c: 3 }, 'x': { n: 1, c: 1 }, [day(1)]: { n: 2, c: 1 } } });
+  ok('a damaged card, a non-string in recent and a day that scored more than it answered are each dropped, and the rest kept', Object.keys(cardless.cards).join() === 'good' && cardless.recent.join() === 'a,b' && Object.keys(cardless.days).join() === day(1), JSON.stringify([Object.keys(cardless.cards), cardless.recent, Object.keys(cardless.days)]));
+
+  const mk = days => { let t = P.empty(); days.forEach(d => { t = P.record(t, { id: 'q', correct: true, today: day(d) }); }); return t; };
+  ok('a streak counts consecutive days ending today', P.streak(mk([-2, -1, 0]), day(0)) === 3);
+  ok('a day with no answers yet today does not end it: it counts to yesterday', P.streak(mk([-3, -2, -1]), day(0)) === 3);
+  ok('but a missed day does', P.streak(mk([-3, -2]), day(0)) === 0 && P.streak(mk([-5, -4, -1, 0]), day(0)) === 2);
+  ok('and a streak crosses a month and the clocks changing', P.streak(mk([-40, -39, -38, -37, -36, -35, -34, -33, -32, -31, -30, -29, -28, -27, -26, -25, -24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0]), day(0)) === 41);
+  ok('an empty record has no streak', P.streak(P.empty(), day(0)) === 0 && P.streak(null, day(0)) === 0);
+
+  const items = ['as', 'mr', 'ms', 'ar'].map(id => ({ id }));
+  let sm = P.record(P.record(P.empty(), { id: 'as', correct: true, today: day(-10) }), { id: 'mr', correct: false, today: T0 });
+  const sum = P.summary(sm, items, T0);
+  ok('the summary says how many were seen, how many are due, and the accuracy', sum.total === 4 && sum.seen === 2 && sum.unseen === 2 && sum.due >= 1 && sum.answered === 2 && Math.abs(sum.accuracy - 0.5) < 1e-9 && sum.today === 1, JSON.stringify(sum));
+  const none = P.summary(P.empty(), [], T0);
+  ok('an empty Lab summarises to zeros and no accuracy, not NaN', none.total === 0 && none.seen === 0 && none.accuracy === null && none.streak === 0 && none.due === 0, JSON.stringify(none));
+  ok('cards for items that are no longer offered do not count as seen', P.summary(sm, [{ id: 'ms' }], T0).seen === 0);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
