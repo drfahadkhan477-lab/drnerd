@@ -34,6 +34,8 @@ const D = require('../src/lab/drill.js').Drill;
 const RX = require('../src/core/rhythms-extra.js').RhythmsExtra;
 const Strips = require('../src/lab/strips.js').Strips;
 const P = require('../src/lab/progress.js').LabProgress;
+const HM = require('../src/lab/heartmap.js').HeartMap;
+const LI = require('../src/lab/items.js').LabItems;
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -221,6 +223,27 @@ head('grading');
   const lapsed = D.grade({ card: reviewed, correct: false, today: day(first.ivl + reviewed.ivl) });
   ok('a wrong answer after that counts as a lapse and shortens it', lapsed.lapses > reviewed.lapses && lapsed.stability < reviewed.stability, `lapses ${reviewed.lapses}→${lapsed.lapses}`);
   ok('grading never throws on a damaged card', (() => { try { D.grade({ card: { stability: NaN, last: 5 }, correct: true, today: TODAY }); D.grade({}); D.grade(null); return true; } catch (_) { return false; } })());
+}
+
+head('the three drills are one list the engine can serve');
+{
+  const ids = LI.ALL.map(i => i.id);
+  ok('every heart sound, tracing and strip is an item, once, under its own prefix', ids.length === 12 + T.TRACINGS.length + Strips.STRIPS.length && new Set(ids).size === ids.length && LI.KINDS.every(k => LI.ITEMS[k.id].every(i => i.id.startsWith(k.prefix) && i.kind === k.id)), ids.length + ' items');
+  ok('each has a name, a description, teaching points and a site, none of them empty', LI.ALL.every(i => i.name && i.blurb.length > 30 && i.points.length >= 1 && i.site), '');
+  const bad = LI.ALL.filter(i => !i.confusableWith.length || i.confusableWith.some(c => c === i.id || !LI.byId(c) || LI.byId(c).kind !== i.kind));
+  ok('every item names at least one look-alike, and it is another item of the same kind', bad.length === 0, bad.map(i => i.id).join(', ') || 'all');
+  const groups = {}; LI.ITEMS.sounds.forEach(i => { groups[i.site] = (groups[i.site] || 0) + 1; });
+  const lone = LI.ITEMS.sounds.filter(i => groups[i.site] > 1 && !i.confusableWith.some(c => LI.byId(c).site === i.site));
+  ok('a heart sound with others heard at the same time is offered against at least one of them', lone.length === 0, lone.map(i => i.id).join(', ') || 'all');
+  ok('the site of a heart sound is when it is heard, read from the audio\'s own timing', LI.byId('snd:as').site === 'systolic' && LI.byId('snd:ar').site === 'diastolic' && LI.byId('snd:pda').site === 'continuous' && LI.byId('snd:s3').site === 'none');
+  const o = D.options({ item: LI.byId('snd:as'), items: LI.ITEMS.sounds, n: 4, seed: 5 });
+  ok('and so a systolic murmur is offered against the systolic look-alikes, not against a diastolic rumble', o.includes('snd:hocm') && o.includes('snd:mr') && o.includes('snd:vsd') && !o.includes('snd:ms'), o.join(','));
+  const full = ['sounds', 'tracings', 'strips'].every(k => {
+    const seen = new Set(); for (let sd = 1; sd <= 80; sd++) seen.add(D.next({ items: LI.ITEMS[k], cards: {}, today: TODAY, seed: sd }).item.id);
+    return seen.size > LI.ITEMS[k].length / 2;
+  });
+  ok('every drill serves new items in a varied order from its own list', full);
+  ok('and the Lab\'s own list is what the heart map says it is: a sound item for every condition on it', LI.ITEMS.sounds.map(i => i.key).sort().join() === Object.keys(HM.CONDITIONS).sort().join());
 }
 
 head('what the Lab remembers');
