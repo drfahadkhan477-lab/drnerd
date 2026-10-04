@@ -22,6 +22,8 @@
     "serve": "node scripts/serve.js 8080 dist",
     "memorizer": "node scripts/build-memorizer.js",
     "memorizer:serve": "node scripts/build-memorizer.js && node scripts/serve.js 8081 dist-memorizer",
+    "lab": "node scripts/build-lab.js",
+    "lab:serve": "node scripts/build-lab.js && node scripts/serve.js 8082 dist-lab",
     "leak-guard": "node scripts/leak-guard.js --all-tracked",
     "hooks": "git config core.hooksPath .githooks && echo \"hooks on: .githooks\"",
     "release-check": "node scripts/release-check.js",

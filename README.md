@@ -500,3 +500,10 @@ Memorizer carries no content of its own, so unlike Systole it builds
 anywhere, CI included — and CI runs it: its pure suites in the logic job, and
 the whole app in Chromium, on a PDF and notes the tests write themselves, in
 the memorizer-browser job.
+
+## The Lab — heart sounds, tracings, strips
+
+A third app, built the same way and also carrying nothing from the export:
+twelve heart sounds synthesised on `physio.js`'s valve events, pressure tracings,
+ECG strips, and a map of which valve and chamber each one is. It remembers what
+you miss. See `docs/LAB.md`.
