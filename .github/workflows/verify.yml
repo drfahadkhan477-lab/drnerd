@@ -410,9 +410,9 @@ jobs:
   # the memorizer-browser job above already runs, and figprobe, which drives
   # its browser through a subprocess, so tests/verify-stats.js counts it as
   # pure Node and would refuse it in a browser job. The
-  # step labels are the counts the record holds for each suite (from the real
-  # build); a few suites count per figure or per note, so on this build they
-  # can run a different number of checks than the label says.
+  # step labels are the counts the record holds for each suite, from the real
+  # build. When this job was added every suite here ran exactly that number on
+  # this build too, apart from two that had just gained a check.
   #
   # The build is marked synthetic, and scripts/verify.js will not write
   # tests/test-stats.json for a marked build: these numbers are never the

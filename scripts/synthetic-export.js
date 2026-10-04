@@ -101,8 +101,11 @@ const dataUrl = png => 'data:image/png;base64,' + png.toString('base64');
    verify-apex for "amyloid"). Each reference note names one too, which is
    what lets retrieval connect a question to a note at all: every other word
    in this library is in every document and scores nothing. The words are the
-   field's vocabulary, not any question's text. */
-const TOPICS = ['amyloidosis', 'pericarditis', 'endocarditis', 'aortic stenosis', 'atrial flutter',
+   field's vocabulary, not any question's text. None of them is a word
+   verify-references asks its own notes about: a short synthetic stem naming
+   "aortic stenosis" outranked the note that suite expects for its aortic
+   stenosis question, which measured this fixture, not the app. */
+const TOPICS = ['amyloidosis', 'pericarditis', 'endocarditis', 'tamponade', 'takotsubo',
                 'myocarditis', 'coarctation', 'pulmonary embolism', 'sarcoidosis', 'syncope', 'vasculitis'];
 
 function question(id, ch, n, ci, opts = {}) {
