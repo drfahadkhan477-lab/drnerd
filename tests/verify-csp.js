@@ -84,11 +84,18 @@ head('the allowlist covers every host the shipped app can reach');
     'fonts.googleapis.com':  'stage0 — fonts: drop Google Fonts links',
     'fonts.gstatic.com':     'stage0 — fonts: drop Google Fonts links',
   };
+  /* Scripts in the tree that never become part of systole.html, each named
+     with what it is instead. A host in one of these is not a host the app can
+     reach, so it is not scanned; every other file still is. */
+  const NOT_SHIPPED = {
+    'scripts/model-manifest.js': 'a developer tool run by hand; it writes memorizer/src/models.js for the Memorizer, not the app',
+  };
   const roots = ['scripts', 'src'];
   const files = [];
   const walk = d => fs.readdirSync(d, { withFileTypes: true }).forEach(f => {
     const p = path.join(d, f.name);
-    if (f.isDirectory()) walk(p); else if (f.name.endsWith('.js')) files.push(p);
+    const rel = path.relative(path.join(__dirname, '..'), p).split(path.sep).join('/');
+    if (f.isDirectory()) walk(p); else if (f.name.endsWith('.js') && !(rel in NOT_SHIPPED)) files.push(p);
   });
   roots.forEach(r => walk(path.join(__dirname, '..', r)));
 
@@ -102,6 +109,10 @@ head('the allowlist covers every host the shipped app can reach');
   ok('every https host in the tree is either allowed or removed by a named step',
      unaccounted.length === 0, unaccounted.join(', ') || 'none');
   ok('and the allowlist is not empty', allowed.size > 0, [...allowed].join(', '));
+  /* An exclusion that names a file no longer there is a hole kept open for
+     nothing; it would quietly cover whatever file next took the name. */
+  const gone = Object.keys(NOT_SHIPPED).filter(r => !fs.existsSync(path.join(__dirname, '..', r)));
+  ok('every file excused from the scan still exists', gone.length === 0, gone.join(', ') || 'none');
   /* The other direction: a host allowed by the policy but contacted by nothing
      is a permission granted for no reason. */
   const unused = [...allowed].filter(h => !hosts.has(h));

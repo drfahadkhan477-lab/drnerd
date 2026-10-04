@@ -666,6 +666,11 @@ const parallelSet = chosen.filter(([n]) => !SERIAL.has(n)).sort((a, b) => cost(b
 const serialSet = chosen.filter(([n]) => SERIAL.has(n));
 
 console.log(`\nVerifying ${shortTarget}`);
+/* A build assembled around scripts/synthetic-export.js (CI's build) runs the
+   same suites, but its counts are of invented questions; writeStats will not
+   record them. Said up front so a long run does not end in a surprise. */
+const SYNTHETIC = !TARGET_IS_URL && require('./synthetic-export.js').isSyntheticBuild(TARGET);
+if (SYNTHETIC) console.log('  synthetic build: tests/test-stats.json will not be written');
 if (urlIncapable.length) {
   /* Named, counted, and NOT quietly re-pointed at the default build. Running
      them against a different artifact than the one on the command line would
@@ -868,6 +873,7 @@ function writeStats(pwaCount) {
      single-file build's. Same reason --engine webkit does not write: a true
      number about the wrong thing is still wrong in the sentence it lands in. */
   if (TARGET_IS_URL) return;
+  if (SYNTHETIC) return;
   if (ENGINE !== DEFAULT_ENGINE) return;
   if (chosen.length !== SUITES.length) return;
   const file = path.join(ROOT, 'tests', 'test-stats.json');
