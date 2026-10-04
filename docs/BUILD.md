@@ -637,7 +637,7 @@ nothing else changes.
 ### Registering it
 
 Settings → Actions → Runners → New self-hosted runner, then follow the
-commands GitHub gives you. Two things must match this repository rather than
+commands GitHub gives you. Three things must match this repository rather than
 the defaults:
 
 - **Labels.** Add `systole`. The job asks for `[self-hosted, systole]`, so a
@@ -653,11 +653,22 @@ the defaults:
   content, the rule that the export has exactly one home is worth keeping
   boring.
 
+- **`SYSTOLE_REFS`.** In the same `.env`, the directory that holds the
+  reference corpus as `refs/` and `refs-images/` — usually the `content/`
+  folder of the clone you normally build in:
+
+      SYSTOLE_REFS=/Users/you/systole/content
+
+  The job copies both into its own checkout before the gate, because the
+  corpus is gitignored and a fresh checkout has none. Without it the build
+  still completes and the corpus suites fail, which is what the first real
+  run did.
+
 Run it with `./run.sh` when you want it, or install the service to have it
 always on.
 
-On Windows the same two things apply, with `run.cmd` for `run.sh`. Write the
-path in `.env` with forward slashes (`SYSTOLE_SOURCE=C:/Users/you/Downloads/export.html`):
+On Windows the same things apply, with `run.cmd` for `run.sh`. Write the
+paths in `.env` with forward slashes (`SYSTOLE_SOURCE=C:/Users/you/Downloads/export.html`):
 the first step tests it with bash's `[ -f ]`, and a backslash path is not a
 valid path to bash. One more thing must be true there: the job's steps run
 in bash, and the runner finds bash by searching `PATH`. Windows ships
