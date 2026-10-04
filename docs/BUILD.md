@@ -261,8 +261,26 @@ bank, its figures, and the Braunwald reference seed and figures.
    needed to build the app. CI now assembles the real app around a
    synthetic bank (`scripts/synthetic-export.js`) and runs the browser
    suites on it: the `synthetic-browser` job.
-3. **Carve `app/`.** Split it into CSS and modules a piece at a time. New work
-   edits `app/` or `src/` directly; no new patch steps are added.
+3. **Carve `app/`** (now). Split it into CSS and modules a piece at a time:
+
+   ```bash
+   node scripts/carve.js <from> <to> app/<path>     # lines of app/systole.html, inclusive
+   node scripts/assemble-app.js --compare build/systole.html
+   ```
+
+   `scripts/carve.js` moves those lines into the file and leaves a slot token,
+   and keeps the result only if the shell assembles to the same bytes as
+   before. The second command, beside a chain build, is what shows the app is
+   still the chain's. `freeze-shell` on a later chain build finds each piece
+   where it stands, so the carving survives a re-freeze; a piece it does
+   not find verbatim is where the chain and `app/` have parted, and it
+   refuses to freeze until they agree. A piece must also be found exactly once
+   in the assembled app, not only in the shell: text that also stands inside a
+   piece already carved would be found twice or once by filename order.
+   `tests/verify-carve-pure.js` audits the committed `app/` without the
+   export: every token has its file and every piece is cited once. The
+   stylesheet is the first piece, `app/css/systole.css`. New work edits
+   `app/` or `src/` directly; no new patch steps are added.
 4. **Retire the chain** once both paths give the same file for a few
    releases. The scripts stay in history. `npm run release-check` compares
    the two on every certification (its `assemble` step), so the release
@@ -651,7 +669,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        124 suites · 85 need no browser · + pwa
+tests/        124 suites · 86 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
