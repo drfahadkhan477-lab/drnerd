@@ -16,7 +16,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { blankComments } = require('./_source.js');
 const { suitesFromWorkflow, run } = require('../scripts/test-public.js');
 
 let passed = 0, failed = 0;
@@ -32,10 +31,9 @@ const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'
 const { pure, browser, synthetic } = suitesFromWorkflow(yml);
 const synNames = synthetic.suites.map(x => x.name);
 /* The same "uses a browser" rule verify-stats and verify-engine apply. */
-const launches = n => {
-  const code = blankComments(fs.readFileSync(path.join(__dirname, `${n}.js`), 'utf8'));
-  return /^[^'"`\n]*require\(\s*'playwright'\s*\)/m.test(code) || /^[^'"`\n]*\blaunch\(/m.test(code);
-};
+/* The rule verify.js tags suites with (tests/_targets.js tagsOf), not a copy
+   of it: a copy here saw only direct launches. */
+const launches = n => require('./_targets.js').tagsOf(n.replace(/^verify-/, '')).includes('browser');
 ok('it finds the pure suites', pure.length > 20, `${pure.length}`);
 ok('and the browser suites', browser.length > 0, browser.join(', '));
 ok('no pure suite launches a browser', pure.every(n => !launches(n)), pure.filter(launches).join(', ') || 'none');
@@ -51,6 +49,19 @@ ok('and the last of them writes the target the suites read',
    synthetic.build.length > 0 && synthetic.suites.every(x => synthetic.build[synthetic.build.length - 1].includes(x.target)));
 ok('together they are every suite the workflow runs, each once',
    JSON.stringify(pure.concat(browser, synNames).sort()) === JSON.stringify(all.slice().sort()), `${pure.length + browser.length + synNames.length} of ${all.length}`);
+
+head('the workflow runs once per commit');
+{
+  /* A push to a branch with a pull request fired this workflow as `push` and
+     as `pull_request`: every job twice per commit. Held in the workflow's own
+     trigger block, comments blanked. */
+  const top = yml.slice(yml.indexOf('\non:'), yml.indexOf('\njobs:')).replace(/#.*$/gm, '');
+  ok('`push` is for master only, so a branch with a pull request is not run twice',
+     /\n\s+push:\s*\n\s+branches:\s*\[\s*master\s*\]/.test(top), top.replace(/\s+/g, ' ').slice(0, 120));
+  ok('pull requests are still tested', /\n\s+pull_request:/.test(top));
+  ok('a newer push cancels the pull request run before it, and never a master run',
+     /cancel-in-progress:\s*\$\{\{\s*github\.event_name\s*==\s*'pull_request'\s*\}\}/.test(top));
+}
 
 head('reading a workflow');
 const SYN = syn => !syn ? '' : `  synthetic-browser:\n    steps:\n      - name: build\n        run: |\n${syn.build.map(c => `          node ${c.join(' ')}\n`).join('')}` +

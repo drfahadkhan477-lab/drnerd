@@ -23,7 +23,7 @@ and neither is quoting question text into a transcript.
 3. The main drnerd repository remains clean per leak-guard checks
 
 `scripts/leak-guard.js` enforces this on drnerd's staged files. Run
-`npm run hooks` once per clone to get it on pre-commit; CI runs it regardless.
+`npm run hooks` once per clone to get it on pre-commit (and the pure suites on pre-push); CI runs it regardless.
 The submodule's own repository content is the owner's responsibility to keep secure.
 
 ## The failure mode this project keeps producing
@@ -123,6 +123,11 @@ built something and threw it away, say why; the next person will otherwise
 rebuild it.
 
 ## Before you finish
+
+Run `npm run test:pure` before every push (about a minute; `npm run hooks`
+makes git do it for you). CI's first job runs the same suites, and a push that
+fails there costs a ten-minute cycle: two of them on one day were a fixture
+that tripped a rule in another suite, which running them all would have shown.
 
 After merging, sync the working branch onto the merge commit **and push it** —
 otherwise it sits one commit behind its own remote ref and the stop hook

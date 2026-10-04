@@ -1,0 +1,300 @@
+#!/usr/bin/env node
+/*
+ * Pressure tracings and the drill engine behind every Lab exercise.
+ *
+ *   node tests/verify-drills-pure.js
+ *
+ * Pure Node (src/lab/tracings.js, src/lab/drill.js). Tracings are held by what a
+ * reader sees, measured from the FINISHED curve: how big the a wave is, whether an
+ * x or a y descent exists, where a giant wave falls in the cycle, the mean. The
+ * parameters they were built from are never read back. The one difference that
+ * matters most (constriction versus tamponade) is a y descent, and is checked as one.
+ *
+ * ECG strips (src/lab/strips.js) are held the same way: by what a reader reads off the
+ * finished waveform (the rate, whether it is regular, a dropped beat, how wide the QRS is,
+ * how tall the T is next to the R, how late it falls, whether the ST is lifted), measured
+ * by a detector that knows nothing about the generator. Rate and width are where a naive
+ * peak counter lies (an rSR' is two peaks, a peaked T is taller than the R), so those are
+ * checked on exactly those strips.
+ *
+ * What the Lab remembers (src/lab/progress.js) is held by what survives: a store that is
+ * missing, full, blocked or holds someone else's data still opens an empty Lab; a record
+ * round-trips; the streak counts consecutive days and is not lost by opening the app in
+ * the morning; the recent list and the days kept are bounded.
+ *
+ * The drill engine is held by what it chooses: what is due first and most forgotten
+ * first, never the item just shown, never empty, and wrong answers that are the
+ * look-alikes, with the right answer in a different place each time.
+ */
+'use strict';
+const Physio = require('../src/core/physio.js').Physio;
+const FSRS = require('../src/core/fsrs.js').FSRS;
+const T = require('../src/lab/tracings.js').Tracings;
+const D = require('../src/lab/drill.js').Drill;
+const RX = require('../src/core/rhythms-extra.js').RhythmsExtra;
+const Strips = require('../src/lab/strips.js').Strips;
+const P = require('../src/lab/progress.js').LabProgress;
+const HM = require('../src/lab/heartmap.js').HeartMap;
+const LI = require('../src/lab/items.js').LabItems;
+
+let passed = 0, failed = 0;
+const ok = (label, cond, detail = '') => {
+  cond ? passed++ : failed++;
+  console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
+};
+const head = t => console.log('\n── ' + t + ' ──');
+
+const F = {};
+T.TRACINGS.forEach(t => { F[t.id] = T.features(t.fn); });
+const f = id => F[id];
+
+head('every tracing is a well-formed cycle');
+{
+  const ids = T.TRACINGS.map(t => t.id);
+  ok('ids are unique and each has a name, a blurb, teaching points and a site', new Set(ids).size === ids.length && T.TRACINGS.every(t => t.name && t.blurb.length > 30 && t.points.length >= 2 && (t.site === 'RA' || t.site === 'PCWP')), String(ids.length));
+  const bad = T.TRACINGS.filter(t => { for (let i = 0; i <= 200; i++) { const v = t.fn(i / 200); if (!Number.isFinite(v) || v < -2 || v > 60) return true; } return false; });
+  ok('every curve is finite and within a plausible pressure range', bad.length === 0, bad.map(t => t.id).join(', ') || 'all');
+  const open = T.TRACINGS.filter(t => Math.abs(t.fn(0) - t.fn(1)) > 1e-6 || Math.abs(t.fn(0.3) - t.fn(1.3)) > 1e-6);
+  ok('and each repeats exactly from one cycle to the next', open.length === 0, open.map(t => t.id).join(', ') || 'all');
+  const confus = T.TRACINGS.filter(t => t.confusableWith.some(c => !ids.includes(c) || c === t.id));
+  ok('the look-alikes each tracing names are other tracings', confus.length === 0, confus.map(t => t.id).join(', ') || 'all');
+  const asym = T.TRACINGS.filter(t => t.confusableWith.length && !t.confusableWith.some(c => T.byId(c).site === t.site));
+  ok('and at least one is from the same site, so the drill compares like with like', asym.length === 0, asym.map(t => t.id).join(', ') || 'all');
+}
+
+head('the normal traces are physio\'s own');
+{
+  let worst = 0;
+  for (let i = 0; i < 200; i++) worst = Math.max(worst, Math.abs(T.byId('ra-normal').fn(i / 200) - Physio.raPressure(i / 200)), Math.abs(T.byId('pcwp-normal').fn(i / 200) - Physio.laPressure(i / 200)));
+  ok('the normal right atrial and wedge traces equal physio\'s atrial curves', worst < 1e-9, worst.toExponential(1));
+  ok('a normal right atrial mean is low, and the a wave is small', f('ra-normal').mean < 6 && f('ra-normal').aPeak > 1 && f('ra-normal').aPeak < 6, `mean ${f('ra-normal').mean.toFixed(1)}, a ${f('ra-normal').aPeak.toFixed(1)}`);
+  const orig = Physio.raPressure; let moved;
+  Physio.raPressure = t => orig(t) + 5;
+  try { moved = T.byId('ra-normal').fn(0.3); } finally { Physio.raPressure = orig; }
+  ok('and changing the physiology changes the normal trace with it', Math.abs(moved - (orig(0.3) + 5)) < 1e-9, `${moved.toFixed(2)} vs ${(orig(0.3) + 5).toFixed(2)}`);
+}
+
+head('each abnormal tracing shows what it is named for');
+{
+  const n = f('ra-normal');
+  ok('tricuspid regurgitation: no x descent, a giant systolic wave, a steep y descent, a high mean',
+     f('ra-tr').xDepth < 0.5 && f('ra-tr').sysPeak > 10 && f('ra-tr').sysAt > 0.2 && f('ra-tr').sysAt < 0.42 && f('ra-tr').yDepth > 4 && f('ra-tr').mean > 10, JSON.stringify({ x: f('ra-tr').xDepth.toFixed(1), sys: f('ra-tr').sysPeak.toFixed(1), y: f('ra-tr').yDepth.toFixed(1) }));
+  ok('and the normal trace does have an x descent and no giant systolic wave', n.xDepth > 0.8 && n.sysPeak < 3);
+  ok('tricuspid stenosis: a giant a wave and a slow, shallow y descent', f('ra-ts').aPeak > 8 && f('ra-ts').aPeak > 2.5 * n.aPeak && f('ra-ts').yDepth < 0.5 * n.yDepth, `a ${f('ra-ts').aPeak.toFixed(1)}, y ${f('ra-ts').yDepth.toFixed(1)} vs ${n.yDepth.toFixed(1)}`);
+  ok('atrial fibrillation: no a wave, a prominent v wave', f('ra-af').aPeak < 1.5 && f('ra-af').vPeak > 4 && f('ra-af').xDepth < 0.5 * n.xDepth + 0.3, `a ${f('ra-af').aPeak.toFixed(1)}, v ${f('ra-af').vPeak.toFixed(1)}`);
+  ok('AV dissociation: a giant a wave that falls in systole, not before it', f('ra-cannon').sysPeak > 10 && f('ra-cannon').sysAt > 0.15 && f('ra-cannon').sysAt < 0.35 && f('ra-cannon').aPeak < 3, `systolic ${f('ra-cannon').sysPeak.toFixed(1)} at ${f('ra-cannon').sysAt.toFixed(2)}, atrial-systole ${f('ra-cannon').aPeak.toFixed(1)}`);
+  ok('pulmonary hypertension: a giant a wave in atrial systole', f('ra-pulmhtn').aPeak > 8 && (f('ra-pulmhtn').aAt < 0.12 || f('ra-pulmhtn').aAt > 0.88), `a ${f('ra-pulmhtn').aPeak.toFixed(1)}`);
+  ok('constrictive pericarditis: a high mean, deep x AND y descents, the y deeper', f('ra-constriction').mean > 12 && f('ra-constriction').xDepth > 4 && f('ra-constriction').yDepth > 4 && f('ra-constriction').yDepth > 1.2 * f('ra-constriction').xDepth,
+     `mean ${f('ra-constriction').mean.toFixed(1)}, x ${f('ra-constriction').xDepth.toFixed(1)}, y ${f('ra-constriction').yDepth.toFixed(1)}`);
+  ok('tamponade: a high mean, a deep x descent, NO y descent', f('ra-tamponade').mean > 12 && f('ra-tamponade').xDepth > 4 && f('ra-tamponade').yDepth < 1, `x ${f('ra-tamponade').xDepth.toFixed(1)}, y ${f('ra-tamponade').yDepth.toFixed(2)}`);
+  ok('restrictive cardiomyopathy: deep descents, the y at least as deep as the x', f('ra-restrictive').mean > 12 && f('ra-restrictive').yDepth >= f('ra-restrictive').xDepth && f('ra-restrictive').yDepth > 4);
+  /* The point of the whole set: the one thing that separates constriction from tamponade. */
+  ok('constriction and tamponade differ by the y descent, and by little else',
+     f('ra-constriction').yDepth - f('ra-tamponade').yDepth > 5 && Math.abs(f('ra-constriction').mean - f('ra-tamponade').mean) < 3, `y ${f('ra-constriction').yDepth.toFixed(1)} vs ${f('ra-tamponade').yDepth.toFixed(1)}; means ${f('ra-constriction').mean.toFixed(1)} vs ${f('ra-tamponade').mean.toFixed(1)}`);
+  const w = f('pcwp-normal');
+  ok('acute mitral regurgitation (wedge): a giant v wave in systole, far larger than the a, and a high mean',
+     f('pcwp-mr').vPeak > 15 && f('pcwp-mr').vPeak > 3 * f('pcwp-mr').aPeak && f('pcwp-mr').vAt > 0.3 && f('pcwp-mr').vAt < 0.5 && f('pcwp-mr').mean > 15, `v ${f('pcwp-mr').vPeak.toFixed(1)} at ${f('pcwp-mr').vAt.toFixed(2)}, a ${f('pcwp-mr').aPeak.toFixed(1)}`);
+  ok('mitral stenosis (wedge): a high mean and a slow, shallow y descent', f('pcwp-ms').mean > 15 && f('pcwp-ms').yDepth < 0.5 * w.yDepth, `y ${f('pcwp-ms').yDepth.toFixed(1)} vs normal ${w.yDepth.toFixed(1)}`);
+  ok('and a normal wedge has neither a giant v wave nor a raised mean', w.vPeak < 8 && w.mean < 12, `v ${w.vPeak.toFixed(1)}, mean ${w.mean.toFixed(1)}`);
+}
+
+/* ── the drill engine ─────────────────────────────────────────────── */
+const TODAY = '2026-10-10';
+const day = n => FSRS.localDateToISO(new Date(FSRS.isoToLocalDate(TODAY).getTime() + n * 86400000));
+const items = T.TRACINGS.map(t => ({ id: t.id, site: t.site, confusableWith: t.confusableWith }));
+const card = (ago, rating) => FSRS.update(FSRS.update(null, rating || 3, day(-ago - 20)), rating || 3, day(-ago));
+
+head('every ECG strip is a drill item with a reason to be one');
+const SF = {};
+{
+  const ids = Strips.STRIPS.map(t => t.id);
+  ok('every rhythm the Rhythm Lab can draw has a strip, and every strip is a rhythm it can draw', JSON.stringify(ids.slice().sort()) === JSON.stringify(Object.keys(RX.EXTRA).sort()), ids.length + ' strips, ' + Object.keys(RX.EXTRA).length + ' rhythms');
+  ok('ids are unique and each has a name (the rhythm\'s own), a description, teaching points and a site', new Set(ids).size === ids.length && Strips.STRIPS.every(t => t.name === RX.EXTRA[t.id].name && t.blurb.length > 30 && t.points.length >= 1 && t.points.every(p => p.length > 30) && t.site === 'ECG'));
+  const confus = Strips.STRIPS.filter(t => !t.confusableWith.length || t.confusableWith.some(c => !ids.includes(c) || c === t.id));
+  ok('every strip names at least one look-alike, and each is another strip', confus.length === 0, confus.map(t => t.id).join(', ') || 'all');
+  Strips.STRIPS.forEach(t => { const tr = Strips.trace(t.id, 30); SF[t.id] = Strips.features(tr.samples, tr.rate); });
+  const bad = Strips.STRIPS.filter(t => { const s = Strips.trace(t.id, 6).samples; let lo = Infinity, hi = -Infinity; for (const v of s) { if (!Number.isFinite(v)) return true; lo = Math.min(lo, v); hi = Math.max(hi, v); } return hi - lo < 0.8 || hi > 3 || lo < -3; });
+  ok('every strip is finite, within 3 mV, and not flat', bad.length === 0, bad.map(t => t.id).join(', ') || 'all');
+  const sig = Strips.STRIPS.map(t => Array.from(Strips.trace(t.id, 3).samples.slice(0, 500)).map(v => v.toFixed(3)).join());
+  ok('no two strips are the same drawing', new Set(sig).size === sig.length);
+  ok('the same strip is the same every time, and an unknown one is an error rather than a flat line', JSON.stringify(Array.from(Strips.trace('avb1', 2).samples)) === JSON.stringify(Array.from(Strips.trace('avb1', 2).samples)) && (() => { try { Strips.trace('nope', 2); return false; } catch (_) { return true; } })());
+}
+
+head('the strip reader counts beats, not peaks');
+{
+  const f = id => SF[id];
+  /* the rate trap: where the number of peaks is not the number of beats */
+  const declared = ['sinus_arrhythmia', 'avb1', 'svt', 'junctional', 'idioventricular', 'wpw', 'lbbb', 'rbbb', 'hyperk', 'longqt', 'pericarditis'];
+  const off = declared.filter(id => Math.abs(f(id).rate - RX.EXTRA[id].hr) / RX.EXTRA[id].hr > 0.06);
+  ok('the rate read off the strip matches the one the rhythm is labelled with, on every rhythm whose labelled rate is its ventricular rate', off.length === 0, off.map(id => `${id} ${f(id).rate.toFixed(0)} vs ${RX.EXTRA[id].hr}`).join(', ') || declared.length + ' rhythms');
+  ok('an rSR\' counts as one beat, not two: right bundle branch block at 70, not 140', Math.abs(f('rbbb').rate - 70) < 3, f('rbbb').rate.toFixed(1));
+  ok('a peaked T as tall as the R is not a beat: hyperkalaemia at 62, not 124', Math.abs(f('hyperk').rate - 62) < 3 && f('hyperk').tOverR > 0.8, `${f('hyperk').rate.toFixed(1)}, T/R ${f('hyperk').tOverR.toFixed(2)}`);
+  ok('a premature beat\'s cut-off T wave is not a beat: bigeminy is about 83 a minute, not 124', f('bigeminy').rate > 70 && f('bigeminy').rate < 95, f('bigeminy').rate.toFixed(1));
+  /* the same things, made up, so that the reader is held to its own rule and not to the generator's quirks */
+  const rate = 250, step = new Float32Array(rate * 10); for (let i = 0; i < step.length; i++) step[i] = (Math.floor(i / rate) % 2) ? 0.6 : 0;
+  ok('a jump of one sample is not a beat, however tall (a step of 0.6 mV every second, ten of them: steep and tall, so only its being one sample refuses it)', Strips.features(step, rate).beats === 0, String(Strips.features(step, rate).beats));
+  const small = new Float32Array(rate * 10); for (let i = 0; i < small.length; i++) { const ph = (i % rate) / rate; small[i] = ph < 0.02 ? 0.3 * Math.sin(ph / 0.02 * Math.PI) : 0; }
+  ok('and a hump that is steep for several samples but under 0.4 mV tall is not a beat either (so only its height refuses it)', Strips.features(small, rate).beats === 0, String(Strips.features(small, rate).beats));
+  const empty = Strips.features(new Float32Array(0), rate), one = Strips.features(new Float32Array(100), rate);
+  ok('an empty or flat strip reads as no beats and a rate of zero, not NaN', empty.beats === 0 && one.beats === 0 && empty.rate === 0 && Number.isFinite(one.regularity) && Number.isFinite(one.qrsMs), JSON.stringify([empty.rate, one.rate]));
+}
+
+head('each strip shows what it is named for');
+{
+  const f = id => SF[id];
+  const base = f('avb1');
+  ok('the yardstick is a regular, narrow beat', base.regularity < 0.01 && base.qrsMs >= 30 && base.qrsMs <= 60, `regularity ${base.regularity.toFixed(3)}, QRS ${base.qrsMs} ms`);
+  ok('supraventricular tachycardia is fast, regular and narrow', f('svt').rate > 150 && f('svt').regularity < 0.03 && f('svt').qrsMs <= base.qrsMs * 1.3, `${f('svt').rate.toFixed(0)}/min, QRS ${f('svt').qrsMs} ms`);
+  ok('an idioventricular escape is slow, regular and wide', f('idioventricular').rate < 40 && f('idioventricular').regularity < 0.03 && f('idioventricular').qrsMs >= base.qrsMs * 1.8, `${f('idioventricular').rate.toFixed(0)}/min, QRS ${f('idioventricular').qrsMs} ms`);
+  ok('a junctional escape is 40 to 60, regular and narrow', f('junctional').rate >= 40 && f('junctional').rate <= 60 && f('junctional').regularity < 0.03 && f('junctional').qrsMs <= base.qrsMs * 1.3, `${f('junctional').rate.toFixed(0)}/min`);
+  ok('both bundle branch blocks are at least twice as wide as a normal beat', f('lbbb').qrsMs >= base.qrsMs * 2 && f('rbbb').qrsMs >= base.qrsMs * 2, `L ${f('lbbb').qrsMs}, R ${f('rbbb').qrsMs}, normal ${base.qrsMs} ms`);
+  ok('pre-excitation widens the QRS, but less than a bundle branch block does', f('wpw').qrsMs >= base.qrsMs * 1.3 && f('wpw').qrsMs < f('lbbb').qrsMs, `WPW ${f('wpw').qrsMs} ms`);
+  const narrow = ['sinus_arrhythmia', 'avb1', 'mobitz1', 'mobitz2', 'pac', 'svt', 'junctional', 'longqt', 'pericarditis'];
+  ok('hyperkalaemia\'s T wave is as tall as its R and no other narrow rhythm\'s is', f('hyperk').tOverR >= 0.8 && narrow.every(id => f(id).tOverR < 0.5), narrow.map(id => f(id).tOverR.toFixed(2)).join(' '));
+  ok('a long QT puts the top of the T wave at least 1.6 times later after the QRS than a normal beat does', f('longqt').tPeakMs >= base.tPeakMs * 1.6, `${f('longqt').tPeakMs} against ${base.tPeakMs} ms`);
+  ok('pericarditis lifts the ST segment, and a normal beat does not', f('pericarditis').stMv >= base.stMv + 0.07, `${f('pericarditis').stMv.toFixed(3)} against ${base.stMv.toFixed(3)} mV`);
+
+  const near = (v, a, b) => Math.abs(v - a) <= 0.08 * a || Math.abs(v - b) <= 0.08 * b;
+  const m2 = f('mobitz2');
+  ok('Mobitz II: the intervals are one length or double it, and double it where a beat is dropped', m2.pause > 1.9 && m2.pause < 2.1 && m2.rr.every(v => near(v, m2.rrMin, m2.rrMax)), `pause ${m2.pause.toFixed(2)}`);
+  const m1 = f('mobitz1');
+  const longRR = m1.rr.filter(v => v > m1.rrMin * 1.3);
+  ok('Mobitz I: one long interval in every three, shorter than double because the PR resets', m1.pause > 1.5 && m1.pause < 1.95 && longRR.length > 0 && Math.abs(m1.rr.length / longRR.length - 3) < 0.5, `pause ${m1.pause.toFixed(2)}, 1 long in ${(m1.rr.length / longRR.length).toFixed(1)}`);
+  const bg = f('bigeminy').rr;
+  const shortFirst = bg[0] < bg[1];
+  const alt = bg.every((v, i) => i === bg.length - 1 || ((v < bg[i + 1]) === ((i % 2 === 0) === shortFirst)));
+  ok('bigeminy alternates short and long: a premature beat, then a pause, every time', alt && f('bigeminy').pause > 1.8, `pause ${f('bigeminy').pause.toFixed(2)}`);
+  const med = Strips.features(Strips.trace('pac', 30).samples, 250).rr.slice().sort((a, b) => a - b)[Math.floor(f('pac').rr.length / 2)];
+  ok('premature atrial complexes come early: the shortest interval is under three quarters of the usual one', f('pac').rrMin < med * 0.75, `${f('pac').rrMin} against ${med} ms`);
+  const sa = f('sinus_arrhythmia');
+  ok('sinus arrhythmia varies gently: irregular, but never a pause or an early beat', sa.regularity > 0.05 && sa.regularity < 0.25 && sa.pause < 1.6, `regularity ${sa.regularity.toFixed(3)}, pause ${sa.pause.toFixed(2)}`);
+  ok('and the regular rhythms are regular', ['avb1', 'svt', 'junctional', 'idioventricular', 'wpw', 'lbbb', 'rbbb', 'hyperk', 'longqt', 'pericarditis'].every(id => f(id).regularity < 0.04 && f(id).pause < 1.1), '');
+}
+
+head('which item next');
+{
+  ok('with no history it offers something new', (r => r && r.reason === 'new' && items.some(i => i.id === r.item.id))(D.next({ items, cards: {}, today: TODAY, seed: 1 })));
+  const cards = {};
+  items.forEach(i => { cards[i.id] = card(3, 3); cards[i.id].due = day(5); });
+  cards['ra-tr'] = card(40, 3); cards['ra-tr'].due = day(-2);              // due, but remembered?
+  cards['ra-ts'] = FSRS.update(null, 1, day(-60)); cards['ra-ts'].due = day(-1);   // due, and nearly forgotten
+  const r = D.next({ items, cards, today: TODAY, seed: 1 });
+  ok('what is due comes first, and the most forgotten of it first', r.reason === 'due' && r.item.id === 'ra-ts', `${r.reason} ${r.item.id}`);
+  const rec = (id) => D.recall(cards[id], TODAY);
+  ok('and that is because it is the less remembered of the two due', rec('ra-ts') < rec('ra-tr'), `${rec('ra-ts').toFixed(2)} vs ${rec('ra-tr').toFixed(2)}`);
+  const none = {}; items.forEach(i => { none[i.id] = card(2, 3); none[i.id].due = day(7); });
+  const ahead = D.next({ items, cards: none, today: TODAY, seed: 1 });
+  ok('with nothing due and nothing new it still has something: the weakest thing you know', ahead.reason === 'review-ahead' && !!ahead.item);
+  const again = D.next({ items, cards: {}, today: TODAY, seed: 1, recent: ['a', 'b', 'c'] });
+  ok('the same seed gives the same choice', D.next({ items, cards: {}, today: TODAY, seed: 5 }).item.id === D.next({ items, cards: {}, today: TODAY, seed: 5 }).item.id && !!again);
+  const picked = new Set(); for (let s = 1; s <= 30; s++) picked.add(D.next({ items, cards: {}, today: TODAY, seed: s }).item.id);
+  ok('and different seeds give different new items, not always the first', picked.size > 3, String(picked.size));
+  const recent = ['ra-tr', 'ra-ts', 'ra-af'];
+  const streak = [...Array(40).keys()].map(s => D.next({ items, cards: {}, today: TODAY, seed: s + 1, recent }).item.id);
+  ok('it never shows one of the last three again', streak.every(id => !recent.includes(id)), [...new Set(streak)].join(','));
+  ok('unless there is nothing else', D.next({ items: items.slice(0, 1), cards: {}, today: TODAY, seed: 1, recent: [items[0].id] }).item.id === items[0].id);
+  ok('an empty list gives nothing, not an error', D.next({ items: [], cards: {}, today: TODAY }) === null && D.next(null) === null);
+}
+
+head('the wrong answers are the look-alikes');
+{
+  const item = items.find(i => i.id === 'ra-constriction');
+  const o = D.options({ item, items, n: 4, seed: 3 });
+  ok('the answer is among the options once, and there are four distinct options', o.includes('ra-constriction') && o.filter(x => x === 'ra-constriction').length === 1 && new Set(o).size === 4 && o.length === 4, o.join(','));
+  ok('the look-alikes are offered: tamponade and restrictive are against constriction', o.includes('ra-tamponade') && o.includes('ra-restrictive'), o.join(','));
+  const sites = new Set(o.map(id => items.find(i => i.id === id).site));
+  ok('and the rest are from the same site, not a wedge trace against a jugular one', sites.size === 1, [...sites].join(','));
+  const slots = new Set(); for (let s = 1; s <= 40; s++) slots.add(D.options({ item, items, n: 4, seed: s }).indexOf('ra-constriction'));
+  ok('the right answer is not always in the same place', slots.size === 4, [...slots].sort().join(','));
+  ok('the same seed gives the same order', JSON.stringify(D.options({ item, items, n: 4, seed: 9 })) === JSON.stringify(D.options({ item, items, n: 4, seed: 9 })));
+  const few = D.options({ item: items[0], items: [items[0], items[1]], n: 4, seed: 1 });
+  ok('two items give two options', few.length === 2 && few.includes(items[0].id), few.join(','));
+  ok('an item with nothing to confuse it with still gets options', D.options({ item: { id: 'x', site: 'RA' }, items: [{ id: 'x', site: 'RA' }, ...items], n: 4, seed: 1 }).length === 4);
+  ok('nonsense in gives an empty list, not an error', D.options(null).length === 0 && D.options({ item: 5, items }).length === 0);
+}
+
+head('grading');
+{
+  const first = D.grade({ card: null, correct: true, today: TODAY });
+  const wrong = D.grade({ card: null, correct: false, today: TODAY });
+  ok('a right answer makes a card that is due later than a wrong one', first.due > wrong.due && first.stability > wrong.stability, `${first.due} vs ${wrong.due}`);
+  const reviewed = D.grade({ card: first, correct: true, today: day(first.ivl) });
+  ok('and a second right answer lengthens it', reviewed.stability > first.stability);
+  const lapsed = D.grade({ card: reviewed, correct: false, today: day(first.ivl + reviewed.ivl) });
+  ok('a wrong answer after that counts as a lapse and shortens it', lapsed.lapses > reviewed.lapses && lapsed.stability < reviewed.stability, `lapses ${reviewed.lapses}→${lapsed.lapses}`);
+  ok('grading never throws on a damaged card', (() => { try { D.grade({ card: { stability: NaN, last: 5 }, correct: true, today: TODAY }); D.grade({}); D.grade(null); return true; } catch (_) { return false; } })());
+}
+
+head('the three drills are one list the engine can serve');
+{
+  const ids = LI.ALL.map(i => i.id);
+  ok('every heart sound, tracing and strip is an item, once, under its own prefix', ids.length === 12 + T.TRACINGS.length + Strips.STRIPS.length && new Set(ids).size === ids.length && LI.KINDS.every(k => LI.ITEMS[k.id].every(i => i.id.startsWith(k.prefix) && i.kind === k.id)), ids.length + ' items');
+  ok('each has a name, a description, teaching points and a site, none of them empty', LI.ALL.every(i => i.name && i.blurb.length > 30 && i.points.length >= 1 && i.site), '');
+  const bad = LI.ALL.filter(i => !i.confusableWith.length || i.confusableWith.some(c => c === i.id || !LI.byId(c) || LI.byId(c).kind !== i.kind));
+  ok('every item names at least one look-alike, and it is another item of the same kind', bad.length === 0, bad.map(i => i.id).join(', ') || 'all');
+  const groups = {}; LI.ITEMS.sounds.forEach(i => { groups[i.site] = (groups[i.site] || 0) + 1; });
+  const lone = LI.ITEMS.sounds.filter(i => groups[i.site] > 1 && !i.confusableWith.some(c => LI.byId(c).site === i.site));
+  ok('a heart sound with others heard at the same time is offered against at least one of them', lone.length === 0, lone.map(i => i.id).join(', ') || 'all');
+  ok('the site of a heart sound is when it is heard, read from the audio\'s own timing', LI.byId('snd:as').site === 'systolic' && LI.byId('snd:ar').site === 'diastolic' && LI.byId('snd:pda').site === 'continuous' && LI.byId('snd:s3').site === 'none');
+  const o = D.options({ item: LI.byId('snd:as'), items: LI.ITEMS.sounds, n: 4, seed: 5 });
+  ok('and so a systolic murmur is offered against the systolic look-alikes, not against a diastolic rumble', o.includes('snd:hocm') && o.includes('snd:mr') && o.includes('snd:vsd') && !o.includes('snd:ms'), o.join(','));
+  const full = ['sounds', 'tracings', 'strips'].every(k => {
+    const seen = new Set(); for (let sd = 1; sd <= 80; sd++) seen.add(D.next({ items: LI.ITEMS[k], cards: {}, today: TODAY, seed: sd }).item.id);
+    return seen.size > LI.ITEMS[k].length / 2;
+  });
+  ok('every drill serves new items in a varied order from its own list', full);
+  ok('and the Lab\'s own list is what the heart map says it is: a sound item for every condition on it', LI.ITEMS.sounds.map(i => i.key).sort().join() === Object.keys(HM.CONDITIONS).sort().join());
+}
+
+head('what the Lab remembers');
+{
+  const mem = () => { const m = {}; return { getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, raw: m }; };
+  const day = n => { const d = new Date(2026, 9, 4 + n); return FSRS.localDateToISO(d); };
+  const T0 = day(0);
+
+  ok('nothing stored gives an empty Lab', JSON.stringify(P.load(mem())) === JSON.stringify(P.empty()) && JSON.stringify(P.load(null)) === JSON.stringify(P.empty()) && JSON.stringify(P.load(undefined)) === JSON.stringify(P.empty()));
+  const broken = { getItem: () => { throw new Error('SecurityError'); }, setItem: () => { throw new Error('QuotaExceededError'); } };
+  ok('storage that throws is an empty Lab, and a save that fails says so instead of throwing', JSON.stringify(P.load(broken)) === JSON.stringify(P.empty()) && P.save(broken, P.empty()) === false);
+  const junk = mem();
+  const leaked = ['{not json', '42', 'null', '[]', '"cards"', '{"cards":5}', '{"cards":{"x":{"stability":"a"}},"recent":7,"days":3}'].filter(bad => { junk.setItem(P.KEY, bad); return JSON.stringify(P.load(junk)) !== JSON.stringify(P.empty()); });
+  ok('anything stored that is not ours is an empty Lab', leaked.length === 0, leaked.join(' | ') || '7 kinds of junk');
+
+  let s = P.empty();
+  s = P.record(s, { id: 'as', correct: true, today: T0 });
+  ok('an answer makes a card for that item, due later, and a tally for the day', s.cards.as && s.cards.as.due > T0 && s.days[T0].n === 1 && s.days[T0].c === 1 && s.recent.join() === 'as', JSON.stringify(s.cards.as && s.cards.as.due));
+  const wrong = P.record(P.empty(), { id: 'as', correct: false, today: T0 });
+  ok('a wrong answer is due sooner than a right one, and counts as an attempt but not a success', wrong.cards.as.due < s.cards.as.due && wrong.days[T0].n === 1 && wrong.days[T0].c === 0);
+  const before = JSON.stringify(s); P.record(s, { id: 'mr', correct: true, today: T0 });
+  ok('recording leaves the state it was given alone', JSON.stringify(s) === before);
+  ok('a second answer to the same item reviews its card rather than starting over', P.record(s, { id: 'as', correct: true, today: day(3) }).cards.as.reps === s.cards.as.reps + 1);
+  ok('an answer with no id, or none that makes sense, changes nothing', JSON.stringify(P.record(s, { correct: true, today: T0 })) === before && JSON.stringify(P.record(s, null)) === before && JSON.stringify(P.record(s, { id: 5 })) === before);
+  ok('and an unreadable date falls back to today instead of writing garbage', Object.keys(P.record(P.empty(), { id: 'x', correct: true, today: 'soon' }).days).every(d => /^\d{4}-\d{2}-\d{2}$/.test(d)));
+
+  let many = P.empty(); for (let i = 0; i < 40; i++) many = P.record(many, { id: 'item' + i, correct: true, today: T0 });
+  ok('only the last dozen items shown are remembered as recent', many.recent.length === 12 && many.recent[11] === 'item39' && many.recent[0] === 'item28', many.recent.length + ' kept');
+  let years = P.empty(); for (let i = 0; i < 450; i++) years = P.record(years, { id: 'a', correct: true, today: day(i) });
+  ok('and only the last 400 days of tallies are kept', Object.keys(years.days).length === 400 && !years.days[day(0)] && years.days[day(449)], Object.keys(years.days).length + ' days');
+
+  const store = mem();
+  ok('a state saves and loads back the same', P.save(store, s) === true && JSON.stringify(P.load(store)) === JSON.stringify(P.sanitise(s)));
+  const cardless = P.sanitise({ cards: { good: s.cards.as, noStability: { due: T0, last: T0 }, badDate: Object.assign({}, s.cards.as, { due: 'tomorrow' }), nan: Object.assign({}, s.cards.as, { stability: NaN }) }, recent: ['a', 5, null, 'b'], days: { [T0]: { n: 2, c: 3 }, 'x': { n: 1, c: 1 }, [day(1)]: { n: 2, c: 1 } } });
+  ok('a damaged card, a non-string in recent and a day that scored more than it answered are each dropped, and the rest kept', Object.keys(cardless.cards).join() === 'good' && cardless.recent.join() === 'a,b' && Object.keys(cardless.days).join() === day(1), JSON.stringify([Object.keys(cardless.cards), cardless.recent, Object.keys(cardless.days)]));
+
+  const mk = days => { let t = P.empty(); days.forEach(d => { t = P.record(t, { id: 'q', correct: true, today: day(d) }); }); return t; };
+  ok('a streak counts consecutive days ending today', P.streak(mk([-2, -1, 0]), day(0)) === 3);
+  ok('a day with no answers yet today does not end it: it counts to yesterday', P.streak(mk([-3, -2, -1]), day(0)) === 3);
+  ok('but a missed day does', P.streak(mk([-3, -2]), day(0)) === 0 && P.streak(mk([-5, -4, -1, 0]), day(0)) === 2);
+  ok('and a streak crosses a month and the clocks changing', P.streak(mk([-40, -39, -38, -37, -36, -35, -34, -33, -32, -31, -30, -29, -28, -27, -26, -25, -24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0]), day(0)) === 41);
+  ok('an empty record has no streak', P.streak(P.empty(), day(0)) === 0 && P.streak(null, day(0)) === 0);
+
+  const items = ['as', 'mr', 'ms', 'ar'].map(id => ({ id }));
+  let sm = P.record(P.record(P.empty(), { id: 'as', correct: true, today: day(-10) }), { id: 'mr', correct: false, today: T0 });
+  const sum = P.summary(sm, items, T0);
+  ok('the summary says how many were seen, how many are due, and the accuracy', sum.total === 4 && sum.seen === 2 && sum.unseen === 2 && sum.due >= 1 && sum.answered === 2 && Math.abs(sum.accuracy - 0.5) < 1e-9 && sum.today === 1, JSON.stringify(sum));
+  const none = P.summary(P.empty(), [], T0);
+  ok('an empty Lab summarises to zeros and no accuracy, not NaN', none.total === 0 && none.seen === 0 && none.accuracy === null && none.streak === 0 && none.due === 0, JSON.stringify(none));
+  ok('cards for items that are no longer offered do not count as seen', P.summary(sm, [{ id: 'ms' }], T0).seen === 0);
+}
+
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed ? 1 : 0);

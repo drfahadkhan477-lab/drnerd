@@ -22,15 +22,15 @@
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
 # READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 5432 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 5339.
-# The other 227 all drive something this workflow cannot have: the real
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 5349.
+# The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
 # licensed question bank, deliberately never committed to this repository or
 # to any secret GitHub holds. What needs the real bank itself (its corrected
 # answer keys, its content flags, search quality over its library, how long
 # it takes to load) and the split build under --pwa are measured only on a
-# machine with the export, so there is no way to run those 227 checks here.
+# machine with the export, so there is no way to run those 217 checks here.
 # See docs/BUILD.md and the comment at the top of scripts/build.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
@@ -47,7 +47,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 80 suites that are pure Node with no Playwright and no
+#   logic        the 85 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -74,7 +74,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 5339 real checks, up
+#                Across every job, 5349 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -91,7 +91,7 @@
 #                around an invented bank; see the job for which suites and
 #                why the rest are left out.
 #
-# Adding the other 227 checks to this file is possible — GitHub Actions
+# Adding the other 217 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -102,7 +102,13 @@
 name: verify (source-independent subset)
 
 on:
+  # A push to a branch that has a pull request used to run this whole
+  # workflow twice, once as `push` and once as `pull_request`: two sets of
+  # the same twelve-minute jobs for every commit. A branch is now tested as
+  # its pull request; `push` is for master, where a merge is tested as it
+  # lands. tests/verify-testpublic-pure.js holds this shape.
   push:
+    branches: [master]
   pull_request:
   # The `full` job's own `if:` asks for this event, and GitHub only offers the
   # "Run workflow" button for a workflow that declares it on the default
@@ -115,6 +121,13 @@ on:
 # could notice that while GitHub was unable to parse this file at all.
 permissions:
   contents: read
+
+# A newer push to a pull request makes the run still going for the one before
+# it pointless, so it is cancelled. Master is never cancelled: every merge is
+# tested to the end.
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   syntax:
@@ -206,6 +219,16 @@ jobs:
         run: node tests/verify-assemble-pure.js
       - name: the synthetic export builds the real app, and is marked so its run is never recorded (26 checks)
         run: node tests/verify-synthetic-pure.js
+      - name: each heart sound and murmur is on the valve events physio measures, with the shape and pitch of its lesion (36 checks)
+        run: node tests/verify-lab-pure.js
+      - name: the study plan fits the time, puts the most forgotten first and the weak chapters next, and never throws on damaged data (39 checks)
+        run: node tests/verify-plan-pure.js
+      - name: questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair (27 checks)
+        run: node tests/verify-topicrun-pure.js
+      - name: a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary (29 checks)
+        run: node tests/verify-voice-pure.js
+      - name: each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes (42 checks)
+        run: node tests/verify-drills-pure.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
@@ -389,6 +412,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (25 checks)
         run: node tests/verify-bankstore.js
+      - if: ${{ !cancelled() }}
+        name: the Lab, built and driven — the audio played is the heart sound asked, nothing names an answer early, progress is stored and survives a reload, and the heart map is drawn from the map (67 checks)
+        run: node tests/verify-lab.js
 
   # ── the app itself, built around an invented bank ───────────────────────────
   #
@@ -408,10 +434,7 @@ jobs:
   #   splash      reads the splash while the real 27 MB bank is still parsing;
   #               a small bank renders first and the splash is already gone
   #
-  # and two that need no build and run elsewhere or not yet: bankstore, which
-  # the memorizer-browser job above already runs, and figprobe, which drives
-  # its browser through a subprocess, so tests/verify-stats.js counts it as
-  # pure Node and would refuse it in a browser job. The
+  # and bankstore, which the memorizer-browser job above already runs. The
   # step labels are the counts the record holds for each suite, from the real
   # build. When this job was added every suite here ran exactly that number on
   # this build too, apart from two that had just gained a check.
@@ -551,6 +574,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: Echo Studio routes, delegates and keeps the caret where it was (26 checks)
         run: node tests/verify-echo.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a figure that never rendered is told apart from one that rendered invisibly (10 checks)
+        run: node tests/verify-figprobe.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Coronary view draws the left bed collapsing in systole, on one scale (8 checks)
         run: node tests/verify-coronaryview.js build/synthetic/systole.html

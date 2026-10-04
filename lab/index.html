@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<!-- Everything the page does is inside the page: no request leaves it. connect-src 'self'
+     is for the service worker's own file; img-src 'self' is for the home-screen icon the
+     browser fetches for the tab. 'self' on script and style is for running this file from the repository unbuilt; the
+     built page has every script and stylesheet inline. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Systole Lab">
+<title>Systole Lab</title>
+<!-- @pwa -->
+<link rel="stylesheet" href="app.css" data-inline>
+</head>
+<body>
+<div id="app"><noscript>Systole Lab needs JavaScript.</noscript></div>
+<!--
+  Order matters: physio.js is the heart's own timing, which heart sounds, tracings and the
+  heart map are all written against; drill.js and progress.js sit on fsrs.js. ui.js reads
+  every module before it at load. scripts/build-lab.js inlines each tag marked data-inline,
+  so the built app is one file. Served from the repository root, this page also runs as it
+  is: http://localhost:8080/lab/
+-->
+<script src="../src/core/fsrs.js" data-inline></script>
+<script src="../src/core/physio.js" data-inline></script>
+<script src="../src/core/rhythms-extra.js" data-inline></script>
+<script src="../src/lab/heartsounds.js" data-inline></script>
+<script src="../src/lab/tracings.js" data-inline></script>
+<script src="../src/lab/strips.js" data-inline></script>
+<script src="../src/lab/heartmap.js" data-inline></script>
+<script src="../src/lab/drill.js" data-inline></script>
+<script src="../src/lab/progress.js" data-inline></script>
+<script src="../src/lab/items.js" data-inline></script>
+<script src="src/ui.js" data-inline></script>
+</body>
+</html>
