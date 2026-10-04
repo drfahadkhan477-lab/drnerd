@@ -102,6 +102,13 @@ head('what a carve refuses');
     ['app/..\\..\\x.css', 'app\\x.css', 'app/css\\x.css', 'app//x.css', 'app/./x.css', 'app/css/'].every(n => refuses(c(3, 4, n), /not a path under app/)));
   ok('the shell itself', refuses(c(3, 4, 'app/systole.html'), /cannot be carved into itself/));
   ok('a range past the end', refuses(c(3, 99), /not a range/) && refuses(c(4, 3), /not a range/) && refuses(c(0, 2), /not a range/));
+  /* split() counts non-overlapping matches: of three identical lines, a two-line
+     piece starts at two offsets and split() finds it once. */
+  const OVER = ['<style>', '.r{}', '.r{}', '.r{}', '</style>', ''].join('\n');
+  const o = (from, to) => () => Carve.carve({ shell: OVER, from, to, name: 'app/x.txt' });
+  ok('a two-line piece that starts at two offsets of three identical lines, whichever is chosen',
+    refuses(o(2, 3), /stands in the shell 2 times/) && refuses(o(3, 4), /stands in the shell 2 times/));
+  ok('and the three lines together start once, and are fine', !refuses(o(2, 4), /./));
   const r = root('exists');
   put(r, 'app/css/a.css', 'already here\n');
   ok('a piece that already exists, leaving both files as they were',
@@ -154,6 +161,8 @@ head('auditApp names each way app/ can be broken');
   ok('a piece that holds a token', saidWithAssembly(nested, /a\.css holds a slot token/));
   const crlf = root('crlf', carved); put(crlf, 'app/css/a.css', '.a{}\r\n');
   ok('a piece with a carriage return', said(crlf, /carriage return/));
+  const emptied = root('emptied', carved); put(emptied, 'app/css/a.css', '');
+  ok('a cited piece truncated to nothing', said(emptied, /a\.css is empty/));
   const repeat = root('repeat', SHELL.replace('boot();', Slots.token('src', SRC) + 'boot();'));
   ok('a src slot the shell repeats: the shell does not assemble', said(repeat, /the shell does not assemble: slot src:src\/core\/thing\.js appears more than once/));
   const torn = root('torn', SHELL.replace('boot();', '@@SLOT[src:src/core/thing.js' + ' boot();'));
@@ -206,6 +215,34 @@ head('a piece is found once in the assembled app, not only in the shell');
   put(hand, 'app/css/z-big.css', BIG); put(hand, 'app/css/a-small.css', SMALL);
   const a = Carve.auditApp(hand);
   ok('auditApp names the pair a tree can hold by hand', a.problems.length === 1 && /a-small\.css's text stands in the assembled app 2 times/.test(a.problems[0]), JSON.stringify(a.problems));
+}
+
+head('slot names resolve only inside their own directory');
+{
+  /* A name is read and written into a served page. The "secret" is invented. */
+  const outside = path.join(dir, 'confine-outside');
+  fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, 'secret.txt'), 'INVENTED-NOT-A-SECRET');
+  fs.writeFileSync(path.join(outside, 'x.css'), '.x{}\n');
+  const LINKED = SHELL.replace('boot();', Slots.token('src', 'src/link/secret.txt') + Slots.token('app', 'app/link/x.css') + Slots.token('app', 'app/css/a.css') + 'boot();');
+  const r = root('confine', LINKED);
+  put(r, 'assets/pic.bin', 'x'.repeat(600)); put(r, 'app/css/a.css', '.a{}\n');
+  let linked = false;
+  try { fs.symlinkSync(outside, path.join(r, 'src', 'link'), 'junction'); fs.symlinkSync(outside, path.join(r, 'app', 'link'), 'junction'); linked = true; } catch (e) { /* reported below */ }
+  ok('a link out of src/ and app/ could be made here, so the escapes below are really tried', linked);
+  const res = Slots.repoResolver(null, r);
+  ok('a name under its own directory resolves', typeof res('src', SRC) === 'string' && typeof res('asset', 'assets/pic.bin') === 'string' && typeof res('app', 'app/css/a.css') === 'string');
+  ok('a name that climbs out, or is not under its directory, resolves to nothing',
+    ['src/../../confine-outside/secret.txt', '../confine-outside/secret.txt', 'src//x', 'src\\..\\x', '/etc/hosts', 'src/'].every(n => res('src', n) === undefined)
+    && res('asset', 'assets/../../confine-outside/secret.txt') === undefined && res('app', 'app/../' + SRC) === undefined);
+  ok('a spelling of a contained file that is not the canonical one resolves to nothing: one name per file',
+    ['src/core/../core/thing.js', 'src//core/thing.js', 'src/./core/thing.js', 'src\\core\\thing.js'].every(n => res('src', n) === undefined) && typeof res('src', SRC) === 'string');
+  ok('a name under another kind\'s directory resolves to nothing', res('src', 'assets/pic.bin') === undefined && res('asset', SRC) === undefined && res('app', SRC) === undefined && res('lib', SRC) === undefined);
+  ok('a path that leaves its directory through a link resolves to nothing', res('src', 'src/link/secret.txt') === undefined && res('app', 'app/link/x.css') === undefined);
+  const offered = Slots.repoSources(r);
+  ok('and a link is not followed when the sources are listed', !('app/link/x.css' in offered.apps) && !Object.keys(offered.srcs).some(n => n.startsWith('src/link/')), Object.keys(offered.apps).join());
+  ok('a payload name that is not a bare identifier resolves to nothing', res('payload', '../x') === undefined && res('payload', 'all_q') === undefined);
+  const a = Carve.auditApp(r);
+  ok('the audit names both tokens', a.problems.length === 2 && a.problems.every(p => /has no file in the repository, or none inside/.test(p)), JSON.stringify(a.problems));
 }
 
 head('files a workstation leaves under app/ are not pieces');

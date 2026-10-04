@@ -72,7 +72,9 @@ function walk(dir, keep) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
     const p = path.join(dir, e.name);
-    return e.isDirectory() ? walk(p, keep) : keep(p) ? [p] : [];
+    /* Regular files only: a link is neither followed nor offered, so what a
+       cut compares against cannot come from outside the directory. */
+    return e.isDirectory() ? walk(p, keep) : e.isFile() && keep(p) ? [p] : [];
   });
 }
 
@@ -160,16 +162,40 @@ function assemble(shell, resolve) {
   return out;
 }
 
+/* Each kind of slot reads from one directory of the repository and nowhere
+   else. A name is a slot's own text in a committed shell, and what it names is
+   read and written into a page that is served: `src:../secret`, or a path that
+   leads out through a link, would embed a file that is not the app's. */
+const KIND_DIR = { src: 'src', asset: 'assets', app: 'app' };
+
+/* contained(root, kind, name) → the file's path, or null when the name is not
+   forward-slash segments under the kind's directory, names no regular file, or
+   resolves (links followed) to somewhere outside that directory. */
+function contained(root, kind, name) {
+  const dir = KIND_DIR[kind];
+  if (!dir || typeof name !== 'string') return null;
+  if (!name.startsWith(dir + '/') || name.includes('\\') || name.split('/').some(s => s === '' || s === '.' || s === '..')) return null;
+  const f = path.join(root, name);
+  try {
+    const real = fs.realpathSync(f), base = fs.realpathSync(path.join(root, dir));
+    const rel = path.relative(base, real);
+    if (rel === '' || rel.split(path.sep)[0] === '..' || path.isAbsolute(rel)) return null;
+    return fs.statSync(real).isFile() ? f : null;
+  } catch (e) { return null; }
+}
+
 /* The resolver assembly uses: payloads from a directory, src and assets from
-   the repository as it is now. */
+   the repository as it is now. A payload name is a bare identifier, as the
+   names in PAYLOADS are. */
 function repoResolver(payloadDir, root = ROOT) {
   return (kind, name) => {
     if (kind === 'payload') {
+      if (!/^[A-Z][A-Z0-9_]*$/.test(name)) return undefined;
       const f = path.join(payloadDir, name + '.txt');
       return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : undefined;
     }
-    const f = path.join(root, name);
-    if (!fs.existsSync(f)) return undefined;
+    const f = contained(root, kind, name);
+    if (f === null) return undefined;
     if (kind === 'src' || kind === 'app') return fs.readFileSync(f, 'utf8');
     if (kind === 'asset') return fs.readFileSync(f).toString('base64');
     return undefined;
@@ -204,4 +230,4 @@ function leakScan(shell, payloads) {
            offsets: { questionText: q.slice(0, 10), refText: r.slice(0, 10), base64Runs: runs.slice(0, 10) } };
 }
 
-module.exports = { PAYLOADS, TOKEN_RE, isMetadata, token, cut, assemble, repoSources, repoResolver, leakScan };
+module.exports = { PAYLOADS, TOKEN_RE, KIND_DIR, isMetadata, token, cut, assemble, repoSources, repoResolver, leakScan };

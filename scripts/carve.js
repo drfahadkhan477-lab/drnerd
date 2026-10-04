@@ -57,12 +57,21 @@ function carve({ shell, from, to, name }) {
   const after = shell.slice(before.length + piece.length);
   if (before + piece + after !== shell) throw new Error(`lines ${from}..${to} do not end in a newline`);
   if (piece.includes('@@SLOT[')) throw new Error('the lines hold a slot token: a piece holds none');
-  const times = shell.split(piece).length - 1;
+  const times = countIn(shell, piece);
   if (times !== 1) throw new Error(`the lines' text stands in the shell ${times} times: a piece must be found exactly once`);
   return { shell: before + Slots.token('app', name) + after, piece };
 }
 
-const countIn = (hay, needle) => (needle ? hay.split(needle).length - 1 : 0);
+/* Every start offset, overlapping ones included. split() counts only
+   non-overlapping matches: of three identical lines, a two-line piece starts at
+   two offsets and split() finds one, so the piece would be accepted at either
+   and cut() would later take the first, moving the token. */
+const countIn = (hay, needle) => {
+  if (!needle) return 0;
+  let n = 0, i = -1;
+  while ((i = hay.indexOf(needle, i + 1)) !== -1) n++;
+  return n;
+};
 
 /* Payloads stand as themselves: a carve is judged on the app, not the content. */
 const withPayloadsLeft = root => {
@@ -117,8 +126,9 @@ function carveFile({ root = ROOT, from, to, name, cut = carve, write = fs.writeF
 
 function walk(dir) {
   if (!fs.existsSync(dir)) return [];
+  /* Regular files only, as app-slots' walk: a link is neither followed nor a piece. */
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
-    e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
+    e.isDirectory() ? walk(path.join(dir, e.name)) : e.isFile() ? [path.join(dir, e.name)] : []);
 }
 
 /* auditApp(root) → { problems: [text], pieces: [name], tokens: n }
@@ -143,7 +153,7 @@ function auditApp(root = ROOT) {
     /* repo() would read app:package.json or app:src/x.js if the file exists, and
        assembly would inject a file that is not a piece of app/. */
     if (kind === 'app' && !validName(name)) { problems.push(`app:${name} is not a path under app/`); continue; }
-    if (typeof repo(kind, name) !== 'string') problems.push(`${kind}:${name} has no file in the repository`);
+    if (typeof repo(kind, name) !== 'string') problems.push(`${kind}:${name} has no file in the repository, or none inside ${Slots.KIND_DIR[kind]}/`);
     if (kind === 'app') {
       cited.set(name, (cited.get(name) || 0) + 1);
       if (Slots.isMetadata(name.slice('app/'.length))) problems.push(`${name} is cited, but it is a name the pieces of app/ skip: a freeze would not claim it`);
@@ -173,9 +183,15 @@ function auditApp(root = ROOT) {
        stop on too, and the audit must not pass a shell that cannot assemble. */
     if (!/has nothing to fill it/.test(e.message)) problems.push(`the shell does not assemble: ${e.message}`);
   }
-  if (assembled !== null) for (const name of pieces) {
-    const n = countIn(assembled, fs.readFileSync(path.join(root, name), 'utf8'));
-    if (n > 1) problems.push(`${name}'s text stands in the assembled app ${n} times: a freeze would find it once or twice by filename order`);
+  /* Only pieces a token cites: an uncited one is named above, and assembling
+     never writes it, so what the app holds of it is nothing to count. */
+  if (assembled !== null) for (const name of pieces.filter(n => cited.get(n))) {
+    const text = fs.readFileSync(path.join(root, name), 'utf8');
+    /* An empty piece is counted by nothing: cut() never matches it, so a freeze
+       would report it inline and assembling would silently drop its region. */
+    if (text === '') { problems.push(`${name} is empty`); continue; }
+    const n = countIn(assembled, text);
+    if (n !== 1) problems.push(`${name}'s text stands in the assembled app ${n} times: a piece is found exactly once there, or a freeze depends on filename order`);
   }
   return { problems, pieces, tokens };
 }
