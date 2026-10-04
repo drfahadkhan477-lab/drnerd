@@ -27,6 +27,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const http = require('http');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 
@@ -86,7 +87,18 @@ const pixels = () => {
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lab-'));
   const built = build(dir);
-  const URL = 'file://' + path.join(dir, 'index.html');
+  /* Served over http, as it will be hosted: from a file:// page WebKit refuses to fetch the manifest and
+     icon ("Origin null") and logs it, which is a fact about file pages and not about the Lab. */
+  const TYPES = { '.html': 'text/html', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.js': 'text/javascript' };
+  const server = http.createServer((req, res) => {
+    const name = req.url.split('?')[0] === '/' ? 'index.html' : req.url.split('?')[0].slice(1);
+    const file = path.join(dir, path.basename(name));
+    if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' }); res.end(fs.readFileSync(file));
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const BASE = 'http://127.0.0.1:' + server.address().port + '/';
+  const URL = BASE;
   const T = { timeout: 30000 };
 
   head('the build is one page and the files that make it installable');
@@ -114,7 +126,7 @@ const pixels = () => {
     const ctx = await browser.newContext(Object.assign({ viewport: { width: 900, height: 900 }, serviceWorkers: 'block' }, opts || {}));
     const p = watch(await ctx.newPage(), events, tag, errors);
     p.on('console', m => { if (m.type() === 'error') errors.push(tag + ': console ' + m.text()); });
-    p.on('request', r => { if (!/^(file|data|blob):/.test(r.url())) outside.push(tag + ' ' + r.url()); });
+    p.on('request', r => { if (!/^(data|blob):/.test(r.url()) && !r.url().startsWith(BASE)) outside.push(tag + ' ' + r.url()); });
     p.on('dialog', d => d.accept());
     await p.addInitScript(spyOnAudio);
     if (init) await p.addInitScript(init);
@@ -389,6 +401,7 @@ const pixels = () => {
   ok('nothing left the device throughout', outside.length === 0, outside.join(', ') || 'none');
   ok('and nothing threw or logged an error on any page throughout', errors.length === 0, errors.join(' | '));
   await browser.close();
+  server.close();
   fs.rmSync(dir, { recursive: true, force: true });
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
