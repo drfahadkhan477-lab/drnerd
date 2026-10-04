@@ -51,6 +51,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { findMarkdownFiles } = require('./refs-patch.js');
 
 /* Overridable so a test can point this at a fixture corpus instead of the
    licensed one. Unset in every real build, where the defaults are the only
@@ -73,12 +74,14 @@ const IMAGES_DIR = process.env.SYSTOLE_REF_IMAGES_DIR || path.join(__dirname, '.
    scripts/assemble-app.js fills the frozen shell's REF_IMGS slot with exactly
    what this step writes; the script below calls it with the two directories. */
 function buildRefImages(refsDir = REFS_DIR, imagesDir = IMAGES_DIR) {
-  const mdFiles = fs.existsSync(refsDir)
-    ? fs.readdirSync(refsDir).filter(f => f.endsWith('.md'))
-    : [];
+  /* The notes refs-patch seeds, found the way refs-patch finds them. This
+     read only the top level of refsDir while refs-patch walks into
+     subfolders, so a note filed in a subfolder was seeded and its figures
+     were not. */
+  const mdFiles = fs.existsSync(refsDir) ? findMarkdownFiles(refsDir) : [];
   const keys = new Set();
   for (const f of mdFiles) {
-    const raw = fs.readFileSync(path.join(refsDir, f), 'utf8');
+    const raw = fs.readFileSync(f, 'utf8');
     const re = /!\[[^\]]*\]\(refimg:\/\/([^)\s]+)\)/g;
     let m;
     while ((m = re.exec(raw))) keys.add(m[1]);

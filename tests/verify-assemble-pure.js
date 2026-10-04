@@ -165,6 +165,40 @@ head('the command line');
   ok('an export that is not there exits 2', none.status === 2, String(none.status));
 }
 
+head('a flagged question that now ships a figure stops the build');
+{
+  /* flags-patch records wantFigs: 0 for questions flagged for a missing
+     figure. If the export starts shipping one, the flag is stale and the
+     step must refuse. The single-file bank says how many through img, not
+     figs, so that is the case that matters. */
+  const { applyContentFlags } = require(S('flags-patch.js'));
+  const f = FLAGS.find(x => x.wantFigs === 0);
+  const bank = () => JSON.parse(JSON.stringify(BANK)).map(x => { delete x.figs; return x; });
+  const tries = mutate => { const b = bank(); mutate(b.find(x => x.id === f.id)); try { applyContentFlags(b); return ''; } catch (e) { return e.message; } };
+  ok('a flagged question declaring a figure through img is refused', /now ships 1 figure/.test(tries(x => { x.img = 1; })),
+     tries(x => { x.img = 1; }).split('\n')[0] || 'accepted');
+  ok('and one with img 0 is not', tries(x => { x.img = 0; }) === '', tries(x => { x.img = 0; }).split('\n')[0]);
+  ok('figs still counts where a bank carries it', /now ships 1 figure/.test(tries(x => { x.figs = ['a.webp']; })));
+}
+
+head('a note in a subfolder is seeded with its figures');
+{
+  /* refs-patch walks subfolders; ref-images-patch read only the top level,
+     so a figure cited from a subfolder's note was never embedded. */
+  const { buildRefImages } = require(S('ref-images-patch.js'));
+  const { buildRefSeed } = require(S('refs-patch.js'));
+  const r2 = path.join(dir, 'refs2'), i2 = path.join(dir, 'refs2-images');
+  fs.mkdirSync(path.join(r2, 'unit'), { recursive: true }); fs.mkdirSync(i2);
+  fs.writeFileSync(path.join(r2, 'unit', 'deep.md'), '---\ntitle: Deep chapter\n---\n\n## Section\n\n' +
+    'invented words '.repeat(30) + '\n\n![deep](refimg://deep.png)\n');
+  fs.writeFileSync(path.join(i2, 'deep.png'), Buffer.from('89504e470d0a1a0a' + '00'.repeat(40), 'hex'));
+  const seeded = buildRefSeed(r2).notes.length;
+  let keys = [];
+  try { keys = [...buildRefImages(r2, i2).keys]; } catch (e) { keys = ['threw: ' + e.message]; }
+  ok('the note is seeded', seeded === 1, seeded + ' note(s)');
+  ok('and its figure is embedded with it', keys.length === 1 && keys[0] === 'deep.png', keys.join(', ') || 'no figures');
+}
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
