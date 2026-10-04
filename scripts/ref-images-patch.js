@@ -52,13 +52,6 @@
 const fs = require('fs');
 const path = require('path');
 
-const SRC = process.argv[2];
-const OUT = process.argv[3];
-if (!SRC || !OUT) {
-  console.error('usage: node scripts/ref-images-patch.js <input.html> <output.html>');
-  process.exit(1);
-}
-
 /* Overridable so a test can point this at a fixture corpus instead of the
    licensed one. Unset in every real build, where the defaults are the only
    thing build.js ever uses. */
@@ -76,34 +69,50 @@ const IMAGES_DIR = process.env.SYSTOLE_REF_IMAGES_DIR || path.join(__dirname, '.
    skipping it silently killed a feature that has nothing to do with whether
    the build-time corpus happened to have pictures in it. An empty REF_IMGS is
    the honest representation of "no figures baked in" — not an absent one. */
-const mdFiles = fs.existsSync(REFS_DIR)
-  ? fs.readdirSync(REFS_DIR).filter(f => f.endsWith('.md'))
-  : [];
-const keys = new Set();
-for (const f of mdFiles) {
-  const raw = fs.readFileSync(path.join(REFS_DIR, f), 'utf8');
-  const re = /!\[[^\]]*\]\(refimg:\/\/([^)\s]+)\)/g;
-  let m;
-  while ((m = re.exec(raw))) keys.add(m[1]);
-}
-
-const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
-const REF_IMGS = {};
-let totalBytes = 0;
-for (const key of keys) {
-  const file = path.join(IMAGES_DIR, key);
-  if (!fs.existsSync(file)) {
-    throw new Error(`ref-images: "${key}" is cited by a note but content/refs-images/${key} does not exist`);
+/* The figures every note cites, as the JSON this step embeds. Exported so
+   scripts/assemble-app.js fills the frozen shell's REF_IMGS slot with exactly
+   what this step writes; the script below calls it with the two directories. */
+function buildRefImages(refsDir = REFS_DIR, imagesDir = IMAGES_DIR) {
+  const mdFiles = fs.existsSync(refsDir)
+    ? fs.readdirSync(refsDir).filter(f => f.endsWith('.md'))
+    : [];
+  const keys = new Set();
+  for (const f of mdFiles) {
+    const raw = fs.readFileSync(path.join(refsDir, f), 'utf8');
+    const re = /!\[[^\]]*\]\(refimg:\/\/([^)\s]+)\)/g;
+    let m;
+    while ((m = re.exec(raw))) keys.add(m[1]);
   }
-  const ext = path.extname(file).toLowerCase();
-  const mime = MIME[ext];
-  if (!mime) throw new Error(`ref-images: "${key}" has an unsupported extension (${ext})`);
-  const buf = fs.readFileSync(file);
-  totalBytes += buf.length;
-  REF_IMGS[key] = `data:${mime};base64,${buf.toString('base64')}`;
+
+  const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+  const REF_IMGS = {};
+  let totalBytes = 0;
+  for (const key of keys) {
+    const file = path.join(imagesDir, key);
+    if (!fs.existsSync(file)) {
+      throw new Error(`ref-images: "${key}" is cited by a note but content/refs-images/${key} does not exist`);
+    }
+    const ext = path.extname(file).toLowerCase();
+    const mime = MIME[ext];
+    if (!mime) throw new Error(`ref-images: "${key}" has an unsupported extension (${ext})`);
+    const buf = fs.readFileSync(file);
+    totalBytes += buf.length;
+    REF_IMGS[key] = `data:${mime};base64,${buf.toString('base64')}`;
+  }
+
+  return { keys, totalBytes, json: JSON.stringify(REF_IMGS) };
 }
 
-const IMGS_JSON = JSON.stringify(REF_IMGS);
+module.exports = { buildRefImages, REFS_DIR, IMAGES_DIR };
+if (require.main !== module) return;
+
+const SRC = process.argv[2];
+const OUT = process.argv[3];
+if (!SRC || !OUT) {
+  console.error('usage: node scripts/ref-images-patch.js <input.html> <output.html>');
+  process.exit(1);
+}
+const { keys, totalBytes, json: IMGS_JSON } = buildRefImages();
 
 /* ── the patch ────────────────────────────────────────────────────────────── */
 let html = fs.readFileSync(SRC, 'utf8');

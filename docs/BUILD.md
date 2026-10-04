@@ -242,9 +242,24 @@ bank, its figures, and the Braunwald reference seed and figures.
    Its report lists every `src/` module that a later patch edited after
    embedding: that is the drift the next steps remove. It stages nothing;
    review `app/`, then commit it yourself.
-2. **Assemble from `app/`.** `app/` + `content/` + the answer-key and flag
-   fixes as data → the same single file, with no patch step run. CI can then
-   assemble the real app around a synthetic bank.
+2. **Assemble from `app/`** (now). On the owner's machine, beside a chain build:
+
+   ```bash
+   node scripts/assemble-app.js --compare build/systole.html
+   ```
+
+   It finds the export as `build.js` does: a path given, `SYSTOLE_SRC`, or the
+   one file in `source/`.
+
+   `scripts/assemble-app.js` fills each slot from where the chain gets it: the
+   export's bank with `keys-patch`'s and `flags-patch`'s corrections, the
+   export's figures verbatim, `refs-patch`'s and `ref-images-patch`'s seed and
+   figures from `content/`, `heart-bake.js`'s mesh, and `src/` and `assets/`
+   as they are. It stamps the result as `build.js` does. `--compare` says
+   whether it is the chain's build byte for byte, and if not, which part
+   differs, by name. When it reports byte-identical, the chain is no longer
+   needed to build the app. CI can then assemble the real app around a
+   synthetic bank.
 3. **Carve `app/`.** Split it into CSS and modules a piece at a time. New work
    edits `app/` or `src/` directly; no new patch steps are added.
 4. **Retire the chain** once both paths give the same file for a few
@@ -316,6 +331,9 @@ touches source/ or your notes in content/refs.
 suite's code (`node scripts/verify.js --list` shows them).
 `--report-json <file>` writes the results as data: suite, tags, status,
 counts and time, and no line of suite output.
+`--jobs N|auto` runs suites side by side; `SYSTOLE_JOBS` in the environment
+makes that this machine's default, and `--jobs` still overrides it. The suites
+that measure time run alone either way.
 
 ```bash
 node scripts/verify.js                       # everything, ~4 min
@@ -624,7 +642,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        124 suites · 78 need no browser · + pwa
+tests/        124 suites · 79 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

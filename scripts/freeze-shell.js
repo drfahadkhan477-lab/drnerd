@@ -73,6 +73,8 @@ function freeze({ input, appDir, payloadDir, root = ROOT, log = console.log, slo
   log(`shell   ${(shell.length / 1e3).toFixed(0)} KB`);
   log(`slots   ${kinds('payload').map(s => `${s.name} ${(s.bytes / 1e6).toFixed(2)} MB`).join(', ')}`);
   log(`        ${kinds('src').length} src modules, ${kinds('asset').length} assets read from the repository at assembly`);
+  const repeated = kinds('asset').filter(s => s.times > 1);
+  if (repeated.length) log(`        claimed at more than one site: ${repeated.map(s => `${s.name} ×${s.times}`).join(', ')}`);
   if (report.inline.src.length) log(`inline  src not found verbatim (a later patch edited the embedded copy): ${report.inline.src.join(', ')}`);
   if (report.inline.asset.length) log(`inline  assets not found: ${report.inline.asset.join(', ')}`);
   log(`round trip ${same ? 'byte-identical' : 'DIFFERENT'}`);
