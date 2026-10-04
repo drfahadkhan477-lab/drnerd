@@ -202,7 +202,7 @@ jobs:
         run: node tests/verify-study-file-check.js
       - name: the built file cuts into the app and its payloads losslessly, and the app carries none of the bank (43 checks)
         run: node tests/verify-app-slots-pure.js
-      - name: the app assembles from app/systole.html as the chain builds it (23 checks)
+      - name: the app assembles from app/systole.html as the chain builds it (24 checks)
         run: node tests/verify-assemble-pure.js
       - name: the synthetic export builds the real app, and is marked so its run is never recorded (26 checks)
         run: node tests/verify-synthetic-pure.js

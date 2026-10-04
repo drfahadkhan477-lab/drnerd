@@ -40,7 +40,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const REFS_DIR = path.join(__dirname, '..', 'content', 'refs');
+/* Overridable as ref-images-patch's is, and by the same variable: the two
+   read one corpus, and a caller that redirects only one of them pairs the
+   real notes with the fixture's figures. */
+const REFS_DIR = process.env.SYSTOLE_REFS_DIR || path.join(__dirname, '..', 'content', 'refs');
 
 /* ── parse the corpus exactly the way the importer will ───────────────────── */
 function field(fm, key) {
