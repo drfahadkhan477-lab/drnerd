@@ -40,13 +40,6 @@
 const fs = require('fs');
 const path = require('path');
 
-const SRC = process.argv[2];
-const OUT = process.argv[3];
-if (!SRC || !OUT) {
-  console.error('usage: node scripts/refs-patch.js <input.html> <output.html>');
-  process.exit(1);
-}
-
 const REFS_DIR = path.join(__dirname, '..', 'content', 'refs');
 
 /* ── parse the corpus exactly the way the importer will ───────────────────── */
@@ -90,29 +83,45 @@ function findMarkdownFiles(dir) {
   return mdFiles;
 }
 
-let notes = [];
-let files = [];
+/* The seed, built from a corpus directory. Exported so scripts/assemble-app.js
+   fills the frozen shell's REF_SEED slot with exactly what this step writes;
+   the script below calls it with REFS_DIR. */
+function buildRefSeed(dir = REFS_DIR) {
+  let notes = [];
+  let files = [];
 
-if (!fs.existsSync(REFS_DIR)) {
-  console.error(`refs: ${path.relative(process.cwd(), REFS_DIR)} does not exist — nothing to seed.`);
-  // Continue with empty seed to keep patch chain intact
-} else {
-  files = findMarkdownFiles(REFS_DIR);
-  if (!files.length) {
-    console.error(`refs: no .md files in ${path.relative(process.cwd(), REFS_DIR)} — nothing to seed.`);
+  if (!fs.existsSync(dir)) {
+    console.error(`refs: ${path.relative(process.cwd(), dir)} does not exist — nothing to seed.`);
+    // Continue with empty seed to keep patch chain intact
   } else {
-    for (const f of files) notes.push(...notesFromFile(f));
+    files = findMarkdownFiles(dir);
+    if (!files.length) {
+      console.error(`refs: no .md files in ${path.relative(process.cwd(), dir)} — nothing to seed.`);
+    } else {
+      for (const f of files) notes.push(...notesFromFile(f));
+    }
   }
+
+  /* A note the importer would reject is a note that will never be retrieved.
+     Fail loudly here rather than shipping dead weight. */
+  const thin = notes.filter(n => n.body.split(/\s+/).length < 40);
+  if (thin.length) throw new Error(`refs: ${thin.length} section(s) too thin to retrieve: ${thin.map(n => n.title).join(', ')}`);
+  const untitled = notes.filter(n => !n.title.includes('—'));
+  if (untitled.length) throw new Error(`refs: ${untitled.length} note(s) missing a chapter title`);
+
+  return { notes, files, seed: JSON.stringify(notes) };
 }
 
-/* A note the importer would reject is a note that will never be retrieved.
-   Fail loudly here rather than shipping dead weight. */
-const thin = notes.filter(n => n.body.split(/\s+/).length < 40);
-if (thin.length) throw new Error(`refs: ${thin.length} section(s) too thin to retrieve: ${thin.map(n => n.title).join(', ')}`);
-const untitled = notes.filter(n => !n.title.includes('—'));
-if (untitled.length) throw new Error(`refs: ${untitled.length} note(s) missing a chapter title`);
+module.exports = { buildRefSeed, REFS_DIR };
+if (require.main !== module) return;
 
-const SEED = JSON.stringify(notes);
+const SRC = process.argv[2];
+const OUT = process.argv[3];
+if (!SRC || !OUT) {
+  console.error('usage: node scripts/refs-patch.js <input.html> <output.html>');
+  process.exit(1);
+}
+const { notes, files, seed: SEED } = buildRefSeed();
 
 /* ── the patch ────────────────────────────────────────────────────────────── */
 let html = fs.readFileSync(SRC, 'utf8');
