@@ -153,6 +153,12 @@ head('the command line');
      the CLI is held to writing a stamped file and to its exit codes. */
   const plain = run([]);
   ok('it writes a stamped file', plain.status === 0 && fs.existsSync(outFile) && /systole-build/.test(fs.readFileSync(outFile, 'utf8')), (plain.stdout + plain.stderr).trim().slice(0, 120));
+  /* The export found the way build.js finds it: the owner's first run was
+     refused because this read a variable build.js does not. */
+  const viaEnv = spawnSync(process.execPath, [S('assemble-app.js'), '--shell', shellFile, '--out', outFile], { encoding: 'utf8', env: { ...env, SYSTOLE_SRC: exportFile } });
+  ok('it finds the export through SYSTOLE_SRC, as build.js does', viaEnv.status === 0, (viaEnv.stdout + viaEnv.stderr).trim().slice(0, 120));
+  const buildVar = (fs.readFileSync(S('build.js'), 'utf8').match(/process\.env\.(SYSTOLE_\w+)\) return path\.resolve/) || [])[1];
+  ok('and that is the variable build.js reads', buildVar === 'SYSTOLE_SRC', String(buildVar));
   const none = spawnSync(process.execPath, [S('assemble-app.js'), path.join(dir, 'missing.html')], { encoding: 'utf8' });
   ok('an export that is not there exits 2', none.status === 2, String(none.status));
 }

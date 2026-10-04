@@ -248,6 +248,9 @@ bank, its figures, and the Braunwald reference seed and figures.
    node scripts/assemble-app.js --compare build/systole.html
    ```
 
+   It finds the export as `build.js` does: a path given, `SYSTOLE_SRC`, or the
+   one file in `source/`.
+
    `scripts/assemble-app.js` fills each slot from where the chain gets it: the
    export's bank with `keys-patch`'s and `flags-patch`'s corrections, the
    export's figures verbatim, `refs-patch`'s and `ref-images-patch`'s seed and

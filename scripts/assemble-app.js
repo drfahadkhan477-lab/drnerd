@@ -106,11 +106,13 @@ function compareToChain(chainBuf, assembledUnstamped, sources = Slots.repoSource
 
 function findSource(arg) {
   if (arg) return arg;
-  if (process.env.SYSTOLE_SOURCE) return process.env.SYSTOLE_SOURCE;
+  /* SYSTOLE_SRC, the variable build.js reads: the first owner run of this
+     script was refused for a machine set up for build.js under that name. */
+  if (process.env.SYSTOLE_SRC) return path.resolve(process.env.SYSTOLE_SRC);
   const dir = path.join(ROOT, 'source');
   const found = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.html')) : [];
   if (found.length === 1) return path.join(dir, found[0]);
-  throw new Error(found.length ? `source/ holds ${found.length} exports; name one` : 'no export: pass its path, set SYSTOLE_SOURCE, or put it in source/');
+  throw new Error(found.length ? `source/ holds ${found.length} exports; name one` : 'no export: pass its path, set SYSTOLE_SRC, or put it in source/');
 }
 
 if (require.main === module) {
