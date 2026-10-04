@@ -316,6 +316,9 @@ touches source/ or your notes in content/refs.
 suite's code (`node scripts/verify.js --list` shows them).
 `--report-json <file>` writes the results as data: suite, tags, status,
 counts and time, and no line of suite output.
+`--jobs N|auto` runs suites side by side; `SYSTOLE_JOBS` in the environment
+makes that this machine's default, and `--jobs` still overrides it. The suites
+that measure time run alone either way.
 
 ```bash
 node scripts/verify.js                       # everything, ~4 min
