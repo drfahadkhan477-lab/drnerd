@@ -220,6 +220,39 @@ node scripts/build.js --keep              # once, keeps all 91 intermediates
 node scripts/build.js --keep --from theme # only steps 14-91 rerun
 ```
 
+### Retiring the patch chain
+
+The chain is being replaced gradually, with the old path and the new one
+side by side until they agree. The export's application code is the owner's
+own, so it can be committed once what it carries is taken out: the question
+bank, its figures, and the Braunwald reference seed and figures.
+
+1. **Freeze the shell** (now). On the owner's machine, after a build:
+
+   ```bash
+   node scripts/build.js
+   node scripts/freeze-shell.js        # → app/systole.html, payloads → content/payload/
+   ```
+
+   `scripts/app-slots.js` replaces each payload with a slot token, and each
+   `src/` module and `assets/` file found verbatim too, so those stay the
+   source of truth. `freeze-shell` writes `app/` only if assembling the shell
+   gives the build back byte for byte, no question-bank or reference text is
+   left in it, no unclaimed base64 is left in it, and leak-guard passes it.
+   Its report lists every `src/` module that a later patch edited after
+   embedding: that is the drift the next steps remove. It stages nothing;
+   review `app/`, then commit it yourself.
+2. **Assemble from `app/`.** `app/` + `content/` + the answer-key and flag
+   fixes as data → the same single file, with no patch step run. CI can then
+   assemble the real app around a synthetic bank.
+3. **Carve `app/`.** Split it into CSS and modules a piece at a time. New work
+   edits `app/` or `src/` directly; no new patch steps are added.
+4. **Retire the chain** once both paths give the same file for a few
+   releases. The scripts stay in history.
+
+`tests/verify-app-slots-pure.js` holds step 1 on a synthetic build. Only
+`freeze-shell` on the real build can show that the real one cuts cleanly.
+
 ---
 
 ## Verifying
@@ -591,7 +624,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        124 suites · 77 need no browser · + pwa
+tests/        124 suites · 78 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
