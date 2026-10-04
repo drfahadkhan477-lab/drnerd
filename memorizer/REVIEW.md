@@ -47,6 +47,44 @@ Cancellation stops between pages and before the final commit; a currently execut
 
 The next smallest validation step is a final-revision WebKit CI run followed by a real iPad test of a large multipart import, cancellation, backup rescue in memory mode, restore, offline update, model switching and keyboard/VoiceOver focus.
 
+## October 4 follow-up: large binary backups
+
+PR [#116](https://github.com/drfahadkhan477-lab/drnerd/pull/116) merged after its final Chromium and WebKit CI checks passed. This follow-up includes the subsequent `master` updates through `19ae1ed`; their study-import and model work is preserved.
+
+Stress testing exposed a separate restore failure: the repeated base64 regex exhausted V8's regex stack on an 8 MiB payload. A constant-stack alphabet/padding scan now accepts the same base64 syntax while retaining checksum, schema and atomic-write checks. The pure regression failed with `RangeError: Maximum call stack size exceeded` when run against the pre-fix module, and passes with the fix. Malformed payloads with valid checksums still reject without altering saved bytes.
+
+The browser backup flow now exports and restores an 8 MiB synthetic payload and compares every byte. The skipped-question test uses the existing recall helper to wait for the asynchronous transition before starting its drill assertions; no scoring or skip assertion was removed.
+
+The newly merged study-import suite also needed to scroll its lazy SVG into view before waiting for visibility in Firefox. Its existing image, sanitizer, strict-mode and import assertions remain intact.
+
+Local checks on the updated branch:
+
+- `npm run test:pure`: 77 suites passed; its six browser suites were explicitly excluded.
+- `node tests/verify-memorizer-hardening.js`: 64 Chromium checks passed.
+- `SYSTOLE_ENGINE=firefox node tests/verify-memorizer-hardening.js`: 64 Firefox checks passed.
+- `NODE_USE_ENV_PROXY=1 SYSTOLE_ENGINE=firefox node tests/verify-memorizer.js`: 483 checks passed.
+- Firefox study-import: 69 checks passed; Firefox data-protection: 18 checks passed.
+- `npm run memorizer`, `npm run leak-guard`, and `git diff --check`: passed.
+- A separate synthetic Node v24.19.0 experiment exported/restored 32 MiB with an exact full-byte comparison: 42.67 MiB JSON, 1,901 ms export, 1,251 ms restore, and 576 MiB peak process RSS from a 28 MiB baseline. These measurements are from Node, not Safari or an iPad.
+
+Local WebKit remains unavailable because its system libraries are missing; the new PR's mandatory WebKit CI must pass on its final revision. Real iPad/Safari/VoiceOver, real WebGPU models, private licensed-content builds and large-book device memory measurements were not run. The memory expansion of JSON/base64 backups remains a risk; the next bounded step is an iPad memory benchmark and then a lower-memory backup format if needed.
+
+Additional checks that did not pass: Firefox offline preparation failed to cache CDN dependencies in this environment, including a repeat with Node's environment proxy enabled; its later cache comparison could not run. This is unresolved, not an offline-readiness pass. CodeQL's analysis/upload job failed because GitHub reports that code scanning is disabled for this repository; no security or workflow guard was changed.
+
+Follow-up files: `memorizer/src/backup.js`, `tests/verify-memorizer-backup-pure.js`, `tests/verify-memorizer-hardening.js`, `tests/verify-memorizer.js`, `tests/verify-memorizer-studyimport.js`, and this report. The list below records the original merged review.
+
+## October 4 follow-up: offline checks across engines
+
+Both Chromium and WebKit CI runs passed on PR #126's final revision, `881473fe2df832626220bb6b04570b65917c2a85`. CodeQL's repository-settings failure remains separate.
+
+The Firefox offline failure came from the harness: Playwright implements the experimental service-worker request interception in its Chromium backend. The generated test worker now delegates only its CDN network boundary to a local HTTP fixture server. The production worker's fetch handler, pinned-host predicate, cache keys and cache writes remain intact; the delegated native fetch retains the original Request's integrity metadata. The fixture uses the actual public pinned dependency bytes and prevents browser HTTP caching.
+
+The suite now rejects incorrect bytes without caching them, proves the changed upstream response with an uncached probe, compares every cached reader byte, cuts the dependency transport's sockets, and verifies that cached readers and Mermaid require no upstream request. These assertions run on every engine, replacing the unmeasurable WebKit offline-emulation checks with a controlled transport outage. A mutation that bypassed the generated worker's cache failed four assertions, establishing that the fixture cannot conceal a broken cache path.
+
+Checks: 12 Chromium and 12 Firefox offline checks passed; 77 pure suites, standalone Memorizer build, leak guard and whitespace checks passed. Local WebKit remains blocked by missing system libraries; the stacked follow-up PR retains mandatory WebKit CI. No real iPad network toggle, browser-to-CDN CORS/TLS behavior, WebGPU operation or private licensed-content build was measured by this test. The existing full app suite covers direct PDF loading; a real iPad offline/large-backup trial remains the next device validation step.
+
+This follow-up changes only `tests/verify-memorizer-offline.js` and this report. No production app or shared dependency change is required.
+
 ## Changed files
 
 - `memorizer/index.html`

@@ -638,23 +638,19 @@ style; it is what makes the numeric verification above possible.
 
 ## Security scanning
 
-`.github/workflows/codeql.yml` runs GitHub's CodeQL over the code this
-repository holds: the JavaScript in `src/`, the patch chain, the suites and
-`tools/`; the Python in `tools/`; and the workflow files themselves. It runs
-on every pull request, on pushes to `master`, and weekly, with the
-`security-extended` query suite. Findings appear under the repository's
-Security tab and as a check on the pull request.
-
-It cannot scan the built app. The licensed export is never committed, so
-nothing it contributes to `build/systole.html` is visible to CodeQL — only
-the code this repository patches in.
+No static analysis runs on this repository. `.github/workflows/codeql.yml`
+ran GitHub's CodeQL over the JavaScript, Python and workflow files here until
+code scanning was turned off for the repository, after which every run failed
+uploading its results; the workflow was removed rather than left red. Turning
+code scanning back on in the repository settings and restoring that file from
+history brings it back.
 
 **The `github-advanced-security` check is not a security review of this
 code.** It is a separate GitHub service whose file exclusions skip `*.js`,
 `*.json`, `*.yml`, `*.html` and `*.py` — every language here. On a pull
 request that changes only those files it reports success having read
 nothing; on one that also changes Markdown it has crashed at startup. Read
-its green as "did not run", and CodeQL's as the scan.
+its green as "did not run".
 
 ## The laptop as a CI runner (optional)
 
@@ -689,6 +685,15 @@ the defaults:
 Run it with `./run.sh` when you want it, or install the service to have it
 always on.
 
+On Windows the same two things apply, with `run.cmd` for `run.sh`. Write the
+path in `.env` with forward slashes (`SYSTOLE_SOURCE=C:/Users/you/Downloads/export.html`):
+the first step tests it with bash's `[ -f ]`, and a backslash path is not a
+valid path to bash. One more thing must be true there: the job's steps run
+in bash, and the runner finds bash by searching `PATH`. Windows ships
+`C:\Windows\System32\bash.exe`, which is the WSL launcher and not a shell, so
+Git for Windows' `bin` directory has to come before `System32` in the `.path`
+file the runner writes beside `run.cmd` when it is configured.
+
 ### Turning it on properly, after the first green run
 
 The job is **manual only** to begin with: Actions → `full` → Run workflow. That
@@ -701,7 +706,7 @@ it bounds execution, not the wait for a runner.
 Once a dispatched run has gone green end to end, make it automatic by adding
 the push arm back to the job's `if:`:
 
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref == 'refs/heads/master'
 
 Do that when the runner is proven and not before. Checks that are usually
 yellow are checks people stop reading.

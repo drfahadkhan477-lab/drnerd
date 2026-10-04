@@ -36,6 +36,24 @@ module.exports = (async () => {
   const invalid = JSON.parse(JSON.parse(text).payload); invalid.files = [];
   const payload = JSON.stringify(invalid), checksum = await root.MemProvenance.fingerprint(payload);
   await assert.rejects(backup.restore(JSON.stringify({ ...JSON.parse(text), payload, checksum })), /missing its PDF/);
+  // Correct checksums must not allow malformed binary syntax through.
+  for (const data of ['A', 'A===', 'AA=A', '====', 'AA A', 'AA-_']) {
+    const records = JSON.parse(JSON.parse(text).payload);
+    records.files[0].bytes.data = data;
+    const payload = JSON.stringify(records), checksum = await root.MemProvenance.fingerprint(payload);
+    await assert.rejects(backup.restore(JSON.stringify({ ...JSON.parse(text), payload, checksum })), /Invalid binary payload/);
+    assert.deepEqual(Array.from(new Uint8Array((await store.get('files', 'unit')).bytes)), bytes);
+  }
+  // An actual export/restore, including byte comparison, protects against
+  // regex stack overflow that tiny PDF fixtures cannot expose.
+  const large = new Uint8Array(8 * 1024 * 1024);
+  for (let i = 0; i < large.length; i++) large[i] = (i * 31 + (i >>> 16)) & 255;
+  await store.put('files', { id: 'unit', bytes: large.buffer });
+  const largeBackup = await backup.exportText();
+  await store.put('files', { id: 'unit', bytes: new ArrayBuffer(0) });
+  await backup.restore(largeBackup);
+  assert.equal(Buffer.compare(Buffer.from((await store.get('files', 'unit')).bytes), Buffer.from(large)), 0);
+  console.log('PASS 8 MiB backup round trip preserves every byte; malformed base64 is rejected without writes');
   console.log('PASS backup restores PDF bytes, notes, progress and SRS; excludes keys and refuses corruption/incomplete records');
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });

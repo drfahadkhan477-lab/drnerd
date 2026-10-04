@@ -238,6 +238,7 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
     ok('the note counts the diagram kept', /1 diagram kept from the file/.test(st.notice), st.notice);
     ok('what is stored is the cleaned drawing', /Gradient/.test(st.stored) && !/script|onload|evil/.test(st.stored), st.stored.slice(0, 120));
     await p.click('#learn-unit');
+    await p.locator('#diagrams').scrollIntoViewIfNeeded();
     await p.waitForSelector('#diagrams img', T);
     const lv = await p.evaluate(() => ({ src: document.querySelector('#diagrams img').getAttribute('src'), flow: !!document.getElementById('flow'),
       label: (document.getElementById('pack-label') || {}).textContent || '' }));
