@@ -123,7 +123,8 @@ function auditApp(root = ROOT) {
     if (typeof repo(kind, name) !== 'string') problems.push(`${kind}:${name} has no file in the repository`);
     if (kind === 'app') cited.set(name, (cited.get(name) || 0) + 1);
   }
-  const pieces = walk(path.join(root, 'app')).map(f => path.relative(root, f).split(path.sep).join('/')).filter(n => n !== SHELL).sort();
+  const pieces = walk(path.join(root, 'app')).map(f => path.relative(root, f).split(path.sep).join('/'))
+    .filter(n => n !== SHELL && !Slots.isMetadata(n.slice('app/'.length))).sort();
   for (const name of pieces) {
     const n = cited.get(name) || 0;
     if (n !== 1) problems.push(`${name} is cited by ${n} tokens: a piece is cited by exactly one`);

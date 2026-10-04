@@ -153,6 +153,18 @@ head('auditApp names each way app/ can be broken');
   ok('a kind of slot that does not exist', said(badkind, /lib:src\/core\/thing\.js is not a kind/));
 }
 
+head('files a workstation leaves under app/ are not pieces');
+{
+  const carved = SHELL.replace('.a{color:red}\n.b{color:blue}\n', Slots.token('app', 'app/css/a.css'));
+  const r = root('junk', carved); put(r, 'app/css/a.css', '.a{color:red}\n.b{color:blue}\n');
+  const junk = ['app/.DS_Store', 'app/css/.DS_Store', 'app/css/Thumbs.db', 'app/Desktop.ini', 'app/.cache/x.css', 'app/css/.a.css.swp'];
+  junk.forEach(j => put(r, j, 'x'));
+  const a = Carve.auditApp(r), offered = Object.keys(Slots.repoSources(r).apps);
+  ok('the audit finds only the piece, and no problem', a.problems.length === 0 && a.pieces.join() === 'app/css/a.css', JSON.stringify(a));
+  ok('the cut is offered only the piece', offered.join() === 'app/css/a.css', offered.join());
+  ok('a name that only looks like metadata is still a piece', !Slots.isMetadata('css/a.css') && !Slots.isMetadata('css/dotted.name.css') && !Slots.isMetadata('thumbs.css') && Slots.isMetadata('css/.hidden/a.css'));
+}
+
 head('the committed app/');
 {
   const a = Carve.auditApp(ROOT);

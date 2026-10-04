@@ -76,6 +76,12 @@ function walk(dir, keep) {
   });
 }
 
+/* A file a workstation puts under app/ that is not the app: a dotfile or a
+   dot-directory's contents (.DS_Store, editor state), and the two names Windows
+   adds. Whether a piece is one must not depend on whose machine it is read on,
+   or a freeze would refuse for a file no one committed. rel is relative to app/. */
+const isMetadata = rel => rel.split(/[\\/]/).some(seg => seg.startsWith('.')) || /^(Thumbs\.db|desktop\.ini)$/i.test(path.basename(rel));
+
 /* What the repository offers to slot, as { name: text }. Names are
    repository-relative paths, so a slot names the file it came from — with
    forward slashes whatever the machine, because the names are written into the
@@ -89,9 +95,10 @@ function repoSources(root = ROOT) {
      accident, and nothing that small is worth a slot. */
   for (const f of walk(path.join(root, 'assets'), p => !p.endsWith('.md') && fs.statSync(p).size >= 512))
     assets[rel(f)] = fs.readFileSync(f).toString('base64');
-  /* The pieces carved out of the shell: everything under app/ but the shell. */
+  /* The pieces carved out of the shell: every file under app/ but the shell
+     and what a workstation leaves there (isMetadata). */
   const shellFile = path.join(root, 'app', 'systole.html');
-  for (const f of walk(path.join(root, 'app'), p => p !== shellFile))
+  for (const f of walk(path.join(root, 'app'), p => p !== shellFile && !isMetadata(path.relative(path.join(root, 'app'), p))))
     apps[rel(f)] = fs.readFileSync(f, 'utf8');
   return { srcs, assets, apps };
 }
@@ -197,4 +204,4 @@ function leakScan(shell, payloads) {
            offsets: { questionText: q.slice(0, 10), refText: r.slice(0, 10), base64Runs: runs.slice(0, 10) } };
 }
 
-module.exports = { PAYLOADS, TOKEN_RE, token, cut, assemble, repoSources, repoResolver, leakScan };
+module.exports = { PAYLOADS, TOKEN_RE, isMetadata, token, cut, assemble, repoSources, repoResolver, leakScan };
