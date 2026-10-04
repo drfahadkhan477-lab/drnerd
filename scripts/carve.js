@@ -62,16 +62,36 @@ function carve({ shell, from, to, name }) {
   return { shell: before + Slots.token('app', name) + after, piece };
 }
 
-/* Every start offset, overlapping ones included. split() counts only
-   non-overlapping matches: of three identical lines, a two-line piece starts at
-   two offsets and split() finds one, so the piece would be accepted at either
-   and cut() would later take the first, moving the token. */
-const countIn = (hay, needle) => {
-  if (!needle) return 0;
-  let n = 0, i = -1;
-  while ((i = hay.indexOf(needle, i + 1)) !== -1) n++;
-  return n;
-};
+/* Every start offset, overlapping ones included (see app-slots.js): of three
+   identical lines a two-line piece starts at two offsets, and a count that
+   found one would accept it at either while cut() later took the first. The
+   freeze's count and this one are the same function, so they cannot disagree. */
+const countIn = Slots.countAll;
+
+/* destinationProblem(root, name) → text, or null when nothing stands in the way.
+   Judged before anything is written. existsSync follows links, so a dangling
+   link at the destination reads as absent and the write would create its target
+   wherever it points; and a parent that is a link can lead out of app/. So the
+   destination is looked at as it stands (lstat), and the nearest parent that
+   exists must resolve to somewhere inside app/. */
+function destinationProblem(root, name) {
+  const file = path.join(root, name);
+  try { fs.lstatSync(file); return `${name} already exists`; } catch (e) { if (e.code !== 'ENOENT') return `${name} could not be examined: ${e.message}`; }
+  let dir = path.dirname(file);
+  for (;;) {
+    try { fs.lstatSync(dir); break; } catch (e) {
+      if (e.code !== 'ENOENT') return `${name} could not be examined: ${e.message}`;
+      const up = path.dirname(dir);
+      if (up === dir) return `${name} has no parent directory that exists`;
+      dir = up;
+    }
+  }
+  let real, base;
+  try { real = fs.realpathSync(dir); base = fs.realpathSync(path.join(root, 'app')); } catch (e) { return `${name} stands under a link that leads nowhere`; }
+  const rel = path.relative(base, real);
+  if (rel.split(path.sep)[0] === '..' || path.isAbsolute(rel)) return `${name} would be written outside app/: a directory above it is a link`;
+  return null;
+}
 
 /* Payloads stand as themselves: a carve is judged on the app, not the content. */
 const withPayloadsLeft = root => {
@@ -92,7 +112,8 @@ function carveFile({ root = ROOT, from, to, name, cut = carve, write = fs.writeF
   const shellFile = path.join(root, SHELL), pieceFile = path.join(root, name);
   const old = fs.readFileSync(shellFile, 'utf8');
   const r = cut({ shell: old, from, to, name });
-  if (fs.existsSync(pieceFile)) throw new Error(`${name} already exists`);
+  const blocked = destinationProblem(root, name);
+  if (blocked) throw new Error(blocked);
   const was = Slots.assemble(old, withPayloadsLeft(root));
   /* Found once in the shell is not enough. A chain build has every piece inline,
      and cut() takes pieces in filename order: text that also stands inside a

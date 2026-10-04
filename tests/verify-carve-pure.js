@@ -211,10 +211,42 @@ head('a piece is found once in the assembled app, not only in the shell');
   ok('order decides: the smaller piece sorting first is left inline', inlineOf({ 'app/css/a-small.css': SMALL, 'app/css/z-big.css': BIG }).join() === 'app/css/a-small.css (found 2 times)');
   ok('and sorting last is not: the same pieces freeze', inlineOf({ 'app/css/z-small.css': SMALL, 'app/css/a-big.css': BIG }).length === 0);
 
+  /* The freeze's own count. "aa" in "aaa" starts at two offsets, which split()
+     counts as one: the cut would accept it and put the token at the first. */
+  const asBuild = body => ['<script>', 'const ALL_Q=[1];', 'const IMGS={};', '/*REF_SEED_START*/x/*REF_SEED_END*/', "window.HEART3D_MESH_B64='QQ=='" + ';', body, '</script>', ''].join('\n');
+  const overl = Slots.cut(asBuild('aaa'), { srcs: {}, assets: {}, apps: { 'app/x.txt': 'aa' } });
+  ok('cut: a piece that starts at two overlapping offsets is left inline, and reported',
+    overl.report.inline.app.join() === 'app/x.txt (found 2 times)' && overl.shell.includes('\naaa\n'), JSON.stringify(overl.report.inline));
+  const once = Slots.cut(asBuild('xaay'), { srcs: {}, assets: {}, apps: { 'app/x.txt': 'aa' } });
+  ok('and one that starts once is claimed', once.report.slots.some(s => s.kind === 'app' && s.name === 'app/x.txt') && once.report.inline.app.length === 0 && once.shell.includes(Slots.token('app', 'app/x.txt')));
+
   const hand = root('hand', TWICE.replace('.a{color:red}\n.b{color:blue}\n', Slots.token('app', 'app/css/z-big.css')).replace('.a{color:red}\n', Slots.token('app', 'app/css/a-small.css')));
   put(hand, 'app/css/z-big.css', BIG); put(hand, 'app/css/a-small.css', SMALL);
   const a = Carve.auditApp(hand);
   ok('auditApp names the pair a tree can hold by hand', a.problems.length === 1 && /a-small\.css's text stands in the assembled app 2 times/.test(a.problems[0]), JSON.stringify(a.problems));
+}
+
+head('a destination that is a link, or under one, is refused before anything is written');
+{
+  const r = root('dest');
+  const out = path.join(dir, 'dest-outside'), gone = path.join(dir, 'dest-gone');
+  fs.mkdirSync(out); fs.mkdirSync(gone);
+  let linked = false;
+  try {
+    fs.symlinkSync(out, path.join(r, 'app', 'out'), 'junction');
+    fs.symlinkSync(gone, path.join(r, 'app', 'dangling'), 'junction');
+    fs.rmdirSync(gone); /* the link now leads nowhere */
+    linked = true;
+  } catch (e) { /* reported below */ }
+  ok('a link out of app/ and a dangling one could be made here, so the cases below are really tried', linked && !fs.existsSync(gone) && fs.readdirSync(out).length === 0);
+  const shellFile = path.join(r, 'app', 'systole.html'), was = fs.readFileSync(shellFile, 'utf8');
+  const go = name => () => Carve.carveFile({ root: r, from: 3, to: 4, name });
+  ok('a destination that is a dangling link counts as there, and its target is not created', refuses(go('app/dangling'), /already exists/) && !fs.existsSync(gone));
+  ok('a destination under a link that leaves app/ is refused, and nothing is written there', refuses(go('app/out/new.css'), /outside app\//) && fs.readdirSync(out).length === 0);
+  ok('a destination under a dangling link is refused', refuses(go('app/dangling/new.css'), /leads nowhere/) && !fs.existsSync(gone));
+  ok('the shell is as it was after all three, and no half-written copy is left', fs.readFileSync(shellFile, 'utf8') === was && !fs.existsSync(shellFile + '.carving'));
+  Carve.carveFile({ root: r, from: 3, to: 4, name: 'app/css/fine.css' });
+  ok('a plain new destination is still carved', fs.readFileSync(path.join(r, 'app', 'css', 'fine.css'), 'utf8') === '.a{color:red}\n.b{color:blue}\n');
 }
 
 head('slot names resolve only inside their own directory');
