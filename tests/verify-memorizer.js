@@ -3184,7 +3184,13 @@ function kindOf(user) {
     ok('my units says which pages were recognised', /Read by text recognition: pages 2\./.test(await p3.locator('.unit-row').first().innerText()));
     /* A photo of the same page, through the Photo chip. */
     await p3.setInputFiles('#photo-input', { name: 'page.jpg', mimeType: 'image/jpeg', buffer: jpeg });
-    await p3.locator('h1.bar-title', { hasText: 'Photos' }).waitFor({ timeout: 120000 });
+    try { await p3.locator('h1.bar-title', { hasText: 'Photos' }).waitFor({ timeout: 120000 }); } catch (e) {
+      console.error('Photo import state:', await p3.evaluate(() => {
+        const u = Memorizer.ui;
+        return { view: u.view, importing: u.importing, active: !!u.importJob, error: u.error, notice: u.notice };
+      }));
+      throw e;
+    }
     const prec2 = await p3.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.source === 'photo')));
     const ptext = prec2.clusters.map(c => c.text).join(' ');
     ok('a photo of a page is read the same way, heading and all', /Venous return is the main determinant of preload in a healthy heart, and preload rises with volume\./.test(ptext) &&
