@@ -149,10 +149,12 @@ head('the command line');
   fs.writeFileSync(shellFile, shell); fs.writeFileSync(chainFile, chainStamped);
   const env = { ...process.env, SYSTOLE_REFS_DIR: refs, SYSTOLE_REF_IMAGES_DIR: imgs };
   const run = extra => spawnSync(process.execPath, [S('assemble-app.js'), exportFile, '--shell', shellFile, '--out', outFile, ...extra], { encoding: 'utf8', env });
-  /* refs-patch reads content/refs, which the CLI cannot be pointed away from:
-     the CLI is held to writing a stamped file and to its exit codes. */
   const plain = run([]);
   ok('it writes a stamped file', plain.status === 0 && fs.existsSync(outFile) && /systole-build/.test(fs.readFileSync(outFile, 'utf8')), (plain.stdout + plain.stderr).trim().slice(0, 120));
+  /* Both reference scripts follow SYSTOLE_REFS_DIR. When only ref-images-patch
+     did, the CLI paired content/refs with the fixture's figures: green where
+     content/refs is absent, red on the machine that has it. */
+  ok('and its references are the fixture corpus, not content/refs', plain.status === 0 && fs.readFileSync(outFile, 'utf8').includes('Fixture chapter'), (plain.stdout + plain.stderr).trim().slice(0, 120));
   /* The export found the way build.js finds it: the owner's first run was
      refused because this read a variable build.js does not. */
   const viaEnv = spawnSync(process.execPath, [S('assemble-app.js'), '--shell', shellFile, '--out', outFile], { encoding: 'utf8', env: { ...env, SYSTOLE_SRC: exportFile } });
