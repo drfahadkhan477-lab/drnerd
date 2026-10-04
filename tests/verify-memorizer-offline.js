@@ -28,7 +28,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { launch } = require('./_engine');
+const { launch, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 
 let passed = 0, failed = 0;
@@ -40,6 +40,27 @@ let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 const errors = [], events = [];
 onDeath(() => ({ section, checks: passed + failed, errors, events }));
+async function expectedFetchErrors(page, since, url) {
+  // WebKit also raises page errors for the two failures the test provokes.
+  // Wait for both diagnostics, then remove only this exact pair. Any other
+  // page error stays in errors and fails the final assertion.
+  if (engineName() === 'webkit' && errors.length - since < 2) {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { page.off('pageerror', arrived); reject(new Error('Expected rejected-fetch diagnostics did not arrive.')); }, 5000);
+      function arrived() {
+        if (errors.length - since < 2) return;
+        clearTimeout(timer); page.off('pageerror', arrived); resolve();
+      }
+      page.on('pageerror', arrived); arrived();
+    });
+  }
+  const got = errors.slice(since), parsed = new URL(url);
+  const path = 'http: /' + parsed.hostname + parsed.pathname + parsed.search + '.';
+  if (!got.length) return true;
+  if (got.length !== 2 || got[0] !== 'http: TypeError: Load failed' || got[1] !== path) return false;
+  errors.splice(since, 2);
+  return true;
+}
 
 const ROOT = path.join(__dirname, '..');
 const { build } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
@@ -119,12 +140,14 @@ self.fetch = function (input, init) {
     const before = await p.$$eval('#offline-status li', li => li.map(x => [x.dataset.ready, x.textContent]));
     ok('before preparing, no group is called ready', before.length === 3 && before.every(x => x[0] === 'false'), JSON.stringify(before));
     transport = 'corrupt';
+    const corruptErrors = errors.length;
     const refused = await p.evaluate(async () => {
       const f = MemPdf.LIB;
       const rejected = await fetch(f.url, { integrity: f.sri, mode: 'cors' }).then(() => false, () => true);
       return rejected && !await caches.match(f.url);
     });
-    ok('incorrect bytes fail the original integrity check and never enter the cache', refused);
+    ok('incorrect bytes fail the original integrity check and never enter the cache',
+      refused && await expectedFetchErrors(p, corruptErrors, 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js'));
     transport = 'original';
     await p.click('#prep-offline');
     await p.waitForFunction(() => { const li = [...document.querySelectorAll('#offline-status li')]; return li.length === 3 && !document.querySelector('#prep-offline[disabled]'); }, null, { timeout: 180000 });
@@ -154,8 +177,10 @@ self.fetch = function (input, init) {
     // Cut the worker's upstream sockets, so requests still reach the worker
     // on every engine. no-store prevents the browser HTTP cache masking this.
     transport = 'offline';
+    const offlineErrors = errors.length;
     const never = await p.evaluate(u => fetch(u, { mode: 'cors' }).then(r => r.ok, () => false), neverUrl + '?not-kept');
-    ok('the network really is cut: a file never kept is not served', never === false);
+    ok('the network really is cut: a file never kept is not served',
+      never === false && await expectedFetchErrors(p, offlineErrors, neverUrl + '?not-kept'));
     const served = await p.evaluate(us => Promise.all(us.map(u => fetch(u, { mode: 'cors' }).then(r => r.ok, () => false))), urls);
     const flow = await p.evaluate(() => fetch('https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js', { mode: 'cors' }).then(r => r.ok, () => false));
     ok('every one of them is still served, from the cache', served.every(Boolean), JSON.stringify(urls.filter((_, i) => !served[i])));
