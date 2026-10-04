@@ -225,6 +225,20 @@ head('the steps are the ones a release actually needs');
      !/SKIP\.add\('webkit'\)/.test(src) && /--skip/.test(src));
 }
 
+head('the patch chain is retired: the gate builds the app the way the app is built now');
+{
+  const { spawnSync } = require('child_process');
+  const ROOT = path.join(__dirname, '..');
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  ok('the marker that says so is in the repository', fs.existsSync(path.join(ROOT, 'scripts', 'CHAIN-RETIRED')));
+  ok('npm run build assembles the app from app/ and the export, to the file the rest of the pipeline reads; the old recipe is build:chain', /assemble-app\.js/.test(pkg.scripts.build) && /--out build\/systole\.html/.test(pkg.scripts.build) && /scripts\/build\.js/.test(pkg.scripts['build:chain']), pkg.scripts.build);
+  const r = spawnSync('node', [GATE, '--dry-run'], { encoding: 'utf8' });
+  const out = (r.stdout || '') + (r.stderr || '');
+  ok('the gate\'s build step is the assembler, said in those words', /build\s+the app assembles from app\/, src\/, assets\/ and the export \(the patch chain is retired\)/.test(out), out.split('\n').find(l => /^\s*[–✓✗]\s+build/.test(l)) || '(no build step)');
+  ok('and the chain\'s byte-for-byte comparison is not a step any more: not skipped, gone, because there is no chain build to compare with', !/byte for byte/.test(out) && !/assemble\s+the app assembled/.test(out));
+  ok('every step after it is still there, WebKit included', ['extract', 'pwabuild', 'chromium', 'pwa', 'webkit'].every(id => new RegExp('\\s' + id + '\\s').test(out)));
+}
+
 head('there is one command, whatever you call it');
 {
   /* WHY AN ALIAS IS ALLOWED TO EXIST AT ALL. `npm run release` is the name
