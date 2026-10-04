@@ -36,7 +36,9 @@ const SHELL = 'app/systole.html';
 
 /* carve({ shell, from, to, name }) → { shell, piece }. Pure: writes nothing. */
 function carve({ shell, from, to, name }) {
-  if (!/^app\/[^@\]]+$/.test(name) || name.split('/').includes('..')) throw new Error(`"${name}" is not a path under app/`);
+  /* Forward slashes only, as slot names are written: on Windows a backslash is
+     a separator to path.join, and "app/..\x" would leave app/ unnoticed. */
+  if (!/^app\/[^@\]\\]+$/.test(name) || name.split('/').some(s => s === '' || s === '.' || s === '..')) throw new Error(`"${name}" is not a path under app/`);
   if (name === SHELL) throw new Error('the shell cannot be carved into itself');
   const lines = shell.split('\n');
   /* A shell ending in a newline splits to a last empty entry, which is not a line. */

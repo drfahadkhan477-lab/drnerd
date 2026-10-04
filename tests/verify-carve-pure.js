@@ -92,6 +92,10 @@ head('what a carve refuses');
   ok('lines that hold a token', refuses(c(9, 11), /hold a slot token/));
   ok('lines whose text stands twice', refuses(c(6, 6), /stands in the shell 2 times/));
   ok('a path outside app/', refuses(c(3, 4, 'src/x.css'), /not a path under app/) && refuses(c(3, 4, 'app/../src/x.css'), /not a path under app/));
+  /* A backslash is a separator on Windows and a letter of the name elsewhere:
+     refused on both, so the same name means the same file. */
+  ok('a path that leaves app/ by a backslash, or names no file',
+    ['app/..\\..\\x.css', 'app\\x.css', 'app/css\\x.css', 'app//x.css', 'app/./x.css', 'app/css/'].every(n => refuses(c(3, 4, n), /not a path under app/)));
   ok('the shell itself', refuses(c(3, 4, 'app/systole.html'), /cannot be carved into itself/));
   ok('a range past the end', refuses(c(3, 99), /not a range/) && refuses(c(4, 3), /not a range/) && refuses(c(0, 2), /not a range/));
   const r = root('exists');
