@@ -10,6 +10,13 @@
  * parameters they were built from are never read back. The one difference that
  * matters most (constriction versus tamponade) is a y descent, and is checked as one.
  *
+ * ECG strips (src/lab/strips.js) are held the same way: by what a reader reads off the
+ * finished waveform (the rate, whether it is regular, a dropped beat, how wide the QRS is,
+ * how tall the T is next to the R, how late it falls, whether the ST is lifted), measured
+ * by a detector that knows nothing about the generator. Rate and width are where a naive
+ * peak counter lies (an rSR' is two peaks, a peaked T is taller than the R), so those are
+ * checked on exactly those strips.
+ *
  * The drill engine is held by what it chooses: what is due first and most forgotten
  * first, never the item just shown, never empty, and wrong answers that are the
  * look-alikes, with the right answer in a different place each time.
@@ -19,6 +26,8 @@ const Physio = require('../src/core/physio.js').Physio;
 const FSRS = require('../src/core/fsrs.js').FSRS;
 const T = require('../src/lab/tracings.js').Tracings;
 const D = require('../src/lab/drill.js').Drill;
+const RX = require('../src/core/rhythms-extra.js').RhythmsExtra;
+const Strips = require('../src/lab/strips.js').Strips;
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -86,6 +95,73 @@ const TODAY = '2026-10-10';
 const day = n => FSRS.localDateToISO(new Date(FSRS.isoToLocalDate(TODAY).getTime() + n * 86400000));
 const items = T.TRACINGS.map(t => ({ id: t.id, site: t.site, confusableWith: t.confusableWith }));
 const card = (ago, rating) => FSRS.update(FSRS.update(null, rating || 3, day(-ago - 20)), rating || 3, day(-ago));
+
+head('every ECG strip is a drill item with a reason to be one');
+const SF = {};
+{
+  const ids = Strips.STRIPS.map(t => t.id);
+  ok('every rhythm the Rhythm Lab can draw has a strip, and every strip is a rhythm it can draw', JSON.stringify(ids.slice().sort()) === JSON.stringify(Object.keys(RX.EXTRA).sort()), ids.length + ' strips, ' + Object.keys(RX.EXTRA).length + ' rhythms');
+  ok('ids are unique and each has a name (the rhythm\'s own), a description, teaching points and a site', new Set(ids).size === ids.length && Strips.STRIPS.every(t => t.name === RX.EXTRA[t.id].name && t.blurb.length > 30 && t.points.length >= 1 && t.points.every(p => p.length > 30) && t.site === 'ECG'));
+  const confus = Strips.STRIPS.filter(t => !t.confusableWith.length || t.confusableWith.some(c => !ids.includes(c) || c === t.id));
+  ok('every strip names at least one look-alike, and each is another strip', confus.length === 0, confus.map(t => t.id).join(', ') || 'all');
+  Strips.STRIPS.forEach(t => { const tr = Strips.trace(t.id, 30); SF[t.id] = Strips.features(tr.samples, tr.rate); });
+  const bad = Strips.STRIPS.filter(t => { const s = Strips.trace(t.id, 6).samples; let lo = Infinity, hi = -Infinity; for (const v of s) { if (!Number.isFinite(v)) return true; lo = Math.min(lo, v); hi = Math.max(hi, v); } return hi - lo < 0.8 || hi > 3 || lo < -3; });
+  ok('every strip is finite, within 3 mV, and not flat', bad.length === 0, bad.map(t => t.id).join(', ') || 'all');
+  const sig = Strips.STRIPS.map(t => Array.from(Strips.trace(t.id, 3).samples.slice(0, 500)).map(v => v.toFixed(3)).join());
+  ok('no two strips are the same drawing', new Set(sig).size === sig.length);
+  ok('the same strip is the same every time, and an unknown one is an error rather than a flat line', JSON.stringify(Array.from(Strips.trace('avb1', 2).samples)) === JSON.stringify(Array.from(Strips.trace('avb1', 2).samples)) && (() => { try { Strips.trace('nope', 2); return false; } catch (_) { return true; } })());
+}
+
+head('the strip reader counts beats, not peaks');
+{
+  const f = id => SF[id];
+  /* the rate trap: where the number of peaks is not the number of beats */
+  const declared = ['sinus_arrhythmia', 'avb1', 'svt', 'junctional', 'idioventricular', 'wpw', 'lbbb', 'rbbb', 'hyperk', 'longqt', 'pericarditis'];
+  const off = declared.filter(id => Math.abs(f(id).rate - RX.EXTRA[id].hr) / RX.EXTRA[id].hr > 0.06);
+  ok('the rate read off the strip matches the one the rhythm is labelled with, on every rhythm whose labelled rate is its ventricular rate', off.length === 0, off.map(id => `${id} ${f(id).rate.toFixed(0)} vs ${RX.EXTRA[id].hr}`).join(', ') || declared.length + ' rhythms');
+  ok('an rSR\' counts as one beat, not two: right bundle branch block at 70, not 140', Math.abs(f('rbbb').rate - 70) < 3, f('rbbb').rate.toFixed(1));
+  ok('a peaked T as tall as the R is not a beat: hyperkalaemia at 62, not 124', Math.abs(f('hyperk').rate - 62) < 3 && f('hyperk').tOverR > 0.8, `${f('hyperk').rate.toFixed(1)}, T/R ${f('hyperk').tOverR.toFixed(2)}`);
+  ok('a premature beat\'s cut-off T wave is not a beat: bigeminy is about 83 a minute, not 124', f('bigeminy').rate > 70 && f('bigeminy').rate < 95, f('bigeminy').rate.toFixed(1));
+  /* the same things, made up, so that the reader is held to its own rule and not to the generator's quirks */
+  const rate = 250, step = new Float32Array(rate * 10); for (let i = 0; i < step.length; i++) step[i] = (Math.floor(i / rate) % 2) ? 0.6 : 0;
+  ok('a jump of one sample is not a beat, however tall (a step of 0.6 mV every second, ten of them: steep and tall, so only its being one sample refuses it)', Strips.features(step, rate).beats === 0, String(Strips.features(step, rate).beats));
+  const small = new Float32Array(rate * 10); for (let i = 0; i < small.length; i++) { const ph = (i % rate) / rate; small[i] = ph < 0.02 ? 0.3 * Math.sin(ph / 0.02 * Math.PI) : 0; }
+  ok('and a hump that is steep for several samples but under 0.4 mV tall is not a beat either (so only its height refuses it)', Strips.features(small, rate).beats === 0, String(Strips.features(small, rate).beats));
+  const empty = Strips.features(new Float32Array(0), rate), one = Strips.features(new Float32Array(100), rate);
+  ok('an empty or flat strip reads as no beats and a rate of zero, not NaN', empty.beats === 0 && one.beats === 0 && empty.rate === 0 && Number.isFinite(one.regularity) && Number.isFinite(one.qrsMs), JSON.stringify([empty.rate, one.rate]));
+}
+
+head('each strip shows what it is named for');
+{
+  const f = id => SF[id];
+  const base = f('avb1');
+  ok('the yardstick is a regular, narrow beat', base.regularity < 0.01 && base.qrsMs >= 30 && base.qrsMs <= 60, `regularity ${base.regularity.toFixed(3)}, QRS ${base.qrsMs} ms`);
+  ok('supraventricular tachycardia is fast, regular and narrow', f('svt').rate > 150 && f('svt').regularity < 0.03 && f('svt').qrsMs <= base.qrsMs * 1.3, `${f('svt').rate.toFixed(0)}/min, QRS ${f('svt').qrsMs} ms`);
+  ok('an idioventricular escape is slow, regular and wide', f('idioventricular').rate < 40 && f('idioventricular').regularity < 0.03 && f('idioventricular').qrsMs >= base.qrsMs * 1.8, `${f('idioventricular').rate.toFixed(0)}/min, QRS ${f('idioventricular').qrsMs} ms`);
+  ok('a junctional escape is 40 to 60, regular and narrow', f('junctional').rate >= 40 && f('junctional').rate <= 60 && f('junctional').regularity < 0.03 && f('junctional').qrsMs <= base.qrsMs * 1.3, `${f('junctional').rate.toFixed(0)}/min`);
+  ok('both bundle branch blocks are at least twice as wide as a normal beat', f('lbbb').qrsMs >= base.qrsMs * 2 && f('rbbb').qrsMs >= base.qrsMs * 2, `L ${f('lbbb').qrsMs}, R ${f('rbbb').qrsMs}, normal ${base.qrsMs} ms`);
+  ok('pre-excitation widens the QRS, but less than a bundle branch block does', f('wpw').qrsMs >= base.qrsMs * 1.3 && f('wpw').qrsMs < f('lbbb').qrsMs, `WPW ${f('wpw').qrsMs} ms`);
+  const narrow = ['sinus_arrhythmia', 'avb1', 'mobitz1', 'mobitz2', 'pac', 'svt', 'junctional', 'longqt', 'pericarditis'];
+  ok('hyperkalaemia\'s T wave is as tall as its R and no other narrow rhythm\'s is', f('hyperk').tOverR >= 0.8 && narrow.every(id => f(id).tOverR < 0.5), narrow.map(id => f(id).tOverR.toFixed(2)).join(' '));
+  ok('a long QT puts the top of the T wave at least 1.6 times later after the QRS than a normal beat does', f('longqt').tPeakMs >= base.tPeakMs * 1.6, `${f('longqt').tPeakMs} against ${base.tPeakMs} ms`);
+  ok('pericarditis lifts the ST segment, and a normal beat does not', f('pericarditis').stMv >= base.stMv + 0.07, `${f('pericarditis').stMv.toFixed(3)} against ${base.stMv.toFixed(3)} mV`);
+
+  const near = (v, a, b) => Math.abs(v - a) <= 0.08 * a || Math.abs(v - b) <= 0.08 * b;
+  const m2 = f('mobitz2');
+  ok('Mobitz II: the intervals are one length or double it, and double it where a beat is dropped', m2.pause > 1.9 && m2.pause < 2.1 && m2.rr.every(v => near(v, m2.rrMin, m2.rrMax)), `pause ${m2.pause.toFixed(2)}`);
+  const m1 = f('mobitz1');
+  const longRR = m1.rr.filter(v => v > m1.rrMin * 1.3);
+  ok('Mobitz I: one long interval in every three, shorter than double because the PR resets', m1.pause > 1.5 && m1.pause < 1.95 && longRR.length > 0 && Math.abs(m1.rr.length / longRR.length - 3) < 0.5, `pause ${m1.pause.toFixed(2)}, 1 long in ${(m1.rr.length / longRR.length).toFixed(1)}`);
+  const bg = f('bigeminy').rr;
+  const shortFirst = bg[0] < bg[1];
+  const alt = bg.every((v, i) => i === bg.length - 1 || ((v < bg[i + 1]) === ((i % 2 === 0) === shortFirst)));
+  ok('bigeminy alternates short and long: a premature beat, then a pause, every time', alt && f('bigeminy').pause > 1.8, `pause ${f('bigeminy').pause.toFixed(2)}`);
+  const med = Strips.features(Strips.trace('pac', 30).samples, 250).rr.slice().sort((a, b) => a - b)[Math.floor(f('pac').rr.length / 2)];
+  ok('premature atrial complexes come early: the shortest interval is under three quarters of the usual one', f('pac').rrMin < med * 0.75, `${f('pac').rrMin} against ${med} ms`);
+  const sa = f('sinus_arrhythmia');
+  ok('sinus arrhythmia varies gently: irregular, but never a pause or an early beat', sa.regularity > 0.05 && sa.regularity < 0.25 && sa.pause < 1.6, `regularity ${sa.regularity.toFixed(3)}, pause ${sa.pause.toFixed(2)}`);
+  ok('and the regular rhythms are regular', ['avb1', 'svt', 'junctional', 'idioventricular', 'wpw', 'lbbb', 'rbbb', 'hyperk', 'longqt', 'pericarditis'].every(id => f(id).regularity < 0.04 && f(id).pause < 1.1), '');
+}
 
 head('which item next');
 {
