@@ -477,10 +477,14 @@ jobs:
     concurrency:
       group: systole-full
       cancel-in-progress: false
-    # Longer than a cold run with WebKit on the 42 MB single file, which is the
-    # slowest thing here. This bounds a run that HANGS; it does nothing about a
-    # run that never starts, which is why the trigger above is manual.
-    timeout-minutes: 90
+    # This bounds a run that HANGS; it does nothing about a run that never
+    # starts, which is why the trigger above is manual. The first figure here
+    # was written before the job had ever run, and the first real run was
+    # cancelled by it with one of the three suite passes finished. It is
+    # GitHub's own ceiling for a hosted job until a complete run says what a
+    # run on the runner actually costs. Size it from that run, not from this
+    # comment.
+    timeout-minutes: 360
     # The steps below are POSIX sh. A Linux or macOS runner runs them in bash
     # anyway; a Windows runner defaults to PowerShell, where `if [ -z ... ]` is
     # a parse error and "$SYSTOLE_SOURCE" is an undefined variable rather than
@@ -507,6 +511,41 @@ jobs:
           fi
           # Size and digest only — never the name, which can carry the title.
           echo "export present: $(wc -c < "$SYSTOLE_SOURCE") bytes"
+
+      # The build also needs the reference corpus (docs/BUILD.md: "A full green
+      # run therefore needs the real corpus, notes and figures both"). It is
+      # gitignored, so a fresh checkout has none, and checkout's clean removes
+      # whatever the last run staged. SYSTOLE_REFS names the directory on the
+      # runner that holds refs/ and refs-images/, the same way SYSTOLE_SOURCE
+      # names the export: in the runner's environment, never here.
+      #
+      # The counts are taken from content/ AFTER the copy, so they measure what
+      # the build will read and not what the runner claims to have.
+      - name: the reference corpus is where the runner says it is
+        run: |
+          if [ -z "${SYSTOLE_REFS:-}" ]; then
+            echo "SYSTOLE_REFS is not set on this runner."
+            echo "Set it to the directory holding refs/ and refs-images/ in the runner's environment."
+            exit 1
+          fi
+          for d in refs refs-images; do
+            if [ ! -d "$SYSTOLE_REFS/$d" ]; then
+              echo "SYSTOLE_REFS has no $d directory."
+              exit 1
+            fi
+          done
+          mkdir -p content
+          rm -rf content/refs content/refs-images
+          cp -R "$SYSTOLE_REFS/refs" content/refs
+          cp -R "$SYSTOLE_REFS/refs-images" content/refs-images
+          notes=$(find content/refs -type f -name '*.md' | wc -l)
+          images=$(find content/refs-images -type f | wc -l)
+          if [ "$notes" -eq 0 ] || [ "$images" -eq 0 ]; then
+            echo "the corpus staged empty: $notes note files, $images image files."
+            exit 1
+          fi
+          # Counts only, never a name: a note's filename is its topic.
+          echo "corpus staged: $notes note files, $images image files"
 
       # NO SEPARATE leak-guard STEP HERE, and that is deliberate. The obvious
       # thing to write is `run: node scripts/leak-guard.js` before the gate. On
