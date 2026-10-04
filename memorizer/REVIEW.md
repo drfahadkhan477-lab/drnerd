@@ -73,6 +73,18 @@ Additional checks that did not pass: Firefox offline preparation failed to cache
 
 Follow-up files: `memorizer/src/backup.js`, `tests/verify-memorizer-backup-pure.js`, `tests/verify-memorizer-hardening.js`, `tests/verify-memorizer.js`, `tests/verify-memorizer-studyimport.js`, and this report. The list below records the original merged review.
 
+## October 4 follow-up: offline checks across engines
+
+Both Chromium and WebKit CI runs passed on PR #126's final revision, `881473fe2df832626220bb6b04570b65917c2a85`. CodeQL's repository-settings failure remains separate.
+
+The Firefox offline failure came from the harness: Playwright implements the experimental service-worker request interception in its Chromium backend. The generated test worker now delegates only its CDN network boundary to a local HTTP fixture server. The production worker's fetch handler, pinned-host predicate, cache keys and cache writes remain intact; the delegated native fetch retains the original Request's integrity metadata. The fixture uses the actual public pinned dependency bytes and prevents browser HTTP caching.
+
+The suite now rejects incorrect bytes without caching them, proves the changed upstream response with an uncached probe, compares every cached reader byte, cuts the dependency transport's sockets, and verifies that cached readers and Mermaid require no upstream request. These assertions run on every engine, replacing the unmeasurable WebKit offline-emulation checks with a controlled transport outage. A mutation that bypassed the generated worker's cache failed four assertions, establishing that the fixture cannot conceal a broken cache path.
+
+Checks: 12 Chromium and 12 Firefox offline checks passed; 77 pure suites, standalone Memorizer build, leak guard and whitespace checks passed. Local WebKit remains blocked by missing system libraries; the stacked follow-up PR retains mandatory WebKit CI. No real iPad network toggle, browser-to-CDN CORS/TLS behavior, WebGPU operation or private licensed-content build was measured by this test. The existing full app suite covers direct PDF loading; a real iPad offline/large-backup trial remains the next device validation step.
+
+This follow-up changes only `tests/verify-memorizer-offline.js` and this report. No production app or shared dependency change is required.
+
 ## Changed files
 
 - `memorizer/index.html`
