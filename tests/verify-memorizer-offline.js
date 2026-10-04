@@ -91,11 +91,26 @@ self.fetch = function (input, init) {
       r.setHeader('cache-control', 'no-store');
       r.setHeader('access-control-allow-origin', '*');
       if (transport === 'different' || transport === 'corrupt') { r.setHeader('content-type', 'text/plain'); return r.end('NOT FROM THE CACHE'); }
+      /* THREE TRIES, as tests/verify-memorizer.js's cdnGet. One dropped Node
+         fetch here was a 502 to the worker, which cached one reader file of
+         two: "after preparing, all three are ready offline" failed on WebKit
+         CI, and the next check died reading a cache entry that was not
+         there. The network between the runner and jsDelivr is not what this
+         suite measures; the bytes are still jsDelivr's and still checked
+         against the pinned hashes. A file still missing after three tries is
+         a logged 502, as before. */
       try {
         if (!bytes.has(url)) {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error('CDN returned HTTP ' + res.status);
-          bytes.set(url, { type: res.headers.get('content-type'), body: Buffer.from(await res.arrayBuffer()) });
+          let last = '';
+          for (let attempt = 1; attempt <= 3 && !bytes.has(url); attempt++) {
+            try {
+              const res = await fetch(url);
+              if (res.ok) bytes.set(url, { type: res.headers.get('content-type'), body: Buffer.from(await res.arrayBuffer()) });
+              else last = 'CDN returned HTTP ' + res.status;
+            } catch (e) { last = e.message; }
+            if (!bytes.has(url)) await new Promise(res => setTimeout(res, 500 * attempt));
+          }
+          if (!bytes.has(url)) { console.log(`  [cdn] ${url} failed three times: ${last}`); throw new Error(last); }
         }
         const b = bytes.get(url);
         r.setHeader('content-type', b.type || 'application/octet-stream');
