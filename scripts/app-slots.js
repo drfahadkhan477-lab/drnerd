@@ -63,16 +63,21 @@ function walk(dir, keep) {
   });
 }
 
+/* A slot name is written into the shell and read back on another machine, so
+   it is always the POSIX spelling. path.relative gives backslashes on Windows,
+   and a shell frozen there named slots no Linux assembly would find. */
+const rel = (root, f) => path.relative(root, f).split(path.sep).join('/');
+
 /* What the repository offers to slot, as { name: text }. Names are
    repository-relative paths, so a slot names the file it came from. */
 function repoSources(root = ROOT) {
   const srcs = {}, assets = {};
   for (const f of walk(path.join(root, 'src'), p => p.endsWith('.js')))
-    srcs[path.relative(root, f)] = fs.readFileSync(f, 'utf8');
+    srcs[rel(root, f)] = fs.readFileSync(f, 'utf8');
   /* Assets under 512 bytes are skipped: a short base64 string could match by
      accident, and nothing that small is worth a slot. */
   for (const f of walk(path.join(root, 'assets'), p => !p.endsWith('.md') && fs.statSync(p).size >= 512))
-    assets[path.relative(root, f)] = fs.readFileSync(f).toString('base64');
+    assets[rel(root, f)] = fs.readFileSync(f).toString('base64');
   return { srcs, assets };
 }
 
