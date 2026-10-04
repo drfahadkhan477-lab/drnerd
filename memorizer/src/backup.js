@@ -11,9 +11,18 @@ function base64(buffer) {
   return root.btoa(parts.join(''));
 }
 function bufferOf(text) {
-  if (typeof text !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) throw new Error('Invalid binary payload.');
+  // Repeating four-character regex groups can exhaust the regex engine's
+  // stack on ordinary book-sized payloads. Scan the alphabet and padding.
+  if (typeof text !== 'string' || text.length % 4) throw new Error('Invalid binary payload.');
+  var end = text.length;
+  if (end && text.charAt(end - 1) === '=') end--;
+  if (end && text.charAt(end - 1) === '=') end--;
+  for (var i = 0; i < end; i++) {
+    var c = text.charCodeAt(i);
+    if (!(c >= 65 && c <= 90) && !(c >= 97 && c <= 122) && !(c >= 48 && c <= 57) && c !== 43 && c !== 47) throw new Error('Invalid binary payload.');
+  }
   var raw = root.atob(text), out = new Uint8Array(raw.length);
-  for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  for (i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
   return out.buffer;
 }
 function map(value, decode) {

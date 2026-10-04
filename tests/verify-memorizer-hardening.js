@@ -522,6 +522,11 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     const r = await context('backup');
     await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Backup');
     await r.locator('#learn-unit').waitFor(T); await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+    await r.evaluate(async () => {
+      const bytes = new Uint8Array(8 * 1024 * 1024);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 31 + (i >>> 16)) & 255;
+      await MemStore.put('files', { id: 'synthetic-large-binary', bytes: bytes.buffer });
+    });
     await r.evaluate(() => {
       window.__backupPut = IDBObjectStore.prototype.put;
       IDBObjectStore.prototype.put = function (v) {
@@ -548,6 +553,10 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     await r.waitForFunction(() => Memorizer.ui.notice === 'Backup restored.', null, T);
     await r.reload(); await r.waitForFunction(() => Memorizer.ui.docs.length === 1, null, T);
     ok('restored pending note survives reload and the warning clears', await r.evaluate(() => !MemStore.failureMessage() && Object.values(Memorizer.ui.notes).some(n => n.text === 'Rescue this pending note')));
+    ok('an 8 MiB binary payload survives the browser backup/restore flow byte for byte', await r.evaluate(async () => {
+      const saved = await MemStore.get('files', 'synthetic-large-binary'), bytes = new Uint8Array(saved.bytes);
+      return bytes.length === 8 * 1024 * 1024 && bytes.every((v, i) => v === ((i * 31 + (i >>> 16)) & 255));
+    }));
   }
 
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');

@@ -2508,11 +2508,7 @@ function kindOf(user) {
     await ps.locator('#learn-unit').click();
     await ps.locator('#to-drill').waitFor(T);
     await ps.locator('#to-drill').click();
-    for (let g = 0; g < 40 && await ps.evaluate(() => Memorizer.ui.state.phase === 'memorize'); g++) {
-      const k = await ps.evaluate(() => Memorizer.ui.state.per[Memorizer.ui.state.section].memo.pos);
-      await ps.locator('#recall-show').click(); await ps.locator('#recall-knew').click();
-      await ps.waitForFunction(k => Memorizer.ui.state.phase !== 'memorize' || Memorizer.ui.state.per[Memorizer.ui.state.section].memo.pos !== k, k, T);
-    }
+    await memorize(ps);
     await ps.locator('#mcq .option').first().waitFor(T);
     const d0 = await ps.evaluate(() => { const c = Memorizer.ui.state.per[Memorizer.ui.state.section]; return { order: c.order.slice(), pos: c.pos, n: c.quiz.questions.length, q: document.querySelector('#mcq h2.q').textContent }; });
     const canSkip = await ps.locator('#skip-q').count() === 1;
