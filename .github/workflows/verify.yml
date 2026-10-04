@@ -102,7 +102,13 @@
 name: verify (source-independent subset)
 
 on:
+  # A push to a branch that has a pull request used to run this whole
+  # workflow twice, once as `push` and once as `pull_request`: two sets of
+  # the same twelve-minute jobs for every commit. A branch is now tested as
+  # its pull request; `push` is for master, where a merge is tested as it
+  # lands. tests/verify-testpublic-pure.js holds this shape.
   push:
+    branches: [master]
   pull_request:
   # The `full` job's own `if:` asks for this event, and GitHub only offers the
   # "Run workflow" button for a workflow that declares it on the default
@@ -115,6 +121,13 @@ on:
 # could notice that while GitHub was unable to parse this file at all.
 permissions:
   contents: read
+
+# A newer push to a pull request makes the run still going for the one before
+# it pointless, so it is cancelled. Master is never cancelled: every merge is
+# tested to the end.
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   syntax:
