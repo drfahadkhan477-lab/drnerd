@@ -16,7 +16,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { blankComments } = require('./_source.js');
 const { suitesFromWorkflow, run } = require('../scripts/test-public.js');
 
 let passed = 0, failed = 0;
@@ -32,10 +31,9 @@ const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'
 const { pure, browser, synthetic } = suitesFromWorkflow(yml);
 const synNames = synthetic.suites.map(x => x.name);
 /* The same "uses a browser" rule verify-stats and verify-engine apply. */
-const launches = n => {
-  const code = blankComments(fs.readFileSync(path.join(__dirname, `${n}.js`), 'utf8'));
-  return /^[^'"`\n]*require\(\s*'playwright'\s*\)/m.test(code) || /^[^'"`\n]*\blaunch\(/m.test(code);
-};
+/* The rule verify.js tags suites with (tests/_targets.js tagsOf), not a copy
+   of it: a copy here saw only direct launches. */
+const launches = n => require('./_targets.js').tagsOf(n.replace(/^verify-/, '')).includes('browser');
 ok('it finds the pure suites', pure.length > 20, `${pure.length}`);
 ok('and the browser suites', browser.length > 0, browser.join(', '));
 ok('no pure suite launches a browser', pure.every(n => !launches(n)), pure.filter(launches).join(', ') || 'none');
