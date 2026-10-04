@@ -542,6 +542,19 @@ function kindOf(user) {
       await p.waitForFunction(k => !document.querySelector('#recall') || new RegExp('^Card ' + (k + 2) + ' of').test(document.querySelector('#recall .mcq-meta').textContent), at, T);
     }
   };
+  /* Lazy previews above the lesson's button change its position when
+     scrolling starts them. Settle the visible previews before clicking;
+     Firefox sometimes completed the automatic click while still on teach.
+     This is a layout precondition, with no retry of the action. */
+  const startMemorize = async p => {
+    await p.waitForFunction(() => !Memorizer.ui.figuresBusy, null, T);
+    await p.locator('#to-drill').scrollIntoViewIfNeeded();
+    await p.waitForFunction(() => Array.from(document.querySelectorAll('main img')).every(img => {
+      const r = img.getBoundingClientRect();
+      return !r.width || r.bottom < -400 || r.top > innerHeight + 400 || (img.complete && img.naturalWidth > 0);
+    }), null, T);
+    await p.locator('#to-drill').click();
+  };
   const meta = p => p.locator('.mcq-meta').innerText();
   /* Choose option i, then Next; waits for the next question (or the end)
      by the progress line changing, not by time. */
@@ -2011,7 +2024,7 @@ function kindOf(user) {
     });
     ok('each point sets its key term in bold, the sentence unchanged', keys.length >= 1 && keys.every(k => sec1.indexOf(k) !== -1) && changed.length === 0,
        JSON.stringify({ keys, changed }));
-    await p2.locator('#to-drill').click();
+    await startMemorize(p2);
     await memorize(p2);
     await p2.locator('#mcq .option').first().waitFor(T);
     const qs = await p2.evaluate(() => Memorizer.ui.state.per[0].quiz.questions);
@@ -2378,7 +2391,7 @@ function kindOf(user) {
     /* A fresh drill of that section, so its questions are written now. */
     const unitId = await p2.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'unit').id));
     await p2.evaluate(id => MemStore.del('sessions', id).then(() => Memorizer.openDoc(id, 0)), unitId);
-    await p2.locator('#to-drill').click();
+    await startMemorize(p2);
     await memorize(p2);
     await p2.locator('#mcq .option').first().waitFor(T);
     const qz = await p2.evaluate(() => Memorizer.ui.state.per[0].quiz.questions);
@@ -2507,7 +2520,7 @@ function kindOf(user) {
     await ps.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
     await ps.locator('#learn-unit').click();
     await ps.locator('#to-drill').waitFor(T);
-    await ps.locator('#to-drill').click();
+    await startMemorize(ps);
     await memorize(ps);
     await ps.locator('#mcq .option').first().waitFor(T);
     const d0 = await ps.evaluate(() => { const c = Memorizer.ui.state.per[Memorizer.ui.state.section]; return { order: c.order.slice(), pos: c.pos, n: c.quiz.questions.length, q: document.querySelector('#mcq h2.q').textContent }; });
@@ -2923,7 +2936,7 @@ function kindOf(user) {
     await p4.evaluate(id => MemStore.del('sessions', id).then(() => Memorizer.openDoc(id, 0)), d.id);
     await p4.locator('#pack-label').waitFor(T);
     ok('a unit started over is taught from its pack, not rebuilt', await p4.evaluate(() => Memorizer.ui.state.per[0].lesson.by === 'pack' && !Memorizer.ui.state.per[1].lesson));
-    await p4.locator('#to-drill').click();
+    await startMemorize(p4);
     await memorize(p4);
     await p4.locator('#mcq .option').first().waitFor(T);
     ok('and drilled from it', /Complete the quoted source sentence/.test(await text(p4, '#mcq h2.q')) &&
