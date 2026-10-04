@@ -263,7 +263,10 @@ bank, its figures, and the Braunwald reference seed and figures.
 3. **Carve `app/`.** Split it into CSS and modules a piece at a time. New work
    edits `app/` or `src/` directly; no new patch steps are added.
 4. **Retire the chain** once both paths give the same file for a few
-   releases. The scripts stay in history.
+   releases. The scripts stay in history. `npm run release-check` compares
+   the two on every certification (its `assemble` step), so the release
+   reports in `build/release-report.md` are that record; a difference
+   withholds `CERTIFIED`.
 
 `tests/verify-app-slots-pure.js` holds step 1 on a synthetic build. Only
 `freeze-shell` on the real build can show that the real one cuts cleanly.
@@ -282,7 +285,8 @@ npm run release -- --dry-run                           # exercise the gate itsel
 
 `scripts/release-check.js` runs the sequence a release actually needs, in
 order: the export is readable → nothing licensed is staged → the patch chain
-applies → every figure decodes → the split build assembles → the full suite on
+applies → the app assembled without the chain is the chain's build, byte for
+byte → every figure decodes → the split build assembles → the full suite on
 Chromium → the full suite against `dist/` over http → the full suite on WebKit.
 
 **It does not deploy.** It certifies, or it refuses to, and there are three
