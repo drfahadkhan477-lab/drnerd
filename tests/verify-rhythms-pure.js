@@ -178,5 +178,54 @@ head('arriving at an instant two different ways gives the same trace');
      diverged.join(', '));
 }
 
+head('the AV-block strips show the interval they are named for');
+{
+  /* Each strip is read as a reader reads it: the gap from the top of the P wave to the top
+     of the R that follows it. A first-degree block drawn with a normal-looking P-to-R gap, or a
+     Wenckebach whose PR never lengthens, is a normal beat with the wrong name on it. This is
+     also the one place the interval is measured at all: the suite above holds that these
+     rhythms are drawn, not that they look like what they are called. */
+  const MS = 1;
+  function pToR(kind, seconds) {
+    const st = {}, n = seconds * 1000 / MS, s = new Float64Array(n);
+    for (let i = 0; i < n; i++) s[i] = R.extraRhythmMV(kind, i * MS, st);
+    const beats = [];
+    for (let i = 450; i < n - 5; i++) {
+      if (s[i] > 0.7 && s[i] >= s[i - 1] && s[i] >= s[i + 1] && (!beats.length || i - beats[beats.length - 1].r > 300)) {
+        let p = i - 60, best = -Infinity;
+        for (let j = i - 340; j <= i - 60; j++) if (s[j] > best) { best = s[j]; p = j; }
+        beats.push({ r: i, gap: i - p });
+      }
+    }
+    return beats;
+  }
+  const sinus = pToR('sinus_arrhythmia', 12);
+  const base = sinus[3].gap;
+  ok('a normal beat has a P-to-R gap of about 140 ms (the yardstick the rest are held to)', base > 120 && base < 160, base + ' ms');
+  ok('and it does not change from beat to beat in a rhythm with a normal PR, however the rate varies', sinus.length > 8 && sinus.every(b => Math.abs(b.gap - base) <= 3), sinus.length + ' beats');
+
+  const first = pToR('avb1', 12);
+  ok('first-degree block: the P-to-R gap is far longer than a normal beat\'s (PR over 200 ms)', first.length > 5 && first.every(b => b.gap >= base * 1.8), first.slice(0, 3).map(b => b.gap).join(',') + ' ms against ' + base);
+  ok('and the same on every beat: it is a fixed delay', first.every(b => Math.abs(b.gap - first[0].gap) <= 3));
+
+  const w = pToR('mobitz1', 40);
+  /* runs of conducted beats are separated by a pause (the dropped one) */
+  const between = []; for (let i = 1; i < w.length; i++) between.push(w[i].r - w[i - 1].r);
+  const usual = between.slice().sort((a, b) => a - b)[Math.floor(between.length / 3)];   // a conducted-to-conducted gap
+  const runs = [[w[0]]];
+  for (let i = 1; i < w.length; i++) { if (w[i].r - w[i - 1].r > 1.3 * usual) runs.push([]); runs[runs.length - 1].push(w[i]); }
+  const full = runs.filter(r => r.length === 3);
+  /* the first group is cut by the start of the strip, and the last by its end */
+  ok('Mobitz I: beats come in groups of three, each followed by a dropped beat', full.length >= 3 && runs.slice(1, -1).every(r => r.length === 3), runs.map(r => r.length).join(','));
+  ok('and within each group the PR lengthens: longer, longer, then the drop', full.every(r => r[1].gap >= r[0].gap + 30 && r[2].gap >= r[1].gap + 30), full.slice(0, 2).map(r => r.map(b => b.gap).join('→')).join(' | '));
+  ok('and the first beat after a pause has the shortest PR again', full.length > 1 && full.slice(1).every((r, k) => r[0].gap <= full[k][2].gap - 60), '');
+
+  const m2 = pToR('mobitz2', 40);
+  ok('Mobitz II: the PR does not change before the beats that do conduct', m2.length > 8 && m2.every(b => Math.abs(b.gap - m2[0].gap) <= 3), m2.slice(0, 4).map(b => b.gap).join(',') + ' ms');
+  ok('and it is a normal PR (under 200 ms), not a long one: the block shows only in the dropped beats', m2[0].gap >= base && m2[0].gap <= base + 40, m2[0].gap + ' ms against ' + base);
+  const gaps = []; for (let i = 1; i < m2.length; i++) gaps.push(m2[i].r - m2[i - 1].r);
+  ok('which leave a pause twice the usual interval', gaps.some(g => g > 1.9 * Math.min(...gaps) && g < 2.1 * Math.min(...gaps)), Math.min(...gaps) + ' and ' + Math.max(...gaps) + ' ms');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
