@@ -274,7 +274,9 @@ bank, its figures, and the Braunwald reference seed and figures.
    still the chain's. `freeze-shell` on a later chain build finds each piece
    where it stands, so the carving survives a re-freeze; a piece it does
    not find verbatim is where the chain and `app/` have parted, and it
-   refuses to freeze until they agree.
+   refuses to freeze until they agree. A piece must also be found exactly once
+   in the assembled app, not only in the shell: text that also stands inside a
+   piece already carved would be found twice or once by filename order.
    `tests/verify-carve-pure.js` audits the committed `app/` without the
    export: every token has its file and every piece is cited once. The
    stylesheet is the first piece, `app/css/systole.css`. New work edits

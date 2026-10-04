@@ -153,6 +153,35 @@ head('auditApp names each way app/ can be broken');
   ok('a kind of slot that does not exist', said(badkind, /lib:src\/core\/thing\.js is not a kind/));
 }
 
+head('a piece is found once in the assembled app, not only in the shell');
+{
+  /* ".a{color:red}" stands twice: inside the first block, and alone below it. */
+  const TWICE = ['<style>', '.a{color:red}', '.b{color:blue}', '</style>', '<style>', '.a{color:red}', '</style>', '<script>', 'const ALL_Q=' + Slots.token('payload', 'ALL_Q') + ';', '</script>', ''].join('\n');
+  const BIG = '.a{color:red}\n.b{color:blue}\n', SMALL = '.a{color:red}\n';
+  const r = root('nested', TWICE);
+  Carve.carveFile({ root: r, from: 2, to: 3, name: 'app/css/z-big.css' });
+  const afterBig = fs.readFileSync(path.join(r, 'app', 'systole.html'), 'utf8');
+  /* The shell now holds SMALL once, so the old count was satisfied. */
+  ok('the smaller text is found once in the remaining shell', afterBig.split(SMALL).length - 1 === 1);
+  ok('and carving it is refused: it stands twice in the assembled app, and nothing changes',
+    refuses(() => Carve.carveFile({ root: r, from: 4, to: 4, name: 'app/css/a-small.css' }), /assembled app 2 times/)
+    && !fs.existsSync(path.join(r, 'app', 'css', 'a-small.css'))
+    && fs.readFileSync(path.join(r, 'app', 'systole.html'), 'utf8') === afterBig);
+
+  /* What was being prevented. The pieces below are what the old check allowed;
+     cut() takes them in filename order, so the smaller one sorting first finds
+     its text twice in the chain build and is left inline. */
+  const chain = Slots.assemble(TWICE, (k, n) => (k === 'payload' ? '[1]' : undefined));
+  const inlineOf = apps => Slots.cut(chain.replace('const ALL_Q=[1];', '\nconst ALL_Q=[1];\nconst IMGS={};\n/*REF_SEED_START*/x/*REF_SEED_END*/\nwindow.HEART3D_MESH_B64=\'QQ==\';'), { srcs: {}, assets: {}, apps }).report.inline.app;
+  ok('order decides: the smaller piece sorting first is left inline', inlineOf({ 'app/css/a-small.css': SMALL, 'app/css/z-big.css': BIG }).join() === 'app/css/a-small.css (found 2 times)');
+  ok('and sorting last is not: the same pieces freeze', inlineOf({ 'app/css/z-small.css': SMALL, 'app/css/a-big.css': BIG }).length === 0);
+
+  const hand = root('hand', TWICE.replace('.a{color:red}\n.b{color:blue}\n', Slots.token('app', 'app/css/z-big.css')).replace('.a{color:red}\n', Slots.token('app', 'app/css/a-small.css')));
+  put(hand, 'app/css/z-big.css', BIG); put(hand, 'app/css/a-small.css', SMALL);
+  const a = Carve.auditApp(hand);
+  ok('auditApp names the pair a tree can hold by hand', a.problems.length === 1 && /a-small\.css's text stands in the assembled app 2 times/.test(a.problems[0]), JSON.stringify(a.problems));
+}
+
 head('files a workstation leaves under app/ are not pieces');
 {
   const carved = SHELL.replace('.a{color:red}\n.b{color:blue}\n', Slots.token('app', 'app/css/a.css'));

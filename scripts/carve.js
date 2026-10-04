@@ -55,6 +55,8 @@ function carve({ shell, from, to, name }) {
   return { shell: before + Slots.token('app', name) + after, piece };
 }
 
+const countIn = (hay, needle) => (needle ? hay.split(needle).length - 1 : 0);
+
 /* Payloads stand as themselves: a carve is judged on the app, not the content. */
 const withPayloadsLeft = root => {
   const repo = Slots.repoResolver(null, root);
@@ -76,6 +78,13 @@ function carveFile({ root = ROOT, from, to, name, cut = carve, write = fs.writeF
   const r = cut({ shell: old, from, to, name });
   if (fs.existsSync(pieceFile)) throw new Error(`${name} already exists`);
   const was = Slots.assemble(old, withPayloadsLeft(root));
+  /* Found once in the shell is not enough. A chain build has every piece inline,
+     and cut() takes pieces in filename order: text that also stands inside a
+     piece already carved is found twice by whichever of the two sorts first, and
+     a freeze then refuses a build that is byte for byte the app. So the count
+     is of the whole assembled app. */
+  const whole = countIn(was, r.piece);
+  if (whole !== 1) throw new Error(`the lines' text stands in the assembled app ${whole} times (once here, the rest inside pieces already carved): a piece must be found exactly once there`);
   fs.mkdirSync(path.dirname(pieceFile), { recursive: true });
   try { write(pieceFile, r.piece); } catch (e) {
     fs.rmSync(pieceFile, { force: true });
@@ -131,6 +140,14 @@ function auditApp(root = ROOT) {
     const text = fs.readFileSync(path.join(root, name), 'utf8');
     if (text.includes('@@SLOT[')) problems.push(`${name} holds a slot token`);
     if (text.includes('\r')) problems.push(`${name} has a carriage return: the chain's output has none`);
+  }
+  /* The same rule carveFile holds a new piece to, held to the pieces already
+     there: a tree can break it by hand or by two carves that each looked fine. */
+  let assembled = null;
+  try { assembled = Slots.assemble(shell, withPayloadsLeft(root)); } catch (e) { /* what is missing is already named above */ }
+  if (assembled !== null) for (const name of pieces) {
+    const n = countIn(assembled, fs.readFileSync(path.join(root, name), 'utf8'));
+    if (n > 1) problems.push(`${name}'s text stands in the assembled app ${n} times: a freeze would find it once or twice by filename order`);
   }
   return { problems, pieces, tokens };
 }
