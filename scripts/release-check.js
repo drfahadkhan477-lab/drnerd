@@ -76,6 +76,14 @@ const STEPS = [
     cmd: ['node', ['scripts/leak-guard.js', '--all-tracked']] },
   { id: 'build',     what: 'the patch chain applies, all of it',
     cmd: ['node', ['scripts/build.js', () => SRC]] },
+  /* Retiring the patch chain (docs/BUILD.md) waits on this: the app built
+     from app/systole.html without the chain must be the chain's build, byte
+     for byte, release after release. Run on every certification, so that
+     record builds itself; a difference withholds CERTIFIED and names only
+     which part differs. */
+  { id: 'assemble',  what: 'the app assembled without the chain is the chain\'s build, byte for byte',
+    cmd: ['node', ['scripts/assemble-app.js', () => SRC, '--out', 'build/systole.assembled.html', '--compare', 'build/systole.html']],
+    after: 'build', needs: () => fs.existsSync(BUILD) },
   { id: 'extract',   what: 'every figure decodes and reads back byte-identical',
     cmd: ['node', ['scripts/extract-content.js', () => BUILD]], after: 'build', needs: () => fs.existsSync(BUILD) },
   { id: 'pwabuild',  what: 'the split build assembles',
