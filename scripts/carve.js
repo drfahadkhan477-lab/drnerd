@@ -34,11 +34,15 @@ const Slots = require('./app-slots.js');
 const ROOT = path.join(__dirname, '..');
 const SHELL = 'app/systole.html';
 
+/* A name is forward-slash segments under app/, as slot names are written: on
+   Windows a backslash is a separator to path.join, and "app/..\x" would leave
+   app/ unnoticed. Held to a new piece by carve() and to every app token by
+   auditApp(), so the two cannot disagree about what a piece's name is. */
+const validName = name => /^app\/[^@\]\\]+$/.test(name) && !name.split('/').some(s => s === '' || s === '.' || s === '..');
+
 /* carve({ shell, from, to, name }) → { shell, piece }. Pure: writes nothing. */
 function carve({ shell, from, to, name }) {
-  /* Forward slashes only, as slot names are written: on Windows a backslash is
-     a separator to path.join, and "app/..\x" would leave app/ unnoticed. */
-  if (!/^app\/[^@\]\\]+$/.test(name) || name.split('/').some(s => s === '' || s === '.' || s === '..')) throw new Error(`"${name}" is not a path under app/`);
+  if (!validName(name)) throw new Error(`"${name}" is not a path under app/`);
   if (name === SHELL) throw new Error('the shell cannot be carved into itself');
   /* repoSources() does not offer these as pieces, so a freeze would neither
      claim the file nor report it: the carve would be silently dropped. */
@@ -125,18 +129,31 @@ function auditApp(root = ROOT) {
   const shell = fs.readFileSync(path.join(root, SHELL), 'utf8');
   const repo = Slots.repoResolver(null, root);
   const payloads = new Set(Slots.PAYLOADS.map(p => p.name));
-  const cited = new Map();
+  const cited = new Map(), payloadSeen = new Map();
   let tokens = 0;
   for (const m of shell.matchAll(Slots.TOKEN_RE)) {
     const [, kind, name] = m;
     tokens++;
-    if (kind === 'payload') { if (!payloads.has(name)) problems.push(`payload:${name} is not a payload app-slots knows`); continue; }
+    if (kind === 'payload') {
+      if (!payloads.has(name)) problems.push(`payload:${name} is not a payload app-slots knows`);
+      else payloadSeen.set(name, (payloadSeen.get(name) || 0) + 1);
+      continue;
+    }
     if (!['src', 'asset', 'app'].includes(kind)) { problems.push(`${kind}:${name} is not a kind of slot`); continue; }
+    /* repo() would read app:package.json or app:src/x.js if the file exists, and
+       assembly would inject a file that is not a piece of app/. */
+    if (kind === 'app' && !validName(name)) { problems.push(`app:${name} is not a path under app/`); continue; }
     if (typeof repo(kind, name) !== 'string') problems.push(`${kind}:${name} has no file in the repository`);
     if (kind === 'app') {
       cited.set(name, (cited.get(name) || 0) + 1);
-      if (name.startsWith('app/') && Slots.isMetadata(name.slice('app/'.length))) problems.push(`${name} is cited, but it is a name the pieces of app/ skip: a freeze would not claim it`);
+      if (Slots.isMetadata(name.slice('app/'.length))) problems.push(`${name} is cited, but it is a name the pieces of app/ skip: a freeze would not claim it`);
     }
+  }
+  /* A token removed by hand leaves nothing for the loop above to see. A
+     payload the shell repeats is not counted here: assembling it throws, and
+     the assembly check below records that. */
+  for (const p of Slots.PAYLOADS) {
+    if (p.required && !payloadSeen.get(p.name)) problems.push(`payload:${p.name} is required and the shell has 0 of it: assembling would write a build without it`);
   }
   const pieces = walk(path.join(root, 'app')).map(f => path.relative(root, f).split(path.sep).join('/'))
     .filter(n => n !== SHELL && !Slots.isMetadata(n.slice('app/'.length))).sort();

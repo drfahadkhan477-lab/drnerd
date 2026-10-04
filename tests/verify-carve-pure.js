@@ -40,6 +40,9 @@ const refuses = (fn, re) => { try { fn(); return false; } catch (e) { return re.
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'systole-carve-'));
 const SRC = 'src/core/thing.js', SRC_TEXT = 'window.Thing=(function(){return 7})();\n';
+/* The payload slots app-slots marks required, other than ALL_Q, which the
+   shells below carry themselves. A shell without one of them is a finding. */
+const REQUIRED_PAYLOADS = Slots.PAYLOADS.filter(p => p.required && p.name !== 'ALL_Q').map(p => Slots.token('payload', p.name));
 const SHELL = [
   '<!doctype html>',
   '<style>',
@@ -52,6 +55,7 @@ const SHELL = [
   'const ALL_Q=' + Slots.token('payload', 'ALL_Q') + ';',
   Slots.token('src', SRC),
   'boot();',
+  ...REQUIRED_PAYLOADS,
   '</script>',
   '',
 ].join('\n');
@@ -135,7 +139,7 @@ head('auditApp names each way app/ can be broken');
   const carved = SHELL.replace('.a{color:red}\n.b{color:blue}\n', Slots.token('app', 'app/css/a.css'));
   const whole = root('whole', carved); put(whole, 'app/css/a.css', '.a{color:red}\n.b{color:blue}\n');
   const a = Carve.auditApp(whole);
-  ok('a whole app/ has no problem', a.problems.length === 0 && a.pieces.join() === 'app/css/a.css' && a.tokens === 3, JSON.stringify(a));
+  ok('a whole app/ has no problem', a.problems.length === 0 && a.pieces.join() === 'app/css/a.css' && a.tokens === 3 + REQUIRED_PAYLOADS.length, JSON.stringify(a));
 
   const said = (r, re) => { const p = Carve.auditApp(r).problems; return p.length === 1 && re.test(p[0]); };
   /* Two breaks that also stop assembly name both, and nothing else. */
@@ -154,9 +158,22 @@ head('auditApp names each way app/ can be broken');
   ok('a src slot the shell repeats: the shell does not assemble', said(repeat, /the shell does not assemble: slot src:src\/core\/thing\.js appears more than once/));
   const torn = root('torn', SHELL.replace('boot();', '@@SLOT[src:src/core/thing.js' + ' boot();'));
   ok('a slot token that is malformed: the shell does not assemble', said(torn, /the shell does not assemble/));
+  /* A token removed by hand leaves the loop over tokens nothing to look at. */
+  for (const p of Slots.PAYLOADS.filter(q => q.required)) {
+    const gone = root('gone-' + p.name, SHELL.replace(Slots.token('payload', p.name), ''));
+    ok(`the required payload ${p.name} removed from the shell`, said(gone, new RegExp(`payload:${p.name} is required and the shell has 0`)));
+  }
+  const again = Slots.token('payload', 'ALL_Q');
+  ok('a required payload the shell repeats is still a problem, through assembly', said(root('twice-pay', SHELL.replace('boot();', again + 'boot();')), /the shell does not assemble: slot payload:ALL_Q appears more than once/));
+  const optional = Slots.PAYLOADS.filter(q => !q.required);
+  ok('a payload app-slots does not require may be absent, and the list of them is not empty', optional.length > 0 && optional.every(q => !SHELL.includes(Slots.token('payload', q.name))) && Carve.auditApp(root('optional')).problems.length === 0);
+  const outside = root('outside', SHELL.replace('boot();', Slots.token('app', SRC) + 'boot();'));
+  ok('an app token that names a file outside app/', said(outside, /app:src\/core\/thing\.js is not a path under app/));
+  const dotdot = root('dotdot', SHELL.replace('boot();', Slots.token('app', 'app/../' + SRC) + 'boot();'));
+  ok('an app token that climbs out of app/ and names a file that exists', said(dotdot, /is not a path under app/));
   const nosrc = root('nosrc'); fs.rmSync(path.join(nosrc, SRC));
   ok('a src token whose module is gone', said(nosrc, /src:src\/core\/thing\.js has no file/));
-  const badpay = root('badpay', SHELL.replace('payload:ALL_Q', 'payload:NOPE'));
+  const badpay = root('badpay', SHELL.replace('boot();', Slots.token('payload', 'NOPE') + 'boot();'));
   ok('a payload app-slots does not know', said(badpay, /payload:NOPE is not a payload/));
   const badkind = root('badkind', SHELL.replace('src:' + SRC, 'lib:' + SRC));
   ok('a kind of slot that does not exist', said(badkind, /lib:src\/core\/thing\.js is not a kind/));
@@ -165,7 +182,7 @@ head('auditApp names each way app/ can be broken');
 head('a piece is found once in the assembled app, not only in the shell');
 {
   /* ".a{color:red}" stands twice: inside the first block, and alone below it. */
-  const TWICE = ['<style>', '.a{color:red}', '.b{color:blue}', '</style>', '<style>', '.a{color:red}', '</style>', '<script>', 'const ALL_Q=' + Slots.token('payload', 'ALL_Q') + ';', '</script>', ''].join('\n');
+  const TWICE = ['<style>', '.a{color:red}', '.b{color:blue}', '</style>', '<style>', '.a{color:red}', '</style>', '<script>', 'const ALL_Q=' + Slots.token('payload', 'ALL_Q') + ';', ...REQUIRED_PAYLOADS, '</script>', ''].join('\n');
   const BIG = '.a{color:red}\n.b{color:blue}\n', SMALL = '.a{color:red}\n';
   const r = root('nested', TWICE);
   Carve.carveFile({ root: r, from: 2, to: 3, name: 'app/css/z-big.css' });
