@@ -28,7 +28,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { launch } = require('./_engine');
+const { launch, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 
 let passed = 0, failed = 0;
@@ -357,7 +357,9 @@ const pixels = () => {
   /* ── a phone, and the dark ─────────────────────────────────────────── */
   head('a phone, and the dark');
   {
-    const ph = await open('phone', { viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
+    /* Firefox supports the viewport and touch but Playwright cannot emulate
+       its mobile browser. Keep the same geometry and tap assertions there. */
+    const ph = await open('phone', { viewport: { width: 390, height: 800 }, isMobile: engineName() !== 'firefox', hasTouch: true });
     /* Mobile emulation widens the viewport to fit what overflows it, so the viewport proves nothing:
        the right-hand edge of every element, against the 390 px the phone has, does. */
     const wide = async () => ph.evaluate(() => Math.max(...Array.from(document.querySelectorAll('#app *')).filter(e => !e.closest('.sr')).map(e => e.getBoundingClientRect().right)) - 390);
