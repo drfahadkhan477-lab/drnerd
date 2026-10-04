@@ -108,8 +108,32 @@ head('src/ stays the source of truth');
   ok('a module edited inside the build stays inline, and is reported', r.report.inline.src.includes(SRC) && !r.shell.includes(Slots.token('src', SRC)), r.report.inline.src.join(', '));
 }
 
-head('malformed input is refused, never guessed at');
 const throws = (fn, re) => { try { fn(); return false; } catch (e) { return re.test(e.message); } };
+
+head('an asset embedded twice is claimed at both sites');
+{
+  /* The real build carries the heart photograph twice. Left inline, both
+     copies are base64 runs no slot claimed and the freeze is refused. */
+  const twice = BUILD.replace('<div id="app"></div>', `<div id="app"></div><img src="data:font/woff2;base64,${fontB64}">`);
+  const c = Slots.cut(twice, SOURCES);
+  const tok = Slots.token('asset', ASSET);
+  ok('neither copy is left in the shell', !c.shell.includes(fontB64) && c.shell.split(tok).length - 1 === 2, String(c.shell.split(tok).length - 1));
+  ok('and the report says it was claimed twice', c.report.slots.some(s => s.name === ASSET && s.times === 2) && !c.report.inline.asset.length);
+  ok('the leak scan sees no stray blob', Slots.leakScan(c.shell, c.payloads).base64Runs === 0);
+  ok('assembling gives that build back, byte for byte', !throws(() => Slots.assemble(c.shell, memResolver(c.payloads)), /./) && Slots.assemble(c.shell, memResolver(c.payloads)) === twice);
+  const r = Slots.cut(BUILD.replace("window.HEART3D_MESH_KEY", srcText + "\nwindow.HEART3D_MESH_KEY"), SOURCES);
+  ok('a src module embedded twice is still left inline, and reported', r.report.inline.src.includes(SRC + ' (found 2 times)') && r.shell.includes(srcText), r.report.inline.src.join(', '));
+}
+
+head('slot names are the same on every machine');
+{
+  const { srcs, assets } = Slots.repoSources();
+  const names = Object.keys(srcs).concat(Object.keys(assets));
+  ok('the repository names its modules and assets with forward slashes', names.includes(SRC) && names.includes(ASSET) && !names.some(n => n.includes('\\')),
+     names.filter(n => n.includes('\\')).slice(0, 3).join(', '));
+}
+
+head('malformed input is refused, never guessed at');
 ok('a build with no question bank', throws(() => Slots.cut(BUILD.replace('\nconst ALL_Q=', '\nconst NOT_Q='), SOURCES), /ALL_Q\] expected exactly 1 match, found 0/));
 ok('a build with the bank twice', throws(() => Slots.cut(BUILD.replace(`const IMGS=`, `const ALL_Q=${BANK};\nconst IMGS=`), SOURCES), /ALL_Q\] expected exactly 1 match, found 2/));
 ok('a build with no reference seed', throws(() => Slots.cut(BUILD.replace('REF_SEED_START', 'REF_SEED_GONE'), SOURCES), /REF_SEED/));
