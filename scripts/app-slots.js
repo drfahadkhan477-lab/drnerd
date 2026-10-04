@@ -10,7 +10,7 @@
  * that is provably lossless and provably clean, which is this file.
  *
  * A SLOT is a span of the built file replaced by a token, @@SLOT[kind:name]@@.
- * Three kinds of span leave the app:
+ * Four kinds of span leave the shell:
  *
  *   payload   ALL_Q, IMGS, the reference seed, the reference figures and the
  *             heart's baked mesh. Stored beside the content (content/payload/,
@@ -20,6 +20,10 @@
  *             assembling reads the file as it is now, not as it was cut.
  *   asset     a file of assets/ found verbatim as base64 (fonts, the splash
  *             photograph). Read from assets/ at assembly, same reason.
+ *   app       a piece of the app carved out of the shell into its own file
+ *             under app/ (scripts/carve.js): step 3 of retiring the chain.
+ *             Ours, committed, and read at assembly as src is. Held to
+ *             exactly-once as src is, and a piece holds no token itself.
  *
  * A payload or a src module must match exactly once, as patch() must. One that
  * is not found verbatim stays inline and is REPORTED, not guessed at: it means
@@ -74,7 +78,7 @@ function walk(dir, keep) {
    forward slashes whatever the machine, because the names are written into the
    committed shell and a shell cut on Windows has to assemble on Linux. */
 function repoSources(root = ROOT) {
-  const srcs = {}, assets = {};
+  const srcs = {}, assets = {}, apps = {};
   const rel = f => path.relative(root, f).split(path.sep).join('/');
   for (const f of walk(path.join(root, 'src'), p => p.endsWith('.js')))
     srcs[rel(f)] = fs.readFileSync(f, 'utf8');
@@ -82,12 +86,16 @@ function repoSources(root = ROOT) {
      accident, and nothing that small is worth a slot. */
   for (const f of walk(path.join(root, 'assets'), p => !p.endsWith('.md') && fs.statSync(p).size >= 512))
     assets[rel(f)] = fs.readFileSync(f).toString('base64');
-  return { srcs, assets };
+  /* The pieces carved out of the shell: everything under app/ but the shell. */
+  const shellFile = path.join(root, 'app', 'systole.html');
+  for (const f of walk(path.join(root, 'app'), p => p !== shellFile))
+    apps[rel(f)] = fs.readFileSync(f, 'utf8');
+  return { srcs, assets, apps };
 }
 
 /* cut(html, sources) → { shell, payloads, report }
    payloads: { ALL_Q: text, … } — the spans that left and must be stored.
-   report:   { slots: [{kind,name,bytes,times}], inline: {src:[…], asset:[…]} }
+   report:   { slots: [{kind,name,bytes,times}], inline: {src:[…], asset:[…], app:[…]} }
              times is how many sites an asset was claimed at; absent means one. */
 function cut(html, sources = repoSources()) {
   if (html.includes('@@SLOT[')) throw new Error('the input already contains a slot token: it is not a fresh build');
@@ -104,8 +112,8 @@ function cut(html, sources = repoSources()) {
     shell = shell.replace(whole, () => kept + token('payload', p.name) + tail);
     slots.push({ kind: 'payload', name: p.name, bytes: m[2].length });
   }
-  const inline = { src: [], asset: [] };
-  for (const [kind, table] of [['src', sources.srcs], ['asset', sources.assets]]) {
+  const inline = { src: [], asset: [], app: [] };
+  for (const [kind, table] of [['src', sources.srcs], ['asset', sources.assets], ['app', sources.apps || {}]]) {
     for (const name of Object.keys(table).sort()) {
       const text = table[name], n = count(shell, text);
       if (n === 1) {
@@ -152,7 +160,7 @@ function repoResolver(payloadDir, root = ROOT) {
     }
     const f = path.join(root, name);
     if (!fs.existsSync(f)) return undefined;
-    if (kind === 'src') return fs.readFileSync(f, 'utf8');
+    if (kind === 'src' || kind === 'app') return fs.readFileSync(f, 'utf8');
     if (kind === 'asset') return fs.readFileSync(f).toString('base64');
     return undefined;
   };
@@ -186,4 +194,4 @@ function leakScan(shell, payloads) {
            offsets: { questionText: q.slice(0, 10), refText: r.slice(0, 10), base64Runs: runs.slice(0, 10) } };
 }
 
-module.exports = { PAYLOADS, token, cut, assemble, repoSources, repoResolver, leakScan };
+module.exports = { PAYLOADS, TOKEN_RE, token, cut, assemble, repoSources, repoResolver, leakScan };

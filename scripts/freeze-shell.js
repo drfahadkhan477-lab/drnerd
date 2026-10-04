@@ -77,6 +77,8 @@ function freeze({ input, appDir, payloadDir, root = ROOT, log = console.log, slo
   if (repeated.length) log(`        claimed at more than one site: ${repeated.map(s => `${s.name} ×${s.times}`).join(', ')}`);
   if (report.inline.src.length) log(`inline  src not found verbatim (a later patch edited the embedded copy): ${report.inline.src.join(', ')}`);
   if (report.inline.asset.length) log(`inline  assets not found: ${report.inline.asset.join(', ')}`);
+  if (kinds('app').length) log(`        ${kinds('app').length} pieces carved into app/ found as they stand`);
+  if (report.inline.app.length) log(`inline  app pieces not found verbatim (the chain's output and app/ have parted there): ${report.inline.app.join(', ')}`);
   log(`round trip ${same ? 'byte-identical' : 'DIFFERENT'}`);
   log(`scan    question text ${scan.questionText}, reference text ${scan.refText}, unclaimed base64 runs ${scan.base64Runs}`);
 

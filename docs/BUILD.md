@@ -260,8 +260,23 @@ bank, its figures, and the Braunwald reference seed and figures.
    differs, by name. When it reports byte-identical, the chain is no longer
    needed to build the app. CI can then assemble the real app around a
    synthetic bank.
-3. **Carve `app/`.** Split it into CSS and modules a piece at a time. New work
-   edits `app/` or `src/` directly; no new patch steps are added.
+3. **Carve `app/`** (now). Split it into CSS and modules a piece at a time:
+
+   ```bash
+   node scripts/carve.js <from> <to> app/<path>     # lines of app/systole.html, inclusive
+   node scripts/assemble-app.js --compare build/systole.html
+   ```
+
+   `scripts/carve.js` moves those lines into the file and leaves a slot token,
+   and keeps the result only if the shell assembles to the same bytes as
+   before. The second command, beside a chain build, is what shows the app is
+   still the chain's. `freeze-shell` on a later chain build finds each piece
+   where it stands, so the carving survives a re-freeze; a piece it reports
+   as not found verbatim is where the chain and `app/` have parted.
+   `tests/verify-carve-pure.js` audits the committed `app/` without the
+   export: every token has its file and every piece is cited once. The
+   stylesheet is the first piece, `app/css/systole.css`. New work edits
+   `app/` or `src/` directly; no new patch steps are added.
 4. **Retire the chain** once both paths give the same file for a few
    releases. The scripts stay in history.
 
@@ -642,7 +657,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        124 suites · 79 need no browser · + pwa
+tests/        124 suites · 80 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

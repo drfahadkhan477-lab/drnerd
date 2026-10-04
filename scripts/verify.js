@@ -192,6 +192,9 @@ const SUITES = [
   /* Step 2: the frozen shell's slots filled from where the chain gets them,
      ALL_Q held to keys-patch and flags-patch run as the chain runs them. */
   ['assemble-pure', 'the app assembles from app/systole.html as the chain builds it, stamped as build.js stamps'],
+  /* Step 3: lines of the shell moved into files under app/. The committed
+     app/ is audited here too, which needs no export. */
+  ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],
   /* Guards the release gate's one job: never printing CERTIFIED over something
      it did not check. The permissive direction is the dangerous one here, so
      the checks are mostly about what it REFUSES to claim. */
@@ -412,7 +415,7 @@ const SUITES = [
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
    which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure'];
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'carve-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
