@@ -44,8 +44,27 @@ module.exports = (async () => {
     await assert.rejects(backup.restore(JSON.stringify({ ...JSON.parse(text), payload, checksum })), /Invalid binary payload/);
     assert.deepEqual(Array.from(new Uint8Array((await store.get('files', 'unit')).bytes)), bytes);
   }
+  // Keep the version 1 format compatible with an independent encoder,
+  // including padding on either side of a binary conversion boundary.
+  for (const length of [0, 1, 2, 3, 8189, 8190, 8191, 16379, 16380, 16381]) {
+    const binary = Uint8Array.from({ length }, (_, i) => (i * 31 + (i >>> 8)) & 255);
+    await store.put('files', { id: 'unit', bytes: binary.buffer });
+    const envelope = JSON.parse(await backup.exportText());
+    const records = JSON.parse(envelope.payload);
+    assert.equal(envelope.version, 1);
+    assert.equal(records.files[0].bytes.data, Buffer.from(binary).toString('base64'));
+    // Restore version 1 data encoded outside Memorizer, not just data
+    // produced by its own matching encoder/decoder.
+    records.files[0].bytes.data = Buffer.from(binary).toString('base64');
+    const payload = JSON.stringify(records), checksum = await root.MemProvenance.fingerprint(payload);
+    await backup.restore(JSON.stringify({ ...envelope, payload, checksum }));
+    assert.equal(Buffer.compare(Buffer.from((await store.get('files', 'unit')).bytes), Buffer.from(binary)), 0);
+  }
   // An actual export/restore, including byte comparison, protects against
-  // regex stack overflow that tiny PDF fixtures cannot expose.
+  // regex stack overflow and whole-PDF conversion strings that tiny
+  // fixtures cannot expose. Enforce a 64 KiB temporary conversion budget.
+  root.btoa = raw => { assert.ok(raw.length <= 64 * 1024, 'export conversion exceeds the temporary string budget'); return btoa(raw); };
+  root.atob = encoded => { assert.ok(encoded.length <= 64 * 1024, 'restore conversion exceeds the temporary string budget'); return atob(encoded); };
   const large = new Uint8Array(8 * 1024 * 1024);
   for (let i = 0; i < large.length; i++) large[i] = (i * 31 + (i >>> 16)) & 255;
   await store.put('files', { id: 'unit', bytes: large.buffer });
@@ -53,7 +72,8 @@ module.exports = (async () => {
   await store.put('files', { id: 'unit', bytes: new ArrayBuffer(0) });
   await backup.restore(largeBackup);
   assert.equal(Buffer.compare(Buffer.from((await store.get('files', 'unit')).bytes), Buffer.from(large)), 0);
-  console.log('PASS 8 MiB backup round trip preserves every byte; malformed base64 is rejected without writes');
+  console.log('PASS version 1 base64 matches an independent encoder across padding/chunk boundaries');
+  console.log('PASS 8 MiB backup preserves every byte within the conversion budget; malformed base64 is rejected without writes');
   console.log('PASS backup restores PDF bytes, notes, progress and SRS; excludes keys and refuses corruption/incomplete records');
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });

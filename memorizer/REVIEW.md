@@ -95,6 +95,18 @@ Checks: 12 Chromium and 12 Firefox offline checks passed; 77 pure suites, standa
 
 This follow-up changes only `tests/verify-memorizer-offline.js` and this report. No production app or shared dependency change is required.
 
+## October 4 follow-up: bounded binary backup conversions
+
+The version 1 backup codec now converts PDF bytes in chunks: at most 8,190 binary characters for an encode call and 10,920 base64 characters for a decode call. Encoding uses complete three-byte groups and decoding uses complete four-character groups, so existing backup files, typed-view offsets and padding remain compatible. The full syntax scan still precedes decoding, and checksum/schema validation and atomic replacement remain intact.
+
+The regression enforces a 64 KiB conversion-input budget on an 8 MiB export/restore and compares every restored byte. It fails against the previous codec because export submits the entire PDF as one binary string. Independent Node base64 fixtures cover empty data, both padding cases and chunk boundaries, rather than only comparing the codec with itself.
+
+Local validation: the focused backup regression, all 80 pure suites, all 64 Chromium and all 64 Firefox hardening checks, `npm run memorizer`, leak guard and whitespace checks passed. Local WebKit launch again failed before any check because system libraries are missing; the PR's mandatory WebKit result must be assessed separately. No real iPad, WebGPU model or licensed-content build was tested.
+
+Exploratory Node v24.19.0 processes exported/restored the same synthetic 32 MiB file with exact byte comparisons. Fallback-checksum peak RSS was 510.7 MiB before and 457.1 MiB after; SHA-256 peak RSS was 576.3 MiB before and 585.5 MiB after. These process measurements vary with allocation and garbage collection; they do not demonstrate lower overall memory for every path. This change bounds temporary conversion strings, while snapshots, JSON/base64 strings and atomic restore still consume memory proportional to the full backup. A real iPad trial remains necessary before setting a backup size limit or selecting a new format.
+
+Follow-up files: `memorizer/src/backup.js`, `tests/verify-memorizer-backup-pure.js`, and this report.
+
 ## Changed files
 
 - `memorizer/index.html`
