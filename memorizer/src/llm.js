@@ -56,6 +56,155 @@ function supported() {
   }, function () { return { ok: false, why: 'WebGPU could not start' }; });
 }
 
+/* ── the model files, pinned and checked (models.js, scripts/model-manifest.js)
+   WebLLM downloads a model from its Hugging Face repository's main branch
+   and its runtime (.wasm) from GitHub's main branch; both move. Here every
+   model comes from the commit the manifest names and the runtime from the
+   commit it names, so what is downloaded cannot change upstream. Then, the
+   runtime, the config and the tokenizer are checked by the engine before it
+   uses them (integrityOf), and the first time a model loads every file the
+   engine stored as bytes, the weights with them, is hashed and compared with
+   the manifest before the model answers anything (verify). A file that does
+   not match, or one at the pinned address the manifest does not know, and
+   the model is deleted and refused.
+   WHAT THIS DOES NOT DO: the weights are checked after they are on the GPU,
+   not before (the engine has no hook for them), and a file IndexedDB keeps
+   as parsed JSON (the weights' index) cannot be hashed and is not counted. */
+var Models = root.MemModels || (typeof require === 'function' ? require('./models.js') : null);
+var VERIFIED_KEY = 'memorizer.llm.verified.';
+function modelBase(m) { return 'https://huggingface.co/' + m.repo + '/resolve/' + m.rev + '/'; }
+function libUrl(m) { return 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/' + Models.libCommit + '/' + m.lib.path; }
+/* hex SHA-256 → the "sha256-<base64>" form the engine checks against */
+function sri(h) {
+  var bin = '';
+  for (var i = 0; i < h.length; i += 2) bin += String.fromCharCode(parseInt(h.slice(i, i + 2), 16));
+  return 'sha256-' + (root.btoa || btoa)(bin);
+}
+/* The engine checks, BEFORE it uses them and on every load, the files it
+   is given hashes for: the runtime before it is run, the config and the
+   tokenizer before they are read. The weights it does not check; verify()
+   below does, once, after the first load. */
+function integrityOf(m) {
+  var tok = {};
+  ['tokenizer.json', 'tokenizer.model'].forEach(function (f) { if (m.files[f]) tok[f] = sri(m.files[f]); });
+  var out = { model_lib: sri(m.lib.sha256), tokenizer: tok, onFailure: 'error' };
+  if (m.files['mlc-chat-config.json']) out.config = sri(m.files['mlc-chat-config.json']);
+  return out;
+}
+function pinnedConfig(base, backend) {
+  var cfg = Object.assign({}, base || {}, { cacheBackend: backend });
+  cfg.model_list = ((base && base.model_list) || []).map(function (r) {
+    var m = Models && Models.models[r.model_id];
+    return m ? Object.assign({}, r, { model: modelBase(m), model_lib: libUrl(m), integrity: integrityOf(m) }) : r;
+  });
+  return cfg;
+}
+/* files: [{ url, sha256 }] read back from the browser's store. → { ok,
+   checked, bad: [names], unknown: [names] } for model id. PURE. */
+function verifyFiles(id, files) {
+  var m = Models && Models.models[id];
+  if (!m) return { ok: false, checked: 0, bad: [], unknown: [], why: 'no manifest for ' + id };
+  var base = modelBase(m), out = { checked: 0, bad: [], unknown: [] };
+  files.forEach(function (f) {
+    var want = f.url === libUrl(m) ? m.lib.sha256 : f.url.indexOf(base) === 0 ? m.files[decodeURIComponent(f.url.slice(base.length))] : undefined;
+    var name = f.url.slice(f.url.lastIndexOf('/') + 1);
+    if (want === undefined) { out.unknown.push(name); return; }
+    out.checked++;
+    if (want !== f.sha256) out.bad.push(name);
+  });
+  out.ok = out.checked > 0 && !out.bad.length && !out.unknown.length;
+  return out;
+}
+function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+function subtle() { var c = root.crypto || (typeof crypto !== 'undefined' ? crypto : null); return c && c.subtle; }
+function digest(buf) { return subtle().digest('SHA-256', buf).then(hex); }
+/* Everything the engine stored at this model's pinned addresses, from
+   whichever store it used, ONE FILE AT A TIME: a model is up to a couple of
+   gigabytes, and holding it all at once would end the tab on an iPad.
+   Copies at other addresses (a download from before the pin) are not
+   looked at: they are not what the engine loads. */
+var STORES = ['webllm/model', 'webllm/wasm', 'webllm/config'];
+/* A stored file's bytes, through FileReader as ocr.js reads its downloads
+   (Blob.arrayBuffer() is Safari 14); Node, where the tests run, has none. */
+function bytesOf(blob) {
+  if (typeof FileReader === 'undefined') return blob.arrayBuffer();
+  return new Promise(function (resolve, reject) {
+    var fr = new FileReader();
+    fr.onload = function () { resolve(fr.result); };
+    fr.onerror = function () { reject(fr.error || new Error('could not read a stored file')); };
+    fr.readAsArrayBuffer(blob);
+  });
+}
+function storedFiles(id, backend) {
+  var m = Models && Models.models[id], out = [];
+  if (!m) return Promise.resolve(out);
+  var mine = function (url) { return url === libUrl(m) || url.indexOf(modelBase(m)) === 0; };
+  var add = function (url, buf) { return digest(buf).then(function (h) { out.push({ url: url, sha256: h }); }); };
+  var each = function (list, fn) { return list.reduce(function (p, x) { return p.then(function () { return fn(x); }); }, Promise.resolve()); };
+  if (backend !== 'indexeddb') {
+    var cs = root.caches || (typeof caches !== 'undefined' ? caches : null);
+    if (!cs) return Promise.resolve(out);
+    return each(STORES, function (n) {
+      return cs.has(n).then(function (has) {
+        if (!has) return;
+        return cs.open(n).then(function (c) {
+          return c.keys().then(function (ks) {
+            return each(ks.filter(function (k) { return mine(k.url); }), function (k) {
+              return c.match(k).then(function (r) { return r.blob(); }).then(bytesOf).then(function (buf) { return add(k.url, buf); });
+            });
+          });
+        });
+      });
+    }).then(function () { return out; });
+  }
+  var idb = root.indexedDB || (typeof indexedDB !== 'undefined' ? indexedDB : null);
+  if (!idb) return Promise.resolve(out);
+  var req = function (r) { return new Promise(function (res, rej) { r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); };
+  /* A store that is not there is not made here: the engine makes it, with
+     its own schema, and would find an empty one in the way. Asked first
+     where the browser can say (indexedDB.databases(), Safari 14+): opening
+     to look would make it, and aborting that open undoes it on Chromium
+     but not on WebKit, which keeps the empty database. The abort stays for
+     a browser that cannot say. */
+  var listed = idb.databases ? idb.databases().then(function (ds) { return ds.map(function (d) { return d.name; }); }, function () { return null; }) : Promise.resolve(null);
+  return listed.then(function (names) { return each(STORES, function (n) {
+    if (names && names.indexOf(n) === -1) return;
+    return new Promise(function (resolve) {
+      var o = idb.open(n);
+      o.onupgradeneeded = function () { o.transaction.abort(); };
+      o.onerror = function () { resolve(null); };
+      o.onsuccess = function () { resolve(o.result); };
+    }).then(function (db) {
+      if (!db) return;
+      if (!db.objectStoreNames.contains('urls')) { db.close(); return; }
+      return req(db.transaction('urls').objectStore('urls').getAllKeys()).then(function (keys) {
+        return each(keys.filter(function (k) { return typeof k === 'string' && mine(k); }), function (k) {
+          return req(db.transaction('urls').objectStore('urls').get(k)).then(function (r) {
+            if (r && r.data instanceof ArrayBuffer) return add(k, r.data);
+          });
+        });
+      }).then(function () { db.close(); }, function () { db.close(); });
+    });
+  }); }).then(function () { return out; });
+}
+function verify(id, backend) {
+  var m = Models && Models.models[id];
+  try { if (m && ls().getItem(VERIFIED_KEY + id) === m.rev) return Promise.resolve({ ok: true, cached: true }); } catch (_) {}
+  return storedFiles(id, backend).then(function (files) {
+    var r = verifyFiles(id, files);
+    if (r.ok) { try { ls().setItem(VERIFIED_KEY + id, m.rev); } catch (_) {} }
+    return r;
+  });
+}
+var verifier = null;
+/* Tests hand in a stand-in for the check (there is no download here). */
+function useVerify(fn) { verifier = fn; }
+/* What the app says about its model files (Settings). */
+function modelSource(id) {
+  var m = Models && Models.models[id];
+  return m ? { repo: m.repo, rev: m.rev.slice(0, 10), engine: Models.engine, files: Object.keys(m.files).length + 1 } : null;
+}
+
 var libP = null;
 function loadLib() {
   if (libP) return libP;
@@ -64,8 +213,9 @@ function loadLib() {
     return r.text();
   }).then(function (src) {
     var url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
-    /* An indirect import(): a bundler, or an old parser, never sees it. */
-    return new Function('u', 'return import(u)')(url);
+    /* A plain dynamic import: the page's Content-Security-Policy forbids eval,
+       and new Function() is eval. */
+    return import(url);
   });
   libP.catch(function () { libP = null; });
   return libP;
@@ -186,10 +336,33 @@ function gpu() {
 /* One engine, tried and retried by the rules above. */
 function create(lib, id, onProgress) {
   var backend = savedBackend();
+  /* a model that is not the one the manifest names: not used, not kept (a
+     retry would only load the same cached file again) */
+  function refuse(e, what) {
+    return unload(e).catch(function () {}).then(function () {
+      return deleteFiles(lib, id).then(function () { return 'It has been deleted and was not used'; },
+        function (d) { return 'It was not used, and could not be deleted (' + d.message + '); delete it in Settings'; });
+    }).then(function (done) {
+      var err = new Error('the downloaded model does not match the one Memorizer expects: ' + what + '. ' + done);
+      err.integrity = true;
+      throw err;
+    });
+  }
   function attempt(n) {
-    var appConfig = Object.assign({}, lib.prebuiltAppConfig || {}, { cacheBackend: backend });
+    var appConfig = pinnedConfig(lib.prebuiltAppConfig, backend);
     return lib.CreateMLCEngine(id, { appConfig: appConfig, initProgressCallback: function (p) { if (onProgress) onProgress(p.progress || 0, p.text || ''); } })
-      .then(function (e) { saveBackend(backend); return e; }, function (err) {
+      .then(function (e) {
+        saveBackend(backend);
+        return (verifier || verify)(id, backend).then(function (v) {
+          if (v.ok) return e;
+          return refuse(e, v.why || (v.bad.length ? v.bad.length + ' file' + (v.bad.length === 1 ? '' : 's') + ' not what it should be (' + v.bad.slice(0, 3).join(', ') + ')'
+            : v.unknown.length ? 'files it does not expect (' + v.unknown.slice(0, 3).join(', ') + ')' : 'no files to check'));
+        });
+      }, function (err) {
+        if (err && err.name === 'IntegrityError') {
+          var url = String(err.url || '');
+          return refuse(null, (url.slice(url.lastIndexOf('/') + 1) || 'a file') + ' not what it should be');
+        }
         var next = nextTry(err, n, backend);
         if (!next) throw new Error(explain(err));
         if (onProgress) onProgress(0, next.backend !== backend ? 'the browser cache refused the files; trying its other store' : 'the download was interrupted; trying again (' + (n + 2) + ' of ' + (RETRIES + 1) + ')');
@@ -230,17 +403,30 @@ function clearModel(model) {
   return loadLib().then(function (lib) {
     var pending = engineStarting, matching = engineModel === model || startingModel === model;
     return (matching ? stop().then(function () { return pending; }).catch(function () {}) : Promise.resolve()).then(function () {
-    var jobs = [];
-    [model, variantFor(model, false)].forEach(function (id) {
-      ['cache', 'indexeddb'].forEach(function (b) {
-        jobs.push(Promise.resolve().then(function () {
-          return lib.deleteModelAllInfoInCache(id, Object.assign({}, lib.prebuiltAppConfig || {}, { cacheBackend: b }));
-        }).catch(function (e) { throw new Error('Could not delete ' + id + ' from ' + b + ': ' + ((e && e.message) || e)); }));
-      });
-    });
-    return Promise.all(jobs).then(function () { return true; });
+      return deleteFiles(lib, model);
     });
   });
+}
+/* The files themselves, both builds, both stores. A copy at the pinned
+   addresses that cannot be deleted is said so; a copy from before the pin,
+   at the engine's own addresses, is removed if it is there (nothing loads
+   it any more, and it holds the same gigabytes) and is not an error if it
+   is not. Called by clearModel once nothing is starting, and directly by a
+   refusal inside a start (create), which clearModel would wait on. */
+function deleteFiles(lib, model) {
+  var jobs = [];
+  [model, variantFor(model, false)].forEach(function (id) {
+    try { ls().removeItem(VERIFIED_KEY + id); } catch (_) {}
+    ['cache', 'indexeddb'].forEach(function (b) {
+      jobs.push(Promise.resolve().then(function () {
+        return lib.deleteModelAllInfoInCache(id, pinnedConfig(lib.prebuiltAppConfig, b));
+      }).catch(function (e) { throw new Error('Could not delete ' + id + ' from ' + b + ': ' + ((e && e.message) || e)); }));
+      jobs.push(Promise.resolve().then(function () {
+        return lib.deleteModelAllInfoInCache(id, Object.assign({}, lib.prebuiltAppConfig || {}, { cacheBackend: b }));
+      }).catch(function () {}));
+    });
+  });
+  return Promise.all(jobs).then(function () { return true; });
 }
 
 function stripThinking(t) { return String(t).replace(/<think>[\s\S]*?(?:<\/think>|$)/g, '').trim(); }
@@ -337,7 +523,7 @@ function parseQuestions(text) {
   } catch (_) { return []; }
 }
 
-var MemLLM = { stop: stop, stopEmbed: stopEmbed, WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
+var MemLLM = { pinnedConfig: pinnedConfig, verifyFiles: verifyFiles, verify: verify, storedFiles: storedFiles, useVerify: useVerify, modelSource: modelSource, stop: stop, stopEmbed: stopEmbed, WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
                loadLib: loadLib, useEngine: useEngine, ready: ready, start: start, chat: chat, SYSTEM: SYSTEM,
                summaryPrompt: summaryPrompt, plainPrompt: plainPrompt, analogyPrompt: analogyPrompt, questionsPrompt: questionsPrompt,
                QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions, stripThinking: stripThinking,
