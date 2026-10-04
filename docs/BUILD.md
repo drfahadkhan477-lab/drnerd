@@ -691,8 +691,17 @@ the first step tests it with bash's `[ -f ]`, and a backslash path is not a
 valid path to bash. One more thing must be true there: the job's steps run
 in bash, and the runner finds bash by searching `PATH`. Windows ships
 `C:\Windows\System32\bash.exe`, which is the WSL launcher and not a shell, so
-Git for Windows' `bin` directory has to come before `System32` in the `.path`
-file the runner writes beside `run.cmd` when it is configured.
+Git for Windows' `bin` directory has to come before `System32` in the `PATH`
+of the process that starts `run.cmd`. A `.path` file beside it does nothing on
+Windows — that was tried first, and the first dispatched run failed in
+`System32\bash.exe`. A two-line launcher is enough:
+
+    set "PATH=C:\Program Files\Git\bin;%PATH%"
+    call "%~dp0run.cmd" %*
+
+Do not kill the listener to restart it. Close its window or press Ctrl+C;
+a killed listener leaves its session open on GitHub, and the next one is
+refused with "a session for this runner already exists" for a few minutes.
 
 ### Turning it on properly, after the first green run
 
