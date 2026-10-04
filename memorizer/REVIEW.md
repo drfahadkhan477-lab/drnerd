@@ -107,6 +107,8 @@ Exploratory Node v24.19.0 processes exported/restored the same synthetic 32 MiB 
 
 Follow-up files: `memorizer/src/backup.js`, `tests/verify-memorizer-backup-pure.js`, and this report.
 
+The measurements can now be reproduced with the committed [backup benchmark and iPad checklist](BACKUP-TESTING.md). It uses fresh Node processes, deterministic synthetic bytes and both checksum paths, and verifies the full restore before reporting results. Device acceptance items remain unmeasured until a real iPad trial is recorded.
+
 ## Changed files
 
 - `memorizer/index.html`
