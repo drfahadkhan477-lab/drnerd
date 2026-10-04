@@ -118,9 +118,13 @@ head('the synthetic build, then its suites');
   /* A build that writes the target, a suite that passes only when handed a
      target that exists, and a suite that leaves a mark when it runs at all. */
   fs.mkdirSync(path.join(TMP, 'scripts'));
-  fs.writeFileSync(path.join(TMP, 'scripts', 'mk.js'), 'require("fs").writeFileSync(process.argv[2], "x")');
+  fs.writeFileSync(path.join(TMP, 'scripts', 'mk.js'), 'require("fs").writeFileSync(process.argv.slice(2)[0], "x")');
   fs.writeFileSync(path.join(TMP, 'scripts', 'broken.js'), 'process.exit(1)');
-  suite('verify-s', 'const f = process.argv[2]; require("fs").writeFileSync(require("path").join(__dirname, "ran-s"), "1"); process.exit(f && require("fs").existsSync(f) ? 0 : 4)');
+  /* argv.slice, not argv[2], in both fixtures: tests/_targets.js tags a
+     suite "build" when its source binds argv[2], and verify-engine expects a
+     suite that mentions it to bind a target. A fixture's text is in this
+     suite's source, so it read as this suite taking a build. */
+  suite('verify-s', 'const f = process.argv.slice(2)[0]; require("fs").writeFileSync(require("path").join(__dirname, "ran-s"), "1"); process.exit(f && require("fs").existsSync(f) ? 0 : 4)');
   const T = path.join(TMP, 'syn.html');
   const parsed = suitesFromWorkflow(Y(['verify-a'], ['verify-c'], null, { build: [['scripts/mk.js', T]], suites: ['verify-s'], target: T }));
   ok('a synthetic job is read as its build and its suites, each with its target',
