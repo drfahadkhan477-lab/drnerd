@@ -61,7 +61,7 @@ const withPayloadsLeft = root => {
 
 /* carveFile({ root, from, to, name }) → { bytes }. Writes the piece and the shell.
    `cut` is a parameter so the suite can hand it a carve that loses a line and
-   see the same-bytes check refuse it, and `write` so it can fail the shell's
+   see the same-bytes check refuse it, and `write` so it can fail either
    write and see the piece taken back; nothing else passes either.
 
    The shell is replaced by rename, so it is the old one or the new one, never
@@ -75,7 +75,10 @@ function carveFile({ root = ROOT, from, to, name, cut = carve, write = fs.writeF
   if (fs.existsSync(pieceFile)) throw new Error(`${name} already exists`);
   const was = Slots.assemble(old, withPayloadsLeft(root));
   fs.mkdirSync(path.dirname(pieceFile), { recursive: true });
-  write(pieceFile, r.piece);
+  try { write(pieceFile, r.piece); } catch (e) {
+    fs.rmSync(pieceFile, { force: true });
+    throw new Error('the piece could not be written, so nothing was kept: ' + e.message);
+  }
   let same = false;
   try { same = Slots.assemble(r.shell, withPayloadsLeft(root)) === was; } catch (e) { same = false; }
   if (!same) {

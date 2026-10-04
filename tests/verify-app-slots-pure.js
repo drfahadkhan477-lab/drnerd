@@ -194,6 +194,17 @@ head('freeze-shell writes app/ only when every check holds');
   const lr = freeze({ input, appDir, payloadDir: path.join(dir, 'lossy-payload'), root, log: l => lines.push(l), slots: lossy });
   ok('a cut that loses a byte is not frozen', !lr.ok && !fs.existsSync(path.join(appDir, 'systole.html')) && /does not give back the input/.test(lr.failures.join(' ')), lr.failures.join(' | '));
 
+  /* A piece carved into app/ (scripts/carve.js). Last, because it changes
+     what the root offers to every cut after it. */
+  const PIECE = 'app/js/render.js', pieceFile = path.join(root, PIECE);
+  fs.mkdirSync(path.dirname(pieceFile), { recursive: true });
+  fs.writeFileSync(pieceFile, 'function render(){ return ALL_Q.length; }\n');
+  const carved = run(BUILD, 'carved');
+  ok('a build that holds a carved piece as it stands is frozen with its token', carved.r.ok && fs.readFileSync(path.join(carved.appDir, 'systole.html'), 'utf8').includes(Slots.token('app', PIECE)), carved.r.failures.join(' | '));
+  fs.writeFileSync(pieceFile, 'function render(){ return 0; }\n');
+  const parted = run(BUILD, 'parted');
+  ok('a build that no longer holds a carved piece is not frozen, and the piece is named', !parted.r.ok && !fs.existsSync(path.join(parted.appDir, 'systole.html')) && parted.r.failures.some(f => f.includes(PIECE)), parted.r.failures.join(' | '));
+
   const cli = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'freeze-shell.js'), path.join(dir, 'missing.html')], { encoding: 'utf8' });
   ok('the command line refuses a build that is not there', cli.status === 2, String(cli.status));
   fs.rmSync(dir, { recursive: true, force: true });

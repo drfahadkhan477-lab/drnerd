@@ -194,11 +194,11 @@ jobs:
         run: node tests/verify-claude-skills.js
       - name: a study file is checked by Memorizer's own import code (26 checks)
         run: node tests/verify-study-file-check.js
-      - name: the built file cuts into the app and its payloads losslessly, and the app carries none of the bank (43 checks)
+      - name: the built file cuts into the app and its payloads losslessly, and the app carries none of the bank (45 checks)
         run: node tests/verify-app-slots-pure.js
       - name: the app assembles from app/systole.html as the chain builds it (24 checks)
         run: node tests/verify-assemble-pure.js
-      - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (26 checks)
+      - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (27 checks)
         run: node tests/verify-carve-pure.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js

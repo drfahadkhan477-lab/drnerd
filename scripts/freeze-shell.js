@@ -54,6 +54,11 @@ function freeze({ input, appDir, payloadDir, root = ROOT, log = console.log, slo
   const scan = slots.leakScan(shell, payloads);
   if (scan.questionText) failures.push(`${scan.questionText} question-bank strings are in the shell (offsets ${scan.offsets.questionText.join(', ')})`);
   if (scan.refText) failures.push(`${scan.refText} reference-seed strings are in the shell (offsets ${scan.offsets.refText.join(', ')})`);
+  /* A piece under app/ that the build no longer holds verbatim: the shell cut
+     from this build would not cite it, and the piece would be left beside a
+     shell that has its text inline. The chain and app/ have parted there, and
+     which of the two is right is not something a freeze can decide. */
+  if (report.inline.app.length) failures.push(`${report.inline.app.length} carved pieces are not in this build as they stand in app/: ${report.inline.app.join(', ')}`);
   if (scan.base64Runs) failures.push(`${scan.base64Runs} base64 runs of 2000+ characters no slot claimed (offsets ${scan.offsets.base64Runs.join(', ')})`);
 
   /* leak-guard judges the file by its content here, so it is given a copy
@@ -78,7 +83,6 @@ function freeze({ input, appDir, payloadDir, root = ROOT, log = console.log, slo
   if (report.inline.src.length) log(`inline  src not found verbatim (a later patch edited the embedded copy): ${report.inline.src.join(', ')}`);
   if (report.inline.asset.length) log(`inline  assets not found: ${report.inline.asset.join(', ')}`);
   if (kinds('app').length) log(`        ${kinds('app').length} pieces carved into app/ found as they stand`);
-  if (report.inline.app.length) log(`inline  app pieces not found verbatim (the chain's output and app/ have parted there): ${report.inline.app.join(', ')}`);
   log(`round trip ${same ? 'byte-identical' : 'DIFFERENT'}`);
   log(`scan    question text ${scan.questionText}, reference text ${scan.refText}, unclaimed base64 runs ${scan.base64Runs}`);
 

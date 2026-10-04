@@ -113,6 +113,12 @@ head('what a carve refuses');
     && !fs.existsSync(path.join(full, 'app', 'css', 'a.css'))
     && fs.readdirSync(path.join(full, 'app')).filter(f => f !== 'css').join() === 'systole.html'
     && fs.readFileSync(path.join(full, 'app', 'systole.html'), 'utf8') === SHELL);
+  const short = root('short');
+  const failsOnPiece = (f, text) => { fs.writeFileSync(f, text.slice(0, 5)); throw new Error('no space left'); };
+  ok('a piece that cannot be written whole: the part of it is removed and the shell is as it was',
+    refuses(() => Carve.carveFile({ root: short, from: 3, to: 4, name: 'app/css/a.css', write: failsOnPiece }), /piece could not be written.*no space left/)
+    && !fs.existsSync(path.join(short, 'app', 'css', 'a.css'))
+    && fs.readFileSync(path.join(short, 'app', 'systole.html'), 'utf8') === SHELL);
   const cli = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'carve.js'), '3'], { encoding: 'utf8' });
   ok('the command line without a path exits 2', cli.status === 2, String(cli.status));
 }

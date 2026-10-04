@@ -271,8 +271,9 @@ bank, its figures, and the Braunwald reference seed and figures.
    and keeps the result only if the shell assembles to the same bytes as
    before. The second command, beside a chain build, is what shows the app is
    still the chain's. `freeze-shell` on a later chain build finds each piece
-   where it stands, so the carving survives a re-freeze; a piece it reports
-   as not found verbatim is where the chain and `app/` have parted.
+   where it stands, so the carving survives a re-freeze; a piece it does
+   not find verbatim is where the chain and `app/` have parted, and it
+   refuses to freeze until they agree.
    `tests/verify-carve-pure.js` audits the committed `app/` without the
    export: every token has its file and every piece is cited once. The
    stylesheet is the first piece, `app/css/systole.css`. New work edits
