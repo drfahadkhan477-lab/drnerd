@@ -16,12 +16,17 @@
  *     measured as RMS in windows between valve events;
  *   - the SHAPES differ as the lesions do (aortic stenosis peaks late, mitral
  *     regurgitation is a plateau, aortic regurgitation decays);
+ *   - the heart map (src/lab/heartmap.js) agrees with all of the above: a lesion it files
+ *     under "diastolic" must be loud in diastole in the rendered audio, and the valve it
+ *     blames must be the one the textbook says makes that sound;
  *   - the PITCHES differ (an aortic regurgitation murmur is high and blowing, a
  *     mitral stenosis rumble is low), measured as a spectral centroid.
  */
 'use strict';
 const Physio = require('../src/core/physio.js').Physio;
 const H = require('../src/lab/heartsounds.js').HeartSounds;
+const HM = require('../src/lab/heartmap.js').HeartMap;
+const TR = require('../src/lab/tracings.js').Tracings;
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -182,6 +187,87 @@ head('the pitches differ as the lesions do');
   ok('an aortic regurgitation murmur is high-pitched and a mitral stenosis rumble is low', ar > 1.8 * ms, `${ar.toFixed(0)} Hz vs ${ms.toFixed(0)} Hz`);
   ok('the rumble is under 110 Hz', ms < 110, ms.toFixed(0) + ' Hz');
   ok('and a mitral regurgitation murmur is higher than the rumble', mr > 1.6 * ms, `${mr.toFixed(0)} Hz vs ${ms.toFixed(0)} Hz`);
+}
+
+head('the heart map: geometry');
+{
+  const C = HM.CHAMBERS, ids = Object.keys(C);
+  const inside = ids.filter(i => C[i].x < 0 || C[i].y < 0 || C[i].x + C[i].w > HM.VIEWBOX.w || C[i].y + C[i].h > HM.VIEWBOX.h);
+  ok('every chamber is inside the picture', inside.length === 0, inside.join(', ') || ids.length + ' chambers');
+  const overlaps = [];
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+    const a = C[ids[i]], b = C[ids[j]];
+    const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    if (w > 0 && h > 0) overlaps.push(ids[i] + '/' + ids[j]);
+  }
+  ok('no two chambers overlap (they may touch: that is where a valve is)', overlaps.length === 0, overlaps.join(', ') || 'none');
+  const dist = (pt, c) => Math.hypot(Math.max(c.x - pt.x, 0, pt.x - (c.x + c.w)), Math.max(c.y - pt.y, 0, pt.y - (c.y + c.h)));
+  const off = Object.keys(HM.VALVES).filter(v => HM.VALVES[v].between.some(ch => dist(HM.VALVES[v], C[ch]) > 4));
+  ok('each valve sits on the edge between the two chambers it separates', off.length === 0, off.join(', ') || Object.keys(HM.VALVES).join(', '));
+  ok('and the pairs are the right ones', HM.VALVES.mitral.between.join() === 'LA,LV' && HM.VALVES.aortic.between.join() === 'LV,Ao' && HM.VALVES.tricuspid.between.join() === 'RA,RV' && HM.VALVES.pulmonic.between.join() === 'RV,PA');
+  ok('the right heart is on the viewer\'s left and the left heart on the right, as on a chest film', ids.filter(i => C[i].side === 'right').every(i => C[i].x + C[i].w / 2 < 200) && ids.filter(i => C[i].side === 'left').every(i => C[i].x + C[i].w / 2 > 200));
+  ok('the normal flow names only chambers that exist, and goes in at the veins and out by the arteries', HM.NORMAL_FLOW.every(([a, b]) => C[a] && C[b]) && HM.NORMAL_FLOW[0][0] === 'SVC' && HM.NORMAL_FLOW.some(f => f[1] === 'PA') && HM.NORMAL_FLOW.some(f => f[1] === 'Ao'));
+}
+
+head('the heart map: every Lab exercise has a place on it');
+{
+  const lesionIds = H.LESIONS.map(l => l.id).sort(), condIds = Object.keys(HM.CONDITIONS).sort();
+  ok('every heart-sound lesion has a condition on the map, and every condition is a lesion', JSON.stringify(lesionIds) === JSON.stringify(condIds), lesionIds.length + ' lesions, ' + condIds.length + ' conditions');
+  const trIds = TR.TRACINGS.map(t => t.id).sort(), mapIds = Object.keys(HM.TRACING_MAP).sort();
+  ok('and every pressure tracing is placed, and every placement is a tracing', JSON.stringify(trIds) === JSON.stringify(mapIds), trIds.length + ' tracings');
+  const badArea = condIds.filter(id => !HM.AREAS[HM.CONDITIONS[id].area]);
+  ok('every condition names a place on the chest to listen, and that place exists', badArea.length === 0, badArea.join(', ') || 'all');
+  const badChamber = condIds.filter(id => { const c = HM.CONDITIONS[id]; return c.enlarged.concat(c.hypertrophied, c.flows.flatMap(f => [f.from, f.to])).some(x => !HM.CHAMBERS[x]); });
+  ok('and every chamber and flow it names exists', badChamber.length === 0, badChamber.join(', ') || 'all');
+  ok('a lesion with a valve names a real valve and a kind of fault; one without names neither', condIds.every(id => { const c = HM.CONDITIONS[id]; return c.valve ? (HM.VALVES[c.valve] && ['stenosis', 'regurgitation', 'prolapse'].includes(c.state)) : c.state === null; }));
+  ok('every condition says in a sentence what is going on', condIds.every(id => HM.CONDITIONS[id].note.length > 40));
+  ok('an unknown condition is an error, not an empty picture', (() => { try { HM.forLesion('nope'); return false; } catch (_) { return true; } })());
+}
+
+head('the heart map: what it says agrees with the physiology and the audio');
+{
+  /* the textbook: which valve fault is heard when. The map's valve is the author's; the phase is read from the synthesiser. */
+  const faulty = Object.keys(HM.CONDITIONS).filter(id => HM.CONDITIONS[id].valve);
+  const wrong = faulty.filter(id => { const c = HM.CONDITIONS[id]; return HM.phaseOf(id) !== (c.state === 'prolapse' ? 'systolic' : HM.EXPECTED_PHASE[c.state][c.valve]); });
+  ok('the timing of each valve lesion\'s murmur is the textbook timing for that valve and fault', wrong.length === 0, wrong.map(id => id + ' is ' + HM.phaseOf(id)).join(', ') || faulty.map(id => id + ':' + HM.phaseOf(id)).join(' '));
+  ok('and every murmurless lesion is filed as none, the continuous one as continuous', ['normal', 's3', 's4', 'wide'].every(id => HM.phaseOf(id) === 'none') && HM.phaseOf('pda') === 'continuous' && HM.phaseOf('vsd') === 'systolic' && HM.phaseOf('hocm') === 'systolic');
+  /* the audio, not the spec: where the rendered murmur's energy is */
+  const rms = (id, a, b) => { const r = R(id), per = r.samples.length / BEATS; let s = 0, n = 0; for (let k = 0; k < BEATS; k++) for (let i = Math.floor((k + a) * per); i < Math.floor((k + b) * per); i++) { s += r.samples[i] * r.samples[i]; n++; } return Math.sqrt(s / n); };
+  const SYS = [0.22, 0.38], DIA = [0.50, 0.80], LOUD = 0.02;   // the signal is normalised to 0.9 at its peak; a murmur is well above 0.02, silence is below 0.002
+  const lies = Object.keys(HM.CONDITIONS).filter(id => {
+    const p = HM.phaseOf(id); if (p === 'none' || p === 'continuous' || p === 'both') return false;
+    const sys = rms(id, ...SYS), dia = rms(id, ...DIA);
+    /* the window it is filed under must actually be loud: two silent windows are not "twice as loud" */
+    return p === 'systolic' ? !(sys >= LOUD && sys >= 2 * dia) : !(dia >= LOUD && dia >= 2 * sys);
+  });
+  ok('every lesion the map files under systole is at least twice as loud in systole as in diastole in the rendered audio, and the reverse for diastole', lies.length === 0, lies.join(', ') || Object.keys(HM.CONDITIONS).filter(id => ['systolic', 'diastolic'].includes(HM.phaseOf(id))).map(id => id + ':' + HM.phaseOf(id)).join(' '));
+  const cont = rms('pda', ...SYS) > 0.5 * rms('pda', ...DIA) && rms('pda', ...DIA) > 0.3 * rms('pda', ...SYS);
+  ok('the continuous murmur is heard in both', cont, `${rms('pda', ...SYS).toFixed(3)} / ${rms('pda', ...DIA).toFixed(3)}`);
+
+  const flowOf = id => HM.CONDITIONS[id].flows;
+  const dir = faulty.filter(id => {
+    const c = HM.CONDITIONS[id], [a, b] = HM.VALVES[c.valve].between, f = flowOf(id).find(x => x.kind === 'jet');
+    if (!f) return true;
+    return c.state === 'stenosis' ? !(f.from === a && f.to === b) : !(f.from === b && f.to === a);
+  });
+  ok('a stenotic valve\'s jet goes forward through it, a leaking valve\'s goes back', dir.length === 0, dir.join(', ') || faulty.join(', '));
+  const unloaded = faulty.filter(id => {
+    const c = HM.CONDITIONS[id], p = HM.PROXIMAL[c.valve];
+    if (c.state === 'prolapse') return false;
+    return c.state === 'stenosis' ? !(c.enlarged.includes(p) || c.hypertrophied.includes(p)) : !c.enlarged.includes(p);
+  });
+  ok('the chamber behind a diseased valve is the one that is loaded: enlarged for a leak, enlarged or thickened for a stenosis', unloaded.length === 0, unloaded.join(', ') || faulty.join(', '));
+  ok('and mitral stenosis does not load the left ventricle, which has nothing to push against', !HM.CONDITIONS.ms.enlarged.includes('LV') && !HM.CONDITIONS.ms.hypertrophied.includes('LV'));
+  const shunts = Object.keys(HM.CONDITIONS).flatMap(id => HM.CONDITIONS[id].flows.filter(f => f.kind === 'shunt').map(f => ({ id, f })));
+  ok('every shunt goes from the left side to the right, because that is where the pressure is', shunts.length === 3 && shunts.every(({ f }) => HM.CHAMBERS[f.from].side === 'left' && HM.CHAMBERS[f.to].side === 'right'), shunts.map(({ id, f }) => `${id} ${f.from}→${f.to}`).join(', '));
+
+  const placed = Object.keys(HM.TRACING_MAP).filter(id => {
+    const m = HM.TRACING_MAP[id], t = TR.byId(id);
+    const siteOk = (t.site === 'RA' && m.site === 'RA') || (t.site === 'PCWP' && m.site === 'LA');
+    const kindOk = /regurgitation/i.test(t.name) ? m.state === 'regurgitation' : /stenosis/i.test(t.name) ? m.state === 'stenosis' : m.state !== 'regurgitation' && m.state !== 'stenosis';
+    return !(siteOk && kindOk && (!m.valve || HM.VALVES[m.valve]));
+  });
+  ok('a tracing is placed where it is measured (the wedge is the left atrium) and its fault is the one in its name', placed.length === 0, placed.join(', ') || Object.keys(HM.TRACING_MAP).length + ' tracings');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -410,6 +410,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (25 checks)
         run: node tests/verify-bankstore.js
+      - if: ${{ !cancelled() }}
+        name: the Lab, built and driven — the audio played is the heart sound asked, nothing names an answer early, progress is stored and survives a reload, and the heart map is drawn from the map (67 checks)
+        run: node tests/verify-lab.js
 
   # ── the app itself, built around an invented bank ───────────────────────────
   #

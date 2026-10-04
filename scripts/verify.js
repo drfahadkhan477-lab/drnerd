@@ -197,7 +197,7 @@ const SUITES = [
   ['synthetic-pure', 'the synthetic export builds the real app, and is marked so its run is never recorded'],
   /* The Lab: heart sounds synthesised on physio's valve events, held by
      measuring the audio, not by reading the spec back. */
-  ['lab-pure', 'each heart sound and murmur is on the valve events physio measures, with the shape and pitch of its lesion'],
+  ['lab-pure', 'each heart sound and murmur is on the valve events physio measures, with the shape and pitch of its lesion, and the heart map agrees with the audio on when it is heard'],
   /* The study planner and the readiness forecast, on real FSRS cards. */
   ['plan-pure', 'the study plan fits the time, puts the most forgotten first and the weak chapters next, and never throws on damaged data'],
   /* Topic runs: questions about the same thing, grouped by their distinctive words. */
@@ -205,7 +205,7 @@ const SUITES = [
   /* Voice mode's logic: what is read, what is heard, what happens next. */
   ['voice-pure', 'a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary'],
   /* The Lab's pressure tracings and the drill engine every Lab exercise shares. */
-  ['drills-pure', 'each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes'],
+  ['drills-pure', 'each pressure tracing and ECG strip shows what it is named for, measured from the finished waveform; the drill offers what is due and the look-alikes; what the Lab remembers survives bad storage'],
   /* Guards the release gate's one job: never printing CERTIFIED over something
      it did not check. The permissive direction is the dangerous one here, so
      the checks are mostly about what it REFUSES to claim. */
@@ -359,6 +359,7 @@ const SUITES = [
   ['memorizer-studyimport',  'a saved HTML page read in the browser, and the Import Study dialog driven: right options and answers, a real modal, too large refused, no half-imported unit'],
   ['memorizer-data',         'your data and what the page may do: a backup holds units, packs and progress and restores into an empty browser, a bad file is refused, and the browser refuses any host but the app\u2019s'],
   ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
+  ['lab',                    'the Lab, built and driven: the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map'],
 ];
 
 /* ── suites registered since the last full green run ──────────────────────────
@@ -426,7 +427,7 @@ const SUITES = [
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
    which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'lab-pure', 'plan-pure', 'topicrun-pure', 'voice-pure', 'drills-pure'];
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'lab-pure', 'plan-pure', 'topicrun-pure', 'voice-pure', 'drills-pure', 'lab'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

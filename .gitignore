@@ -73,4 +73,5 @@ node_modules/
 # with. The app reads a PDF in the browser and never stores it; nothing a user
 # studies belongs in the repository, whosever it is.
 dist-memorizer/
+dist-lab/
 memorizer/samples/
