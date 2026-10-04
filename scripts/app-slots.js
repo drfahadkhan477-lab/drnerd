@@ -22,8 +22,11 @@
  *             photograph). Read from assets/ at assembly, same reason.
  *
  * A payload or a src module must match exactly once, as patch() must. One that
- * is not found verbatim stays inline and is REPORTED, not guessed at: it means
- * a later patch edited the embedded copy, which is drift worth knowing.
+ * is not found verbatim stays inline and is REPORTED, not guessed at. The cut
+ * cannot say why: a later patch edited the embedded copy, src/ changed after
+ * the build was made, or the module is not in this build at all. The first two
+ * are drift worth knowing; the report names the module and leaves the cause
+ * to whoever reads the diff.
  *
  * An asset may be embedded more than once (the heart photograph is, by the
  * splash and by the home hero) and is claimed at every site. Exactly-once
