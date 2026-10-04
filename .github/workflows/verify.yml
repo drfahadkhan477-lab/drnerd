@@ -36,8 +36,8 @@
 #
 # What runs here needs no source file, and is genuinely worth having on every
 # push. Most of it needs no browser either; the memorizer-browser job drives
-# the Memorizer — a second app that carries no licensed content — in Chromium
-# and in WebKit, and the synthetic-browser job drives this app in Chromium:
+# the Memorizer — a second app that carries no licensed content — in Chromium,
+# WebKit and Firefox, and the synthetic-browser job drives this app in Chromium:
 #
 #   syntax       every .js and .py file in the repo parses, and the two
 #                listing commands (which patch chain steps exist, which test
@@ -336,12 +336,12 @@ jobs:
   #
   # IN WEBKIT TOO, because the device this is for is an iPad and an iPad is
   # WebKit. Every suite here launches through tests/_engine.js, so the engine
-  # is SYSTOLE_ENGINE and nothing else changes between the two entries. The
+  # is SYSTOLE_ENGINE and nothing else changes between the three entries. The
   # Chromium entry keeps its name exactly, so nothing that looks a check up
-  # by name loses it. fail-fast is off: a WebKit-only failure must not cancel
-  # the Chromium run that would show it is WebKit-only. Each suite runs even
-  # when the one before it failed (!cancelled()), so one run shows every
-  # failure on an engine, not only the first; the job is still red.
+  # by name loses it. fail-fast is off: an engine failure must not cancel
+  # the other engines. Firefox uses the same suites and assertions. Each
+  # suite runs even when the one before it failed (!cancelled()), so one run
+  # shows every failure on an engine, not only the first; the job is still red.
   #
   # Playwright's WebKit on Linux is WebKitGTK, not Safari on iPadOS. It shares
   # the engine, the JavaScript core and IndexedDB, which is what these suites
@@ -358,6 +358,8 @@ jobs:
             label: Chromium
           - engine: webkit
             label: WebKit
+          - engine: firefox
+            label: Firefox
     env:
       SYSTOLE_ENGINE: ${{ matrix.engine }}
     steps:
