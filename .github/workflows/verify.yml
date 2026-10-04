@@ -194,7 +194,7 @@ jobs:
         run: node tests/verify-claude-skills.js
       - name: a study file is checked by Memorizer's own import code (26 checks)
         run: node tests/verify-study-file-check.js
-      - name: the built file cuts into the app and its payloads losslessly, and the app carries none of the bank (37 checks)
+      - name: the built file cuts into the app and its payloads losslessly, and the app carries none of the bank (43 checks)
         run: node tests/verify-app-slots-pure.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js
