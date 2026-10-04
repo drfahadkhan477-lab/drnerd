@@ -1,0 +1,25 @@
+#!/bin/sh
+# Run every suite that needs no browser and no build before anything is
+# pushed (npm run test:pure, about a minute). CI runs the same suites first
+# in its `logic` job; this is the same answer without a ten-minute round trip.
+#
+# Installed with the pre-commit hook, once per clone: npm run hooks
+#
+# Not run for a push that only deletes a branch or tag. To push anyway, say
+# so on purpose: git push --no-verify.
+#
+# Git feeds this one line per ref on stdin: "<local ref> <local sha> <remote
+# ref> <remote sha>". A deletion has an all-zero local sha.
+only_deletes=1
+while read -r _ local_sha _ _; do
+  case "$local_sha" in
+    *[!0]*) only_deletes=0 ;;
+  esac
+done
+[ "$only_deletes" = 1 ] && exit 0
+cd "$(dirname "$0")/.." || exit 1
+echo "pre-push: the suites that need no browser and no build"
+if ! node scripts/test-public.js --pure; then
+  echo "pre-push: a suite failed, so nothing was pushed. Fix it, or push with --no-verify on purpose." >&2
+  exit 1
+fi
