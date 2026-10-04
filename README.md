@@ -34,7 +34,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 5432 + 134 checks above — read it as 5339, not 5566.**
+**That badge is not the 5432 + 134 checks above — read it as 5349, not 5566.**
 CI cannot build the app from the real bank: that needs the licensed export,
 which is deliberately never committed here and never will be, on GitHub or
 anywhere else that isn't your own devices. So it builds the real app around
@@ -45,7 +45,7 @@ the test-suite list both still list without crashing, `scripts/build.js`
 still refuses to run and explains why when no source is present, and
 the 80 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
-scope and why the other 227 checks can't run here.
+scope and why the other 217 checks can't run here.
 
 ### The device this is for
 

@@ -160,10 +160,12 @@ const ciTotal = ciSuites.reduce((n, s) => n + (stats.suites[s] || 0), 0);
    runsInCI() (it answers "can CI run this" and says no, because
    verify-engine reads _engine.js), and "requires _engine" (it does, to test
    it, and never launches anything). The check below caught both. */
-const launches = n => {
-  const code = blankComments(fs.readFileSync(path.join(__dirname, `verify-${n}.js`), 'utf8'));
-  return /^[^'"`\n]*require\(\s*'playwright'\s*\)/m.test(code) || /^[^'"`\n]*\blaunch\(/m.test(code);
-};
+/* tests/_targets.js tagsOf, which verify.js tags suites with: a direct
+   launch, or a tool the suite runs that launches one. This file had its own
+   copy that saw only the first, so verify-figprobe, which drives its browser
+   through tools/figure-probe.js, was "pure Node" here and "browser" there,
+   and could be put in neither job. One rule now. */
+const launches = n => require('./_targets.js').tagsOf(`${n}`).includes('browser');
 const pureCI = ciSuites.filter(n => !launches(n));
 
 head('the workflow is one GitHub can read');
