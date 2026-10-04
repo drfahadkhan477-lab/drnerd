@@ -5,6 +5,7 @@
  *
  *   node scripts/assemble-app.js [source.html] [--out build/systole.assembled.html]
  *                                [--compare build/systole.html]
+ *                                [--refs content/refs] [--ref-images content/refs-images]
  *
  * app/systole.html is the chain's output with every payload replaced by a slot
  * token (scripts/app-slots.js, frozen by scripts/freeze-shell.js). This fills
@@ -118,12 +119,16 @@ function findSource(arg) {
 if (require.main === module) {
   const args = process.argv.slice(2);
   const opt = f => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
-  const positional = args.find((a, i) => !a.startsWith('--') && !['--out', '--compare', '--shell'].includes(args[i - 1]));
+  const positional = args.find((a, i) => !a.startsWith('--') && !['--out', '--compare', '--shell', '--refs', '--ref-images'].includes(args[i - 1]));
   try {
     const source = findSource(positional);
     const shellFile = opt('--shell') || path.join(ROOT, 'app', 'systole.html');
     const out = opt('--out') || path.join(ROOT, 'build', 'systole.assembled.html');
-    const r = assembleApp({ shell: fs.readFileSync(shellFile, 'utf8'), resolve: producers({ exportHtml: fs.readFileSync(source, 'utf8') }) });
+    const r = assembleApp({ shell: fs.readFileSync(shellFile, 'utf8'), resolve: producers({
+      exportHtml: fs.readFileSync(source, 'utf8'),
+      refsDir: opt('--refs') ? path.resolve(opt('--refs')) : undefined,
+      imagesDir: opt('--ref-images') ? path.resolve(opt('--ref-images')) : undefined,
+    }) });
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, r.out);
     console.log(`assembled → ${path.relative(ROOT, out)}  (${(r.out.length / 1e6).toFixed(2)} MB, build ${r.digest})`);
