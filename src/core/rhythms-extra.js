@@ -36,7 +36,12 @@ function xBeat(t, o) {
   const qt = o.qtScale || 1;
   let v = 0;
 
-  if (pAmp) v += gauss(t, pr - 115, 20, pAmp);          // P, sitting PR before the R
+  /* The P wave sits where the atria fire, 45 ms into the beat, and the QRS comes prMs after it
+     starts. It was placed at pr - 115, which keeps P a fixed 115 ms before the R whatever the PR is:
+     a first-degree block (320) and a Wenckebach (160, 220, 280) then drew a perfectly normal-looking
+     P-to-R gap, and the lone P of a dropped beat (below) sat at 45 while every conducted one moved.
+     At the default 160 the two agree, which is why nothing else changed. */
+  if (pAmp) v += gauss(t, 45, 20, pAmp);
   if (o.prDepress) v -= gauss(t, pr - 70, 26, o.prDepress);
 
   const q0 = pr;

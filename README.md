@@ -43,7 +43,7 @@ on that, except the few whose subject is the real bank itself. On every push
 it also checks, with no source file: every script parses, the patch chain and
 the test-suite list both still list without crashing, `scripts/build.js`
 still refuses to run and explains why when no source is present, and
-the 81 suites that need neither a browser nor a build all stay green. See
+the 86 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 217 checks can't run here.
 
@@ -500,3 +500,10 @@ Memorizer carries no content of its own, so unlike Systole it builds
 anywhere, CI included — and CI runs it: its pure suites in the logic job, and
 the whole app in Chromium, on a PDF and notes the tests write themselves, in
 the memorizer-browser job.
+
+## The Lab — heart sounds, tracings, strips
+
+A third app, built the same way and also carrying nothing from the export:
+twelve heart sounds synthesised on `physio.js`'s valve events, pressure tracings,
+ECG strips, and a map of which valve and chamber each one is. It remembers what
+you miss. See `docs/LAB.md`.

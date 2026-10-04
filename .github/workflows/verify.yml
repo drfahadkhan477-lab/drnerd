@@ -47,7 +47,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 81 suites that are pure Node with no Playwright and no
+#   logic        the 86 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -102,7 +102,13 @@
 name: verify (source-independent subset)
 
 on:
+  # A push to a branch that has a pull request used to run this whole
+  # workflow twice, once as `push` and once as `pull_request`: two sets of
+  # the same twelve-minute jobs for every commit. A branch is now tested as
+  # its pull request; `push` is for master, where a merge is tested as it
+  # lands. tests/verify-testpublic-pure.js holds this shape.
   push:
+    branches: [master]
   pull_request:
   # The `full` job's own `if:` asks for this event, and GitHub only offers the
   # "Run workflow" button for a workflow that declares it on the default
@@ -115,6 +121,13 @@ on:
 # could notice that while GitHub was unable to parse this file at all.
 permissions:
   contents: read
+
+# A newer push to a pull request makes the run still going for the one before
+# it pointless, so it is cancelled. Master is never cancelled: every merge is
+# tested to the end.
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   syntax:
@@ -208,6 +221,16 @@ jobs:
         run: node tests/verify-carve-pure.js
       - name: the synthetic export builds the real app, and is marked so its run is never recorded (26 checks)
         run: node tests/verify-synthetic-pure.js
+      - name: each heart sound and murmur is on the valve events physio measures, with the shape and pitch of its lesion (36 checks)
+        run: node tests/verify-lab-pure.js
+      - name: the study plan fits the time, puts the most forgotten first and the weak chapters next, and never throws on damaged data (39 checks)
+        run: node tests/verify-plan-pure.js
+      - name: questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair (27 checks)
+        run: node tests/verify-topicrun-pure.js
+      - name: a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary (29 checks)
+        run: node tests/verify-voice-pure.js
+      - name: each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes (42 checks)
+        run: node tests/verify-drills-pure.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
@@ -389,6 +412,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (25 checks)
         run: node tests/verify-bankstore.js
+      - if: ${{ !cancelled() }}
+        name: the Lab, built and driven — the audio played is the heart sound asked, nothing names an answer early, progress is stored and survives a reload, and the heart map is drawn from the map (67 checks)
+        run: node tests/verify-lab.js
 
   # ── the app itself, built around an invented bank ───────────────────────────
   #

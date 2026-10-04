@@ -50,6 +50,19 @@ ok('and the last of them writes the target the suites read',
 ok('together they are every suite the workflow runs, each once',
    JSON.stringify(pure.concat(browser, synNames).sort()) === JSON.stringify(all.slice().sort()), `${pure.length + browser.length + synNames.length} of ${all.length}`);
 
+head('the workflow runs once per commit');
+{
+  /* A push to a branch with a pull request fired this workflow as `push` and
+     as `pull_request`: every job twice per commit. Held in the workflow's own
+     trigger block, comments blanked. */
+  const top = yml.slice(yml.indexOf('\non:'), yml.indexOf('\njobs:')).replace(/#.*$/gm, '');
+  ok('`push` is for master only, so a branch with a pull request is not run twice',
+     /\n\s+push:\s*\n\s+branches:\s*\[\s*master\s*\]/.test(top), top.replace(/\s+/g, ' ').slice(0, 120));
+  ok('pull requests are still tested', /\n\s+pull_request:/.test(top));
+  ok('a newer push cancels the pull request run before it, and never a master run',
+     /cancel-in-progress:\s*\$\{\{\s*github\.event_name\s*==\s*'pull_request'\s*\}\}/.test(top));
+}
+
 head('reading a workflow');
 const SYN = syn => !syn ? '' : `  synthetic-browser:\n    steps:\n      - name: build\n        run: |\n${syn.build.map(c => `          node ${c.join(' ')}\n`).join('')}` +
   syn.suites.map(n => `      - name: ${n} (1 checks)\n        run: node tests/${n}.js ${syn.target}\n`).join('');
