@@ -40,6 +40,9 @@ function carve({ shell, from, to, name }) {
      a separator to path.join, and "app/..\x" would leave app/ unnoticed. */
   if (!/^app\/[^@\]\\]+$/.test(name) || name.split('/').some(s => s === '' || s === '.' || s === '..')) throw new Error(`"${name}" is not a path under app/`);
   if (name === SHELL) throw new Error('the shell cannot be carved into itself');
+  /* repoSources() does not offer these as pieces, so a freeze would neither
+     claim the file nor report it: the carve would be silently dropped. */
+  if (Slots.isMetadata(name.slice('app/'.length))) throw new Error(`"${name}" is a name the pieces of app/ skip (a dotfile, a dot-directory, Thumbs.db, desktop.ini)`);
   const lines = shell.split('\n');
   /* A shell ending in a newline splits to a last empty entry, which is not a line. */
   const total = shell.endsWith('\n') ? lines.length - 1 : lines.length;
@@ -130,7 +133,10 @@ function auditApp(root = ROOT) {
     if (kind === 'payload') { if (!payloads.has(name)) problems.push(`payload:${name} is not a payload app-slots knows`); continue; }
     if (!['src', 'asset', 'app'].includes(kind)) { problems.push(`${kind}:${name} is not a kind of slot`); continue; }
     if (typeof repo(kind, name) !== 'string') problems.push(`${kind}:${name} has no file in the repository`);
-    if (kind === 'app') cited.set(name, (cited.get(name) || 0) + 1);
+    if (kind === 'app') {
+      cited.set(name, (cited.get(name) || 0) + 1);
+      if (name.startsWith('app/') && Slots.isMetadata(name.slice('app/'.length))) problems.push(`${name} is cited, but it is a name the pieces of app/ skip: a freeze would not claim it`);
+    }
   }
   const pieces = walk(path.join(root, 'app')).map(f => path.relative(root, f).split(path.sep).join('/'))
     .filter(n => n !== SHELL && !Slots.isMetadata(n.slice('app/'.length))).sort();

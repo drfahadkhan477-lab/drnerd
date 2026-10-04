@@ -123,6 +123,9 @@ head('what a carve refuses');
     refuses(() => Carve.carveFile({ root: short, from: 3, to: 4, name: 'app/css/a.css', write: failsOnPiece }), /piece could not be written.*no space left/)
     && !fs.existsSync(path.join(short, 'app', 'css', 'a.css'))
     && fs.readFileSync(path.join(short, 'app', 'systole.html'), 'utf8') === SHELL);
+  ok('a destination the pieces of app/ skip: a dotfile, a dot-directory, Thumbs.db, desktop.ini',
+    ['app/.piece.css', 'app/.cache/piece.css', 'app/css/.piece.css', 'app/Thumbs.db', 'app/css/Desktop.ini'].every(n => refuses(c(3, 4, n), /pieces of app\/ skip/))
+    && !refuses(c(3, 4, 'app/css/thumbs.css'), /./) );
   const cli = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'carve.js'), '3'], { encoding: 'utf8' });
   ok('the command line without a path exits 2', cli.status === 2, String(cli.status));
 }
@@ -191,6 +194,10 @@ head('files a workstation leaves under app/ are not pieces');
   const a = Carve.auditApp(r), offered = Object.keys(Slots.repoSources(r).apps);
   ok('the audit finds only the piece, and no problem', a.problems.length === 0 && a.pieces.join() === 'app/css/a.css', JSON.stringify(a));
   ok('the cut is offered only the piece', offered.join() === 'app/css/a.css', offered.join());
+  const cites = root('cites', SHELL.replace('.a{color:red}\n.b{color:blue}\n', Slots.token('app', 'app/.hidden.css')));
+  put(cites, 'app/.hidden.css', '.a{color:red}\n.b{color:blue}\n');
+  const ca = Carve.auditApp(cites);
+  ok('a token that cites such a name is named by the audit', ca.problems.length === 1 && /\.hidden\.css is cited, but it is a name the pieces of app\/ skip/.test(ca.problems[0]), JSON.stringify(ca.problems));
   ok('a name that only looks like metadata is still a piece', !Slots.isMetadata('css/a.css') && !Slots.isMetadata('css/dotted.name.css') && !Slots.isMetadata('thumbs.css') && Slots.isMetadata('css/.hidden/a.css'));
 }
 
