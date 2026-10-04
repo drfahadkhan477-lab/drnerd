@@ -21,9 +21,15 @@
  *   asset     a file of assets/ found verbatim as base64 (fonts, the splash
  *             photograph). Read from assets/ at assembly, same reason.
  *
- * Every slot must match exactly once, as patch() must. A src module or asset
- * that is not found verbatim stays inline and is REPORTED, not guessed at: it
- * means a later patch edited the embedded copy, which is drift worth knowing.
+ * A payload or a src module must match exactly once, as patch() must. One that
+ * is not found verbatim stays inline and is REPORTED, not guessed at: it means
+ * a later patch edited the embedded copy, which is drift worth knowing.
+ *
+ * An asset may be embedded more than once (the heart photograph is, by the
+ * splash and by the home hero) and is claimed at every site. Exactly-once
+ * guards an edit landing in the wrong place; a verbatim base64 file filled
+ * back from the same file is the same bytes wherever it stands, and left
+ * inline it is a blob the leak scan rightly refuses.
  *
  * assemble() is cut()'s inverse. freeze-shell.js proves it byte for byte on the
  * real build; tests/verify-app-slots-pure.js on a synthetic one.
@@ -64,21 +70,25 @@ function walk(dir, keep) {
 }
 
 /* What the repository offers to slot, as { name: text }. Names are
-   repository-relative paths, so a slot names the file it came from. */
+   repository-relative paths, so a slot names the file it came from — with
+   forward slashes whatever the machine, because the names are written into the
+   committed shell and a shell cut on Windows has to assemble on Linux. */
 function repoSources(root = ROOT) {
   const srcs = {}, assets = {};
+  const rel = f => path.relative(root, f).split(path.sep).join('/');
   for (const f of walk(path.join(root, 'src'), p => p.endsWith('.js')))
-    srcs[path.relative(root, f)] = fs.readFileSync(f, 'utf8');
+    srcs[rel(f)] = fs.readFileSync(f, 'utf8');
   /* Assets under 512 bytes are skipped: a short base64 string could match by
      accident, and nothing that small is worth a slot. */
   for (const f of walk(path.join(root, 'assets'), p => !p.endsWith('.md') && fs.statSync(p).size >= 512))
-    assets[path.relative(root, f)] = fs.readFileSync(f).toString('base64');
+    assets[rel(f)] = fs.readFileSync(f).toString('base64');
   return { srcs, assets };
 }
 
 /* cut(html, sources) → { shell, payloads, report }
    payloads: { ALL_Q: text, … } — the spans that left and must be stored.
-   report:   { slots: [{kind,name,bytes}], inline: {src:[…], asset:[…]} } */
+   report:   { slots: [{kind,name,bytes,times}], inline: {src:[…], asset:[…]} }
+             times is how many sites an asset was claimed at; absent means one. */
 function cut(html, sources = repoSources()) {
   if (html.includes('@@SLOT[')) throw new Error('the input already contains a slot token: it is not a fresh build');
   let shell = html;
@@ -101,6 +111,9 @@ function cut(html, sources = repoSources()) {
       if (n === 1) {
         shell = shell.replace(text, () => token(kind, name));
         slots.push({ kind, name, bytes: text.length });
+      } else if (n > 1 && kind === 'asset') {
+        shell = shell.split(text).join(token(kind, name));
+        slots.push({ kind, name, bytes: text.length, times: n });
       } else if (n > 1) {
         inline[kind].push(`${name} (found ${n} times)`);
       } else {
@@ -112,13 +125,14 @@ function cut(html, sources = repoSources()) {
 }
 
 /* assemble(shell, resolve) — resolve(kind, name) returns the span's text.
-   Every token is filled exactly once; an unknown kind, a missing payload or a
-   token left over is an error, never an empty string. */
+   A payload or src token may appear once; an asset token may repeat, as the
+   asset did in the build. An unknown kind, a missing payload or a token left
+   over is an error, never an empty string. */
 function assemble(shell, resolve) {
   const seen = new Set();
   const out = shell.replace(TOKEN_RE, (_, kind, name) => {
     const key = kind + ':' + name;
-    if (seen.has(key)) throw new Error(`slot ${key} appears more than once in the shell`);
+    if (seen.has(key) && kind !== 'asset') throw new Error(`slot ${key} appears more than once in the shell`);
     seen.add(key);
     const text = resolve(kind, name);
     if (typeof text !== 'string') throw new Error(`slot ${key} has nothing to fill it`);
