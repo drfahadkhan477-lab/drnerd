@@ -55,17 +55,23 @@ Stress testing exposed a separate restore failure: the repeated base64 regex exh
 
 The browser backup flow now exports and restores an 8 MiB synthetic payload and compares every byte. The skipped-question test uses the existing recall helper to wait for the asynchronous transition before starting its drill assertions; no scoring or skip assertion was removed.
 
+The newly merged study-import suite also needed to scroll its lazy SVG into view before waiting for visibility in Firefox. Its existing image, sanitizer, strict-mode and import assertions remain intact.
+
 Local checks on the updated branch:
 
 - `npm run test:pure`: 77 suites passed; its six browser suites were explicitly excluded.
 - `node tests/verify-memorizer-hardening.js`: 64 Chromium checks passed.
 - `SYSTOLE_ENGINE=firefox node tests/verify-memorizer-hardening.js`: 64 Firefox checks passed.
+- `NODE_USE_ENV_PROXY=1 SYSTOLE_ENGINE=firefox node tests/verify-memorizer.js`: 483 checks passed.
+- Firefox study-import: 69 checks passed; Firefox data-protection: 18 checks passed.
 - `npm run memorizer`, `npm run leak-guard`, and `git diff --check`: passed.
 - A separate synthetic Node v24.19.0 experiment exported/restored 32 MiB with an exact full-byte comparison: 42.67 MiB JSON, 1,901 ms export, 1,251 ms restore, and 576 MiB peak process RSS from a 28 MiB baseline. These measurements are from Node, not Safari or an iPad.
 
 Local WebKit remains unavailable because its system libraries are missing; the new PR's mandatory WebKit CI must pass on its final revision. Real iPad/Safari/VoiceOver, real WebGPU models, private licensed-content builds and large-book device memory measurements were not run. The memory expansion of JSON/base64 backups remains a risk; the next bounded step is an iPad memory benchmark and then a lower-memory backup format if needed.
 
-Follow-up files: `memorizer/src/backup.js`, `tests/verify-memorizer-backup-pure.js`, `tests/verify-memorizer-hardening.js`, `tests/verify-memorizer.js`, and this report. The list below records the original merged review.
+Additional checks that did not pass: Firefox offline preparation failed to cache CDN dependencies in this environment, including a repeat with Node's environment proxy enabled; its later cache comparison could not run. This is unresolved, not an offline-readiness pass. CodeQL's analysis/upload job failed because GitHub reports that code scanning is disabled for this repository; no security or workflow guard was changed.
+
+Follow-up files: `memorizer/src/backup.js`, `tests/verify-memorizer-backup-pure.js`, `tests/verify-memorizer-hardening.js`, `tests/verify-memorizer.js`, `tests/verify-memorizer-studyimport.js`, and this report. The list below records the original merged review.
 
 ## Changed files
 
