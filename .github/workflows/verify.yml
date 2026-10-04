@@ -775,6 +775,17 @@ jobs:
           # Counts only, never a name: a note's filename is its topic.
           echo "corpus staged: $notes note files, $images image files"
 
+      # Without this the checkout has no node_modules, and scripts/verify.js
+      # falls back to whatever playwright is installed globally on the runner.
+      # The first complete runs here were on a global 1.63.0 while package.json
+      # pins another, so they certified nothing about the pinned browsers.
+      # `playwright install` is a no-op when the pinned builds are already in
+      # the runner's browser cache.
+      - name: the pinned playwright, from the lockfile
+        run: |
+          npm ci
+          npx playwright install chromium webkit
+
       # NO SEPARATE leak-guard STEP HERE, and that is deliberate. The obvious
       # thing to write is `run: node scripts/leak-guard.js` before the gate. On
       # a fresh checkout it stages nothing, checks 0 files and exits 0 — it
