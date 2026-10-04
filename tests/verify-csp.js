@@ -28,6 +28,7 @@
  */
 'use strict';
 const http = require('http');
+const { blankComments } = require('./_source.js');
 const { launch, engineName } = require('./_engine.js');
 const { onDeath, watch } = require('./_deathnote.js');
 const CSP = require('../scripts/csp.js');
@@ -84,6 +85,15 @@ head('the allowlist covers every host the shipped app can reach');
     'fonts.googleapis.com':  'stage0 — fonts: drop Google Fonts links',
     'fonts.gstatic.com':     'stage0 — fonts: drop Google Fonts links',
   };
+  /* Scripts under scripts/ that are not part of this app at all. The scan is
+     of what the shipped app can reach, and a tool run by hand on the owner's
+     machine reaches whatever it likes without the app's policy being wrong.
+     Each is named with why, and the check below holds the claim: no other
+     file under scripts/ or src/ names it, so no build step can be loading it. */
+  const NOT_SHIPPED = {
+    'scripts/model-manifest.js': 'a Memorizer maintenance tool — run by hand, writes memorizer/src/models.js',
+  };
+  const relPath = p => path.relative(path.join(__dirname, '..'), p).split(path.sep).join('/');
   const roots = ['scripts', 'src'];
   const files = [];
   const walk = d => fs.readdirSync(d, { withFileTypes: true }).forEach(f => {
@@ -92,8 +102,17 @@ head('the allowlist covers every host the shipped app can reach');
   });
   roots.forEach(r => walk(path.join(__dirname, '..', r)));
 
+  const loaders = Object.keys(NOT_SHIPPED).map(tool => {
+    const base = path.basename(tool);
+    const by = files.filter(f => relPath(f) !== tool && blankComments(fs.readFileSync(f, 'utf8')).includes(base)).map(relPath);
+    return by.length ? tool + ' is named by ' + by.join(', ') : '';
+  }).filter(Boolean);
+  ok('a script excused from the scan is one nothing in the build names',
+     loaders.length === 0 && Object.keys(NOT_SHIPPED).every(t => files.some(f => relPath(f) === t)), loaders.join('; ') || 'none');
+
   const hosts = new Set();
   for (const f of files) {
+    if (relPath(f) in NOT_SHIPPED) continue;
     for (const m of fs.readFileSync(f, 'utf8').matchAll(/https:\/\/([a-z0-9.-]+)/gi)) hosts.add(m[1]);
   }
   const allowed = new Set(CSP.CONNECT.filter(s => s.startsWith('https://'))

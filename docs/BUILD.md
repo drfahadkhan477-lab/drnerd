@@ -258,8 +258,9 @@ bank, its figures, and the Braunwald reference seed and figures.
    as they are. It stamps the result as `build.js` does. `--compare` says
    whether it is the chain's build byte for byte, and if not, which part
    differs, by name. When it reports byte-identical, the chain is no longer
-   needed to build the app. CI can then assemble the real app around a
-   synthetic bank.
+   needed to build the app. CI now assembles the real app around a
+   synthetic bank (`scripts/synthetic-export.js`) and runs the browser
+   suites on it: the `synthetic-browser` job.
 3. **Carve `app/`** (now). Split it into CSS and modules a piece at a time:
 
    ```bash
@@ -279,7 +280,10 @@ bank, its figures, and the Braunwald reference seed and figures.
    stylesheet is the first piece, `app/css/systole.css`. New work edits
    `app/` or `src/` directly; no new patch steps are added.
 4. **Retire the chain** once both paths give the same file for a few
-   releases. The scripts stay in history.
+   releases. The scripts stay in history. `npm run release-check` compares
+   the two on every certification (its `assemble` step), so the release
+   reports in `build/release-report.md` are that record; a difference
+   withholds `CERTIFIED`.
 
 `tests/verify-app-slots-pure.js` holds step 1 on a synthetic build. Only
 `freeze-shell` on the real build can show that the real one cuts cleanly.
@@ -298,7 +302,8 @@ npm run release -- --dry-run                           # exercise the gate itsel
 
 `scripts/release-check.js` runs the sequence a release actually needs, in
 order: the export is readable → nothing licensed is staged → the patch chain
-applies → every figure decodes → the split build assembles → the full suite on
+applies → the app assembled without the chain is the chain's build, byte for
+byte → every figure decodes → the split build assembles → the full suite on
 Chromium → the full suite against `dist/` over http → the full suite on WebKit.
 
 **It does not deploy.** It certifies, or it refuses to, and there are three
@@ -330,8 +335,12 @@ exists to prevent, arriving through the convenience alias.
 
 Without the export, `npm test` runs every suite CI runs: the pure-Node ones,
 then the browser suites that make their own documents (the Memorizer and the
-code-only deploy's import). It reads that list from
-`.github/workflows/verify.yml`, so the two cannot drift apart.
+code-only deploy's import), then the app's browser suites on the synthetic
+build, which it makes first with the same commands as CI's
+`synthetic-browser` job (into `build/synthetic/`, never over your own
+`build/systole.html`). It reads all of that from
+`.github/workflows/verify.yml`, so the two cannot drift apart. That build is
+marked synthetic, so no run on it is ever written to `tests/test-stats.json`.
 `npm run test:pure` skips the browser suites and says which ones it skipped.
 `SYSTOLE_ENGINE=webkit npm test` runs the browser half on WebKit. The full
 registry below needs your build, and is `npm run test:private`.
@@ -658,7 +667,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        124 suites · 80 need no browser · + pwa
+tests/        124 suites · 81 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
@@ -688,10 +697,13 @@ its green as "did not run".
 
 ## The laptop as a CI runner (optional)
 
-CI runs the honest subset because GitHub's runners cannot build the app — the
-ACCSAP 12 export is licensed and is not in this repository nor in any secret
-GitHub holds. That leaves the browser suites running only when you remember to
-run them, which is why "CSP has never met the real app" was true for weeks.
+CI runs the honest subset because GitHub's runners cannot build the app from
+the real bank — the ACCSAP 12 export is licensed and is not in this
+repository nor in any secret GitHub holds. They build it around an invented
+one, which leaves the suites about the real bank itself, and the split build,
+running only when you remember to run them. Before the synthetic build that
+was every browser suite, which is why "CSP has never met the real app" was
+true for weeks.
 
 The `full` job in `.github/workflows/verify.yml` closes that, by running on
 your own machine. It is opt-in: with no runner registered it never starts, and

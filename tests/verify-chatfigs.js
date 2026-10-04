@@ -95,7 +95,15 @@ const sse = text => [
       const sh = document.getElementById('shell');
       if (!sh.classList.contains('ai-open')) toggleAI();
       buildAI();
-      fire('explain this');
+      /* ASKED ABOUT THE NOTE, BY ITS TITLE. What is SENT is decided by
+         retrieval when the question goes out; lastHits is pinned only after,
+         for what is SHOWN. Asked as a bare "explain this", the request carried
+         whatever notes those two words matched, which on the real library
+         happened to include one with a figure and on a library without the
+         word "explain" included none: the grounded check below measured the
+         library's vocabulary. Naming the note makes it the note both modes
+         retrieve, so grounded must send its figure and open must not. */
+      fire('explain this: ' + note.title);
       await new Promise(r => setTimeout(r, 1600));
       lastHits = [{ kind: 'r', id: note.id, title: note.title }];
       buildAI();
@@ -128,8 +136,13 @@ const sse = text => [
 
   head('the vision attachment stays rationed, though the display is not');
   const openSys = (sent.find(Boolean) || {});
-  const openHasImage = JSON.stringify(openSys).includes('"type":"image_url"');
-  ok('open mode still does not spend tokens sending note figures', !openHasImage);
+  /* In the wire's own spelling. This looked for {"type":"image_url"}, the
+     OpenAI shape, while the suite drives Gemini, which sends an image as
+     inlineData: an open mode that sent every figure passed it. The grounded
+     check below already spoke Gemini; this one now uses the same pattern. */
+  const IMAGE_PART = /"inlineData"\s*:\s*\{[^}]*"mimeType"\s*:\s*"image\//;
+  ok('a request went out in open mode, so the check below has one to read', sent.some(Boolean), sent.length + ' request(s)');
+  ok('open mode still does not spend tokens sending note figures', !IMAGE_PART.test(JSON.stringify(openSys)));
 
   head('grounded mode — shown and sent');
   const grounded = await ask(true);
@@ -137,8 +150,7 @@ const sse = text => [
   const gReq = sent.find(Boolean) || {};
   /* Gemini carries an image as an inlineData part with its own mimeType, where
      the OpenAI shape used {type:'image_url'}. Same claim, this wire's spelling. */
-  ok('and now it is sent to the model too',
-     /"inlineData"\s*:\s*\{[^}]*"mimeType"\s*:\s*"image\//.test(JSON.stringify(gReq)));
+  ok('and now it is sent to the model too', IMAGE_PART.test(JSON.stringify(gReq)));
 
   head('the model may place one inline, and then it is not shown twice');
   const inline = await page.evaluate(async () => {

@@ -38,6 +38,7 @@ const P = require(path.join(__dirname, '..', 'memorizer', 'src', 'provenance.js'
   await require('./verify-memorizer-store-pure.js');
   await require('./verify-memorizer-runtime-pure.js');
   await require('./verify-memorizer-backup-pure.js');
+  await require('./verify-memorizer-backup-benchmark-pure.js');
   head('the fingerprint is SHA-256 of exactly what was imported');
   /* FIPS 180-2 test vectors. */
   const abc = await P.fingerprint('abc', webcrypto.subtle);

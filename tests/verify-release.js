@@ -47,8 +47,12 @@ head('a run that measured nothing says so');
   ok('it says plainly that nothing was measured', /nothing was measured/.test(r.out));
   ok('and it exits non-zero', r.code === 1, String(r.code));
   /* The distinction the whole file turns on: skipped is not passed. */
+  /* The step count is read from the gate, not written here: this said "8"
+     and went stale the day a step was added. */
+  const steps = (fs.readFileSync(GATE, 'utf8').match(/^\s*\{ id: '[a-z]+'/gm) || []).length;
   ok('every step is recorded as skipped, not passed',
-     /8 skipped/.test(r.out) && !/✓/.test(r.out), (r.out.match(/\d+ skipped/) || [''])[0]);
+     steps > 5 && new RegExp(`\\b${steps} skipped`).test(r.out) && !/✓/.test(r.out),
+     `${(r.out.match(/\d+ skipped/) || [''])[0]} of ${steps} steps`);
 }
 
 head('a skip costs the certificate, and is named');
@@ -212,7 +216,7 @@ head('and a failing step cannot put its output in either place');
 head('the steps are the ones a release actually needs');
 {
   const src = fs.readFileSync(GATE, 'utf8');
-  for (const id of ['source', 'leakguard', 'build', 'extract', 'pwabuild', 'chromium', 'pwa', 'webkit']) {
+  for (const id of ['source', 'leakguard', 'build', 'assemble', 'extract', 'pwabuild', 'chromium', 'pwa', 'webkit']) {
     ok(`it runs '${id}'`, new RegExp(`id: '${id}'`).test(src));
   }
   /* WebKit is the engine the app is actually used on. It being present but
