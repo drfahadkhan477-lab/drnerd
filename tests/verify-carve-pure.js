@@ -106,6 +106,13 @@ head('what a carve refuses');
     refuses(() => Carve.carveFile({ root: lossy, from: 3, to: 4, name: 'app/css/a.css', cut: drops }), /does not give the same bytes/)
     && !fs.existsSync(path.join(lossy, 'app', 'css', 'a.css'))
     && fs.readFileSync(path.join(lossy, 'app', 'systole.html'), 'utf8') === SHELL);
+  const full = root('full');
+  const failsOnShell = (f, text) => { if (!String(f).includes('systole.html')) return fs.writeFileSync(f, text); fs.writeFileSync(f, text.slice(0, 9)); throw new Error('no space left'); };
+  ok('a shell that cannot be written: the piece is taken back and nothing else is left in app/',
+    refuses(() => Carve.carveFile({ root: full, from: 3, to: 4, name: 'app/css/a.css', write: failsOnShell }), /could not be written.*no space left/)
+    && !fs.existsSync(path.join(full, 'app', 'css', 'a.css'))
+    && fs.readdirSync(path.join(full, 'app')).filter(f => f !== 'css').join() === 'systole.html'
+    && fs.readFileSync(path.join(full, 'app', 'systole.html'), 'utf8') === SHELL);
   const cli = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'carve.js'), '3'], { encoding: 'utf8' });
   ok('the command line without a path exits 2', cli.status === 2, String(cli.status));
 }

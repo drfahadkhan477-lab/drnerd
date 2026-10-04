@@ -198,7 +198,7 @@ jobs:
         run: node tests/verify-app-slots-pure.js
       - name: the app assembles from app/systole.html as the chain builds it (24 checks)
         run: node tests/verify-assemble-pure.js
-      - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (25 checks)
+      - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (26 checks)
         run: node tests/verify-carve-pure.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js

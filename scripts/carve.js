@@ -9,8 +9,8 @@
  * app/<path>, and one token, @@SLOT[app:app/<path>]@@, stands where they
  * were. scripts/app-slots.js fills it back at assembly, so the assembled app
  * is the same bytes before and after, and that is checked here before
- * anything is kept: if it is not, the piece is removed and the shell is left
- * as it was.
+ * anything is kept: if it is not, or the shell cannot be written, the piece is
+ * removed and the shell is left as it was.
  *
  * A carve is refused when
  *   - the lines hold a slot token (a piece is plain text; nothing is filled
@@ -61,22 +61,36 @@ const withPayloadsLeft = root => {
 
 /* carveFile({ root, from, to, name }) → { bytes }. Writes the piece and the shell.
    `cut` is a parameter so the suite can hand it a carve that loses a line and
-   see the same-bytes check refuse it; nothing else passes one. */
-function carveFile({ root = ROOT, from, to, name, cut = carve }) {
+   see the same-bytes check refuse it, and `write` so it can fail the shell's
+   write and see the piece taken back; nothing else passes either.
+
+   The shell is replaced by rename, so it is the old one or the new one, never
+   part of each, and a write that fails takes the piece back with it. A process
+   killed between the two writes still leaves a piece beside the old shell:
+   auditApp names it as cited by no token, and deleting it is the whole repair. */
+function carveFile({ root = ROOT, from, to, name, cut = carve, write = fs.writeFileSync }) {
   const shellFile = path.join(root, SHELL), pieceFile = path.join(root, name);
   const old = fs.readFileSync(shellFile, 'utf8');
   const r = cut({ shell: old, from, to, name });
   if (fs.existsSync(pieceFile)) throw new Error(`${name} already exists`);
   const was = Slots.assemble(old, withPayloadsLeft(root));
   fs.mkdirSync(path.dirname(pieceFile), { recursive: true });
-  fs.writeFileSync(pieceFile, r.piece);
+  write(pieceFile, r.piece);
   let same = false;
   try { same = Slots.assemble(r.shell, withPayloadsLeft(root)) === was; } catch (e) { same = false; }
   if (!same) {
     fs.rmSync(pieceFile, { force: true });
     throw new Error('assembling the carved shell does not give the same bytes: nothing was kept');
   }
-  fs.writeFileSync(shellFile, r.shell);
+  const next = shellFile + '.carving';
+  try {
+    write(next, r.shell);
+    fs.renameSync(next, shellFile);
+  } catch (e) {
+    fs.rmSync(next, { force: true });
+    fs.rmSync(pieceFile, { force: true });
+    throw new Error('the shell could not be written, so the piece was removed: ' + e.message);
+  }
   return { bytes: r.piece.length };
 }
 
