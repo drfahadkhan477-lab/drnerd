@@ -2,6 +2,14 @@
 
 October 3, 2026. This follows the broad engineering review and the request to implement its fixes one by one. Changes are limited to Memorizer, its synthetic regression tests, and its standalone build script. The latest base-branch OCR recovery was merged and preserved.
 
+## Completion status — October 4
+
+The implementation and follow-up fixes are complete and merged: [#116](https://github.com/drfahadkhan477-lab/drnerd/pull/116), [#126](https://github.com/drfahadkhan477-lab/drnerd/pull/126), and [#127](https://github.com/drfahadkhan477-lab/drnerd/pull/127). The final Memorizer merge, `fd3abd3`, passed Chromium, WebKit, logic, syntax, build-guard and CodeQL checks. The subsequent `master` revision `84da234` also passed all source-independent CI jobs ([run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/37168903989)). A separate repository change, #128, removed the checked-in CodeQL workflow after the Memorizer work; GitHub still reports CodeQL checks on this report's PR.
+
+The sections below record validation at each stage. Firefox offline validation and final-revision WebKit CI are resolved. Local WebKit remains unavailable because system libraries are missing, but CI WebKit coverage passed. One earlier Chromium run lost its page context near the end of the main suite; the final merge and subsequent `master` passed that suite, so this remains an intermittent observation rather than a reproduced application defect.
+
+The remaining acceptance work needs a real iPad: import a large synthetic multipart book, cancel an import, export/rescue a backup in temporary-memory mode, restore and verify it, reopen offline, switch real on-device models, and check keyboard/VoiceOver focus. Device memory use, a physical network toggle and browser-to-CDN CORS/TLS were not measured here. The 32 MiB Node backup experiment below used 576 MiB peak RSS; it does not establish a safe iPad backup size. The next step is that device trial, followed by a smaller-memory backup format if its measurements warrant one.
+
 ## Changes, in review order
 
 | Finding | Result |
@@ -24,7 +32,7 @@ October 3, 2026. This follows the broad engineering review and the request to im
 
 Additional improvements: versioned binary-preserving backups with checksums, preview and atomic replacement; pending failed writes included in exports; storage estimates and persistence requests; cooperative import cancellation; OCR worker shutdown; visible-image PDF rendering with coalesced requests and a bounded cache; reusable search indexes built in a disposable worker; standard radio keyboard behavior; visible speech-service privacy disclosure.
 
-## Validation
+## Validation for the original review
 
 All fixtures were synthetic. No private licensed-content build or fixture was added.
 
@@ -45,7 +53,7 @@ Memory fallback remains temporary; closing/reloading loses it unless exported. B
 
 Cancellation stops between pages and before the final commit; a currently executing PDF/OCR page can still take time to finish. The render cache is bounded, but full PDF extraction, page text and visible images still consume memory. Worker indexing falls back to the existing main-thread implementation when workers are unavailable. Startup cleanup deliberately leaves recent staged imports alone to avoid deleting another tab's active import.
 
-The next smallest validation step is a final-revision WebKit CI run followed by a real iPad test of a large multipart import, cancellation, backup rescue in memory mode, restore, offline update, model switching and keyboard/VoiceOver focus.
+Final-revision WebKit CI subsequently passed. The remaining device validation is described in the completion status above.
 
 ## October 4 follow-up: large binary backups
 
@@ -67,21 +75,23 @@ Local checks on the updated branch:
 - `npm run memorizer`, `npm run leak-guard`, and `git diff --check`: passed.
 - A separate synthetic Node v24.19.0 experiment exported/restored 32 MiB with an exact full-byte comparison: 42.67 MiB JSON, 1,901 ms export, 1,251 ms restore, and 576 MiB peak process RSS from a 28 MiB baseline. These measurements are from Node, not Safari or an iPad.
 
-Local WebKit remains unavailable because its system libraries are missing; the new PR's mandatory WebKit CI must pass on its final revision. Real iPad/Safari/VoiceOver, real WebGPU models, private licensed-content builds and large-book device memory measurements were not run. The memory expansion of JSON/base64 backups remains a risk; the next bounded step is an iPad memory benchmark and then a lower-memory backup format if needed.
+Local WebKit remains unavailable because its system libraries are missing; PR #126's mandatory WebKit CI subsequently passed on its final revision. Real iPad/Safari/VoiceOver, real WebGPU models, private licensed-content builds and large-book device memory measurements were not run. The memory expansion of JSON/base64 backups remains a risk; the next bounded step is an iPad memory benchmark and then a lower-memory backup format if needed.
 
-Additional checks that did not pass: Firefox offline preparation failed to cache CDN dependencies in this environment, including a repeat with Node's environment proxy enabled; its later cache comparison could not run. This is unresolved, not an offline-readiness pass. CodeQL's analysis/upload job failed because GitHub reports that code scanning is disabled for this repository; no security or workflow guard was changed.
+At this stage, Firefox offline preparation failed to cache CDN dependencies in this environment, including a repeat with Node's environment proxy enabled; its later cache comparison could not run. PR #127 resolved the harness failure as described below. CodeQL initially failed because repository code scanning was disabled, then its rerun passed on #126's final revision. The later removal of the checked-in CodeQL workflow was a separate repository change; CodeQL checks still appear on later PRs.
 
 Follow-up files: `memorizer/src/backup.js`, `tests/verify-memorizer-backup-pure.js`, `tests/verify-memorizer-hardening.js`, `tests/verify-memorizer.js`, `tests/verify-memorizer-studyimport.js`, and this report. The list below records the original merged review.
 
 ## October 4 follow-up: offline checks across engines
 
-Both Chromium and WebKit CI runs passed on PR #126's final revision, `881473fe2df832626220bb6b04570b65917c2a85`. CodeQL's repository-settings failure remains separate.
+Both Chromium and WebKit CI runs passed on PR #126's final revision, `881473fe2df832626220bb6b04570b65917c2a85`. Its CodeQL rerun passed too.
 
 The Firefox offline failure came from the harness: Playwright implements the experimental service-worker request interception in its Chromium backend. The generated test worker now delegates only its CDN network boundary to a local HTTP fixture server. The production worker's fetch handler, pinned-host predicate, cache keys and cache writes remain intact; the delegated native fetch retains the original Request's integrity metadata. The fixture uses the actual public pinned dependency bytes and prevents browser HTTP caching.
 
 The suite now rejects incorrect bytes without caching them, proves the changed upstream response with an uncached probe, compares every cached reader byte, cuts the dependency transport's sockets, and verifies that cached readers and Mermaid require no upstream request. These assertions run on every engine, replacing the unmeasurable WebKit offline-emulation checks with a controlled transport outage. A mutation that bypassed the generated worker's cache failed four assertions, establishing that the fixture cannot conceal a broken cache path.
 
-Checks: 12 Chromium and 12 Firefox offline checks passed; 77 pure suites, standalone Memorizer build, leak guard and whitespace checks passed. Local WebKit remains blocked by missing system libraries; the stacked follow-up PR retains mandatory WebKit CI. No real iPad network toggle, browser-to-CDN CORS/TLS behavior, WebGPU operation or private licensed-content build was measured by this test. The existing full app suite covers direct PDF loading; a real iPad offline/large-backup trial remains the next device validation step.
+WebKit also reports page errors for the two intentionally rejected fetches. The test accepts only the exact pair of diagnostics for each known URL; any other page error still fails the suite.
+
+Checks: 12 Chromium and 12 Firefox offline checks passed; 77 pure suites, standalone Memorizer build, leak guard and whitespace checks passed. Both Chromium and WebKit CI runs passed on #127's final revision, `6403975`, and on the merged `master` revision, `fd3abd3`. Local WebKit remains blocked by missing system libraries. No real iPad network toggle, browser-to-CDN CORS/TLS behavior, WebGPU operation or private licensed-content build was measured by this test. The existing full app suite covers direct PDF loading; a real iPad offline/large-backup trial remains the next device validation step.
 
 This follow-up changes only `tests/verify-memorizer-offline.js` and this report. No production app or shared dependency change is required.
 
