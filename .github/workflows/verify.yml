@@ -98,6 +98,10 @@ name: verify (source-independent subset)
 on:
   push:
   pull_request:
+  # The `full` job's own `if:` asks for this event, and GitHub only offers the
+  # "Run workflow" button for a workflow that declares it on the default
+  # branch. Without this line the job could never be selected.
+  workflow_dispatch:
 
 # Read-only, for every job. Nothing here writes to the repository, comments,
 # or publishes; each job checks out and runs Node. Without this block the jobs
@@ -460,7 +464,11 @@ jobs:
     #
     # and it becomes automatic. Not before: an unregistered runner turning
     # master's checks yellow is how a team learns to ignore them.
-    if: github.event_name == 'workflow_dispatch'
+    #
+    # master only. A manual run can name any branch or tag, and checkout would
+    # then execute that ref here, beside the export. Anyone with write access
+    # could dispatch it. The ref check keeps "manual" from meaning "any code".
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
     # A queued run holding build/ while another starts is how two release
     # checks overwrite each other's artifacts. One at a time, and let the
     # running one finish rather than cancelling it mid-build.
@@ -471,6 +479,13 @@ jobs:
     # slowest thing here. This bounds a run that HANGS; it does nothing about a
     # run that never starts, which is why the trigger above is manual.
     timeout-minutes: 90
+    # The steps below are POSIX sh. A Linux or macOS runner runs them in bash
+    # anyway; a Windows runner defaults to PowerShell, where `if [ -z ... ]` is
+    # a parse error and "$SYSTOLE_SOURCE" is an undefined variable rather than
+    # the environment. Saying bash makes the job the same on all three.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -502,7 +517,9 @@ jobs:
       # if something was skipped, which is not a pass. Its stdout is the
       # verdict and the failing step ids, and that is all this log will hold.
       - name: release-check
-        run: npm run release-check -- "$SYSTOLE_SOURCE"
+        # --silent: npm otherwise prints the expanded command, path and
+        # filename included, before release-check.js can sanitise anything.
+        run: npm run --silent release-check -- "$SYSTOLE_SOURCE"
 
       # Runs even when the gate failed, because "which step" is the one thing
       # worth having here and a failed run is when you want it. Still ids only:
