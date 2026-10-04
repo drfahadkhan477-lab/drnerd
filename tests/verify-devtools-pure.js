@@ -92,6 +92,19 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('and no line of output and no path', !!doc && !/PASS|FAIL|→/.test(JSON.stringify(doc)) && !JSON.stringify(doc).includes(TMP) && doc.target === 'file');
     const bad = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--tag', 'zqtag']);
     ok('a tag that is not one is refused before anything runs', bad.status === 1 && /is not a tag/.test(bad.stderr), bad.stderr.trim().split('\n')[0]);
+    /* SYSTOLE_JOBS is a machine's default for --jobs. Each case passes it
+       explicitly, so a machine that sets it for itself does not change what
+       is measured here. */
+    const jobsRun = (extra, v) => node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--tag', 'pure'].concat(extra), { SYSTOLE_JOBS: v });
+    const line = r => ((r.stdout || '').split('\n').find(l => /at a time/.test(l)) || (r.stderr || '').trim().split('\n')[0] || `exit ${r.status}`).trim();
+    const j2 = jobsRun([], '2');
+    ok('SYSTOLE_JOBS sets how many run at once', j2.status === 0 && /, 2 at a time/.test(j2.stdout), line(j2));
+    const j1 = jobsRun(['--jobs', '1'], '3');
+    ok('and --jobs on the command line wins over it', j1.status === 0 && /one at a time/.test(j1.stdout), line(j1));
+    const jbad = jobsRun([], 'fast');
+    ok('a SYSTOLE_JOBS that is not a count is refused before anything runs', jbad.status === 1 && /SYSTOLE_JOBS "fast" is not a number of jobs/.test(jbad.stderr) && !/passed/.test(jbad.stdout), line(jbad));
+    const jstale = jobsRun(['--jobs', '2'], 'fast');
+    ok('but not when --jobs says how many: a stale default does not stop the run', jstale.status === 0 && /, 2 at a time/.test(jstale.stdout), line(jstale));
     /* No browser installed: a pure selection still runs. PLAYWRIGHT_BROWSERS_PATH
        pointed at an empty folder makes every engine's executable missing. */
     const empty = path.join(TMP, 'no-browsers'); fs.mkdirSync(empty);

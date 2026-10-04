@@ -11,6 +11,7 @@
  *   --jobs N       run N suites at once (default 1; `auto` = cores-1, capped
  *                  at 4). The suites that measure wall-clock time or WebGL
  *                  contexts always run alone — see SERIAL below.
+ *                  SYSTOLE_JOBS in the environment sets this machine's default.
  *   --engine <e>   chromium (default), webkit or firefox
  *   --tag <a,b>    run only suites with these tags: pure, browser, build, serial
  *                  (read from each suite's code — tests/_targets.js tagsOf)
@@ -620,7 +621,20 @@ if (flag('--pwa') || chosen.some(([n]) => tagsFor(n).includes('browser'))) requi
    core for the parent and for whatever else is on the machine — four browsers
    on four cores is how you turn a 5s launch budget into a 6s launch. */
 const CORES = require('os').cpus().length || 1;
-const jobsArg = opt('--jobs', '1');
+/* SYSTOLE_JOBS is the same decision made once per machine instead of once per
+   command — the checked-in default is still 1, and --jobs still wins. A value
+   that is not a count is refused rather than read as 1: a machine set up to
+   run fast that silently runs serially looks exactly like one that was never
+   set up. Refused only when it would have been USED: it is a default, so a
+   stale one must not stop a run that says --jobs for itself (found by
+   review). */
+const envJobs = (process.env.SYSTOLE_JOBS || '').trim();
+const envJobsOk = envJobs === 'auto' || /^[1-9]\d*$/.test(envJobs);
+if (envJobs && !envJobsOk && !flag('--jobs')) {
+  console.error(`\n  SYSTOLE_JOBS ${JSON.stringify(envJobs)} is not a number of jobs. Use a count, or auto.\n`);
+  process.exit(1);
+}
+const jobsArg = opt('--jobs', envJobsOk ? envJobs : '1');
 const JOBS = jobsArg === 'auto' ? Math.max(1, Math.min(4, CORES - 1))
                                 : Math.max(1, parseInt(jobsArg, 10) || 1);
 /* SAID OUT LOUD, NOT CLAMPED. Asking for more workers than the machine has
