@@ -28,6 +28,7 @@
  */
 'use strict';
 const http = require('http');
+const { blankComments } = require('./_source.js');
 const { launch, engineName } = require('./_engine.js');
 const { onDeath, watch } = require('./_deathnote.js');
 const CSP = require('../scripts/csp.js');
@@ -84,23 +85,34 @@ head('the allowlist covers every host the shipped app can reach');
     'fonts.googleapis.com':  'stage0 — fonts: drop Google Fonts links',
     'fonts.gstatic.com':     'stage0 — fonts: drop Google Fonts links',
   };
-  /* Scripts in the tree that never become part of systole.html, each named
-     with what it is instead. A host in one of these is not a host the app can
-     reach, so it is not scanned; every other file still is. */
+  /* Scripts under scripts/ that are not part of this app at all. The scan is
+     of what the shipped app can reach, and a tool run by hand on the owner's
+     machine reaches whatever it likes without the app's policy being wrong.
+     Each is named with why, and the check below holds the claim: no other
+     file under scripts/ or src/ names it, so no build step can be loading it. */
   const NOT_SHIPPED = {
-    'scripts/model-manifest.js': 'a developer tool run by hand; it writes memorizer/src/models.js for the Memorizer, not the app',
+    'scripts/model-manifest.js': 'a Memorizer maintenance tool — run by hand, writes memorizer/src/models.js',
   };
+  const relPath = p => path.relative(path.join(__dirname, '..'), p).split(path.sep).join('/');
   const roots = ['scripts', 'src'];
   const files = [];
   const walk = d => fs.readdirSync(d, { withFileTypes: true }).forEach(f => {
     const p = path.join(d, f.name);
-    const rel = path.relative(path.join(__dirname, '..'), p).split(path.sep).join('/');
-    if (f.isDirectory()) walk(p); else if (f.name.endsWith('.js') && !(rel in NOT_SHIPPED)) files.push(p);
+    if (f.isDirectory()) walk(p); else if (f.name.endsWith('.js')) files.push(p);
   });
   roots.forEach(r => walk(path.join(__dirname, '..', r)));
 
+  const loaders = Object.keys(NOT_SHIPPED).map(tool => {
+    const base = path.basename(tool);
+    const by = files.filter(f => relPath(f) !== tool && blankComments(fs.readFileSync(f, 'utf8')).includes(base)).map(relPath);
+    return by.length ? tool + ' is named by ' + by.join(', ') : '';
+  }).filter(Boolean);
+  ok('a script excused from the scan is one nothing in the build names',
+     loaders.length === 0 && Object.keys(NOT_SHIPPED).every(t => files.some(f => relPath(f) === t)), loaders.join('; ') || 'none');
+
   const hosts = new Set();
   for (const f of files) {
+    if (relPath(f) in NOT_SHIPPED) continue;
     for (const m of fs.readFileSync(f, 'utf8').matchAll(/https:\/\/([a-z0-9.-]+)/gi)) hosts.add(m[1]);
   }
   const allowed = new Set(CSP.CONNECT.filter(s => s.startsWith('https://'))
@@ -109,10 +121,6 @@ head('the allowlist covers every host the shipped app can reach');
   ok('every https host in the tree is either allowed or removed by a named step',
      unaccounted.length === 0, unaccounted.join(', ') || 'none');
   ok('and the allowlist is not empty', allowed.size > 0, [...allowed].join(', '));
-  /* An exclusion that names a file no longer there is a hole kept open for
-     nothing; it would quietly cover whatever file next took the name. */
-  const gone = Object.keys(NOT_SHIPPED).filter(r => !fs.existsSync(path.join(__dirname, '..', r)));
-  ok('every file excused from the scan still exists', gone.length === 0, gone.join(', ') || 'none');
   /* The other direction: a host allowed by the policy but contacted by nothing
      is a permission granted for no reason. */
   const unused = [...allowed].filter(h => !hosts.has(h));
