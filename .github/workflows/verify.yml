@@ -47,7 +47,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 84 suites that are pure Node with no Playwright and no
+#   logic        the 85 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -227,6 +227,8 @@ jobs:
         run: node tests/verify-topicrun-pure.js
       - name: a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary (29 checks)
         run: node tests/verify-voice-pure.js
+      - name: each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes (42 checks)
+        run: node tests/verify-drills-pure.js
       - name: the release gate never claims more than it measured (53 checks)
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
