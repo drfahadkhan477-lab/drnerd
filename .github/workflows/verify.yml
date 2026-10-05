@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 5432 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 5349.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6447 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6364.
 # The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
@@ -74,7 +74,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 5349 real checks, up
+#                Across every job, 6364 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -201,13 +201,13 @@ jobs:
         run: node tests/verify-conductionwave-pure.js
       - name: the coronary tree's branch geometry and flow-glow curve (29 checks)
         run: node tests/verify-coronarytree-pure.js
-      - name: the engine is a flag, not thirty-four hardcoded copies of one (91 checks)
+      - name: the engine is a flag, not thirty-four hardcoded copies of one (96 checks)
         run: node tests/verify-engine.js
-      - name: the licensed question bank cannot be committed (36 checks)
+      - name: the licensed question bank cannot be committed (40 checks)
         run: node tests/verify-leakguard.js
       - name: a Claude Code session cannot read the licensed export (24 checks)
         run: node tests/verify-claude-guard.js
-      - name: the Claude Code subagents cannot edit files (26 checks)
+      - name: the Claude Code subagents cannot edit files (47 checks)
         run: node tests/verify-claude-agents.js
       - name: the Claude Code skills are found and cite only what exists (37 checks)
         run: node tests/verify-claude-skills.js
@@ -221,7 +221,7 @@ jobs:
         run: node tests/verify-carve-pure.js
       - name: the synthetic export builds the real app, and is marked so its run is never recorded (26 checks)
         run: node tests/verify-synthetic-pure.js
-      - name: each heart sound and murmur is on the valve events physio measures, with the shape and pitch of its lesion (36 checks)
+      - name: each heart sound and murmur is on the valve events physio measures, with the shape and pitch of its lesion (58 checks)
         run: node tests/verify-lab-pure.js
       - name: the study plan fits the time, puts the most forgotten first and the weak chapters next, and never throws on damaged data (39 checks)
         run: node tests/verify-plan-pure.js
@@ -229,9 +229,9 @@ jobs:
         run: node tests/verify-topicrun-pure.js
       - name: a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary (29 checks)
         run: node tests/verify-voice-pure.js
-      - name: each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes (42 checks)
+      - name: each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes (99 checks)
         run: node tests/verify-drills-pure.js
-      - name: the release gate never claims more than it measured (53 checks)
+      - name: the release gate never claims more than it measured (59 checks)
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
         run: node tests/verify-contentrules.js
@@ -243,7 +243,7 @@ jobs:
         run: node tests/verify-profile-pure.js
       - name: imported figures survive a note list that has not loaded (36 checks)
         run: node tests/verify-refassets-pure.js
-      - name: every arrhythmia the picker offers has something that draws it (13 checks)
+      - name: every arrhythmia the picker offers has something that draws it (23 checks)
         run: node tests/verify-rhythms-pure.js
       - name: nothing in src/ uses syntax an iPad cannot parse (13 checks)
         run: node tests/verify-ipad-pure.js
@@ -293,15 +293,15 @@ jobs:
         run: node tests/verify-extract-pure.js
       - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing; the reference notes travel in it too, and the written schema names the version the code enforces (28 checks)
         run: node tests/verify-bankpack-pure.js
-      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (20 checks)
+      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (33 checks)
         run: node tests/verify-testpublic-pure.js
-      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (38 checks)
+      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (42 checks)
         run: node tests/verify-devtools-pure.js
-      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
+      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (250 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
         run: node tests/verify-memorizer-prompts-pure.js
-      - name: Memorizer — teach, memorise, then drill; every miss typed, one card, and kept until it graduates; review rounds interleaved (138 checks)
+      - name: Memorizer — teach, memorise, then drill; every miss typed, one card, and kept until it graduates; review rounds interleaved (142 checks)
         run: node tests/verify-memorizer-session-pure.js
       - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, makes the cards to memorise, and re-teaches by the kind of miss (166 checks)
         run: node tests/verify-memorizer-coach-pure.js
@@ -309,11 +309,11 @@ jobs:
         run: node tests/verify-memorizer-appearance-pure.js
       - name: Memorizer — the home screen's progress, streak, brain and its live impulses, pearl, the pearl's figure or table, and weak spots say true things (133 checks)
         run: node tests/verify-memorizer-home-pure.js
-      - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (39 checks)
+      - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (43 checks)
         run: node tests/verify-memorizer-book-pure.js
       - name: Memorizer — asking your book answers in its own sentences, with pages, or says nothing was found (38 checks)
         run: node tests/verify-memorizer-ask-pure.js
-      - name: Memorizer — the on-device AI says nothing the book does not (61 checks)
+      - name: Memorizer — the on-device AI says nothing the book does not (68 checks)
         run: node tests/verify-memorizer-ground-pure.js
       - name: Memorizer — search by meaning, its measured floor, and its merge with search by words (14 checks)
         run: node tests/verify-memorizer-vec-pure.js
@@ -323,11 +323,11 @@ jobs:
         run: node tests/verify-memorizer-figure-pure.js
       - name: Memorizer — the Coach as an agent — it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, names what is still weak, and runs a message as steps, each decided by what the last found — and, with the on-device model, a loop whose answer holds to what its tools found, the new tools, and what it remembers (76 checks)
         run: node tests/verify-memorizer-agent-pure.js
-      - name: Memorizer — studying beyond the drill — recall and figure cards from the book, section checks days apart, timed practice, confidence, cases, an exam plan, teach-back, corrections, notes, the mastery map, the week and the streak (104 checks)
+      - name: Memorizer — studying beyond the drill — recall and figure cards from the book, section checks days apart, timed practice, confidence, cases, an exam plan, teach-back, corrections, notes, the mastery map, the week and the streak (110 checks)
         run: node tests/verify-memorizer-study-pure.js
       - name: Memorizer — where a unit came from — a real SHA-256 of its bytes, a duplicate recognised, an import report that counts what happened (31 checks)
         run: node tests/verify-memorizer-provenance-pure.js
-      - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (103 checks)
+      - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (105 checks)
         run: node tests/verify-memorizer-pack-pure.js
       - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text, a deleted section's diagrams with it (52 checks)
         run: node tests/verify-memorizer-studyimport-pure.js
@@ -397,16 +397,16 @@ jobs:
           npm ci
           npx playwright install --with-deps ${{ matrix.engine }}
       - if: ${{ !cancelled() }}
-        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (479 checks)
+        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (483 checks)
         run: node tests/verify-memorizer.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (37 checks)
+        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (64 checks)
         run: node tests/verify-memorizer-hardening.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (68 checks)
+        name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (69 checks)
         run: node tests/verify-memorizer-studyimport.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut (9 checks)
+        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut (12 checks)
         run: node tests/verify-memorizer-offline.js
       - if: ${{ !cancelled() }}
         name: Memorizer — your data and what the page may do — the backup reminder on the app's own backup, an orphan that would spoil a backup removed, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (18 checks)
@@ -514,7 +514,7 @@ jobs:
         name: an imported chapter brings its figures, and keeps them (32 checks)
         run: node tests/verify-assets.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the figure Apex is reasoning from is one you can see (40 checks)
+        name: the figure Apex is reasoning from is one you can see (41 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the home screen opens with something worth knowing (69 checks)
@@ -574,7 +574,7 @@ jobs:
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the policy contains an injection without breaking anything the app does (19 checks)
+        name: the policy contains an injection without breaking anything the app does (20 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: Echo Studio routes, delegates and keeps the caret where it was (26 checks)
