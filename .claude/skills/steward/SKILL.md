@@ -49,6 +49,10 @@ places, in one commit:
 - **`memorizer-browser`** runs the Memorizer in Chromium, WebKit and Firefox on
   documents the suite makes itself. A red one is this PR's to root-cause
   until shown otherwise, per the harness's CI rules.
+- **A browser job can be skipped on a PR.** `scripts/ci-changes.js` skips
+  `memorizer-browser` or `synthetic-browser` when no changed file can reach
+  it (docs only, Memorizer only, Systole shell only). A skipped job did not
+  run: a PR body says which were skipped, never that they passed.
 - **Reading a failed job's log:** never paste it, and never quote it into a
   PR comment. Suite output can quote question text. Grep for the FAIL lines,
   page errors and stack traces. The `ci-log-reader` agent does this in its

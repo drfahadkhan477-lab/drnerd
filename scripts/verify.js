@@ -313,6 +313,9 @@ const SUITES = [
   ['bankstore', 'the code-only deploy in a browser: import screen with no bank and no request to content/, a refused package changes nothing, a good one launches the app, a replacement is atomic, a normal build unchanged'],
   ['devtools-pure', 'each build in its own workspace, suite tags read from the code, a JSON report with no output text, doctor, and a clean that cannot reach the export'],
   ['testpublic-pure', '`npm test` runs every suite CI runs, pure and browser, from the workflow\'s own list — a failure, a missing file or a missing browser fails it, and a pure-only run says what it left out'],
+  /* scripts/ci-changes.js: a pull request skips a browser job only when every
+     changed file is known not to reach it, and anything doubtful runs both. */
+  ['cichanges-pure', 'a pull request skips a browser job only when none of its files can reach it, and a failed decision runs both'],
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
@@ -434,7 +437,7 @@ const SUITES = [
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
    which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'carve-pure', 'lab-pure', 'plan-pure', 'topicrun-pure', 'voice-pure', 'drills-pure', 'lab', 'planscreen', 'topicrunscreen', 'voicescreen', 'examdate'];
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'carve-pure', 'lab-pure', 'plan-pure', 'topicrun-pure', 'voice-pure', 'drills-pure', 'lab', 'planscreen', 'topicrunscreen', 'voicescreen', 'examdate', 'cichanges-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

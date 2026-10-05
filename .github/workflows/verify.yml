@@ -47,7 +47,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 86 suites that are pure Node with no Playwright and no
+#   logic        the 87 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -90,6 +90,10 @@
 #   synthetic-browser  the app's own browser suites, on the real app built
 #                around an invented bank; see the job for which suites and
 #                why the rest are left out.
+#
+#   changes      on a pull request, which of the two browser jobs above it
+#                needs; scripts/ci-changes.js. A job it skips shows as
+#                skipped, not passed. Master and manual runs get both.
 #
 # Adding the other 217 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
@@ -295,6 +299,8 @@ jobs:
         run: node tests/verify-bankpack-pure.js
       - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (20 checks)
         run: node tests/verify-testpublic-pure.js
+      - name: a pull request skips a browser job only when none of its files can reach it (45 checks)
+        run: node tests/verify-cichanges-pure.js
       - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (38 checks)
         run: node tests/verify-devtools-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (194 checks)
@@ -373,6 +379,12 @@ jobs:
   # exercise; it is not a substitute for opening the app on the iPad.
   memorizer-browser:
     name: memorizer-browser — the whole app, in ${{ matrix.label }}, on documents made for the test
+    # Skipped only when the `changes` job (at the end of this file) says the
+    # pull request cannot reach it. `!= 'false'` rather than `== 'true'`, so a
+    # `changes` job that failed, and wrote nothing, runs this rather than
+    # skipping it.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.memorizer != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -446,6 +458,10 @@ jobs:
   # record. Chromium only: WebKit takes minutes to parse even this build.
   synthetic-browser:
     name: synthetic-browser — the real app, built around an invented bank, in Chromium
+    # Skipped only when the `changes` job says the pull request cannot reach
+    # it; fails open the same way as memorizer-browser.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.synthetic != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -825,3 +841,32 @@ jobs:
         run: |
           echo "Full report (on this machine, not uploaded): build/release-report.md"
           echo "Failing suite output: tests/last-run.log"
+
+  # Which browser jobs a pull request needs. scripts/ci-changes.js decides, and
+  # says why in its header: a job is skipped only when every changed file is
+  # known not to reach it, and a push to master or a manual run gets both.
+  # syntax, logic and build-guard never depend on this; they always run.
+  #
+  # Kept last in the file: tests/verify-devtools-pure.js reads the logic job
+  # as the text between `logic:` and `memorizer-browser:`.
+  #
+  # A skipped matrix job reports one check under its unexpanded name, not one
+  # per engine. Master had no required status checks when this was added; if
+  # any are, a check required by its per-engine name would wait forever on a
+  # pull request that skipped memorizer-browser.
+  changes:
+    name: changes — which browser jobs this pull request needs
+    runs-on: ubuntu-latest
+    outputs:
+      memorizer: ${{ steps.which.outputs.memorizer }}
+      synthetic: ${{ steps.which.outputs.synthetic }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - id: which
+        name: read the changed files
+        run: node scripts/ci-changes.js
