@@ -19,7 +19,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 124 suites and roughly 5432 checks, and they
+ * WHY THIS EXISTS. There are 147 suites and roughly 6447 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -435,8 +435,18 @@ const SUITES = [
 
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
-   which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'carve-pure', 'lab-pure', 'plan-pure', 'topicrun-pure', 'voice-pure', 'drills-pure', 'lab', 'planscreen', 'topicrunscreen', 'voicescreen', 'examdate', 'studyvisuals', 'icons-pure'];
+   which measured the one that had been waiting: devtools-pure (38 checks).
+
+   Emptied a tenth time by the full green Chromium run on the owner's laptop at
+   654315d (6447 checks across 147 suites), which measured the 23 that had been
+   waiting. That run's --pwa step stopped at the stats suite, which found this
+   prose stale against the record the same run had just written, so the
+   split-build figure (134) is carried over from the ninth emptying and was
+   not re-measured.
+
+   Suites registered after that run are the pending ones now, and the record
+   does not hold them yet: topicrunscreen, voicescreen, examdate, studyvisuals, icons-pure. */
+const PENDING_RECORD = ['topicrunscreen', 'voicescreen', 'examdate', 'studyvisuals', 'icons-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
