@@ -80,6 +80,7 @@ const SUITES = [
   ['planscreen',   'the "I have N minutes" card plans a review session of that size, in order, and rating in it moves the schedule'],
   ['topicrunscreen', 'the Topic runs card asks three to five questions about one thing, from what you missed, each holding the words it says they share'],
   ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
+  ['studyvisuals', 'the Study cards draw the app\'s own numbers: rings, chips, pace pill, countdown, run icons and pips, the voice dock, every icon resolving'],
   ['voicescreen', 'the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave'],
   ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn'],
   ['failsafe',     'render() throwing shows a real screen, never a blank or frozen one'],
@@ -211,6 +212,7 @@ const SUITES = [
   ['topicrun-pure', 'questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair'],
   /* Voice mode's logic: what is read, what is heard, what happens next. */
   ['voice-pure', 'a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary'],
+  ['icons-pure', 'every icon the app names is drawn by the one sprite in the page, and no symbol is defined anywhere else'],
   /* The Lab's pressure tracings and the drill engine every Lab exercise shares. */
   ['drills-pure', 'each pressure tracing and ECG strip shows what it is named for, measured from the finished waveform; the drill offers what is due and the look-alikes; what the Lab remembers survives bad storage'],
   /* Guards the release gate's one job: never printing CERTIFIED over something
@@ -437,7 +439,7 @@ const SUITES = [
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
    which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'carve-pure', 'lab-pure', 'plan-pure', 'topicrun-pure', 'voice-pure', 'drills-pure', 'lab', 'planscreen', 'topicrunscreen', 'voicescreen', 'examdate', 'cichanges-pure'];
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'carve-pure', 'lab-pure', 'plan-pure', 'topicrun-pure', 'voice-pure', 'drills-pure', 'lab', 'planscreen', 'topicrunscreen', 'voicescreen', 'examdate', 'studyvisuals', 'icons-pure', 'cichanges-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

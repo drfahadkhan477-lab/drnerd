@@ -47,7 +47,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 87 suites that are pure Node with no Playwright and no
+#   logic        the 88 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -233,6 +233,8 @@ jobs:
         run: node tests/verify-topicrun-pure.js
       - name: a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary (29 checks)
         run: node tests/verify-voice-pure.js
+      - name: every icon the app names is drawn by the one sprite in the page, and no symbol is defined anywhere else (7 checks)
+        run: node tests/verify-icons-pure.js
       - name: each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes (42 checks)
         run: node tests/verify-drills-pure.js
       - name: the release gate never claims more than it measured (53 checks)
@@ -562,6 +564,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day (17 checks)
         run: node tests/verify-examdate.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the Study cards draw the app's own numbers, every icon resolves, and the voice dock runs and stops a session (26 checks)
+        run: node tests/verify-studyvisuals.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the chapter grid staggers in, and its bar fills instead of arriving drawn (21 checks)
         run: node tests/verify-chapters.js build/synthetic/systole.html
