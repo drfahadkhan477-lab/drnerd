@@ -2570,3 +2570,6 @@ html[data-theme="dark"]{
   .heat{grid-template-columns:repeat(15,1fr)}
 }
 
+
+.plan-card .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;padding:0}
+.plan-card .chip{min-height:44px;padding:0 18px}
