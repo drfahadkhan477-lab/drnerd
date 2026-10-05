@@ -2573,3 +2573,6 @@ html[data-theme="dark"]{
 
 .plan-card .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;padding:0}
 .plan-card .chip{min-height:44px;padding:0 18px}
+.run-card .run-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.run-card .run-btn{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px;padding:8px 14px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:inherit;text-align:left;font:inherit;cursor:pointer}
+.run-card .run-n{color:var(--muted);white-space:nowrap;font-size:.85em}
