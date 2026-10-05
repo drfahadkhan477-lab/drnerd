@@ -149,22 +149,30 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
        resolves (as verify-memorizer does): narrower than Chromium's, which
        reads the clipboard itself. */
     const webkit = engineName() === 'webkit';
-    if (webkit) await p.evaluate(() => {
+    /* On EVERY engine, remember the string the app hands to writeText, at the
+       moment it does. That is the app's own output, before any clipboard has
+       had a chance to change its line endings. */
+    await p.evaluate(webkitOnly => {
       const c = navigator.clipboard, write = c.writeText.bind(c); let last = null;
-      c.writeText = t => write(t).then(v => { last = String(t); return v; });
-      c.readText = () => last === null ? Promise.reject(new Error('nothing was copied')) : Promise.resolve(last);
-    });
+      window.__clipWritten = null;
+      c.writeText = t => { window.__clipWritten = String(t); return write(t).then(v => { last = String(t); return v; }); };
+      if (webkitOnly) c.readText = () => last === null ? Promise.reject(new Error('nothing was copied')) : Promise.resolve(last);
+    }, webkit);
     await p.click('#import-copy-prompt');
     await p.waitForFunction(() => /Copied/.test(document.getElementById('import-copy-status').textContent), null, T);
     /* Chromium on Windows hands the clipboard back with CRLF for every newline it
        was given as LF (measured: "a\nb" reads back as "a\r\nb"), so on Windows
        alone the line endings are put back before the exact comparison. Elsewhere
-       nothing is normalised, so a prompt the app wrote with CRLF still fails. */
+       nothing is normalised. On Windows that normalisation would also hide CRLF
+       the app wrote itself, which is why the string the app passed to writeText
+       is asserted separately below, on every engine. */
     const clip = await p.evaluate(() => navigator.clipboard.readText().then(raw => {
       const t = /Windows/.test(navigator.userAgent) ? raw.replace(/\r\n/g, '\n') : raw;
       return t === MemStudyImport.studyFilePrompt() && /MEMORIZER STUDY FILE/.test(t);
     }, e => 'unreadable: ' + e.message));
     ok('Copy puts the study-file prompt, exactly as spec.js builds it, on the clipboard' + (webkit ? ' (WebKit: as the browser accepted it)' : ''), clip === true, String(clip));
+    const written = await p.evaluate(() => ({ same: window.__clipWritten === MemStudyImport.studyFilePrompt(), type: typeof window.__clipWritten, cr: typeof window.__clipWritten === 'string' && window.__clipWritten.includes('\r') }));
+    ok('the app hands writeText the prompt exactly, with no line-ending conversion of its own', written.same === true, JSON.stringify(written));
     await p.click('#import-cancel');
     ok('the footer Cancel closes it', await p.$('#import-dialog') === null);
     await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);
