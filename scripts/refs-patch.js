@@ -115,7 +115,7 @@ function buildRefSeed(dir = REFS_DIR) {
   return { notes, files, seed: JSON.stringify(notes) };
 }
 
-module.exports = { buildRefSeed, REFS_DIR };
+module.exports = { buildRefSeed, findMarkdownFiles, REFS_DIR };
 if (require.main !== module) return;
 
 const SRC = process.argv[2];

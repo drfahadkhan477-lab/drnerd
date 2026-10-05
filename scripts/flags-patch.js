@@ -168,7 +168,11 @@ function applyContentFlags(bank) {
     if (!q) throw new Error(`[${f.id}] not in the bank`);
 
     if (f.wantFigs != null) {
-      const figs = (q.figs || []).length;
+      /* q.img, the count the app itself reads. This read q.figs, which only
+         the split build carries (scripts/content-checks.js says so): on the
+         single-file bank this step runs on, it was always 0, so wantFigs: 0
+         held whatever the export shipped. figs still counts where it exists. */
+      const figs = Array.isArray(q.figs) ? q.figs.length : (q.img || 0);
       if (figs !== f.wantFigs) {
         throw new Error(`[${f.id}] now ships ${figs} figure(s), not ${f.wantFigs} as recorded here.\n` +
                         `  The export may have fixed this question. Recheck it before flagging it.`);
