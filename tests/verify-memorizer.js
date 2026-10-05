@@ -3131,6 +3131,35 @@ function kindOf(user) {
        download fails, as it would offline. */
     const fresh = async (tag, blockOcr) => {
       const p = watch(await (await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' })).newPage(), events, tag, errors);
+      /* Keep the worker's startup messages if an import times out. Tesseract
+         can leave createWorker() pending after its worker reports a failure;
+         the page's final error alone cannot identify that failed step. */
+      if (!blockOcr) await p.addInitScript(() => {
+        const NativeWorker = window.Worker;
+        let serial = 0;
+        window.__ocrWorkerEvents = [];
+        const record = (id, event) => {
+          __ocrWorkerEvents.push({ id, ms: Math.round(performance.now()), ...event });
+          if (__ocrWorkerEvents.length > 64) __ocrWorkerEvents.shift();
+        };
+        window.Worker = class extends NativeWorker {
+          constructor(...args) {
+            super(...args);
+            this.traceId = ++serial;
+            record(this.traceId, { status: 'created' });
+            this.addEventListener('error', e => record(this.traceId, { status: 'error', message: e.message }));
+            this.addEventListener('message', e => {
+              const m = e.data || {};
+              if (m.status) record(this.traceId, { status: m.status, action: m.action,
+                detail: m.status === 'reject' ? String(m.data).slice(0, 400) : m.data && m.data.status });
+            });
+          }
+          terminate() {
+            record(this.traceId, { status: 'terminated' });
+            return super.terminate();
+          }
+        };
+      });
       await wire(p);
       /* After wire(): Playwright tries the most recently added route first,
          so added before it, this block was shadowed by the CDN route and
@@ -3187,7 +3216,8 @@ function kindOf(user) {
     try { await p3.locator('h1.bar-title', { hasText: 'Photos' }).waitFor({ timeout: 120000 }); } catch (e) {
       console.error('Photo import state:', await p3.evaluate(() => {
         const u = Memorizer.ui;
-        return { view: u.view, importing: u.importing, active: !!u.importJob, error: u.error, notice: u.notice };
+        return { view: u.view, importing: u.importing, active: !!u.importJob, error: u.error, notice: u.notice,
+          workers: window.__ocrWorkerEvents };
       }));
       throw e;
     }
