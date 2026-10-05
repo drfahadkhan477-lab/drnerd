@@ -61,7 +61,7 @@ module.exports = (async () => {
   class Reader { readAsArrayBuffer(blob) { blob.arrayBuffer().then(v => { this.result = v; this.onload(); }); } }
   const ocrSrc = fs.readFileSync(path.join(__dirname, '../memorizer/src/ocr.js'), 'utf8');
   const O = require('../memorizer/src/ocr.js');
-  const workerText = O.WORKER_FIX.find + ';' + O.CORE_FIX.find;
+  const workerText = O.WORKER_FIX.find + ';' + O.CORE_FIX.find + ';' + O.START_FAIL_FIX.find;
   vm.runInNewContext(ocrSrc, { window: ocrRoot, document: ocrDoc, Blob, FileReader: Reader, TextDecoder, Uint8Array,
     fetch: async url => ({ ok: true, blob: async () => new Blob([/tesseract.js-core/.test(url) ? O.CORE_BINARY_FIX.find : workerText]) }), URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL: () => { revoked++; } },
     setTimeout: () => 1, clearTimeout: () => { timerCleared++; } });

@@ -127,6 +127,14 @@ var WORKER_FIX = { find: 'return"string"==typeof t?t:t.data})).join("+")', repla
    leaving createWorker() pending with an unhandled worker rejection. */
 var CORE_FIX = { find: 'r.resolve({loaded:!0})})),t.next=12;break;case 11:',
   replace: 'r.resolve({loaded:!0})})).catch(function(e){r.reject(String(e));self.close()}),t.next=12;break;case 11:' };
+/* A load, language or initialize job that is rejected leaves createWorker()
+   pending, and the page never receives the worker to terminate: the failed
+   instance would stay alive, holding its WebAssembly memory, while the retry
+   starts a second one. The worker closes itself once it has posted that
+   rejection (errorHandler still receives it first). Rejections of later
+   jobs — recognize — leave the worker alone: only startup is fatal. */
+var START_FAIL_FIX = { find: 'i.dispatchHandlers(e,(function(t){return postMessage(t)}))',
+  replace: 'i.dispatchHandlers(e,(function(t){postMessage(t);if("reject"===t.status&&("load"===t.action||"loadLanguage"===t.action||"initialize"===t.action))self.close()}))' };
 /* Both pinned cores embed their wasm as a data URL. Decode those checked
    bytes locally with the core's existing fallback, rather than fetching
    the multi-MB URL again from a worker. External URLs keep their loader. */
@@ -139,7 +147,7 @@ function fixCore(text) {
 }
 function fixWorker(text) {
   text = String(text);
-  [WORKER_FIX, CORE_FIX].forEach(function (fix) {
+  [WORKER_FIX, CORE_FIX, START_FAIL_FIX].forEach(function (fix) {
     var n = text.split(fix.find).length - 1;
     if (n !== 1) throw new Error('the text reader\'s worker has changed (anchor found ' + n + ' times)');
     text = text.replace(fix.find, fix.replace);
@@ -240,9 +248,15 @@ function recognizeNow(canvas, onStatus) {
   });
 }
 
-/* Read one pdf.js page: draw it, recognise it, return pdf.js-shaped items. */
+/* Read one pdf.js page: draw it, recognise it, return pdf.js-shaped items.
+   The reader is started first so the download is announced before the page
+   is drawn; a WebAssembly fault while it starts gets the same one fresh
+   reader that recognize() gives a fault while reading. */
 function readPage(page, onStatus) {
-  return engine(onStatus).then(function () {
+  return engine(onStatus).catch(function (e) {
+    if (!isWasmFault(e)) throw e;
+    return engine(onStatus);
+  }).then(function () {
     var vp = page.getViewport({ scale: SCALE });
     var canvas = document.createElement('canvas');
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
@@ -297,6 +311,6 @@ function release() {
   queue = job.then(function () {}, function () {}); return job;
 }
 
-root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, CORE_FIX: CORE_FIX, CORE_BINARY_FIX: CORE_BINARY_FIX, fixCore: fixCore, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
+root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, CORE_FIX: CORE_FIX, START_FAIL_FIX: START_FAIL_FIX,CORE_BINARY_FIX: CORE_BINARY_FIX, fixCore: fixCore, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemOcr;
 })(typeof window !== 'undefined' ? window : this);
