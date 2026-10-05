@@ -2588,23 +2588,23 @@ html[data-theme="dark"]{
 .pg-seen,.pg-recall,.mr-arc{animation:arcIn 1.1s var(--glide) .35s both}
 @keyframes arcIn{from{stroke-dasharray:0 100}}
 .pg-mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
-.pg-mid b{font-size:21px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
-.pg-mid span{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.pg-mid b{font-size:var(--t-h4);font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.pg-mid span{font-size:var(--t-micro);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px}
 .plan-copy{min-width:0}
-.pg-legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:12px;font-weight:700;color:var(--muted)}
+.pg-legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:var(--t-tiny);font-weight:700;color:var(--muted)}
 .pg-legend span{display:inline-flex;align-items:center;gap:6px}
 .pg-legend span::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--teal)}
 .pg-legend .lg-recall::before{background:var(--green2)}
 .plan-ready{margin-top:10px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--teal) 7%,transparent);border:1px solid color-mix(in srgb,var(--teal) 18%,transparent)}
-.pace-pill{font-size:11px;font-weight:800;letter-spacing:.04em;border-radius:99px;padding:3px 10px;border:1px solid}
+.pace-pill{font-size:var(--t-tiny);font-weight:800;letter-spacing:.04em;border-radius:99px;padding:3px 10px;border:1px solid}
 .pace-pill.good{color:var(--green);background:var(--green-bg);border-color:var(--green-b)}
 .pace-pill.ok{color:var(--teal);background:var(--teal4);border-color:var(--teal3)}
 .pace-pill.warn{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-b)}
 .plan-card .plan-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;padding:0}
 .plan-card .plan-chip{display:flex;align-items:center;justify-content:center;gap:6px;min-height:52px;padding:0 10px;border-radius:14px;
   color:var(--text);font-variant-numeric:tabular-nums}
-.plan-chip b{font-size:18px;font-weight:800;letter-spacing:-.02em}
-.plan-chip span{font-size:12px;font-weight:700;color:var(--muted)}
+.plan-chip b{font-size:var(--t-lead);font-weight:800;letter-spacing:-.02em}
+.plan-chip span{font-size:var(--t-tiny);font-weight:700;color:var(--muted)}
 .mini-ring{width:26px;height:26px;flex:none}
 .mini-ring circle{fill:none;stroke-width:3;stroke-linecap:round}
 .mr-track{stroke:var(--border2)}
@@ -2617,17 +2617,17 @@ html[data-theme="dark"]{
   background:color-mix(in srgb,var(--teal) 12%,transparent)}
 .exam-ico .icon{width:22px;height:22px}
 .exam-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
-.exam-main label{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.exam-main label{font-size:var(--t-tiny);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .exam-ctl{display:flex;align-items:center;gap:8px}
 .exam-ctl input{flex:1;min-width:0;min-height:44px;max-width:100%;padding:0 10px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:inherit;font:inherit}
 .exam-x{flex:none;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;border:1.5px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer}
 .exam-x .icon{width:18px;height:18px}
 @media(hover:hover){.exam-x:hover{color:var(--red);border-color:var(--red-b)}}
-.exam-left{font-size:13px;font-weight:700}
+.exam-left{font-size:var(--t-meta);font-weight:700}
 .exam-count{flex:none;text-align:center;line-height:1;padding:0 4px}
-.exam-count b{display:block;font-size:30px;font-weight:800;letter-spacing:-.04em;font-variant-numeric:tabular-nums;
+.exam-count b{display:block;font-size:var(--t-h3);font-weight:800;letter-spacing:-.04em;font-variant-numeric:tabular-nums;
   background:linear-gradient(160deg,var(--teal),var(--green2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.exam-count span{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.exam-count span{font-size:var(--t-micro);font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 
 /* topic runs: each row carries its chapter's icon and colour, and a pip per question */
 .run-card .run-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
@@ -2640,13 +2640,13 @@ html[data-theme="dark"]{
 .run-ico{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;
   background:linear-gradient(140deg,var(--ch),color-mix(in srgb,var(--ch) 65%,#000));box-shadow:0 4px 12px color-mix(in srgb,var(--ch) 35%,transparent)}
 .run-ico .icon{width:20px;height:20px;stroke-width:2}
-.run-t{flex:1;min-width:0;font-size:14px;line-height:1.35}
+.run-t{flex:1;min-width:0;font-size:var(--t-meta);line-height:1.35}
 .run-t b{font-weight:800}
 .run-w{color:var(--muted)}
 .run-side{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
 .run-pips{display:flex;gap:3px}
 .run-pips i{width:7px;height:7px;border-radius:50%;background:var(--ch)}
-.run-card .run-n{color:var(--muted);white-space:nowrap;font-size:11px;font-weight:700}
+.run-card .run-n{color:var(--muted);white-space:nowrap;font-size:var(--t-tiny);font-weight:700}
 
 /* voice: a breathing microphone, a moving wave, and the commands as keys */
 .voice-card{background:linear-gradient(140deg,var(--hero-a),var(--hero-b));border-color:rgba(255,255,255,.1);color:#fff}
@@ -2666,11 +2666,11 @@ html:not([data-palette="contrast"]) .feed-card.voice-card::after{opacity:.18}
 .voice-wave i{flex:1;height:100%;border-radius:3px;background:linear-gradient(180deg,#5EEAD4,var(--teal));transform-origin:center;
   transform:scaleY(calc(.18 + .5 * (1 + sin(var(--k) * 0.7)) / 2));animation:wave 1.6s ease-in-out infinite;animation-delay:calc(var(--k) * -70ms);opacity:.85}
 @keyframes wave{0%,100%{transform:scaleY(.2)}50%{transform:scaleY(1)}}
-.voice-say{font-size:12px;color:rgba(255,255,255,.7);display:flex;flex-wrap:wrap;align-items:center;gap:5px}
-.voice-say kbd{font:700 11px/1 inherit;font-family:inherit;padding:4px 7px;border-radius:7px;color:#fff;
+.voice-say{font-size:var(--t-tiny);color:rgba(255,255,255,.7);display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.voice-say kbd{font-weight:700;font-size:var(--t-tiny);line-height:1;font-family:inherit;padding:4px 7px;border-radius:7px;color:#fff;
   background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2)}
 .voice-go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;margin-top:14px;border:0;border-radius:14px;
-  font:inherit;font-weight:800;font-size:15px;color:#0B1B33;background:linear-gradient(90deg,#5EEAD4,#38BDF8);cursor:pointer;
+  font:inherit;font-weight:800;font-size:var(--t-body);color:#0B1B33;background:linear-gradient(90deg,#5EEAD4,#38BDF8);cursor:pointer;
   box-shadow:0 8px 24px rgba(56,189,248,.3);transition:transform .2s var(--spring),box-shadow .2s}
 .voice-go .icon{width:18px;height:18px;stroke-width:2.2}
 @media(hover:hover){.voice-go:hover{transform:translateY(-1px);box-shadow:0 12px 30px rgba(56,189,248,.42)}}
@@ -2699,8 +2699,8 @@ body.voice-on #app{padding-bottom:104px}
 #voiceDock[data-state="speaking"] .vd-bars i:nth-child(4){animation-delay:-.45s}
 #voiceDock[data-state="speaking"] .vd-bars i:nth-child(5){animation-delay:-.6s}
 .vd-text{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
-.vd-state{font-size:14px;font-weight:800}
-.vd-sub{font-size:12px;color:rgba(255,255,255,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vd-state{font-size:var(--t-meta);font-weight:800}
+.vd-sub{font-size:var(--t-tiny);color:rgba(255,255,255,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vd-stop{flex:none;display:flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:14px;border:1px solid rgba(255,255,255,.22);
   background:rgba(255,255,255,.08);color:#fff;font:inherit;font-weight:800;cursor:pointer}
 .vd-stop .icon{width:16px;height:16px;fill:currentColor}
