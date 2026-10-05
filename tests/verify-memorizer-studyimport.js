@@ -156,7 +156,14 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
     });
     await p.click('#import-copy-prompt');
     await p.waitForFunction(() => /Copied/.test(document.getElementById('import-copy-status').textContent), null, T);
-    const clip = await p.evaluate(() => navigator.clipboard.readText().then(t => t === MemStudyImport.studyFilePrompt() && /MEMORIZER STUDY FILE/.test(t), e => 'unreadable: ' + e.message));
+    /* Chromium on Windows hands the clipboard back with CRLF for every newline it
+       was given as LF (measured: "a\nb" reads back as "a\r\nb"), so on Windows
+       alone the line endings are put back before the exact comparison. Elsewhere
+       nothing is normalised, so a prompt the app wrote with CRLF still fails. */
+    const clip = await p.evaluate(() => navigator.clipboard.readText().then(raw => {
+      const t = /Windows/.test(navigator.userAgent) ? raw.replace(/\r\n/g, '\n') : raw;
+      return t === MemStudyImport.studyFilePrompt() && /MEMORIZER STUDY FILE/.test(t);
+    }, e => 'unreadable: ' + e.message));
     ok('Copy puts the study-file prompt, exactly as spec.js builds it, on the clipboard' + (webkit ? ' (WebKit: as the browser accepted it)' : ''), clip === true, String(clip));
     await p.click('#import-cancel');
     ok('the footer Cancel closes it', await p.$('#import-dialog') === null);
