@@ -70,3 +70,13 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   CI engine and `docs/BUILD.md`, `package.json` and a skill still said two
   engines. → Rule: after changing what CI requires, grep the docs and the
   `.claude/` files for the old claim before pushing.
+- **A clean merge that made a number wrong.** Two branches each moved the
+  browser-free suite count from 86 to 87, for different suites. The lines were
+  identical, so git merged them with no conflict, and the real count was 88. →
+  Rule: after any merge, run `node tests/verify-stats.js` before pushing, even
+  when git reported no conflict. A clean merge only means the lines agreed.
+- **A cancelled job read as a red PR.** GitHub's hosted runners failed to start
+  jobs ("not acquired by Runner of type hosted") or shut one down mid-step.
+  → Rule: read the job's annotations and failed step before calling it a test
+  failure; re-run once, and say so on the PR. Merge only on a run where every
+  required job actually ran.
