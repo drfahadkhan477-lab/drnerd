@@ -33,7 +33,7 @@ var ui = {
   docs: [], cards: [], sessions: {}, at: {}, pearlSkip: 0, books: [], days: [], bookId: null,
   docsStale: true, pearlCache: null,
   docId: null, docRec: null, state: null,
-  busy: '', busyKey: '', stepSeq: 0, moving: false, rating: false, saveError: '', notice: '',
+  busy: '', busyKey: '', stepSeq: 0, moving: false, slowSaves: 0, rating: false, saveError: '', notice: '',
   error: '', choice: null, pasting: false,
   importing: '', reviewShown: false, reviewDone: 0, drill: null,
 };
@@ -562,7 +562,15 @@ function openDoc(id, section) {
 /* One transition at a time. A second tap before the first has been stored
    and drawn lands on the OLD screen's button: on "I knew it" that skipped a
    memorise card, and on Next it filed an answer with no choice. While a
-   step is being stored, taps are ignored. */
+   step is being stored, taps are ignored.
+   But not for ever. A save that never settles (an IndexedDB transaction or
+   open that hangs, which WebKit has shipped) used to leave every later tap
+   ignored with nothing on screen to say why. After SAVE_WAIT_MS the step is
+   drawn anyway, taps work again, and a note says the save has not finished
+   (ui.slowSaves); it goes when the save does. Nothing is lost by drawing
+   early: every save writes the whole session, so the next one that works
+   stores this step too. */
+var SAVE_WAIT_MS = 5000;
 function go(event) {
   if (ui.moving) return Promise.resolve();
   if (event && /^(?:open|toUnit|toExam)$/.test(event.type)) ui.recall = null;
@@ -570,7 +578,15 @@ function go(event) {
   ui.choice = null; ui.sure = false; ui.error = ''; ui.back = 0; ui.notice = '';
   var p;
   try { p = dispatch(event); } catch (e) { ui.moving = false; throw e; }
-  return p.then(function () { ui.moving = false; render(); root.scrollTo(0, 0); });
+  return new Promise(function (resolve, reject) {
+    var drawn = false, slow = false;
+    function draw() { if (drawn) return; drawn = true; ui.moving = false; render(); root.scrollTo(0, 0); resolve(); }
+    var timer = root.setTimeout(function () { if (!drawn) { slow = true; ui.slowSaves++; draw(); } }, SAVE_WAIT_MS);
+    p.then(function () {
+      root.clearTimeout(timer);
+      if (slow) { ui.slowSaves--; render(); } else draw();
+    }, function (e) { root.clearTimeout(timer); if (slow) ui.slowSaves--; reject(e); });
+  });
 }
 
 /* ── speech: the lesson can be listened to ───────────────────────────────── */
@@ -4159,6 +4175,18 @@ function storageBanner() {
         Store.retryFailures().then(function () { ui.saveError = Store.failureMessage() || ui.actionError; docsChanged(); return refresh(); }).then(render, function (e) { saveFailed(e); render(); });
       }, 'primary', { id: 'store-retry' }) : null,
       ui.actionError ? button('Dismiss this error', function () { ui.actionError = ''; ui.saveError = Store.failureMessage(); render(); }, 'quiet', { id: 'store-dismiss' }) : null));
+  }
+  if (ui.slowSaves > 0) {
+    return h('p.warn.store-banner', { id: 'store-saving', role: 'status' },
+      h('strong', 'Still saving your last step. '),
+      'The browser has not finished storing it. You can carry on; keep this tab open until this note goes. If it stays, the steps since it appeared may not be kept.');
+  }
+  /* The store did not answer at all (store.js open): the saved data is still
+     there, unread, so the remedy is a reload, not a normal window. */
+  if (!Store.persistent && Store.openTimedOut) {
+    return h('p.warn.store-banner', { id: 'store-banner', role: 'status' },
+      h('strong', 'Your saved study data did not open. '),
+      'The browser\u2019s storage did not answer, so this visit is working from memory: your saved units are not shown, and nothing done now will be kept. Reload the page to try again; what you saved before has not been changed.');
   }
   /* Opened from the iPad's Files app, Safari shows the file as a data: URL:
      no origin, so no storage of any kind, and no "normal window" fixes it. */

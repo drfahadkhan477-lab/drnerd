@@ -315,6 +315,9 @@ const SUITES = [
   ['bankstore', 'the code-only deploy in a browser: import screen with no bank and no request to content/, a refused package changes nothing, a good one launches the app, a replacement is atomic, a normal build unchanged'],
   ['devtools-pure', 'each build in its own workspace, suite tags read from the code, a JSON report with no output text, doctor, and a clean that cannot reach the export'],
   ['testpublic-pure', '`npm test` runs every suite CI runs, pure and browser, from the workflow\'s own list — a failure, a missing file or a missing browser fails it, and a pure-only run says what it left out'],
+  /* scripts/ci-changes.js: a pull request skips a browser job only when every
+     changed file is known not to reach it, and anything doubtful runs both. */
+  ['cichanges-pure', 'a pull request skips a browser job only when none of its files can reach it, and a failed decision runs both'],
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
@@ -445,8 +448,8 @@ const SUITES = [
    not re-measured.
 
    Suites registered after that run are the pending ones now, and the record
-   does not hold them yet: topicrunscreen, voicescreen, examdate, studyvisuals, icons-pure. */
-const PENDING_RECORD = ['topicrunscreen', 'voicescreen', 'examdate', 'studyvisuals', 'icons-pure'];
+   does not hold them yet: topicrunscreen, voicescreen, examdate, studyvisuals, icons-pure, cichanges-pure. */
+const PENDING_RECORD = ['topicrunscreen', 'voicescreen', 'examdate', 'studyvisuals', 'icons-pure', 'cichanges-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
