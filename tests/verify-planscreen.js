@@ -87,7 +87,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }
   {
     await page.click('#planCard [data-plan="20"]');
-    await onScreen(page, 'quiz');
+    await onScreen(page, 'quiz', { marker: '.q-card' });
     const deck = await page.evaluate(() => {
       const t = FSRS.todayISO();
       const dueIn = S.questions.filter(q => S.srs[q.id] && S.srs[q.id].due <= t);
