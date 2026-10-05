@@ -3127,6 +3127,10 @@ function kindOf(user) {
 
   head('scanned pages and photos: read by text recognition, on the device');
   {
+    /* Earlier profiles have finished their assertions. Close their pages,
+       PDF workers and animations before starting another memory-heavy
+       reader; otherwise this scenario also carries the whole prior suite. */
+    for (const context of browser.contexts()) await context.close();
     /* Fresh profiles again: one online, one where the text reader's
        download fails, as it would offline. */
     const fresh = async (tag, blockOcr) => {
