@@ -2787,6 +2787,7 @@ function refImportText(){
 
 /* ═══════════ FSRS-5 — see src/core/fsrs.js ═══════════ */
 @@SLOT[src:src/core/fsrs.js]@@
+@@SLOT[src:src/core/studyplan.js]@@
 
 /* ═══════════ SM-2 spaced repetition + active recall ═══════════
    Per-question card: {difficulty, stability, ivl, reps, due, lapses, last}.
@@ -5799,12 +5800,31 @@ function restoreDeck(qs,key){
   return {deck,i,answers:(rec.answers&&typeof rec.answers==='object')?rec.answers:{},
           correct:rec.correct|0,total:rec.total|0};
 }
-function startQuiz(ch,mode='all'){
+/* ── "I have N minutes" — src/core/studyplan.js chooses what, in what order and why (due first, most
+   forgotten first; then the weaker chapters; then new). It runs as a review session (mode 'due'), so a
+   card rated here moves its schedule exactly as in the review queue. ── */
+function planNow(minutes){
+  return StudyPlan.plan({minutes,pool:POOL,srs:S.srs,chStats:S.chStats,missed:S.missed});
+}
+function startPlan(minutes){
+  const qs=planNow(minutes).items.map(it=>QBYID[it.id]).filter(q=>q&&!q.bad);
+  if(!qs.length){alert('Nothing to plan: there are no questions to draw from.');return;}
+  startQuiz(null,'due',qs);
+}
+/* Questions answered a day, over the last seven days (today included). */
+function recentPerDay(){
+  let total=0,d=new Date();
+  for(let i=0;i<7;i++){ const v=S.daily[FSRS.localDateToISO(d)]; if(v&&v.a>0) total+=v.a; d.setDate(d.getDate()-1); }
+  return total/7;
+}
+function startQuiz(ch,mode='all',deck){
   let qs;
   if(mode==='missed') qs=[...S.missed].map(id=>QBYID[id]).filter(q=>q&&!q.bad);
-  else if(mode==='due') qs=reviewQueue(20);
+  else if(mode==='due') qs=deck||reviewQueue(20);
   else qs=(ch?POOL.filter(q=>q.ch===ch):[...POOL]);
   if(!qs.length){alert(mode==='due'?'Nothing left to review right now — the whole bank is scheduled.':'No questions available for that selection.');return;}
+  /* A deck handed in (the study plan) is asked in the order it was planned in, not shuffled below. (Only
+     'all' decks are ever saved for resuming: resumeKey is null for review, so a plan has nothing to resume.) */
   const back=restoreDeck(qs,resumeKey(ch,mode));
   if(back){
     Object.assign(S,{screen:'quiz',chapter:ch,questions:back.deck,qIdx:back.i,
@@ -5823,7 +5843,7 @@ function startQuiz(ch,mode='all'){
     if(live) live.textContent='Resumed at question '+(back.i+1)+' of '+back.deck.length;
     return;
   }
-  qs=shuf(qs);
+  if(!deck) qs=shuf(qs);
   Object.assign(S,{screen:'quiz',chapter:ch,questions:qs,qIdx:0,selected:null,
     answered:false,mode,zoomed:-1,quizCorrect:0,quizTotal:0,answers:{},resumed:false});
   render();toTop();clearAnnounce();markShown();
@@ -6790,6 +6810,16 @@ function buildStudy(){
     <div class="fc-cta">${dueN?'Review now':'Begin'} ${icon('arrow-right','icon-sm')}</div>
   </button>`;
 
+  const planPreview=planNow(20), ready=StudyPlan.readiness({pool:POOL,srs:S.srs,chStats:S.chStats,recentPerDay:recentPerDay()});
+  const readyLine=ready.status==='no-data'?'':`You have seen ${ready.seen} of ${ready.total} questions and remember about ${Math.round((ready.retention||0)*100)}% of them today.`+(ready.weakChapters.length?` Weakest: ${ready.weakChapters.map(w=>`${w.ch} (${w.pct}%)`).join(', ')}.`:'');
+  const planCard=`<div class="feed-card plan-card" id="planCard" role="group" aria-label="Study plan">
+    <div class="fc-top"><span class="fc-badge">STUDY PLAN</span></div>
+    <div class="fc-title">I have…</div>
+    <div class="fc-sub" id="planSub">${e(planPreview.text)}</div>
+    ${readyLine?`<div class="fc-sub" id="planReady">${e(readyLine)}</div>`:''}
+    <div class="chips plan-chips">${[10,20,40].map(m=>`<button class="chip" data-plan="${m}" onclick="startPlan(${m})">${m} min</button>`).join('')}</div>
+  </div>`;
+
   const missCard=S.missed.size>0?`<button class="feed-card miss-card" onclick="startQuiz(null,'missed')">
     <div class="fc-top"><span class="fc-badge red">WEAK SPOTS</span></div>
     <div class="fc-title">${S.missed.size} to reclaim</div>
@@ -6829,6 +6859,7 @@ function buildStudy(){
 
     <div class="feed">
       ${reviewCard}
+      ${planCard}
       ${missCard}
       <button class="feed-card all-card" onclick="startQuiz(null)">
         <div class="fc-top"><span class="fc-badge">FULL BANK</span></div>
