@@ -79,6 +79,7 @@ const SUITES = [
   ['homeprog',     'the progress card counts up in step with the bar it sits beside'],
   ['planscreen',   'the "I have N minutes" card plans a review session of that size, in order, and rating in it moves the schedule'],
   ['topicrunscreen', 'the Topic runs card asks three to five questions about one thing, from what you missed, each holding the words it says they share'],
+  ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
   ['voicescreen', 'the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave'],
   ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn'],
   ['failsafe',     'render() throwing shows a real screen, never a blank or frozen one'],
@@ -441,9 +442,9 @@ const SUITES = [
    split-build figure (134) is carried over from the ninth emptying and was
    not re-measured.
 
-   Two suites registered after that run are the pending ones now, and the
-   record does not hold them yet: topicrunscreen and voicescreen. */
-const PENDING_RECORD = ['topicrunscreen', 'voicescreen'];
+   Suites registered after that run are the pending ones now, and the record
+   does not hold them yet: topicrunscreen, voicescreen, examdate. */
+const PENDING_RECORD = ['topicrunscreen', 'voicescreen', 'examdate'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
