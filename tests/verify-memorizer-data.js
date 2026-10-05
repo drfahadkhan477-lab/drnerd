@@ -77,7 +77,12 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
     await p.waitForSelector('#learn-unit', T);
     await toHome(p);
   };
-  const day = () => new Date().toISOString().slice(0, 10);
+  /* The app's day is the LOCAL day (FSRS.todayISO), and this must be too. The UTC
+     day, which `toISOString().slice(0, 10)` gives, differs from it for the hours
+     after local midnight wherever the offset is positive: between 00:00 and 05:00
+     in Karachi both "the day remembered" checks failed, and CI, which runs in
+     UTC, never saw it. src/core/fsrs.js fixed the same mistake in the app. */
+  const day = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   try {
     head('the backup reminder');
     let { ctx, p } = await fresh('nudge-later');
