@@ -538,6 +538,12 @@ jobs:
         name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
         run: node tests/verify-planscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
+        run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave (21 checks)
+        run: node tests/verify-voicescreen.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the chapter grid staggers in, and its bar fills instead of arriving drawn (21 checks)
         run: node tests/verify-chapters.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}

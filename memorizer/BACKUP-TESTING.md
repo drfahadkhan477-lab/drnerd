@@ -34,6 +34,8 @@ The benchmark always uses an isolated **memory fallback** store. It does not mea
 
 ## Prepare an iPad trial
 
+A one-page order of work for the day, with a results table, is in [IPAD-RUNSHEET.md](IPAD-RUNSHEET.md).
+
 1. Use a dedicated test origin and only self-authored synthetic PDFs/notes. Backup restore replaces that origin's study records. Build with `npm run memorizer`; follow [the existing iPad hosting instructions](../docs/IPAD.md) for a secure test address. No deployment is performed by the benchmark.
 2. Record commit/build stamp, iPad model, iPadOS version, Safari versus Home Screen mode, free storage, power/thermal state, and network connection. Use the same files for repeated trials.
 3. Create numbered synthetic PDF pages with distinctive first/last text and headings. Include a text PDF, a self-created scanned PDF, and a multipart pair with explicit part/page-range filenames. Record file names, SHA-256 hashes, bytes and page counts. Increase bytes and page counts separately; large compressed files and long/scanned books exercise different costs.

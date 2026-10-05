@@ -149,22 +149,51 @@ const PAGE = `<!doctype html><html><head><title>Saved page title</title>
        resolves (as verify-memorizer does): narrower than Chromium's, which
        reads the clipboard itself. */
     const webkit = engineName() === 'webkit';
-    if (webkit) await p.evaluate(() => {
+    /* On EVERY engine, remember the string the app hands to writeText, at the
+       moment it does. That is the app's own output, before any clipboard has
+       had a chance to change its line endings. */
+    await p.evaluate(webkitOnly => {
       const c = navigator.clipboard, write = c.writeText.bind(c); let last = null;
-      c.writeText = t => write(t).then(v => { last = String(t); return v; });
-      c.readText = () => last === null ? Promise.reject(new Error('nothing was copied')) : Promise.resolve(last);
-    });
+      window.__clipWritten = null;
+      c.writeText = t => { window.__clipWritten = String(t); return write(t).then(v => { last = String(t); return v; }); };
+      if (webkitOnly) c.readText = () => last === null ? Promise.reject(new Error('nothing was copied')) : Promise.resolve(last);
+    }, webkit);
     await p.click('#import-copy-prompt');
     await p.waitForFunction(() => /Copied/.test(document.getElementById('import-copy-status').textContent), null, T);
     /* Chromium on Windows hands the clipboard back with CRLF for every newline it
        was given as LF (measured: "a\nb" reads back as "a\r\nb"), so on Windows
        alone the line endings are put back before the exact comparison. Elsewhere
-       nothing is normalised, so a prompt the app wrote with CRLF still fails. */
-    const clip = await p.evaluate(() => navigator.clipboard.readText().then(raw => {
+       nothing is normalised. On Windows that normalisation would also hide CRLF
+       the app wrote itself, which is why the string the app passed to writeText
+       is asserted separately below, on every engine. */
+    const readBackIsPrompt = () => navigator.clipboard.readText().then(raw => {
       const t = /Windows/.test(navigator.userAgent) ? raw.replace(/\r\n/g, '\n') : raw;
       return t === MemStudyImport.studyFilePrompt() && /MEMORIZER STUDY FILE/.test(t);
-    }, e => 'unreadable: ' + e.message));
+    }, e => 'unreadable: ' + e.message);
+    const clip = await p.evaluate(readBackIsPrompt);
     ok('Copy puts the study-file prompt, exactly as spec.js builds it, on the clipboard' + (webkit ? ' (WebKit: as the browser accepted it)' : ''), clip === true, String(clip));
+    /* The Windows branch cannot be reached by the real clipboard on CI's Linux, so
+       it is run with a stand-in read-back: the prompt with every newline as CRLF,
+       which is what Chromium on Windows was measured to return. This proves the
+       rule the line above applies (put CRLF back to LF, on Windows only); it does
+       not prove that Windows returns CRLF, which only a Windows machine can. */
+    const standIn = ua => p.evaluate(agent => {
+      window.__readBefore = navigator.clipboard.readText;
+      const crlf = MemStudyImport.studyFilePrompt().replace(/\n/g, '\r\n');
+      Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => agent });
+      navigator.clipboard.readText = () => Promise.resolve(crlf);
+    }, ua);
+    const restore = () => p.evaluate(() => { navigator.clipboard.readText = window.__readBefore; delete navigator.userAgent; });
+    await standIn('Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
+    const winCrlf = await p.evaluate(readBackIsPrompt);
+    await restore();
+    await standIn('Mozilla/5.0 (X11; Linux x86_64)');
+    const otherCrlf = await p.evaluate(readBackIsPrompt);
+    await restore();
+    ok('a Windows-style read-back (every newline as CRLF) matches the prompt once its line endings are put back', winCrlf === true, String(winCrlf));
+    ok('and only on Windows: the same CRLF read-back anywhere else is not accepted', otherCrlf === false, String(otherCrlf));
+    const written = await p.evaluate(() => ({ same: window.__clipWritten === MemStudyImport.studyFilePrompt(), type: typeof window.__clipWritten, cr: typeof window.__clipWritten === 'string' && window.__clipWritten.includes('\r') }));
+    ok('the app hands writeText the prompt exactly, with no line-ending conversion of its own', written.same === true, JSON.stringify(written));
     await p.click('#import-cancel');
     ok('the footer Cancel closes it', await p.$('#import-dialog') === null);
     await p.click('#chip-import-study'); await p.waitForSelector('#import-dialog', T);

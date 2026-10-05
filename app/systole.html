@@ -2788,6 +2788,8 @@ function refImportText(){
 /* ═══════════ FSRS-5 — see src/core/fsrs.js ═══════════ */
 @@SLOT[src:src/core/fsrs.js]@@
 @@SLOT[src:src/core/studyplan.js]@@
+@@SLOT[src:src/core/topicrun.js]@@
+@@SLOT[src:src/core/voicemode.js]@@
 
 /* ═══════════ SM-2 spaced repetition + active recall ═══════════
    Per-question card: {difficulty, stability, ivl, reps, due, lapses, last}.
@@ -5811,6 +5813,101 @@ function startPlan(minutes){
   if(!qs.length){alert('Nothing to plan: there are no questions to draw from.');return;}
   startQuiz(null,'due',qs);
 }
+/* ── Topic runs — src/core/topicrun.js groups questions that are about the same thing (shared distinctive
+   words, within one chapter) into runs of three to five, starting from what you missed, then what is due.
+   Asked back to back in the order it gives, as a review session: ratings move the schedule as usual. ── */
+let _runsKey='',_runs=[],_runsShown=[];
+function topicRunsNow(){
+  const dueIds=new Set(dueQuestions().map(q=>q.id));
+  const key=POOL.length+'|'+S.missed.size+'|'+dueIds.size;
+  if(key!==_runsKey){
+    _runsKey=key;
+    try{ _runs=TopicRun.runs({pool:POOL.filter(q=>!q.bad),missed:S.missed,due:dueIds,size:4,max:3}); }
+    catch(_){ _runs=[]; }   // a card that cannot be worked out is no card, not a broken screen
+  }
+  return _runs;
+}
+function runLabel(r){
+  const words=r.shared.slice(0,3).join(' · ');
+  return (CH_SHORT[r.ch]||r.ch)+(words?' — '+words:'');
+}
+function startRun(i){
+  const r=_runsShown[i]; if(!r) return;
+  const qs=r.ids.map(id=>QBYID[id]).filter(q=>q&&!q.bad);
+  if(qs.length<2){alert('That run is no longer available.');return;}
+  startQuiz(null,'due',qs);
+}
+/* ── Voice session — src/core/voicemode.js decides what to say and how to read what was said; the browser's
+   speechSynthesis speaks and SpeechRecognition listens. It drives the ordinary quiz screen (startQuiz in review
+   mode), so an answer is scored by selectOpt and rated by rateReview exactly as when tapped: right → Good, wrong →
+   Again. Nothing starts without a tap (iPad Safari will not speak or listen otherwise), and a browser without
+   both speech halves simply has no card. Leaving the quiz screen ends the session. ── */
+const VOICE_SR=()=>window.SpeechRecognition||window.webkitSpeechRecognition;
+function voiceAvailable(){ return !!(window.speechSynthesis&&window.SpeechSynthesisUtterance&&VOICE_SR()); }
+let _voice=null;
+function voiceSay(text){
+  return new Promise(res=>{
+    let done=false; const fin=()=>{ if(!done){done=true;clearTimeout(t);res();} };
+    const t=setTimeout(fin,4000+text.length*90);          // some browsers never fire onend
+    try{ const u=new SpeechSynthesisUtterance(text); u.onend=fin; u.onerror=fin; speechSynthesis.speak(u); }catch(_){ fin(); }
+  });
+}
+function voiceHear(){
+  return new Promise(res=>{
+    let done=false, rec=null; const fin=v=>{ if(!done){done=true;clearTimeout(t);clearInterval(watch);try{rec&&rec.stop();}catch(_){} res(v);} };
+    const t=setTimeout(()=>fin(null),9000);
+    const watch=setInterval(()=>{ if(_voice===null||S.screen!=='quiz'){ clearInterval(watch); fin(null); } },250);   // the microphone does not stay open on another screen
+    try{
+      rec=new (VOICE_SR())(); rec.lang='en-US'; rec.interimResults=false; rec.maxAlternatives=1;
+      rec.onresult=ev=>{ try{ fin(ev.results[0][0].transcript); }catch(_){ fin(null); } };
+      rec.onerror=()=>fin(null); rec.onend=()=>fin(null);
+      rec.start();
+    }catch(_){ fin(null); }
+  });
+}
+function voiceLive(v){ return _voice===v && S.screen==='quiz' && S.questions===v.deck; }
+function startVoice(){
+  if(!voiceAvailable()){alert('This browser cannot speak and listen. Try Safari or Chrome.');return;}
+  const ids=planNow(10).items.map(it=>it.id);
+  const qs=ids.map(id=>QBYID[id]).filter(q=>q&&!q.bad&&q.o&&q.o.length);
+  if(!qs.length){alert('Nothing to ask: there are no questions to draw from.');return;}
+  startQuiz(null,'due',qs);
+  if(S.screen!=='quiz') return;
+  const v=_voice={deck:S.questions,state:VoiceMode.init(S.questions.length),pending:[]};
+  runVoice(v,{type:'start'});
+}
+function stopVoice(){ _voice=null; try{speechSynthesis.cancel();}catch(_){} }
+async function runVoice(v,event){
+  let queue=[event];
+  while(queue.length&&_voice===v){
+    const ev=queue.shift();
+    /* Feedback has been read: rate the answer as a tap would (right → Good, wrong → Again). That moves the quiz on,
+       or, after the last question, to the results screen; the spoken summary still follows. */
+    if(ev.type==='feedbackRead'&&voiceLive(v)){
+      const last=v.state.results[v.state.results.length-1];
+      rateReview(last&&last.correct?3:1);
+    }
+    const r=VoiceMode.step(v.state,ev,{q:v.deck[v.state.i]||{}}); v.state=r.state;
+    for(const fx of r.effects){
+      if(_voice!==v) return;
+      if(fx.type==='done'){ await voiceSay(fx.summary); if(_voice===v) _voice=null; return; }
+      if(!voiceLive(v)) { stopVoice(); return; }
+      if(fx.type==='ask'){
+        while(S.qIdx<fx.i&&S.qIdx<S.questions.length-1) nextQ();   // a skipped question leaves the screen behind
+        for(const part of VoiceMode.speakable(v.deck[fx.i]).parts){ if(!voiceLive(v)){stopVoice();return;} await voiceSay(part); }
+        queue.push({type:'questionRead'});
+      }else if(fx.type==='speak'){
+        await voiceSay(fx.text);
+        if(v.state.phase==='feedback') queue.push({type:'feedbackRead'});
+      }else if(fx.type==='listen'){
+        const t=await voiceHear();
+        queue.push(t==null?{type:'silence'}:{type:'heard',transcript:t});
+      }else if(fx.type==='record'){
+        selectOpt(fx.choice);
+      }
+    }
+  }
+}
 /* Questions answered a day, over the last seven days (today included). */
 function recentPerDay(){
   let total=0,d=new Date();
@@ -6820,6 +6917,21 @@ function buildStudy(){
     <div class="chips plan-chips">${[10,20,40].map(m=>`<button class="chip" data-plan="${m}" onclick="startPlan(${m})">${m} min</button>`).join('')}</div>
   </div>`;
 
+  _runsShown=topicRunsNow();
+  const runCard=_runsShown.length?`<div class="feed-card run-card" id="runCard" role="group" aria-label="Topic runs">
+    <div class="fc-top"><span class="fc-badge">TOPIC RUNS</span></div>
+    <div class="fc-title">Same topic, back to back</div>
+    <div class="fc-sub">Three to five questions about one thing, from what you most need.</div>
+    <div class="run-list">${_runsShown.map((r,i)=>`<button class="run-btn" data-run="${i}" onclick="startRun(${i})"><span class="run-t">${e(runLabel(r))}</span><span class="run-n">${r.ids.length} questions</span></button>`).join('')}</div>
+  </div>`:'';
+
+  const voiceCard=voiceAvailable()?`<div class="feed-card voice-card" id="voiceCard" role="group" aria-label="Voice session">
+    <div class="fc-top"><span class="fc-badge">VOICE</span></div>
+    <div class="fc-title">Hands full? Answer out loud</div>
+    <div class="fc-sub">Ten questions, read aloud. Say a letter, or “repeat”, “skip”, “explain”, “stop”. Needs the microphone.</div>
+    <div class="chips"><button class="chip" id="voiceStart" onclick="startVoice()">Start</button></div>
+  </div>`:'';
+
   const missCard=S.missed.size>0?`<button class="feed-card miss-card" onclick="startQuiz(null,'missed')">
     <div class="fc-top"><span class="fc-badge red">WEAK SPOTS</span></div>
     <div class="fc-title">${S.missed.size} to reclaim</div>
@@ -6860,6 +6972,8 @@ function buildStudy(){
     <div class="feed">
       ${reviewCard}
       ${planCard}
+      ${runCard}
+      ${voiceCard}
       ${missCard}
       <button class="feed-card all-card" onclick="startQuiz(null)">
         <div class="fc-top"><span class="fc-badge">FULL BANK</span></div>

@@ -526,6 +526,24 @@ function kindOf(user) {
   const URL = FILE ? 'file://' + path.join(dir, 'index.html') : ORIGIN + '/index.html';
   const T = { timeout: 60000 };
   const text = async (p, sel) => (await p.locator(sel).innerText()).replace(/\s+/g, ' ').trim();
+  /* A wait for a screen the app should have drawn, with the same 60 s and the
+     same locator wait. A bare locator timeout says only "Timeout 60000ms
+     exceeded"; an intermittent one (the Firefox job once timed out here, on a
+     docs-only change, and passed when re-run) is read from the transcript or not
+     at all. So when it does time out, say what the app itself reports: whether a
+     step is still being stored (ui.moving, which makes go() ignore taps), what is
+     busy or failed, the phase it believes it is in, and which ids are on screen. */
+  const arrived = async (p, sel, what) => {
+    try { await p.locator(sel).waitFor(T); } catch (e) {
+      const seen = await p.evaluate(() => {
+        const u = window.Memorizer && window.Memorizer.ui;
+        if (!u) return { app: 'Memorizer.ui is not there' };
+        return { phase: u.state && u.state.phase, section: u.state && u.state.section, moving: u.moving, busy: u.busy, error: u.error,
+                 saveError: u.saveError, actionError: u.actionError, ids: [...document.querySelectorAll('main [id]')].slice(0, 20).map(el => el.id) };
+      }).catch(x => ({ unreadable: String(x.message).split('\n')[0] }));
+      throw new Error('never reached ' + what + ' (' + sel + '): ' + String(e.message).split('\n')[0] + '; the app says ' + JSON.stringify(seen));
+    }
+  };
   /* Home is the hero, the brain and the pearl; the chapters, and everything
      done with them, are the Chapters tab (the owner: "move chapters to other
      page"). The waits are for each page to be drawn — a precondition. */
@@ -848,7 +866,7 @@ function kindOf(user) {
 
   head('memorise it before the drill');
   await page.locator('#to-drill').click();
-  await page.locator('#recall').waitFor(T);
+  await arrived(page, '#recall', 'the memorise screen after "now memorise it"');
   const nCards = await page.evaluate(() => Memorizer.ui.state.per[0].memo.order.length);
   ok('the lesson leads to memorising, not the drill: a card at a time, its answer hidden', nCards >= 3 && await page.locator('#mcq').count() === 0 &&
      await page.locator('#recall-answer').count() === 0 && (await page.locator('.stepper li.now').textContent()) === 'Memorize' &&
