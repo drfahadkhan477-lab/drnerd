@@ -10,7 +10,7 @@
  * that is provably lossless and provably clean, which is this file.
  *
  * A SLOT is a span of the built file replaced by a token, @@SLOT[kind:name]@@.
- * Three kinds of span leave the app:
+ * Four kinds of span leave the shell:
  *
  *   payload   ALL_Q, IMGS, the reference seed, the reference figures and the
  *             heart's baked mesh. Stored beside the content (content/payload/,
@@ -20,6 +20,10 @@
  *             assembling reads the file as it is now, not as it was cut.
  *   asset     a file of assets/ found verbatim as base64 (fonts, the splash
  *             photograph). Read from assets/ at assembly, same reason.
+ *   app       a piece of the app carved out of the shell into its own file
+ *             under app/ (scripts/carve.js): step 3 of retiring the chain.
+ *             Ours, committed, and read at assembly as src is. Held to
+ *             exactly-once as src is, and a piece holds no token itself.
  *
  * A payload or a src module must match exactly once, as patch() must. One that
  * is not found verbatim stays inline and is REPORTED, not guessed at. The cut
@@ -68,16 +72,24 @@ function walk(dir, keep) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
     const p = path.join(dir, e.name);
-    return e.isDirectory() ? walk(p, keep) : keep(p) ? [p] : [];
+    /* Regular files only: a link is neither followed nor offered, so what a
+       cut compares against cannot come from outside the directory. */
+    return e.isDirectory() ? walk(p, keep) : e.isFile() && keep(p) ? [p] : [];
   });
 }
+
+/* A file a workstation puts under app/ that is not the app: a dotfile or a
+   dot-directory's contents (.DS_Store, editor state), and the two names Windows
+   adds. Whether a piece is one must not depend on whose machine it is read on,
+   or a freeze would refuse for a file no one committed. rel is relative to app/. */
+const isMetadata = rel => rel.split(/[\\/]/).some(seg => seg.startsWith('.')) || /^(Thumbs\.db|desktop\.ini)$/i.test(path.basename(rel));
 
 /* What the repository offers to slot, as { name: text }. Names are
    repository-relative paths, so a slot names the file it came from — with
    forward slashes whatever the machine, because the names are written into the
    committed shell and a shell cut on Windows has to assemble on Linux. */
 function repoSources(root = ROOT) {
-  const srcs = {}, assets = {};
+  const srcs = {}, assets = {}, apps = {};
   const rel = f => path.relative(root, f).split(path.sep).join('/');
   for (const f of walk(path.join(root, 'src'), p => p.endsWith('.js')))
     srcs[rel(f)] = fs.readFileSync(f, 'utf8');
@@ -85,12 +97,17 @@ function repoSources(root = ROOT) {
      accident, and nothing that small is worth a slot. */
   for (const f of walk(path.join(root, 'assets'), p => !p.endsWith('.md') && fs.statSync(p).size >= 512))
     assets[rel(f)] = fs.readFileSync(f).toString('base64');
-  return { srcs, assets };
+  /* The pieces carved out of the shell: every file under app/ but the shell
+     and what a workstation leaves there (isMetadata). */
+  const shellFile = path.join(root, 'app', 'systole.html');
+  for (const f of walk(path.join(root, 'app'), p => p !== shellFile && !isMetadata(path.relative(path.join(root, 'app'), p))))
+    apps[rel(f)] = fs.readFileSync(f, 'utf8');
+  return { srcs, assets, apps };
 }
 
 /* cut(html, sources) → { shell, payloads, report }
    payloads: { ALL_Q: text, … } — the spans that left and must be stored.
-   report:   { slots: [{kind,name,bytes,times}], inline: {src:[…], asset:[…]} }
+   report:   { slots: [{kind,name,bytes,times}], inline: {src:[…], asset:[…], app:[…]} }
              times is how many sites an asset was claimed at; absent means one. */
 function cut(html, sources = repoSources()) {
   if (html.includes('@@SLOT[')) throw new Error('the input already contains a slot token: it is not a fresh build');
@@ -107,8 +124,8 @@ function cut(html, sources = repoSources()) {
     shell = shell.replace(whole, () => kept + token('payload', p.name) + tail);
     slots.push({ kind: 'payload', name: p.name, bytes: m[2].length });
   }
-  const inline = { src: [], asset: [] };
-  for (const [kind, table] of [['src', sources.srcs], ['asset', sources.assets]]) {
+  const inline = { src: [], asset: [], app: [] };
+  for (const [kind, table] of [['src', sources.srcs], ['asset', sources.assets], ['app', sources.apps || {}]]) {
     for (const name of Object.keys(table).sort()) {
       const text = table[name], n = count(shell, text);
       if (n === 1) {
@@ -145,17 +162,41 @@ function assemble(shell, resolve) {
   return out;
 }
 
+/* Each kind of slot reads from one directory of the repository and nowhere
+   else. A name is a slot's own text in a committed shell, and what it names is
+   read and written into a page that is served: `src:../secret`, or a path that
+   leads out through a link, would embed a file that is not the app's. */
+const KIND_DIR = { src: 'src', asset: 'assets', app: 'app' };
+
+/* contained(root, kind, name) → the file's path, or null when the name is not
+   forward-slash segments under the kind's directory, names no regular file, or
+   resolves (links followed) to somewhere outside that directory. */
+function contained(root, kind, name) {
+  const dir = KIND_DIR[kind];
+  if (!dir || typeof name !== 'string') return null;
+  if (!name.startsWith(dir + '/') || name.includes('\\') || name.split('/').some(s => s === '' || s === '.' || s === '..')) return null;
+  const f = path.join(root, name);
+  try {
+    const real = fs.realpathSync(f), base = fs.realpathSync(path.join(root, dir));
+    const rel = path.relative(base, real);
+    if (rel === '' || rel.split(path.sep)[0] === '..' || path.isAbsolute(rel)) return null;
+    return fs.statSync(real).isFile() ? f : null;
+  } catch (e) { return null; }
+}
+
 /* The resolver assembly uses: payloads from a directory, src and assets from
-   the repository as it is now. */
+   the repository as it is now. A payload name is a bare identifier, as the
+   names in PAYLOADS are. */
 function repoResolver(payloadDir, root = ROOT) {
   return (kind, name) => {
     if (kind === 'payload') {
+      if (!/^[A-Z][A-Z0-9_]*$/.test(name)) return undefined;
       const f = path.join(payloadDir, name + '.txt');
       return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : undefined;
     }
-    const f = path.join(root, name);
-    if (!fs.existsSync(f)) return undefined;
-    if (kind === 'src') return fs.readFileSync(f, 'utf8');
+    const f = contained(root, kind, name);
+    if (f === null) return undefined;
+    if (kind === 'src' || kind === 'app') return fs.readFileSync(f, 'utf8');
     if (kind === 'asset') return fs.readFileSync(f).toString('base64');
     return undefined;
   };
@@ -189,4 +230,4 @@ function leakScan(shell, payloads) {
            offsets: { questionText: q.slice(0, 10), refText: r.slice(0, 10), base64Runs: runs.slice(0, 10) } };
 }
 
-module.exports = { PAYLOADS, token, cut, assemble, repoSources, repoResolver, leakScan };
+module.exports = { PAYLOADS, TOKEN_RE, KIND_DIR, isMetadata, token, cut, assemble, repoSources, repoResolver, leakScan };

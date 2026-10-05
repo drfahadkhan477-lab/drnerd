@@ -81,7 +81,17 @@ this way: the README's split-build count, sitting between two guarded numbers,
 and `verify.yml`'s "the nine suites" when there were eighteen. Both are guarded
 now. If you write a sentence containing a number, guard it or do not write it.
 
-## The patch chain
+## The patch chain is retired
+
+`scripts/CHAIN-RETIRED` exists, so `npm run build` and `npm run release-check`
+build the app with `scripts/assemble-app.js` from `app/`, `src/` and `assets/`.
+**Edit those directly; add no new `*-patch.js` step.** The chain below is history,
+kept in the repository, and five of its scripts are libraries the assembler
+imports. `npm run build:chain` runs the old recipe and is correct only while
+`app/` still equals its output; the first edit to `app/` ends that. Do not "fix"
+a difference between the two by editing a patch step.
+
+## The patch chain (history; still read this before touching a `*-patch.js`)
 
 `scripts/build.js` holds `CHAIN`: 91 steps, each a `*-patch.js`. `patch(label,
 find, replace)` throws unless `find` matches **exactly once** — that is the

@@ -261,13 +261,44 @@ bank, its figures, and the Braunwald reference seed and figures.
    needed to build the app. CI now assembles the real app around a
    synthetic bank (`scripts/synthetic-export.js`) and runs the browser
    suites on it: the `synthetic-browser` job.
-3. **Carve `app/`.** Split it into CSS and modules a piece at a time. New work
-   edits `app/` or `src/` directly; no new patch steps are added.
-4. **Retire the chain** once both paths give the same file for a few
-   releases. The scripts stay in history. `npm run release-check` compares
-   the two on every certification (its `assemble` step), so the release
-   reports in `build/release-report.md` are that record; a difference
-   withholds `CERTIFIED`.
+3. **Carve `app/`** (now). Split it into CSS and modules a piece at a time:
+
+   ```bash
+   node scripts/carve.js <from> <to> app/<path>     # lines of app/systole.html, inclusive
+   node scripts/assemble-app.js --compare build/systole.html
+   ```
+
+   `scripts/carve.js` moves those lines into the file and leaves a slot token,
+   and keeps the result only if the shell assembles to the same bytes as
+   before. The second command, beside a chain build, is what shows the app is
+   still the chain's. `freeze-shell` on a later chain build finds each piece
+   where it stands, so the carving survives a re-freeze; a piece it does
+   not find verbatim is where the chain and `app/` have parted, and it
+   refuses to freeze until they agree. A piece must also be found exactly once
+   in the assembled app, not only in the shell: text that also stands inside a
+   piece already carved would be found twice or once by filename order.
+   `tests/verify-carve-pure.js` audits the committed `app/` without the
+   export: every token has its file and every piece is cited once. The
+   stylesheet is the first piece, `app/css/systole.css`. New work edits
+   `app/` or `src/` directly; no new patch steps are added.
+4. **Retire the chain** (done, 2026-10-04). `scripts/CHAIN-RETIRED` says so, and
+   two things read it. `npm run build` is now
+   `node scripts/assemble-app.js --out build/systole.html`: the app is built from
+   `app/`, `src/`, `assets/` and the export, to the file the rest of the pipeline
+   already reads. `npm run release-check`'s `build` step is the assembler too, and its
+   byte-for-byte comparison with the chain's build is no longer a step: there is no
+   chain build to compare with. (It is not skipped; a skip would withhold `CERTIFIED`
+   for ever, and a step that quietly vanished would be the overclaim that file forbids.)
+   The old recipe is `npm run build:chain`, and works for as long as `app/` still equals
+   its output. **The first edit to `app/` ends that**, which is what retiring it was for:
+   the 20-minute button, the readiness forecast, topic runs and voice mode are edits to
+   `app/`. The `*-patch.js` scripts stay in the repository as history, and five of them
+   as libraries the assembler imports (`keys-patch`, `flags-patch`, `refs-patch`,
+   `ref-images-patch`, and `heart-bake.js`). Nothing is added to the chain.
+
+   What the owner's machine should do once, after pulling this: `npm run release-check`
+   on the real export. Its `build` step is then the first real build by the assembler as
+   *the* builder; the full suite on Chromium, over http and on WebKit is what certifies it.
 
 `tests/verify-app-slots-pure.js` holds step 1 on a synthetic build. Only
 `freeze-shell` on the real build can show that the real one cuts cleanly.
@@ -651,7 +682,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        124 suites · 85 need no browser · + pwa
+tests/        124 suites · 86 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
