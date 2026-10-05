@@ -281,11 +281,24 @@ bank, its figures, and the Braunwald reference seed and figures.
    export: every token has its file and every piece is cited once. The
    stylesheet is the first piece, `app/css/systole.css`. New work edits
    `app/` or `src/` directly; no new patch steps are added.
-4. **Retire the chain** once both paths give the same file for a few
-   releases. The scripts stay in history. `npm run release-check` compares
-   the two on every certification (its `assemble` step), so the release
-   reports in `build/release-report.md` are that record; a difference
-   withholds `CERTIFIED`.
+4. **Retire the chain** (done, 2026-10-04). `scripts/CHAIN-RETIRED` says so, and
+   two things read it. `npm run build` is now
+   `node scripts/assemble-app.js --out build/systole.html`: the app is built from
+   `app/`, `src/`, `assets/` and the export, to the file the rest of the pipeline
+   already reads. `npm run release-check`'s `build` step is the assembler too, and its
+   byte-for-byte comparison with the chain's build is no longer a step: there is no
+   chain build to compare with. (It is not skipped; a skip would withhold `CERTIFIED`
+   for ever, and a step that quietly vanished would be the overclaim that file forbids.)
+   The old recipe is `npm run build:chain`, and works for as long as `app/` still equals
+   its output. **The first edit to `app/` ends that**, which is what retiring it was for:
+   the 20-minute button, the readiness forecast, topic runs and voice mode are edits to
+   `app/`. The `*-patch.js` scripts stay in the repository as history, and five of them
+   as libraries the assembler imports (`keys-patch`, `flags-patch`, `refs-patch`,
+   `ref-images-patch`, and `heart-bake.js`). Nothing is added to the chain.
+
+   What the owner's machine should do once, after pulling this: `npm run release-check`
+   on the real export. Its `build` step is then the first real build by the assembler as
+   *the* builder; the full suite on Chromium, over http and on WebKit is what certifies it.
 
 `tests/verify-app-slots-pure.js` holds step 1 on a synthetic build. Only
 `freeze-shell` on the real build can show that the real one cuts cleanly.

@@ -62,6 +62,8 @@ if (!DRY && !SRC) {
 }
 
 const BUILD = path.join(ROOT, 'build', 'systole.html');
+/* The patch chain is retired when this marker exists; see the `build` step. */
+const RETIRED = fs.existsSync(path.join(ROOT, 'scripts', 'CHAIN-RETIRED'));
 const DIST  = path.join(ROOT, 'dist');
 const REPORT = path.join(ROOT, 'build', 'release-report.md');
 
@@ -74,16 +76,25 @@ const STEPS = [
     run: () => { fs.accessSync(SRC, fs.constants.R_OK); return `${(fs.statSync(SRC).size / 1048576).toFixed(1)} MB`; } },
   { id: 'leakguard', what: 'nothing licensed is staged or tracked',
     cmd: ['node', ['scripts/leak-guard.js', '--all-tracked']] },
-  { id: 'build',     what: 'the patch chain applies, all of it',
-    cmd: ['node', ['scripts/build.js', () => SRC]] },
+  /* RETIRED: the patch chain no longer builds the app (scripts/CHAIN-RETIRED, docs/BUILD.md). The
+     step is the same id with a different builder, not a skipped step: a skip would withhold
+     CERTIFIED forever, and a step that quietly vanished would be the overclaim this file forbids.
+     Un-retired (the marker deleted), the original two steps return and the byte-for-byte
+     comparison with them. */
+  RETIRED
+    ? { id: 'build', what: 'the app assembles from app/, src/, assets/ and the export (the patch chain is retired)',
+        cmd: ['node', ['scripts/assemble-app.js', () => SRC, '--out', 'build/systole.html']] }
+    : { id: 'build', what: 'the patch chain applies, all of it',
+        cmd: ['node', ['scripts/build.js', () => SRC]] },
   /* Retiring the patch chain (docs/BUILD.md) waits on this: the app built
      from app/systole.html without the chain must be the chain's build, byte
      for byte, release after release. Run on every certification, so that
      record builds itself; a difference withholds CERTIFIED and names only
      which part differs. */
+  ...(RETIRED ? [] : [
   { id: 'assemble',  what: 'the app assembled without the chain is the chain\'s build, byte for byte',
     cmd: ['node', ['scripts/assemble-app.js', () => SRC, '--out', 'build/systole.assembled.html', '--compare', 'build/systole.html']],
-    after: 'build', needs: () => fs.existsSync(BUILD) },
+    after: 'build', needs: () => fs.existsSync(BUILD) } ]),
   { id: 'extract',   what: 'every figure decodes and reads back byte-identical',
     cmd: ['node', ['scripts/extract-content.js', () => BUILD]], after: 'build', needs: () => fs.existsSync(BUILD) },
   { id: 'pwabuild',  what: 'the split build assembles',

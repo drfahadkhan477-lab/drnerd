@@ -8,7 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "node scripts/build.js",
+    "build": "node scripts/assemble-app.js --out build/systole.html",
+    "build:chain": "node scripts/build.js",
     "verify": "node scripts/verify.js",
     "test": "node scripts/test-public.js",
     "test:pure": "node scripts/test-public.js --pure",
