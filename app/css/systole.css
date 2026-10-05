@@ -2578,3 +2578,7 @@ html[data-theme="dark"]{
 .run-card .run-n{color:var(--muted);white-space:nowrap;font-size:.85em}
 .voice-card .chips{margin-top:8px}
 .voice-card .chip{min-height:44px;padding:0 18px}
+.plan-card .exam-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-top:10px}
+.plan-card .exam-row input{min-height:44px;padding:0 10px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:inherit;font:inherit}
+.plan-card .exam-row .chip{min-height:44px}
+.plan-card .exam-left{font-weight:600}
