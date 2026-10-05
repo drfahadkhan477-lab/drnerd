@@ -68,6 +68,17 @@ const PAYLOADS = [
 
 const count = (hay, needle) => (needle ? hay.split(needle).length - 1 : 0);
 
+/* Every start offset, overlapping ones included. split() counts only
+   non-overlapping matches: "aa" in "aaa" starts at two offsets and split()
+   finds one, so a cut would accept it and put its token at the first. Held to
+   app pieces by cut() and to a new piece by carve.js, so the two agree. */
+const countAll = (hay, needle) => {
+  if (!needle) return 0;
+  let n = 0, i = -1;
+  while ((i = hay.indexOf(needle, i + 1)) !== -1) n++;
+  return n;
+};
+
 function walk(dir, keep) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
@@ -127,7 +138,7 @@ function cut(html, sources = repoSources()) {
   const inline = { src: [], asset: [], app: [] };
   for (const [kind, table] of [['src', sources.srcs], ['asset', sources.assets], ['app', sources.apps || {}]]) {
     for (const name of Object.keys(table).sort()) {
-      const text = table[name], n = count(shell, text);
+      const text = table[name], n = kind === 'app' ? countAll(shell, text) : count(shell, text);
       if (n === 1) {
         shell = shell.replace(text, () => token(kind, name));
         slots.push({ kind, name, bytes: text.length });
@@ -230,4 +241,4 @@ function leakScan(shell, payloads) {
            offsets: { questionText: q.slice(0, 10), refText: r.slice(0, 10), base64Runs: runs.slice(0, 10) } };
 }
 
-module.exports = { PAYLOADS, TOKEN_RE, KIND_DIR, isMetadata, token, cut, assemble, repoSources, repoResolver, leakScan };
+module.exports = { PAYLOADS, TOKEN_RE, KIND_DIR, countAll, isMetadata, token, cut, assemble, repoSources, repoResolver, leakScan };
