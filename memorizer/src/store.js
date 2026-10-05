@@ -52,19 +52,33 @@ var mem = { docs: {}, sessions: {}, cards: {}, files: {}, books: {}, bookpages: 
 var dbp = null;
 var api = { persistent: false };
 
+/* An open that never answers — no success, no error, no blocked — would leave
+   every read and write waiting on it for ever, and the app with it: WebKit has
+   shipped exactly that (Safari 14.1's first indexedDB.open could hang). After
+   this long the visit goes on from memory, like a refused open, and
+   `openTimedOut` says why, so the reader is told to reload rather than to
+   leave private browsing. A connection that arrives later is closed unused,
+   as a late success after `blocked` already is. Opening normally takes
+   milliseconds; this is far past any real upgrade. */
+api.OPEN_TIMEOUT_MS = 15000;
+api.openTimedOut = false;
 function open() {
   if (dbp) return dbp;
   dbp = new Promise(function (resolve) {
-    var req, settled = false;
-    function fallback() { settled = true; resolve(null); }
+    var req, settled = false, timer = null;
+    function fallback() {
+      if (settled) return;
+      settled = true; if (timer !== null && root.clearTimeout) root.clearTimeout(timer); resolve(null);
+    }
     try { req = root.indexedDB.open(DB_NAME, DB_VERSION); } catch (_) { fallback(); return; }
+    if (root.setTimeout) timer = root.setTimeout(function () { if (!settled) { api.openTimedOut = true; fallback(); } }, api.OPEN_TIMEOUT_MS);
     req.onupgradeneeded = function () {
       var db = req.result;
       STORES.forEach(function (s) { if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' }); });
     };
     req.onsuccess = function () {
       if (settled) { req.result.close(); return; }
-      settled = true;
+      settled = true; if (timer !== null && root.clearTimeout) root.clearTimeout(timer);
       var db = req.result;
       db.onversionchange = function () { db.close(); api.persistent = false; };
       api.persistent = true; resolve(db);

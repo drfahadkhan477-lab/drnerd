@@ -172,6 +172,35 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
   ok('"Try saving again" stores the session and its card together', retried.answers === before.answers + 1 && retried.cards === before.cards + 1,
      JSON.stringify(retried));
 
+  head('a save that never finishes does not freeze the app');
+  /* go() ignores taps until the step's save settles. A save that never
+     settles (an IndexedDB transaction or open that hangs) must not leave the
+     app ignoring every tap with nothing on screen: here the save is held,
+     not refused, until the test lets it go. */
+  ok('(the drill has another question to answer)', await p.locator('#mcq .option').count() > 0 && await p.evaluate(() => Memorizer.ui.state.phase === 'drill'));
+  const held = await p.evaluate(() => Memorizer.ui.state.per[0].answers.length);
+  await p.evaluate(() => {
+    window.__realSaveStep = MemStore.saveStep; window.__held = 0;
+    MemStore.saveStep = function (st, cs) { window.__held++; return new Promise(res => { window.__releaseSave = () => window.__realSaveStep.call(MemStore, st, cs).then(res); }); };
+  });
+  await p.locator('#mcq .option').first().click();
+  await settled(p);
+  await p.evaluate(() => { document.querySelector('#mcq').__old = true; });
+  await p.locator('#next').click();
+  /* a precondition, not the claim: the slow-save bound has had its chance */
+  await p.waitForFunction(() => Memorizer.ui.slowSaves > 0, null, { timeout: 20000 }).catch(() => {});
+  const during = await p.evaluate(() => { const m = document.querySelector('#mcq'), n = document.getElementById('store-saving');
+    return { held: window.__held, moving: Memorizer.ui.moving, slow: Memorizer.ui.slowSaves, answers: Memorizer.ui.state.per[0].answers.length,
+             redrawn: !m || !m.__old, note: n ? n.textContent : '' }; });
+  ok('(the save was really held)', during.held === 1, JSON.stringify(during));
+  ok('the step is drawn and taps work again, though its save has not finished', !during.moving && during.redrawn && during.answers === held + 1, JSON.stringify(during));
+  ok('and a note says the save is still going', during.slow === 1 && /Still saving your last step/.test(during.note), during.note || '(no note)');
+  await p.evaluate(() => { MemStore.saveStep = window.__realSaveStep; if (window.__releaseSave) window.__releaseSave(); });
+  await p.waitForFunction(() => Memorizer.ui.slowSaves === 0, null, T).catch(() => {});
+  await settled(p);
+  const heldStored = await stored(p), gone = await p.locator('#store-saving').count() === 0;
+  ok('when it finishes the note goes, and the step is stored', gone && heldStored.answers === held + 1, JSON.stringify({ gone, stored: heldStored }));
+
   head('a review is counted only once, and only when stored');
   await p.locator('nav.dock').getByRole('button', { name: /Review/ }).click();
   await p.locator('#mcq').waitFor(T);

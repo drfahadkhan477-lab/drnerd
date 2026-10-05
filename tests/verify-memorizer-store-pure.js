@@ -81,6 +81,35 @@ module.exports = (async () => {
   assert.equal(closed, true);
   console.log('PASS blocked then late-success stays honestly in fallback and closes the unused connection');
 
+  /* An open that never answers (no success, error or blocked event, as Safari
+     14.1's first open could do) must not leave every read and write waiting for
+     ever: after its bound the visit goes on from memory, saying why. */
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let hungReq, hungClosed = false;
+  const hungRoot = { indexedDB: { open() { hungReq = {}; return hungReq; } }, setTimeout, clearTimeout };
+  vm.runInNewContext(source, { window: hungRoot, ArrayBuffer, DataView });
+  hungRoot.MemStore.OPEN_TIMEOUT_MS = 30;
+  const hung = await Promise.race([hungRoot.MemStore.open(), sleep(2000).then(() => 'still waiting')]);
+  assert.equal(hung, null, 'an open that never answers falls back to memory within its bound');
+  assert.equal(hungRoot.MemStore.openTimedOut, true);
+  assert.equal(hungRoot.MemStore.persistent, false);
+  await hungRoot.MemStore.put('docs', { id: 'd', name: 'kept for this visit' });
+  assert.equal((await hungRoot.MemStore.get('docs', 'd')).name, 'kept for this visit');
+  hungReq.result = { close() { hungClosed = true; } }; hungReq.onsuccess();
+  assert.equal(hungClosed, true, 'a connection that arrives after the bound is closed unused');
+  assert.equal(hungRoot.MemStore.persistent, false);
+  console.log('PASS an open that never answers falls back to memory after its bound, says why, and closes a late connection');
+
+  const okRoot = { indexedDB: { open() { const r = {}; queueMicrotask(() => { r.result = {}; r.onsuccess(); }); return r; } }, setTimeout, clearTimeout };
+  vm.runInNewContext(source, { window: okRoot, ArrayBuffer, DataView });
+  okRoot.MemStore.OPEN_TIMEOUT_MS = 30;
+  const db = await okRoot.MemStore.open();
+  await sleep(80);
+  assert.ok(db, 'an open that answers resolves with its connection');
+  assert.equal(okRoot.MemStore.openTimedOut, false, 'and its bound, cleared, never fires');
+  assert.equal(okRoot.MemStore.persistent, true);
+  console.log('PASS an open that answers in time is used, and its bound never fires');
+
   const deck = root.MemStore;
   await deck.put('cards', { id: 'card', errorType: 'C', hazard: false, srs: { due: '2026-10-10', reps: 4 } });
   await deck.saveStep({ id: 'unit', state: {} }, [{ id: 'card', errorType: 'R', hazard: true, srs: null }]);
