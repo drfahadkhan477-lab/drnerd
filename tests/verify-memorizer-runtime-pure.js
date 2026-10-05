@@ -60,7 +60,8 @@ module.exports = (async () => {
   const ocrDoc = { createElement: () => { const c = { width: 0, height: 0, getContext: () => ({ fillRect() {} }) }; canvases.push(c); return c; } };
   class Reader { readAsArrayBuffer(blob) { blob.arrayBuffer().then(v => { this.result = v; this.onload(); }); } }
   const ocrSrc = fs.readFileSync(path.join(__dirname, '../memorizer/src/ocr.js'), 'utf8');
-  const workerText = 'return"string"==typeof t?t:t.data})).join("+")';
+  const O = require('../memorizer/src/ocr.js');
+  const workerText = O.WORKER_FIX.find + ';' + O.CORE_FIX.find;
   vm.runInNewContext(ocrSrc, { window: ocrRoot, document: ocrDoc, Blob, FileReader: Reader, TextDecoder, Uint8Array,
     fetch: async () => ({ ok: true, blob: async () => new Blob([workerText]) }), URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL: () => { revoked++; } },
     setTimeout: () => 1, clearTimeout: () => { timerCleared++; } });

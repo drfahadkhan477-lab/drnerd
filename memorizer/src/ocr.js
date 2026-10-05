@@ -122,10 +122,19 @@ function blobUrl(buf, type) { return URL.createObjectURL(new Blob([buf], { type:
    by the patch chain's rule: the anchor must match exactly once, or this
    throws rather than guess. */
 var WORKER_FIX = { find: 'return"string"==typeof t?t:t.data})).join("+")', replace: 'return"string"==typeof t?t:t.code})).join("+")' };
+/* The core's ready promise is detached from load(), without a rejection
+   handler. Report a failed core and close its unusable worker, instead of
+   leaving createWorker() pending with an unhandled worker rejection. */
+var CORE_FIX = { find: 'r.resolve({loaded:!0})})),t.next=12;break;case 11:',
+  replace: 'r.resolve({loaded:!0})})).catch(function(e){r.reject(String(e));self.close()}),t.next=12;break;case 11:' };
 function fixWorker(text) {
-  var n = String(text).split(WORKER_FIX.find).length - 1;
-  if (n !== 1) throw new Error('the text reader\'s worker has changed (anchor found ' + n + ' times)');
-  return String(text).replace(WORKER_FIX.find, WORKER_FIX.replace);
+  text = String(text);
+  [WORKER_FIX, CORE_FIX].forEach(function (fix) {
+    var n = text.split(fix.find).length - 1;
+    if (n !== 1) throw new Error('the text reader\'s worker has changed (anchor found ' + n + ' times)');
+    text = text.replace(fix.find, fix.replace);
+  });
+  return text;
 }
 
 var starting = null, current = null;
@@ -278,6 +287,6 @@ function release() {
   queue = job.then(function () {}, function () {}); return job;
 }
 
-root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
+root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, CORE_FIX: CORE_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemOcr;
 })(typeof window !== 'undefined' ? window : this);

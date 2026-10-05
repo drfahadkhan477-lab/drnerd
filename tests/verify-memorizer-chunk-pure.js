@@ -920,13 +920,17 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
   const noBase = O.ocrItems([{ paragraphs: [{ lines: [{ bbox: { y0: 88 * S, y1: 100 * S }, words: [word('x', 72, 80)] }] }] }], S, H);
   ok('a line with no baseline or row height uses its box', noBase.length === 1 && noBase[0].transform[5] === H - 100 && noBase[0].transform[0] === 12, JSON.stringify(noBase[0]));
 
-  /* The one correction made to tesseract.js 5.1.1's worker before it runs. */
-  const src = 'x;a.map((function(t){' + O.WORKER_FIX.find + ';y';
-  ok('the worker fix replaces its anchor', O.fixWorker(src) === 'x;a.map((function(t){' + O.WORKER_FIX.replace + ';y');
+  /* Corrections made to the checked tesseract.js 5.1.1 worker. */
+  const src = 'x;a.map((function(t){' + O.WORKER_FIX.find + ';y;' + O.CORE_FIX.find;
+  ok('the worker fix replaces both anchors', O.fixWorker(src) === 'x;a.map((function(t){' + O.WORKER_FIX.replace + ';y;' + O.CORE_FIX.replace);
   let none = '', twice = '';
   try { O.fixWorker('nothing to fix'); } catch (e) { none = e.message; }
   try { O.fixWorker(src + src); } catch (e) { twice = e.message; }
   ok('and throws, rather than guess, when the anchor is missing or doubled', /found 0 times/.test(none) && /found 2 times/.test(twice), none + ' / ' + twice);
+  let noCore = '', twiceCore = '';
+  try { O.fixWorker(O.WORKER_FIX.find); } catch (e) { noCore = e.message; }
+  try { O.fixWorker(src + O.CORE_FIX.find); } catch (e) { twiceCore = e.message; }
+  ok('the core error fix also refuses a missing or doubled anchor', /found 0 times/.test(noCore) && /found 2 times/.test(twiceCore));
 
   /* Every file the text reader fetches is one the service worker keeps. */
   const { build, zipOf, ZIP_FILES } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
@@ -1243,6 +1247,29 @@ async function ocrRetry() {
   const SRC = fs.readFileSync(path.join(ROOT, 'memorizer', 'src', 'ocr.js'), 'utf8');
   const FAULT = () => Promise.reject(new Error("RuntimeError: Out of bounds memory access (evaluating '(Tf=b._emscripten_bind_TessBaseAPI_Recognize_1=b.asm.Id).apply(null,arguments)')"));
   const READ = () => Promise.resolve({ data: { blocks: [{ paragraphs: [{ lines: [{ bbox: { y0: 0, y1: 24 }, words: [{ text: 'Preload', confidence: 95, bbox: { x0: 10, x1: 80, y0: 0, y1: 24 } }] }] }] }] } });
+  {
+    const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+    /* Execute the pinned core-loading callback with real promises. The
+       detached rejection must become a worker response, and only a failed
+       core closes the worker. The language anchor is an inert comment. */
+    const source = '// ' + O.WORKER_FIX.find + '\nself.loadCore=function(h,r){var l,t={};switch(6){case 6:' +
+      'h({}).then((function(t){l=t,r.progress({progress:1}),' + O.CORE_FIX.find +
+      'r.resolve({loaded:!0});case 12:break;}};';
+    const run = async core => {
+      let closed = 0, answer;
+      const done = new Promise(resolve => { answer = resolve; });
+      const self = { close: () => { closed++; } };
+      vm.runInNewContext(O.fixWorker(source), { self, String });
+      self.loadCore(core, { progress() {}, resolve: value => answer({ value }), reject: error => answer({ error }) });
+      const response = await Promise.race([done, new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+      return { ...response, closed };
+    };
+    const bad = await run(() => Promise.reject(new WebAssembly.RuntimeError('Synthetic core startup fault')));
+    ok('a rejected core ready promise reports the actual WebAssembly error and closes the failed worker',
+       !bad.hung && /RuntimeError.*Synthetic core startup fault/.test(bad.error) && bad.closed === 1);
+    const good = await run(() => Promise.resolve({}));
+    ok('a core that starts still reports success and keeps its worker alive', !good.hung && good.value && good.value.loaded && good.closed === 0);
+  }
   /* plan: what each recognize() call does, in order, across every worker */
   function sandbox(plan, starts = []) {
     const made = [], log = { recognize: [], thrown: [], scripts: [], live: new Set() };
@@ -1255,7 +1282,8 @@ async function ocrRetry() {
     const win = {
       Blob, URL: url, TextDecoder, Uint8Array, WebAssembly, Promise, Error, String,
       setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref(); return t; }, clearTimeout,
-      fetch: () => Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['x;' + require(path.join(ROOT, 'memorizer', 'src', 'ocr.js')).WORKER_FIX.find])) }),
+      fetch: () => { const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+        return Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['x;' + O.WORKER_FIX.find + ';' + O.CORE_FIX.find])) }); },
       FileReader: class { readAsArrayBuffer(b) { b.arrayBuffer().then(r => { this.result = r; this.onload(); }); } },
       document: { createElement: () => ({ getContext: () => ({ fillRect() {}, drawImage() {} }) }) },
       Image: class { set src(_) { this.naturalWidth = 40; this.naturalHeight = 30; setTimeout(() => this.onload(), 0); } },
