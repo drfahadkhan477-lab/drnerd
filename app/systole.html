@@ -2788,6 +2788,7 @@ function refImportText(){
 /* ═══════════ FSRS-5 — see src/core/fsrs.js ═══════════ */
 @@SLOT[src:src/core/fsrs.js]@@
 @@SLOT[src:src/core/studyplan.js]@@
+@@SLOT[src:src/core/topicrun.js]@@
 
 /* ═══════════ SM-2 spaced repetition + active recall ═══════════
    Per-question card: {difficulty, stability, ivl, reps, due, lapses, last}.
@@ -5811,6 +5812,30 @@ function startPlan(minutes){
   if(!qs.length){alert('Nothing to plan: there are no questions to draw from.');return;}
   startQuiz(null,'due',qs);
 }
+/* ── Topic runs — src/core/topicrun.js groups questions that are about the same thing (shared distinctive
+   words, within one chapter) into runs of three to five, starting from what you missed, then what is due.
+   Asked back to back in the order it gives, as a review session: ratings move the schedule as usual. ── */
+let _runsKey='',_runs=[],_runsShown=[];
+function topicRunsNow(){
+  const dueIds=new Set(dueQuestions().map(q=>q.id));
+  const key=POOL.length+'|'+S.missed.size+'|'+dueIds.size;
+  if(key!==_runsKey){
+    _runsKey=key;
+    try{ _runs=TopicRun.runs({pool:POOL.filter(q=>!q.bad),missed:S.missed,due:dueIds,size:4,max:3}); }
+    catch(_){ _runs=[]; }   // a card that cannot be worked out is no card, not a broken screen
+  }
+  return _runs;
+}
+function runLabel(r){
+  const words=r.shared.slice(0,3).join(' · ');
+  return (CH_SHORT[r.ch]||r.ch)+(words?' — '+words:'');
+}
+function startRun(i){
+  const r=_runsShown[i]; if(!r) return;
+  const qs=r.ids.map(id=>QBYID[id]).filter(q=>q&&!q.bad);
+  if(qs.length<2){alert('That run is no longer available.');return;}
+  startQuiz(null,'due',qs);
+}
 /* Questions answered a day, over the last seven days (today included). */
 function recentPerDay(){
   let total=0,d=new Date();
@@ -6820,6 +6845,14 @@ function buildStudy(){
     <div class="chips plan-chips">${[10,20,40].map(m=>`<button class="chip" data-plan="${m}" onclick="startPlan(${m})">${m} min</button>`).join('')}</div>
   </div>`;
 
+  _runsShown=topicRunsNow();
+  const runCard=_runsShown.length?`<div class="feed-card run-card" id="runCard" role="group" aria-label="Topic runs">
+    <div class="fc-top"><span class="fc-badge">TOPIC RUNS</span></div>
+    <div class="fc-title">Same topic, back to back</div>
+    <div class="fc-sub">Three to five questions about one thing, from what you most need.</div>
+    <div class="run-list">${_runsShown.map((r,i)=>`<button class="run-btn" data-run="${i}" onclick="startRun(${i})"><span class="run-t">${e(runLabel(r))}</span><span class="run-n">${r.ids.length} questions</span></button>`).join('')}</div>
+  </div>`:'';
+
   const missCard=S.missed.size>0?`<button class="feed-card miss-card" onclick="startQuiz(null,'missed')">
     <div class="fc-top"><span class="fc-badge red">WEAK SPOTS</span></div>
     <div class="fc-title">${S.missed.size} to reclaim</div>
@@ -6860,6 +6893,7 @@ function buildStudy(){
     <div class="feed">
       ${reviewCard}
       ${planCard}
+      ${runCard}
       ${missCard}
       <button class="feed-card all-card" onclick="startQuiz(null)">
         <div class="fc-top"><span class="fc-badge">FULL BANK</span></div>
