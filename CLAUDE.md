@@ -132,6 +132,23 @@ never examined. State what you got wrong and what you did about it. If you
 built something and threw it away, say why; the next person will otherwise
 rebuild it.
 
+## Working method
+
+- **Read `tasks/lessons.md` at the start of a session.** After any correction
+  from the owner or a reviewer, add the pattern and a rule that prevents it.
+- **Plan before editing** anything over two or three files, or with an
+  architectural choice: write checkable steps to `tasks/todo.md` (gitignored),
+  confirm them, tick them off, and add a short review section at the end. If
+  something goes sideways, stop and re-plan; do not keep pushing.
+- **Never call a task done without proof**: run the checks, tail the result
+  lines, and say what did not run. Ask whether a staff engineer would approve it.
+- **Fix the root cause, touching only what the fix needs.** A bug report or a
+  red CI job is yours to fix without being told how.
+- **Agents in `.claude/agents/`** (`planner`, `verifier`, `memorizer-reviewer`,
+  `hollow-check-reviewer`, `leak-auditor`, `ci-log-reader`) are used when the
+  owner asks for them, per "Spending tokens". Each states its inputs, what it
+  returns, its failure modes, and what it never does.
+
 ## Before you finish
 
 Run `npm run test:pure` before every push (about a minute; `npm run hooks`

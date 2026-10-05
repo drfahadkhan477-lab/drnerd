@@ -26,6 +26,11 @@ publish. You change nothing: no edits, no commits, no pushes.
 Each suspect file, the rule or the reason, and how sure you are. Then the files
 you checked and found clean. If nothing is suspect, say so plainly.
 
+## Failure modes
+- `origin/master` is not fetched: say so and compare against the merge base you
+  can find; do not report a clean branch from an empty diff.
+- A file is binary or too large to read: list it as unexamined by name and size.
+
 ## Never
 Quote suspect content. Name the file and line, describe it in your own words.
 Quoting it into the transcript is the leak CLAUDE.md forbids.

@@ -32,6 +32,11 @@ EOF
 - If the job died before its tests ran (checkout, install, runner loss), say so.
 - If nothing failed, say that plainly. Silence is not a report.
 
+## Failure modes
+- The log cannot be fetched (permission, expired, too large to save): say that
+  and stop; do not fall back to guessing from the job name.
+- The log is truncated: say where it ends, so the caller knows what was not seen.
+
 ## Never
 - Paste the whole log, or more than ~40 lines of it. Suite output can quote
   question text from the licensed bank; CLAUDE.md forbids quoting it into a

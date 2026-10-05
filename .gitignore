@@ -25,6 +25,10 @@ source/
 __pycache__/
 *.pyc
 
+# The working plan for the task in hand (CLAUDE.md, "Working method").
+# tasks/lessons.md IS tracked: it is the record of corrections.
+tasks/todo.md
+
 # Transcript of the last failing verify run — quotes licensed suite output.
 tests/last-run.log
 
