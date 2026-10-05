@@ -38,12 +38,14 @@ head('a pull request skips only the job its files cannot reach');
   ok('docs only: both browser jobs are skipped', is(docs, false, false), show(classify(docs)));
   ok('docs beside Memorizer code still skip only the synthetic job', is(docs.concat(mem), true, false));
   ok('one file from each side runs both', is(['memorizer/src/ui.js', 'app/systole.html'], true, true));
+  ok('the Lab\'s own page and its browser suite skip only the synthetic job', is(['lab/index.html', 'lab/src/ui.js', 'tests/verify-lab.js'], true, false), show(classify(['lab/index.html', 'lab/src/ui.js', 'tests/verify-lab.js'])));
+  ok('but the Lab\'s modules in src/lab/ run both: verify-csp walks src/', is(['src/lab/heartsounds.js'], true, true));
 }
 
 head('every doubtful case runs both');
 {
   for (const f of ['src/core/fsrs.js', 'scripts/build-memorizer.js', 'scripts/build-pwa.js', 'tools/pack-content.js',
-                   'lab/index.html', 'tests/_render.js', 'tests/_engine.js', 'package.json', 'package-lock.json',
+                   'tests/_render.js', 'tests/_engine.js', 'package.json', 'package-lock.json',
                    '.github/workflows/verify.yml', 'a-new-directory/file.js', 'docs.js', 'memorizer.js']) {
     ok(`${f} runs both`, is([f], true, true), show(classify([f])));
   }
@@ -92,6 +94,13 @@ head('each list is held against the files the job it skips really runs');
   const helpers = fs.readdirSync(path.join(ROOT, 'tests')).filter(f => /^_.*\.js$/.test(f)).map(f => 'tests/' + f);
   const helperSkips = helpers.filter(f => !is([f], true, true));
   ok('every shared test helper runs both', helpers.length > 3 && helperSkips.length === 0, helperSkips.join(', ') || `${helpers.length} helpers`);
+  /* The other direction, for what the synthetic job is allowed to skip: no file it runs names a directory
+     on the Memorizer-only list as a path ('lab/…', or 'lab' handed to path.join). The app's own 'lab'
+     screen is a string, not a path, and does not count. Read with comments blanked. */
+  const { blankComments } = require('./_source.js');
+  const reads = synFiles.filter(f => fs.existsSync(path.join(ROOT, f)))
+    .filter(f => /['"`/](?:lab|memorizer)\/|join\([^)]*['"](?:lab|memorizer)['"]/.test(blankComments(fs.readFileSync(path.join(ROOT, f), 'utf8'))));
+  ok('no file the synthetic job runs names lab/ or memorizer/', synFiles.length >= 30 && reads.length === 0, reads.join(', ') || `${synFiles.length} files read`);
 }
 
 head('the workflow is wired so a failed decision runs both');
@@ -145,6 +154,16 @@ head('the script itself, in throwaway repositories');
     ok('the same commit pushed to master writes both true', runIn(mem, 'push') === 'memorizer=true synthetic=true', runIn(mem, 'push'));
     const both = repo(['memorizer/src/ui.js', 'src/core/fsrs.js']);
     ok('a commit that also touches src/ writes both true', runIn(both, 'pull_request') === 'memorizer=true synthetic=true', runIn(both, 'pull_request'));
+    /* A shared file moved into app/: git names a rename by its new path only, which alone
+       would skip the Memorizer job although it had used the file at its old path. */
+    const moved = fs.mkdtempSync(path.join(tmp, 'r-'));
+    git(moved, 'init', '-q');
+    fs.mkdirSync(path.join(moved, 'src', 'core'), { recursive: true });
+    fs.writeFileSync(path.join(moved, 'src', 'core', 'shared.js'), Array.from({ length: 20 }, (_, i) => 'line ' + i).join('\n'));
+    git(moved, 'add', '.'); git(moved, 'commit', '-qm', 'base');
+    fs.mkdirSync(path.join(moved, 'app'));
+    git(moved, 'mv', 'src/core/shared.js', 'app/shared.js'); git(moved, 'commit', '-qm', 'move');
+    ok('a shared file moved into app/ still runs the Memorizer job: the path it left counts', runIn(moved, 'pull_request') === 'memorizer=true synthetic=true', runIn(moved, 'pull_request'));
     /* One commit, so HEAD^1 does not exist: the diff fails, and must not
        read as "nothing changed". */
     const lone = fs.mkdtempSync(path.join(tmp, 'r-'));

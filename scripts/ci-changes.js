@@ -6,7 +6,8 @@
  *   node scripts/ci-changes.js        (in the workflow's `changes` job)
  *
  * The synthetic-browser job takes about twelve minutes and never reads
- * memorizer/; the memorizer-browser job never reads the Systole shell in app/
+ * memorizer/ or lab/ (the Lab's browser suite runs in memorizer-browser);
+ * the memorizer-browser job never reads the Systole shell in app/
  * or assets/. A pull request that touches only one side was paying for both.
  *
  * THE DIRECTION OF EVERY DOUBT IS "RUN IT". A job is skipped only when every
@@ -33,8 +34,10 @@ const fs = require('fs');
 
 /* Reaches neither browser job. */
 const DOCS = [/^docs\//, /^tasks\//, /^\.claude\//, /^[^/]+\.md$/];
-/* Reaches memorizer-browser only. */
-const MEMORIZER_ONLY = [/^memorizer\//, /^tests\/verify-memorizer[a-z0-9-]*\.js$/];
+/* Reaches memorizer-browser only: the Memorizer, and the Lab, whose browser suite
+   runs in that job. src/lab/ is not here: verify-csp, in synthetic-browser,
+   walks all of src/. scripts/build-lab.js is not here either: it walks scripts/. */
+const MEMORIZER_ONLY = [/^memorizer\//, /^tests\/verify-memorizer[a-z0-9-]*\.js$/, /^lab\//, /^tests\/verify-lab\.js$/];
 /* Reaches synthetic-browser only. */
 const SYSTOLE_ONLY = [/^app\//, /^assets\//];
 
@@ -55,10 +58,13 @@ function decide(event, files) {
 
 /* On a pull_request event the checkout is GitHub's merge commit, whose first
    parent is the base branch's tip, so HEAD^1..HEAD is the whole pull request
-   as it would land. Needs fetch-depth: 2. */
+   as it would land. Needs fetch-depth: 2.
+   --no-renames: by default git lists a moved file under its new name only, so
+   src/core/x.js moved to app/x.js would read as a Systole-only change and skip
+   the Memorizer job, which had used src/core/x.js. Both paths are listed. */
 function changedFiles() {
   try {
-    const out = execFileSync('git', ['diff', '--name-only', 'HEAD^1', 'HEAD'], { encoding: 'utf8' });
+    const out = execFileSync('git', ['diff', '--name-only', '--no-renames', 'HEAD^1', 'HEAD'], { encoding: 'utf8' });
     return out.split('\n').map(s => s.trim()).filter(Boolean);
   } catch (e) {
     console.log('could not read the changed files (' + String(e.message).split('\n')[0] + '); running both jobs');
