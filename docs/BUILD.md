@@ -33,15 +33,19 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
   ```bash
   npm ci                                     # playwright 1.56.0, ts-fsrs 5.4.2, from the lockfile
-  npx playwright install chromium webkit     # the two engines the suites are run on
+  npx playwright install chromium webkit     # the engines the full run uses
+  npx playwright install firefox             # also, to reproduce CI's memorizer-browser job
   ```
 
   Pinned rather than ranged, and with `package-lock.json` committed, because a
   suite that measures a browser is measuring a *specific* browser — `^1.56.0`
   would make a green run mean "green on whatever shipped this week".
 
-  `--engine firefox` is accepted by the harness but is not part of the
-  provisioned set; `scripts/verify.js` checks the executable exists and tells
+  Firefox is required by CI's `memorizer-browser` job (Chromium, WebKit and
+  Firefox each run the Memorizer suites), so install all three engines to
+  reproduce that job locally. The full `scripts/verify.js` run in CI uses
+  Chromium and WebKit only. `--engine firefox` works wherever Firefox is
+  installed; `scripts/verify.js` checks the executable exists and tells
   you how to install it before it spawns a single suite, rather than failing
   fifty-four times identically.
 

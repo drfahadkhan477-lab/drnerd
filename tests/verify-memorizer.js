@@ -542,6 +542,19 @@ function kindOf(user) {
       await p.waitForFunction(k => !document.querySelector('#recall') || new RegExp('^Card ' + (k + 2) + ' of').test(document.querySelector('#recall .mcq-meta').textContent), at, T);
     }
   };
+  /* Lazy previews above the lesson's button change its position when
+     scrolling starts them. Settle the visible previews before clicking;
+     Firefox sometimes completed the automatic click while still on teach.
+     This is a layout precondition, with no retry of the action. */
+  const startMemorize = async p => {
+    await p.waitForFunction(() => !Memorizer.ui.figuresBusy, null, T);
+    await p.locator('#to-drill').scrollIntoViewIfNeeded();
+    await p.waitForFunction(() => Array.from(document.querySelectorAll('main img')).every(img => {
+      const r = img.getBoundingClientRect();
+      return !r.width || r.bottom < -400 || r.top > innerHeight + 400 || (img.complete && img.naturalWidth > 0);
+    }), null, T);
+    await p.locator('#to-drill').click();
+  };
   const meta = p => p.locator('.mcq-meta').innerText();
   /* Choose option i, then Next; waits for the next question (or the end)
      by the progress line changing, not by time. */
@@ -2011,7 +2024,7 @@ function kindOf(user) {
     });
     ok('each point sets its key term in bold, the sentence unchanged', keys.length >= 1 && keys.every(k => sec1.indexOf(k) !== -1) && changed.length === 0,
        JSON.stringify({ keys, changed }));
-    await p2.locator('#to-drill').click();
+    await startMemorize(p2);
     await memorize(p2);
     await p2.locator('#mcq .option').first().waitFor(T);
     const qs = await p2.evaluate(() => Memorizer.ui.state.per[0].quiz.questions);
@@ -2378,7 +2391,7 @@ function kindOf(user) {
     /* A fresh drill of that section, so its questions are written now. */
     const unitId = await p2.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.name === 'unit').id));
     await p2.evaluate(id => MemStore.del('sessions', id).then(() => Memorizer.openDoc(id, 0)), unitId);
-    await p2.locator('#to-drill').click();
+    await startMemorize(p2);
     await memorize(p2);
     await p2.locator('#mcq .option').first().waitFor(T);
     const qz = await p2.evaluate(() => Memorizer.ui.state.per[0].quiz.questions);
@@ -2507,7 +2520,7 @@ function kindOf(user) {
     await ps.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
     await ps.locator('#learn-unit').click();
     await ps.locator('#to-drill').waitFor(T);
-    await ps.locator('#to-drill').click();
+    await startMemorize(ps);
     await memorize(ps);
     await ps.locator('#mcq .option').first().waitFor(T);
     const d0 = await ps.evaluate(() => { const c = Memorizer.ui.state.per[Memorizer.ui.state.section]; return { order: c.order.slice(), pos: c.pos, n: c.quiz.questions.length, q: document.querySelector('#mcq h2.q').textContent }; });
@@ -2923,7 +2936,7 @@ function kindOf(user) {
     await p4.evaluate(id => MemStore.del('sessions', id).then(() => Memorizer.openDoc(id, 0)), d.id);
     await p4.locator('#pack-label').waitFor(T);
     ok('a unit started over is taught from its pack, not rebuilt', await p4.evaluate(() => Memorizer.ui.state.per[0].lesson.by === 'pack' && !Memorizer.ui.state.per[1].lesson));
-    await p4.locator('#to-drill').click();
+    await startMemorize(p4);
     await memorize(p4);
     await p4.locator('#mcq .option').first().waitFor(T);
     ok('and drilled from it', /Complete the quoted source sentence/.test(await text(p4, '#mcq h2.q')) &&
@@ -3114,10 +3127,43 @@ function kindOf(user) {
 
   head('scanned pages and photos: read by text recognition, on the device');
   {
+    /* Earlier profiles have finished their assertions. Close their pages,
+       PDF workers and animations before starting another memory-heavy
+       reader; otherwise this scenario also carries the whole prior suite. */
+    for (const context of browser.contexts()) await context.close();
     /* Fresh profiles again: one online, one where the text reader's
        download fails, as it would offline. */
     const fresh = async (tag, blockOcr) => {
       const p = watch(await (await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' })).newPage(), events, tag, errors);
+      /* Keep the worker's startup messages if an import times out. Tesseract
+         can leave createWorker() pending after its worker reports a failure;
+         the page's final error alone cannot identify that failed step. */
+      if (!blockOcr) await p.addInitScript(() => {
+        const NativeWorker = window.Worker;
+        let serial = 0;
+        window.__ocrWorkerEvents = [];
+        const record = (id, event) => {
+          __ocrWorkerEvents.push({ id, ms: Math.round(performance.now()), ...event });
+          if (__ocrWorkerEvents.length > 64) __ocrWorkerEvents.shift();
+        };
+        window.Worker = class extends NativeWorker {
+          constructor(...args) {
+            super(...args);
+            this.traceId = ++serial;
+            record(this.traceId, { status: 'created' });
+            this.addEventListener('error', e => record(this.traceId, { status: 'error', message: e.message }));
+            this.addEventListener('message', e => {
+              const m = e.data || {};
+              if (m.status) record(this.traceId, { status: m.status, action: m.action,
+                detail: m.status === 'reject' ? String(m.data).slice(0, 400) : m.data && m.data.status });
+            });
+          }
+          terminate() {
+            record(this.traceId, { status: 'terminated' });
+            return super.terminate();
+          }
+        };
+      });
       await wire(p);
       /* After wire(): Playwright tries the most recently added route first,
          so added before it, this block was shadowed by the CDN route and
@@ -3171,7 +3217,14 @@ function kindOf(user) {
     ok('my units says which pages were recognised', /Read by text recognition: pages 2\./.test(await p3.locator('.unit-row').first().innerText()));
     /* A photo of the same page, through the Photo chip. */
     await p3.setInputFiles('#photo-input', { name: 'page.jpg', mimeType: 'image/jpeg', buffer: jpeg });
-    await p3.locator('h1.bar-title', { hasText: 'Photos' }).waitFor({ timeout: 120000 });
+    try { await p3.locator('h1.bar-title', { hasText: 'Photos' }).waitFor({ timeout: 120000 }); } catch (e) {
+      console.error('Photo import state:', await p3.evaluate(() => {
+        const u = Memorizer.ui;
+        return { view: u.view, importing: u.importing, active: !!u.importJob, error: u.error, notice: u.notice,
+          workers: window.__ocrWorkerEvents };
+      }));
+      throw e;
+    }
     const prec2 = await p3.evaluate(() => MemStore.all('docs').then(ds => ds.find(d => d.source === 'photo')));
     const ptext = prec2.clusters.map(c => c.text).join(' ');
     ok('a photo of a page is read the same way, heading and all', /Venous return is the main determinant of preload in a healthy heart, and preload rises with volume\./.test(ptext) &&

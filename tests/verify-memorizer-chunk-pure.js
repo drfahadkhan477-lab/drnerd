@@ -920,13 +920,26 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
   const noBase = O.ocrItems([{ paragraphs: [{ lines: [{ bbox: { y0: 88 * S, y1: 100 * S }, words: [word('x', 72, 80)] }] }] }], S, H);
   ok('a line with no baseline or row height uses its box', noBase.length === 1 && noBase[0].transform[5] === H - 100 && noBase[0].transform[0] === 12, JSON.stringify(noBase[0]));
 
-  /* The one correction made to tesseract.js 5.1.1's worker before it runs. */
-  const src = 'x;a.map((function(t){' + O.WORKER_FIX.find + ';y';
-  ok('the worker fix replaces its anchor', O.fixWorker(src) === 'x;a.map((function(t){' + O.WORKER_FIX.replace + ';y');
+  /* Corrections made to the checked tesseract.js 5.1.1 worker. */
+  const src = 'x;a.map((function(t){' + O.WORKER_FIX.find + ';y;' + O.CORE_FIX.find + ';z;' + O.START_FAIL_FIX.find;
+  ok('the worker fix replaces all three anchors', O.fixWorker(src) === 'x;a.map((function(t){' + O.WORKER_FIX.replace + ';y;' + O.CORE_FIX.replace + ';z;' + O.START_FAIL_FIX.replace);
   let none = '', twice = '';
   try { O.fixWorker('nothing to fix'); } catch (e) { none = e.message; }
   try { O.fixWorker(src + src); } catch (e) { twice = e.message; }
   ok('and throws, rather than guess, when the anchor is missing or doubled', /found 0 times/.test(none) && /found 2 times/.test(twice), none + ' / ' + twice);
+  let noCore = '', twiceCore = '';
+  try { O.fixWorker(O.WORKER_FIX.find); } catch (e) { noCore = e.message; }
+  try { O.fixWorker(src + O.CORE_FIX.find); } catch (e) { twiceCore = e.message; }
+  ok('the core error fix also refuses a missing or doubled anchor', /found 0 times/.test(noCore) && /found 2 times/.test(twiceCore));
+  let noStart = '', twiceStart = '';
+  try { O.fixWorker(O.WORKER_FIX.find + O.CORE_FIX.find); } catch (e) { noStart = e.message; }
+  try { O.fixWorker(src + O.START_FAIL_FIX.find); } catch (e) { twiceStart = e.message; }
+  ok('the startup-failure fix also refuses a missing or doubled anchor', /found 0 times/.test(noStart) && /found 2 times/.test(twiceStart));
+  ok('the core binary fix uses the embedded bytes through the existing decoder', O.fixCore(O.CORE_BINARY_FIX.find) === O.CORE_BINARY_FIX.replace);
+  let noBinary = '', twiceBinary = '';
+  try { O.fixCore(''); } catch (e) { noBinary = e.message; }
+  try { O.fixCore(O.CORE_BINARY_FIX.find + O.CORE_BINARY_FIX.find); } catch (e) { twiceBinary = e.message; }
+  ok('the core binary fix refuses a missing or doubled anchor', /found 0 times/.test(noBinary) && /found 2 times/.test(twiceBinary));
 
   /* Every file the text reader fetches is one the service worker keeps. */
   const { build, zipOf, ZIP_FILES } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
@@ -1243,8 +1256,58 @@ async function ocrRetry() {
   const SRC = fs.readFileSync(path.join(ROOT, 'memorizer', 'src', 'ocr.js'), 'utf8');
   const FAULT = () => Promise.reject(new Error("RuntimeError: Out of bounds memory access (evaluating '(Tf=b._emscripten_bind_TessBaseAPI_Recognize_1=b.asm.Id).apply(null,arguments)')"));
   const READ = () => Promise.resolve({ data: { blocks: [{ paragraphs: [{ lines: [{ bbox: { y0: 0, y1: 24 }, words: [{ text: 'Preload', confidence: 95, bbox: { x0: 10, x1: 80, y0: 0, y1: 24 } }] }] }] }] } });
+  {
+    const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+    let fetched = 0;
+    const loader = { Promise, Ma: () => new Uint8Array([0, 1]),
+      fetch: () => { fetched++; return Promise.resolve({ arrayBuffer: () => Promise.resolve(new Uint8Array([3, 4]).buffer) }); } };
+    vm.runInNewContext(O.fixCore('function load(a){var pa=false,fa=true,ha=false,Ja="data:application/octet-stream;base64,";' +
+      O.CORE_BINARY_FIX.find + '{return fetch(a).then(function(r){return r.arrayBuffer()})}return Promise.resolve().then(function(){return Ma(a)})}'), loader);
+    const embedded = await loader.load('data:application/octet-stream;base64,AAE=');
+    ok('embedded core bytes are decoded intact without a worker data URL fetch', fetched === 0 && [...embedded].join() === '0,1');
+    const external = await loader.load('https://core.example/reader.wasm');
+    ok('the core loader still fetches an external binary URL', fetched === 1 && [...new Uint8Array(external)].join() === '3,4');
+    /* Execute the pinned core-loading callback with real promises. The
+       detached rejection must become a worker response, and only a failed
+       core closes the worker. The language anchor is an inert comment. */
+    const source = '// ' + O.WORKER_FIX.find + '\nself.loadCore=function(h,r){var l,t={};switch(6){case 6:' +
+      'h({}).then((function(t){l=t,r.progress({progress:1}),' + O.CORE_FIX.find +
+      'r.resolve({loaded:!0});case 12:break;}};\nfunction unusedListener(i,e){' + O.START_FAIL_FIX.find + '}';
+    const run = async core => {
+      let closed = 0, answer;
+      const done = new Promise(resolve => { answer = resolve; });
+      const self = { close: () => { closed++; } };
+      vm.runInNewContext(O.fixWorker(source), { self, String });
+      self.loadCore(core, { progress() {}, resolve: value => answer({ value }), reject: error => answer({ error }) });
+      const response = await Promise.race([done, new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+      return { ...response, closed };
+    };
+    const bad = await run(() => Promise.reject(new WebAssembly.RuntimeError('Synthetic core startup fault')));
+    ok('a rejected core ready promise reports the actual WebAssembly error and closes the failed worker',
+       !bad.hung && /RuntimeError.*Synthetic core startup fault/.test(bad.error) && bad.closed === 1);
+    const good = await run(() => Promise.resolve({}));
+    ok('a core that starts still reports success and keeps its worker alive', !good.hung && good.value && good.value.loaded && good.closed === 0);
+    /* Execute the patched message listener. Tesseract's dispatcher is
+       stood in for by a function that answers one job with a given status;
+       what is measured is the patched send callback: the rejection must be
+       posted first (errorHandler receives it) and a failed STARTUP job must
+       then close the worker, while a failed recognize job must not. */
+    const listener = (action, status) => {
+      const events = [];
+      const i = { dispatchHandlers: (packet, send) => send({ action, status, data: 'x' }) };
+      const postMessage = m => events.push('post:' + m.action + ':' + m.status);
+      const self = { close: () => events.push('close') };
+      vm.runInNewContext('(function(i,e,postMessage,self){' + O.START_FAIL_FIX.replace + '})', {})(i, { action }, postMessage, self);
+      return events.join();
+    };
+    ok('a rejected initialize job is posted, then closes the failed worker', listener('initialize', 'reject') === 'post:initialize:reject,close', listener('initialize', 'reject'));
+    ok('a rejected language job closes the failed worker', listener('loadLanguage', 'reject') === 'post:loadLanguage:reject,close');
+    ok('a rejected core load job closes the failed worker', listener('load', 'reject') === 'post:load:reject,close');
+    ok('a rejected recognize job is posted but keeps the reader alive', listener('recognize', 'reject') === 'post:recognize:reject');
+    ok('a successful initialize job is posted and keeps the reader alive', listener('initialize', 'resolve') === 'post:initialize:resolve');
+  }
   /* plan: what each recognize() call does, in order, across every worker */
-  function sandbox(plan) {
+  function sandbox(plan, starts = []) {
     const made = [], log = { recognize: [], thrown: [], scripts: [], live: new Set() };
     /* the page's object URLs, so a worker's multi-MB script blob left
        unreleased after the worker started is seen */
@@ -1255,7 +1318,8 @@ async function ocrRetry() {
     const win = {
       Blob, URL: url, TextDecoder, Uint8Array, WebAssembly, Promise, Error, String,
       setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref(); return t; }, clearTimeout,
-      fetch: () => Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['x;' + require(path.join(ROOT, 'memorizer', 'src', 'ocr.js')).WORKER_FIX.find])) }),
+      fetch: url => { const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+        return Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob([/tesseract.js-core/.test(url) ? O.CORE_BINARY_FIX.find : 'x;' + O.WORKER_FIX.find + ';' + O.CORE_FIX.find + ';' + O.START_FAIL_FIX.find])) }); },
       FileReader: class { readAsArrayBuffer(b) { b.arrayBuffer().then(r => { this.result = r; this.onload(); }); } },
       document: { createElement: () => ({ getContext: () => ({ fillRect() {}, drawImage() {} }) }) },
       Image: class { set src(_) { this.naturalWidth = 40; this.naturalHeight = 30; setTimeout(() => this.onload(), 0); } },
@@ -1277,7 +1341,8 @@ async function ocrRetry() {
           },
           terminate: () => { w.ended = true; return Promise.resolve(); } };
         made.push(w);
-        return Promise.resolve(w);
+        const start = starts.shift();
+        return start ? start(w, opts) : Promise.resolve(w);
       } },
     };
     win.window = win;
@@ -1287,6 +1352,72 @@ async function ocrRetry() {
   }
   const settle = p => p.then(v => ({ v }), e => ({ e }));
 
+  {
+    /* 5.1.1 calls errorHandler for a failed initialize job, but leaves
+       createWorker() pending. A startup fault must reach the same bounded
+       recovery as a recognition fault, without waiting ninety seconds. */
+    let late;
+    const t = sandbox([], [(w, opts) => new Promise(resolve => {
+      late = () => resolve(w);
+      setTimeout(() => opts.errorHandler('RuntimeError: memory access out of bounds'), 0);
+    })]);
+    const r = await Promise.race([settle(t.O.readImage(t.photo)), new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+    ok('a swallowed WebAssembly startup fault is recovered once by a fresh reader, without waiting for the startup timeout',
+       !r.hung && !r.e && r.v.items.length === 1 && t.made.length === 2 && t.log.recognize.join() === '1',
+       JSON.stringify({ hung: !!r.hung, made: t.made.length, calls: t.log.recognize }));
+    late(); await new Promise(resolve => setTimeout(resolve, 0));
+    const next = await settle(t.O.readImage(t.photo));
+    ok('a failed startup that resolves late is terminated and cannot replace the fresh reader',
+       t.made[0].ended && !next.e && t.made.length === 2 && t.log.recognize.join() === '1,1' && t.log.live.size === 0);
+    await t.O.release();
+  }
+  {
+    /* the scanned-PDF path starts the reader before it draws the page, so a
+       startup fault must be recovered there too, not only through readImage */
+    const t = sandbox([], [(w, opts) => new Promise(() => {
+      setTimeout(() => opts.errorHandler('RuntimeError: memory access out of bounds'), 0);
+    })]);
+    const r = await Promise.race([settle(t.O.readPage(t.page)), new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+    ok('a scanned page whose reader hits a WebAssembly startup fault is read by one fresh reader',
+       !r.hung && !r.e && r.v.length === 1 && t.made.length === 2 && t.log.recognize.join() === '1',
+       JSON.stringify({ hung: !!r.hung, error: r.e && String(r.e.message || r.e), made: t.made.length, calls: t.log.recognize }));
+    await t.O.release();
+  }
+  {
+    const failStart = (w, opts) => new Promise(() => { setTimeout(() => opts.errorHandler('RuntimeError: unreachable'), 0); });
+    const t = sandbox([], [failStart, failStart]);
+    const r = await Promise.race([settle(t.O.readPage(t.page)), new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+    ok('a scanned page whose reader faults twice at startup is reported after one retry, with no third reader',
+       !r.hung && r.e && /RuntimeError/.test(String(r.e.message || r.e)) && t.made.length === 2 && !t.log.recognize.length,
+       JSON.stringify({ hung: !!r.hung, made: t.made.length, calls: t.log.recognize }));
+    await t.O.release();
+  }
+  {
+    let late;
+    const t = sandbox([], [(w, opts) => new Promise(resolve => {
+      late = () => resolve(w);
+      setTimeout(() => opts.errorHandler('the trained language could not be initialized'), 0);
+    })]);
+    const r = await Promise.race([settle(t.O.readPage(t.page)), new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+    ok('a swallowed startup error that is not a WebAssembly fault is reported immediately and is not retried',
+       !r.hung && r.e && /trained language/.test(String(r.e.message || r.e)) && t.made.length === 1 && !t.log.recognize.length,
+       JSON.stringify({ hung: !!r.hung, error: r.e && String(r.e.message || r.e), made: t.made.length }));
+    late(); await new Promise(resolve => setTimeout(resolve, 0));
+    await t.O.release();
+  }
+  {
+    const late = [];
+    const failStart = (w, opts) => new Promise(resolve => {
+      late.push(() => resolve(w));
+      setTimeout(() => opts.errorHandler('RuntimeError: unreachable'), 0);
+    });
+    const t = sandbox([], [failStart, failStart]);
+    const r = await Promise.race([settle(t.O.readImage(t.photo)), new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+    ok('two WebAssembly startup faults are reported after one retry, with no third reader or recognition job',
+       !r.hung && r.e && /RuntimeError/.test(String(r.e.message || r.e)) && t.made.length === 2 && !t.log.recognize.length && t.log.live.size === 0);
+    late.forEach(resolve => resolve()); await new Promise(resolve => setTimeout(resolve, 0));
+    await t.O.release();
+  }
   {
     const t = sandbox([FAULT]);
     const r = await settle(t.O.readPage(t.page));

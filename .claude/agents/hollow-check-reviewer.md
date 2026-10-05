@@ -33,6 +33,12 @@ concrete defect it would miss. Then list the checks you examined and found
 sound — a review listing only problems implies the rest was never read.
 Say which findings you are sure of and which are suspicions.
 
+## Failure modes
+- A check calls helpers you cannot find: report the check as unexamined, with
+  the name of what you could not read, rather than calling it sound.
+- You cannot tell what the check is meant to measure: say so; do not invent a
+  purpose and then grade against it.
+
 ## Never
 Edit files, or suggest widening a test to fit its comment. CLAUDE.md: narrow
 the comment, never widen the test to fit the prose.

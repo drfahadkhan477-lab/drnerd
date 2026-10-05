@@ -60,9 +60,10 @@ module.exports = (async () => {
   const ocrDoc = { createElement: () => { const c = { width: 0, height: 0, getContext: () => ({ fillRect() {} }) }; canvases.push(c); return c; } };
   class Reader { readAsArrayBuffer(blob) { blob.arrayBuffer().then(v => { this.result = v; this.onload(); }); } }
   const ocrSrc = fs.readFileSync(path.join(__dirname, '../memorizer/src/ocr.js'), 'utf8');
-  const workerText = 'return"string"==typeof t?t:t.data})).join("+")';
+  const O = require('../memorizer/src/ocr.js');
+  const workerText = O.WORKER_FIX.find + ';' + O.CORE_FIX.find + ';' + O.START_FAIL_FIX.find;
   vm.runInNewContext(ocrSrc, { window: ocrRoot, document: ocrDoc, Blob, FileReader: Reader, TextDecoder, Uint8Array,
-    fetch: async () => ({ ok: true, blob: async () => new Blob([workerText]) }), URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL: () => { revoked++; } },
+    fetch: async url => ({ ok: true, blob: async () => new Blob([/tesseract.js-core/.test(url) ? O.CORE_BINARY_FIX.find : workerText]) }), URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL: () => { revoked++; } },
     setTimeout: () => 1, clearTimeout: () => { timerCleared++; } });
   await ocrRoot.MemOcr.readPage({ getViewport: () => ({ width: 10, height: 10 }), render: () => ({ promise: Promise.resolve() }) });
   assert.equal(canvases[0].width, 0); assert.equal(canvases[0].height, 0); assert.equal(timerCleared, 1); assert.equal(revoked, 1);

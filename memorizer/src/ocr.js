@@ -122,10 +122,37 @@ function blobUrl(buf, type) { return URL.createObjectURL(new Blob([buf], { type:
    by the patch chain's rule: the anchor must match exactly once, or this
    throws rather than guess. */
 var WORKER_FIX = { find: 'return"string"==typeof t?t:t.data})).join("+")', replace: 'return"string"==typeof t?t:t.code})).join("+")' };
+/* The core's ready promise is detached from load(), without a rejection
+   handler. Report a failed core and close its unusable worker, instead of
+   leaving createWorker() pending with an unhandled worker rejection. */
+var CORE_FIX = { find: 'r.resolve({loaded:!0})})),t.next=12;break;case 11:',
+  replace: 'r.resolve({loaded:!0})})).catch(function(e){r.reject(String(e));self.close()}),t.next=12;break;case 11:' };
+/* A load, language or initialize job that is rejected leaves createWorker()
+   pending, and the page never receives the worker to terminate: the failed
+   instance would stay alive, holding its WebAssembly memory, while the retry
+   starts a second one. The worker closes itself once it has posted that
+   rejection (errorHandler still receives it first). Rejections of later
+   jobs — recognize — leave the worker alone: only startup is fatal. */
+var START_FAIL_FIX = { find: 'i.dispatchHandlers(e,(function(t){return postMessage(t)}))',
+  replace: 'i.dispatchHandlers(e,(function(t){postMessage(t);if("reject"===t.status&&("load"===t.action||"loadLanguage"===t.action||"initialize"===t.action))self.close()}))' };
+/* Both pinned cores embed their wasm as a data URL. Decode those checked
+   bytes locally with the core's existing fallback, rather than fetching
+   the multi-MB URL again from a worker. External URLs keep their loader. */
+var CORE_BINARY_FIX = { find: 'if(!pa&&(fa||ha))', replace: 'if(!pa&&!a.startsWith(Ja)&&(fa||ha))' };
+function fixCore(text) {
+  text = String(text);
+  var n = text.split(CORE_BINARY_FIX.find).length - 1;
+  if (n !== 1) throw new Error('the text reader\'s core has changed (anchor found ' + n + ' times)');
+  return text.replace(CORE_BINARY_FIX.find, CORE_BINARY_FIX.replace);
+}
 function fixWorker(text) {
-  var n = String(text).split(WORKER_FIX.find).length - 1;
-  if (n !== 1) throw new Error('the text reader\'s worker has changed (anchor found ' + n + ' times)');
-  return String(text).replace(WORKER_FIX.find, WORKER_FIX.replace);
+  text = String(text);
+  [WORKER_FIX, CORE_FIX, START_FAIL_FIX].forEach(function (fix) {
+    var n = text.split(fix.find).length - 1;
+    if (n !== 1) throw new Error('the text reader\'s worker has changed (anchor found ' + n + ' times)');
+    text = text.replace(fix.find, fix.replace);
+  });
+  return text;
 }
 
 var starting = null, current = null;
@@ -144,25 +171,30 @@ function engine(onStatus) {
          passed the core as its own blob: URL and Chromium refused it. The
          worker only imports its core when TesseractCore is not yet defined,
          and here the core has already defined it, so nothing is imported. */
-      var workerUrl = blobUrl(new Blob([r[1], '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript');
-      var started = T.createWorker([{ code: 'eng', data: new Uint8Array(r[2]) }], 1, {
-        workerPath: workerUrl, workerBlobURL: false,
-        cacheMethod: 'none', gzip: true,
-        /* tesseract.js 5.1.1 rejects a failed job AND, unless given this,
-           throws the same error on the page (src/createWorker.js, the
-           'reject' branch) — an uncaught error even when the rejection is
-           handled and the page read again. The rejection is the report:
-           recognize() below retries or passes it on, so nothing is lost. */
-        errorHandler: function () {},
-      });
+      var workerUrl = blobUrl(new Blob([fixCore(new TextDecoder().decode(r[1])), '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript');
       return new Promise(function (resolve, reject) {
         var settled = false, timer = setTimeout(function () {
-          settled = true; URL.revokeObjectURL(workerUrl); reject(new Error('the text reader did not start'));
+          fail(new Error('the text reader did not start'));
         }, START_TIMEOUT_MS);
-        started.then(function (worker) {
-          if (settled) { discard(worker); return; }
-          settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); resolve(worker);
-        }, function (e) { if (!settled) { settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); reject(e); } });
+        function fail(e) {
+          if (settled) return;
+          settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); reject(e);
+        }
+        try {
+          var started = T.createWorker([{ code: 'eng', data: new Uint8Array(r[2]) }], 1, {
+            workerPath: workerUrl, workerBlobURL: false,
+            cacheMethod: 'none', gzip: true,
+            /* 5.1.1 swallows failed language/initialize jobs, leaving
+               createWorker() pending. Forward those errors while starting;
+               recognition errors already reject their own jobs. Providing
+               this handler also prevents a duplicate uncaught page error. */
+            errorHandler: fail,
+          });
+          Promise.resolve(started).then(function (worker) {
+            if (settled) { discard(worker); return; }
+            settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); resolve(worker);
+          }, fail);
+        } catch (e) { fail(e); }
       });
     }).then(function (worker) { current = worker; return worker; });
   var attempt = starting; attempt.catch(function () { if (starting === attempt) starting = null; });
@@ -216,9 +248,15 @@ function recognizeNow(canvas, onStatus) {
   });
 }
 
-/* Read one pdf.js page: draw it, recognise it, return pdf.js-shaped items. */
+/* Read one pdf.js page: draw it, recognise it, return pdf.js-shaped items.
+   The reader is started first so the download is announced before the page
+   is drawn; a WebAssembly fault while it starts gets the same one fresh
+   reader that recognize() gives a fault while reading. */
 function readPage(page, onStatus) {
-  return engine(onStatus).then(function () {
+  return engine(onStatus).catch(function (e) {
+    if (!isWasmFault(e)) throw e;
+    return engine(onStatus);
+  }).then(function () {
     var vp = page.getViewport({ scale: SCALE });
     var canvas = document.createElement('canvas');
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
@@ -273,6 +311,6 @@ function release() {
   queue = job.then(function () {}, function () {}); return job;
 }
 
-root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
+root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, CORE_FIX: CORE_FIX, START_FAIL_FIX: START_FAIL_FIX,CORE_BINARY_FIX: CORE_BINARY_FIX, fixCore: fixCore, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemOcr;
 })(typeof window !== 'undefined' ? window : this);

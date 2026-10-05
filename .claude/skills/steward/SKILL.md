@@ -46,7 +46,7 @@ places, in one commit:
 - **`full` is always skipped in CI.** It needs the licensed export. Skipped is
   not green: a PR body never says the browser suites on the build ran unless
   the owner ran them.
-- **`memorizer-browser`** runs the Memorizer in Chromium and WebKit on
+- **`memorizer-browser`** runs the Memorizer in Chromium, WebKit and Firefox on
   documents the suite makes itself. A red one is this PR's to root-cause
   until shown otherwise, per the harness's CI rules.
 - **Reading a failed job's log:** never paste it, and never quote it into a

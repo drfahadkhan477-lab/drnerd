@@ -198,6 +198,26 @@ head('the runner can actually be told which engine to use');
      /ENGINES\.includes\(ENGINE\)/.test(v));
 }
 
+head('Memorizer CI exercises every engine without weakening the iPad gate');
+{
+  const { jobBody } = require('../scripts/test-public.js');
+  const job = jobBody(fs.readFileSync(path.join(ROOT, '.github/workflows/verify.yml'), 'utf8'), 'memorizer-browser') || '';
+  const entries = [...job.matchAll(/^\s*- engine: (\w+)\s*\n\s+label: (\w+)\s*$/gm)]
+    .map(m => [m[1], m[2]]);
+  ok('Chromium, WebKit and Firefox keep their own named CI entries',
+     JSON.stringify(entries) === JSON.stringify([
+       ['chromium', 'Chromium'], ['webkit', 'WebKit'], ['firefox', 'Firefox']
+     ]), JSON.stringify(entries));
+  ok('an engine failure cannot cancel the other engine runs', /fail-fast:\s*false\b/.test(job));
+  ok('the matrix engine reaches the test helper',
+     /SYSTOLE_ENGINE:\s*\$\{\{\s*matrix\.engine\s*\}\}/.test(job));
+  ok('CI installs the selected browser using the pinned repository dependencies',
+     /\bnpm ci\b/.test(job) && /npx playwright install --with-deps \$\{\{\s*matrix\.engine\s*\}\}/.test(job));
+  const suites = job.split(/\n      - /).filter(step => /run:\s*node tests\/verify-/.test(step));
+  ok('every browser suite still runs after an earlier suite fails',
+     suites.length > 0 && suites.every(step => /if:\s*\$\{\{\s*!cancelled\(\)\s*\}\}/.test(step)));
+}
+
 head('console noise the engine makes, told apart from noise the app makes');
 {
   /* THE SAME COPY-PASTE, ONE LEVEL UP. Twenty-five suites each carried
