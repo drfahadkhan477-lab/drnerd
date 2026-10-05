@@ -1244,7 +1244,7 @@ async function ocrRetry() {
   const FAULT = () => Promise.reject(new Error("RuntimeError: Out of bounds memory access (evaluating '(Tf=b._emscripten_bind_TessBaseAPI_Recognize_1=b.asm.Id).apply(null,arguments)')"));
   const READ = () => Promise.resolve({ data: { blocks: [{ paragraphs: [{ lines: [{ bbox: { y0: 0, y1: 24 }, words: [{ text: 'Preload', confidence: 95, bbox: { x0: 10, x1: 80, y0: 0, y1: 24 } }] }] }] }] } });
   /* plan: what each recognize() call does, in order, across every worker */
-  function sandbox(plan) {
+  function sandbox(plan, starts = []) {
     const made = [], log = { recognize: [], thrown: [], scripts: [], live: new Set() };
     /* the page's object URLs, so a worker's multi-MB script blob left
        unreleased after the worker started is seen */
@@ -1277,7 +1277,8 @@ async function ocrRetry() {
           },
           terminate: () => { w.ended = true; return Promise.resolve(); } };
         made.push(w);
-        return Promise.resolve(w);
+        const start = starts.shift();
+        return start ? start(w, opts) : Promise.resolve(w);
       } },
     };
     win.window = win;
@@ -1287,6 +1288,51 @@ async function ocrRetry() {
   }
   const settle = p => p.then(v => ({ v }), e => ({ e }));
 
+  {
+    /* 5.1.1 calls errorHandler for a failed initialize job, but leaves
+       createWorker() pending. A startup fault must reach the same bounded
+       recovery as a recognition fault, without waiting ninety seconds. */
+    let late;
+    const t = sandbox([], [(w, opts) => new Promise(resolve => {
+      late = () => resolve(w);
+      setTimeout(() => opts.errorHandler('RuntimeError: memory access out of bounds'), 0);
+    })]);
+    const r = await Promise.race([settle(t.O.readImage(t.photo)), new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+    ok('a swallowed WebAssembly startup fault is recovered once by a fresh reader, without waiting for the startup timeout',
+       !r.hung && !r.e && r.v.items.length === 1 && t.made.length === 2 && t.log.recognize.join() === '1',
+       JSON.stringify({ hung: !!r.hung, made: t.made.length, calls: t.log.recognize }));
+    late(); await new Promise(resolve => setTimeout(resolve, 0));
+    const next = await settle(t.O.readImage(t.photo));
+    ok('a failed startup that resolves late is terminated and cannot replace the fresh reader',
+       t.made[0].ended && !next.e && t.made.length === 2 && t.log.recognize.join() === '1,1' && t.log.live.size === 0);
+    await t.O.release();
+  }
+  {
+    let late;
+    const t = sandbox([], [(w, opts) => new Promise(resolve => {
+      late = () => resolve(w);
+      setTimeout(() => opts.errorHandler('the trained language could not be initialized'), 0);
+    })]);
+    const r = await Promise.race([settle(t.O.readPage(t.page)), new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+    ok('a swallowed startup error that is not a WebAssembly fault is reported immediately and is not retried',
+       !r.hung && r.e && /trained language/.test(String(r.e.message || r.e)) && t.made.length === 1 && !t.log.recognize.length,
+       JSON.stringify({ hung: !!r.hung, error: r.e && String(r.e.message || r.e), made: t.made.length }));
+    late(); await new Promise(resolve => setTimeout(resolve, 0));
+    await t.O.release();
+  }
+  {
+    const late = [];
+    const failStart = (w, opts) => new Promise(resolve => {
+      late.push(() => resolve(w));
+      setTimeout(() => opts.errorHandler('RuntimeError: unreachable'), 0);
+    });
+    const t = sandbox([], [failStart, failStart]);
+    const r = await Promise.race([settle(t.O.readImage(t.photo)), new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+    ok('two WebAssembly startup faults are reported after one retry, with no third reader or recognition job',
+       !r.hung && r.e && /RuntimeError/.test(String(r.e.message || r.e)) && t.made.length === 2 && !t.log.recognize.length && t.log.live.size === 0);
+    late.forEach(resolve => resolve()); await new Promise(resolve => setTimeout(resolve, 0));
+    await t.O.release();
+  }
   {
     const t = sandbox([FAULT]);
     const r = await settle(t.O.readPage(t.page));
