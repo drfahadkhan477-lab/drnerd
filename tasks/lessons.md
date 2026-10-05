@@ -21,11 +21,25 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   synthetic fixture and still miss the real pinned file. → Rule: when a patch
   targets third-party code pinned by SRI, run the real fixed file through the
   patch once (fetch it, confirm its hash) and say so in the commit.
+- **A check CI cannot exercise.** A timezone fix and an OS-clipboard fix both
+  pass on a UTC Linux runner whether or not they are right. → Rule: reproduce
+  the condition instead of reasoning about it: `TZ=Pacific/Kiritimati` (UTC+14)
+  makes the local day differ from the UTC day for most of the day, and showed
+  master failing two checks the fix passes. Where the condition cannot be made
+  (a Windows clipboard), say the branch is unexercised and narrow the comment.
+- **A normalisation applied on the wrong side.** Making a read-back match its
+  expectation can hide the very defect the check exists for (CRLF the app wrote
+  itself). → Rule: normalise only what the environment changes, and assert the
+  value the app produced on the way out as well.
 - **A number moved to turn a suite green.** → Rule: the suite is right until
   proven otherwise. Never move a threshold, timeout or count.
 
 ## Process
 
+- **Handing an agent a command its tools cannot run.** I asked a read-only
+  reviewer (Read, Grep, Glob) to run `git diff`; it came back with questions and
+  no verdict. → Rule: check the agent's `tools:` line first; give agents without
+  Bash the diff inline or a path to it.
 - **Pushing a fix the reviewer called optional or the reverse.** → Rule: a
   red-circle review comment, a failing Approvals row and a P1/P2 bot finding
   that reproduces are all work now; verify each before replying.
