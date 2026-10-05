@@ -80,6 +80,7 @@ const SUITES = [
   ['planscreen',   'the "I have N minutes" card plans a review session of that size, in order, and rating in it moves the schedule'],
   ['topicrunscreen', 'the Topic runs card asks three to five questions about one thing, from what you missed, each holding the words it says they share'],
   ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
+  ['studyvisuals', 'the Study cards draw the app\'s own numbers: rings, chips, pace pill, countdown, run icons and pips, the voice dock, every icon resolving'],
   ['voicescreen', 'the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave'],
   ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn'],
   ['failsafe',     'render() throwing shows a real screen, never a blank or frozen one'],
@@ -434,7 +435,7 @@ const SUITES = [
    Emptied a ninth time by the full green run with --pwa on the owner's
    laptop at 9a647f9 (5432 checks across 124 suites, 134 on the split build),
    which measured the one that had been waiting: devtools-pure (38 checks). */
-const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'carve-pure', 'lab-pure', 'plan-pure', 'topicrun-pure', 'voice-pure', 'drills-pure', 'lab', 'planscreen', 'topicrunscreen', 'voicescreen', 'examdate'];
+const PENDING_RECORD = ['memorizer-studyimport-pure', 'memorizer-studyimport', 'memorizer-misses-pure', 'memorizer-offline', 'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-data', 'claude-guard', 'claude-agents', 'claude-skills', 'study-file-check', 'app-slots-pure', 'assemble-pure', 'synthetic-pure', 'carve-pure', 'lab-pure', 'plan-pure', 'topicrun-pure', 'voice-pure', 'drills-pure', 'lab', 'planscreen', 'topicrunscreen', 'voicescreen', 'examdate', 'studyvisuals'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

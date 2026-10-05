@@ -547,6 +547,9 @@ jobs:
         name: the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day (17 checks)
         run: node tests/verify-examdate.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: the Study cards draw the app's own numbers, every icon resolves, and the voice dock runs and stops a session (26 checks)
+        run: node tests/verify-studyvisuals.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the chapter grid staggers in, and its bar fills instead of arriving drawn (21 checks)
         run: node tests/verify-chapters.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
