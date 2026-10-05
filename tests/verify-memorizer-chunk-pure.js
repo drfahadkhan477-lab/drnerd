@@ -931,6 +931,11 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
   try { O.fixWorker(O.WORKER_FIX.find); } catch (e) { noCore = e.message; }
   try { O.fixWorker(src + O.CORE_FIX.find); } catch (e) { twiceCore = e.message; }
   ok('the core error fix also refuses a missing or doubled anchor', /found 0 times/.test(noCore) && /found 2 times/.test(twiceCore));
+  ok('the core binary fix uses the embedded bytes through the existing decoder', O.fixCore(O.CORE_BINARY_FIX.find) === O.CORE_BINARY_FIX.replace);
+  let noBinary = '', twiceBinary = '';
+  try { O.fixCore(''); } catch (e) { noBinary = e.message; }
+  try { O.fixCore(O.CORE_BINARY_FIX.find + O.CORE_BINARY_FIX.find); } catch (e) { twiceBinary = e.message; }
+  ok('the core binary fix refuses a missing or doubled anchor', /found 0 times/.test(noBinary) && /found 2 times/.test(twiceBinary));
 
   /* Every file the text reader fetches is one the service worker keeps. */
   const { build, zipOf, ZIP_FILES } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
@@ -1249,6 +1254,15 @@ async function ocrRetry() {
   const READ = () => Promise.resolve({ data: { blocks: [{ paragraphs: [{ lines: [{ bbox: { y0: 0, y1: 24 }, words: [{ text: 'Preload', confidence: 95, bbox: { x0: 10, x1: 80, y0: 0, y1: 24 } }] }] }] }] } });
   {
     const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+    let fetched = 0;
+    const loader = { Promise, Ma: () => new Uint8Array([0, 1]),
+      fetch: () => { fetched++; return Promise.resolve({ arrayBuffer: () => Promise.resolve(new Uint8Array([3, 4]).buffer) }); } };
+    vm.runInNewContext(O.fixCore('function load(a){var pa=false,fa=true,ha=false,Ja="data:application/octet-stream;base64,";' +
+      O.CORE_BINARY_FIX.find + '{return fetch(a).then(function(r){return r.arrayBuffer()})}return Promise.resolve().then(function(){return Ma(a)})}'), loader);
+    const embedded = await loader.load('data:application/octet-stream;base64,AAE=');
+    ok('embedded core bytes are decoded intact without a worker data URL fetch', fetched === 0 && [...embedded].join() === '0,1');
+    const external = await loader.load('https://core.example/reader.wasm');
+    ok('the core loader still fetches an external binary URL', fetched === 1 && [...new Uint8Array(external)].join() === '3,4');
     /* Execute the pinned core-loading callback with real promises. The
        detached rejection must become a worker response, and only a failed
        core closes the worker. The language anchor is an inert comment. */
@@ -1282,8 +1296,8 @@ async function ocrRetry() {
     const win = {
       Blob, URL: url, TextDecoder, Uint8Array, WebAssembly, Promise, Error, String,
       setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t.unref) t.unref(); return t; }, clearTimeout,
-      fetch: () => { const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
-        return Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['x;' + O.WORKER_FIX.find + ';' + O.CORE_FIX.find])) }); },
+      fetch: url => { const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+        return Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob([/tesseract.js-core/.test(url) ? O.CORE_BINARY_FIX.find : 'x;' + O.WORKER_FIX.find + ';' + O.CORE_FIX.find])) }); },
       FileReader: class { readAsArrayBuffer(b) { b.arrayBuffer().then(r => { this.result = r; this.onload(); }); } },
       document: { createElement: () => ({ getContext: () => ({ fillRect() {}, drawImage() {} }) }) },
       Image: class { set src(_) { this.naturalWidth = 40; this.naturalHeight = 30; setTimeout(() => this.onload(), 0); } },

@@ -127,6 +127,16 @@ var WORKER_FIX = { find: 'return"string"==typeof t?t:t.data})).join("+")', repla
    leaving createWorker() pending with an unhandled worker rejection. */
 var CORE_FIX = { find: 'r.resolve({loaded:!0})})),t.next=12;break;case 11:',
   replace: 'r.resolve({loaded:!0})})).catch(function(e){r.reject(String(e));self.close()}),t.next=12;break;case 11:' };
+/* Both pinned cores embed their wasm as a data URL. Decode those checked
+   bytes locally with the core's existing fallback, rather than fetching
+   the multi-MB URL again from a worker. External URLs keep their loader. */
+var CORE_BINARY_FIX = { find: 'if(!pa&&(fa||ha))', replace: 'if(!pa&&!a.startsWith(Ja)&&(fa||ha))' };
+function fixCore(text) {
+  text = String(text);
+  var n = text.split(CORE_BINARY_FIX.find).length - 1;
+  if (n !== 1) throw new Error('the text reader\'s core has changed (anchor found ' + n + ' times)');
+  return text.replace(CORE_BINARY_FIX.find, CORE_BINARY_FIX.replace);
+}
 function fixWorker(text) {
   text = String(text);
   [WORKER_FIX, CORE_FIX].forEach(function (fix) {
@@ -153,7 +163,7 @@ function engine(onStatus) {
          passed the core as its own blob: URL and Chromium refused it. The
          worker only imports its core when TesseractCore is not yet defined,
          and here the core has already defined it, so nothing is imported. */
-      var workerUrl = blobUrl(new Blob([r[1], '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript');
+      var workerUrl = blobUrl(new Blob([fixCore(new TextDecoder().decode(r[1])), '\n;\n', fixWorker(new TextDecoder().decode(r[0]))]), 'text/javascript');
       return new Promise(function (resolve, reject) {
         var settled = false, timer = setTimeout(function () {
           fail(new Error('the text reader did not start'));
@@ -287,6 +297,6 @@ function release() {
   queue = job.then(function () {}, function () {}); return job;
 }
 
-root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, CORE_FIX: CORE_FIX, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
+root.MemOcr = { release: release, readImage: readImage, PHOTO_MAX_WIDTH: PHOTO_MAX_WIDTH, START_TIMEOUT_MS: START_TIMEOUT_MS, WORKER_FIX: WORKER_FIX, CORE_FIX: CORE_FIX, CORE_BINARY_FIX: CORE_BINARY_FIX, fixCore: fixCore, fixWorker: fixWorker, TESS: TESS, SCALE: SCALE, MIN_CONFIDENCE: MIN_CONFIDENCE, ocrItems: ocrItems, readPage: readPage, hasSimd: hasSimd, isWasmFault: isWasmFault };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemOcr;
 })(typeof window !== 'undefined' ? window : this);
