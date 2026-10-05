@@ -14,14 +14,16 @@ in Split View — and the service worker keeps it working with the network off.
 Build the thing you host:
 
 ```bash
-node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/extract-content.js build/systole.html # → content/
-node scripts/build-pwa.js build/systole.html       # → dist/
+npm run build   # → build/systole.html   (the export: SYSTOLE_SRC, or the one file in source/)
+npm run pwa     # → content/, then dist/
 ```
 
-**All three, in that order, every time.** The middle one is easy to skip on a
-rebuild — `content/` is already there, so the split appears to work. It does
-not: `dist/index.html` and `dist/app.js` would be the new build and
+`npm run build` is `scripts/assemble-app.js`; the patch chain that used to build
+the app is retired (`scripts/CHAIN-RETIRED`). `npm run pwa` runs the next two
+steps together, in order: `extract-content.js`, then `build-pwa.js`. If you run
+those two scripts by hand instead, run **both, in that order, every time.** The
+first is easy to skip on a rebuild — `content/` is already there, so the split
+appears to work. It does not: `dist/index.html` and `dist/app.js` would be the new build and
 `dist/content/` the old one, and nothing on screen would say so. `build-pwa.js`
 now compares the digest `extract-content.js` wrote into `content/manifest.json`
 against the file it is splitting and refuses the pair when they disagree,
