@@ -5589,7 +5589,7 @@ const KEY='accsap12.v2';
 const DATA_SCHEMA_VERSION=1;
 const SCHEMA_KEYS=['schemaVersion','chStats','missed','theme','homeLayout',
   'sessionCorrect','sessionTotal','srs','reviewStreak','lastReviewDay','daily',
-  'practice','sinceBackup','lastBackup','resume','focusMode'];
+  'practice','sinceBackup','lastBackup','resume','focusMode','examDate'];
 let FOREIGN={};
 
 function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOREIGN,{
@@ -5598,7 +5598,7 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOR
   sessionCorrect:S.sessionCorrect,sessionTotal:S.sessionTotal,
   srs:S.srs,reviewStreak:S.reviewStreak,lastReviewDay:S.lastReviewDay,daily:S.daily,
   practice:S.practice,sinceBackup:S.sinceBackup,lastBackup:S.lastBackup,
-  resume:S.resume,focusMode:!!S.focusMode})));}
+  resume:S.resume,focusMode:!!S.focusMode,examDate:S.examDate||null})));}
   /* This holds the statistics and all 639 FSRS cards. It had a bare catch, so
      the one store whose loss you would most want to hear about was the only
      one that died without a word. */
@@ -5627,7 +5627,8 @@ let S={screen:'home',chapter:null,questions:[],qIdx:0,selected:null,answered:fal
   daily:boot.daily||{},practice:boot.practice||{},
   sinceBackup:boot.sinceBackup||0,lastBackup:boot.lastBackup||null,
   mode:'all',zoomed:-1,theme:boot.theme||'auto',homeLayout:boot.homeLayout||'signal',
-  focusMode:!!boot.focusMode};
+  focusMode:!!boot.focusMode,
+  examDate:/^\d{4}-\d{2}-\d{2}$/.test(boot.examDate||'')?boot.examDate:null};
 
 /* ── theme ──
    A theme is a mode (which drives every existing component style) paired with
@@ -5907,6 +5908,24 @@ async function runVoice(v,event){
       }
     }
   }
+}
+/* ── Exam date — one date the owner sets on the Study screen, kept with the rest of the progress. StudyPlan.readiness
+   turns it into the countdown and the pace needed. A value that is not a real calendar day is refused, not stored. ── */
+function validExamDate(v){
+  if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y,m,d]=v.split('-').map(Number), t=new Date(y,m-1,d);
+  return t.getFullYear()===y&&t.getMonth()===m-1&&t.getDate()===d;
+}
+function setExamDate(v){
+  if(v===''||v==null) S.examDate=null;
+  else if(validExamDate(v)) S.examDate=v;
+  else return;
+  save(); render();
+}
+function examLeftText(){
+  if(!S.examDate) return '';
+  const n=FSRS.daysBetween(todayISO(),S.examDate);
+  return n>1?`${n} days to your exam`:n===1?'Your exam is tomorrow':n===0?'Your exam is today':'Your exam date has passed';
 }
 /* Questions answered a day, over the last seven days (today included). */
 function recentPerDay(){
@@ -6907,14 +6926,18 @@ function buildStudy(){
     <div class="fc-cta">${dueN?'Review now':'Begin'} ${icon('arrow-right','icon-sm')}</div>
   </button>`;
 
-  const planPreview=planNow(20), ready=StudyPlan.readiness({pool:POOL,srs:S.srs,chStats:S.chStats,recentPerDay:recentPerDay()});
-  const readyLine=ready.status==='no-data'?'':`You have seen ${ready.seen} of ${ready.total} questions and remember about ${Math.round((ready.retention||0)*100)}% of them today.`+(ready.weakChapters.length?` Weakest: ${ready.weakChapters.map(w=>`${w.ch} (${w.pct}%)`).join(', ')}.`:'');
+  const planPreview=planNow(20), ready=StudyPlan.readiness({pool:POOL,srs:S.srs,chStats:S.chStats,recentPerDay:recentPerDay(),examDate:S.examDate});
+  const readyLine=ready.status==='no-data'?'':ready.text;
   const planCard=`<div class="feed-card plan-card" id="planCard" role="group" aria-label="Study plan">
     <div class="fc-top"><span class="fc-badge">STUDY PLAN</span></div>
     <div class="fc-title">I have…</div>
     <div class="fc-sub" id="planSub">${e(planPreview.text)}</div>
     ${readyLine?`<div class="fc-sub" id="planReady">${e(readyLine)}</div>`:''}
     <div class="chips plan-chips">${[10,20,40].map(m=>`<button class="chip" data-plan="${m}" onclick="startPlan(${m})">${m} min</button>`).join('')}</div>
+    <div class="exam-row"><label for="examDate">Exam date</label>
+      <input type="date" id="examDate" value="${S.examDate||''}" onchange="setExamDate(this.value)">
+      ${S.examDate?`<button class="chip" id="examClear" onclick="setExamDate('')">Clear</button>`:''}
+      <span class="exam-left" id="examLeft">${e(examLeftText())}</span></div>
   </div>`;
 
   _runsShown=topicRunsNow();
