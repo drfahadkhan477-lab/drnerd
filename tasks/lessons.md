@@ -23,6 +23,21 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   patch once (fetch it, confirm its hash) and say so in the commit.
 - **A number moved to turn a suite green.** → Rule: the suite is right until
   proven otherwise. Never move a threshold, timeout or count.
+- **A guard (and its check) for a case that cannot occur.** A study plan "does not
+  resume a saved deck" guard and its check passed with the guard removed, because
+  `resumeKey` is null for review decks: nothing is ever saved to resume. → Rule: make the
+  case happen once, by injecting the defect, before guarding or testing it; if it cannot
+  happen, delete the guard and say why in a comment. Do not invent a scenario.
+- **A fixture that cannot show the quantity under test.** "Runs of three to five" passed
+  with a size limit of nine, because the invented bank only ever forms runs of three; a
+  silent murmur passed "twice as loud in its window" because both windows read 0 and
+  `0 < 0` is false. → Rule: for any at-most, at-least or ratio check, make the fixture able
+  to break the bound, assert the measured quantity is not trivially zero, then inject the
+  bound's removal. Fix the fixture, never the bound.
+- **Measuring with the thing that moves.** A sideways-scroll check read the viewport, which
+  mobile emulation widens to fit the overflow; a zip's expected file list came from the
+  builder's own constant. → Rule: measure with an instrument the defect cannot move (every
+  element's right edge, a literal list written in the test).
 
 ## Process
 
