@@ -83,7 +83,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the field shows the date and Clear appears', r.val === d30 && r.clear === true);
 
   head('it survives a reload');
-  await page.reload({ waitUntil: 'load' });
+  await page.reload({ waitUntil: 'load', timeout: 200000 });   // the real build is ~90 MB: not Playwright's 30 s default
   await booted(page);
   await toStudy();
   r = await read();
@@ -113,7 +113,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(() => setExamDate('next week'));
   ok('free text is refused, and the date already set stays', (await read()).mem === keep);
   await page.evaluate(() => { const b = JSON.parse(localStorage.getItem(KEY)); b.examDate = 'banana'; localStorage.setItem(KEY, JSON.stringify(b)); });
-  await page.reload({ waitUntil: 'load' });
+  await page.reload({ waitUntil: 'load', timeout: 200000 });   // the real build is ~90 MB: not Playwright's 30 s default
   await booted(page);
   await toStudy();
   r = await read();
