@@ -16,7 +16,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
-const { booted, onScreen } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 const { systemText, turns, toolResults } = require('./_wire');
 
@@ -244,7 +244,9 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   /* render() runs through startViewTransition when the screen changes, so the
      new DOM is not there on the next line — wait for the cards, not a timer. */
   await page.evaluate(() => goMemory());
-  await onScreen(page, 'memory', { marker: '.ref-card' });
+  /* The cards only, not a wait on the screen: S.screen === 'memory' is what the first check below
+     asserts, and waiting for it would leave that check nothing to catch (found in review of #180). */
+  await settled(page, () => document.querySelectorAll('.ref-card').length > 0, { label: "the memory screen's cards" });
   const panel = await page.evaluate(() => ({
     screen: S.screen,
     cards: document.querySelectorAll('.ref-card').length,
