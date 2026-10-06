@@ -77,9 +77,28 @@ function ready() {
   }).catch(() => 0);
 }
 
+/* Writes still on their way to IndexedDB. add() does not wait for its write, so an
+   importer that reported success at once could be reloaded or closed with a figure
+   still in flight, and that figure was gone on the next launch (found on a slow
+   machine: one of two figures missing after a reload). flush() is what an importer
+   awaits before it says it is done. */
+const inflight = new Set();
+function track(p) {
+  inflight.add(p);
+  p.then(() => inflight.delete(p), () => inflight.delete(p));
+  return p;
+}
+function pending() { return inflight.size; }
+/* true when every write in flight was stored, false when any was not (quota, a
+   disabled or private store): the caller then knows its figures will not survive
+   a reload, and can say so. */
+function flush() {
+  return Promise.all([...inflight]).then(rs => rs.every(r => r !== false));
+}
+
 function write(key, dataUrl) {
   mem[key] = dataUrl;                          // memory first: import works regardless
-  return open().then(d => {
+  return track(open().then(d => {
     if (!d) return false;
     return new Promise(resolve => {
       let tx;
@@ -89,7 +108,7 @@ function write(key, dataUrl) {
       tx.onerror = () => resolve(false);
       tx.onabort = () => resolve(false);       // quota, most likely
     });
-  }).catch(() => false);
+  }).catch(() => false));
 }
 
 function drop(key) {
@@ -190,7 +209,7 @@ function sweep(bodies, opts) {
   return gone.length;
 }
 
-root.RefAssets = { ready, add, get, has, keys, count, bytes, drop, sweep,
+root.RefAssets = { ready, add, get, has, keys, count, bytes, drop, sweep, flush, pending,
                    isImageName, mimeFor, hashBytes, PREFIX,
                    _mem: () => mem };
 

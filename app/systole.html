@@ -2688,11 +2688,15 @@ function refImportText(){
       }catch(_){ failed++; }
     }
 
+    /* The figures are written to IndexedDB in the background; "linked" must mean
+       stored, or a reload straight after the import loses them. */
+    const stored=(report.linked&&typeof RefAssets!=='undefined'&&RefAssets.flush)?await RefAssets.flush():true;
     render();
     /* The old importer said "Added 14 notes" and nothing about the figures it
        had just discarded, which is exactly why nobody noticed for weeks. */
     const bits=[`Added ${notes} note${notes===1?'':'s'}`];
     if(report.linked) bits.push(`${report.linked} figure${report.linked===1?'':'s'} linked`);
+    if(!stored) bits.push('figures could not be saved on this device and will not survive a reload');
     if(report.missing.length) bits.push(`${report.missing.length} image${report.missing.length===1?'':'s'} not found (${report.missing.slice(0,2).join(', ')}${report.missing.length>2?'…':''})`);
     if(report.skipped) bits.push(`${report.skipped} zip entr${report.skipped===1?'y':'ies'} unreadable`);
     if(failed) bits.push(`${failed} file${failed===1?'':'s'} could not be read`);

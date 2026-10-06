@@ -8,7 +8,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted, watchTransitions, resized } = require('./_render.js');
+const { booted, watchTransitions, resized, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -279,24 +279,34 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        count instead of being averaged into it. */
     const open = async (w, h) => {
       await resized(page, w, h);
-      await page.waitForFunction(
-        ([w, h]) => Math.abs(window.innerWidth - w) <= 2 && Math.abs(window.innerHeight - h) <= 2,
-        [w, h], { timeout: 8000 });
+      /* Both waits are preconditions, so they take settled()'s standard timeout
+         rather than 8 s of their own. On the owner's laptop, 48 minutes into a
+         full run on the 92 MB real build, one of them ran out at 8 s and the log
+         said only "Timeout 8000ms exceeded". Now a timeout names the wait, and
+         the second says what the panel's box was doing when it gave up. */
+      await settled(page, ([w, h]) => Math.abs(window.innerWidth - w) <= 2 && Math.abs(window.innerHeight - h) <= 2,
+        { arg: [w, h], label: `the viewport to become ${w}x${h}` });
       await page.evaluate(() => {
         const sh = document.getElementById('shell');
         if (!sh.classList.contains('ai-open')) toggleAI();
         buildAI();
-        window.__stable = 0; window.__lastRect = null;
+        window.__stable = 0; window.__lastRect = null; window.__changes = 0;
       });
-      await page.waitForFunction(() => {
-        const ai = document.getElementById('ai');
-        const r = ai.getBoundingClientRect();
-        const key = [window.innerWidth, window.innerHeight, r.x, r.y, r.width, r.height]
-          .map(n => Math.round(n)).join(',');
-        window.__stable = (window.__lastRect === key) ? (window.__stable || 0) + 1 : 0;
-        window.__lastRect = key;
-        return window.__stable >= 3;
-      }, null, { timeout: 8000, polling: 'raf' });
+      try {
+        await settled(page, () => {
+          const ai = document.getElementById('ai');
+          const r = ai.getBoundingClientRect();
+          const key = [window.innerWidth, window.innerHeight, r.x, r.y, r.width, r.height]
+            .map(n => Math.round(n)).join(',');
+          if (window.__lastRect !== key) window.__changes++;
+          window.__stable = (window.__lastRect === key) ? (window.__stable || 0) + 1 : 0;
+          window.__lastRect = key;
+          return window.__stable >= 3;
+        }, { label: `the tutor panel to hold still for three frames at ${w}x${h}` });
+      } catch (e) {
+        const seen = await page.evaluate(() => `last box ${window.__lastRect}, changed ${window.__changes} times`);
+        throw new Error(e.message + ' (' + seen + ')');
+      }
       return shape();
     };
 

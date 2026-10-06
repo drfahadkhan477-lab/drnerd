@@ -232,19 +232,37 @@ function zip(entries) {
       if (tag === 'input') { input = el; el.click = () => {}; }
       return el;
     };
+    /* Count IndexedDB write transactions not yet committed, at the browser's own
+       layer: asking RefAssets whether it has writes pending would believe whatever
+       it says, and a RefAssets that lost track of a write would say none. */
+    const origTx = IDBDatabase.prototype.transaction;
+    window.__openWrites = 0;
+    IDBDatabase.prototype.transaction = function (names, mode) {
+      const tx = origTx.apply(this, arguments);
+      if (mode === 'readwrite') {
+        window.__openWrites++;
+        const done = () => { window.__openWrites--; };
+        tx.addEventListener('complete', done); tx.addEventListener('abort', done); tx.addEventListener('error', done);
+      }
+      return tx;
+    };
     refImportText();
     document.createElement = orig;
     const dt = new DataTransfer();
     dt.items.add(file);
     Object.defineProperty(input, 'files', { value: dt.files, configurable: true });
+    /* No sleep after it: the importer itself waits until its figures are stored, and
+       pending is read the moment it returns. A fixed 300 ms here hid that it did not. */
     await input.onchange();
-    await new Promise(r => setTimeout(r, 300));
-    return { notes: REF.length, assets: RefAssets.count(),
+    const openWrites = window.__openWrites;
+    IDBDatabase.prototype.transaction = origTx;
+    return { notes: REF.length, assets: RefAssets.count(), openWrites,
              bodies: REF.map(r => r.body),
              toast: (document.getElementById('toast') || {}).textContent || '' };
   }, { b64: fs.readFileSync(zipPath).toString('base64'), name: 'Braunwald_chapter.zip' });
 
   ok('the chapter became notes', imported.notes === 2, imported.notes + ' notes');
+  ok('the importer says it is done only once its figures are stored, not still on their way', imported.openWrites === 0, imported.openWrites + ' IndexedDB writes still uncommitted');
   ok('the __MACOSX shadow was ignored, not imported as a note', imported.notes === 2);
   ok('both images that exist were stored', imported.assets === 2, imported.assets + ' assets');
   const joined = imported.bodies.join('\n');
