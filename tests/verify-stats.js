@@ -13,8 +13,9 @@
  * sentences moved with it. Nobody was lying; a person edited three files from
  * memory eight times and got one of them wrong.
  *
- * So scripts/verify.js now writes tests/test-stats.json from a full green run,
- * and this suite holds the prose to it. A count in a document is now a claim
+ * So scripts/verify.js now writes tests/test-stats.json from green runs — in
+ * two halves, Systole's and the Memorizer's, each from a run where every one
+ * of its suites passed (scripts/record.js) — and this suite holds the prose to it. A count in a document is now a claim
  * that fails a check when it is false, which is the only kind of claim worth
  * writing down.
  *

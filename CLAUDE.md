@@ -61,8 +61,12 @@ change is wrong until proven otherwise.
 
 ## Prose follows the record, never leads it
 
-`tests/test-stats.json` is machine-written, on full green runs only. Never
-hand-edit it.
+`tests/test-stats.json` is machine-written, never hand-edited. It has two
+halves, Systole and the Memorizer (`scripts/record.js`), and each half is
+written only from a run where every one of its own suites ran and passed; the
+other half keeps its previous numbers. A Memorizer failure no longer holds back
+Systole's record, and the reverse. Do not loosen "every one of its suites" —
+a half written from a partial run is a confidently wrong number in three docs.
 
 Counts quoted in `README.md`, `docs/BUILD.md` and `.github/workflows/verify.yml`
 are guarded by `tests/verify-stats.js` against that record. When one of them
@@ -71,9 +75,9 @@ disagrees with reality but agrees with the record is *correct today* and will
 correct itself on the next full run. Editing it by hand is prose leading the
 record.
 
-`PENDING_RECORD` in `scripts/verify.js` lists suites registered since the last
-full green run. It is checked in both directions, so it self-cleans — empty it
-after a full green run, not before.
+`PENDING_RECORD` in `scripts/verify.js` lists suites registered since their
+half of the record was last written. It is checked in both directions, so it
+self-cleans — remove a name after a green run has recorded it, not before.
 
 **A guard with a hole in it is worse than no guard**, because the surrounding
 green reads as coverage of the whole paragraph. Two sentences have drifted
