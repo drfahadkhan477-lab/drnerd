@@ -88,6 +88,7 @@
 const path = require('path');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
+const { BOOT_TIMEOUT } = require('./_render.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -115,10 +116,14 @@ const TARGET = process.argv.slice(2).find(a => !a.startsWith('--')) || path.join
   const browser = await launch();
   const page = watch(await browser.newPage({ viewport: { width: 1200, height: 900 } }), events);
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto('file://' + path.resolve(TARGET));
+  /* The real build is ~92 MB. Without a timeout here Playwright's 30 s default
+     applied to the load, and the owner's Windows run died on it before the
+     first check, while the wait below allowed two minutes. Both use the shared
+     boot budget now. */
+  await page.goto('file://' + path.resolve(TARGET), { timeout: BOOT_TIMEOUT });
   await page.waitForFunction(
     () => typeof S !== 'undefined' && typeof search === 'function' && typeof REF !== 'undefined', null,
-    { timeout: 120000 });
+    { timeout: BOOT_TIMEOUT });
 
   /* --misses lists which notes each shape failed to put first, and what came
      first instead. Off by default and changes nothing measured: it exists so a

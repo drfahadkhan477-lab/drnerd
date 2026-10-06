@@ -66,13 +66,23 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('a topic with many questions on it gives a run of four, not all of them');
   {
     /* the invented bank only forms runs of three, so make a topic that could fill a longer one: twelve
-       questions in one chapter that share words nothing else in the bank uses */
+       questions in one chapter that share words nothing else in the bank uses.
+       On the real bank this has to hold against everything else on it, which the first version did
+       not: three words prefixed to a long stem left the twelve barely similar, and with many other
+       runs of four the card's top three were decided on seed id, so the run was not on it at all
+       ({"found":false} on the owner's run). So the twelve are ONLY those words (stem and keyed
+       option), and the first is missed, which is what a run starts from. The size under test is
+       untouched: twelve alike, and the run must still stop at four. */
     const r = await page.evaluate(() => {
-      const ch = POOL[0].ch, mine = POOL.filter(q => q.ch === ch).slice(0, 12), old = mine.map(q => q.s);
-      mine.forEach(q => { q.s = 'Zebratitis quagga mongoose ' + q.s; });
+      const ch = POOL[0].ch, mine = POOL.filter(q => q.ch === ch && q.o && q.o[q.ci]).slice(0, 12);
+      const old = mine.map(q => [q.s, q.o[q.ci].t]), wasMissed = S.missed.has(mine[0].id);
+      mine.forEach(q => { q.s = 'Zebratitis quagga mongoose'; q.o[q.ci].t = 'okapi'; });
+      S.missed.add(mine[0].id);
       _runsKey = ''; const runs = topicRunsNow().slice();
       const z = runs.find(x => x.shared.includes('zebratitis'));
-      mine.forEach((q, i) => { q.s = old[i]; }); _runsKey = '';
+      mine.forEach((q, i) => { q.s = old[i][0]; q.o[q.ci].t = old[i][1]; });
+      if (!wasMissed) S.missed.delete(mine[0].id);
+      _runsKey = '';
       return { n: mine.length, found: !!z, size: z && z.ids.length, inTopic: z && z.ids.every(id => mine.some(q => q.id === id)) };
     });
     ok('twelve questions on one invented topic make a run, all from that topic, of four', r.n === 12 && r.found && r.inTopic && r.size === 4, JSON.stringify(r));
