@@ -104,7 +104,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     });
     ok('it is a review session of exactly the run\'s questions, in the run\'s order', r.mode === 'due' && JSON.stringify(r.ids) === JSON.stringify(r.want), r.ids.length + ' questions');
     ok('all from one chapter', r.chapters === 1);
-    ok('and each question contains every word the run says they share: the grouping is in the questions', r.words.length > 0 && r.sharing, r.words.join(','));
+    ok('and each question contains every word the run says they share: the grouping is in the questions', r.words.length > 0 && r.sharing, `${r.words.length} shared words`);   // a count: the words come from the bank's questions
     ok('it starts from the seed question', r.seedFirst);
     const rated = await page.evaluate(() => {
       const q = S.questions[0], before = S.srs[q.id] ? JSON.stringify(S.srs[q.id]) : null;
