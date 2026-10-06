@@ -105,10 +105,14 @@ const STUB = () => {
   const first = await page.evaluate(() => ({
     said: window.__said.slice(), n: S.questions.length, stem: VoiceMode.clean(S.questions[0].s), mode: S.mode,
     opts: S.questions[0].o.length,
+    /* options with nothing to say once markup is removed: a figure-only option, read as a count, never as text */
+    silent: S.questions[0].o.filter(o => !VoiceMode.clean(o && o.t)).length,
   }));
   ok('the session is a review session of up to ten questions', first.mode === 'due' && first.n >= 2 && first.n <= 10, first.n + ' in ' + first.mode);
-  ok('the stem was read aloud', first.said.join(' ').includes(first.stem.split(/[.?!]/)[0].trim().slice(0, 30)), first.said[0]);
-  ok('every option was read by its letter', first.said.filter(t => /^Option [A-H]\./.test(t)).length === first.opts, first.said.length + ' parts');
+  /* Details are counts, never text: on the owner's machine this runs on the licensed bank, and a detail is printed. */
+  ok('the stem was read aloud', first.said.join(' ').includes(first.stem.split(/[.?!]/)[0].trim().slice(0, 30)), `${first.said.length} parts spoken, stem ${first.stem.length} characters`);
+  const optLines = first.said.filter(t => /^Option [A-H]\./.test(t)).length;
+  ok('every option was read by its letter', optLines === first.opts, `${optLines} of ${first.opts} options read, ${first.silent} with no text to read`);
   await page.evaluate(() => { window.__heard.push('skip'); });
   await waitFor(page, () => S.qIdx === 1);
   const skipped = await page.evaluate(() => ({ idx: S.qIdx, answered: S.answered, total: Object.values(S.chStats).reduce((a, c) => a + c.total, 0), said: window.__said.some(t => t === 'Skipping.') }));
