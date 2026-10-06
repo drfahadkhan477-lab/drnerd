@@ -44,12 +44,13 @@ const STUB = () => {
     this.start = () => {
       window.__listens++;
       const tick = () => {
+        if (this.stopped) return;   // a listener the page has stopped must not take the next section's words
         if (window.__heard.length) this.onresult && this.onresult({ results: [[{ transcript: window.__heard.shift() }]] });
         else setTimeout(tick, 20);
       };
       tick();
     };
-    this.stop = () => {};
+    this.stop = () => { this.stopped = true; };
   };
 };
 
@@ -58,14 +59,24 @@ const STUB = () => {
   const errors = [], events = [];
   onDeath(() => ({ section, checks: passed + failed, errors, events: events.length ? events.join(', ') : 'none' }));
 
-  const open = async (stub) => {
-    const page = watch(await browser.newPage({ viewport: { width: 430, height: 1000 } }), events, 'main');
-    page.on('pageerror', e => errors.push(e.message));
-    if (stub) await page.addInitScript(STUB);
-    await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-    await booted(page);
-    await page.evaluate(() => { S.srs = {}; S.chStats = {}; S.missed = new Set(); S.daily = {}; });
-    return page;
+  /* ONE PAGE, LOADED ONCE. This suite opened the app four times, one page per section. On the
+     owner's laptop the real build is 92 MB, and the fourth load ran out at 200 s 50 minutes into a
+     full run. Each section now starts from a reset instead: no voice session, an empty scripted
+     voice, and empty progress. */
+  const page = watch(await browser.newPage({ viewport: { width: 430, height: 1000 } }), events, 'main');
+  page.on('pageerror', e => errors.push(e.message));
+  await page.addInitScript(STUB);
+  await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
+  await booted(page);
+  /* Home first, so the next toStudy() is a real screen change and reads a Study screen drawn after the reset. */
+  const fresh = async () => {
+    await page.evaluate(() => {
+      stopVoice();
+      window.__said = []; window.__heard = []; window.__listens = 0;
+      S.srs = {}; S.chStats = {}; S.missed = new Set(); S.daily = {};
+      goHome();
+    });
+    await onScreen(page, 'home', { marker: '.hero-h1' });
   };
   const toStudy = async (page) => {
     await page.evaluate(() => goStudy());
@@ -76,17 +87,18 @@ const STUB = () => {
 
   head('no speech in the browser: no card, and the rest is there');
   {
-    const page = await open(false);
-    await page.evaluate(() => { Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: undefined }); });
+    await fresh();
+    /* The scripted voice is set aside and put back: the same page, without speech. */
+    await page.evaluate(() => { window.__stubSynth = window.speechSynthesis; Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: undefined }); });
     await toStudy(page);
     const r = await page.evaluate(() => ({ voice: !!document.getElementById('voiceCard'), plan: !!document.getElementById('planCard') }));
     ok('no Voice card without speech APIs', r.voice === false, JSON.stringify(r));
     ok('the plan card is still there', r.plan === true);
-    await page.close();
+    await page.evaluate(() => { Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: window.__stubSynth }); });
   }
 
   head('the card, and nothing spoken before the tap');
-  const page = await open(true);
+  await fresh();
   await toStudy(page);
   const card = await page.evaluate(() => {
     const b = document.getElementById('voiceStart');
@@ -130,10 +142,10 @@ const STUB = () => {
   ok('the spoken letter was scored as one answer', right.total === 1 && !right.missed, JSON.stringify({ t: right.total, m: right.missed }));
   ok('"Correct." was spoken, with the reason', right.said === 1);
   ok('a right answer was rated Good: first interval of two days or more, no lapse', right.card && right.card.ivl >= 2 && right.card.lapses === 0, JSON.stringify(right.card));
-  await page.close();
 
   head('a wrong letter, and stop');
-  const p2 = await open(true);
+  await fresh();
+  const p2 = page;
   await toStudy(p2);
   await p2.click('#voiceStart');
   await onScreen(p2, 'quiz', { marker: '.q-card' });
@@ -147,10 +159,10 @@ const STUB = () => {
   ok('"Not quite" was spoken, naming the answer', done.said === 1);
   ok('a wrong answer was rated Again: a lapse, due again tomorrow at the latest', done.srs !== null && done.srs.lapses === 1 && done.srs.ivl <= 1, JSON.stringify(done.srs));
   ok('"stop" ended the session with a spoken summary', done.fin.length === 1 && /1 of 1 correct|0 of 1 correct/.test(done.fin[0]), done.fin[0]);
-  await p2.close();
 
   head('leaving the quiz ends the session');
-  const p3 = await open(true);
+  await fresh();
+  const p3 = page;
   await toStudy(p3);
   await p3.click('#voiceStart');
   await onScreen(p3, 'quiz', { marker: '.q-card' });
@@ -162,7 +174,6 @@ const STUB = () => {
   const after = await p3.evaluate(() => ({ said: window.__said.length, listens: window.__listens, live: _voice !== null }));
   ok('nothing more is spoken or listened for after leaving', after.said === before.said && after.listens === before.listens, JSON.stringify({ before, after }));
   ok('the session itself is over, not just quiet', after.live === false, JSON.stringify(after));
-  await p3.close();
 
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();

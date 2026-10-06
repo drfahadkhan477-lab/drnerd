@@ -23,7 +23,7 @@ const path = require('path');
 const { CATEGORY } = require('./_olderbank.js');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chapters.js <patched.html>'); process.exit(1); }
@@ -153,11 +153,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     await page2.goto(URL, { waitUntil: 'load', timeout: 200000 });
     await booted(page2);
     await page2.waitForTimeout(900);
-    const r = await page2.evaluate(async () => {
+    await page2.evaluate(() => {
       const q = POOL[0];
       S.srs[q.id] = { difficulty: 5, stability: 20, ivl: 20, reps: 3, lapses: 0, last: '2026-08-20', due: '2026-09-20' };
       goStudy(); render();
-      await new Promise(res => setTimeout(res, 200));
+    });
+    /* A PRECONDITION, NOT A PAUSE. This was a fixed 200 ms, and on the owner's laptop, 50 minutes
+       into a full run on the 92 MB build, the bar was read before mountChapterBars() had set it
+       (the screen swaps inside an async view transition, then the width lands two frames later),
+       so it measured 0 px. Wait for the app to have assigned the width; the measurement below is
+       what the check is about. */
+    await settled(page2, () => { const b = document.querySelector('.ct-bar i[data-w]'); return !!b && b.style.width === (b.dataset.w || '0') + '%'; },
+      { label: 'the chapter bar to be given its width by mountChapterBars()' });
+    const r = await page2.evaluate(async () => {
       const bar = document.querySelector('.ct-bar i[data-w]');
       const transitionDuration = getComputedStyle(bar).transitionDuration;
       return { widthPx: bar.getBoundingClientRect().width, target: +bar.dataset.w, transitionDuration };
