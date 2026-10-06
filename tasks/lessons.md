@@ -52,14 +52,16 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   `RefAssets.pending()`; with write-tracking removed it said 0 and passed. → Rule: count
   at a layer the change cannot reach (here, `IDBDatabase.prototype.transaction`), then
   inject the defect that would make the self-report lie.
-- **A wait sized for the small build.** On the owner's laptop, 50 minutes into a run on
-  the 92 MB real build, a run failed a different suite each time: a reload on Playwright's
-  30 s default, layout waits of 8 s, fixed 150 and 200 ms reads, a suite that loaded the
-  app four times. Each passed alone and in CI. → Rule: a page load or reload of the build
-  under test takes the boot timeout; a precondition goes through `settled()`/`onScreen()`
-  (15 s, named); a fixed sleep before a read becomes a wait for what the app sets; load the
-  build once per suite. Reproduce by making the app slow (a `setTimeout` around the step),
-  not by loading the CPU, which did not reproduce any of them.
+- **A wait sized for the small build.** On the owner's laptop, late in a full run on the
+  real build, a run failed a different suite each time: a reload on Playwright's default
+  timeout, layout waits shorter than the shared one, fixed short reads, a suite that loaded
+  the app once per section. Each passed alone and in CI. → Rule: a page load or reload of
+  the build under test takes the boot timeout; a precondition goes through `settled()` with
+  its standard timeout and a label; a fixed sleep before a read becomes a wait for what the
+  app sets; load the build once per suite. A precondition must not be what the next check
+  asserts: a wait on `S.screen` before a check on `S.screen` leaves the check nothing to
+  catch (found in review of #180). Reproduce by making the app slow (a `setTimeout` around
+  the step), not by loading the CPU, which did not reproduce any of them.
 
 ## Process
 

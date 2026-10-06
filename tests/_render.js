@@ -97,6 +97,12 @@ async function settled(page, pred, opts = {}) {
     await page.waitForFunction(pred, opts.arg === undefined ? null : opts.arg, { timeout });
   } catch (e) {
     const what = opts.label || 'the expected markup';
+    /* Only a timeout is "never settled". A page that crashed, a browser that closed, or a predicate
+       that threw is a different failure, and reporting it as a slow render sends the reader of a
+       laptop transcript after the wrong cause, so it keeps its own message. */
+    if (!e || e.name !== 'TimeoutError') {
+      throw new Error(`waiting for ${what} failed before it could settle: ${String(e && e.message || e).split('\n')[0]}`);
+    }
     throw new Error(`render never settled: waited ${timeout}ms for ${what}, and it never became true. ` +
                     `The screen it was reading is most likely the previous one.`);
   }
