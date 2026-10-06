@@ -16,7 +16,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, onScreen } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 const { systemText, turns, toolResults } = require('./_wire');
 
@@ -244,7 +244,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   /* render() runs through startViewTransition when the screen changes, so the
      new DOM is not there on the next line — wait for the cards, not a timer. */
   await page.evaluate(() => goMemory());
-  await page.waitForFunction(() => document.querySelectorAll('.ref-card').length > 0, null, { timeout: 5000 });
+  await onScreen(page, 'memory', { marker: '.ref-card' });
   const panel = await page.evaluate(() => ({
     screen: S.screen,
     cards: document.querySelectorAll('.ref-card').length,

@@ -48,6 +48,18 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   mobile emulation widens to fit the overflow; a zip's expected file list came from the
   builder's own constant. → Rule: measure with an instrument the defect cannot move (every
   element's right edge, a literal list written in the test).
+- **Asking the code under test whether it worked.** An import check read
+  `RefAssets.pending()`; with write-tracking removed it said 0 and passed. → Rule: count
+  at a layer the change cannot reach (here, `IDBDatabase.prototype.transaction`), then
+  inject the defect that would make the self-report lie.
+- **A wait sized for the small build.** On the owner's laptop, 50 minutes into a run on
+  the 92 MB real build, a run failed a different suite each time: a reload on Playwright's
+  30 s default, layout waits of 8 s, fixed 150 and 200 ms reads, a suite that loaded the
+  app four times. Each passed alone and in CI. → Rule: a page load or reload of the build
+  under test takes the boot timeout; a precondition goes through `settled()`/`onScreen()`
+  (15 s, named); a fixed sleep before a read becomes a wait for what the app sets; load the
+  build once per suite. Reproduce by making the app slow (a `setTimeout` around the step),
+  not by loading the CPU, which did not reproduce any of them.
 
 ## Process
 
@@ -63,6 +75,12 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   measured. A skipped step is not a pass.
 - **Reading or quoting suite output that holds licensed text.** → Rule: grep
   for `FAIL` lines and stack traces; never paste a log or `tests/last-run.log`.
+  A check's own detail is output too: print counts and ids, never a stem, an option
+  or a run's shared words, since the owner pastes those lines here.
+- **A command typed after another on one PowerShell line.** The owner's `git pull`
+  ran as a continuation of the release-check line (`>>`), so a 90-minute run tested
+  old code. → Rule: give each command its own block, and before a long run ask for
+  `git log --oneline -1` and check the commit against the one just merged.
 - **Prose that leads the record.** → Rule: before editing a number in
   `README.md`, `docs/BUILD.md` or `verify.yml`, run `node tests/verify-stats.js`
   and find out whether it is guarded.

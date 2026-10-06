@@ -24,7 +24,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted, watchTransitions, resized } = require('./_render.js');
+const { booted, watchTransitions, resized, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -413,8 +413,10 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     };
     const at = async (w, h) => {
       await resized(page, w, h);
-      await page.waitForFunction(([w, h]) =>
-        Math.abs(innerWidth - w) <= 2 && Math.abs(innerHeight - h) <= 2, [w, h], { timeout: 8000 });
+      /* A precondition: settled()'s standard timeout and a named failure, not 8 s of its own (the same
+         wait ran out in verify-apex on the owner's laptop on the 92 MB build). */
+      await settled(page, ([w, h]) => Math.abs(innerWidth - w) <= 2 && Math.abs(innerHeight - h) <= 2,
+        { arg: [w, h], label: `the viewport to become ${w}x${h}` });
       await page.evaluate(() => { goHome(); render(); });
       await settle();
       return page.evaluate(() => {
