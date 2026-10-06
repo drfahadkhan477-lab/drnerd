@@ -318,6 +318,7 @@ const SUITES = [
   /* scripts/ci-changes.js: a pull request skips a browser job only when every
      changed file is known not to reach it, and anything doubtful runs both. */
   ['cichanges-pure', 'a pull request skips a browser job only when none of its files can reach it, and a failed decision runs both'],
+  ['record-pure',    'the counts record in two halves: each written only from a run where every one of its suites ran and passed, the other half kept'],
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
@@ -448,8 +449,8 @@ const SUITES = [
    not re-measured.
 
    Suites registered after that run are the pending ones now, and the record
-   does not hold them yet: topicrunscreen, voicescreen, examdate, studyvisuals, icons-pure, cichanges-pure. */
-const PENDING_RECORD = ['topicrunscreen', 'voicescreen', 'examdate', 'studyvisuals', 'icons-pure', 'cichanges-pure'];
+   does not hold them yet: topicrunscreen, voicescreen, examdate, studyvisuals, icons-pure, cichanges-pure, record-pure. */
+const PENDING_RECORD = ['topicrunscreen', 'voicescreen', 'examdate', 'studyvisuals', 'icons-pure', 'cichanges-pure', 'record-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -498,6 +499,7 @@ const opt = (n, fb) => { const i = argv.indexOf(n); return i > -1 && argv[i + 1]
 const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 
 const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
+const { mergeRecord } = require(path.join(ROOT, 'scripts', 'record.js'));
 const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : []);
 if (flag('--list')) {
   console.log('\nSuites, their tags, and what each defends:\n');
@@ -899,58 +901,45 @@ if (flag('--bail') && stopScheduling) console.log('\n  --bail: stopping here.\n'
    reads this file and holds the prose to it, which is only possible if the
    file is generated. So: generated here, never edited.
 
-   Written ONLY from a complete run on the default engine. A --only run knows
-   the count of two suites, a --skip run is missing some, and a --engine webkit
-   run measures a different browser; any of those overwriting this file would
-   put a confidently wrong number into three documents at once, which is worse
-   than the hand-editing it replaces. */
+   Written per FAMILY (scripts/record.js): Systole's half from a run in which
+   every Systole suite ran and passed, the Memorizer's half likewise, and a
+   half this run did not earn keeps its previous numbers. A --skip or --only
+   run can therefore still write a half it covered completely — a run that
+   skips the Memorizer writes Systole's numbers and leaves the Memorizer's
+   alone — and a half it covered partly is not touched. A --engine webkit run
+   still writes nothing: it measures a different browser. */
 function writeStats(pwaCount) {
-  if (only.length || skip.length) return;
   /* A URL run measures the split build, and the numbers in the docs are the
      single-file build's. Same reason --engine webkit does not write: a true
      number about the wrong thing is still wrong in the sentence it lands in. */
   if (TARGET_IS_URL) return;
   if (SYNTHETIC) return;
   if (ENGINE !== DEFAULT_ENGINE) return;
-  if (chosen.length !== SUITES.length) return;
   const file = path.join(ROOT, 'tests', 'test-stats.json');
-  /* --pwa is a separate opt-in, so a run without it has nothing to say about
-     the split build. Carrying the previous value forward is the honest move:
-     the alternative is deleting a true number because this run did not measure
-     it. */
   let prev = {};
   try { prev = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
-  const suites = {};
-  /* Checks EXECUTED, not checks passed. On a green run these are the same
-     number. They differ only in the one case that can still reach this
-     function — verify-stats failing because the record is stale — and there,
-     counting passes would record a smaller total than the same suite produces
-     once it goes green, so the docs would be updated to a number the next run
-     immediately contradicts. The record would never settle. */
-  for (const r of results) suites[r.name] = r.checks;
-  /* How long each one took, so the next parallel run can pack the slow ones
-     first instead of discovering them. Wall-clock seconds from THIS machine
-     under THIS --jobs, which makes them a scheduling hint and nothing else —
-     no check reads them, and a wrong one costs a worse packing, not a wrong
-     verdict. Carried forward for a suite this run did not time. */
-  const seconds = Object.assign({}, prev.seconds || {});
-  for (const r of results) seconds[r.name] = +r.secs;
-  const stats = {
-    _generated: 'by scripts/verify.js on a full green run — do not hand-edit',
+  /* Checks EXECUTED, not checks passed (results[].checks). On a green run
+     these are the same number. They differ only in the one case that can still
+     reach a write — verify-stats failing because the record is stale — and
+     there, counting passes would record a smaller total than the same suite
+     produces once it goes green, so the record would never settle.
+     Seconds are a scheduling hint for the next --jobs run and nothing else; no
+     check reads them. They move with their family's counts. */
+  const out = mergeRecord(prev, results, SUITES.map(([n]) => n), {
     engine: ENGINE,
-    /* The arrangement the numbers were produced under. 1 is one suite at a
-       time; anything higher ran the shared suites concurrently and the ones in
-       SERIAL alone. It changes no count — it is here so a reader of the record
-       knows which it is looking at. */
+    /* 1 is one suite at a time; higher ran the shared suites concurrently.
+       It changes no count — it says which arrangement produced the numbers. */
     jobs: JOBS,
-    suiteCount: results.length,
-    total: results.reduce((n, r) => n + r.checks, 0),
-    pwa: pwaCount === undefined ? (prev.pwa === undefined ? null : prev.pwa) : pwaCount,
-    suites,
-    seconds,
-  };
-  fs.writeFileSync(file, JSON.stringify(stats, null, 2) + '\n');
-  console.log(`  counts written to ${path.relative(process.cwd(), file)}\n`);
+    commit: provenance(),
+    pwaCount,
+  });
+  if (!out) {
+    console.log('  counts not written: no family had every one of its suites run and pass\n');
+    return;
+  }
+  fs.writeFileSync(file, JSON.stringify(out.record, null, 2) + '\n');
+  console.log(`  counts written to ${path.relative(process.cwd(), file)}: ${out.written.join(', ')}` +
+              (out.kept.length ? ` (kept from the previous record: ${out.kept.join(', ')})` : '') + '\n');
 }
 
 /* Written before the pass/fail gate, and deliberately NOT blocked by the one
@@ -1018,21 +1007,16 @@ const blockers = results.filter(r => !r.ok && r.name !== 'stats');
 const total = results.reduce((n, r) => n + r.checks, 0);
 const bad = results.filter(r => !r.ok);
 console.log(`\n  ${total} checks across ${results.length} suites in ${((Date.now() - t0) / 60000).toFixed(1)} min`);
-/* WRITTEN WHENEVER THE RUN IS GREEN, even with --pwa pending. It used to be
-   skipped here under --pwa so the record could be written once, below, with a
-   real split-build count in it — which is right when the split build works and
-   throws away a true measurement when it does not. A full green run of 86
-   suites was lost exactly that way: every suite passed, then the split build
-   refused because content/ had been extracted from an earlier build, and
-   process.exit(1) came before the only line that writes the record. Twenty-
-   three minutes of true numbers discarded over a staleness in a directory the
-   suites had nothing to say about.
-   Writing here carries the previous pwa figure forward, which is what
-   writeStats already does for a run without --pwa and for the same stated
-   reason: the alternative is deleting a true number because this run did not
-   measure it. If the split build then succeeds, the call below rewrites the
-   file with the real figure and supersedes this one. */
-if (!blockers.length) writeStats();
+/* CALLED ON EVERY RUN; writeStats decides, family by family, what this run
+   earned. It used to wait for an all-green run, which tied Systole's record to
+   the Memorizer's: one Memorizer browser suite failing on one machine held
+   back Systole numbers measured green from end to end.
+   It also writes before --pwa, carrying the previous split-build figure
+   forward. A full green run of 86 suites was once lost because the split build
+   refused after every suite had passed, and process.exit(1) came before the
+   only line that wrote the record. If the split build succeeds, the call below
+   rewrites the file with the real figure and supersedes this one. */
+writeStats();
 if (bad.length) {
   console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}`);
   console.log(`  full output of those suites: ${path.relative(process.cwd(), writeFailLog())}`);
@@ -1137,7 +1121,7 @@ if (flag('--pwa')) {
   }
   console.log(`  cachebuckets: ${cm[1]} checks on the caches, all green\n`);
 
-  if (!blockers.length) writeStats(+m[1] + +wm[1] + +cm[1]);
+  writeStats(+m[1] + +wm[1] + +cm[1]);
 }
 
 /* Deferred to here so a stale record still gets rewritten above, but never

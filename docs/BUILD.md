@@ -387,9 +387,10 @@ node scripts/verify.js --list                # what each suite defends
 ```
 
 Across 147 suites, 6447 checks, plus 134 more on the split build. Those numbers are
-not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` on a
-full green run and `verify-stats` fails if this sentence, the README or the CI
-header disagrees with it. They used to be maintained from memory in three files,
+not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
+two halves, Systole's from a run where every Systole suite passed and the
+Memorizer's likewise, the other half kept as it was — and `verify-stats`
+fails if this sentence, the README or the CI header disagrees with it. They used to be maintained from memory in three files,
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
 
@@ -686,7 +687,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        147 suites · 88 need no browser · + pwa
+tests/        147 suites · 89 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
