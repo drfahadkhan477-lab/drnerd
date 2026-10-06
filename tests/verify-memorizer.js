@@ -416,7 +416,15 @@ function kindOf(user) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'memorizer-'));
   const built = build(dir);
   const pdf = makePdf();
-  const browser = await launch();
+  /* SOFTWARE RENDERING, AS CI HAS IT. On the owner's Windows laptop the page
+     closed itself in "memorise it before the drill", 86 checks in, on the
+     first 3D card flip: Chromium's GPU process logged shared_image_manager
+     errors for twelve seconds, then the browser exited (code 0, no renderer
+     crash), so every later check was lost. Linux CI draws with SwiftShader and
+     has never seen it. The Memorizer draws no WebGL, only 2D canvases, so this
+     flag removes the graphics driver from the run and changes nothing the
+     suite measures. Chromium only: launchOptions drops it for the others. */
+  const browser = await launch({ args: ['--use-angle=swiftshader'] });
   /* routablePage()'s context — no service worker, so page.route() sees
      every request — written out so the page is created inside watch(), which
      verify-engine requires of every browser suite. */
