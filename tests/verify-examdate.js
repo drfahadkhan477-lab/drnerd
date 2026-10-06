@@ -17,7 +17,7 @@
 const path = require('path');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, onScreen, quiet } = require('./_render.js');
+const { booted, onScreen, quiet, settled } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-examdate.js <build.html>'); process.exit(1); }
@@ -74,7 +74,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const d30 = await inDays(30);
   await page.fill('#examDate', d30);
   await page.dispatchEvent('#examDate', 'change');
-  await page.waitForFunction(() => S.examDate !== null, null, { timeout: 10000 });
+  await settled(page, () => S.examDate !== null, { label: 'the chosen date to reach S.examDate' });
   await onScreen(page, 'study', { marker: '#examClear' });
   r = await read();
   ok('the date is stored in the saved blob', r.stored === d30 && r.mem === d30, JSON.stringify({ s: r.stored, m: r.mem, want: d30 }));
@@ -100,7 +100,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('clearing it');
   await page.click('#examClear');
-  await page.waitForFunction(() => S.examDate === null, null, { timeout: 10000 });
+  await settled(page, () => S.examDate === null, { label: 'Clear to empty S.examDate' });
   await onScreen(page, 'study', { marker: '#planCard' });
   r = await read();
   ok('Clear removes the date from the screen and from storage', r.left === '' && r.clear === false && r.val === '' && r.stored == null, JSON.stringify(r));
