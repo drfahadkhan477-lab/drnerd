@@ -2718,8 +2718,15 @@ function refImportText(){
 */
 'use strict';
 
-function todayISO(){ return new Date().toISOString().slice(0,10); }
-function addDays(iso,n){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+/* The LOCAL calendar day, as src/core/fsrs.js counts it (see isoToLocalDate
+   there). Both used to read the UTC day back with toISOString(): east of
+   Greenwich between local midnight and UTC midnight, todayISO() was yesterday
+   and every exam countdown read a day long; addDays() parsed local midnight
+   and so stepped back a day for any zone east of UTC. Found on the owner's
+   run in Karachi (UTC+5) after midnight. */
+function isoLocal(d){ const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+function todayISO(){ return isoLocal(new Date()); }
+function addDays(iso,n){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||'')); const d=m?new Date(+m[1],+m[2]-1,+m[3]):new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return isoLocal(d); }
 
 /* rateReview() and the rate-row preview call FSRS.update(card, rating, today)
    directly — see src/core/fsrs.js. Rating scale is FSRS's own: 1 Again,

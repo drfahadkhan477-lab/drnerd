@@ -2600,12 +2600,20 @@ html[data-theme="dark"]{
 .pace-pill.good{color:var(--green);background:var(--green-bg);border-color:var(--green-b)}
 .pace-pill.ok{color:var(--teal);background:var(--teal4);border-color:var(--teal3)}
 .pace-pill.warn{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-b)}
-.plan-card .plan-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;padding:0}
+.plan-card .plan-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px;padding:0}
 .plan-card .plan-chip{display:flex;align-items:center;justify-content:center;gap:6px;min-height:52px;padding:0 10px;border-radius:14px;
   color:var(--text);font-variant-numeric:tabular-nums}
 .plan-chip b{font-size:var(--t-lead);font-weight:800;letter-spacing:-.02em}
 .plan-chip span{font-size:var(--t-tiny);font-weight:700;color:var(--muted)}
 .mini-ring{width:26px;height:26px;flex:none}
+/* A 1fr column never shrinks below its content, so three chips of ring, number and "min" pushed
+   past the card at 360 px: by 1 px with Linux's fonts, by more with the owner's on Windows
+   (verify-studyvisuals, "nothing spills out of its card"). minmax(0,1fr) keeps the columns inside
+   the card; this keeps the contents inside the columns on a narrow phone. */
+@media (max-width:400px){
+  .plan-card .plan-chip{padding:0 6px;gap:4px;min-width:0}
+  .plan-card .plan-chip .mini-ring{width:22px;height:22px}
+}
 .mini-ring circle{fill:none;stroke-width:3;stroke-linecap:round}
 .mr-track{stroke:var(--border2)}
 .mr-arc{stroke:var(--teal)}
