@@ -3,7 +3,7 @@
 Two commands.
 
 ```bash
-node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
+npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
 node scripts/verify.js --pwa                           # → 6616 + 134 checks
 ```
 
@@ -13,7 +13,7 @@ Open `build/systole.html` in a browser. That single file is the whole app.
 
 ## The source export is not in this repository
 
-Systole is built by patching your own ACCSAP 12 export. Those 638 questions,
+Systole is built around your own ACCSAP 12 export. Those 638 questions,
 408 figures and the ACC's commentary are licensed content: they stay on your
 devices and are never committed. `.gitignore` blocks `source/`, `build/`,
 `content/` and `dist/` for exactly that reason.
@@ -21,8 +21,8 @@ devices and are never committed. `.gitignore` blocks `source/`, `build/`,
 The build finds the export three ways, in order:
 
 ```bash
-node scripts/build.js ~/Downloads/ACCSAP_12_super_v12.html   # explicit
-SYSTOLE_SRC=~/path/to/export.html node scripts/build.js      # environment
+npm run build -- ~/Downloads/ACCSAP_12_super_v12.html      # explicit
+SYSTOLE_SRC=~/path/to/export.html npm run build             # environment
 mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source/
 ```
 
@@ -296,9 +296,10 @@ bank, its figures, and the Braunwald reference seed and figures.
    The old recipe is `npm run build:chain`, and works for as long as `app/` still equals
    its output. **The first edit to `app/` ends that**, which is what retiring it was for:
    the 20-minute button, the readiness forecast, topic runs and voice mode are edits to
-   `app/`. The `*-patch.js` scripts stay in the repository as history, and five of them
-   as libraries the assembler imports (`keys-patch`, `flags-patch`, `refs-patch`,
-   `ref-images-patch`, and `heart-bake.js`). Nothing is added to the chain.
+   `app/`. The `*-patch.js` scripts stay in the repository as history until they are
+   deleted. What the assembler imports has moved out of them: `answer-keys.js`,
+   `content-flags.js`, `ref-seed.js`, `ref-images.js` (and `heart-bake.js`). Nothing is
+   added to the chain.
 
    What the owner's machine should do once, after pulling this: `npm run release-check`
    on the real export. Its `build` step is then the first real build by the assembler as
@@ -385,6 +386,26 @@ node scripts/verify.js --only physio,theme   # just these
 node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
+
+A suite that runs far past its recorded time is stopped and reported as having
+died, with the section it was in, and the run carries on; `--suite-timeout N`
+sets the limit in minutes (`0` for none, `scripts/suitetime.js` has the default).
+Every run ends by naming its slowest sections, so a slow run says where its time
+went instead of leaving it to be guessed.
+
+### Which tests run where
+
+| Where | What | When |
+|---|---|---|
+| GitHub, by itself | every suite that needs no export: the pure ones, the Memorizer in three browsers, and the app's own browser suites on an invented bank | on every pull request and every merge; nothing to do |
+| Laptop, quick: `npm run test:laptop` | the suites tagged `laptop` (see `--list`): the ones no CI job runs, because they need your export | after a change to the app, in a few minutes |
+| Laptop, full: `npm run test:private` | the whole registry on your real build; the only run that writes `tests/test-stats.json` | before a release, or when the record should move |
+| iPad | Settings → Self-test, which checks the figure viewer and layout in the iPad's own Safari; and by hand, voice mode and the Lab's sounds | after installing a new version |
+
+The `laptop` tag is read from `.github/workflows/verify.yml`, so a suite moved
+into CI leaves the quick laptop run the same day. The full run repeats on your
+real bank what GitHub already ran on the invented one, which is why it is the
+occasional run rather than the routine one.
 
 Across 154 suites, 6616 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
@@ -687,7 +708,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        154 suites · 89 need no browser · + pwa
+tests/        154 suites · 90 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

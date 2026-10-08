@@ -70,7 +70,26 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   the provider the test selects, and the test must wait on something only the
   stubbed reply can produce (its text in the panel), so a skipped stub times out.
 
+- **A suite that measured a substitute.** Several suites read the retired
+  patch scripts, or a tokenizer written in the test, instead of the code that
+  ships. Moving them to app/ found an icon button with no name, four alert()s,
+  a palette check reading a fallback literal, and a ranking fixture whose
+  central case failed on the real tokenizer. → Rule: a suite lifts the code
+  under test from the file that ships (app/, src/), between anchors that must
+  each occur once; never from a build step, and never a copy kept in the test.
+
 ## Process
+
+- **A click that "did nothing" because it missed.** Firefox CI intermittently
+  stayed on the lesson after "now memorise it" (phase teach, nothing logged). Reading
+  the app's logic found nothing. A capture-phase click listener showed the click
+  landing on `<main>`: lazily drawn figures and page thumbnails grew as the scroll
+  brought them near, and the button moved after Playwright had aimed (#185); fixing
+  the figures alone still failed on a thumbnail. → Rule: when a click changes
+  nothing, record what it actually hit and where the target was at that instant
+  before reasoning about handlers. Reproduce locally (`npx playwright install
+  firefox`, or `npx playwright install --with-deps webkit` as CI does) and loop
+  until it fails, rather than guessing from one CI log.
 
 - **Handing the owner a retired command.** I gave `node scripts/build.js` (the
   retired patch chain) for a laptop build; it ran for four minutes and built an app

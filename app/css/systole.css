@@ -347,6 +347,13 @@ html[data-focus="1"] #focusExit svg{width:19px;height:19px;
   transition:transform .22s var(--spring),background .18s}
 @media(hover:hover){.hp-due:hover{background:color-mix(in srgb, var(--amber) 22%, transparent)}}
 .hp-due:active{transform:scale(.94)}
+/* The ticks are --border3 on --border2: the strongest border weight on the
+   track's own fill, so they follow every palette without knowing which is on.
+   HOW FAINT, MEASURED: 1.36:1 on Slate, 1.34 on Parchment, 1.23 on Nocturne,
+   1.34 on Cath Lab, 1.42 on Monitor and 2.06 on Contrast. A hairline on
+   purpose — decoration beside an aria-valuenow, a legend and a percentage, so
+   not held to a contrast minimum, only to differing from the track at all.
+   tests/verify-palette-pure.js holds these figures to the palettes. */
 .hp-track{position:relative;height:22px;border-radius:12px;
   background-color:var(--border2);
   background-image:repeating-linear-gradient(90deg,
@@ -843,8 +850,29 @@ html[data-theme="dark"][data-palette="monitor"]{
    accessibility floor. Semantic green/red/amber stay exactly as themed
    everywhere else (verify-theme.js already asserts they never move), so
    "correct" and "wrong" still mean what they mean elsewhere. The accent is
-   held inside the luminance envelope Monitor already clears — see this
-   patch's header for why that is a measurement and not a preference. */
+   held inside the luminance envelope Monitor already clears, and that is a
+   measurement rather than a preference:
+
+   THE ACCENT IS DELIBERATELY NOT THE BRIGHTEST ONE AVAILABLE. What a
+   high-contrast theme owes the reader is text against ground — #FAFAFA on
+   #060606 is about 19:1 — and the accent contributes nothing to that. What
+   the accent does do is sit under text in composites verify-pearl,
+   verify-home and verify-homeprog sweep for AA, and every one of those passes
+   with Monitor as the brightest dark accent in the set (#2DD4BF, relative
+   luminance .514; its accent-2 #5EEAD4, .660). So #38BDF8 (.440) and #7DD3FC
+   (.580) sit strictly inside that envelope, while still clearing 9.46:1
+   against this palette's own ground. A first draft used #00E5FF (.633)
+   because it looked like the brightest thing available.
+
+   THE BORDER LADDER IS MEASURED TOO. Against --card they measure
+   2.11 / 3.26 / 4.36:1 (--border2 / --border / --border3), so --border, which
+   bounds interactive components, clears the 3:1 WCAG asks of a non-text
+   boundary, and --border3, which the progress track's ticks draw in, clears
+   it with room to spare. The first draft had --border at 2.72:1.
+
+   tests/verify-palette-pure.js holds every figure in this comment to the hexes
+   below. (Moved here from scripts/highcontrast-patch.js when the patch chain
+   was retired.) */
 html[data-theme="dark"][data-palette="contrast"]{
   --bg:#060606;--card:#121212;--white:#121212;
   --border:#666666;--border2:#4A4A4A;--border3:#7A7A7A;

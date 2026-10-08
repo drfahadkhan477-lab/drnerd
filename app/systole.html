@@ -3486,7 +3486,7 @@ function peekQuestion(id){
         <div><div class="peek-ch">${e(q.ch)} · item ${q.n}</div>
              <div class="peek-sub">related item from your question bank</div></div>
         <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"
-          onclick="closePeek()">${icon('x','icon-sm')}</button>
+          aria-label="Close" onclick="closePeek()">${icon('x','icon-sm')}</button>
       </div>
       <div class="peek-body">
         <p>${e(q.s)}</p>
@@ -4928,7 +4928,7 @@ function aiSettings(){
   const wrap=document.getElementById('ai');
   wrap.innerHTML=`<div class="ai-head"><div class="ai-avatar">${icon("settings")}</div>
       <div style="flex:1"><div class="ai-title">Tutor settings</div></div>
-      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)" onclick="buildAI()">${icon("x")}</button></div>`+
+      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)" aria-label="Close" onclick="buildAI()">${icon("x")}</button></div>`+
     setupHtml()+
     `<div class="setup" style="padding-top:0">
        <button class="btn" style="width:100%;background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
@@ -5738,7 +5738,7 @@ function planNow(minutes){
 }
 function startPlan(minutes){
   const qs=planNow(minutes).items.map(it=>QBYID[it.id]).filter(q=>q&&!q.bad);
-  if(!qs.length){alert('Nothing to plan: there are no questions to draw from.');return;}
+  if(!qs.length){toast('Nothing to plan: there are no questions to draw from.');return;}
   startQuiz(null,'due',qs);
 }
 /* ── Topic runs — src/core/topicrun.js groups questions that are about the same thing (shared distinctive
@@ -5762,7 +5762,7 @@ function runLabel(r){
 function startRun(i){
   const r=_runsShown[i]; if(!r) return;
   const qs=r.ids.map(id=>QBYID[id]).filter(q=>q&&!q.bad);
-  if(qs.length<2){alert('That run is no longer available.');return;}
+  if(qs.length<2){toast('That run is no longer available.');return;}
   startQuiz(null,'due',qs);
 }
 /* ── Voice session — src/core/voicemode.js decides what to say and how to read what was said; the browser's
@@ -5817,10 +5817,10 @@ function voiceDock(state,text){
 }
 function voiceLive(v){ return _voice===v && S.screen==='quiz' && S.questions===v.deck; }
 function startVoice(){
-  if(!voiceAvailable()){alert('This browser cannot speak and listen. Try Safari or Chrome.');return;}
+  if(!voiceAvailable()){toast('This browser cannot speak and listen. Try Safari or Chrome.');return;}
   const ids=planNow(10).items.map(it=>it.id);
   const qs=ids.map(id=>QBYID[id]).filter(q=>q&&!q.bad&&q.o&&q.o.length);
-  if(!qs.length){alert('Nothing to ask: there are no questions to draw from.');return;}
+  if(!qs.length){toast('Nothing to ask: there are no questions to draw from.');return;}
   startQuiz(null,'due',qs);
   if(S.screen!=='quiz') return;
   const v=_voice={deck:S.questions,state:VoiceMode.init(S.questions.length),pending:[]};

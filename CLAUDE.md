@@ -4,7 +4,7 @@ Read this before changing anything. It is not a description of the project —
 `README.md` and `docs/BUILD.md` do that. It is the set of rules that are easy
 to break without noticing, each one here because it was broken at least once.
 
-## The licensed corpus never enters git (except via submodule)
+## The licensed corpus never enters git
 
 The ACCSAP 12 export is licensed content. `source/`, `build/`, `content/` and
 `dist/` are gitignored in the main repository and stay that way. `tests/last-run.log` is gitignored
@@ -15,16 +15,15 @@ or question bank HTML directly to `drnerd`. Building the app from the owner's ow
 export is the sanctioned workflow. Reading that export as a document is not sanctioned,
 and neither is quoting question text into a transcript.
 
-**Submodule exception:** The `content/refs-repo` submodule (at
-`drfahadkhan477-lab/systole-refs`) may contain derived reference material
-(markdown exports, figures) from the licensed corpus **if and only if**:
-1. The systole-refs repository is **private** (access-controlled)
-2. It is a separate git repository from drnerd (a gitlink, not committed files)
-3. The main drnerd repository remains clean per leak-guard checks
+**Reference notes:** `content/refs-repo` holds derived reference material
+(markdown exports, figures) from the licensed corpus. It is no longer a
+submodule: its private repository (`systole-refs`) was deleted by the owner, so
+the folder exists only on the owner's machine, under the gitignored `content/`.
+It is still licensed material — the guards that refuse to read it stay — and
+never re-add it to git in any form.
 
 `scripts/leak-guard.js` enforces this on drnerd's staged files. Run
 `npm run hooks` once per clone to get it on pre-commit (and the pure suites on pre-push); CI runs it regardless.
-The submodule's own repository content is the owner's responsibility to keep secure.
 
 ## The failure mode this project keeps producing
 
@@ -90,8 +89,10 @@ now. If you write a sentence containing a number, guard it or do not write it.
 `scripts/CHAIN-RETIRED` exists, so `npm run build` and `npm run release-check`
 build the app with `scripts/assemble-app.js` from `app/`, `src/` and `assets/`.
 **Edit those directly; add no new `*-patch.js` step.** The chain below is history,
-kept in the repository, and five of its scripts are libraries the assembler
-imports. `npm run build:chain` runs the old recipe and is correct only while
+kept in the repository until it is deleted (tasks/todo.md). What the assembler
+needs from it has moved out: `scripts/answer-keys.js`, `content-flags.js`,
+`ref-seed.js` and `ref-images.js` (and `heart-bake.js`, which was never a step);
+the old `*-patch.js` names are thin wrappers over those. `npm run build:chain` runs the old recipe and is correct only while
 `app/` still equals its output; the first edit to `app/` ends that. Do not "fix"
 a difference between the two by editing a patch step.
 

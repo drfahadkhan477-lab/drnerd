@@ -1,30 +1,31 @@
 #!/usr/bin/env node
 /**
- * Word order in the ranker — scripts/phrase-patch.js, measured on the search()
- * it patches.
+ * Word order in the ranker, measured on the search() the app ships.
  *
  *   node tests/verify-phrase-pure.js
  *
- * WHAT IT RUNS. Not a copy of the ranker: prefixrank-patch.js's own text for
- * buildIndex(), stubTerms() and search() is read out of that file (its
- * patch() calls are collected rather than applied), put on a page with a small
- * tok() and a document list, and phrase-patch.js is run over that page exactly
- * as the chain runs it. Both pages are then evaluated and asked the same
- * questions, so every claim below is BEFORE against AFTER on the same code.
+ * WHAT IT RUNS. Not a copy of the ranker: app/systole.html's own tokenizer,
+ * index and search() are cut out of the page between two exact anchors and run
+ * in a sandbox over a small document list. BEFORE is the same code with the
+ * phrase credit's weight (PHRASE_W) set to 0, so every claim below is the
+ * ranker with word order counted against the same ranker without it.
+ *
+ * Until the patch chain was retired this read prefixrank-patch.js's text and
+ * ran phrase-patch.js over it; since then the ranker's source is app/, so a
+ * suite reading the patch scripts would have gone on passing after the app's
+ * ranker changed.
  *
  * THE CASE IT WAS WRITTEN FOR, from the owner's build: a phrase from a note
  * found a shorter note on the same topic first, one holding the phrase's words
  * scattered and never the phrase (verbatim in the winner: 0 of 42). The first
- * check proves the fixture reproduces that under the unpatched ranker —
- * without it, "the note now comes first" could be true of a fixture where it
- * always came first.
+ * check proves the fixture reproduces that with the credit off — without it,
+ * "the note now comes first" could be true of a fixture where it always came
+ * first.
  */
 'use strict';
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const vm = require('vm');
-const { execFileSync } = require('child_process');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -35,40 +36,21 @@ const head = t => console.log('\n── ' + t + ' ──');
 
 const ROOT = path.join(__dirname, '..');
 
-/* prefixrank's patch() calls, collected: its own find/replace text. */
-function prefixrankPairs() {
-  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'prefixrank-patch.js'), 'utf8')
-    .replace(/function patch\(label, find, replace\) \{[\s\S]*?\n\}/, 'function patch(label, find, replace) { __pairs.push({ label, find, replace }); }');
-  const __pairs = [];
-  const fakeFs = { readFileSync: () => '', writeFileSync: () => {} };
-  vm.runInNewContext(src, {
-    __pairs, console: { log() {}, error() {} },
-    process: { argv: ['node', 'x', 'in', 'out'], exit() {} },
-    require: m => (m === 'fs' ? fakeFs : require(m)),
-  });
-  return __pairs;
+/* The ranker as the page ships it: from the stopword list through the end of
+   search(). Both anchors must occur exactly once, or the cut is not the one
+   this suite means. */
+const APP = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
+const FROM = 'const STOP=new Set((', TO = '  return top.filter(r=>r.score>=cut);\n}';
+for (const a of [FROM, TO]) {
+  const n = APP.split(a).length - 1;
+  if (n !== 1) throw new Error(`app/systole.html: expected the anchor once, found ${n}: ${a.slice(0, 50)}`);
 }
-const pairs = prefixrankPairs();
-const byLabel = l => { const p = pairs.find(x => x.label.startsWith(l)); if (!p) throw new Error('prefixrank has no patch ' + l); return p.replace; };
-
-const STOP = ['the', 'and', 'of', 'in', 'a', 'an', 'to', 'for', 'with', 'on', 'by', 'is', 'are', 'or', 'as', 'at', 'be', 'it', 'its', 'this', 'that'];
-const page = `<script>
-let IDX=null; let VOCAB=null;
-const STOPW=new Set(${JSON.stringify(STOP)});
-function tok(s){ return String(s).toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>1&&!STOPW.has(w)); }
-${byLabel('prefixrank: a stub resolves')}
-${byLabel('prefixrank: the index keeps postings')}
-  for(const d of __DOCS) add(d.key, d.text, d.meta);
-  const avg=docs.reduce((a,d)=>a+d.len,0)/Math.max(1,docs.length);
-  IDX={df,docs,avg,N:docs.length,post};
-}
-${byLabel('prefixrank: a prefix is scored as one term')}
-</script>`;
-
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'phrase-'));
-fs.writeFileSync(path.join(tmp, 'in.html'), page);
-execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'phrase-patch.js'), path.join(tmp, 'in.html'), path.join(tmp, 'out.html')], { stdio: 'pipe' });
-const patched = fs.readFileSync(path.join(tmp, 'out.html'), 'utf8');
+const RANKER = APP.slice(APP.indexOf(FROM), APP.indexOf(TO) + TO.length);
+const W_RE = /const PHRASE_W=(\d+(?:\.\d+)?);/g;
+const W_HITS = [...RANKER.matchAll(W_RE)];
+if (W_HITS.length !== 1) throw new Error(`the ranker should set PHRASE_W once, found ${W_HITS.length}`);
+const PHRASE_W = Number(W_HITS[0][1]);
+const UNCREDITED = RANKER.replace(W_RE, 'const PHRASE_W=0;');
 
 const filler = (seed, n) => Array.from({ length: n }, (_, i) => `f${seed}w${i}`).join(' ');
 const PHRASE = 'warfarin bridging increases major bleeding without reducing thromboembolism after surgery';
@@ -76,13 +58,16 @@ const DOCS = [
   /* the note the phrase comes from: longer, holds the phrase in order */
   { key: 'r:target', text: `Perioperative anticoagulation ${filler('t', 50)} ${PHRASE} ${filler('u', 40)}`, meta: { kind: 'r', id: 'target' } },
   /* a shorter note on the same topic: every word, never in that order */
-  /* The rival is ~70% of the target's length. Scanned before settling on it,
-     so the limit is written down rather than found later: at ~90% the
-     unpatched ranker already picks the target; at ~70% it picks the rival
-     and the phrase credit turns it round; at ~50% the rival still wins even
-     with it — the credit is weighed like coverage, not made to outweigh any
-     length. (The owner's misses: median 172 words against 158.) */
-  { key: 'r:rival', text: `surgery thromboembolism reducing without bleeding major increases bridging warfarin ${filler('r', 60)}`, meta: { kind: 'r', id: 'rival' } },
+  /* The rival is ~89% of the target's length (80 filler words). Scanned on
+     the app's own ranker, so the limit is written down rather than found
+     later: with the credit off the rival wins up to ~98% of the target's
+     length; with it on, the target wins from ~78% upward; below that the
+     rival wins either way — the credit is weighed like coverage, not made to
+     outweigh any length. (The owner's misses: median 158 words against 172,
+     ~92%, inside that window.) An earlier version of this suite ran a
+     simplified tokenizer and put the window at ~70%; on the real one a rival
+     at 70% beats the target even with the credit. */
+  { key: 'r:rival', text: `surgery thromboembolism reducing without bleeding major increases bridging warfarin ${filler('r', 80)}`, meta: { kind: 'r', id: 'rival' } },
   /* half the phrase in order, the rest scattered */
   { key: 'r:half', text: `warfarin bridging increases major ${filler('h', 110)} surgery thromboembolism reducing without bleeding`, meta: { kind: 'r', id: 'half' } },
   { key: 'q:1', text: `A question about warfarin and bleeding ${filler('q1', 30)}`, meta: { kind: 'q', id: 'q1' } },
@@ -92,25 +77,23 @@ const DOCS = [
   { key: 'r:common', text: `cmzz note on heart failure ${filler('cm', 60)}`, meta: { kind: 'r', id: 'common' } },
 ];
 
-function load(html) {
-  /* The page is this file's own, opened and closed exactly as written above,
-     so the script is cut out between those two markers — no pattern that
-     reads like filtering HTML it did not write. */
-  const open = '<script>', close = '</script>';
-  const a = html.indexOf(open), b = html.lastIndexOf(close);
-  if (a < 0 || b < a) throw new Error('the page lost its script markers');
-  const js = html.slice(a + open.length, b);
-  const ctx = { __DOCS: DOCS, console };
-  vm.runInNewContext(js + '\n;this.search=search;this.buildIndex=buildIndex;', ctx);
+/* The page's buildIndex() reads ALL_Q and REF, so the documents go in as
+   those: a question's text as its stem, a note's as its body. */
+function load(code) {
+  const ALL_Q = DOCS.filter(d => d.meta.kind === 'q')
+    .map((d, i) => ({ id: d.meta.id, s: d.text, o: [], ci: 0, ex: '', ch: '', n: i + 1 }));
+  const REF = DOCS.filter(d => d.meta.kind === 'r').map(d => ({ id: d.meta.id, title: '', tags: '', body: d.text }));
+  const ctx = { ALL_Q, REF, console };
+  vm.runInNewContext(code + '\n;this.search=search;', ctx);
   return ctx;
 }
-const before = load(page), after = load(patched);
+const before = load(UNCREDITED), after = load(RANKER);
 const rank = (ctx, q) => ctx.search(q, { limit: 40 });
 const ids = (ctx, q) => rank(ctx, q).map(h => h.meta.id);
 const score = (ctx, q, id) => { const h = rank(ctx, q).find(x => x.meta.id === id); return h ? h.score : null; };
 
 head('the case it was written for');
-ok('under the unpatched ranker, the shorter note holding the words scattered comes first — the fixture reproduces the miss',
+ok('with the phrase credit off, the shorter note holding the words scattered comes first — the fixture reproduces the miss',
    ids(before, PHRASE)[0] === 'rival', ids(before, PHRASE).slice(0, 3).join(', '));
 ok('with the phrase counted, the note that holds it comes first', ids(after, PHRASE)[0] === 'target', ids(after, PHRASE).slice(0, 3).join(', '));
 ok('and a note holding half of it in order ranks above the one holding none of it',
@@ -132,7 +115,7 @@ ok('a stub beside a word forms no pair, and changes nothing', stub(before) === s
    target holds. The stub must neither form a pair nor dilute that one. */
 const SQ = 'warfa bridging increases';
 const gain = score(after, SQ, 'target') - score(before, SQ, 'target');
-ok('and a stub does not dilute the credit of the pair beside it — the whole credit, not half', Math.abs(gain - 6) < 1e-9, `+${gain.toFixed(3)}`);
+ok('and a stub does not dilute the credit of the pair beside it — the whole credit, not half', Math.abs(gain - PHRASE_W) < 1e-9, `+${gain.toFixed(3)} of ${PHRASE_W}`);
 
 /* A query opening on the common pair. Unweighted, holding it alone would earn
    1/nb of the credit, the same as holding any rare pair; weighed by rarity it
@@ -145,11 +128,13 @@ const nb = 3;   // cmzz-heart, heart-failure, failure-warfarin
    and null minus null is 0 — which reads as "earned almost nothing". */
 const cb = score(before, HQ, 'common'), ca = score(after, HQ, 'common');
 const commonGain = ca - cb;
-ok('a pair nearly every note holds earns a small part of an equal share, not the share', cb !== null && ca !== null && commonGain > 0 && commonGain < 0.5 * 6 / nb,
-   cb === null || ca === null ? 'the note was not returned — nothing measured' : `+${commonGain.toFixed(3)} (an equal share would be +${(6 / nb).toFixed(3)})`);
+ok('a pair nearly every note holds earns a small part of an equal share, not the share', cb !== null && ca !== null && commonGain > 0 && commonGain < 0.5 * PHRASE_W / nb,
+   cb === null || ca === null ? 'the note was not returned — nothing measured' : `+${commonGain.toFixed(3)} (an equal share would be +${(PHRASE_W / nb).toFixed(3)})`);
 
-head('the patch is applied as the chain applies it');
-ok('five edits, each matching once', (patched.match(/PHRASE_W/g) || []).length >= 2 && patched.includes('bg[ts[i]') && patched.includes('post,bgdf}') && patched !== page);
+head('the ranker read is the one with the credit in it');
+ok('the cut holds the pair index and the credit, and the weight is not zero',
+   PHRASE_W > 0 && /bg\[ts\[i\]/.test(RANKER) && RANKER.includes('post,bgdf}') && /PHRASE_W/.test(RANKER.slice(RANKER.indexOf('function search('))),
+   `PHRASE_W=${PHRASE_W}`);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
