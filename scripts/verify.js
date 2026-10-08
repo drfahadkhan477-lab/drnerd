@@ -538,7 +538,7 @@ const shortTarget = TARGET_IS_URL ? TARGET : path.relative(process.cwd(), TARGET
    review). */
 function requireBuild() {
   if (TARGET_IS_URL || fs.existsSync(TARGET)) return;
-  console.error(`\nNo build at ${TARGET}\n\n  Build one first:  node scripts/build.js\n  or run only the suites that need none:  --tag pure\n`);
+  console.error(`\nNo build at ${TARGET}\n\n  Build one first:  npm run build -- path/to/your-export.html\n  or run only the suites that need none:  --tag pure\n`);
   process.exit(1);
 }
 /* --pwa builds dist/ from a standalone file and serves it. Handed a URL it has

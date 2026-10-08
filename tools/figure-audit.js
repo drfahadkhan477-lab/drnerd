@@ -257,6 +257,6 @@ for (const ch of [...byCh.keys()].sort()) {
 
 console.log(`Each one is a judgement call, not a defect — read it and decide.`);
 console.log(`A question that ACCSAP itself never shipped a figure for wants the same`);
-console.log(`in-app notice COR_89 carries (see the FLAGS list in scripts/flags-patch.js);`);
+console.log(`in-app notice COR_89 carries (see the FLAGS list in scripts/content-flags.js);`);
 console.log(`one whose figure was lost on the way in is a build problem worth chasing.`);
 if (!SHOW) console.log(`\nRe-run with --show to see the sentence around each match.`);

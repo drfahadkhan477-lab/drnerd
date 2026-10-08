@@ -958,8 +958,8 @@ step('copy only the content the app asks for', () => {
    was covering by accident: the cross-check below proves the two builds AGREE,
    and two builds that both lost the corrections agree perfectly. This asserts
    the corrections are actually present in what ships. */
-const { CORRECTIONS } = require('./keys-patch.js');
-const { applyContentFlags } = require('./flags-patch.js');
+const { CORRECTIONS } = require('./answer-keys.js');
+const { applyContentFlags } = require('./content-flags.js');
 step('the bank corrections are present in what ships', () => {
   const p = path.join(DIST, 'content', 'questions.json');
   const bank = JSON.parse(fs.readFileSync(p, 'utf8'));

@@ -387,7 +387,7 @@ async function readPdf(browser, file) {
   if (staged.length && unfilled.length) console.log(`  bank fields the import does not fill: ${unfilled.join(', ')}`);
   const underSource = /^source([\\/]|$)/.test(path.relative(ROOT, OUT));
   console.log(`\nstaged in ${path.relative(process.cwd(), OUT)}${underSource ? ' (source/ is gitignored)' : ''}.  To put them in a build:`);
-  console.log('  node scripts/build.js  then  node tools/older-acc-import.js --merge  then  node scripts/extract-content.js build/systole.html');
+  console.log('  npm run build  then  node tools/older-acc-import.js --merge  then  node scripts/extract-content.js build/systole.html');
 })().catch(e => { console.error(String(e && e.message || e).split('\n')[0]); process.exit(1); });
 
 /* ── --shapes ─────────────────────────────────────────────────────────── */
@@ -434,13 +434,13 @@ function merge() {
   /* Read, not checked-then-read: a missing file is reported from the read
      itself, so nothing can change between a check and the use it guards. */
   const readOr = (f, why) => { try { return fs.readFileSync(f, 'utf8'); } catch (e) { if (e.code === 'ENOENT') { console.error(`${f}: ${why}`); process.exit(1); } throw e; } };
-  let html = readOr(target, 'no build there — run node scripts/build.js first');
+  let html = readOr(target, 'no build there — run npm run build first');
   const staged = JSON.parse(readOr(qFile, 'nothing staged — run the import first'));
   const figData = {};
   for (const q of staged) figData[q.id] = (q.figs || []).map(n => 'data:image/jpeg;base64,' + fs.readFileSync(path.join(OUT, 'figures', n)).toString('base64'));
   const QRE = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/, IRE = /\nconst IMGS=(\{[\s\S]*?\});\n/;
   const qm = QRE.exec(html), im = IRE.exec(html);
-  if (!qm || !im) { console.error('could not find "const ALL_Q=" and "const IMGS=" in the build — is it a single-file build from scripts/build.js?'); process.exit(1); }
+  if (!qm || !im) { console.error('could not find "const ALL_Q=" and "const IMGS=" in the build — is it a single-file build from npm run build (scripts/assemble-app.js)?'); process.exit(1); }
   const r = A.mergeBank(JSON.parse(qm[1]), JSON.parse(im[1]), staged, figData);
   html = html.replace(QRE, () => '\nconst ALL_Q=' + JSON.stringify(r.bank) + ';\n');
   html = html.replace(IRE, () => '\nconst IMGS=' + JSON.stringify(r.imgs) + ';\n');

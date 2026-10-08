@@ -43,8 +43,8 @@ const ROOT = path.join(__dirname, '..');
 const S = p => path.join(ROOT, 'scripts', p);
 const A = require(S('assemble-app.js'));
 const Slots = require(S('app-slots.js'));
-const { CORRECTIONS } = require(S('keys-patch.js'));
-const { FLAGS, CME_BOILERPLATE } = require(S('flags-patch.js'));
+const { CORRECTIONS } = require(S('answer-keys.js'));
+const { FLAGS, CME_BOILERPLATE } = require(S('content-flags.js'));
 const { bake } = require(S('heart-bake.js'));
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'assemble-'));
@@ -171,7 +171,7 @@ head('a flagged question that now ships a figure stops the build');
      figure. If the export starts shipping one, the flag is stale and the
      step must refuse. The single-file bank says how many through img, not
      figs, so that is the case that matters. */
-  const { applyContentFlags } = require(S('flags-patch.js'));
+  const { applyContentFlags } = require(S('content-flags.js'));
   const f = FLAGS.find(x => x.wantFigs === 0);
   const bank = () => JSON.parse(JSON.stringify(BANK)).map(x => { delete x.figs; return x; });
   const tries = mutate => { const b = bank(); mutate(b.find(x => x.id === f.id)); try { applyContentFlags(b); return ''; } catch (e) { return e.message; } };
@@ -185,8 +185,8 @@ head('a note in a subfolder is seeded with its figures');
 {
   /* refs-patch walks subfolders; ref-images-patch read only the top level,
      so a figure cited from a subfolder's note was never embedded. */
-  const { buildRefImages } = require(S('ref-images-patch.js'));
-  const { buildRefSeed } = require(S('refs-patch.js'));
+  const { buildRefImages } = require(S('ref-images.js'));
+  const { buildRefSeed } = require(S('ref-seed.js'));
   const r2 = path.join(dir, 'refs2'), i2 = path.join(dir, 'refs2-images');
   fs.mkdirSync(path.join(r2, 'unit'), { recursive: true }); fs.mkdirSync(i2);
   fs.writeFileSync(path.join(r2, 'unit', 'deep.md'), '---\ntitle: Deep chapter\n---\n\n## Section\n\n' +

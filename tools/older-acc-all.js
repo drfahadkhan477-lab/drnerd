@@ -76,7 +76,7 @@ if (before !== null && after !== null && after < before) {
   finish(1);
 }
 
-s = step('build', ['scripts/build.js'], { keep: false });
+s = step('build', ['scripts/assemble-app.js', '--out', 'build/systole.html'], { keep: false });
 if (!s.ok) { say(s.out.split('\n').filter(Boolean).slice(-3).join('\n')); say('build failed.'); finish(1); }
 say('build ok');
 

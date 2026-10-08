@@ -30,7 +30,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { FLAGS, applyContentFlags, ALL_Q_RE } = require('../scripts/flags-patch.js');
+const { FLAGS, applyContentFlags, ALL_Q_RE } = require('../scripts/content-flags.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-content.js <build.html>'); process.exit(1); }
