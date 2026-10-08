@@ -134,7 +134,7 @@ const MIN = 60000;
     const yml = require('fs').readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
     const list = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--list'], { cwd: ROOT, encoding: 'utf8' }).stdout || '';
     const rows = [...list.matchAll(/^  ([a-z0-9-]+)\s+\[([a-z,]+)\]/gm)].map(m => ({ n: m[1], laptop: m[2].split(',').includes('laptop') }));
-    const named = n => new RegExp(`tests/verify-${n.replace(/-/g, '\\-')}\\.js`).test(yml);
+    const named = n => yml.includes(`tests/verify-${n}.js`);
     const wrong = rows.filter(r => r.laptop === named(r.n)).map(r => r.n);
     ok('--list tags `laptop` exactly the suites the workflow never names', rows.length > 100 && wrong.length === 0,
        `${rows.length} listed; wrong: ${wrong.join(', ') || 'none'}`);
