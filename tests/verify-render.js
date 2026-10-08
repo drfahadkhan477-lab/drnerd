@@ -178,9 +178,12 @@ head('no wait passes its options where the argument goes');
      afterBoot.state && afterBoot.firstRender, JSON.stringify(afterBoot));
 
   /* Reading with no wait at all. If this sees the quiz counter, the fixture is
-     not reproducing the deferred swap and nothing below means anything. */
-  await page.evaluate(() => go('quiz'));
-  const immediate = await page.evaluate(() => ({
+     not reproducing the deferred swap and nothing below means anything.
+     Read in the SAME evaluate as go(): a view transition's update callback
+     never runs inside the call that started it, but it can run between two
+     evaluates. Chromium 156 (playwright 1.64) renders a frame in that gap often
+     enough that a separate read saw the swap already landed in 5 runs of 10. */
+  const immediate = await page.evaluate(() => (go('quiz'), {
     screen: S.screen,
     counter: !!document.querySelector('.q-counter'),
     heroStillThere: !!document.querySelector('.hero-h1'),
