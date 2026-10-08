@@ -7,13 +7,16 @@
  *   --only <a,b>   run just these suites (names as in tests/verify-<name>.js)
  *   --skip <a,b>   run everything except these
  *   --bail         stop at the first failing suite
+ *   --suite-timeout N  stop any one suite after N minutes (0 = never);
+ *                  default 3x its recorded time, at least 20 minutes
  *   --pwa          also build, serve and test the Stage 1 split build
  *   --jobs N       run N suites at once (default 1; `auto` = cores-1, capped
  *                  at 4). The suites that measure wall-clock time or WebGL
  *                  contexts always run alone — see SERIAL below.
  *                  SYSTOLE_JOBS in the environment sets this machine's default.
  *   --engine <e>   chromium (default), webkit or firefox
- *   --tag <a,b>    run only suites with these tags: pure, browser, build, serial
+ *   --tag <a,b>    run only suites with these tags: pure, browser, build, serial,
+ *                  laptop (the suites no CI job runs: the quick run with your export)
  *                  (read from each suite's code — tests/_targets.js tagsOf)
  *   --report-json <file>  also write the results as JSON: suite, tags, status,
  *                  counts and time. No output text, so nothing licensed.
@@ -319,6 +322,7 @@ const SUITES = [
      changed file is known not to reach it, and anything doubtful runs both. */
   ['cichanges-pure', 'a pull request skips a browser job only when none of its files can reach it, and a failed decision runs both'],
   ['record-pure',    'the counts record in two halves: each written only from a run where every one of its suites ran and passed, the other half kept'],
+  ['suitetime-pure', 'a suite that runs far past its recorded time is stopped and named with the section it was in, and every section is timed'],
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
@@ -454,8 +458,11 @@ const SUITES = [
    waiting: topicrunscreen, voicescreen, examdate, studyvisuals, icons-pure,
    cichanges-pure and record-pure. That run's --pwa step did not start
    (build-pwa found content/ extracted from a different build), so the
-   split-build figure (134) is carried over again and was not re-measured. */
-const PENDING_RECORD = [];
+   split-build figure (134) is carried over again and was not re-measured.
+
+   Suites registered after that run are the pending ones now, and the record
+   does not hold them yet: suitetime-pure. */
+const PENDING_RECORD = ['suitetime-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -505,7 +512,14 @@ const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 
 const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
 const { mergeRecord } = require(path.join(ROOT, 'scripts', 'record.js'));
-const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : []);
+const { limitFor, sectionClock, slowest, watch, fmtMin } = require(path.join(ROOT, 'scripts', 'suitetime.js'));
+/* `laptop`: a suite no CI job runs, so only a machine with the export ever
+   does. Everything else GitHub runs on every pull request, on the synthetic
+   bank or with no build at all, which makes `--tag laptop` the short routine
+   run and the full registry the occasional one that writes the record. */
+const CI_SUITES = require(path.join(ROOT, 'scripts', 'test-public.js'))
+  .ciSuites(fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8'));
+const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : [], CI_SUITES.has(n) ? [] : ['laptop']);
 if (flag('--list')) {
   console.log('\nSuites, their tags, and what each defends:\n');
   for (const [name, claim] of SUITES) console.log(`  ${name.padEnd(14)} ${('[' + tagsFor(name).join(',') + ']').padEnd(18)} ${claim}`);
@@ -514,7 +528,7 @@ if (flag('--list')) {
   process.exit(0);
 }
 
-const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json'];
+const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
 /* A PATH OR A URL. Every suite already takes either — `file://` is just how a
    path reaches them — and the split build can only be driven over HTTP,
@@ -550,7 +564,12 @@ if (TARGET_IS_URL && flag('--pwa')) {
 }
 
 const only = list(opt('--only')), skip = list(opt('--skip'));
-const TAGS = ['pure', 'browser', 'build', 'serial'];
+/* --suite-timeout N: minutes any one suite may run before it is stopped; 0 for
+   no limit. Without it each suite gets three times its recorded time, never
+   under 20 minutes (scripts/suitetime.js). */
+const SUITE_TIMEOUT = opt('--suite-timeout');
+try { limitFor(undefined, SUITE_TIMEOUT); } catch (e) { console.error(e.message); process.exit(2); }
+const TAGS = ['pure', 'browser', 'build', 'serial', 'laptop'];
 const wantTags = list(opt('--tag'));
 for (const t of wantTags) if (!TAGS.includes(t)) {
   console.error(`\n  --tag ${JSON.stringify(t)} is not a tag. Use one of: ${TAGS.join(', ')}.\n`);
@@ -777,16 +796,32 @@ function runSuite(name, claim) {
       env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE },
     });
     let out = '';
-    ch.stdout.on('data', d => { out += d; });
-    ch.stderr.on('data', d => { out += d; });
+    /* Where the time went (scripts/suitetime.js): each "── section ──" heading
+       timestamped as it arrives, and a ceiling past which the suite is stopped
+       and reported as dead in the section it was in, instead of holding the
+       whole run. */
+    const clock = sectionClock(t);
+    const limit = limitFor(PREV_SECS[name], SUITE_TIMEOUT);
+    let stopped = false;
+    const cancel = watch(ch, limit, () => {
+      stopped = true;
+      const where = clock.current();
+      out += `\nError: stopped by verify.js after ${fmtMin(Date.now() - t)} (its limit: ${fmtMin(limit)})`
+        + (where ? ` in section "${where}"` : ' before its first section') + '\n';
+    });
+    const take = d => { const s = String(d); out += s; clock.feed(s, Date.now()); };
+    ch.stdout.on('data', take);
+    ch.stderr.on('data', take);
     ch.on('error', e => { out += '\n' + (e && e.message || e); });
     ch.on('close', status => {
+      cancel();
       const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
-      const passed = m ? +m[1] : 0, failed = m ? +m[2] : null;
+      const passed = m ? +m[1] : 0, failed = stopped ? null : (m ? +m[2] : null);
       resolve({
         name, claim, passed, failed, checks: passed + (failed || 0),
         secs: ((Date.now() - t) / 1000).toFixed(0), ms: Date.now() - t,
-        ok: status === 0 && failed === 0, out,
+        ok: !stopped && status === 0 && failed === 0, out,
+        sections: clock.end(Date.now()),
       });
     });
   });
@@ -1012,6 +1047,16 @@ const blockers = results.filter(r => !r.ok && r.name !== 'stats');
 const total = results.reduce((n, r) => n + r.checks, 0);
 const bad = results.filter(r => !r.ok);
 console.log(`\n  ${total} checks across ${results.length} suites in ${((Date.now() - t0) / 60000).toFixed(1)} min`);
+/* Where the time went: the longest sections of the run, so the next speed-up
+   is aimed at a measured step. Section names are the suites' own headings,
+   never suite output. */
+{
+  const top = slowest(results, 8).filter(x => x.ms >= 60000);
+  if (top.length) {
+    console.log('  slowest sections:');
+    for (const x of top) console.log(`    ${fmtMin(x.ms).padStart(8)}  ${x.suite} › ${x.section}`);
+  }
+}
 /* CALLED ON EVERY RUN; writeStats decides, family by family, what this run
    earned. It used to wait for an all-green run, which tied Systole's record to
    the Memorizer's: one Memorizer browser suite failing on one machine held

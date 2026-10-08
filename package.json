@@ -14,6 +14,7 @@
     "test": "node scripts/test-public.js",
     "test:pure": "node scripts/test-public.js --pure",
     "test:private": "node scripts/verify.js",
+    "test:laptop": "node scripts/verify.js --tag laptop",
     "doctor": "node scripts/doctor.js",
     "clean": "node scripts/clean.js",
     "clean:private": "node scripts/clean.js --private",

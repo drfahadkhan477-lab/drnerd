@@ -47,7 +47,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 89 suites that are pure Node with no Playwright and no
+#   logic        the 90 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -305,6 +305,8 @@ jobs:
         run: node tests/verify-cichanges-pure.js
       - name: the counts record in two halves — Systole's written from a run where every Systole suite passed, the Memorizer's likewise, the other half kept (31 checks)
         run: node tests/verify-record-pure.js
+      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs (24 checks)
+        run: node tests/verify-suitetime-pure.js
       - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (42 checks)
         run: node tests/verify-devtools-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (250 checks)
