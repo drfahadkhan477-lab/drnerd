@@ -651,15 +651,22 @@ jobs:
   # two runs of all of them, not from a guess. Left out, each with the reason
   # measured on the PR that added this job:
   #
-  #   homeprog, selftest, pearl   WebKit's page crashed. The browser's own log
-  #       ends in "No provider of eglDestroySync found": the runner has no GPU,
-  #       Mesa cannot make a hardware EGL display, and the compositor aborts.
+  #   homeprog, selftest, pearl   WebKit's page crashed (homeprog in most
+  #       runs, at its reduced-motion page; selftest and pearl now and then).
+  #       The browser's own log ends in "No provider of eglDestroySync found":
+  #       the runner has no GPU, Mesa cannot make a hardware EGL display, and
+  #       the compositor aborts.
   #   layout, apex   the 3D heart's texture upload hits a Mesa driver error
   #       (TextureGL setImageHelper, "Unexpected driver error") and the context
-  #       is lost, which the suites' console checks rightly report.
-  #   polish, physio   a timing check failed once in two runs (a double tap
-  #       350 ms window; 600 ms of frames that did not move the cursor), cause
-  #       not established.
+  #       is lost, which the suites' console checks rightly report. layout in
+  #       every run, apex in most.
+  #   physio   WebKit delivered 2 animation frames in 2.8 s, so the cursor its
+  #       check watches had nothing to advance on.
+  #   polish   its double-tap check failed once in ten runs; cause not seen.
+  #
+  # Neither WEBKIT_DISABLE_DMABUF_RENDERER=1 nor LIBGL_ALWAYS_SOFTWARE=1, nor
+  # both, changed any of this: the crashes and the driver error came back under
+  # each, in a side-by-side run with a control.
   #
   # They all run in Chromium in the job above. Not here either: update handling
   # and offline loading of the split build, which are verify-pwa's; it asserts
