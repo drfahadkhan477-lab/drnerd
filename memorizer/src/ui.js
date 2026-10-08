@@ -746,6 +746,16 @@ function withBytes(fileId) {
 var imageObserver = null;
 function lazyImage(alt, pageNo, box, scale, d) {
   var img = h('img', { alt: alt, loading: 'lazy' }), at = where(d || ui.docRec, pageNo);
+  /* The figure's shape before it is drawn. The crop is the box with
+     Pdf.CROP_MARGIN round it (pdf.js padBox), so width and height in that
+     ratio let the browser hold the space from the first paint. Without them
+     the image was 0 px tall until it scrolled near, then grew to its full
+     height, and everything below it jumped: in the lesson, the "now memorise
+     it" button moved 324 px under a tap that had already been aimed at it. */
+  if (box && box.length === 4) {
+    var m = Pdf.CROP_MARGIN || 0, bw = Math.abs(box[2] - box[0]) + 2 * m, bh = Math.abs(box[3] - box[1]) + 2 * m;
+    if (bw > 0 && bh > 0) { img.setAttribute('width', String(Math.round(bw))); img.setAttribute('height', String(Math.round(bh))); }
+  }
   function load() {
     (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
       if (!img.isConnected) return null;
