@@ -133,3 +133,12 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   required job actually ran.
 
 - **A test wrote to a path a probe returned, and the probe could return a real binary.** Making devtools-pure independent of browser install state, I created a stand-in file at whatever path `playwright.chromium.executablePath()` gave. With no real playwright, the test's own stand-in module answered with `process.execPath`, and the test tried to overwrite `/opt/node22/bin/node`; ETXTBSY stopped it. Rule: a test writes only under its own temp dir, checked with `path.resolve(p).startsWith(TMP + sep)` before the write, and never over a file that exists. Run a new fixture in every machine state it claims to handle (here: no playwright, playwright without browsers, with browsers) before trusting it.
+
+- **A CI suite set chosen from too few runs.** I chose synthetic-webkit's set from
+  two full WebKit runs, and the first run of the chosen set failed a suite that had
+  passed both (theme: the sweep read the splash before WebKit's slow frames removed
+  it). Frame starvation on a GPU-less runner (2 frames in 2.8 s, measured) makes any
+  wait that leans on rAF timing a coin toss there. → Rule: before trusting a new
+  browser job, run its suites at least three times and treat a single failure as a
+  race to root-cause in the test, not as noise; print frame counts and wall time in
+  a timing check's detail so the failing run says which cause it was.
