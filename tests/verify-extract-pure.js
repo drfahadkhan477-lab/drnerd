@@ -107,28 +107,36 @@ for (const [label, q, i, re] of cases) {
 }
 ok('nothing was written outside the output folder', !fs.existsSync(path.join(TMP, 'zqescape_1.webp')) && !fs.existsSync(path.join(path.dirname(OUT), 'zqescape_1.webp')));
 
-head('build.js says which export it took when there are several');
+head('the build says which export it takes, and will not guess between several');
 {
-  /* findSource lifted from build.js's text and run against a stand-in fs, so
-     no file is ever put in the repository's source/ folder. */
-  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'build.js'), 'utf8');
+  /* findSource lifted from scripts/assemble-app.js's text — the build that
+     ships — and run against a stand-in fs, so no file is ever put in the
+     repository's source/ folder. (Until the patch chain was deleted this read
+     scripts/build.js, which took the newest of several exports; the assembler
+     refuses to guess, and that is what is held now.) */
+  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'assemble-app.js'), 'utf8');
   const at = src.indexOf('function findSource(');
   let depth = 0, end = -1;
   for (let k = src.indexOf('{', at); k < src.length; k++) {
     if (src[k] === '{') depth++; else if (src[k] === '}' && !--depth) { end = k + 1; break; }
   }
-  const files = { '/r/source': ['ACCSAP_old.html', 'ACCSAP_new.html', 'notes.txt'], '/r': [] };
-  const mt = { '/r/source/ACCSAP_old.html': 1, '/r/source/ACCSAP_new.html': 2 };
-  const fakeFs = { existsSync: d => d in files, readdirSync: d => files[d], statSync: p => ({ mtimeMs: mt[p] || 0 }) };
-  const logs = [];
-  const findSource = at > 0 && end > 0 ? new Function('fs', 'path', 'ROOT', 'positional', 'process', 'console',
-    `${src.slice(at, end)}\nreturn findSource;`)(fakeFs, path.posix, '/r', [], { env: {} }, { log: m => logs.push(m) }) : null;
-  const got = findSource ? findSource() : null;
-  ok('with two exports it still takes the newest (a working setup keeps working)', got === '/r/source/ACCSAP_new.html', String(got));
-  ok('but names the one it took and the one it passed over', /building from the newest: ACCSAP_new\.html/.test(logs.join('\n')) && /passed over: ACCSAP_old\.html/.test(logs.join('\n')),
-     logs.join(' | ').slice(0, 120));
-  files['/r/source'] = ['ACCSAP_only.html']; logs.length = 0;
-  ok('and with one export it says nothing extra', findSource && findSource() === '/r/source/ACCSAP_only.html' && logs.length === 0);
+  const files = { '/r/source': ['ACCSAP_old.html', 'ACCSAP_new.html', 'notes.txt'] };
+  const fakeFs = { existsSync: d => d in files, readdirSync: d => files[d] };
+  const env = {};
+  const findSource = at > 0 && end > 0 ? new Function('fs', 'path', 'ROOT', 'process',
+    `${src.slice(at, end)}\nreturn findSource;`)(fakeFs, path.posix, '/r', { env }) : null;
+  const tryFind = a => { try { return findSource(a); } catch (e) { return 'threw: ' + e.message; } };
+  ok('the function was lifted whole', typeof findSource === 'function');
+  ok('with two exports in source/ it refuses and asks for one to be named',
+     /holds 2 exports; name one/.test(String(findSource && tryFind())), String(findSource && tryFind()));
+  ok('an export named on the command line wins', findSource && tryFind('/x/mine.html') === '/x/mine.html');
+  env.SYSTOLE_SRC = '/y/env.html';
+  ok('and SYSTOLE_SRC is honoured when none is named', findSource && tryFind() === '/y/env.html', String(findSource && tryFind()));
+  delete env.SYSTOLE_SRC;
+  files['/r/source'] = ['ACCSAP_only.html'];
+  ok('with one export it takes it', findSource && tryFind() === '/r/source/ACCSAP_only.html', String(findSource && tryFind()));
+  files['/r/source'] = [];
+  ok('and with none it says where an export can come from', /no export: pass its path, set SYSTOLE_SRC, or put it in source\//.test(String(findSource && tryFind())));
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });
