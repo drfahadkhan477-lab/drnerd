@@ -386,6 +386,12 @@ node scripts/verify.js --skip keys --bail    # stop at the first failure
 node scripts/verify.js --list                # what each suite defends
 ```
 
+A suite that runs far past its recorded time is stopped and reported as having
+died, with the section it was in, and the run carries on; `--suite-timeout N`
+sets the limit in minutes (`0` for none, `scripts/suitetime.js` has the default).
+Every run ends by naming its slowest sections, so a slow run says where its time
+went instead of leaving it to be guessed.
+
 Across 154 suites, 6616 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
@@ -687,7 +693,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        154 suites · 89 need no browser · + pwa
+tests/        154 suites · 90 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
