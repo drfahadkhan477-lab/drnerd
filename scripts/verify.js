@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 154 suites and roughly 6616 checks, and they
+ * WHY THIS EXISTS. There are 155 suites and roughly 6632 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -454,9 +454,13 @@ const SUITES = [
    (build-pwa found content/ extracted from a different build), so the
    split-build figure (134) is carried over again and was not re-measured.
 
-   Suites registered after that run are the pending ones now, and the record
-   does not hold them yet: suitetime-pure. */
-const PENDING_RECORD = ['suitetime-pure'];
+   Emptied a twelfth time by the Systole-only green Chromium run with --pwa on
+   the owner's laptop at 35a2086, two suites at a time (5986 checks across 150
+   suites, the Memorizer half kept from the tenth emptying), which measured
+   the one that had been waiting: suitetime-pure. The split build was measured
+   by this run for the first time since the ninth emptying, and came to the
+   same 134. */
+const PENDING_RECORD = [];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
