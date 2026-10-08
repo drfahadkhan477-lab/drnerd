@@ -9,7 +9,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, settled } = require('./_render.js');
+const { booted, settled, watchTransitions } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-polish.js <patched.html>'); process.exit(1); }
@@ -33,6 +33,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'main');
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
+  await watchTransitions(page);
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   /* The Stage 1 build injects app.js only after its content fetch resolves,
@@ -196,6 +197,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      the same or the click passes straight through with no error at all. */
   await page.evaluate(() => { T.tool = 'pen'; T.active = true; T.erase = false; T.sizeKey = 'L'; syncInkMode(); });
   await page.waitForTimeout(300);
+  /* PRECONDITION: no screen transition still in flight. synthetic-webkit
+     once died here with "Element is not attached to the DOM": a view
+     transition started earlier (home to quiz) committed its renderNow()
+     while the canvas below was being scrolled to, and the card it belonged
+     to was replaced. Waiting on the live transition's `finished` is the
+     same precondition resized() uses; it asserts nothing. */
+  await page.evaluate(() => (window.__vtLive && window.__vtLive.finished
+    ? window.__vtLive.finished.catch(() => {}) : null));
   const inkCanvas = page.locator('.q-card .ink-canvas');
   await inkCanvas.scrollIntoViewIfNeeded();
   const inkBox = await inkCanvas.boundingBox();
