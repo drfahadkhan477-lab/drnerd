@@ -45,7 +45,7 @@ function loadPearl() {
 }
 
 /* The importer's own rule: one note per `##` section, titled "<file> — <section>".
-   Kept deliberately close to scripts/refs-patch.js, because a parser that
+   Kept deliberately close to scripts/ref-seed.js, because a parser that
    disagrees with the one doing the baking would measure a corpus nobody ships. */
 function parse(dir) {
   const files = fs.readdirSync(dir)
@@ -84,7 +84,7 @@ const check = (label, pass, detail) => {
 
 if (!fs.existsSync(DIR)) {
   console.error(`check-refs: ${path.relative(process.cwd(), DIR)} does not exist.`);
-  console.error('The build needs one: scripts/refs-patch.js exits 1 without it.');
+  console.error('The build needs one: scripts/ref-seed.js (which the assembler uses) refuses without it.');
   console.error('See docs/REFERENCE-GUIDE.md for the format.');
   process.exit(1);
 }

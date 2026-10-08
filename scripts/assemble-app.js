@@ -37,10 +37,10 @@
 const fs = require('fs');
 const path = require('path');
 const Slots = require('./app-slots.js');
-const { applyKeyCorrections, ALL_Q_RE } = require('./keys-patch.js');
-const { applyContentFlags } = require('./flags-patch.js');
-const { buildRefSeed, REFS_DIR } = require('./refs-patch.js');
-const { buildRefImages, IMAGES_DIR } = require('./ref-images-patch.js');
+const { applyKeyCorrections, ALL_Q_RE } = require('./answer-keys.js');
+const { applyContentFlags } = require('./content-flags.js');
+const { buildRefSeed, REFS_DIR } = require('./ref-seed.js');
+const { buildRefImages, IMAGES_DIR } = require('./ref-images.js');
 const { bake } = require('./heart-bake.js');
 const { gitCommit, stampBuffer, STAMP_RE } = require('./stamp.js');
 

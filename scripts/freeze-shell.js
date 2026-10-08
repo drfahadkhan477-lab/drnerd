@@ -103,7 +103,7 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const opt = (flag, dflt) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : dflt; };
   const input = args.find((a, i) => !a.startsWith('--') && !['--app', '--payload'].includes(args[i - 1])) || path.join(ROOT, 'build', 'systole.html');
-  if (!fs.existsSync(input)) { console.error(`no build at ${input}: run node scripts/build.js first`); process.exit(2); }
+  if (!fs.existsSync(input)) { console.error(`no build at ${input}: run npm run build -- path/to/your-export.html first`); process.exit(2); }
   try {
     const r = freeze({ input, appDir: opt('--app', path.join(ROOT, 'app')), payloadDir: opt('--payload', path.join(ROOT, 'content', 'payload')) });
     process.exit(r.ok ? 0 : 1);

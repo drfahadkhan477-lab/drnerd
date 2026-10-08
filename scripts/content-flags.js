@@ -1,0 +1,204 @@
+#!/usr/bin/env node
+/*
+ * Questions the export ships broken in a way the fellow cannot see.
+ *
+ *   node scripts/flags-patch.js <in.html> <out.html>
+ *
+ * TWO DEFECTS, ONE SHAPE. A handful of ACCSAP items ask the fellow to pick
+ * between lettered panels — "ECG A" through "ECG E", "Pattern A" through
+ * "Pattern E" — where the panels are a figure. The export marks these with
+ * `imgopt`. For COR_89 the panels are simply not in the source PDF: five
+ * options that name pictures, and no pictures. COR_108 already carries a
+ * `flag` saying exactly that; COR_89 carried nothing until this step existed.
+ *
+ * COR_85 is the same failure in a different field: the export ships it with
+ * no commentary at all (`ex:""`) and every option's peer-response percentage
+ * at zero — the ACC never recorded which answer their own reviewers picked,
+ * so the "correct" answer key on this one item cannot be independently
+ * confirmed from anything in the export. `bad` is this app's own field for
+ * exactly that: a question POOL excludes rather than presenting as if its
+ * answer were as trustworthy as the other 637.
+ *
+ * BOTH LOOK FINE UNTIL YOU CHECK. That is what makes them worse than a
+ * question that is visibly broken.
+ *
+ * WHY IT IS A PATCH AND NOT AN EDIT, and why it is not a new mechanism:
+ * content/ is the licensed export and is gitignored, so an edit there is
+ * untracked and a fresh extraction silently undoes it — which is exactly
+ * what had already happened to COR_85's `bad` field before this step existed
+ * to make it durable. A chain step is where a content correction lives so it
+ * survives re-extraction and fails loudly if the export changes underneath
+ * it, and one generic mechanism that can set either `flag` or `bad` is that
+ * same shape for two fields, not a second parallel system for the second one.
+ *
+ * WHAT IS DELIBERATELY LEFT ALONE. COR_102, HEA_3 and HEA_56 also use
+ * lettered options, and all three DO ship their figures (HEA_56 has one per
+ * option), so the fellow can see what is being asked — flagging them would be
+ * noise on questions that work. Nothing else in the bank has ex:"" — COR_85
+ * is the only item of this kind, exactly as COR_89 was the only untriaged
+ * imgopt/no-figure item when that half of this file was written.
+ */
+'use strict';
+const fs = require('fs');
+
+/* Each entry names the state asserted BEFORE the change, and which field to
+   set. The assertion is not decoration: if a future export ships the missing
+   commentary or the missing figure, applyContentFlags() throws rather than
+   silently re-flagging a question that has since been fixed. */
+const FLAGS = [
+  {
+    id: 'COR_89',
+    wantFigs: 0,
+    flag: 'The lettered answer figures for this item are not present in the source PDF, ' +
+          'so the panels cannot be displayed — review this question inside ACCSAP.',
+    why: 'imgopt is set and figs is empty; options are "Pattern A" through "Pattern E". ' +
+         'Same defect as COR_108, which the export already flags in these words.',
+  },
+  /* ── three stems that ask about a picture the export does not carry ──────
+     Found by tools/figure-audit.js on the first full run of it against a real
+     build. It reports 14 questions whose wording points at an image they do
+     not have; six already carry ACCSAP's own notice, and five of the rest
+     mention an image only in the COMMENTARY, where nothing is being asked of
+     the fellow and a notice would be noise on a question that works.
+
+     These three are the ones where it is in the STEM. That is the difference
+     between an untidy explanation and a question that cannot be answered: the
+     fellow is told to read an echocardiogram or an ECG, there is nothing to
+     read, and until now nothing said so. "The figures are missing" is exactly
+     how this was first reported, and this is what was behind it.
+
+     NOT A BUILD PROBLEM, which the same run establishes: the audit's count
+     integrity line reports every declared figure present across 305 questions
+     and 408 figures, so nothing is being lost or failing to decode in the
+     chain. These items declare no figure at all.
+
+     THE WORDING IS CAREFUL ON PURPOSE. It says the image is not in the export
+     and sends the fellow to ACCSAP; it does not claim ACCSAP never shipped
+     one. Telling those two apart means reading the licensed source as a
+     document, which is not something this project does — and the fellow with
+     an ACCSAP subscription can settle it in a way this build cannot. */
+  {
+    id: 'COR_128',
+    wantFigs: 0,
+    flag: 'The image this question refers to is not present in the ACCSAP export, ' +
+          'so it cannot be displayed — review this question inside ACCSAP.',
+    why: 'the stem says an echocardiogram "is shown" and figs is empty.',
+  },
+  {
+    id: 'COR_58',
+    wantFigs: 0,
+    flag: 'The image this question refers to is not present in the ACCSAP export, ' +
+          'so it cannot be displayed — review this question inside ACCSAP.',
+    why: 'the stem asks about "the following findings on electrocardiogram" and figs is empty.',
+  },
+  {
+    id: 'HEA_10',
+    wantFigs: 0,
+    flag: 'The image this question refers to is not present in the ACCSAP export, ' +
+          'so it cannot be displayed — review this question inside ACCSAP.',
+    why: 'the stem refers to "this echocardiogram" and figs is empty.',
+  },
+  {
+    id: 'COR_85',
+    wantEx: '',
+    bad: 'the ACCSAP export carries no peer-response data, so the answer key cannot be confirmed; ' +
+         'the commentary is absent from the source PDF',
+    why: 'ex is empty and every option\'s peer-response percentage is 0 — the export never recorded ' +
+         'which answer the ACC\'s own reviewers picked, so nothing in it can confirm this item\'s key.',
+  },
+];
+
+/* ── the CME administration boilerplate ──────────────────────────────────
+   19 explanations end with ACCSAP's course-credit paperwork notice. It is not
+   cardiology, it is not commentary on the question, and it reaches the fellow
+   at the bottom of the teaching text every time one of those 19 comes up —
+   and reaches Apex too, because the explanation is what the tutor retrieves.
+   Found by an external audit; verified at exactly 19 occurrences of one
+   single variant, always trailing, always preceded by a space.
+
+   Anchored on the sentence opening rather than matched whole, so a trailing
+   variant that differs in its second half is still removed rather than
+   silently surviving. Deliberately NOT a general regex over the bank: it
+   deletes from a known phrase to end-of-string and nothing else, which is
+   why the test can prove no teaching text is lost.
+
+   Only this administrative sentence is stored here — no question text, no
+   explanation text. Same side of the licensed-content line as FLAGS. */
+const CME_BOILERPLATE = 'If you meet the minimum passing score';
+
+function stripBoilerplate(bank) {
+  const stripped = [];
+  for (const q of bank) {
+    const ex = q.ex;
+    if (typeof ex !== 'string') continue;
+    const i = ex.indexOf(CME_BOILERPLATE);
+    if (i < 0) continue;
+    /* Only when it runs to the end. If ACCSAP ever embeds this mid-paragraph
+       with real teaching after it, cutting to end-of-string would delete that
+       teaching — so leave it and let the test's count assertion fail loudly
+       rather than quietly lose commentary. */
+    if (!/[.\s]*$/.test(ex.slice(i)) || !ex.slice(i).endsWith('.')) continue;
+    const kept = ex.slice(0, i).replace(/\s+$/, '');
+    if (kept === ex) continue;
+    q.ex = kept;
+    stripped.push(q.id);
+  }
+  return stripped;
+}
+
+/* Apply every flag to a parsed bank, in place. Returns what it changed.
+   Shared with build-pwa.js so the split build gets the same treatment — the
+   answer keys were corrected in one build and not the other for exactly as
+   long as that list had a single consumer. */
+function applyContentFlags(bank) {
+  const byId = new Map(bank.map(q => [q.id, q]));
+  const applied = [];
+
+  /* Folded in here rather than exported as a second step the caller must
+     remember: this file's own history is that a content correction with two
+     call sites got applied to one build and not the other. One consumer.
+
+     Reported alongside `applied` rather than inside it. `applied` means "one
+     line per FLAGS entry" — verify-content.js asserts applied.length ===
+     FLAGS.length, and that assertion is worth more than the convenience of
+     one flat list. */
+  const stripped = stripBoilerplate(bank);
+  for (const f of FLAGS) {
+    const q = byId.get(f.id);
+    if (!q) throw new Error(`[${f.id}] not in the bank`);
+
+    if (f.wantFigs != null) {
+      /* q.img, the count the app itself reads. This read q.figs, which only
+         the split build carries (scripts/content-checks.js says so): on the
+         single-file bank this step runs on, it was always 0, so wantFigs: 0
+         held whatever the export shipped. figs still counts where it exists. */
+      const figs = Array.isArray(q.figs) ? q.figs.length : (q.img || 0);
+      if (figs !== f.wantFigs) {
+        throw new Error(`[${f.id}] now ships ${figs} figure(s), not ${f.wantFigs} as recorded here.\n` +
+                        `  The export may have fixed this question. Recheck it before flagging it.`);
+      }
+    }
+    if (f.wantEx != null) {
+      if ((q.ex || '') !== f.wantEx) {
+        throw new Error(`[${f.id}] now has real commentary ("${String(q.ex).slice(0, 60)}…"), ` +
+                         `not empty as recorded here.\n` +
+                         `  The export may have fixed this question. Recheck it before flagging it.`);
+      }
+    }
+
+    if (f.flag) {
+      if (q.flag) { applied.push(`${f.id}  already flagged by the export — left as is`); }
+      else { q.flag = f.flag; applied.push(`${f.id}  flagged: ${f.flag.slice(0, 56)}…`); }
+    }
+    if (f.bad) {
+      if (q.bad) { applied.push(`${f.id}  already marked bad — left as is`); }
+      else { q.bad = f.bad; applied.push(`${f.id}  marked bad: ${f.bad.slice(0, 56)}…`); }
+    }
+  }
+  applied.stripped = stripped;
+  return applied;
+}
+
+const ALL_Q_RE = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/;
+
+module.exports = { FLAGS, applyContentFlags, stripBoilerplate, CME_BOILERPLATE, ALL_Q_RE };

@@ -90,8 +90,10 @@ now. If you write a sentence containing a number, guard it or do not write it.
 `scripts/CHAIN-RETIRED` exists, so `npm run build` and `npm run release-check`
 build the app with `scripts/assemble-app.js` from `app/`, `src/` and `assets/`.
 **Edit those directly; add no new `*-patch.js` step.** The chain below is history,
-kept in the repository, and five of its scripts are libraries the assembler
-imports. `npm run build:chain` runs the old recipe and is correct only while
+kept in the repository until it is deleted (tasks/todo.md). What the assembler
+needs from it has moved out: `scripts/answer-keys.js`, `content-flags.js`,
+`ref-seed.js` and `ref-images.js` (and `heart-bake.js`, which was never a step);
+the old `*-patch.js` names are thin wrappers over those. `npm run build:chain` runs the old recipe and is correct only while
 `app/` still equals its output; the first edit to `app/` ends that. Do not "fix"
 a difference between the two by editing a patch step.
 

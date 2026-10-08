@@ -22,7 +22,7 @@ and a row of glass doors to everything else.
 
 ```bash
 npm test                                            # no export needed: every suite CI runs
-node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
+npm run build -- path/to/ACCSAP_export.html       # → build/systole.html
 node scripts/verify.js                              # 6616 checks, 154 suites
 node scripts/verify.js --pwa                        # + 134 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs

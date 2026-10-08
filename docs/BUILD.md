@@ -3,7 +3,7 @@
 Two commands.
 
 ```bash
-node scripts/build.js path/to/ACCSAP_12_export.html   # → build/systole.html
+npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
 node scripts/verify.js --pwa                           # → 6616 + 134 checks
 ```
 
@@ -13,7 +13,7 @@ Open `build/systole.html` in a browser. That single file is the whole app.
 
 ## The source export is not in this repository
 
-Systole is built by patching your own ACCSAP 12 export. Those 638 questions,
+Systole is built around your own ACCSAP 12 export. Those 638 questions,
 408 figures and the ACC's commentary are licensed content: they stay on your
 devices and are never committed. `.gitignore` blocks `source/`, `build/`,
 `content/` and `dist/` for exactly that reason.
@@ -21,8 +21,8 @@ devices and are never committed. `.gitignore` blocks `source/`, `build/`,
 The build finds the export three ways, in order:
 
 ```bash
-node scripts/build.js ~/Downloads/ACCSAP_12_super_v12.html   # explicit
-SYSTOLE_SRC=~/path/to/export.html node scripts/build.js      # environment
+npm run build -- ~/Downloads/ACCSAP_12_super_v12.html      # explicit
+SYSTOLE_SRC=~/path/to/export.html npm run build             # environment
 mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source/
 ```
 
@@ -296,9 +296,10 @@ bank, its figures, and the Braunwald reference seed and figures.
    The old recipe is `npm run build:chain`, and works for as long as `app/` still equals
    its output. **The first edit to `app/` ends that**, which is what retiring it was for:
    the 20-minute button, the readiness forecast, topic runs and voice mode are edits to
-   `app/`. The `*-patch.js` scripts stay in the repository as history, and five of them
-   as libraries the assembler imports (`keys-patch`, `flags-patch`, `refs-patch`,
-   `ref-images-patch`, and `heart-bake.js`). Nothing is added to the chain.
+   `app/`. The `*-patch.js` scripts stay in the repository as history until they are
+   deleted. What the assembler imports has moved out of them: `answer-keys.js`,
+   `content-flags.js`, `ref-seed.js`, `ref-images.js` (and `heart-bake.js`). Nothing is
+   added to the chain.
 
    What the owner's machine should do once, after pulling this: `npm run release-check`
    on the real export. Its `build` step is then the first real build by the assembler as
