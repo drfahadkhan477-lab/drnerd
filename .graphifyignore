@@ -20,11 +20,3 @@ dist/
 # (leak-guard's DERIVED and FILES).
 graphify-out/
 tests/last-run.log
-
-# Vendored and minified. Its single-letter names (u, p, h, r, s, l) collide
-# with real functions of the same names in src/core/heart3d.js, and graphify
-# resolves by name — so it fabricated edges between the two files, supplied
-# five of the ten "god nodes" in a report, and headed that report's suggested
-# questions with "why does u() connect heart3d.js to lottie.min.js?". It does
-# not; nothing here is anyone's code to read.
-assets/splash-heart/lottie.min.js

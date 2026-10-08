@@ -6,7 +6,7 @@
  * so nothing ever reads half of it. If the rename fails (the destination is
  * a directory, or locked, as Windows does to an open file) the temporary is
  * removed before the error goes on: it is a complete copy of whatever was
- * being written, and for scripts/build.js that is the licensed build, which
+ * being written, and for scripts/assemble-app.js that is the licensed build, which
  * must not be left lying beside an --out that may be outside the gitignored
  * folders (found by review).
  */
