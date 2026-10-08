@@ -136,7 +136,7 @@ head('the build says which export it takes, and will not guess between several')
   files['/r/source'] = ['ACCSAP_only.html'];
   ok('with one export it takes it', findSource && tryFind() === '/r/source/ACCSAP_only.html', String(findSource && tryFind()));
   files['/r/source'] = [];
-  ok('and with none it says where an export can come from', /no export: pass its path, set SYSTOLE_SRC, or put it in source\//.test(String(findSource && tryFind())));
+  ok('and with none it says where an export can come from', /deliberately not in this repository: pass its path, set SYSTOLE_SRC, or put it in source\//.test(String(findSource && tryFind())));
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });

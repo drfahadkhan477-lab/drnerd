@@ -31,7 +31,7 @@
 # answer keys, its content flags, search quality over its library, how long
 # it takes to load) and the split build under --pwa are measured only on a
 # machine with the export, so there is no way to run those 251 checks here.
-# See docs/BUILD.md and the comment at the top of scripts/build.js for why,
+# See docs/BUILD.md and the comment at the top of scripts/assemble-app.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
 # What runs here needs no source file, and is genuinely worth having on every
@@ -80,7 +80,7 @@
 #                which meant the most mathematically load-bearing code in the
 #                project was invisible here. It no longer is.
 #
-#   build-guard  scripts/build.js must still refuse to run without a source
+#   build-guard  npm run build must still refuse to run without a source
 #                file, with a clear message, and exit non-zero. This is
 #                asserting the ABSENCE of a feature on purpose — if that
 #                guard were ever loosened to "warn and continue anyway," this
@@ -152,8 +152,6 @@ jobs:
           set -e
           find tools -name '*.py' -print0 \
             | xargs -0 -n1 python3 -m py_compile
-      - name: the patch chain lists without crashing
-        run: npm run steps
       - name: the verify suite list lists without crashing
         run: npm run suites
       - name: Memorizer builds into one file (it needs no licensed source)
@@ -651,26 +649,26 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
-      - name: build.js exits non-zero and explains why, with no source present
+      - name: npm run build exits non-zero and explains why, with no source present
         run: |
           set +e
-          output="$(node scripts/build.js 2>&1)"
+          output="$(npm run --silent build 2>&1)"
           status=$?
           set -e
           echo "$output"
           if [ "$status" -eq 0 ]; then
-            echo "::error::scripts/build.js exited 0 with no source file present — it must refuse to build."
+            echo "::error::npm run build exited 0 with no source file present — it must refuse to build."
             exit 1
           fi
           if ! echo "$output" | grep -q "deliberately not in this repository"; then
-            echo "::error::scripts/build.js failed, but not with its documented refusal message — the guard may have changed shape."
+            echo "::error::npm run build failed, but not with its documented refusal message — the guard may have changed shape."
             exit 1
           fi
 
   # ── the other 1552 checks, on a machine that has the export ────────────────
   #
   # Everything above runs on GitHub's runners and therefore cannot build the
-  # app: scripts/build.js refuses without the ACCSAP 12 export, the export is
+  # app: npm run build refuses without the ACCSAP 12 export, the export is
   # licensed, and it is deliberately not in this repository nor in any secret
   # GitHub holds. That is why the three jobs above are "the honest subset".
   #

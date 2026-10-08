@@ -194,7 +194,7 @@ const SUITES = [
   ['app-slots-pure', 'the built file cuts into the app and its payloads byte for byte, and the app carries none of the bank'],
   /* Step 2: the frozen shell's slots filled from where the chain gets them,
      ALL_Q held to keys-patch and flags-patch run as the chain runs them. */
-  ['assemble-pure', 'the app assembles from app/systole.html as the chain builds it, stamped as build.js stamps'],
+  ['assemble-pure', 'the app assembles from app/systole.html, the export and the repository, stamped once'],
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
   ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],

@@ -46,7 +46,7 @@ Rule of thumb: `/clear` for a new task, `/compact` to continue a long one.
 
 1. **Clear between tasks.** If your next prompt would make sense in a fresh terminal, `/clear` first.
 2. **Match the model to the job** (above).
-3. **Point at files, don't paste them.** Write a bare path (`scripts/build.js`, the `patch` function) — an `@` prefix injects the whole file. Trim logs to the relevant 20–30 lines; put big dumps on disk and reference the path. In this repo, never paste suite output or `tests/last-run.log` — it quotes licensed question text.
+3. **Point at files, don't paste them.** Write a bare path (`scripts/assemble-app.js`, the `producers` function) — an `@` prefix injects the whole file. Trim logs to the relevant 20–30 lines; put big dumps on disk and reference the path. In this repo, never paste suite output or `tests/last-run.log` — it quotes licensed question text.
 4. **Keep `CLAUDE.md` lean.** Add a rule only the second time you correct Claude on the same thing; keep it under roughly 200 lines; prune stale notes every few weeks.
 5. **Ask for a plan before big changes.** For anything over two or three files: Plan Mode, or "list the files you'll touch and what you'll do in each first." Correct the plan, then execute — ideally plan on Opus, execute on Sonnet.
 

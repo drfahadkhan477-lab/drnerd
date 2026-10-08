@@ -3,7 +3,8 @@
  * Figures inside reference notes — rendered in the library, and shown to
  * Apex, not just described to it.
  *
- *   node scripts/ref-images-patch.js <input.html> <output.html>
+ * A library: scripts/assemble-app.js calls buildRefImages() to fill REF_IMGS.
+ * (It was the ref-images-patch.js step of the patch chain, now deleted.)
  *
  * The notes already cite `![caption](refimg://KEY)` at the point in the
  * prose a figure actually illustrates — a flowchart next to the paragraph
