@@ -18,8 +18,7 @@ npm run build   # → build/systole.html   (the export: SYSTOLE_SRC, or the one 
 npm run pwa     # → content/, then dist/
 ```
 
-`npm run build` is `scripts/assemble-app.js`; the patch chain that used to build
-the app is retired (`scripts/CHAIN-RETIRED`). `npm run pwa` runs the next two
+`npm run build` is `scripts/assemble-app.js`. `npm run pwa` runs the next two
 steps together, in order: `extract-content.js`, then `build-pwa.js`. If you run
 those two scripts by hand instead, run **both, in that order, every time.** The
 first is easy to skip on a rebuild — `content/` is already there, so the split

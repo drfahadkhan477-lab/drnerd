@@ -8,7 +8,7 @@
  *                                                merged — the same one file out
  *
  *   1. node tools/older-acc-import.js            read both PDFs, stage what is new
- *   2. node scripts/build.js                     a fresh single-file build
+ *   2. npm run build -- <export.html>           a fresh single-file build
  *   3. node tools/older-acc-import.js --merge    the staged questions into it
  *   4. node scripts/extract-content.js build/systole.html
  *   5. node scripts/verify.js --pwa              every suite, both builds

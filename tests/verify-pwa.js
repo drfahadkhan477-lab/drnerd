@@ -380,7 +380,7 @@ async function heapAfterBoot(page, url) {
     ok('q.img and the extracted figure lists agree', declared === figs, `${declared} vs ${figs}`);
 
     /* THE SIX KEYS THE EXPORT GETS WRONG MUST BE RIGHT IN *THIS* BUILD TOO.
-       scripts/keys-patch.js corrects them into the ALL_Q embedded in the
+       scripts/answer-keys.js corrects them into the ALL_Q embedded in the
        single-file build; this build serves content/questions.json instead, and
        for a long time build-pwa copied that from the licensed export
        byte-for-byte — so the iPad shipped the export's own wrong keys while the

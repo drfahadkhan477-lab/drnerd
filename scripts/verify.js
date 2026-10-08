@@ -138,11 +138,6 @@ const SUITES = [
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
   ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
-  /* Written because focusmode anchored on three lines copied out of
-     fullbleed's source, and two steps in between had rewritten them — which
-     reading the source cannot tell you and a build would have, if a build
-     were something everyone could run. */
-  ['shellanchor-pure', 'every anchor into the shell markup still matches at the step that uses it'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
@@ -199,7 +194,7 @@ const SUITES = [
   ['app-slots-pure', 'the built file cuts into the app and its payloads byte for byte, and the app carries none of the bank'],
   /* Step 2: the frozen shell's slots filled from where the chain gets them,
      ALL_Q held to keys-patch and flags-patch run as the chain runs them. */
-  ['assemble-pure', 'the app assembles from app/systole.html as the chain builds it, stamped as build.js stamps'],
+  ['assemble-pure', 'the app assembles from app/systole.html, the export and the repository, stamped once'],
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
   ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],
@@ -292,7 +287,6 @@ const SUITES = [
   ['refscheck-pure','the corpus checker holds every floor it claims, and reads before reporting'],
   ['echo-pure',    'the echo tables point at what exists, and the arithmetic is the arithmetic'],
   ['echoui-pure',  'Echo Studio computes only what was measured, and restates no cutoff'],
-  ['echoanchor-pure','every anchor echo-patch uses still exists at the step it runs from'],
   /* The three above stop where strings become a document. This one starts
      there: it runs echo-patch over a scaffold and drives the result, so the
      glue, the delegated listeners and the caret are held rather than argued
@@ -463,6 +457,18 @@ const SUITES = [
    Suites registered after that run are the pending ones now, and the record
    does not hold them yet: suitetime-pure. */
 const PENDING_RECORD = ['suitetime-pure'];
+
+/* ── suites deleted since their half of the record was last written ─────────
+   The mirror of PENDING_RECORD. A suite removed from the registry is still in
+   tests/test-stats.json until the next green run of its half rewrites it
+   (scripts/record.js drops a name that is no longer registered), and until
+   then verify-stats would read it as the record holding something that is no
+   longer a suite. Naming it here says that is on purpose. Checked in both
+   directions like PENDING_RECORD: a name here must still be in the record and
+   must not be registered, so the next write forces it out of this list. */
+/* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
+   survived the chain to the step that used them; deleted with the chain. */
+const RETIRED_RECORD = ['shellanchor-pure', 'echoanchor-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

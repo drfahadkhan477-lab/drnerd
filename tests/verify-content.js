@@ -6,7 +6,7 @@
  *   node tests/verify-content.js /path/to/build.html
  *
  * Pure Node, no browser: everything here operates on the parsed question
- * bank and on scripts/flags-patch.js's exported applyContentFlags(), the
+ * bank and on scripts/content-flags.js's exported applyContentFlags(), the
  * same shape as verify-fsrs.js and verify-worker.js.
  *
  * TWO DIFFERENT CLAIMS, BOTH NECESSARY:
@@ -222,7 +222,7 @@ head('the CME administration boilerplate is gone from the teaching text');
    clean bank would block every build on something nobody can repair and would
    be switched off within the week. A broken question must instead carry `bad`
    or `flag`, which the app SHOWS — the remedy is to add it to FLAGS in
-   scripts/flags-patch.js, putting a notice in front of the fellow rather than
+   scripts/content-flags.js, putting a notice in front of the fellow rather than
    leaving them to wonder at 1am why an item made no sense.
 
    The rules themselves are proven in tests/verify-contentrules.js, against
@@ -249,7 +249,7 @@ head('the bank has no structural defect the fellow is not told about');
      open.length
        ? `${Object.entries(byRule).map(([r, n]) => `${r} ${n}`).join(', ')}  ` +
          `— e.g. ${open.slice(0, 3).map(f => `${f.id} (${f.detail})`).join('; ')}  ` +
-         `— add these to FLAGS in scripts/flags-patch.js so the app says so`
+         `— add these to FLAGS in scripts/content-flags.js so the app says so`
        : 'none');
 
   /* Disclosed defects are expected and are reported, not asserted away: this

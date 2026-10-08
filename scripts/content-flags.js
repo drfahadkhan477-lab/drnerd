@@ -2,7 +2,9 @@
 /*
  * Questions the export ships broken in a way the fellow cannot see.
  *
- *   node scripts/flags-patch.js <in.html> <out.html>
+ * A library: scripts/assemble-app.js and build-pwa.js call
+ * applyContentFlags() on the bank. (It was the flags-patch.js step of the
+ * patch chain, now deleted.)
  *
  * TWO DEFECTS, ONE SHAPE. A handful of ACCSAP items ask the fellow to pick
  * between lettered panels — "ECG A" through "ECG E", "Pattern A" through

@@ -2,7 +2,8 @@
 /*
  * Reference seed — ship the Braunwald corpus already loaded.
  *
- *   node scripts/refs-patch.js <input.html> <output.html>
+ * A library: scripts/assemble-app.js calls buildRefSeed() to fill REF_SEED.
+ * (It was the refs-patch.js step of the patch chain, now deleted.)
  *
  * The library and the importer already exist (braunwald-patch). What was
  * missing is that a fresh install starts empty, so grounded mode has nothing

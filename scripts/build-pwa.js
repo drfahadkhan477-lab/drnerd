@@ -935,7 +935,7 @@ step('copy only the content the app asks for', () => {
 });
 
 /* THE BANK IS NOT SHIPPABLE AS THE EXPORT WROTE IT. The export keys six
-   questions wrong — scripts/keys-patch.js says which, why, and on what
+   questions wrong — scripts/answer-keys.js says which, why, and on what
    evidence — and a wrong key is silent: it marks a correct answer wrong and
    teaches the distractor as the fact.
 

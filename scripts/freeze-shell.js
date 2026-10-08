@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /*
- * Freeze the patch chain's output as the app's source: step 1 of retiring the
- * chain (docs/BUILD.md, "Retiring the patch chain").
+ * Freeze a build as the app's source. It froze the patch chain's output into
+ * app/ (docs/BUILD.md, "How it got here"); the chain is deleted and app/ is
+ * edited directly, so run on a build of app/ it can only give app/ back.
  *
- *   node scripts/build.js                     # the chain, as always
  *   node scripts/freeze-shell.js [build/systole.html] [--app app] [--payload content/payload]
  *
  * Runs on the owner's machine: its input is the built file, which carries the

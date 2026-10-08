@@ -1,14 +1,13 @@
 'use strict';
 /*
  * The build stamp, for scripts/assemble-app.js: one comment before </head>
- * naming the document's digest and the commit that made it, written exactly as
- * scripts/build.js writes it after the patch chain.
+ * naming the document's digest and the commit that made it.
  *
- * A COPY, NOT A MOVE. build.js keeps its own stamping code because
- * tests/verify-provenance-pure.js holds that code where it is: after the chain,
- * over the unstamped bytes, as a Buffer (see the comment there for why a string
- * round trip is wrong). tests/verify-assemble-pure.js holds this copy's comment
- * template to build.js's, so the two cannot drift apart unnoticed.
+ * Over the unstamped bytes, as a Buffer: a string round trip turns a lone
+ * 0x92 (the Windows-1252 apostrophe an exported corpus carries) into three
+ * bytes and moves the digest away from the one extract-content.js writes.
+ * tests/verify-provenance-pure.js runs this and holds it to that. (It was a
+ * copy of scripts/build.js's stamping until the patch chain was deleted.)
  */
 const crypto = require('crypto');
 const path = require('path');
