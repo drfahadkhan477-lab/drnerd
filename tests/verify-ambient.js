@@ -1,15 +1,14 @@
 #!/usr/bin/env node
 /*
- * The Living Diagram's ambient mode, in a browser: does what ambient-patch
- * INSERTS keep the promises livingDiagram.js makes?
+ * The Living Diagram's ambient mode, in a browser: does the ambient block in
+ * app/systole.html keep the promises livingDiagram.js makes?
  *
  *   NODE_PATH=$(npm root -g) node tests/verify-ambient.js
  *
- * Takes no build, by the method verify-echo uses: a scaffold carrying the one
- * anchor ambient-patch looks for is patched by the SHIPPED script, and the
- * views are this repository's own modules — Heart3D, ECG12 and Leads12,
- * Wiggers and Physio, LivingDiagram — loaded as the earlier chain steps
- * embed them. Nothing under test is a copy.
+ * Takes no build: a scaffold gets the ambient block cut out of the page that
+ * ships, and the views are this repository's own modules — Heart3D, ECG12 and
+ * Leads12, Wiggers and Physio, LivingDiagram — loaded as the page embeds them.
+ * Nothing under test is a copy.
  *
  * WHAT IS HELD, each a promise from livingDiagram.js's header or from the
  * step's own:
@@ -34,7 +33,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath } = require('./_deathnote.js');
 
@@ -68,16 +66,28 @@ var S = { screen: 'home', focusMode: false };
 </script>
 </body></html>`;
 
-const IN = path.join(TMP, 'in.html'), OUT = path.join(TMP, 'out.html');
-fs.writeFileSync(IN, SCAFFOLD, 'utf8');
-const applied = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'ambient-patch.js'), IN, OUT], { encoding: 'utf8' });
-const patchOut = (applied.stdout || '') + (applied.stderr || '');
+/* The ambient block as the page ships it, cut out of app/systole.html between
+   its banner and its closing line, each required once. Until the patch chain
+   was retired this ran ambient-patch.js over the scaffold; the code now lives
+   in the page, and a suite that ran the patch would go on passing after the
+   page changed. */
+const PAGE = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
+const FROM = '/* ═════════ Living Diagram — ambient mode, see src/ui/livingDiagram.js ═════════ */';
+const TO = '           live: function(){ return !!live; } };\n})();';
+const counts = [FROM, TO].map(a => PAGE.split(a).length - 1);
+const AMBIENT_SRC = counts[0] === 1 && counts[1] === 1
+  ? PAGE.slice(PAGE.indexOf(FROM), PAGE.indexOf(TO, PAGE.indexOf(FROM)) + TO.length) : '';
 
-head('the shipped patch applies to the scaffold');
-ok('scripts/ambient-patch.js exits 0', applied.status === 0,
-   applied.status === 0 ? 'applied' : patchOut.trim().split('\n').slice(0, 2).join(' / '));
-ok('and reports its one edit', (patchOut.match(/✓/g) || []).length === 1, (patchOut.match(/✓/g) || []).length + ' edits');
-if (applied.status !== 0) { console.log(`\n${passed} passed, ${failed} failed`); process.exit(1); }
+const OUT = path.join(TMP, 'out.html');
+const ANCHOR = '/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */';
+fs.writeFileSync(OUT, SCAFFOLD.replace(ANCHOR, AMBIENT_SRC + '\n' + ANCHOR), 'utf8');
+
+head('the ambient block is read from the page that ships');
+ok('its banner and its closing line each occur once in app/systole.html', counts[0] === 1 && counts[1] === 1,
+   `banner ${counts[0]}, close ${counts[1]}`);
+ok('and the cut is the whole module, not a fragment', /var AMBIENT = \(function\(\)\{/.test(AMBIENT_SRC) && AMBIENT_SRC.length > 4000,
+   `${AMBIENT_SRC.length} characters`);
+if (!AMBIENT_SRC) { console.log(`\n${passed} passed, ${failed} failed`); process.exit(1); }
 
 (async () => {
   const browser = await launch();
