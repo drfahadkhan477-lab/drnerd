@@ -1,0 +1,63 @@
+# MEASUREMENT, NOT FOR MERGE. Deleted before PR #200 leaves draft.
+#
+# The seven suites synthetic-webkit leaves out, in WebKit, twice each, under
+# four graphics settings side by side: none (the control), WebKitGTK's DMA-BUF
+# renderer off, Mesa forced to software GL, and both. The question is whether
+# the page crashes (libepoxy: "No provider of eglDestroySync") and the texture
+# upload error (TextureGL setImageHelper) belong to the runner's GPU path and
+# go away with a setting, or not.
+name: webkit-probe (measurement, not for merge)
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: webkit-probe-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  probe:
+    name: webkit-probe — ${{ matrix.variant }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { variant: control, dmabuf: '', softgl: '' }
+          - { variant: dmabuf-off, dmabuf: '1', softgl: '' }
+          - { variant: software-gl, dmabuf: '', softgl: '1' }
+          - { variant: both, dmabuf: '1', softgl: '1' }
+    env:
+      SYSTOLE_ENGINE: webkit
+      DEBUG: pw:browser
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: install the pinned test tools and WebKit
+        run: |
+          npm ci
+          npx playwright install --with-deps webkit
+      - name: build the app around the synthetic export
+        run: |
+          node scripts/synthetic-export.js build/synthetic/export.html
+          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
+      # Set only when asked: an empty value is still "set" to a getenv() check.
+      - name: the variant's graphics setting
+        run: |
+          if [ -n "${{ matrix.dmabuf }}" ]; then echo "WEBKIT_DISABLE_DMABUF_RENDERER=1" >> "$GITHUB_ENV"; fi
+          if [ -n "${{ matrix.softgl }}" ]; then echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"; fi
+      - name: the seven left-out suites, twice each
+        run: |
+          rc=0
+          for pass in 1 2; do
+            for s in homeprog selftest pearl layout apex polish physio; do
+              echo "::group::$s pass $pass"
+              code=0; node tests/verify-$s.js build/synthetic/systole.html || code=$?
+              echo "::endgroup::"
+              echo "PROBE ${{ matrix.variant }} $s pass=$pass exit=$code"
+              [ $code -eq 0 ] || rc=1
+            done
+          done
+          exit $rc
