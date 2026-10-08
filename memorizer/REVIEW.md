@@ -2,7 +2,20 @@
 
 October 3, 2026. This follows the broad engineering review and the request to implement its fixes one by one. Changes are limited to Memorizer, its synthetic regression tests, and its standalone build script. The latest base-branch OCR recovery was merged and preserved.
 
-## Completion status — October 4
+## Current status — October 8
+
+The original review fixes and the follow-ups below are merged. Subsequent work also merged:
+
+- [#145](https://github.com/drfahadkhan477-lab/drnerd/pull/145): required Firefox CI alongside Chromium and WebKit, and OCR startup failure reporting/recovery. Its final revision, `cb4580894a913606a2dc605b911731956a46de8a`, passed all three browser jobs, logic, syntax, build-guard, synthetic-browser and CodeQL checks ([run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/37309478636)). The licensed-content `full` job was skipped.
+- [#167](https://github.com/drfahadkhan477-lab/drnerd/pull/167): a [physical iPad run sheet](IPAD-RUNSHEET.md). Its acceptance results remain **not run**.
+- [#172](https://github.com/drfahadkhan477-lab/drnerd/pull/172): a database open that never answers falls back to temporary memory after 15 seconds and closes a late connection; a study save still pending after five seconds releases navigation and displays its pending status. This does not establish that a hung transaction eventually commits.
+- [#185](https://github.com/drfahadkhan477-lab/drnerd/pull/185): PDF figures and page thumbnails reserve their space before drawing, preventing them from moving a study button during a tap. The final implementation uses CSS `aspect-ratio` for WebKit too.
+
+On the synced October 8 base, `dd18f9d487b0b1181d57c8c40a51613513769780`, the focused storage regression, all 89 pure suites, `npm run memorizer` (build `ef4010c85482`), leak guard and whitespace checks passed locally. The storage regression exercises missing, throwing, rejected and blocked IndexedDB opens, intact synthetic PDF bytes, read/write copy isolation, typed views, atomic fallback changes, and open-timeout ordering. The pure run did not execute its 61 browser suites. The earlier validation sections below are historical results, not claims about this base revision.
+
+Physical iPad/Safari/VoiceOver, real on-device model switching, memory pressure during large backups and an actual device network toggle remain unmeasured. Work through the run sheet on a disposable origin before choosing a backup size limit or a different backup format. Linux browser CI does not replace that device trial. No private licensed-content build was run for this update.
+
+## Completion record — October 4
 
 The implementation and follow-up fixes are complete and merged: [#116](https://github.com/drfahadkhan477-lab/drnerd/pull/116), [#126](https://github.com/drfahadkhan477-lab/drnerd/pull/126), and [#127](https://github.com/drfahadkhan477-lab/drnerd/pull/127). The final Memorizer merge, `fd3abd3`, passed Chromium, WebKit, logic, syntax, build-guard and CodeQL checks. The subsequent `master` revision `84da234` also passed all source-independent CI jobs ([run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/37168903989)). A separate repository change, #128, removed the checked-in CodeQL workflow after the Memorizer work; GitHub still reports CodeQL checks on this report's PR.
 
