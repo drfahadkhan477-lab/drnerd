@@ -102,6 +102,15 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('a SYSTOLE_JOBS that is not a count is refused before anything runs', jbad.status === 1 && /SYSTOLE_JOBS "fast" is not a number of jobs/.test(jbad.stderr) && !/passed/.test(jbad.stdout), line(jbad));
     const jstale = jobsRun(['--jobs', '2'], 'fast');
     ok('but not when --jobs says how many: a stale default does not stop the run', jstale.status === 0 && /, 2 at a time/.test(jstale.stdout), line(jstale));
+    /* WITH NO BUILD NAMED, which is how the command is typed. Every case above
+       names a target first, and the target is the first argument that is not
+       an option or an option's value; --jobs was missing from the list of
+       options that take one, so in "--pwa --jobs 2" the 2 became the build
+       and a full run stopped at "No build at" that path having run nothing. */
+    const jbare = node([path.join(ROOT, 'scripts', 'verify.js'), '--only', 'engine', '--tag', 'pure', '--jobs', '2'], { SYSTOLE_JOBS: '3' });
+    const verifying = ((jbare.stdout || '').split('\n').find(l => /^Verifying /.test(l)) || `exit ${jbare.status}`).trim();
+    ok('and the number after --jobs is not taken for the build when none is named',
+       jbare.status === 0 && /, 2 at a time/.test(jbare.stdout) && /systole\.html$/.test(verifying), verifying);
     /* No browser installed: a pure selection still runs. PLAYWRIGHT_BROWSERS_PATH
        pointed at an empty folder makes every engine's executable missing. */
     const empty = path.join(TMP, 'no-browsers'); fs.mkdirSync(empty);
@@ -222,11 +231,22 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     /* A file that opens but cannot be read, or cannot be opened at all. Mode
        000 does that for anyone but root, who ignores it; as root (this
        session's container), a link to /proc/self/mem opens and then fails its
-       first read with EIO. Neither available means unmeasured, said aloud. */
+       first read with EIO. On Windows chmod only toggles read-only, so mode
+       000 left the file readable and this check failed there for a file that
+       was served correctly; an ACL denying read is what cannot be opened.
+       None available means unmeasured, said aloud. */
     const bad = path.join(dir, 'unreadable.bin');
     const asRoot = process.getuid && process.getuid() === 0;
     let badHow = null;
     if (asRoot && fs.existsSync('/proc/self/mem')) { fs.symlinkSync('/proc/self/mem', bad); badHow = 'a link to /proc/self/mem'; }
+    else if (process.platform === 'win32') {
+      fs.writeFileSync(bad, 'secret');
+      try {
+        require('child_process').execFileSync('icacls', [bad, '/deny', `${process.env.USERNAME}:(R)`], { stdio: 'ignore' });
+        /* Only if it took: a file that still opens would measure nothing. */
+        try { fs.closeSync(fs.openSync(bad, 'r')); } catch (_) { badHow = 'an ACL denying read'; }
+      } catch (_) {}
+    }
     else if (!asRoot) { fs.writeFileSync(bad, 'secret'); fs.chmodSync(bad, 0o000); badHow = 'mode 000'; }
     const port = await new Promise(r => { const s = net.createServer().listen(0, () => { const p = s.address().port; s.close(() => r(p)); }); });
     const { spawn } = require('child_process');
@@ -261,10 +281,11 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
       const after2 = await get('/index.html');
       ok('and the server is still there after that too', after2.status === 200 && exited === null, `status ${after2.status}, exit ${exited}`);
     } else {
-      console.log('  ----  unmeasured: no way to make an unreadable file here (root without /proc)');
+      console.log('  ----  unmeasured: no way to make an unreadable file here (root without /proc, or an ACL that did not take)');
     }
     srv.kill();
     try { fs.chmodSync(bad, 0o600); } catch (_) {}
+    if (process.platform === 'win32') { try { require('child_process').execFileSync('icacls', [bad, '/remove:d', process.env.USERNAME], { stdio: 'ignore' }); } catch (_) {} }
   }
 
   fs.rmSync(TMP, { recursive: true, force: true });
