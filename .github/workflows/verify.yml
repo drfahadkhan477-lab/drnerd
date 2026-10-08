@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6616 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6533.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6632 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6549.
 # The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
@@ -74,7 +74,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6533 real checks, up
+#                Across every job, 6549 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -193,7 +193,7 @@ jobs:
         run: node tests/verify-palette-pure.js
       - name: the home strip's rotation never repeats and excludes vfib (32 checks)
         run: node tests/verify-herorhythm-pure.js
-      - name: a corpus with no figures in it still builds (15 checks)
+      - name: a corpus with no figures in it still builds (8 checks)
         run: node tests/verify-refimg-pure.js
       - name: every anchor into the shell markup still matches (10 checks)
         run: node tests/verify-shellanchor-pure.js
@@ -261,7 +261,7 @@ jobs:
         run: node tests/verify-figaudit.js
       - name: a dead suite is diagnosed by what killed it, not by what it last printed (32 checks)
         run: node tests/verify-cause-pure.js
-      - name: nothing a model says can become something the page runs (39 checks)
+      - name: nothing a model says can become something the page runs (38 checks)
         run: node tests/verify-md-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
@@ -283,7 +283,7 @@ jobs:
         run: node tests/verify-echoanchor-pure.js
       - name: the notes search ranks, quotes and escapes (41 checks)
         run: node tests/verify-notesearch-pure.js
-      - name: the heart loads a mesh baked at build time, and refuses any other copy (36 checks)
+      - name: the heart loads a mesh baked at build time, and refuses any other copy (37 checks)
         run: node tests/verify-heartbake-pure.js
       - name: the split build ships src/ without its comments, and nothing else changes (28 checks)
         run: node tests/verify-stripcomments-pure.js
@@ -626,7 +626,7 @@ jobs:
         name: neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone (31 checks)
         run: node tests/verify-glass.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the notes search opens, keeps the caret, and opens a note with its figures (17 checks)
+        name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (31 checks)
