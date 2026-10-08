@@ -23,7 +23,7 @@ and a row of glass doors to everything else.
 ```bash
 npm test                                            # no export needed: every suite CI runs
 node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 6447 checks, 147 suites
+node scripts/verify.js                              # 6616 checks, 154 suites
 node scripts/verify.js --pwa                        # + 134 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
@@ -34,7 +34,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 6447 + 134 checks above — read it as 6364, not 6581.**
+**That badge is not the 6616 + 134 checks above — read it as 6533, not 6750.**
 CI cannot build the app from the real bank: that needs the licensed export,
 which is deliberately never committed here and never will be, on GitHub or
 anywhere else that isn't your own devices. So it builds the real app around

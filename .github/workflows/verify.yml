@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6447 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6364.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6616 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6533.
 # The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
@@ -74,7 +74,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6364 real checks, up
+#                Across every job, 6533 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -219,7 +219,7 @@ jobs:
         run: node tests/verify-study-file-check.js
       - name: the built file cuts into the app and its payloads losslessly, and the app carries none of the bank (45 checks)
         run: node tests/verify-app-slots-pure.js
-      - name: the app assembles from app/systole.html as the chain builds it (24 checks)
+      - name: the app assembles from app/systole.html as the chain builds it (29 checks)
         run: node tests/verify-assemble-pure.js
       - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (68 checks)
         run: node tests/verify-carve-pure.js
@@ -531,7 +531,7 @@ jobs:
         name: Apex still knows you next time, and you can see what it kept (46 checks)
         run: node tests/verify-memory.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: an imported chapter brings its figures, and keeps them (32 checks)
+        name: an imported chapter brings its figures, and keeps them (33 checks)
         run: node tests/verify-assets.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the figure Apex is reasoning from is one you can see (41 checks)
