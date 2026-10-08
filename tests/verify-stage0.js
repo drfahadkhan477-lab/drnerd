@@ -70,9 +70,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        in node. Observes `document` and not documentElement, which is null this
        early; the interval is a second route in case an observer is not. */
     window.__heroAt = null;
+    window.__heroState = null;
     const stamp = () => {
       if (window.__heroAt === null && document.querySelector('.hero-h1')) {
         window.__heroAt = performance.now();
+        window.__heroState = document.readyState;
         return true;
       }
       return false;
@@ -151,7 +153,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      number was doing double duty as. */
   const timing = await page.evaluate(() => {
     const nav = performance.getEntriesByType('navigation')[0] || {};
-    return { domInteractive: nav.domInteractive || 0, heroAt: window.__heroAt };
+    return { domInteractive: nav.domInteractive || 0, heroAt: window.__heroAt, heroState: window.__heroState };
   });
   /* NO SEPARATE WALL-CLOCK CAP, and the first version of this had one. It read
      `launchMs < 60000` as a hang detector, and 60000 came from Chromium numbers
@@ -170,9 +172,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('the hero was stamped so the paint can be placed in the parse', false,
        'no stamp — the init script did not run');
   } else {
+    /* ASKED OF THE DOCUMENT, NOT OF TWO CLOCK READINGS. This compared heroAt
+       with domInteractive. The app is one script that renders near its end,
+       so on the synthetic build the hero lands well under a millisecond
+       before parsing ends; Chromium's clock resolves that, and WebKit's,
+       clamped to whole milliseconds as Safari's is, gave the same reading for
+       both (hero 1.23s, parsed 1.23s) and failed a strict "<" on a tie. The
+       proposition is "during the parse", and readyState answers it exactly:
+       'loading' until the parser is done, whatever the clock's resolution. A
+       paint moved to DOMContentLoaded, a timeout or an await stamps
+       'interactive' or 'complete', and fails, on either engine. */
     ok('paints before the document has finished parsing',
-       timing.heroAt < timing.domInteractive,
-       `hero ${(timing.heroAt / 1000).toFixed(2)}s, parsed ${(timing.domInteractive / 1000).toFixed(2)}s`);
+       timing.heroState === 'loading',
+       `stamped while the document was "${timing.heroState}"; hero ${timing.heroAt.toFixed(1)}ms, parsed ${timing.domInteractive.toFixed(1)}ms`);
   }
 
   head('embedded typefaces');
