@@ -112,7 +112,35 @@ module.exports = (async () => {
   assert.equal(unloaded, 2);
   await Promise.all([llm.startEmbed(), llm.startEmbed()]); assert.equal(created, 3);
   await llm.stopEmbed(); assert.equal(unloaded, 3);
-  console.log('PASS model starts are deduplicated, switching releases GPU memory, and cache failures are reported');
+  console.log('PASS model starts are deduplicated, switching unloads the prior engine, and cache failures are reported');
+
+  // A count of unload calls cannot prove that unloading finished before
+  // allocating the next engine. Hold it pending and observe constructor order.
+  const first = llm.MODELS[0].id, second = llm.MODELS[1].id, order = [];
+  let enteredUnload, releaseUnload, timer;
+  const entered = new Promise(resolve => { enteredUnload = resolve; });
+  const released = new Promise(resolve => { releaseUnload = resolve; });
+  llm.useLib({ CreateMLCEngine: async id => {
+    order.push('create:' + id);
+    return { unload: async () => {
+      order.push('unload:' + id);
+      if (id === first) { enteredUnload(); await released; }
+      order.push('released:' + id);
+    } };
+  } });
+  await llm.start(first);
+  const switching = llm.start(second);
+  await Promise.race([entered, new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('model switch never began unloading')), 2000);
+  })]).finally(() => clearTimeout(timer));
+  await new Promise(setImmediate);
+  assert.deepEqual(order, ['create:' + first, 'unload:' + first], 'the next model must wait for the old engine to finish unloading');
+  assert.equal(llm.ready(first), false); assert.equal(llm.ready(second), false);
+  releaseUnload(); await switching;
+  assert.deepEqual(order, ['create:' + first, 'unload:' + first, 'released:' + first, 'create:' + second]);
+  assert.equal(llm.ready(first), false); assert.equal(llm.ready(second), true);
+  await llm.stop();
+  console.log('PASS model switching waits for completed unload before creating the next engine (stand-in engines, not measured GPU memory)');
 
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });
