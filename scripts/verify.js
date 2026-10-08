@@ -509,11 +509,25 @@ const RETIRED_RECORD = [];
    serial to 24.2 min at --jobs 3, so the parallelism bought nothing there and
    cost three suites to do it.
 
+   AND THREE MEMORIZER SUITES, FOUND THE SAME WAY (October 8, master 28a8df4,
+   SYSTOLE_JOBS=3 on the owner's Windows laptop):
+
+     memorizer             locator.waitFor 60s, at the first PDF it reads
+     memorizer-hardening   locator.click 30s, at its first double tap
+     memorizer-studyimport twenty minutes inside "the dialog"
+
+   Twice at three at a time they failed or hung; then, on the same commit and
+   machine with --jobs 1, they gave 484, 69 and 72 checks, all passing, the
+   counts CI and the record hold. Like the three above they wait on browser
+   work (PDF rendering in a worker, layout settling, the clipboard), not on a
+   clock.
+
    Everything else in the registry asserts on content, geometry or arithmetic,
    and was verified to give the same result under --jobs 3 as it does alone —
    that comparison is the evidence, not this list. */
 const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
-                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs']);
+                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs',
+                        'memorizer', 'memorizer-hardening', 'memorizer-studyimport']);
 
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(n);
