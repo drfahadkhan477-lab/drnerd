@@ -71,13 +71,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   onDeath(() => ({ section, checks: passed + failed, errors,
                    events: events.length ? events.join(', ') : 'none' }));
 
+  /* Every load below takes the boot timeout the other suites use. They had
+     60 s of their own, and late in a full run on the real build a sabotaged
+     copy took longer than that to load, so the suite died in goto having
+     measured nothing about the crash screen. */
   head('the real build boots clean — no false positives from the breaker itself');
   {
     const page = watch(await browser.newPage(), events, 'clean boot', errors);
     const boot = [];
     page.on('pageerror', e => boot.push(e.message));
-    await page.goto(URL, { waitUntil: 'load', timeout: 60000 });
-    await booted(page, { timeout: 60000 });
+    await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
+    await booted(page, { timeout: 150000 });
     const crash = await page.evaluate(crashButton);
     ok('no page errors on a normal boot', boot.length === 0, boot.slice(0, 3).join(' | '));
     ok('the crash screen never appears on a normal boot', !crash);
@@ -89,7 +93,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const url = sabotaged('rendernow-sync', h =>
       h.replace('function renderNow(){\n', 'function renderNow(){\n  throw new Error("INJECTED_TEST_FAILURE");\n'));
     const page = watch(await browser.newPage(), events, 'rendernow-sync', errors);
-    await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+    await page.goto(url, { waitUntil: 'load', timeout: 250000 });
     await page.waitForTimeout(1200);
     const r = await page.evaluate(() => {
       const app = document.getElementById('app');
@@ -110,7 +114,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       return h.replace('function renderNow(){\n', 'function renderNow(){\n  throw new Error("INJECTED_VT_FAILURE");\n');
     });
     const page = watch(await browser.newPage(), events, 'rendernow-vt', errors);
-    await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+    await page.goto(url, { waitUntil: 'load', timeout: 250000 });
     await page.waitForTimeout(1200);
     const crash = await page.evaluate(crashButton);
     ok('the crash screen appears when the throw happens inside startViewTransition\'s own callback', crash);
@@ -120,8 +124,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('an uncaught error unrelated to rendering, after a real screen is already up, does not take the screen over');
   {
     const page = watch(await browser.newPage(), events, 'recovered', errors);
-    await page.goto(URL, { waitUntil: 'load', timeout: 60000 });
-    await booted(page, { timeout: 60000 });
+    await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
+    await booted(page, { timeout: 150000 });
     await page.evaluate(() => {
       window.dispatchEvent(new ErrorEvent('error', { error: new Error('unrelated'), message: 'unrelated' }));
     });
