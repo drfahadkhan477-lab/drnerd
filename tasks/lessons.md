@@ -63,7 +63,19 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   catch (found in review of #180). Reproduce by making the app slow (a `setTimeout` around
   the step), not by loading the CPU, which did not reproduce any of them.
 
+- **A stub in the wrong provider's wire format.** verify-chat opened the panel on
+  Gemini and fed it OpenAI-shaped stream lines, which Gemini's reader skips. The
+  "tool step" never ran and no reply was ever appended; the composer checks passed
+  on rebuilds that happen anyway. → Rule: a stubbed reply must be in the shape of
+  the provider the test selects, and the test must wait on something only the
+  stubbed reply can produce (its text in the panel), so a skipped stub times out.
+
 ## Process
+
+- **Handing the owner a retired command.** I gave `node scripts/build.js` (the
+  retired patch chain) for a laptop build; it ran for four minutes and built an app
+  that no longer matches `app/`. → Rule: before giving a build command, read what
+  `npm run build` and `scripts/release-check.js` invoke today and give that.
 
 - **Handing an agent a command its tools cannot run.** I asked a read-only
   reviewer (Read, Grep, Glob) to run `git diff`; it came back with questions and
