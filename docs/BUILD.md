@@ -232,7 +232,7 @@ went instead of leaving it to be guessed.
 
 | Where | What | When |
 |---|---|---|
-| GitHub, by itself | every suite that needs no export: the pure ones, the Memorizer in three browsers, and the app's own browser suites on an invented bank, in Chromium, with the ones about booting, saved data, the quiz and screen fit run again in WebKit, the iPad's engine (`synthetic-webkit`) | on every pull request and every merge; nothing to do |
+| GitHub, by itself | every suite that needs no export: the pure ones, the Memorizer in three browsers, and the app's own browser suites on an invented bank, in Chromium, and most of them again in WebKit, the iPad's engine (`synthetic-webkit`; the workflow names the ones left out and why) | on every pull request and every merge; nothing to do |
 | Laptop, quick: `npm run test:laptop` | the suites tagged `laptop` (see `--list`): the ones no CI job runs, because they need your export | after a change to the app, in a few minutes |
 | Laptop, full: `npm run test:private` | the whole registry on your real build; the only run that writes `tests/test-stats.json` | before a release, or when the record should move |
 | iPad | Settings → Self-test, which checks the figure viewer and layout in the iPad's own Safari; and by hand, voice mode and the Lab's sounds | after installing a new version |
