@@ -178,13 +178,18 @@ head('no wait passes its options where the argument goes');
      afterBoot.state && afterBoot.firstRender, JSON.stringify(afterBoot));
 
   /* Reading with no wait at all. If this sees the quiz counter, the fixture is
-     not reproducing the deferred swap and nothing below means anything. */
-  await page.evaluate(() => go('quiz'));
-  const immediate = await page.evaluate(() => ({
-    screen: S.screen,
-    counter: !!document.querySelector('.q-counter'),
-    heroStillThere: !!document.querySelector('.hero-h1'),
-  }));
+     not reproducing the deferred swap and nothing below means anything. Read in
+     the same task as go(): across two evaluate() round trips WebKit can paint a
+     frame in between and run the swap, which failed this on master's CI with
+     the fixture intact. */
+  const immediate = await page.evaluate(() => {
+    go('quiz');
+    return {
+      screen: S.screen,
+      counter: !!document.querySelector('.q-counter'),
+      heroStillThere: !!document.querySelector('.hero-h1'),
+    };
+  });
   ok('state changes synchronously', immediate.screen === 'quiz', immediate.screen);
   ok('but the markup has NOT — this is the race, reproduced',
      immediate.counter === false && immediate.heroStillThere === true,

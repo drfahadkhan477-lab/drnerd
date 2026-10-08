@@ -3020,9 +3020,14 @@ function kindOf(user) {
     /* the pack removed: its sections go back to the built-in coach */
     await p4.locator('#pack-card summary').click();
     await p4.locator('#pack-remove').click();
-    await p4.waitForFunction(() => !Memorizer.ui.pack, null, T);
-    ok('removing the pack deletes it and sends its section back to the built-in coach', await p4.evaluate(id => MemStore.get('packs', id), d.id) === null &&
-       await p4.evaluate(() => !Memorizer.ui.state.per[0].lesson) && /none yet/.test(await text(p4, '#pack-card summary')));
+    /* removePack clears ui.pack before its dispatch and render, so waiting on
+       that flag read the section and the card early (WebKit, master's CI).
+       The button leaves only with the render that ends removePack. */
+    await p4.locator('#pack-remove').waitFor({ state: 'detached', ...T });
+    const unpacked = { stored: await p4.evaluate(id => MemStore.get('packs', id), d.id) === null,
+      coach: await p4.evaluate(() => !Memorizer.ui.state.per[0].lesson), card: /none yet/.test(await text(p4, '#pack-card summary')) };
+    ok('removing the pack deletes it and sends its section back to the built-in coach',
+       unpacked.stored && unpacked.coach && unpacked.card, JSON.stringify(unpacked));
 
     /* THE PEARL AS THE DAY'S RECALL (phase 4) */
     await p4.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
