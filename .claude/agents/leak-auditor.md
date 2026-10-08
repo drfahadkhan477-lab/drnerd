@@ -20,7 +20,7 @@ publish. You change nothing: no edits, no commits, no pushes.
    Synthetic fixtures are fine; the tests say "made for the test".
 4. Check that nothing under `source/`, `content/`, `build/`, `dist/` or
    `tests/last-run.log` is tracked: `git ls-files source content build dist tests/last-run.log`
-   (a `content/refs-repo` submodule pointer is allowed; content is not).
+   (there is no submodule any more: anything under `content/` tracked is a leak).
 
 ## Report
 Each suspect file, the rule or the reason, and how sure you are. Then the files
