@@ -15,7 +15,7 @@
 const path = require('path');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted } = require('./_render.js');
+const { booted, onScreen, settled } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) {
@@ -310,7 +310,16 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.waitForTimeout(400);
   ok('rhythm lab mounts', (await page.locator('#labCanvas').count()) === 1);
   await page.evaluate(() => { const q = ALL_Q.find(x => x.img > 0); jumpTo(q.id); });
-  await page.waitForTimeout(900);
+  /* PRECONDITIONS, NOT THE PROPOSITION. This slept 900 ms, which WebKit
+     sometimes outran: one synthetic-webkit run counted "0 figure(s)" and the
+     next, on the same commit, passed. jumpTo() renders through the view
+     transition, so wait for the quiz screen's question card (the Lab screen
+     before it has none), then for every figure image to have FINISHED
+     loading, decoded or broken. Whether there are figures, and whether they
+     decoded, is still the check below, and can still fail. */
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await settled(page, () => [...document.querySelectorAll('.fig-img')].every(i => i.complete),
+                { label: 'every figure image on the question to finish loading' });
   const figs = await page.evaluate(() => ({
     n: document.querySelectorAll('.fig-card').length,
     decoded: [...document.querySelectorAll('.fig-img')].every(i => i.complete && i.naturalWidth > 0),
