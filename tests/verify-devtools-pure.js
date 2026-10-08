@@ -242,6 +242,14 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
       q.on('error', () => resolve({ status: 0, body: '' })); q.setTimeout(5000, () => { q.destroy(); }); q.end();
     });
     ok('the server starts and serves a file', (await get('/index.html')).status === 200);
+    /* The root guard, here as well as in verify-pwa, which needs the real
+       build: a sibling whose name starts with the root's, and a plain walk up.
+       Sent raw, since a normalising client would resolve the ".." itself. */
+    fs.mkdirSync(dir + '-old'); fs.writeFileSync(path.join(dir + '-old', 'secret.txt'), 'next door');
+    const sib = await get('/../' + path.basename(dir) + '-old/secret.txt');
+    ok('a sibling folder sharing the root\'s name prefix is not served', sib.status === 403 || sib.status === 404, `${sib.status} ${sib.body.slice(0, 20)}`);
+    const up = await get('/../../../../../../etc/hostname');
+    ok('and neither is a walk upwards', up.status === 403 || up.status === 404, String(up.status));
     const malformed = await get('/%ZZ');
     ok('a malformed escape is a 400', malformed.status === 400, String(malformed.status));
     const after1 = await get('/index.html');
