@@ -755,6 +755,14 @@ if (JOBS > 1) {
   console.log(`  ${chosen.length} suite${chosen.length === 1 ? '' : 's'}, one at a time, on ${ENGINE}\n`);
 }
 
+/* WHAT WAS TESTED, taken once, before any suite runs. Asked again later it
+   describes a different tree: a --pwa run writes tests/test-stats.json after
+   the suites and again after the split build, so the second write, and the
+   "all green" line between them, saw the first write as an uncommitted change
+   and labelled a clean checkout "+uncommitted changes" (the record of
+   2026-10-08 says so of a tree that was clean). Set at the top of the run
+   below, where provenance() is in scope. */
+let STARTED_ON = '';
 const results = [];
 /* The --pwa phases, which run outside the suite loop. Recorded here so the
    report covers everything the invocation measured: without them a run whose
@@ -924,6 +932,7 @@ async function runSerial(list) {
    At --jobs 1 the two calls are the same thing and the registry order is
    preserved, which is what every previous run printed. */
 (async () => {
+STARTED_ON = provenance();
 if (JOBS === 1) {
   await runSerial(chosen);
 } else {
@@ -976,7 +985,7 @@ function writeStats(pwaCount) {
     /* 1 is one suite at a time; higher ran the shared suites concurrently.
        It changes no count — it says which arrangement produced the numbers. */
     jobs: JOBS,
-    commit: provenance(),
+    commit: STARTED_ON,
     pwaCount,
   });
   if (!out) {
@@ -1031,7 +1040,7 @@ function writeFailLog() {
   }
   const header = [
     `# systole verify — ${new Date().toISOString()}`,
-    `# checkout  ${provenance()}`,
+    `# checkout  ${STARTED_ON}`,
     `# engine    ${ENGINE}`,
     `# target    ${TARGET_IS_URL ? TARGET : path.relative(ROOT, TARGET)}  (${built})`,
     `# suites    ${results.length} run, ${total} checks, ${bad.length} failing`,
@@ -1076,7 +1085,7 @@ writeStats();
 if (bad.length) {
   console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}`);
   console.log(`  full output of those suites: ${path.relative(process.cwd(), writeFailLog())}`);
-  console.log(`  checkout: ${provenance()}\n`);
+  console.log(`  checkout: ${STARTED_ON}\n`);
   /* A stats-only failure means the record is out of date, which is the one
      failure that must NOT stop the run: --pwa has not happened yet, and the
      split build's count is part of what needs rewriting. Exiting here left the
@@ -1085,7 +1094,7 @@ if (bad.length) {
      lines below where it was solved. */
   if (blockers.length) process.exit(1);
   console.log('  (only the counts record is stale — continuing so it can be rewritten)\n');
-} else console.log(`  all green   —   ${provenance()} on ${ENGINE}\n`);
+} else console.log(`  all green   —   ${STARTED_ON} on ${ENGINE}\n`);
 
 /* ── the split build ──────────────────────────────────────────────────────────
    Built, served on a free port, tested, torn down. Kept out of the loop above
