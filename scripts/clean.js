@@ -7,7 +7,7 @@
  *   npm run clean:private -- --yes      and removes it
  *
  * PUBLIC (npm run clean): dist-memorizer/ and build/.work/, the per-run build
- * workspaces scripts/build.js leaves only when a run is killed hard.
+ * workspaces the deleted scripts/build.js left when a run was killed hard.
  *
  * PRIVATE (--private): what is made FROM the export and can be made again
  * from it: build/, dist/, and the three things scripts/extract-content.js

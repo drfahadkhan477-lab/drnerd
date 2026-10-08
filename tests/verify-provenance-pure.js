@@ -305,5 +305,25 @@ head('the built artifacts are checked where only a build can check them');
      /the extracted content records a commit as well/.test(PWASUITE));
 }
 
+head('the record names the tree the suites ran on, not the tree after the record was written');
+{
+  /* A --pwa run writes tests/test-stats.json twice. provenance() asked git
+     after the first write, saw that file modified, and recorded a clean
+     checkout as "+uncommitted changes" (the record of 2026-10-08). So it is
+     asked once, before any suite runs, and everything that names the checkout
+     uses that answer. Read from the blanked source: the comment above
+     STARTED_ON quotes the very phrase. */
+  const { blankComments } = require('./_source.js');
+  const V = blankComments(fs.readFileSync(path.join(__dirname, '..', 'scripts', 'verify.js'), 'utf8'));
+  const calls = [...V.matchAll(/(?<!function )\bprovenance\(\)/g)].map(m => m.index);
+  const runs = ['await runSerial(', 'await runPool('].map(t => V.indexOf(t)).filter(i => i > 0);
+  const firstRun = runs.length ? Math.min(...runs) : -1, firstWrite = V.indexOf('writeStats(');
+  ok('verify.js asks git about the checkout exactly once, into STARTED_ON', calls.length === 1 && /STARTED_ON\s*=\s*provenance\(\)/.test(V), `${calls.length} call(s)`);
+  ok('and before any suite runs or the record is written',
+     calls.length === 1 && firstRun > 0 && calls[0] < firstRun && calls[0] < firstWrite);
+  ok('the record, the failure log and the summary lines all use that answer',
+     /commit:\s*STARTED_ON\b/.test(V) && /# checkout\s+\$\{STARTED_ON\}/.test(V) && (V.match(/\$\{STARTED_ON\}/g) || []).length >= 3);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

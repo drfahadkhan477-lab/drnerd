@@ -302,8 +302,13 @@ head('a run reported from somewhere else says where it came from');
      /git status --porcelain/.test(v));
   /* Provenance on the green line too. A green run from a stale tree is the
      more dangerous of the two: nobody re-reads a summary that says green. */
+  /* Compared as the expression each line prints, not as the literal
+     provenance(): since the 2026-10-08 record it is asked once, into
+     STARTED_ON, and both lines print that. */
+  const greenSays = (v.match(/all green[^\n]{0,40}?\$\{([^}]+)\}/) || [])[1];
+  const failSays = (v.match(/checkout: \$\{([^}]+)\}/) || [])[1];
   ok('a green run carries the same provenance as a failing one',
-     /all green[\s\S]{0,60}provenance\(\)/.test(v));
+     !!greenSays && greenSays === failSays && /^(provenance\(\)|STARTED_ON)$/.test(greenSays), `${greenSays} / ${failSays}`);
   ok('the log header names the engine and the build it tested, not only the code',
      /engine\s+\$\{ENGINE\}/.test(v) && /statSync\(TARGET\)/.test(v));
   /* The transcript quotes suite output verbatim, and suite output quotes note

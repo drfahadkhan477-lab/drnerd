@@ -36,8 +36,10 @@
  *                only knows the one path.
  *   2. NAME      an ACCSAP export by its filename, wherever it has been moved.
  *   3. SIZE      anything over 1 MB. The largest file this repository legiti-
- *                mately tracks is 168 KB (lottie.min.js), so there is a factor
- *                of six of headroom before this can be a nuisance.
+ *                mately tracks is app/systole.html, and CI runs --all-tracked,
+ *                so the day anything tracked crosses the limit is a red check
+ *                rather than a surprise. (This said 168 KB, lottie.min.js,
+ *                until app/ was frozen; no number here, so it cannot go stale.)
  *   4. PAYLOAD   `const ALL_Q=[` or `const IMGS={` in a file over 200 KB. The
  *                marker ALONE is not enough and must not be: eight tracked
  *                source files contain it on purpose — the patch scripts that
