@@ -21,16 +21,16 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6632 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6515.
-# The other 251 all drive something this workflow cannot have: the real
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6611 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6528.
+# The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
 # licensed question bank, deliberately never committed to this repository or
 # to any secret GitHub holds. What needs the real bank itself (its corrected
 # answer keys, its content flags, search quality over its library, how long
 # it takes to load) and the split build under --pwa are measured only on a
-# machine with the export, so there is no way to run those 251 checks here.
+# machine with the export, so there is no way to run those 217 checks here.
 # See docs/BUILD.md and the comment at the top of scripts/assemble-app.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
@@ -74,7 +74,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6515 real checks, up
+#                Across every job, 6528 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -95,7 +95,7 @@
 #                needs; scripts/ci-changes.js. A job it skips shows as
 #                skipped, not passed. Master and manual runs get both.
 #
-# Adding the other 251 checks to this file is possible — GitHub Actions
+# Adding the other 217 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -409,16 +409,16 @@ jobs:
           npm ci
           npx playwright install --with-deps ${{ matrix.engine }}
       - if: ${{ !cancelled() }}
-        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (483 checks)
+        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (484 checks)
         run: node tests/verify-memorizer.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (64 checks)
+        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (69 checks)
         run: node tests/verify-memorizer-hardening.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (69 checks)
+        name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (72 checks)
         run: node tests/verify-memorizer-studyimport.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut, and outside WebKit a closed tab reopened with the origin down keeps its saved data and readers (12 checks)
+        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut, and outside WebKit a closed tab reopened with the origin down keeps its saved data and readers (16 checks)
         run: node tests/verify-memorizer-offline.js
       - if: ${{ !cancelled() }}
         name: Memorizer — your data and what the page may do — the backup reminder on the app's own backup, an orphan that would spoil a backup removed, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (18 checks)

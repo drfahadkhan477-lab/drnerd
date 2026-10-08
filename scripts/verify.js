@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 155 suites and roughly 6632 checks, and they
+ * WHY THIS EXISTS. There are 153 suites and roughly 6611 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -472,7 +472,7 @@ const PENDING_RECORD = [];
    must not be registered, so the next write forces it out of this list. */
 /* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
    survived the chain to the step that used them; deleted with the chain. */
-const RETIRED_RECORD = ['shellanchor-pure', 'echoanchor-pure'];
+const RETIRED_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

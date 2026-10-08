@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
-node scripts/verify.js --pwa                           # → 6632 + 134 checks
+node scripts/verify.js --pwa                           # → 6611 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -65,8 +65,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 154
-  run normally — it is 35 of the 6632 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 152
+  run normally — it is 35 of the 6611 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -242,7 +242,7 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 155 suites, 6632 checks, plus 134 more on the split build. Those numbers are
+Across 153 suites, 6611 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
@@ -544,7 +544,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/systole.css   (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        155 suites · 88 need no browser · + pwa
+tests/        153 suites · 88 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
