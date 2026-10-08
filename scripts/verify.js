@@ -138,11 +138,6 @@ const SUITES = [
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
   ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
-  /* Written because focusmode anchored on three lines copied out of
-     fullbleed's source, and two steps in between had rewritten them — which
-     reading the source cannot tell you and a build would have, if a build
-     were something everyone could run. */
-  ['shellanchor-pure', 'every anchor into the shell markup still matches at the step that uses it'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
@@ -292,7 +287,6 @@ const SUITES = [
   ['refscheck-pure','the corpus checker holds every floor it claims, and reads before reporting'],
   ['echo-pure',    'the echo tables point at what exists, and the arithmetic is the arithmetic'],
   ['echoui-pure',  'Echo Studio computes only what was measured, and restates no cutoff'],
-  ['echoanchor-pure','every anchor echo-patch uses still exists at the step it runs from'],
   /* The three above stop where strings become a document. This one starts
      there: it runs echo-patch over a scaffold and drives the result, so the
      glue, the delegated listeners and the caret are held rather than argued
@@ -472,7 +466,9 @@ const PENDING_RECORD = ['suitetime-pure'];
    longer a suite. Naming it here says that is on purpose. Checked in both
    directions like PENDING_RECORD: a name here must still be in the record and
    must not be registered, so the next write forces it out of this list. */
-const RETIRED_RECORD = [];
+/* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
+   survived the chain to the step that used them; deleted with the chain. */
+const RETIRED_RECORD = ['shellanchor-pure', 'echoanchor-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

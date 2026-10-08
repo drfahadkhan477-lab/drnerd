@@ -22,15 +22,15 @@
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
 # READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6616 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6533.
-# The other 217 all drive something this workflow cannot have: the real
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6499.
+# The other 251 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
 # licensed question bank, deliberately never committed to this repository or
 # to any secret GitHub holds. What needs the real bank itself (its corrected
 # answer keys, its content flags, search quality over its library, how long
 # it takes to load) and the split build under --pwa are measured only on a
-# machine with the export, so there is no way to run those 217 checks here.
+# machine with the export, so there is no way to run those 251 checks here.
 # See docs/BUILD.md and the comment at the top of scripts/build.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
@@ -47,7 +47,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 90 suites that are pure Node with no Playwright and no
+#   logic        the 88 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -74,7 +74,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6533 real checks, up
+#                Across every job, 6499 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -95,7 +95,7 @@
 #                needs; scripts/ci-changes.js. A job it skips shows as
 #                skipped, not passed. Master and manual runs get both.
 #
-# Adding the other 217 checks to this file is possible — GitHub Actions
+# Adding the other 251 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -195,8 +195,6 @@ jobs:
         run: node tests/verify-herorhythm-pure.js
       - name: a corpus with no figures in it still builds (15 checks)
         run: node tests/verify-refimg-pure.js
-      - name: every anchor into the shell markup still matches (10 checks)
-        run: node tests/verify-shellanchor-pure.js
       - name: the Pencil width curve, without a canvas (38 checks)
         run: node tests/verify-pencil-pure.js
       - name: the Living Diagram's timing and view-cycling, without a screen (31 checks)
@@ -279,8 +277,6 @@ jobs:
         run: node tests/verify-echo-pure.js
       - name: Echo Studio computes only what was measured (58 checks)
         run: node tests/verify-echoui-pure.js
-      - name: echo-patch's anchors still exist where it runs (24 checks)
-        run: node tests/verify-echoanchor-pure.js
       - name: the notes search ranks, quotes and escapes (41 checks)
         run: node tests/verify-notesearch-pure.js
       - name: the heart loads a mesh baked at build time, and refuses any other copy (36 checks)
