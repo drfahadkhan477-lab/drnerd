@@ -56,7 +56,10 @@ const server = http.createServer((req, res) => {
      /dist-old or /dist.bak to anyone who asks for "/../dist-old/x". resolve
      has already collapsed the "..", so the only thing standing between the
      tailnet and the directory next door is comparing against DIR + sep. */
-  if (file !== DIR && !file.startsWith(DIR + path.sep)) { res.writeHead(403).end('forbidden'); return; }
+  /* No exception for DIR itself: it is a folder, so it was a 404 anyway, and
+     the exception is the branch CodeQL could not see past (an unsanitised
+     path reaching fs.stat whenever file === DIR). */
+  if (!file.startsWith(DIR + path.sep)) { res.writeHead(403).end('forbidden'); return; }
 
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404).end('not found'); return; }
