@@ -19,7 +19,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 147 suites and roughly 6447 checks, and they
+ * WHY THIS EXISTS. There are 154 suites and roughly 6616 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -448,9 +448,14 @@ const SUITES = [
    split-build figure (134) is carried over from the ninth emptying and was
    not re-measured.
 
-   Suites registered after that run are the pending ones now, and the record
-   does not hold them yet: topicrunscreen, voicescreen, examdate, studyvisuals, icons-pure, cichanges-pure, record-pure. */
-const PENDING_RECORD = ['topicrunscreen', 'voicescreen', 'examdate', 'studyvisuals', 'icons-pure', 'cichanges-pure', 'record-pure'];
+   Emptied an eleventh time by the Systole-only green Chromium run on the
+   owner's laptop at 7252e87 (5970 checks across 149 suites, the Memorizer
+   half kept from the tenth emptying), which measured the seven that had been
+   waiting: topicrunscreen, voicescreen, examdate, studyvisuals, icons-pure,
+   cichanges-pure and record-pure. That run's --pwa step did not start
+   (build-pwa found content/ extracted from a different build), so the
+   split-build figure (134) is carried over again and was not re-measured. */
+const PENDING_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
