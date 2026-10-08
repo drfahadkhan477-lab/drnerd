@@ -159,27 +159,37 @@ const ALLOW = [
   // 'tests/fixtures/big-thing.json',   // synthetic, contains no licensed text
 ];
 
+/* SUBMODULE POINTERS (mode 160000) are a commit id, not content, so they are
+   never opened — but they are still held to the path rules. They used to be
+   skipped outright, because content/refs-repo was a sanctioned submodule of
+   the owner's private notes. That repository is gone and the exception with
+   it (CLAUDE.md), so a pointer under content/, source/, build/ or dist/ is
+   refused like a file there: it would link a licensed corpus from this public
+   repository. Collected here, checked by path only below. */
+const gitlinks = [];
+
 function staged() {
-  /* --raw, not --name-only, to see each entry's mode: a submodule pointer
-     (160000) is a commit id, not content, and tracked() skips it. Reading
-     names alone, the hook refused every commit that moved content/refs-repo
-     while CI passed the same tree. -z output: ":old new sha sha status" NUL
-     path NUL, one path per entry since ACM has no renames. */
+  /* --raw, not --name-only, to see each entry's mode. -z output:
+     ":old new sha sha status" NUL path NUL, one path per entry since ACM has
+     no renames. */
   try {
     const out = execFileSync('git', ['diff', '--cached', '--raw', '-z', '--diff-filter=ACM'],
       { encoding: 'utf8' }).split('\0');
     const files = [];
-    for (let i = 0; i + 1 < out.length; i += 2)
-      if (out[i].split(' ')[1] !== '160000' && out[i + 1]) files.push(out[i + 1]);
+    for (let i = 0; i + 1 < out.length; i += 2) {
+      if (!out[i + 1]) continue;
+      if (out[i].split(' ')[1] === '160000') gitlinks.push(out[i + 1]); else files.push(out[i + 1]);
+    }
     return files;
   } catch (_) { return []; }
 }
 function tracked() {
   try {
-    return execFileSync('git', ['ls-files', '--stage'], { encoding: 'utf8' })
-      .split('\n').map(s => s.trim()).filter(Boolean)
-      .filter(line => !line.startsWith('160000')) // skip submodules (mode 160000)
-      .map(line => line.split('\t')[1]); // extract path from "mode hash stage<tab>path" format
+    const lines = execFileSync('git', ['ls-files', '--stage'], { encoding: 'utf8' })
+      .split('\n').map(s => s.trim()).filter(Boolean);
+    /* "mode hash stage<tab>path": submodule pointers to one list, files to the other. */
+    for (const line of lines) if (line.startsWith('160000')) gitlinks.push(line.split('\t')[1]);
+    return lines.filter(line => !line.startsWith('160000')).map(line => line.split('\t')[1]);
   } catch (_) { return []; }
 }
 
@@ -244,6 +254,12 @@ const files = argv.includes('--all-tracked') ? tracked()
 
 const hits = [];
 for (const f of files) { const h = inspect(f); if (h) hits.push({ file: f, ...h }); }
+for (const g of gitlinks) {
+  const p = g.split(path.sep).join('/');
+  if (ALLOW.includes(p)) continue;
+  if (DIRS.some(d => p.startsWith(d)) || DERIVED.some(d => p.startsWith(d)))
+    hits.push({ file: g, rule: 'PATH', why: `a submodule under ${p.split('/')[0]}/ links licensed content from this public repository` });
+}
 
 if (!hits.length) {
   if (!argv.includes('--quiet')) console.log(`leak-guard: ${files.length} file(s) checked, nothing licensed`);

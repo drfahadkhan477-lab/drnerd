@@ -83,6 +83,26 @@ function watch(child, limitMs, onTimeout) {
   return () => clearTimeout(t);
 }
 
+/* spawnSync with the same ceiling, for the --pwa phases that run one at a
+   time after the registry (build-pwa, verify-pwa, verify-pages,
+   verify-cachebuckets). They used spawnSync with no timeout, so a hung split
+   build waited forever whatever --suite-timeout said (Codex review of #186).
+   On a timeout the child is killed and a line naming the stop is appended to
+   its stderr, so the runner's own failure printing says why. */
+function spawnLimited(cmd, args, opts, limitMs, label) {
+  const { spawnSync } = require('child_process');
+  const t = Date.now();
+  const r = spawnSync(cmd, args, Object.assign({}, opts, limitMs ? { timeout: limitMs, killSignal: 'SIGKILL' } : {}));
+  const timedOut = !!(r.error && r.error.code === 'ETIMEDOUT');
+  if (timedOut) {
+    r.stderr = String(r.stderr || '') +
+      `\nError: ${label || 'this step'} stopped by verify.js after ${fmtMin(Date.now() - t)} (its limit: ${fmtMin(limitMs)})\n`;
+    if (r.status === 0) r.status = null;
+  }
+  r.timedOut = timedOut;
+  return r;
+}
+
 const fmtMin = ms => (ms / MIN).toFixed(ms < 10 * MIN ? 1 : 0) + ' min';
 
-module.exports = { limitFor, sectionClock, slowest, watch, fmtMin, FLOOR_MS, UNKNOWN_MS, FACTOR };
+module.exports = { limitFor, sectionClock, slowest, watch, spawnLimited, fmtMin, FLOOR_MS, UNKNOWN_MS, FACTOR };

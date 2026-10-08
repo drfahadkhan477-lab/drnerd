@@ -222,10 +222,11 @@ head('the pre-commit route: what is staged');
 {
   /* Every case above names its files. The hook names none, so the guard asks
      git what is staged, and that path had no test. A submodule pointer is a
-     commit id, not content: --all-tracked skipped it, the staged route did
-     not, so every commit that moved content/refs-repo was refused by the
-     hook and passed by CI. Both routes now agree. A throwaway repository,
-     so nothing here touches this one's index. */
+     commit id, not content, so it is never opened — but since the systole-refs
+     submodule was removed (its repository deleted), a pointer under content/
+     is refused like a file there: it would link a licensed corpus from this
+     public repository. It used to be allowed, and this test required that. A
+     throwaway repository, so nothing here touches this one's index. */
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'leakguard-git-'));
   const git = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a],
                                      { cwd: repo, encoding: 'utf8' });
@@ -234,21 +235,27 @@ head('the pre-commit route: what is staged');
     catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
   };
   git('init', '-q');
-  git('update-index', '--add', '--cacheinfo', '160000,' + '1'.repeat(40) + ',content/refs-repo');
   fs.writeFileSync(path.join(repo, 'notes.md'), 'ordinary\n');
   git('add', 'notes.md');
   let r = inRepo();
-  ok('a staged submodule pointer under content/ is not refused', r.code === 0, r.out.trim().slice(0, 90));
-  /* Not an empty list read as clean: the ordinary file staged beside the
-     pointer was checked, so git was asked and answered. */
-  ok('and the file staged beside it was checked, the pointer not counted', /\b1 file\(s\) checked/.test(r.out), r.out.trim().slice(0, 60));
-  fs.mkdirSync(path.join(repo, 'content'), { recursive: true });
-  fs.writeFileSync(path.join(repo, 'content', 'questions.json'), '{}');
-  git('add', '-f', 'content/questions.json');
+  /* Not an empty list read as clean: the ordinary file was checked, so git
+     was asked and answered. */
+  ok('an ordinary staged file is checked and passes', r.code === 0 && /\b1 file\(s\) checked/.test(r.out), r.out.trim().slice(0, 60));
+  git('update-index', '--add', '--cacheinfo', '160000,' + '1'.repeat(40) + ',content/refs-repo');
   r = inRepo();
-  ok('while a real file staged beside it is still refused', r.code === 1 && /PATH\s+content\/questions\.json/.test(r.out),
+  ok('a staged submodule pointer under content/ is refused', r.code === 1 && /PATH\s+content\/refs-repo/.test(r.out),
      r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 60));
-  ok('and the pointer is not what it names', !/refs-repo/.test(r.out));
+  /* The --all-tracked route (CI's) must agree with the hook's. */
+  git('commit', '-q', '-m', 'x', '--no-verify');
+  let all;
+  try { all = { code: 0, out: execFileSync(process.execPath, [GUARD, '--all-tracked'], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+  catch (e) { all = { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+  ok('and --all-tracked refuses the same pointer once it is committed', all.code === 1 && /content\/refs-repo/.test(all.out),
+     all.out.match(/PATH.*/)?.[0] || all.out.trim().slice(0, 60));
+  git('rm', '-q', '--cached', 'content/refs-repo');
+  git('update-index', '--add', '--cacheinfo', '160000,' + '2'.repeat(40) + ',vendor/lib');
+  r = inRepo();
+  ok('a submodule outside the licensed folders still passes', r.code === 0, r.out.trim().slice(0, 60));
   fs.rmSync(repo, { recursive: true, force: true });
 }
 
