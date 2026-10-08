@@ -418,7 +418,7 @@ jobs:
         name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (69 checks)
         run: node tests/verify-memorizer-studyimport.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut (12 checks)
+        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut, and a closed tab reopened with the origin down keeps its saved data and readers (12 checks)
         run: node tests/verify-memorizer-offline.js
       - if: ${{ !cancelled() }}
         name: Memorizer — your data and what the page may do — the backup reminder on the app's own backup, an orphan that would spoil a backup removed, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (18 checks)
