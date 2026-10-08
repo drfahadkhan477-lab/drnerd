@@ -6,6 +6,11 @@
  *   node scripts/leak-guard.js <path>...       # specific files
  *   node scripts/leak-guard.js --all-tracked   # everything git already has
  *
+ * Exit 0: nothing licensed. 1: something refused, named. 2: it could not look
+ * (git did not answer, a named file could not be read), so it certifies
+ * nothing. The staged and --all-tracked routes judge the blobs in git's index,
+ * which is what a commit takes; named paths are read from disk.
+ *
  * WHY .gitignore IS NOT ENOUGH, which is the whole point. content/, build/,
  * dist/ and source/ are ignored, and that holds right up until someone types
  * `git add -f`, or renames an export to something that does not match a
@@ -60,6 +65,14 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+
+/* A failure to look is not a pass. Enumerating files or reading one the
+   guard was asked about exits 2, never 0 with "0 file(s) checked". */
+function cannot(what, e) {
+  console.error(`leak-guard: could not ${what}: ${(e && e.message || String(e)).split('\n')[0]}`);
+  console.error('leak-guard: nothing was certified. Fix the cause and run it again.');
+  process.exit(2);
+}
 
 const MAX_BYTES          = 1024 * 1024;
 const PAYLOAD_SNIFF_BYTES = 200 * 1024;
@@ -168,32 +181,97 @@ const ALLOW = [
    repository. Collected here, checked by path only below. */
 const gitlinks = [];
 
+/* WHAT GIT WILL COMMIT, NOT WHAT IS ON DISK. The staged and --all-tracked
+   routes return { file, blob }: the path and the object id the index holds
+   for it. Content rules read that blob. They used to read the working copy,
+   so a file staged at 5 MB and then overwritten on disk with "{}" passed while
+   git committed the 5 MB, and a staged file deleted from disk was skipped. */
 function staged() {
-  /* --raw, not --name-only, to see each entry's mode. -z output:
+  /* --raw, not --name-only, to see each entry's mode and new blob. -z output:
      ":old new sha sha status" NUL path NUL, one path per entry since ACM has
      no renames. */
+  let out;
   try {
-    const out = execFileSync('git', ['diff', '--cached', '--raw', '-z', '--diff-filter=ACM'],
-      { encoding: 'utf8' }).split('\0');
-    const files = [];
-    for (let i = 0; i + 1 < out.length; i += 2) {
-      if (!out[i + 1]) continue;
-      if (out[i].split(' ')[1] === '160000') gitlinks.push(out[i + 1]); else files.push(out[i + 1]);
-    }
-    return files;
-  } catch (_) { return []; }
+    out = execFileSync('git', ['diff', '--cached', '--raw', '--no-abbrev', '-z', '--diff-filter=ACM'],
+      { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).split('\0');
+  } catch (e) { cannot('ask git what is staged', e); }
+  const files = [];
+  for (let i = 0; i + 1 < out.length; i += 2) {
+    if (!out[i + 1]) continue;
+    const [, mode, , blob] = out[i].split(' ');
+    if (mode === '160000') gitlinks.push(out[i + 1]); else files.push({ file: out[i + 1], blob });
+  }
+  return files;
 }
 function tracked() {
+  let lines;
   try {
-    const lines = execFileSync('git', ['ls-files', '--stage'], { encoding: 'utf8' })
-      .split('\n').map(s => s.trim()).filter(Boolean);
-    /* "mode hash stage<tab>path": submodule pointers to one list, files to the other. */
-    for (const line of lines) if (line.startsWith('160000')) gitlinks.push(line.split('\t')[1]);
-    return lines.filter(line => !line.startsWith('160000')).map(line => line.split('\t')[1]);
-  } catch (_) { return []; }
+    lines = execFileSync('git', ['ls-files', '--stage', '-z'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+      .split('\0').filter(Boolean);
+  } catch (e) { cannot('ask git what is tracked', e); }
+  /* "mode hash stage<tab>path": submodule pointers to one list, files to the other. */
+  const files = [];
+  for (const line of lines) {
+    const tab = line.indexOf('\t'), [mode, blob] = line.slice(0, tab).split(' '), file = line.slice(tab + 1);
+    if (mode === '160000') gitlinks.push(file); else files.push({ file, blob });
+  }
+  return files;
 }
 
-function inspect(file) {
+/* Sizes of every blob in one call, then the contents of those small enough
+   for a content rule to need, in a second. One git process each, not one per
+   file: --all-tracked covers the whole repository. */
+function catBatch(ids, check) {
+  if (!ids.length) return Buffer.alloc(0);
+  try {
+    return execFileSync('git', ['cat-file', check ? '--batch-check' : '--batch'],
+      { input: ids.join('\n') + '\n', maxBuffer: 1024 * 1024 * 1024 });
+  } catch (e) { cannot('read the staged contents from git', e); }
+}
+function blobSources(entries) {
+  const ids = [...new Set(entries.map(e => e.blob))];
+  const size = new Map();
+  for (const line of catBatch(ids, true).toString('utf8').split('\n').filter(Boolean)) {
+    const [id, type, n] = line.split(' ');
+    if (type !== 'blob') cannot(`read object ${id}`, new Error(line));
+    size.set(id, Number(n));
+  }
+  /* MAX_BYTES and over is refused on size alone, so its bytes are never read. */
+  const want = ids.filter(id => size.get(id) <= MAX_BYTES);
+  const body = new Map(), buf = catBatch(want, false);
+  let at = 0;
+  for (const id of want) {
+    const nl = buf.indexOf(10, at);
+    const [got, , n] = buf.slice(at, nl).toString('utf8').split(' ');
+    if (got !== id || Number(n) !== size.get(id)) cannot(`read object ${id}`, new Error('git cat-file answered out of order'));
+    body.set(id, buf.slice(nl + 1, nl + 1 + Number(n)));
+    at = nl + 1 + Number(n) + 1;
+  }
+  return entries.map(e => ({ file: e.file, src: {
+    size: size.get(e.blob),
+    head: n => body.has(e.blob) ? body.get(e.blob).slice(0, n) : Buffer.alloc(0),
+    text: () => body.get(e.blob).toString('utf8'),
+  } }));
+}
+
+/* A file named on the command line is read from disk: that is what was asked
+   about. One that cannot be read is an error, not a pass. */
+function diskSource(file) {
+  let st;
+  try { st = fs.statSync(file); } catch (e) { cannot(`read ${file}`, e); }
+  if (!st.isFile()) return null;
+  return {
+    size: st.size,
+    head: n => {
+      const fd = fs.openSync(file, 'r');
+      try { const b = Buffer.alloc(Math.min(n, st.size)); fs.readSync(fd, b, 0, b.length, 0); return b; }
+      finally { fs.closeSync(fd); }
+    },
+    text: () => fs.readFileSync(file, 'utf8'),
+  };
+}
+
+function inspect(file, src) {
   const p = file.split(path.sep).join('/');
   if (ALLOW.includes(p)) return null;
 
@@ -206,23 +284,16 @@ function inspect(file) {
   if (NAME.test(path.basename(p)))
     return { rule: 'NAME', why: 'the filename is an ACCSAP export, wherever it has been moved to' };
 
-  let st;
-  try { st = fs.statSync(file); } catch (_) { return null; }   /* staged-then-deleted */
-  if (!st.isFile()) return null;
+  const st = src === undefined ? diskSource(file) : src;
+  if (!st) return null;
 
   /* BEFORE THE SIZE RULES, and deliberately. Rules 3, 4 and 5 all have floors
      — 1 MB, then 200 KB — and a verify log is usually under both of them, so
      a check that waited for them would never run on the file it is for. One
      line is enough to recognise it and costs nothing on anything else. */
   if (st.size > 0) {
-    let head = '';
-    try {
-      const fd = fs.openSync(file, 'r');
-      const buf = Buffer.alloc(Math.min(200, st.size));
-      fs.readSync(fd, buf, 0, buf.length, 0);
-      fs.closeSync(fd);
-      head = buf.toString('utf8').split('\n')[0];
-    } catch (_) { head = ''; }
+    let head;
+    try { head = st.head(200).toString('utf8').split('\n')[0]; } catch (e) { cannot(`read ${file}`, e); }
     if (LOGHEAD.test(head))
       return { rule: 'LOG', why: 'a verify run log under another name — suite output quotes question text' };
   }
@@ -231,8 +302,8 @@ function inspect(file) {
     return { rule: 'SIZE', why: `${(st.size / 1048576).toFixed(1)} MB — nothing here legitimately exceeds 1 MB` };
   if (st.size === 0) return null;
 
-  let text = '';
-  try { text = fs.readFileSync(file, 'utf8'); } catch (_) { return null; }
+  let text;
+  try { text = st.text(); } catch (e) { cannot(`read ${file}`, e); }
 
   /* FIGURES first, and unconditionally: it has no floor (rule 5's comment
      says why), so it runs on every file rule 3 let through, not just the
@@ -248,12 +319,13 @@ function inspect(file) {
 }
 
 const argv = process.argv.slice(2);
-const files = argv.includes('--all-tracked') ? tracked()
-            : argv.filter(a => !a.startsWith('--')).length ? argv.filter(a => !a.startsWith('--'))
-            : staged();
+const named = argv.filter(a => !a.startsWith('--'));
+const files = argv.includes('--all-tracked') ? blobSources(tracked())
+            : named.length ? named.map(file => ({ file }))
+            : blobSources(staged());
 
 const hits = [];
-for (const f of files) { const h = inspect(f); if (h) hits.push({ file: f, ...h }); }
+for (const { file, src } of files) { const h = inspect(file, src); if (h) hits.push({ file, ...h }); }
 for (const g of gitlinks) {
   const p = g.split(path.sep).join('/');
   if (ALLOW.includes(p)) continue;
