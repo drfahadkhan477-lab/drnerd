@@ -9,7 +9,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-polish.js <patched.html>'); process.exit(1); }
@@ -618,7 +618,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const touchPage = watch(await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true }), events, 'touch');
     await touchPage.goto(URL, { waitUntil: 'load', timeout: 250000 });
     await booted(touchPage, { timeout: 150000 });
-    const touch = await touchPage.evaluate(async () => {
+    const onPlainSurface = await touchPage.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       /* WATCH THE CALL, NOT THE FLAG. This read `second.defaultPrevented`,
          which is only true if the browser HONOURS preventDefault() on a
@@ -682,18 +682,32 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       const loose = document.createElement('div');
       document.body.appendChild(loose);
       /* A plain div nothing re-renders, so the element itself is stable. */
-      const onPlainSurface = await doubleTap(loose);
+      const r = await doubleTap(loose);
       loose.remove();
+      /* Kept for the second half below, which runs after a wait this
+         evaluate cannot make. */
+      window.__doubleTap = doubleTap;
+      return r;
+    });
 
-      /* render() runs inside a view transition on a screen change, so the
-         quiz DOM is not there synchronously. Poll rather than guess. */
-      startQuiz(CHAPTERS[0], 'all');
-      for (let i = 0; i < 60 && !document.querySelector('.opt'); i++) await wait(50);
+    /* render() runs inside a view transition on a screen change, so the quiz
+       DOM is not there synchronously. This was sixty 50 ms polls inside the
+       page; on the real build they take about 9 s, measured, not the 3 s
+       they read as. Late in one full run the option had not arrived by then,
+       foundOption came back false, and the check below went red without
+       saying whether the quiz was slow or the handler was wrong. Why that
+       render was so late was not established. The option row is a
+       precondition of that check and not what it asserts (it asserts that
+       preventDefault was called), so it takes settled(): its standard
+       timeout, and a failure that names the wait. */
+    await touchPage.evaluate(() => { startQuiz(CHAPTERS[0], 'all'); });
+    await settled(touchPage, () => !!document.querySelector('.opt'), { label: 'the first quiz option, for the double tap' });
+    const touch = await touchPage.evaluate(async (onPlainSurface) => {
       const optEl = document.querySelector('.opt');
       /* By selector, so the second tap finds the row the re-render left. */
-      const onOption = optEl ? await doubleTap(() => document.querySelector('.opt')) : null;
+      const onOption = optEl ? await window.__doubleTap(() => document.querySelector('.opt')) : null;
       return { onPlainSurface, onOption, foundOption: !!optEl };
-    });
+    }, onPlainSurface);
     await touchPage.close();
     ok('a rapid double tap on a plain surface is no longer swallowed',
        touch.onPlainSurface.asked === false, JSON.stringify(touch.onPlainSurface));
