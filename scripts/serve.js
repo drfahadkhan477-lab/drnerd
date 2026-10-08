@@ -38,7 +38,12 @@ const TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  let p = decodeURIComponent(req.url.split('?')[0]);
+  /* ONE BAD REQUEST MUST NOT STOP THE SERVER. decodeURIComponent throws a
+     URIError on a malformed escape, and "/%ZZ" from anything on the tailnet
+     used to kill the process: an uncaught throw in the handler. */
+  let p;
+  try { p = decodeURIComponent(req.url.split('?')[0]); }
+  catch (_) { res.writeHead(400).end('bad request'); return; }
   if (p.endsWith('/')) p += 'index.html';
   const file = path.join(DIR, p);
   /* Never serve outside the root, however creative the path.
@@ -58,8 +63,16 @@ const server = http.createServer((req, res) => {
     headers['cache-control'] = p.includes('/content/figures/')
       ? 'public, max-age=31536000, immutable'
       : 'no-cache';
-    res.writeHead(200, headers);
-    fs.createReadStream(file).pipe(res);
+    /* Headers wait for the file to open, so a file that cannot be read gets a
+       500 rather than a 200 with no body; an error after that ends the
+       response. Either way it is this request that fails, not the server: an
+       'error' on a stream with no listener used to be an uncaught exception. */
+    const stream = fs.createReadStream(file);
+    stream.on('open', () => { res.writeHead(200, headers); stream.pipe(res); });
+    stream.on('error', () => {
+      if (!res.headersSent) res.writeHead(500).end('could not read');
+      else res.destroy();
+    });
   });
 });
 

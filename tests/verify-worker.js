@@ -366,6 +366,62 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
        /"stopSequences"/.test(sent || '') && /"contents":\[\]/.test(sent || ''));
   }
 
+  head('the clamp reads the value Google will read, or refuses');
+  /* A review found three ways past the clamp, each reproduced against a stub
+     before this was written: the value was read as its leading digits, so
+     1e5 read as 1 and went upstream as 100,000 tokens; a second
+     maxOutputTokens was never looked at; and the first match anywhere in
+     generationConfig counted, so a same-named field inside a responseSchema
+     could stand in for the real one. */
+  {
+    const send = async raw => {
+      let sent = null;
+      const f = async (u, init) => { sent = init && init.body; return new Response('ok', { status: 200 }); };
+      const r = await handleApex(new Request(
+        'https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
+        { method: 'POST', body: raw, headers: ACCESS }), { ...ENV, APEX_RPM: '0' }, f);
+      return { status: r.status, sent, said: r.status === 200 ? '' : await r.text() };
+    };
+    const asked = sent => { try { return JSON.parse(sent).generationConfig.maxOutputTokens; } catch (_) { return 'unparsed'; } };
+    const C = '"contents":[{"role":"user","parts":[{"text":"x"}]}]';
+
+    const exp = await send(`{"generationConfig":{"maxOutputTokens":1e5},${C}}`);
+    ok('1e5 is read as 100,000 and clamped, not as 1 and let through', exp.status === 200 && asked(exp.sent) === 2000,
+       `${exp.status}, sent ${asked(exp.sent)}`);
+    const frac = await send(`{"generationConfig":{"maxOutputTokens":2.5e3},${C}}`);
+    ok('2.5e3 is the whole number 2500, and clamped', frac.status === 200 && asked(frac.sent) === 2000, `${frac.status}, sent ${asked(frac.sent)}`);
+    for (const [label, v] of [['a fraction', '1500.5'], ['zero', '0'], ['a negative', '-5'],
+                              ['a string Google would still parse as a number', '"100000"'], ['a number with junk after it', '100000x']]) {
+      const r = await send(`{"generationConfig":{"maxOutputTokens":${v}},${C}}`);
+      ok(`${label} (${v}) is refused, not reinterpreted`, r.status === 400 && r.sent === null, `${r.status}, sent ${r.sent === null ? 'nothing' : asked(r.sent)}`);
+    }
+
+    for (const [label, cfg] of [['2000 then 100000', '"maxOutputTokens":2000,"maxOutputTokens":100000'],
+                                ['100000 then 2000', '"maxOutputTokens":100000,"maxOutputTokens":2000']]) {
+      const r = await send(`{"generationConfig":{${cfg}},${C}}`);
+      ok(`maxOutputTokens twice (${label}) is refused, whichever copy a parser keeps`, r.status === 400 && r.sent === null && /appears 2 times/.test(r.said), `${r.status} ${r.said.slice(0, 80)}`);
+    }
+    const twoCfg = await send(`{"generationConfig":{"maxOutputTokens":2000},${C},"generationConfig":{"maxOutputTokens":100000}}`);
+    ok('generationConfig twice is refused', twoCfg.status === 400 && twoCfg.sent === null, String(twoCfg.status));
+    const escaped = await send(`{"generationConfig":{"maxOutputTokens":2000},${C},"generation\\u0043onfig":{"maxOutputTokens":100000}}`);
+    ok('a second generationConfig spelled with an escape is refused, not missed', escaped.status === 400 && escaped.sent === null, String(escaped.status));
+    const escKey = await send(`{"generationConfig":{"maxOutputTokens":2000,"maxOutput\\u0054okens":100000},${C}}`);
+    ok('and so is a second maxOutputTokens spelled that way', escKey.status === 400 && escKey.sent === null, String(escKey.status));
+
+    const schema = '"responseSchema":{"type":"object","properties":{"maxOutputTokens":5}}';
+    const nested = await send(`{"generationConfig":{${schema},"maxOutputTokens":900000},${C}}`);
+    ok('a same-named field inside a responseSchema does not stand in for the real one', nested.status === 200 && asked(nested.sent) === 2000,
+       `${nested.status}, sent ${asked(nested.sent)}`);
+    ok('and is itself left as written', nested.sent !== null && JSON.parse(nested.sent).generationConfig.responseSchema.properties.maxOutputTokens === 5);
+    const onlyNested = await send(`{"generationConfig":{${schema}},${C}}`);
+    ok('with no real one beside it, it is refused as missing', onlyNested.status === 400 && onlyNested.sent === null, String(onlyNested.status));
+
+    const trailing = await send(`{"generationConfig":{"maxOutputTokens":2000},${C}}{"generationConfig":{"maxOutputTokens":100000}}`);
+    ok('a second object after the first is refused', trailing.status === 400 && trailing.sent === null, String(trailing.status));
+    const spaced = await send(`{ "generationConfig" : { "maxOutputTokens" : 900000 } , ${C} }`);
+    ok('whitespace around the colon is still a key, and still clamped', spaced.status === 200 && asked(spaced.sent) === 2000, `${spaced.status}, sent ${asked(spaced.sent)}`);
+  }
+
   head('a typo in a dashboard field does not disable a safeguard');
   /* All three of these are strings typed into a Cloudflare settings field, and
      each used to fail differently and quietly:

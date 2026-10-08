@@ -131,3 +131,5 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   → Rule: read the job's annotations and failed step before calling it a test
   failure; re-run once, and say so on the PR. Merge only on a run where every
   required job actually ran.
+
+- **A test wrote to a path a probe returned, and the probe could return a real binary.** Making devtools-pure independent of browser install state, I created a stand-in file at whatever path `playwright.chromium.executablePath()` gave. With no real playwright, the test's own stand-in module answered with `process.execPath`, and the test tried to overwrite `/opt/node22/bin/node`; ETXTBSY stopped it. Rule: a test writes only under its own temp dir, checked with `path.resolve(p).startsWith(TMP + sep)` before the write, and never over a file that exists. Run a new fixture in every machine state it claims to handle (here: no playwright, playwright without browsers, with browsers) before trusting it.
