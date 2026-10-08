@@ -22,16 +22,16 @@
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
 # READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6632 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6549.
-# The other 217 all drive something this workflow cannot have: the real
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6515.
+# The other 251 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
 # licensed question bank, deliberately never committed to this repository or
 # to any secret GitHub holds. What needs the real bank itself (its corrected
 # answer keys, its content flags, search quality over its library, how long
 # it takes to load) and the split build under --pwa are measured only on a
-# machine with the export, so there is no way to run those 217 checks here.
-# See docs/BUILD.md and the comment at the top of scripts/build.js for why,
+# machine with the export, so there is no way to run those 251 checks here.
+# See docs/BUILD.md and the comment at the top of scripts/assemble-app.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
 # What runs here needs no source file, and is genuinely worth having on every
@@ -47,7 +47,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 90 suites that are pure Node with no Playwright and no
+#   logic        the 88 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -74,13 +74,13 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6549 real checks, up
+#                Across every job, 6515 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
 #                project was invisible here. It no longer is.
 #
-#   build-guard  scripts/build.js must still refuse to run without a source
+#   build-guard  npm run build must still refuse to run without a source
 #                file, with a clear message, and exit non-zero. This is
 #                asserting the ABSENCE of a feature on purpose — if that
 #                guard were ever loosened to "warn and continue anyway," this
@@ -95,7 +95,7 @@
 #                needs; scripts/ci-changes.js. A job it skips shows as
 #                skipped, not passed. Master and manual runs get both.
 #
-# Adding the other 217 checks to this file is possible — GitHub Actions
+# Adding the other 251 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -152,8 +152,6 @@ jobs:
           set -e
           find tools -name '*.py' -print0 \
             | xargs -0 -n1 python3 -m py_compile
-      - name: the patch chain lists without crashing
-        run: npm run steps
       - name: the verify suite list lists without crashing
         run: npm run suites
       - name: Memorizer builds into one file (it needs no licensed source)
@@ -195,8 +193,6 @@ jobs:
         run: node tests/verify-herorhythm-pure.js
       - name: a corpus with no figures in it still builds (8 checks)
         run: node tests/verify-refimg-pure.js
-      - name: every anchor into the shell markup still matches (10 checks)
-        run: node tests/verify-shellanchor-pure.js
       - name: the Pencil width curve, without a canvas (38 checks)
         run: node tests/verify-pencil-pure.js
       - name: the Living Diagram's timing and view-cycling, without a screen (31 checks)
@@ -219,7 +215,7 @@ jobs:
         run: node tests/verify-study-file-check.js
       - name: the built file cuts into the app and its payloads losslessly, and the app carries none of the bank (45 checks)
         run: node tests/verify-app-slots-pure.js
-      - name: the app assembles from app/systole.html as the chain builds it (29 checks)
+      - name: the app assembles from app/systole.html, the export and the repository (29 checks)
         run: node tests/verify-assemble-pure.js
       - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (68 checks)
         run: node tests/verify-carve-pure.js
@@ -279,8 +275,6 @@ jobs:
         run: node tests/verify-echo-pure.js
       - name: Echo Studio computes only what was measured (58 checks)
         run: node tests/verify-echoui-pure.js
-      - name: echo-patch's anchors still exist where it runs (24 checks)
-        run: node tests/verify-echoanchor-pure.js
       - name: the notes search ranks, quotes and escapes (41 checks)
         run: node tests/verify-notesearch-pure.js
       - name: the heart loads a mesh baked at build time, and refuses any other copy (37 checks)
@@ -305,7 +299,7 @@ jobs:
         run: node tests/verify-cichanges-pure.js
       - name: the counts record in two halves — Systole's written from a run where every Systole suite passed, the Memorizer's likewise, the other half kept (31 checks)
         run: node tests/verify-record-pure.js
-      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs (24 checks)
+      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (24 checks)
         run: node tests/verify-suitetime-pure.js
       - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (42 checks)
         run: node tests/verify-devtools-pure.js
@@ -655,26 +649,26 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
-      - name: build.js exits non-zero and explains why, with no source present
+      - name: npm run build exits non-zero and explains why, with no source present
         run: |
           set +e
-          output="$(node scripts/build.js 2>&1)"
+          output="$(npm run --silent build 2>&1)"
           status=$?
           set -e
           echo "$output"
           if [ "$status" -eq 0 ]; then
-            echo "::error::scripts/build.js exited 0 with no source file present — it must refuse to build."
+            echo "::error::npm run build exited 0 with no source file present — it must refuse to build."
             exit 1
           fi
           if ! echo "$output" | grep -q "deliberately not in this repository"; then
-            echo "::error::scripts/build.js failed, but not with its documented refusal message — the guard may have changed shape."
+            echo "::error::npm run build failed, but not with its documented refusal message — the guard may have changed shape."
             exit 1
           fi
 
   # ── the other 1552 checks, on a machine that has the export ────────────────
   #
   # Everything above runs on GitHub's runners and therefore cannot build the
-  # app: scripts/build.js refuses without the ACCSAP 12 export, the export is
+  # app: npm run build refuses without the ACCSAP 12 export, the export is
   # licensed, and it is deliberately not in this repository nor in any secret
   # GitHub holds. That is why the three jobs above are "the honest subset".
   #

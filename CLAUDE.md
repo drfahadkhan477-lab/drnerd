@@ -77,6 +77,9 @@ record.
 `PENDING_RECORD` in `scripts/verify.js` lists suites registered since their
 half of the record was last written. It is checked in both directions, so it
 self-cleans — remove a name after a green run has recorded it, not before.
+`RETIRED_RECORD` is its mirror: suites deleted since their half was last
+written, still in the record until the next write drops them. Also checked in
+both directions; remove a name once a green run has dropped it.
 
 **A guard with a hole in it is worse than no guard**, because the surrounding
 green reads as coverage of the whole paragraph. Two sentences have drifted
@@ -84,28 +87,22 @@ this way: the README's split-build count, sitting between two guarded numbers,
 and `verify.yml`'s "the nine suites" when there were eighteen. Both are guarded
 now. If you write a sentence containing a number, guard it or do not write it.
 
-## The patch chain is retired
+## How the app is built
 
-`scripts/CHAIN-RETIRED` exists, so `npm run build` and `npm run release-check`
-build the app with `scripts/assemble-app.js` from `app/`, `src/` and `assets/`.
-**Edit those directly; add no new `*-patch.js` step.** The chain below is history,
-kept in the repository until it is deleted (tasks/todo.md). What the assembler
-needs from it has moved out: `scripts/answer-keys.js`, `content-flags.js`,
-`ref-seed.js` and `ref-images.js` (and `heart-bake.js`, which was never a step);
-the old `*-patch.js` names are thin wrappers over those. `npm run build:chain` runs the old recipe and is correct only while
-`app/` still equals its output; the first edit to `app/` ends that. Do not "fix"
-a difference between the two by editing a patch step.
+`npm run build` (and `npm run release-check`) runs `scripts/assemble-app.js`,
+which fills the slots in `app/systole.html` from the export, the reference
+notes, `src/` and `assets/`. **Edit `app/`, `src/` and `assets/` directly.**
+The bank's corrections live in `scripts/answer-keys.js` and `content-flags.js`;
+the reference notes are built by `ref-seed.js` and `ref-images.js`.
 
-## The patch chain (history; still read this before touching a `*-patch.js`)
+The patch chain that used to build the app (`scripts/build.js` and its
+`*-patch.js` steps) is deleted; git history has it. Do not bring back a
+`*-patch.js` step or a find-and-replace build. `verify-release.js` fails if
+a `scripts/*-patch.js` or `scripts/build.js` appears; the rest is on you.
 
-`scripts/build.js` holds `CHAIN`: 91 steps, each a `*-patch.js`. `patch(label,
-find, replace)` throws unless `find` matches **exactly once** — that is the
-whole safety model, so keep anchors distinctive and never loosen one to make it
-match. `cut(label, open, close)` removes a span.
-
-Anything asserted about the built output from a patch script (e.g. build-pwa
-checking `SECURITY_HEADERS` as a substring) means that literal must stay
-unbroken in the source. Reformatting it breaks the build, not the test.
+Anything a check asserts as a substring of `app/systole.html` (e.g. build-pwa
+checking `SECURITY_HEADERS`) means that literal must stay unbroken in the
+source. Reformatting it breaks the build, not the test.
 
 ## Tests
 

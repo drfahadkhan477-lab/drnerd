@@ -28,24 +28,23 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'devtools-'));
 const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env, env || {}) });
 
 (async () => {
-  head('scripts/build.js: each run in its own workspace, and nothing half-written left behind');
+  head('the build: a refused build leaves the previous one, and nothing half-written behind');
   {
+    /* scripts/assemble-app.js, the build that ships. (Until the patch chain
+       was deleted this section ran scripts/build.js and checked its
+       per-run workspace, which the assembler has no need of.) */
     const fake = path.join(TMP, 'zq-not-an-export.html');
     fs.writeFileSync(fake, '<html><head></head><body>zq</body></html>');
     const out = path.join(TMP, 'out.html');
     fs.writeFileSync(out, 'the previous build');
-    const work = path.join(ROOT, 'build', '.work');
-    const before = fs.existsSync(work) ? fs.readdirSync(work).sort() : [];
-    const r = node([path.join(ROOT, 'scripts', 'build.js'), fake, '--out', out]);
-    const after = fs.existsSync(work) ? fs.readdirSync(work).sort() : [];
-    ok('a build its first step refuses fails', r.status !== 0, `exit ${r.status}`);
+    const r = node([path.join(ROOT, 'scripts', 'assemble-app.js'), fake, '--out', out]);
+    ok('a build the assembler refuses fails', r.status !== 0, `exit ${r.status}`);
     ok('and leaves the previous output exactly as it was', fs.readFileSync(out, 'utf8') === 'the previous build');
-    ok('and no workspace of its own behind', JSON.stringify(after) === JSON.stringify(before), after.filter(x => !before.includes(x)).join(', ') || 'none');
-    ok('and no step files in build/ itself', !fs.existsSync(path.join(ROOT, 'build', 'stage0.html')));
-    /* Where the steps are written, from the source: a run that is not --keep
-       or --from must not share build/<step>.html. Read blanked, as the rule is. */
+    ok('and no partial copy beside it', !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).join(', '));
     const { blankComments } = require('./_source.js');
-    const src = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'build.js'), 'utf8'));
+    const asm = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'assemble-app.js'), 'utf8'));
+    ok('a build that succeeds is put in place whole, through replaceWhole',
+       /replaceWhole\(out, r\.out\)/.test(asm) && !/fs\.writeFileSync\(out,/.test(asm));
     const { replaceWhole } = require('../scripts/atomic.js');
     const dest = path.join(TMP, 'dest.html'); replaceWhole(dest, 'whole');
     ok('the finished file is put in place whole', fs.readFileSync(dest, 'utf8') === 'whole' && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)));
@@ -58,8 +57,6 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     fs.writeFileSync = realWrite;
     ok('a write that fails part-way leaves no partial copy either', threwW && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).filter(f => /\.tmp-/.test(f)).join(', ') || 'none');
     ok('and when it cannot be, no copy of it is left beside the destination', threw && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).filter(f => /\.tmp-/.test(f)).join(', ') || 'none');
-    ok('a normal run\'s workspace is build/.work/run-<pid>-<time>, and only --keep or --from share build/',
-       /const SHARED = KEEP \|\| !!FROM;/.test(src) && /'\.work', `run-\$\{process\.pid\}-\$\{Date\.now\(\)\}`/.test(src));
   }
 
   head('suite tags: read from each suite\'s code');
@@ -68,7 +65,7 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('a suite that launches a browser and reads a build is browser and build', JSON.stringify(tagsOf('home')) === '["browser","build"]', JSON.stringify(tagsOf('home')));
     ok('one that only launches a browser is browser', JSON.stringify(tagsOf('bankstore')) === '["browser"]', JSON.stringify(tagsOf('bankstore')));
     ok('one that does neither is pure — verify-engine requires _engine and launches nothing', JSON.stringify(tagsOf('engine')) === '["pure"]', JSON.stringify(tagsOf('engine')));
-    ok('and so is this one, which runs verify.js and build.js but launches nothing', JSON.stringify(tagsOf('devtools-pure')) === '["pure"]', JSON.stringify(tagsOf('devtools-pure')));
+    ok('and so is this one, which runs verify.js and the assembler but launches nothing', JSON.stringify(tagsOf('devtools-pure')) === '["pure"]', JSON.stringify(tagsOf('devtools-pure')));
     ok('a suite that spawns a tool which launches a browser is a browser suite', tagsOf('figprobe').includes('browser'), JSON.stringify(tagsOf('figprobe')));
     /* The CI logic job is the set of pure suites CI can run: every one of
        them must be tagged pure, or the tag and the job disagree. */
@@ -129,14 +126,31 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     const rp = path.join(TMP, 'pwa-report.json');
     /* --pwa asks for a browser before anything runs, and CI's logic job has
        no playwright. A stand-in module on NODE_PATH answers that check (its
-       "browser" is node itself, a file that exists), so the run reaches the
-       split build on every machine; where a real playwright is installed,
-       that one is found first and answers just the same. */
+       "browser" is node itself, a file that exists).
+
+       WHERE A REAL PLAYWRIGHT IS INSTALLED, IT IS FOUND FIRST, and it used to
+       be trusted to "answer just the same". It does only if its browsers were
+       downloaded: installed without them, the run stopped at "no browser
+       installed" and this check failed on the machine, not on the code. So the
+       real one is pointed at a browsers folder in TMP holding a stand-in file
+       at the path it will ask for. Either way the run reaches the split build,
+       whatever this machine has installed. */
     const fakeMods = path.join(TMP, 'fake_modules', 'playwright');
     fs.mkdirSync(fakeMods, { recursive: true });
     fs.writeFileSync(path.join(fakeMods, 'index.js'), `const e = { executablePath: () => ${JSON.stringify(process.execPath)} }; module.exports = { chromium: e, webkit: e, firefox: e };`);
-    const pw = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--pwa', '--report-json', rp],
-                    { NODE_PATH: path.join(TMP, 'fake_modules') });
+    const fakeBrowsers = path.join(TMP, 'fake-browsers');
+    const pwEnv = { NODE_PATH: path.join(TMP, 'fake_modules'), PLAYWRIGHT_BROWSERS_PATH: fakeBrowsers };
+    const wants = spawnSync(process.execPath, ['-e',
+      `try { process.stdout.write(require(require.resolve('playwright', { paths: [${JSON.stringify(ROOT)}] })).chromium.executablePath()); } catch (_) {}`],
+      { encoding: 'utf8', env: Object.assign({}, process.env, pwEnv) }).stdout;
+    /* Only ever inside fakeBrowsers. With no real playwright the probe finds
+       the stand-in module above, whose answer is node's own binary: the first
+       draft of this line tried to overwrite it, and was stopped only by the
+       file being in use. */
+    if (wants && path.resolve(wants).startsWith(fakeBrowsers + path.sep) && !fs.existsSync(wants)) {
+      fs.mkdirSync(path.dirname(wants), { recursive: true }); fs.writeFileSync(wants, '');
+    }
+    const pw = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--pwa', '--report-json', rp], pwEnv);
     let pd = null; try { pd = JSON.parse(fs.readFileSync(rp, 'utf8')); } catch (_) {}
     const bp = pd && pd.suites.find(x => x.suite === 'build-pwa');
     ok('with --pwa, a split build that fails is in the report as failed', pw.status !== 0 && !!bp && bp.status === 'fail' && JSON.stringify(bp.tags) === '["pwa"]',
@@ -194,6 +208,63 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
        wet.code === 0 && !has('build') && !has('dist') && !has('content/questions.json') && !has('content/manifest.json') && !has('content/figures'), wet.removed.join(', '));
     ok('and never the export, the notes, or the notes\' submodule',
        has('source/ACCSAP_export.html') && has('content/refs/unit.md') && has('content/refs-repo/note.md'));
+  }
+
+  head('scripts/serve.js: a bad request fails, the server does not');
+  {
+    /* docs/IPAD.md offers serve.js as a host over Tailscale, so one request
+       must not be able to stop it. "/%ZZ" made decodeURIComponent throw and
+       the process exit 1; a file that failed to read emitted an 'error' no
+       one listened for, which is the same exit. */
+    const http = require('http'), net = require('net');
+    const dir = path.join(TMP, 'serve'); fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'index.html'), 'home');
+    /* A file that opens but cannot be read, or cannot be opened at all. Mode
+       000 does that for anyone but root, who ignores it; as root (this
+       session's container), a link to /proc/self/mem opens and then fails its
+       first read with EIO. Neither available means unmeasured, said aloud. */
+    const bad = path.join(dir, 'unreadable.bin');
+    const asRoot = process.getuid && process.getuid() === 0;
+    let badHow = null;
+    if (asRoot && fs.existsSync('/proc/self/mem')) { fs.symlinkSync('/proc/self/mem', bad); badHow = 'a link to /proc/self/mem'; }
+    else if (!asRoot) { fs.writeFileSync(bad, 'secret'); fs.chmodSync(bad, 0o000); badHow = 'mode 000'; }
+    const port = await new Promise(r => { const s = net.createServer().listen(0, () => { const p = s.address().port; s.close(() => r(p)); }); });
+    const { spawn } = require('child_process');
+    const srv = spawn(process.execPath, [path.join(ROOT, 'scripts', 'serve.js'), String(port), dir], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let exited = null; srv.on('exit', c => { exited = c; });
+    await new Promise(r => { srv.stdout.on('data', d => { if (/serving/.test(String(d))) r(); }); setTimeout(r, 5000); });
+    const get = p => new Promise(resolve => {
+      const q = http.request({ host: '127.0.0.1', port, path: p, method: 'GET' },
+        r => { let b = ''; r.on('data', d => b += d); r.on('end', () => resolve({ status: r.statusCode, body: b })); r.on('error', () => resolve({ status: r.statusCode, body: 'cut' })); });
+      q.on('error', () => resolve({ status: 0, body: '' })); q.setTimeout(5000, () => { q.destroy(); }); q.end();
+    });
+    ok('the server starts and serves a file', (await get('/index.html')).status === 200);
+    /* The root guard, here as well as in verify-pwa, which needs the real
+       build: a sibling whose name starts with the root's, and a plain walk up.
+       Sent raw, since a normalising client would resolve the ".." itself. */
+    fs.mkdirSync(dir + '-old'); fs.writeFileSync(path.join(dir + '-old', 'secret.txt'), 'next door');
+    const sib = await get('/../' + path.basename(dir) + '-old/secret.txt');
+    ok('a sibling folder sharing the root\'s name prefix is not served', sib.status === 403 || sib.status === 404, `${sib.status} ${sib.body.slice(0, 20)}`);
+    const up = await get('/../../../../../../etc/hostname');
+    ok('and neither is a walk upwards', up.status === 403 || up.status === 404, String(up.status));
+    const malformed = await get('/%ZZ');
+    ok('a malformed escape is a 400', malformed.status === 400, String(malformed.status));
+    const after1 = await get('/index.html');
+    ok('and the server is still there afterwards', after1.status === 200 && exited === null, `status ${after1.status}, exit ${exited}`);
+    if (badHow) {
+      const unread = await get('/unreadable.bin');
+      /* Narrow: a crashed server also answers "not a 200". Whether the
+         server survived is the next check's; this one only says the file
+         was not passed off as served. */
+      ok(`a file that cannot be read (${badHow}) is not answered as a complete 200`, unread.status !== 200 || unread.body === 'cut' || unread.body === '',
+         `status ${unread.status}`);
+      const after2 = await get('/index.html');
+      ok('and the server is still there after that too', after2.status === 200 && exited === null, `status ${after2.status}, exit ${exited}`);
+    } else {
+      console.log('  ----  unmeasured: no way to make an unreadable file here (root without /proc)');
+    }
+    srv.kill();
+    try { fs.chmodSync(bad, 0o600); } catch (_) {}
   }
 
   fs.rmSync(TMP, { recursive: true, force: true });

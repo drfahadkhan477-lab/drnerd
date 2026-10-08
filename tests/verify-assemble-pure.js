@@ -1,28 +1,31 @@
 #!/usr/bin/env node
 /*
- * The app assembles from app/systole.html as the chain builds it.
+ * The app assembles from app/systole.html, the export and the repository.
  *
  *   node tests/verify-assemble-pure.js
  *
- * Pure Node. scripts/assemble-app.js is step 2 of retiring the patch chain: it
- * fills the frozen shell's slots from the export, the reference corpus and the
- * repository, the places the chain gets them, and stamps the result as
- * build.js does. Only the owner's machine can compare it with a real chain
- * build (--compare). This holds what can be held without the export:
+ * Pure Node. scripts/assemble-app.js is how the app is built (npm run build):
+ * it fills the frozen shell's slots from the export, the reference corpus and
+ * the repository, and stamps the result. This holds what can be held without
+ * the export:
  *
- *   - ALL_Q is what keys-patch and then flags-patch write, checked against
- *     those two scripts RUN AS THE CHAIN RUNS THEM on a synthetic export, not
- *     against the functions the assembler calls;
+ *   - ALL_Q is the export's bank with every answer-key correction and content
+ *     flag applied, and nothing else changed, checked field by field against
+ *     the tables in scripts/answer-keys.js and content-flags.js rather than by
+ *     calling the functions the assembler calls;
  *   - IMGS is the export's line verbatim, HEART_MESH is heart-bake's;
- *   - a synthetic chain output, cut by app-slots and assembled back from the
+ *   - a synthetic build, cut by app-slots and assembled back from the
  *     producers, is the same bytes with the same stamp;
- *   - the shell's old stamp is dropped and exactly one new one goes in, written
- *     as build.js writes it (its template is read from build.js, so the copy in
- *     scripts/stamp.js cannot drift unnoticed);
+ *   - the shell's old stamp is dropped and exactly one new one goes in (what
+ *     the stamp says is verify-provenance-pure's);
  *   - --compare says which part differs, by name, never the text.
  *
+ * Until the patch chain was deleted, ALL_Q was compared with keys-patch.js and
+ * flags-patch.js run as separate processes. Those wrappers called the same
+ * two functions, so the field-by-field check below is the stronger of the two.
+ *
  * The synthetic bank is invented: question ids and answer letters from
- * keys-patch's CORRECTIONS and flags-patch's FLAGS, which are already in this
+ * answer-keys' CORRECTIONS and content-flags' FLAGS, which are already in this
  * repository, and placeholder text. No question text exists here.
  */
 'use strict';
@@ -57,6 +60,7 @@ const q = id => byId.get(id) || (byId.set(id, { id, s: 'Invented stem for ' + id
 for (const c of CORRECTIONS) q(c.id).ci = LETTERS.indexOf(c.was);
 for (const f of FLAGS) { const x = q(f.id); if (f.wantEx != null) x.ex = f.wantEx; }
 q('FIXTURE_1').ex = 'Invented teaching. ' + CME_BOILERPLATE + ' and so on.';
+q('FIXTURE_2').ex = 'Invented teaching that no table names.';
 const BANK = [...byId.values()];
 /* Spaced as JSON.stringify never writes it, so a producer that re-serialized
    the figures instead of copying them would be caught. */
@@ -74,19 +78,25 @@ fs.writeFileSync(path.join(imgs, 'u', 'fig.png'), Buffer.from('89504e470d0a1a0a'
 
 const resolve = A.producers({ exportHtml: EXPORT, refsDir: refs, imagesDir: imgs });
 
-head('each payload is what the chain writes');
+head('each payload is what the app is built from');
 {
-  /* keys-patch then flags-patch, as build.js runs them: separate processes on files. */
-  const mid = path.join(dir, 'keys.html'), out = path.join(dir, 'flags.html');
-  const k = spawnSync(process.execPath, [S('keys-patch.js'), exportFile, mid], { encoding: 'utf8' });
-  const f = spawnSync(process.execPath, [S('flags-patch.js'), mid, out], { encoding: 'utf8' });
-  ok('keys-patch and flags-patch accept the synthetic export', k.status === 0 && f.status === 0, (k.stderr + f.stderr).trim().slice(0, 120));
-  const chainBank = (/\nconst ALL_Q=(\[[\s\S]*?\]);\n/.exec(fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '') || [])[1];
-  ok('ALL_Q is the bank those two steps write, byte for byte', !!chainBank && resolve('payload', 'ALL_Q') === chainBank);
-  const fixed = JSON.parse(resolve('payload', 'ALL_Q'));
-  ok('and it carries the corrections (one key moved, the boilerplate gone)',
-     fixed.find(x => x.id === CORRECTIONS[0].id).ci === LETTERS.indexOf(CORRECTIONS[0].now) &&
-     !fixed.find(x => x.id === 'FIXTURE_1').ex.includes(CME_BOILERPLATE));
+  const text = resolve('payload', 'ALL_Q');
+  const fixed = JSON.parse(text), was = new Map(BANK.map(x => [x.id, x]));
+  ok('ALL_Q is the whole bank, in the export\'s order', fixed.map(x => x.id).join() === BANK.map(x => x.id).join(), `${fixed.length} of ${BANK.length}`);
+  ok('written as JSON.stringify writes it, with nothing around it', text === JSON.stringify(fixed));
+  const keyed = new Map(CORRECTIONS.map(c => [c.id, c]));
+  const wrongKey = fixed.filter(x => x.ci !== (keyed.has(x.id) ? LETTERS.indexOf(keyed.get(x.id).now) : was.get(x.id).ci)).map(x => x.id);
+  ok(`every one of the ${CORRECTIONS.length} answer-key corrections moved its key, and no other key moved`,
+     CORRECTIONS.length > 0 && wrongKey.length === 0, wrongKey.join(', ') || 'none');
+  const flagged = FLAGS.filter(f => f.flag || f.bad);
+  const unflagged = flagged.filter(f => { const x = fixed.find(y => y.id === f.id); return (f.flag && x.flag !== f.flag) || (f.bad && !x.bad); }).map(f => f.id);
+  ok(`every one of the ${flagged.length} content flags is set`, flagged.length > 0 && unflagged.length === 0, unflagged.join(', ') || 'none');
+  const ex = fixed.find(x => x.id === 'FIXTURE_1').ex;
+  ok('the CME boilerplate is gone from a commentary, and the teaching before it stays',
+     !ex.includes(CME_BOILERPLATE) && ex.startsWith('Invented teaching.'), ex.slice(0, 60));
+  const touched = new Set([...keyed.keys(), ...FLAGS.map(f => f.id), 'FIXTURE_1']);
+  const drifted = fixed.filter(x => !touched.has(x.id) && JSON.stringify(x) !== JSON.stringify(was.get(x.id))).map(x => x.id);
+  ok('a question no table names is untouched', fixed.some(x => !touched.has(x.id)) && drifted.length === 0, drifted.join(', ') || 'none');
   ok('IMGS is the export’s line, verbatim', resolve('payload', 'IMGS') === IMGS);
   ok('HEART_MESH is heart-bake over src/core/heart3d.js',
      resolve('payload', 'HEART_MESH') === bake(fs.readFileSync(path.join(ROOT, 'src', 'core', 'heart3d.js'), 'utf8')).b64);
@@ -97,7 +107,7 @@ head('each payload is what the chain writes');
   ok('an unknown payload has no producer', resolve('payload', 'NOPE') === undefined);
 }
 
-head('a chain output, cut and assembled back, is the same bytes');
+head('a build, cut and assembled back, is the same bytes');
 const SRC = 'src/core/fsrs.js', srcText = fs.readFileSync(path.join(ROOT, SRC), 'utf8');
 const CHAIN_UNSTAMPED = [
   '<!doctype html><html><head><title>fixture</title></head><body><script>',
@@ -120,14 +130,6 @@ const shell = Slots.cut(chainStamped.toString('utf8'), SOURCES).shell;
   ok('exactly one stamp: the shell’s old one is gone', (r.out.toString().match(/systole-build/g) || []).length === 1);
   ok('its digest is over the unstamped bytes', r.digest === crypto.createHash('sha256').update(r.unstamped).digest('hex').slice(0, 16));
   ok('a shell with two stamps is refused', (() => { try { A.assembleApp({ shell: shell.replace('</head>', '<!-- systole-build 0123456789abcdef commit abc -->\n</head>'), resolve, commit: 'x' }); return false; } catch (e) { return /2 build stamps/.test(e.message); } })());
-}
-
-head('the stamp is build.js’s');
-{
-  const tmpl = src => (src.match(/Buffer\.from\(`(<!-- systole-build [^`]*)`\)/) || [])[1];
-  const fromBuild = tmpl(fs.readFileSync(S('build.js'), 'utf8')), fromStamp = tmpl(fs.readFileSync(S('stamp.js'), 'utf8'));
-  ok('build.js’s stamp template was found', !!fromBuild, String(fromBuild));
-  ok('scripts/stamp.js writes the same template', !!fromBuild && fromBuild === fromStamp, String(fromStamp));
 }
 
 head('--compare names the part that differs, never its text');
@@ -155,12 +157,10 @@ head('the command line');
      did, the CLI paired content/refs with the fixture's figures: green where
      content/refs is absent, red on the machine that has it. */
   ok('and its references are the fixture corpus, not content/refs', plain.status === 0 && fs.readFileSync(outFile, 'utf8').includes('Fixture chapter'), (plain.stdout + plain.stderr).trim().slice(0, 120));
-  /* The export found the way build.js finds it: the owner's first run was
-     refused because this read a variable build.js does not. */
+  /* The owner's first run was refused because this read a different variable
+     from the one their machine was set up with. */
   const viaEnv = spawnSync(process.execPath, [S('assemble-app.js'), '--shell', shellFile, '--out', outFile], { encoding: 'utf8', env: { ...env, SYSTOLE_SRC: exportFile } });
-  ok('it finds the export through SYSTOLE_SRC, as build.js does', viaEnv.status === 0, (viaEnv.stdout + viaEnv.stderr).trim().slice(0, 120));
-  const buildVar = (fs.readFileSync(S('build.js'), 'utf8').match(/process\.env\.(SYSTOLE_\w+)\) return path\.resolve/) || [])[1];
-  ok('and that is the variable build.js reads', buildVar === 'SYSTOLE_SRC', String(buildVar));
+  ok('it finds the export through SYSTOLE_SRC', viaEnv.status === 0, (viaEnv.stdout + viaEnv.stderr).trim().slice(0, 120));
   const none = spawnSync(process.execPath, [S('assemble-app.js'), path.join(dir, 'missing.html')], { encoding: 'utf8' });
   ok('an export that is not there exits 2', none.status === 2, String(none.status));
 }

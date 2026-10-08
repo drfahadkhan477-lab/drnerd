@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /*
- * Search your notes, without a browser: the ranking, the quoting, the markup,
- * and the four anchors notesearch-patch relies on.
+ * Search your notes, without a browser: the ranking, the quoting and the
+ * markup.
  *
  *   node tests/verify-notesearch-pure.js
  *
  * No browser, no build, no licensed export. tests/verify-notesearch.js drives
- * the patched screen in a browser; this holds everything that decides
+ * the screen in a browser; this holds everything that decides
  * something, which is all of src/core/notesearch.js.
  *
  * THE RANKING CHECK IS THE REASON THIS EXISTS. On the device, the app's own
@@ -124,26 +124,6 @@ head('the markup the screen shows');
   ok('an open note replaces the list', /ns-note-title">Sotalol/.test(opened) && !/data-ns-q/.test(opened));
   const missing = N.screenHtml({ q: 'sotalol', open: 'gone' }, NOTES, fakeSearch([]), esc, x => x, () => '');
   ok('an open id no longer on the shelf falls back to the search', /data-ns-q/.test(missing));
-}
-
-head('the four anchors are echo\'s own output, and nothing runs between');
-{
-  /* notesearch-patch's safety argument, checked: each anchor is text that
-     echo-patch emits, and notesearch runs straight after echo, so no step can
-     rewrite an anchor before this one reads it. */
-  const patchSrc = read('scripts/notesearch-patch.js');
-  const echoSrc = read('scripts/echo-patch.js');
-  const CALL = /patch\(\s*'([^']*)',\s*`((?:\\.|[^\\`])*)`/g;
-  const un = t => t.replace(/\\`/g, '`').replace(/\\\$/g, '$').replace(/\\\\/g, '\\');
-  const anchors = [...patchSrc.matchAll(CALL)].map(m => ({ label: m[1], find: un(m[2]) }));
-  ok('four anchors found in notesearch-patch.js', anchors.length === 4, anchors.map(a => a.label).join(' | '));
-  const echoEmits = [...echoSrc.matchAll(/patch\(\s*'[^']*',\s*`(?:\\.|[^\\`])*`\s*,\s*`((?:\\.|[^\\`])*)`\s*\)/g)].map(m => un(m[1])).join('\n');
-  for (const a of anchors) {
-    ok(`"${a.label}" is text echo-patch emits`, echoEmits.includes(a.find), a.find.split('\n')[0].slice(0, 60));
-  }
-  const chain = [...(read('scripts/build.js').match(/const CHAIN = \[([\s\S]*?)\];/) || [, ''])[1].matchAll(/'([a-z0-9-]+)'/g)].map(m => m[1]);
-  ok('notesearch runs immediately after echo', chain.indexOf('notesearch') === chain.indexOf('echo') + 1 && chain.indexOf('echo') > -1,
-     `echo at ${chain.indexOf('echo') + 1}, notesearch at ${chain.indexOf('notesearch') + 1}`);
 }
 
 head('Safari 13.4 can parse it');

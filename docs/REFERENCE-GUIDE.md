@@ -124,7 +124,7 @@ against perfusion at rest](refimg://hf/049_FIG.56.5_p058.jpg)
 ```
 
 `refimg://<unit>/<file>` resolves against `content/refs-images/`, and the build
-step `scripts/ref-images-patch.js` does two things with it. In the Notes panel
+(`scripts/ref-images.js`, called by `scripts/assemble-app.js`) does two things with it. In the Notes panel
 the citation renders as the figure with your caption beneath it. And in
 **grounded mode**, when Apex cites that note, the figure is attached to the
 request as an actual image — so it describes what is in the diagram rather than

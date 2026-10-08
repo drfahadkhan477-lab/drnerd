@@ -93,6 +93,16 @@ const PENDING = (() => {
   return [...block.slice(0, block.indexOf('];') + 2).matchAll(/'([a-z0-9-]+)'/g)].map(m => m[1]);
 })();
 
+/* And the mirror: suites deleted since the last write of their half, still
+   in the record on purpose until the next one. */
+const RETIRED = (() => {
+  const v = read('scripts/verify.js');
+  const at = v.indexOf('const RETIRED_RECORD = [');
+  if (at < 0) return [];
+  const block = v.slice(at);
+  return [...block.slice(0, block.indexOf('];') + 2).matchAll(/'([a-z0-9-]+)'/g)].map(m => m[1]);
+})();
+
 head('every registered suite is in the record');
 {
   /* Read out of the runner's own registry, so adding a suite and forgetting to
@@ -112,7 +122,7 @@ head('every registered suite is in the record');
      this block was written for — a suite registered and then quietly never
      run, visible only as a total that is mysteriously too low. */
   const missing = registered.filter(n => !(n in stats.suites) && !PENDING.includes(n));
-  const stale = Object.keys(stats.suites).filter(n => !registered.includes(n));
+  const stale = Object.keys(stats.suites).filter(n => !registered.includes(n) && !RETIRED.includes(n));
   ok('no registered suite is missing from the record without saying so', missing.length === 0,
      missing.join(', ') || 'none');
   /* Both directions, because a one-way check would let a name be parked in
@@ -124,21 +134,18 @@ head('every registered suite is in the record');
   ok('and nothing is still declared pending that the record already holds',
      PENDING.every(n => !(n in stats.suites)),
      PENDING.filter(n => n in stats.suites).join(', ') || 'none');
-  ok('and the record holds nothing that is no longer a suite', stale.length === 0,
+  ok('and the record holds nothing that is no longer a suite, unless it is declared retired', stale.length === 0,
      stale.join(', ') || 'none');
+  /* Both directions again: a retired name must still be in the record (or the
+     write that dropped it has happened, and the name must go) and must not be
+     a registered suite (or it was never retired). */
+  ok('nothing is declared retired that the record no longer holds',
+     RETIRED.every(n => n in stats.suites), RETIRED.filter(n => !(n in stats.suites)).join(', ') || 'none');
+  ok('and nothing declared retired is still registered',
+     RETIRED.every(n => !registered.includes(n)), RETIRED.filter(n => registered.includes(n)).join(', ') || 'none');
   ok('every recorded suite reported at least one check', !Object.entries(stats.suites).some(([, n]) => !(n > 0)),
      Object.entries(stats.suites).filter(([, n]) => !(n > 0)).map(([k]) => k).join(', ') || 'none');
 }
-
-/* How long the patch chain is, derived from the chain itself. Three sentences
-   quote this number and none of them was checked, so all three had drifted:
-   docs/BUILD.md said fifty-six, scripts/build.js said fifty-six, package.json
-   said 64, and the chain was 73. Nobody had been careless — the number moves
-   whenever a step is added, which is exactly the kind of fact prose loses and
-   a derivation keeps. */
-const chainSteps = ((read('scripts/build.js').match(/const CHAIN = \[([\s\S]*?)\];/) || [, ''])[1]
-                    .match(/'[^']+'/g) || []).map(s => s.slice(1, -1));
-const chainLength = chainSteps.length;
 
 /* The honest CI number, derived rather than quoted: whichever suites the
    workflow actually invokes, summed from what they actually reported. */
@@ -308,17 +315,6 @@ head('the prose agrees with the record');
        means it is true today rather than after the next full run. */
     ['.github/workflows/verify.yml', 'the size of the logic job',
      /the (\d+) suites that are pure Node/, r => [+r[1] === pureCI.length]],
-    ['docs/BUILD.md', 'the length of the patch chain',
-     /The chain is (\d+) patch scripts/, r => [+r[1] === chainLength]],
-    ['scripts/build.js', 'the length of the patch chain',
-     /applying (\d+) patch scripts/, r => [+r[1] === chainLength]],
-    ['package.json', 'the length of the patch chain',
-     /standard library and (\d+) patch scripts/, r => [+r[1] === chainLength]],
-    /* CLAUDE.md tells the next agent "if you write a sentence containing a
-       number, guard it or do not write it". It had one unguarded sentence of
-       its own when it was written. This is that sentence. */
-    ['CLAUDE.md', 'the length of the patch chain',
-     /holds `CHAIN`: (\d+) steps/, r => [+r[1] === chainLength]],
     /* FIVE MORE IN docs/BUILD.md, ALL OF THEM STALE WHEN THIS WAS WRITTEN, and
        every one the same shape as the two CLAUDE.md already names: an
        unguarded sentence sitting near a guarded one, so the green around it
@@ -333,20 +329,10 @@ head('the prose agrees with the record');
     ['docs/BUILD.md', 'the paragraph on building without Python',
      /the other (\d+)\s+run normally\s*—\s*it is (\d+) of the (\d+) checks/,
      r => [+r[1] === stats.suiteCount - 1, +r[2] === stats.suites.figreview, +r[3] === stats.total]],
-    /* The two numbers in the iterate-on-one-step recipe. Both move whenever a
-       step is added anywhere, and the second moves when one is added BEFORE
-       theme, which is how it came to say 14-20 against an 85-step chain. */
-    ['docs/BUILD.md', 'the --keep intermediates count',
-     /--keep\s+#\s*once, keeps all (\d+) intermediates/, r => [+r[1] === chainLength]],
-    ['docs/BUILD.md', 'the step range --from theme reruns',
-     /--from theme\s*#\s*only steps (\d+)-(\d+) rerun/,
-     r => [+r[1] === chainSteps.indexOf('theme') + 1, +r[2] === chainLength]],
     /* The repository-shape sketch, which reads as a diagram and so gets
-       re-read often and re-checked never. It said 71 patch scripts against 85,
-       and "35 Playwright suites (34 single-file + pwa)" against a registry of
+       re-read often and re-checked never. It said 71 patch scripts against 85
+       (a count dropped with the chain), and "35 Playwright suites (34 single-file + pwa)" against a registry of
        75 — a sentence that had been wrong through roughly forty additions. */
-    ['docs/BUILD.md', 'the patch-script count in the repository sketch',
-     /verify · (\d+) \*-patch/, r => [+r[1] === chainLength]],
     ['docs/BUILD.md', 'the suite counts in the repository sketch',
      /(\d+) suites · (\d+) need no browser/,
      r => [+r[1] === stats.suiteCount, +r[2] === pureCI.length]],
@@ -377,22 +363,6 @@ head('the prose agrees with the record');
     const verdicts = judge(m);
     ok(`${file}: ${what}`, verdicts.every(Boolean), verdicts.every(Boolean) ? m[0].replace(/\s+/g, ' ').slice(0, 72) : `says "${m[0].replace(/\s+/g, ' ').slice(0, 72)}"`);
   }
-}
-
-head('the chain is as long as the prose says');
-{
-  ok('the chain has steps to count', chainLength > 0, `${chainLength} steps`);
-  /* Vacuity guard: a derivation that silently returns zero would make every
-     claim above compare 0 against 0 the moment somebody reformats the array. */
-  const onDisk = fs.readdirSync(path.join(ROOT, 'scripts')).filter(f => f.endsWith('-patch.js')).length;
-  ok('and every step in it has a patch script on disk', chainLength === onDisk,
-     `${chainLength} in CHAIN, ${onDisk} scripts`);
-  /* The --from range above is anchored on chainSteps.indexOf('theme'), and a
-     miss there returns -1, which +1 turns into a plausible-looking 0. A step
-     renamed out from under that claim would otherwise leave it comparing a
-     number nobody meant against prose nobody updated. */
-  ok('and theme is one of its steps, so the --from range is not anchored on a miss',
-     chainSteps.includes('theme'), `theme at ${chainSteps.indexOf('theme') + 1}`);
 }
 
 head('the arithmetic in the header is self-consistent');
@@ -485,7 +455,7 @@ head('no assertion is incapable of failing');
      !probe('list.length === 0') && !probe('found !== null'));
 }
 
-/* ── a number in a suite claim, held to the chain that builds it ──────────────
+/* ── a number in a suite claim, held to the app that defines it ───────────────
 
    scripts/verify.js describes each suite in one line. The theme suite's line
    said "eight palettes" from the day it was written until well after the ninth
@@ -501,21 +471,21 @@ head('no assertion is incapable of failing');
    The count is derived, never typed: a tenth preset moves it on its own.
 
    NARROW ON PURPOSE, and said here rather than left for the reader to assume.
-   It counts DISTINCT THEMES ids appearing in any *-patch.js, which is correct
-   while every such entry is an addition — no step removes a theme today. A
-   step that did would make this overcount, and would have to be taught here.
+   It counts DISTINCT THEMES ids appearing in app/systole.html, which is
+   correct while every such entry is a palette the app offers. (Until the
+   patch chain was deleted it counted them across the *-patch.js scripts,
+   which added them one step at a time.)
    It also holds one claim, not every claim in SUITES: the others quote counts
    ("two axes", "three layouts") whose sources are not one array, and a sweep
    that guessed at them would be the kind of lint that gets ignored. */
-head('the palette count in a suite claim is the count the chain builds');
+head('the palette count in a suite claim is the count the app defines');
 {
   const WORD = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
                  seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 
   const ids = new Set();
-  for (const name of fs.readdirSync(path.join(ROOT, 'scripts'))) {
-    if (!name.endsWith('-patch.js')) continue;
-    const src = blankComments(read(path.join('scripts', name)));
+  {
+    const src = blankComments(read('app/systole.html'));
     const re = /\{\s*id:\s*'([a-z0-9]+)'\s*,\s*name:\s*'[^']*'\s*,\s*group:\s*'(?:light|dark)'/g;
     let m;
     while ((m = re.exec(src))) ids.add(m[1]);
@@ -533,12 +503,12 @@ head('the palette count in a suite claim is the count the chain builds');
      also exactly what this section would look like if it had never run. */
   ok('the theme suite has a claim to read', claim.length > 0, claim || '(none)');
   ok('that claim names a palette count', Number.isFinite(count), String(named));
-  ok('the chain defines themes to count', ids.size > 0, `${ids.size} ids`);
+  ok('the app defines themes to count', ids.size > 0, `${ids.size} ids`);
 
-  ok('the claim names as many palettes as the chain defines',
-     count === ids.size, `claim says ${count}, chain builds ${ids.size}`);
+  ok('the claim names as many palettes as the app defines',
+     count === ids.size, `claim says ${count}, the app defines ${ids.size}`);
   ok('verify-theme.js asserts that same number, so suite and claim cannot drift',
-     Number(asserted) === ids.size, `verify-theme says ${asserted}, chain builds ${ids.size}`);
+     Number(asserted) === ids.size, `verify-theme says ${asserted}, the app defines ${ids.size}`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

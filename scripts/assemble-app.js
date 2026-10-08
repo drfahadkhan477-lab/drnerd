@@ -1,37 +1,34 @@
 #!/usr/bin/env node
 /*
- * Build the app from app/systole.html, without the patch chain: step 2 of
- * retiring it (docs/BUILD.md, "Retiring the patch chain").
+ * Build the app: `npm run build -- path/to/export.html` runs this.
  *
  *   node scripts/assemble-app.js [source.html] [--out build/systole.assembled.html]
- *                                [--compare build/systole.html]
+ *                                [--compare other-build.html]
  *                                [--refs content/refs] [--ref-images content/refs-images]
  *
- * app/systole.html is the chain's output with every payload replaced by a slot
- * token (scripts/app-slots.js, frozen by scripts/freeze-shell.js). This fills
- * each slot from where the chain itself gets it, not from a copy of the
- * chain's output:
+ * app/systole.html is the app with every payload replaced by a slot token
+ * (scripts/app-slots.js). This fills each slot:
  *
- *   ALL_Q        the export's bank, with keys-patch's answer-key corrections
- *                then flags-patch's content flags applied, written as those
- *                two steps write it (JSON.stringify of the whole bank)
- *   IMGS         the export's figures, verbatim: no step edits them
- *   REF_SEED     refs-patch's seed, built from content/refs
- *   REF_IMGS     ref-images-patch's figures, built from content/refs-images
- *   HEART_MESH   scripts/heart-bake.js over src/core/heart3d.js, as apex-patch does
+ *   ALL_Q        the export's bank, with the answer-key corrections
+ *                (scripts/answer-keys.js) then the content flags
+ *                (scripts/content-flags.js) applied: JSON.stringify of the bank
+ *   IMGS         the export's figures, verbatim
+ *   REF_SEED     the reference notes, built from content/refs (scripts/ref-seed.js)
+ *   REF_IMGS     their figures, from content/refs-images (scripts/ref-images.js)
+ *   HEART_MESH   scripts/heart-bake.js over src/core/heart3d.js
  *   src, asset   the repository's files as they are now
  *
- * The functions are the chain's own, exported from those scripts, so there is
- * one copy of each rule. Then it stamps the result as build.js does
- * (scripts/stamp.js), after removing the stamp the frozen shell was cut with.
+ * Then it stamps the result (scripts/stamp.js), after removing the stamp the
+ * frozen shell was cut with.
  *
- * --compare is the proof this path is the chain's: it strips both stamps and
- * compares bytes, and when they differ says WHICH part differs (each payload,
- * and the shell around them), never what the text is. Run it on the owner's
- * machine after `node scripts/build.js`, where both inputs exist.
+ * --compare strips both stamps and compares bytes with another build, and when
+ * they differ says WHICH part differs (each payload, and the shell around
+ * them), never what the text is. It was the proof that this path built what
+ * the retired patch chain built; it still answers "what changed between these
+ * two builds" without printing licensed text.
  *
- * The export is read as UTF-8, as stage0-patch reads it, so any byte the
- * chain would replace is replaced the same way here.
+ * The export is read as UTF-8, so a byte that is not valid UTF-8 becomes
+ * U+FFFD here exactly as it did in the patch chain.
  */
 'use strict';
 const fs = require('fs');
@@ -43,6 +40,7 @@ const { buildRefSeed, REFS_DIR } = require('./ref-seed.js');
 const { buildRefImages, IMAGES_DIR } = require('./ref-images.js');
 const { bake } = require('./heart-bake.js');
 const { gitCommit, stampBuffer, STAMP_RE } = require('./stamp.js');
+const { replaceWhole } = require('./atomic.js');
 
 const ROOT = path.join(__dirname, '..');
 const IMGS_RE = /\nconst IMGS=(\{[\s\S]*?\});\n/;
@@ -107,13 +105,16 @@ function compareToChain(chainBuf, assembledUnstamped, sources = Slots.repoSource
 
 function findSource(arg) {
   if (arg) return arg;
-  /* SYSTOLE_SRC, the variable build.js reads: the first owner run of this
-     script was refused for a machine set up for build.js under that name. */
+  /* SYSTOLE_SRC, the variable the patch chain read: the first owner run of
+     this script was refused for a machine set up under that name. */
   if (process.env.SYSTOLE_SRC) return path.resolve(process.env.SYSTOLE_SRC);
   const dir = path.join(ROOT, 'source');
   const found = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.html')) : [];
   if (found.length === 1) return path.join(dir, found[0]);
-  throw new Error(found.length ? `source/ holds ${found.length} exports; name one` : 'no export: pass its path, set SYSTOLE_SRC, or put it in source/');
+  /* "deliberately not in this repository" is what CI's build-guard job looks
+     for: the refusal must say why there is no export, not only where to put one. */
+  throw new Error(found.length ? `source/ holds ${found.length} exports; name one`
+    : 'no export. It is the licensed question bank and is deliberately not in this repository: pass its path, set SYSTOLE_SRC, or put it in source/');
 }
 
 if (require.main === module) {
@@ -130,7 +131,9 @@ if (require.main === module) {
       imagesDir: opt('--ref-images') ? path.resolve(opt('--ref-images')) : undefined,
     }) });
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, r.out);
+    /* Whole or not at all: a write that fails part-way (a full disk) must not
+       leave a broken app where the previous working one was. */
+    replaceWhole(out, r.out);
     console.log(`assembled → ${path.relative(ROOT, out)}  (${(r.out.length / 1e6).toFixed(2)} MB, build ${r.digest})`);
     const cmp = opt('--compare');
     if (cmp) {

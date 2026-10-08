@@ -71,12 +71,12 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   checks both libraries before running rather than dying halfway through.
 
 - **A reference corpus at `content/refs/`** — `.md` files in the shape
-  `docs/REFERENCE-GUIDE.md` describes. The build REQUIRES it: `refs-patch`
-  exits 1 on a missing or empty directory, so there is no such thing as a
-  build without one.
+  `docs/REFERENCE-GUIDE.md` describes. Without it the build still finishes
+  (since `dc26ab3` it prints "nothing to seed" and carries on), but the app
+  ships with an empty notes library and the full suite cannot go green.
 
-  **The three files in `docs/reference-examples/` unblock the build and are
-  not a test corpus**, which is worth stating because it is not guessable and
+  **The three files in `docs/reference-examples/` are enough to build with and
+  are not a test corpus**, which is worth stating because it is not guessable and
   because assuming otherwise costs a full run. Copying them in produces 12
   notes citing no figures, and six suites then fail for want of a corpus
   rather than for anything wrong with the app:
@@ -98,215 +98,51 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## How the build works
 
-The chain is 91 patch scripts, run in order against the export. Each applies a list of
-exact-match find/replace edits and **throws unless every edit matches exactly
-once**.
+`npm run build -- path/to/export.html` runs `scripts/assemble-app.js`.
+`app/systole.html` is the app with every payload replaced by a slot token
+(`scripts/app-slots.js`), and the assembler fills each slot:
 
-That strictness is the point. A patch that silently matched zero times would be
-a feature that quietly disappeared, and a patch that matched twice would be one
-applied somewhere it was never meant to go. The failure mode of this build is a
-loud error naming the step, not a subtly wrong app.
+- **the question bank**: the export's, with the answer-key corrections
+  (`scripts/answer-keys.js`) and then the content flags
+  (`scripts/content-flags.js`) applied. Each correction states the value it
+  replaces, so an export that has changed underneath it stops the build with
+  the question's id instead of being "corrected" a second time;
+- **the bank's figures**: the export's, verbatim;
+- **the reference notes and their figures**: built from `content/refs` and
+  `content/refs-images` (`scripts/ref-seed.js`, `scripts/ref-images.js`);
+- **the heart's mesh**: `scripts/heart-bake.js` over `src/core/heart3d.js`;
+- **every `src/` module and `assets/` file**: as they are in the repository.
 
-The cost is that order matters, and the dependencies are real:
+Then it stamps the result (`scripts/stamp.js`) and writes it whole
+(`scripts/atomic.js`): a build that fails part-way leaves the previous app
+where it was. It finds the export the way you give it: a path, `SYSTOLE_SRC`,
+or the one `.html` file in `source/`. With none it refuses and says why, and
+CI's `build-guard` job holds it to that.
 
-| # | Step | Depends on |
-|---|------|-----------|
-| 1 | `stage0` | stabilises the raw export — everything assumes it |
-| 2 | `keys` | six answer keys the export gets wrong, fixed before anything reads them |
-| 3 | `flags` | two questions whose lettered answer panels the export never shipped; flagged beside `keys`, for the same reason |
-| 4 | `apex` | embeds `heart3d.js` and `apex.js`; the only place the heart enters |
-| 5–6 | `stage2`, `stage3` | FSRS-5–derived scheduling, then Apex's vision and memory |
-| 7 | `polish` | the rhythm registry the hero and Rhythm Lab both read. Also now embeds the Living Diagram family (`livingDiagram.js`, `conductionWave.js`, `coronaryTree.js`) beside heroRhythm/pencil, the same way and for the same reason. **Build-verified**: the full green run recorded in `94823e0` built this embed. Before that it had only been checked mechanically for collisions against every `find` anchor in every other `*-patch.js` script (none found), and its find/replace pair is the one heroRhythm/pencil had already proved |
-| 8 | `splash` | the pre-paint loading screen |
-| 9 | `braunwald` | the grounded reference library |
-| 10 | `art` | the design pass the later panels sit inside |
-| 11 | `leads` | the 12-lead — needs `art`'s panel styles |
-| 12 | `physio` | the cardiac cycle — anchors on the 12-lead's embed comment. `PHYSIO_VIEWS` now carries a sixth entry, `conduction`, and `physioNoteHtml()` a matching case, so Lab's chip picker and its teaching note both cover the view `wiggers.js` gained the same session. **Build-verified**: the full green run recorded in `94823e0` built both edits. They sit inside the same find/replace pair that `lab-patch.js`'s later anchor depends on, and that anchor still matched |
-| 13 | `name` | Systole |
-| 14 | `theme` | palettes — must follow `name`, it restyles the hero wordmark |
-| 15 | `home` | welcome bar, progress bar, layouts |
-| 16 | `splash-heart` | the mechanistic heart, into `splash`'s markup |
-| 17 | `crisp` | device-pixel ceilings |
-| 18 | `scale` | the 4pt spacing scale, and bars that reveal without layout |
-| 19 | `type` | the modular type scale, snapped over everything above |
-| 20 | `lab` | removes the Rhythm Lab's 3D heart — late, so what it deletes is final |
-| 21 | `review` | fixes from the full code review |
-| 22 | `refs` | the reference-note store, and the seeded library that ships with it |
-| 23 | `read` | the reading view those notes are read in |
-| 24 | `ref-images` | `refimg://`, so a note can cite a figure — the renderer is injected whether or not the corpus cites one, because `assets` anchors on it and because the same code resolves figures imported at runtime. A figure-free corpus used to skip it and kill the build at step 63; `verify-refimg-pure` holds that now |
-| 25 | `gemini` | a third provider, with its own wire shape and model discovery |
-| 26 | `memory` | what Apex keeps about you between sessions |
-| 27 | `assets` | an imported chapter brings its figures — rewrites the importer, the renderer and the vision path, so it must follow all three |
-| 28 | `chatfigs` | the figure Apex reasons from appears in the answer — after `assets` and `ref-images`, whose work it rewrites |
-| 29 | `pearl` | one sentence from your own notes, on the home screen |
-| 30 | `homeflow` | home cut to the trace, the pearl and the progress bar; everything else behind a door — last, so it moves finished markup |
-| 31 | `pearlcard` | the pearl as a numbered ladder on ECG paper, and the `-webkit-` spellings Safari needs |
-| 32 | `offline` | one press pulls every figure onto the device — on the Progress screen since step 85 (it began under `homeflow`'s door row), and only alive in the split build |
-| 33 | `pvloop` | the pearl's strip becomes the pressure–volume loop the cardiac-cycle screen already computes |
-| 34 | `fullbleed` | the navigation bar leaves the reading column so its colour reaches both edges of an iPad, and reserves the strip the status bar sits in |
-| 35 | `figview` | a figure opens full size and closes four ways |
-| 36 | `slowcycle` | the cardiac cycle runs at a fraction of real time, with a speed control that does not pretend to be a heart rate |
-| 37 | `hosted` | Gemini moves behind the Cloudflare Worker, Groq and Anthropic stay bring-your-own-key — last, it rewrites what `gemini` built |
-| 38 | `split` | Apex sits beside the question in landscape and under it in portrait, never over it — last, it re-lays out screens every earlier step built |
-| 39 | `boundary` | a retrieved note is fenced with a per-turn nonce and named as data, not direction — after every earlier retrieval step, because it wraps the text they produce |
-| 40 | `toolfence` | the same fence on `search_question_bank`, the channel the model opens itself; and a failed request stops being something Apex said — after `boundary`, whose `refBlock`/`refSafe` it reuses |
-| 41 | `chatfix` | the panel keeps the sentence you were typing and the place you were reading, and sends a window of the thread rather than all of it |
-| 42 | `autotheme` | `auto` notices the system flipping, so the heart, the 12-lead and the cardiac cycle follow it instead of waiting for a reload |
-| 43 | `store` | ink, notes, chats and the review log move to IndexedDB — after every step that reads or writes through `loadJSON` |
-| 44 | `homewide` | the home screen fills a landscape iPad instead of a 960px column with 406px of dead space either side, and portrait stops being sized by the length of whichever pearl was picked |
-| 45 | `pearlrich` | a pearl is a whole thought — up to three sentences, median 143→295 characters — over a travelling ECG current instead of a corner PV loop; after `homewide`, which gives it a tall column to be long in |
-| 46 | `apexroom` | the tutor panel is spacious, its nine prompts are behind a button, and the two known iOS scroll traps are closed |
-| 47 | `mistral` | Groq and Anthropic leave, Mistral arrives BYOK and vision-capable — genuinely last, it revises code that `apex`, `gemini`, `hosted`, `memory`, `ref-images`, `toolfence`, `chatfix` and `apexroom` all touched |
-| 48 | `guards` | the quiz keyboard steps aside for a focused `<select>` — after `apexroom`, which is what put one over the quiz screen |
-| 49 | `chipfix` | `apexroom` hid `.chips` globally to fold the tutor's prompts away; the Lab and the search screen share that class and lost their rows. Scoped to `#aiChips` |
-| 50 | `quiznav` | a Previous button, and the per-question memory that makes going back safe without re-grading or re-scheduling |
-| 51 | `homeprog` | the home screen's progress bar becomes a card: a legend, a due-review pill, numbers that count up with the fill |
-| 52 | `calibrationtrack` | ten faint calibration ticks across the home progress track — a static `repeating-linear-gradient` layered under the existing fill bars, in the `--border3` token every theme already resolves. No new markup, no animation. Built and run at `a0a94f9`: `verify-home` and `verify-homeprog` both pass, so the track still animates, counts up and reports the `aria-valuenow` it did before. **No suite asserts the ticks are visible** — none was written, and the measured `--border3`-against-`--border2` ratio is 1.23–1.42:1 across the named palettes, which is a hairline by intent and close enough to nothing that only an eye on a real screen can tell subtle from invisible |
-| 53 | `chapters` | the Chapters grid uses its own stagger timing, and the bar transition gets a starting point to run from |
-| 54 | `studyflow` | the Signal/Focus/Grid switcher removed — it only ever affected Chapters despite the name — and the page's sections cascade in like the home screen's |
-| 55 | `welcome` | one dismissable line under the doors naming Chapters and Apex, for a first-time reader only — after `homeflow`, whose door row it sits beneath |
-| 56 | `streamthrottle` | a streaming reply repaints on animation frames, not on every network chunk — after `mistral` and `gemini`, whose `oneTurn*` functions it wraps a shared painter around |
-| 57 | `contrastfix` | the 46 sites using `--dim` for text anyone is expected to read move to the already-AA `--muted`, and every interactive element gains a `:focus-visible` ring |
-| 58 | `highcontrast` | a ninth theme preset, Contrast — near-black ground, near-white text, on the same `data-palette` mechanism the other eight already use. Its accent luminance is deliberately held inside the range `verify-pearl` and `verify-home`'s AA sweeps already clear, rather than picked for looking bright. `verify-theme.js`/`verify-tokens.js` asserted an exact eight-theme set and were extended to nine — the count, the light/dark split, the distinct-background and distinct-accent sets, the picker's option count, and `ACCENT_BY_THEME`, which is looped by its own keys and so would have skipped the new preset silently rather than failing. Built and run at `a0a94f9`: both pass. What no suite covers is whether the palette reads well; that is eyeball-only |
-| 59 | `failsafe` | `render()` throwing stops meaning a blank or frozen screen — wraps every earlier step's own version of `render()`, and boot's own call |
-| 60 | `semantictokens` | `--accent`/`--success`/`--danger`/`--warning` become canonical; `--teal`, `--green`, `--red`, `--amber` and their `-2` variants become pure `var()` aliases — after `failsafe`, rewriting `theme`'s own settled literals |
-| 61 | `splashtiming` | the rhythm trace waits for the heart to settle instead of sweeping in parallel with it — after `splash-heart`, whose 1s settle it now sequences after |
-| 62 | `haptics` | a felt pulse alongside the correct/wrong feedback `selectOpt` already draws — feature-detected, and silent under `prefers-reduced-motion` |
-| 63 | `designfollowup` | `--warn`/`--warn-bg`/`--warn-b` become real aliases rather than four independently-restated literals (fixing a latent auto+dark mismatch), and the splash heart gets its own `@keyframes` back from a same-named collision |
-| 64 | `disclaimer` | the app says what it is — educational board review, not clinical decision support — in both of the Apex panel's states and on the Progress screen, and gains the `<main>` and `<h1>` landmarks it never had |
-| 65 | `announce` | the quiz says what just happened: `aria-pressed` reports the user's own selection instead of the answer key, which had been announcing the correct option as pressed; a permanent live region outside `#app` speaks the verdict; focus follows the reading order; `ArrowLeft` reaches the Previous button `quiznav` shipped without a key; and the last `--dim` on read text moves to `--muted` |
-| 66 | `curate` | the document-wide double-tap trap is scoped to the controls that need it — it had been swallowing pinch and double-tap zoom on figures; the hero rotation stops while the page is hidden; `.q-card` gains the accessible name it needed once `announce` gave it focus; and `reviewQueue`'s "cap" and "storage marked persistent" stop misdescribing what they do |
-| 67 | `calibrate` | the review log stops recording only right-or-wrong — how long the answer took, how sure you were before giving it, and after a miss why you think you missed it; `calib.js` reads the three back as calibration, pace and error mix. Also finishes the WebGL context recovery `hardening` left half-wired, and stops `restoreQuizState` inferring "answered" from an `S.answers` entry merely existing |
-| 68 | `figzoom` | a figure stops being fitted-or-natural and becomes something you examine — pinch, wheel, drag to pan, double-tap, a control row and the keyboard, over `figzoom.js`'s zoom-about-a-point arithmetic. `figview`'s four ways out survive intact, which is most of what the event handling is for: a pan ends on the image, so without care the drag that moved the figure is also the tap that dismisses it |
-| 69 | `figloadfade` | a figure fades in once its full-resolution image finishes loading, instead of popping in mid-decode — the hidden state is opt-in, added only on a path that has already committed to removing it on both `load` and `error`, so a failed load is never silently blank. That inversion is the whole design: written the obvious way round — `img{opacity:0}` plus a class the script adds — a figure whose decode errors or whose script never ran is not a broken-image mark but nothing at all, on a screen whose only content is that figure. Built and run at `a0a94f9`: `verify-figzoom` passes, so the viewer still opens, zooms, pans and closes four ways with the fade in place. **The error path is guarded by `verify-figfade-pure`** — which exists because this row previously admitted the hole instead of closing it. That suite lifts the patch's own `replace` block and runs it against stub images, so the four outcomes (cached, pending-then-load, pending-then-**error**, script-never-ran) are checked against the lines that actually ship rather than a copy. Proven red twice: delete the `error` listener and the third case fails; write the CSS hidden-by-default and the inversion sweep fails |
-| 70 | `schema` | the saved blob carries a `DATA_SCHEMA_VERSION`, and `save()` preserves fields it does not recognise. Systole is a file you copy between your own devices, so two copies at different versions is the ordinary case — and until now the older one would silently drop whatever the newer one had added, the next time it wrote. Paired with `SCHEDULER_VERSION` in `fsrs.js`, which stamps each card with the model that scheduled it, pinned by a fingerprint of the FSRS weights so a tuning change cannot pass unnoticed |
-| 71 | `figfit` | two things a real iPad found, neither reachable by a synthetic test. **"Fit" did not fit**: the viewer image was `max-width` only, so a TALL figure overflowed into a clipped middle band — `figzoom` had replaced scrolling with transform panning, and panning is disabled while fitted because a fitted image is assumed whole. One `max-height:100%` makes scale 1 a true contain. **And the figures under an Apex answer had no control of any kind** — they arrived with the reply and stayed, taking a third of the panel. Now a disclosure, shut by default, following `apexChipsOpen` exactly: a module-level flag so it survives the re-render, a class toggle so a half-typed question is not destroyed |
-| 72 | `selftest` | the invariants run **on the device**, in the engine, at the size the iPad is actually held: open the app with `#selftest`. Both bugs that reached the fellow were invisible to 1,496 checks because the harness is Blink, portrait-ish, and a 400×300 rectangle — while the app is WebKit, landscape, and 408 real figures, 401 of which were clipped at "Fit". That gap cannot be closed from the harness, so the checks go to the device. It opens real figures and measures them rather than recomputing the sizing rule, which would agree with a wrong one |
-| 73 | `answerroom` | opening the figures under an Apex answer crushed the answer to **43px** on an iPad held portrait — one line. `.ai-body` was the panel's only `flex:1` child and carried `min-height:0`, so every pixel the figure list took came out of the answer with nothing to stop it at zero. An explicit `8rem` floor, and the list gives up the difference. Four candidates were measured at three frames before this one was chosen; shrinking the figures too was rejected, because a 12-lead too small to read is not a saving |
-| 74 | `avatarfit` | the Apex avatar's canvas threw `IndexSizeError` whenever it was briefly under 4px — a collapsing panel, a rotating iPad — because `R = min(w,h)/2 - 2` goes negative and `createRadialGradient` refuses a negative `r0`. The throw happens inside the rAF loop, so it killed the animation for the session rather than skipping a frame. `fit()` tested the width and never the height. Found by `verify-layout`, which resizes |
-| 75 | `prefixq` | `tok()` stems, and the stem of a truncation is a truncation — "amylo" is not "amyloidosis", so `IDX.df` has no entry, no document scores, and the library's own search box answered **ten of 146** title queries with nothing at all. Query tokens the index has *never seen* are completed against the vocabulary, at most two, nearest in length first; tokens it knows are left exactly alone. `54.1% → 80.1%` R@1 on truncated terms, empty results to zero, and the other three query shapes unchanged to the decimal. Measured by `verify-retrieval` |
-| 76 | `prefixrank` | The rest of that gap, by **scoring** the prefix instead of substituting for it. Two chosen completions make a document whose only matching term is a *third* one invisible, credit a document holding both twice, and give each completion its own idf so a rare wrong one outargues the common right one. Raising the cap fixes none of these — at 2/3/4/6/8 it measured `63.4 / 61.7 / 61.0 / 62.7 / 63.4`, noise around a ceiling. A stub is now **one term whose postings are the union of every term it prefixes**: tf summed, df counted over documents. `buildIndex` keeps postings, so a stub costs the postings that can match rather than the whole collection — and stub queries got *faster*, 0.25 → 0.11 ms. A known token is still never treated as a prefix: `as` is aortic stenosis. `66.8% → 87.1%` R@1 on the 295-note shelf, above the `80.1%` the old mechanism reached on half as many notes; floor raised 0.79 → 0.86. Measured by `verify-retrieval` |
-| 77 | `heroart` | the home hero becomes the anatomical heart again — `heart3d.js` gains a fourth style, `specimen`, and the conduction system is drawn as a source rather than a lit surface. The current is not an effect: `uAct` is the depolarisation front in ms since the sinus node fired and each vertex carries its own activation time, driven by the same cardiac clock as the ECG strip beside it, so when the hero rotation reaches atrial fibrillation the current goes irregular too |
-| 78 | `apexpage` | Apex gets the whole viewport under the nav, and its answers get set like prose. Full-page is a class on `#shell` rather than an `S.screen`, because `#ai` lives outside `#app` precisely so `render()` cannot tear down a conversation mid-reply — one Apex, one thread, one composer, a different box |
-| 79 | `resume` | a chapter you left is the chapter you come back to. The place is written per chapter under `resume` in the saved blob (added to `SCHEMA_KEYS`, capped at 12 chapters), restored when the same deck is opened again, and cleared by a reset — with an explicit restart control, because resuming has to be refusable |
-| 80 | `figsharp` | a note figure is drawn at the size it has rather than the size of the card. `.ref-fig` was a full-width block, so a 480 px figure was upscaled to fill it and read as blurry on every screen wider than the figure. `width:fit-content` on the frame and `width:auto` on the image; the copy Apex shows gets the same treatment |
-| 81 | `heartreuse` | navigating the app stops spending WebGL contexts. The hero built a new one on every visit home — twenty round trips, forty contexts — which Chromium absorbs because it returns a released slot and WebKit does not, so the same code hit the sixteen-context cap after about eight visits and began evicting a LIVE context. The markup now carries a slot; the canvas is created once and moved into it, and leaving home pauses the heart instead of destroying it |
-| 82 | `onetutor` | asked for after an audit that found no dead code at all, which leaves only this kind of removal: the second provider, working and not wanted. 7.6 KB out across 23 edits. The in-app importer stays — the step was scoped to both and narrowed to Mistral only before a line was written, and the patch's own header went on describing the wider version until it was corrected. `PROVIDERS`/`ENDPOINT`/`MODELS` stay maps with one entry rather than collapsing into bare Gemini constants, and the nine suites that mocked Mistral's OpenAI shape move onto `tests/_wire.js`, which says what a suite wants to know — the system prompt, the turns — instead of spelling Gemini's JSON out nine times |
-| 83 | `flushguard` | the last chunk is painted however the stream ends. `makeStreamPainter` exists so that "the very last chunk is never left unpainted waiting on a frame that may not come", and its `flush()` sat after the read loop — honoured on the one path where the loop ends tidily and on no other. Now a `try`/`finally` around the loop. Found in the same pass: the composer rendered `<button id="aiSend" ${aiBusy?'disabled':''}>` with a ■ glyph, so the stop button was disabled in exactly the state where it was the stop button, and `aiAbort.abort()` — its only caller anywhere — was unreachable |
-| 84 | `heroflex` | the hero stops reserving vertical space by how **wide** the screen is. `.hero-ecg{height:clamp(92px,13.5vw,140px)}` and `.hero-live{padding-bottom:clamp(104px,16vw,158px)}` both take their tallest value at 1194px wide — which is an 11-inch iPad in *landscape*, the shortest shape the app is held in. Rotate it to portrait and the hero gets shorter on a screen with 360px more room. Each clamp gains a height term through `min()`, so whichever axis is scarcer decides; the floors are untouched, and a phone renders identically. Measured by `verify-home`: the 11-inch landscape home screen goes from `97px over` to `47px over` |
-| 85 | `offhome` | the offline-download card moves off the home screen and onto Progress. The landscape home grid budgets itself exactly one screen and gives all of it to four named areas, sweeping every other child into implicit rows **beyond** that budget — under a rule whose own comment describes it as a fallback for the story rail and feed that had moved to the Chapters page. The card inherited that fallback and became 114.5px of guaranteed overflow on an 11-inch iPad held sideways. Bringing the tail into the grid and capping the wrap was tested and reaches 0px too, but squashes the hero 268px → 200px and widens the medallion/ECG overlap from 19px to 87px; the owner chose the move. Progress already opens with "Saved locally on this device", which is the same subject, and the cache survey moved with the card so it no longer runs on every visit home. `verify-pwa`: `0px over — first run, with the welcome card, was 43px` |
-| 86 | `focusmode` | the quiz, without the chrome around it. `#navbar` is fixed and outside the reading column, and one variable — `--navh` — is what `.nav`'s height, `#shell`'s `padding-top` and the Apex panel's `top`/`height` all measure from, so the whole feature is hiding the bar and setting that to `0px`: the shell and the tutor reclaim the space themselves. `--sat` is deliberately left alone, being the status bar's reserve rather than the app's chrome. The screen test is in JS and not CSS on purpose — `#navbar` is a *sibling* of `#app`, so scoping it to the quiz in CSS would need `:has()`, which Safari gained in 15.4 against this app's 13.4 floor. Two controls, each rendered only where it can act: the way in sits in the nav and only on the quiz screen (offered on Home it would flip `aria-pressed`, save, re-render and visibly do nothing), and the way out is a fixed 44px button in the shell, outside everything `render()` replaces — quiznav's action row is `reviewing ? '' : ...`, so putting it there would strand a fellow with no chrome and no way back. Keeps the progress bar, and keeps the confidence row, which feeds `calib.js`: hiding that would change what gets recorded, which is a behaviour change wearing a layout change's clothes. **Before any build reached it**: every anchor was read verbatim from a committed patch script and proven to match exactly once against a fixture, but nothing has built it. `tests/verify-focus.js` ships with it and was listed in `PENDING_RECORD` until the full green run recorded in `6ee3e5a` took its count  **Build-verified at last.** The first run that ever reached step 86 died here: the exit button anchored on three lines copied out of `fullbleed`(34), but `disclaimer`(64) had swapped that `<div id="app">` for the `<main>` landmark and `announce`(65) had put a live region beside it, so the anchor described markup gone since step 64 — `found 0`. Reading a patch script is how you get that wrong, and it is all anyone without a build can read. The anchor is now `<header id="navbar"></header>` alone, which is unique and is the insertion point; the other two lines were never load-bearing. `verify-shellanchor-pure` replays the whole shell region through the chain and checks every anchor into it at the step that uses it |
-| 87 | `ambient` | the Living Diagram's ambient mode. `livingDiagram.js` has decided since the Conduction Wave branch *when* ambient mode may run — the home screen only, after two minutes with no interaction, never with the Apex panel open, in Focus Mode or under `prefers-reduced-motion` — and *which* view comes next, never the same twice running; this step draws it. The views are the repository's own: `Heart3D` (whose `destroy()` and WebGL budget `verify-heartreuse` already holds), `ECG12` and `Wiggers`' PV loop. The earlier deferral was about `ECGMonitor`, which lives only inside the licensed export; this does not touch it. **One anchor**, the Durable memory banner, re-emitted so `echo` still finds it once; no state on `S`, no mount, the stylesheet injected on first use. A tap closes the overlay through its own `click`, so waking the screen never presses what was under the finger; a mouse closes it by moving a real distance, not a jitter. A change of screen counts as activity, so returning home after time elsewhere does not raise it at once. `verify-ambient` drives the shipped step over a scaffold: every promise above, and twenty visits to the heart view with no WebGL context discarded |
-| 88 | `echo` | Echo Studio: a reference you can browse and a calculator you can drive, as two tabs over one set of tables. The thinking is in `src/core/echo.js` (12 views with window, position, index mark and angle; 14 measurements; 9 severity tables as ordered bands; 9 disease profiles; the continuity, PISA, Bernoulli, Simpson and Devereux arithmetic) and `src/ui/echo.js` (strings in, strings out — no DOM, no timers), so both are held by `verify-echo-pure` and `verify-echoui-pure` without a browser. The calculator's rule is that a derived row appears only when every input it names is a finite number: never defaulted, never guessed, never `NaN`, because a plausible wrong number on a study screen gets memorised while an absent one gets investigated. **Four anchors, and three more deliberately avoided**: Echo's state lives in a closure here rather than on `S`, which drops the state-object anchor, the save-tail anchor and any concern about `SCHEMA_KEYS`; interaction is delegated from `document` once, which drops the mount anchor. Each of the four was replayed through the chain before it was written down — `verify-echoanchor-pure` does that replay as a check, seeding from the step that emits each region and applying every later step that touches it. It carries the focusmode bug as a fixture: `<div id="app">` is emitted by `fullbleed`(34) and destroyed by `disclaimer`(64), and must be reported REWRITTEN rather than merely absent, so a replay that goes blind is caught by its own self-test. **Build-verified**: the full green run recorded in `94823e0` built step 87, so `patch()` found all four anchors unique in the whole document. The replay alone could not show that. It proves each anchor SURVIVES to step 87, not that it is UNIQUE, because the rest of the document is the licensed export |
-| 89 | `notesearch` | Search your notes: a book button beside Echo opens a field over `search()`'s own index, filtered to notes, with notes titled by every word typed moved first. A tap opens the whole note with its figures through `md()`. The top-bar search is the export's and answers from questions only; this repository does not read that code, so the notes got a screen of their own. Anchored only on text echo emits, straight after it. |
-| 90 | `glass` | the buttons and cards become frosted, lit glass, and a light glides across a pane on hover or press — designed from `tools/button-census.js` run on a build in three themes, not from the export's stylesheet, which is not read. Neutral controls paint `var(--card)`, so each gets `--card: var(--card-glass)`, a see-through copy of the current theme's own card colour derived at runtime by `glassSync()`: every answer state, the destructive button and a selected chip paint other colours and are untouched by construction, since no rule here names a background. Frosted except `.chip` (the notes screen carries two thousand); a pane in `::after` (free on every button — `::before` is taken on `.opt` and `.ch-tile`) draws the highlight, rim and moving light beneath the label. High contrast is scoped out entirely, reduced motion stops every movement, and nothing Safari 13.4 lacks is used. `tests/verify-glass.js` runs the patch's own output against a page built with the census's names; not yet built against the export |
-| 91 | `phrase` | word order counts in the ranker: `buildIndex` also records each document's adjacent pairs of `tok()` terms, and `search()` credits a reference note with the fraction of the query's adjacent known-term pairs it holds — each pair weighed by its rarity across the index, as BM25 weighs a term — weighted like the coverage credit beside it. Questions rank exactly as before (the credit is in the note branch only), and a one-term query or a stub earns nothing. Added when the Braunwald units took "prose from the note" to 96.3% against its 98% floor: of 42 misses the winner held the 12-word phrase word for word in none — the right note had the phrase, a neighbour only its words. `tests/verify-phrase-pure.js` runs prefixrank's own search() before and after this patch |
-`node scripts/build.js --list` prints this. The order lives in `CHAIN` in
-`scripts/build.js` and nowhere else.
+**Where to edit**: `app/systole.html`, `app/css/systole.css`, `src/` and
+`assets/`. `scripts/carve.js` moves a range of lines out of
+`app/systole.html` into a file of its own, leaving a slot token, and keeps the
+result only if the app assembles to the same bytes as before.
+`tests/verify-carve-pure.js` audits the committed `app/` without the export:
+every token has its file and every piece is cited once.
 
-### Useful flags
+`node scripts/assemble-app.js <export> --out a.html --compare b.html` says
+whether two builds are the same bytes (stamps aside) and, if not, which part
+differs, by name, never the text.
 
-```bash
-node scripts/build.js --keep              # keep every intermediate step
-node scripts/build.js --from theme        # resume mid-chain, reusing build/
-node scripts/build.js --out ~/systole.html
-```
+### How it got here
 
-`--from` is what saves time while iterating: change `theme-patch.js`, rerun from
-`theme`, and the earlier steps are reused rather than recomputed.
-
-It needs those earlier steps to still be on disk, and a normal build cleans them
-up. So the iterating loop is:
-
-```bash
-node scripts/build.js --keep              # once, keeps all 91 intermediates
-# ...edit scripts/theme-patch.js...
-node scripts/build.js --keep --from theme # only steps 14-91 rerun
-```
-
-### Retiring the patch chain
-
-The chain is being replaced gradually, with the old path and the new one
-side by side until they agree. The export's application code is the owner's
-own, so it can be committed once what it carries is taken out: the question
-bank, its figures, and the Braunwald reference seed and figures.
-
-1. **Freeze the shell** (now). On the owner's machine, after a build:
-
-   ```bash
-   node scripts/build.js
-   node scripts/freeze-shell.js        # → app/systole.html, payloads → content/payload/
-   ```
-
-   `scripts/app-slots.js` replaces each payload with a slot token, and each
-   `src/` module and `assets/` file found verbatim too, so those stay the
-   source of truth. `freeze-shell` writes `app/` only if assembling the shell
-   gives the build back byte for byte, no question-bank or reference text is
-   left in it, no unclaimed base64 is left in it, and leak-guard passes it.
-   Its report lists every `src/` module that a later patch edited after
-   embedding: that is the drift the next steps remove. It stages nothing;
-   review `app/`, then commit it yourself.
-2. **Assemble from `app/`** (now). On the owner's machine, beside a chain build:
-
-   ```bash
-   node scripts/assemble-app.js --compare build/systole.html
-   ```
-
-   It finds the export as `build.js` does: a path given, `SYSTOLE_SRC`, or the
-   one file in `source/`.
-
-   `scripts/assemble-app.js` fills each slot from where the chain gets it: the
-   export's bank with `keys-patch`'s and `flags-patch`'s corrections, the
-   export's figures verbatim, `refs-patch`'s and `ref-images-patch`'s seed and
-   figures from `content/`, `heart-bake.js`'s mesh, and `src/` and `assets/`
-   as they are. It stamps the result as `build.js` does. `--compare` says
-   whether it is the chain's build byte for byte, and if not, which part
-   differs, by name. When it reports byte-identical, the chain is no longer
-   needed to build the app. CI now assembles the real app around a
-   synthetic bank (`scripts/synthetic-export.js`) and runs the browser
-   suites on it: the `synthetic-browser` job.
-3. **Carve `app/`** (now). Split it into CSS and modules a piece at a time:
-
-   ```bash
-   node scripts/carve.js <from> <to> app/<path>     # lines of app/systole.html, inclusive
-   node scripts/assemble-app.js --compare build/systole.html
-   ```
-
-   `scripts/carve.js` moves those lines into the file and leaves a slot token,
-   and keeps the result only if the shell assembles to the same bytes as
-   before. The second command, beside a chain build, is what shows the app is
-   still the chain's. `freeze-shell` on a later chain build finds each piece
-   where it stands, so the carving survives a re-freeze; a piece it does
-   not find verbatim is where the chain and `app/` have parted, and it
-   refuses to freeze until they agree. A piece must also be found exactly once
-   in the assembled app, not only in the shell: text that also stands inside a
-   piece already carved would be found twice or once by filename order.
-   `tests/verify-carve-pure.js` audits the committed `app/` without the
-   export: every token has its file and every piece is cited once. The
-   stylesheet is the first piece, `app/css/systole.css`. New work edits
-   `app/` or `src/` directly; no new patch steps are added.
-4. **Retire the chain** (done, 2026-10-04). `scripts/CHAIN-RETIRED` says so, and
-   two things read it. `npm run build` is now
-   `node scripts/assemble-app.js --out build/systole.html`: the app is built from
-   `app/`, `src/`, `assets/` and the export, to the file the rest of the pipeline
-   already reads. `npm run release-check`'s `build` step is the assembler too, and its
-   byte-for-byte comparison with the chain's build is no longer a step: there is no
-   chain build to compare with. (It is not skipped; a skip would withhold `CERTIFIED`
-   for ever, and a step that quietly vanished would be the overclaim that file forbids.)
-   The old recipe is `npm run build:chain`, and works for as long as `app/` still equals
-   its output. **The first edit to `app/` ends that**, which is what retiring it was for:
-   the 20-minute button, the readiness forecast, topic runs and voice mode are edits to
-   `app/`. The `*-patch.js` scripts stay in the repository as history until they are
-   deleted. What the assembler imports has moved out of them: `answer-keys.js`,
-   `content-flags.js`, `ref-seed.js`, `ref-images.js` (and `heart-bake.js`). Nothing is
-   added to the chain.
-
-   What the owner's machine should do once, after pulling this: `npm run release-check`
-   on the real export. Its `build` step is then the first real build by the assembler as
-   *the* builder; the full suite on Chromium, over http and on WebKit is what certifies it.
-
-`tests/verify-app-slots-pure.js` holds step 1 on a synthetic build. Only
-`freeze-shell` on the real build can show that the real one cuts cleanly.
+Until October 2026 the app was built by a patch chain: `scripts/build.js` ran
+its `*-patch.js` scripts in order against the export, each a list of
+exact-match find-and-replace edits that refused to run unless every edit
+matched exactly once. The chain's output was frozen into `app/`
+(`scripts/freeze-shell.js`), the assembler was shown to build the same bytes,
+the chain was retired on 2026-10-04 and then deleted. Its scripts, and the
+table of what each step did and why, are in git history:
+`git show 11d588e:docs/BUILD.md` and `git show 11d588e:scripts/build.js`.
+Comments in `app/`, `src/` and the suites still say "see scripts/X-patch.js"
+where that step's header explained a decision at length; read it with
+`git show 11d588e:scripts/X-patch.js`.
 
 ---
 
@@ -321,9 +157,8 @@ npm run release -- --dry-run                           # exercise the gate itsel
 ```
 
 `scripts/release-check.js` runs the sequence a release actually needs, in
-order: the export is readable → nothing licensed is staged → the patch chain
-applies → the app assembled without the chain is the chain's build, byte for
-byte → every figure decodes → the split build assembles → the full suite on
+order: the export is readable → nothing licensed is staged → the app
+assembles → every figure decodes → the split build assembles → the full suite on
 Chromium → the full suite against `dist/` over http → the full suite on WebKit.
 
 **It does not deploy.** It certifies, or it refuses to, and there are three
@@ -707,12 +542,13 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
-scripts/      build · verify · 91 *-patch · build-pwa · serve · shots
-tests/        155 suites · 90 need no browser · + pwa
+app/          systole.html · css/systole.css   (the app, payloads as slots)
+scripts/      assemble-app · verify · build-pwa · serve · shots
+tests/        155 suites · 88 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
-`src/` is the source of truth. The patch scripts embed those modules into the
+`src/` is the source of truth. The assembler embeds those modules into the
 page — they are never edited in the built file, and the built file is never
 edited by hand.
 

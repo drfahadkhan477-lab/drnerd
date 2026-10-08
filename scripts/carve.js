@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * Carve a piece of app/systole.html into its own file: step 3 of retiring the
- * patch chain (docs/BUILD.md, "Retiring the patch chain").
+ * patch chain (docs/BUILD.md, "How it got here").
  *
  *   node scripts/carve.js <from> <to> app/<path>
  *

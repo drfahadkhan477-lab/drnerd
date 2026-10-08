@@ -1,6 +1,9 @@
 # The splash heart
 
-Embedded into the app by `scripts/splash-heart-patch.js` — inline in the
+**Not used by the current build.** No slot in `app/` names these files and
+`scripts/build-pwa.js` does not read them: the splash shows
+`assets/hero-heart/heart.webp` now. They were embedded by `scripts/splash-heart-patch.js`
+in the deleted patch chain — inline in the
 single-file build, extracted to `content/splash-heart/` and fetched by
 `scripts/build-pwa.js` in the split build.
 
