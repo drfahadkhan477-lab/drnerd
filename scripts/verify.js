@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 155 suites and roughly 6632 checks, and they
+ * WHY THIS EXISTS. There are 153 suites and roughly 6611 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -472,7 +472,7 @@ const PENDING_RECORD = [];
    must not be registered, so the next write forces it out of this list. */
 /* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
    survived the chain to the step that used them; deleted with the chain. */
-const RETIRED_RECORD = ['shellanchor-pure', 'echoanchor-pure'];
+const RETIRED_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -509,11 +509,25 @@ const RETIRED_RECORD = ['shellanchor-pure', 'echoanchor-pure'];
    serial to 24.2 min at --jobs 3, so the parallelism bought nothing there and
    cost three suites to do it.
 
+   AND THREE MEMORIZER SUITES, FOUND THE SAME WAY (October 8, master 28a8df4,
+   SYSTOLE_JOBS=3 on the owner's Windows laptop):
+
+     memorizer             locator.waitFor 60s, at the first PDF it reads
+     memorizer-hardening   locator.click 30s, at its first double tap
+     memorizer-studyimport twenty minutes inside "the dialog"
+
+   Twice at three at a time they failed or hung; then, on the same commit and
+   machine with --jobs 1, they gave 484, 69 and 72 checks, all passing, the
+   counts CI and the record hold. Like the three above they wait on browser
+   work (PDF rendering in a worker, layout settling, the clipboard), not on a
+   clock.
+
    Everything else in the registry asserts on content, geometry or arithmetic,
    and was verified to give the same result under --jobs 3 as it does alone —
    that comparison is the evidence, not this list. */
 const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
-                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs']);
+                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs',
+                        'memorizer', 'memorizer-hardening', 'memorizer-studyimport']);
 
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(n);
@@ -538,7 +552,7 @@ if (flag('--list')) {
   process.exit(0);
 }
 
-const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout'];
+const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout', '--jobs'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
 /* A PATH OR A URL. Every suite already takes either — `file://` is just how a
    path reaches them — and the split build can only be driven over HTTP,
@@ -759,6 +773,14 @@ if (JOBS > 1) {
   console.log(`  ${chosen.length} suite${chosen.length === 1 ? '' : 's'}, one at a time, on ${ENGINE}\n`);
 }
 
+/* WHAT WAS TESTED, taken once, before any suite runs. Asked again later it
+   describes a different tree: a --pwa run writes tests/test-stats.json after
+   the suites and again after the split build, so the second write, and the
+   "all green" line between them, saw the first write as an uncommitted change
+   and labelled a clean checkout "+uncommitted changes" (the record of
+   2026-10-08 says so of a tree that was clean). Set at the top of the run
+   below, where provenance() is in scope. */
+let STARTED_ON = '';
 const results = [];
 /* The --pwa phases, which run outside the suite loop. Recorded here so the
    report covers everything the invocation measured: without them a run whose
@@ -928,6 +950,7 @@ async function runSerial(list) {
    At --jobs 1 the two calls are the same thing and the registry order is
    preserved, which is what every previous run printed. */
 (async () => {
+STARTED_ON = provenance();
 if (JOBS === 1) {
   await runSerial(chosen);
 } else {
@@ -980,7 +1003,7 @@ function writeStats(pwaCount) {
     /* 1 is one suite at a time; higher ran the shared suites concurrently.
        It changes no count — it says which arrangement produced the numbers. */
     jobs: JOBS,
-    commit: provenance(),
+    commit: STARTED_ON,
     pwaCount,
   });
   if (!out) {
@@ -1035,7 +1058,7 @@ function writeFailLog() {
   }
   const header = [
     `# systole verify — ${new Date().toISOString()}`,
-    `# checkout  ${provenance()}`,
+    `# checkout  ${STARTED_ON}`,
     `# engine    ${ENGINE}`,
     `# target    ${TARGET_IS_URL ? TARGET : path.relative(ROOT, TARGET)}  (${built})`,
     `# suites    ${results.length} run, ${total} checks, ${bad.length} failing`,
@@ -1080,7 +1103,7 @@ writeStats();
 if (bad.length) {
   console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}`);
   console.log(`  full output of those suites: ${path.relative(process.cwd(), writeFailLog())}`);
-  console.log(`  checkout: ${provenance()}\n`);
+  console.log(`  checkout: ${STARTED_ON}\n`);
   /* A stats-only failure means the record is out of date, which is the one
      failure that must NOT stop the run: --pwa has not happened yet, and the
      split build's count is part of what needs rewriting. Exiting here left the
@@ -1089,7 +1112,7 @@ if (bad.length) {
      lines below where it was solved. */
   if (blockers.length) process.exit(1);
   console.log('  (only the counts record is stale — continuing so it can be rewritten)\n');
-} else console.log(`  all green   —   ${provenance()} on ${ENGINE}\n`);
+} else console.log(`  all green   —   ${STARTED_ON} on ${ENGINE}\n`);
 
 /* ── the split build ──────────────────────────────────────────────────────────
    Built, served on a free port, tested, torn down. Kept out of the loop above
