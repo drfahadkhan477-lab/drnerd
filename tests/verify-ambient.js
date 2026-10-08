@@ -263,6 +263,45 @@ if (!AMBIENT_SRC) { console.log(`\n${passed} passed, ${failed} failed`); process
      contextWarnings.length ? `${contextWarnings.length} warning(s): ${contextWarnings[0]}` : 'none');
   ok('and no overlay was left behind', visits.overlays === 0, `${visits.overlays} left`);
 
+  head('a lost context that comes back is rebuilt, not reused');
+  /* Heart3D clears its lost flag on webglcontextrestored but does not rebuild its buffers,
+     programs or VAOs (heart3d.js says why), so a restored instance has a context and nothing
+     to draw with. Ambient keeps one heart across visits; after a loss the next visit must build
+     a new one, on a new canvas, for exactly one more context, as the hero does. This is what an
+     iPadOS memory reclaim looks like, driven here with WEBGL_lose_context. */
+  const lostRun = await page.evaluate(async () => {
+    const rnd = Math.random;
+    Math.random = () => 0;
+    try {
+      AMBIENT.enter();
+      const cv1 = document.querySelector('.ambient-canvas');
+      const gl = cv1 && cv1.getContext('webgl2');
+      const ext = gl && gl.getExtension('WEBGL_lose_context');
+      if (!ext || AMBIENT.view() !== 'heart') { AMBIENT.exit(); return { skipped: true }; }
+      const before = window.__ctx;
+      ext.loseContext();
+      await new Promise(r => setTimeout(r, 150));
+      ext.restoreContext();
+      await new Promise(r => setTimeout(r, 300));
+      AMBIENT.exit();
+      AMBIENT.enter();
+      const cv2 = document.querySelector('.ambient-canvas');
+      const out = { skipped: false, before, after: window.__ctx, fresh: !!cv2 && cv2 !== cv1,
+                    live: AMBIENT.view() === 'heart' && AMBIENT.live() };
+      AMBIENT.exit();
+      return out;
+    } finally { Math.random = rnd; }
+  });
+  if (lostRun.skipped) {
+    ok('WEBGL_lose_context was available to drive this', false, 'extension unavailable, or the heart was not showing');
+  } else {
+    ok('the next visit builds the heart on a new canvas', lostRun.fresh);
+    ok('for exactly one more context', lostRun.after === lostRun.before + 1, `${lostRun.before} → ${lostRun.after}`);
+    /* Narrow on purpose: AMBIENT.live() says a view object is mounted, not that it drew. It
+       guards a fix that drops the heart and never builds another. */
+    ok('and ambient mode reports the heart view as live', lostRun.live);
+  }
+
   head('and nothing broke');
   ok('no page or console error', errors.length === 0, errors.slice(0, 2).join(' | ') || 'clean');
 

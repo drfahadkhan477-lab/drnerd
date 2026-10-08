@@ -4194,7 +4194,14 @@ var AMBIENT = (function(){
       var cv = document.createElement('canvas');
       cv.className = 'ambient-canvas';
       stage.appendChild(cv);
-      if (v === 'heart' && window.Heart3D) { live = heart = Heart3D.create(cv, { rhythm: 'sinus', mode: 'whole' }); heartCanvas = cv; }
+      if (v === 'heart' && window.Heart3D) {
+        /* onLost drops the kept handles, as the hero mount does: Heart3D clears its lost flag on
+           restore but does not rebuild its GPU objects, so a restored instance cannot draw and
+           the next visit must build anew. The one showing at the time is destroyed by release(). */
+        var h = Heart3D.create(cv, { rhythm: 'sinus', mode: 'whole',
+          onLost: function(){ if (heart === h) { heart = null; heartCanvas = null; } } });
+        live = heart = h; heartCanvas = cv;
+      }
       else if (v === 'ecg' && window.ECG12) live = ECG12.mount(cv, { kind: 'sinus', hr: 68, dark: true });
       else if (v === 'pvloop' && window.Wiggers) live = Wiggers.mount(cv, { view: 'pv', dark: true, hr: 68 });
     }
