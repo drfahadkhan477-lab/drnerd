@@ -695,6 +695,8 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the tutor, its tools, and the 3D heart it sits beside (44 checks)
         run: node tests/verify-apex.js build/synthetic/systole.html
+        env:
+          DEBUG: pw:browser
       - if: ${{ !cancelled() }}
         name: FSRS-5 scheduling replaces SM-2 (25 checks)
         run: node tests/verify-stage2.js build/synthetic/systole.html
@@ -746,6 +748,8 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the home screen opens with something worth knowing (69 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
+        env:
+          DEBUG: pw:browser
       - if: ${{ !cancelled() }}
         name: a retrieved note is material to teach from, never an instruction (54 checks)
         run: node tests/verify-boundary.js build/synthetic/systole.html
@@ -761,6 +765,8 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the progress card counts up in step with the bar it sits beside (27 checks)
         run: node tests/verify-homeprog.js build/synthetic/systole.html
+        env:
+          DEBUG: pw:browser
       - if: ${{ !cancelled() }}
         name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
         run: node tests/verify-planscreen.js build/synthetic/systole.html
@@ -803,9 +809,13 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the on-device self-test reports honestly, and can actually fail (27 checks)
         run: node tests/verify-selftest.js build/synthetic/systole.html
+        env:
+          DEBUG: pw:browser
       - if: ${{ !cancelled() }}
         name: every screen fits, at every frame a real device produces (26 checks)
         run: node tests/verify-layout.js build/synthetic/systole.html
+        env:
+          DEBUG: pw:browser
       - if: ${{ !cancelled() }}
         name: the review sheet records the box in original pixels, not preview pixels (35 checks)
         run: node tests/verify-figreview.js build/synthetic/systole.html
