@@ -19,7 +19,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -34,19 +34,19 @@ const ok = (label, cond, detail = '') => {
 let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
-const sse = text => [
-  `data: {"choices":[{"delta":{"content":${JSON.stringify(text)}}}]}`,
-  'data: [DONE]',
-  '',
-].join('\n\n');
+/* Gemini's own stream shape, because the panel is opened on provider
+   'gemini' below. These were OpenAI-shaped ({"choices":[{"delta":…}]}) until
+   the laptop run of 2026-10-06, which Gemini's reader skips line by line: no
+   reply text was ever appended, and the "tool round" never ran — the first
+   turn ended empty and the second queued reply was never requested. The
+   composer checks passed on the two rebuilds that happen anyway, without the
+   mid-reply one they are named for. Same shape as verify-flushguard. */
+const part = p => 'data: ' + JSON.stringify({ candidates: [{ content: { role: 'model', parts: [p] } }] }) + '\n\n';
+const sse = text => part({ text }) + 'data: [DONE]\n\n';
 
 /* A tool round, so the panel rebuilds mid-reply — which is exactly when the
    composer used to be wiped. */
-const TOOL_SSE = [
-  'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"get_performance","arguments":"{}"}}]}}]}',
-  'data: [DONE]',
-  '',
-].join('\n\n');
+const TOOL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) + 'data: [DONE]\n\n';
 
 (async () => {
   const browser = await launch();
@@ -105,7 +105,17 @@ const TOOL_SSE = [
     await page.fill('#aiIn', 'and what about the RV?');
     await page.evaluate(() => { const t = document.getElementById('aiIn'); t.focus(); t.setSelectionRange(4, 4); });
     await page.evaluate(() => fire('how am I doing?'));
-    await page.waitForTimeout(2600);
+    /* Precondition, not a sleep: the whole exchange has finished — the tool
+       step, the second request and the final rebuild. aiBusy goes false and
+       buildAI() runs in the same synchronous finally, so once both hold the
+       panel has been rebuilt at least twice underneath the composer. This was
+       a fixed 2600 ms, which on the full build under --jobs could read the
+       composer before the exchange finished (one failing run on the owner's
+       laptop), and on a slow enough machine would read it before any rebuild
+       at all — passing having measured nothing. */
+    await settled(page, () => typeof aiBusy !== 'undefined' && !aiBusy &&
+      /Here is your record\./.test((document.getElementById('aiBody') || {}).textContent || ''),
+      { timeout: 60000, label: 'the tool step and its reply to finish and the panel to rebuild' });
     const after = await page.evaluate(() => {
       const t = document.getElementById('aiIn');
       return { value: t ? t.value : null, start: t ? t.selectionStart : -1,
