@@ -754,7 +754,15 @@ function lazyImage(alt, pageNo, box, scale, d) {
      it" button moved 324 px under a tap that had already been aimed at it. */
   if (box && box.length === 4) {
     var m = Pdf.CROP_MARGIN || 0, bw = Math.abs(box[2] - box[0]) + 2 * m, bh = Math.abs(box[3] - box[1]) + 2 * m;
-    if (bw > 0 && bh > 0) { img.setAttribute('width', String(Math.round(bw))); img.setAttribute('height', String(Math.round(bh))); }
+    /* The attributes alone are not enough: WebKit (Safari, the iPad) takes no
+       ratio from them while the image has no src, and held 29 px of a 128 px
+       figure: it shows the alt text, one line tall, and "aspect-ratio: auto
+       W / H" defers to that. A plain ratio holds in every engine, and
+       object-fit keeps a crop clipped at the page edge from stretching. */
+    if (bw > 0 && bh > 0) {
+      img.setAttribute('width', String(Math.round(bw))); img.setAttribute('height', String(Math.round(bh)));
+      img.style.aspectRatio = Math.round(bw) + ' / ' + Math.round(bh); img.style.objectFit = 'contain';
+    }
   }
   function load() {
     (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
