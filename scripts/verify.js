@@ -464,6 +464,16 @@ const SUITES = [
    does not hold them yet: suitetime-pure. */
 const PENDING_RECORD = ['suitetime-pure'];
 
+/* ── suites deleted since their half of the record was last written ─────────
+   The mirror of PENDING_RECORD. A suite removed from the registry is still in
+   tests/test-stats.json until the next green run of its half rewrites it
+   (scripts/record.js drops a name that is no longer registered), and until
+   then verify-stats would read it as the record holding something that is no
+   longer a suite. Naming it here says that is on purpose. Checked in both
+   directions like PENDING_RECORD: a name here must still be in the record and
+   must not be registered, so the next write forces it out of this list. */
+const RETIRED_RECORD = [];
+
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
    what is on screen and dishonest for one that asserts on how long something

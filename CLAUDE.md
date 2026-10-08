@@ -77,6 +77,9 @@ record.
 `PENDING_RECORD` in `scripts/verify.js` lists suites registered since their
 half of the record was last written. It is checked in both directions, so it
 self-cleans — remove a name after a green run has recorded it, not before.
+`RETIRED_RECORD` is its mirror: suites deleted since their half was last
+written, still in the record until the next write drops them. Also checked in
+both directions; remove a name once a green run has dropped it.
 
 **A guard with a hole in it is worse than no guard**, because the surrounding
 green reads as coverage of the whole paragraph. Two sentences have drifted

@@ -93,6 +93,16 @@ const PENDING = (() => {
   return [...block.slice(0, block.indexOf('];') + 2).matchAll(/'([a-z0-9-]+)'/g)].map(m => m[1]);
 })();
 
+/* And the mirror: suites deleted since the last write of their half, still
+   in the record on purpose until the next one. */
+const RETIRED = (() => {
+  const v = read('scripts/verify.js');
+  const at = v.indexOf('const RETIRED_RECORD = [');
+  if (at < 0) return [];
+  const block = v.slice(at);
+  return [...block.slice(0, block.indexOf('];') + 2).matchAll(/'([a-z0-9-]+)'/g)].map(m => m[1]);
+})();
+
 head('every registered suite is in the record');
 {
   /* Read out of the runner's own registry, so adding a suite and forgetting to
@@ -112,7 +122,7 @@ head('every registered suite is in the record');
      this block was written for — a suite registered and then quietly never
      run, visible only as a total that is mysteriously too low. */
   const missing = registered.filter(n => !(n in stats.suites) && !PENDING.includes(n));
-  const stale = Object.keys(stats.suites).filter(n => !registered.includes(n));
+  const stale = Object.keys(stats.suites).filter(n => !registered.includes(n) && !RETIRED.includes(n));
   ok('no registered suite is missing from the record without saying so', missing.length === 0,
      missing.join(', ') || 'none');
   /* Both directions, because a one-way check would let a name be parked in
@@ -124,8 +134,15 @@ head('every registered suite is in the record');
   ok('and nothing is still declared pending that the record already holds',
      PENDING.every(n => !(n in stats.suites)),
      PENDING.filter(n => n in stats.suites).join(', ') || 'none');
-  ok('and the record holds nothing that is no longer a suite', stale.length === 0,
+  ok('and the record holds nothing that is no longer a suite, unless it is declared retired', stale.length === 0,
      stale.join(', ') || 'none');
+  /* Both directions again: a retired name must still be in the record (or the
+     write that dropped it has happened, and the name must go) and must not be
+     a registered suite (or it was never retired). */
+  ok('nothing is declared retired that the record no longer holds',
+     RETIRED.every(n => n in stats.suites), RETIRED.filter(n => !(n in stats.suites)).join(', ') || 'none');
+  ok('and nothing declared retired is still registered',
+     RETIRED.every(n => !registered.includes(n)), RETIRED.filter(n => registered.includes(n)).join(', ') || 'none');
   ok('every recorded suite reported at least one check', !Object.entries(stats.suites).some(([, n]) => !(n > 0)),
      Object.entries(stats.suites).filter(([, n]) => !(n > 0)).map(([k]) => k).join(', ') || 'none');
 }
