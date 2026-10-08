@@ -1385,21 +1385,31 @@ function buildSurfaces(res, lo, hi) {
     const a = attributesFor(net.positions, normals, fn);
     return { positions: net.positions, normals, weights: a.weights, color: a.color, extra: a.extra, indices: net.indices };
   };
-  return { outer: one(sdOuter), cav: one(sdCavities) };
+  /* The coronaries too: the same on every launch (fixed control points walked
+     onto sdOuter), and the second-largest cost left at launch once the
+     surfaces were baked — 0.25 s of 1.0 s on the owner's laptop at an iPad's
+     pace, projectToSurface sampling the distance field for every point. They
+     do not depend on the grid; they ride in the same copy because they come
+     from the same code, under the same key. */
+  return { outer: one(sdOuter), cav: one(sdCavities), coron: buildCoronaries() };
 }
 
-/* One ArrayBuffer: a 72-byte header, then per surface its five Float32 blocks,
-   then both index lists as Uint32.
-     0  'HM01'           4  key, 16 ASCII bytes     20  res, 3 × Uint32
-     32 lo, hi, 6 × Float32                          56  vertices, indices × 2 surfaces */
-const MESH_MAGIC = 0x31304d48;   // 'HM01', little-endian
-const MESH_HEADER = 72, MESH_FLOATS = 16;   // 3 position + 3 normal + 4 weight + 3 colour + 3 extra
+/* One ArrayBuffer: an 80-byte header, then per mesh its five Float32 blocks,
+   then the three index lists as Uint32.
+     0  'HM02'           4  key, 16 ASCII bytes     20  res, 3 × Uint32
+     32 lo, hi, 6 × Float32                          56  vertices, indices × 3 meshes
+   HM01 carried two meshes and no coronaries; its tag is refused, so a copy in
+   the old layout is never read as the new one. */
+const MESH_MAGIC = 0x32304d48;   // 'HM02', little-endian
+const MESH_HEADER = 80, MESH_FLOATS = 16;   // 3 position + 3 normal + 4 weight + 3 colour + 3 extra
 const MESH_PARTS = [['positions', 3], ['normals', 3], ['weights', 4], ['color', 3], ['extra', 3]];
+const MESH_NAMES = ['outer', 'cav', 'coron'];
+const meshBytes = (nv, ni) => MESH_HEADER + 4 * MESH_FLOATS * nv.reduce((a, b) => a + b, 0) + 4 * ni.reduce((a, b) => a + b, 0);
 
 function packSurfaces(s, key, res, lo, hi) {
-  const surf = [s.outer, s.cav];
+  const surf = MESH_NAMES.map(n => s[n]);
   const nv = surf.map(x => x.positions.length / 3), ni = surf.map(x => x.indices.length);
-  const bytes = MESH_HEADER + 4 * MESH_FLOATS * (nv[0] + nv[1]) + 4 * (ni[0] + ni[1]);
+  const bytes = meshBytes(nv, ni);
   const buf = new ArrayBuffer(bytes);
   const u32 = new Uint32Array(buf, 0, MESH_HEADER / 4), f32 = new Float32Array(buf, 0, MESH_HEADER / 4);
   u32[0] = MESH_MAGIC;
@@ -1407,13 +1417,13 @@ function packSurfaces(s, key, res, lo, hi) {
   const kb = new Uint8Array(buf, 4, 16);
   for (let i = 0; i < 16; i++) kb[i] = k.charCodeAt(i) & 0x7f;
   for (let i = 0; i < 3; i++) { u32[5 + i] = res[i]; f32[8 + i] = lo[i]; f32[11 + i] = hi[i]; }
-  u32[14] = nv[0]; u32[15] = ni[0]; u32[16] = nv[1]; u32[17] = ni[1];
+  for (let i = 0; i < surf.length; i++) { u32[14 + 2 * i] = nv[i]; u32[15 + 2 * i] = ni[i]; }
   let at = MESH_HEADER;
-  for (let i = 0; i < 2; i++) for (const [name, w] of MESH_PARTS) {
+  for (let i = 0; i < surf.length; i++) for (const [name, w] of MESH_PARTS) {
     new Float32Array(buf, at, nv[i] * w).set(surf[i][name]);
     at += 4 * nv[i] * w;
   }
-  for (let i = 0; i < 2; i++) { new Uint32Array(buf, at, ni[i]).set(surf[i].indices); at += 4 * ni[i]; }
+  for (let i = 0; i < surf.length; i++) { new Uint32Array(buf, at, ni[i]).set(surf[i].indices); at += 4 * ni[i]; }
   return buf;
 }
 
@@ -1429,16 +1439,16 @@ function unpackSurfaces(buf, key, res, lo, hi) {
   for (let i = 0; i < 3; i++) {
     if (u32[5 + i] !== res[i] || f32[8 + i] !== Math.fround(lo[i]) || f32[11 + i] !== Math.fround(hi[i])) return null;
   }
-  const nv = [u32[14], u32[16]], ni = [u32[15], u32[17]];
-  if (buf.byteLength !== MESH_HEADER + 4 * MESH_FLOATS * (nv[0] + nv[1]) + 4 * (ni[0] + ni[1])) return null;
-  const out = [{}, {}];
+  const nv = MESH_NAMES.map((_, i) => u32[14 + 2 * i]), ni = MESH_NAMES.map((_, i) => u32[15 + 2 * i]);
+  if (buf.byteLength !== meshBytes(nv, ni)) return null;
+  const out = MESH_NAMES.map(() => ({}));
   let at = MESH_HEADER;
-  for (let i = 0; i < 2; i++) for (const [name, w] of MESH_PARTS) {
+  for (let i = 0; i < out.length; i++) for (const [name, w] of MESH_PARTS) {
     out[i][name] = new Float32Array(buf, at, nv[i] * w);
     at += 4 * nv[i] * w;
   }
-  for (let i = 0; i < 2; i++) { out[i].indices = new Uint32Array(buf, at, ni[i]); at += 4 * ni[i]; }
-  return { outer: out[0], cav: out[1] };
+  for (let i = 0; i < out.length; i++) { out[i].indices = new Uint32Array(buf, at, ni[i]); at += 4 * ni[i]; }
+  return { outer: out[0], cav: out[1], coron: out[2] };
 }
 
 /* The baked copy arrives one of two ways: as an ArrayBuffer the split build's
@@ -1471,12 +1481,11 @@ function create(canvas, opts) {
 
   const t0 = performance.now();
   const baked = bakedSurfaces(RES, LO, HI);
-  const { outer, cav } = baked || buildSurfaces(RES, LO, HI);
+  const { outer, cav, coron } = baked || buildSurfaces(RES, LO, HI);
   const meshSource = baked ? 'baked' : 'computed';
   const buildMs = performance.now() - t0;
 
   const valves = buildValves();
-  const coron = buildCoronaries();
   const cond = buildConduction();
 
   const prog = program(gl, VERT, FRAG);
