@@ -50,9 +50,10 @@ const ROOT = path.join(__dirname, '..');
    the line it is really on. */
 const SOURCES = (() => {
   const out = [];
-  for (const f of fs.readdirSync(path.join(ROOT, 'scripts')).sort()) {
-    if (/-patch\.js$/.test(f)) out.push('scripts/' + f);
-  }
+  /* The page that ships, whose inline script is most of the app. This list
+     used to be the patch scripts, which stopped being the app's source when
+     the chain was retired and every later edit went into app/ instead. */
+  out.push('app/systole.html');
   (function walk(dir) {
     for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       if (e.isDirectory()) walk(dir + '/' + e.name);
@@ -69,8 +70,9 @@ const lineOf = (code, index) => code.slice(0, index).split('\n').length;
 /* ────────────────────────────────────────────────────────────────────────── */
 head('the files this suite reads');
 {
-  ok('there are patch scripts to read', SOURCES.filter(s => /-patch\.js$/.test(s.file)).length >= 60,
-     `${SOURCES.filter(s => /-patch\.js$/.test(s.file)).length} patch scripts`);
+  const page = SOURCES.find(s => s.file === 'app/systole.html');
+  ok('the shipping page is read', !!page && page.code.length > 100000,
+     page ? `${page.code.length} characters` : 'not in the list');
   ok('and src/ as well', SOURCES.some(s => s.file.startsWith('src/')),
      `${SOURCES.filter(s => s.file.startsWith('src/')).length} files under src/`);
   /* THE BLANKER, NOT A LOCAL COPY. verify-engine.js enforces this across the
@@ -115,11 +117,19 @@ head('the files this suite reads');
  * message, so changing what a dialog ASKS is also a change this notices.
  */
 const KNOWN_DIALOGS = [
-  ['scripts/memory-patch.js', 'confirm', 'Delete this memory? Apex will stop knowing it.'],
-  ['scripts/memory-patch.js', 'confirm', 'Forget everything Apex knows about you? This cannot be undone.'],
-  ['scripts/polish-patch.js', 'confirm', 'Clear all ink and notes on this question?'],
-  ['scripts/polish-patch.js', 'confirm', 'Clear all ink and notes on this question?'],
+  ['app/systole.html', 'confirm', 'Delete this memory? Apex will stop knowing it.'],
+  ['app/systole.html', 'confirm', 'Forget everything Apex knows about you? This cannot be undone.'],
+  ['app/systole.html', 'confirm', 'Clear all ink and notes on this question?'],
+  ['app/systole.html', 'confirm', 'Delete this reference note?'],
+  ['app/systole.html', 'confirm', 'Reset all scores, the missed-question list, and your spaced-repetition schedule?'],
 ];
+/* FIVE, NOT FOUR, and not because a fifth arrived by habit. Until the patch
+   chain was retired this list was checked against the patch scripts only, so
+   it never saw the export's own Reset confirm (in the app since the start) or
+   the reference-note delete (added to app/ after the retirement). Read against
+   the page that ships, both are destructive and cannot be undone, which is
+   what this rule allows a confirm() for. The same move found four alert()s and
+   two nameless close buttons; those were fixed in the app, not listed here. */
 
 head('no native dialog arrives without being meant');
 {
@@ -135,14 +145,14 @@ head('no native dialog arrives without being meant');
     }
   }
   /* Vacuity guard: "no unexpected dialogs" is also what a scan that matched
-     nothing returns, and this scan has four things it must find. */
+     nothing returns, and this scan has five things it must find. */
   ok('the scan finds the dialogs that are known to be there',
      found.length >= KNOWN_DIALOGS.length, `${found.length} found, ${KNOWN_DIALOGS.length} expected`);
 
   const key = d => `${d[0]}|${d[1]}|${d[2]}`;
   const want = KNOWN_DIALOGS.map(key).sort();
 
-  /* A MULTISET DIFFERENCE, not a set one. polish-patch.js asks the same
+  /* A MULTISET DIFFERENCE, not a set one. A page that asks the same
      question in two places, so the list holds that entry twice and a third
      copy must be reported — a Set would swallow it. */
   const pool = want.slice();
@@ -160,7 +170,7 @@ head('no native dialog arrives without being meant');
   const missing = pool.slice();
   ok('and every dialog on the list is still in the source — no stale exemption',
      missing.length === 0, missing.join(' | ') || 'none');
-  ok('the list has not quietly grown', KNOWN_DIALOGS.length === 4, `${KNOWN_DIALOGS.length} entries`);
+  ok('the list has not quietly grown', KNOWN_DIALOGS.length === 5, `${KNOWN_DIALOGS.length} entries`);
   /* alert() and prompt() have no entries at all, so any of either is new. */
   ok('there is no alert() anywhere', !found.some(f => f.kind === 'alert'),
      found.filter(f => f.kind === 'alert').map(f => f.file + ':' + f.line).join(', ') || 'none');
