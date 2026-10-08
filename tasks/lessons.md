@@ -70,6 +70,14 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   the provider the test selects, and the test must wait on something only the
   stubbed reply can produce (its text in the panel), so a skipped stub times out.
 
+- **A suite that measured a substitute.** Several suites read the retired
+  patch scripts, or a tokenizer written in the test, instead of the code that
+  ships. Moving them to app/ found an icon button with no name, four alert()s,
+  a palette check reading a fallback literal, and a ranking fixture whose
+  central case failed on the real tokenizer. → Rule: a suite lifts the code
+  under test from the file that ships (app/, src/), between anchors that must
+  each occur once; never from a build step, and never a copy kept in the test.
+
 ## Process
 
 - **A click that "did nothing" because it missed.** Firefox CI intermittently

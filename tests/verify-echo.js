@@ -1,37 +1,35 @@
 #!/usr/bin/env node
 /*
- * Echo Studio, in a browser: does what echo-patch INSERTS actually run?
+ * Echo Studio, in a browser: does the Echo code the app ships actually run?
  *
  *   NODE_PATH=$(npm root -g) node tests/verify-echo.js
  *
  * Takes no build. Three suites already cover the thinking — verify-echo-pure
  * (the tables and the arithmetic), verify-echoui-pure (the markup) and
- * verify-echoanchor-pure (the four anchors still exist where the step runs).
+ * verify-echoanchor-pure (the chain's four anchors, until the chain goes).
  * All three are pure Node, and none of them can answer the question this one
  * asks, because all three stop at the point where strings become a document.
  *
- * ── THE FIXTURE IS PATCHED BY THE REAL SCRIPT, NOT HAND-COPIED ───────────
+ * ── THE FIXTURE GETS THE APP'S OWN CODE, NOT A HAND COPY ────────────────
  *
  * The obvious way to write this is to paste the glue — goEcho, the two
  * document listeners, echoRepaintResults — into a fixture and drive that.
  * That fixture would then be a second copy of the shipped glue, and the first
- * time somebody edited scripts/echo-patch.js this suite would go on proving
- * that the OLD glue worked. This project has had five copies of a comment
- * blanker and two of them had drifted; tests/_source.js exists because of it.
+ * time somebody edited the app this suite would go on proving that the OLD
+ * glue worked. This project has had five copies of a comment blanker and two
+ * of them had drifted; tests/_source.js exists because of it.
  *
- * So there is no copy. This writes a small scaffold containing the four
- * anchors echo-patch looks for, runs `node scripts/echo-patch.js` over it as
- * a child process, and drives the output. Everything under test — the
- * modules, the glue, the delegated listeners, the nav button, the CSS — is
- * placed by the shipped step. If the patch changes, this tests the change.
- * If the patch stops applying, patch() throws and this suite dies saying so,
- * which is the same failure a real build would give eighty-seven steps in.
+ * So there is no copy. The glue (with both modules filled in from src/, as
+ * the build fills them), the nav button and the css are cut out of app/ by
+ * tests/_appcut.js, each between anchors that must occur once, and put into a
+ * small scaffold. Until the patch chain was retired the same pieces were
+ * placed by running scripts/echo-patch.js over the scaffold.
  *
  * ── WHAT THE SCAFFOLD SUPPLIES, AND WHY THAT IS NOT CHEATING ─────────────
  *
- * Four things the licensed export and the earlier chain steps would supply:
- * an `S` with a screen on it, a `render()` whose ternary chain the patch
- * extends, an `icon()`, and a nav with a theme-wrap in it. They are the
+ * Four things the rest of the page supplies: an `S` with a screen on it, a
+ * `render()` that routes to Echo, an `icon()`, and a nav with a theme-wrap in
+ * it. They are the
  * environment, not the subject — each is the smallest thing that makes the
  * anchor real, and none of them is asserted about.
  *
@@ -58,7 +56,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { cut } = require('./_appcut.js');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath } = require('./_deathnote.js');
 
@@ -75,10 +73,9 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'echo-ui-'));
 process.on('exit', () => { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) {} });
 
 /* ── the scaffold ─────────────────────────────────────────────────────────
-   Every one of the four anchors appears here exactly once, spelled as
-   scripts/echo-patch.js spells it. patch() throws on anything else, so a
-   drift between these strings and the step's is a loud failure here rather
-   than a quiet one that only a full build would find. */
+   Each place a piece goes appears here exactly once: before the Durable
+   memory banner (the glue), before the theme-wrap (the button) and before the
+   .nav rule (the css), which is where they sit in the app. */
 const SCAFFOLD = `<!doctype html>
 <html><head><meta charset="utf-8"><title>echo fixture</title><style>
 .nav{color:#fff;height:var(--navh);display:flex;align-items:center;
@@ -93,7 +90,7 @@ function buildMemory(){ return '<p>memory</p>'; }
 function buildStudy(){ return '<p>study</p>'; }
 
 /* The nav lives in a template literal because it does in the app: the button
-   echo-patch inserts interpolates \${icon('zap')}, which is markup only if
+   Echo adds interpolates \${icon('zap')}, which is markup only if
    something evaluates it. */
 function navHtml(){ return \`
   <nav class="nav"><div class="nav-right">
@@ -115,29 +112,34 @@ function render(){
 </body></html>
 `;
 
-const IN = path.join(TMP, 'in.html');
+/* Echo as the page ships it. Until the patch chain was retired this ran
+   echo-patch.js over the scaffold; the four things it inserted now live in
+   app/, so each is cut out of the file it ships in (tests/_appcut.js: each
+   anchor once, src slots filled as the build fills them) and put where the
+   patch put it. The router line the patch added is already in the scaffold. */
 const OUT = path.join(TMP, 'out.html');
-fs.writeFileSync(IN, SCAFFOLD, 'utf8');
+let pieces = null, cutError = '';
+try {
+  pieces = {
+    glue: cut('app/systole.html', '/* ═════════ Echo Studio — see src/core/echo.js, src/ui/echo.js ═════════ */',
+      '/* ══════════ Search your notes — see src/core/notesearch.js'),
+    door: cut('app/systole.html', '      <button class="icon-btn" onclick="goEcho()" title="Echo Studio"',
+      '      <div class="theme-wrap">'),
+    css: cut('app/css/systole.css', '.echo-studio{', '.ns-screen{'),
+  };
+} catch (e) { cutError = e.message; }
 
-const applied = spawnSync(process.execPath,
-  [path.join(ROOT, 'scripts', 'echo-patch.js'), IN, OUT], { encoding: 'utf8' });
-const patchOut = (applied.stdout || '') + (applied.stderr || '');
-
-head('the shipped patch applies to the scaffold');
-ok('scripts/echo-patch.js exits 0', applied.status === 0,
-   applied.status === 0 ? 'applied' : patchOut.trim().split('\n').slice(0, 3).join(' / '));
-/* NON-VACUITY. Everything below is read out of the patched file, so a patch
-   that did nothing would leave a page with no Echo on it and every check
-   after this would fail for the wrong reason. The edit list makes the cause
-   unambiguous instead. */
-ok('and reports all four of its edits', (patchOut.match(/✓/g) || []).length === 4,
-   (patchOut.match(/✓/g) || []).length + ' edits');
-
-if (applied.status !== 0) {
-  console.log('\n' + patchOut);
-  console.log(`\n${passed} passed, ${failed} failed`);
-  process.exit(1);
-}
+head('Echo is read from the app that ships');
+ok('its glue, its way in and its css were each found once', !!pieces, cutError || 'three pieces');
+ok('and each is whole: both modules filled in, the button, the tabs',
+   !!pieces && /var EchoUI\b|EchoUI\s*=/.test(pieces.glue) && /function buildEchoScreen\(\)/.test(pieces.glue) &&
+   /goEcho\(\)/.test(pieces.door) && /\.echo-tabs\{/.test(pieces.css),
+   pieces ? `glue ${pieces.glue.length}, door ${pieces.door.length}, css ${pieces.css.length}` : 'nothing cut');
+if (!pieces) { console.log(`\n${passed} passed, ${failed} failed`); process.exit(1); }
+fs.writeFileSync(OUT, SCAFFOLD
+  .replace('/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */', m => pieces.glue + '\n' + m)
+  .replace('      <div class="theme-wrap">', m => pieces.door + m)
+  .replace('.nav{color:#fff;height:var(--navh);display:flex;align-items:center;', m => pieces.css + m), 'utf8');
 
 /* The panel is repainted by innerHTML, so node identity is the whole question
    in the caret section. A dataset marker survives a repaint that leaves the

@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /*
- * Search your notes, in a browser: does what notesearch-patch INSERTS run?
+ * Search your notes, in a browser: does the code the app ships run?
  *
  *   NODE_PATH=$(npm root -g) node tests/verify-notesearch.js
  *
  * Takes no build, by the method verify-echo uses and for its reason: the glue
  * is not copied into a fixture, where it would go on proving an old version
- * worked. A scaffold carrying echo-patch's four anchors is written, the real
- * scripts/echo-patch.js is run over it, then the real
- * scripts/notesearch-patch.js over that — so notesearch reads the text echo
- * actually emits, exactly as it does as step 89 — and the result is driven.
+ * worked. Its glue (module filled in from src/), its route, its button and
+ * its css are cut out of app/ (tests/_appcut.js) and put into a scaffold, and
+ * the result is driven. Until the patch chain was retired the same pieces
+ * came from running echo-patch.js and notesearch-patch.js over the scaffold.
  *
- * WHAT THE SCAFFOLD SUPPLIES. What the export and earlier steps would: an S,
+ * WHAT THE SCAFFOLD SUPPLIES. What the rest of the page would: an S,
  * a render() with the router chain, icon(), e(), a nav with a theme-wrap, and
  * the three things this screen consumes — REF (the shelf), search() (the
  * index, here a word match over REF, ranked by count, questions mixed in as
@@ -31,7 +31,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { cut } = require('./_appcut.js');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath } = require('./_deathnote.js');
 
@@ -101,22 +101,38 @@ function render(){
 </body></html>
 `;
 
-const IN = path.join(TMP, 'in.html');
-const MID = path.join(TMP, 'echo.html');
+/* Search-your-notes as the page ships it. Until the patch chain was retired
+   this ran echo-patch.js and then notesearch-patch.js over the scaffold; the
+   pieces now live in app/, so each is cut out of the file it ships in
+   (tests/_appcut.js: each anchor once, src slots filled as the build fills
+   them) and put where the patches put them. Echo comes along because it sits
+   between the same anchors in the app, as it did in the chain. */
 const OUT = path.join(TMP, 'out.html');
-fs.writeFileSync(IN, SCAFFOLD, 'utf8');
-const run = (script, a, b) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', script), a, b], { encoding: 'utf8' });
-const echo = run('echo-patch.js', IN, MID);
-const ns = echo.status === 0 ? run('notesearch-patch.js', MID, OUT) : { status: 1, stdout: '', stderr: 'echo-patch did not apply' };
-const nsOut = (ns.stdout || '') + (ns.stderr || '');
+let pieces = null, cutError = '';
+try {
+  pieces = {
+    glue: cut('app/systole.html', '/* ═════════ Echo Studio — see src/core/echo.js, src/ui/echo.js ═════════ */',
+      '/* ══════════════ Glass — see scripts/glass-patch.js'),
+    route: cut('app/systole.html', "    :S.screen==='notesearch'?buildNoteSearch()", "    :S.screen==='echo'?buildEchoScreen()"),
+    doors: cut('app/systole.html', '      <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"',
+      '      <div class="theme-wrap">'),
+    css: cut('app/css/systole.css', '.echo-studio{', '/* ── glass — see scripts/glass-patch.js ── */'),
+  };
+} catch (e) { cutError = e.message; }
 
-head('the shipped patches apply, in chain order');
-ok('scripts/echo-patch.js exits 0', echo.status === 0, echo.status === 0 ? 'applied' : ((echo.stdout || '') + (echo.stderr || '')).trim().split('\n')[0]);
-ok('scripts/notesearch-patch.js exits 0 on echo\'s output', ns.status === 0,
-   ns.status === 0 ? 'applied' : nsOut.trim().split('\n').slice(0, 2).join(' / '));
-/* Non-vacuity: everything below reads the patched file. */
-ok('and reports all four of its edits', (nsOut.match(/✓/g) || []).length === 4, (nsOut.match(/✓/g) || []).length + ' edits');
-if (ns.status !== 0) { console.log('\n' + nsOut); console.log(`\n${passed} passed, ${failed} failed`); process.exit(1); }
+head('search-your-notes is read from the app that ships');
+ok('its glue, its route, its way in and its css were each found once', !!pieces, cutError || 'four pieces');
+/* Non-vacuity: everything below drives what was cut. */
+ok('and each is whole: the module filled in, the screen routed, the button, the list',
+   !!pieces && /function buildNoteSearch\(\)/.test(pieces.glue) && /NoteSearch\b/.test(pieces.glue) &&
+   /buildNoteSearch\(\)/.test(pieces.route) && /goNoteSearch\(\)/.test(pieces.doors) && /\.ns-list\{/.test(pieces.css),
+   pieces ? `glue ${pieces.glue.length}, doors ${pieces.doors.length}, css ${pieces.css.length}` : 'nothing cut');
+if (!pieces) { console.log(`\n${passed} passed, ${failed} failed`); process.exit(1); }
+fs.writeFileSync(OUT, SCAFFOLD
+  .replace('/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */', m => pieces.glue + '\n' + m)
+  .replace("    S.screen==='echo'?buildEchoScreen()\n", m => m + pieces.route)
+  .replace('      <div class="theme-wrap">', m => pieces.doors + m)
+  .replace('.nav{color:#fff;height:var(--navh);display:flex;align-items:center;', m => pieces.css + m), 'utf8');
 
 (async () => {
   const browser = await launch();

@@ -9,7 +9,7 @@
  * generates the stylesheet from them. Two things are proven about that data:
  *
  *   · CONTRAST IS PORTED, NOT INVENTED. Its colours are read out of
- *     scripts/highcontrast-patch.js and compared, value for value. The
+ *     Systole's own app/css/systole.css and compared, value for value. The
  *     owner's two were drawn for Memorizer and have no source to drift from;
  *     until they replaced them, Systole's other eight were held here the
  *     same way.
@@ -45,6 +45,13 @@ const lum = hex => {
 const parseRgba = s => { const m = /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/.exec(s); return m ? [+m[1], +m[2], +m[3], +m[4]] : [0, 0, 0, -1]; };
 const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
+/* Systole as it ships: its stylesheet (the palette blocks and :root defaults)
+   and its page (the THEMES picker entries). Until the patch chain was retired
+   this read theme-patch.js and highcontrast-patch.js, which the app had since
+   moved on from. */
+const SYSTOLE_SRC = () => fs.readFileSync(path.join(ROOT, 'app', 'css', 'systole.css'), 'utf8')
+  + fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
+
 head('the themes: the owner’s two, Memorizer’s own, the five from the owner’s colour pairs, and Systole’s Contrast');
 {
   const ids = L.THEMES.map(t => t.id);
@@ -52,7 +59,7 @@ head('the themes: the owner’s two, Memorizer’s own, the five from the owner�
      L.AUTO.light === 'daylight' && L.AUTO.dark === 'clinical' && L.byId('daylight').mode === 'light' && L.byId('clinical').mode === 'dark', ids.join(', '));
   /* Contrast is Systole's: its id, name and swatch are what Systole's
      picker shows, read from Systole's own source. */
-  const tp = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
+  const tp = SYSTOLE_SRC();
   const systole = {};
   for (const m of tp.matchAll(/\{id:'([a-z]+)',\s*name:'([^']+)'/g)) systole[m[1]] = m[2];
   const ct = L.byId('contrast');
@@ -64,7 +71,7 @@ head('the themes: the owner’s two, Memorizer’s own, the five from the owner�
 
 head('ported colour for colour');
 {
-  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
+  const src = SYSTOLE_SRC();
   /* Memorizer token ← Systole token. Contrast's cards sit on --navy2, not
      --border2, which it uses as a visible rule. */
   const MAP = { bg: 'bg', surface: 'card', 'surface-2': 'border2', ink: 'text', muted: 'muted', line: 'border', accent: 'teal', 'accent-soft': 'teal4' };
@@ -217,7 +224,7 @@ head('contrast and brightness, computed, and readable at every setting');
 
 head('the hero band: each theme’s own, readable across its gradient');
 {
-  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
+  const src = SYSTOLE_SRC();
   const blockOf = re => { const m = src.match(re); const t = {}; if (m) for (const x of m[1].matchAll(/--([a-z0-9-]+):([^;]+);/g)) t[x[1]] = x[2].trim(); return t; };
   const rootDefaults = blockOf(/\n:root\{([\s\S]*?)\n\}/);
   const drift = [];
@@ -251,7 +258,7 @@ head('the hero band: each theme’s own, readable across its gradient');
 
 head('glass and glow: the aurora and second accent, and text readable on glass over it');
 {
-  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'theme-patch.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'scripts', 'highcontrast-patch.js'), 'utf8');
+  const src = SYSTOLE_SRC();
   const blockOf = re => { const m = src.match(re); const t = {}; if (m) for (const x of m[1].matchAll(/--([a-z0-9-]+):([^;]+);/g)) t[x[1]] = x[2].trim(); return t; };
   const rootDefaults = blockOf(/\n:root\{([\s\S]*?)\n\}/);
   const drift = [];
