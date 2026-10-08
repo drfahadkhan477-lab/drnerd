@@ -28,24 +28,23 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'devtools-'));
 const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env, env || {}) });
 
 (async () => {
-  head('scripts/build.js: each run in its own workspace, and nothing half-written left behind');
+  head('the build: a refused build leaves the previous one, and nothing half-written behind');
   {
+    /* scripts/assemble-app.js, the build that ships. (Until the patch chain
+       was deleted this section ran scripts/build.js and checked its
+       per-run workspace, which the assembler has no need of.) */
     const fake = path.join(TMP, 'zq-not-an-export.html');
     fs.writeFileSync(fake, '<html><head></head><body>zq</body></html>');
     const out = path.join(TMP, 'out.html');
     fs.writeFileSync(out, 'the previous build');
-    const work = path.join(ROOT, 'build', '.work');
-    const before = fs.existsSync(work) ? fs.readdirSync(work).sort() : [];
-    const r = node([path.join(ROOT, 'scripts', 'build.js'), fake, '--out', out]);
-    const after = fs.existsSync(work) ? fs.readdirSync(work).sort() : [];
-    ok('a build its first step refuses fails', r.status !== 0, `exit ${r.status}`);
+    const r = node([path.join(ROOT, 'scripts', 'assemble-app.js'), fake, '--out', out]);
+    ok('a build the assembler refuses fails', r.status !== 0, `exit ${r.status}`);
     ok('and leaves the previous output exactly as it was', fs.readFileSync(out, 'utf8') === 'the previous build');
-    ok('and no workspace of its own behind', JSON.stringify(after) === JSON.stringify(before), after.filter(x => !before.includes(x)).join(', ') || 'none');
-    ok('and no step files in build/ itself', !fs.existsSync(path.join(ROOT, 'build', 'stage0.html')));
-    /* Where the steps are written, from the source: a run that is not --keep
-       or --from must not share build/<step>.html. Read blanked, as the rule is. */
+    ok('and no partial copy beside it', !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).join(', '));
     const { blankComments } = require('./_source.js');
-    const src = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'build.js'), 'utf8'));
+    const asm = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'assemble-app.js'), 'utf8'));
+    ok('a build that succeeds is put in place whole, through replaceWhole',
+       /replaceWhole\(out, r\.out\)/.test(asm) && !/fs\.writeFileSync\(out,/.test(asm));
     const { replaceWhole } = require('../scripts/atomic.js');
     const dest = path.join(TMP, 'dest.html'); replaceWhole(dest, 'whole');
     ok('the finished file is put in place whole', fs.readFileSync(dest, 'utf8') === 'whole' && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)));
@@ -58,8 +57,6 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     fs.writeFileSync = realWrite;
     ok('a write that fails part-way leaves no partial copy either', threwW && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).filter(f => /\.tmp-/.test(f)).join(', ') || 'none');
     ok('and when it cannot be, no copy of it is left beside the destination', threw && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).filter(f => /\.tmp-/.test(f)).join(', ') || 'none');
-    ok('a normal run\'s workspace is build/.work/run-<pid>-<time>, and only --keep or --from share build/',
-       /const SHARED = KEEP \|\| !!FROM;/.test(src) && /'\.work', `run-\$\{process\.pid\}-\$\{Date\.now\(\)\}`/.test(src));
   }
 
   head('suite tags: read from each suite\'s code');
@@ -68,7 +65,7 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('a suite that launches a browser and reads a build is browser and build', JSON.stringify(tagsOf('home')) === '["browser","build"]', JSON.stringify(tagsOf('home')));
     ok('one that only launches a browser is browser', JSON.stringify(tagsOf('bankstore')) === '["browser"]', JSON.stringify(tagsOf('bankstore')));
     ok('one that does neither is pure — verify-engine requires _engine and launches nothing', JSON.stringify(tagsOf('engine')) === '["pure"]', JSON.stringify(tagsOf('engine')));
-    ok('and so is this one, which runs verify.js and build.js but launches nothing', JSON.stringify(tagsOf('devtools-pure')) === '["pure"]', JSON.stringify(tagsOf('devtools-pure')));
+    ok('and so is this one, which runs verify.js and the assembler but launches nothing', JSON.stringify(tagsOf('devtools-pure')) === '["pure"]', JSON.stringify(tagsOf('devtools-pure')));
     ok('a suite that spawns a tool which launches a browser is a browser suite', tagsOf('figprobe').includes('browser'), JSON.stringify(tagsOf('figprobe')));
     /* The CI logic job is the set of pure suites CI can run: every one of
        them must be tagged pure, or the tag and the job disagree. */

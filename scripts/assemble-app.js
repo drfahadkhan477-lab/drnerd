@@ -43,6 +43,7 @@ const { buildRefSeed, REFS_DIR } = require('./ref-seed.js');
 const { buildRefImages, IMAGES_DIR } = require('./ref-images.js');
 const { bake } = require('./heart-bake.js');
 const { gitCommit, stampBuffer, STAMP_RE } = require('./stamp.js');
+const { replaceWhole } = require('./atomic.js');
 
 const ROOT = path.join(__dirname, '..');
 const IMGS_RE = /\nconst IMGS=(\{[\s\S]*?\});\n/;
@@ -130,7 +131,9 @@ if (require.main === module) {
       imagesDir: opt('--ref-images') ? path.resolve(opt('--ref-images')) : undefined,
     }) });
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, r.out);
+    /* Whole or not at all: a write that fails part-way (a full disk) must not
+       leave a broken app where the previous working one was. */
+    replaceWhole(out, r.out);
     console.log(`assembled → ${path.relative(ROOT, out)}  (${(r.out.length / 1e6).toFixed(2)} MB, build ${r.digest})`);
     const cmp = opt('--compare');
     if (cmp) {
