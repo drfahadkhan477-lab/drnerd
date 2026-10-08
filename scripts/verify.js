@@ -552,7 +552,7 @@ if (flag('--list')) {
   process.exit(0);
 }
 
-const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout'];
+const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout', '--jobs'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
 /* A PATH OR A URL. Every suite already takes either — `file://` is just how a
    path reaches them — and the split build can only be driven over HTTP,

@@ -102,6 +102,15 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('a SYSTOLE_JOBS that is not a count is refused before anything runs', jbad.status === 1 && /SYSTOLE_JOBS "fast" is not a number of jobs/.test(jbad.stderr) && !/passed/.test(jbad.stdout), line(jbad));
     const jstale = jobsRun(['--jobs', '2'], 'fast');
     ok('but not when --jobs says how many: a stale default does not stop the run', jstale.status === 0 && /, 2 at a time/.test(jstale.stdout), line(jstale));
+    /* WITH NO BUILD NAMED, which is how the command is typed. Every case above
+       names a target first, and the target is the first argument that is not
+       an option or an option's value; --jobs was missing from the list of
+       options that take one, so in "--pwa --jobs 2" the 2 became the build
+       and a full run stopped at "No build at" that path having run nothing. */
+    const jbare = node([path.join(ROOT, 'scripts', 'verify.js'), '--only', 'engine', '--tag', 'pure', '--jobs', '2'], { SYSTOLE_JOBS: '3' });
+    const verifying = ((jbare.stdout || '').split('\n').find(l => /^Verifying /.test(l)) || `exit ${jbare.status}`).trim();
+    ok('and the number after --jobs is not taken for the build when none is named',
+       jbare.status === 0 && /, 2 at a time/.test(jbare.stdout) && /systole\.html$/.test(verifying), verifying);
     /* No browser installed: a pure selection still runs. PLAYWRIGHT_BROWSERS_PATH
        pointed at an empty folder makes every engine's executable missing. */
     const empty = path.join(TMP, 'no-browsers'); fs.mkdirSync(empty);
