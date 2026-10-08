@@ -341,9 +341,17 @@ function stage(p, text) {
 function ls() { return root.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null); }
 function savedBackend() { try { return ls().getItem(BACKEND_KEY) === 'indexeddb' ? 'indexeddb' : 'cache'; } catch (_) { return 'cache'; } }
 function saveBackend(b) { try { ls().setItem(BACKEND_KEY, b); } catch (_) {} }
+/* Asked, not waited on for ever: Firefox answers persist() with a prompt,
+   and a prompt nobody answers leaves the promise pending, so a start that
+   awaited it never reached the engine (CI's headless Firefox, and anyone who
+   closes the prompt). After PERSIST.ms the start goes on; the question stays
+   on screen and an answer still counts for the files stored after it. */
+var PERSIST = { ms: 3000 };
 function persist() {
-  var st = root.navigator && root.navigator.storage;
-  return st && st.persist ? st.persist().then(function (v) { return !!v; }, function () { return false; }) : Promise.resolve(false);
+  var nav = root.navigator || (typeof navigator !== 'undefined' ? navigator : null), st = nav && nav.storage;
+  if (!st || !st.persist) return Promise.resolve(false);
+  return Promise.race([st.persist().then(function (v) { return !!v; }, function () { return false; }),
+    new Promise(function (r) { setTimeout(function () { r(false); }, PERSIST.ms); })]);
 }
 var gpuProbe = null;
 /* Tests hand in a stand-in engine library and GPU. */
@@ -549,7 +557,7 @@ function parseQuestions(text) {
   } catch (_) { return []; }
 }
 
-var MemLLM = { stage: stage, CHECKING: CHECKING, pinnedConfig: pinnedConfig, verifyFiles: verifyFiles, verify: verify, storedFiles: storedFiles, useVerify: useVerify, modelSource: modelSource, stop: stop, stopEmbed: stopEmbed, WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
+var MemLLM = { stage: stage, PERSIST: PERSIST, CHECKING: CHECKING, pinnedConfig: pinnedConfig, verifyFiles: verifyFiles, verify: verify, storedFiles: storedFiles, useVerify: useVerify, modelSource: modelSource, stop: stop, stopEmbed: stopEmbed, WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
                loadLib: loadLib, useEngine: useEngine, ready: ready, start: start, chat: chat, SYSTEM: SYSTEM,
                summaryPrompt: summaryPrompt, plainPrompt: plainPrompt, analogyPrompt: analogyPrompt, questionsPrompt: questionsPrompt,
                QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions, stripThinking: stripThinking,

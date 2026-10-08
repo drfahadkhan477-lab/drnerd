@@ -1091,6 +1091,17 @@ async function startLoop() {
   head('the on-device model: downloaded from pinned commits, and checked before it is used');
   /* six of the starts above end in a loaded model: each is checked once */
   ok('every start above asked the engine for the pinned files, and each load was checked', allCalls.length > 10 && allCalls.every(c => c.from === 'pinned') && passes === 6, allCalls.length + ' starts, ' + passes + ' checks');
+  {
+    /* Firefox's persist() is a prompt; unanswered, its promise never settles */
+    const had = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { value: { storage: { persist: () => new Promise(() => {}) } }, configurable: true, writable: true });
+    const wait = L.PERSIST.ms; L.PERSIST.ms = 20;
+    const lb = lib([]); L.useLib(lb); L.useGpu(() => ({ ok: true, f16: true })); L.useEngine(null, null);
+    const got = await Promise.race([L.start('Qwen3-0.6B-q4f16_1-MLC').then(() => 'started', e => 'failed: ' + e.message), new Promise(r => setTimeout(() => r('still waiting after 2 s'), 2000))]);
+    L.PERSIST.ms = wait;
+    if (had) Object.defineProperty(globalThis, 'navigator', had); else delete globalThis.navigator;
+    ok('a storage prompt nobody answers does not hold the start: the engine is reached', got === 'started' && lb.calls.length === 1, got);
+  }
   const offered = L.MODELS.map(m => m.id).concat(L.MODELS.map(m => L.variantFor(m.id, false)), [L.EMBED.id]);
   const cfg = L.pinnedConfig({ model_list: RECORDS.concat([{ model_id: 'Other-MLC', model: 'https://huggingface.co/x/Other-MLC', model_lib: 'https://x/lib.wasm' }]) }, 'cache');
   const missing = offered.filter(id => !MANIFEST.models[id]);
