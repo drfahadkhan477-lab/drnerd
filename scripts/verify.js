@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 155 suites and roughly 6632 checks, and they
+ * WHY THIS EXISTS. There are 153 suites and roughly 6611 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -472,7 +472,7 @@ const PENDING_RECORD = [];
    must not be registered, so the next write forces it out of this list. */
 /* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
    survived the chain to the step that used them; deleted with the chain. */
-const RETIRED_RECORD = ['shellanchor-pure', 'echoanchor-pure'];
+const RETIRED_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -509,11 +509,25 @@ const RETIRED_RECORD = ['shellanchor-pure', 'echoanchor-pure'];
    serial to 24.2 min at --jobs 3, so the parallelism bought nothing there and
    cost three suites to do it.
 
+   AND THREE MEMORIZER SUITES, FOUND THE SAME WAY (October 8, master 28a8df4,
+   SYSTOLE_JOBS=3 on the owner's Windows laptop):
+
+     memorizer             locator.waitFor 60s, at the first PDF it reads
+     memorizer-hardening   locator.click 30s, at its first double tap
+     memorizer-studyimport twenty minutes inside "the dialog"
+
+   Twice at three at a time they failed or hung; then, on the same commit and
+   machine with --jobs 1, they gave 484, 69 and 72 checks, all passing, the
+   counts CI and the record hold. Like the three above they wait on browser
+   work (PDF rendering in a worker, layout settling, the clipboard), not on a
+   clock.
+
    Everything else in the registry asserts on content, geometry or arithmetic,
    and was verified to give the same result under --jobs 3 as it does alone —
    that comparison is the evidence, not this list. */
 const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
-                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs']);
+                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs',
+                        'memorizer', 'memorizer-hardening', 'memorizer-studyimport']);
 
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(n);
