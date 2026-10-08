@@ -105,16 +105,25 @@ ok('it is baked on the grid the hero asks for',
    String(baked.res) === String(HERO_RES) && !!M.unpack(bakedBuf, baked.key, HERO_RES, M.LO, M.HI), String(baked.res));
 ok('what it embeds unpacks to the mesh, value for value',
    differences(heroBuilt, M.unpack(bakedBuf, baked.key, HERO_RES, M.LO, M.HI)).length === 0);
-const heroart = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'heroart-patch.js'), 'utf8'));
-const heroGrids = heroart.match(/resolution:\[[^\]]*\]/g) || [];
-ok('heroart-patch mounts the hero at that grid, read from the bake, not typed twice',
-   /require\('\.\/heart-bake\.js'\)/.test(heroart) && heroGrids[heroGrids.length - 1] === "resolution:[${HERO_RES.join(',')}]",
-   heroGrids[heroGrids.length - 1]);
-const apex = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'apex-patch.js'), 'utf8'));
-ok('apex-patch bakes with this module, from the heart3d.js it embeds',
-   /require\('\.\/heart-bake\.js'\)\.bake\(heart3d\)/.test(apex));
-ok('and embeds the key and the copy beside the code',
-   apex.includes("window.HEART3D_MESH_KEY='${bakedHeart.key}';") && apex.includes("window.HEART3D_MESH_B64='${bakedHeart.b64}';"));
+/* The page that ships, not the patch scripts that used to write it: since the
+   chain was retired the hero's grid and the mesh's key are typed into
+   app/systole.html, and the build fills only the mesh's bytes. A key that no
+   longer matches heart3d.js is the original bug again — the copy is refused
+   and the hero meshes at every launch — so it is held to a fresh bake here. */
+const shipped = blankComments(fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8'));
+const heroGrids = shipped.match(/resolution:\[[^\]]*\]/g) || [];
+ok('the page mounts the hero at the grid the bake uses',
+   heroGrids.length > 0 && heroGrids[heroGrids.length - 1] === `resolution:[${HERO_RES.join(',')}]`,
+   heroGrids[heroGrids.length - 1] || 'no resolution:[…] in the page');
+const pageKey = (shipped.match(/window\.HEART3D_MESH_KEY='([0-9a-f]+)';/) || [])[1];
+ok('the key the page carries is the key of the heart3d.js it ships with',
+   !!pageKey && pageKey === baked.key, `page ${pageKey || 'none'}, bake ${baked.key}`);
+ok('and the mesh itself is a slot the build fills, not bytes frozen in the page',
+   shipped.includes("window.HEART3D_MESH_B64='@@SLOT[payload:HEART_MESH]@@';"));
+const assembler = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'assemble-app.js'), 'utf8'));
+ok('which the assembler fills by baking src/core/heart3d.js with this module',
+   /require\('\.\/heart-bake\.js'\)/.test(assembler) &&
+   /HEART_MESH:\s*\(\)\s*=>\s*bake\(fs\.readFileSync\(path\.join\(root, 'src', 'core', 'heart3d\.js'\)/.test(assembler));
 
 head('create() takes the copy only when it is the one for this code');
 /* take() is what create() calls: it reads the page's globals. */
