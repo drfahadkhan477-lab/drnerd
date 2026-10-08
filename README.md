@@ -43,7 +43,7 @@ on that, except the few whose subject is the real bank itself. On every push
 it also checks, with no source file: every script parses, the patch chain and
 the test-suite list both still list without crashing, `scripts/build.js`
 still refuses to run and explains why when no source is present, and
-the 89 suites that need neither a browser nor a build all stay green. See
+the 90 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 217 checks can't run here.
 
@@ -84,13 +84,14 @@ python3 tools/figure-review.py                      # → build/figure-review.ht
 python3 tools/trim-figure.py --apply-crops content/refs-images
 ```
 
-The Braunwald units in the private `content/refs-repo` submodule are baked the
-same way, each with its reviewed crop record (`tools/figure-crops.<unit>.json`).
-`content/refs` is a real folder that add-unit writes into, not a symlink into
-the submodule:
+The Braunwald units are baked the same way from the notes in
+`content/refs-repo`, each with its reviewed crop record
+(`tools/figure-crops.<unit>.json`). That folder lives only on the owner's own
+machine: it was a submodule pointing at a private repository, which has been
+deleted, so there is no copy to fetch and it should be backed up like the export.
+`content/refs` is a real folder that add-unit writes into:
 
 ```bash
-git submodule update --init content/refs-repo
 python3 tools/add-unit.py --unit hf --quality 70 --crops tools/figure-crops.hf.json \
   --notes content/refs-repo/references/heart-failure --figures content/refs-repo/references/heart-failure/visuals
 python3 tools/add-unit.py --unit ischemia --crops tools/figure-crops.ischemia.json \

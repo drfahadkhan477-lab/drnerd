@@ -80,6 +80,17 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
 
 ## Process
 
+- **A click that "did nothing" because it missed.** Firefox CI intermittently
+  stayed on the lesson after "now memorise it" (phase teach, nothing logged). Reading
+  the app's logic found nothing. A capture-phase click listener showed the click
+  landing on `<main>`: lazily drawn figures and page thumbnails grew as the scroll
+  brought them near, and the button moved after Playwright had aimed (#185); fixing
+  the figures alone still failed on a thumbnail. → Rule: when a click changes
+  nothing, record what it actually hit and where the target was at that instant
+  before reasoning about handlers. Reproduce locally (`npx playwright install
+  firefox`, or `npx playwright install --with-deps webkit` as CI does) and loop
+  until it fails, rather than guessing from one CI log.
+
 - **Handing the owner a retired command.** I gave `node scripts/build.js` (the
   retired patch chain) for a laptop build; it ran for four minutes and built an app
   that no longer matches `app/`. → Rule: before giving a build command, read what

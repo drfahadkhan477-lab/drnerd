@@ -12,8 +12,8 @@ whole, with nothing dropped and nothing flagged.
 ## What this is not for
 
 The ACCSAP 12 export and the older ACC question banks are licensed and not
-read in a session (CLAUDE.md, section "The licensed corpus never enters git
-(except via submodule)"). If the chapter comes from `source/`, `content/`,
+read in a session (CLAUDE.md, section "The licensed corpus never enters
+git"). If the chapter comes from `source/`, `content/`,
 `build/` or `dist/`, stop and say so. A study file is never written from a
 question bank.
 
