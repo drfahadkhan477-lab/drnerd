@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6611 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6528.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6634 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6551.
 # The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
@@ -74,7 +74,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6528 real checks, up
+#                Across every job, 6551 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -173,7 +173,7 @@ jobs:
         run: node tests/verify-fsrs.js
       - name: the scheduler against ts-fsrs, on our own weights (15 checks)
         run: node tests/verify-oracle.js
-      - name: the Cloudflare Worker request handler (73 checks)
+      - name: the Cloudflare Worker request handler (90 checks)
         run: node tests/verify-worker.js
       - name: the cardiac cycle's physics (23 checks)
         run: node tests/verify-physio-pure.js
@@ -203,7 +203,7 @@ jobs:
         run: node tests/verify-coronarytree-pure.js
       - name: the engine is a flag, not thirty-four hardcoded copies of one (96 checks)
         run: node tests/verify-engine.js
-      - name: the licensed question bank cannot be committed (40 checks)
+      - name: the licensed question bank cannot be committed (46 checks)
         run: node tests/verify-leakguard.js
       - name: a Claude Code session cannot read the licensed export (24 checks)
         run: node tests/verify-claude-guard.js
@@ -233,7 +233,7 @@ jobs:
         run: node tests/verify-icons-pure.js
       - name: each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes (99 checks)
         run: node tests/verify-drills-pure.js
-      - name: the release gate never claims more than it measured (59 checks)
+      - name: the release gate never claims more than it measured (58 checks)
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
         run: node tests/verify-contentrules.js
@@ -251,7 +251,7 @@ jobs:
         run: node tests/verify-ipad-pure.js
       - name: the newer copy survives and a refused write is not lost (56 checks)
         run: node tests/verify-store-pure.js
-      - name: the counts in the docs are the counts the tests produced (60 checks)
+      - name: the counts in the docs are the counts the tests produced (52 checks)
         run: node tests/verify-stats.js
       - name: a stem that points at a picture is caught, and the count is honest (36 checks)
         run: node tests/verify-figaudit.js
@@ -263,7 +263,7 @@ jobs:
         run: node tests/verify-ecg12-pure.js
       - name: a splash that cannot load the bank says which failure it was (51 checks)
         run: node tests/verify-loader-pure.js
-      - name: a split build cannot be half of one build and half of another (52 checks)
+      - name: a split build cannot be half of one build and half of another (53 checks)
         run: node tests/verify-provenance-pure.js
       - name: a deploy landing under a running app leaves a pair that is noticed (49 checks)
         run: node tests/verify-swupdate-pure.js
@@ -275,7 +275,7 @@ jobs:
         run: node tests/verify-echo-pure.js
       - name: Echo Studio computes only what was measured (58 checks)
         run: node tests/verify-echoui-pure.js
-      - name: the notes search ranks, quotes and escapes (41 checks)
+      - name: the notes search ranks, quotes and escapes (35 checks)
         run: node tests/verify-notesearch-pure.js
       - name: the heart loads a mesh baked at build time, and refuses any other copy (37 checks)
         run: node tests/verify-heartbake-pure.js
@@ -289,7 +289,7 @@ jobs:
         run: node tests/verify-phrase-pure.js
       - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, no word of it is printed, a key its own commentary contradicts is refused, a question with no explanation says so, a merged build carries exactly the staging, a bold heading naming no "Question" starts one, every figure type is served as an image, and an unanswered explanation is probed letter by letter (176 checks)
         run: node tests/verify-olderacc-pure.js
-      - name: extraction refuses an unsafe id, an image whose bytes are not its mime, damaged base64, and a bank that breaks the content schema, and a refusal leaves the last good content untouched (30 checks)
+      - name: extraction refuses an unsafe id, an image whose bytes are not its mime, damaged base64, and a bank that breaks the content schema, and a refusal leaves the last good content untouched (33 checks)
         run: node tests/verify-extract-pure.js
       - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing; the reference notes travel in it too, and the written schema names the version the code enforces (28 checks)
         run: node tests/verify-bankpack-pure.js
@@ -299,9 +299,9 @@ jobs:
         run: node tests/verify-cichanges-pure.js
       - name: the counts record in two halves — Systole's written from a run where every Systole suite passed, the Memorizer's likewise, the other half kept (31 checks)
         run: node tests/verify-record-pure.js
-      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (24 checks)
+      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (28 checks)
         run: node tests/verify-suitetime-pure.js
-      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (42 checks)
+      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (49 checks)
         run: node tests/verify-devtools-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (250 checks)
         run: node tests/verify-memorizer-chunk-pure.js
