@@ -3020,9 +3020,20 @@ function kindOf(user) {
     /* the pack removed: its sections go back to the built-in coach */
     await p4.locator('#pack-card summary').click();
     await p4.locator('#pack-remove').click();
-    await p4.waitForFunction(() => !Memorizer.ui.pack, null, T);
-    ok('removing the pack deletes it and sends its section back to the built-in coach', await p4.evaluate(id => MemStore.get('packs', id), d.id) === null &&
-       await p4.evaluate(() => !Memorizer.ui.state.per[0].lesson) && /none yet/.test(await text(p4, '#pack-card summary')));
+    /* A PRECONDITION: removePack() has redrawn. It clears ui.pack first, then awaits a
+       dispatch, then renders, so waiting on ui.pack alone read the card before the redraw (it
+       failed this way in WebKit on master). The remove button exists only while there is a
+       pack, so its leaving marks the redraw. Not awaited as a pass: if it never leaves, the
+       three readings below say which part of the removal did not happen. */
+    await p4.locator('#pack-remove').waitFor({ state: 'detached', ...T }).catch(() => {});
+    const unpacked = {
+      stored: await p4.evaluate(id => MemStore.get('packs', id), d.id),
+      lesson: await p4.evaluate(() => !!Memorizer.ui.state.per[0].lesson),
+      summary: await text(p4, '#pack-card summary'),
+    };
+    ok('removing the pack deletes it and sends its section back to the built-in coach',
+       unpacked.stored === null && !unpacked.lesson && /none yet/.test(unpacked.summary),
+       `stored ${unpacked.stored === null ? 'gone' : 'still there'}, section lesson ${unpacked.lesson ? 'still the pack’s' : 'cleared'}, card ${/none yet/.test(unpacked.summary) ? 'says none yet' : 'not redrawn'}`);
 
     /* THE PEARL AS THE DAY'S RECALL (phase 4) */
     await p4.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
