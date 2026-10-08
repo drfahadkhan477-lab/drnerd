@@ -872,6 +872,23 @@ function kindOf(user) {
   ok('and the whole lesson is one tap away again', await page.locator('main #points').count() === 1 && await page.locator('main #numbers').count() === 1 &&
      await page.locator('main .hook').count() >= 1 && await page.locator('#to-drill').count() === 1 && await page.locator('#lesson-steps').count() === 0);
 
+  /* A FIGURE HOLDS ITS SPACE BEFORE IT IS DRAWN. Figures are drawn from the
+     PDF only when they come near the screen, and an undrawn one used to be
+     0 px tall: scrolling to "now memorise it" brought one near, it grew 324 px,
+     and the button moved out from under the click. In Firefox that click then
+     landed on <main> about one run in four, and the memorise screen never
+     came. Measured on the figures not yet drawn when the page appears (at
+     least one, or this measures nothing), against their drawn height. The
+     wait for them to be drawn is a precondition; the heights are the check. */
+  const undrawn = await page.evaluate(() => [...document.querySelectorAll('main img[loading="lazy"]')].filter(i => !i.getAttribute('src'))
+    .map((i, k) => { i.dataset.held = String(k); return Math.round(i.getBoundingClientRect().height); }));
+  await page.evaluate(() => document.querySelector('#to-drill').scrollIntoView({ block: 'center' }));
+  await page.waitForFunction(() => [...document.querySelectorAll('main img[data-held]')].every(i => i.naturalWidth > 0), null, T);
+  const drawn = await page.evaluate(() => [...document.querySelectorAll('main img[data-held]')].map(i => Math.round(i.getBoundingClientRect().height)));
+  ok('a figure holds its space before it is drawn, so nothing below it jumps when it appears',
+     undrawn.length >= 1 && drawn.length === undrawn.length && undrawn.every((hgt, k) => hgt > 0 && Math.abs(drawn[k] - hgt) <= 0.05 * drawn[k]),
+     JSON.stringify({ undrawn, drawn }));
+
   head('memorise it before the drill');
   await page.locator('#to-drill').click();
   await arrived(page, '#recall', 'the memorise screen after "now memorise it"');

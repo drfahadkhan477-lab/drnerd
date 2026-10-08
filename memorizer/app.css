@@ -121,6 +121,12 @@ table.data tbody tr:last-child td { border-bottom: 0; }
 .fig-cap { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .pages { display: flex; gap: var(--s-3); overflow-x: auto; padding-bottom: var(--s-2); margin-top: var(--s-3); }
 .pages .fig { flex: 0 0 9rem; }
+/* A page thumbnail's box is fixed before the page is drawn, and the page is
+   fitted inside it: its true shape is not known until the PDF is open, and a
+   thumbnail that grew from 0 px pushed the lesson below it (with the figures'
+   reserved boxes in ui.js lazyImage, the "now memorise it" button moved out
+   from under a tap). A page of another shape gets white margin, not a jump. */
+.pages .fig img { aspect-ratio: 210 / 297; object-fit: contain; }
 .lightbox { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; padding: var(--s-4); }
 .lightbox img { max-width: 100%; max-height: 100%; background: #FFFFFF; border-radius: .375rem; }
 /* :not(.figure-view) is what wins this: .btn.primary, later in the file, set
