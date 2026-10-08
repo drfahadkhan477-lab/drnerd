@@ -102,6 +102,28 @@ const MIN = 60000;
        `exit ${r2.status}`);
   }
 
+  head('the --pwa phases are held to the ceiling too');
+  {
+    const { spawnLimited } = require('../scripts/suitetime.js');
+    /* Ends by itself after 10 s, so a spawnLimited that lost its timeout
+       makes these checks fail rather than hang the suite. */
+    const hung = spawnLimited(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], { encoding: 'utf8' }, 300, 'a hung phase');
+    ok('a phase that never exits is stopped, and fails', hung.timedOut === true && hung.status !== 0, `status ${hung.status}`);
+    ok('and its output says it was stopped, and which', /a hung phase stopped by verify\.js after .* \(its limit: /.test(hung.stderr || ''));
+    const quick = spawnLimited(process.execPath, ['-e', 'console.log("done")'], { encoding: 'utf8' }, 20000, 'a quick phase');
+    ok('a phase that finishes in time is untouched', quick.timedOut === false && quick.status === 0 && /done/.test(quick.stdout));
+    /* Every phase the --pwa block spawns from the repository goes through it:
+       a plain spawnSync of a tests/ or scripts/ file there is one that can
+       still hang the run. Read blanked, so this comment's own wording does
+       not count. */
+    const { blankComments } = require('./_source.js');
+    const v = blankComments(require('fs').readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8'));
+    const block = v.slice(v.indexOf("if (flag('--pwa'))"));
+    const plain = (block.match(/spawnSync\(process\.execPath, \[path\.join\(ROOT, '(?:tests|scripts)'/g) || []).length;
+    const limited = (block.match(/spawnLimited\(process\.execPath, \[path\.join\(ROOT, '(?:tests|scripts)'/g) || []).length;
+    ok('every --pwa phase is spawned with the ceiling', plain === 0 && limited === 4, `${limited} limited, ${plain} not`);
+  }
+
   head('the laptop run: what only a machine with the export can run');
   {
     const { ciSuites } = require('../scripts/test-public.js');
