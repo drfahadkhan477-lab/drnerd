@@ -8,7 +8,7 @@
 WHY THIS EXISTS. A unit written for the in-app importer cites its figures the
 way the export laid them out — `![Fig 52.2 — …](page_figures/page_308.jpg)` —
 and the importer resolves those against the files picked alongside. The build
-does not: scripts/ref-images-patch.js resolves `refimg://<key>` against
+does not: scripts/ref-images.js resolves `refimg://<key>` against
 content/refs-images/ and throws on a key that is not there. Getting from one to
 the other by hand is 11 files of link rewriting and 53 images copied out of a
 folder of 260. Done by hand it goes wrong quietly — the build catches a missing

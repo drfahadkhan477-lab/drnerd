@@ -1,6 +1,6 @@
 # Embedded typefaces
 
-Latin subsets, embedded into the app by `scripts/stage0-patch.js` as base64 so
+Latin subsets, embedded into the app by `scripts/assemble-app.js` (an asset slot in `app/systole.html`) as base64 so
 the app makes no network request on launch.
 
 | File | Family | Licence |

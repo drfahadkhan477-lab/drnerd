@@ -6,7 +6,7 @@ here; `content/`, `build/`, `dist/` and `source/` are all gitignored.
 
 ## Systole — cardiology board review
 
-A single-file study app for the ABIM cardiovascular boards, built by patching a
+A single-file study app for the ABIM cardiovascular boards, built from a
 personal ACCSAP 12 export. A procedural WebGL heart that beats on a real cardiac
 clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
 (Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5–derived
@@ -34,18 +34,18 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 6616 + 134 checks above — read it as 6533, not 6750.**
+**That badge is not the 6616 + 134 checks above — read it as 6499, not 6750.**
 CI cannot build the app from the real bank: that needs the licensed export,
 which is deliberately never committed here and never will be, on GitHub or
 anywhere else that isn't your own devices. So it builds the real app around
 an invented bank (`scripts/synthetic-export.js`) and runs the browser suites
 on that, except the few whose subject is the real bank itself. On every push
-it also checks, with no source file: every script parses, the patch chain and
-the test-suite list both still list without crashing, `scripts/build.js`
-still refuses to run and explains why when no source is present, and
-the 90 suites that need neither a browser nor a build all stay green. See
+it also checks, with no source file: every script parses, the test-suite
+list still lists without crashing, `npm run build` still refuses to run and
+explains why when no source is present, and
+the 88 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
-scope and why the other 217 checks can't run here.
+scope and why the other 251 checks can't run here.
 
 ### The device this is for
 
@@ -118,8 +118,8 @@ time the images are built. `tests/verify-figreview.js` drives the whole round
 trip, sheet to cropped pixels, and holds the one invariant the hour of tapping
 depends on: the box recorded is in *original* pixels, not preview pixels.
 
-`figure-review.py` and `trim-figure.py` are not part of the build; nothing in
-`scripts/build.js` touches them. They need more than the standard library,
+`figure-review.py` and `trim-figure.py` are not part of the build; nothing
+`npm run build` runs touches them. They need more than the standard library,
 which nothing said until now:
 
 ```bash

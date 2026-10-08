@@ -138,11 +138,6 @@ const SUITES = [
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
   ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
-  /* Written because focusmode anchored on three lines copied out of
-     fullbleed's source, and two steps in between had rewritten them — which
-     reading the source cannot tell you and a build would have, if a build
-     were something everyone could run. */
-  ['shellanchor-pure', 'every anchor into the shell markup still matches at the step that uses it'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
@@ -199,7 +194,7 @@ const SUITES = [
   ['app-slots-pure', 'the built file cuts into the app and its payloads byte for byte, and the app carries none of the bank'],
   /* Step 2: the frozen shell's slots filled from where the chain gets them,
      ALL_Q held to keys-patch and flags-patch run as the chain runs them. */
-  ['assemble-pure', 'the app assembles from app/systole.html as the chain builds it, stamped as build.js stamps'],
+  ['assemble-pure', 'the app assembles from app/systole.html, the export and the repository, stamped once'],
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
   ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],
@@ -292,7 +287,6 @@ const SUITES = [
   ['refscheck-pure','the corpus checker holds every floor it claims, and reads before reporting'],
   ['echo-pure',    'the echo tables point at what exists, and the arithmetic is the arithmetic'],
   ['echoui-pure',  'Echo Studio computes only what was measured, and restates no cutoff'],
-  ['echoanchor-pure','every anchor echo-patch uses still exists at the step it runs from'],
   /* The three above stop where strings become a document. This one starts
      there: it runs echo-patch over a scaffold and drives the result, so the
      glue, the delegated listeners and the caret are held rather than argued
@@ -464,6 +458,18 @@ const SUITES = [
    does not hold them yet: suitetime-pure. */
 const PENDING_RECORD = ['suitetime-pure'];
 
+/* ── suites deleted since their half of the record was last written ─────────
+   The mirror of PENDING_RECORD. A suite removed from the registry is still in
+   tests/test-stats.json until the next green run of its half rewrites it
+   (scripts/record.js drops a name that is no longer registered), and until
+   then verify-stats would read it as the record holding something that is no
+   longer a suite. Naming it here says that is on purpose. Checked in both
+   directions like PENDING_RECORD: a name here must still be in the record and
+   must not be registered, so the next write forces it out of this list. */
+/* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
+   survived the chain to the step that used them; deleted with the chain. */
+const RETIRED_RECORD = ['shellanchor-pure', 'echoanchor-pure'];
+
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
    what is on screen and dishonest for one that asserts on how long something
@@ -512,7 +518,7 @@ const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 
 const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
 const { mergeRecord } = require(path.join(ROOT, 'scripts', 'record.js'));
-const { limitFor, sectionClock, slowest, watch, fmtMin } = require(path.join(ROOT, 'scripts', 'suitetime.js'));
+const { limitFor, sectionClock, slowest, watch, spawnLimited, fmtMin } = require(path.join(ROOT, 'scripts', 'suitetime.js'));
 /* `laptop`: a suite no CI job runs, so only a machine with the export ever
    does. Everything else GitHub runs on every pull request, on the synthetic
    bank or with no build at all, which makes `--tag laptop` the short routine
@@ -1088,9 +1094,12 @@ if (bad.length) {
    process outlives its run. */
 if (flag('--pwa')) {
   const PORT = 8137;
+  /* Each phase below has no recorded time of its own, so it gets the default
+     ceiling for an unrecorded suite, or what --suite-timeout says. */
+  const PHASE_LIMIT = limitFor(undefined, SUITE_TIMEOUT);
   console.log('── the Stage 1 split build, over HTTP ──\n');
   let pt = Date.now();
-  const b = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'build-pwa.js'), TARGET], { encoding: 'utf8' });
+  const b = spawnLimited(process.execPath, [path.join(ROOT, 'scripts', 'build-pwa.js'), TARGET], { encoding: 'utf8' }, PHASE_LIMIT, 'build-pwa');
   phases.push({ suite: 'build-pwa', tags: ['pwa'], status: b.status === 0 ? 'pass' : 'fail', checks: 0, passed: 0, failed: b.status === 0 ? 0 : null, durationMs: Date.now() - pt });
   if (b.status !== 0) { console.error(b.stdout + b.stderr); process.exit(1); }
   console.log((b.stdout.match(/shell total.*/) || ['  (built)'])[0].trim());
@@ -1110,8 +1119,8 @@ if (flag('--pwa')) {
   }
   pt = Date.now();
 
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
-                      { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE } });
+  const r = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
+                      { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE } }, PHASE_LIMIT, 'verify-pwa');
   const out = (r.stdout || '') + (r.stderr || '');
   phase('pwa', out, r.status, Date.now() - pt);
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
@@ -1141,8 +1150,8 @@ if (flag('--pwa')) {
      never touches _worker.js, which in advanced mode owns every request to the
      project. A deployment went down once while that path had no test at all. */
   pt = Date.now();
-  const wk = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pages.js'),
-                                          path.join(ROOT, 'dist')], { encoding: 'utf8' });
+  const wk = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pages.js'),
+                                          path.join(ROOT, 'dist')], { encoding: 'utf8' }, PHASE_LIMIT, 'verify-pages');
   const wout = (wk.stdout || '') + (wk.stderr || '');
   phase('pages', wout, wk.status, Date.now() - pt);
   const wm = wout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
@@ -1159,8 +1168,8 @@ if (flag('--pwa')) {
      the one being verified. It drives no browser — the failure it guards is
      two deploys apart and is decidable from the worker's own source. */
   pt = Date.now();
-  const cb = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-cachebuckets.js'),
-                                          path.join(ROOT, 'dist')], { encoding: 'utf8' });
+  const cb = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-cachebuckets.js'),
+                                          path.join(ROOT, 'dist')], { encoding: 'utf8' }, PHASE_LIMIT, 'verify-cachebuckets');
   const cout = (cb.stdout || '') + (cb.stderr || '');
   phase('cachebuckets', cout, cb.status, Date.now() - pt);
   const cm = cout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);

@@ -2,14 +2,13 @@
   "name": "systole",
   "version": "1.0.0",
   "private": true,
-  "description": "Systole \u2014 a single-file cardiology board-review app built by patching a personal ACCSAP 12 export. The question bank itself is licensed content and is never committed.",
+  "description": "Systole \u2014 a single-file cardiology board-review app built from a personal ACCSAP 12 export. The question bank itself is licensed content and is never committed.",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "build": "node scripts/assemble-app.js --out build/systole.html",
-    "build:chain": "node scripts/build.js",
     "verify": "node scripts/verify.js",
     "test": "node scripts/test-public.js",
     "test:pure": "node scripts/test-public.js --pure",
@@ -18,7 +17,6 @@
     "doctor": "node scripts/doctor.js",
     "clean": "node scripts/clean.js",
     "clean:private": "node scripts/clean.js --private",
-    "steps": "node scripts/build.js --list",
     "suites": "node scripts/verify.js --list",
     "pwa": "node scripts/extract-content.js build/systole.html && node scripts/build-pwa.js build/systole.html",
     "serve": "node scripts/serve.js 8080 dist",
@@ -32,7 +30,7 @@
     "release": "npm run release-check --"
   },
   "comments": {
-    "dependencies": "The BUILD has none on purpose \u2014 it is Node's standard library and 91 patch scripts, and `npm run build` needs no install at all. devDependencies are for the TESTS only: playwright drives the suites, ts-fsrs regenerates tests/fixtures/fsrs-oracle.json and is otherwise unused (the fixture itself is committed, so verify-oracle runs without it). Both are pinned to exact versions rather than ranges, and package-lock.json pins their transitive tree, because a suite that measures a browser is measuring a specific browser.",
+    "dependencies": "The BUILD has none on purpose \u2014 it is Node's standard library and the scripts in scripts/, and `npm run build` needs no install at all. devDependencies are for the TESTS only: playwright drives the suites, ts-fsrs regenerates tests/fixtures/fsrs-oracle.json and is otherwise unused (the fixture itself is committed, so verify-oracle runs without it). Both are pinned to exact versions rather than ranges, and package-lock.json pins their transitive tree, because a suite that measures a browser is measuring a specific browser.",
     "usage": "npm test runs every check that needs no export (the suites CI runs). With your export: npm run build -- path/to/ACCSAP_export.html   then   npm run test:private",
     "browsers": "Playwright downloads its own browsers on install. Set PLAYWRIGHT_BROWSERS_PATH to share one copy, and PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 where they are already provisioned. `npx playwright install chromium webkit` is the minimum for a full run; CI's memorizer-browser job also runs Firefox, so install `firefox` too to reproduce it locally (it is also what --engine firefox needs)."
   },

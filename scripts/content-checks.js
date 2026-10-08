@@ -25,7 +25,7 @@
  * this repository, so a gate demanding a clean bank would block every build on
  * something nobody can repair — and would be switched off within a week.
  *
- * flags-patch.js already settled this: COR_89's answer panels are simply not in
+ * content-flags.js already settled this: COR_89's answer panels are simply not in
  * the source PDF, so the question carries a `flag` that the app SHOWS to the
  * fellow. The defect is disclosed rather than hidden. So the rule here is the
  * same one, generalised: a structural defect must be disclosed. Any question

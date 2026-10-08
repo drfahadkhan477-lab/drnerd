@@ -226,75 +226,64 @@ head('the artifact names the commit that produced it');
 
 head('the single file says which commit made it, too');
 {
-  /* IT SAID NOTHING AT ALL until now. The split build has carried a BUILD_ID
-     since the shell/content split and a commit since the provenance pass;
-     systole.html carried neither — and it is the artifact that actually
+  /* IT SAID NOTHING AT ALL once. The split build has carried a BUILD_ID since
+     the shell/content split and a commit since the provenance pass; the
+     single file carried neither — and it is the artifact that actually
      travels, dropped into Files and opened on a tablet away from the
-     repository that made it. "Is this the build with the fix?" had no answer
-     in the file.
+     repository that made it.
 
-     AFTER THE CHAIN, NOT INSIDE IT, and that is the property worth holding:
-     a stamping step would be an 83rd link whose output every later anchor
-     would have to tolerate. Asserted by position — the stamp must be written
-     below the loop that runs CHAIN. */
-  const BUILD = fs.readFileSync(path.join(ROOT, 'scripts', 'build.js'), 'utf8');
-  ok('build.js stamps the finished document', /systole-build \$\{digest\} commit \$\{commit\}/.test(BUILD));
-  const loopAt = BUILD.indexOf('for (const step of CHAIN)');
-  const stampAt = BUILD.indexOf('systole-build ${digest}');
-  ok('and does it after the chain has run, so no patch anchor can see it',
-     loopAt > 0 && stampAt > loopAt, `chain@${loopAt} stamp@${stampAt}`);
-  /* The chain itself must not have grown a step for this. */
-  ok('the chain is not one step longer for it',
-     !/stamp-patch|provenance-patch/.test(BUILD));
-
-  /* A COMMENT, NOT A SCRIPT: nothing to execute, so no CSP question and no
-     new inline script for verify-csp or verify-stage0 to account for. */
-  ok('the stamp is an HTML comment',
-     /const stamp = Buffer\.from\(`<!-- systole-build/.test(BUILD));
-
-  /* </head> is the boundary build-pwa.js already holds to exactly one
-     occurrence, so this reuses a checked anchor rather than guessing a new
-     one — and refuses rather than appending blindly when it is not there. */
-  /* BYTE-EXACT, and this is the check that would have caught what the first
-     version of this stamp did. The line it replaced was copyFileSync, which
-     is byte-exact by definition; reading with encoding 'utf8' and writing the
-     string back is not. A lone 0x92 — the Windows-1252 apostrophe an exported
-     HTML corpus carries — goes in as one byte and comes out as three, in a
-     42 MB file nobody reads by eye. It would also have moved the digest apart
-     from the one extract-content.js writes, so build-pwa's freshness check
-     would then refuse the build for looking stale: a true refusal for
-     entirely the wrong reason. */
-  ok('the document is read as bytes, not decoded to a string',
-     /const built = fs\.readFileSync\(input\);/.test(BUILD)
-     && !/fs\.readFileSync\(input, 'utf8'\)/.test(BUILD));
-  ok('and spliced as bytes, so nothing is re-encoded on the way out',
-     /Buffer\.concat\(\[built\.subarray\(0, at\), stamp, built\.subarray\(at\)\]\)/.test(BUILD));
-  ok('it is placed at the one anchor this repo already checks',
-     /const at = built\.indexOf\(HEAD\);/.test(BUILD)
-     && /at < 0 \|\| at !== built\.lastIndexOf\(HEAD\)/.test(BUILD));
-  ok('and a document without exactly one </head> is refused, not stamped',
-     /process\.exit\(1\)/.test(BUILD.slice(BUILD.indexOf('nowhere to stamp it'), BUILD.indexOf('nowhere to stamp it') + 120)));
-
-  /* Over the UNSTAMPED bytes, because stamping changes them — the same move
-     BUILD_ID makes in build-pwa.js, for the same reason. */
-  ok('the digest is taken before the stamp goes in, over those same bytes',
-     /const built = fs\.readFileSync\(input\);[\s\S]{0,120}?createHash\('sha256'\)\.update\(built\)/.test(BUILD));
-
-  /* NO CLOCK. The same export at the same commit must produce the same
-     bytes; a timestamp in the artifact would end that for nothing. */
-  ok('no timestamp rides along, so the build stays reproducible',
-     !/new Date\(\)/.test(BUILD.slice(stampAt - 900, stampAt + 300)));
-
+     Held by running the stamp, not by reading its source: scripts/stamp.js is
+     what scripts/assemble-app.js stamps the finished document with. (Until
+     the patch chain was retired this section read scripts/build.js as text.) */
+  const { stampBuffer, gitCommit, STAMP_RE } = require(path.join(ROOT, 'scripts', 'stamp.js'));
+  const crypto = require('crypto');
+  /* A lone 0x92 — the Windows-1252 apostrophe an exported corpus carries — is
+     one byte that a string round trip turns into three. */
+  const doc = Buffer.concat([Buffer.from('<html><head><title>x</title>'), Buffer.from([0x92]),
+                             Buffer.from('</head><body>b</body></html>')]);
+  const { out, digest } = stampBuffer(doc, 'abc123def456');
+  const text = out.toString('latin1');
+  ok('the document is stamped with its digest and the commit, before </head>',
+     /<!-- systole-build [0-9a-f]{16} commit abc123def456 -->\n<\/head>/.test(text), text.slice(0, 120));
+  ok('the digest is taken over the unstamped bytes',
+     digest === crypto.createHash('sha256').update(doc).digest('hex').slice(0, 16), digest);
+  const at = out.indexOf(Buffer.from('<!-- systole-build'));
+  const len = out.indexOf(Buffer.from('-->\n'), at) + 4 - at;
+  ok('and nothing else changes: removing the stamp gives the input back, byte for byte',
+     Buffer.concat([out.subarray(0, at), out.subarray(at + len)]).equals(doc));
+  ok('the stamp is an HTML comment, which the CSP and the inline-script checks never see',
+     /^<!-- [^>]* -->\n$/.test(out.subarray(at, at + len).toString('latin1')));
+  let refused = '';
+  try { stampBuffer(Buffer.from('<html><body>no head</body></html>'), 'x'); } catch (e) { refused = e.message; }
+  ok('a document without a </head> is refused, not stamped', /exactly one <\/head>/.test(refused), refused || 'stamped anyway');
+  refused = '';
+  try { stampBuffer(Buffer.from('<head></head><head></head>'), 'x'); } catch (e) { refused = e.message; }
+  ok('and so is one with two', /exactly one <\/head>/.test(refused), refused || 'stamped anyway');
+  /* NO CLOCK. The same document at the same commit must produce the same bytes. */
+  ok('no timestamp rides along, so the build stays reproducible', stampBuffer(doc, 'abc123def456').out.equals(out));
+  ok('the stamp the assembler strips is the one it writes', (text.match(STAMP_RE) || []).length === 1);
   /* Same two rules as everywhere else: a tarball is a legitimate place to
      build from, and a dirty tree is a claim the repository cannot honour. */
-  ok('a missing git is "unknown" here as well', /return 'unknown';/.test(BUILD));
-  ok('and a dirty tree is marked', /dirty \? at \+ '-dirty' : at/.test(BUILD));
+  ok('outside a git checkout the commit is "unknown"', gitCommit(require('os').tmpdir()) === 'unknown');
+  {
+    /* A throwaway repository: one commit, then a change not committed. */
+    const { execFileSync } = require('child_process');
+    const repo = fs.mkdtempSync(path.join(require('os').tmpdir(), 'stamp-git-'));
+    const git = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: repo, stdio: 'ignore' });
+    git('init', '-q'); fs.writeFileSync(path.join(repo, 'a'), '1'); git('add', 'a'); git('commit', '-q', '-m', 'x');
+    const clean = gitCommit(repo);
+    fs.writeFileSync(path.join(repo, 'a'), '2');
+    const dirty = gitCommit(repo);
+    fs.rmSync(repo, { recursive: true, force: true });
+    ok('a clean checkout is its commit, and a dirty tree is marked',
+       /^[0-9a-f]{12}$/.test(clean) && dirty === clean + '-dirty', `${clean} / ${dirty}`);
+  }
 }
 
 head('the built artifacts are checked where only a build can check them');
 {
   /* WHAT THIS FILE CANNOT DO, said once rather than implied. Everything above
-     reads build-pwa.js and build.js as TEXT: it proves they EMIT the stamps.
+     reads build-pwa.js as TEXT and runs stamp.js: it proves they EMIT the stamps.
      It cannot tell whether a stamp survived substitution, the split, the font
      lift or eight later rewrites of `html`. Only the artifact answers that,
      and only a run with the licensed export produces one.

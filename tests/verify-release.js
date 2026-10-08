@@ -216,7 +216,7 @@ head('and a failing step cannot put its output in either place');
 head('the steps are the ones a release actually needs');
 {
   const src = fs.readFileSync(GATE, 'utf8');
-  for (const id of ['source', 'leakguard', 'build', 'assemble', 'extract', 'pwabuild', 'chromium', 'pwa', 'webkit']) {
+  for (const id of ['source', 'leakguard', 'build', 'extract', 'pwabuild', 'chromium', 'pwa', 'webkit']) {
     ok(`it runs '${id}'`, new RegExp(`id: '${id}'`).test(src));
   }
   /* WebKit is the engine the app is actually used on. It being present but
@@ -225,16 +225,18 @@ head('the steps are the ones a release actually needs');
      !/SKIP\.add\('webkit'\)/.test(src) && /--skip/.test(src));
 }
 
-head('the patch chain is retired: the gate builds the app the way the app is built now');
+head('the gate builds the app the way npm run build does');
 {
   const { spawnSync } = require('child_process');
   const ROOT = path.join(__dirname, '..');
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  ok('the marker that says so is in the repository', fs.existsSync(path.join(ROOT, 'scripts', 'CHAIN-RETIRED')));
-  ok('npm run build assembles the app from app/ and the export, to the file the rest of the pipeline reads; the old recipe is build:chain', /assemble-app\.js/.test(pkg.scripts.build) && /--out build\/systole\.html/.test(pkg.scripts.build) && /scripts\/build\.js/.test(pkg.scripts['build:chain']), pkg.scripts.build);
+  ok('npm run build assembles the app from app/ and the export, to the file the rest of the pipeline reads', /assemble-app\.js/.test(pkg.scripts.build) && /--out build\/systole\.html/.test(pkg.scripts.build), pkg.scripts.build);
+  ok('and the patch chain is gone: no build.js, no build:chain, no *-patch.js',
+     !fs.existsSync(path.join(ROOT, 'scripts', 'build.js')) && !pkg.scripts['build:chain'] &&
+     !fs.readdirSync(path.join(ROOT, 'scripts')).some(f => f.endsWith('-patch.js')));
   const r = spawnSync('node', [GATE, '--dry-run'], { encoding: 'utf8' });
   const out = (r.stdout || '') + (r.stderr || '');
-  ok('the gate\'s build step is the assembler, said in those words', /build\s+the app assembles from app\/, src\/, assets\/ and the export \(the patch chain is retired\)/.test(out), out.split('\n').find(l => /^\s*[–✓✗]\s+build/.test(l)) || '(no build step)');
+  ok('the gate\'s build step is the assembler, said in those words', /build\s+the app assembles from app\/, src\/, assets\/ and the export/.test(out), out.split('\n').find(l => /^\s*[–✓✗]\s+build/.test(l)) || '(no build step)');
   ok('and the chain\'s byte-for-byte comparison is not a step any more: not skipped, gone, because there is no chain build to compare with', !/byte for byte/.test(out) && !/assemble\s+the app assembled/.test(out));
   ok('every step after it is still there, WebKit included', ['extract', 'pwabuild', 'chromium', 'pwa', 'webkit'].every(id => new RegExp('\\s' + id + '\\s').test(out)));
 }
