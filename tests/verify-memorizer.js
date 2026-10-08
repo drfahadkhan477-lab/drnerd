@@ -2354,6 +2354,30 @@ function kindOf(user) {
     }));
     ok('every model offered, on the engine’s own list, comes from a pinned commit with the hashes the engine checks before use', pin.n === pin.of && pin.pinned, JSON.stringify(pin));
     ok('the real engine reads those hashes: a file that is not the one pinned is its IntegrityError, naming the file', pin.said === 'IntegrityError naming the file', pin.said);
+    /* Starting it shows how far it has got: a stand-in engine reports in the
+       real engine's words, then holds until the test lets it finish. */
+    await p2.evaluate(() => {
+      window.__go = null;
+      MemLLM.useGpu(() => ({ ok: true, f16: true }));
+      MemLLM.useVerify(async () => ({ ok: true, checked: 1, bad: [], unknown: [] }));
+      MemLLM.useLib({ prebuiltAppConfig: { model_list: [] }, CreateMLCEngine: (id, o) => new Promise(res => {
+        o.initProgressCallback({ progress: 0.33, text: 'Fetching param cache[3/9]: 120MB fetched. 33% completed, 4 secs elapsed. It can take a while when we first visit this page to populate the cache.' });
+        window.__go = () => res({ unload: async () => {} });
+      }) });
+    });
+    await p2.locator('#ai-toggle').click();
+    const bar = p2.locator('#ai-start [role="progressbar"]');
+    await bar.waitFor(T).catch(() => {});
+    const during = { now: await bar.getAttribute('aria-valuenow').catch(() => null), step: await p2.locator('#ai-start').innerText().catch(() => ''),
+      width: await p2.locator('#ai-start .bar i').evaluate(e => e.style.width).catch(() => '') };
+    ok('starting the model shows a bar at the engine’s fraction, with the step and how much has arrived', during.now === '33' && during.width === '33%' &&
+       /Downloading the model — 33% · 120 MB downloaded/.test(during.step), JSON.stringify(during));
+    await p2.waitForFunction(() => typeof window.__go === 'function', null, T);
+    await p2.evaluate(() => window.__go());
+    await p2.waitForFunction(() => /^Ready: running on this device\./.test((document.getElementById('ai-status') || {}).textContent || ''), null, T).catch(() => {});
+    ok('and when it has started, the bar is gone and it says it is ready', await p2.locator('#ai-start').count() === 0 &&
+       (await p2.locator('#ai-status').innerText()) === 'Ready: running on this device.', await p2.locator('#ai-status').innerText());
+    await p2.evaluate(() => MemLLM.stop().then(() => { MemLLM.useLib(null); MemLLM.useGpu(null); MemLLM.useVerify(null); }));
     /* A stand-in for the model, answering each job with faithful sentences
        and made-up ones, the way a small model does. */
     await p2.evaluate(() => {

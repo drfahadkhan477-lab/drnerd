@@ -50,6 +50,7 @@ function saveConfig(c) { try { root.localStorage.setItem(CFG_KEY, JSON.stringify
 
 /* WebGPU with an adapter, or why not. */
 function supported() {
+  if (gpuProbe) return Promise.resolve(gpuProbe()).then(function (g) { return { ok: !!g.ok, why: g.ok ? '' : 'WebGPU is here but found no usable GPU' }; });
   if (!root.navigator || !root.navigator.gpu) return Promise.resolve({ ok: false, why: 'this browser has no WebGPU (on iPad it needs iPadOS 26 or later)' });
   return root.navigator.gpu.requestAdapter().then(function (a) {
     return a ? { ok: true, why: '' } : { ok: false, why: 'WebGPU is here but found no usable GPU' };
@@ -314,6 +315,28 @@ function nextTry(err, n, backend) {
   if ((k === 'cache' || k === 'quota' || k === 'network') && backend === 'cache') return { backend: 'indexeddb', wait: 0 };
   return null;
 }
+/* What a start is doing, for the bar in Settings. The engine reports a
+   fraction and a sentence of its own ("Fetching param cache[3/9]: 120MB
+   fetched. 33% completed, …"); the fraction restarts at 0 for each of its
+   steps, so the step is named beside it or a bar that falls back to 0
+   would read as a download starting over. → { pct, step, detail }. PURE. */
+var CHECKING = 'Checking the downloaded files against their published hashes';
+var STEPS = [
+  [/^Start to fetch params/, 'Downloading the model', null],
+  [/^Fetching param cache\[\d+\/\d+\]: (\d+)MB fetched/, 'Downloading the model', ' MB downloaded'],
+  [/^Loading model from cache\[\d+\/\d+\]: (\d+)MB loaded/, 'Loading the model onto the GPU', ' MB loaded'],
+  [/^Loading GPU shader modules/, 'Preparing the GPU', null],
+  [/^Finish loading on /, 'Loaded on the GPU', null],
+  [new RegExp('^' + CHECKING), 'Checking the files', null],
+];
+function stage(p, text) {
+  var t = String(text || ''), pct = Math.max(0, Math.min(100, Math.floor(100 * (+p || 0))));
+  for (var i = 0; i < STEPS.length; i++) {
+    var m = t.match(STEPS[i][0]);
+    if (m) return { pct: pct, step: STEPS[i][1], detail: STEPS[i][2] && m[1] ? m[1] + STEPS[i][2] : '' };
+  }
+  return { pct: pct, step: t || 'Starting', detail: '' };
+}
 /* root.localStorage in a page; a global one where a test provides it */
 function ls() { return root.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null); }
 function savedBackend() { try { return ls().getItem(BACKEND_KEY) === 'indexeddb' ? 'indexeddb' : 'cache'; } catch (_) { return 'cache'; } }
@@ -353,6 +376,9 @@ function create(lib, id, onProgress) {
     return lib.CreateMLCEngine(id, { appConfig: appConfig, initProgressCallback: function (p) { if (onProgress) onProgress(p.progress || 0, p.text || ''); } })
       .then(function (e) {
         saveBackend(backend);
+        /* the first start hashes every stored file, a gigabyte or more on an
+           iPad, after the engine has already said 100% */
+        if (onProgress) onProgress(1, CHECKING);
         return (verifier || verify)(id, backend).then(function (v) {
           if (v.ok) return e;
           return refuse(e, v.why || (v.bad.length ? v.bad.length + ' file' + (v.bad.length === 1 ? '' : 's') + ' not what it should be (' + v.bad.slice(0, 3).join(', ') + ')'
@@ -523,7 +549,7 @@ function parseQuestions(text) {
   } catch (_) { return []; }
 }
 
-var MemLLM = { pinnedConfig: pinnedConfig, verifyFiles: verifyFiles, verify: verify, storedFiles: storedFiles, useVerify: useVerify, modelSource: modelSource, stop: stop, stopEmbed: stopEmbed, WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
+var MemLLM = { stage: stage, CHECKING: CHECKING, pinnedConfig: pinnedConfig, verifyFiles: verifyFiles, verify: verify, storedFiles: storedFiles, useVerify: useVerify, modelSource: modelSource, stop: stop, stopEmbed: stopEmbed, WAIT: WAIT, variantFor: variantFor, classify: classify, explain: explain, nextTry: nextTry, RETRIES: RETRIES, BACKEND_KEY: BACKEND_KEY, useLib: useLib, useGpu: useGpu, gpu: gpu, clearModel: clearModel, EMBED: EMBED, useEmbedder: useEmbedder, embedReady: embedReady, startEmbed: startEmbed, embed: embed, WEBLLM: WEBLLM, MODELS: MODELS, CFG_KEY: CFG_KEY, loadConfig: loadConfig, saveConfig: saveConfig, supported: supported,
                loadLib: loadLib, useEngine: useEngine, ready: ready, start: start, chat: chat, SYSTEM: SYSTEM,
                summaryPrompt: summaryPrompt, plainPrompt: plainPrompt, analogyPrompt: analogyPrompt, questionsPrompt: questionsPrompt,
                QUESTIONS_SCHEMA: QUESTIONS_SCHEMA, parseQuestions: parseQuestions, stripThinking: stripThinking,
