@@ -25,7 +25,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -283,6 +283,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      what it needed was the claim below, which asserts the transparency
      directly rather than inferring it from an absence. */
   const FIXED_SEL = ['.hero-heart-plate'];
+  /* A PRECONDITION: the splash has left the document. dismissSplash() removes it a frame and
+     520 ms after boot, faded out but still in the tree until then, and the sweep reads every
+     element's computed ground, visible or not. In WebKit on CI, frames came slowly enough that
+     the sweep found the splash's own dark plate (.sp-heart-mount) and reported it as a surface
+     that ignores the palette. */
+  await settled(page, () => !document.getElementById('splash'),
+    { label: 'the splash to leave the document before the sweep' });
   const w = await paint('parchment', FIXED_SEL), g = await paint('monitor', FIXED_SEL);
   const warm = w.out, green = g.out;
   const FIXED = Object.keys(w.fixed);

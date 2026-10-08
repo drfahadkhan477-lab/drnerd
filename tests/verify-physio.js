@@ -247,8 +247,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return { t0, t1, advanced, frames, wall: performance.now() - started,
              hr: RHYTHMS[labKind].hr, slow: (physio.slow ? physio.slow() : 1) };
   });
+  /* Frames and wall time in the detail: WebKit once read 0.000 → 0.000, and without them
+     "no frames came" and "frames came and the clock stood still" read the same. */
   ok('the cursor advances on its own', ownClock.advanced > 0.001,
-     `${ownClock.t0.toFixed(3)} → ${ownClock.t1.toFixed(3)}`);
+     `${ownClock.t0.toFixed(3)} → ${ownClock.t1.toFixed(3)}, ${ownClock.frames} frame(s) in ${Math.round(ownClock.wall)} ms`);
   /* 600ms at 68 bpm is 0.68 of a cycle, DIVIDED BY the playback speed. Both
      halves matter and the suite now pins both: the clock is driven by the
      rhythm's own rate rather than a free-running constant, and the slow-motion

@@ -655,9 +655,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         const mk = () => new TouchEvent('touchend', { bubbles: true, cancelable: true });
         const first = at();
         if (!first) return { asked: false, honoured: false, cancelable: null, connected: null, missing: true };
+        const t1 = Date.now();
         first.dispatchEvent(mk());
         await wait(60);
         const el = at() || first;
+        /* The app suppresses a second tap within 350 ms of the first, by Date.now(). A busy
+           page can hold this 60 ms wait past that; the gap goes in the detail so the reader
+           can tell a stretched wait from a handler that did not ask. */
+        const gap = Date.now() - t1;
         const second = mk();
         let asked = false;
         const orig = second.preventDefault;
@@ -676,7 +681,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         const connected = el.isConnected;
         el.dispatchEvent(second);
         return { asked, honoured: second.defaultPrevented,
-                 cancelable: second.cancelable, connected };
+                 cancelable: second.cancelable, connected, gap };
       };
       goHome(); render();
       const loose = document.createElement('div');
