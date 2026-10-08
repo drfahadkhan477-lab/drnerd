@@ -25,7 +25,9 @@
  *   · after closing the tab and stopping the origin server, a new tab in
  *     the same browser context boots the cached app, retains saved study
  *     data and binary bytes, and reads the original cached dependencies.
- *     This does not exercise quitting Safari or restarting an iPad.
+ *     Chromium and Firefox only: in WebKit the section prints NOT RUN (the
+ *     reason is at the section). This does not exercise quitting Safari or
+ *     restarting an iPad.
  */
 'use strict';
 const fs = require('fs');
@@ -214,52 +216,64 @@ self.fetch = function (input, init) {
       JSON.stringify([...new Set(probes.map(a => a.transport + ': ' + a.url))]));
 
     head('a closed tab reopened with the origin unavailable');
-    const fixture = { id: 'offline-unit', text: 'Offline unit\n\nAn amber token identifies this synthetic saved lesson.',
-      note: 'Keep this synthetic note after closing the tab.', bytes: [37, 80, 68, 70, 45, 49, 46, 55, 10, 0, 255] };
-    await p.evaluate(async f => {
-      const clusters = MemChunk.clusterBlocks(MemChunk.blocksFromPages(MemChunk.pagesFromText(f.text)).blocks);
-      await MemStore.batch([
-        { store: 'docs', value: { id: f.id, name: 'Offline unit', source: 'text', pages: 1, addedAt: Date.now(), clusters } },
-        { store: 'sessions', value: { id: f.id, state: MemSession.init(f.id, clusters.map(c => c.title)) } },
-        { store: 'files', value: { id: f.id, bytes: Uint8Array.from(f.bytes).buffer } },
-        { store: 'meta', value: { id: 'notes', recs: { [f.id + ':0']: f.note } } }
-      ]);
-    }, fixture);
-    await p.close();
-    await new Promise((resolve, reject) => {
-      server.close(error => error ? reject(error) : resolve());
-      server.closeAllConnections();
-    });
-    const unreachable = await new Promise(resolve => {
-      const req = http.get(HTTP, res => { res.resume(); resolve(false); });
-      req.on('error', error => resolve(error.code === 'ECONNREFUSED'));
-      req.setTimeout(5000, () => { req.destroy(); resolve(false); });
-    });
-    ok('an independent HTTP probe confirms the app origin is unreachable', unreachable);
-    p = watch(await ctx.newPage(), events, 'reopened', errors);
-    await p.goto(HTTP + '?offline-reopen');
-    await toSettings(p);
-    ok('a new tab boots the cached app with a service-worker controller',
-      await p.evaluate(() => !!navigator.serviceWorker.controller));
-    const restored = await p.evaluate(async id => {
-      const [doc, session, file, notes] = await Promise.all([
-        MemStore.get('docs', id), MemStore.get('sessions', id), MemStore.get('files', id), MemStore.get('meta', 'notes')
-      ]);
-      return { persistent: MemStore.persistent, text: doc && doc.clusters.map(c => c.text).join('\n'),
-        docId: session && session.state.docId, phase: session && session.state.phase,
-        bytes: file && Array.from(new Uint8Array(file.bytes)), note: notes && notes.recs[id + ':0'] };
-    }, fixture.id);
-    ok('saved text, session, note and every binary byte survive offline tab reopening',
-      restored.persistent && restored.text.includes('An amber token') && restored.docId === fixture.id && restored.phase === 'unit' &&
-      restored.note === fixture.note && JSON.stringify(restored.bytes) === JSON.stringify(fixture.bytes));
-    const readers = urls.concat('https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js');
-    const hashes = await p.evaluate(us => Promise.all(us.map(async u => {
-      const r = await fetch(u, { mode: 'cors' });
-      const hash = await crypto.subtle.digest('SHA-256', await r.arrayBuffer());
-      return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
-    })), readers);
-    ok('reopened readers and diagrams match the original upstream bytes with the origin still cut',
-      hashes.every((hash, i) => hash === createHash('sha256').update(bytes.get(readers[i]).body).digest('hex')));
+    if (engineName() === 'webkit') {
+      // NOT RUN, never counted as a pass. Playwright's Linux WebKit cannot hold
+      // this scenario: with no page of the origin open, its temporary profile
+      // drops the origin's Cache Storage within 4-12 s (5 entries before, only
+      // the page just fetched after a 12 s pause), and its saved profile
+      // (launchPersistentContext) reads back an empty cache even while the first
+      // tab is open. The worker then rightly answers "offline, and nothing
+      // cached". A WebKit pass here only meant the reopen beat that discard
+      // (#198). Whether Safari on an iPad keeps the cache is on the run sheet.
+      console.log('  NOT RUN  in WebKit: this browser build discards an idle origin\u2019s Cache Storage, so reopening would measure a race (see the comment)');
+    } else {
+      const fixture = { id: 'offline-unit', text: 'Offline unit\n\nAn amber token identifies this synthetic saved lesson.',
+        note: 'Keep this synthetic note after closing the tab.', bytes: [37, 80, 68, 70, 45, 49, 46, 55, 10, 0, 255] };
+      await p.evaluate(async f => {
+        const clusters = MemChunk.clusterBlocks(MemChunk.blocksFromPages(MemChunk.pagesFromText(f.text)).blocks);
+        await MemStore.batch([
+          { store: 'docs', value: { id: f.id, name: 'Offline unit', source: 'text', pages: 1, addedAt: Date.now(), clusters } },
+          { store: 'sessions', value: { id: f.id, state: MemSession.init(f.id, clusters.map(c => c.title)) } },
+          { store: 'files', value: { id: f.id, bytes: Uint8Array.from(f.bytes).buffer } },
+          { store: 'meta', value: { id: 'notes', recs: { [f.id + ':0']: f.note } } }
+        ]);
+      }, fixture);
+      await p.close();
+      await new Promise((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+        server.closeAllConnections();
+      });
+      const unreachable = await new Promise(resolve => {
+        const req = http.get(HTTP, res => { res.resume(); resolve(false); });
+        req.on('error', error => resolve(error.code === 'ECONNREFUSED'));
+        req.setTimeout(5000, () => { req.destroy(); resolve(false); });
+      });
+      ok('an independent HTTP probe confirms the app origin is unreachable', unreachable);
+      p = watch(await ctx.newPage(), events, 'reopened', errors);
+      await p.goto(HTTP + '?offline-reopen');
+      await toSettings(p);
+      ok('a new tab boots the cached app with a service-worker controller',
+        await p.evaluate(() => !!navigator.serviceWorker.controller));
+      const restored = await p.evaluate(async id => {
+        const [doc, session, file, notes] = await Promise.all([
+          MemStore.get('docs', id), MemStore.get('sessions', id), MemStore.get('files', id), MemStore.get('meta', 'notes')
+        ]);
+        return { persistent: MemStore.persistent, text: doc && doc.clusters.map(c => c.text).join('\n'),
+          docId: session && session.state.docId, phase: session && session.state.phase,
+          bytes: file && Array.from(new Uint8Array(file.bytes)), note: notes && notes.recs[id + ':0'] };
+      }, fixture.id);
+      ok('saved text, session, note and every binary byte survive offline tab reopening',
+        restored.persistent && restored.text.includes('An amber token') && restored.docId === fixture.id && restored.phase === 'unit' &&
+        restored.note === fixture.note && JSON.stringify(restored.bytes) === JSON.stringify(fixture.bytes));
+      const readers = urls.concat('https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js');
+      const hashes = await p.evaluate(us => Promise.all(us.map(async u => {
+        const r = await fetch(u, { mode: 'cors' });
+        const hash = await crypto.subtle.digest('SHA-256', await r.arrayBuffer());
+        return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
+      })), readers);
+      ok('reopened readers and diagrams match the original upstream bytes with the origin still cut',
+        hashes.every((hash, i) => hash === createHash('sha256').update(bytes.get(readers[i]).body).digest('hex')));
+    }
     await ctx.close();
   } finally {
     await browser.close();
