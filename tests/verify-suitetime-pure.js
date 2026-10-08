@@ -11,6 +11,9 @@
  * named with the section it was in. Section times come from the "── … ──"
  * headings, even when a chunk ends mid-line. The end-to-end check runs the real
  * runner with a ceiling too short for any suite to beat.
+ *
+ * And which suites the routine laptop run is: those tagged `laptop`, the ones
+ * no CI job names, read from the workflow so the set keeps itself current.
  */
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
@@ -97,6 +100,58 @@ const MIN = 60000;
                          { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
     ok('a bad --suite-timeout stops the run before any suite starts', r2.status === 2 && /wants minutes/.test(r2.stderr || ''),
        `exit ${r2.status}`);
+  }
+
+  head('the laptop run: what only a machine with the export can run');
+  {
+    const { ciSuites } = require('../scripts/test-public.js');
+    const fixture = [
+      'jobs:',
+      '  logic:',
+      '    steps:',
+      '      - name: a (1 checks)',
+      '        run: node tests/verify-alpha-pure.js',
+      '  memorizer-browser:',
+      '    steps:',
+      '      - name: b (1 checks)',
+      '        run: node tests/verify-memorizer-beta.js',
+      '  synthetic-browser:',
+      '    steps:',
+      '      - name: c (1 checks)',
+      '        run: node tests/verify-gamma.js build/synthetic/systole.html',
+      '  full:',
+      '    steps:',
+      '      - run: node tests/verify-delta.js build/systole.html',
+      '',
+    ].join('\n');
+    const set = ciSuites(fixture);
+    ok('ciSuites() takes the logic, Memorizer and synthetic jobs, by registry name',
+       ['alpha-pure', 'memorizer-beta', 'gamma'].every(n => set.has(n)), [...set].join(','));
+    ok('and not the full job, which runs only on a machine with the export', !set.has('delta'));
+
+    /* Against the real registry and workflow, with a different instrument: a
+       plain search of verify.yml for the suite's file, not the job parser. */
+    const yml = require('fs').readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
+    const list = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--list'], { cwd: ROOT, encoding: 'utf8' }).stdout || '';
+    const rows = [...list.matchAll(/^  ([a-z0-9-]+)\s+\[([a-z,]+)\]/gm)].map(m => ({ n: m[1], laptop: m[2].split(',').includes('laptop') }));
+    const named = n => new RegExp(`tests/verify-${n.replace(/-/g, '\\-')}\\.js`).test(yml);
+    const wrong = rows.filter(r => r.laptop === named(r.n)).map(r => r.n);
+    ok('--list tags `laptop` exactly the suites the workflow never names', rows.length > 100 && wrong.length === 0,
+       `${rows.length} listed; wrong: ${wrong.join(', ') || 'none'}`);
+    const lap = rows.filter(r => r.laptop).map(r => r.n);
+    ok('and there are some: the quick laptop run is not empty', lap.length > 0, lap.join(', '));
+    const t = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--tag', 'laptop', '--only', 'cause-pure'],
+                        { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+    ok('--tag laptop is accepted', !/is not a tag/.test((t.stderr || '') + (t.stdout || '')), `exit ${t.status}`);
+  }
+
+  head('a value given to --suite-timeout is not the build');
+  {
+    const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--suite-timeout', '30', '--only', 'cause-pure'],
+                        { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
+    const out = (r.stdout || '') + (r.stderr || '');
+    ok('"--suite-timeout 30" leaves the target at the default build', /Verifying build[\/\\]systole\.html/.test(out) && !/Verifying 30\b/.test(out),
+       (out.match(/Verifying \S+/) || ['no Verifying line'])[0]);
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

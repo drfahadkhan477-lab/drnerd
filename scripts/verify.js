@@ -15,7 +15,8 @@
  *                  contexts always run alone — see SERIAL below.
  *                  SYSTOLE_JOBS in the environment sets this machine's default.
  *   --engine <e>   chromium (default), webkit or firefox
- *   --tag <a,b>    run only suites with these tags: pure, browser, build, serial
+ *   --tag <a,b>    run only suites with these tags: pure, browser, build, serial,
+ *                  laptop (the suites no CI job runs: the quick run with your export)
  *                  (read from each suite's code — tests/_targets.js tagsOf)
  *   --report-json <file>  also write the results as JSON: suite, tags, status,
  *                  counts and time. No output text, so nothing licensed.
@@ -512,7 +513,13 @@ const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
 const { mergeRecord } = require(path.join(ROOT, 'scripts', 'record.js'));
 const { limitFor, sectionClock, slowest, watch, fmtMin } = require(path.join(ROOT, 'scripts', 'suitetime.js'));
-const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : []);
+/* `laptop`: a suite no CI job runs, so only a machine with the export ever
+   does. Everything else GitHub runs on every pull request, on the synthetic
+   bank or with no build at all, which makes `--tag laptop` the short routine
+   run and the full registry the occasional one that writes the record. */
+const CI_SUITES = require(path.join(ROOT, 'scripts', 'test-public.js'))
+  .ciSuites(fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8'));
+const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : [], CI_SUITES.has(n) ? [] : ['laptop']);
 if (flag('--list')) {
   console.log('\nSuites, their tags, and what each defends:\n');
   for (const [name, claim] of SUITES) console.log(`  ${name.padEnd(14)} ${('[' + tagsFor(name).join(',') + ']').padEnd(18)} ${claim}`);
@@ -521,7 +528,7 @@ if (flag('--list')) {
   process.exit(0);
 }
 
-const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json'];
+const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
 /* A PATH OR A URL. Every suite already takes either — `file://` is just how a
    path reaches them — and the split build can only be driven over HTTP,
@@ -562,7 +569,7 @@ const only = list(opt('--only')), skip = list(opt('--skip'));
    under 20 minutes (scripts/suitetime.js). */
 const SUITE_TIMEOUT = opt('--suite-timeout');
 try { limitFor(undefined, SUITE_TIMEOUT); } catch (e) { console.error(e.message); process.exit(2); }
-const TAGS = ['pure', 'browser', 'build', 'serial'];
+const TAGS = ['pure', 'browser', 'build', 'serial', 'laptop'];
 const wantTags = list(opt('--tag'));
 for (const t of wantTags) if (!TAGS.includes(t)) {
   console.error(`\n  --tag ${JSON.stringify(t)} is not a tag. Use one of: ${TAGS.join(', ')}.\n`);
