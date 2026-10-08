@@ -19,9 +19,10 @@
  *   it cycles views without showing the same one twice running
  *   a tap closes it WITHOUT pressing what was beneath the finger
  *   a key closes it; hiding the tab closes it
- *   the WebGL heart is released every time: Chromium keeps sixteen contexts
- *     and warns before discarding the oldest, so twenty visits to the heart
- *     view that each leaked one would say so
+ *   the WebGL heart costs one context however often it is shown: it is built
+ *     once and woken on later visits. Counted at getContext, because WebKit
+ *     keeps a released context's slot and Chromium returns it, so the
+ *     "too many active WebGL contexts" warning, also held, fires only in WebKit
  *
  * Time is driven through AMBIENT.tick(now) rather than waited for: a two
  * minute idle threshold is a number to pass, not a duration to sit through.
@@ -102,6 +103,18 @@ if (!AMBIENT_SRC) { console.log(`\n${passed} passed, ${failed} failed`); process
     const t = m.text();
     if (/too many active webgl contexts/i.test(t)) contextWarnings.push(t.slice(0, 100));
     else if (m.type() === 'error' && !isEngineNoise(t)) errors.push(t.slice(0, 120));
+  });
+  /* WebGL contexts counted at the source, before any code runs, as verify-heartreuse counts them:
+     the warning below only fires in an engine that keeps a released context's slot, so on
+     Chromium it cannot see a heart rebuilt on every visit. A marked canvas is counted once. */
+  await page.addInitScript(() => {
+    window.__ctx = 0;
+    const orig = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+      const g = orig.call(this, type, ...rest);
+      if (/webgl/i.test(type) && g && !this.__counted) { this.__counted = true; window.__ctx++; }
+      return g;
+    };
   });
   await page.goto('file://' + OUT);
 
@@ -217,7 +230,7 @@ if (!AMBIENT_SRC) { console.log(`\n${passed} passed, ${failed} failed`); process
   });
   ok('hiding the tab closes it', !(await state()).active);
 
-  head('the WebGL heart is released every time');
+  head('the WebGL heart is built once, however many visits it has');
   /* Twenty times onto the heart view and off again. PRECONDITION FIRST: if
      Heart3D could not draw here, no context was ever made and "no warning"
      would be the absence of a test. So the heart must have been live on
@@ -238,10 +251,14 @@ if (!AMBIENT_SRC) { console.log(`\n${passed} passed, ${failed} failed`); process
       AMBIENT.exit();
     }
     Math.random = rnd;
-    return { live, overlays: document.querySelectorAll('.ambient').length };
+    return { live, overlays: document.querySelectorAll('.ambient').length, contexts: window.__ctx };
   });
   await page.waitForTimeout(300);
   ok('the heart view drew on all twenty visits (the precondition)', visits.live === 20, `${visits.live} of 20`);
+  /* Exactly one: the heart is built once and woken on every later visit. Zero would mean it
+     never drew, which the precondition above already refuses. */
+  ok('one WebGL context in the whole run, however many visits the heart had', visits.contexts === 1,
+     `${visits.contexts} context(s)`);
   ok('and no context was discarded for want of room', contextWarnings.length === 0,
      contextWarnings.length ? `${contextWarnings.length} warning(s): ${contextWarnings[0]}` : 'none');
   ok('and no overlay was left behind', visits.overlays === 0, `${visits.overlays} left`);

@@ -4145,6 +4145,13 @@ var AMBIENT = (function(){
 
   var NAMES = { heart: 'The heart', ecg: 'The 12-lead', pvloop: 'The pressure–volume loop' };
   var last = Date.now(), active = false, view = null, el = null, live = null;
+  /* THE HEART IS BUILT ONCE and kept, stopped, between visits, as the home hero's is
+     (mountHeroHeart3d). WebKit caps a page at sixteen WebGL contexts and does not
+     return a released one's slot, so a heart made on every visit filled the cap and
+     WebKit began evicting the oldest context on the page, which can be a live one
+     (synthetic-webkit: eleven evictions in twenty visits). verify-ambient counts the
+     contexts. Rebuilt only after a real loss, which no reattachment can revive. */
+  var heart = null, heartCanvas = null;
   var dwell = 0, closing = 0, moved = 0, lastX = null, lastY = null, lastScreen = null;
 
   function shellOpen(){ var sh = document.getElementById('shell'); return !!(sh && sh.classList.contains('ai-open')); }
@@ -4169,7 +4176,8 @@ var AMBIENT = (function(){
   }
 
   function release(){
-    if (live && live.destroy) { try { live.destroy(); } catch(_) {} }
+    if (live && live === heart) { try { heart.stop(); } catch(_) {} }
+    else if (live && live.destroy) { try { live.destroy(); } catch(_) {} }
     live = null;
   }
 
@@ -4179,12 +4187,17 @@ var AMBIENT = (function(){
     release();
     var stage = el.querySelector('.ambient-stage');
     stage.innerHTML = '';
-    var cv = document.createElement('canvas');
-    cv.className = 'ambient-canvas';
-    stage.appendChild(cv);
-    if (v === 'heart' && window.Heart3D) live = Heart3D.create(cv, { rhythm: 'sinus', mode: 'whole' });
-    else if (v === 'ecg' && window.ECG12) live = ECG12.mount(cv, { kind: 'sinus', hr: 68, dark: true });
-    else if (v === 'pvloop' && window.Wiggers) live = Wiggers.mount(cv, { view: 'pv', dark: true, hr: 68 });
+    if (v === 'heart' && heart && !heart.lost) {
+      stage.appendChild(heartCanvas);
+      live = heart.start();
+    } else {
+      var cv = document.createElement('canvas');
+      cv.className = 'ambient-canvas';
+      stage.appendChild(cv);
+      if (v === 'heart' && window.Heart3D) { live = heart = Heart3D.create(cv, { rhythm: 'sinus', mode: 'whole' }); heartCanvas = cv; }
+      else if (v === 'ecg' && window.ECG12) live = ECG12.mount(cv, { kind: 'sinus', hr: 68, dark: true });
+      else if (v === 'pvloop' && window.Wiggers) live = Wiggers.mount(cv, { view: 'pv', dark: true, hr: 68 });
+    }
     view = v;
     el.setAttribute('data-view', v);
     el.setAttribute('data-live', live ? '1' : '0');
@@ -6435,8 +6448,9 @@ function mountHeroHeart3d(){
        restore could not re-mount even when asked. */
     /* A lost context cannot be revived by re-attaching its canvas, so this
        drops the canvas too and the next mount builds a new one. It is the only
-       remaining path in the app that allocates a second context, and it fires
-       when the GPU resets or iPadOS reclaims memory — not on navigation. */
+       path that gives the hero a second context (ambient mode builds one heart
+       of its own, once), and it fires when the GPU resets or iPadOS reclaims
+       memory — not on navigation. */
     onLost:function(){
       if(heroHeart3dCanvas&&heroHeart3dCanvas.parentNode) heroHeart3dCanvas.remove();
       heroHeart3d=null; heroHeart3dCanvas=null;
