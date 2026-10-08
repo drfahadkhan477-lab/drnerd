@@ -651,24 +651,29 @@ jobs:
   # two runs of all of them, not from a guess. Left out, each with the reason
   # measured on the PR that added this job:
   #
-  #   homeprog, selftest, pearl   WebKit's page crashed (homeprog in most
-  #       runs, at its reduced-motion page; selftest and pearl now and then).
-  #       The browser's own log ends in "No provider of eglDestroySync found":
-  #       the runner has no GPU, Mesa cannot make a hardware EGL display, and
-  #       the compositor aborts.
+  #   homeprog   WebKit's page crashed in most runs, at its reduced-motion
+  #       page. The browser's own log ends in "No provider of eglDestroySync
+  #       found": the runner has no GPU, Mesa cannot make a hardware EGL
+  #       display, and the compositor aborts.
   #   layout, apex   the 3D heart's texture upload hits a Mesa driver error
   #       (TextureGL setImageHelper, "Unexpected driver error") and the context
   #       is lost, which the suites' console checks rightly report. layout in
   #       every run, apex in most.
   #   physio   WebKit delivered 2 animation frames in 2.8 s, so the cursor its
   #       check watches had nothing to advance on.
-  #   polish   its double-tap check failed once in ten runs; cause not seen.
+  #
+  # IN, ON THE OWNER'S DECISION, KNOWING THEY CAN FAIL FOR THE RUNNER'S REASONS:
+  # selftest (the page crashed in 2 of 11 runs) and pearl (1 of 10), neither
+  # caught with the browser's log on, and polish (its double-tap check failed in
+  # 1 of 10; its detail now prints the gap between the taps).
+  # A red one here is read before it is re-run: a crash with that abort in the
+  # log is the runner; anything else is the app's or the suite's.
   #
   # Neither WEBKIT_DISABLE_DMABUF_RENDERER=1 nor LIBGL_ALWAYS_SOFTWARE=1, nor
   # both, changed any of this: the crashes and the driver error came back under
   # each, in a side-by-side run with a control.
   #
-  # They all run in Chromium in the job above. Not here either: update handling
+  # The ones left out all run in Chromium in the job above. Not here either: update handling
   # and offline loading of the split build, which are verify-pwa's; it asserts
   # the real bank's question and figure counts, so it cannot run on this bank.
   #
@@ -708,6 +713,9 @@ jobs:
         name: Apex can read figures and remembers who it teaches (31 checks)
         run: node tests/verify-stage3.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: Pencil feel, the hero heart, the rhythm library (79 checks)
+        run: node tests/verify-polish.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: grounded mode answers only from your references (24 checks)
         run: node tests/verify-braunwald.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -743,6 +751,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the figure Apex is reasoning from is one you can see (41 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the home screen opens with something worth knowing (69 checks)
+        run: node tests/verify-pearl.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a retrieved note is material to teach from, never an instruction (54 checks)
         run: node tests/verify-boundary.js build/synthetic/systole.html
@@ -794,6 +805,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
         run: node tests/verify-schema.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the on-device self-test reports honestly, and can actually fail (27 checks)
+        run: node tests/verify-selftest.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the review sheet records the box in original pixels, not preview pixels (35 checks)
         run: node tests/verify-figreview.js build/synthetic/systole.html
