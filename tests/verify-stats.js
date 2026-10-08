@@ -148,9 +148,14 @@ head('every registered suite is in the record');
 }
 
 /* The honest CI number, derived rather than quoted: whichever suites the
-   workflow actually invokes, summed from what they actually reported. */
+   workflow actually invokes, summed from what they actually reported.
+   EACH SUITE ONCE. synthetic-webkit runs suites synthetic-browser already
+   runs, in a second engine; they are the same checks, as memorizer-browser's
+   three engines are, and summing every line that names one counted them
+   twice (6737 against 6499 the day that job was added). */
 const yml = read('.github/workflows/verify.yml');
-const ciSuites = [...yml.matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1]);
+const ciSteps = [...yml.matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1]);
+const ciSuites = [...new Set(ciSteps)];
 const ciTotal = ciSuites.reduce((n, s) => n + (stats.suites[s] || 0), 0);
 /* THE ONES OF THOSE THAT NEED NO BROWSER, which is what three sentences
    below actually count ("pure Node", "need neither a browser nor a build",
@@ -206,8 +211,9 @@ head('CI runs what the workflow says it runs');
      directly beside the command, which makes it the most likely of all these
      numbers to be read and the least likely to be updated. */
   const labels = [...yml.matchAll(/name:\s*(.+?)\((\d+)\s+checks\)\s*\n\s*run:\s*node\s+tests\/verify-([a-z0-9-]+)\.js/g)];
-  ok('every directly-invoked suite carries a labelled count',
-     labels.length === ciSuites.length, `${labels.length} labelled of ${ciSuites.length}`);
+  /* Every step, not every suite: a suite run in two jobs has two labels. */
+  ok('every step that invokes a suite carries a labelled count',
+     labels.length === ciSteps.length, `${labels.length} labelled of ${ciSteps.length} steps`);
   /* Same exemption, same reason: there is no recorded count to compare a
      pending suite's label against. Everything else is held to it exactly. */
   const wrong = labels.filter(m => !PENDING.includes(m[3]) && stats.suites[m[3]] !== +m[2])
@@ -224,7 +230,7 @@ head('the browser-free count is not every suite CI runs');
   ok('some suites CI runs need no browser', pureCI.length > 20, `${pureCI.length} of ${ciSuites.length}`);
   const browserInCI = ciSuites.filter(n => !pureCI.includes(n));
   ok('and the ones left out are the workflow\u2019s browser job, and nothing else',
-     JSON.stringify(browserInCI) === JSON.stringify([...yml.slice(yml.indexOf('\n  memorizer-browser:')).matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1])),
+     JSON.stringify(browserInCI) === JSON.stringify([...new Set([...yml.slice(yml.indexOf('\n  memorizer-browser:')).matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1]))]),
      browserInCI.join(', ') || 'none');
 }
 

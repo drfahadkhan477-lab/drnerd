@@ -37,7 +37,9 @@
 # What runs here needs no source file, and is genuinely worth having on every
 # push. Most of it needs no browser either; the memorizer-browser job drives
 # the Memorizer — a second app that carries no licensed content — in Chromium,
-# WebKit and Firefox, and the synthetic-browser job drives this app in Chromium:
+# WebKit and Firefox, the synthetic-browser job drives this app in Chromium,
+# and synthetic-webkit drives a chosen set of its suites in WebKit, the
+# iPad's engine:
 #
 #   syntax       every .js and .py file in the repo parses, and the two
 #                listing commands (which patch chain steps exist, which test
@@ -640,6 +642,82 @@ jobs:
       - if: ${{ !cancelled() }}
         name: a reply can be stopped, and the last chunk is painted however the stream ends (27 checks)
         run: node tests/verify-flushguard.js build/synthetic/systole.html
+
+  # ── the same app, in WebKit: the engine the iPad runs ───────────────────────
+  #
+  # The job above is Chromium only, because WebKit takes minutes to parse even
+  # this build and every suite would take hours. But the device this app is
+  # for is an iPad, and an iPad is WebKit; until this job, nothing in CI ran
+  # Systole there (memorizer-browser's WebKit entry is the other app). So this
+  # runs the suites whose subject is what an iPad does to the app, not how it
+  # looks in one browser:
+  #
+  #   boot         stage0 (stable, works offline), failsafe (a render that
+  #                throws still shows a screen), selftest (the on-device check)
+  #   saved data   store (IndexedDB), backup (a restore appears now), schema
+  #                (an older copy cannot eat newer data), resume
+  #   the quiz     quiznav (going back never re-grades), stage2 (FSRS)
+  #   the screen   layout (every screen fits at real device frames)
+  #
+  # Not here: update handling and offline loading of the split build. Those
+  # are verify-pwa's, which asserts the real bank's question and figure
+  # counts and so cannot run on an invented bank as it stands.
+  #
+  # Same build, same suites, same assertions as the job above; only
+  # SYSTOLE_ENGINE differs (tests/_engine.js). Playwright's WebKit on Linux is
+  # WebKitGTK, not Safari on iPadOS: it shares the engine, the JavaScript core
+  # and IndexedDB, and it is not a substitute for opening the app on the iPad.
+  synthetic-webkit:
+    name: synthetic-webkit — the real app, built around an invented bank, in WebKit (boot, saved data, the quiz, the screen)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.synthetic != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SYSTOLE_ENGINE: webkit
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: install the pinned test tools, and WebKit
+        run: |
+          npm ci
+          npx playwright install --with-deps webkit
+      - name: build the app from app/systole.html around the synthetic export
+        run: |
+          node scripts/synthetic-export.js build/synthetic/export.html
+          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the single-file build is stable and works offline (27 checks)
+        run: node tests/verify-stage0.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
+        run: node tests/verify-failsafe.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the on-device self-test reports honestly, and can actually fail (27 checks)
+        run: node tests/verify-selftest.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the big stores live in a database, and nothing is ever in neither place (39 checks)
+        run: node tests/verify-store.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a restored backup appears now, not only after the next launch (19 checks)
+        run: node tests/verify-backup.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
+        run: node tests/verify-schema.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a chapter you left is the chapter you come back to (27 checks)
+        run: node tests/verify-resume.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: going back never re-grades a question or re-schedules a card (24 checks)
+        run: node tests/verify-quiznav.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: FSRS-5 scheduling replaces SM-2 (25 checks)
+        run: node tests/verify-stage2.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: every screen fits, at every frame a real device produces (26 checks)
+        run: node tests/verify-layout.js build/synthetic/systole.html
 
   build-guard:
     name: build-guard — refuses to run without the licensed source
