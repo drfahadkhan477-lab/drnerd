@@ -165,10 +165,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        what the check is about. */
     await settled(page2, () => { const b = document.querySelector('.ct-bar i[data-w]'); return !!b && b.style.width === (b.dataset.w || '0') + '%'; },
       { label: 'the chapter bar to be given its width by mountChapterBars()' });
+    /* Read two frames after the width is assigned, not in the same task. A transition of
+       .001ms still starts on the next style update: Chromium had already resolved it here,
+       WebKit had not, and read 0 px. Two frames is "effectively instant" for the eye; the
+       transition this rule suppresses takes many more (the motion case above is at ~12% of
+       its width on its first frame), so the read below still tells the two apart. */
     const r = await page2.evaluate(async () => {
+      await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
       const bar = document.querySelector('.ct-bar i[data-w]');
       const transitionDuration = getComputedStyle(bar).transitionDuration;
-      return { widthPx: bar.getBoundingClientRect().width, target: +bar.dataset.w, transitionDuration };
+      const track = bar.parentElement.clientWidth;
+      return { widthPx: bar.getBoundingClientRect().width, target: +bar.dataset.w, track, transitionDuration };
     });
     /* The app carries one universal rule for this —
        *,*::before,*::after{transition-duration:.001ms!important} — rather
@@ -180,7 +187,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        choice rather than making its own. */
     ok('the universal reduced-motion rule reaches this bar too',
        parseFloat(r.transitionDuration) < 0.01, r.transitionDuration);
-    ok('and the bar still reaches a real, non-zero width', r.widthPx > 0, `${r.widthPx}px`);
+    const finalPx = r.track * r.target / 100;
+    ok('and the bar is at its final width within two frames', r.widthPx > 0 && Math.abs(r.widthPx - finalPx) <= 1,
+       `${r.widthPx.toFixed(1)}px of ${finalPx.toFixed(1)}px`);
     await page2.close();
   }
 

@@ -2354,6 +2354,30 @@ function kindOf(user) {
     }));
     ok('every model offered, on the engine’s own list, comes from a pinned commit with the hashes the engine checks before use', pin.n === pin.of && pin.pinned, JSON.stringify(pin));
     ok('the real engine reads those hashes: a file that is not the one pinned is its IntegrityError, naming the file', pin.said === 'IntegrityError naming the file', pin.said);
+    /* Starting it shows how far it has got: a stand-in engine reports in the
+       real engine's words, then holds until the test lets it finish. */
+    await p2.evaluate(() => {
+      window.__go = null;
+      MemLLM.useGpu(() => ({ ok: true, f16: true }));
+      MemLLM.useVerify(async () => ({ ok: true, checked: 1, bad: [], unknown: [] }));
+      MemLLM.useLib({ prebuiltAppConfig: { model_list: [] }, CreateMLCEngine: (id, o) => new Promise(res => {
+        o.initProgressCallback({ progress: 0.33, text: 'Fetching param cache[3/9]: 120MB fetched. 33% completed, 4 secs elapsed. It can take a while when we first visit this page to populate the cache.' });
+        window.__go = () => res({ unload: async () => {} });
+      }) });
+    });
+    await p2.locator('#ai-toggle').click();
+    const bar = p2.locator('#ai-start [role="progressbar"]');
+    await bar.waitFor(T).catch(() => {});
+    const during = { now: await bar.getAttribute('aria-valuenow').catch(() => null), step: await p2.locator('#ai-start').innerText().catch(() => ''),
+      width: await p2.locator('#ai-start .bar i').evaluate(e => e.style.width).catch(() => '') };
+    ok('starting the model shows a bar at the engine’s fraction, with the step and how much has arrived', during.now === '33' && during.width === '33%' &&
+       /Downloading the model — 33% · 120 MB downloaded/.test(during.step), JSON.stringify(during));
+    await p2.waitForFunction(() => typeof window.__go === 'function', null, T);
+    await p2.evaluate(() => window.__go());
+    await p2.waitForFunction(() => /^Ready: running on this device\./.test((document.getElementById('ai-status') || {}).textContent || ''), null, T).catch(() => {});
+    ok('and when it has started, the bar is gone and it says it is ready', await p2.locator('#ai-start').count() === 0 &&
+       (await p2.locator('#ai-status').innerText()) === 'Ready: running on this device.', await p2.locator('#ai-status').innerText());
+    await p2.evaluate(() => MemLLM.stop().then(() => { MemLLM.useLib(null); MemLLM.useGpu(null); MemLLM.useVerify(null); }));
     /* A stand-in for the model, answering each job with faithful sentences
        and made-up ones, the way a small model does. */
     await p2.evaluate(() => {
@@ -3020,9 +3044,20 @@ function kindOf(user) {
     /* the pack removed: its sections go back to the built-in coach */
     await p4.locator('#pack-card summary').click();
     await p4.locator('#pack-remove').click();
-    await p4.waitForFunction(() => !Memorizer.ui.pack, null, T);
-    ok('removing the pack deletes it and sends its section back to the built-in coach', await p4.evaluate(id => MemStore.get('packs', id), d.id) === null &&
-       await p4.evaluate(() => !Memorizer.ui.state.per[0].lesson) && /none yet/.test(await text(p4, '#pack-card summary')));
+    /* A PRECONDITION: removePack() has redrawn. It clears ui.pack first, then awaits a
+       dispatch, then renders, so waiting on ui.pack alone read the card before the redraw (it
+       failed this way in WebKit on master). The remove button exists only while there is a
+       pack, so its leaving marks the redraw. Not awaited as a pass: if it never leaves, the
+       three readings below say which part of the removal did not happen. */
+    await p4.locator('#pack-remove').waitFor({ state: 'detached', ...T }).catch(() => {});
+    const unpacked = {
+      stored: await p4.evaluate(id => MemStore.get('packs', id), d.id),
+      lesson: await p4.evaluate(() => !!Memorizer.ui.state.per[0].lesson),
+      summary: await text(p4, '#pack-card summary'),
+    };
+    ok('removing the pack deletes it and sends its section back to the built-in coach',
+       unpacked.stored === null && !unpacked.lesson && /none yet/.test(unpacked.summary),
+       `stored ${unpacked.stored === null ? 'gone' : 'still there'}, section lesson ${unpacked.lesson ? 'still the pack’s' : 'cleared'}, card ${/none yet/.test(unpacked.summary) ? 'says none yet' : 'not redrawn'}`);
 
     /* THE PEARL AS THE DAY'S RECALL (phase 4) */
     await p4.locator('nav.dock').getByRole('button', { name: 'Home' }).click();

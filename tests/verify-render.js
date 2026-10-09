@@ -179,16 +179,19 @@ head('no wait passes its options where the argument goes');
 
   /* Reading with no wait at all. If this sees the quiz counter, the fixture is
      not reproducing the deferred swap and nothing below means anything.
-     Read in the SAME evaluate as go(): a view transition's update callback
-     never runs inside the call that started it, but it can run between two
-     evaluates. Chromium 156 (tried with playwright 1.64) rendered a frame in that
-     gap often enough that a separate read saw the swap already landed in 5 runs
-     of 10. */
-  const immediate = await page.evaluate(() => (go('quiz'), {
-    screen: S.screen,
-    counter: !!document.querySelector('.q-counter'),
-    heroStillThere: !!document.querySelector('.hero-h1'),
-  }));
+     IN THE SAME TASK AS go(). It was read in a second evaluate, one round trip
+     later, and on master's WebKit run a frame passed in that gap: the view
+     transition's swap had landed and the read saw counter:true hero:false. The
+     claim is "the markup has not moved when go() returns", and only a read in
+     the same task can ask that of every engine. */
+  const immediate = await page.evaluate(() => {
+    go('quiz');
+    return {
+      screen: S.screen,
+      counter: !!document.querySelector('.q-counter'),
+      heroStillThere: !!document.querySelector('.hero-h1'),
+    };
+  });
   ok('state changes synchronously', immediate.screen === 'quiz', immediate.screen);
   ok('but the markup has NOT — this is the race, reproduced',
      immediate.counter === false && immediate.heroStillThere === true,

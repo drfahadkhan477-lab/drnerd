@@ -38,7 +38,10 @@ ok('it finds the pure suites', pure.length > 20, `${pure.length}`);
 ok('and the browser suites', browser.length > 0, browser.join(', '));
 ok('no pure suite launches a browser', pure.every(n => !launches(n)), pure.filter(launches).join(', ') || 'none');
 ok('every browser suite does', browser.every(launches), browser.filter(n => !launches(n)).join(', ') || 'none');
-const all = [...yml.matchAll(/node\s+tests\/(verify-[a-z0-9-]+)\.js/g)].map(m => m[1]);
+/* Each suite once: synthetic-webkit runs some of the synthetic job's suites
+   again in WebKit, and npm test runs them once, in the engine it is given. A
+   suite only that job named would still be missing below. */
+const all = [...new Set([...yml.matchAll(/node\s+tests\/(verify-[a-z0-9-]+)\.js/g)].map(m => m[1]))];
 ok('the synthetic job\u2019s suites are found, each with a target', synNames.length > 0 && synthetic.suites.every(x => /\.html$/.test(x.target)),
    `${synNames.length} suites`);
 ok('and every one of them launches a browser', synNames.every(launches), synNames.filter(n => !launches(n)).join(', ') || 'none');
