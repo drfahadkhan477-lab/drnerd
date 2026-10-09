@@ -672,6 +672,18 @@ report into the run summary — that is the leak. Read it locally.
 A self-hosted runner executes the workflow on real hardware that has the
 licensed corpus and your home directory on it, and on a `pull_request` trigger
 that workflow comes from the PR's branch. This repository is public, so anyone
-can open a pull request, and from a fork its workflow would be theirs. Running
-only on pushes to `master` and on manual dispatch is what keeps that code off
-your machine; never add `pull_request` or `pull_request_target` to this job.
+can open a pull request, and a fork's run uses the fork's own copy of the
+workflow files: it can drop this job's restriction, or add a workflow of its own
+that asks for this runner. Nothing written in a workflow file stops that. What
+does:
+
+- **Register no self-hosted runner while the repository is public** (GitHub's
+  own advice), or make the repository private first.
+- If a runner must exist on a public repository: Settings → Actions → General →
+  fork pull request workflows, set **Require approval for all external
+  contributors**, and never approve a fork's run while the runner is
+  registered.
+
+The job itself runs only on pushes to `master` and on manual dispatch, so it
+does not start for pull requests on its own; never add `pull_request` or
+`pull_request_target` to it.

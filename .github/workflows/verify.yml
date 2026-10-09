@@ -685,9 +685,10 @@ jobs:
   #       not reach the GPU: glxinfo reports llvmpipe, Mesa forced onto d3d12
   #       fails to start (Intel HD 5500 and Radeon R5 M255, 2014-15 parts),
   #       and homeprog crashed there at the same line as here. A self-hosted
-  #       runner on a public repository would also run fork pull requests on
-  #       a machine that holds the licensed export, so any future one must
-  #       skip forks.
+  #       runner on this public repository could also be reached by a fork's
+  #       pull request, whose run uses the fork's own workflow files, on a
+  #       machine that holds the licensed export: see the `full` job's WHY
+  #       NOT pull_request for what actually prevents that.
   #
   # The ones left out all run in Chromium in the job above. Not here either: update handling
   # and offline loading of the split build, which are verify-pwa's; it asserts
@@ -935,10 +936,16 @@ jobs:
   # A self-hosted runner executes whatever the workflow says, on real hardware
   # with the licensed corpus and the owner's home directory on it. On a
   # pull_request trigger, that is code from the PR's branch. This repository is
-  # PUBLIC: anyone can open a pull request, and from a fork its workflow would
-  # be theirs. So this job runs only on pushes to master and on manual
-  # dispatch, and that restriction is what protects the corpus, not a spare
-  # precaution. Never add pull_request or pull_request_target here.
+  # PUBLIC: anyone can open a pull request, and a fork's run uses the fork's
+  # copy of the workflow files, so it can drop this job's trigger restriction
+  # or add a workflow of its own that asks for [self-hosted, systole]. Nothing
+  # written in a workflow file keeps fork code off this runner. What does:
+  # register no self-hosted runner while the repository is public (GitHub's
+  # own advice), or make it private, or set "Require approval for all external
+  # contributors" for fork workflows and never approve one while a runner is
+  # registered. This job still runs only on pushes to master and manual
+  # dispatch, so it does not start for pull requests on its own; never add
+  # pull_request or pull_request_target to it.
   full:
     name: full — the browser suites, on a machine with the export
     runs-on: [self-hosted, systole]
