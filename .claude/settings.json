@@ -1,4 +1,9 @@
-{
+{  "permissions": {
+    "allow": [
+      "Bash(gh api -X POST repos/drfahadkhan477-lab/drnerd/rulesets *)",
+      "Bash(gh api repos/drfahadkhan477-lab/drnerd/rulesets*)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
