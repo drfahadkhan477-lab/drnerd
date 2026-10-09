@@ -412,7 +412,7 @@ head('the scheduler says which scheduler it is');
      that discards the one signal the pin exists to give. Bump
      SCHEDULER_VERSION first, decide what happens to cards already scheduled
      under the old model, and only then update the value here. */
-  const PINNED = '4fb3c4d0';
+  const PINNED = 'e70d5984';
   ok('the FSRS parameters are exactly the ones this pin was taken over',
      F.paramsFingerprint() === PINNED,
      F.paramsFingerprint() === PINNED ? PINNED
