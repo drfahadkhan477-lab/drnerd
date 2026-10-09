@@ -1,0 +1,65 @@
+name: webkit-selftest-probe (measurement, not for merge)
+
+# TEMPORARY. Measures why verify-selftest.js loses its page in WebKit on
+# synthetic-webkit ("the browser CRASHED the page", at a different check each
+# time). Runs the suite repeatedly while sampling WebKit's memory and the
+# kernel log, so the crash can be told apart from the OOM killer. Deleted
+# before this branch is merged.
+
+on:
+  push:
+    branches: [claude/pensive-bell-fapazl]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: selftest in WebKit, shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    env:
+      SYSTOLE_ENGINE: webkit
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: install
+        run: |
+          npm ci
+          npx playwright install --with-deps webkit
+      - name: build the synthetic app
+        run: |
+          node scripts/synthetic-export.js build/synthetic/export.html
+          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
+          ls -la build/synthetic/systole.html
+          nproc; free -m
+      - name: run verify-selftest four times, sampling memory
+        run: |
+          set +e
+          for i in 1 2 3 4; do
+            sudo dmesg -C 2>/dev/null
+            ( peak=0; while :; do
+                r=$(ps -eo rss,comm | awk 'tolower($2) ~ /webkit|minibrowser|pw_run/ {s+=$1} END {print s+0}')
+                [ "$r" -gt "$peak" ] && peak=$r && echo "$peak" > /tmp/peak
+                free -m | awk '/Mem:/ {print $7}' >> /tmp/avail
+                sleep 0.5; done ) & SAMPLER=$!
+            start=$(date +%s)
+            DEBUG=pw:browser node tests/verify-selftest.js build/synthetic/systole.html > /tmp/out.txt 2> /tmp/err.txt
+            code=$?
+            kill $SAMPLER 2>/dev/null; wait $SAMPLER 2>/dev/null
+            echo "=== shard ${{ matrix.shard }} iteration $i: exit $code after $(( $(date +%s) - start ))s; peak WebKit RSS $(( $(cat /tmp/peak 2>/dev/null || echo 0) / 1024 )) MB; min available $(sort -n /tmp/avail | head -1) MB"
+            grep -E "passed, [0-9]+ failed|last section|checks completed|page events" /tmp/out.txt
+            if [ $code -ne 0 ]; then
+              echo "--- kernel log"; sudo dmesg | grep -iE "oom|killed process|segfault|trap|WebKit" | tail -20
+              echo "--- browser stderr (crash lines)"; grep -iE "crash|signal|abort|SIG|terminated|ASSERT|WebProcess" /tmp/err.txt | tail -30
+            fi
+            rm -f /tmp/peak /tmp/avail
+          done
+          exit 0
