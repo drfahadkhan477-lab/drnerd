@@ -270,6 +270,86 @@ function reload(prev, opts) {
     ok('the notes it never saw are kept, and its own is added', JSON.stringify(B.get(KEY)) === '{"older":1,"fresh":1}', JSON.stringify(B.get(KEY)));
   }
 
+  head('a write that lands after a fallback retires the local copy');
+  {
+    /* One refused write leaves a whole local copy; the next write reaches the
+       database. That copy is now OLDER than the database, and taken whole on
+       the next launch it would throw away everything written after it. */
+    const opts = { seed: { [KEY]: { a: 1 } }, putFails: true };
+    const a = makeWeb(opts);
+    const A = loadStore(a);
+    await A.ready();
+    A.set(KEY, { a: 1, b: 1 });
+    await settle();
+    ok('(the refused write fell back)', a.ls.get(KEY) !== undefined);
+    opts.putFails = false;
+    A.set(KEY, { a: 1, b: 1, c: 1 });
+    await settle();
+    ok('the stale local copy is removed once the database has the newer value', a.ls.get(KEY) === undefined,
+       String(a.ls.get(KEY)));
+    ok('and so are its stamps', a.ls.get('accsap12.store.fellback') === undefined &&
+       a.ls.get('accsap12.store.fellback.whole') === undefined);
+    const b = reload(a, {});
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    ok('the next launch keeps what was written after the fallback', JSON.stringify(B.get(KEY)) === '{"a":1,"b":1,"c":1}',
+       JSON.stringify(B.get(KEY)));
+  }
+
+  head('a local copy migration could not move is loaded, and survives the session');
+  {
+    /* X leaves a whole local copy. Y's migration cannot write it (the database
+       still refuses), so it stays in localStorage — but Y must still load it,
+       or Y works from the older database value, and whatever Y then writes is
+       either missing the copy's entries or is overwritten by the copy later. */
+    const x = makeWeb({ seed: { [KEY]: { a: 1 } }, putFails: true });
+    const X = loadStore(x);
+    await X.ready();
+    X.set(KEY, { a: 1, b: 1 });
+    await settle();
+    /* Built by hand, not with reload(): reload() copies its options, so
+       turning putFails off afterwards would never reach the fake. */
+    const opts = { seed: Object.fromEntries(x.db), putFails: true };
+    const y = makeWeb(opts);
+    for (const [k, v] of x.ls) y.ls.set(k, v);
+    const Y = loadStore(y);
+    await Y.ready();
+    await settle();
+    ok('the session loads the entry only the local copy has', JSON.stringify(Y.get(KEY)) === '{"a":1,"b":1}',
+       JSON.stringify(Y.get(KEY)));
+    opts.putFails = false;
+    Y.set(KEY, Object.assign({}, Y.get(KEY), { c: 1 }));
+    await settle();
+    ok('(the session\'s write reached the database)', JSON.stringify(y.db.get(KEY)) === '{"a":1,"b":1,"c":1}',
+       JSON.stringify(y.db.get(KEY)));
+    ok('and the copy it loaded is retired', y.ls.get(KEY) === undefined, String(y.ls.get(KEY)));
+    const z = reload(y, {});
+    const Z = loadStore(z);
+    await Z.ready();
+    await settle();
+    ok('the next launch has both the copy\'s entry and the session\'s write', JSON.stringify(Z.get(KEY)) === '{"a":1,"b":1,"c":1}',
+       JSON.stringify(Z.get(KEY)));
+  }
+
+  head('a write made before hydration that the database refuses is kept');
+  {
+    /* set() before ready() is flushed by ready() against the merged value. The
+       flush's result was thrown away, so a refused flush left no copy at all. */
+    const a = makeWeb({ seed: { [KEY]: { a: 1, gone: 1 } }, putFails: true });
+    const A = loadStore(a);
+    A.set(KEY, { a: 1, early: 1 });
+    await A.ready();
+    await settle();
+    ok('the refused flush fell back to localStorage', a.ls.get(KEY) !== undefined,
+       a.ls.get(KEY) === undefined ? 'LOST — neither store has it' : String(a.ls.get(KEY)));
+    const b = reload(a, {});
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    ok('and the next launch has the early write', JSON.stringify(B.get(KEY)).indexOf('early') > -1, JSON.stringify(B.get(KEY)));
+  }
+
   /* ── the mirror ─────────────────────────────────────────────────────────
      accsap12.v2 — the FSRS cards, the chapter statistics, the streak — stays
      in localStorage because load() reads it synchronously at boot. That makes

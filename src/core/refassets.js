@@ -164,18 +164,22 @@ function add(bytes, filename) {
 function get(key) { return mem[key] || ''; }
 function has(key) { return !!mem[key]; }
 function keys() { return Object.keys(mem); }
-/* Backups carry only cited user assets, never the build's bundled corpus. */
+/* Backups carry only cited user assets, never the build's bundled corpus.
+   A cited image that is not here (a version 5 backup restored on a new device,
+   or an image the store refused and a relaunch then lost) is left out and
+   listed in `missing`, never a reason to refuse: refusing withheld the ink,
+   notes and progress too, on every export after, with no way to recover. */
 async function backup(bodies) {
   await ready();
-  const out = Object.create(null), re = /refimg:\/\/(u\/[a-z0-9]+-[a-z0-9]+\.[a-z]+)/g;
+  const assets = Object.create(null), missing = [], re = /refimg:\/\/(u\/[a-z0-9]+-[a-z0-9]+\.[a-z]+)/g;
   for (const body of bodies || []) {
     let m; re.lastIndex = 0;
     while ((m = re.exec(String(body || '')))) {
-      if (!has(m[1])) throw new Error('A referenced image is missing.');
-      out[m[1]] = get(m[1]);
+      if (has(m[1])) assets[m[1]] = get(m[1]);
+      else if (!missing.includes(m[1])) missing.push(m[1]);
     }
   }
-  return out;
+  return { assets, missing };
 }
 function validateBackup(assets) {
   if (!assets || typeof assets !== 'object' || Array.isArray(assets)) throw new Error('Invalid image backup.');

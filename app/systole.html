@@ -2083,7 +2083,7 @@ async function exportMarkup(){
   try{
   await Store.ready();
   if(typeof flushLog==='function') flushLog();
-  const assets=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{};
+  const {assets,missing}=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{assets:{},missing:[]};
   const blob=new Blob([JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
     refs:(typeof REF!=='undefined'?REF:[]),
     log:(typeof LOG!=='undefined'?LOG:[]),
@@ -2095,8 +2095,9 @@ async function exportMarkup(){
   a.href=URL.createObjectURL(blob);
   a.download='accsap12-annotations-'+new Date().toISOString().slice(0,10)+'.json';
   a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
   return true;
-  }catch(_){ toast('Backup could not be exported. Check that your reference images are available.'); return false; }
+  }catch(_){ toast('Backup could not be exported.'); return false; }
 }
 function validateAnnotationBackup(d){
   const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -5581,7 +5582,7 @@ function progressFromBackup(raw){
   entries('daily',['a','c','r'],['a','c']);
   entries('chStats',['correct','total'],[]);
   entries('practice',['n','c','t'],[]);
-  entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>v.due==null||typeof v.due==='string');
+  entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string'));
   entries('resume',['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')));
   for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
     if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');

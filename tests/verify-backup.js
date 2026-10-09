@@ -219,18 +219,22 @@ const restore = `(text) => new Promise(resolve => {
     'a day with no counts': { daily: { '2026-10-09': {} } },
     'a null card': { srs: { BKUP_1: null } },
     'a card whose due date is not a date string': { srs: { BKUP_1: { due: 5 } } },
+    'a card whose last review is not a date string': { srs: { BKUP_1: { due: '2026-11-01', last: 12345 } } },
     'a null chapter': { chStats: { Arrhythmias: null } },
     'a chapter count that is negative': { chStats: { Arrhythmias: { correct: -1, total: 2 } } },
     'a null practice record': { practice: { BKUP_1: null } },
     'a null resume record': { resume: { all: null } },
     'a resume record whose ids are not a list': { resume: { all: { ids: 'BKUP_1', i: 1 } } },
   };
+  /* Restores a file through the real importer and returns the toast it left,
+     cleared first so a repeat of the same message is still seen. */
+  const importToast = text => page.evaluate(async ({ fn, text }) => {
+    const t = document.getElementById('toast'); if (t) t.textContent = '';
+    await (new Function('return ' + fn))()(text);
+    return (document.getElementById('toast') || {}).textContent || '';
+  }, { fn: restore, text });
   for (const [what, stats] of Object.entries(badNested)) {
-    const toast = await page.evaluate(async ({ fn, text }) => {
-      const t = document.getElementById('toast'); if (t) t.textContent = '';
-      await (new Function('return ' + fn))()(text);
-      return (document.getElementById('toast') || {}).textContent || '';
-    }, { fn: restore, text: JSON.stringify({ v: 5, ink: { wouldReplace: true }, stats }) });
+    const toast = await importToast(JSON.stringify({ v: 5, ink: { wouldReplace: true }, stats }));
     ok('a backup with ' + what + ' is refused', toast === 'That file could not be read.', JSON.stringify(toast));
     ok('and changes nothing', await statState() === nestedBefore);
     const built = await page.evaluate(() => { try { buildStats(); forecast7(); return true; } catch (e) { return e.message; } });
@@ -238,12 +242,8 @@ const restore = `(text) => new Promise(resolve => {
   }
 
   /* The valid round trip: a whole day record is restored and read. */
-  const dayToast = await page.evaluate(async ({ fn, text }) => {
-    const t = document.getElementById('toast'); if (t) t.textContent = '';
-    await (new Function('return ' + fn))()(text);
-    return (document.getElementById('toast') || {}).textContent || '';
-  }, { fn: restore, text: JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 } },
-    srs: { BKUP_1: { reps: 3, due: '2026-11-01', stability: 4, difficulty: 5 } } } }) });
+  const dayToast = await importToast(JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 } },
+    srs: { BKUP_1: { reps: 3, due: '2026-11-01', last: '2026-10-01', stability: 4, difficulty: 5 } } } }));
   ok('a backup with a well-formed day record is restored', dayToast === 'Annotations restored.', JSON.stringify(dayToast));
   ok('and the Progress screen reads it', await page.evaluate(() => {
     try { buildStats(); forecast7(); } catch (e) { return e.message; }
@@ -271,6 +271,28 @@ const restore = `(text) => new Promise(resolve => {
   await other.evaluate(()=>RefAssets.ready());
   ok('restored image bytes survive reload',await other.evaluate(({key,value})=>RefAssets.get(key)===value,exported));
   await context.close();
+
+  /* A version 5 backup restored on a new device brings citations without their
+     images. Export used to refuse from then on, ink and progress with it. */
+  head('an image the notes cite but this device lacks does not stop the export');
+  const partial=await page.evaluate(async()=>{
+    const raw=atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXGQAAAAASUVORK5CYII=');
+    const kept=RefAssets.add(Uint8Array.from(raw,c=>c.charCodeAt(0)),'synthetic.png'); await RefAssets.flush();
+    const lost='u/'+RefAssets.hashBytes(new Uint8Array([1,2,3]))+'.png';
+    REF=[{id:'synthetic-missing-image',title:'Synthetic reference',body:'![a](refimg://'+kept+') ![b](refimg://'+lost+')',tags:[],ts:Date.now()}];
+    saveJSON('accsap12.ref',REF);
+    INK={'synthetic-ink':{strokes:[]}};
+    const t=document.getElementById('toast'); if(t) t.textContent='';
+    const create=URL.createObjectURL,click=HTMLAnchorElement.prototype.click;let blob=null;
+    URL.createObjectURL=b=>{blob=b;return 'blob:stub';};HTMLAnchorElement.prototype.click=()=>{};
+    let result;try{result=await exportMarkup();}finally{URL.createObjectURL=create;HTMLAnchorElement.prototype.click=click;}
+    return {kept,lost,result,text:blob?await blob.text():null,toast:(document.getElementById('toast')||{}).textContent||''};
+  });
+  const partialEnv=partial.text?JSON.parse(partial.text):null;
+  ok('the backup is still written',partial.result===true&&!!partialEnv,JSON.stringify(partial.toast));
+  ok('with the ink and the image that is here, and without the one that is not',
+     !!partialEnv&&!!partialEnv.ink['synthetic-ink']&&!!partialEnv.assets[partial.kept]&&!(partial.lost in partialEnv.assets));
+  ok('and the user is told an image was left out',/without 1 image/.test(partial.toast),JSON.stringify(partial.toast));
 
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed\n`);

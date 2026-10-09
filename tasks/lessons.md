@@ -78,6 +78,19 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   under test from the file that ships (app/, src/), between anchors that must
   each occur once; never from a build step, and never a copy kept in the test.
 
+- **A replace-instead-of-merge rule tested only at the moment it is written.**
+  #224 marked a fallback copy "whole" so recovery would take it over the
+  database; every test ended the session right after the fallback. A review
+  found the copy outliving later writes that did land, so the next launch threw
+  them away, where the old merge had kept them. → Rule: when a copy gains
+  authority over another, test what happens to it after the other moves on
+  (a later successful write, a second session) before trusting it.
+- **A fake whose options were copied.** A store test turned `putFails` off
+  mid-session on an options object `reload()` had already copied, so the
+  "write that lands" never landed and the check passed an injected defect.
+  → Rule: when a test changes the fake's behaviour mid-run, assert the effect
+  (the value is in the database) as a precondition before the claim.
+
 ## Process
 
 - **A debug copy that edited a different line than the one I then read.** To see
