@@ -82,7 +82,7 @@ head('the table carries positions and scores, never the notes\' text');
 const flat = J(table);
 const leaked = NOTES.some(n => n.body.split(/(?<=\.)\s/).some(s => s.length >= 20 && flat.includes(s.slice(0, 20))));
 ok('no run of note text appears in it', !leaked);
-ok('every entry is 0 or four integers', Object.values(table).every(v => v === 0 || (Array.isArray(v) && v.length === 4 && v.every(Number.isInteger))));
+ok('every entry is 0 or three integers', Object.values(table).every(v => v === 0 || (Array.isArray(v) && v.length === 3 && v.every(Number.isInteger))));
 
 head('it is consulted, and an entry that does not fit is refused');
 /* Point note b's entry at its OTHER candidate — a real pearl, with its real
@@ -92,17 +92,71 @@ const kb = P.bodyKey(NOTES[1].body);
 const bParas = P.paragraphs(NOTES[1].body);
 const firstPara = P.sentences(bParas[0]);
 const altRun = firstPara.slice(0, 1).join(' ');
-const swapped = Object.assign({}, table, { [kb]: [0, 0, 1, P.score(altRun)] });
+const altAt = NOTES[1].body.indexOf(altRun);
+const swapped = Object.assign({}, table, { [kb]: [altAt, altAt + altRun.length, P.score(altRun)] });
 const usesTable = P.harvest(NOTES, swapped).find(x => x.id === 'b');
 ok('an entry pointing at another real pearl changes what is shown', P.isPearl(altRun) && !!usesTable &&
    usesTable.text === P.clean(altRun) && usesTable.text !== plainOut.find(x => x.id === 'b').text, usesTable && usesTable.text.slice(0, 50));
-const bad = (entry) => J(P.harvest(NOTES, Object.assign({}, table, { [kb]: entry }))) === J(plainOut);
-ok('positions past the end of the note are searched afresh', bad([9, 0, 1, 7]) && bad([0, 7, 2, 7]));
-ok('a score that is not the run\'s own is searched afresh', bad([table[kb][0], table[kb][1], table[kb][2], table[kb][3] + 1]));
-ok('a malformed entry is searched afresh', bad('x') && bad([1, 2]) && bad(null));
+/* Refused, and searched afresh. Both halves: an entry that points at the same
+   pearl in another way would leave the output unchanged while being used. */
+const bad = (entry) => !P.entryFits(NOTES[1].body, entry) &&
+  J(P.harvest(NOTES, Object.assign({}, table, { [kb]: entry }))) === J(plainOut);
+/* Each bad entry is the baked one with one field broken, so the shape is
+   right and only the broken field can be what refuses it. */
+/* A bake with no entry for b fails the checks above; this one should report, not crash. */
+const eb = Array.isArray(table[kb]) ? table[kb] : [0, 1, 0], with_ = (j, v) => eb.map((x, k) => k === j ? v : x);
+ok('a span outside the note, or empty, is searched afresh',
+   bad(with_(0, NOTES[1].body.length)) && bad(with_(1, NOTES[1].body.length + 1)) && bad(with_(1, eb[0])));
+/* The one the range test alone stands between: slice() reads a negative start
+   from the end of the note, so this names the very same run and would pass
+   every check of the run itself. */
+const fBody = NOTES[5].body, kf = P.bodyKey(fBody), ef = table[kf];
+const neg = Array.isArray(ef) ? [ef[0] - fBody.length, ef[1], ef[2]] : null;
+ok('a negative start that slice() would read as the same run is refused',
+   !!neg && ef[0] > 0 && fBody.slice(neg[0], neg[1]) === fBody.slice(ef[0], ef[1]) && !P.entryFits(fBody, neg) &&
+   J(P.harvest(NOTES, Object.assign({}, table, { [kf]: neg }))) === J(plainOut), J(ef));
+ok('a score that is not the run\'s own is searched afresh', bad(with_(2, eb[2] + 1)));
+ok('a malformed entry is searched afresh', bad('x') && bad([1, 2]) && bad(null) && bad(eb.slice(1)) && bad(eb.concat(0)) && bad(with_(0, eb[0] + 0.5)));
 const edited = NOTES.map(n => n.id === 'd' ? Object.assign({}, n, { body: n.body.replace('140 mmHg', '150 mmHg') }) : n);
 ok('an edited note is not in the table and is searched as it now reads',
    J(P.harvest(edited, table)) === J(P.harvest(edited)) && P.harvest(edited, table).find(x => x.id === 'd').text.includes('150 mmHg'));
+
+head('a lookup reads the pearl\'s own span, not the whole note');
+/* The point of the span. With the run named by paragraph and sentence index,
+   reaching it still cleaned the whole note, and the owner's profile showed
+   that walk costing most of what the search had. Measured, not timed:
+   plain(), sentences(), clean() and the scoring do their text work through
+   String.prototype.replace, so the longest string handed to replace during a
+   lookup is the most of the note any step read. (Not the total: scoring a run
+   takes about twenty passes over it, and that sum says nothing about the
+   note.) The pearl sits between long runs of filler, so its span starts well
+   inside the note. */
+const filler = Array.from({ length: 120 }, (_, k) => `Filler line ${k} says very little at all.`).join('\n\n');
+const big = { id: 'g', title: 'Unit · Long — Pearl in the middle', source: 's',
+              body: filler + '\n\n' + NOTES[3].body + '\n\n' + filler };
+const bigT = P.bake([big]);
+const bigE = bigT[P.bodyKey(big.body)];
+const span = Array.isArray(bigE) ? bigE[1] - bigE[0] : 0;
+const nativeReplace = String.prototype.replace;
+let longest = 0, bigOut;
+String.prototype.replace = function (...a) { longest = Math.max(longest, this.length); return nativeReplace.apply(this, a); };
+try { bigOut = P.harvest([big], bigT); } finally { String.prototype.replace = nativeReplace; }
+ok('the long note\'s pearl is baked as a span well inside the note, and found from it',
+   Array.isArray(bigE) && bigE[0] > filler.length && span < NOTES[3].body.length + 1 &&
+   bigOut.length === 1 && J(bigOut) === J(P.harvest([big])), J(bigE));
+ok('and no step of the lookup reads more than that span', longest > 0 && longest <= span,
+   `longest string through replace ${longest}, span ${span}, note ${big.body.length}`);
+
+/* A code span opened in one paragraph and closed in the next. plain() removes
+   it, blank line and all, so the run the search finds joins words that are not
+   side by side in the raw note, and no stretch of the note reads as that run.
+   bake() must leave the note out and let the app search it. */
+const split = { id: 's', title: 'Unit · Odd — A span across a blank line', source: 's',
+                body: 'A short opener with a stray `tick in it.\n\nAnd the other` tick sits here. ' + NOTES[3].body };
+const splitT = P.bake([split]);
+ok('a note whose run is not a stretch of its text is left out of the table, and still gets its pearl',
+   !Object.prototype.hasOwnProperty.call(splitT, P.bodyKey(split.body)) &&
+   P.harvest([split]).length === 1 && J(P.harvest([split], splitT)) === J(P.harvest([split])), J(splitT));
 
 head('the build bakes the seed it ships, and the app passes the table on');
 const seed = J(NOTES.map(n => ({ title: n.title, body: n.body, source: n.source })));

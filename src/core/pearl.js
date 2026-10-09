@@ -277,32 +277,51 @@ function bodyKey(body) {
    at build time, so scripts/pearl-bake.js runs bake() over them there and the
    app carries the result.
 
-   The table holds no text: per note fingerprint, where its pearl is
-   (paragraph, first sentence, how many) and its score, or 0 for a note with
-   none. harvest() rebuilds the run from the note it is given and uses the
-   entry only if that run is still a pearl with that score; anything else —
-   no table, an edited note, an entry that does not fit — and the note is
-   searched exactly as before. So what is shown is always this code's verdict
-   on the note as it stands. */
+   The table holds no text: per note fingerprint, where its pearl is and its
+   score, or 0 for a note with none. harvest() rebuilds the run from the note
+   it is given and uses the entry only if that run is still a pearl with that
+   score; anything else — no table, an edited note, an entry that does not fit
+   — and the note is searched exactly as before. So what is shown is always
+   this code's verdict on the note as it stands.
+
+   WHERE, AS A SPAN OF THE RAW NOTE. The first table named the run by
+   paragraph and sentence index, and the owner's profile showed what that
+   cost: the scoring was gone, but reaching paragraph p still ran plain() over
+   the whole note, and that walk was most of what the search had cost. A run
+   is its stretch of the note with the whitespace collapsed — sentences()
+   splits on whitespace and joins with one space — so an entry is
+   [start, end, score], a span of the raw body, and the lookup's text work is
+   on that span alone (the fingerprint and the figure search still pass over
+   the note once, without cleaning it). bake() keeps an entry only if the span, collapsed, is exactly the run
+   the search found; a run whose stretch holds something plain() strips (a
+   code span, a figure) has no such span, and that note is left out of the
+   table, so it is searched. */
+const collapse = s => s.replace(/\s+/g, ' ').trim();
+
 function bake(notes) {
   const table = {};
   for (const r of (notes || [])) {
-    const b = bestRun(r.body);
-    table[bodyKey(r.body)] = b && b.score >= 5 ? [b.p, b.i, b.n, b.score] : 0;
+    const body = String(r.body || '');
+    const b = bestRun(body);
+    if (!b || b.score < 5) { table[bodyKey(body)] = 0; continue; }
+    /* The run's words, with any whitespace between them, in the raw note.
+       Build time only: a RegExp per note is nothing here, and the app never
+       makes one. */
+    const m = new RegExp(b.run.split(' ').map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')).exec(body);
+    const e = m && [m.index, m.index + m[0].length, b.score];
+    if (e && collapse(body.slice(e[0], e[1])) === b.run && fromTable(body, e)) table[bodyKey(body)] = e;
   }
   return table;
 }
 
 /* A table entry checked against the note it claims to describe. */
 function fromTable(body, e) {
-  if (!Array.isArray(e) || e.length !== 4) return undefined;
-  const para = paragraphs(body)[e[0]];
-  if (para === undefined) return undefined;
-  const sents = sentences(para);
-  if (!(e[1] >= 0 && e[2] >= 1 && e[1] + e[2] <= sents.length && e[2] <= MAX_RUN)) return undefined;
-  const run = sents.slice(e[1], e[1] + e[2]).join(' ');
-  if (!isPearl(run) || score(run) !== e[3]) return undefined;
-  return { score: e[3], run };
+  if (!Array.isArray(e) || e.length !== 3 || !e.every(Number.isInteger)) return undefined;
+  body = String(body || '');
+  if (!(e[0] >= 0 && e[0] < e[1] && e[1] <= body.length)) return undefined;
+  const run = collapse(body.slice(e[0], e[1]));
+  if (!isPearl(run) || score(run) !== e[2]) return undefined;
+  return { score: e[2], run };
 }
 
 /* One entry per note: its best sentence, and how good that sentence is. Notes
