@@ -3136,6 +3136,9 @@ function buildPhysio(){
     ${physioView==='pv'?`<div class="physio-chips iv-chips">${Physio.INTERVENTIONS.map(iv=>
       `<button class="chip${physioIv===iv.id?' hot':''}" data-physio-iv="${iv.id}">${e(iv.label)}</button>`).join('')}</div>`:''}
     <div class="physio-note" id="physioNote"></div>
+    <div class="ref-hint physio-model" id="physioModel">A teaching model: every curve is computed from
+      textbook resting values, not recorded from a patient. Use it to understand the cycle, not to
+      measure or interpret one.</div>
   </div>`;
 }
 function physioNoteHtml(){

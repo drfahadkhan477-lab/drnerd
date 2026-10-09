@@ -80,6 +80,15 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
 
 ## Process
 
+- **A browser upgrade judged on Chromium alone.** I moved playwright 1.56 -> 1.64
+  (released the day before) after a green local Chromium run; both CI WebKit jobs
+  then hit their time limits still passing, because 1.64's WebKit 27.2 drew 2-3
+  frames a second after the Memorizer loaded (memorizer-data: 63 s against 20 s on
+  1.56 and 10 s on 1.63). -> Rule: before pushing a playwright bump, time one
+  Memorizer suite in WebKit on the old pin and the new one (`npm i --no-save
+  playwright@X`, `npx playwright install webkit`); a slower engine is a finding,
+  never a reason to raise `timeout-minutes`.
+
 - **A click that "did nothing" because it missed.** Firefox CI intermittently
   stayed on the lesson after "now memorise it" (phase teach, nothing logged). Reading
   the app's logic found nothing. A capture-phase click listener showed the click

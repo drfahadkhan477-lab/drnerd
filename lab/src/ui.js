@@ -28,7 +28,10 @@ function context() {
   const C = window.AudioContext || window.webkitAudioContext;
   if (!C) return null;
   if (!ac) ac = new C();
-  if (ac.state === 'suspended') ac.resume();
+  /* resume() can stay pending (autoplay with no gesture) and Firefox rejects
+     it with "Navigated away from page" when the page reloads; nothing is lost
+     then, so the rejection is handled rather than reported as an error. */
+  if (ac.state === 'suspended') { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); }
   return ac;
 }
 function stop() {
