@@ -50,6 +50,9 @@ jobs:
           node scripts/synthetic-export.js build/synthetic/export.html
           node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
 
+      - name: what this WebKit supports (Web Audio, overscroll-behavior)
+        run: node tools/rc-webkit-caps.js
+
       - name: control — with transitions left on, the first screen change still crashes this WebKit
         run: node tools/rc-webkit-probe.js build/synthetic/systole.html --expect crash --runs 3
 
