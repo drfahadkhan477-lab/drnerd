@@ -6,7 +6,10 @@ name: webkit-selftest-probe (measurement, not for merge)
 # web process or its ThreadedCompositor thread, with WebKit at ~150 MB and
 # 12 GB free: not memory. Round 2 runs the same suite against copies of the
 # build with one compositing ingredient of the figure viewer switched off each,
-# to find which one the assertion needs. Only the probe's copy of the build is
+# to find which one the assertion needs. Round 2 (12 runs each): baseline 2,
+# no backdrop-filter 3, no will-change 5, no animation/transition 0 crashes.
+# Round 3 splits motion into the overlay's fade-in and the image's opacity
+# transition, at 24 runs each. Only the probe's copy of the build is
 # altered. Deleted before this branch is merged.
 
 on:
@@ -25,8 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [baseline, no-motion, no-backdrop, no-will-change]
-        shard: [1, 2, 3]
+        variant: [baseline, no-motion, no-overlay-fade, no-img-transition]
+        shard: [1, 2, 3, 4, 5, 6]
     env:
       SYSTOLE_ENGINE: webkit
     steps:
@@ -44,8 +47,8 @@ jobs:
           node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
           case "${{ matrix.variant }}" in
             no-motion)      CSS='*,*::before,*::after{animation:none!important;transition:none!important}' ;;
-            no-backdrop)    CSS='*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}' ;;
-            no-will-change) CSS='.figv-scroll img{will-change:auto!important}' ;;
+            no-overlay-fade)   CSS='#peek,#peek *{animation:none!important}' ;;
+            no-img-transition) CSS='.figv-scroll img{transition:none!important}' ;;
             *)              CSS='' ;;
           esac
           if [ -n "$CSS" ]; then
