@@ -83,7 +83,15 @@ const STUB = () => {
     await onScreen(page, 'study', { marker: '#planCard' });
     await quiet(page);
   };
-  const waitFor = (page, fn, arg) => page.waitForFunction(fn, arg, { timeout: 15000 });
+  /* POLLED ON A TIMER, NOT ON FRAMES. waitForFunction re-checks on
+     requestAnimationFrame by default, and a page that is not painting gives it
+     none: with WebKit's screen swaps instant (tests/_engine.js takes view
+     transitions away there) this page sat idle while the scripted voice
+     talked, and a wait whose condition was already true timed out (4 runs in
+     12 on WebKit, and once in CI). Every wait here is on page state the voice
+     sets from timers, not on paint, so a 100 ms poll is what it needs: 0 in 20
+     with it, on WebKit with transitions off and on. */
+  const waitFor = (page, fn, arg) => page.waitForFunction(fn, arg, { timeout: 15000, polling: 100 });
 
   head('no speech in the browser: no card, and the rest is there');
   {
