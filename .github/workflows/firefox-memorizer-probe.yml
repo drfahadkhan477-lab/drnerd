@@ -5,7 +5,12 @@ name: firefox-memorizer-probe (measurement, not for merge)
 # #home-hero after a reload, nothing logged) in about 35 recent runs of the
 # job. Too rare to read from one log: this runs the suite many times and, on
 # any failure, keeps the kernel log and Firefox's own stderr, so the crash can
-# be named. Deleted before this branch is merged.
+# be named. Round 1 (150 runs): 10 crashes, every one at the same point: the
+# page.reload() that follows openDoc's figure search (line ~2028), with
+# nothing in the kernel log or Firefox's stderr. Round 2 compares the suite as
+# it is with a copy that calls MemPdf.release() (waits for queued pdf.js
+# renders, then destroys the open document and its worker) before that
+# reload. Deleted before this branch is merged.
 
 on:
   push:
@@ -17,12 +22,13 @@ permissions:
 
 jobs:
   probe:
-    name: verify-memorizer in Firefox, shard ${{ matrix.shard }}
+    name: verify-memorizer in Firefox, ${{ matrix.variant }}, shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
+        variant: [baseline, release-before-reload]
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     env:
       SYSTOLE_ENGINE: firefox
@@ -35,6 +41,15 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps firefox
+      - name: alter the probe's copy of the suite
+        if: matrix.variant == 'release-before-reload'
+        run: |
+          node -e '
+            const fs = require("fs"), f = "tests/verify-memorizer.js", s = fs.readFileSync(f, "utf8");
+            const at = "    await page.evaluate(d => MemStore.put(\x27docs\x27, d), orig);\n    await page.reload();";
+            const n = s.split(at).length - 1; if (n !== 1) { console.error("anchor found " + n + " times"); process.exit(2); }
+            fs.writeFileSync(f, s.replace(at, "    await page.evaluate(d => MemStore.put(\x27docs\x27, d), orig);\n    await page.evaluate(() => MemPdf.release());\n    await page.reload();"));'
+          grep -n "MemPdf.release()" tests/verify-memorizer.js
       - name: run verify-memorizer fifteen times
         run: |
           set +e
@@ -44,7 +59,7 @@ jobs:
             start=$(date +%s)
             DEBUG=pw:browser node tests/verify-memorizer.js > /tmp/out.txt 2> /tmp/err.txt
             code=$?
-            echo "=== shard ${{ matrix.shard }} iteration $i: exit $code after $(( $(date +%s) - start ))s; $(grep -E 'passed, [0-9]+ failed' /tmp/out.txt)"
+            echo "=== ${{ matrix.variant }} shard ${{ matrix.shard }} iteration $i: exit $code after $(( $(date +%s) - start ))s; $(grep -E 'passed, [0-9]+ failed' /tmp/out.txt)"
             if [ $code -ne 0 ]; then
               fails=$((fails+1))
               grep -E "^  FAIL|last section|checks completed|page events|the page logged" /tmp/out.txt | head -12
@@ -54,5 +69,5 @@ jobs:
               echo "--- firefox stderr: last lines"; tail -15 /tmp/err.txt
             fi
           done
-          echo "=== RESULT shard ${{ matrix.shard }}: $fails failure(s) in 15"
+          echo "=== RESULT ${{ matrix.variant }} shard ${{ matrix.shard }}: $fails failure(s) in 15"
           exit 0
