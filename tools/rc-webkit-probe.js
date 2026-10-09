@@ -1,18 +1,15 @@
 #!/usr/bin/env node
 /*
- * Does the first screen change crash this WebKit? For the `rc` branch's
- * Windows job (.github/workflows/rc-windows.yml), which runs it twice: on a
- * control build with render()'s stillOutgoing() call removed, expecting a
- * crash, and on the build as committed, expecting none.
+ * Does the first screen change crash this WebKit, with view transitions left
+ * on? For the `rc` branch's Windows job (.github/workflows/rc-windows.yml),
+ * which expects a crash: it uses raw Playwright, not tests/_engine.js, so the
+ * harness's switch (startViewTransition taken away in WebKit) is not applied.
  *
  *   node tools/rc-webkit-probe.js <build.html> --expect crash|ok [--runs 3]
  *
- * WHY A CONTROL. On the owner's Windows machine, Playwright 1.63's WebKit
- * (26.6) crashed the page on every first screen change of the real build:
- * a view transition tearing down layers mid-animation. Linux WebKit never
- * crashed on the same suites. If the synthetic build on this runner does not
- * crash either, a clean run of the fixed build proves nothing, and this says
- * so by failing the control step instead of letting the job go green.
+ * WHY. If this stops crashing, the WebKit has been fixed and the harness's
+ * switch can go: the step fails and says so, rather than the switch staying
+ * on long after the reason for it.
  *
  * Prints counts and states only: the build is synthetic, but the habit holds.
  */
@@ -58,8 +55,8 @@ const URL = 'file:///' + path.resolve(target).replace(/\\/g, '/');
   /* A run that never reached home measured nothing: neither verdict holds. */
   if (booted < runs) { console.log('FAIL  the home screen did not come up in every run, so nothing was measured'); process.exit(1); }
   if (expect === 'crash') {
-    if (crashes > 0) { console.log('PASS  the control crashes here, so a clean run of the fixed build means something'); process.exit(0); }
-    console.log('FAIL  the control did not crash on this runner: this job cannot show the fix, and its other steps prove nothing about it');
+    if (crashes > 0) { console.log('PASS  with transitions on, this WebKit still crashes: the harness switch is still needed'); process.exit(0); }
+    console.log('FAIL  with transitions on, this WebKit no longer crashes here: the harness switch in tests/_engine.js may be retired');
     process.exit(1);
   }
   if (crashes === 0 && reachedQuiz === runs) { console.log('PASS  no crash, and every run reached the quiz'); process.exit(0); }
