@@ -6169,12 +6169,31 @@ function showCrashScreen(err){
     try{ document.body.innerHTML='<p style="padding:2rem;font-family:sans-serif;">Something went wrong. <a href="javascript:location.reload()">Reload</a></p>'; }catch(__){}
   }
 }
+/* THE OUTGOING SCREEN IS SNAPSHOTTED STILL. A view transition captures the
+   old screen and then tears it down; animated layers torn down mid-animation
+   are what WebKit 26.6's compositor asserts on (#211 found it on Linux, in
+   verify-selftest; the owner's Windows run hit it on every first screen
+   change). Measured on the real build in Playwright's Windows WebKit 26.6:
+   25 animations running at the swap, the page crashed every time; with them
+   off, 0 running and no crash, and with backdrop-filter or filter off it
+   still crashed. Everything renderNow() is about to replace lives in #app and
+   #navbar, so cancelling what runs there loses nothing: the new screen starts
+   its own. Nothing outside them is touched. */
+function stillOutgoing(){
+  if(!document.getAnimations) return;
+  const app=document.getElementById('app'), bar=document.getElementById('navbar');
+  for(const a of document.getAnimations()){
+    const t=a.effect&&a.effect.target;
+    if(a.playState==='running'&&t&&((app&&app.contains(t))||(bar&&bar.contains(t)))) a.cancel();
+  }
+}
 function render(){
   const changingScreen = lastScreen!==null && lastScreen!==S.screen;
   lastScreen = S.screen;
   const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   try{
     if(changingScreen && document.startViewTransition && !reduced){
+      stillOutgoing();
       const vt=document.startViewTransition(()=>renderNow());
       vt.updateCallbackDone.catch(showCrashScreen);
       /* A TRANSITION SKIPPED BY THE NEXT ONE IS NAVIGATION, NOT A FAILURE.

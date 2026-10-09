@@ -787,6 +787,38 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('.q-card is labelled by an element that exists', !!named.text, JSON.stringify(named));
   ok('and that label names the question', /Question\s*\d+/.test(named.text || ''), named.text);
 
+  head('a screen change is snapshotted still: nothing animates under the swap');
+  /* WebKit 26.6 asserts in its compositor when a view transition tears down
+     layers mid-animation (#211 on Linux; every first screen change on the
+     owner's Windows run, 25 animations running at the swap). render() now
+     cancels what runs in #app and #navbar before it starts a transition.
+     Measured at the call itself: startViewTransition is wrapped to count the
+     running animations there at that instant. Two preconditions, or the zero
+     would mean nothing: home had animations running before the change, and a
+     transition was actually started (an engine without the API, or reduced
+     motion, takes the instant path and would read zero for free). */
+  await page.evaluate(() => { goHome(); render(); });
+  await settled(page, () => S.screen === 'home' && !!document.querySelector('.hero-h1'), { label: 'the home screen, for the still-swap check' });
+  await page.waitForTimeout(600);
+  const still = await page.evaluate(() => {
+    const inScreen = () => {
+      const app = document.getElementById('app'), bar = document.getElementById('navbar');
+      return document.getAnimations().filter(a => { const t = a.effect && a.effect.target;
+        return a.playState === 'running' && t && ((app && app.contains(t)) || (bar && bar.contains(t))); }).length;
+    };
+    const before = inScreen();
+    const orig = document.startViewTransition;
+    const seen = [];
+    if (orig) document.startViewTransition = function (cb) { seen.push(inScreen()); return orig.call(document, cb); };
+    try { startQuiz(CHAPTERS[0], 'all'); } finally { if (orig) document.startViewTransition = orig; }
+    return { before, transitions: seen.length, atSwap: seen };
+  });
+  ok('the home screen has animations running before the change, so the count can catch something',
+     still.before > 0, JSON.stringify(still));
+  ok('and opening a quiz starts a view transition', still.transitions === 1, JSON.stringify(still));
+  ok('with nothing in #app or #navbar still animating at that instant',
+     still.transitions === 1 && still.atSwap[0] === 0, JSON.stringify(still));
+
   head('regression: everything prior still functions');
   const reg = await page.evaluate(() => {
     goHome(); render();
