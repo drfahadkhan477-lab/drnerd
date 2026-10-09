@@ -5569,6 +5569,20 @@ let FOREIGN={};
 function progressFromBackup(raw){
   const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
   for(const k of ['chStats','srs','daily','practice','resume']) if(raw[k]!=null&&!record(raw[k])) throw new Error('Invalid statistics.');
+  /* Every entry too, before anything is stored: the Progress screen and the
+     scheduler read them field by field (d.a in buildStats, S.srs[id].due in
+     forecast7), so one null day passed here, was saved, and crashed Progress
+     on every later launch. A field is checked where the app reads it; one
+     that is absent is left to the reader's own default, as it always was. */
+  const count=v=>v==null||(Number.isFinite(v)&&v>=0);
+  const entries=(k,fields,need,extra)=>{ for(const v of Object.values(raw[k]||{})){
+    if(!record(v)||fields.some(f=>!count(v[f]))||need.some(f=>v[f]==null)||(extra&&!extra(v))) throw new Error('Invalid statistics.');
+  }};
+  entries('daily',['a','c','r'],['a','c']);
+  entries('chStats',['correct','total'],[]);
+  entries('practice',['n','c','t'],[]);
+  entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>v.due==null||typeof v.due==='string');
+  entries('resume',['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')));
   for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
     if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');
   for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');

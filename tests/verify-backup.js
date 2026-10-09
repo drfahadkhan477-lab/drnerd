@@ -204,6 +204,52 @@ const restore = `(text) => new Promise(resolve => {
   },restore);
   ok('invalid statistics are refused before any annotations change', await page.evaluate(()=>!INK.wouldReplace&&S.sessionCorrect===37));
 
+  /* A record inside a statistics map is read field by field by the Progress
+     screen and the scheduler (d.a in buildStats, S.srs[id].due in forecast7).
+     A null one used to pass, be stored, and crash the Progress screen on this
+     and every later launch. Each of these must be refused with the whole state
+     as it was: the live statistics, the stored copy, and the annotations. */
+  const statState = () => page.evaluate(() => JSON.stringify({
+    S: { chStats: S.chStats, srs: S.srs, daily: S.daily, practice: S.practice, resume: S.resume },
+    stored: localStorage.getItem('accsap12.v2'), ink: INK, notes: NOTES }));
+  const nestedBefore = await statState();
+  const badNested = {
+    'a null day': { daily: { '2026-10-09': null } },
+    'a day whose count is not a number': { daily: { '2026-10-09': { a: 'many', c: 0 } } },
+    'a day with no counts': { daily: { '2026-10-09': {} } },
+    'a null card': { srs: { BKUP_1: null } },
+    'a card whose due date is not a date string': { srs: { BKUP_1: { due: 5 } } },
+    'a null chapter': { chStats: { Arrhythmias: null } },
+    'a chapter count that is negative': { chStats: { Arrhythmias: { correct: -1, total: 2 } } },
+    'a null practice record': { practice: { BKUP_1: null } },
+    'a null resume record': { resume: { all: null } },
+    'a resume record whose ids are not a list': { resume: { all: { ids: 'BKUP_1', i: 1 } } },
+  };
+  for (const [what, stats] of Object.entries(badNested)) {
+    const toast = await page.evaluate(async ({ fn, text }) => {
+      const t = document.getElementById('toast'); if (t) t.textContent = '';
+      await (new Function('return ' + fn))()(text);
+      return (document.getElementById('toast') || {}).textContent || '';
+    }, { fn: restore, text: JSON.stringify({ v: 5, ink: { wouldReplace: true }, stats }) });
+    ok('a backup with ' + what + ' is refused', toast === 'That file could not be read.', JSON.stringify(toast));
+    ok('and changes nothing', await statState() === nestedBefore);
+    const built = await page.evaluate(() => { try { buildStats(); forecast7(); return true; } catch (e) { return e.message; } });
+    ok('and the Progress screen still builds', built === true, String(built));
+  }
+
+  /* The valid round trip: a whole day record is restored and read. */
+  const dayToast = await page.evaluate(async ({ fn, text }) => {
+    const t = document.getElementById('toast'); if (t) t.textContent = '';
+    await (new Function('return ' + fn))()(text);
+    return (document.getElementById('toast') || {}).textContent || '';
+  }, { fn: restore, text: JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 } },
+    srs: { BKUP_1: { reps: 3, due: '2026-11-01', stability: 4, difficulty: 5 } } } }) });
+  ok('a backup with a well-formed day record is restored', dayToast === 'Annotations restored.', JSON.stringify(dayToast));
+  ok('and the Progress screen reads it', await page.evaluate(() => {
+    try { buildStats(); forecast7(); } catch (e) { return e.message; }
+    return S.daily['2026-10-09'].a === 7 && JSON.parse(localStorage.getItem('accsap12.v2')).daily['2026-10-09'].c === 5;
+  }) === true);
+
   head('reference images survive a backup on a different device');
   const exported=await page.evaluate(async()=>{
     const raw=atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXGQAAAAASUVORK5CYII=');

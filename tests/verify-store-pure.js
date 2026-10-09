@@ -182,6 +182,94 @@ function reload(prev, opts) {
        JSON.parse(b.ls.get('accsap12.store.fellback') || '[]').indexOf(KEY) > -1);
   }
 
+  /* A deletion made while the database refused writes. The session that made
+     it was hydrated from the database, so its fallback copy is whole: a key
+     missing from it was deleted, and recovery must not fold it back in. */
+  const CHAT = 'accsap12.chat';
+  const deletedAcross = async (key, before, after) => {
+    const a = makeWeb({ seed: { [key]: before }, putFails: true });
+    const A = loadStore(a);
+    await A.ready();
+    ok('(the session was hydrated from the database)', JSON.stringify(A.get(key)) === JSON.stringify(before),
+       JSON.stringify(A.get(key)));
+    A.set(key, after);
+    await settle();
+    const b = reload(a, {});
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    return { app: B.get(key), db: b.db.get(key), ls: b.ls.get(key),
+             stamps: [b.ls.get('accsap12.store.fellback'), b.ls.get('accsap12.store.fellback.whole')] };
+  };
+
+  head('a deletion made while the database refused writes stays deleted');
+  {
+    const r = await deletedAcross(KEY, { keep: { t: 'kept' }, gone: { t: 'deleted' } }, { keep: { t: 'kept' } });
+    ok('the deleted note does not come back to the app', JSON.stringify(r.app) === '{"keep":{"t":"kept"}}', JSON.stringify(r.app));
+    ok('nor to the database', JSON.stringify(r.db) === '{"keep":{"t":"kept"}}', JSON.stringify(r.db));
+    ok('the local copy is cleared once across', r.ls === undefined);
+    ok('and both stamps with it', r.stamps[0] === undefined && r.stamps[1] === undefined, JSON.stringify(r.stamps));
+  }
+
+  head('deleting the last note leaves no notes');
+  {
+    const r = await deletedAcross(KEY, { only: { t: 'the last one' } }, {});
+    ok('the app reads an empty map', JSON.stringify(r.app) === '{}', JSON.stringify(r.app));
+    ok('and the database holds one', JSON.stringify(r.db) === '{}', JSON.stringify(r.db));
+  }
+
+  head('a conversation cleared while the database refused writes stays cleared');
+  {
+    const r = await deletedAcross(CHAT, { Q1: [{ content: 'cleared' }], Q2: [{ content: 'kept' }] },
+                                  { Q2: [{ content: 'kept' }] });
+    ok('the cleared conversation does not come back', JSON.stringify(r.app) === '{"Q2":[{"content":"kept"}]}', JSON.stringify(r.app));
+    ok('nor to the database', JSON.stringify(r.db) === '{"Q2":[{"content":"kept"}]}', JSON.stringify(r.db));
+  }
+
+  head('a later session without the database, started from a whole copy, deletes too');
+  {
+    /* A: hydrated, writes refused, leaves a whole copy. C: no database at all,
+       boots on that copy and deletes from it. B: the database is back. */
+    const a = makeWeb({ seed: { [KEY]: { keep: 1, gone: 1 } }, putFails: true });
+    const A = loadStore(a);
+    await A.ready();
+    A.set(KEY, { keep: 1, gone: 1, added: 1 });
+    await settle();
+    const c = reload(a, { openFails: true });
+    const C = loadStore(c);
+    await C.ready();
+    ok('(C booted on the local copy)', JSON.stringify(C.get(KEY)) === '{"keep":1,"gone":1,"added":1}', JSON.stringify(C.get(KEY)));
+    C.set(KEY, { keep: 1, added: 1 });
+    await settle();
+    const b = reload(c, {});
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    ok('the note deleted in C stays deleted', JSON.stringify(B.get(KEY)) === '{"keep":1,"added":1}', JSON.stringify(B.get(KEY)));
+  }
+
+  head('a session that never saw the database still folds, and loses nothing');
+  {
+    /* The other side of the same line. The database will not open and
+       localStorage has nothing (the key migrated long ago), so the app starts
+       from an empty map: a note it writes is new, and the database's notes
+       are ones it never saw, not ones it deleted. Taking its copy whole would
+       throw all of them away. */
+    const a = makeWeb({ openFails: true });
+    const A = loadStore(a);
+    await A.ready();
+    A.set(KEY, { fresh: 1 });
+    await settle();
+    ok('(its copy is not marked whole)', a.ls.get('accsap12.store.fellback.whole') === undefined,
+       String(a.ls.get('accsap12.store.fellback.whole')));
+    const b = reload(a, {});
+    b.db.set(KEY, { older: 1 });
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    ok('the notes it never saw are kept, and its own is added', JSON.stringify(B.get(KEY)) === '{"older":1,"fresh":1}', JSON.stringify(B.get(KEY)));
+  }
+
   /* ── the mirror ─────────────────────────────────────────────────────────
      accsap12.v2 — the FSRS cards, the chapter statistics, the streak — stays
      in localStorage because load() reads it synchronously at boot. That makes
