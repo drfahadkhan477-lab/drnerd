@@ -1,10 +1,13 @@
 name: webkit-selftest-probe (measurement, not for merge)
 
-# TEMPORARY. Measures why verify-selftest.js loses its page in WebKit on
-# synthetic-webkit ("the browser CRASHED the page", at a different check each
-# time). Runs the suite repeatedly while sampling WebKit's memory and the
-# kernel log, so the crash can be told apart from the OOM killer. Deleted
-# before this branch is merged.
+# TEMPORARY. verify-selftest.js loses its page in WebKit ("the browser CRASHED
+# the page"). Round 1 measured 15 crashes in 24 runs, every one a
+# "trap invalid opcode in libWPEWebKit" (a WebKit release assertion) in the
+# web process or its ThreadedCompositor thread, with WebKit at ~150 MB and
+# 12 GB free: not memory. Round 2 runs the same suite against copies of the
+# build with one compositing ingredient of the figure viewer switched off each,
+# to find which one the assertion needs. Only the probe's copy of the build is
+# altered. Deleted before this branch is merged.
 
 on:
   push:
@@ -16,13 +19,14 @@ permissions:
 
 jobs:
   probe:
-    name: selftest in WebKit, shard ${{ matrix.shard }}
+    name: selftest in WebKit, ${{ matrix.variant }}, shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        variant: [baseline, no-motion, no-backdrop, no-will-change]
+        shard: [1, 2, 3]
     env:
       SYSTOLE_ENGINE: webkit
     steps:
@@ -34,32 +38,33 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps webkit
-      - name: build the synthetic app
+      - name: build the synthetic app, then switch one ingredient off
         run: |
           node scripts/synthetic-export.js build/synthetic/export.html
           node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
-          ls -la build/synthetic/systole.html
-          nproc; free -m
-      - name: run verify-selftest four times, sampling memory
+          case "${{ matrix.variant }}" in
+            no-motion)      CSS='*,*::before,*::after{animation:none!important;transition:none!important}' ;;
+            no-backdrop)    CSS='*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}' ;;
+            no-will-change) CSS='.figv-scroll img{will-change:auto!important}' ;;
+            *)              CSS='' ;;
+          esac
+          if [ -n "$CSS" ]; then
+            node -e 'const fs=require("fs"),f="build/synthetic/systole.html",s=fs.readFileSync(f,"utf8"),i=s.lastIndexOf("</head>");if(i<0)process.exit(2);fs.writeFileSync(f,s.slice(0,i)+"<style id=\"probe\">"+process.argv[1]+"</style>"+s.slice(i))' "$CSS"
+            grep -c 'id="probe"' build/synthetic/systole.html
+          fi
+          grep -m1 "model name" /proc/cpuinfo
+      - name: run verify-selftest four times
         run: |
           set +e
+          crashes=0
           for i in 1 2 3 4; do
             sudo dmesg -C 2>/dev/null
-            ( peak=0; while :; do
-                r=$(ps -eo rss,comm | awk 'tolower($2) ~ /webkit|minibrowser|pw_run/ {s+=$1} END {print s+0}')
-                [ "$r" -gt "$peak" ] && peak=$r && echo "$peak" > /tmp/peak
-                free -m | awk '/Mem:/ {print $7}' >> /tmp/avail
-                sleep 0.5; done ) & SAMPLER=$!
-            start=$(date +%s)
-            DEBUG=pw:browser node tests/verify-selftest.js build/synthetic/systole.html > /tmp/out.txt 2> /tmp/err.txt
+            node tests/verify-selftest.js build/synthetic/systole.html > /tmp/out.txt 2>&1
             code=$?
-            kill $SAMPLER 2>/dev/null; wait $SAMPLER 2>/dev/null
-            echo "=== shard ${{ matrix.shard }} iteration $i: exit $code after $(( $(date +%s) - start ))s; peak WebKit RSS $(( $(cat /tmp/peak 2>/dev/null || echo 0) / 1024 )) MB; min available $(sort -n /tmp/avail | head -1) MB"
-            grep -E "passed, [0-9]+ failed|last section|checks completed|page events" /tmp/out.txt
-            if [ $code -ne 0 ]; then
-              echo "--- kernel log"; sudo dmesg | grep -iE "oom|killed process|segfault|trap|WebKit" | tail -20
-              echo "--- browser stderr (crash lines)"; grep -iE "crash|signal|abort|SIG|terminated|ASSERT|WebProcess" /tmp/err.txt | tail -30
-            fi
-            rm -f /tmp/peak /tmp/avail
+            trap_line=$(sudo dmesg | grep -m1 "traps:" | sed -E 's/.*traps: //; s/ ip:.*//')
+            [ -n "$trap_line" ] && crashes=$((crashes+1))
+            echo "=== ${{ matrix.variant }} shard ${{ matrix.shard }} iteration $i: exit $code; trap: ${trap_line:-none}; $(grep -E 'passed, [0-9]+ failed' /tmp/out.txt)"
+            grep -E "^  FAIL" /tmp/out.txt | head -5
           done
+          echo "=== RESULT ${{ matrix.variant }} shard ${{ matrix.shard }}: $crashes crash(es) in 4"
           exit 0
