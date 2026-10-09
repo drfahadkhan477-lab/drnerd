@@ -6197,29 +6197,52 @@ function render(){
   lastScreen = S.screen;
   const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   try{
-    if(changingScreen && document.startViewTransition && !reduced){
+    if(changingScreen && document.startViewTransition && !reduced && !document.hidden){
+      /* STOPPED, THEN TWO FRAMES, THEN THE TRANSITION. Stopping alone is not
+         enough: on Windows WebKit 26.6 the page still died when the
+         transition started in the same task, with every animation cancelled
+         or switched off by CSS (rc's experiments, 2 of 2 each). Cancelling
+         and then waiting two frames survived (2 of 2), so the layers have to
+         be gone before the snapshot is taken. A newer screen change inside
+         those frames supersedes this one, and a hidden page (which runs no
+         frames) takes the instant swap below rather than never swapping. */
       stillOutgoing();
-      const vt=document.startViewTransition(()=>renderNow());
-      vt.updateCallbackDone.catch(showCrashScreen);
-      /* A TRANSITION SKIPPED BY THE NEXT ONE IS NAVIGATION, NOT A FAILURE.
-         startViewTransition hands back three promises. Only updateCallbackDone
-         can carry a render throw, which is why it alone reaches the crash
-         screen — curate-patch.js records why that must not be loosened. But
-         ready and finished reject with AbortError whenever a newer transition
-         starts before the current one settles, and a fellow tapping through
-         screens faster than the animation does exactly that. Unhandled, those
-         become unhandled promise rejections: harmless to the app, and enough
-         to fail every "no console or page errors" check in the suite — which
-         is how this was found, on a newer Chromium than it was written on.
-         Swallowed, not reported: there is nothing here to tell anybody. */
-      if(vt.ready) vt.ready.catch(()=>{});
-      if(vt.finished) vt.finished.catch(()=>{});
+      const token=++vtToken;
+      vtPending=true;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(token!==vtToken) return;
+        vtPending=false;
+        try{ startScreenTransition(); }catch(err){ showCrashScreen(err); }
+      }));
     } else {
+      /* Anything else draws now. A redraw during the two frames supersedes the
+         pending transition: the new screen is already up, so fading to it
+         would show nothing, and fading later over its fresh animations is
+         the crash this waits to avoid. */
+      vtToken++; vtPending=false;
       renderNow();
     }
   }catch(err){
     showCrashScreen(err);
   }
+}
+let vtToken=0, vtPending=false;
+function startScreenTransition(){
+  const vt=document.startViewTransition(()=>renderNow());
+  vt.updateCallbackDone.catch(showCrashScreen);
+  /* A TRANSITION SKIPPED BY THE NEXT ONE IS NAVIGATION, NOT A FAILURE.
+     startViewTransition hands back three promises. Only updateCallbackDone
+     can carry a render throw, which is why it alone reaches the crash
+     screen — curate-patch.js records why that must not be loosened. But
+     ready and finished reject with AbortError whenever a newer transition
+     starts before the current one settles, and a fellow tapping through
+     screens faster than the animation does exactly that. Unhandled, those
+     become unhandled promise rejections: harmless to the app, and enough
+     to fail every "no console or page errors" check in the suite — which
+     is how this was found, on a newer Chromium than it was written on.
+     Swallowed, not reported: there is nothing here to tell anybody. */
+  if(vt.ready) vt.ready.catch(()=>{});
+  if(vt.finished) vt.finished.catch(()=>{});
 }
 function renderNow(){
   const app=document.getElementById('app');
