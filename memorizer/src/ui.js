@@ -21,8 +21,8 @@ var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS 
 var Skill = root.MemSkill;
 var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance, Study = root.MemStudy, Pack = root.MemPack;
 
-var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
-                sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
+var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.8/dist/mermaid.min.js',
+                sri: 'sha384-N3QqR/7q+xm3BGX+CBbNI8AUmRRqcsDzToy+0z1NLDI0QmTKW8zvwLvqulJgk3dP' };
 
 var ui = {
   openSeq: 0, drafts: {},
@@ -677,6 +677,11 @@ var chartSeq = 0;
 function flowchart(code) {
   var box = h('div.chart', h('p.muted', 'Drawing the diagram…'));
   var fallback = function () { box.textContent = ''; box.appendChild(h('pre.chart-src', code)); };
+  /* Only a flowchart reaches Mermaid (MemStudyImport.isFlowchart): this code
+     comes from a study file or a pasted pack, and Mermaid's other diagram
+     types are where its injection advisories are. Anything else is shown as
+     its text. */
+  if (!root.MemStudyImport || !root.MemStudyImport.isFlowchart(code)) { fallback(); return box; }
   mermaid().then(function (M) {
     return M.render('mchart' + (++chartSeq), code).then(function (out) {
       box.innerHTML = out.svg;
@@ -4378,6 +4383,6 @@ function start() {
   });
 }
 
-root.Memorizer = { makeStudyCards: makeStudyCards, aiCase: aiCase, startPractice: startPractice, motion: { seek: seek, total: total, replay: replay }, ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc, importStudyUnit: importStudyUnit, showStudyImportDialog: showStudyImportDialog };
+root.Memorizer = { flowchart: flowchart, makeStudyCards: makeStudyCards, aiCase: aiCase, startPractice: startPractice, motion: { seek: seek, total: total, replay: replay }, ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc, importStudyUnit: importStudyUnit, showStudyImportDialog: showStudyImportDialog };
 if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(window);

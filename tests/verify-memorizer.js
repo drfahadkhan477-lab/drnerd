@@ -430,7 +430,7 @@ function kindOf(user) {
      verify-engine requires of every browser suite. */
   const page = watch(await (await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' })).newPage(), events, '', errors);
   await page.addInitScript(() => {
-    try { localStorage.setItem('memorizer.ai.v1', JSON.stringify({ provider: 'anthropic', model: 'claude-opus-5', key: 'sk-ant-stub' })); } catch (_) {}
+    try { localStorage.setItem('memorizer.ai.v1', JSON.stringify({ provider: 'anthropic', model: 'claude-opus-5-5', key: 'sk-ant-stub' })); } catch (_) {}
   });
   /* jsDelivr is fetched from the Node side and handed to the page. Not to
      change what is served — the bytes are jsDelivr's own, and the page still

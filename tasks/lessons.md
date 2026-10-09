@@ -78,7 +78,30 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   under test from the file that ships (app/, src/), between anchors that must
   each occur once; never from a build step, and never a copy kept in the test.
 
+- **A replace-instead-of-merge rule tested only at the moment it is written.**
+  #224 marked a fallback copy "whole" so recovery would take it over the
+  database; every test ended the session right after the fallback. A review
+  found the copy outliving later writes that did land, so the next launch threw
+  them away, where the old merge had kept them. → Rule: when a copy gains
+  authority over another, test what happens to it after the other moves on
+  (a later successful write, a second session) before trusting it.
+- **A fake whose options were copied.** A store test turned `putFails` off
+  mid-session on an options object `reload()` had already copied, so the
+  "write that lands" never landed and the check passed an injected defect.
+  → Rule: when a test changes the fake's behaviour mid-run, assert the effect
+  (the value is in the database) as a precondition before the claim.
+
 ## Process
+
+- **A debug copy that edited a different line than the one I then read.** To see
+  why verify-voicescreen timed out, I replaced "line 163" in a copy, but an edit
+  just before had moved the wait I meant; the state I printed belonged to another
+  wait, I read it as "the condition was already true", blamed rAF polling, and
+  pushed a 100 ms poll that passed 20 runs here by luck and failed CI. The real
+  cause was in the app (a voice listener outliving its session). -> Rule: in a
+  debug copy, anchor the edit on the line's text, not its number, and print which
+  wait fired with the state; and treat "0 of N" on a flake as evidence only when N
+  is several times the runs a failure took before.
 
 - **A browser upgrade judged on Chromium alone.** I moved playwright 1.56 -> 1.64
   (released the day before) after a green local Chromium run; both CI WebKit jobs
@@ -174,3 +197,5 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   crashed page, read `dmesg` on the runner before reading the suite, and isolate the
   trigger by switching ingredients off in a copy of the build across enough runs to
   count (PR #211: 14/24 crashed as built, 0/36 with motion off, 0/32 with the fix).
+
+- **A handoff inherited a different browser.** A laptop task required Chromium but its command omitted --engine, so SYSTOLE_ENGINE could select Firefox or WebKit. → Rule: when a result requires a specific browser, pin it in the command and verify the flag wins over the inherited environment.

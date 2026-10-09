@@ -291,7 +291,7 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
   {
     const held = [];
     const r = await context('late', () => {
-      try { localStorage.setItem('memorizer.ai.v1', JSON.stringify({ provider: 'anthropic', model: 'claude-opus-5', key: 'sk-ant-stub' })); } catch (_) {}
+      try { localStorage.setItem('memorizer.ai.v1', JSON.stringify({ provider: 'anthropic', model: 'claude-opus-5-5', key: 'sk-ant-stub' })); } catch (_) {}
       /* Counts model replies once read, so a wait can know the app has had
          one; the app's own handling runs in the microtasks straight after. */
       const text = Response.prototype.text;
@@ -589,6 +589,20 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
       const saved = await MemStore.get('files', 'synthetic-large-binary'), bytes = new Uint8Array(saved.bytes);
       return bytes.length === 8 * 1024 * 1024 && bytes.every((v, i) => v === ((i * 31 + (i >>> 16)) & 255));
     }));
+    // Writes queued and not awaited before a restore belong to the replaced
+    // data. Before restore joined the write queue they ran after its
+    // transaction and left their records on top of the restored database.
+    const raced = await r.evaluate(async text => {
+      const pending = [];
+      for (let i = 0; i < 100; i++) pending.push(MemStore.put('meta', { id: 'stale-' + i, at: i }));
+      pending.push(MemStore.put('meta', { id: 'notes', recs: { 'stale:0': { text: 'STALE' } } }));
+      await MemBackup.restore(text);
+      await Promise.allSettled(pending);
+      const meta = await MemStore.all('meta'), want = (await MemBackup.inspect(text)).stores.meta.map(m => m.id).sort();
+      const notes = meta.find(m => m.id === 'notes');
+      return { ids: meta.map(m => m.id).sort().join(','), want: want.join(','), stale: !!(notes && JSON.stringify(notes).includes('STALE')) };
+    }, backup);
+    ok('writes queued before a restore cannot land on the restored IndexedDB database', raced.ids === raced.want && !raced.stale, JSON.stringify(raced).slice(0, 200));
   }
 
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');

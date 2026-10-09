@@ -182,6 +182,174 @@ function reload(prev, opts) {
        JSON.parse(b.ls.get('accsap12.store.fellback') || '[]').indexOf(KEY) > -1);
   }
 
+  /* A deletion made while the database refused writes. The session that made
+     it was hydrated from the database, so its fallback copy is whole: a key
+     missing from it was deleted, and recovery must not fold it back in. */
+  const CHAT = 'accsap12.chat';
+  const deletedAcross = async (key, before, after) => {
+    const a = makeWeb({ seed: { [key]: before }, putFails: true });
+    const A = loadStore(a);
+    await A.ready();
+    ok('(the session was hydrated from the database)', JSON.stringify(A.get(key)) === JSON.stringify(before),
+       JSON.stringify(A.get(key)));
+    A.set(key, after);
+    await settle();
+    const b = reload(a, {});
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    return { app: B.get(key), db: b.db.get(key), ls: b.ls.get(key),
+             stamps: [b.ls.get('accsap12.store.fellback'), b.ls.get('accsap12.store.fellback.whole')] };
+  };
+
+  head('a deletion made while the database refused writes stays deleted');
+  {
+    const r = await deletedAcross(KEY, { keep: { t: 'kept' }, gone: { t: 'deleted' } }, { keep: { t: 'kept' } });
+    ok('the deleted note does not come back to the app', JSON.stringify(r.app) === '{"keep":{"t":"kept"}}', JSON.stringify(r.app));
+    ok('nor to the database', JSON.stringify(r.db) === '{"keep":{"t":"kept"}}', JSON.stringify(r.db));
+    ok('the local copy is cleared once across', r.ls === undefined);
+    ok('and both stamps with it', r.stamps[0] === undefined && r.stamps[1] === undefined, JSON.stringify(r.stamps));
+  }
+
+  head('deleting the last note leaves no notes');
+  {
+    const r = await deletedAcross(KEY, { only: { t: 'the last one' } }, {});
+    ok('the app reads an empty map', JSON.stringify(r.app) === '{}', JSON.stringify(r.app));
+    ok('and the database holds one', JSON.stringify(r.db) === '{}', JSON.stringify(r.db));
+  }
+
+  head('a conversation cleared while the database refused writes stays cleared');
+  {
+    const r = await deletedAcross(CHAT, { Q1: [{ content: 'cleared' }], Q2: [{ content: 'kept' }] },
+                                  { Q2: [{ content: 'kept' }] });
+    ok('the cleared conversation does not come back', JSON.stringify(r.app) === '{"Q2":[{"content":"kept"}]}', JSON.stringify(r.app));
+    ok('nor to the database', JSON.stringify(r.db) === '{"Q2":[{"content":"kept"}]}', JSON.stringify(r.db));
+  }
+
+  head('a later session without the database, started from a whole copy, deletes too');
+  {
+    /* A: hydrated, writes refused, leaves a whole copy. C: no database at all,
+       boots on that copy and deletes from it. B: the database is back. */
+    const a = makeWeb({ seed: { [KEY]: { keep: 1, gone: 1 } }, putFails: true });
+    const A = loadStore(a);
+    await A.ready();
+    A.set(KEY, { keep: 1, gone: 1, added: 1 });
+    await settle();
+    const c = reload(a, { openFails: true });
+    const C = loadStore(c);
+    await C.ready();
+    ok('(C booted on the local copy)', JSON.stringify(C.get(KEY)) === '{"keep":1,"gone":1,"added":1}', JSON.stringify(C.get(KEY)));
+    C.set(KEY, { keep: 1, added: 1 });
+    await settle();
+    const b = reload(c, {});
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    ok('the note deleted in C stays deleted', JSON.stringify(B.get(KEY)) === '{"keep":1,"added":1}', JSON.stringify(B.get(KEY)));
+  }
+
+  head('a session that never saw the database still folds, and loses nothing');
+  {
+    /* The other side of the same line. The database will not open and
+       localStorage has nothing (the key migrated long ago), so the app starts
+       from an empty map: a note it writes is new, and the database's notes
+       are ones it never saw, not ones it deleted. Taking its copy whole would
+       throw all of them away. */
+    const a = makeWeb({ openFails: true });
+    const A = loadStore(a);
+    await A.ready();
+    A.set(KEY, { fresh: 1 });
+    await settle();
+    ok('(its copy is not marked whole)', a.ls.get('accsap12.store.fellback.whole') === undefined,
+       String(a.ls.get('accsap12.store.fellback.whole')));
+    const b = reload(a, {});
+    b.db.set(KEY, { older: 1 });
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    ok('the notes it never saw are kept, and its own is added', JSON.stringify(B.get(KEY)) === '{"older":1,"fresh":1}', JSON.stringify(B.get(KEY)));
+  }
+
+  head('a write that lands after a fallback retires the local copy');
+  {
+    /* One refused write leaves a whole local copy; the next write reaches the
+       database. That copy is now OLDER than the database, and taken whole on
+       the next launch it would throw away everything written after it. */
+    const opts = { seed: { [KEY]: { a: 1 } }, putFails: true };
+    const a = makeWeb(opts);
+    const A = loadStore(a);
+    await A.ready();
+    A.set(KEY, { a: 1, b: 1 });
+    await settle();
+    ok('(the refused write fell back)', a.ls.get(KEY) !== undefined);
+    opts.putFails = false;
+    A.set(KEY, { a: 1, b: 1, c: 1 });
+    await settle();
+    ok('the stale local copy is removed once the database has the newer value', a.ls.get(KEY) === undefined,
+       String(a.ls.get(KEY)));
+    ok('and so are its stamps', a.ls.get('accsap12.store.fellback') === undefined &&
+       a.ls.get('accsap12.store.fellback.whole') === undefined);
+    const b = reload(a, {});
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    ok('the next launch keeps what was written after the fallback', JSON.stringify(B.get(KEY)) === '{"a":1,"b":1,"c":1}',
+       JSON.stringify(B.get(KEY)));
+  }
+
+  head('a local copy migration could not move is loaded, and survives the session');
+  {
+    /* X leaves a whole local copy. Y's migration cannot write it (the database
+       still refuses), so it stays in localStorage — but Y must still load it,
+       or Y works from the older database value, and whatever Y then writes is
+       either missing the copy's entries or is overwritten by the copy later. */
+    const x = makeWeb({ seed: { [KEY]: { a: 1 } }, putFails: true });
+    const X = loadStore(x);
+    await X.ready();
+    X.set(KEY, { a: 1, b: 1 });
+    await settle();
+    /* Built by hand, not with reload(): reload() copies its options, so
+       turning putFails off afterwards would never reach the fake. */
+    const opts = { seed: Object.fromEntries(x.db), putFails: true };
+    const y = makeWeb(opts);
+    for (const [k, v] of x.ls) y.ls.set(k, v);
+    const Y = loadStore(y);
+    await Y.ready();
+    await settle();
+    ok('the session loads the entry only the local copy has', JSON.stringify(Y.get(KEY)) === '{"a":1,"b":1}',
+       JSON.stringify(Y.get(KEY)));
+    opts.putFails = false;
+    Y.set(KEY, Object.assign({}, Y.get(KEY), { c: 1 }));
+    await settle();
+    ok('(the session\'s write reached the database)', JSON.stringify(y.db.get(KEY)) === '{"a":1,"b":1,"c":1}',
+       JSON.stringify(y.db.get(KEY)));
+    ok('and the copy it loaded is retired', y.ls.get(KEY) === undefined, String(y.ls.get(KEY)));
+    const z = reload(y, {});
+    const Z = loadStore(z);
+    await Z.ready();
+    await settle();
+    ok('the next launch has both the copy\'s entry and the session\'s write', JSON.stringify(Z.get(KEY)) === '{"a":1,"b":1,"c":1}',
+       JSON.stringify(Z.get(KEY)));
+  }
+
+  head('a write made before hydration that the database refuses is kept');
+  {
+    /* set() before ready() is flushed by ready() against the merged value. The
+       flush's result was thrown away, so a refused flush left no copy at all. */
+    const a = makeWeb({ seed: { [KEY]: { a: 1, gone: 1 } }, putFails: true });
+    const A = loadStore(a);
+    A.set(KEY, { a: 1, early: 1 });
+    await A.ready();
+    await settle();
+    ok('the refused flush fell back to localStorage', a.ls.get(KEY) !== undefined,
+       a.ls.get(KEY) === undefined ? 'LOST — neither store has it' : String(a.ls.get(KEY)));
+    const b = reload(a, {});
+    const B = loadStore(b);
+    await B.ready();
+    await settle();
+    ok('and the next launch has the early write', JSON.stringify(B.get(KEY)).indexOf('early') > -1, JSON.stringify(B.get(KEY)));
+  }
+
   /* ── the mirror ─────────────────────────────────────────────────────────
      accsap12.v2 — the FSRS cards, the chapter statistics, the streak — stays
      in localStorage because load() reads it synchronously at boot. That makes

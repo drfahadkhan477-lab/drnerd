@@ -278,20 +278,20 @@ function bodyKey(body) {
    app carries the result.
 
    The table holds no text: per note fingerprint, where its pearl is and its
-   score, or — for a note with none — the note's length. harvest() rebuilds
-   the run from the note it is given and uses the entry only if that run is
-   still a pearl with that score; anything else — no table, an edited note, an
-   entry that does not fit — and the note is searched exactly as before. So a
-   pearl that is shown is always this code's verdict on the note as it stands.
+   score. harvest() rebuilds the run from the note it is given and uses the
+   entry only if that run is still a pearl with that score; anything else — no
+   table, no entry, an edited note, an entry that does not fit — and the note is
+   searched exactly as before. So what is shown is always this code's verdict on
+   the note as it stands, and a table can only ever save time.
 
-   "NONE" IS TAKEN ON TRUST, AND ONLY THAT. Checking that a note has no pearl
-   is the search itself, so a no-pearl entry cannot be re-checked the way a
-   span is. Two 32-bit fingerprints colliding — a note you wrote against a
-   seeded note with no pearl — would hide your note's pearl. The entry carries
-   the note's length so that a collision must also match it; that makes it
-   rarer, not impossible. It is the same fingerprint refSeedApply() trusts to
-   tell an edited seeded note from an untouched one. A span entry cannot hide
-   anything: on the wrong note it fails its checks and the note is searched.
+   A NOTE WITH NO PEARL HAS NO ENTRY, AND IS SEARCHED. "None" cannot be
+   re-checked the way a span is: checking that a note has no pearl is the search
+   itself. An entry saying so would be taken on the 32-bit fingerprint alone, and
+   a note you wrote that collided with a seeded no-pearl note would lose its
+   pearl with nothing to notice. (An earlier version stored the note's length to
+   make that rarer; the owner chose the full guarantee over the time.) A span
+   entry cannot hide anything: on the wrong note it fails its checks and the note
+   is searched.
 
    WHERE, AS A SPAN OF THE RAW NOTE. The first table named the run by
    paragraph and sentence index, and the owner's profile showed what that
@@ -312,7 +312,7 @@ function bake(notes) {
   for (const r of (notes || [])) {
     const body = String(r.body || '');
     const b = bestRun(body);
-    if (!b || b.score < 5) { table[bodyKey(body)] = body.length; continue; }
+    if (!b || b.score < 5) continue;
     /* The run's words, with any whitespace between them, in the raw note.
        Build time only: a RegExp per note is nothing here, and the app never
        makes one. */
@@ -342,9 +342,7 @@ function harvest(notes, table) {
     let best;
     if (has) {
       const k = bodyKey(r.body);
-      const e = has(k) ? table[k] : undefined;
-      if (typeof e === 'number') best = e === String(r.body || '').length ? null : undefined;
-      else if (e !== undefined) best = fromTable(r.body, e);
+      if (has(k)) best = fromTable(r.body, table[k]);
     }
     if (best === undefined) best = bestRun(r.body);
     if (best && best.score >= 5) {

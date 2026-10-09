@@ -1372,7 +1372,7 @@ root.Wiggers = { mount, VIEWS };
 })(typeof window !== 'undefined' ? window : this);
 
 /* the heart's surfaces, baked by scripts/apex-patch.js — build-pwa moves the base64 into content/ */
-window.HEART3D_MESH_KEY='41dee7355a06f1b4';
+window.HEART3D_MESH_KEY='e3900ba5129647e7';
 window.HEART3D_MESH_B64='@@SLOT[payload:HEART_MESH]@@';
 
 /* ═══════════ cardiac waveform engine — original, offline, no external assets ═══════════
@@ -2083,7 +2083,7 @@ async function exportMarkup(){
   try{
   await Store.ready();
   if(typeof flushLog==='function') flushLog();
-  const assets=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{};
+  const {assets,missing}=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{assets:{},missing:[]};
   const blob=new Blob([JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
     refs:(typeof REF!=='undefined'?REF:[]),
     log:(typeof LOG!=='undefined'?LOG:[]),
@@ -2095,8 +2095,9 @@ async function exportMarkup(){
   a.href=URL.createObjectURL(blob);
   a.download='accsap12-annotations-'+new Date().toISOString().slice(0,10)+'.json';
   a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
   return true;
-  }catch(_){ toast('Backup could not be exported. Check that your reference images are available.'); return false; }
+  }catch(_){ toast('Backup could not be exported.'); return false; }
 }
 function validateAnnotationBackup(d){
   const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -5569,6 +5570,20 @@ let FOREIGN={};
 function progressFromBackup(raw){
   const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
   for(const k of ['chStats','srs','daily','practice','resume']) if(raw[k]!=null&&!record(raw[k])) throw new Error('Invalid statistics.');
+  /* Every entry too, before anything is stored: the Progress screen and the
+     scheduler read them field by field (d.a in buildStats, S.srs[id].due in
+     forecast7), so one null day passed here, was saved, and crashed Progress
+     on every later launch. A field is checked where the app reads it; one
+     that is absent is left to the reader's own default, as it always was. */
+  const count=v=>v==null||(Number.isFinite(v)&&v>=0);
+  const entries=(k,fields,need,extra)=>{ for(const v of Object.values(raw[k]||{})){
+    if(!record(v)||fields.some(f=>!count(v[f]))||need.some(f=>v[f]==null)||(extra&&!extra(v))) throw new Error('Invalid statistics.');
+  }};
+  entries('daily',['a','c','r'],['a','c']);
+  entries('chStats',['correct','total'],[]);
+  entries('practice',['n','c','t'],[]);
+  entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string'));
+  entries('resume',['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')));
   for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
     if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');
   for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');
@@ -5842,12 +5857,21 @@ function voiceSay(text){
     try{ const u=new SpeechSynthesisUtterance(text); u.onend=fin; u.onerror=fin; speechSynthesis.speak(u); }catch(_){ fin(); }
   });
 }
+/* The listener that is open now, so stopVoice() can close it at once. It used
+   to close only when its own 250 ms watch next looked, and the watch asked
+   whether ANY session was running: stop, start again inside that quarter
+   second, and the old listener stayed open and took the new session's first
+   answer, which its ended session then threw away ("I did not catch that").
+   verify-voicescreen found it once WebKit's screen swaps became instant. */
+let _hearing=null;
 function voiceHear(){
   if(_voice) voiceDock('listening','Say a letter, or “repeat”');
+  const session=_voice;
   return new Promise(res=>{
-    let done=false, rec=null; const fin=v=>{ if(!done){done=true;clearTimeout(t);clearInterval(watch);try{rec&&rec.stop();}catch(_){} res(v);} };
+    let done=false, rec=null; const fin=v=>{ if(!done){done=true;clearTimeout(t);clearInterval(watch);if(_hearing===fin)_hearing=null;try{rec&&rec.stop();}catch(_){} res(v);} };
+    _hearing=fin;
     const t=setTimeout(()=>fin(null),9000);
-    const watch=setInterval(()=>{ if(_voice===null||S.screen!=='quiz'){ clearInterval(watch); fin(null); } },250);   // the microphone does not stay open on another screen
+    const watch=setInterval(()=>{ if(_voice!==session||S.screen!=='quiz'){ clearInterval(watch); fin(null); } },250);   // the microphone does not stay open on another screen, or past its own session
     try{
       rec=new (VOICE_SR())(); rec.lang='en-US'; rec.interimResults=false; rec.maxAlternatives=1;
       rec.onresult=ev=>{ try{ fin(ev.results[0][0].transcript); }catch(_){ fin(null); } };
@@ -5887,7 +5911,7 @@ function startVoice(){
   const v=_voice={deck:S.questions,state:VoiceMode.init(S.questions.length),pending:[]};
   runVoice(v,{type:'start'});
 }
-function stopVoice(){ _voice=null; voiceDock(null); try{speechSynthesis.cancel();}catch(_){} }
+function stopVoice(){ _voice=null; if(_hearing) _hearing(null); voiceDock(null); try{speechSynthesis.cancel();}catch(_){} }
 async function runVoice(v,event){
   let queue=[event];
   while(queue.length&&_voice===v){
