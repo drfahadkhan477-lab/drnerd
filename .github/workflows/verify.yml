@@ -49,7 +49,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 88 suites that are pure Node with no Playwright and no
+#   logic        the 89 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -281,6 +281,8 @@ jobs:
         run: node tests/verify-notesearch-pure.js
       - name: the heart loads a mesh baked at build time, and refuses any other copy (37 checks)
         run: node tests/verify-heartbake-pure.js
+      - name: the pearls found at build time are the ones the search finds (18 checks)
+        run: node tests/verify-pearlbake-pure.js
       - name: the split build ships src/ without its comments, and nothing else changes (28 checks)
         run: node tests/verify-stripcomments-pure.js
       - name: the note figures load after the home screen, one unit at a time (29 checks)

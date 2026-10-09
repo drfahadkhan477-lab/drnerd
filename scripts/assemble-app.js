@@ -39,6 +39,7 @@ const { applyContentFlags } = require('./content-flags.js');
 const { buildRefSeed, REFS_DIR } = require('./ref-seed.js');
 const { buildRefImages, IMAGES_DIR } = require('./ref-images.js');
 const { bake } = require('./heart-bake.js');
+const { bakePearls } = require('./pearl-bake.js');
 const { gitCommit, stampBuffer, STAMP_RE } = require('./stamp.js');
 const { replaceWhole } = require('./atomic.js');
 
@@ -66,6 +67,8 @@ function producers({ exportHtml, refsDir = REFS_DIR, imagesDir = IMAGES_DIR, roo
       return m[1];
     },
     REF_SEED: () => buildRefSeed(refsDir).seed,
+    /* The seeded notes' pearls, found here rather than at launch (scripts/pearl-bake.js). */
+    REF_PEARLS: () => bakePearls(once('REF_SEED', PAYLOAD.REF_SEED)),
     REF_IMGS: () => buildRefImages(refsDir, imagesDir).json,
     HEART_MESH: () => bake(fs.readFileSync(path.join(root, 'src', 'core', 'heart3d.js'), 'utf8')).b64,
   };
