@@ -71,13 +71,25 @@ function slowest(results, n) {
   return all.sort((a, b) => b.ms - a.ms).slice(0, n);
 }
 
-/* Stop the child when the limit passes. Returns cancel(). onTimeout runs first,
-   so the runner can write the reason into the suite's output before 'close'. */
-function watch(child, limitMs, onTimeout) {
+/* group is true only for a child spawned detached on POSIX. Close its pipes
+   as well: a descendant may otherwise prevent 'close' after the parent exits. */
+function stop(child, group = false) {
+  for (const stream of [child.stdin, child.stdout, child.stderr]) {
+    try { if (stream) stream.destroy(); } catch (_) {}
+  }
+  if (process.platform === 'win32' && child.pid) {
+    require('child_process').execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'],
+      { windowsHide: true, timeout: 1000 }, () => { try { child.kill('SIGKILL'); } catch (_) {} });
+  } else {
+    try { if (group && child.pid) process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); }
+    catch (_) { try { child.kill('SIGKILL'); } catch (_) {} }
+  }
+}
+function watch(child, limitMs, onTimeout, group = false) {
   if (!limitMs) return () => {};
   const t = setTimeout(() => {
     try { onTimeout(); } catch (_) {}
-    try { child.kill('SIGKILL'); } catch (_) {}
+    stop(child, group);
   }, limitMs);
   if (t.unref) t.unref();
   return () => clearTimeout(t);
@@ -105,4 +117,4 @@ function spawnLimited(cmd, args, opts, limitMs, label) {
 
 const fmtMin = ms => (ms / MIN).toFixed(ms < 10 * MIN ? 1 : 0) + ' min';
 
-module.exports = { limitFor, sectionClock, slowest, watch, spawnLimited, fmtMin, FLOOR_MS, UNKNOWN_MS, FACTOR };
+module.exports = { limitFor, sectionClock, slowest, stop, watch, spawnLimited, fmtMin, FLOOR_MS, UNKNOWN_MS, FACTOR };

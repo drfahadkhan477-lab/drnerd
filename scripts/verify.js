@@ -536,7 +536,7 @@ const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 
 const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
 const { mergeRecord } = require(path.join(ROOT, 'scripts', 'record.js'));
-const { limitFor, sectionClock, slowest, watch, spawnLimited, fmtMin } = require(path.join(ROOT, 'scripts', 'suitetime.js'));
+const { limitFor, sectionClock, slowest, stop, watch, spawnLimited, fmtMin } = require(path.join(ROOT, 'scripts', 'suitetime.js'));
 /* `laptop`: a suite no CI job runs, so only a machine with the export ever
    does. Everything else GitHub runs on every pull request, on the synthetic
    bank or with no build at all, which makes `--tag laptop` the short routine
@@ -821,12 +821,21 @@ if (REPORT_JSON) process.on('exit', code => {
 });
 let stopScheduling = false;
 
+/* Detached suite groups need explicit cleanup when the runner is interrupted. */
+const activeChildren = new Set();
+const stopChildren = () => { for (const child of activeChildren) stop(child, true); activeChildren.clear(); };
+process.once('exit', stopChildren);
+for (const [signal, status] of [['SIGINT', 130], ['SIGTERM', 143]])
+  process.once(signal, () => { stopChildren(); process.exit(status); });
+
 function runSuite(name, claim) {
   return new Promise(resolve => {
     const t = Date.now();
     const ch = spawn(process.execPath, [path.join(ROOT, 'tests', `verify-${name}.js`), TARGET], {
       env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE },
+      detached: process.platform !== 'win32',
     });
+    activeChildren.add(ch);
     let out = '';
     /* Where the time went (scripts/suitetime.js): each "── section ──" heading
        timestamped as it arrives, and a ceiling past which the suite is stopped
@@ -840,12 +849,13 @@ function runSuite(name, claim) {
       const where = clock.current();
       out += `\nError: stopped by verify.js after ${fmtMin(Date.now() - t)} (its limit: ${fmtMin(limit)})`
         + (where ? ` in section "${where}"` : ' before its first section') + '\n';
-    });
+    }, true);
     const take = d => { const s = String(d); out += s; clock.feed(s, Date.now()); };
     ch.stdout.on('data', take);
     ch.stderr.on('data', take);
     ch.on('error', e => { out += '\n' + (e && e.message || e); });
     ch.on('close', status => {
+      activeChildren.delete(ch);
       cancel();
       const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
       const passed = m ? +m[1] : 0, failed = stopped ? null : (m ? +m[2] : null);

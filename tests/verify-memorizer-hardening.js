@@ -74,6 +74,9 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
   const browser = await launch();
   const outside = [];
   const context = async (tag, init) => {
+    /* Each case has its own storage. Finished animated pages must not keep
+       consuming WebKit processes and memory throughout the remaining cases. */
+    for (const previous of browser.contexts()) await previous.close();
     const ctx = await browser.newContext({ viewport: { width: 820, height: 1100 }, serviceWorkers: 'block' });
     const p = watch(await ctx.newPage(), events, tag, errors);
     /* The model's host is compared whole, after parsing: a pattern matched
@@ -590,6 +593,65 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
 
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));
+  head('deletion cancels failed writes without losing other units’ pending notes');
+  for (const wholeBook of [false,true]) {
+    const r=await context('delete pending writes');await r.goto(URL);await r.locator('#home-hero').waitFor(T);
+    const result=await r.evaluate(async wholeBook=>{
+      const id='delete-unit',keep='keep-unit',cluster={index:0,title:'Synthetic',text:'Synthetic source.',segments:[]};
+      const session={id,state:{docId:id,titles:['Synthetic'],per:{}}};
+      const ops=[{store:'docs',value:{id,clusters:[cluster]}},{store:'docs',value:{id:keep,clusters:[cluster]}},
+        {store:'sessions',value:session},{store:'meta',value:{id:'notes',recs:{[id+':0']:{text:'Old'},[keep+':0']:{text:'Keep'}}}}];
+      if(wholeBook)ops.push({store:'books',value:{id:'delete-book',parts:[],chapters:[{docId:id}]}});
+      await MemStore.batch(ops);
+      const put=IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put=function(v){if(this.name==='sessions'||(this.name==='meta'&&(v.id==='notes'||v.id==='unrelated')))
+        throw new DOMException('Synthetic full storage','QuotaExceededError');return put.apply(this,arguments);};
+      try{
+        await MemStore.saveStep(session,[{id:'delete-card',docId:id,cluster:0}]).catch(()=>{});
+        await MemStore.put('meta',{id:'notes',recs:{[id+':0']:{text:'Delete pending'},[keep+':0']:{text:'Rescue pending'}}}).catch(()=>{});
+        await MemStore.put('meta',{id:'unrelated',text:'Preserve this failed write'}).catch(()=>{});
+      }finally{IDBObjectStore.prototype.put=put;}
+      const del=IDBObjectStore.prototype.delete;
+      IDBObjectStore.prototype.delete=function(){if(this.name==='docs')throw new Error('Synthetic deletion failure');return del.apply(this,arguments);};
+      let deletionFailed=false;
+      try{await(wholeBook?MemStore.deleteBook('delete-book'):MemStore.deleteDoc(id)).catch(()=>{deletionFailed=true;});}
+      finally{IDBObjectStore.prototype.delete=del;}
+      const failedSnapshot=await MemStore.snapshot(),retained=deletionFailed&&!!(await MemStore.get('docs',id))&&failedSnapshot.cards.some(c=>c.id==='delete-card');
+      const getAll=IDBObjectStore.prototype.getAll,reads=[];
+      IDBObjectStore.prototype.getAll=function(){reads.push(this.name);return getAll.apply(this,arguments);};
+      try{if(wholeBook)await MemStore.deleteBook('delete-book');else await MemStore.deleteDoc(id);}
+      finally{IDBObjectStore.prototype.getAll=getAll;}
+      const boundedReads=reads.includes('cards')&&reads.includes('meta')&&reads.every(s=>s==='cards'||s==='meta');
+      const preview=await MemBackup.inspect(await MemBackup.exportText());
+      const pendingOther=!!MemStore.failureMessage();await MemStore.retryFailures();
+      const after={docs:(await MemStore.all('docs')).length,sessions:(await MemStore.all('sessions')).length,cards:(await MemStore.all('cards')).length};
+      const notes=await MemStore.get('meta','notes');
+      const race='race-unit';await MemStore.batch([{store:'docs',value:{id:race,clusters:[cluster]}}]);
+      const raceSession={id:race,state:{docId:race,titles:['Synthetic'],per:{}}};
+      const saving=MemStore.saveStep(raceSession,[]),deleting=MemStore.deleteDoc(race);
+      await Promise.all([saving,deleting]);
+      await MemStore.batch([{store:'docs',value:{id:race,clusters:[cluster]}}]);
+      const deletingAgain=MemStore.deleteDoc(race),late=MemStore.saveStep(raceSession,[]).then(()=>null,e=>e.name);
+      await deletingAgain;const lateError=await late;
+      await MemStore.batch([{store:'docs',value:{id,clusters:[cluster]}}]);
+      await MemStore.saveStep(session,[{id:'delete-card',docId:id,cluster:0}]);
+      const revived=!!(await MemStore.get('cards','delete-card'));
+      return {previewDocs:preview.docs,previewCards:preview.cards,after,pendingOther,retained,revived,boundedReads,
+        rescued:notes.recs[keep+':0'].text,deletedNote:!!notes.recs[id+':0'],
+        unrelated:(await MemStore.get('meta','unrelated')).text,lateError,
+        raceGone:!(await MemStore.get('docs',race))&&!(await MemStore.get('sessions',race)),pendingAfter:!!MemStore.failureMessage()};
+    },wholeBook);
+    ok(`failed save → ${wholeBook?'book':'unit'} deletion exports a restorable backup`,result.previewDocs===1&&result.previewCards===0);
+    ok('a failed deletion preserves the document and its pending rescue payload',result.retained);
+    ok('deletion reads cleanup records without loading library PDF bytes',result.boundedReads);
+    ok('retry does not recreate the deleted session or cards',result.after.docs===1&&result.after.sessions===0&&result.after.cards===0);
+    ok('the deletion saves surviving pending notes and removes deleted-unit notes',result.rescued==='Rescue pending'&&!result.deletedNote);
+    ok('unrelated failed writes survive deletion and can be retried',result.pendingOther&&result.unrelated==='Preserve this failed write');
+    ok('an in-flight save is cleaned and a late save is refused without a retry payload',result.raceGone&&result.lateError==='DeletedDocumentError'&&!result.pendingAfter);
+    ok('deliberately restoring the document allows its previous card IDs to be saved again',result.revived);
+    await r.context().close();
+  }
+
   await browser.close();
   fs.rmSync(dir, { recursive: true, force: true });
   console.log(`\n${passed} passed, ${failed} failed`);

@@ -51,6 +51,25 @@ var STORES = ['docs', 'sessions', 'cards', 'files', 'books', 'bookpages', 'meta'
 var mem = { docs: {}, sessions: {}, cards: {}, files: {}, books: {}, bookpages: {}, meta: {}, vectors: {}, packs: {} };
 var dbp = null;
 var api = { persistent: false };
+var writeQueue = Promise.resolve(), removed = Object.create(null), removedDocs = Object.create(null);
+function serialWrite(run) {
+  var next = writeQueue.then(run); writeQueue = next.catch(function () {}); return next;
+}
+function revive(ops) {
+  ops.forEach(function (o) {
+    if (!o.value) return;
+    delete removed[o.store + ':' + o.value.id];
+    if (o.store === 'docs') {
+      delete removedDocs[o.value.id];
+      ['sessions', 'files', 'vectors', 'packs'].forEach(function (s) { delete removed[s + ':' + o.value.id]; });
+      Object.keys(removed).forEach(function (key) { if (removed[key] === o.value.id) delete removed[key]; });
+    }
+  });
+}
+function wasRemoved(o) {
+  if (!o.value || o.store === 'docs') return false;
+  return (o.value.docId && removedDocs[o.value.docId]) || removed[o.store + ':' + o.value.id];
+}
 
 /* An open that never answers — no success, no error, no blocked — would leave
    every read and write waiting on it for ever, and the app with it: WebKit has
@@ -160,13 +179,13 @@ function batch(ops) {
         if (next[o.store] === mem[o.store]) next[o.store] = Object.assign({}, mem[o.store]);
         if (o.clear) next[o.store] = {}; else if (o.delete) delete next[o.store][o.id]; else next[o.store][o.value.id] = o.value;
       });
-      mem = next; return;
+      mem = next; revive(snapshot); return;
     }
     return new Promise(function (resolve, reject) {
       var t;
       try {
         t = db.transaction(snapshot.map(function (o) { return o.store; }).filter(function (s, i, a) { return a.indexOf(s) === i; }), 'readwrite');
-        t.oncomplete = function () { resolve(); };
+        t.oncomplete = function () { revive(snapshot); resolve(); };
         t.onerror = t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
         snapshot.forEach(function (o) { var os = t.objectStore(o.store); if (o.clear) os.clear(); else if (o.delete) os.delete(o.id); else os.put(o.value); });
       } catch (e) { if (t) try { t.abort(); } catch (_) {} reject(e); }
@@ -177,10 +196,11 @@ function batch(ops) {
 /* Build cleanup with metadata so manifests and their content agree. */
 function removalOps(ids) {
   ids = ids.filter(Boolean);
-  return Promise.all([all('cards'), get('meta', 'notes'), get('meta', 'checks')]).then(function (r) {
+  return snapshotStores(['cards', 'meta']).then(function (data) {
+    var r = [data.cards, data.meta.find(function (m) { return m.id === 'notes'; }), data.meta.find(function (m) { return m.id === 'checks'; })];
     var ops = [];
     ids.forEach(function (id) { ['docs', 'sessions', 'files', 'vectors', 'packs'].forEach(function (store) { ops.push({ store: store, id: id, delete: true }); }); });
-    r[0].filter(function (c) { return ids.indexOf(c.docId) !== -1; }).forEach(function (c) { ops.push({ store: 'cards', id: c.id, delete: true }); });
+    r[0].filter(function (c) { return ids.indexOf(c.docId) !== -1; }).forEach(function (c) { ops.push({ store: 'cards', id: c.id, docId: c.docId, delete: true }); });
     ['notes', 'checks'].forEach(function (id, i) {
       var rec = r[i + 1]; if (!rec) return;
       Object.keys(rec.recs || {}).forEach(function (key) { if (ids.some(function (d) { return key.indexOf(d + ':') === 0; })) delete rec.recs[key]; });
@@ -189,15 +209,27 @@ function removalOps(ids) {
     return ops;
   });
 }
-function deleteDoc(id) { return removalOps([id]).then(batch); }
+function finishDeletion(ids, ops) {
+  return batch(ops).then(function () {
+    ids.filter(Boolean).forEach(function (id) { removedDocs[id] = true; });
+    ops.filter(function (o) { return o.delete; }).forEach(function (o) { removed[o.store + ':' + o.id] = o.docId || true; });
+    Object.keys(failures).forEach(function (key) {
+      var f = failures[key];
+      if (f.ops.some(function (o) { return o.value && (removed[o.store + ':' + o.value.id] ||
+        (o.value.docId && removedDocs[o.value.docId])); }) ||
+        ops.some(function (o) { return o.value && key === o.store + ':' + o.value.id; })) delete failures[key];
+    });
+  });
+}
+function deleteDoc(id) { return serialWrite(function () { return removalOps([id]).then(function (ops) { return finishDeletion([id], ops); }); }); }
 function deleteBook(id) {
-  return get('books', id).then(function (b) {
+  return serialWrite(function () { return get('books', id).then(function (b) {
     if (!b) return;
     return removalOps(b.chapters.map(function (c) { return c.docId; })).then(function (ops) {
       b.parts.forEach(function (p, i) { ops.push({ store: 'files', id: p.fileId, delete: true }, { store: 'bookpages', id: id + ':' + i, delete: true }); });
-      ops.push({ store: 'books', id: id, delete: true }); return batch(ops);
+      ops.push({ store: 'books', id: id, delete: true }); return finishDeletion(b.chapters.map(function (c) { return c.docId; }), ops);
     });
-  });
+  }); });
 }
 /* What no unit owns any more: a pack, a session, search vectors or review
    cards whose unit is gone, left by an import or a delete cut short in an
@@ -304,18 +336,19 @@ function saveStep(session, cards) {
 }
 
 /* A consistent snapshot for export, including writes still awaiting retry. */
-function snapshot() {
+function snapshotStores(stores) {
   return open().then(function (db) {
-    if (!db) { var out = {}; STORES.forEach(function (s) { out[s] = Object.keys(mem[s]).map(function (k) { return clone(mem[s][k]); }); }); return out; }
+    if (!db) { var out = {}; stores.forEach(function (s) { out[s] = Object.keys(mem[s]).map(function (k) { return clone(mem[s][k]); }); }); return out; }
     return new Promise(function (resolve, reject) {
-      var t = db.transaction(STORES, 'readonly'), out = {};
+      var t = db.transaction(stores, 'readonly'), out = {};
       t.oncomplete = function () { resolve(out); }; t.onerror = t.onabort = function () { reject(t.error || new Error('snapshot failed')); };
-      STORES.forEach(function (s) { var req = t.objectStore(s).getAll(); req.onsuccess = function () { out[s] = req.result; }; });
+      stores.forEach(function (s) { var req = t.objectStore(s).getAll(); req.onsuccess = function () { out[s] = req.result; }; });
     });
   }).then(function (out) {
     Object.keys(failures).sort(function (a, b) { return failures[a].seq - failures[b].seq; }).forEach(function (k) {
       (failures[k].ops || []).forEach(function (o) {
-        var list = out[o.store], at = list.findIndex(function (v) { return v.id === (o.value ? o.value.id : o.id); });
+        var list = out[o.store]; if (!list) return;
+        var at = list.findIndex(function (v) { return v.id === (o.value ? o.value.id : o.id); });
         if (o.delete) { if (at >= 0) list.splice(at, 1); return; }
         var v = clone(o.value);
         if (o.history && at >= 0) { v.srs = list[at].srs; v.hazard = !!(list[at].hazard || v.hazard); }
@@ -324,6 +357,7 @@ function snapshot() {
     }); return out;
   });
 }
+function snapshot() { return snapshotStores(STORES); }
 function health() {
   var st = root.navigator && root.navigator.storage;
   return Promise.all([Promise.resolve().then(function () { return st && st.estimate ? st.estimate() : {}; }), Promise.resolve().then(function () { return st && st.persisted ? st.persisted() : false; })]).then(function (r) { return { persistent: api.persistent, durable: !!r[1], usage: r[0].usage || 0, quota: r[0].quota || 0 }; });
@@ -335,11 +369,18 @@ function persist() { var st = root.navigator && root.navigator.storage; return s
 var failures = {}, latest = {}, ticket = 0;
 function tracked(key, run, meta, ops) {
   var seq = ++ticket; latest[key] = seq;
-  return Promise.resolve().then(run).then(function (v) {
+  return serialWrite(function () {
+    if (ops.some(wasRemoved)) { var e = new Error('This unit was deleted.'); e.name = 'DeletedDocumentError'; throw e; }
+    ops.forEach(function (o) {
+      if (o.store === 'meta' && o.value && o.value.recs && (o.value.id === 'notes' || o.value.id === 'checks'))
+        Object.keys(o.value.recs).forEach(function (k) { if (Object.keys(removedDocs).some(function (id) { return k.indexOf(id + ':') === 0; })) delete o.value.recs[k]; });
+    });
+    return Promise.resolve().then(run).then(function (v) { revive(ops); return v; });
+  }).then(function (v) {
     if (latest[key] === seq) delete failures[key];
     return v;
   }, function (e) {
-    if (latest[key] === seq) failures[key] = { run: run, meta: meta, ops: ops, seq: seq, error: e };
+    if (latest[key] === seq && e.name !== 'DeletedDocumentError') failures[key] = { run: run, meta: meta, ops: ops, seq: seq, error: e };
     throw e;
   });
 }
