@@ -80,6 +80,22 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   firefox`, or `webkit` plus `install-deps`) and loop until it fails, rather than
   guessing from one CI log.
 
+- **A check that reads the input, not the output.** "It opens full size" read the
+  lightbox image's `naturalWidth > 0`, true whatever size it was shown at, so a held
+  `width` attribute that drew "Enlarge" at 1x of a 2.5x render passed (three reviews
+  found it; no suite did). → Rule: a claim about what the reader sees measures the
+  rendered box (`getBoundingClientRect`) against what it should be, never a property
+  of the source.
+- **A shared helper changed for one caller.** Space held for lazy figures in the lesson
+  also applied in the lightbox and the occlusion card, whose CSS took the held size
+  differently. → Rule: before changing a helper's output, grep every caller and read the
+  CSS each one's output lands in; measure at each, not only at the caller that prompted it.
+- **A fix placed in one caller of a shared hazard.** The hung-save bound went into
+  `go()`; Review's rating, opening a unit and filing a lesson waited on the same kind of
+  save and still froze. → Rule: fix the hazard where it happens or at every caller that
+  waits on it — grep for every `.then` on that promise before calling it fixed, and
+  narrow the commit title to what was covered.
+
 ## Process
 
 - **Handing the owner a retired command.** I gave `node scripts/build.js` (the

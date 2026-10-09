@@ -1393,6 +1393,19 @@ async function ocrRetry() {
     await t.O.release();
   }
   {
+    /* one fresh reader per page, wherever the fault falls: a startup fault
+       already spent the page's retry, so the fresh reader faulting while
+       reading is reported, not answered with a third reader */
+    const t = sandbox([FAULT], [(w, opts) => new Promise(() => {
+      setTimeout(() => opts.errorHandler('RuntimeError: memory access out of bounds'), 0);
+    })]);
+    const r = await Promise.race([settle(t.O.readPage(t.page)), new Promise(resolve => setTimeout(() => resolve({ hung: true }), 1000))]);
+    ok('a scanned page whose reader faults at startup and then while reading is reported, with no third reader',
+       !r.hung && r.e && /RuntimeError/.test(String(r.e.message || r.e)) && t.made.length === 2 && t.log.recognize.join() === '1',
+       JSON.stringify({ hung: !!r.hung, made: t.made.length, calls: t.log.recognize }));
+    await t.O.release();
+  }
+  {
     let late;
     const t = sandbox([], [(w, opts) => new Promise(resolve => {
       late = () => resolve(w);
@@ -1402,6 +1415,9 @@ async function ocrRetry() {
     ok('a swallowed startup error that is not a WebAssembly fault is reported immediately and is not retried',
        !r.hung && r.e && /trained language/.test(String(r.e.message || r.e)) && t.made.length === 1 && !t.log.recognize.length,
        JSON.stringify({ hung: !!r.hung, error: r.e && String(r.e.message || r.e), made: t.made.length }));
+    /* 5.1.1 hands errorHandler the bare string; callers read e.message */
+    ok('a startup failure is reported as an Error carrying the reader\'s message',
+       r.e instanceof Error && /trained language/.test(r.e.message), String(r.e && r.e.constructor && r.e.constructor.name));
     late(); await new Promise(resolve => setTimeout(resolve, 0));
     await t.O.release();
   }

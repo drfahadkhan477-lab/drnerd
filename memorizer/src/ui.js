@@ -254,12 +254,12 @@ function pump() {
      against the book when it was imported, so nothing to ask for. */
   var fromPack = Pack.safeSection(ui.pack, s.section, ui.docRec);
   if (s.phase === 'teach' && !c.lesson && fromPack) {
-    dispatch({ type: 'taught', value: JSON.parse(JSON.stringify(fromPack.lesson)) }).then(render);
+    waitForSave(dispatch({ type: 'taught', value: JSON.parse(JSON.stringify(fromPack.lesson)) })).then(render);
   } else if (s.phase === 'drill' && !c.quiz && fromPack && fromPack.quiz.questions.length) {
-    dispatch({ type: 'quizReady', value: JSON.parse(JSON.stringify(fromPack.quiz)) }).then(render);
+    waitForSave(dispatch({ type: 'quizReady', value: JSON.parse(JSON.stringify(fromPack.quiz)) })).then(render);
   } else if (s.phase === 'teach' && !c.lesson) {
     ask('Preparing the lesson…', 'lesson', [cluster()], [cluster()])
-      .then(function (v) { return dispatch({ type: 'taught', value: v }); })
+      .then(function (v) { return waitForSave(dispatch({ type: 'taught', value: v })); })
       .then(render, function () {});
   } else if (s.phase === 'drill' && !c.quiz) {
     ask('Writing your questions…', 'quiz', [cluster(), c.lesson, ui.docRec.clusters], [cluster(), c.lesson])
@@ -275,7 +275,7 @@ function pump() {
           return { questions: all.slice(0, Coach.QUIZ_SIZE + ai.length) };
         });
       })
-      .then(function (v) { return dispatch({ type: 'quizReady', value: v }); })
+      .then(function (v) { return waitForSave(dispatch({ type: 'quizReady', value: v })); })
       .then(render, function () {});
   } else if (s.phase === 'exam' && !s.exam.questions) {
     var weak = Session.weakest(s, 2), n = Session.examSize(s), lessons = {};
@@ -283,11 +283,11 @@ function pump() {
     /* With a pack, the exam asks its questions for the sections it covers
        (pack.js exam) and the built-in coach's for the rest. */
     if (builtin() && Pack.coverage(ui.pack, ui.docRec).have) {
-      dispatch({ type: 'examReady', value: Pack.exam(Pack.safeRecord(ui.pack, ui.docRec), Coach.exam(ui.docRec.clusters, Session.asked(s), weak, n), weak, n) }).then(render);
+      waitForSave(dispatch({ type: 'examReady', value: Pack.exam(Pack.safeRecord(ui.pack, ui.docRec), Coach.exam(ui.docRec.clusters, Session.asked(s), weak, n), weak, n) })).then(render);
       return;
     }
     ask('Setting your final exam…', 'exam', [ui.docRec.clusters, Session.asked(s), weak, n], [ui.docRec.clusters, lessons, weak, n])
-      .then(function (v) { return dispatch({ type: 'examReady', value: v }); })
+      .then(function (v) { return waitForSave(dispatch({ type: 'examReady', value: v })); })
       .then(render, function () {});
   }
 }
@@ -556,21 +556,46 @@ function openDoc(id, section) {
     if (typeof section === 'number') ui.state = Session.next(ui.state, { type: 'open', section: section });
     ui.view = 'session'; ui.error = ''; ui.choice = null;
     ensureFigures(ui.docRec);
-    return save();
+    return waitForSave(save());
   }).then(function () { if (seq === ui.openSeq) { render(); root.scrollTo(0, 0); } }, function (e) { if (seq === ui.openSeq) { ui.error = e.message; render(); } });
+}
+/* A save that never settles (an IndexedDB transaction or open that hangs,
+   which WebKit has shipped) used to leave the screen waiting on it for ever:
+   a step, a rating, a unit opened, a lesson filed — each drawn only when its
+   save settled, with nothing on screen to say why. waitForSave(p) settles
+   with p, or after SAVE_WAIT_MS, whichever is first; a save that slow is
+   counted in ui.slowSaves, which puts a note on screen until it settles.
+   When one is already that slow, the next does not wait at all: IndexedDB
+   runs writes to the same stores in order, so it is queued behind the first
+   and would only wait out the bound again on every step. onSlow, if given,
+   puts in memory what the save will store, for a screen that reads it.
+   Nothing is lost by drawing early: every session save writes the whole
+   session, so the next one that works stores this step too. */
+var SAVE_WAIT_MS = 5000;
+function waitForSave(p, onSlow) {
+  return new Promise(function (resolve, reject) {
+    var slow = false, done = false, timer = null;
+    function late() {
+      if (done) return;
+      done = slow = true; ui.slowSaves++;
+      try { if (onSlow) onSlow(); resolve(); } catch (e) { reject(e); }
+    }
+    p.then(function (v) {
+      root.clearTimeout(timer);
+      if (slow) { ui.slowSaves--; render(); } else { done = true; resolve(v); }
+    }, function (e) {
+      root.clearTimeout(timer);
+      if (slow) { ui.slowSaves--; saveFailed(e); render(); } else { done = true; reject(e); }
+    });
+    if (ui.slowSaves > 0) late(); else timer = root.setTimeout(late, SAVE_WAIT_MS);
+  });
 }
 /* One transition at a time. A second tap before the first has been stored
    and drawn lands on the OLD screen's button: on "I knew it" that skipped a
    memorise card, and on Next it filed an answer with no choice. While a
-   step is being stored, taps are ignored.
-   But not for ever. A save that never settles (an IndexedDB transaction or
-   open that hangs, which WebKit has shipped) used to leave every later tap
-   ignored with nothing on screen to say why. After SAVE_WAIT_MS the step is
-   drawn anyway, taps work again, and a note says the save has not finished
-   (ui.slowSaves); it goes when the save does. Nothing is lost by drawing
-   early: every save writes the whole session, so the next one that works
-   stores this step too. */
-var SAVE_WAIT_MS = 5000;
+   step is being stored, taps are ignored — until waitForSave gives up on
+   it. However the step ends, taps work again: a rejected save or a throw
+   while drawing rejects go() with ui.moving cleared. */
 function go(event) {
   if (ui.moving) return Promise.resolve();
   if (event && /^(?:open|toUnit|toExam)$/.test(event.type)) ui.recall = null;
@@ -578,15 +603,8 @@ function go(event) {
   ui.choice = null; ui.sure = false; ui.error = ''; ui.back = 0; ui.notice = '';
   var p;
   try { p = dispatch(event); } catch (e) { ui.moving = false; throw e; }
-  return new Promise(function (resolve, reject) {
-    var drawn = false, slow = false;
-    function draw() { if (drawn) return; drawn = true; ui.moving = false; render(); root.scrollTo(0, 0); resolve(); }
-    var timer = root.setTimeout(function () { if (!drawn) { slow = true; ui.slowSaves++; draw(); } }, SAVE_WAIT_MS);
-    p.then(function () {
-      root.clearTimeout(timer);
-      if (slow) { ui.slowSaves--; render(); } else draw();
-    }, function (e) { root.clearTimeout(timer); if (slow) ui.slowSaves--; reject(e); });
-  });
+  return waitForSave(p).then(function () { ui.moving = false; render(); root.scrollTo(0, 0); },
+    function (e) { ui.moving = false; throw e; });
 }
 
 /* ── speech: the lesson can be listened to ───────────────────────────────── */
@@ -744,31 +762,48 @@ function withBytes(fileId) {
   byteLoads[fileId] = p; p.then(function () { delete byteLoads[fileId]; }, function () { delete byteLoads[fileId]; }); return p;
 }
 var imageObserver = null;
-function lazyImage(alt, pageNo, box, scale, d) {
-  var img = h('img', { alt: alt, loading: 'lazy' }), at = where(d || ui.docRec, pageNo);
-  /* The figure's shape before it is drawn. The crop is the box with
-     Pdf.CROP_MARGIN round it (pdf.js padBox), so width and height in that
-     ratio let the browser hold the space from the first paint. Without them
-     the image was 0 px tall until it scrolled near, then grew to its full
-     height, and everything below it jumped: in the lesson, the "now memorise
-     it" button moved 324 px under a tap that had already been aimed at it. */
+/* margin: the crop's margin round the box, Pdf.CROP_MARGIN unless given
+   (the occlusion figure draws the box exactly: its mask is placed in
+   fractions of the box). */
+function lazyImage(alt, pageNo, box, scale, d, margin) {
+  var img = h('img', { alt: alt, loading: 'lazy' }), at = where(d || ui.docRec, pageNo), held = false;
+  /* The figure's shape before it is drawn. The crop is the box with its
+     margin round it (pdf.js padBox), so a box in that ratio lets the
+     browser hold the space from the first paint. Without it the image was
+     0 px tall until it scrolled near, then grew to its full height, and
+     everything below it jumped: in the lesson, the "now memorise it"
+     button moved 324 px under a tap that had already been aimed at it. */
+  var m = margin == null ? (Pdf.CROP_MARGIN || 0) : margin;
   if (box && box.length === 4) {
-    var m = Pdf.CROP_MARGIN || 0, bw = Math.abs(box[2] - box[0]) + 2 * m, bh = Math.abs(box[3] - box[1]) + 2 * m;
+    var bw = Math.abs(box[2] - box[0]) + 2 * m, bh = Math.abs(box[3] - box[1]) + 2 * m;
     /* The attributes alone are not enough: WebKit (Safari, the iPad) takes no
        ratio from them while the image has no src, and held 29 px of a 128 px
        figure: it shows the alt text, one line tall, and "aspect-ratio: auto
-       W / H" defers to that. A plain ratio holds in every engine, and
-       object-fit keeps a crop clipped at the page edge from stretching. */
+       W / H" defers to that. A plain CSS ratio holds in Chromium, Firefox and
+       Safari 15 and later. Safari 14 and earlier (iPadOS 13.4 to 14) have no
+       CSS aspect-ratio: there the space is not held, and the figure grows
+       as it is drawn, as it did before. */
     if (bw > 0 && bh > 0) {
       img.setAttribute('width', String(Math.round(bw))); img.setAttribute('height', String(Math.round(bh)));
-      img.style.aspectRatio = Math.round(bw) + ' / ' + Math.round(bh); img.style.objectFit = 'contain';
+      img.style.aspectRatio = Math.round(bw) + ' / ' + Math.round(bh); held = true;
     }
   }
+  /* Drawn, the image takes its own shape and size again. The held box is
+     only a guess at it: a crop clamped at the page edge is narrower, a
+     page with /Rotate turns it on its side, and held there the picture was
+     shrunk inside it with white bars (and an occlusion mask, placed in
+     fractions of the image, missed its label). In the lightbox the width
+     attribute, in PDF points, drew "Enlarge" at 1x instead of the 2.5x
+     render, smaller than the figure it enlarged. */
+  img.onload = function () {
+    if (!held) return;
+    held = false; img.removeAttribute('width'); img.removeAttribute('height'); img.style.aspectRatio = '';
+  };
   function load() {
     (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
       if (!img.isConnected) return null;
       if (!bytes) throw new Error('no file');
-      return Pdf.renderBox(at.fileId, bytes, at.page, box, scale);
+      return Pdf.renderBox(at.fileId, bytes, at.page, box, scale, margin);
     }).then(function (url) { if (url && img.isConnected) img.src = url; }, function () { img.alt = alt + ' (could not be drawn)'; });
   }
   if (root.IntersectionObserver) {
@@ -1438,7 +1473,7 @@ function importPack(text) {
   return Store.put('packs', rec).then(function () {
     ui.pack = rec; ui.packText = '';
     clearDraft('pack-text');
-    return dispatch({ type: 'packed', value: { sections: checked.sections.map(function (s) { return Pack.safeSection(rec, s.index, d); }).filter(Boolean) } });
+    return waitForSave(dispatch({ type: 'packed', value: { sections: checked.sections.map(function (s) { return Pack.safeSection(rec, s.index, d); }).filter(Boolean) } }));
   }).then(render, function (e) { saveFailed(e); render(); });
 }
 
@@ -1448,7 +1483,7 @@ function removePack(d) {
   if (!root.confirm('Remove the study pack from "' + d.name + '"? Its sections are taught by the built-in coach again; your scores and review cards are kept.')) return Promise.resolve();
   return Store.del('packs', d.id).then(function () {
     ui.pack = null; ui.packReport = null;
-    return dispatch({ type: 'unpacked' });
+    return waitForSave(dispatch({ type: 'unpacked' }));
   }).then(render, function (e) { saveFailed(e); render(); });
 }
 
@@ -2697,12 +2732,18 @@ function viewReview() {
     var upd = Session.review(card, r, today(), FSRS);
     if (how && how.hazard) upd.hazard = true;
     markStudied(); logActivity('review', {});
-    Store.put('cards', upd).then(function () {
+    /* A write that is slow to settle (waitForSave) moves on to the next
+       card: the rating is put in memory so this card is not asked again
+       while it waits, and it is counted when it is stored. */
+    waitForSave(Store.put('cards', upd).then(function () {
       if (dr) dr.done[card.id] = true;
       if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id);
       ui.saveError = Store.failureMessage() || ui.actionError; ui.reviewDone++;
       return refresh();
-    }, saveFailed).then(next);
+    }, saveFailed), function () {
+      ui.cards = ui.cards.map(function (c) { return c.id === card.id ? upd : c; });
+      if (dr) dr.done[card.id] = true;
+    }).then(next);
   };
   var head = h('div.review-head', h('span.count', isAgain ? 'Asked again · ' + ui.againQ.length + ' left' : dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'),
     h('span.muted', (names[card.docId] || '') + ' · ' + card.title));
@@ -2753,12 +2794,14 @@ function clozeCard(card, tag, rate) {
 }
 /* The figure with its label hidden: the image drawn from the stored PDF,
    and a mask where the label was printed (study.js maskOf). Answered, the
-   mask lifts. */
+   mask lifts. The mask is in fractions of the figure's box, so the image is
+   the box exactly, with no crop margin: drawn with the margin, the mask
+   sat up to 8 pt off its label, and the label's first letter showed. */
 function occlusionFigure(card) {
   var d = ui.docs.filter(function (x) { return x.id === card.docId; })[0];
   var m = card.mask, pc = function (v) { return (100 * v).toFixed(2) + '%'; };
   return h('div.occlusion' + (ui.choice != null ? '.revealed' : ''), { id: 'occlusion' },
-    lazyImage('A figure with one label hidden', card.figure.page, card.figure.box, 2, d),
+    lazyImage('A figure with one label hidden', card.figure.page, card.figure.box, 2, d, 0),
     h('span.occlusion-mask', { 'aria-hidden': 'true', style: 'left:' + pc(m.left) + ';top:' + pc(m.top) + ';width:' + pc(m.width) + ';height:' + pc(m.height) }));
 }
 
