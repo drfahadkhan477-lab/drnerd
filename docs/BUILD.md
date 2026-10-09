@@ -671,5 +671,7 @@ report into the run summary — that is the leak. Read it locally.
 
 A self-hosted runner executes the workflow on real hardware that has the
 licensed corpus and your home directory on it, and on a `pull_request` trigger
-that workflow comes from the PR's branch. This repository is private and
-single-author so the exposure is small, but the mitigation costs nothing.
+that workflow comes from the PR's branch. This repository is public, so anyone
+can open a pull request, and from a fork its workflow would be theirs. Running
+only on pushes to `master` and on manual dispatch is what keeps that code off
+your machine; never add `pull_request` or `pull_request_target` to this job.
