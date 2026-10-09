@@ -9,7 +9,9 @@ name: webkit-selftest-probe (measurement, not for merge)
 # to find which one the assertion needs. Round 2 (12 runs each): baseline 2,
 # no backdrop-filter 3, no will-change 5, no animation/transition 0 crashes.
 # Round 3 splits motion into the overlay's fade-in and the image's opacity
-# transition, at 24 runs each. Only the probe's copy of the build is
+# transition, at 24 runs each: baseline 14, no image transition 6, no overlay
+# fade 9, no motion 0. Round 4 runs the fix itself, verify-selftest.js with
+# reducedMotion 'reduce', against an unaltered build, 32 times. Only the probe's copy of the build is
 # altered. Deleted before this branch is merged.
 
 on:
@@ -28,8 +30,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [baseline, no-motion, no-overlay-fade, no-img-transition]
-        shard: [1, 2, 3, 4, 5, 6]
+        variant: [patched-suite]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       SYSTOLE_ENGINE: webkit
     steps:
