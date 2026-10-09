@@ -74,6 +74,22 @@ function suitesFromWorkflow(yml) {
 
 /* opts: { root, yml, pure, engine, executablePath, log } — the seams the
    suite drives. Returns { code, ran, failed, notRun }. */
+/* WHERE GIT LOOKS FOR A REPOSITORY IS NOT INHERITED. Git exports GIT_DIR to
+   the hooks of a linked worktree (and only there), and the pre-push hook runs
+   this. Several suites build throwaway repositories in a temp directory and
+   run git there by cwd; with GIT_DIR in their environment every one of those
+   commands went to the real repository instead. Pushing from a worktree once
+   moved its branch onto sixteen fixture commits and set core.bare on the
+   whole clone. A suite finds this repository by its cwd, like a person does. */
+const REPO_ENV = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_IMPLICIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR',
+  'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_GRAFT_FILE', 'GIT_SHALLOW_FILE',
+  'GIT_NO_REPLACE_OBJECTS', 'GIT_REPLACE_REF_BASE', 'GIT_PREFIX'];
+function childEnv(extra) {
+  const env = Object.assign({}, process.env, extra);
+  for (const k of REPO_ENV) delete env[k];
+  return env;
+}
+
 function run(opts) {
   const o = opts || {};
   const root = o.root || ROOT;
@@ -108,7 +124,7 @@ function run(opts) {
     else if (!fs.existsSync(file)) status = 'missing';
     else {
       const r = spawnSync(process.execPath, [file].concat(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'],
-        env: Object.assign({}, process.env, { SYSTOLE_ENGINE: engine }), maxBuffer: 64 * 1048576 });
+        env: childEnv({ SYSTOLE_ENGINE: engine }), maxBuffer: 64 * 1048576 });
       status = r.status === 0 ? 'pass' : (r.status === null ? `killed (${r.signal})` : `exit ${r.status}`);
       if (status !== 'pass') {
         const out = (String(r.stdout || '') + String(r.stderr || '')).split('\n').filter(l => /FAIL|Error|error/.test(l)).slice(0, 8);
@@ -127,7 +143,7 @@ function run(opts) {
     let broke = null;
     for (const [script, ...args] of synthetic.build) {
       log(`  build  node ${script} ${args.join(' ')}`);
-      const r = spawnSync(process.execPath, [path.join(root, script)].concat(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1048576 });
+      const r = spawnSync(process.execPath, [path.join(root, script)].concat(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: childEnv(), maxBuffer: 64 * 1048576 });
       if (r.status !== 0) { broke = `synthetic build failed at ${script}`; log('      ' + String(r.stderr || r.stdout || '').trim().split('\n').slice(-3).join('\n      ')); break; }
     }
     synthetic.suites.forEach(x => runOne({ name: x.name, args: [x.target], refused: broke }));

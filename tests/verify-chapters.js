@@ -109,19 +109,38 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         const q = POOL[i]; if (!q) break;
         S.srs[q.id] = { difficulty: 5, stability: 12 + (i % 40), ivl: 20, reps: 3, lapses: 0, last: '2026-08-20', due: '2026-09-20' };
       }
+      /* FRAME ZERO IS THE MOMENT THE APP GIVES THE BAR ITS WIDTH, read there.
+         It used to be a reading 80 ms after render(), which measured two
+         different things depending on load. On a quick page the width had not
+         been assigned yet (mountChapterBars waits two frames), so the reading
+         was 0 px whatever the bar does. On the owner's laptop, deep into a
+         full run, the timer fired late, the 1 s ease-out was already past
+         90%, and the check failed with nothing broken. The observer below
+         fires in the microtask after mountChapterBars sets the width, and the
+         layout it forces resolves the transition at its start. A bar that
+         arrives drawn either never has its width set (markup carried it, no
+         record, null) or reads its final width here. */
+      const first = new Promise(res => {
+        const mo = new MutationObserver(recs => {
+          const rec = recs.find(m => m.target.matches && m.target.matches('.ct-bar i[data-w]'));
+          if (!rec) return;
+          mo.disconnect();
+          const bar = document.querySelector('.ct-bar i[data-w]');
+          res(bar === rec.target ? bar.getBoundingClientRect().width : null);
+        });
+        mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['style'] });
+        setTimeout(() => { mo.disconnect(); res(null); }, 10000);
+      });
       goStudy(); render();
-      // Deliberately not read yet — see the file header on why an immediate
-      // read here would be measuring the view-transition's settling, not the
-      // fill animation.
-      await new Promise(res => setTimeout(res, 80));
+      const atAssign = await first;
       const bar = document.querySelector('.ct-bar i[data-w]');
-      return { targetPct: +bar.dataset.w, atSettle: bar.getBoundingClientRect().width };
+      return { targetPct: +bar.dataset.w, atAssign };
     });
 
-    // The 80ms settle above is itself real time into a 1s ease-out transition,
-    // so its own reading is frame zero — sampling starts from there, not
-    // after another wait, or the true beginning of the fill is never seen.
-    const frames = [r.atSettle];
+    // Sampling starts from the reading at assignment, so the true beginning
+    // of the fill is never skipped, however late this side gets to look.
+    // null (never assigned) becomes NaN, which every comparison below fails.
+    const frames = [typeof r.atAssign === 'number' ? r.atAssign : NaN];
     for (let t = 150; t <= 1000; t += 150) {
       await page.waitForTimeout(150);
       const w = await page.evaluate(() => {
