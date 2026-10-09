@@ -684,6 +684,6 @@ does:
   contributors**, and never approve a fork's run while the runner is
   registered.
 
-The job itself runs only on pushes to `master` and on manual dispatch, so it
-does not start for pull requests on its own; never add `pull_request` or
-`pull_request_target` to it.
+The job itself runs only when started by hand on `master` (it is manual only,
+above), so it does not start for pull requests on its own; never add
+`pull_request` or `pull_request_target` to it.

@@ -943,9 +943,9 @@ jobs:
   # register no self-hosted runner while the repository is public (GitHub's
   # own advice), or make it private, or set "Require approval for all external
   # contributors" for fork workflows and never approve one while a runner is
-  # registered. This job still runs only on pushes to master and manual
-  # dispatch, so it does not start for pull requests on its own; never add
-  # pull_request or pull_request_target to it.
+  # registered. This job runs only on manual dispatch on master (its `if`
+  # below; the push arm is still commented out), so it does not start for pull
+  # requests on its own; never add pull_request or pull_request_target to it.
   full:
     name: full — the browser suites, on a machine with the export
     runs-on: [self-hosted, systole]
