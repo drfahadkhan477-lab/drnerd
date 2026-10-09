@@ -70,3 +70,7 @@ jobs:
       - name: experiments — which way of quieting the old screen survives (control build)
         if: ${{ !cancelled() }}
         run: node tools/rc-vt-experiments.js build/synthetic/control.html --runs 2
+
+      - name: at boot — what is live when a quiz opens straight after boot, and does page-wide stopping survive
+        if: ${{ !cancelled() }}
+        run: node tools/rc-boot-swap.js build/synthetic/systole.html --runs 2
