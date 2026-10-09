@@ -175,6 +175,28 @@ async function heapAfterBoot(page, url) {
   await page.close();
   }
 
+  head('the faces the first layout uses are preloaded, and fetched once');
+  /* build-pwa preloads the upright faces so the first layout has them, rather
+     than asking the operating system for fallbacks and laying out again when
+     they land. A preload that does not match the font request (no crossorigin,
+     wrong type) is worse than none: the face downloads twice. So this counts
+     the requests, and asks the browser how each one was started. */
+  {
+  const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'font preload', errors);
+  const asked = {};
+  page.on('request', r => { const m = /\/fonts\/([^/?#]+\.woff2)/.exec(r.url()); if (m) asked[m[1]] = (asked[m[1]] || 0) + 1; });
+  await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+  await booted(page);
+  const how = await page.evaluate(() => performance.getEntriesByType('resource')
+    .filter(e => /\/fonts\/[^/]+\.woff2/.test(e.name))
+    .map(e => [e.name.split('/fonts/')[1], e.initiatorType]));
+  const UPRIGHT = ['dm-sans.woff2', 'dm-serif-display.woff2', 'jetbrains-mono.woff2'];
+  ok('each upright face is requested exactly once', UPRIGHT.every(n => asked[n] === 1), JSON.stringify(asked));
+  ok('and the browser started each from the preload link', UPRIGHT.every(n => how.some(([f, i]) => f === n && i === 'link')),
+     JSON.stringify(how));
+  await page.close();
+  }
+
   head('the Worker ships with the site, and the site still serves');
   {
     const w = await (await fetch(new URL('_worker.js', target).href)).text();
