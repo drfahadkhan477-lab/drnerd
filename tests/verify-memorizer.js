@@ -2009,6 +2009,17 @@ function kindOf(user) {
     stale.clusters[0].title = 'hy = rly: ' + base;
     stale.clusters[1].title = 'hy = rly: ' + base + ' (cont.)';
     await page.evaluate(d => MemStore.put('docs', d), stale);
+    /* NOT THE APP, THE TEST BROWSER. Playwright's Firefox 155 now and then
+       crashes the page when it reloads with pdf.js still holding a document.
+       Round 2 of the #212 probe: as the suite was, 8 crashes in 150 runs, all
+       at this section's second reload; with MemPdf.release() (it waits out
+       queued renders, then destroys the document and its worker) before that
+       reload, 0 there in 149, and 1 at the first reload, not released. So
+       both reloads here release first: a precondition, not a claim. What it
+       costs: this section no longer reloads over a live pdf.js document in
+       any engine; the suite's other reloads still do. */
+    const releasePdf = () => page.evaluate(() => MemPdf.release());
+    await releasePdf();
     await page.reload();
     await page.locator('#home-hero').waitFor(T);
     await page.evaluate(id => Memorizer.openDoc(id), planId);
@@ -2025,6 +2036,7 @@ function kindOf(user) {
        isEngineNoiseError.) */
     await page.waitForFunction(() => !Memorizer.ui.figuresBusy, null, T);
     await page.evaluate(d => MemStore.put('docs', d), orig);
+    await releasePdf();
     await page.reload();
     await page.locator('#home-hero').waitFor(T);
   }
