@@ -397,7 +397,18 @@ function failureMessage() {
 function retryFailures() {
   return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta, f.ops); }));
 }
-api.forgetFailures = function () { failures = {}; latest = {}; }; api.snapshot = function () { return afterWrites(snapshot); }; api.STORES = STORES.slice(); api.health = health; api.persist = persist; api.failureMessage = failureMessage; api.retryFailures = retryFailures;
+/* Replace the whole database (a backup restore) as one turn of the write
+   queue. Every write queued before it runs first and is then cleared away
+   with the data it belonged to; run outside the queue, those writes landed
+   on top of the restored records. Writes waiting for retry belonged to the
+   old data too, so they are forgotten, but only once the replacement has
+   committed: a refused one leaves them to retry. Uses the raw batch, never a
+   queued write, which would wait on this turn for ever. */
+function replace(ops) {
+  return serialWrite(function () { return batch(ops).then(function () { failures = {}; latest = {}; }); });
+}
+api.replace = replace;
+api.snapshot = function () { return afterWrites(snapshot); }; api.STORES = STORES.slice(); api.health = health; api.persist = persist; api.failureMessage = failureMessage; api.retryFailures = retryFailures;
 api.update = update; api.removalOps = removalOps; api.cleanImports = cleanImports; api.sweep = sweep; api.batch = batch; api.open = open; api.put = function (store, value) {
   var v = clone(value);
   return tracked(store + ':' + v.id, function () { return put(store, v); }, store === 'meta' ? v : null, [{ store: store, value: v }]);
