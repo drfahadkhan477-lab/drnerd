@@ -304,6 +304,9 @@ const SUITES = [
      screen driven in a browser over a scaffold, the way echo is. */
   ['notesearch-pure','a note titled with the words is found first, quoted and escaped'],
   ['heartbake-pure', 'the heart is loaded from a mesh baked at build time, value for value, and any other copy is refused'],
+  /* The seeded notes' pearls, found at build time: exactly what the search finds,
+     no note text in the table, and any entry that does not fit is searched afresh. */
+  ['pearlbake-pure', 'the pearls found at build time are the ones the search finds, and an entry that does not fit is searched afresh'],
   ['refsmerge-pure', 'a reference unit adds only sections that are new and high yield, and what it writes splits back into notes'],
   ['phrase-pure', 'a note holding the query\'s words in the query\'s order outranks one holding them scattered; questions, one-word queries and stubs rank as before'],
   ['olderacc-pure', 'an older ACC bank\'s questions parse in each layout, keep their answer or are left out, skip what the bank has, and print no word of it'],
@@ -460,7 +463,7 @@ const SUITES = [
    the one that had been waiting: suitetime-pure. The split build was measured
    by this run for the first time since the ninth emptying, and came to the
    same 134. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['pearlbake-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

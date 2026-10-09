@@ -38,8 +38,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 (async () => {
   const browser = await launch();
   /* Landscape, because that is the shape both shipped bugs needed and the
-     shape no other suite in this project uses for the viewer. */
-  const page = await browser.newPage({ viewport: { width: 1194, height: 834 } });
+     shape no other suite in this project uses for the viewer.
+
+     Reduced motion, because of WebKit on the CI runner. The self-test opens
+     24 figures back to back, several runs per suite, and each open replays
+     the viewer's fade-in and the image's opacity transition and then tears
+     them down mid-animation. Linux WebKit's compositor answers that with a
+     release assertion ("trap invalid opcode" in libWPEWebKit, in the web
+     process or its ThreadedCompositor thread) and the page dies at a
+     different check each time. Measured on PR #211: 14 crashes in 24 runs as
+     it was, 0 in 36 with motion switched off, with WebKit near 150 MB and
+     12 GB free, so not memory. Nothing this suite asserts is about motion:
+     the self-test measures layout size, not painted rectangles, precisely so
+     that an entrance animation cannot move its answer. */
+  const page = await browser.newPage({ viewport: { width: 1194, height: 834 }, reducedMotion: 'reduce' });
   const errors = [];
   const events = [];
   page.on('crash', () => events.push('the browser CRASHED the page'));

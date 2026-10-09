@@ -80,6 +80,15 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
 
 ## Process
 
+- **A browser upgrade judged on Chromium alone.** I moved playwright 1.56 -> 1.64
+  (released the day before) after a green local Chromium run; both CI WebKit jobs
+  then hit their time limits still passing, because 1.64's WebKit 27.2 drew 2-3
+  frames a second after the Memorizer loaded (memorizer-data: 63 s against 20 s on
+  1.56 and 10 s on 1.63). -> Rule: before pushing a playwright bump, time one
+  Memorizer suite in WebKit on the old pin and the new one (`npm i --no-save
+  playwright@X`, `npx playwright install webkit`); a slower engine is a finding,
+  never a reason to raise `timeout-minutes`.
+
 - **A click that "did nothing" because it missed.** Firefox CI intermittently
   stayed on the lesson after "now memorise it" (phase teach, nothing logged). Reading
   the app's logic found nothing. A capture-phase click listener showed the click
@@ -144,3 +153,24 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   browser job, run its suites at least three times and treat a single failure as a
   race to root-cause in the test, not as noise; print frame counts and wall time in
   a timing check's detail so the failing run says which cause it was.
+
+- **A bake that re-derives its own address keeps the cost it was meant to remove.** The
+  first pearl table named each pearl by paragraph and sentence index. It was proven
+  correct and was faster in Node, but the owner's laptop profile showed `fromTable`
+  still costing 0.64 s of the 0.77 s scan: reaching "paragraph p" meant cleaning the
+  whole note, which was most of what the search had cost. My Node benchmark ran
+  only the Arrhythmias notes (235, ~1 KB each), not the owner's full seed, so it
+  under-weighted the walk. → Rule: when caching a computed answer, the cached address
+  must be readable without redoing the work that found it (here, a raw character
+  span rather than an index into a derived structure). Break the lookup itself into
+  its steps and time each one before calling the cache done.
+
+- **"The browser CRASHED the page" read as a test race.** synthetic-webkit's
+  intermittent red on verify-selftest looked like the timing races above, and the
+  crash point moved every run. It was neither memory nor the test: the kernel log
+  on the runner (`sudo dmesg`) showed `trap invalid opcode in libWPEWebKit` for every
+  crash, a WebKit release assertion in its compositor, fired by animated layers
+  torn down mid-animation 24 times in a row. → Rule: when Playwright reports a
+  crashed page, read `dmesg` on the runner before reading the suite, and isolate the
+  trigger by switching ingredients off in a copy of the build across enough runs to
+  count (PR #211: 14/24 crashed as built, 0/36 with motion off, 0/32 with the fix).

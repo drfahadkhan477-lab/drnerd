@@ -241,27 +241,117 @@ function clean(raw) {
     .trim();
 }
 
-/* One entry per note: its best sentence, and how good that sentence is. Notes
-   with nothing quotable simply do not appear. */
-function harvest(notes) {
-  const out = [];
-  for (const r of (notes || [])) {
-    let best = null, bestScore = -1;
-    for (const para of paragraphs(r.body)) {
-      const sents = sentences(para);
-      for (const run of runs(sents)) {
+/* The search harvest makes for one note: which run of which paragraph is its
+   best pearl, and its score, or null. Runs are visited in exactly the order
+   runs() yields them, longest first, and kept only when strictly better, so
+   among equals the fuller statement — the first one seen — wins. */
+function bestRun(body) {
+  let best = null;
+  paragraphs(body).forEach((para, p) => {
+    const sents = sentences(para);
+    for (let n = Math.min(MAX_RUN, sents.length); n >= 1; n--) {
+      for (let i = 0; i + n <= sents.length; i++) {
+        const run = sents.slice(i, i + n).join(' ');
         if (!isPearl(run)) continue;
         const sc = score(run);
-        /* Strictly greater, and runs() yields longest first — so among equals
-           the fuller statement is the one that was seen first and kept. */
-        if (sc > bestScore) { bestScore = sc; best = run; }
+        if (!best || sc > best.score) best = { p, i, n, score: sc, run };
       }
     }
-    if (best && bestScore >= 5) {
+  });
+  return best;
+}
+
+/* The note's text, fingerprinted: FNV-1a, the hash the app already keys its
+   seeded notes by. Kept here so the build and the app use one implementation. */
+function bodyKey(body) {
+  const s = String(body || '');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+
+/* THE HARVEST, BAKED. Scanning every run of every paragraph of every note runs
+   a dozen regular expressions thousands of times; on the owner's laptop at an
+   iPad's pace it was the largest cost left at launch, blocking the page just
+   after the home screen appeared. The notes the app is seeded with are known
+   at build time, so scripts/pearl-bake.js runs bake() over them there and the
+   app carries the result.
+
+   The table holds no text: per note fingerprint, where its pearl is and its
+   score, or — for a note with none — the note's length. harvest() rebuilds
+   the run from the note it is given and uses the entry only if that run is
+   still a pearl with that score; anything else — no table, an edited note, an
+   entry that does not fit — and the note is searched exactly as before. So a
+   pearl that is shown is always this code's verdict on the note as it stands.
+
+   "NONE" IS TAKEN ON TRUST, AND ONLY THAT. Checking that a note has no pearl
+   is the search itself, so a no-pearl entry cannot be re-checked the way a
+   span is. Two 32-bit fingerprints colliding — a note you wrote against a
+   seeded note with no pearl — would hide your note's pearl. The entry carries
+   the note's length so that a collision must also match it; that makes it
+   rarer, not impossible. It is the same fingerprint refSeedApply() trusts to
+   tell an edited seeded note from an untouched one. A span entry cannot hide
+   anything: on the wrong note it fails its checks and the note is searched.
+
+   WHERE, AS A SPAN OF THE RAW NOTE. The first table named the run by
+   paragraph and sentence index, and the owner's profile showed what that
+   cost: the scoring was gone, but reaching paragraph p still ran plain() over
+   the whole note, and that walk was most of what the search had cost. A run
+   is its stretch of the note with the whitespace collapsed — sentences()
+   splits on whitespace and joins with one space — so an entry is
+   [start, end, score], a span of the raw body, and the lookup's text work is
+   on that span alone (the fingerprint and the figure search still pass over
+   the note once, without cleaning it). bake() keeps an entry only if the span, collapsed, is exactly the run
+   the search found; a run whose stretch holds something plain() strips (a
+   code span, a figure) has no such span, and that note is left out of the
+   table, so it is searched. */
+const collapse = s => s.replace(/\s+/g, ' ').trim();
+
+function bake(notes) {
+  const table = {};
+  for (const r of (notes || [])) {
+    const body = String(r.body || '');
+    const b = bestRun(body);
+    if (!b || b.score < 5) { table[bodyKey(body)] = body.length; continue; }
+    /* The run's words, with any whitespace between them, in the raw note.
+       Build time only: a RegExp per note is nothing here, and the app never
+       makes one. */
+    const m = new RegExp(b.run.split(' ').map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')).exec(body);
+    const e = m && [m.index, m.index + m[0].length, b.score];
+    if (e && collapse(body.slice(e[0], e[1])) === b.run && fromTable(body, e)) table[bodyKey(body)] = e;
+  }
+  return table;
+}
+
+/* A table entry checked against the note it claims to describe. */
+function fromTable(body, e) {
+  if (!Array.isArray(e) || e.length !== 3 || !e.every(Number.isInteger)) return undefined;
+  body = String(body || '');
+  if (!(e[0] >= 0 && e[0] < e[1] && e[1] <= body.length)) return undefined;
+  const run = collapse(body.slice(e[0], e[1]));
+  if (!isPearl(run) || score(run) !== e[2]) return undefined;
+  return { score: e[2], run };
+}
+
+/* One entry per note: its best sentence, and how good that sentence is. Notes
+   with nothing quotable simply do not appear. `table` is optional (see bake). */
+function harvest(notes, table) {
+  const out = [];
+  const has = table && typeof table === 'object' ? k => Object.prototype.hasOwnProperty.call(table, k) : null;
+  for (const r of (notes || [])) {
+    let best;
+    if (has) {
+      const k = bodyKey(r.body);
+      const e = has(k) ? table[k] : undefined;
+      if (typeof e === 'number') best = e === String(r.body || '').length ? null : undefined;
+      else if (e !== undefined) best = fromTable(r.body, e);
+    }
+    if (best === undefined) best = bestRun(r.body);
+    if (best && best.score >= 5) {
       /* The note's own first figure, so a pearl can be shown with the diagram
          that explains it rather than as a line of text on its own. */
       const fig = /!\[([^\]]*)\]\(refimg:\/\/([^)\s]+)\)/.exec(r.body || '');
-      out.push({ id: r.id, title: r.title || '', text: clean(best), score: bestScore,
+      out.push({ id: r.id, title: r.title || '', text: clean(best.run), score: best.score,
                  chapter: (r.title || '').split('—')[0].trim(), source: r.source || '',
                  figKey: fig ? fig[2] : '', figCap: fig ? fig[1] : '' });
     }
@@ -498,7 +588,13 @@ function steps(text) {
   }).filter(s => s.text);
 }
 
-root.Pearl = { harvest, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
+/* Does this table entry fit this note — would harvest() use it rather than
+   search? Exported so a test can hold the build to entries that are used: a
+   bake whose every entry was refused would cost nothing visible, and save
+   nothing either. */
+function entryFits(body, e) { return fromTable(body, e) !== undefined; }
+
+root.Pearl = { harvest, bake, bodyKey, entryFits, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
                weakWords, aimWords, steps, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
 
 })(typeof window !== 'undefined' ? window : this);

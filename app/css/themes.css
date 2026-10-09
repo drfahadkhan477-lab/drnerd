@@ -1,0 +1,175 @@
+/* ═══════════ Themes — palette overrides on the data-palette axis ═══════════
+   Defaults for the hero's own surfaces live in :root and the dark block below,
+   so a palette need only restate what it changes. */
+:root{
+  --hero-a:#0B1B33;--hero-b:#0E2947;--hero-c:#0A1628;
+  --hero-edge:rgba(94,234,212,.16);
+  --aura-1:rgba(94,234,212,.20);--aura-2:rgba(56,189,248,.18);--aura-3:rgba(129,140,248,.15);
+  --hero-accent:#5EEAD4;
+}
+html[data-theme="light"]{
+  --hero-a:#12243F;--hero-b:#173A5E;--hero-c:#0F1E3D;
+}
+
+/* Slate — cool desaturated indigo on paper-white. The quietest of the light
+   themes; nothing in it is fully saturated. */
+html[data-palette="slate"]{
+  --bg:#EDF0F6;--card:#FFFFFF;--white:#FFFFFF;
+  --border:#D3D9E6;--border2:#E7EBF3;--border3:#C3CBDC;
+  --text:#1E2536;--muted:#4B5568;--dim:#8A93A6;--faint:#CBD2E0;
+  --accent:#4F5BD5;--accent-2:#6366F1;--teal:var(--accent);--teal2:var(--accent-2);--teal3:#C7D0FA;--teal4:#EDEFFD;
+  --navy:#1E1B4B;--navy2:#312E81;--navy3:#3730A3;
+  --shadow-glow:0 0 0 3px rgba(99,102,241,.16);
+  --hero-a:#232056;--hero-b:#312E81;--hero-c:#1B1840;
+  --hero-edge:rgba(129,140,248,.22);
+  --aura-1:rgba(129,140,248,.22);--aura-2:rgba(99,102,241,.18);--aura-3:rgba(56,189,248,.12);
+  --hero-accent:#A5B4FC;
+}
+
+/* Parchment — warm paper and teak ink. Made for long reading; the warm ground
+   is what makes it restful rather than the colour of the type. */
+html[data-palette="parchment"]{
+  --bg:#F3ECDD;--card:#FBF6EC;--white:#FBF6EC;
+  --border:#E2D7C2;--border2:#EFE7D6;--border3:#D6C8AF;
+  --text:#372E20;--muted:#6A5B45;--dim:#9A8B72;--faint:#D8CBB2;
+  --accent:#0E7C86;--accent-2:#12919B;--teal:var(--accent);--teal2:var(--accent-2);--teal3:#A9DAD6;--teal4:#E6F2EF;
+  --navy:#2C2418;--navy2:#3E3320;--navy3:#524327;
+  --green-bg:#EAF3E6;--green-b:#B7D8A8;--red-bg:#F7EAE4;--red-b:#E6C3B2;
+  --amber-bg:#F6EEDC;--amber-b:#E0CDA0;--warn-bg:var(--amber-bg);--warn-b:var(--amber-b);
+  --shadow-glow:0 0 0 3px rgba(14,124,134,.16);
+  --hero-a:#2B2419;--hero-b:#3A3121;--hero-c:#241E14;
+  --hero-edge:rgba(18,145,155,.22);
+  --aura-1:rgba(18,145,155,.20);--aura-2:rgba(217,155,60,.16);--aura-3:rgba(120,90,50,.14);
+  --hero-accent:#63D6C8;
+}
+
+/* Nocturne — deep indigo-violet night. Elegant, and gentler on the eye at
+   night than a blue-heavy dark because the accent carries the colour, not the
+   background. */
+html[data-theme="dark"][data-palette="nocturne"]{
+  --bg:#0E0B1A;--card:#17132B;--white:#17132B;
+  --border:#2A2348;--border2:#231D3E;--border3:#332B56;
+  --text:#EDE9F7;--muted:#A79FC4;--dim:#6E6690;--faint:#362E52;
+  --accent:#A78BFA;--accent-2:#C4B5FD;--teal:var(--accent);--teal2:var(--accent-2);--teal3:#4A3D7C;--teal4:#221B40;
+  --navy:#1E1B4B;--navy2:#2E2760;--navy3:#3A2F7A;
+  --shadow-glow:0 0 0 3px rgba(167,139,250,.20);
+  --hero-a:#1A1533;--hero-b:#2A2160;--hero-c:#130E28;
+  --hero-edge:rgba(167,139,250,.22);
+  --aura-1:rgba(167,139,250,.22);--aura-2:rgba(139,92,246,.18);--aura-3:rgba(99,102,241,.14);
+  --hero-accent:#C4B5FD;
+}
+
+/* Cath Lab — tungsten amber on a near-black warm brown, the colour of a
+   fluoroscopy suite with the lights down. */
+html[data-theme="dark"][data-palette="cathlab"]{
+  --bg:#120C07;--card:#1D140B;--white:#1D140B;
+  --border:#3A2A18;--border2:#2C1F12;--border3:#463320;
+  --text:#F5EDE1;--muted:#C6AF93;--dim:#8C775D;--faint:#3A2C1C;
+  --accent:#F59E0B;--accent-2:#FBBF24;--teal:var(--accent);--teal2:var(--accent-2);--teal3:#5A3E12;--teal4:#2A1E08;
+  --navy:#2A1B0C;--navy2:#3E2A12;--navy3:#523618;
+  --shadow-glow:0 0 0 3px rgba(245,158,11,.20);
+  --hero-a:#241708;--hero-b:#3A2610;--hero-c:#190F05;
+  --hero-edge:rgba(245,158,11,.22);
+  --aura-1:rgba(245,158,11,.22);--aura-2:rgba(251,191,36,.16);--aura-3:rgba(180,83,9,.16);
+  --hero-accent:#FBBF24;
+}
+
+/* Monitor — phosphor mint on deep charcoal-green, the bedside monitor. The
+   accent is minted well clear of the emerald that means 'correct', so the two
+   greens never read as the same thing. */
+html[data-theme="dark"][data-palette="monitor"]{
+  --bg:#08110D;--card:#0F1A15;--white:#0F1A15;
+  --border:#1E3328;--border2:#16271E;--border3:#264234;
+  --text:#E6F4EC;--muted:#93B7A4;--dim:#5F8571;--faint:#26382F;
+  --accent:#2DD4BF;--accent-2:#5EEAD4;--teal:var(--accent);--teal2:var(--accent-2);--teal3:#14503F;--teal4:#082820;
+  --navy:#0E2A1E;--navy2:#124030;--navy3:#175540;
+  --shadow-glow:0 0 0 3px rgba(45,212,191,.20);
+  --hero-a:#0A1F16;--hero-b:#103828;--hero-c:#07160F;
+  --hero-edge:rgba(45,212,191,.22);
+  --aura-1:rgba(45,212,191,.22);--aura-2:rgba(94,234,212,.16);--aura-3:rgba(16,185,129,.14);
+  --hero-accent:#5EEAD4;
+}
+
+/* Contrast — near-black ground, near-white text. Not another mood; the
+   accessibility floor. Semantic green/red/amber stay exactly as themed
+   everywhere else (verify-theme.js already asserts they never move), so
+   "correct" and "wrong" still mean what they mean elsewhere. The accent is
+   held inside the luminance envelope Monitor already clears, and that is a
+   measurement rather than a preference:
+
+   THE ACCENT IS DELIBERATELY NOT THE BRIGHTEST ONE AVAILABLE. What a
+   high-contrast theme owes the reader is text against ground — #FAFAFA on
+   #060606 is about 19:1 — and the accent contributes nothing to that. What
+   the accent does do is sit under text in composites verify-pearl,
+   verify-home and verify-homeprog sweep for AA, and every one of those passes
+   with Monitor as the brightest dark accent in the set (#2DD4BF, relative
+   luminance .514; its accent-2 #5EEAD4, .660). So #38BDF8 (.440) and #7DD3FC
+   (.580) sit strictly inside that envelope, while still clearing 9.46:1
+   against this palette's own ground. A first draft used #00E5FF (.633)
+   because it looked like the brightest thing available.
+
+   THE BORDER LADDER IS MEASURED TOO. Against --card they measure
+   2.11 / 3.26 / 4.36:1 (--border2 / --border / --border3), so --border, which
+   bounds interactive components, clears the 3:1 WCAG asks of a non-text
+   boundary, and --border3, which the progress track's ticks draw in, clears
+   it with room to spare. The first draft had --border at 2.72:1.
+
+   tests/verify-palette-pure.js holds every figure in this comment to the hexes
+   below. (Moved here from scripts/highcontrast-patch.js when the patch chain
+   was retired.) */
+html[data-theme="dark"][data-palette="contrast"]{
+  --bg:#060606;--card:#121212;--white:#121212;
+  --border:#666666;--border2:#4A4A4A;--border3:#7A7A7A;
+  --text:#FAFAFA;--muted:#D6D6D6;--dim:#9E9E9E;--faint:#3A3A3A;
+  --accent:#38BDF8;--accent-2:#7DD3FC;--teal:var(--accent);--teal2:var(--accent-2);
+  --teal3:#0C4A6E;--teal4:#082F49;
+  --navy:#141414;--navy2:#1E1E1E;--navy3:#282828;
+  --shadow-glow:0 0 0 3px rgba(56,189,248,.32);
+  --hero-a:#0A0A0A;--hero-b:#151515;--hero-c:#050505;
+  --hero-edge:rgba(56,189,248,.32);
+  --aura-1:rgba(56,189,248,.22);--aura-2:rgba(125,211,252,.16);--aura-3:rgba(255,255,255,.10);
+  --hero-accent:#7DD3FC;
+}
+
+.icon-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);color:#fff;
+  width:36px;height:36px;border-radius:10px;font-size:16px;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;transition:background .18s var(--ease)}
+.icon-btn:active{background:rgba(255,255,255,.26)}
+.theme-wrap{position:relative}
+.theme-menu{position:absolute;top:44px;right:0;z-index:120;width:236px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  box-shadow:var(--e4);padding:7px;opacity:0;transform:translateY(-6px) scale(.98);
+  transform-origin:top right;pointer-events:none;
+  transition:opacity .16s var(--ease),transform .16s var(--ease)}
+.theme-menu.open{opacity:1;transform:none;pointer-events:auto}
+.theme-menu-h{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:6px 9px 4px}
+.theme-opt{display:flex;align-items:center;gap:10px;width:100%;padding:8px 9px;border:none;
+  background:none;border-radius:9px;cursor:pointer;text-align:left;color:var(--text);
+  font-family:inherit;font-size:13px;font-weight:600;transition:background .13s var(--ease)}
+@media(hover:hover){.theme-opt:hover{background:var(--border2)}}
+.theme-opt.on{background:color-mix(in srgb,var(--teal) 12%,transparent)}
+.theme-sw{width:22px;height:22px;border-radius:7px;flex:none;border:1px solid rgba(255,255,255,.14);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
+.theme-opt .tk{flex:1 1 auto}
+.theme-opt .tc{color:var(--teal);opacity:0;transition:opacity .13s var(--ease)}
+.theme-opt.on .tc{opacity:1}
+.theme-opt .tc .icon{width:16px;height:16px}
+.notice{display:flex;gap:9px;align-items:flex-start;background:var(--warn-bg);
+  border:1px solid var(--warn-b);color:var(--warn);border-radius:var(--r2);
+  padding:10px 13px;font-size:13px;line-height:1.45;margin:10px 0 0}
+.notice b{font-weight:700}
+.exp-trunc{margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);
+  font-size:11px;color:var(--muted);font-style:italic}
+.src-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;
+  letter-spacing:.03em;text-transform:uppercase;color:var(--green);
+  background:var(--green-bg);border:1px solid var(--green-b);
+  padding:3px 8px;border-radius:99px;margin-left:8px;vertical-align:middle}
+.q-imgnote{font-size:13px;color:var(--muted);margin-top:8px;font-style:italic}
+.opt.img-opt .opt-text{font-family:var(--font-mono);font-weight:600;letter-spacing:.04em}
+.dist-bar{min-width:2px}
+.qstats{display:flex;gap:14px;font-size:11px;color:var(--muted);
+  justify-content:center;margin-top:2px}
+.kbd-row kbd{font-family:var(--font-mono)}
+@media print{.nav,.actions,.kb-hint{display:none!important}}
+

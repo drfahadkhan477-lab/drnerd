@@ -32,13 +32,13 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 - **Playwright** — for the test suites only, and pinned:
 
   ```bash
-  npm ci                                     # playwright 1.56.0, ts-fsrs 5.4.2, from the lockfile
+  npm ci                                     # playwright 1.63.0, ts-fsrs 5.4.2, from the lockfile
   npx playwright install chromium webkit     # the engines the full run uses
   npx playwright install firefox             # also, to reproduce CI's memorizer-browser job
   ```
 
   Pinned rather than ranged, and with `package-lock.json` committed, because a
-  suite that measures a browser is measuring a *specific* browser — `^1.56.0`
+  suite that measures a browser is measuring a *specific* browser — `^1.63.0`
   would make a green run mean "green on whatever shipped this week".
 
   Firefox is required by CI's `memorizer-browser` job (Chromium, WebKit and
@@ -119,12 +119,19 @@ where it was. It finds the export the way you give it: a path, `SYSTOLE_SRC`,
 or the one `.html` file in `source/`. With none it refuses and says why, and
 CI's `build-guard` job holds it to that.
 
-**Where to edit**: `app/systole.html`, `app/css/systole.css`, `src/` and
+**Where to edit**: `app/systole.html`, the stylesheet pieces in `app/css/`, `src/` and
 `assets/`. `scripts/carve.js` moves a range of lines out of
 `app/systole.html` into a file of its own, leaving a slot token, and keeps the
 result only if the app assembles to the same bytes as before.
 `tests/verify-carve-pure.js` audits the committed `app/` without the export:
 every token has its file and every piece is cited once.
+
+The stylesheet is split into pieces under `app/css/`, joined in the order
+`app/systole.html`'s `<style>` names them. That order is the cascade's: a
+later rule wins, so moving a rule to another piece, or reordering the slots,
+can change how the app looks even though no rule changed. Suites read the
+joined stylesheet through `stylesheet()` in `tests/_appcut.js`, never one
+piece by path.
 
 `node scripts/assemble-app.js <export> --out a.html --compare b.html` says
 whether two builds are the same bytes (stamps aside) and, if not, which part
@@ -542,9 +549,9 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
-app/          systole.html · css/systole.css   (the app, payloads as slots)
+app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        153 suites · 88 need no browser · + pwa
+tests/        153 suites · 89 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
@@ -587,6 +594,14 @@ your own machine. It is opt-in: with no runner registered it never starts, and
 nothing else changes.
 
 ### Registering it
+
+> **Stop first: this repository is public.** Do not register this runner, put
+> the export's path in its environment, or start it while the repository is
+> public. A fork's pull request can run its own workflow code on any
+> self-hosted runner the repository has, and this one would sit on the machine
+> that holds the licensed export. Make the repository private first, or apply
+> every control in [Why it does not run on pull requests](#why-it-does-not-run-on-pull-requests)
+> below, before any step in this section.
 
 Settings → Actions → Runners → New self-hosted runner, then follow the
 commands GitHub gives you. Three things must match this repository rather than
@@ -671,5 +686,23 @@ report into the run summary — that is the leak. Read it locally.
 
 A self-hosted runner executes the workflow on real hardware that has the
 licensed corpus and your home directory on it, and on a `pull_request` trigger
-that workflow comes from the PR's branch. This repository is private and
-single-author so the exposure is small, but the mitigation costs nothing.
+that workflow comes from the PR's branch. This repository is public, so anyone
+can open a pull request, and a fork's run uses the fork's own copy of the
+workflow files: it can drop this job's restriction, or add a workflow of its own
+that asks for this runner. Nothing written in a workflow file stops that. What
+does:
+
+- **Register no self-hosted runner while the repository is public** (GitHub's
+  own advice), or make the repository private first.
+- If a runner must exist on a public repository: Settings → Actions → General →
+  fork pull request workflows, set **Require approval for all external
+  contributors**, and never approve a fork's run at all. An approved job that
+  asks for this runner waits in the queue, for up to 24 hours, and starts as
+  soon as a runner comes online, so approving one "while no runner exists" is
+  not safe either.
+- **Before registering or starting the runner**, cancel every queued or
+  waiting workflow run in the Actions tab.
+
+The job itself runs only when started by hand on `master` (it is manual only,
+above), so it does not start for pull requests on its own; never add
+`pull_request` or `pull_request_target` to it.

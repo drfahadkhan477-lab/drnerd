@@ -38,4 +38,31 @@ function cut(file, from, to, opts = {}) {
   return fill(src.slice(i, opts.inclusive ? j + to.length : j));
 }
 
-module.exports = { cut, fill, once };
+/* THE STYLESHEET, AS THE APP GETS IT. It used to be one file,
+   app/css/systole.css; it is now ten pieces under app/css/, each a slot in
+   app/systole.html's <style>. This joins the pieces in the order the shell
+   names them, which is the order the cascade sees, so a suite reading a rule
+   or cutting between two anchors reads exactly what ships, wherever the piece
+   boundaries fall. */
+const SHEET_RE = /@@SLOT\[app:(app\/css\/[^\]]+\.css)\]@@/g;
+function stylesheetPieces() {
+  const shell = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
+  const style = shell.match(/<style>([\s\S]*?)<\/style>/);
+  if (!style) throw new Error('app/systole.html has no <style>');
+  const names = [...style[1].matchAll(SHEET_RE)].map(m => m[1]);
+  if (!names.length) throw new Error('app/systole.html\'s <style> names no app/css/ piece');
+  return names;
+}
+function stylesheet() {
+  return stylesheetPieces().map(n => fs.readFileSync(path.join(ROOT, n), 'utf8')).join('');
+}
+/* cut() over the joined stylesheet. */
+function cutStylesheet(from, to, opts = {}) {
+  const src = stylesheet();
+  const i = once(src, from, 'the stylesheet');
+  const j = once(src, to, 'the stylesheet');
+  if (j < i) throw new Error('the stylesheet: the end anchor comes before the start');
+  return fill(src.slice(i, opts.inclusive ? j + to.length : j));
+}
+
+module.exports = { cut, fill, once, stylesheet, stylesheetPieces, cutStylesheet };

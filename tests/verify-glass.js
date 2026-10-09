@@ -70,7 +70,7 @@ var S = {};
 (async () => {
   head('the glass is read from the app that ships');
   /* Until the patch chain was retired this ran glass-patch.js over the
-     fixture. The glass now lives in app/css/systole.css (the rules) and
+     fixture. The glass now lives in app/css/nav.css (the rules) and
      app/systole.html (the script that derives --card-glass), so both are cut
      out of those files, each between anchors that must occur once, and put
      into the fixture where the patch used to put them. */
@@ -79,13 +79,13 @@ var S = {};
     if (n !== 1) throw new Error(`${where}: expected the anchor once, found ${n}: ${a.slice(0, 50)}`);
     return src.indexOf(a);
   };
-  const APP_CSS = fs.readFileSync(path.join(__dirname, '..', 'app', 'css', 'systole.css'), 'utf8');
+  const APP_CSS = require('./_appcut.js').stylesheet();
   const APP_HTML = fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8');
   const NAV = '.nav{color:#fff;height:var(--navh);display:flex;align-items:center;';
   const MEMORY = '/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */';
   const BANNER = '/* ── glass — see scripts/glass-patch.js ── */';
-  const cssFrom = once(APP_CSS, BANNER, 'app/css/systole.css') + BANNER.length;
-  const css = APP_CSS.slice(cssFrom, once(APP_CSS, NAV, 'app/css/systole.css'));
+  const cssFrom = once(APP_CSS, BANNER, 'the stylesheet') + BANNER.length;
+  const css = APP_CSS.slice(cssFrom, once(APP_CSS, NAV, 'the stylesheet'));
   const jsFrom = once(APP_HTML, '/* ══════════════ Glass — see scripts/glass-patch.js', 'app/systole.html');
   const js = APP_HTML.slice(jsFrom, APP_HTML.indexOf(MEMORY, jsFrom));
   ok('the rules and the script were both found, and are whole', css.length > 2000 && /backdrop-filter/.test(css) &&

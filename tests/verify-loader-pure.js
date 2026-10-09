@@ -285,6 +285,49 @@ const splitChecks = async () => {
      !/writeFileSync\([^)]*'refs-images\.json'/.test(SRC) && !/fetch\('content\/refs-images\.json'\)/.test(SRC));
 };
 
+/* The shell preloads its upright faces, so the first layout has them instead
+   of asking the operating system for fallbacks and laying out again when the
+   faces arrive (traced at --cpu 4: 11 platform font lookups, 32-35 ms, down to
+   1 lookup, 4-7 ms). preloadFaces() is lifted out of build-pwa.js, not copied. */
+const preloadChecks = () => {
+  head('the shell preloads the faces its first layout uses');
+  const at = SRC.indexOf('function preloadFaces(');
+  let fn = null;
+  if (at >= 0) {
+    let depth = 0, end = -1;
+    for (let k = SRC.indexOf('{', at); k < SRC.length; k++) {
+      if (SRC[k] === '{') depth++;
+      else if (SRC[k] === '}') { depth--; if (!depth) { end = k + 1; break; } }
+    }
+    if (end > 0) fn = new Function(`${SRC.slice(at, end)}\nreturn preloadFaces;`)();
+  }
+  ok('build-pwa defines preloadFaces() and calls it on the shell',
+     typeof fn === 'function' && /html = preloadFaces\(html, fontAssets\.map\(/.test(SRC));
+  if (typeof fn !== 'function') return;
+  const FACES = ['dm-sans.woff2', 'dm-sans-italic.woff2', 'dm-serif-display.woff2', 'jetbrains-mono.woff2'];
+  const shell = '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="x">\n<style>body{}</style>\n</head>';
+  let out = '', outErr = '';
+  try { out = fn(shell, FACES); } catch (e) { outErr = e.message; }
+  ok('it builds the preloads for the four real faces without complaint', !outErr, outErr);
+  const links = [...out.matchAll(/<link rel="preload"[^>]*>/g)].map(m => m[0]);
+  ok('one preload per upright face, and none for the italic',
+     links.length === 3 && ['dm-sans.woff2', 'dm-serif-display.woff2', 'jetbrains-mono.woff2'].every(n => links.some(l => l.includes(`href="fonts/${n}"`))) &&
+     !links.some(l => l.includes('italic')), links.join(' '));
+  /* A font is always fetched in CORS mode; a preload without crossorigin does
+     not match it, and the face downloads twice. as and type must be right for
+     the browser to treat it as a font at all. */
+  ok('each is a CORS font preload of type woff2', links.length === 3 &&
+     links.every(l => / as="font"/.test(l) && / type="font\/woff2"/.test(l) && / crossorigin/.test(l)));
+  const charsetAt = out.indexOf('<meta charset="UTF-8">'), firstLink = out.indexOf('<link rel="preload"'), styleAt = out.indexOf('<style>');
+  ok('after the charset declaration, and before the stylesheet', charsetAt >= 0 && charsetAt < firstLink && firstLink < styleAt,
+     `charset ${charsetAt}, first preload ${firstLink}, style ${styleAt}`);
+  let threw = '';
+  try { fn(shell.replace('<meta charset="UTF-8">\n', ''), FACES); } catch (e) { threw = e.message; }
+  ok('a shell whose charset line moved is refused, not silently left without preloads', /charset/.test(threw), threw);
+};
+
+preloadChecks();
+
 splitChecks().catch(e => { failed++; console.log('  FAIL  the split checks threw  → ' + e.message); }).then(() => {
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

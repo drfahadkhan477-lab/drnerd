@@ -22,6 +22,15 @@
  * and everything it called). It is a separate launch because the profiler
  * slows what it watches, and the medians above should not carry that.
  *
+ * --layout adds one more launch, traced, and lists every style recalculation
+ * and layout the page did before the hero: when, how long, how many objects,
+ * and which script forced it (or "the browser, for a frame" when none did).
+ * A profiler bills a forced layout to whichever function asked — on the
+ * owner's laptop ECGMonitor.fit showed 0.37 s of self time for four lines of
+ * code, which was the home screen's layout, not the ECG — so this says what
+ * the time was and how much of the page it covered. Chromium only, like the
+ * throttle; a separate launch for the same reason as --profile.
+ *
  * WHY THIS EXISTS. verify-stage0 asserts "launches without stalling" as
  *
  *     ok('launches without stalling', launchMs < 5000)
@@ -65,10 +74,11 @@ const flag = (name, dflt) => {
   if (!Number.isFinite(n) || n < 1) { console.error(`--${name} needs a number of 1 or more`); process.exit(1); }
   return n;
 };
-const CPU = flag('cpu', 1), RUNS = Math.round(flag('runs', 1)), PROFILE = argv.includes('--profile');
+const CPU = flag('cpu', 1), RUNS = Math.round(flag('runs', 1)), PROFILE = argv.includes('--profile'),
+      LAYOUT = argv.includes('--layout');
 const target = argv.find((a, i) => !a.startsWith('--') && !(i > 0 && /^--(cpu|runs)$/.test(argv[i - 1])));
 if (!target) {
-  console.error('usage: node tools/boot-probe.js <build/systole.html | http://host:port> [--cpu N] [--runs N]');
+  console.error('usage: node tools/boot-probe.js <build/systole.html | http://host:port> [--cpu N] [--runs N] [--profile] [--layout]');
   process.exit(1);
 }
 const URL = /^https?:/.test(target) ? target
@@ -82,7 +92,10 @@ const URL = /^https?:/.test(target) ? target
   console.log(`Boot probe — ${engineName()}\n  ${target}` +
               (CPU > 1 ? `, CPU slowed ${CPU}×` : '') + (RUNS > 1 ? `, ${RUNS} runs` : '') + '\n');
 
-  const once = async (profile = false) => {
+  /* mode: undefined for a timed run, 'profile' or 'layout' for the extra one. */
+  const once = async (mode) => {
+  const profile = mode === 'profile';
+  const tracing = mode === 'layout' && engineName() === 'chromium' && typeof browser.startTracing === 'function';
   const page = await (await browser.newContext()).newPage();
   /* Chromium only, like the throttle; null elsewhere, and said so below. */
   let cdp = null;
@@ -110,6 +123,8 @@ const URL = /^https?:/.test(target) ? target
     const stamp = () => {
       if (window.__heroAt === null && document.querySelector('.hero-h1')) {
         window.__heroAt = performance.now();
+        /* The same moment, on the trace's clock, for --layout. */
+        try { performance.mark('boot-probe:hero'); } catch (_) {}
         return true;
       }
       return false;
@@ -129,6 +144,10 @@ const URL = /^https?:/.test(target) ? target
     } catch (_) { window.__longTasks = null; }
   });
 
+  if (tracing) {
+    await browser.startTracing(page, { categories: ['devtools.timeline', 'disabled-by-default-devtools.timeline',
+      'disabled-by-default-devtools.timeline.stack', 'blink.user_timing'] });
+  }
   const t0 = Date.now();
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   /* Wait on the DOM condition verify-stage0 itself waits on — proven to work
@@ -136,6 +155,7 @@ const URL = /^https?:/.test(target) ? target
      install costs precision and not the whole reading. */
   await page.waitForFunction(() => !!document.querySelector('.hero-h1'), null, { timeout: 120000 });
   const cpuProfile = cdp ? (await cdp.send('Profiler.stop')).profile : null;
+  const trace = tracing ? JSON.parse((await browser.stopTracing()).toString()) : null;
   const wallMs = Date.now() - t0;
   const heroFallback = await page.evaluate(() => performance.now());
 
@@ -163,7 +183,7 @@ const URL = /^https?:/.test(target) ? target
      reported rather than presenting one as the other. */
   const heroAt = t.stamped ? t.heroAt : heroFallback;
   await page.context().close();
-  return { t, heroAt, wallMs, throttled, cpuProfile };
+  return { t, heroAt, wallMs, throttled, cpuProfile, trace };
   };
 
   const runs = [];
@@ -256,9 +276,15 @@ const URL = /^https?:/.test(target) ? target
   console.log('');
 
   if (PROFILE) {
-    const p = (await once(true)).cpuProfile;
+    const p = (await once('profile')).cpuProfile;
     if (!p) console.log('  Profile: unavailable — this engine has no sampling profiler.\n');
     else printProfile(p);
+  }
+
+  if (LAYOUT) {
+    const tr = (await once('layout')).trace;
+    if (!tr) console.log('  Layout trace: unavailable — this engine cannot be traced.\n');
+    else printLayout(tr);
   }
 
   await browser.close();
@@ -310,4 +336,42 @@ function printProfile(profile) {
   console.log('\n  By self time — the function\'s own code:');
   top(self, 15).forEach(line);
   console.log('');
+}
+
+/* Style and layout before the hero, from a trace. Only the page's main thread
+   (the one the hero mark was made on), and only up to that mark. Who forced a
+   pass is the top of the script stack the trace records with it; a pass with
+   no stack was the browser's own, for a frame. */
+function printLayout(trace) {
+  const ev = trace.traceEvents || [];
+  const hero = ev.find(e => e.name === 'boot-probe:hero');
+  const nav = ev.find(e => e.name === 'navigationStart' && (!hero || e.pid === hero.pid));
+  if (!hero || !nav) {
+    console.log('  Layout trace: unavailable — the trace carries no ' + (hero ? 'navigation start' : 'hero mark') + '.\n');
+    return;
+  }
+  const at = ts => ((ts - nav.ts) / 1e6).toFixed(2) + 's';
+  const passes = ev.filter(e => e.ph === 'X' && e.pid === hero.pid && e.tid === hero.tid && e.ts <= hero.ts &&
+                                (e.name === 'Layout' || e.name === 'UpdateLayoutTree'));
+  const rows = passes.map(e => {
+    const a = e.args || {}, b = a.beginData || {}, d = a.data || {};
+    const stack = b.stackTrace || d.stackTrace || [];
+    return { ts: e.ts, ms: e.dur / 1000, kind: e.name === 'Layout' ? 'layout' : 'style',
+             objects: e.name === 'Layout' ? (b.dirtyObjects ?? b.totalObjects ?? null) : (a.elementCount ?? d.elementCount ?? null),
+             by: stack.length ? stack.slice(0, 3).map(f => f.functionName || '(anonymous)').join(' < ') : null };
+  });
+  const sum = (k, forced) => rows.filter(r => r.kind === k && (forced === undefined || !!r.by === forced)).reduce((n, r) => n + r.ms, 0);
+  console.log(`  Style and layout before the hero (traced launch, hero at ${at(hero.ts)}):`);
+  console.log(`    layout ${(sum('layout') / 1000).toFixed(2)}s in ${rows.filter(r => r.kind === 'layout').length} passes, ` +
+              `${(sum('layout', true) / 1000).toFixed(2)}s of it forced by script`);
+  console.log(`    style  ${(sum('style') / 1000).toFixed(2)}s in ${rows.filter(r => r.kind === 'style').length} passes, ` +
+              `${(sum('style', true) / 1000).toFixed(2)}s of it forced by script`);
+  const big = rows.filter(r => r.ms >= 2).sort((x, y) => x.ts - y.ts);
+  for (const r of big) {
+    console.log('    ' + at(r.ts).padStart(6) + (r.ms.toFixed(1) + 'ms').padStart(9) + '  ' + r.kind.padEnd(6) +
+                (r.objects === null ? '' : String(r.objects) + (r.kind === 'layout' ? ' objects' : ' elements')).padStart(15) +
+                '   ' + (r.by || 'the browser, for a frame'));
+  }
+  if (rows.length > big.length) console.log(`    … and ${rows.length - big.length} passes under 2 ms`);
+  console.log('  (a separate launch: tracing slows what it watches)\n');
 }

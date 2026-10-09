@@ -31,7 +31,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { cut } = require('./_appcut.js');
+const { cut, cutStylesheet } = require('./_appcut.js');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath } = require('./_deathnote.js');
 
@@ -116,7 +116,7 @@ try {
     route: cut('app/systole.html', "    :S.screen==='notesearch'?buildNoteSearch()", "    :S.screen==='echo'?buildEchoScreen()"),
     doors: cut('app/systole.html', '      <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"',
       '      <div class="theme-wrap">'),
-    css: cut('app/css/systole.css', '.echo-studio{', '/* ── glass — see scripts/glass-patch.js ── */'),
+    css: cutStylesheet('.echo-studio{', '/* ── glass — see scripts/glass-patch.js ── */'),
   };
 } catch (e) { cutError = e.message; }
 

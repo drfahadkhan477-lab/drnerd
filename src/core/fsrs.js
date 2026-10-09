@@ -24,6 +24,21 @@
                default 90% target retention (see fsrsIvl for why that makes
                ivl and stability numerically the same thing at this target).
 
+   WHERE THIS DEPARTS FROM UPSTREAM FSRS-5, on purpose (the scheduler
+   contract; tests/verify-oracle.js compares the arithmetic against ts-fsrs):
+     · whole local calendar days only: no sub-day learning or relearning
+       steps, and no same-day short-term stability update;
+     · interval = stability rounded UP (fsrsIvl), never down or to nearest;
+     · interval capped at 36500 days, the same as upstream's default;
+     · no interval fuzz, so the same card and rating always give the same day;
+     · Again never raises stability above what the card had
+       (fsrsNextStabilityFail) — upstream's formula can;
+     · a legacy SM-2 card is seeded from its old interval at difficulty 5
+       (fsrsSeed); malformed stored fields fall back to first-review values;
+     · a non-numeric rating counts as Good; out-of-range ones are clamped;
+     · target retention is fixed at 90%, and the weights are the population
+       defaults, never fitted to a deck.
+
    Usage:
      const next = fsrsUpdate(S.srs[q.id], grade);   // grade: 1 Again .. 4 Easy
      S.srs[q.id] = next;
@@ -51,11 +66,15 @@ const FSRS_FACTOR = Math.pow(0.9, 1 / FSRS_DECAY) - 1;   // ≈0.234568, tuned s
    granularity: a store accumulates cards over months and can easily span two
    models, so a single stamp on the blob would be a lie about most of it. The
    cost is ~5 bytes x 639 cards in a store that is bounded and small. */
-const SCHEDULER_VERSION = 1;
+/* 2: the interval is capped at FSRS_MAX_IVL (36500 days). Cards stamped 1 were
+   scheduled without the cap; they are left as they are, because no realistic
+   card has reached it, and the next review reschedules any that did. */
+const SCHEDULER_VERSION = 2;
 
 /* And the forcing function, because a version somebody has to remember to
    bump is a version that will be wrong. This hashes the numbers that actually
-   determine every interval the module produces; verify-fsrs.js pins the
+   determine every interval the module produces (the weights, the decay and
+   the interval cap); verify-fsrs.js pins the
    result. Change a weight without bumping SCHEDULER_VERSION and the pin fails
    and says so — the same bargain scripts/build.js makes with its exact-match
    patches, and the same one SHELL_V makes by deriving itself from content.
@@ -63,7 +82,7 @@ const SCHEDULER_VERSION = 1;
    FNV-1a: this module runs in a browser with no crypto import, and the job is
    to notice a change, not to resist an adversary. */
 function fsrsParamsFingerprint() {
-  const src = FSRS_W.join(',') + '|' + FSRS_DECAY;
+  const src = FSRS_W.join(',') + '|' + FSRS_DECAY + '|' + FSRS_MAX_IVL;
   let h = 0x811c9dc5;
   for (let i = 0; i < src.length; i++) { h = Math.imul(h ^ src.charCodeAt(i), 0x01000193) >>> 0; }
   return h.toString(16).padStart(8, '0');
@@ -188,8 +207,18 @@ function fsrsNextStabilityFail(difficulty, stability, retrievability) {
    keeps a fresh Again (stability ≈0.4d) and a fresh Hard (≈1.2d) from both
    collapsing onto the same "tomorrow" — the exact failure mode this module
    replaces. */
+/* CAPPED AT A CENTURY, as upstream FSRS is (ts-fsrs: maximum_interval =
+   36500). Without it the interval has no ceiling at all: five Easy ratings in
+   a row schedule a card 107 years out, and a few more carry its due date past
+   the year 9999. Every due check in both apps compares ISO strings
+   (`due <= today`), and '13442-02-25' sorts BEFORE '2026-10-09' — so the most
+   thoroughly learned card in the deck would come due on every visit. Kept on
+   its own schedule that takes millennia, so the realistic routes are a wrong
+   device clock or an edited backup; the cap closes all of them. Only the
+   interval is capped: stability is the model's state, and stays the model's. */
+const FSRS_MAX_IVL = 36500;
 function fsrsIvl(stability) {
-  return Math.max(1, Math.ceil(stability));
+  return Math.min(FSRS_MAX_IVL, Math.max(1, Math.ceil(stability)));
 }
 
 /* Seed a "previous state" for a card FSRS has never scheduled before —
@@ -273,7 +302,7 @@ root.FSRS = {
   update: fsrsUpdate, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
   ivl: fsrsIvl, daysBetween, todayISO, isoToLocalDate, localDateToISO,
-  W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR,
+  W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR, MAX_IVL: FSRS_MAX_IVL,
   SCHEDULER_VERSION, paramsFingerprint: fsrsParamsFingerprint,
 };
 

@@ -309,7 +309,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       document.querySelector(`[data-physio-view="${id}"]`)?.click();
       await new Promise(r => setTimeout(r, 120));
       const cv = document.getElementById('physioCanvas');
-      out.push({ id, w: cv.width, h: cv.height, view: physio.view() });
+      const m = document.getElementById('physioModel');
+      out.push({ id, w: cv.width, h: cv.height, view: physio.view(), model: m && m.getBoundingClientRect().height > 0 ? m.textContent : '' });
     }
     return out;
   });
@@ -322,6 +323,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('clicking a chip actually switches the view',
      viewSweep.length === EXPECTED_VIEWS.length && viewSweep.every(v => v.id === v.view),
      viewSweep.map(v => `${v.id}:${v.view}`).join(' '));
+  /* The curves are computed from textbook resting values, and the panel has
+     to say so wherever it is open: a model that looks like a recording reads
+     as one. Every view rebuilds the panel, so each is checked, not just the first. */
+  ok('every view says it is a teaching model, not a recording',
+     viewSweep.length === EXPECTED_VIEWS.length && viewSweep.every(v => /teaching model/i.test(v.model) && /not recorded from a patient/i.test(v.model)),
+     viewSweep.filter(v => !/teaching model/i.test(v.model)).map(v => v.id).join(' ') || 'all');
 
   head('the PV loop responds to an intervention, on screen');
   await page.evaluate(() => { document.querySelector('[data-physio-view="pv"]').click(); });
