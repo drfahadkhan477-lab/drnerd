@@ -44,7 +44,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 
 const ROOT = path.join(__dirname, '..');
 const APP = path.join(ROOT, 'app', 'systole.html');
-const APP_CSS = path.join(ROOT, 'app', 'css', 'systole.css');
+
 
 /* The lines between two anchors, both included, each required to occur
    exactly once. This suite used to lift the replace argument out of
@@ -52,8 +52,9 @@ const APP_CSS = path.join(ROOT, 'app', 'css', 'systole.css');
    so it is read there, from the page and the stylesheet that ship. A copy
    kept in this file would go on passing after the app changed. */
 function between(file, first, last) {
-  const src = fs.readFileSync(file, 'utf8');
-  const name = path.relative(ROOT, file);
+  /* The stylesheet is ten pieces joined in the shell's order (tests/_appcut.js). */
+  const src = file === 'stylesheet' ? require('./_appcut.js').stylesheet() : fs.readFileSync(file, 'utf8');
+  const name = file === 'stylesheet' ? 'the stylesheet' : path.relative(ROOT, file);
   for (const a of [first, last]) {
     const n = src.split(a).length - 1;
     if (n !== 1) throw new Error(`${name}: expected the anchor once, found ${n}: ${a.slice(0, 60)}`);
@@ -66,7 +67,7 @@ function between(file, first, last) {
 const JS = { replace: between(APP,
   "  const fs_=wrap.querySelector('.figv-scroll');",
   "    if(im&&!im.complete) im.addEventListener('load',figZ.apply,{once:true}); else figZ.apply(); }") };
-const CSS = { replace: between(APP_CSS,
+const CSS = { replace: between('stylesheet',
   '.figv-scroll.zoomed:active{cursor:grabbing}',
   '.figv-scroll img{transition:none}.figv-scroll img.fig-loading{opacity:1}\n}') };
 

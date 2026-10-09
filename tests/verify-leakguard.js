@@ -288,6 +288,18 @@ head('the pre-commit route: what is staged');
   ok('and a clean staged file is not refused for what is only on disk', r.code === 0, r.out.trim().slice(0, 80));
   git('rm', '-q', '-f', '--cached', 'plain.json');
 
+  fs.writeFileSync(at('move.json'), '{}'); git('add', 'move.json'); git('commit', '-q', '-m', 'rename fixture', '--no-verify');
+  fs.mkdirSync(at('content'), { recursive: true });
+  git('mv', 'move.json', 'content/move.json');
+  ok('the fixture is a Git-detected rename', /R100/.test(git('diff', '--cached', '--name-status')));
+  r = inRepo();
+  ok('a staged rename into a forbidden destination is refused', r.code === 1 && /PATH\s+content\/move\.json/.test(r.out));
+  git('reset', '--hard', '-q', 'HEAD');
+  git('mv', 'move.json', 'ordinary-moved.json');
+  r = inRepo();
+  ok('an ordinary rename is actually checked and passes', r.code === 0 && /1 file\(s\) checked/.test(r.out));
+  git('reset', '--hard', '-q', 'HEAD');
+
   /* A FAILURE TO LOOK IS NOT A PASS. Git that cannot answer used to give an
      empty list, and "0 file(s) checked, nothing licensed", exit 0. */
   const broken = args => {

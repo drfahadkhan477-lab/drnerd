@@ -18,7 +18,7 @@
 @font-face{font-family:'DM Sans';font-style:italic;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSans-Italic.woff2]@@) format('woff2')}
 @font-face{font-family:'DM Serif Display';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSerifDisplay.woff2]@@) format('woff2')}
 @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/JetBrainsMono.woff2]@@) format('woff2')}
-@@SLOT[app:app/css/systole.css]@@</style>
+@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@</style>
 <script>
 /* Home Screen apps only. navigator.standalone is the iOS spelling and
    display-mode:standalone is everyone else's; either one means the browser
@@ -2079,9 +2079,12 @@ function mountInk(){
 function currentQ(){ return (S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null; }
 
 /* ── export / import (survives file:// storage limits) ────────────────────── */
-function exportMarkup(){
+async function exportMarkup(){
+  try{
+  await Store.ready();
   if(typeof flushLog==='function') flushLog();
-  const blob=new Blob([JSON.stringify({v:5,ink:INK,notes:NOTES,
+  const assets=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{};
+  const blob=new Blob([JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
     refs:(typeof REF!=='undefined'?REF:[]),
     log:(typeof LOG!=='undefined'?LOG:[]),
     chat:loadJSON('accsap12.chat',{}),stats:loadJSON('accsap12.v2',{}),
@@ -2092,6 +2095,22 @@ function exportMarkup(){
   a.href=URL.createObjectURL(blob);
   a.download='accsap12-annotations-'+new Date().toISOString().slice(0,10)+'.json';
   a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  return true;
+  }catch(_){ toast('Backup could not be exported. Check that your reference images are available.'); return false; }
+}
+function validateAnnotationBackup(d){
+  const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+  if(!record(d)||(d.v!=null&&(!Number.isInteger(d.v)||d.v<1||d.v>6))) throw new Error('Invalid backup.');
+  const safe=v=>{ if(v&&typeof v==='object') for(const k of Object.keys(v)){
+    if(['__proto__','constructor','prototype'].includes(k)) throw new Error('Unsafe backup key.'); safe(v[k]);
+  }};
+  safe(d);
+  for(const k of ['ink','notes','chat','stats']) if(d[k]!=null&&!record(d[k])) throw new Error('Invalid '+k);
+  for(const k of ['refs','log','mem']) if(d[k]!=null&&!Array.isArray(d[k])) throw new Error('Invalid '+k);
+  if(d.refs&&d.refs.some(r=>!record(r)||typeof r.body!=='string')) throw new Error('Invalid reference.');
+  if(d.v===6&&!record(d.assets)) throw new Error('Missing backup images.');
+  if(d.assets!=null) RefAssets.validateBackup(d.assets);
+  return d.stats?progressFromBackup(d.stats):null;
 }
 function importMarkup(){
   const inp=document.createElement('input');
@@ -2099,9 +2118,12 @@ function importMarkup(){
   inp.onchange=()=>{
     const f=inp.files[0]; if(!f)return;
     const r=new FileReader();
-    r.onload=()=>{
+    r.onload=async()=>{
       try{
         const d=JSON.parse(r.result);
+        const progress=validateAnnotationBackup(d);
+        await Store.ready();
+        const assetsStored=d.assets==null||await RefAssets.restoreBackup(d.assets);
         if(d.ink)  { INK=d.ink;   saveJSON(INK_KEY,INK); }
         if(d.notes){ NOTES=d.notes; saveJSON(NOTE_KEY,NOTES); }
         if(d.refs&&typeof REF!=='undefined'){ REF=d.refs; saveJSON('accsap12.ref',REF);
@@ -2111,9 +2133,14 @@ function importMarkup(){
            store; this one only wrote, so a restored backup's conversations
            did not appear until the app was next launched. */
         if(d.chat){ CHATS=d.chat; saveJSON('accsap12.chat',CHATS); }
-        if(d.stats)saveJSON('accsap12.v2',d.stats);
+        if(d.stats){
+          Object.assign(S,progress);
+          FOREIGN={}; for(const k of Object.keys(d.stats)) if(!SCHEMA_KEYS.includes(k)) FOREIGN[k]=d.stats[k];
+          saveJSON('accsap12.v2',d.stats);
+          applyTheme();
+        }
         if(d.mem&&typeof Memory!=='undefined') Memory.replaceAll(d.mem);
-        toast('Annotations restored.'); render();
+        toast(assetsStored?'Annotations restored.':'Annotations restored for this visit, but the images could not be saved. Export a backup before closing.'); render();
       }catch(e){ toast('That file could not be read.'); }
     };
     r.readAsText(f);
@@ -3298,12 +3325,6 @@ function mountTwelve(){
   /* The canvas is sized from its box, and the box is not final until layout
      settles after a screen change — redraw once it is. */
   requestAnimationFrame(()=>twelve&&twelve.draw());
-}let __webgl2Checked=null;
-function hasWebGL2(){
-  if(__webgl2Checked!==null) return __webgl2Checked;
-  try{ const c=document.createElement('canvas'); __webgl2Checked=!!c.getContext('webgl2'); }
-  catch(_){ __webgl2Checked=false; }
-  return __webgl2Checked;
 }
 function setLab(k){
   /* A lead selected on one rhythm is still the lead you want to watch on the
@@ -5545,6 +5566,20 @@ const SCHEMA_KEYS=['schemaVersion','chStats','missed','theme','homeLayout',
   'practice','sinceBackup','lastBackup','resume','focusMode','examDate'];
 let FOREIGN={};
 
+function progressFromBackup(raw){
+  const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+  for(const k of ['chStats','srs','daily','practice','resume']) if(raw[k]!=null&&!record(raw[k])) throw new Error('Invalid statistics.');
+  for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
+    if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');
+  for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');
+  if(raw.missed!=null&&(!Array.isArray(raw.missed)||raw.missed.some(x=>typeof x!=='string'))) throw new Error('Invalid missed list.');
+  return {resume:raw.resume||{},resumed:false,sessionCorrect:raw.sessionCorrect||0,sessionTotal:raw.sessionTotal||0,
+    chStats:raw.chStats||{},missed:new Set(raw.missed||[]),srs:raw.srs||{},reviewStreak:raw.reviewStreak||0,
+    lastReviewDay:raw.lastReviewDay||null,daily:raw.daily||{},practice:raw.practice||{},
+    sinceBackup:raw.sinceBackup||0,lastBackup:raw.lastBackup||null,theme:raw.theme||'auto',homeLayout:raw.homeLayout||'signal',
+    focusMode:!!raw.focusMode,examDate:/^\d{4}-\d{2}-\d{2}$/.test(raw.examDate||'')?raw.examDate:null};
+}
+
 function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOREIGN,{
   schemaVersion:DATA_SCHEMA_VERSION,
   chStats:S.chStats,missed:[...S.missed],theme:S.theme,homeLayout:S.homeLayout,
@@ -6409,7 +6444,13 @@ function mountHeroHeart3d(){
      stays alive with its context; only the render loop stops, because a rAF
      loop drawing into a detached canvas is a frame budget spent on nothing. */
   if(!slot){ if(heroHeart3d) heroHeart3d.stop(); return; }
-  if(typeof Heart3D==='undefined'||!hasWebGL2()){
+  /* NO TEST CONTEXT FIRST. This asked hasWebGL2(), which made a throwaway
+     canvas and a WebGL2 context just to see if one could be had, and then
+     Heart3D.create asked again on the real canvas: two contexts per launch,
+     the first measured at 0.04 s with the CPU slowed 4x, and a slot of WebKit's sixteen held
+     until it was collected. create() returns null when there is no WebGL2,
+     and that is handled below exactly as the test's "no" was. */
+  if(typeof Heart3D==='undefined'){
     document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
     return;
   }
@@ -6472,7 +6513,11 @@ function mountHeroHeart3d(){
     onRestored:function(){
       if(S.screen==='home') mountHeroHeart3d();
     }});
-  if(!heroHeart3d){ cv.remove(); return; }
+  if(!heroHeart3d){
+    cv.remove();
+    document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
+    return;
+  }
   heroHeart3dCanvas=cv;
   cv.style.pointerEvents='none';           // decorative — never eats a home-screen scroll
   document.getElementById('heroHeart')?.classList.add('heart-3d-active');

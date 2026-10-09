@@ -190,11 +190,11 @@ const gitlinks = [];
    git committed the 5 MB, and a staged file deleted from disk was skipped. */
 function staged() {
   /* --raw, not --name-only, to see each entry's mode and new blob. -z output:
-     ":old new sha sha status" NUL path NUL, one path per entry since ACM has
-     no renames. */
+     ":old new sha sha status" NUL path NUL. Disable rename detection so a
+     destination is always checked as an addition; include type changes too. */
   let out;
   try {
-    out = execFileSync('git', ['diff', '--cached', '--raw', '--no-abbrev', '-z', '--diff-filter=ACM'],
+    out = execFileSync('git', ['diff', '--cached', '--raw', '--no-abbrev', '--no-renames', '-z', '--diff-filter=ACMT'],
       { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).split('\0');
   } catch (e) { cannot('ask git what is staged', e); }
   const files = [];

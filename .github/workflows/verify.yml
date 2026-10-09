@@ -679,6 +679,14 @@ jobs:
   # path) and then run again; runSelfTest() alone, on fresh pages or repeated
   # on one page, never crashed. Not the panel's blur, shadow or translucency,
   # not will-change on the figure, not memory. Cause not yet found.
+  # THE DEVICE SAYS IT IS THE HARNESS. The owner ran Settings > Self-test on
+  # the iPad the same day, the path that crashes here (#selftest, then Run
+  # again), against the real bank's figures, in portrait and in landscape,
+  # several times: every run finished, every check held, no crash. As with the
+  # resize crash in tests/_render.js, this is Playwright's WPE WebKit on Linux,
+  # not iPadOS Safari. The step stays in this job and still fails when the page
+  # dies; a red verify-selftest with "the browser CRASHED the page" and nothing
+  # logged is this, and is read as such. Any other failure in it is real.
   # A red one here is read before it is re-run: a crash with that abort in the
   # log is the runner; anything else is the app's or the suite's.
   #

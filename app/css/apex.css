@@ -1,0 +1,450 @@
+/* ═══════════ ANNOTATION · STICKY NOTES · AI PANEL ═══════════ */
+:root{--ink-bar:#111E35}
+.ink-host{position:relative}
+.ink-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:6;
+  touch-action:pan-y;pointer-events:none}
+.ink-host.ink-on .ink-canvas{pointer-events:auto;cursor:crosshair}
+.ink-host.ink-on .fig-img{cursor:default}
+
+/* floating tool rail */
+.tool-rail{position:fixed;left:max(10px,env(safe-area-inset-left));top:50%;
+  transform:translateY(-50%);z-index:60;display:flex;flex-direction:column;gap:6px;
+  background:var(--white);border:1.5px solid var(--border);border-radius:16px;
+  padding:8px 6px;box-shadow:0 8px 28px rgba(15,30,61,.16)}
+.tool-rail.hidden{display:none}
+.tool{width:44px;height:44px;border-radius:11px;border:1.5px solid transparent;
+  background:transparent;color:var(--muted);font-size:19px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .16s var(--ease)}
+.tool:active{transform:scale(.92)}
+.tool.on{background:var(--teal-bg,#E6FBF7);border-color:var(--teal);color:var(--teal)}
+.tool.danger.on{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.tool-sep{height:1px;background:var(--border2);margin:3px 4px}
+.swatches{display:flex;flex-direction:column;gap:5px;align-items:center}
+.sw{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;
+  transition:transform .14s var(--ease)}
+.sw.on{border-color:var(--text);transform:scale(1.16)}
+.pen-badge{font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--green);
+  text-align:center;text-transform:uppercase;padding-top:2px}
+.size-picker{display:flex;flex-direction:column;gap:7px;align-items:center;padding:2px 0}
+.size-dot{border:none;padding:0;cursor:pointer;border-radius:50%;background:var(--muted);
+  opacity:.45;transition:all .16s var(--ease)}
+.size-dot.on{opacity:1;background:var(--teal);box-shadow:0 0 0 2px var(--teal-bg,#E6FBF7)}
+.size-dot[data-sz="S"]{width:7px;height:7px}
+.size-dot[data-sz="M"]{width:11px;height:11px}
+.size-dot[data-sz="L"]{width:16px;height:16px}
+.tool.auto-on{background:var(--teal-bg,#E6FBF7);border-color:var(--teal);color:var(--teal)}
+.tool-auto{font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+
+/* sticky notes */
+.note-layer{position:absolute;inset:0;z-index:7;pointer-events:none}
+.sticky{position:absolute;min-width:120px;max-width:260px;pointer-events:auto;
+  background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:8px 10px 10px;
+  box-shadow:0 4px 14px rgba(15,30,61,.14);font-size:13px;line-height:1.45;color:#3F2D06;
+  touch-action:none}
+.sticky.blue{background:#DBEAFE;border-color:#93C5FD;color:#0C2A5B}
+.sticky.green{background:#D1FAE5;border-color:#6EE7B7;color:#053E2E}
+.sticky.pink{background:#FCE7F3;border-color:#F9A8D4;color:#500724}
+.sticky-head{display:flex;align-items:center;gap:6px;margin:-4px -4px 4px;cursor:grab}
+.sticky-grip{flex:1;height:12px;opacity:.35;
+  background:repeating-linear-gradient(90deg,currentColor 0 3px,transparent 3px 6px);
+  border-radius:2px}
+.sticky-x{border:none;background:transparent;font-size:13px;line-height:1;cursor:pointer;
+  opacity:.55;color:inherit;padding:2px 4px}
+.sticky textarea{width:100%;border:none;background:transparent;resize:none;outline:none;
+  font:inherit;color:inherit;overflow:hidden}
+
+/* AI panel */
+/* The bar is out of the flow now, so the panes have to step around it. */
+#shell{display:flex;align-items:stretch;min-height:100dvh;
+  padding-top:calc(var(--navh) + var(--sat))}
+#app{flex:1;min-width:0}
+#ai{width:0;flex:0 0 0;overflow:hidden;transition:flex-basis .28s var(--ease);
+  border-left:1px solid var(--border);background:var(--white);
+  display:flex;flex-direction:column;position:sticky;
+  top:calc(var(--navh) + var(--sat));height:calc(100dvh - var(--navh) - var(--sat))}
+#shell.ai-open #ai{flex:0 0 min(46vw,560px);width:auto}
+.grounded-btn{background:var(--card);border-color:var(--border);color:var(--muted)}
+.grounded-btn.on{background:var(--teal4);border-color:var(--teal);color:var(--teal)}
+.grounded-tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--teal);font-weight:600}
+.ref-src{font-family:var(--font-mono);font-size:13px;color:var(--muted);margin-top:5px;line-height:1.45}
+.ai-head{display:flex;align-items:center;gap:9px;padding:12px 14px;
+  border-bottom:1px solid var(--border2);background:var(--card)}
+.ai-avatar{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;
+  justify-content:center;background:linear-gradient(135deg,var(--navy3),var(--teal));font-size:16px;
+  overflow:hidden}
+.ai-avatar canvas{width:100%;height:100%;display:block}
+.ai-title{font-weight:700;font-size:13px;letter-spacing:-.01em}
+.ai-sub{font-size:11px;color:var(--muted)}
+.ai-body{flex:1;min-height:0;overflow-y:auto;padding:18px 18px 20px;
+  display:flex;flex-direction:column;gap:18px;
+  /* THE GESTURE STOPS HERE. Without this, reaching the end of the thread
+     chains the scroll to a parent — which in the portrait split is html/body
+     with overflow:hidden, so there is nowhere for it to go and the panel reads
+     as locked until you lift your finger. #app already carries this, for
+     exactly the same reason.
+     min-height:0 above is the other half: .ai-body is a flex:1 child of a
+     column flex container, and without it a flex item will not shrink below
+     its content. It happens to scroll today because #ai is overflow:hidden;
+     this is what stops that being load-bearing. */
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch}
+.msg{max-width:96%;font-size:16px;line-height:1.75}
+.msg p{margin:0 0 13px;max-width:72ch}
+.msg p:last-child{margin-bottom:0}
+.msg h3,.msg h4{font-size:16px;font-weight:700;margin:14px 0 6px;line-height:1.35}
+.msg ul{margin:0 0 10px;padding-left:20px}
+.msg li{margin:0 0 5px}
+/* pan-y as well as pan-x: a drug-dose table scrolls sideways, and a vertical
+   drag that happens to start on one belongs to the thread behind it. */
+.msg .tw{overflow-x:auto;touch-action:pan-x pan-y;margin:0 0 14px;
+  border:1px solid var(--border);border-radius:10px;-webkit-overflow-scrolling:touch}
+.msg table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.5}
+.msg th{text-align:left;font-weight:700;background:var(--card);padding:8px 11px;
+  border-bottom:1.5px solid var(--border);white-space:nowrap}
+.msg td{padding:8px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+.msg tbody tr:last-child td{border-bottom:0}
+.msg.user{align-self:flex-end;background:var(--teal);color:#fff;padding:9px 13px;
+  border-radius:14px 14px 4px 14px}
+.msg.bot{align-self:flex-start;color:var(--text)}
+.msg.bot h3{font-size:13px;margin:10px 0 4px;color:var(--teal);letter-spacing:-.01em}
+.msg.bot strong{font-weight:700}
+.msg.bot ul,.msg.bot ol{margin:6px 0 6px 18px}
+.msg.bot li{margin:3px 0}
+.msg.bot code{font-family:var(--font-mono);font-size:13px;background:var(--card);
+  padding:1px 5px;border-radius:4px}
+.msg.bot p{margin:6px 0}
+.msg.err{align-self:stretch;background:var(--red-bg);border:1px solid var(--red-b);
+  color:var(--red);padding:9px 12px;border-radius:10px;font-size:13px}
+
+/* ── Apex, full page ──────────────────────────────────────────────────────
+   Two ids and a class, so this wins over the bare #ai rules inside the
+   portrait and landscape media queries no matter what order they land in. */
+#shell.ai-full #ai{position:fixed;left:0;right:0;
+  top:calc(var(--navh) + var(--sat));bottom:0;
+  width:auto;max-width:none;height:auto;flex:0 0 auto;
+  border:0;border-radius:0;box-shadow:none;z-index:60;
+  background:var(--white)}
+#shell.ai-full #app{visibility:hidden}
+#shell.ai-full .ai-fab{display:none!important}
+/* One centred column for all three stacked regions, so the composer lines up
+   under the thread instead of running the width of an iPad. */
+#shell.ai-full .ai-head>div:first-of-type,
+#shell.ai-full .ai-body,
+#shell.ai-full .chips,
+#shell.ai-full .src-strip,
+#shell.ai-full .fig-strip,
+#shell.ai-full .ai-foot>*{max-width:860px;margin-left:auto;margin-right:auto;width:100%}
+#shell.ai-full .ai-body{padding:28px 24px 32px;gap:24px}
+#shell.ai-full .ai-head{padding:14px 20px}
+/* The header's own centred column would push the buttons to the middle of the
+   screen; only the title block is capped, and the row itself stays full width. */
+#shell.ai-full .ai-head>div:first-of-type{margin-left:0;margin-right:auto}
+#shell.ai-full .msg{max-width:100%}
+#shell.ai-full .msg.user{max-width:min(82%,620px)}
+#shell.ai-full .msg.bot p{max-width:74ch}
+
+/* ── how an answer reads ──────────────────────────────────────────────────
+   Written after the .msg.bot block above, so these override it by order. */
+/* --t-lead over --t-body, and --t-body in bold under it: three steps of
+   hierarchy taken from the modular scale rather than invented. The first
+   version of this used 17px and 15px, which are not steps on that ladder —
+   the type suite exists to catch exactly that and did. */
+.msg.bot h3{font-size:var(--t-lead);font-weight:700;color:var(--teal);
+  margin:22px 0 7px;line-height:1.3;letter-spacing:-.012em}
+.msg.bot h4{font-size:var(--t-body);font-weight:700;color:var(--text);
+  margin:18px 0 5px;line-height:1.35;letter-spacing:-.008em}
+/* A heading that opens a message has nothing above it to be separated from. */
+.msg.bot>h3:first-child,.msg.bot>h4:first-child{margin-top:0}
+.msg.bot p{margin:0 0 13px}
+.msg.bot>*:last-child{margin-bottom:0}
+.msg.bot ul,.msg.bot ol{margin:0 0 14px;padding-left:24px}
+.msg.bot ol{list-style:decimal}
+.msg.bot ul{list-style:disc}
+.msg.bot li{margin:0 0 7px;padding-left:2px}
+.msg.bot li:last-child{margin-bottom:0}
+.msg.bot li::marker{color:var(--teal);font-weight:600}
+/* A quote from a guideline or a stem, set as an aside rather than a wall. */
+.msg.bot blockquote{margin:0 0 14px;padding:2px 0 2px 15px;
+  border-left:3px solid var(--teal);color:var(--muted)}
+.msg.bot blockquote p:last-child{margin-bottom:0}
+.msg.bot hr{border:0;border-top:1px solid var(--border);margin:20px 0}
+/* Zebra, so a wide row can be followed across a table that scrolls sideways. */
+.msg tbody tr:nth-child(even) td{background:var(--card)}
+.msg.bot pre{margin:0 0 14px;padding:12px 14px;border-radius:10px;
+  background:var(--card);border:1px solid var(--border);overflow-x:auto}
+.msg.bot pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+/* Closed by default and genuinely absent from the layout — display:none
+   rather than height:0, so it takes no space and nothing inside it is
+   focusable while it is shut. */
+.chips{display:flex;flex-wrap:wrap;gap:7px 9px;padding:0 18px 12px}
+/* Deliberately quieter than the options. This is an aside the fellow may
+   ignore entirely, not a second question competing with the first. */
+.cf-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 18px 10px}
+.cf-lab,.miss-lab{font-size:var(--t-tiny);color:var(--muted)}
+.cf-chip,.miss-chip{font-size:var(--t-tiny);color:var(--muted);background:var(--card);
+  border:1px solid var(--border);border-radius:999px;padding:5px 11px;cursor:pointer;
+  transition:border-color .18s,color .18s,background .18s}
+.cf-chip.on,.miss-chip.on{color:var(--accent);border-color:var(--accent);background:var(--teal4)}
+.miss-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:14px}
+.cb-head{font-size:var(--t-body);color:var(--text);padding:2px 0 10px}
+.cb-head b{color:var(--danger)}
+.cb-sub{display:block;font-size:var(--t-tiny);color:var(--muted);margin-top:3px}
+.cb-h2{margin-top:16px}
+.cb-row{display:flex;align-items:center;gap:9px;padding:3px 0}
+.cb-row2{font-size:var(--t-meta);color:var(--text);padding:2px 0}
+.cb-lab{font-size:var(--t-tiny);color:var(--muted);width:9.5em;flex:none}
+.cb-track{flex:1;height:7px;border-radius:999px;background:var(--border);overflow:hidden}
+.cb-fill{display:block;height:100%;background:var(--accent);border-radius:999px}
+.cb-val{font-size:var(--t-tiny);color:var(--muted);width:6.5em;text-align:right;flex:none}
+.cb-thin{font-size:var(--t-tiny);color:var(--muted);padding:2px 0}
+.miss-lab{width:100%}
+/* Only the tutor's own prompt row folds away — see chipfix-patch.js. It is
+   hidden by id rather than by class so the Lab and the search screen, which
+   share .chips and have no button to unfold them, keep theirs. */
+#aiChips{display:none}
+#aiChips.open{display:flex}
+.ai-more{flex:0 0 auto;width:40px;height:40px;border-radius:11px;
+  border:1.5px solid var(--border);background:var(--card);color:var(--muted);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:color .16s var(--ease),border-color .16s var(--ease),background .16s var(--ease)}
+.ai-more.on{border-color:var(--teal);color:var(--teal);background:var(--teal4)}
+.chip{border:1.5px solid var(--border);background:var(--card);color:var(--muted);
+  border-radius:99px;padding:6px 11px;font-size:11px;font-weight:600;cursor:pointer;
+  transition:all .16s var(--ease)}
+.chip:active{transform:scale(.95)}
+.chip.hot{border-color:var(--teal);color:var(--teal)}
+.ai-foot{border-top:1px solid var(--border2);padding:10px 12px;
+  padding-bottom:max(10px,env(safe-area-inset-bottom));background:var(--card)}
+.ai-input{display:flex;gap:8px;align-items:flex-end}
+.ai-input textarea{flex:1;min-width:0;border:1.5px solid var(--border);border-radius:12px;
+  /* 16, not 15. The type suite holds every fixed size to the 9/11/13/16/19
+     ladder, and 15 is exactly the off-ladder size it exists to refuse — it
+     caught this. 16 is also what .msg is set at, so the composer and the
+     conversation are finally the same size, which is the point. */
+  padding:11px 14px;font:inherit;font-size:16px;line-height:1.5;resize:none;max-height:132px;
+  background:var(--white);color:var(--text);outline:none}
+.ai-input textarea:focus{border-color:var(--teal)}
+.ai-send{width:40px;height:40px;border-radius:11px;border:none;background:var(--teal);
+  color:#fff;font-size:16px;cursor:pointer;flex:0 0 auto}
+.ai-send:disabled{opacity:.4}
+.ai-send.stopping{background:var(--danger)}
+.fab-av{width:26px;height:26px;display:block;flex:none}
+.ai-fab:active{transform:scale(.96)}
+.ai-fab{transition:transform .12s var(--ease,ease),box-shadow .2s var(--ease,ease)}
+.ai-fab:hover{box-shadow:0 10px 30px rgba(30,58,138,.44)}
+.ai-fab{position:fixed;right:max(14px,env(safe-area-inset-right));
+  bottom:max(14px,env(safe-area-inset-bottom));z-index:70;
+  height:50px;padding:0 18px;border-radius:25px;border:none;cursor:pointer;
+  background:linear-gradient(135deg,var(--navy3),var(--teal));color:#fff;font-weight:700;
+  font-size:13px;letter-spacing:-.01em;box-shadow:0 8px 24px rgba(30,58,138,.34);
+  display:flex;align-items:center;gap:7px}
+.typing{display:inline-flex;gap:3px}
+.typing i{width:5px;height:5px;border-radius:50%;background:var(--dim);
+  animation:blink 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.setup{padding:16px;font-size:13px;line-height:1.6;color:var(--muted)}
+.setup h4{font-size:13px;color:var(--text);margin:0 0 8px}
+.setup input{width:100%;border:1.5px solid var(--border);border-radius:10px;
+  padding:9px 11px;font-family:var(--font-mono);font-size:13px;margin:8px 0;
+  background:var(--white);color:var(--text)}
+.setup select{width:100%;border:1.5px solid var(--border);border-radius:10px;
+  padding:9px 11px;font:inherit;font-size:13px;background:var(--white);color:var(--text)}
+.setup .note{font-size:11px;color:var(--muted);margin-top:10px}
+@media (max-width:1023px){
+  #shell{display:block}
+  #ai{position:fixed;inset:auto 0 0 0;width:100%;height:0;border-left:none;
+    border-top:1px solid var(--border);z-index:80;
+    border-radius:18px 18px 0 0;box-shadow:0 -10px 40px rgba(15,30,61,.2)}
+  #shell.ai-open #ai{height:74dvh;flex-basis:auto}
+  .tool-rail{left:auto;right:max(10px,env(safe-area-inset-right));top:auto;
+    bottom:calc(max(14px,env(safe-area-inset-bottom)) + 62px);transform:none;
+    flex-direction:row;padding:6px 8px}
+  .tool-sep{width:1px;height:auto;margin:4px 3px}
+  .swatches{flex-direction:row}
+}
+
+/* ── Apex beside the question, or under it ──────────────────────────────────
+   Which split is right depends on the SHAPE of the screen, not its size: side
+   by side wants width, stacked wants height, and a 1210×834 iPad and a 834×1194
+   iPad are the same iPad. So orientation decides. Below 700px neither fits and
+   the bottom sheet above stays exactly as it is.
+
+   These come after the max-width:1023px block on purpose — they undo it for
+   the shapes that can do better. */
+
+/* Landscape: question left, Apex right. Also claims the 768–1023 band that the
+   sheet used to take, where there is width for two columns. */
+@media (min-width:768px) and (orientation:landscape){
+  #shell{display:flex;align-items:stretch}
+  #ai{position:sticky;inset:auto;top:calc(var(--navh) + var(--sat));
+    height:calc(100dvh - var(--navh) - var(--sat));
+    width:0;flex:0 0 0;max-width:none;
+    border-left:1px solid var(--border);border-top:none;
+    border-radius:0;box-shadow:none;z-index:1}
+  #shell.ai-open #ai{flex:0 0 min(46vw,560px);width:auto}
+}
+
+/* Portrait: question above, Apex below, each scrolling on its own so the stem
+   stays where you left it while the answer arrives. The measure is untouched —
+   #app keeps its max-width, because a wide line of prose is no better here. */
+@media (min-width:700px) and (orientation:portrait){
+  html,body{height:100%;overflow:hidden}
+  #shell{display:flex;flex-direction:column;height:100dvh;min-height:0}
+  /* width:100% is doing real work here. #app carries margin:0 auto to centre
+     itself, and an auto margin on the cross axis DISABLES flex stretching — so
+     in this column flex container #app was sized to fit its contents and then
+     centred. Measured across three launches at 1024x1366, the home screen came
+     out 960px, 700px and 544px wide, because the width of the page was being
+     set by the length of whichever pearl had been chosen. It is a reading
+     column; it is not allowed to have an opinion about the prose inside it. */
+  #app{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;width:100%}
+  #ai{position:static;inset:auto;width:100%;max-width:none;
+    height:0;flex:0 0 0;min-height:0;overflow:hidden;
+    border-left:none;border-top:1.5px solid var(--border);
+    border-radius:18px 18px 0 0;
+    box-shadow:0 -10px 30px rgba(15,30,61,.10);z-index:1}
+  #shell.ai-open #app{flex:1 1 52%}
+  #shell.ai-open #ai{flex:1 1 48%;height:auto}
+}
+
+/* ── retrieval strip, peek modal, reference library ── */
+.src-strip{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:0 14px 8px}
+/* MEASURED: with three cited figures at 320px each the strip reached 428px of
+   an 888px panel and left the conversation 275px — a third of the tutor,
+   showing pictures. The figures matter and they stay; they are bounded, and
+   the strip scrolls if there are more than fit. Tapping one still opens it
+   full size, which is where a figure is actually read. */
+.fig-strip{display:flex;flex-direction:column;gap:8px;padding:0 18px 10px}
+/* .src-lbl is declared after this and supplies the type, so only what a
+   <button> would otherwise impose is reset here. */
+.fig-toggle{display:flex;align-items:center;gap:6px;width:100%;
+  padding:0;border:0;background:none;cursor:pointer;text-align:left;font-family:inherit}
+.fig-toggle .icon{width:14px;height:14px;flex:0 0 auto;
+  transition:transform .2s var(--glide,ease)}
+.fig-strip.open .fig-toggle .icon{transform:rotate(180deg)}
+/* The scroll cap moves onto the list: on the container it clipped the control
+   that opens it. */
+.fig-list{display:none}
+.fig-strip.open .fig-list{display:flex;flex-direction:column;gap:8px;
+  max-height:min(24vh,200px);overflow-y:auto;overscroll-behavior:contain}
+/* THE ANSWER'S FLOOR. Declared after .ai-body's own rule so it wins, and set
+   in rem because it is a number of LINES that matters, not a number of pixels:
+   about five of them. Without it .ai-body kept min-height:0 — correct for
+   letting a flex item shrink enough to scroll, and catastrophic as a lower
+   bound, because the figure list then took the answer down to 43px on an iPad
+   held portrait. See scripts/answerroom-patch.js for the measurements.
+   .fig-strip needs min-height:0 for the same reason .ai-body needed it: it is
+   now the box expected to give way. */
+.ai-body{min-height:8rem}
+.fig-strip{min-height:0}
+.ai-fig{margin:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--white)}
+.ai-fig img{display:block;width:100%;height:auto;max-height:190px;object-fit:contain;background:var(--white)}
+/* 13px, not 12: the type suite holds every fixed size to the 9/11/13/16 ladder,
+   and "just a bit smaller than 13" is exactly the twenty-ninth size it exists
+   to refuse. Matches the note figure's own caption, which is the same thing in
+   a different panel. */
+.ai-fig figcaption{padding:7px 11px;font-size:13px;line-height:1.45;color:var(--muted);
+  border-top:1px solid var(--border)}
+.ai-fig-src{display:block;margin-top:3px;font-size:11px;color:var(--muted)}
+/* A FIGURE THE MODEL PLACED INLINE, WHICH HAD NO STYLES AT ALL.
+   md() emits <figure class="ref-fig">, and every .ref-fig rule was scoped to
+   .ref-body — the Notes panel. Inside a reply there was no rule, so the image
+   took its natural size: 824px in a 430px panel, max-width:none. The message
+   list then scrolled sideways, which on a touch device reads as the app being
+   stuck — you cannot swipe the conversation back, and the composer and the
+   close button are off the edge. The inline citation was the whole point of
+   letting the model place a figure, and it was unusable the moment it worked. */
+.msg .ref-fig{margin:10px 0;border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;background:var(--white);max-width:100%}
+.msg .ref-fig img{display:block;width:auto;max-width:100%;height:auto;
+  max-height:340px;object-fit:contain;background:var(--white)}
+.msg .ref-fig figcaption{padding:7px 11px;font-size:13px;line-height:1.45;
+  color:var(--muted);border-top:1px solid var(--border)}
+/* And a floor under all of it. A model may emit any markup it likes, and one
+   over-wide element in a reply breaks the same way — so nothing in the panel
+   is allowed past its edge, and the things that genuinely need width scroll
+   inside themselves instead of taking the conversation with them. */
+.ai-body img,.ai-body table,.ai-body pre,.ai-body figure{max-width:100%}
+.ai-body pre,.ai-body table{overflow-x:auto;display:block}
+.src-lbl{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.src-pill{border:1px solid var(--border);background:var(--card);color:var(--muted);
+  border-radius:99px;padding:3px 9px;font-size:11px;font-weight:600;cursor:pointer;
+  font-family:var(--font-mono)}
+.src-pill.ref{border-color:var(--teal);color:var(--teal);cursor:default;font-family:var(--font-sans)}
+#peek{display:none}
+#peek.peek-open{display:flex;position:fixed;inset:0;z-index:120;background:rgba(10,22,40,.55);
+  align-items:center;justify-content:center;padding:18px;
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.peek-card{background:var(--white);border-radius:18px;max-width:660px;width:100%;
+  max-height:86dvh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.peek-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border2)}
+.peek-ch{font-weight:700;font-size:13px}
+.peek-sub{font-size:11px;color:var(--muted)}
+.peek-body{overflow-y:auto;padding:14px 16px;font-size:16px;line-height:1.7;color:var(--text)}
+.peek-opts{list-style:none;margin:10px 0;padding:0}
+.peek-opts li{padding:5px 9px;border-radius:8px;margin:3px 0;background:var(--card);font-size:13px}
+.peek-opts li.ok{background:var(--green-bg);border:1px solid var(--green-b);color:var(--green)}
+.peek-ex{margin-top:10px;padding-top:10px;border-top:1px solid var(--border2);
+  font-size:13px;color:var(--muted);line-height:1.66}
+.peek-foot{padding:12px 16px;border-top:1px solid var(--border2)}
+.ref-new{background:var(--white);border:1.5px solid var(--border);border-radius:16px;
+  padding:14px;margin:14px 0}
+.ref-new input,.ref-new textarea{width:100%;border:1.5px solid var(--border);border-radius:10px;
+  padding:9px 11px;font:inherit;font-size:13px;margin-bottom:8px;background:var(--card);
+  color:var(--text);outline:none;resize:vertical}
+.ref-new input:focus,.ref-new textarea:focus{border-color:var(--teal)}
+.ref-btns{display:flex;flex-wrap:wrap;gap:7px}
+.ref-hint{font-size:11px;color:var(--muted);margin-top:9px;line-height:1.5}
+.ref-card{background:var(--white);border:1.5px solid var(--border2);border-radius:14px;
+  padding:12px 14px;margin-bottom:9px}
+.ref-top{display:flex;align-items:flex-start;gap:10px}
+.ref-title{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700;font-size:16px;letter-spacing:-.01em;line-height:1.35}
+.ref-acts{display:flex;gap:5px}
+.ref-tags{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
+.ref-tags .ref-more{color:var(--muted);background:transparent;border-style:dashed;cursor:default}
+.ref-tags span{font-size:11px;font-weight:600;color:var(--teal);background:var(--green-bg);
+  border:1px solid var(--green-b);border-radius:99px;padding:2px 8px}
+.ref-body{font-size:16px;line-height:1.7;color:var(--text);margin-top:10px;
+  max-height:300px;overflow-y:auto;padding-right:4px}
+.ref-body>*:first-child{margin-top:0}
+.ref-body>*:last-child{margin-bottom:0}
+/* The frame shrinks to the picture instead of the picture stretching to the
+   frame. width:fit-content with max-width:100% keeps a 1328px figure inside
+   the card and lets a 278px table stay 278px, and the auto margins centre
+   whatever is left over so a narrow figure reads as placed rather than
+   stranded. */
+.ref-body .ref-fig{margin:0 auto 14px;padding:0;border:1px solid var(--border);
+  border-radius:10px;overflow:hidden;background:var(--card);
+  width:fit-content;max-width:100%}
+/* width:auto, NOT width:100%. The old rule asked a 644px crop to fill an 876px
+   card — 1752 device pixels on a 2x iPad, a 2.7x upscale, which is what was
+   reported as blurry. max-width still shrinks the wide ones to fit. */
+.ref-body .ref-fig img{display:block;width:auto;max-width:100%;height:auto}
+.ref-body .ref-fig figcaption{padding:8px 12px;font-size:13px;line-height:1.45;
+  color:var(--muted);border-top:1px solid var(--border)}
+/* A measure, not the width of the card. Long lines are hard to track back
+   from, and a desktop card is far wider than comfortable reading. */
+.ref-body p{margin:0 0 12px;max-width:68ch}
+.ref-body h3,.ref-body h4{font-size:16px;font-weight:700;color:var(--text);
+  margin:18px 0 8px;letter-spacing:-.01em;line-height:1.35}
+.ref-body ul{margin:0 0 12px;padding-left:20px;max-width:68ch}
+.ref-body li{margin:0 0 6px}
+.ref-body strong{color:var(--text);font-weight:700}
+.ref-body em{font-style:italic}
+.ref-body code{font-family:var(--font-mono);font-size:13px;
+  background:var(--card);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+.ref-body pre{margin:0 0 12px;padding:10px 12px;overflow-x:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:8px}
+.ref-body pre code{border:0;background:none;padding:0}
+/* Tables scroll sideways inside their own frame rather than squeezing. */
+.ref-body .tw{overflow-x:auto;margin:0 0 14px;
+  border:1px solid var(--border);border-radius:10px;-webkit-overflow-scrolling:touch}
+.ref-body table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.5}
+.ref-body th{text-align:left;font-weight:700;color:var(--text);background:var(--card);
+  padding:9px 12px;border-bottom:1.5px solid var(--border);white-space:nowrap}
+.ref-body td{padding:9px 12px;border-bottom:1px solid var(--border);
+  color:var(--muted);vertical-align:top}
+.ref-body tbody tr:last-child td{border-bottom:0}
+

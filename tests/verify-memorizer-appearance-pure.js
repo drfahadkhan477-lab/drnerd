@@ -49,7 +49,7 @@ const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) +
    and its page (the THEMES picker entries). Until the patch chain was retired
    this read theme-patch.js and highcontrast-patch.js, which the app had since
    moved on from. */
-const SYSTOLE_SRC = () => fs.readFileSync(path.join(ROOT, 'app', 'css', 'systole.css'), 'utf8')
+const SYSTOLE_SRC = () => require('./_appcut.js').stylesheet()
   + fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
 
 head('the themes: the owner’s two, Memorizer’s own, the five from the owner’s colour pairs, and Systole’s Contrast');

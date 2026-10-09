@@ -14,12 +14,8 @@
  * from later. This suite drives the real importer with a real File, the way
  * verify-assets.js already does for the chapter importer, and checks both.
  *
- * Two things are intentionally not asserted as "live-updated": S.srs and the
- * rest of the accsap12.v2 statistics blob. Both are documented (see the
- * comment above fsrsSeed()) as restored to the store only, and re-read into
- * S on the next boot — not synchronously, because S is a snapshot taken once
- * at load() time, not a live view of the store. Asserting a live update
- * there would be testing for behaviour the app was never meant to have.
+ * Restored progress must survive an ordinary action before the next boot.
+ * Reference figures must survive restoration in an independent storage context.
  */
 'use strict';
 const path = require('path');
@@ -99,7 +95,9 @@ const restore = `(text) => new Promise(resolve => {
     refs: [{ id: 'r1', title: 'Restored reference', tags: [], body: 'body text', ts: Date.now(), source: 'backup' }],
     log: [{ id: 'BKUP_1', ts: Date.now(), correct: true }],
     chat: { _general: [{ err: false, content: 'restored assistant reply' }] },
-    stats: { chStats: { Arrhythmias: { seen: 3 } }, srs: {} },
+    stats: { chStats: { Arrhythmias: { seen: 3 } }, sessionCorrect:37,sessionTotal:41,
+      missed:['BKUP_1'],srs:{BKUP_1:{reps:3,due:'2026-11-01',stability:4,difficulty:5}},
+      futurePreference:{keep:true} },
     mem: [{ id: 'm1', text: 'the fellow prefers terse explanations', kind: 'fact', created: Date.now(), seq: 1 }],
   };
 
@@ -150,6 +148,16 @@ const restore = `(text) => new Promise(resolve => {
   ok('and chat threads are persisted to the store', JSON.stringify(r1.storeChat) === JSON.stringify(BACKUP.chat));
 
   ok('statistics are persisted to the store', JSON.stringify(r1.storeStats) === JSON.stringify(BACKUP.stats));
+  const progress = await page.evaluate(() => {
+    const live={correct:S.sessionCorrect,total:S.sessionTotal,missed:S.missed.has('BKUP_1'),reps:S.srs.BKUP_1.reps};
+    setTheme('midnight'); return {live,saved:JSON.parse(localStorage.getItem('accsap12.v2'))};
+  });
+  ok('restored statistics and missed cards are live before another action', progress.live.correct===37&&progress.live.total===41&&progress.live.missed&&progress.live.reps===3);
+  ok('changing theme keeps restored progress and unknown schema fields', progress.saved.sessionCorrect===37&&progress.saved.srs.BKUP_1.reps===3&&progress.saved.futurePreference.keep);
+  await page.reload();
+  await page.waitForFunction(()=>typeof S!=='undefined'&&typeof Store!=='undefined');
+  await page.evaluate(()=>Store.ready());
+  ok('restored progress survives the action and reload', await page.evaluate(()=>S.sessionCorrect===37&&S.missed.has('BKUP_1')&&S.srs.BKUP_1.reps===3));
 
   if (r1.liveMem !== null) {
     ok('memory is live-updated via Memory.replaceAll, not store-only',
@@ -189,6 +197,34 @@ const restore = `(text) => new Promise(resolve => {
   ok('notes are untouched by a failed restore', JSON.stringify(r2.notes) === JSON.stringify(before.notes));
   ok('the log is untouched by a failed restore', JSON.stringify(r2.log) === JSON.stringify(before.log));
   ok('chats are untouched by a failed restore', JSON.stringify(r2.chats) === JSON.stringify(before.chats));
+
+  await page.evaluate(async restoreFn=>{
+    const restoreCall=new Function('return '+restoreFn)();
+    await restoreCall(JSON.stringify({ink:{wouldReplace:true},stats:{missed:'invalid'}}));
+  },restore);
+  ok('invalid statistics are refused before any annotations change', await page.evaluate(()=>!INK.wouldReplace&&S.sessionCorrect===37));
+
+  head('reference images survive a backup on a different device');
+  const exported=await page.evaluate(async()=>{
+    const raw=atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXGQAAAAASUVORK5CYII=');
+    const key=RefAssets.add(Uint8Array.from(raw,c=>c.charCodeAt(0)),'synthetic.png'); await RefAssets.flush();
+    REF=[{id:'synthetic-image-note',title:'Synthetic reference',body:'![Synthetic](refimg://'+key+')',tags:[],ts:Date.now()}];
+    saveJSON('accsap12.ref',REF);
+    const create=URL.createObjectURL,click=HTMLAnchorElement.prototype.click;let blob;
+    URL.createObjectURL=b=>{blob=b;return 'blob:stub';};HTMLAnchorElement.prototype.click=()=>{};
+    try{await exportMarkup();}finally{URL.createObjectURL=create;HTMLAnchorElement.prototype.click=click;}
+    return {key,value:RefAssets.get(key),text:await blob.text()};
+  });
+  const envelope=JSON.parse(exported.text);
+  ok('version 6 exports the cited imported image bytes',envelope.v===6&&envelope.assets[exported.key]===exported.value);
+  const context=await browser.newContext(),other=await context.newPage(); await boot(other);
+  await other.evaluate(async({fn,text})=>{await(new Function('return '+fn)())(text);},{fn:restore,text:exported.text});
+  ok('a new storage context restores the image and its citation',await other.evaluate(({key,value})=>RefAssets.get(key)===value&&REF[0].body.includes(key),exported));
+  await other.reload();
+  await other.waitForFunction(()=>typeof RefAssets!=='undefined');
+  await other.evaluate(()=>RefAssets.ready());
+  ok('restored image bytes survive reload',await other.evaluate(({key,value})=>RefAssets.get(key)===value,exported));
+  await context.close();
 
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed\n`);

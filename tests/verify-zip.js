@@ -43,7 +43,7 @@ function makeZip(entries) {
   const enc = new TextEncoder();
   const locals = [], centrals = [];
   let offset = 0;
-  for (const { name, size } of entries) {
+  for (const { name, size, declared = size } of entries) {
     const nameB = enc.encode(name);
     const data = new Uint8Array(size).fill(0x41);
     const lh = new Uint8Array(30 + nameB.length);
@@ -55,7 +55,7 @@ function makeZip(entries) {
     const ch = new Uint8Array(46 + nameB.length);
     const cv = new DataView(ch.buffer);
     cv.setUint32(0, 0x02014b50, true); cv.setUint16(10, 0, true);
-    cv.setUint32(20, size, true); cv.setUint32(24, size, true);
+    cv.setUint32(20, size, true); cv.setUint32(24, declared, true);
     cv.setUint16(28, nameB.length, true); cv.setUint16(30, 0, true);
     cv.setUint16(32, 0, true); cv.setUint32(42, offset, true);
     ch.set(nameB, 46);
@@ -113,6 +113,16 @@ function makeZip(entries) {
      spent.files.map(f => f.name).join(','));
 
   head('defaults are permissive — the caps are a ceiling, not a policy change');
+  const forged = await Z.read(makeZip([{ name: 'forged.bin', size: 200, declared: 1 },
+    { name: 'safe.bin', size: 10 }]), { maxTotal: 100 });
+  ok('a forged stored size cannot exceed the actual budget', forged.files.reduce((n, f) => n + f.bytes.length, 0) <= 100);
+  ok('the forged entry is skipped while the next valid entry loads',
+     forged.skipped.includes('forged.bin') && forged.files.some(f => f.name === 'safe.bin'));
+  const remaining = await Z.read(makeZip([{ name: 'first.bin', size: 80 },
+    { name: 'forged.bin', size: 40, declared: 1 }, { name: 'last.bin', size: 10 }]), { maxTotal: 100 });
+  ok('a forged size cannot spend more than the remaining budget', remaining.files.map(f => f.name).join(',') === 'first.bin,last.bin');
+  const inconsistent = await Z.read(makeZip([{ name: 'wrong.bin', size: 10, declared: 1 }]));
+  ok('inconsistent stored sizes are refused even within the budget', inconsistent.files.length === 0 && inconsistent.skipped.includes('wrong.bin'));
   const normal = await Z.read(makeZip([{ name: 'x.bin', size: 4096 }]));
   ok('an ordinary archive is unaffected by the new limits', normal.files.length === 1 && normal.skipped.length === 0);
 
