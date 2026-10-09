@@ -1,0 +1,712 @@
+/* ═══════════════════ v9 — cardiac UI ═══════════════════ */
+
+/* ── startup ──
+   Covers the parse window measured in this script's header. Everything here
+   is HTML + CSS on purpose: it has to paint before the script it is hiding. */
+#splash{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;
+  background:var(--bg);pointer-events:none;
+  transition:opacity .42s ease,visibility .42s ease}
+#splash.gone{opacity:0;visibility:hidden}
+.sp-in{display:flex;flex-direction:column;align-items:center;padding:24px}
+.sp-heart-mount{width:min(310px,66vw);height:min(310px,66vw);margin-bottom:16px;
+  position:relative;border-radius:26%;
+  /* The plate: its own dark ground, a hairline ring to separate it from a
+     cream splash, and a shadow deep enough to sit it on the page rather than
+     float above it. */
+  background:#0b1622;
+  box-shadow:0 18px 46px rgba(3,12,24,.5), 0 0 0 1px rgba(148,190,220,.14),
+             inset 0 0 60px rgba(4,10,18,.55);
+  overflow:hidden;
+  animation:spRiseHeart 1s both cubic-bezier(.2,.7,.3,1)}
+.sp-heart-img{display:block;width:100%;height:100%;object-fit:cover;
+  /* Systole is quick, diastole is slow — the easing does the work that a
+     symmetric pulse cannot.
+
+     NO DELAY, DELIBERATELY. This was written with a 1s delay so the beat would
+     not "fight" the entrance rise. It cannot: spRise is on .sp-heart-mount and
+     spBeat is on the .sp-heart-img inside it, so they compose rather than
+     collide. Meanwhile the splash is dismissed on the app's first real render,
+     which on a warm launch is a few hundred milliseconds — so a beat that
+     started at 1s was a beat almost nobody would ever see. The suite caught
+     this by sampling the transform twice and finding it unchanged. */
+  animation:spBeat 1150ms infinite cubic-bezier(.28,.9,.32,1)}
+/* A soft inner vignette over the photograph's own edge, so the medallion's
+   corners fall away instead of ending on a hard crop. */
+.sp-heart-mount::after{content:"";position:absolute;inset:0;border-radius:inherit;
+  pointer-events:none;
+  background:radial-gradient(115% 115% at 50% 42%,rgba(0,0,0,0) 52%,rgba(4,10,18,.62) 100%)}
+@keyframes spRiseHeart{from{opacity:0;transform:translateY(16px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes spBeat{0%,100%{transform:scale(1)}
+  18%{transform:scale(1.045)}
+  32%{transform:scale(1.012)}
+  46%{transform:scale(1.026)}}
+@media(prefers-reduced-motion:reduce){
+  .sp-heart-mount{animation:none}
+  .sp-heart-img{animation:none}}
+.sp-strip{width:min(420px,72vw);height:auto;overflow:visible}
+.sp-base{fill:none;stroke:var(--teal);stroke-width:2;opacity:.14;
+  stroke-linecap:round;stroke-linejoin:round}
+.sp-trace{fill:none;stroke:var(--teal2);stroke-width:2.6;
+  stroke-linecap:round;stroke-linejoin:round;
+  filter:drop-shadow(0 0 6px rgba(45,212,191,.55));
+  stroke-dasharray:1;stroke-dashoffset:1;
+  animation:spSweep 2.4s .85s cubic-bezier(.4,0,.5,1) infinite}
+/* pathLength="1" on the path means the dash units are fractions of the whole
+   trace, so the sweep does not need the real path length measured */
+@keyframes spSweep{
+  0%{stroke-dashoffset:1;opacity:0}
+  5%{opacity:1}
+  74%{stroke-dashoffset:0;opacity:1}
+  93%{stroke-dashoffset:0;opacity:0}
+  100%{stroke-dashoffset:1;opacity:0}
+}
+.sp-word{font-size:clamp(28px,6vw,40px);font-weight:760;letter-spacing:-.03em;
+  color:var(--text);margin-top:12px;animation:spRise .7s .10s both ease-out}
+.sp-sub{font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-top:4px;
+  animation:spRise .7s .24s both ease-out}
+@keyframes spRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){
+  .sp-trace{animation:none;stroke-dashoffset:0;opacity:1}
+  .sp-word,.sp-sub{animation:none}
+}
+
+/* The text this app exists to show. A modular scale would happily let these
+   shrink with the viewport — they were at 15px and 13px — but the most-read
+   text in a study app should never be the smallest thing on the screen. Pinned
+   at the body step everywhere, which RAISES them on phones. */
+.q-card,.exp-text,.reveal-body .exp-text{font-size:var(--t-body)}
+
+/* ═══════════ Spacing scale, applied ═══════════
+   An override layer, on purpose — see scripts/scale-patch.js for why. Every
+   value below is a step on the 4-point scale; the ones that were already on it
+   are restated rather than left out, so this block is the whole story of the
+   app's structural rhythm rather than a list of exceptions to it. */
+.feed-card{padding:var(--s4) var(--s5)}
+.ch-tile{padding:var(--s5);gap:var(--s3)}
+.q-card{padding:var(--s6) var(--s7)}
+.opt{padding:var(--s4) var(--s5);gap:var(--s3)}
+.qbar{padding:var(--s4) var(--s5)}
+.physio-note{padding:var(--s3) var(--s4) var(--s4)}
+.physio-chips{padding:var(--s3) var(--s4) 0;gap:var(--s2)}
+.speed-chips{align-items:center;padding-top:var(--s2)}
+.speed-lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  margin-right:var(--s1)}
+.chip.mini{padding:4px 11px;font-size:11px}
+.lead-card{padding:var(--s3) var(--s4) var(--s4)}
+.twelve-hint{padding:var(--s2) var(--s4) 0}
+.home-progress{margin:calc(var(--s1) * -1) var(--s0) var(--s5)}
+.section-label{margin:var(--s6) 0 var(--s3)}
+
+/* ── live hero ── */
+.hero-live{position:relative;overflow:hidden;border-radius:24px;margin:var(--s3) 0 var(--s4);
+  padding:var(--s6) var(--s6) 74px;isolation:isolate;
+  background:linear-gradient(145deg,var(--hero-a) 0%,var(--hero-b) 48%,var(--hero-c) 100%);
+  border:1px solid var(--hero-edge);
+  box-shadow:0 18px 50px rgba(3,10,22,.5),inset 0 1px 0 rgba(255,255,255,.05)}
+.hero-live::before{content:'';position:absolute;inset:-40%;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(30% 40% at 15% 20%,var(--aura-1),transparent 65%),
+    radial-gradient(28% 36% at 85% 12%,var(--aura-2),transparent 62%),
+    radial-gradient(40% 46% at 60% 92%,var(--aura-3),transparent 66%);
+  animation:auroraShift 26s var(--glide) infinite}
+/* The aurora above drifts on a 26 second cycle — atmospheric, but nothing to
+   do with the heart. This layer pulses at 68 bpm, the rate the hero's own
+   trace opens on, so the background belongs to the subject instead of just
+   being weather behind it. Confined to the hero deliberately: the same effect
+   behind a question stem would compete with reading. */
+.hero-live::after{content:'';position:absolute;inset:-25%;z-index:-1;pointer-events:none;
+  background:radial-gradient(38% 42% at 32% 62%,rgba(45,212,191,.17),transparent 62%);
+  animation:heroBeat 1.76s ease-out infinite}
+@keyframes heroBeat{
+  0%{transform:scale(.94);opacity:.45}
+  9%{transform:scale(1.04);opacity:.85}
+  22%{transform:scale(.99);opacity:.60}
+  32%{transform:scale(1.02);opacity:.70}
+  46%,100%{transform:scale(.94);opacity:.45}
+}
+@media(prefers-reduced-motion:reduce){.hero-live::after{animation:none}}
+
+/* 62px was a band lost against a tall hero on iPad and a wall on a phone.
+   Scaling with the viewport keeps the trace the same visual weight either way,
+   and the taller mask means the R waves are not clipped at the top. */
+/* min(), so whichever axis is scarcer decides. The floors are untouched: a
+   phone is nowhere near either term and renders exactly as before. */
+.hero-ecg{height:clamp(92px,min(13.5vw,11vh),140px)!important}
+.hero-live{padding-bottom:clamp(104px,min(16vw,13vh),158px)!important}
+.hero-ecg{position:absolute;left:0;right:0;bottom:0;height:62px;width:100%;
+  z-index:0;opacity:.72;pointer-events:none;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.hero-inner{position:relative;z-index:2}
+.hero-greet{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:color-mix(in srgb,var(--hero-accent) 88%,transparent);margin-bottom:6px;animation:riseIn .5s var(--glide) both}
+.hero-h1{font-family:var(--font-serif);font-size:48px;line-height:1;color:#fff;
+  margin-top:0;font-weight:400;
+  letter-spacing:-.02em;margin-bottom:12px;animation:riseIn .55s var(--glide) .05s both}
+.hero-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  animation:riseIn .55s var(--glide) .12s both}
+.hl-item{font-size:13px;color:rgba(255,255,255,.62)}
+.hl-item b{color:#fff;font-weight:700;font-size:13px}
+.hl-dot{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.28)}
+
+/* live rhythm label under the hero stats, crossfades on each rotation */
+/* Everything else on this screen is a control — something to press. This is
+   the one thing to READ, so it is set in the serif the wordmark uses and given
+   a teal rule down its edge instead of the uniform border the action cards
+   share. The distinction is the point: it should not look pressable. */
+/* Glass goes where a surface sits ABOVE content — the pearl and the doors —
+   so the screen reads as layers rather than a stack of opaque boxes. Anything
+   that has to stay legible over a photograph keeps its own ground. */
+.pearl-card{position:relative;display:flex;gap:0;align-items:stretch;
+  background:color-mix(in srgb, var(--white) 82%, transparent);
+  backdrop-filter:blur(18px) saturate(1.5);-webkit-backdrop-filter:blur(18px) saturate(1.5);
+  border:1.5px solid var(--border2);border-radius:22px;overflow:hidden;
+  box-shadow:0 1px 2px rgba(10,22,40,.04),0 12px 32px -12px rgba(10,22,40,.14);
+  margin:var(--s5,20px) 0 var(--s5,20px);
+  transition:box-shadow .4s var(--glide),transform .4s var(--glide);
+  animation:riseIn .7s var(--glide) .06s both}
+.pearl-card:hover{box-shadow:0 1px 2px rgba(10,22,40,.05),0 20px 44px -14px rgba(10,22,40,.20)}
+/* The trace runs along the foot of the PROSE, not of the whole card. It is
+   positioned against .pearl-main, so on a wide screen it underlines the
+   sentence rather than crossing under the figure beside it — and on a narrow
+   one, where the figure wraps below, it no longer lies across that figure's
+   caption. It fades at both ends so it reads as passing through. */
+/* Bottom-right of the PROSE column, not of the whole card, so on a wide screen
+   it sits under the sentence rather than over the figure beside it. Square,
+   because a loop is — which is the whole point of replacing a strip with one. */
+
+.pearl-rule{flex:0 0 3px;background:linear-gradient(180deg,var(--teal) 0%,var(--teal) 55%,rgba(94,234,212,.15) 100%)}
+.pearl-main{flex:1;min-width:0;padding:28px 30px 26px}
+@media(max-width:640px){.pearl-main{padding:22px 20px 22px}}
+.pearl-head{display:flex;align-items:center;gap:9px;margin-bottom:16px}
+.pearl-tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--teal)}
+.pearl-cap{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pearl-next{margin-left:auto;flex:0 0 auto;background:transparent;border:0;padding:4px;
+  cursor:pointer;color:var(--muted);display:flex;border-radius:8px;
+  transition:color .18s var(--ease),background .18s var(--ease),transform .3s var(--spring)}
+.pearl-next:hover{color:var(--teal);background:var(--card)}
+.pearl-next:active{transform:rotate(-90deg)}
+.pearl-body{margin:0;font-family:var(--font-display);font-size:23px;line-height:1.45;
+  color:var(--text);text-wrap:pretty;letter-spacing:-.01em}
+@media(max-width:900px){.pearl-body{font-size:19px}}
+.pearl-open{margin-top:18px;background:transparent;border:0;padding:0;cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;
+  color:var(--teal);font-family:inherit}
+.pearl-open .icon{transition:transform .22s var(--spring)}
+.pearl-open:hover .icon{transform:translateX(3px)}
+/* Beside the sentence, not under it: a pearl and the diagram that explains it
+   are one thought, and stacking them reads as two. */
+.pearl-fig{flex:0 0 38%;max-width:300px;margin:0;
+  border-left:1px solid color-mix(in srgb, var(--border2) 70%, transparent);
+  background:color-mix(in srgb, var(--white) 55%, transparent);
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:12px;transition:background .3s var(--glide)}
+.pearl-fig:hover{background:color-mix(in srgb, var(--white) 80%, transparent)}
+.pearl-fig img{display:block;max-width:100%;max-height:230px;object-fit:contain;
+  border-radius:8px}
+/* ── the background ──────────────────────────────────────────────────────
+   ECG paper, not an abstract gradient: the 1mm/5mm grid every trace in this
+   app is drawn against, at an opacity where it reads as texture. Both layers
+   are painted from palette variables, so all eight themes carry them without
+   a rule of their own, and both are behind the content with pointer-events
+   off — a decorative layer must never eat a tap meant for the card. */
+.pearl-card::before,.pearl-card::after{content:'';position:absolute;inset:0;
+  pointer-events:none;z-index:0}
+.pearl-card::before{
+  background-image:
+    repeating-linear-gradient(0deg,  color-mix(in srgb, var(--teal) 22%, transparent) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--teal) 22%, transparent) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(0deg,  color-mix(in srgb, var(--teal) 42%, transparent) 0 1px, transparent 1px 25px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--teal) 42%, transparent) 0 1px, transparent 1px 25px);
+  opacity:.16;
+  -webkit-mask-image:radial-gradient(120% 90% at 12% 0%, #000 0%, transparent 72%);
+  mask-image:radial-gradient(120% 90% at 12% 0%, #000 0%, transparent 72%);
+  animation:pearlPaper 28s linear infinite}
+/* A wash of the accent moving out of phase with the paper, so the card is
+   never quite still and never fast enough to pull the eye off the sentence. */
+.pearl-card::after{
+  background:
+    radial-gradient(52% 62% at 8% 0%,   color-mix(in srgb, var(--teal) 30%, transparent), transparent 70%),
+    radial-gradient(46% 58% at 96% 100%,color-mix(in srgb, var(--navy3) 26%, transparent), transparent 68%);
+  opacity:.5;animation:pearlWash 22s var(--ease,ease-in-out) infinite alternate}
+@keyframes pearlPaper{from{background-position:0 0,0 0,0 0,0 0}
+                      to{background-position:0 25px,25px 0,0 25px,25px 0}}
+@keyframes pearlWash{from{transform:translate3d(0,0,0) scale(1)}
+                     to{transform:translate3d(-4%,3%,0) scale(1.12)}}
+/* Everything the fellow actually reads sits above both layers. The trace is
+   raised WITHOUT being given a position: it is absolutely positioned along the
+   card's foot, and .pearl-card is a flex row, so relative would put it back in
+   the flow as a full-width flex item and crush the prose into a column one
+   word wide. Only the z-index is wanted here. */
+.pearl-rule,.pearl-main,.pearl-fig{position:relative;z-index:1}
+/* Behind the words, edge to edge, and never in the way of a tap. The prose
+   columns are lifted above it rather than the trace being pushed down, so a
+   long pearl scrolling inside its column still passes over the current. */
+.pearl-current{position:absolute;inset:0;width:100%;height:100%;
+  z-index:0;pointer-events:none;opacity:.8}
+.pearl-main,.pearl-rule,.pearl-fig{position:relative;z-index:1}
+.pearl-head,.pearl-steps,.pearl-body,.pearl-open{position:relative;z-index:1}
+
+/* ── the ladder ──────────────────────────────────────────────────────────
+   Numbered, because the order is the argument: the fact, then what follows
+   from it, then the caveat. The rungs arrive one at a time — 70ms apart, which
+   is enough to read as a sequence and not enough to be a wait. */
+.pearl-steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:15px}
+.pearl-step{display:flex;gap:11px;align-items:flex-start;
+  animation:pearlRung .5s var(--glide) both;animation-delay:calc(var(--i) * .07s + .06s)}
+.pearl-n{flex:0 0 auto;width:22px;height:22px;margin-top:3px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:11px;font-weight:700;
+  color:var(--teal);background:color-mix(in srgb, var(--teal) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--teal) 30%, transparent)}
+.pearl-txt{flex:1;min-width:0;font-family:var(--font-display);font-size:16px;
+  line-height:1.5;color:var(--text);text-wrap:pretty}
+/* The connective the step was cut at, lifted out of the prose so it labels the
+   move rather than repeating inside it. */
+.pearl-lead{display:inline-block;margin-right:7px;font-style:normal;
+  font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--teal);vertical-align:1px}
+/* A threshold, a dose, a difference between two arms: what the question turns
+   on, marked so it survives a glance. */
+.pearl-num{font-weight:650;color:var(--text);
+  background:color-mix(in srgb, var(--teal) 15%, transparent);
+  border-radius:5px;padding:0 4px;box-decoration-break:clone;
+  -webkit-box-decoration-break:clone}
+@keyframes pearlRung{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+.pearl-in{animation:pearlIn .5s var(--glide) both}
+@keyframes pearlIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* A card that breathes is pleasant; a card that breathes when the fellow has
+   asked the system to stop moving is a headache. */
+@media(prefers-reduced-motion:reduce){
+  .pearl-card::before,.pearl-card::after{animation:none}
+  .pearl-step{animation:none}
+}
+.pearl-fig figcaption{padding:8px 10px 2px;font-size:11px;line-height:1.45;
+  color:var(--muted);text-align:left}
+/* The same glass as the doors, because it sits in their row and is the same
+   kind of thing: a control, not something to read. */
+.off-card{margin-top:10px;padding:14px 16px;border-radius:16px;
+  background:color-mix(in srgb, var(--white) 74%, transparent);
+  backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);
+  border:1.5px solid var(--border2);
+  animation:riseIn .6s var(--glide) .28s both}
+.off-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
+.off-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--teal)}
+.off-val{font-family:var(--font-mono);font-size:11px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.off-track{height:6px;border-radius:3px;overflow:hidden;
+  background:color-mix(in srgb, var(--teal) 12%, transparent)}
+.off-fill{display:block;height:100%;border-radius:3px;
+  background:linear-gradient(90deg,var(--teal),var(--teal2));
+  transition:width .3s var(--glide)}
+.off-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.off-note{font-size:11px;line-height:1.45;color:var(--muted);min-width:0}
+.off-btn{flex:0 0 auto;padding:8px 14px;border-radius:11px;cursor:pointer;font-family:inherit;
+  font-size:13px;font-weight:650;color:var(--white);background:var(--teal);border:0;
+  transition:transform .26s var(--spring),opacity .2s}
+.off-btn:hover{transform:translateY(-1px)}
+.off-btn:disabled{cursor:default;opacity:.55;transform:none;
+  background:color-mix(in srgb, var(--teal) 30%, transparent);color:var(--muted)}
+/* Nothing left to fetch: the bar is the whole width and the prose stops
+   asking for something that has already happened. */
+.off-card.all-here .off-note{color:var(--teal)}
+.off-card.has-trouble .off-note{color:var(--amber)}
+.off-card.has-trouble .off-fill{background:linear-gradient(90deg,var(--amber2),var(--amber))}
+@media(max-width:520px){
+  .off-foot{flex-direction:column;align-items:stretch}
+  .off-btn{width:100%}
+}
+
+/* Two wide doors and four small ones, so the grid closes evenly at every
+   width: the material first, the tool that is a destination in its own right
+   last, and the four rooms between them. Everything visible at once is the
+   whole point of having moved the rest off this screen. */
+.hello{display:flex;align-items:flex-start;gap:12px;margin-top:14px;padding:14px 16px;
+  border-radius:16px;border:1.5px solid color-mix(in srgb, var(--teal) 34%, transparent);
+  background:color-mix(in srgb, var(--teal) 9%, var(--white));
+  animation:riseIn .5s var(--glide) .3s both}
+.hello-ic{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:10px;
+  background:color-mix(in srgb, var(--teal) 18%, transparent);color:var(--teal)}
+.hello-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.hello-txt>b{font-size:13px;font-weight:700;color:var(--text)}
+.hello-txt>i{font-style:normal;font-size:13px;line-height:1.45;color:var(--muted)}
+.hello-txt>i b{color:var(--text);font-weight:700}
+/* THE DISMISS BUTTON LIVES ON THE LEFT, UNDER THE TEXT, AND THAT IS NOT A
+   VISUAL PREFERENCE. Apex's floating button is position:fixed in the
+   bottom-right corner of the viewport, so it passes over whatever happens to
+   be scrolled beneath it — margins cannot move content out of its way. The
+   first draft put "Got it" at the right-hand end of the card's own row, and
+   on an iPad in portrait the FAB landed exactly on top of it:
+   elementFromPoint at the button's own centre returned aiFab, so the one
+   control whose entire job is making this card go away could not be tapped
+   at all. Anything interactive therefore stays out of the right-hand edge,
+   where the FAB is; the left is a place the FAB never occupies at any scroll
+   position or viewport size. */
+.hello-x{align-self:flex-start;margin-top:9px;padding:7px 14px;border-radius:99px;cursor:pointer;
+  border:1.5px solid var(--border2);background:var(--white);color:var(--text);
+  font-family:inherit;font-size:13px;font-weight:700;
+  transition:transform .2s var(--spring),background .18s}
+.hello-x:active{transform:scale(.94)}
+.hello.gone{opacity:0;transform:translateY(-6px);transition:opacity .24s,transform .24s}
+.door-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:10px;
+  margin-top:var(--s4,16px)}
+.door{display:flex;align-items:center;gap:11px;text-align:left;
+  padding:15px 16px;border-radius:16px;cursor:pointer;font-family:inherit;
+  background:color-mix(in srgb, var(--white) 74%, transparent);
+  backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);
+  border:1.5px solid var(--border2);color:var(--text);
+  transition:transform .34s var(--spring),box-shadow .34s var(--glide),border-color .22s var(--ease);
+  animation:riseIn .6s var(--glide) both}
+.door:nth-child(1){animation-delay:.04s}.door:nth-child(2){animation-delay:.08s}
+.door:nth-child(3){animation-delay:.12s}.door:nth-child(4){animation-delay:.16s}
+.door:nth-child(5){animation-delay:.20s}.door:nth-child(6){animation-delay:.24s}
+.door:hover{transform:translateY(-3px);border-color:var(--teal);
+  box-shadow:0 14px 30px -14px rgba(10,22,40,.28)}
+.door:active{transform:translateY(-1px) scale(.985)}
+.door-wide{grid-column:1/-1;padding:18px 20px}
+.door-ic{display:flex;flex:0 0 auto;color:var(--teal)}
+.door-ic .icon{width:21px;height:21px}
+.door-txt{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.door-txt b{font-size:13px;font-weight:650;letter-spacing:-.01em}
+.door-txt i{font-style:normal;font-size:11px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.door-go{margin-left:auto;color:var(--muted);display:flex;
+  transition:transform .28s var(--spring),color .2s}
+.door:hover .door-go{color:var(--teal);transform:translateX(4px)}
+/* The study page: a back door, the layout switch it inherited, and a title
+   that says what the page is — it is entered deliberately now, so it may as
+   well introduce itself. */
+.study-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:var(--s4,16px)}
+.study-back{display:flex;align-items:center;gap:6px;padding:8px 13px;border-radius:11px;
+  background:color-mix(in srgb, var(--white) 74%, transparent);
+  backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);
+  border:1.5px solid var(--border2);color:var(--muted);font-family:inherit;
+  font-size:13px;font-weight:600;cursor:pointer;
+  animation:riseIn .5s var(--glide) both;
+  transition:color .2s,border-color .2s,transform .26s var(--spring)}
+.study-back:hover{color:var(--teal);border-color:var(--teal);transform:translateX(-2px)}
+.study-title{margin-bottom:var(--s4,16px);animation:riseIn .6s var(--glide) .04s both}
+.study-title h2{margin:0;font-size:33px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
+.study-title p{margin:6px 0 0;font-size:13px;line-height:1.5;color:var(--muted);max-width:52ch}
+@media(max-width:700px){
+  .study-title h2{font-size:28px}
+  .pearl-card{flex-wrap:wrap}
+  .pearl-body{font-size:16px}
+  .pearl-fig{flex:1 1 100%;max-width:none;border-left:0;border-top:1px solid var(--border2)}
+  .pearl-fig img{max-height:220px}
+}
+.hero-rhythm-label{margin-top:12px;font-family:var(--font-mono);font-size:11px;
+  color:color-mix(in srgb,var(--hero-accent) 82%,transparent);letter-spacing:.02em}
+/* The three stats were one inline run that broke mid-pair at narrow widths,
+   leaving "638" on one line and "questions" on the next. A wrapping flex row
+   with the dots as real separators keeps each pair together. */
+.hero-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px}
+.hero-line .hl-item{display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap}
+.hero-line .hl-dot{align-self:center}
+@media(max-width:520px){ .hero-line .hl-dot{display:none} }
+.hero-rhythm-label.anim-in{animation:riseIn .4s var(--glide) both}
+
+/* THE MEDALLION IS ONE BOX WITH TWO OCCUPANTS. The still photograph is in the
+   markup and visible from the first paint; the turning heart fades in over it
+   once a WebGL2 context exists and its first frame is up. Sharing one box and
+   one frame means the swap is a crossfade rather than a jump, and a device
+   that never gets a context simply keeps what it already had.
+
+   Larger than the box the old mini heart had — clamp(92px…) to clamp(124px…).
+   At the old size the conduction tree was three yellow pixels. A drawing has
+   to be big enough to be read or it is only texture. */
+.hero-heart-plate,.hero-heart-3d{
+  position:absolute;right:clamp(10px,2.4vw,22px);top:clamp(6px,1.6vw,16px);
+  width:clamp(124px,15vw,168px);height:clamp(132px,16vw,178px);z-index:1}
+.hero-heart-plate{
+  border-radius:24%;overflow:hidden;background:#0b1622;pointer-events:none;
+  transition:opacity .5s var(--glide);
+  box-shadow:0 10px 26px rgba(3,12,24,.34), 0 0 0 1px rgba(148,190,220,.13),
+             inset 0 0 34px rgba(4,10,18,.5)}
+/* The beat lives here and nowhere else, because setHeroBeatRate() writes
+   animationDuration onto '#heroHeart .h-beat'. It drives the still image; the
+   turning heart runs its own clock from the same rhythm. */
+.hero-heart-plate .h-beat{width:100%;height:100%;
+  animation:heroBeat 850ms infinite cubic-bezier(.28,.9,.32,1)}
+.hero-heart-plate img{display:block;width:100%;height:100%;object-fit:cover}
+.hero-heart-plate::after{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:radial-gradient(118% 118% at 50% 40%,rgba(0,0,0,0) 50%,rgba(4,10,18,.6) 100%)}
+@keyframes heroBeat{0%,100%{transform:scale(1)}
+  17%{transform:scale(1.05)}
+  31%{transform:scale(1.014)}
+  45%{transform:scale(1.03)}}
+/* NO GROUND UNDER THE MODEL. The canvas is created with alpha:true and cleared
+   to (0,0,0,0), so the heart has always been transparent — the black square was
+   this rule painting a plate behind it. The still photograph needs its frame
+   because the picture has a dark ground baked into it and would otherwise be a
+   rectangle pasted on the hero; the model needs no frame because it has no
+   rectangle. So the two states are framed differently on purpose, and only one
+   of them is ever on screen. */
+/* The slot is the positioned box now, and the canvas inside it is told to
+   fill it — the canvas is created in script and never carries layout of its
+   own, so every rule about where the heart sits stays on this one class. */
+.hero-heart-3d>canvas{display:block;width:100%;height:100%}
+.hero-heart-3d{
+  opacity:0;transition:opacity .6s var(--glide);pointer-events:none;
+  background:transparent;
+  /* The shadow moves onto the heart itself rather than onto a box behind it. */
+  filter:drop-shadow(0 12px 22px rgba(3,10,20,.55))}
+#heroHeart.heart-3d-active{opacity:0}
+#heroHeart.heart-3d-active ~ .hero-heart-3d{opacity:1}
+@media(prefers-reduced-motion:reduce){ .hero-heart-plate .h-beat{animation:none} }
+
+/* streak flame — a small flicker so momentum reads as alive, not a static badge */
+.fc-streak .icon{animation:flicker 2.2s ease-in-out infinite}
+@keyframes flicker{
+  0%,100%{transform:scale(1) translateY(0);opacity:1}
+  30%{transform:scale(1.08) translateY(-0.5px);opacity:.88}
+  55%{transform:scale(.95) translateY(0.5px);opacity:1}
+  78%{transform:scale(1.05) translateY(-0.3px);opacity:.92}
+}
+
+/* beating heart */
+.heart-svg{position:absolute;right:16px;top:14px;width:74px;height:80px;opacity:.9;z-index:1}
+.h-beat{transform-origin:60px 60px;animation:hbeat 1.1s ease-in-out infinite}
+@keyframes hbeat{0%,100%{transform:scale(1)}12%{transform:scale(1.11)}
+  24%{transform:scale(.99)}36%{transform:scale(1.05)}52%{transform:scale(1)}}
+.h-sa{animation:node 1.1s ease-in-out infinite}
+.h-av{animation:node 1.1s ease-in-out .16s infinite}
+.h-his{animation:node 1.1s ease-in-out .24s infinite}
+@keyframes node{0%,100%{opacity:.35}8%{opacity:1}30%{opacity:.4}}
+
+/* ── story rail ── */
+.story-rail{display:flex;gap:12px;overflow-x:auto;padding:2px 2px 12px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.story-rail::-webkit-scrollbar{display:none}
+.story{flex:0 0 auto;background:none;border:none;cursor:pointer;padding:0;
+  display:flex;flex-direction:column;align-items:center;gap:5px;width:66px;
+  animation:popIn .4s var(--spring) .10s both}
+.story:nth-child(2){animation-delay:.13s}.story:nth-child(3){animation-delay:.16s}
+.story:nth-child(4){animation-delay:.19s}.story:nth-child(5){animation-delay:.22s}
+.story:nth-child(n+6){animation-delay:.25s}
+.story-ring{position:relative;width:64px;height:64px;display:block}
+.story-ring svg{width:100%;height:100%;transform:rotate(0)}
+.story-ico{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:28px}
+.story-lbl{font-size:11px;font-weight:600;color:var(--muted);text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:66px}
+.story:active .story-ring{transform:scale(.93);transition:transform .16s var(--spring)}
+
+/* ── feed cards ── */
+.feed{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+.feed-card{position:relative;overflow:hidden;text-align:left;border:1.5px solid var(--border2);
+  background:var(--white);border-radius:18px;padding:16px 18px;cursor:pointer;font:inherit;
+  color:var(--text);animation:riseIn .45s var(--glide) .30s both;
+  transition:transform .24s var(--spring),box-shadow .24s var(--glide),border-color .2s}
+.feed>.feed-card:nth-child(2){animation-delay:.34s}
+.feed>.feed-card:nth-child(3){animation-delay:.38s}
+.feed-card:active{transform:scale(.985)}
+@media(hover:hover){.feed-card:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(15,30,61,.14)}}
+.fc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.fc-badge{font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--muted);
+  border:1px solid var(--border);border-radius:99px;padding:3px 9px}
+.fc-badge.red{color:var(--red);border-color:var(--red-b);background:var(--red-bg)}
+.fc-streak{font-size:13px;font-weight:800;color:var(--amber)}
+.fc-title{font-size:19px;font-weight:700;letter-spacing:-.02em;margin-bottom:3px}
+.fc-sub{font-size:13px;color:var(--muted);line-height:1.5}
+.fc-cta{margin-top:10px;font-size:13px;font-weight:800;color:var(--teal)}
+.review-card{border-color:var(--hero-edge)}
+.review-card.live{border-color:var(--teal)}
+.review-card.live .fc-badge{color:var(--teal);border-color:var(--teal);background:var(--green-bg)}
+.fc-glow{position:absolute;inset:-50% -20%;z-index:0;pointer-events:none;opacity:0;
+  background:radial-gradient(40% 60% at 20% 50%,var(--aura-1),transparent 70%)}
+.review-card.live .fc-glow{opacity:1;animation:glowSlide 5.5s ease-in-out infinite}
+@keyframes glowSlide{0%,100%{transform:translateX(-12%)}50%{transform:translateX(18%)}}
+.review-card>*{position:relative;z-index:1}
+.review-card>.fc-glow{position:absolute;z-index:0}
+.miss-card{border-color:var(--red-b)}
+.miss-card .fc-cta{color:var(--red)}
+.all-card{background:linear-gradient(135deg,var(--hero-a),var(--hero-b));border-color:rgba(255,255,255,.12)}
+.all-card .fc-title{color:#fff}
+.all-card .fc-sub{color:rgba(255,255,255,.6)}
+.all-card .fc-badge{color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.22)}
+.all-card .fc-cta{color:#5EEAD4}
+
+/* ── chapter tiles ── */
+.ch-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--s3)}
+/* The eleven-step delay ladder below already existed, under .ch-grid — a
+   class nothing in the markup carries. Retargeted rather than reinvented. */
+.ch-tiles>*{animation:riseIn .5s var(--glide) both}
+.ch-tiles>*:nth-child(1){animation-delay:.42s}.ch-tiles>*:nth-child(2){animation-delay:.45s}
+.ch-tiles>*:nth-child(3){animation-delay:.48s}.ch-tiles>*:nth-child(4){animation-delay:.51s}
+.ch-tiles>*:nth-child(5){animation-delay:.54s}.ch-tiles>*:nth-child(6){animation-delay:.57s}
+.ch-tiles>*:nth-child(7){animation-delay:.60s}.ch-tiles>*:nth-child(8){animation-delay:.63s}
+.ch-tiles>*:nth-child(9){animation-delay:.66s}.ch-tiles>*:nth-child(10){animation-delay:.69s}
+.ch-tiles>*:nth-child(n+11){animation-delay:.72s}
+.ch-tile{--accent:#5EEAD4;text-align:left;background:var(--white);border:1.5px solid var(--border2);
+  border-radius:16px;padding:14px;cursor:pointer;font:inherit;color:var(--text);
+  display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;
+  animation:riseIn .42s var(--glide) both;
+  transition:transform .22s var(--spring),box-shadow .22s var(--glide),border-color .2s}
+.ch-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+.ch-tile:active{transform:scale(.975)}
+@media(hover:hover){.ch-tile:hover{border-color:var(--accent);transform:translateY(-3px);
+  box-shadow:0 12px 28px rgba(15,30,61,.13)}}
+.ct-ico{font-size:28px}
+.ct-name{font-size:16px;font-weight:700;letter-spacing:-.01em;line-height:1.3}
+.ct-meta{font-size:11px;color:var(--muted)}
+.ct-bar{height:8px;border-radius:99px;background:var(--border2);overflow:hidden;margin-top:6px}
+.ct-bar i{display:block;height:100%;border-radius:99px;width:0;
+  background:linear-gradient(90deg,var(--accent),color-mix(in srgb, var(--accent) 65%, white));
+  box-shadow:0 0 7px color-mix(in srgb, var(--accent) 50%, transparent);
+  transition:width 1s var(--glide)}
+/* ZERO IS A STATE, NOT A MISSING VALUE. An untouched chapter draws a solid
+   grey track with nothing in it, which is the same thing this app's own
+   loading skeletons look like — so "you have not started this yet" and
+   "this failed to load" render identically, and the reader cannot tell
+   which one they are looking at. Dashes carry the same visual weight as
+   the solid track (same --border2, so nothing gets quieter or louder) and
+   change only the texture, which is the part that actually says the
+   emptiness is deliberate.
+
+   Keyed off data-w rather than a class because the markup already ships
+   the real value there and mountChapterBars only ever writes style.width,
+   never touching the attribute — so the selector stays true for the life
+   of the tile. Where :has() is unsupported the rule simply drops and the
+   tile falls back to today's solid track, which is the current behaviour
+   rather than a broken one. */
+.ct-bar:has(i[data-w="0"]){background:repeating-linear-gradient(90deg,
+  var(--border2) 0 5px,transparent 5px 10px)}
+.ct-foot{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.ct-foot b{color:var(--accent);font-weight:800}
+
+/* ── feedback blip on the reveal header ── */
+.reveal-header{position:relative;overflow:hidden}
+.blip-canvas{position:absolute;right:10px;top:0;bottom:0;width:130px;height:100%;
+  opacity:.85;pointer-events:none;transition:opacity .4s ease}
+.blip-canvas.blip-out{opacity:0}
+
+/* ── stats ── */
+.stats-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:14px 0 12px}
+.stats-head .btn{flex:0 0 auto;white-space:nowrap}
+.stats-title{font-family:var(--font-serif);font-size:28px;letter-spacing:-.02em}
+.stats-sub{font-size:13px;color:var(--muted);margin-top:2px}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.stat-tile{background:var(--white);border:1.5px solid var(--border2);border-radius:15px;
+  padding:14px 8px;text-align:center;animation:popIn .4s var(--spring) both}
+.stat-tile:nth-child(2){animation-delay:.04s}.stat-tile:nth-child(3){animation-delay:.08s}
+.stat-tile:nth-child(4){animation-delay:.12s}
+.st-v{font-size:23px;font-weight:800;letter-spacing:-.03em;color:var(--teal)}
+.st-l{font-size:11px;color:var(--muted);margin-top:2px}
+.panel{background:var(--white);border:1.5px solid var(--border2);border-radius:18px;
+  padding:16px;margin-bottom:12px}
+.panel-h{font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:12px}
+.spark{width:100%;height:54px;display:block;margin-bottom:10px}
+.heat{display:grid;grid-template-columns:repeat(30,1fr);gap:3px}
+.heat-cell{aspect-ratio:1;border-radius:3px;background:var(--border2)}
+.heat-cell.l1{background:rgba(45,212,191,.30)}.heat-cell.l2{background:rgba(45,212,191,.52)}
+.heat-cell.l3{background:rgba(45,212,191,.76)}.heat-cell.l4{background:var(--teal)}
+.heat-key{display:flex;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:var(--muted)}
+.heat-key i{width:10px;height:10px;border-radius:3px;display:block}
+.retention-row{display:flex;align-items:baseline;gap:14px;margin-bottom:16px}
+.retention-num{font-family:var(--font-display);font-size:33px;font-weight:400;letter-spacing:-.01em;line-height:1}
+.retention-sub{font-size:13px;color:var(--muted);line-height:1.5;max-width:38ch}
+.fc-title{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.fc-row{display:flex;gap:6px;align-items:flex-end}
+.fc-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.fc-bar{width:100%;max-width:26px;border-radius:5px 5px 2px 2px;background:var(--teal);opacity:.85}
+.fc-n{font-size:11px;font-weight:700;color:var(--text)}
+.fc-dow{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.mast-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:10px}
+.mast{background:none;border:none;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;gap:3px;position:relative;padding:0}
+.mast-ring{width:56px;height:56px}
+.mast-ico{position:absolute;top:17px;font-size:16px}
+.mast-pct{font-size:11px;font-weight:800;color:var(--text)}
+.mast-name{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:78px}
+.data-row{display:flex;flex-wrap:wrap;gap:7px}
+
+/* ── rhythm lab ── */
+.lab-monitor{position:relative;border-radius:18px;overflow:hidden;height:210px;
+  background:#050D1A;border:1px solid rgba(94,234,212,.2);margin-bottom:10px;
+  box-shadow:inset 0 0 40px rgba(45,212,191,.07)}
+.lab-monitor canvas{width:100%;height:100%;display:block}
+.lab-readout{position:absolute;left:14px;bottom:10px;display:flex;align-items:baseline;gap:8px;
+  background:rgba(5,13,26,.72);padding:4px 10px;border-radius:99px;
+  border:1px solid rgba(94,234,212,.22);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.lab-name{font-size:13px;font-weight:800;color:#5EEAD4;letter-spacing:-.01em}
+.lab-hr{font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.5)}
+.physio-panel{padding:0;overflow:hidden}
+.physio-panel>.panel-h,.twelve-panel>.panel-h{
+  display:flex;align-items:baseline;gap:var(--s3,12px);
+  padding:var(--s4,16px) var(--s5,20px) 0;margin-bottom:var(--s2,8px)}
+/* The phase, where you are already looking. The caption underneath explains it;
+   this only names it, and it is the one thing on the panel that changes while
+   you watch, so it earns the accent. */
+.physio-phase{margin-left:auto;font-family:var(--font-mono);font-size:11px;
+  letter-spacing:.06em;text-transform:uppercase;font-weight:700;
+  color:var(--teal);background:var(--teal4);border:1px solid var(--teal3);
+  border-radius:999px;padding:3px 10px;white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+/* Taller than it was. The pressure traces are the point of the diagram and
+   they were sharing 60vh with a heart that is no longer there. */
+.physio-stage{aspect-ratio:1.72/1;max-height:74vh}
+@media(max-width:900px){.physio-stage{aspect-ratio:1.4/1;max-height:64vh}}
+@media(max-width:560px){.physio-stage{aspect-ratio:1.1/1;max-height:58vh}}
+/* Up one step of the ladder, not to an arbitrary 14px: the caption is now the
+   only prose on the panel and it is what you read while the cursor sweeps. */
+.physio-note{font-size:var(--t-body,16px);line-height:1.6}
+.physio-chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 0}
+.physio-chips.iv-chips{padding-top:10px;border-top:1px solid var(--border);margin-top:10px}
+.physio-stage{position:relative;aspect-ratio:1.5/1;max-height:60vh;margin:10px 0 0}
+.physio-stage canvas{width:100%;height:100%;display:block;touch-action:none}
+.physio-note{padding:12px 14px 14px;font-size:13px;line-height:1.55;color:var(--muted);min-height:52px}
+.physio-model{margin:0;padding:0 14px 14px}
+.physio-note b{color:var(--text);font-weight:700}
+@media(max-width:560px){.physio-stage{aspect-ratio:1.15/1}}
+.twelve-panel{padding:0;overflow:hidden}
+.twelve-stage{position:relative;aspect-ratio:1.62/1;max-height:62vh;margin:0}
+.twelve-stage canvas{width:100%;height:100%;display:block;cursor:pointer;touch-action:manipulation}
+.twelve-hint{font-family:var(--font-mono);font-size:11px;letter-spacing:.05em;
+  color:var(--muted);padding:8px 14px 0;text-transform:uppercase}
+.twelve-none{padding:14px;font-size:13px;line-height:1.55;color:var(--muted)}
+.lead-card{padding:12px 14px 14px;min-height:64px}
+/* Two different techniques, because the two bars are not the same problem.
+
+   The chapter bar is 4px tall inside a track that already clips, so its own
+   2px radius was never visible: scaleX from the left edge is the cheapest
+   thing that works, and nothing is lost by dropping the radius.
+
+   The distribution bar is 20px tall with a 5px radius that IS visible, and
+   scaleX would squash that radius into an ellipse at low percentages. So it
+   reveals with clip-path instead — which still never touches layout, keeps the
+   element at full size so the radius stays circular, and rounds the revealed
+   edge with inset()'s own 'round'. Same rule, honoured properly. */
+.lead-empty{font-size:13px;color:var(--muted)}
+.chp-fill{width:100%;border-radius:0;transform-origin:left center;
+  transition:transform .9s var(--glide)}
+.dist-bar{width:100%;min-width:0;
+  transition:clip-path .8s var(--glide) .1s}
+@media(prefers-reduced-motion:reduce){
+  .chp-fill{transition:none}
+  .dist-bar{transition:none}
+}
+.lead-head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:7px}
+.lead-id{font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--teal);letter-spacing:-.01em}
+.lead-terr{font-size:13px;font-weight:650;color:var(--text)}
+.lead-art{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.lead-sees{font-size:13px;line-height:1.5;color:var(--text);margin-bottom:6px}
+.lead-look{font-size:13px;line-height:1.5;color:var(--muted)}
+.lab-desc{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px}
+.lab-chips{padding:0}
+
+@media(max-width:520px){
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .hero-h1{font-size:33px}
+  .heat{grid-template-columns:repeat(15,1fr)}
+}
+
+

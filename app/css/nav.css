@@ -1,0 +1,225 @@
+/* ═══ NAVIGATION ═══ */
+/* The colour spans the viewport; the contents keep the measure. Fixed, not
+   sticky: a fixed element reaches both edges without 100vw, and 100vw counts
+   the scrollbar, which on a desktop would have added a horizontal scroll. */
+#navbar{position:fixed;top:0;left:0;right:0;z-index:100;
+  background:var(--navy);color:#fff;
+  padding-top:var(--sat);
+  box-shadow:0 2px 16px rgba(0,0,0,.25);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border-bottom:1px solid rgba(255,255,255,.06)}
+.echo-studio{padding:0 max(20px,var(--sal)) 40px max(20px,var(--sar));max-width:var(--measure);margin:0 auto}
+.echo-tabs{display:flex;gap:8px;margin:12px 0 20px}
+.echo-tab{font:inherit;padding:8px 18px;border-radius:999px;cursor:pointer;
+  background:var(--card);color:var(--muted);border:1px solid var(--border)}
+.echo-tab.on{background:var(--accent);color:var(--ground);border-color:var(--accent)}
+.echo-ref-tab{display:grid;grid-template-columns:minmax(180px,1fr) 3fr;gap:24px;align-items:start}
+@media (max-width:760px){.echo-ref-tab{grid-template-columns:1fr}}
+.echo-list{display:flex;flex-direction:column;gap:4px}
+.echo-pick{font:inherit;text-align:left;padding:8px 12px;border-radius:8px;cursor:pointer;
+  background:transparent;color:var(--text);border:1px solid transparent}
+.echo-pick.on{background:var(--card);border-color:var(--border)}
+.echo-views{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.echo-view{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.echo-view h4{margin:0 0 8px}
+.echo-view dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0;font-size:.9em}
+.echo-view dt{color:var(--muted)}
+.echo-view dd{margin:0}
+.echo-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:24px}
+.echo-field{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:baseline;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.echo-field input{font:inherit;width:100%;background:transparent;color:var(--text);
+  border:0;border-bottom:1px solid var(--border3)}
+.echo-label{font-size:.85em}
+.echo-units,.echo-where{color:var(--muted);font-size:.78em}
+.echo-where{grid-column:1/-1}
+.echo-results,.echo-measures{width:100%;border-collapse:collapse;font-size:.92em}
+.echo-results th,.echo-results td,.echo-measures th,.echo-measures td{
+  text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
+.echo-value{font-variant-numeric:tabular-nums}
+.echo-ref{color:var(--muted);font-size:.85em}
+.echo-note{color:var(--muted);font-size:.82em;margin-top:2px}
+.echo-sex{color:var(--muted);font-size:.8em}
+.echo-grade{text-transform:capitalize}
+.echo-grade[data-grade="severe"],.echo-grade[data-grade="very severe"]{color:var(--accent);font-weight:600}
+.echo-empty,.echo-missing{color:var(--muted)}
+.echo-missing{margin-top:16px;font-size:.9em}
+.ns-screen{padding:0 max(20px,var(--sal)) 40px max(20px,var(--sar));max-width:var(--measure);margin:0 auto}
+.ns-bar{padding:14px 0 10px}
+.ns-q{font:inherit;font-size:1.05em;width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;
+  background:var(--card);color:var(--text);border:1px solid var(--border)}
+.ns-hint,.ns-count{color:var(--muted);margin:10px 2px}
+.ns-count{font-size:.8em;letter-spacing:.08em;text-transform:uppercase}
+.ns-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.ns-hit{font:inherit;width:100%;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:3px;
+  padding:12px 14px;border-radius:12px;background:var(--card);color:var(--text);border:1px solid var(--border)}
+.ns-chapter{color:var(--muted);font-size:.78em}
+.ns-title{font-weight:600}
+.ns-snippet{color:var(--muted);font-size:.9em;line-height:1.45}
+.ns-hit mark,.ns-note mark{background:transparent;color:var(--accent);font-weight:600}
+.ns-back{font:inherit;cursor:pointer;margin:14px 0 6px;padding:6px 12px;border-radius:999px;
+  background:var(--card);color:var(--text);border:1px solid var(--border)}
+.ns-note-title{margin:4px 0 6px}
+.ns-source{color:var(--muted);font-size:.85em;margin:0 0 14px}
+/* ── glass — see scripts/glass-patch.js ── */
+:root{--card-glass:var(--card);--gl-shine:rgba(255,255,255,.62);--gl-rim:rgba(255,255,255,.85);
+  --gl-edge:rgba(15,23,42,.07);--gl-sweep:rgba(255,255,255,.55);--gl-lift:0 6px 18px rgba(8,15,30,.18);
+  --gl-blur:blur(14px) saturate(1.6);--gl-ease:cubic-bezier(.2,.8,.2,1)}
+html[data-theme="dark"]{--gl-shine:rgba(255,255,255,.10);--gl-rim:rgba(255,255,255,.16);--gl-edge:rgba(255,255,255,.06);--gl-sweep:rgba(255,255,255,.16);--gl-lift:0 6px 18px rgba(0,0,0,.42)}
+@media (prefers-color-scheme:dark){html:not([data-theme]){--gl-shine:rgba(255,255,255,.10);--gl-rim:rgba(255,255,255,.16);--gl-edge:rgba(255,255,255,.06);--gl-sweep:rgba(255,255,255,.16);--gl-lift:0 6px 18px rgba(0,0,0,.42)}}
+html:not([data-palette="contrast"]) .btn:not(.btn-next),
+html:not([data-palette="contrast"]) .chip,
+html:not([data-palette="contrast"]) .miss-chip,
+html:not([data-palette="contrast"]) .cf-chip,
+html:not([data-palette="contrast"]) .echo-tab,
+html:not([data-palette="contrast"]) .hello-x,
+html:not([data-palette="contrast"]) .ch-tile,
+html:not([data-palette="contrast"]) .feed-card,
+html:not([data-palette="contrast"]) .opt{--card:var(--card-glass)}
+html:not([data-palette="contrast"]) .btn:not(.btn-next),
+html:not([data-palette="contrast"]) .miss-chip,
+html:not([data-palette="contrast"]) .cf-chip,
+html:not([data-palette="contrast"]) .echo-tab,
+html:not([data-palette="contrast"]) .hello-x,
+html:not([data-palette="contrast"]) .ch-tile,
+html:not([data-palette="contrast"]) .feed-card,
+html:not([data-palette="contrast"]) .opt{-webkit-backdrop-filter:var(--gl-blur);backdrop-filter:var(--gl-blur)}
+html:not([data-palette="contrast"]) .btn:not(.btn-next),
+html:not([data-palette="contrast"]) .chip,
+html:not([data-palette="contrast"]) .miss-chip,
+html:not([data-palette="contrast"]) .cf-chip,
+html:not([data-palette="contrast"]) .echo-tab,
+html:not([data-palette="contrast"]) .hello-x,
+html:not([data-palette="contrast"]) .btn-next,
+html:not([data-palette="contrast"]) .door,
+html:not([data-palette="contrast"]) .study-back{position:relative}
+html:not([data-palette="contrast"]) .btn:not(.btn-next),
+html:not([data-palette="contrast"]) .chip,
+html:not([data-palette="contrast"]) .miss-chip,
+html:not([data-palette="contrast"]) .cf-chip,
+html:not([data-palette="contrast"]) .echo-tab,
+html:not([data-palette="contrast"]) .hello-x,
+html:not([data-palette="contrast"]) .ch-tile,
+html:not([data-palette="contrast"]) .feed-card,
+html:not([data-palette="contrast"]) .opt,
+html:not([data-palette="contrast"]) .btn-next,
+html:not([data-palette="contrast"]) .ai-fab,
+html:not([data-palette="contrast"]) .door,
+html:not([data-palette="contrast"]) .study-back{isolation:isolate}
+html:not([data-palette="contrast"]) .btn:not(.btn-next)::after,
+html:not([data-palette="contrast"]) .chip::after,
+html:not([data-palette="contrast"]) .miss-chip::after,
+html:not([data-palette="contrast"]) .cf-chip::after,
+html:not([data-palette="contrast"]) .echo-tab::after,
+html:not([data-palette="contrast"]) .hello-x::after,
+html:not([data-palette="contrast"]) .ch-tile::after,
+html:not([data-palette="contrast"]) .feed-card::after,
+html:not([data-palette="contrast"]) .opt::after,
+html:not([data-palette="contrast"]) .btn-next::after,
+html:not([data-palette="contrast"]) .ai-fab::after,
+html:not([data-palette="contrast"]) .door::after,
+html:not([data-palette="contrast"]) .study-back::after{content:"";position:absolute;top:0;right:0;bottom:0;left:0;
+  border-radius:inherit;pointer-events:none;z-index:-1;
+  background-image:linear-gradient(105deg,rgba(255,255,255,0) 38%,var(--gl-sweep) 50%,rgba(255,255,255,0) 62%),
+    linear-gradient(180deg,var(--gl-shine),rgba(255,255,255,0) 55%);
+  background-size:260% 100%,100% 100%;background-position:130% 0,0 0;background-repeat:no-repeat;
+  box-shadow:inset 0 1px 0 var(--gl-rim),inset 0 0 0 1px var(--gl-edge);
+  transition:background-position .8s var(--gl-ease)}
+@media (hover:hover){html:not([data-palette="contrast"]) .btn:not(.btn-next):hover::after,
+html:not([data-palette="contrast"]) .chip:hover::after,
+html:not([data-palette="contrast"]) .miss-chip:hover::after,
+html:not([data-palette="contrast"]) .cf-chip:hover::after,
+html:not([data-palette="contrast"]) .echo-tab:hover::after,
+html:not([data-palette="contrast"]) .hello-x:hover::after,
+html:not([data-palette="contrast"]) .ch-tile:hover::after,
+html:not([data-palette="contrast"]) .feed-card:hover::after,
+html:not([data-palette="contrast"]) .opt:hover::after,
+html:not([data-palette="contrast"]) .btn-next:hover::after,
+html:not([data-palette="contrast"]) .ai-fab:hover::after,
+html:not([data-palette="contrast"]) .door:hover::after,
+html:not([data-palette="contrast"]) .study-back:hover::after{background-position:-30% 0,0 0}}
+html:not([data-palette="contrast"]) .btn:not(.btn-next):active::after,
+html:not([data-palette="contrast"]) .chip:active::after,
+html:not([data-palette="contrast"]) .miss-chip:active::after,
+html:not([data-palette="contrast"]) .cf-chip:active::after,
+html:not([data-palette="contrast"]) .echo-tab:active::after,
+html:not([data-palette="contrast"]) .hello-x:active::after,
+html:not([data-palette="contrast"]) .ch-tile:active::after,
+html:not([data-palette="contrast"]) .feed-card:active::after,
+html:not([data-palette="contrast"]) .opt:active::after,
+html:not([data-palette="contrast"]) .btn-next:active::after,
+html:not([data-palette="contrast"]) .ai-fab:active::after,
+html:not([data-palette="contrast"]) .door:active::after,
+html:not([data-palette="contrast"]) .study-back:active::after{background-position:-30% 0,0 0;transition-duration:.45s}
+html:not([data-palette="contrast"]) .btn:not(.btn-next):focus-visible::after,
+html:not([data-palette="contrast"]) .chip:focus-visible::after,
+html:not([data-palette="contrast"]) .miss-chip:focus-visible::after,
+html:not([data-palette="contrast"]) .cf-chip:focus-visible::after,
+html:not([data-palette="contrast"]) .echo-tab:focus-visible::after,
+html:not([data-palette="contrast"]) .hello-x:focus-visible::after,
+html:not([data-palette="contrast"]) .ch-tile:focus-visible::after,
+html:not([data-palette="contrast"]) .feed-card:focus-visible::after,
+html:not([data-palette="contrast"]) .opt:focus-visible::after,
+html:not([data-palette="contrast"]) .btn-next:focus-visible::after,
+html:not([data-palette="contrast"]) .ai-fab:focus-visible::after,
+html:not([data-palette="contrast"]) .door:focus-visible::after,
+html:not([data-palette="contrast"]) .study-back:focus-visible::after{background-position:-30% 0,0 0}
+@keyframes glGlance{from{background-position:130% 0,0 0}to{background-position:-30% 0,0 0}}
+html:not([data-palette="contrast"]) .door::after,
+html:not([data-palette="contrast"]) .ch-tile::after,
+html:not([data-palette="contrast"]) .feed-card::after,
+html:not([data-palette="contrast"]) .btn-next::after{animation:glGlance 1.1s var(--gl-ease) .15s 1}
+html:not([data-palette="contrast"]) .btn-next{box-shadow:var(--gl-lift)}
+html:not([data-palette="contrast"]) .btn:active,
+html:not([data-palette="contrast"]) .chip:active,
+html:not([data-palette="contrast"]) .echo-tab:active,
+html:not([data-palette="contrast"]) .hello-x:active{transform:scale(.97)}
+@media (prefers-reduced-motion:reduce){
+html:not([data-palette="contrast"]) .btn:not(.btn-next)::after,
+html:not([data-palette="contrast"]) .chip::after,
+html:not([data-palette="contrast"]) .miss-chip::after,
+html:not([data-palette="contrast"]) .cf-chip::after,
+html:not([data-palette="contrast"]) .echo-tab::after,
+html:not([data-palette="contrast"]) .hello-x::after,
+html:not([data-palette="contrast"]) .ch-tile::after,
+html:not([data-palette="contrast"]) .feed-card::after,
+html:not([data-palette="contrast"]) .opt::after,
+html:not([data-palette="contrast"]) .btn-next::after,
+html:not([data-palette="contrast"]) .ai-fab::after,
+html:not([data-palette="contrast"]) .door::after,
+html:not([data-palette="contrast"]) .study-back::after{transition:none;animation:none}
+html:not([data-palette="contrast"]) .btn:active,
+html:not([data-palette="contrast"]) .chip:active,
+html:not([data-palette="contrast"]) .echo-tab:active,
+html:not([data-palette="contrast"]) .hello-x:active{transform:none}
+}
+.nav{color:#fff;height:var(--navh);display:flex;align-items:center;
+  justify-content:space-between;
+  max-width:var(--measure);margin:0 auto;
+  padding-left:max(20px,var(--sal));padding-right:max(20px,var(--sar))}
+/* Focus mode. #shell's padding-top and #ai's top/height are both calc()s over
+   --navh, so zeroing it is all it takes for them to reclaim the space. --sat
+   stays: that is the status bar, not the app's chrome. */
+html[data-focus="1"]{--navh:0px}
+html[data-focus="1"] #navbar{display:none}
+#focusExit{display:none}
+html[data-focus="1"] #focusExit{display:flex;align-items:center;justify-content:center;
+  position:fixed;z-index:101;top:calc(var(--sat) + 10px);right:max(14px,var(--sar));
+  width:44px;height:44px;border-radius:999px;cursor:pointer;
+  border:1.5px solid var(--border);background:var(--card);color:var(--muted);
+  box-shadow:var(--e1);transition:transform .13s var(--ease)}
+html[data-focus="1"] #focusExit:active{transform:scale(.94)}
+html[data-focus="1"] #focusExit svg{width:19px;height:19px;
+  fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.nav-brand{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;-webkit-user-select:none}
+.nav-logo{width:32px;height:32px;background:linear-gradient(135deg,var(--teal),var(--teal2));
+  border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;
+  box-shadow:0 2px 8px rgba(14,165,233,.4)}
+.nav-title{font-weight:700;font-size:16px;letter-spacing:-.02em}
+.nav-sub{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px;letter-spacing:.02em}
+.nav-right{display:flex;align-items:center;gap:8px}
+.score-pill{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:20px;
+  padding:5px 13px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;
+  transition:all .2s;letter-spacing:-.01em}
+.score-dot{width:7px;height:7px;border-radius:50%;box-shadow:0 0 6px currentColor}
+

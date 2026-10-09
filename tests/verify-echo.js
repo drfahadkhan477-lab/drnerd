@@ -56,7 +56,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { cut } = require('./_appcut.js');
+const { cut, cutStylesheet } = require('./_appcut.js');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath } = require('./_deathnote.js');
 
@@ -125,7 +125,7 @@ try {
       '/* ══════════ Search your notes — see src/core/notesearch.js'),
     door: cut('app/systole.html', '      <button class="icon-btn" onclick="goEcho()" title="Echo Studio"',
       '      <div class="theme-wrap">'),
-    css: cut('app/css/systole.css', '.echo-studio{', '.ns-screen{'),
+    css: cutStylesheet('.echo-studio{', '.ns-screen{'),
   };
 } catch (e) { cutError = e.message; }
 

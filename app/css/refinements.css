@@ -1,0 +1,160 @@
+/* ═══════════════ v11 — MCQ screen refinement ═══════════════ */
+
+/* question card: subtle depth + chapter-tinted wash, refined tag */
+.q-card{position:relative;overflow:hidden;box-shadow:0 1px 2px rgba(15,30,61,.04),0 8px 22px rgba(15,30,61,.06)}
+.q-card::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.5;
+  background:radial-gradient(120% 90% at 0% 0%,var(--teal4),transparent 60%)}
+html[data-theme="dark"] .q-card::before{opacity:.22}
+.q-card>*{position:relative;z-index:1}
+.q-card>.ink-canvas,.q-card>.note-layer{position:absolute;z-index:6}
+.q-tag{padding:3px 0}
+.q-tag-dot{width:7px;height:7px;box-shadow:0 0 0 3px currentColor;opacity:.9}
+
+/* option letters: circular, chapter-tinted, real depth */
+.opt-letter{--acc:var(--teal);min-width:30px;height:30px;border-radius:50%;
+  background:color-mix(in srgb, var(--acc) 12%, var(--card));
+  color:var(--acc); border:1.5px solid color-mix(in srgb, var(--acc) 38%, var(--border));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  font-weight:800; font-size:13px}
+html[data-theme="dark"] .opt-letter{box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+
+/* option cards: layered depth, accent bar on hover/focus, smoother press */
+.opt{position:relative;border-radius:16px;overflow:hidden;
+  box-shadow:0 1px 2px rgba(15,30,61,.03);
+  transition:transform .2s var(--spring),box-shadow .22s var(--glide),border-color .2s,background .2s}
+.opt::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--acc,var(--teal));transform:scaleY(0);transform-origin:center;
+  transition:transform .24s var(--spring)}
+.opt:not(:disabled):hover::before,.opt:not(:disabled):active::before{transform:scaleY(1)}
+.opt:not(:disabled):hover{box-shadow:0 6px 18px rgba(15,30,61,.09)}
+.opt:not(:disabled):active{transform:scale(.985)}
+.opt.correct,.opt.wrong{border-radius:16px}
+.opt.correct::before{background:var(--green);transform:scaleY(1)}
+.opt.wrong::before{background:var(--red);transform:scaleY(1)}
+.opt.correct .opt-letter{box-shadow:0 0 0 4px var(--green-bg),inset 0 1px 0 rgba(255,255,255,.3)}
+.opt.wrong .opt-letter{box-shadow:0 0 0 4px var(--red-bg),inset 0 1px 0 rgba(255,255,255,.3)}
+
+/* reveal header: icon-in-circle instead of a bare floating emoji */
+.reveal-header{position:relative;overflow:hidden}
+.reveal-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:19px;flex-shrink:0;background:rgba(255,255,255,.55)}
+html[data-theme="dark"] .reveal-icon{background:rgba(255,255,255,.08)}
+.reveal-header.ok .reveal-icon{animation:popIn .4s var(--spring) both}
+.reveal-header.bad .reveal-icon{animation:nudge .4s var(--glide) both}
+
+/* distribution bars: gradient fill, rounded, gentle fill-in shimmer */
+.dist-bar-wrap{height:22px;border-radius:7px;background:var(--card2,var(--bg))}
+.dist-bar{border-radius:7px;position:relative;overflow:hidden;
+  background-image:linear-gradient(180deg,rgba(255,255,255,.16),transparent 60%)}
+.dist-row.correct-row .dist-bar{background-color:var(--green);
+  background-image:linear-gradient(90deg,var(--green),#5EEAD4),linear-gradient(180deg,rgba(255,255,255,.22),transparent 55%)}
+.dist-row.wrong-row .dist-bar{background-color:var(--red);
+  background-image:linear-gradient(90deg,var(--red),#FCA5A5),linear-gradient(180deg,rgba(255,255,255,.18),transparent 55%)}
+.dist-row{animation:slideL .34s var(--glide) both}
+.dist-row:nth-child(2){animation-delay:.03s}.dist-row:nth-child(3){animation-delay:.06s}
+.dist-row:nth-child(4){animation-delay:.09s}.dist-row:nth-child(5){animation-delay:.12s}
+
+/* ═══════ icon system ═══════ */
+.icon{width:1.15em;height:1.15em;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;display:inline-block;vertical-align:-0.2em;
+  flex-shrink:0}
+.icon-lg{width:22px;height:22px}
+.icon-xl{width:28px;height:28px;stroke-width:1.6}
+.icon-sm{width:15px;height:15px;stroke-width:2.1}
+.nav-logo .icon{width:20px;height:20px;color:#fff}
+.icon-btn .icon{width:17px;height:17px}
+.story-ico .icon{width:22px;height:22px}
+.ct-ico .icon{width:22px;height:22px}
+.chp-icon .icon{width:19px;height:19px}
+.mast-ico .icon{width:19px;height:19px}
+.fc-badge .icon,.hit-fig .icon{width:12px;height:12px;stroke-width:2.2}
+.tool .icon{width:19px;height:19px}
+.rail-open .icon{width:20px;height:20px}
+.reveal-icon .icon{width:22px;height:22px}
+.ai-fab .icon{width:16px;height:16px;margin-right:2px}
+.opt-letter-x .icon{width:14px;height:14px}
+.q-tag .icon,.hit-flag .icon{width:12px;height:12px}
+.trophy-ico .icon{width:34px;height:34px}
+
+/* ═══════ v12 — color & depth system ═══════ */
+
+/* elevation scale — consistent shadow language across every card surface */
+:root{
+  --e1:0 1px 2px rgba(8,15,30,.06),0 1px 3px rgba(8,15,30,.08);
+  --e2:0 2px 6px rgba(8,15,30,.08),0 4px 14px rgba(8,15,30,.08);
+  --e3:0 6px 18px rgba(8,15,30,.11),0 12px 32px rgba(8,15,30,.10);
+  --e4:0 14px 38px rgba(8,15,30,.16),0 4px 12px rgba(8,15,30,.08);
+}
+html[data-theme="dark"]{
+  --e1:0 1px 2px rgba(0,0,0,.22),0 1px 3px rgba(0,0,0,.20);
+  --e2:0 2px 8px rgba(0,0,0,.30),0 6px 18px rgba(0,0,0,.22);
+  --e3:0 8px 24px rgba(0,0,0,.38),0 16px 40px rgba(0,0,0,.26);
+  --e4:0 18px 46px rgba(0,0,0,.48),0 6px 16px rgba(0,0,0,.30);
+}
+
+/* chapter accent flows into its icon everywhere the color is passed through */
+.story-ico .icon,.ct-ico .icon,.chp-icon .icon,.mast-ico .icon{color:var(--accent,var(--teal))}
+.ct-ico{background:var(--card);
+  background:color-mix(in srgb, var(--accent,var(--teal)) 14%, transparent);
+  width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;
+  color:var(--accent,var(--teal))}
+.story-ring circle:last-child{filter:none;
+  filter:drop-shadow(0 0 4px color-mix(in srgb, var(--accent,var(--teal)) 45%, transparent))}
+
+/* card surfaces pick up the new elevation scale */
+.feed-card{box-shadow:var(--e1)}
+.feed-card:active{box-shadow:var(--e1)}
+@media(hover:hover){.feed-card:hover{box-shadow:var(--e3)}}
+.ch-tile{box-shadow:var(--e1)}
+@media(hover:hover){.ch-tile:hover{box-shadow:var(--e2)}}
+.q-card,.reveal-card{box-shadow:var(--e2)}
+.panel,.stat-tile{box-shadow:var(--e1)}
+.tool-rail{box-shadow:var(--e3)}
+.ai-fab{box-shadow:var(--e3)}
+@media(hover:hover){.ai-fab:hover{box-shadow:var(--e4)}}
+.peek-card{box-shadow:var(--e4)}
+.rate-btn{box-shadow:var(--e1)}
+
+/* subtle depth on the hero without changing its existing gradient */
+.hero-live{box-shadow:var(--e3),inset 0 1px 0 rgba(255,255,255,.05)}
+.lab-monitor{box-shadow:var(--e3),inset 0 0 40px rgba(45,212,191,.07)}
+
+/* ═══════ v12 — quiz screen refinement ═══════ */
+.opt{box-shadow:var(--e1);position:relative;overflow:hidden;
+  transition:transform .18s var(--spring),box-shadow .2s var(--glide),border-color .18s,background .18s}
+/* .opt::before is defined above with width:3px and a scaleY reveal. It used to
+   be redefined here with width:0 and a width transition, which left the correct
+   and wrong stripes permanently invisible — they set transform, not width. */
+.opt:not(:disabled):active{transform:scale(.982)}
+@media(hover:hover){
+  .opt:hover:not(:disabled){box-shadow:var(--e2);transform:translateX(2px)}
+  /* no width to restore: the stripe reveals with transform */
+}
+.opt-letter{min-width:28px;height:28px;border-radius:9px;font-size:11px;
+  border-color:color-mix(in srgb, var(--acc,var(--border)) 35%, var(--border))}
+.opt:not(:disabled):hover .opt-letter{border-color:var(--acc,var(--teal));color:var(--acc,var(--teal))}
+
+/* progress bar: gradient fill instead of a flat tint */
+.prog-track{background:var(--border2);border-radius:99px;overflow:hidden}
+.prog-fill{background:linear-gradient(90deg,var(--teal),#38BDF8);box-shadow:0 0 10px rgba(45,212,191,.35)}
+
+/* stem card: a touch more presence */
+.q-card{box-shadow:var(--e2)}
+
+/* dist bars in the reveal card: smoother, slightly glossy */
+.dist-bar{background:linear-gradient(90deg,var(--teal),color-mix(in srgb, var(--teal) 70%, #38BDF8))}
+.correct-row .dist-bar{background:linear-gradient(90deg,var(--green),color-mix(in srgb, var(--green) 70%, #6EE7B7))}
+.wrong-row .dist-bar{background:linear-gradient(90deg,var(--red),color-mix(in srgb, var(--red) 70%, #FCA5A5))}
+
+/* ═══════ v12 — screen transitions (View Transitions API, Safari 18+) ═══════
+   Feature-detected and reduced-motion-gated in JS (render() in app.js);
+   unsupported browsers get the original instant swap, zero breakage. */
+::view-transition-old(root){animation:vt-out .22s cubic-bezier(.4,0,.6,1) both}
+::view-transition-new(root){animation:vt-in .3s cubic-bezier(.16,1,.3,1) both}
+@keyframes vt-out{to{opacity:0;transform:scale(.985)}}
+@keyframes vt-in{from{opacity:0;transform:scale(1.015)}}
+
+@media(prefers-reduced-motion:reduce){
+  ::view-transition-old(root),::view-transition-new(root){animation:none!important}
+}
+
