@@ -49,13 +49,19 @@ const M = box.Heart3D && box.Heart3D.mesh;
 const { bake, keyOf, HERO_RES } = require('../scripts/heart-bake.js');
 
 const FIELDS = ['positions', 'normals', 'weights', 'color', 'extra', 'indices'];
-/* Every value of every field of both surfaces, compared as numbers. */
+/* Every value of every field of all three meshes, compared as what makeMesh()
+   uploads: Float32 for the attributes, integers for the indices. The surfaces
+   are built as Float32Arrays already; the coronaries as plain numbers, which
+   makeMesh() turns into Float32 on the way to the GPU — so a raw comparison
+   failed on the coronaries' first value while the copy held exactly the value
+   drawn. Math.fround is the identity on the surfaces. */
 const differences = (a, b) => {
   const out = [];
-  for (const s of ['outer', 'cav']) for (const f of FIELDS) {
+  for (const s of ['outer', 'cav', 'coron']) for (const f of FIELDS) {
     const x = a && a[s] && a[s][f], y = b && b[s] && b[s][f];
     if (!x || !y || x.length !== y.length) { out.push(`${s}.${f} length`); continue; }
-    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) { out.push(`${s}.${f}[${i}]`); break; }
+    const same = f === 'indices' ? (u, v) => u === v : (u, v) => Math.fround(u) === v;
+    for (let i = 0; i < x.length; i++) if (!same(x[i], y[i])) { out.push(`${s}.${f}[${i}]`); break; }
   }
   return out;
 };
@@ -64,15 +70,16 @@ head('the mesh is there to bake');
 ok('heart3d.js exposes its mesh builder', !!M && typeof M.build === 'function' && typeof M.pack === 'function');
 const built = M.build(M.RES, M.LO, M.HI);
 /* Vacuity guard: an empty mesh packs, unpacks and compares equal to itself. */
-ok('and it meshes two real surfaces', built.outer.positions.length / 3 > 5000 && built.cav.positions.length / 3 > 5000,
-   `${built.outer.positions.length / 3} + ${built.cav.positions.length / 3} vertices`);
+ok('and it meshes two real surfaces, and builds the coronaries', built.outer.positions.length / 3 > 5000 && built.cav.positions.length / 3 > 5000
+   && !!built.coron && built.coron.positions.length / 3 > 1000,
+   `${built.outer.positions.length / 3} + ${built.cav.positions.length / 3} + ${built.coron ? built.coron.positions.length / 3 : 0} vertices`);
 
 head('the packed copy is the mesh, value for value');
 const KEY = keyOf(HEART);
 const buf = M.pack(built, KEY, M.RES, M.LO, M.HI);
 const back = M.unpack(buf, KEY, M.RES, M.LO, M.HI);
 const diff = differences(built, back);
-ok('every value of both surfaces survives packing', !!back && diff.length === 0, diff.slice(0, 3).join(', ') || 'none differ');
+ok('every value of all three meshes survives packing', !!back && diff.length === 0, diff.slice(0, 3).join(', ') || 'none differ');
 
 head('any other copy is refused');
 ok('one baked from other code (another key)', M.unpack(buf, keyOf(HEART + ' '), M.RES, M.LO, M.HI) === null);
@@ -91,6 +98,10 @@ const spare = refuses(padded.buffer);
 ok('one with bytes to spare', spare === 'refused', spare);
 const page = Buffer.from('<!doctype html><title>Sign in</title>' + ' '.repeat(80));
 ok('a sign-in page served in its place', M.unpack(new Uint8Array(page).buffer, KEY, M.RES, M.LO, M.HI) === null);
+/* HM01 held two meshes; HM02 adds the coronaries. A copy tagged with the old
+   layout must be refused, not read as the new one. */
+const old = buf.slice(0); new Uint32Array(old, 0, 1)[0] = 0x31304d48;   // 'HM01'
+ok('one tagged with the old two-mesh layout', M.unpack(old, KEY, M.RES, M.LO, M.HI) === null);
 
 head('the build bakes it with the shipped code');
 const baked = bake(HEART);
