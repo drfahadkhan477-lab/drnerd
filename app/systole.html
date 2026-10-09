@@ -5581,7 +5581,7 @@ function progressFromBackup(raw){
   entries('daily',['a','c','r'],['a','c']);
   entries('chStats',['correct','total'],[]);
   entries('practice',['n','c','t'],[]);
-  entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>v.due==null||typeof v.due==='string');
+  entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string'));
   entries('resume',['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')));
   for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
     if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');

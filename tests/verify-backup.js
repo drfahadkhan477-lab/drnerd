@@ -219,18 +219,22 @@ const restore = `(text) => new Promise(resolve => {
     'a day with no counts': { daily: { '2026-10-09': {} } },
     'a null card': { srs: { BKUP_1: null } },
     'a card whose due date is not a date string': { srs: { BKUP_1: { due: 5 } } },
+    'a card whose last review is not a date string': { srs: { BKUP_1: { due: '2026-11-01', last: 12345 } } },
     'a null chapter': { chStats: { Arrhythmias: null } },
     'a chapter count that is negative': { chStats: { Arrhythmias: { correct: -1, total: 2 } } },
     'a null practice record': { practice: { BKUP_1: null } },
     'a null resume record': { resume: { all: null } },
     'a resume record whose ids are not a list': { resume: { all: { ids: 'BKUP_1', i: 1 } } },
   };
+  /* Restores a file through the real importer and returns the toast it left,
+     cleared first so a repeat of the same message is still seen. */
+  const importToast = text => page.evaluate(async ({ fn, text }) => {
+    const t = document.getElementById('toast'); if (t) t.textContent = '';
+    await (new Function('return ' + fn))()(text);
+    return (document.getElementById('toast') || {}).textContent || '';
+  }, { fn: restore, text });
   for (const [what, stats] of Object.entries(badNested)) {
-    const toast = await page.evaluate(async ({ fn, text }) => {
-      const t = document.getElementById('toast'); if (t) t.textContent = '';
-      await (new Function('return ' + fn))()(text);
-      return (document.getElementById('toast') || {}).textContent || '';
-    }, { fn: restore, text: JSON.stringify({ v: 5, ink: { wouldReplace: true }, stats }) });
+    const toast = await importToast(JSON.stringify({ v: 5, ink: { wouldReplace: true }, stats }));
     ok('a backup with ' + what + ' is refused', toast === 'That file could not be read.', JSON.stringify(toast));
     ok('and changes nothing', await statState() === nestedBefore);
     const built = await page.evaluate(() => { try { buildStats(); forecast7(); return true; } catch (e) { return e.message; } });
@@ -238,12 +242,8 @@ const restore = `(text) => new Promise(resolve => {
   }
 
   /* The valid round trip: a whole day record is restored and read. */
-  const dayToast = await page.evaluate(async ({ fn, text }) => {
-    const t = document.getElementById('toast'); if (t) t.textContent = '';
-    await (new Function('return ' + fn))()(text);
-    return (document.getElementById('toast') || {}).textContent || '';
-  }, { fn: restore, text: JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 } },
-    srs: { BKUP_1: { reps: 3, due: '2026-11-01', stability: 4, difficulty: 5 } } } }) });
+  const dayToast = await importToast(JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 } },
+    srs: { BKUP_1: { reps: 3, due: '2026-11-01', last: '2026-10-01', stability: 4, difficulty: 5 } } } }));
   ok('a backup with a well-formed day record is restored', dayToast === 'Annotations restored.', JSON.stringify(dayToast));
   ok('and the Progress screen reads it', await page.evaluate(() => {
     try { buildStats(); forecast7(); } catch (e) { return e.message; }
