@@ -2136,6 +2136,9 @@ function toast(msg){
 
 const REF_KEY='accsap12.ref';
 const REF_SEED = /*REF_SEED_START*/@@SLOT[payload:REF_SEED]@@/*REF_SEED_END*/;
+/* Where each seeded note's pearl is, found at build time (scripts/pearl-bake.js);
+   no note text, only positions and scores, checked against the note at use. */
+const REF_PEARLS = /*REF_PEARLS_START*/@@SLOT[payload:REF_PEARLS]@@/*REF_PEARLS_END*/;
 /* Keyed by the CONTENT of the seed, not by a version number somebody has to
    remember to bump.
  *
@@ -6500,13 +6503,16 @@ function greet(){
   return h<5?'Burning the midnight oil':h<12?'Good morning':h<17?'Good afternoon':h<22?'Good evening':'Late session';
 }
 
-/* Harvested once — a few hundred notes is a few milliseconds of regex, but
-   render() is called on every answer, and paying it there would be careless.
-   Rebuilt when the library changes, which is what invalidateIndex signals. */
+/* Harvested once, and cached: render() is called on every answer. "A few
+   milliseconds of regex" was true of a few hundred notes; with the full shelf
+   it was the largest cost left at launch on an iPad's CPU, so the seeded notes'
+   pearls are found at build time (REF_PEARLS) and only notes edited or added
+   on this device are searched here. Rebuilt when the library changes, which is
+   what invalidateIndex signals. */
 let pearlCache=null, pearlCurrent=null;
 function pearlAll(){
   if(pearlCache) return pearlCache;
-  try{ pearlCache=(typeof Pearl!=='undefined'&&typeof REF!=='undefined')?Pearl.harvest(REF):[]; }
+  try{ pearlCache=(typeof Pearl!=='undefined'&&typeof REF!=='undefined')?Pearl.harvest(REF, typeof REF_PEARLS==='object'?REF_PEARLS:null):[]; }
   catch(_){ pearlCache=[]; }
   return pearlCache;
 }

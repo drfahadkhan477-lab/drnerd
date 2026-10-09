@@ -544,7 +544,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/systole.css   (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        153 suites · 88 need no browser · + pwa
+tests/        153 suites · 89 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
