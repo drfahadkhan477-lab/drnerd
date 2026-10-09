@@ -9,13 +9,14 @@ name: firefox-memorizer-probe (measurement, not for merge)
 # This runs the suite as it now is 150 times and, on a failure, keeps where it
 # stopped and Firefox's stderr. The fix holds if the count is 0.
 #
-# It runs when this file changes, not on every push to the branch. The time
+# It runs when this file changes, not on every push to the branch (#212's, or
+# claude/exciting-fermi-330ukl, the branch that carries it there). The time
 # limit is above round 2's 75 minutes because one shard there was cancelled
 # after a 15-minute install, before its last run, not by a test.
 
 on:
   push:
-    branches: [claude/pensive-bell-fapazl]
+    branches: [claude/pensive-bell-fapazl, claude/exciting-fermi-330ukl]
     paths: [.github/workflows/firefox-memorizer-probe.yml]
   workflow_dispatch:
 
