@@ -100,9 +100,19 @@ function asciiFlow(body) {
   });
   return nodes.length >= 3 && edges.length >= 2 ? 'flowchart TD\n' + nodes.join('\n') + '\n' + edges.join('\n') : '';
 }
+/* Mermaid code the app will hand to Mermaid: a flowchart and nothing else.
+   Other diagram types (sequence, state, class, gantt, xy...) are where
+   Mermaid's published label-injection and denial-of-service advisories
+   live, and a lesson never needs them; a %%{...}%% directive reconfigures
+   the renderer from inside the diagram. Leading %% comments are allowed. */
+function isFlowchart(code) {
+  var body = String(code || '');
+  if (/%%\s*\{/.test(body)) return false;
+  return /^\s*(?:%%[^\n]*\n\s*)*(?:flowchart|graph)\s+(?:TD|TB|LR|RL|BT)\b/.test(body);
+}
 function flowchartOf(b) {
   var body = String(b.body || '').trim();
-  if (b.lang === 'mermaid' || /^(?:flowchart|graph)\s+(?:TD|TB|LR|RL|BT)\b/.test(body)) return /-->|==>|-\.->/.test(body) ? body : '';
+  if (b.lang === 'mermaid' || /^(?:flowchart|graph)\b/.test(body)) return isFlowchart(body) && /-->|==>|-\.->/.test(body) ? body : '';
   return asciiFlow(body);
 }
 
@@ -655,7 +665,7 @@ function parseStudyFile(content, name) {
 }
 
 var api = { MAX_BYTES: MAX_BYTES, ACCEPT: ACCEPT, STUDY_EXAMPLE: STUDY_EXAMPLE, studyFilePrompt: studyFilePrompt, parseMarkdown: parseMarkdown, htmlToMarkdown: htmlToMarkdown, parseHTML: parseHTML,
-            studyText: studyText, citeOf: citeOf, packFor: packFor, asciiFlow: asciiFlow, sanitizeSvg: sanitizeSvg, DIAGRAMS_MAX: DIAGRAMS_MAX, strictQuestions: strictQuestions, studyMeta: studyMeta, detectFormat: detectFormat, parseStudyFile: parseStudyFile };
+            studyText: studyText, citeOf: citeOf, packFor: packFor, asciiFlow: asciiFlow, isFlowchart: isFlowchart, sanitizeSvg: sanitizeSvg, DIAGRAMS_MAX: DIAGRAMS_MAX, strictQuestions: strictQuestions, studyMeta: studyMeta, detectFormat: detectFormat, parseStudyFile: parseStudyFile };
 root.MemStudyImport = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : this);

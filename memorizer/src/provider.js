@@ -28,9 +28,9 @@ var PROVIDERS = {
   },
   anthropic: {
     label: 'Claude (Anthropic) \u2014 your own API key',
-    models: [['claude-opus-5', 'Claude Opus 5 \u2014 best teacher'],
-             ['claude-sonnet-5', 'Claude Sonnet 5 \u2014 faster, cheaper'],
-             ['claude-haiku-4-5', 'Claude Haiku 4.5 \u2014 fastest']],
+    models: [['claude-opus-5-5', 'Claude Opus 5.5 \u2014 best teacher'],
+             ['claude-sonnet-5-5', 'Claude Sonnet 5.5 \u2014 faster, cheaper'],
+             ['claude-haiku-5-5', 'Claude Haiku 5.5 \u2014 fastest']],
     keyHint: 'sk-ant-\u2026  from console.anthropic.com',
   },
 };
@@ -44,10 +44,15 @@ var ENDPOINT = {
    property so a test can shorten it. */
 var RETRY_MS = 2000;
 
-/* Claude Opus 5's safety classifiers can decline a request; "default"
-   fallbacks re-run a declined request on Anthropic's recommended model
-   server-side instead of returning the refusal. Opus 5 only. */
-var FALLBACK_MODELS = { 'claude-opus-5': true };
+/* The safety classifiers of Claude Opus 5.5 and Sonnet 5.5 can decline a
+   request; "default" fallbacks re-run a declined request on Anthropic's
+   recommended model server-side instead of returning the refusal. Haiku 5.5
+   has no server-side fallback. */
+var FALLBACK_MODELS = { 'claude-opus-5-5': true, 'claude-sonnet-5-5': true };
+/* Opus 5.5 and Haiku 5.5 default to medium effort (Opus 5 defaulted to
+   high); a lesson or a drill is the work effort pays for, so it is asked
+   for, the same on every listed model. */
+var EFFORT = 'high';
 
 function build(cfg, prompt, schema, opts) {
   opts = opts || {};
@@ -63,7 +68,8 @@ function build(cfg, prompt, schema, opts) {
       model: model, max_tokens: 16000, system: prompt.system,
       messages: [{ role: 'user', content: prompt.user }],
     };
-    if (schema) body.output_config = { format: { type: 'json_schema', schema: schema } };
+    body.output_config = { effort: EFFORT };
+    if (schema) body.output_config.format = { type: 'json_schema', schema: schema };
     if (FALLBACK_MODELS[model] && !opts.noFallbacks) {
       headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
       body.fallbacks = 'default';

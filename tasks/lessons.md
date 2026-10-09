@@ -174,3 +174,5 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   crashed page, read `dmesg` on the runner before reading the suite, and isolate the
   trigger by switching ingredients off in a copy of the build across enough runs to
   count (PR #211: 14/24 crashed as built, 0/36 with motion off, 0/32 with the fix).
+
+- **A handoff inherited a different browser.** A laptop task required Chromium but its command omitted --engine, so SYSTOLE_ENGINE could select Firefox or WebKit. → Rule: when a result requires a specific browser, pin it in the command and verify the flag wins over the inherited environment.
