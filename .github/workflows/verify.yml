@@ -673,6 +673,22 @@ jobs:
   # both, changed any of this: the crashes and the driver error came back under
   # each, in a side-by-side run with a control.
   #
+  # The crash is not confined to the suites named above: later runs also lost
+  # chatfigs' page, and selftest's again. Any suite here can crash on this
+  # runner, so a red job is read before it is trusted.
+  #
+  # A GPU is what the evidence points to, and two ways to one were looked at
+  # and set aside (October 2026):
+  #   GitHub's GPU runners exist only for organizations on the Team or
+  #       Enterprise plans; this repository belongs to a personal account.
+  #   A self-hosted runner on the owner's Windows laptop, through WSL 2, does
+  #       not reach the GPU: glxinfo reports llvmpipe, Mesa forced onto d3d12
+  #       fails to start (Intel HD 5500 and Radeon R5 M255, 2014-15 parts),
+  #       and homeprog crashed there at the same line as here. A self-hosted
+  #       runner on a public repository would also run fork pull requests on
+  #       a machine that holds the licensed export, so any future one must
+  #       skip forks.
+  #
   # The ones left out all run in Chromium in the job above. Not here either: update handling
   # and offline loading of the split build, which are verify-pwa's; it asserts
   # the real bank's question and figure counts, so it cannot run on this bank.
