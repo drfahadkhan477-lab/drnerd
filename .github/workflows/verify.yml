@@ -663,9 +663,20 @@ jobs:
   #       check watches had nothing to advance on.
   #
   # IN, ON THE OWNER'S DECISION, KNOWING THEY CAN FAIL FOR THE RUNNER'S REASONS:
-  # selftest (the page crashed in 2 of 11 runs) and pearl (1 of 10), neither
-  # caught with the browser's log on, and polish (its double-tap check failed in
-  # 1 of 10; its detail now prints the gap between the taps).
+  # selftest (the page crashed in 2 of 11 runs on that PR, then on master's
+  # merge run and on #205's), pearl (1 of 10, not caught with the browser's log
+  # on), and polish (its double-tap check failed in 1 of 10; its detail now
+  # prints the gap between the taps).
+  # selftest WAS caught with the log on, in a session container with
+  # Playwright's WebKit installed: the page crashed in all 8 runs that finished,
+  # at four different sections, 3 of them with
+  # WEBKIT_DISABLE_COMPOSITING_MODE=1. The log has the libEGL/ZINK warnings
+  # every launch prints and no abort, so by the rule below it is not shown
+  # to be the runner's. Narrowed further on 2026-10-09 (details on #205): it
+  # needs the self-test started through #selftest (openSelfTest, the hashchange
+  # path) and then run again; runSelfTest() alone, on fresh pages or repeated
+  # on one page, never crashed. Not the panel's blur, shadow or translucency,
+  # not will-change on the figure, not memory. Cause not yet found.
   # A red one here is read before it is re-run: a crash with that abort in the
   # log is the runner; anything else is the app's or the suite's.
   #
