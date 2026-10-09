@@ -119,12 +119,19 @@ where it was. It finds the export the way you give it: a path, `SYSTOLE_SRC`,
 or the one `.html` file in `source/`. With none it refuses and says why, and
 CI's `build-guard` job holds it to that.
 
-**Where to edit**: `app/systole.html`, `app/css/systole.css`, `src/` and
+**Where to edit**: `app/systole.html`, the stylesheet pieces in `app/css/`, `src/` and
 `assets/`. `scripts/carve.js` moves a range of lines out of
 `app/systole.html` into a file of its own, leaving a slot token, and keeps the
 result only if the app assembles to the same bytes as before.
 `tests/verify-carve-pure.js` audits the committed `app/` without the export:
 every token has its file and every piece is cited once.
+
+The stylesheet is split into pieces under `app/css/`, joined in the order
+`app/systole.html`'s `<style>` names them. That order is the cascade's: a
+later rule wins, so moving a rule to another piece, or reordering the slots,
+can change how the app looks even though no rule changed. Suites read the
+joined stylesheet through `stylesheet()` in `tests/_appcut.js`, never one
+piece by path.
 
 `node scripts/assemble-app.js <export> --out a.html --compare b.html` says
 whether two builds are the same bytes (stamps aside) and, if not, which part
@@ -542,7 +549,7 @@ refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 ```
 src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhythms-extra · echo
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
-app/          systole.html · css/systole.css   (the app, payloads as slots)
+app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
 tests/        153 suites · 89 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/

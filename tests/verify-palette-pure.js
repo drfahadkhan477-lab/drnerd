@@ -58,7 +58,7 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
    calibrationtrack-patch.js), and by the time the chain was retired those had
    drifted: the app renamed --teal/--teal2 to --accent/--accent-2, so the
    Monitor comparison below was reading a fallback literal, not the palette. */
-const CSS_RAW = read('app/css/systole.css');
+const CSS_RAW = require('./_appcut.js').stylesheet();
 const HC_RAW = CSS_RAW, CT_RAW = CSS_RAW, THEME_RAW = CSS_RAW;
 /* Blanked for anything that hunts a PATTERN, raw only where the comments are
    deliberately the subject. Both halves of that are load-bearing: the sweep
@@ -105,9 +105,9 @@ function palette(src, id, where) {
   return out;
 }
 
-const CONTRAST = palette(HC, 'contrast', 'app/css/systole.css');
+const CONTRAST = palette(HC, 'contrast', 'the stylesheet');
 const NAMED = ['slate', 'parchment', 'nocturne', 'cathlab', 'monitor']
-  .reduce((a, id) => (a[id] = palette(THEME, id, 'app/css/systole.css'), a), {});
+  .reduce((a, id) => (a[id] = palette(THEME, id, 'the stylesheet'), a), {});
 
 head('the palettes were actually read');
 {
