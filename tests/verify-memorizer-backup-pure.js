@@ -85,6 +85,25 @@ module.exports = (async () => {
   await backup.restore(emptyBackup);
   for (const s of root.MemStore.STORES) assert.equal((await store.all(s)).length, 0, s + ' kept records after an empty restore');
   await backup.restore(text);
+  // Writes queued before a restore belong to the replaced data: none of them
+  // may land on top of the restored database. Enqueue enough small writes
+  // that they are still pending when the restore commits, plus a stale note
+  // and a stale study step, and do not await any of them before restoring.
+  const pending = [];
+  for (let i = 0; i < 100; i++) pending.push(store.put('meta', { id: 'stale-' + i, at: i }));
+  pending.push(store.put('meta', { id: 'notes', recs: { 'unit:0': { text: 'STALE' } } }));
+  pending.push(store.saveStep({ id: 'unit', state: { docId: 'unit', titles: ['One'], per: { 0: { done: false, stale: true } } } }, []));
+  await backup.restore(text);
+  await Promise.allSettled(pending);
+  assert.equal((await store.get('meta', 'notes')).recs['unit:0'].text, 'My note', 'a write queued before the restore overwrote the restored note');
+  assert.equal((await store.get('sessions', 'unit')).state.per[0].stale, undefined, 'a study step queued before the restore overwrote the restored session');
+  assert.equal((await store.all('meta')).length, JSON.parse(JSON.parse(text).payload).meta.length, 'writes queued before the restore left records the backup does not have');
+  assert.equal(await state(), before, 'the database after a raced restore differs from the backup');
+  // A refused replacement leaves the database as it was. (Whether it also
+  // keeps writes waiting for retry is not measured here: the memory fallback
+  // has no way to make a write fail.)
+  await assert.rejects(store.replace([{ store: 'meta', clear: true }, { store: 'meta', value: { id: 7 } }]), /invalid storage operation/);
+  assert.equal(await state(), before, 'a refused replacement changed the database');
   // Keep the version 1 format compatible with an independent encoder,
   // including padding on either side of a binary conversion boundary.
   for (const length of [0, 1, 2, 3, 8189, 8190, 8191, 16379, 16380, 16381]) {
@@ -117,6 +136,7 @@ module.exports = (async () => {
   console.log('PASS 8 MiB backup preserves every byte within the conversion budget; malformed base64 is rejected without writes');
   console.log('PASS backup restores PDF bytes, notes, progress and SRS; excludes keys and refuses corruption/incomplete records');
   console.log('PASS truncated, unsafe-key and unknown-view backups are refused with the whole database unchanged');
+  console.log('PASS writes queued before a restore cannot land on the restored database; a refused replacement changes nothing');
   console.log('PASS non-ASCII text round-trips exactly, and an empty backup restores to empty stores');
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });
