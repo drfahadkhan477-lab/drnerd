@@ -799,24 +799,34 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      motion, takes the instant path and would read zero for free). */
   await page.evaluate(() => { goHome(); render(); });
   await settled(page, () => S.screen === 'home' && !!document.querySelector('.hero-h1'), { label: 'the home screen, for the still-swap check' });
-  await page.waitForTimeout(600);
+  /* HELD, NOT ONLY RUNNING. The crash on the owner's machine survived a fix
+     that cancelled running animations only: with 0 running at the swap, the
+     entrance animations that had finished and are held by fill: both still
+     held their layers. 600 ms after home, inside this suite, all 33 were
+     still running, so that version passed here. Wait for the state the
+     owner's page was in: some finished and held. */
+  await settled(page, () => { const app = document.getElementById('app');
+    return document.getAnimations().some(a => a.playState === 'finished' && a.effect && a.effect.target && app.contains(a.effect.target)); },
+    { label: 'an entrance animation on the home screen to finish and be held' });
   const still = await page.evaluate(() => {
     const inScreen = () => {
       const app = document.getElementById('app'), bar = document.getElementById('navbar');
       return document.getAnimations().filter(a => { const t = a.effect && a.effect.target;
-        return a.playState === 'running' && t && ((app && app.contains(t)) || (bar && bar.contains(t))); }).length;
+        return a.playState !== 'idle' && t && ((app && app.contains(t)) || (bar && bar.contains(t))); }).length;
     };
     const before = inScreen();
+    const app0 = document.getElementById('app');
+    const held = document.getAnimations().filter(a => a.playState === 'finished' && a.effect && a.effect.target && app0.contains(a.effect.target)).length;
     const orig = document.startViewTransition;
     const seen = [];
     if (orig) document.startViewTransition = function (cb) { seen.push(inScreen()); return orig.call(document, cb); };
     try { startQuiz(CHAPTERS[0], 'all'); } finally { if (orig) document.startViewTransition = orig; }
-    return { before, transitions: seen.length, atSwap: seen };
+    return { before, held, transitions: seen.length, atSwap: seen };
   });
-  ok('the home screen has animations running before the change, so the count can catch something',
-     still.before > 0, JSON.stringify(still));
+  ok('the home screen has animations before the change, some held at their end, so the count can catch both kinds',
+     still.before > 0 && still.held > 0, JSON.stringify(still));
   ok('and opening a quiz starts a view transition', still.transitions === 1, JSON.stringify(still));
-  ok('with nothing in #app or #navbar still animating at that instant',
+  ok('with no animation in #app or #navbar left at that instant, running or held at its end',
      still.transitions === 1 && still.atSwap[0] === 0, JSON.stringify(still));
 
   head('regression: everything prior still functions');

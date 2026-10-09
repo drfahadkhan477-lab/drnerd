@@ -6178,13 +6178,18 @@ function showCrashScreen(err){
    off, 0 running and no crash, and with backdrop-filter or filter off it
    still crashed. Everything renderNow() is about to replace lives in #app and
    #navbar, so cancelling what runs there loses nothing: the new screen starts
-   its own. Nothing outside them is touched. */
+   its own. Nothing outside them is touched.
+   EVERY STATE, NOT ONLY RUNNING. The first version cancelled running
+   animations only, and on the owner's machine the page still died with 0
+   running at the swap: the entrance animations that had finished, held by
+   fill: both, still hold their layers (6 running, ~25 in all, on the real
+   home screen). */
 function stillOutgoing(){
   if(!document.getAnimations) return;
   const app=document.getElementById('app'), bar=document.getElementById('navbar');
   for(const a of document.getAnimations()){
     const t=a.effect&&a.effect.target;
-    if(a.playState==='running'&&t&&((app&&app.contains(t))||(bar&&bar.contains(t)))) a.cancel();
+    if(a.playState!=='idle'&&t&&((app&&app.contains(t))||(bar&&bar.contains(t)))) a.cancel();
   }
 }
 function render(){
