@@ -281,7 +281,7 @@ jobs:
         run: node tests/verify-notesearch-pure.js
       - name: the heart loads a mesh baked at build time, and refuses any other copy (37 checks)
         run: node tests/verify-heartbake-pure.js
-      - name: the pearls found at build time are the ones the search finds (25 checks)
+      - name: the pearls found at build time are the ones the search finds (23 checks)
         run: node tests/verify-pearlbake-pure.js
       - name: the split build ships src/ without its comments, and nothing else changes (28 checks)
         run: node tests/verify-stripcomments-pure.js
