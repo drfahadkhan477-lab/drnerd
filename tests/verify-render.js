@@ -178,10 +178,12 @@ head('no wait passes its options where the argument goes');
      afterBoot.state && afterBoot.firstRender, JSON.stringify(afterBoot));
 
   /* Reading with no wait at all. If this sees the quiz counter, the fixture is
-     not reproducing the deferred swap and nothing below means anything. Read in
-     the same task as go(): across two evaluate() round trips WebKit can paint a
-     frame in between and run the swap, which failed this on master's CI with
-     the fixture intact. */
+     not reproducing the deferred swap and nothing below means anything.
+     IN THE SAME TASK AS go(). It was read in a second evaluate, one round trip
+     later, and on master's WebKit run a frame passed in that gap: the view
+     transition's swap had landed and the read saw counter:true hero:false. The
+     claim is "the markup has not moved when go() returns", and only a read in
+     the same task can ask that of every engine. */
   const immediate = await page.evaluate(() => {
     go('quiz');
     return {

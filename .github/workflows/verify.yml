@@ -672,8 +672,11 @@ jobs:
   # at four different sections, 3 of them with
   # WEBKIT_DISABLE_COMPOSITING_MODE=1. The log has the libEGL/ZINK warnings
   # every launch prints and no abort, so by the rule below it is not shown
-  # to be the runner's. Its figure check opens two dozen figures back to back
-  # in the zoomable viewer; that is where to look next.
+  # to be the runner's. Narrowed further on 2026-10-09 (details on #205): it
+  # needs the self-test started through #selftest (openSelfTest, the hashchange
+  # path) and then run again; runSelfTest() alone, on fresh pages or repeated
+  # on one page, never crashed. Not the panel's blur, shadow or translucency,
+  # not will-change on the figure, not memory. Cause not yet found.
   # A red one here is read before it is re-run: a crash with that abort in the
   # log is the runner; anything else is the app's or the suite's.
   #

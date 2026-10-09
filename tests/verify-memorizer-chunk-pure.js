@@ -1051,6 +1051,17 @@ async function startLoop() {
      r.said.some(t => /32-bit build/.test(t)) && !r.err, JSON.stringify(r.calls));
   r = await run([], true);
   ok('with it, the 16-bit build as chosen', r.calls[0].id === 'Qwen3-0.6B-q4f16_1-MLC' && !r.said.some(t => /32-bit/.test(t)));
+  /* the bar's step, from the engine's sentences as web-llm 0.2.85 builds them */
+  const st = (p, t) => JSON.stringify(L.stage(p, t));
+  ok('the bar names the step: a download, with how much has arrived', st(0.33, 'Fetching param cache[3/9]: 120MB fetched. 33% completed, 4 secs elapsed. It can take a while when we first visit this page to populate the cache. Later refreshes will become faster.') ===
+     JSON.stringify({ pct: 33, step: 'Downloading the model', detail: '120 MB downloaded' }), st(0.33, 'Fetching param cache[3/9]: 120MB fetched. 33% completed, 4 secs elapsed.'));
+  ok('then loading onto the GPU, and the GPU being prepared, each from its own 0%', L.stage(0.5, 'Loading model from cache[5/9]: 160MB loaded. 50% completed, 2 secs elapsed.').step === 'Loading the model onto the GPU' &&
+     L.stage(0.5, 'Loading model from cache[5/9]: 160MB loaded. 50% completed, 2 secs elapsed.').detail === '160 MB loaded' &&
+     L.stage(0.25, 'Loading GPU shader modules[10/40]: 25% completed, 1 secs elapsed.').step === 'Preparing the GPU' && L.stage(0, 'Start to fetch params').pct === 0);
+  ok('a sentence it does not know is shown as it came; a fraction outside 0–1 is held to the bar', L.stage(2, 'the download was interrupted; trying again (2 of 3)').step === 'the download was interrupted; trying again (2 of 3)' &&
+     L.stage(2, 'x').pct === 100 && L.stage(-1, 'x').pct === 0 && L.stage(NaN, '').step === 'Starting');
+  ok('after the engine’s 100%, the file check is said before it runs, as a step of its own', (() => { const i = r.said.indexOf(L.CHECKING); return i > r.said.indexOf('done') && i > -1; })() &&
+     L.stage(1, L.CHECKING).step === 'Checking the files', JSON.stringify(r.said));
   delete store[L.BACKEND_KEY];
   r = await run(['TypeError: Failed to fetch', 'TypeError: Failed to fetch'], true);
   ok(`an interrupted download is tried again, into the same store, up to ${L.RETRIES} more times`, r.calls.length === 3 && r.calls.every(c => c.backend === 'cache') && !r.err &&
@@ -1080,6 +1091,17 @@ async function startLoop() {
   head('the on-device model: downloaded from pinned commits, and checked before it is used');
   /* six of the starts above end in a loaded model: each is checked once */
   ok('every start above asked the engine for the pinned files, and each load was checked', allCalls.length > 10 && allCalls.every(c => c.from === 'pinned') && passes === 6, allCalls.length + ' starts, ' + passes + ' checks');
+  {
+    /* Firefox's persist() is a prompt; unanswered, its promise never settles */
+    const had = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { value: { storage: { persist: () => new Promise(() => {}) } }, configurable: true, writable: true });
+    const wait = L.PERSIST.ms; L.PERSIST.ms = 20;
+    const lb = lib([]); L.useLib(lb); L.useGpu(() => ({ ok: true, f16: true })); L.useEngine(null, null);
+    const got = await Promise.race([L.start('Qwen3-0.6B-q4f16_1-MLC').then(() => 'started', e => 'failed: ' + e.message), new Promise(r => setTimeout(() => r('still waiting after 2 s'), 2000))]);
+    L.PERSIST.ms = wait;
+    if (had) Object.defineProperty(globalThis, 'navigator', had); else delete globalThis.navigator;
+    ok('a storage prompt nobody answers does not hold the start: the engine is reached', got === 'started' && lb.calls.length === 1, got);
+  }
   const offered = L.MODELS.map(m => m.id).concat(L.MODELS.map(m => L.variantFor(m.id, false)), [L.EMBED.id]);
   const cfg = L.pinnedConfig({ model_list: RECORDS.concat([{ model_id: 'Other-MLC', model: 'https://huggingface.co/x/Other-MLC', model_lib: 'https://x/lib.wasm' }]) }, 'cache');
   const missing = offered.filter(id => !MANIFEST.models[id]);
