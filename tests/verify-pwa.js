@@ -19,6 +19,7 @@ const { splitBank, readStaging } = require('./_olderbank.js');
 const { launch, heapUsedBytes, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
+const SYN = require('../scripts/synthetic-export.js');
 
 const target = process.argv[2];
 const baseline = process.argv[3];
@@ -43,6 +44,26 @@ const unmeasurable = (label, why) => {
   unmeasured++;
   console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
+
+/* WHOSE BANK THIS IS, and what it must therefore hold. This suite used to
+   hold every build to the licensed export's own totals (639 questions, 408
+   figures, a single file twenty times the shell), so on the synthetic build
+   CI makes it failed six checks that were not about the split at all. The
+   expected totals now come from somewhere the build under test cannot move:
+   a synthetic build (the first question carries scripts/synthetic-export.js's
+   mark) is held to that generator, run again here; anything else is held to
+   the licensed export's totals, which stay as they were, named as the
+   private corpus's own. */
+const expectedBank = synthetic => {
+  if (!synthetic) return { synthetic, questions: 639, figures: 408, from: "the licensed export's own totals" };
+  const { bank, imgs } = SYN.syntheticBank();
+  return { synthetic, questions: bank.length, figures: Object.values(imgs).reduce((a, l) => a + l.length, 0),
+           from: 'scripts/synthetic-export.js, generated again here' };
+};
+/* The figure's own type, from its name: the extractor writes .webp, .png and
+   .jpg alike, and the AI path must send each as what it is. */
+const MIME = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+const mimeOf = name => MIME[String(name).split('.').pop().toLowerCase()] || null;
 let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 const kb = b => (b / 1024).toFixed(0) + ' KB';
@@ -60,6 +81,8 @@ async function heapAfterBoot(page, url) {
 }
 
 (async () => {
+  const BANK = expectedBank((await (await fetch(ORIGIN + '/content/questions.json')).text()).includes(SYN.MARK));
+  console.log(`  bank: ${BANK.synthetic ? 'synthetic' : 'not synthetic'} — expecting ${BANK.questions} questions, ${BANK.figures} figures (${BANK.from})`);
   const browser = await launch({ args: ['--enable-precise-memory-info'] });
   /* Twelve pages across nine contexts, and the ones that matter most when this
      suite dies are the offline and update sections — where "Target page,
@@ -142,7 +165,14 @@ async function heapAfterBoot(page, url) {
     ok('the shell transfers under 280 KB', wireBytes < 280 * 1024,
        `${kb(wireBytes)} gzipped, from ${kb(shellBytes)} on disk`);
 
-    if (baseline) {
+    /* Twenty times smaller is a fact about the licensed export, whose single
+       file is mostly its 408 figures; a bank with fewer, smaller figures has a
+       smaller single file and no less correct a shell. The absolute budget
+       above is what holds every build. */
+    if (baseline && BANK.synthetic) {
+      unmeasurable('and is a large fraction smaller than the single file',
+        `the 20x ratio is the licensed export's; this single file is ${mb(require('fs').statSync(baseline).size)} of synthetic bank`);
+    } else if (baseline) {
       const before = require('fs').statSync(baseline).size;
       ok('and is a large fraction smaller than the single file',
          shellBytes < before / 20, `${mb(before)} → ${kb(shellBytes)}`);
@@ -394,9 +424,10 @@ async function heapAfterBoot(page, url) {
     /* The export's part is held to the export's own totals; a merged older
        bank is held to the staging it came from — see tests/_olderbank.js. */
     const bank = splitBank(qs, q => (q.figs ? q.figs.length : 0), readStaging());
-    ok('all 639 questions of the export present', bank.exportCount === 639, String(bank.exportCount));
+    ok(`all ${BANK.questions} questions of the export present`, bank.exportCount === BANK.questions, String(bank.exportCount));
     const figs = qs.reduce((a, q) => a + (q.figs ? q.figs.length : 0), 0);
-    ok('all 408 of the export\'s figures referenced', bank.exportFigs === 408, String(bank.exportFigs));
+    BANK.served = figs;
+    ok(`all ${BANK.figures} of the export\'s figures referenced`, bank.exportFigs === BANK.figures, String(bank.exportFigs));
     ok('and an older bank, if merged, is exactly its staging', bank.ok, bank.why);
     const declared = qs.reduce((a, q) => a + (q.img || 0), 0);
     ok('q.img and the extracted figure lists agree', declared === figs, `${declared} vs ${figs}`);
@@ -475,22 +506,31 @@ async function heapAfterBoot(page, url) {
     const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'AI base64', errors);
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
+    /* Held to the figure file itself, not to one export's format: each data
+       URL and image block must carry the MIME type its file's name says and
+       exactly the bytes the server serves for it. */
     const resolved = await page.evaluate(async () => {
       const q = ALL_Q.find(x => x.img > 0 && !x.bad);
       const urls = await figuresAsDataUrls(q);
       if (!urls) return { none: true };
-      const blocks = Vision.figureBlocks(q, urls);
-      const img = blocks.find(b => b.type === 'image');
-      return {
-        count: urls.length, want: q.img,
-        isDataUrl: urls[0].startsWith('data:image/webp;base64,'),
-        blockOk: !!img && img.source.type === 'base64' && img.source.media_type === 'image/webp'
-                 && img.source.data.length > 1000 && !img.source.data.startsWith('data:'),
-      };
+      const blocks = Vision.figureBlocks(q, urls).filter(b => b.type === 'image');
+      const b64 = async name => { const u = new Uint8Array(await (await fetch('content/figures/' + name)).arrayBuffer());
+        let s = ''; for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return btoa(s); };
+      const files = [];
+      for (const name of q.figs || []) files.push({ name, data: await b64(name) });
+      return { count: urls.length, want: q.img, files,
+               urls: urls.map(u => ({ type: u.slice(5, u.indexOf(';')), data: u.slice(u.indexOf(',') + 1) })),
+               blocks: blocks.map(b => ({ kind: b.source.type, type: b.source.media_type, data: b.source.data })) };
     });
-    ok('every figure resolves to a base64 data URL', resolved.isDataUrl && resolved.count === resolved.want,
-       `${resolved.count}/${resolved.want}`);
-    ok('and produces a wire-shaped image block', resolved.blockOk === true, JSON.stringify(resolved));
+    const files = resolved.files || [];
+    const asFile = (x, i) => !!x && !!files[i] && x.type === mimeOf(files[i].name) && x.data === files[i].data && x.data.length > 0;
+    ok('every figure resolves to a base64 data URL of its own type and bytes',
+       resolved.count === resolved.want && resolved.count === files.length && files.length > 0 && resolved.urls.every(asFile),
+       `${resolved.count}/${resolved.want} · ${files.map(f => f.name).join(', ')} · ${(resolved.urls || []).map(u => u.type).join(', ')}`);
+    ok('and produces a wire-shaped image block for each, the same type and bytes',
+       !!resolved.blocks && resolved.blocks.length === files.length &&
+       resolved.blocks.every((b, i) => b.kind === 'base64' && !b.data.startsWith('data:') && asFile(b, i)),
+       (resolved.blocks || []).map(b => `${b.kind} ${b.type} ${b.data.length}`).join(' · '));
     await page.close();
   }
 
@@ -568,7 +608,8 @@ async function heapAfterBoot(page, url) {
                    btn: c.querySelector('.off-btn').textContent } : null;
     });
     ok('the card is on the Progress screen of the split build', !!before);
-    ok('and knows how many figures the bank has', before && before.total > 400, String(before && before.total));
+    ok('and knows how many figures the bank has', !!before && before.total === BANK.served,
+       `${before && before.total} of ${BANK.served} in questions.json`);
     /* Surveying must not BE a download: caches.match asks the question without
        fetching, and 408 fetches on every home screen would be the opposite of
        the feature. */
@@ -1113,6 +1154,6 @@ async function heapAfterBoot(page, url) {
 
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`
-              + (unmeasured ? `, ${unmeasured} not measurable on ${engineName()}` : ''));
+              + (unmeasured ? `, ${unmeasured} not measured here (${engineName()}${BANK.synthetic ? ', synthetic bank' : ''})` : ''));
   process.exit(failed ? 1 : 0);
 })();
