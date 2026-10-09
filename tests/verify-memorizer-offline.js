@@ -207,7 +207,7 @@ self.fetch = function (input, init) {
     ok('the network really is cut: a file never kept is not served',
       never === false && await expectedFetchErrors(p, offlineErrors, neverUrl + '?not-kept'));
     const served = await p.evaluate(us => Promise.all(us.map(u => fetch(u, { mode: 'cors' }).then(r => r.ok, () => false))), urls);
-    const flow = await p.evaluate(() => fetch('https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js', { mode: 'cors' }).then(r => r.ok, () => false));
+    const flow = await p.evaluate(() => fetch('https://cdn.jsdelivr.net/npm/mermaid@10.9.8/dist/mermaid.min.js', { mode: 'cors' }).then(r => r.ok, () => false));
     ok('every one of them is still served, from the cache', served.every(Boolean), JSON.stringify(urls.filter((_, i) => !served[i])));
     ok('and so is the flowchart drawer', flow);
     const probes = attempts.filter(a => a.transport === 'different' || a.transport === 'offline');
@@ -265,7 +265,7 @@ self.fetch = function (input, init) {
       ok('saved text, session, note and every binary byte survive offline tab reopening',
         restored.persistent && restored.text.includes('An amber token') && restored.docId === fixture.id && restored.phase === 'unit' &&
         restored.note === fixture.note && JSON.stringify(restored.bytes) === JSON.stringify(fixture.bytes));
-      const readers = urls.concat('https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js');
+      const readers = urls.concat('https://cdn.jsdelivr.net/npm/mermaid@10.9.8/dist/mermaid.min.js');
       const hashes = await p.evaluate(us => Promise.all(us.map(async u => {
         const r = await fetch(u, { mode: 'cors' });
         const hash = await crypto.subtle.digest('SHA-256', await r.arrayBuffer());

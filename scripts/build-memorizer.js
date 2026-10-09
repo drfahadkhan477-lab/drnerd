@@ -61,6 +61,24 @@ const HEADERS = [
   '/sw.js',
   '  Cache-Control: no-cache',
   ''].join('\n');
+/* Every inline <script> the build writes, allowed by its SHA-256 in the
+   page's script-src. Once a hash is listed, a browser ignores the policy's
+   'unsafe-inline' (CSP Level 2), so the built page runs its own inline code
+   and nothing else: an injected inline handler or <script> is refused.
+   'unsafe-inline' stays in memorizer/index.html for the unbuilt page served
+   from source, whose scripts are files, and for a browser older than
+   CSP Level 2. Run last, on the final markup: a hash is of the exact text. */
+function hashInlineScripts(html) {
+  const hashes = [];
+  html.replace(/<script>([\s\S]*?)<\/script>/g, (_, code) => {
+    hashes.push("'sha256-" + crypto.createHash('sha256').update(code, 'utf8').digest('base64') + "'");
+    return _;
+  });
+  if (/<script(?![^>]*\bsrc=)[^>]+>/i.test(html)) throw new Error('an inline <script> with attributes: hash it here, or it is refused');
+  const csp = /(<meta http-equiv="Content-Security-Policy" content="[^"]*script-src 'self')/;
+  if (html.split(csp).length !== 3) throw new Error('expected one Content-Security-Policy meta with script-src \'self\'');
+  return html.replace(csp, (m) => m + ' ' + hashes.join(' '));
+}
 function build(out) {
   out = out || OUT;
   let html = fs.readFileSync(path.join(SRC, 'index.html'), 'utf8');
@@ -101,6 +119,7 @@ function build(out) {
   ].join('\n');
   if (html.split('<!-- @pwa -->').length !== 2) throw new Error('expected exactly one <!-- @pwa --> marker in memorizer/index.html');
   html = html.replace('<!-- @pwa -->', pwa);
+  html = hashInlineScripts(html);
 
   const stamp = crypto.createHash('sha256').update(html).digest('hex').slice(0, 12);
   html = html.replace('<html lang="en">', `<html lang="en" data-build="${stamp}">`);
@@ -238,4 +257,4 @@ if (require.main === module) {
     process.exit(1);
   }
 }
-module.exports = { build, zipOf, ZIP_FILES, HEADERS };
+module.exports = { hashInlineScripts, build, zipOf, ZIP_FILES, HEADERS };

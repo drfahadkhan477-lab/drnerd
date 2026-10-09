@@ -946,6 +946,17 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
   const out = fs.mkdtempSync(path.join(require('os').tmpdir(), 'memsw-'));
   build(out);
   const sw = fs.readFileSync(path.join(out, 'sw.js'), 'utf8');
+  /* With a hash in script-src, 'unsafe-inline' is ignored: each inline
+     script the build writes must be hashed there, or it does not run. */
+  {
+    const built = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+    const crypto = require('crypto');
+    const inline = [...built.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => "'sha256-" + crypto.createHash('sha256').update(m[1], 'utf8').digest('base64') + "'");
+    const policy = ((/script-src ([^;]*);/.exec(built) || [])[1] || '').split(/\s+/);
+    const unhashed = inline.filter(h => policy.indexOf(h) === -1).length;
+    ok('every inline script in the built page is hashed in its script-src, and nothing else is', inline.length > 10 && unhashed === 0 &&
+       policy.filter(s => /^'sha256-/.test(s)).length === inline.length, inline.length + ' inline, ' + unhashed + ' unhashed');
+  }
   SW_SRC = sw;
   /* The Cloudflare Pages upload, read back by the central directory — the
      way unzip and Pages read it — not by trusting the writer. */
@@ -1017,6 +1028,39 @@ head('memorizer/ parses on the device it is for');
     }).map(f => path.basename(f));
     ok('no ' + name, hits.length === 0, hits.join(', ') || 'none');
   }
+}
+
+head('memorizer/: what the third-party code it loads may do');
+{
+  /* pdf.js 3.11.174 runs font code through eval unless told not to — the
+     path of CVE-2024-4367. The flag is the mitigation; this holds it on
+     every getDocument( call, read from the comment-blanked source. */
+  const dir = path.join(ROOT, 'memorizer', 'src');
+  const srcs = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
+    .map(f => ({ f, src: blankComments(fs.readFileSync(path.join(dir, f), 'utf8')) }));
+  const calls = [];
+  for (const { f, src } of srcs) {
+    for (const m of src.matchAll(/getDocument\(\s*(\{[^}]*\})/g)) calls.push({ f, args: m[1] });
+  }
+  ok('every pdf.js getDocument( call passes isEvalSupported: false', calls.length >= 2 &&
+     calls.every(c => /\bisEvalSupported:\s*false\b/.test(c.args)),
+     calls.map(c => c.f + ': ' + c.args.replace(/\s+/g, ' ')).join(' | '));
+
+  /* script-src names package paths, not the whole of jsDelivr: any package
+     there would otherwise run as this page. Each library the app loads by
+     <script> tag is under one of those paths. */
+  const page = fs.readFileSync(path.join(ROOT, 'memorizer', 'index.html'), 'utf8');
+  const scriptSrc = ((/script-src ([^;]*);/.exec(page) || [])[1] || '').split(/\s+/);
+  const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
+  const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+  const ui = srcs.find(x => x.f === 'ui.js').src;
+  const mermaidUrl = (/var MERMAID = \{ url: '([^']+)'/.exec(ui) || [])[1];
+  const tagged = [Pdf.LIB.url, O.TESS.lib.url, mermaidUrl];
+  ok('script-src does not allow the whole of cdn.jsdelivr.net', scriptSrc.length > 1 &&
+     !scriptSrc.some(s => /^https:\/\/cdn\.jsdelivr\.net\/?$/.test(s)), scriptSrc.join(' '));
+  ok('and every library loaded by <script> tag is under one of its paths', tagged.every(u => u &&
+     scriptSrc.some(s => /^https:\/\/cdn\.jsdelivr\.net\/npm\/.+\/$/.test(s) && u.indexOf(s) === 0)),
+     tagged.join(', '));
 }
 
 /* ── getting the model onto the iPad: the start loop, against a stand-in

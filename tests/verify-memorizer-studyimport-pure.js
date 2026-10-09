@@ -227,6 +227,18 @@ ok('.html is read as HTML, .md as markdown', SI.detectFormat('a.html', '') === '
 ok('with no telling name, a page that starts as HTML is HTML', SI.detectFormat('a', '<!DOCTYPE html><html>') === 'html' && SI.detectFormat('a', '# Title') === 'markdown');
 ok('a file with no study text is refused, not made an empty unit', SI.parseStudyFile('---\nunit: x\n---\n', 'x.md').success === false);
 
+head('only a flowchart reaches Mermaid');
+/* Mermaid's other diagram types carry its published injection advisories,
+   and a %%{...}%% directive reconfigures it from inside the diagram */
+const kinds = { 'flowchart TD\n  A --> B': true, '%% a note\ngraph LR\n  A --> B': true, '  flowchart LR\n  A --> B': true,
+  'sequenceDiagram\n  A-->>B: hi': false, 'stateDiagram-v2\n  A --> B': false, 'classDiagram\n  A --> B': false,
+  '%%{init: {"theme": "dark"}}%%\nflowchart TD\n  A --> B': false, 'flowchart TD\n  A --> B\n%%{init: {}}%%': false, 'gantt\n  title x': false };
+const wrong = Object.keys(kinds).filter(k => SI.isFlowchart(k) !== kinds[k]);
+ok('flowcharts (TD/LR, after a %% comment) are drawn; sequence, state, class, gantt and %%{directives}%% are not', wrong.length === 0, JSON.stringify(wrong));
+const asBlock = t => SI.parseMarkdown('---\nunit: X\n---\n\n## A\n- **Term**: text for the unit.\n\n```mermaid\n' + t + '\n```\n').flowcharts.length;
+ok('and a study file\u2019s mermaid block is kept only when it is one', asBlock('flowchart TD\n  A --> B') === 1 && asBlock('sequenceDiagram\n  A-->>B: hi') === 0 &&
+   asBlock('stateDiagram-v2\n  A --> B') === 0);
+
 head('a section deleted: its diagrams with it, later ones moved up');
 const Study = require(path.join(SRC, 'study.js'));
 const withDiagrams = { clusters: [{ text: 'a' }, { text: 'b' }, { text: 'c' }], diagrams: [{ index: 0, svg: 'A' }, { index: 1, svg: 'B' }, { index: 2, svg: 'C' }] };

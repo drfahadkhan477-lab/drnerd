@@ -291,7 +291,7 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
   {
     const held = [];
     const r = await context('late', () => {
-      try { localStorage.setItem('memorizer.ai.v1', JSON.stringify({ provider: 'anthropic', model: 'claude-opus-5', key: 'sk-ant-stub' })); } catch (_) {}
+      try { localStorage.setItem('memorizer.ai.v1', JSON.stringify({ provider: 'anthropic', model: 'claude-opus-5-5', key: 'sk-ant-stub' })); } catch (_) {}
       /* Counts model replies once read, so a wait can know the app has had
          one; the app's own handling runs in the microtasks straight after. */
       const text = Response.prototype.text;
