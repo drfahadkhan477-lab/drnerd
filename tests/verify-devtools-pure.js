@@ -148,7 +148,12 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     fs.mkdirSync(fakeMods, { recursive: true });
     fs.writeFileSync(path.join(fakeMods, 'index.js'), `const e = { executablePath: () => ${JSON.stringify(process.execPath)} }; module.exports = { chromium: e, webkit: e, firefox: e };`);
     const fakeBrowsers = path.join(TMP, 'fake-browsers');
-    const pwEnv = { NODE_PATH: path.join(TMP, 'fake_modules'), PLAYWRIGHT_BROWSERS_PATH: fakeBrowsers };
+    /* SYSTOLE_ENGINE IS PINNED, because the stand-in below is made for
+       chromium's path alone. verify.js hands its own engine to every suite,
+       this one included, so in the release check's WebKit step the inner run
+       inherited webkit, looked for a webkit binary that was never faked, and
+       stopped before the split build: "no report (exit 1)", on a pure suite. */
+    const pwEnv = { NODE_PATH: path.join(TMP, 'fake_modules'), PLAYWRIGHT_BROWSERS_PATH: fakeBrowsers, SYSTOLE_ENGINE: 'chromium' };
     const wants = spawnSync(process.execPath, ['-e',
       `try { process.stdout.write(require(require.resolve('playwright', { paths: [${JSON.stringify(ROOT)}] })).chromium.executablePath()); } catch (_) {}`],
       { encoding: 'utf8', env: Object.assign({}, process.env, pwEnv) }).stdout;
