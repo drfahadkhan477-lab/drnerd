@@ -718,9 +718,23 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     await settled(touchPage, () => !!document.querySelector('.opt'), { label: 'the first quiz option, for the double tap' });
     const touch = await touchPage.evaluate(async (onPlainSurface) => {
       const optEl = document.querySelector('.opt');
-      /* By selector, so the second tap finds the row the re-render left. */
-      const onOption = optEl ? await window.__doubleTap(() => document.querySelector('.opt')) : null;
-      return { onPlainSurface, onOption, foundOption: !!optEl };
+      /* By selector, so the second tap finds the row the re-render left.
+         A DOUBLE TAP IS A PRECONDITION HERE, NOT THE CLAIM. On CI's WebKit the
+         page was still busy after the quiz drew, and the 60 ms wait between
+         the taps stretched to 685 and 694 ms in two runs: past the app's 350 ms
+         window, so no double tap was made and the check went red without
+         measuring the handler. So the pair is retried until one lands inside
+         the window, a pause between attempts so each starts afresh; the
+         assertion reads only that attempt. If none ever lands, `inWindow` is
+         false and the check fails saying so, rather than passing. */
+      let onOption = null; const gaps = [];
+      for (let i = 0; optEl && i < 6; i++) {
+        if (i) await new Promise(r => setTimeout(r, 400));
+        onOption = await window.__doubleTap(() => document.querySelector('.opt'));
+        gaps.push(onOption.gap);
+        if (onOption.gap < 350) break;
+      }
+      return { onPlainSurface, onOption, foundOption: !!optEl, gaps, inWindow: !!onOption && onOption.gap < 350 };
     }, onPlainSurface);
     await touchPage.close();
     ok('a rapid double tap on a plain surface is no longer swallowed',
@@ -730,7 +744,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        finger. The app's half is exactly this call, and it is what the scoping
        in curate-patch changed. */
     ok('but the app still asks to suppress it on a quiz option, where it misfires',
-       touch.foundOption === true && touch.onOption && touch.onOption.asked === true,
+       touch.foundOption === true && touch.inWindow === true && touch.onOption && touch.onOption.asked === true,
        JSON.stringify(touch));
   }
 
