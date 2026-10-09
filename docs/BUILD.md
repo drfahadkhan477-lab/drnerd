@@ -32,13 +32,13 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 - **Playwright** — for the test suites only, and pinned:
 
   ```bash
-  npm ci                                     # playwright 1.64.0, ts-fsrs 5.4.2, from the lockfile
+  npm ci                                     # playwright 1.63.0, ts-fsrs 5.4.2, from the lockfile
   npx playwright install chromium webkit     # the engines the full run uses
   npx playwright install firefox             # also, to reproduce CI's memorizer-browser job
   ```
 
   Pinned rather than ranged, and with `package-lock.json` committed, because a
-  suite that measures a browser is measuring a *specific* browser — `^1.64.0`
+  suite that measures a browser is measuring a *specific* browser — `^1.63.0`
   would make a green run mean "green on whatever shipped this week".
 
   Firefox is required by CI's `memorizer-browser` job (Chromium, WebKit and

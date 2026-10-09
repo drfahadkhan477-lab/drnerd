@@ -181,8 +181,9 @@ head('no wait passes its options where the argument goes');
      not reproducing the deferred swap and nothing below means anything.
      Read in the SAME evaluate as go(): a view transition's update callback
      never runs inside the call that started it, but it can run between two
-     evaluates. Chromium 156 (playwright 1.64) renders a frame in that gap often
-     enough that a separate read saw the swap already landed in 5 runs of 10. */
+     evaluates. Chromium 156 (tried with playwright 1.64) rendered a frame in that
+     gap often enough that a separate read saw the swap already landed in 5 runs
+     of 10. */
   const immediate = await page.evaluate(() => (go('quiz'), {
     screen: S.screen,
     counter: !!document.querySelector('.q-counter'),

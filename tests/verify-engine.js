@@ -324,7 +324,7 @@ head('the tools the suites need are pinned, and named before they are missed');
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const dev = pkg.devDependencies || {};
   /* PINNED, NOT RANGED. A suite that measures a browser is measuring a specific
-     browser: "^1.64.0" makes a green run mean "green on whatever shipped this
+     browser: "^1.63.0" makes a green run mean "green on whatever shipped this
      week", which is not a claim anybody can act on later. */
   ok('playwright is a devDependency', !!dev.playwright, dev.playwright || 'absent');
   ok('and pinned to one exact version', /^\d+\.\d+\.\d+$/.test(dev.playwright || ''), dev.playwright || '');
