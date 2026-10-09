@@ -3298,12 +3298,6 @@ function mountTwelve(){
   /* The canvas is sized from its box, and the box is not final until layout
      settles after a screen change — redraw once it is. */
   requestAnimationFrame(()=>twelve&&twelve.draw());
-}let __webgl2Checked=null;
-function hasWebGL2(){
-  if(__webgl2Checked!==null) return __webgl2Checked;
-  try{ const c=document.createElement('canvas'); __webgl2Checked=!!c.getContext('webgl2'); }
-  catch(_){ __webgl2Checked=false; }
-  return __webgl2Checked;
 }
 function setLab(k){
   /* A lead selected on one rhythm is still the lead you want to watch on the
@@ -6409,7 +6403,13 @@ function mountHeroHeart3d(){
      stays alive with its context; only the render loop stops, because a rAF
      loop drawing into a detached canvas is a frame budget spent on nothing. */
   if(!slot){ if(heroHeart3d) heroHeart3d.stop(); return; }
-  if(typeof Heart3D==='undefined'||!hasWebGL2()){
+  /* NO TEST CONTEXT FIRST. This asked hasWebGL2(), which made a throwaway
+     canvas and a WebGL2 context just to see if one could be had, and then
+     Heart3D.create asked again on the real canvas: two contexts per launch,
+     the first measured at 0.04 s with the CPU slowed 4x, and a slot of WebKit's sixteen held
+     until it was collected. create() returns null when there is no WebGL2,
+     and that is handled below exactly as the test's "no" was. */
+  if(typeof Heart3D==='undefined'){
     document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
     return;
   }
@@ -6472,7 +6472,11 @@ function mountHeroHeart3d(){
     onRestored:function(){
       if(S.screen==='home') mountHeroHeart3d();
     }});
-  if(!heroHeart3d){ cv.remove(); return; }
+  if(!heroHeart3d){
+    cv.remove();
+    document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
+    return;
+  }
   heroHeart3dCanvas=cv;
   cv.style.pointerEvents='none';           // decorative — never eats a home-screen scroll
   document.getElementById('heroHeart')?.classList.add('heart-3d-active');

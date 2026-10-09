@@ -102,6 +102,15 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      rest of the app and verify-heroart use to find the canvas. */
   ok('which still answers to the name the markup used to give it', shape.keepsId);
 
+  head('the launch itself spends one context');
+  /* The hero used to ask hasWebGL2() first, which made a throwaway canvas and
+     a context just to see if one could be had, and then Heart3D.create made
+     the real one: two per launch, a slot of WebKit's sixteen held until
+     collected, and ~0.04 s of an iPad-paced boot. One heart, one context. The
+     live-instance checks below are what stop "zero" passing. */
+  const atBoot = await page.evaluate(() => window.__ctx);
+  ok('reaching the home screen created exactly one WebGL context', atBoot === 1, `${atBoot} created`);
+
   head('navigating twenty times');
   const before = await page.evaluate(() => window.__ctx);
   const firstNode = await page.evaluate(() => {
@@ -264,6 +273,38 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  head('with no WebGL2 at all, the photograph stays');
+  /* The hero no longer asks a test context first; it relies on Heart3D.create
+     answering null. A device with no WebGL2 must still get the photograph, no
+     stray canvas in the slot, and no error — the path the removed test used to
+     guard, now taken through create() instead. */
+  const bare = await browser.newPage({ viewport: { width: 1100, height: 950 } });
+  const bareErrors = [];
+  bare.on('pageerror', e => bareErrors.push(e.message));
+  bare.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) bareErrors.push(m.text()); });
+  await bare.addInitScript(() => {
+    window.__asked = 0;
+    const orig = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+      if (/webgl/i.test(type)) { window.__asked++; return null; }
+      return orig.call(this, type, ...rest);
+    };
+  });
+  await bare.goto(URL, { waitUntil: 'load', timeout: 200000 });
+  await booted(bare);
+  await bare.waitForTimeout(800);
+  const noGL = await bare.evaluate(() => ({
+    asked: window.__asked,
+    instance: typeof heroHeart3d !== 'undefined' && !!heroHeart3d,
+    active: !!document.querySelector('#heroHeart.heart-3d-active'),
+    strayCanvas: !!document.querySelector('#heroHeart3dSlot > canvas'),
+    photo: !!document.querySelector('#heroHeart img, #heroHeart picture, #heroHeart svg'),
+  }));
+  ok('the app did ask for WebGL, so this drove the no-WebGL path', noGL.asked > 0, `${noGL.asked} request(s)`);
+  ok('no heart instance, and the medallion is not marked 3D', !noGL.instance && !noGL.active, JSON.stringify(noGL));
+  ok('no canvas is left in the slot, and the photograph is there', !noGL.strayCanvas && noGL.photo, JSON.stringify(noGL));
+  ok('and no error on the way', bareErrors.length === 0, bareErrors.slice(0, 3).join(' | '));
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
