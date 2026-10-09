@@ -155,3 +155,13 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   must be readable without redoing the work that found it (here, a raw character
   span rather than an index into a derived structure). Break the lookup itself into
   its steps and time each one before calling the cache done.
+
+- **"The browser CRASHED the page" read as a test race.** synthetic-webkit's
+  intermittent red on verify-selftest looked like the timing races above, and the
+  crash point moved every run. It was neither memory nor the test: the kernel log
+  on the runner (`sudo dmesg`) showed `trap invalid opcode in libWPEWebKit` for every
+  crash, a WebKit release assertion in its compositor, fired by animated layers
+  torn down mid-animation 24 times in a row. → Rule: when Playwright reports a
+  crashed page, read `dmesg` on the runner before reading the suite, and isolate the
+  trigger by switching ingredients off in a copy of the build across enough runs to
+  count (PR #211: 14/24 crashed as built, 0/36 with motion off, 0/32 with the fix).
