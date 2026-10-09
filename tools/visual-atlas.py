@@ -4,7 +4,7 @@
     python3 tools/visual-atlas.py <pages-dir> <text.md> <out-dir> [--jobs 4]
 
 WHAT THIS IS FOR. The reference notes in content/refs cite figures inline as
-`![caption](refimg://<unit>/<file>)`, and scripts/ref-images-patch.js resolves
+`![caption](refimg://<unit>/<file>)`, and scripts/ref-images.js resolves
 each of those against content/refs-images/. This is the tool that produces the
 files to resolve against: it turns "326 photographs of book pages" into "one
 cropped image per figure, with the legend as printed".

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /*
- * Freeze the patch chain's output as the app's source: step 1 of retiring the
- * chain (docs/BUILD.md, "Retiring the patch chain").
+ * Freeze a build as the app's source. It froze the patch chain's output into
+ * app/ (docs/BUILD.md, "How it got here"); the chain is deleted and app/ is
+ * edited directly, so run on a build of app/ it can only give app/ back.
  *
- *   node scripts/build.js                     # the chain, as always
  *   node scripts/freeze-shell.js [build/systole.html] [--app app] [--payload content/payload]
  *
  * Runs on the owner's machine: its input is the built file, which carries the
@@ -103,7 +103,7 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const opt = (flag, dflt) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : dflt; };
   const input = args.find((a, i) => !a.startsWith('--') && !['--app', '--payload'].includes(args[i - 1])) || path.join(ROOT, 'build', 'systole.html');
-  if (!fs.existsSync(input)) { console.error(`no build at ${input}: run node scripts/build.js first`); process.exit(2); }
+  if (!fs.existsSync(input)) { console.error(`no build at ${input}: run npm run build -- path/to/your-export.html first`); process.exit(2); }
   try {
     const r = freeze({ input, appDir: opt('--app', path.join(ROOT, 'app')), payloadDir: opt('--payload', path.join(ROOT, 'content', 'payload')) });
     process.exit(r.ok ? 0 : 1);

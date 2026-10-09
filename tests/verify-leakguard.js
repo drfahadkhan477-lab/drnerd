@@ -78,8 +78,12 @@ head('it refuses the licensed bank, by every route in');
      to ['graphify']: that assertion went red and the one above stayed green. */
   r = run(['graphify-out/graph.json']);
   ok('and a graphify graph, which is built from the corpus', r.code === 1 && /PATH/.test(r.out), r.out.match(/PATH.*/)?.[0] || r.out.slice(0, 60));
-  r = run(['graphify-outline.md']);
-  ok('but not a file that merely starts with the same letters', r.code === 0);
+  /* A real file, read from tmp: a path that is not there is now an error
+     (exit 2), not a pass, so this used to pass for a reason it no longer can. */
+  fs.writeFileSync(path.join(tmp, 'graphify-outline.md'), 'an outline\n');
+  try { execFileSync(process.execPath, [GUARD, 'graphify-outline.md'], { cwd: tmp, stdio: 'pipe' }); r = { code: 0 }; }
+  catch (e) { r = { code: e.status, out: String(e.stderr) }; }
+  ok('but not a file that merely starts with the same letters', r.code === 0, r.out);
 
   /* 1b. LOG — THE SAME LOG UNDER ANOTHER NAME, which is how this rule came
      to exist. `node scripts/verify.js > 1.txt` is the obvious thing to type,
@@ -222,10 +226,11 @@ head('the pre-commit route: what is staged');
 {
   /* Every case above names its files. The hook names none, so the guard asks
      git what is staged, and that path had no test. A submodule pointer is a
-     commit id, not content: --all-tracked skipped it, the staged route did
-     not, so every commit that moved content/refs-repo was refused by the
-     hook and passed by CI. Both routes now agree. A throwaway repository,
-     so nothing here touches this one's index. */
+     commit id, not content, so it is never opened — but since the systole-refs
+     submodule was removed (its repository deleted), a pointer under content/
+     is refused like a file there: it would link a licensed corpus from this
+     public repository. It used to be allowed, and this test required that. A
+     throwaway repository, so nothing here touches this one's index. */
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'leakguard-git-'));
   const git = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a],
                                      { cwd: repo, encoding: 'utf8' });
@@ -234,21 +239,79 @@ head('the pre-commit route: what is staged');
     catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
   };
   git('init', '-q');
-  git('update-index', '--add', '--cacheinfo', '160000,' + '1'.repeat(40) + ',content/refs-repo');
   fs.writeFileSync(path.join(repo, 'notes.md'), 'ordinary\n');
   git('add', 'notes.md');
   let r = inRepo();
-  ok('a staged submodule pointer under content/ is not refused', r.code === 0, r.out.trim().slice(0, 90));
-  /* Not an empty list read as clean: the ordinary file staged beside the
-     pointer was checked, so git was asked and answered. */
-  ok('and the file staged beside it was checked, the pointer not counted', /\b1 file\(s\) checked/.test(r.out), r.out.trim().slice(0, 60));
-  fs.mkdirSync(path.join(repo, 'content'), { recursive: true });
-  fs.writeFileSync(path.join(repo, 'content', 'questions.json'), '{}');
-  git('add', '-f', 'content/questions.json');
+  /* Not an empty list read as clean: the ordinary file was checked, so git
+     was asked and answered. */
+  ok('an ordinary staged file is checked and passes', r.code === 0 && /\b1 file\(s\) checked/.test(r.out), r.out.trim().slice(0, 60));
+  git('update-index', '--add', '--cacheinfo', '160000,' + '1'.repeat(40) + ',content/refs-repo');
   r = inRepo();
-  ok('while a real file staged beside it is still refused', r.code === 1 && /PATH\s+content\/questions\.json/.test(r.out),
+  ok('a staged submodule pointer under content/ is refused', r.code === 1 && /PATH\s+content\/refs-repo/.test(r.out),
      r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 60));
-  ok('and the pointer is not what it names', !/refs-repo/.test(r.out));
+  /* The --all-tracked route (CI's) must agree with the hook's. */
+  git('commit', '-q', '-m', 'x', '--no-verify');
+  let all;
+  try { all = { code: 0, out: execFileSync(process.execPath, [GUARD, '--all-tracked'], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+  catch (e) { all = { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+  ok('and --all-tracked refuses the same pointer once it is committed', all.code === 1 && /content\/refs-repo/.test(all.out),
+     all.out.match(/PATH.*/)?.[0] || all.out.trim().slice(0, 60));
+  git('rm', '-q', '--cached', 'content/refs-repo');
+  git('update-index', '--add', '--cacheinfo', '160000,' + '2'.repeat(40) + ',vendor/lib');
+  r = inRepo();
+  ok('a submodule outside the licensed folders still passes', r.code === 0, r.out.trim().slice(0, 60));
+  git('rm', '-q', '--cached', 'vendor/lib');
+
+  /* WHAT IS STAGED IS WHAT IS COMMITTED. Content rules read the index's blob,
+     not the working copy: a reviewer staged an oversized file, overwrote it on
+     disk with "{}", and the guard passed what git would have committed. */
+  const at = n => path.join(repo, n);
+  fs.writeFileSync(at('big.txt'), Buffer.alloc(1024 * 1024 + 1, 0x61));
+  git('add', 'big.txt');
+  fs.writeFileSync(at('big.txt'), '{}');
+  r = inRepo();
+  ok('a file staged oversized and shrunk on disk afterwards is refused for what is staged', r.code === 1 && /SIZE\s+big\.txt/.test(r.out),
+     r.out.match(/SIZE.*|could not.*/)?.[0] || r.out.trim().slice(0, 60));
+  git('rm', '-q', '-f', '--cached', 'big.txt');
+  const dump = Array.from({ length: 8 }, (_, i) => `"f${i}": "data:image/png;base64,AAAA"`).join(',\n');
+  fs.writeFileSync(at('slides.json'), '{' + dump + '}');
+  git('add', 'slides.json');
+  fs.unlinkSync(at('slides.json'));
+  r = inRepo();
+  ok('a figure dump staged and then deleted from disk is still refused', r.code === 1 && /FIGURES\s+slides\.json/.test(r.out),
+     r.out.match(/FIGURES.*|could not.*/)?.[0] || r.out.trim().slice(0, 60));
+  git('rm', '-q', '--cached', 'slides.json');
+  fs.writeFileSync(at('plain.json'), '{"a": 1}');
+  git('add', 'plain.json');
+  fs.writeFileSync(at('plain.json'), '{' + dump + '}');
+  r = inRepo();
+  ok('and a clean staged file is not refused for what is only on disk', r.code === 0, r.out.trim().slice(0, 80));
+  git('rm', '-q', '-f', '--cached', 'plain.json');
+
+  fs.writeFileSync(at('move.json'), '{}'); git('add', 'move.json'); git('commit', '-q', '-m', 'rename fixture', '--no-verify');
+  fs.mkdirSync(at('content'), { recursive: true });
+  git('mv', 'move.json', 'content/move.json');
+  ok('the fixture is a Git-detected rename', /R100/.test(git('diff', '--cached', '--name-status')));
+  r = inRepo();
+  ok('a staged rename into a forbidden destination is refused', r.code === 1 && /PATH\s+content\/move\.json/.test(r.out));
+  git('reset', '--hard', '-q', 'HEAD');
+  git('mv', 'move.json', 'ordinary-moved.json');
+  r = inRepo();
+  ok('an ordinary rename is actually checked and passes', r.code === 0 && /1 file\(s\) checked/.test(r.out));
+  git('reset', '--hard', '-q', 'HEAD');
+
+  /* A FAILURE TO LOOK IS NOT A PASS. Git that cannot answer used to give an
+     empty list, and "0 file(s) checked, nothing licensed", exit 0. */
+  const broken = args => {
+    try { execFileSync(process.execPath, [GUARD, ...args], { cwd: repo, env: { ...process.env, GIT_DIR: at('no-such-git-dir') }, stdio: 'pipe' }); return { code: 0, out: '' }; }
+    catch (e) { return { code: e.status, out: String(e.stdout) + String(e.stderr) }; }
+  };
+  const b1 = broken([]), b2 = broken(['--all-tracked']);
+  ok('when git cannot say what is staged, the guard exits 2 and certifies nothing', b1.code === 2 && !/nothing licensed/.test(b1.out), `exit ${b1.code}`);
+  ok('and the same when it cannot say what is tracked', b2.code === 2 && !/nothing licensed/.test(b2.out), `exit ${b2.code}`);
+  let miss;
+  try { execFileSync(process.execPath, [GUARD, 'no-such-file.md'], { cwd: repo, stdio: 'pipe' }); miss = 0; } catch (e) { miss = e.status; }
+  ok('a named file that cannot be read is an error, not a pass', miss === 2, `exit ${miss}`);
   fs.rmSync(repo, { recursive: true, force: true });
 }
 

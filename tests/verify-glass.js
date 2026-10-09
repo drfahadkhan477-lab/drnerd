@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 /*
- * Glass: every promise in scripts/glass-patch.js's header, in a real browser.
+ * Glass: every promise the glass rules make, in a real browser.
  *
  *   node tests/verify-glass.js
  *
- * No build is needed, on purpose: the patch runs as the chain runs it —
- * a process over an input file — against a page that carries the two anchors
- * it needs, and the output is opened in the engine the other suites use.
+ * No build is needed, on purpose: the rules and the script are cut out of
+ * app/css/systole.css and app/systole.html and put into a page that carries
+ * the same class names, which is opened in the engine the other suites use.
  * The page is built from what tools/button-census.js found in the owner's
  * build: the same class names, the same --card token, a ::before already on
  * .opt, a fixed .ai-fab, answer states painted with colours other than --card.
@@ -21,7 +21,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
 const { launch } = require('./_engine.js');
 const { onDeath, watch } = require('./_deathnote.js');
 
@@ -69,18 +68,35 @@ var S = {};
 </script></body></html>`;
 
 (async () => {
-  head('the patch applies, as the chain runs it');
+  head('the glass is read from the app that ships');
+  /* Until the patch chain was retired this ran glass-patch.js over the
+     fixture. The glass now lives in app/css/nav.css (the rules) and
+     app/systole.html (the script that derives --card-glass), so both are cut
+     out of those files, each between anchors that must occur once, and put
+     into the fixture where the patch used to put them. */
+  const once = (src, a, where) => {
+    const n = src.split(a).length - 1;
+    if (n !== 1) throw new Error(`${where}: expected the anchor once, found ${n}: ${a.slice(0, 50)}`);
+    return src.indexOf(a);
+  };
+  const APP_CSS = require('./_appcut.js').stylesheet();
+  const APP_HTML = fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8');
+  const NAV = '.nav{color:#fff;height:var(--navh);display:flex;align-items:center;';
+  const MEMORY = '/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */';
+  const BANNER = '/* ── glass — see scripts/glass-patch.js ── */';
+  const cssFrom = once(APP_CSS, BANNER, 'the stylesheet') + BANNER.length;
+  const css = APP_CSS.slice(cssFrom, once(APP_CSS, NAV, 'the stylesheet'));
+  const jsFrom = once(APP_HTML, '/* ══════════════ Glass — see scripts/glass-patch.js', 'app/systole.html');
+  const js = APP_HTML.slice(jsFrom, APP_HTML.indexOf(MEMORY, jsFrom));
+  ok('the rules and the script were both found, and are whole', css.length > 2000 && /backdrop-filter/.test(css) &&
+     js.length > 500 && /--card-glass/.test(js) && /\}\)\(\);\s*$/.test(js), `css ${css.length}, script ${js.length} characters`);
+  /* Functions, not strings, as the replacement: a "$'" in the css would
+     otherwise be read as a replacement pattern. */
+  const out = FIXTURE.replace(NAV, () => css + NAV).replace(MEMORY, () => js + MEMORY);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glass-'));
-  const IN = path.join(dir, 'in.html'), OUT = path.join(dir, 'out.html');
-  fs.writeFileSync(IN, FIXTURE);
-  let log = '';
-  try { log = execFileSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'glass-patch.js'), IN, OUT], { encoding: 'utf8' }); }
-  catch (e) { log = 'threw: ' + (e.stderr || e.message); }
-  ok('both of its edits apply, each anchor found exactly once', (log.match(/✓/g) || []).length === 2, log.trim().split('\n').pop());
-  const out = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
-  const css = (/\/\* ── glass — see scripts\/glass-patch\.js ── \*\/([\s\S]*?)\.nav\{color:#fff/.exec(out) || [])[1] || '';
-  ok('and the anchors survive for whatever comes after', out.includes('.nav{color:#fff;height:var(--navh);display:flex;align-items:center;') &&
-     out.includes('/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */'));
+  const OUT = path.join(dir, 'out.html');
+  fs.writeFileSync(OUT, out);
+  ok('and the fixture took them where the app has them', out !== FIXTURE && out.includes(css) && out.includes(js));
 
   head('nothing the iPad\'s Safari 13.4 cannot parse, and nothing outside High contrast\'s reach');
   ok('no :is(), no inset shorthand, no color-mix()', !!css && !/:is\(|[;{\s]inset:|color-mix\(/.test(css));

@@ -12,8 +12,8 @@
  * A SLOT is a span of the built file replaced by a token, @@SLOT[kind:name]@@.
  * Four kinds of span leave the shell:
  *
- *   payload   ALL_Q, IMGS, the reference seed, the reference figures and the
- *             heart's baked mesh. Stored beside the content (content/payload/,
+ *   payload   ALL_Q, IMGS, the reference seed, the reference figures, the
+ *             heart's baked mesh and the seed's baked pearls. Stored beside the content (content/payload/,
  *             gitignored), never in the app. The first four are licensed; the
  *             mesh is ours but 3 MB of base64, and scripts/heart-bake.js makes it.
  *   src       a module of src/ found verbatim. src/ stays the source of truth:
@@ -64,6 +64,8 @@ const PAYLOADS = [
   { name: 'REF_SEED', re: /(\/\*REF_SEED_START\*\/)([\s\S]*?)\/\*REF_SEED_END\*\//, required: true },
   { name: 'REF_IMGS', re: /(\/\*REF_IMGS_START\*\/)([\s\S]*?)\/\*REF_IMGS_END\*\//, required: false },
   { name: 'HEART_MESH', re: /(\nwindow\.HEART3D_MESH_B64=')([A-Za-z0-9+/=]*)';/, required: true },
+  /* Optional, as REF_IMGS is: a build made before it existed still cuts. */
+  { name: 'REF_PEARLS', re: /(\/\*REF_PEARLS_START\*\/)([\s\S]*?)\/\*REF_PEARLS_END\*\//, required: false },
 ];
 
 const count = (hay, needle) => (needle ? hay.split(needle).length - 1 : 0);

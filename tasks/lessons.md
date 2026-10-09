@@ -70,15 +70,26 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   the provider the test selects, and the test must wait on something only the
   stubbed reply can produce (its text in the panel), so a skipped stub times out.
 
-- **A click that "did nothing" because it missed.** Firefox CI intermittently
-  stayed on the lesson after "now memorise it" (phase teach, nothing logged). Reading
-  the app's logic found nothing. A capture-phase click listener showed the click
-  landing on `<main>`: lazy figures grew 324 px as the scroll brought them near, and
-  the button moved after Playwright had aimed (#185). → Rule: when a click changes
-  nothing, record what it actually hit and where the target was at that instant
-  before reasoning about handlers. Reproduce locally (`npx playwright install
-  firefox`, or `webkit` plus `install-deps`) and loop until it fails, rather than
-  guessing from one CI log.
+- **A suite that measured a substitute.** Several suites read the retired
+  patch scripts, or a tokenizer written in the test, instead of the code that
+  ships. Moving them to app/ found an icon button with no name, four alert()s,
+  a palette check reading a fallback literal, and a ranking fixture whose
+  central case failed on the real tokenizer. → Rule: a suite lifts the code
+  under test from the file that ships (app/, src/), between anchors that must
+  each occur once; never from a build step, and never a copy kept in the test.
+
+- **A replace-instead-of-merge rule tested only at the moment it is written.**
+  #224 marked a fallback copy "whole" so recovery would take it over the
+  database; every test ended the session right after the fallback. A review
+  found the copy outliving later writes that did land, so the next launch threw
+  them away, where the old merge had kept them. → Rule: when a copy gains
+  authority over another, test what happens to it after the other moves on
+  (a later successful write, a second session) before trusting it.
+- **A fake whose options were copied.** A store test turned `putFails` off
+  mid-session on an options object `reload()` had already copied, so the
+  "write that lands" never landed and the check passed an injected defect.
+  → Rule: when a test changes the fake's behaviour mid-run, assert the effect
+  (the value is in the database) as a precondition before the claim.
 
 - **A check that reads the input, not the output.** "It opens full size" read the
   lightbox image's `naturalWidth > 0`, true whatever size it was shown at, so a held
@@ -97,6 +108,26 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   narrow the commit title to what was covered.
 
 ## Process
+
+- **A browser upgrade judged on Chromium alone.** I moved playwright 1.56 -> 1.64
+  (released the day before) after a green local Chromium run; both CI WebKit jobs
+  then hit their time limits still passing, because 1.64's WebKit 27.2 drew 2-3
+  frames a second after the Memorizer loaded (memorizer-data: 63 s against 20 s on
+  1.56 and 10 s on 1.63). -> Rule: before pushing a playwright bump, time one
+  Memorizer suite in WebKit on the old pin and the new one (`npm i --no-save
+  playwright@X`, `npx playwright install webkit`); a slower engine is a finding,
+  never a reason to raise `timeout-minutes`.
+
+- **A click that "did nothing" because it missed.** Firefox CI intermittently
+  stayed on the lesson after "now memorise it" (phase teach, nothing logged). Reading
+  the app's logic found nothing. A capture-phase click listener showed the click
+  landing on `<main>`: lazily drawn figures and page thumbnails grew as the scroll
+  brought them near, and the button moved after Playwright had aimed (#185); fixing
+  the figures alone still failed on a thumbnail. → Rule: when a click changes
+  nothing, record what it actually hit and where the target was at that instant
+  before reasoning about handlers. Reproduce locally (`npx playwright install
+  firefox`, or `npx playwright install --with-deps webkit` as CI does) and loop
+  until it fails, rather than guessing from one CI log.
 
 - **Handing the owner a retired command.** I gave `node scripts/build.js` (the
   retired patch chain) for a laptop build; it ran for four minutes and built an app
@@ -138,3 +169,39 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   → Rule: read the job's annotations and failed step before calling it a test
   failure; re-run once, and say so on the PR. Merge only on a run where every
   required job actually ran.
+
+- **A test wrote to a path a probe returned, and the probe could return a real binary.** Making devtools-pure independent of browser install state, I created a stand-in file at whatever path `playwright.chromium.executablePath()` gave. With no real playwright, the test's own stand-in module answered with `process.execPath`, and the test tried to overwrite `/opt/node22/bin/node`; ETXTBSY stopped it. Rule: a test writes only under its own temp dir, checked with `path.resolve(p).startsWith(TMP + sep)` before the write, and never over a file that exists. Run a new fixture in every machine state it claims to handle (here: no playwright, playwright without browsers, with browsers) before trusting it.
+
+- **Marking a PR ready at the moment of merging skips the Codex review.** Codex reviews when a draft is marked ready, and takes a few minutes. I marked #186/#187 (and later #194–#196) ready and merged in the same minute, so Codex's findings on #186/#187 arrived after the merge and needed a follow-up PR (#194). Rule: mark a PR ready as soon as its CI is running, wait for the "Codex Review Summary" to say Completed (or for its inline findings), and only then merge.
+
+- **A CI suite set chosen from too few runs.** I chose synthetic-webkit's set from
+  two full WebKit runs, and the first run of the chosen set failed a suite that had
+  passed both (theme: the sweep read the splash before WebKit's slow frames removed
+  it). Frame starvation on a GPU-less runner (2 frames in 2.8 s, measured) makes any
+  wait that leans on rAF timing a coin toss there. → Rule: before trusting a new
+  browser job, run its suites at least three times and treat a single failure as a
+  race to root-cause in the test, not as noise; print frame counts and wall time in
+  a timing check's detail so the failing run says which cause it was.
+
+- **A bake that re-derives its own address keeps the cost it was meant to remove.** The
+  first pearl table named each pearl by paragraph and sentence index. It was proven
+  correct and was faster in Node, but the owner's laptop profile showed `fromTable`
+  still costing 0.64 s of the 0.77 s scan: reaching "paragraph p" meant cleaning the
+  whole note, which was most of what the search had cost. My Node benchmark ran
+  only the Arrhythmias notes (235, ~1 KB each), not the owner's full seed, so it
+  under-weighted the walk. → Rule: when caching a computed answer, the cached address
+  must be readable without redoing the work that found it (here, a raw character
+  span rather than an index into a derived structure). Break the lookup itself into
+  its steps and time each one before calling the cache done.
+
+- **"The browser CRASHED the page" read as a test race.** synthetic-webkit's
+  intermittent red on verify-selftest looked like the timing races above, and the
+  crash point moved every run. It was neither memory nor the test: the kernel log
+  on the runner (`sudo dmesg`) showed `trap invalid opcode in libWPEWebKit` for every
+  crash, a WebKit release assertion in its compositor, fired by animated layers
+  torn down mid-animation 24 times in a row. → Rule: when Playwright reports a
+  crashed page, read `dmesg` on the runner before reading the suite, and isolate the
+  trigger by switching ingredients off in a copy of the build across enough runs to
+  count (PR #211: 14/24 crashed as built, 0/36 with motion off, 0/32 with the fix).
+
+- **A handoff inherited a different browser.** A laptop task required Chromium but its command omitted --engine, so SYSTOLE_ENGINE could select Firefox or WebKit. → Rule: when a result requires a specific browser, pin it in the command and verify the flag wins over the inherited environment.

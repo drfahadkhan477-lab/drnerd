@@ -2,7 +2,26 @@
 
 October 3, 2026. This follows the broad engineering review and the request to implement its fixes one by one. Changes are limited to Memorizer, its synthetic regression tests, and its standalone build script. The latest base-branch OCR recovery was merged and preserved.
 
-## Completion status — October 4
+## Current status — October 9
+
+The original binary-fallback fix and the subsequent review fixes are merged. The current runtime base is `400e1ae1232cd6ea0551caf6e40e182be86f2eae`; its standalone build is `2f5728796a54`.
+
+Recent merged work preserves saved binary bytes and adds these safeguards:
+
+- Writes are queued; reads wait for earlier queued writes. Deleting a unit or book serializes cleanup and prevents a failed save retry from recreating deleted records. Refused restores leave the existing database unchanged.
+- The on-device model UI shows the current startup stage and progress. An unanswered browser persistence prompt no longer prevents the engine from starting. Real GPU inference and memory release still need device validation.
+- Mermaid is pinned to 10.9.8 with an integrity hash. Imported diagram code is restricted to flowcharts and cannot supply renderer configuration directives. Built inline scripts are allowed by their content hashes; injected inline handlers/scripts are refused.
+- Provider request configuration was updated. Actual provider model availability and authenticated API calls were not measured in this update.
+
+On October 9, [the stable Cloudflare site](https://supreme-cnf.pages.dev/) served an app page, service worker, manifest and icon that each matched the current generated build byte for byte. The deployment-specific URL supplied by the owner, `https://db4e189b.supreme-cnf.pages.dev/`, still served the earlier build `f418e3bf3418`. These hosts are separate browser-storage origins. Export a backup before moving between them and prepare offline readers independently on the chosen origin.
+
+Focused storage, backup and runtime regressions, all source-independent pure suites, the standalone build/package and stats checks passed locally. The latest hosted build also passed Chromium startup, real pinned-reader preparation and offline tab reopening with every synthetic saved byte intact. This probe did not render a PDF or run OCR after reopening. The pure run did not execute its browser suites; the merged runtime PR's CI separately passed Chromium, WebKit and Firefox Memorizer jobs. Its licensed-content job was skipped.
+
+The [device preflight](DEVICE-PREFLIGHT.md) records Linux memory experiments and the offline/model lifecycle evidence, including the WebKit reopening limitation. The owner reports an 11-inch M5 iPad on iPadOS 27 and a Windows 10 laptop with the repository and licensed export/build. Physical memory limits, Home Screen/Safari restart, a real network toggle and real GPU model switching remain **not run** here. Private-suite results remain pending from the laptop's Claude Code “Runs only” session; its concrete task is in [LAPTOP-RUNS.md](LAPTOP-RUNS.md). This cloud session cannot directly message or control that session.
+
+The earlier sections below are historical validation records. Use [IPAD-RUNSHEET.md](IPAD-RUNSHEET.md) on a disposable origin for physical acceptance; no safe iPad backup limit has been established.
+
+## Completion record — October 4
 
 The implementation and follow-up fixes are complete and merged: [#116](https://github.com/drfahadkhan477-lab/drnerd/pull/116), [#126](https://github.com/drfahadkhan477-lab/drnerd/pull/126), and [#127](https://github.com/drfahadkhan477-lab/drnerd/pull/127). The final Memorizer merge, `fd3abd3`, passed Chromium, WebKit, logic, syntax, build-guard and CodeQL checks. The subsequent `master` revision `84da234` also passed all source-independent CI jobs ([run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/37168903989)). A separate repository change, #128, removed the checked-in CodeQL workflow after the Memorizer work; GitHub still reports CodeQL checks on this report's PR.
 

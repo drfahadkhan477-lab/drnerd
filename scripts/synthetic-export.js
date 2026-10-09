@@ -48,8 +48,8 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { CORRECTIONS } = require('./keys-patch.js');
-const { FLAGS } = require('./flags-patch.js');
+const { CORRECTIONS } = require('./answer-keys.js');
+const { FLAGS } = require('./content-flags.js');
 
 /* The app's chapters (CH_COLORS in app/systole.html), each with an id prefix.
    The real prefixes are used where the corrections already name them; the

@@ -142,7 +142,16 @@ function run(opts) {
   return { code: failed.length ? 1 : 0, ran, failed, notRun };
 }
 
-module.exports = { suitesFromWorkflow, run, jobBody };
+/* Every suite CI runs anywhere, by registry name ("keys", not "verify-keys").
+   scripts/verify.js tags the rest `laptop`: the ones only a machine with the
+   export can run, which is what the owner's quick laptop run is. Read from the
+   workflow, so a suite added to CI leaves that set the same day. */
+function ciSuites(yml) {
+  const w = suitesFromWorkflow(yml);
+  return new Set([...w.pure, ...w.browser, ...w.synthetic.suites.map(x => x.name)].map(n => n.replace(/^verify-/, '')));
+}
+
+module.exports = { suitesFromWorkflow, run, jobBody, ciSuites };
 
 if (require.main === module) {
   try { process.exit(run({ pure: process.argv.includes('--pure') }).code); }

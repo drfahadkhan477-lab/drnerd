@@ -767,6 +767,20 @@ step('pull the reference figures out of the app code, one file per unit', () => 
 
    A plain function of the app code, so tests/verify-heartbake-pure.js can
    drive it without a build. */
+/* The preload links for the lifted faces, right after the charset
+   declaration (which must stay first). Upright faces only. A named function
+   so tests/verify-loader-pure.js can lift it out and hold it to that.
+   crossorigin is not decoration: a font is always fetched in CORS mode, and a
+   preload without it does not match, so the face is downloaded twice. */
+function preloadFaces(html, names) {
+  const anchor = '<meta charset="UTF-8">\n';
+  if (html.split(anchor).length - 1 !== 1) throw new Error('<meta charset="UTF-8"> not found exactly once');
+  const upright = names.filter(n => !/-italic\.woff2$/.test(n));
+  if (upright.length !== 3) throw new Error(`expected 3 upright faces to preload, found ${upright.length}`);
+  const links = upright.map(n => `<link rel="preload" href="fonts/${n}" as="font" type="font/woff2" crossorigin>\n`).join('');
+  return html.replace(anchor, anchor + links);
+}
+
 function splitHeartMesh(code) {
   const re = /window\.HEART3D_MESH_B64='([A-Za-z0-9+/=]*)';/g;
   const hits = [...code.matchAll(re)];
@@ -836,6 +850,17 @@ step('lift the base64 fonts out of the stylesheet', () => {
      stops finding the four real faces, that is a silently unstyled app. */
   if (found !== 4) throw new Error(`expected 4 inlined font faces, found ${found}`);
 });
+
+/* PRELOADED, SO THE FIRST LAYOUT HAS THEM. Lifted out, the faces are only
+   requested once the parser has read the 170 KB stylesheet and style finds
+   text that uses them, and with font-display:swap the first layout does not
+   wait: it asks the operating system for the fallbacks (system-ui, Georgia,
+   monospace) and lays out again when the faces arrive. Traced at --cpu 4, that
+   was 11 platform font lookups and 32-35 ms inside a 27-object layout here;
+   on the owner's laptop the same layout was 194 ms. Preloaded, 1 lookup and
+   4-7 ms. The italic face is used by one rule and is left to load on demand.
+   Right after the charset declaration, which must stay first. */
+step('preload the upright faces', () => { html = preloadFaces(html, fontAssets.map(([n]) => n)); });
 
 /* ── 3.9. the head, told the truth about itself ───────────────────────────
    Two lines in the head are written for the single-file build and are wrong
@@ -935,7 +960,7 @@ step('copy only the content the app asks for', () => {
 });
 
 /* THE BANK IS NOT SHIPPABLE AS THE EXPORT WROTE IT. The export keys six
-   questions wrong — scripts/keys-patch.js says which, why, and on what
+   questions wrong — scripts/answer-keys.js says which, why, and on what
    evidence — and a wrong key is silent: it marks a correct answer wrong and
    teaches the distractor as the fact.
 
@@ -958,8 +983,8 @@ step('copy only the content the app asks for', () => {
    was covering by accident: the cross-check below proves the two builds AGREE,
    and two builds that both lost the corrections agree perfectly. This asserts
    the corrections are actually present in what ships. */
-const { CORRECTIONS } = require('./keys-patch.js');
-const { applyContentFlags } = require('./flags-patch.js');
+const { CORRECTIONS } = require('./answer-keys.js');
+const { applyContentFlags } = require('./content-flags.js');
 step('the bank corrections are present in what ships', () => {
   const p = path.join(DIST, 'content', 'questions.json');
   const bank = JSON.parse(fs.readFileSync(p, 'utf8'));

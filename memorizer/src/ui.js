@@ -21,14 +21,14 @@ var Provider = root.MemProvider, Store = root.MemStore, Pdf = root.MemPdf, FSRS 
 var Skill = root.MemSkill;
 var Format = root.MemFormat, Look = root.MemLook, Home = root.MemHome, Pearl = root.Pearl, Book = root.MemBook, Ask = root.MemAsk, Ground = root.MemGround, LLM = root.MemLLM, Vec = root.MemVec, Sheet = root.MemSheet, Figure = root.MemFigure, Agent = root.MemAgent, Dialog = root.MemDialog, Prov = root.MemProvenance, Study = root.MemStudy, Pack = root.MemPack;
 
-var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
-                sri: 'sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr' };
+var MERMAID = { url: 'https://cdn.jsdelivr.net/npm/mermaid@10.9.8/dist/mermaid.min.js',
+                sri: 'sha384-N3QqR/7q+xm3BGX+CBbNI8AUmRRqcsDzToy+0z1NLDI0QmTKW8zvwLvqulJgk3dP' };
 
 var ui = {
   openSeq: 0, drafts: {},
   view: 'library',      /* library | book | session | ask | review | settings */
   askIdx: null, askFor: null, askQ: '', askR: null, askKind: 'chapters', askBusy: false,
-  ai: { status: '', busy: '', summary: null, lesson: {}, miss: {} },
+  ai: { status: '', busy: '', progress: null, summary: null, lesson: {}, miss: {} },
   tutor: { v: {}, asking: {} }, wording: null,
   docs: [], cards: [], sessions: {}, at: {}, pearlSkip: 0, books: [], days: [], bookId: null,
   docsStale: true, pearlCache: null,
@@ -695,6 +695,11 @@ var chartSeq = 0;
 function flowchart(code) {
   var box = h('div.chart', h('p.muted', 'Drawing the diagram…'));
   var fallback = function () { box.textContent = ''; box.appendChild(h('pre.chart-src', code)); };
+  /* Only a flowchart reaches Mermaid (MemStudyImport.isFlowchart): this code
+     comes from a study file or a pasted pack, and Mermaid's other diagram
+     types are where its injection advisories are. Anything else is shown as
+     its text. */
+  if (!root.MemStudyImport || !root.MemStudyImport.isFlowchart(code)) { fallback(); return box; }
   mermaid().then(function (M) {
     return M.render('mchart' + (++chartSeq), code).then(function (out) {
       box.innerHTML = out.svg;
@@ -1725,7 +1730,7 @@ function teachAi(got) {
       if (t == null) return;
       got.ai = Study.teachJudge(t, texts, got.said, got.r); render();
     });
-  }, 'quiet', { id: 'teach-ai' }), ui.ai.busy ? h('span.muted', { role: 'status' }, ui.ai.busy) : null);
+  }, 'quiet', { id: 'teach-ai' }), aiBusy('span.muted'));
   var a = got.ai, n = got.points.length;
   return h('div.teach-ai-result', { id: 'teach-ai-result' },
     h('p', h('strong', '\u2728 Marked on this device: ' + a.covered.length + ' of ' + n + ' covered' + (a.wrong.length ? ', ' + a.wrong.length + ' said wrongly' : '') + '.')),
@@ -1994,7 +1999,7 @@ function socraticAi(L) {
     })) : null,
     soc.aiWhy ? h('p.muted', { id: 'soc-ai-dropped' }, 'Its question was not asked: ' + soc.aiWhy + '.') : null,
     h('div.row', button(soc.ai.length ? '\u2728 Another follow-up' : '\u2728 Ask me a follow-up', ask, 'quiet', { id: 'soc-ai' + '-go' }),
-      ui.ai.busy ? h('span.muted', { role: 'status' }, ui.ai.busy) : null));
+      aiBusy('span.muted')));
 }
 /* ROUNDS (phase 4): a pack's oral cases — the stem, the examiner's
    question, the model answer on request, and an honest "had it". */
@@ -2295,7 +2300,7 @@ function aiLessonCard(c, L) {
       aiNote(got.plain.kept, got.plain.dropped.length)] : null,
     got.analogy ? [h('h3', 'Think of it like…'), got.analogy.ok ? h('p', { id: 'ai-analogy-text' }, got.analogy.text) : h('p.muted', 'Its analogy was dropped: ' + got.analogy.why + '.'),
       h('p.muted.ai-label', '✨ Analogy by the on-device AI — not from your book; checked to carry no number and no name the section does not.')] : null,
-    ui.ai.busy ? h('p.muted', { role: 'status' }, ui.ai.busy) : null,
+    aiBusy('div.muted'),
     ui.ai.status && !LLM.ready() ? h('p.muted', ui.ai.status) : null,
     ui.ai.error ? h('p.warn', 'The on-device AI could not run: ' + ui.ai.error) : null,
     h('div.row', button('Explain in plain words', function () {
@@ -2599,7 +2604,7 @@ function caseCard(d, ci) {
   var key = d.id + ':' + ci, got = ui.ai.cases && ui.ai.cases[key];
   if (!got) return h('div.card.case-card', { id: 'case-card' }, h('span.eyebrow', '✨ A case'),
     h('p.muted', 'The on-device AI writes a short patient case on this section; it is kept only if its answer is a sentence of your book.'),
-    ui.ai.busy ? h('p.muted', { role: 'status' }, ui.ai.busy) : button('Write a case', function () {
+    ui.ai.busy ? aiBusy('div.muted') : button('Write a case', function () {
       aiCase(d, ci).then(function (r) { ui.ai.cases = ui.ai.cases || {}; ui.ai.cases[key] = r; ui.choice = null; render(); });
     }, 'quiet', { id: 'ai-case' }));
   if (!got.q) return h('div.card.case-card', { id: 'case-card' }, h('span.eyebrow', '✨ A case'), h('p', { id: 'case-dropped' }, 'Not shown: ' + got.why + '. Your book stays the source.'),
@@ -3259,8 +3264,25 @@ function aiEnsure() {
   if (LLM.ready(c.model)) return Promise.resolve();
   return LLM.supported().then(function (s) {
     if (!s.ok) throw new Error(s.why);
-    return LLM.start(c.model, function (p, text) { ui.ai.status = 'Starting the on-device AI: ' + Math.round(100 * p) + '%' + (text ? ' — ' + text : ''); render(); });
-  }).then(function () { ui.ai.status = 'Ready: running on this device.'; });
+    return LLM.start(c.model, function (p, text) {
+      var g = ui.ai.progress = LLM.stage(p, text);
+      ui.ai.status = 'Starting the on-device AI: ' + g.step + ', ' + g.pct + '%'; render();
+    });
+  }).then(function () { ui.ai.progress = null; ui.ai.status = 'Ready: running on this device.'; },
+    function (e) { ui.ai.progress = null; throw e; });
+}
+/* The busy line, and while a model is starting, how far it has got: the
+   step it is on, a bar, and the engine's own count. Every place an AI job
+   can start a model shows it, not only Settings. */
+function aiProgress() {
+  var g = ui.ai.busy && ui.ai.progress;
+  return g ? h('span.ai-progress',
+    h('span.bar', { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(g.pct), 'aria-label': g.step },
+      h('i', { style: 'width:' + g.pct + '%' })),
+    h('span.muted.ai-step', g.step + ' \u2014 ' + g.pct + '%' + (g.detail ? ' \u00b7 ' + g.detail : ''))) : null;
+}
+function aiBusy(tag) {
+  return ui.ai.busy ? h(tag + '.ai-busy', { role: 'status' }, h('span', ui.ai.busy), aiProgress()) : null;
 }
 /* Run one AI job with a busy line, and never let its failure stop the app. */
 function aiJob(label, fn) {
@@ -3331,7 +3353,7 @@ function explainMiss(q, chosen, i) {
       if (t == null) return;
       ui.ai.miss[key] = Ground.missExplain(t, q, chosen, n.sources); render();
     });
-  }, 'quiet', { id: 'ai-miss-go' }), ui.ai.busy ? h('span.muted', { role: 'status' }, ui.ai.busy) : null);
+  }, 'quiet', { id: 'ai-miss-go' }), aiBusy('span.muted'));
   return h('div.ai-miss', { id: 'ai-miss' }, got.kept.length ? [got.kept.map(function (t) { return h('p', t); }), aiNote(got.kept, got.dropped.length)]
     : h('p.muted', { id: 'ai-miss-dropped' }, 'Its explanation was not shown: ' + got.why + '. The reasons above are Claude\u2019s, compare with the cited source.'));
 }
@@ -3713,7 +3735,7 @@ function viewAsk() {
               if (t == null) return; var g = Ground.summary(t, items); ui.ai.summary = { q: r.question, kept: g.kept, dropped: g.dropped, items: items }; render();
             });
           }, 'quiet', { id: 'ai-summarise' })),
-      ui.ai.busy ? h('p.muted', { role: 'status' }, ui.ai.busy) : null,
+      aiBusy('div.muted'),
       ui.ai.error ? h('p.warn', 'The on-device AI could not run: ' + ui.ai.error) : null) : null;
     answer = r.found ? h('div.card', { id: 'answer' },
       h('p.muted.legend', h('span.src', 'Book · p.'), ' your book’s own words, where it printed them · ', h('span.arranged', 'Headings'), ' arranged by Memorizer, not the book'),
@@ -4026,6 +4048,7 @@ function aiSettingsCard() {
       LLM.saveConfig({ on: on, model: model.value, meaning: c.meaning });
       if (on) aiJob('Downloading and starting the model (once)…', function () { return true; }); else LLM.stop().then(render, function (e) { ui.ai.error = e.message; render(); });
     }, c.on ? 'quiet' : 'primary', { id: 'ai-toggle' }), h('span.muted', { id: 'ai-status', role: 'status' }, ui.ai.busy || ui.ai.status || (c.on ? (LLM.ready() ? 'Ready.' : 'On — starts when first used.') : 'Off.'))),
+    ui.ai.busy && ui.ai.progress ? h('div', { id: 'ai-start' }, aiProgress()) : null,
     h('h3', 'Search by meaning'),
     h('p', 'Ask finds your book\u2019s sentences by their words; this finds them by what they mean too — "why do people pass out" finds "exertional syncope". A small model (' + LLM.EMBED.label + ', about ' + LLM.EMBED.mb + ' MB, ' + LLM.EMBED.licence +
       ') reads each section once, on this device. The answers are still your book\u2019s own sentences with their pages.'),
@@ -4403,6 +4426,6 @@ function start() {
   });
 }
 
-root.Memorizer = { makeStudyCards: makeStudyCards, aiCase: aiCase, startPractice: startPractice, motion: { seek: seek, total: total, replay: replay }, ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc, importStudyUnit: importStudyUnit, showStudyImportDialog: showStudyImportDialog };
+root.Memorizer = { flowchart: flowchart, makeStudyCards: makeStudyCards, aiCase: aiCase, startPractice: startPractice, motion: { seek: seek, total: total, replay: replay }, ui: ui, render: render, start: start, importBook: importBook, openBook: openBook, importFile: importFile, importText: importText, importPhotos: importPhotos, openDoc: openDoc, importStudyUnit: importStudyUnit, showStudyImportDialog: showStudyImportDialog };
 if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(window);

@@ -946,6 +946,17 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
   const out = fs.mkdtempSync(path.join(require('os').tmpdir(), 'memsw-'));
   build(out);
   const sw = fs.readFileSync(path.join(out, 'sw.js'), 'utf8');
+  /* With a hash in script-src, 'unsafe-inline' is ignored: each inline
+     script the build writes must be hashed there, or it does not run. */
+  {
+    const built = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+    const crypto = require('crypto');
+    const inline = [...built.matchAll(/<script>([\s\S]*?)<\/script>/gi)].map(m => "'sha256-" + crypto.createHash('sha256').update(m[1], 'utf8').digest('base64') + "'");
+    const policy = ((/script-src ([^;]*);/.exec(built) || [])[1] || '').split(/\s+/);
+    const unhashed = inline.filter(h => policy.indexOf(h) === -1).length;
+    ok('every inline script in the built page is hashed in its script-src, and nothing else is', inline.length > 10 && unhashed === 0 &&
+       policy.filter(s => /^'sha256-/.test(s)).length === inline.length, inline.length + ' inline, ' + unhashed + ' unhashed');
+  }
   SW_SRC = sw;
   /* The Cloudflare Pages upload, read back by the central directory — the
      way unzip and Pages read it — not by trusting the writer. */
@@ -1019,6 +1030,39 @@ head('memorizer/ parses on the device it is for');
   }
 }
 
+head('memorizer/: what the third-party code it loads may do');
+{
+  /* pdf.js 3.11.174 runs font code through eval unless told not to — the
+     path of CVE-2024-4367. The flag is the mitigation; this holds it on
+     every getDocument( call, read from the comment-blanked source. */
+  const dir = path.join(ROOT, 'memorizer', 'src');
+  const srcs = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
+    .map(f => ({ f, src: blankComments(fs.readFileSync(path.join(dir, f), 'utf8')) }));
+  const calls = [];
+  for (const { f, src } of srcs) {
+    for (const m of src.matchAll(/getDocument\(\s*(\{[^}]*\})/g)) calls.push({ f, args: m[1] });
+  }
+  ok('every pdf.js getDocument( call passes isEvalSupported: false', calls.length >= 2 &&
+     calls.every(c => /\bisEvalSupported:\s*false\b/.test(c.args)),
+     calls.map(c => c.f + ': ' + c.args.replace(/\s+/g, ' ')).join(' | '));
+
+  /* script-src names package paths, not the whole of jsDelivr: any package
+     there would otherwise run as this page. Each library the app loads by
+     <script> tag is under one of those paths. */
+  const page = fs.readFileSync(path.join(ROOT, 'memorizer', 'index.html'), 'utf8');
+  const scriptSrc = ((/script-src ([^;]*);/.exec(page) || [])[1] || '').split(/\s+/);
+  const Pdf = require(path.join(ROOT, 'memorizer', 'src', 'pdf.js'));
+  const O = require(path.join(ROOT, 'memorizer', 'src', 'ocr.js'));
+  const ui = srcs.find(x => x.f === 'ui.js').src;
+  const mermaidUrl = (/var MERMAID = \{ url: '([^']+)'/.exec(ui) || [])[1];
+  const tagged = [Pdf.LIB.url, O.TESS.lib.url, mermaidUrl];
+  ok('script-src does not allow the whole of cdn.jsdelivr.net', scriptSrc.length > 1 &&
+     !scriptSrc.some(s => /^https:\/\/cdn\.jsdelivr\.net\/?$/.test(s)), scriptSrc.join(' '));
+  ok('and every library loaded by <script> tag is under one of its paths', tagged.every(u => u &&
+     scriptSrc.some(s => /^https:\/\/cdn\.jsdelivr\.net\/npm\/.+\/$/.test(s) && u.indexOf(s) === 0)),
+     tagged.join(', '));
+}
+
 /* ── getting the model onto the iPad: the start loop, against a stand-in
    engine and GPU (no WebGPU here). Async, so the summary waits for it. */
 async function startLoop() {
@@ -1051,6 +1095,17 @@ async function startLoop() {
      r.said.some(t => /32-bit build/.test(t)) && !r.err, JSON.stringify(r.calls));
   r = await run([], true);
   ok('with it, the 16-bit build as chosen', r.calls[0].id === 'Qwen3-0.6B-q4f16_1-MLC' && !r.said.some(t => /32-bit/.test(t)));
+  /* the bar's step, from the engine's sentences as web-llm 0.2.85 builds them */
+  const st = (p, t) => JSON.stringify(L.stage(p, t));
+  ok('the bar names the step: a download, with how much has arrived', st(0.33, 'Fetching param cache[3/9]: 120MB fetched. 33% completed, 4 secs elapsed. It can take a while when we first visit this page to populate the cache. Later refreshes will become faster.') ===
+     JSON.stringify({ pct: 33, step: 'Downloading the model', detail: '120 MB downloaded' }), st(0.33, 'Fetching param cache[3/9]: 120MB fetched. 33% completed, 4 secs elapsed.'));
+  ok('then loading onto the GPU, and the GPU being prepared, each from its own 0%', L.stage(0.5, 'Loading model from cache[5/9]: 160MB loaded. 50% completed, 2 secs elapsed.').step === 'Loading the model onto the GPU' &&
+     L.stage(0.5, 'Loading model from cache[5/9]: 160MB loaded. 50% completed, 2 secs elapsed.').detail === '160 MB loaded' &&
+     L.stage(0.25, 'Loading GPU shader modules[10/40]: 25% completed, 1 secs elapsed.').step === 'Preparing the GPU' && L.stage(0, 'Start to fetch params').pct === 0);
+  ok('a sentence it does not know is shown as it came; a fraction outside 0–1 is held to the bar', L.stage(2, 'the download was interrupted; trying again (2 of 3)').step === 'the download was interrupted; trying again (2 of 3)' &&
+     L.stage(2, 'x').pct === 100 && L.stage(-1, 'x').pct === 0 && L.stage(NaN, '').step === 'Starting');
+  ok('after the engine’s 100%, the file check is said before it runs, as a step of its own', (() => { const i = r.said.indexOf(L.CHECKING); return i > r.said.indexOf('done') && i > -1; })() &&
+     L.stage(1, L.CHECKING).step === 'Checking the files', JSON.stringify(r.said));
   delete store[L.BACKEND_KEY];
   r = await run(['TypeError: Failed to fetch', 'TypeError: Failed to fetch'], true);
   ok(`an interrupted download is tried again, into the same store, up to ${L.RETRIES} more times`, r.calls.length === 3 && r.calls.every(c => c.backend === 'cache') && !r.err &&
@@ -1080,6 +1135,17 @@ async function startLoop() {
   head('the on-device model: downloaded from pinned commits, and checked before it is used');
   /* six of the starts above end in a loaded model: each is checked once */
   ok('every start above asked the engine for the pinned files, and each load was checked', allCalls.length > 10 && allCalls.every(c => c.from === 'pinned') && passes === 6, allCalls.length + ' starts, ' + passes + ' checks');
+  {
+    /* Firefox's persist() is a prompt; unanswered, its promise never settles */
+    const had = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { value: { storage: { persist: () => new Promise(() => {}) } }, configurable: true, writable: true });
+    const wait = L.PERSIST.ms; L.PERSIST.ms = 20;
+    const lb = lib([]); L.useLib(lb); L.useGpu(() => ({ ok: true, f16: true })); L.useEngine(null, null);
+    const got = await Promise.race([L.start('Qwen3-0.6B-q4f16_1-MLC').then(() => 'started', e => 'failed: ' + e.message), new Promise(r => setTimeout(() => r('still waiting after 2 s'), 2000))]);
+    L.PERSIST.ms = wait;
+    if (had) Object.defineProperty(globalThis, 'navigator', had); else delete globalThis.navigator;
+    ok('a storage prompt nobody answers does not hold the start: the engine is reached', got === 'started' && lb.calls.length === 1, got);
+  }
   const offered = L.MODELS.map(m => m.id).concat(L.MODELS.map(m => L.variantFor(m.id, false)), [L.EMBED.id]);
   const cfg = L.pinnedConfig({ model_list: RECORDS.concat([{ model_id: 'Other-MLC', model: 'https://huggingface.co/x/Other-MLC', model_lib: 'https://x/lib.wasm' }]) }, 'cache');
   const missing = offered.filter(id => !MANIFEST.models[id]);

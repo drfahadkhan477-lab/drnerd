@@ -144,6 +144,9 @@ async function read(arrayBuffer, opts) {
 
     try {
       const bytes = method === 0 ? raw : await inflateRaw(raw, allow);
+      if (bytes.length > allow || (method === 0 && compSize !== uncompSize)) {
+        skipped.push(name); continue;
+      }
       totalOut += bytes.length;
       files.push({ name, bytes });
     } catch (_) { skipped.push(name); }

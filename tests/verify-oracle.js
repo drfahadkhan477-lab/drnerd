@@ -152,14 +152,15 @@ head('stability after Again — the one deliberate divergence');
 
 head('and the interval that comes out the far side');
 {
-  /* Interval is policy, not model: ours is ceil(stability), which at the 90%
+  /* Interval is policy, not model: ours is ceil(stability), capped at
+     F.MAX_IVL as upstream's is, which at the 90%
      target IS the stability by definition. Asserted against our own rule
      rather than against ts-fsrs, whose next_interval solves the curve and
      rounds differently — comparing them would be measuring a disagreement
      nobody has. */
   const bad = fx.rows.filter(([S, D, el, g]) => {
     const u = F.update({ difficulty: D, stability: S, last: day(0), reps: 3 }, g, day(el));
-    return u.ivl !== Math.max(1, Math.ceil(u.stability));
+    return u.ivl !== Math.min(F.MAX_IVL, Math.max(1, Math.ceil(u.stability)));
   });
   ok('is the stability, rounded up, and never below one day', bad.length === 0, String(bad.length));
 }

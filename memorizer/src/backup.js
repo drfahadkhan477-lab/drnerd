@@ -95,7 +95,7 @@ function restore(text) {
   return inspect(text).then(function (r) {
     var ops = Store.STORES.map(function (s) { return { store: s, clear: true }; });
     Store.STORES.forEach(function (s) { r.stores[s].forEach(function (v) { ops.push({ store: s, value: v }); }); });
-    return Store.batch(ops).then(function () { Store.forgetFailures(); return r; });
+    return Store.replace(ops).then(function () { return r; });
   });
 }
 root.MemBackup = { exportText: exportText, inspect: inspect, restore: restore, VERSION: VERSION };

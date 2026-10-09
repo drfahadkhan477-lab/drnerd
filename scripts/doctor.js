@@ -94,7 +94,7 @@ async function diagnose(opts) {
       src ? (found ? 'SYSTOLE_SRC points at a file' : 'SYSTOLE_SRC points at nothing') : `${found} found in source/`,
       'put your export in source/, or set SYSTOLE_SRC');
   const built = p.exists(path.join(root, 'build', 'systole.html'));
-  add('a build to test (build/systole.html)', 'info', built, built ? 'present' : 'none yet', 'node scripts/build.js');
+  add('a build to test (build/systole.html)', 'info', built, built ? 'present' : 'none yet', 'npm run build -- path/to/your-export.html');
 
   const free = await p.portFree(8080);
   add('port 8080 for npm run serve', 'info', free, free ? 'free' : 'in use', 'stop what is on 8080, or serve on another port');

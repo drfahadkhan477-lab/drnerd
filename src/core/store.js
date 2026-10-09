@@ -165,25 +165,54 @@ function merge(key, stored, written) {
    first case and is also what every existing install looks like. */
 const FALLBACK_KEY = 'accsap12.store.fellback';
 
-function fellBack() {
+/* WHICH OF THOSE LOCAL COPIES ARE WHOLE. A stamp says the local copy is newer;
+   it does not say whether a key MISSING from it was deleted or never seen, and
+   migrate() used to assume never seen: it folded the local copy into the
+   database's, so a note deleted while the database refused writes came back
+   on the next launch, now with no local copy left to say it had gone.
+
+   Which one it is depends on what the session that wrote the copy was built
+   on, so the fallback records that, per key:
+     · a session hydrated from the database writes everything it had, and it
+       had everything — a missing entry is a deletion, and the copy is taken
+       whole;
+     · a session that never reached the database was built on whatever
+       localStorage held at load. If that was a whole copy, so is anything it
+       writes. If it was nothing (the usual state once a key has migrated) or
+       a copy that was itself partial, the session never saw the database's
+       entries, and a missing one means nothing — the copy is folded, as
+       before, so they are not thrown away.
+   Absent from this list means folded, which is also what every stamp written
+   before this list existed gets. */
+const WHOLE_KEY = 'accsap12.store.fellback.whole';
+
+function readList(name) {
   try {
-    const raw = localStorage.getItem(FALLBACK_KEY);
+    const raw = localStorage.getItem(name);
     const a = raw ? JSON.parse(raw) : [];
     return Array.isArray(a) ? a.filter(k => typeof k === 'string') : [];
   } catch (_) { return []; }
 }
-function markFellBack(key) {
+function fellBack() { return readList(FALLBACK_KEY); }
+function wholeCopies() { return readList(WHOLE_KEY); }
+function writeList(name, a) {
+  try {
+    if (a.length) localStorage.setItem(name, JSON.stringify(a));
+    else localStorage.removeItem(name);
+  } catch (_) {}
+}
+/* Called on every fallback write, which with no database is every write, so
+   each list is written only when this key's entry in it changes. */
+function markFellBack(key, whole) {
   const a = fellBack();
-  if (a.indexOf(key) > -1) return;
-  a.push(key);
-  try { localStorage.setItem(FALLBACK_KEY, JSON.stringify(a)); } catch (_) {}
+  if (a.indexOf(key) < 0) { a.push(key); writeList(FALLBACK_KEY, a); }
+  const w = wholeCopies(), at = w.indexOf(key);
+  if (whole && at < 0) { w.push(key); writeList(WHOLE_KEY, w); }
+  else if (!whole && at > -1) { w.splice(at, 1); writeList(WHOLE_KEY, w); }
 }
 function clearFellBack(key) {
-  const a = fellBack().filter(k => k !== key);
-  try {
-    if (a.length) localStorage.setItem(FALLBACK_KEY, JSON.stringify(a));
-    else localStorage.removeItem(FALLBACK_KEY);
-  } catch (_) {}
+  writeList(FALLBACK_KEY, fellBack().filter(k => k !== key));
+  writeList(WHOLE_KEY, wholeCopies().filter(k => k !== key));
 }
 
 let mem = Object.create(null);      // key -> parsed value
@@ -192,6 +221,16 @@ let dirty = Object.create(null);    // keys written before hydration finished
 let db = null;
 let opened = null;
 let usable = null;                  // null = unknown, false = fall back to localStorage
+
+/* Whether this session started from a whole copy of each managed key while it
+   has no database: localStorage held the key at load, and nothing marked that
+   copy as partial. Read before any application code can write. See WHOLE_KEY. */
+const wholeAtLoad = Object.create(null);
+{
+  const stamped = fellBack(), whole = wholeCopies();
+  for (const key of MANAGED)
+    wholeAtLoad[key] = lsGet(key) !== undefined && (stamped.indexOf(key) < 0 || whole.indexOf(key) > -1);
+}
 
 function open() {
   if (opened) return opened;
@@ -350,13 +389,13 @@ async function remirror(d) {
    from here, and deleting on the strength of a write that did not land is how
    you lose a year of annotations in one line. */
 async function migrate(d) {
-  const moved = [];
+  const moved = [], stamped = fellBack(), whole = wholeCopies();
   for (const key of MANAGED) {
     const local = lsGet(key);
     if (local === undefined) continue;                 // nothing here to move
     const already = await idbGet(d, key);
     if (already !== undefined) {
-      if (fellBack().indexOf(key) < 0) {
+      if (stamped.indexOf(key) < 0) {
         /* Both copies exist and nothing stamped this one, so an earlier
            migration wrote the database and was interrupted before it cleared
            localStorage. The two are identical; finish the job. */
@@ -364,13 +403,14 @@ async function migrate(d) {
         continue;
       }
       /* Stamped: set() wrote this to localStorage because the database would
-         not take it, so the LOCAL copy is the newer one. Folded rather than
+         not take it, so the LOCAL copy is the newer one. A copy marked whole
+         is taken as it is (see WHOLE_KEY); any other is folded rather than
          chosen — merge() is the same function hydration already uses for a
          write that landed before the store was ready, and it exists precisely
          so that neither side is thrown away: arrays union without duplicating
          rows, and for the two map-shaped keys the newer side wins per entry.
          Choosing would be a guess about which session mattered. */
-      const folded = merge(key, already, local);
+      const folded = whole.indexOf(key) > -1 ? local : merge(key, already, local);
       if (!(await idbPut(d, key, folded))) continue;     // try again next launch
       if ((await idbGet(d, key)) === undefined) continue;
       try { localStorage.removeItem(key); } catch (_) {}
@@ -400,8 +440,20 @@ function ready() {
       return { available: false, migrated: [], restored: [] };
     }
     const migrated = await migrate(d);
+    /* A stamped local copy still here is one migrate() could not write. It is
+       newer than the database, so the session loads it the way the next
+       migration would (whole, or folded in) instead of the older database
+       value alone. Then whatever this session writes holds everything, which
+       is what makes its own fallback copies whole and lets the copy be
+       retired once a write lands (see landed()). */
+    const stamped = fellBack(), whole = wholeCopies();
     for (const key of MANAGED) {
-      const stored = await idbGet(d, key);
+      let stored = await idbGet(d, key);
+      const left = stamped.indexOf(key) > -1 ? lsGet(key) : undefined;
+      if (left !== undefined) {
+        stored = (stored === undefined || whole.indexOf(key) > -1) ? left : merge(key, stored, left);
+        fellThisSession[key] = 1;
+      }
       if (stored === undefined) continue;
       mem[key] = (key in dirty) ? merge(key, stored, mem[key]) : stored;
     }
@@ -410,7 +462,9 @@ function ready() {
        value rather than the one it was written against. */
     const pending = Object.keys(dirty);
     dirty = Object.create(null);
-    for (const key of pending) await idbPut(d, key, mem[key]);
+    /* A refused flush falls back like any refused write: these are the
+       writes made before hydration, and they were the ones lost silently. */
+    for (const key of pending) await landed(d, key);
     /* LAST, and only then armed. Everything above is about the four keys the
        database owns; this is about the one it only keeps a copy of, and the
        copy must not be writable until it has been read. */
@@ -466,11 +520,26 @@ function set(key, value) {
   open().then(d => {
     if (!d) { lsFallback(key, value); return; }
     if (!hydrated) return;               // ready() will flush it against the merge
-    return idbPut(d, key, mem[key]).then(stored => {
-      if (!stored) lsFallback(key, mem[key]);
-    });
+    return landed(d, key);
   }).catch(() => { lsFallback(key, mem[key]); });
   return true;
+}
+
+/* Write the current value; fall back if the database refuses it. When it
+   lands, a local copy this session fell back to earlier is now older than the
+   database and is retired: left in place, the next launch would take it (whole,
+   see WHOLE_KEY) over everything written after it. Only this session's own
+   copy — a stamped copy left from before, that migrate() could not move, holds
+   entries this session never loaded, and stays for the next launch to try. */
+const fellThisSession = Object.create(null);
+function landed(d, key) {
+  return idbPut(d, key, mem[key]).then(stored => {
+    if (!stored) { lsFallback(key, mem[key]); return; }
+    if (!fellThisSession[key]) return;
+    try { localStorage.removeItem(key); } catch (_) {}
+    clearFellBack(key);
+    delete fellThisSession[key];
+  });
 }
 
 /* localStorage as the fallback rather than as the store: the same write, plus
@@ -479,7 +548,7 @@ function set(key, value) {
    exactly what migrate() is entitled to delete. */
 function lsFallback(key, value) {
   const wrote = lsSet(key, value);
-  if (wrote) markFellBack(key);
+  if (wrote) { markFellBack(key, usable === true ? hydrated : wholeAtLoad[key]); fellThisSession[key] = 1; }
   return wrote;
 }
 

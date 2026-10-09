@@ -90,12 +90,11 @@ Prefer:
 Read `package.json`, then use the repository's own commands. Common source-independent checks include:
 
 ```bash
-npm run steps
 npm run suites
 npm run leak-guard
 ```
 
-Do not assume `npm run build` is available in a clean cloud environment: the legacy build intentionally requires the private ACCSAP source.
+Do not assume `npm run build` is available in a clean cloud environment: the build intentionally requires the private ACCSAP source.
 
 ## Codex task style
 

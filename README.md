@@ -6,7 +6,7 @@ here; `content/`, `build/`, `dist/` and `source/` are all gitignored.
 
 ## Systole — cardiology board review
 
-A single-file study app for the ABIM cardiovascular boards, built by patching a
+A single-file study app for the ABIM cardiovascular boards, built from a
 personal ACCSAP 12 export. A procedural WebGL heart that beats on a real cardiac
 clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
 (Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5–derived
@@ -22,8 +22,8 @@ and a row of glass doors to everything else.
 
 ```bash
 npm test                                            # no export needed: every suite CI runs
-node scripts/build.js path/to/ACCSAP_export.html   # → build/systole.html
-node scripts/verify.js                              # 6616 checks, 154 suites
+npm run build -- path/to/ACCSAP_export.html       # → build/systole.html
+node scripts/verify.js                              # 6634 checks, 153 suites
 node scripts/verify.js --pwa                        # + 134 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
@@ -34,15 +34,15 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 6616 + 134 checks above — read it as 6533, not 6750.**
+**That badge is not the 6634 + 134 checks above — read it as 6551, not 6768.**
 CI cannot build the app from the real bank: that needs the licensed export,
 which is deliberately never committed here and never will be, on GitHub or
 anywhere else that isn't your own devices. So it builds the real app around
 an invented bank (`scripts/synthetic-export.js`) and runs the browser suites
 on that, except the few whose subject is the real bank itself. On every push
-it also checks, with no source file: every script parses, the patch chain and
-the test-suite list both still list without crashing, `scripts/build.js`
-still refuses to run and explains why when no source is present, and
+it also checks, with no source file: every script parses, the test-suite
+list still lists without crashing, `npm run build` still refuses to run and
+explains why when no source is present, and
 the 89 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 217 checks can't run here.
@@ -84,13 +84,14 @@ python3 tools/figure-review.py                      # → build/figure-review.ht
 python3 tools/trim-figure.py --apply-crops content/refs-images
 ```
 
-The Braunwald units in the private `content/refs-repo` submodule are baked the
-same way, each with its reviewed crop record (`tools/figure-crops.<unit>.json`).
-`content/refs` is a real folder that add-unit writes into, not a symlink into
-the submodule:
+The Braunwald units are baked the same way from the notes in
+`content/refs-repo`, each with its reviewed crop record
+(`tools/figure-crops.<unit>.json`). That folder lives only on the owner's own
+machine: it was a submodule pointing at a private repository, which has been
+deleted, so there is no copy to fetch and it should be backed up like the export.
+`content/refs` is a real folder that add-unit writes into:
 
 ```bash
-git submodule update --init content/refs-repo
 python3 tools/add-unit.py --unit hf --quality 70 --crops tools/figure-crops.hf.json \
   --notes content/refs-repo/references/heart-failure --figures content/refs-repo/references/heart-failure/visuals
 python3 tools/add-unit.py --unit ischemia --crops tools/figure-crops.ischemia.json \
@@ -117,8 +118,8 @@ time the images are built. `tests/verify-figreview.js` drives the whole round
 trip, sheet to cropped pixels, and holds the one invariant the hour of tapping
 depends on: the box recorded is in *original* pixels, not preview pixels.
 
-`figure-review.py` and `trim-figure.py` are not part of the build; nothing in
-`scripts/build.js` touches them. They need more than the standard library,
+`figure-review.py` and `trim-figure.py` are not part of the build; nothing
+`npm run build` runs touches them. They need more than the standard library,
 which nothing said until now:
 
 ```bash

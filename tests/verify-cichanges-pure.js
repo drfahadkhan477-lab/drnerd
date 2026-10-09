@@ -90,6 +90,12 @@ head('each list is held against the files the job it skips really runs');
   ok('every file the Memorizer job runs, changed alone, runs it', memSkipped.length === 0, memSkipped.join(', ') || 'none');
   const synSkipped = synFiles.filter(f => !classify([f]).synthetic);
   ok('every file the synthetic job runs, changed alone, runs it', synSkipped.length === 0, synSkipped.join(', ') || 'none');
+  /* synthetic-webkit is skipped on the same answer, so the same must hold
+     for every file it runs. */
+  const wkFiles = runs(jobBody('synthetic-webkit'));
+  const wkSkipped = wkFiles.filter(f => !classify([f]).synthetic);
+  ok('and every file the WebKit job runs, changed alone, runs it', wkFiles.length >= 5 && wkSkipped.length === 0,
+     wkSkipped.join(', ') || `${wkFiles.length} files`);
   /* The shared helpers every browser suite requires. */
   const helpers = fs.readdirSync(path.join(ROOT, 'tests')).filter(f => /^_.*\.js$/.test(f)).map(f => 'tests/' + f);
   const helperSkips = helpers.filter(f => !is([f], true, true));
@@ -112,8 +118,10 @@ head('the workflow is wired so a failed decision runs both');
   ok('and publishes both answers from that step',
      /memorizer:\s*\$\{\{\s*steps\.which\.outputs\.memorizer\s*\}\}/.test(ch) &&
      /synthetic:\s*\$\{\{\s*steps\.which\.outputs\.synthetic\s*\}\}/.test(ch) && /id:\s*which\b/.test(ch));
-  for (const [name, body, key] of [['memorizer-browser', mem, 'memorizer'], ['synthetic-browser', syn, 'synthetic']]) {
+  for (const [name, body, key] of [['memorizer-browser', mem, 'memorizer'], ['synthetic-browser', syn, 'synthetic'],
+                                    ['synthetic-webkit', jobBody('synthetic-webkit'), 'synthetic']]) {
     const cond = (body.match(/\n    if:\s*(.+)/) || [])[1] || '';
+    ok(`${name} is in the workflow`, body.length > 0);
     ok(`${name} waits for the decision`, /\n    needs:\s*\[?\s*changes\s*\]?\s*\n/.test(body));
     /* `!= 'false'`: an empty output, from a changes job that failed, runs the
        job. `== 'true'` would skip it. !cancelled(): without it a failed

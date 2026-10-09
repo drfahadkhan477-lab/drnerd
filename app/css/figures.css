@@ -1,0 +1,349 @@
+/* ═══════════════ v6 — motion & finish ═══════════════ */
+:root{
+  --spring:cubic-bezier(.34,1.56,.64,1);
+  --glide:cubic-bezier(.22,1,.36,1);
+  --glass:rgba(255,255,255,.72);
+}
+html[data-theme="dark"]{--glass:rgba(17,30,53,.74)}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes popIn{0%{opacity:0;transform:scale(.94)}60%{transform:scale(1.012)}100%{opacity:1;transform:none}}
+@keyframes slideL{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+@keyframes shimmer{0%{background-position:-360px 0}100%{background-position:360px 0}}
+@keyframes ringPulse{0%{box-shadow:0 0 0 0 currentColor;opacity:.5}70%{box-shadow:0 0 0 14px transparent;opacity:0}100%{opacity:0}}
+@keyframes floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes drawTick{from{stroke-dashoffset:26}to{stroke-dashoffset:0}}
+@keyframes auroraShift{0%{transform:translate(0,0) scale(1)}33%{transform:translate(4%,-3%) scale(1.06)}
+  66%{transform:translate(-3%,3%) scale(1.03)}100%{transform:translate(0,0) scale(1)}}
+
+/* hero: living gradient field */
+.hero{position:relative;overflow:hidden;isolation:isolate}
+.hero::after{content:'';position:absolute;inset:-32%;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(38% 46% at 18% 24%,rgba(94,234,212,.30),transparent 62%),
+    radial-gradient(34% 42% at 82% 14%,rgba(56,189,248,.26),transparent 60%),
+    radial-gradient(44% 50% at 62% 88%,rgba(129,140,248,.22),transparent 64%);
+  animation:auroraShift 22s var(--glide) infinite}
+.hero-title{animation:riseIn .62s var(--glide) both}
+.hero-sub{animation:riseIn .62s var(--glide) .06s both}
+.hero-stats{animation:riseIn .62s var(--glide) .12s both}
+.hero-badge{animation:popIn .5s var(--spring) both}
+.hero-stat{transition:transform .3s var(--spring)}
+.hero-stat:active{transform:scale(.95)}
+
+/* staggered chapter grid */
+.ch-grid>*{animation:riseIn .5s var(--glide) both}
+.ch-grid>*:nth-child(1){animation-delay:.02s}.ch-grid>*:nth-child(2){animation-delay:.05s}
+.ch-grid>*:nth-child(3){animation-delay:.08s}.ch-grid>*:nth-child(4){animation-delay:.11s}
+.ch-grid>*:nth-child(5){animation-delay:.14s}.ch-grid>*:nth-child(6){animation-delay:.17s}
+.ch-grid>*:nth-child(7){animation-delay:.20s}.ch-grid>*:nth-child(8){animation-delay:.23s}
+.ch-grid>*:nth-child(9){animation-delay:.26s}.ch-grid>*:nth-child(10){animation-delay:.29s}
+.ch-grid>*:nth-child(n+11){animation-delay:.32s}
+.ch-card{transition:transform .26s var(--spring),box-shadow .26s var(--glide),border-color .2s}
+.ch-card:active{transform:scale(.975)}
+@media (hover:hover){.ch-card:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(15,30,61,.13)}}
+
+
+/* question + options */
+.q-card{animation:riseIn .42s var(--glide) both}
+.opts>.opt{animation:slideL .34s var(--glide) both}
+.opts>.opt:nth-child(1){animation-delay:.03s}.opts>.opt:nth-child(2){animation-delay:.07s}
+.opts>.opt:nth-child(3){animation-delay:.11s}.opts>.opt:nth-child(4){animation-delay:.15s}
+.opts>.opt:nth-child(5){animation-delay:.19s}
+.opt{transition:transform .18s var(--spring),background .2s,border-color .2s}
+.opt:not(:disabled):active{transform:scale(.985)}
+@media (hover:hover){.opt:not(:disabled):hover{transform:translateX(3px)}}
+.opt.correct{animation:popIn .42s var(--spring) both}
+.opt.correct .opt-letter{position:relative}
+.opt.correct .opt-letter::after{content:'';position:absolute;inset:-4px;border-radius:50%;
+  color:var(--green);animation:ringPulse .9s var(--glide) .1s both}
+.opt.wrong{animation:nudge .34s var(--glide) both}
+@keyframes nudge{0%,100%{transform:translateX(0)}22%{transform:translateX(-5px)}
+  55%{transform:translateX(4px)}80%{transform:translateX(-2px)}}
+.reveal-card{animation:riseIn .44s var(--glide) both}
+.dist-bar{transition:width .8s var(--glide)}
+.prog-fill{background-size:360px 100%}
+
+/* figures */
+.fig-card{transition:transform .3s var(--glide),box-shadow .3s var(--glide)}
+@media (hover:hover){.fig-card:hover{box-shadow:0 10px 30px rgba(15,30,61,.16)}}
+
+/* tool rail — glass + minimise */
+.tool-rail{background:var(--glass);backdrop-filter:blur(16px) saturate(1.5);
+  -webkit-backdrop-filter:blur(16px) saturate(1.5);
+  animation:popIn .34s var(--spring) both;
+  transition:padding .26s var(--glide),border-radius .26s var(--glide)}
+.tool-rail.mini{padding:5px;border-radius:50%}
+.tool-rail.mini .rail-open{width:48px;height:48px;font-size:19px;border-radius:50%;
+  animation:popIn .3s var(--spring) both}
+.rail-open.has-ink::after{content:'';position:absolute;top:6px;right:6px;width:8px;height:8px;
+  border-radius:50%;background:var(--amber);box-shadow:0 0 0 2px var(--white)}
+.rail-open{position:relative}
+.rail-min{color:var(--muted);font-size:16px}
+.tool{transition:transform .18s var(--spring),background .18s,color .18s,border-color .18s}
+.sw{transition:transform .2s var(--spring),border-color .18s}
+.pen-badge{animation:popIn .3s var(--spring) both}
+
+/* sticky notes */
+.sticky{animation:popIn .34s var(--spring) both;
+  transition:box-shadow .22s var(--glide),transform .22s var(--glide)}
+.sticky:focus-within{box-shadow:0 8px 26px rgba(15,30,61,.22);transform:translateY(-2px)}
+
+/* AI panel */
+#ai{box-shadow:-12px 0 40px rgba(15,30,61,.06)}
+.ai-head{backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.ai-avatar{animation:floatY 4.5s ease-in-out infinite}
+.msg{animation:riseIn .34s var(--glide) both}
+.chip{transition:transform .18s var(--spring),border-color .18s,color .18s,background .18s}
+.chip:active{transform:scale(.94)}
+@media (hover:hover){.chip:hover{border-color:var(--teal);color:var(--teal)}}
+.ai-fab{transition:transform .26s var(--spring),box-shadow .26s var(--glide);
+  animation:popIn .5s var(--spring) .3s both}
+.ai-fab:active{transform:scale(.94)}
+@media (hover:hover){.ai-fab:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(30,58,138,.44)}}
+.src-pill{transition:transform .18s var(--spring),border-color .18s,color .18s}
+.src-pill:active{transform:scale(.93)}
+@media (hover:hover){.src-pill:hover{border-color:var(--teal);color:var(--teal)}}
+
+/* agent tool-run chips */
+.tool-run{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px}
+.tool-chip{font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--teal);
+  background:linear-gradient(90deg,var(--green-bg) 25%,rgba(94,234,212,.28) 50%,var(--green-bg) 75%);
+  background-size:360px 100%;animation:shimmer 1.5s linear infinite;
+  border:1px solid var(--green-b);border-radius:99px;padding:3px 10px}
+
+/* key setup */
+.setup-hero{text-align:center;margin-bottom:14px}
+.setup-mark{width:52px;height:52px;margin:0 auto 10px;border-radius:16px;font-size:28px;
+  display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--navy3),var(--teal));animation:floatY 4s ease-in-out infinite}
+.key-row{display:flex;gap:7px;align-items:center}
+.key-row input{flex:1;margin:0}
+.key-paste{width:42px;height:40px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--card);font-size:16px;cursor:pointer;flex:0 0 auto}
+.key-msg{font-size:13px;margin:8px 0 4px;min-height:16px;color:var(--muted)}
+.key-msg.good{color:var(--green);font-weight:700;animation:popIn .3s var(--spring)}
+.key-msg.warn{color:var(--amber)}
+.key-msg.bad{color:var(--red)}
+
+/* ── the figure viewer ───────────────────────────────────────────────────
+   Dark ground, because a diagram printed on white reads best against one, and
+   because it makes plain that the app is in a different mode now. */
+#peek.fig-open{background:rgba(6,14,28,.88);padding:0;align-items:stretch}
+.figv{position:relative;flex:1;display:flex;flex-direction:column;min-width:0;
+  padding:calc(var(--sat,0px) + 12px) 12px calc(var(--sab,0px) + 12px)}
+.figv-scroll{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;
+  display:flex;align-items:center;justify-content:center}
+/* Natural size when it fits, scaled down when it does not, and scrollable
+   either way — a wide algorithm should be pannable, not squeezed to nothing. */
+.figv-ctl{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px}
+.figv-btn{min-width:40px;height:34px;padding:0 12px;border-radius:17px;border:0;cursor:pointer;
+  background:rgba(255,255,255,.12);color:#fff;font-size:var(--t-body);line-height:1;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.figv-fit{font-size:var(--t-meta)}
+.figv-pct{min-width:4.2em;text-align:center;color:rgba(255,255,255,.75);font-size:var(--t-tiny);
+  font-variant-numeric:tabular-nums}
+/* touch-action:none is what lets a pinch reach the handler at all: without it
+   the browser claims it for page zoom and the figure sits still. */
+.figv-scroll{touch-action:none;overflow:hidden}
+.figv-scroll.zoomed{cursor:grab}
+.figv-scroll.zoomed:active{cursor:grabbing}
+/* A figure often opens before its full-resolution decode finishes; without
+   this it just snaps into view mid-paint. Opacity only — never touches
+   layout, so it cannot fight figzoom.js's transform.
+
+   THE DEFAULT IS VISIBLE, AND THAT IS THE WHOLE DESIGN. Writing this the
+   obvious way round — img{opacity:0} plus a .loaded class the script adds —
+   makes every failure invisible: a figure whose script never ran, whose
+   decode errored, whose 404 the offline cache handed back, is not a broken
+   image icon but nothing at all, on a screen whose only content is that
+   figure. So the hidden state is a class, added only by the one code path
+   that has already committed to removing it on BOTH the load and the error
+   event. Anything that path does not touch is simply shown. */
+.figv-scroll img{transition:opacity .18s var(--ease)}
+.figv-scroll img.fig-loading{opacity:0}
+@media(prefers-reduced-motion:reduce){
+  .figv-scroll img{transition:none}.figv-scroll img.fig-loading{opacity:1}
+}
+/* max-height is the half that was missing. Without it "fitted" meant "as wide
+   as the viewport" and a tall figure overflowed into a clipped middle band
+   with no scroll and no pan — see scripts/figfit-patch.js. Neither max- rule
+   enlarges anything, so a small diagram still sits at its natural size. */
+.figv-scroll img{transform-origin:0 0;will-change:transform;display:block;
+  max-width:100%;max-height:100%;width:auto;height:auto;margin:auto;
+  border-radius:10px;background:#fff;cursor:zoom-in}
+/* Natural size, and the container scrolls to it. This is what makes a legend
+   readable rather than merely crisp. */
+.figv-scroll.zoomed img{margin:0 auto}
+/* Above the figure viewer's own layer, because the figure check opens it. */
+#selftest{position:fixed;inset:0;z-index:400;background:rgba(6,14,28,.92);
+  display:flex;align-items:center;justify-content:center;padding:16px;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.st-card{width:min(560px,100%);max-height:100%;display:flex;flex-direction:column;
+  background:#0F1B2E;color:#fff;border-radius:14px;overflow:hidden;
+  box-shadow:0 18px 48px rgba(0,0,0,.5)}
+.st-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
+  padding:calc(var(--sat,0px) + 14px) 16px 12px;border-bottom:1px solid rgba(255,255,255,.12)}
+.st-head b{font-size:var(--t-lead);font-weight:700}
+.st-x{width:40px;height:40px;border:0;border-radius:20px;cursor:pointer;
+  background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center}
+.st-rows{flex:1;min-height:0;overflow-y:auto;padding:6px 16px}
+.st-row{display:flex;gap:11px;align-items:flex-start;padding:11px 0;
+  border-bottom:1px solid rgba(255,255,255,.07)}
+.st-row:last-child{border-bottom:0}
+.st-dot{flex:0 0 auto;width:22px;height:22px;border-radius:11px;margin-top:1px;
+  display:flex;align-items:center;justify-content:center;font-size:var(--t-tiny);font-weight:700}
+.st-dot.pass{background:rgba(45,212,191,.18);color:#5EEAD4}
+.st-dot.fail{background:rgba(244,63,94,.2);color:#FDA4AF}
+.st-dot.info{background:rgba(255,255,255,.12);color:rgba(255,255,255,.7)}
+.st-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.st-txt b{font-size:var(--t-meta);font-weight:600}
+.st-txt span{font-size:var(--t-tiny);color:rgba(255,255,255,.62);word-break:break-word}
+.st-foot{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 16px calc(var(--sab,0px) + 14px);border-top:1px solid rgba(255,255,255,.12);
+  font-size:var(--t-meta);color:rgba(255,255,255,.75)}
+.st-run{min-height:40px;padding:0 16px;border:0;border-radius:20px;cursor:pointer;
+  background:rgba(255,255,255,.14);color:#fff;font-size:var(--t-meta);font-weight:600}
+.st-run[disabled]{opacity:.5}
+.figv-hint{flex:0 0 auto;margin-top:8px;text-align:center;color:rgba(255,255,255,.55);
+  font-size:11px;letter-spacing:.02em}
+.figv-cap{flex:0 0 auto;margin-top:10px;padding:10px 12px;border-radius:12px;
+  background:rgba(255,255,255,.08);color:#fff;font-size:13px;line-height:1.5;
+  max-height:34vh;overflow-y:auto}
+.figv-cap span{display:block;margin-top:5px;font-size:11px;opacity:.7}
+/* Always the same corner, always on top of the picture. */
+.figv-x{position:absolute;top:calc(var(--sat,0px) + 16px);right:16px;z-index:2;
+  width:40px;height:40px;border-radius:20px;border:0;cursor:pointer;
+  background:rgba(10,22,40,.72);color:#fff;display:flex;align-items:center;
+  justify-content:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.figv-x .icon{width:20px;height:20px}
+/* The page underneath does not move while the viewer is open. A drag that
+   scrolls the page while the picture stays still is what "stuck" feels like. */
+body.peek-locked{overflow:hidden}
+.ai-fig,.ref-fig,.pearl-fig{cursor:zoom-in}
+
+/* peek modal */
+#peek.peek-open{animation:fadeIn .2s ease both}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.peek-card{animation:popIn .34s var(--spring) both}
+
+/* results */
+.score-hero{animation:riseIn .5s var(--glide) both}
+.chp-row{animation:slideL .4s var(--glide) both}
+.chp-row:nth-child(2){animation-delay:.04s}.chp-row:nth-child(3){animation-delay:.08s}
+.chp-row:nth-child(4){animation-delay:.12s}.chp-row:nth-child(5){animation-delay:.16s}
+.chp-fill{transition:width .9s var(--glide)}
+
+/* respect the system setting */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important;scroll-behavior:auto!important}
+  .hero::after{animation:none}
+}
+
+/* ── topic search ── */
+.search-bar{position:sticky;top:0;z-index:20;background:var(--glass);
+  backdrop-filter:blur(16px) saturate(1.5);-webkit-backdrop-filter:blur(16px) saturate(1.5);
+  border:1.5px solid var(--border);border-radius:16px;padding:10px;margin:12px 0 14px}
+.sb-row{display:flex;align-items:center;gap:8px}
+.sb-icon{font-size:16px;opacity:.6;padding-left:4px}
+.sb-row input{flex:1;border:none;background:transparent;font:inherit;font-size:16px;
+  color:var(--text);outline:none;padding:8px 0;min-width:0}
+.sb-row input::placeholder{color:var(--muted)}
+.sb-x{border:none;background:var(--card);color:var(--muted);border-radius:50%;
+  width:26px;height:26px;cursor:pointer;font-size:13px;flex:0 0 auto}
+.sb-row2{display:flex;gap:7px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.sb-row2 select{flex:1;min-width:150px;border:1.5px solid var(--border);border-radius:10px;
+  padding:8px 10px;font:inherit;font-size:13px;background:var(--card);color:var(--text)}
+.sb-quiz{padding:9px 15px;font-size:13px}
+.sb-back{background:var(--card);border:1.5px solid var(--border);color:var(--muted);
+  padding:9px 14px;font-size:13px}
+.chips.sug{padding:0 0 10px}
+.sb-hint{font-size:13px;color:var(--muted);line-height:1.55;padding:0 2px}
+.sb-none{text-align:center;color:var(--muted);font-size:13px;padding:26px 10px;line-height:1.7}
+.sb-none span{font-size:13px;color:var(--muted)}
+.hits{display:flex;flex-direction:column;gap:8px}
+.hit{text-align:left;background:var(--white);border:1.5px solid var(--border2);
+  border-left:3px solid var(--teal);border-radius:13px;padding:11px 13px;cursor:pointer;
+  font:inherit;color:var(--text);animation:riseIn .32s var(--glide) both;
+  transition:transform .2s var(--spring),box-shadow .2s var(--glide),border-color .2s}
+.hit:active{transform:scale(.985)}
+@media (hover:hover){.hit:hover{transform:translateX(3px);box-shadow:0 8px 22px rgba(15,30,61,.1)}}
+.hit-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px}
+.hit-ch{font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;letter-spacing:.01em}
+.hit-flag{font-size:11px;font-weight:700;color:var(--red);background:var(--red-bg);
+  border:1px solid var(--red-b);border-radius:99px;padding:2px 8px}
+.hit-fig{font-size:11px;color:var(--muted)}
+.hit-stem{font-size:16px;line-height:1.65;color:var(--text)}
+.hit-ans{font-size:13px;color:var(--green);margin-top:5px;font-weight:600}
+mark{background:rgba(94,234,212,.32);color:inherit;border-radius:3px;padding:0 2px;font-weight:700}
+html[data-theme="dark"] mark{background:rgba(94,234,212,.24)}
+.hits .hit:nth-child(1){animation-delay:.01s}.hits .hit:nth-child(2){animation-delay:.03s}
+.hits .hit:nth-child(3){animation-delay:.05s}.hits .hit:nth-child(4){animation-delay:.07s}
+.hits .hit:nth-child(n+5){animation-delay:.09s}
+
+/* ═══════ v8 — spaced repetition ═══════ */
+html[data-theme="dark"]{--due-bg:linear-gradient(135deg,#0B3B3A,#0A2E42);--due-b:#0E5C56;--due-glow:rgba(45,212,191,.20)}
+html[data-theme="light"]{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-b:#99F6E4;--due-glow:rgba(45,212,191,.14)}
+:root{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-b:#99F6E4;--due-glow:rgba(45,212,191,.14)}
+
+.due-card{background:var(--due-bg)!important;border-color:var(--due-b)!important;position:relative;overflow:hidden}
+.due-card .ch-name{color:var(--teal)}
+.due-card.has-due{box-shadow:0 0 0 1px var(--due-b),0 10px 30px var(--due-glow)}
+.due-card.has-due .ch-icon{animation:duePulse 1.9s ease-in-out infinite}
+@keyframes duePulse{0%,100%{transform:scale(1) rotate(0)}50%{transform:scale(1.1) rotate(-6deg)}}
+.streak-pct{font-weight:800;color:var(--amber)!important;animation:flameFlicker 2.4s ease-in-out infinite}
+@keyframes flameFlicker{0%,100%{opacity:1;transform:scale(1)}45%{opacity:.82;transform:scale(1.06)}70%{opacity:.94;transform:scale(.97)}}
+
+/* active-recall rating prompt */
+.rate-prompt{margin-top:16px;padding:16px;border-radius:16px;background:var(--card);
+  border:1.5px solid var(--border2);text-align:center}
+.rate-q{font-size:13px;color:var(--muted);margin-bottom:12px;font-weight:600}
+.rate-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.rate-btn{--rc:#888;border:1.5px solid var(--border);background:var(--card);   /* fallback for older engines */
+  border:1.5px solid color-mix(in srgb, var(--rc) 45%, var(--border));
+  background:color-mix(in srgb, var(--rc) 10%, var(--card));border-radius:12px;
+  padding:10px 6px;cursor:pointer;display:flex;flex-direction:column;gap:3px;
+  transition:transform .18s var(--spring),box-shadow .2s var(--glide)}
+.rate-btn:active{transform:scale(.94)}
+@media (hover:hover){.rate-btn:hover{box-shadow:0 6px 16px rgba(0,0,0,.12);box-shadow:0 6px 16px color-mix(in srgb, var(--rc) 30%, transparent);transform:translateY(-2px)}}
+.rate-label{font-weight:800;font-size:13px;color:var(--rc)}
+.rate-sched{font-size:11px;color:var(--muted);font-weight:600}
+@media(max-width:480px){.rate-row{grid-template-columns:repeat(2,1fr)}}
+
+/* AI panel: real provenance */
+.ai-powered{font-size:9px;color:var(--muted);text-align:center;padding:3px 0 8px;letter-spacing:.02em}
+/* Never --dim: it fails AA at every theme, which is what contrastfix-patch.js
+   exists to have settled. A disclaimer nobody can read is not a disclaimer.
+   Sizes are steps on the type ladder, not round numbers — verify-type.js
+   rejects any fixed font-size that is not, and rejected 10px here first. */
+/* The standard visually-hidden idiom: reachable by assistive technology,
+   zero visual footprint, and NOT display:none — which would remove it from
+   the accessibility tree and silence the announcement entirely. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.ai-disclaim{font-size:var(--t-micro);line-height:1.5;color:var(--muted);text-align:center;
+  padding:6px 14px 0;letter-spacing:.01em}
+.app-disclaim{font-size:var(--t-tiny);line-height:1.5;color:var(--muted);
+  margin:10px 0 0;max-width:60ch}
+.ai-powered b{color:var(--teal);font-weight:700}
+
+/* clearance so the last interactive control in a quiz is never trapped under
+   the fixed annotation rail / AI launch button while scrolling */
+.quiz-wrap{padding-bottom:96px}
+@media(max-width:1023px){.quiz-wrap{padding-bottom:118px}}
+
+/* keep the AI launcher out of the way of the rating row's right edge */
+body.rating-active .ai-fab{animation:none;opacity:0;pointer-events:none;transform:translateY(10px) scale(.9)}
+
+/* ── provider picker ── */
+.prov-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.prov-pick{border:1.5px solid var(--border);background:var(--card);border-radius:12px;
+  padding:11px 10px;cursor:pointer;display:flex;flex-direction:column;gap:2px;text-align:left;
+  transition:transform .18s var(--spring),border-color .18s,background .18s}
+.prov-pick:active{transform:scale(.96)}
+.prov-pick.on{border-color:var(--teal);background:var(--green-bg)}
+.pp-name{font-weight:800;font-size:13px;color:var(--text)}
+.prov-pick.on .pp-name{color:var(--teal)}
+.pp-tag{font-size:11px;color:var(--muted)}
+

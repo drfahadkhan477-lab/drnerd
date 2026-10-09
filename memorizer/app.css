@@ -68,6 +68,11 @@ li { margin: .25em 0; }
 
 .bar { height: .375rem; border-radius: .1875rem; background: var(--surface-2); overflow: hidden; margin: var(--s-3) 0 var(--s-2); }
 .bar i { display: block; height: 100%; background: var(--accent); border-radius: .1875rem; }
+/* a model starting (llm.js stage): the step, a bar, the engine's count */
+.ai-busy { display: grid; gap: var(--s-1); }
+.ai-progress { display: grid; gap: var(--s-1); min-width: min(100%, 16rem); }
+.ai-progress .bar { display: block; margin: 0; }
+#ai-start { margin-top: var(--s-2); }
 
 .count { display: inline-block; font-size: var(--t-tiny); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin-bottom: var(--s-1); }
 .stepper { list-style: none; padding: 0; display: flex; gap: var(--s-2); margin: var(--s-3) 0 var(--s-1); flex-wrap: wrap; }

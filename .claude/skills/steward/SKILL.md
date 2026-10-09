@@ -15,7 +15,7 @@ the stricter one wins.
 Run the checks CI's fast jobs run, and tail only the result lines:
 
 1. `node --check` on every changed `.js` file.
-2. `npm run steps` and `npm run suites`: both listings must still work.
+2. `npm run suites`: the suite listing must still work.
 3. `npm run test:pure`: every suite CI's `logic` job runs. The list is read
    from `.github/workflows/verify.yml`, so this and CI name the same set.
 4. `node tests/verify-stats.js`: the counts quoted in prose still match the
@@ -64,8 +64,6 @@ places, in one commit:
 - Moving a threshold, a timeout or an expected count to turn a suite green.
 - "Correcting" a count in prose that agrees with the record but not with
   reality. It is correct today and will correct itself on the next full run.
-- Loosening a patch anchor in `scripts/build.js`'s chain so it matches.
-  `patch()` matching exactly once is the whole safety model.
 - Re-running a job and calling the second result the real one.
 
 ## Stacked PRs

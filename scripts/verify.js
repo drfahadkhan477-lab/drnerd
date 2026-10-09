@@ -7,19 +7,22 @@
  *   --only <a,b>   run just these suites (names as in tests/verify-<name>.js)
  *   --skip <a,b>   run everything except these
  *   --bail         stop at the first failing suite
+ *   --suite-timeout N  stop any one suite after N minutes (0 = never);
+ *                  default 3x its recorded time, at least 20 minutes
  *   --pwa          also build, serve and test the Stage 1 split build
  *   --jobs N       run N suites at once (default 1; `auto` = cores-1, capped
  *                  at 4). The suites that measure wall-clock time or WebGL
  *                  contexts always run alone — see SERIAL below.
  *                  SYSTOLE_JOBS in the environment sets this machine's default.
  *   --engine <e>   chromium (default), webkit or firefox
- *   --tag <a,b>    run only suites with these tags: pure, browser, build, serial
+ *   --tag <a,b>    run only suites with these tags: pure, browser, build, serial,
+ *                  laptop (the suites no CI job runs: the quick run with your export)
  *                  (read from each suite's code — tests/_targets.js tagsOf)
  *   --report-json <file>  also write the results as JSON: suite, tags, status,
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 154 suites and roughly 6616 checks, and they
+ * WHY THIS EXISTS. There are 153 suites and roughly 6634 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -135,11 +138,6 @@ const SUITES = [
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
   ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
-  /* Written because focusmode anchored on three lines copied out of
-     fullbleed's source, and two steps in between had rewritten them — which
-     reading the source cannot tell you and a build would have, if a build
-     were something everyone could run. */
-  ['shellanchor-pure', 'every anchor into the shell markup still matches at the step that uses it'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
@@ -196,7 +194,7 @@ const SUITES = [
   ['app-slots-pure', 'the built file cuts into the app and its payloads byte for byte, and the app carries none of the bank'],
   /* Step 2: the frozen shell's slots filled from where the chain gets them,
      ALL_Q held to keys-patch and flags-patch run as the chain runs them. */
-  ['assemble-pure', 'the app assembles from app/systole.html as the chain builds it, stamped as build.js stamps'],
+  ['assemble-pure', 'the app assembles from app/systole.html, the export and the repository, stamped once'],
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
   ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],
@@ -289,7 +287,6 @@ const SUITES = [
   ['refscheck-pure','the corpus checker holds every floor it claims, and reads before reporting'],
   ['echo-pure',    'the echo tables point at what exists, and the arithmetic is the arithmetic'],
   ['echoui-pure',  'Echo Studio computes only what was measured, and restates no cutoff'],
-  ['echoanchor-pure','every anchor echo-patch uses still exists at the step it runs from'],
   /* The three above stop where strings become a document. This one starts
      there: it runs echo-patch over a scaffold and drives the result, so the
      glue, the delegated listeners and the caret are held rather than argued
@@ -307,6 +304,9 @@ const SUITES = [
      screen driven in a browser over a scaffold, the way echo is. */
   ['notesearch-pure','a note titled with the words is found first, quoted and escaped'],
   ['heartbake-pure', 'the heart is loaded from a mesh baked at build time, value for value, and any other copy is refused'],
+  /* The seeded notes' pearls, found at build time: exactly what the search finds,
+     no note text in the table, and any entry that does not fit is searched afresh. */
+  ['pearlbake-pure', 'the pearls found at build time are the ones the search finds, and an entry that does not fit is searched afresh'],
   ['refsmerge-pure', 'a reference unit adds only sections that are new and high yield, and what it writes splits back into notes'],
   ['phrase-pure', 'a note holding the query\'s words in the query\'s order outranks one holding them scattered; questions, one-word queries and stubs rank as before'],
   ['olderacc-pure', 'an older ACC bank\'s questions parse in each layout, keep their answer or are left out, skip what the bank has, and print no word of it'],
@@ -319,6 +319,7 @@ const SUITES = [
      changed file is known not to reach it, and anything doubtful runs both. */
   ['cichanges-pure', 'a pull request skips a browser job only when none of its files can reach it, and a failed decision runs both'],
   ['record-pure',    'the counts record in two halves: each written only from a run where every one of its suites ran and passed, the other half kept'],
+  ['suitetime-pure', 'a suite that runs far past its recorded time is stopped and named with the section it was in, and every section is timed'],
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
@@ -454,8 +455,27 @@ const SUITES = [
    waiting: topicrunscreen, voicescreen, examdate, studyvisuals, icons-pure,
    cichanges-pure and record-pure. That run's --pwa step did not start
    (build-pwa found content/ extracted from a different build), so the
-   split-build figure (134) is carried over again and was not re-measured. */
-const PENDING_RECORD = [];
+   split-build figure (134) is carried over again and was not re-measured.
+
+   Emptied a twelfth time by the Systole-only green Chromium run with --pwa on
+   the owner's laptop at 35a2086, two suites at a time (5986 checks across 150
+   suites, the Memorizer half kept from the tenth emptying), which measured
+   the one that had been waiting: suitetime-pure. The split build was measured
+   by this run for the first time since the ninth emptying, and came to the
+   same 134. */
+const PENDING_RECORD = ['pearlbake-pure'];
+
+/* ── suites deleted since their half of the record was last written ─────────
+   The mirror of PENDING_RECORD. A suite removed from the registry is still in
+   tests/test-stats.json until the next green run of its half rewrites it
+   (scripts/record.js drops a name that is no longer registered), and until
+   then verify-stats would read it as the record holding something that is no
+   longer a suite. Naming it here says that is on purpose. Checked in both
+   directions like PENDING_RECORD: a name here must still be in the record and
+   must not be registered, so the next write forces it out of this list. */
+/* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
+   survived the chain to the step that used them; deleted with the chain. */
+const RETIRED_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -492,11 +512,25 @@ const PENDING_RECORD = [];
    serial to 24.2 min at --jobs 3, so the parallelism bought nothing there and
    cost three suites to do it.
 
+   AND THREE MEMORIZER SUITES, FOUND THE SAME WAY (October 8, master 28a8df4,
+   SYSTOLE_JOBS=3 on the owner's Windows laptop):
+
+     memorizer             locator.waitFor 60s, at the first PDF it reads
+     memorizer-hardening   locator.click 30s, at its first double tap
+     memorizer-studyimport twenty minutes inside "the dialog"
+
+   Twice at three at a time they failed or hung; then, on the same commit and
+   machine with --jobs 1, they gave 484, 69 and 72 checks, all passing, the
+   counts CI and the record hold. Like the three above they wait on browser
+   work (PDF rendering in a worker, layout settling, the clipboard), not on a
+   clock.
+
    Everything else in the registry asserts on content, geometry or arithmetic,
    and was verified to give the same result under --jobs 3 as it does alone —
    that comparison is the evidence, not this list. */
 const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
-                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs']);
+                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs',
+                        'memorizer', 'memorizer-hardening', 'memorizer-studyimport']);
 
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(n);
@@ -505,7 +539,14 @@ const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 
 const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
 const { mergeRecord } = require(path.join(ROOT, 'scripts', 'record.js'));
-const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : []);
+const { limitFor, sectionClock, slowest, stop, watch, spawnLimited, fmtMin } = require(path.join(ROOT, 'scripts', 'suitetime.js'));
+/* `laptop`: a suite no CI job runs, so only a machine with the export ever
+   does. Everything else GitHub runs on every pull request, on the synthetic
+   bank or with no build at all, which makes `--tag laptop` the short routine
+   run and the full registry the occasional one that writes the record. */
+const CI_SUITES = require(path.join(ROOT, 'scripts', 'test-public.js'))
+  .ciSuites(fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8'));
+const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : [], CI_SUITES.has(n) ? [] : ['laptop']);
 if (flag('--list')) {
   console.log('\nSuites, their tags, and what each defends:\n');
   for (const [name, claim] of SUITES) console.log(`  ${name.padEnd(14)} ${('[' + tagsFor(name).join(',') + ']').padEnd(18)} ${claim}`);
@@ -514,7 +555,7 @@ if (flag('--list')) {
   process.exit(0);
 }
 
-const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json'];
+const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout', '--jobs'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
 /* A PATH OR A URL. Every suite already takes either — `file://` is just how a
    path reaches them — and the split build can only be driven over HTTP,
@@ -538,7 +579,7 @@ const shortTarget = TARGET_IS_URL ? TARGET : path.relative(process.cwd(), TARGET
    review). */
 function requireBuild() {
   if (TARGET_IS_URL || fs.existsSync(TARGET)) return;
-  console.error(`\nNo build at ${TARGET}\n\n  Build one first:  node scripts/build.js\n  or run only the suites that need none:  --tag pure\n`);
+  console.error(`\nNo build at ${TARGET}\n\n  Build one first:  npm run build -- path/to/your-export.html\n  or run only the suites that need none:  --tag pure\n`);
   process.exit(1);
 }
 /* --pwa builds dist/ from a standalone file and serves it. Handed a URL it has
@@ -550,7 +591,12 @@ if (TARGET_IS_URL && flag('--pwa')) {
 }
 
 const only = list(opt('--only')), skip = list(opt('--skip'));
-const TAGS = ['pure', 'browser', 'build', 'serial'];
+/* --suite-timeout N: minutes any one suite may run before it is stopped; 0 for
+   no limit. Without it each suite gets three times its recorded time, never
+   under 20 minutes (scripts/suitetime.js). */
+const SUITE_TIMEOUT = opt('--suite-timeout');
+try { limitFor(undefined, SUITE_TIMEOUT); } catch (e) { console.error(e.message); process.exit(2); }
+const TAGS = ['pure', 'browser', 'build', 'serial', 'laptop'];
 const wantTags = list(opt('--tag'));
 for (const t of wantTags) if (!TAGS.includes(t)) {
   console.error(`\n  --tag ${JSON.stringify(t)} is not a tag. Use one of: ${TAGS.join(', ')}.\n`);
@@ -730,6 +776,14 @@ if (JOBS > 1) {
   console.log(`  ${chosen.length} suite${chosen.length === 1 ? '' : 's'}, one at a time, on ${ENGINE}\n`);
 }
 
+/* WHAT WAS TESTED, taken once, before any suite runs. Asked again later it
+   describes a different tree: a --pwa run writes tests/test-stats.json after
+   the suites and again after the split build, so the second write, and the
+   "all green" line between them, saw the first write as an uncommitted change
+   and labelled a clean checkout "+uncommitted changes" (the record of
+   2026-10-08 says so of a tree that was clean). Set at the top of the run
+   below, where provenance() is in scope. */
+let STARTED_ON = '';
 const results = [];
 /* The --pwa phases, which run outside the suite loop. Recorded here so the
    report covers everything the invocation measured: without them a run whose
@@ -770,23 +824,49 @@ if (REPORT_JSON) process.on('exit', code => {
 });
 let stopScheduling = false;
 
+/* Detached suite groups need explicit cleanup when the runner is interrupted. */
+const activeChildren = new Set();
+const stopChildren = () => { for (const child of activeChildren) stop(child, true); activeChildren.clear(); };
+process.once('exit', stopChildren);
+for (const [signal, status] of [['SIGINT', 130], ['SIGTERM', 143]])
+  process.once(signal, () => { stopChildren(); process.exit(status); });
+
 function runSuite(name, claim) {
   return new Promise(resolve => {
     const t = Date.now();
     const ch = spawn(process.execPath, [path.join(ROOT, 'tests', `verify-${name}.js`), TARGET], {
       env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE },
+      detached: process.platform !== 'win32',
     });
+    activeChildren.add(ch);
     let out = '';
-    ch.stdout.on('data', d => { out += d; });
-    ch.stderr.on('data', d => { out += d; });
+    /* Where the time went (scripts/suitetime.js): each "── section ──" heading
+       timestamped as it arrives, and a ceiling past which the suite is stopped
+       and reported as dead in the section it was in, instead of holding the
+       whole run. */
+    const clock = sectionClock(t);
+    const limit = limitFor(PREV_SECS[name], SUITE_TIMEOUT);
+    let stopped = false;
+    const cancel = watch(ch, limit, () => {
+      stopped = true;
+      const where = clock.current();
+      out += `\nError: stopped by verify.js after ${fmtMin(Date.now() - t)} (its limit: ${fmtMin(limit)})`
+        + (where ? ` in section "${where}"` : ' before its first section') + '\n';
+    }, true);
+    const take = d => { const s = String(d); out += s; clock.feed(s, Date.now()); };
+    ch.stdout.on('data', take);
+    ch.stderr.on('data', take);
     ch.on('error', e => { out += '\n' + (e && e.message || e); });
     ch.on('close', status => {
+      activeChildren.delete(ch);
+      cancel();
       const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
-      const passed = m ? +m[1] : 0, failed = m ? +m[2] : null;
+      const passed = m ? +m[1] : 0, failed = stopped ? null : (m ? +m[2] : null);
       resolve({
         name, claim, passed, failed, checks: passed + (failed || 0),
         secs: ((Date.now() - t) / 1000).toFixed(0), ms: Date.now() - t,
-        ok: status === 0 && failed === 0, out,
+        ok: !stopped && status === 0 && failed === 0, out,
+        sections: clock.end(Date.now()),
       });
     });
   });
@@ -883,6 +963,7 @@ async function runSerial(list) {
    At --jobs 1 the two calls are the same thing and the registry order is
    preserved, which is what every previous run printed. */
 (async () => {
+STARTED_ON = provenance();
 if (JOBS === 1) {
   await runSerial(chosen);
 } else {
@@ -935,7 +1016,7 @@ function writeStats(pwaCount) {
     /* 1 is one suite at a time; higher ran the shared suites concurrently.
        It changes no count — it says which arrangement produced the numbers. */
     jobs: JOBS,
-    commit: provenance(),
+    commit: STARTED_ON,
     pwaCount,
   });
   if (!out) {
@@ -990,7 +1071,7 @@ function writeFailLog() {
   }
   const header = [
     `# systole verify — ${new Date().toISOString()}`,
-    `# checkout  ${provenance()}`,
+    `# checkout  ${STARTED_ON}`,
     `# engine    ${ENGINE}`,
     `# target    ${TARGET_IS_URL ? TARGET : path.relative(ROOT, TARGET)}  (${built})`,
     `# suites    ${results.length} run, ${total} checks, ${bad.length} failing`,
@@ -1012,6 +1093,16 @@ const blockers = results.filter(r => !r.ok && r.name !== 'stats');
 const total = results.reduce((n, r) => n + r.checks, 0);
 const bad = results.filter(r => !r.ok);
 console.log(`\n  ${total} checks across ${results.length} suites in ${((Date.now() - t0) / 60000).toFixed(1)} min`);
+/* Where the time went: the longest sections of the run, so the next speed-up
+   is aimed at a measured step. Section names are the suites' own headings,
+   never suite output. */
+{
+  const top = slowest(results, 8).filter(x => x.ms >= 60000);
+  if (top.length) {
+    console.log('  slowest sections:');
+    for (const x of top) console.log(`    ${fmtMin(x.ms).padStart(8)}  ${x.suite} › ${x.section}`);
+  }
+}
 /* CALLED ON EVERY RUN; writeStats decides, family by family, what this run
    earned. It used to wait for an all-green run, which tied Systole's record to
    the Memorizer's: one Memorizer browser suite failing on one machine held
@@ -1025,7 +1116,7 @@ writeStats();
 if (bad.length) {
   console.log(`\n  ${bad.length} suite${bad.length === 1 ? '' : 's'} failing: ${bad.map(r => r.name).join(', ')}`);
   console.log(`  full output of those suites: ${path.relative(process.cwd(), writeFailLog())}`);
-  console.log(`  checkout: ${provenance()}\n`);
+  console.log(`  checkout: ${STARTED_ON}\n`);
   /* A stats-only failure means the record is out of date, which is the one
      failure that must NOT stop the run: --pwa has not happened yet, and the
      split build's count is part of what needs rewriting. Exiting here left the
@@ -1034,7 +1125,7 @@ if (bad.length) {
      lines below where it was solved. */
   if (blockers.length) process.exit(1);
   console.log('  (only the counts record is stale — continuing so it can be rewritten)\n');
-} else console.log(`  all green   —   ${provenance()} on ${ENGINE}\n`);
+} else console.log(`  all green   —   ${STARTED_ON} on ${ENGINE}\n`);
 
 /* ── the split build ──────────────────────────────────────────────────────────
    Built, served on a free port, tested, torn down. Kept out of the loop above
@@ -1043,9 +1134,12 @@ if (bad.length) {
    process outlives its run. */
 if (flag('--pwa')) {
   const PORT = 8137;
+  /* Each phase below has no recorded time of its own, so it gets the default
+     ceiling for an unrecorded suite, or what --suite-timeout says. */
+  const PHASE_LIMIT = limitFor(undefined, SUITE_TIMEOUT);
   console.log('── the Stage 1 split build, over HTTP ──\n');
   let pt = Date.now();
-  const b = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'build-pwa.js'), TARGET], { encoding: 'utf8' });
+  const b = spawnLimited(process.execPath, [path.join(ROOT, 'scripts', 'build-pwa.js'), TARGET], { encoding: 'utf8' }, PHASE_LIMIT, 'build-pwa');
   phases.push({ suite: 'build-pwa', tags: ['pwa'], status: b.status === 0 ? 'pass' : 'fail', checks: 0, passed: 0, failed: b.status === 0 ? 0 : null, durationMs: Date.now() - pt });
   if (b.status !== 0) { console.error(b.stdout + b.stderr); process.exit(1); }
   console.log((b.stdout.match(/shell total.*/) || ['  (built)'])[0].trim());
@@ -1065,8 +1159,8 @@ if (flag('--pwa')) {
   }
   pt = Date.now();
 
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
-                      { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE } });
+  const r = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
+                      { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE } }, PHASE_LIMIT, 'verify-pwa');
   const out = (r.stdout || '') + (r.stderr || '');
   phase('pwa', out, r.status, Date.now() - pt);
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
@@ -1096,8 +1190,8 @@ if (flag('--pwa')) {
      never touches _worker.js, which in advanced mode owns every request to the
      project. A deployment went down once while that path had no test at all. */
   pt = Date.now();
-  const wk = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-pages.js'),
-                                          path.join(ROOT, 'dist')], { encoding: 'utf8' });
+  const wk = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pages.js'),
+                                          path.join(ROOT, 'dist')], { encoding: 'utf8' }, PHASE_LIMIT, 'verify-pages');
   const wout = (wk.stdout || '') + (wk.stderr || '');
   phase('pages', wout, wk.status, Date.now() - pt);
   const wm = wout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);
@@ -1114,8 +1208,8 @@ if (flag('--pwa')) {
      the one being verified. It drives no browser — the failure it guards is
      two deploys apart and is decidable from the worker's own source. */
   pt = Date.now();
-  const cb = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'verify-cachebuckets.js'),
-                                          path.join(ROOT, 'dist')], { encoding: 'utf8' });
+  const cb = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-cachebuckets.js'),
+                                          path.join(ROOT, 'dist')], { encoding: 'utf8' }, PHASE_LIMIT, 'verify-cachebuckets');
   const cout = (cb.stdout || '') + (cb.stderr || '');
   phase('cachebuckets', cout, cb.status, Date.now() - pt);
   const cm = cout.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);

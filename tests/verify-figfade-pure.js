@@ -4,8 +4,7 @@
  *
  *   node tests/verify-figfade-pure.js
  *
- * No browser, no build. figloadfade-patch.js injects a few lines into the
- * figure viewer's mount, and those lines carry a regression that is very easy
+ * No browser, no build. A few lines in the figure viewer's mount carry a regression that is very easy
  * to reintroduce, because the obvious way to write the feature IS the bug:
  *
  *     .figv-scroll img{opacity:0}          /_ hidden by default _/
@@ -24,19 +23,16 @@
  * catch it if that regresses". This is that suite. It exists because the
  * sentence admitting the hole was easier to write than the test.
  *
- * HOW IT READS THE CODE. The patch's own `replace` argument is lifted out of
- * the script and executed against stub objects — the technique
+ * HOW IT READS THE CODE. The lines are lifted out of app/systole.html (and
+ * the css out of app/css/systole.css) between two exact anchors and executed
+ * against stub objects — the technique
  * verify-swupdate-pure.js uses on build-pwa.js's template literals, for the
  * same reason: a copy of those lines kept here would stop matching the first
- * time they changed and would go on passing. Taking the `replace` and not the
- * `find` matters — the two are nearly identical, and the `find` is the OLD
- * code, so a suite that grabbed the first match would cheerfully test the
- * version without the error handler.
+ * time they changed and would go on passing.
  */
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const { blankComments } = require('./_source.js');
 
 let passed = 0, failed = 0;
@@ -47,29 +43,41 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 const ROOT = path.join(__dirname, '..');
-const PATCH = path.join(ROOT, 'scripts', 'figloadfade-patch.js');
-const SRC = fs.readFileSync(PATCH, 'utf8');
+const APP = path.join(ROOT, 'app', 'systole.html');
 
-/* The third argument of the patch() call whose label starts with the given
-   prefix. Labels are what the build prints, so they are the stable handle —
-   and unlike a line number they say which edit is meant. */
-function replaceArg(labelPrefix) {
-  const re = new RegExp(
-    "patch\\('" + labelPrefix + "[^']*',\\s*`([\\s\\S]*?)`,\\s*`([\\s\\S]*?)`\\);");
-  const m = SRC.match(re);
-  if (!m) throw new Error(`figloadfade-patch.js no longer has a patch() labelled "${labelPrefix}…"`);
-  return { find: m[1], replace: m[2] };
+
+/* The lines between two anchors, both included, each required to occur
+   exactly once. This suite used to lift the replace argument out of
+   figloadfade-patch.js; since the chain was retired the code lives in app/,
+   so it is read there, from the page and the stylesheet that ship. A copy
+   kept in this file would go on passing after the app changed. */
+function between(file, first, last) {
+  /* The stylesheet is ten pieces joined in the shell's order (tests/_appcut.js). */
+  const src = file === 'stylesheet' ? require('./_appcut.js').stylesheet() : fs.readFileSync(file, 'utf8');
+  const name = file === 'stylesheet' ? 'the stylesheet' : path.relative(ROOT, file);
+  for (const a of [first, last]) {
+    const n = src.split(a).length - 1;
+    if (n !== 1) throw new Error(`${name}: expected the anchor once, found ${n}: ${a.slice(0, 60)}`);
+  }
+  const i = src.indexOf(first), j = src.indexOf(last, i);
+  if (j < 0) throw new Error(`${name}: the end anchor comes before the start`);
+  return src.slice(i, j + last.length);
 }
 
-const JS = replaceArg('figloadfade: js');
-const CSS = replaceArg('figloadfade: css');
+const JS = { replace: between(APP,
+  "  const fs_=wrap.querySelector('.figv-scroll');",
+  "    if(im&&!im.complete) im.addEventListener('load',figZ.apply,{once:true}); else figZ.apply(); }") };
+const CSS = { replace: between('stylesheet',
+  '.figv-scroll.zoomed:active{cursor:grabbing}',
+  '.figv-scroll img{transition:none}.figv-scroll img.fig-loading{opacity:1}\n}') };
 
 head('the thing being tested is really the shipped thing');
 {
-  /* Every other check here reads this file as text, so a syntax error in it
-     is invisible to all of them and would surface only at build time. */
-  const r = spawnSync(process.execPath, ['--check', PATCH], { encoding: 'utf8' });
-  ok('figloadfade-patch.js parses as JavaScript', r.status === 0, (r.stderr || '').split('\n')[0]);
+  /* The lifted lines must at least compile on their own, or every check that
+     runs them below would fail for a reason that is not the one it names. */
+  let compiles = '';
+  try { new Function('wrap', 'mountFigZoom', `let figZ;\n${JS.replace}`); } catch (e) { compiles = e.message; }
+  ok('the lifted figure-viewer lines compile', compiles === '', compiles);
 
   /* VACUITY GUARD. Every assertion below is a regex or a substring test over
      these two blocks. If extraction silently returned something empty or
@@ -79,14 +87,11 @@ head('the thing being tested is really the shipped thing');
      `${JS.replace.length} chars`);
   ok('the css block came out whole', CSS.replace.length > 200 && /figv-scroll/.test(CSS.replace),
      `${CSS.replace.length} chars`);
-  /* And that it is the NEW code, not the old: the find is the pre-patch
-     version and the two differ only by the part under test. Blanked, for the
-     same reason the css sweep below is — the replacement's own comment
-     discusses the error listener, and an unblanked test would find the word
-     rather than the call. */
-  ok('it is the replacement that was lifted, not the thing being replaced',
-     /addEventListener\('error'/.test(blankComments(JS.replace)) &&
-     !/addEventListener\('error'/.test(blankComments(JS.find)));
+  /* And that it carries the error path at all. Blanked, for the same reason
+     the css sweep below is — the code's own comment discusses the error
+     listener, and an unblanked test would find the word rather than the call. */
+  ok('the lifted lines carry the error listener as code, not just in a comment',
+     /addEventListener\('error'/.test(blankComments(JS.replace)));
 }
 
 /* ── the stubs ────────────────────────────────────────────────────────────

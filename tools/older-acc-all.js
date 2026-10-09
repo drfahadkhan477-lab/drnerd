@@ -8,7 +8,7 @@
  *                                                merged — the same one file out
  *
  *   1. node tools/older-acc-import.js            read both PDFs, stage what is new
- *   2. node scripts/build.js                     a fresh single-file build
+ *   2. npm run build -- <export.html>           a fresh single-file build
  *   3. node tools/older-acc-import.js --merge    the staged questions into it
  *   4. node scripts/extract-content.js build/systole.html
  *   5. node scripts/verify.js --pwa              every suite, both builds
@@ -76,7 +76,7 @@ if (before !== null && after !== null && after < before) {
   finish(1);
 }
 
-s = step('build', ['scripts/build.js'], { keep: false });
+s = step('build', ['scripts/assemble-app.js', '--out', 'build/systole.html'], { keep: false });
 if (!s.ok) { say(s.out.split('\n').filter(Boolean).slice(-3).join('\n')); say('build failed.'); finish(1); }
 say('build ok');
 

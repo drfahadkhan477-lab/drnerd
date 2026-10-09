@@ -29,10 +29,10 @@ const { blankComments } = require('./_source.js');
 
 const ROOT = path.join(__dirname, '..');
 const Syn = require('../scripts/synthetic-export.js');
-const { CORRECTIONS, ALL_Q_RE } = require('../scripts/keys-patch.js');
-const { FLAGS } = require('../scripts/flags-patch.js');
-const { buildRefSeed } = require('../scripts/refs-patch.js');
-const { buildRefImages } = require('../scripts/ref-images-patch.js');
+const { CORRECTIONS, ALL_Q_RE } = require('../scripts/answer-keys.js');
+const { FLAGS } = require('../scripts/content-flags.js');
+const { buildRefSeed } = require('../scripts/ref-seed.js');
+const { buildRefImages } = require('../scripts/ref-images.js');
 const { producers, assembleApp } = require('../scripts/assemble-app.js');
 
 let passed = 0, failed = 0;

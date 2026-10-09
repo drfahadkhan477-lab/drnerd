@@ -12,7 +12,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 const { systemText, turns } = require('./_wire');
 
@@ -73,6 +73,12 @@ const SSE = [
   /* Drive one full exchange on a question that has a figure, against Mistral —
      the one remaining BYOK provider with real vision. */
   const ask = async wantFigure => {
+    /* A PRECONDITION: the previous reply has finished. fire() returns without
+       sending while aiBusy is set, and the 400 ms below is no promise that the
+       last stream has ended; in WebKit it had not, so the second ask() sent
+       nothing and read as 'no request was made'. */
+    await settled(page, () => typeof aiBusy !== 'undefined' && !aiBusy,
+      { label: 'the previous reply to finish (aiBusy false)' });
     captured.length = 0;
     await page.evaluate(async wantFigure => {
       AI.provider = 'gemini';

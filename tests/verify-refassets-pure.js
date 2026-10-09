@@ -177,5 +177,29 @@ head('what it reports about itself');
   ok('an empty store reports zero', fresh().count() === 0 && fresh().bytes() === 0);
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+(async()=>{
+  head('backup includes cited images and rejects corrupt data before writing');
+  const R=fresh(),key=R.add(bytesOf('synthetic image bytes'),'fig.png');
+  R.add(bytesOf('uncited bytes'),'orphan.png');
+  const {assets,missing:none}=await R.backup([`![Synthetic](refimg://${key})`]);
+  ok('only the cited user image is backed up',Object.keys(assets).length===1&&assets[key]===R.get(key)&&none.length===0);
+  const target=fresh(),stored=await target.restoreBackup(assets);
+  ok('restoration retains the exact bytes even without IndexedDB',target.get(key)===R.get(key));
+  ok('a fallback restore reports that the image is not durable',stored===false);
+  let refused=false;try{await target.restoreBackup({...assets,[key]:assets[key].replace(/.$/,'!')});}catch(_){refused=true;}
+  ok('corrupt image data is rejected without replacing the existing image',refused&&target.get(key)===R.get(key));
+  const empty=fresh();let failedRestore=false;
+  try{await empty.restoreBackup({...assets,'u/not-a-hash.png':'data:image/png;base64,QQ=='});}catch(_){failedRestore=true;}
+  ok('every image is validated before the first write',failedRestore&&empty.count()===0);
+  /* A cited image that is not here: the rest still exports, and the gap is
+     reported once per image, however often it is cited. */
+  const part=fresh(),kept=part.add(bytesOf('present bytes'),'here.png');
+  const lost=`u/${part.hashBytes(bytesOf('absent bytes'))}.png`;
+  let partial;try{partial=await part.backup([`![](refimg://${kept}) ![](refimg://${lost})`,`![](refimg://${lost})`]);}catch(e){partial=e;}
+  ok('a missing cited image does not stop the export of the images that are here',
+     !!partial&&!!partial.assets&&partial.assets[kept]===part.get(kept)&&!(lost in partial.assets),String(partial&&partial.message||''));
+  ok('and the missing image is reported, once',
+     !!partial&&Array.isArray(partial.missing)&&partial.missing.length===1&&partial.missing[0]===lost);
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+})().catch(e=>{console.error(e);process.exit(1);});

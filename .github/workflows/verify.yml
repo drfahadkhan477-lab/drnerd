@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6616 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6533.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6634 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6551.
 # The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
@@ -31,13 +31,15 @@
 # answer keys, its content flags, search quality over its library, how long
 # it takes to load) and the split build under --pwa are measured only on a
 # machine with the export, so there is no way to run those 217 checks here.
-# See docs/BUILD.md and the comment at the top of scripts/build.js for why,
+# See docs/BUILD.md and the comment at the top of scripts/assemble-app.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
 # What runs here needs no source file, and is genuinely worth having on every
 # push. Most of it needs no browser either; the memorizer-browser job drives
 # the Memorizer — a second app that carries no licensed content — in Chromium,
-# WebKit and Firefox, and the synthetic-browser job drives this app in Chromium:
+# WebKit and Firefox, the synthetic-browser job drives this app in Chromium,
+# and synthetic-webkit drives a chosen set of its suites in WebKit, the
+# iPad's engine:
 #
 #   syntax       every .js and .py file in the repo parses, and the two
 #                listing commands (which patch chain steps exist, which test
@@ -74,13 +76,13 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6533 real checks, up
+#                Across every job, 6551 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
 #                project was invisible here. It no longer is.
 #
-#   build-guard  scripts/build.js must still refuse to run without a source
+#   build-guard  npm run build must still refuse to run without a source
 #                file, with a clear message, and exit non-zero. This is
 #                asserting the ABSENCE of a feature on purpose — if that
 #                guard were ever loosened to "warn and continue anyway," this
@@ -152,8 +154,6 @@ jobs:
           set -e
           find tools -name '*.py' -print0 \
             | xargs -0 -n1 python3 -m py_compile
-      - name: the patch chain lists without crashing
-        run: npm run steps
       - name: the verify suite list lists without crashing
         run: npm run suites
       - name: Memorizer builds into one file (it needs no licensed source)
@@ -175,7 +175,7 @@ jobs:
         run: node tests/verify-fsrs.js
       - name: the scheduler against ts-fsrs, on our own weights (15 checks)
         run: node tests/verify-oracle.js
-      - name: the Cloudflare Worker request handler (73 checks)
+      - name: the Cloudflare Worker request handler (90 checks)
         run: node tests/verify-worker.js
       - name: the cardiac cycle's physics (23 checks)
         run: node tests/verify-physio-pure.js
@@ -193,10 +193,8 @@ jobs:
         run: node tests/verify-palette-pure.js
       - name: the home strip's rotation never repeats and excludes vfib (32 checks)
         run: node tests/verify-herorhythm-pure.js
-      - name: a corpus with no figures in it still builds (15 checks)
+      - name: a corpus with no figures in it still builds (8 checks)
         run: node tests/verify-refimg-pure.js
-      - name: every anchor into the shell markup still matches (10 checks)
-        run: node tests/verify-shellanchor-pure.js
       - name: the Pencil width curve, without a canvas (38 checks)
         run: node tests/verify-pencil-pure.js
       - name: the Living Diagram's timing and view-cycling, without a screen (31 checks)
@@ -207,7 +205,7 @@ jobs:
         run: node tests/verify-coronarytree-pure.js
       - name: the engine is a flag, not thirty-four hardcoded copies of one (96 checks)
         run: node tests/verify-engine.js
-      - name: the licensed question bank cannot be committed (40 checks)
+      - name: the licensed question bank cannot be committed (46 checks)
         run: node tests/verify-leakguard.js
       - name: a Claude Code session cannot read the licensed export (24 checks)
         run: node tests/verify-claude-guard.js
@@ -219,7 +217,7 @@ jobs:
         run: node tests/verify-study-file-check.js
       - name: the built file cuts into the app and its payloads losslessly, and the app carries none of the bank (45 checks)
         run: node tests/verify-app-slots-pure.js
-      - name: the app assembles from app/systole.html as the chain builds it (29 checks)
+      - name: the app assembles from app/systole.html, the export and the repository (29 checks)
         run: node tests/verify-assemble-pure.js
       - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (68 checks)
         run: node tests/verify-carve-pure.js
@@ -237,7 +235,7 @@ jobs:
         run: node tests/verify-icons-pure.js
       - name: each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes (99 checks)
         run: node tests/verify-drills-pure.js
-      - name: the release gate never claims more than it measured (59 checks)
+      - name: the release gate never claims more than it measured (58 checks)
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
         run: node tests/verify-contentrules.js
@@ -255,19 +253,19 @@ jobs:
         run: node tests/verify-ipad-pure.js
       - name: the newer copy survives and a refused write is not lost (56 checks)
         run: node tests/verify-store-pure.js
-      - name: the counts in the docs are the counts the tests produced (60 checks)
+      - name: the counts in the docs are the counts the tests produced (52 checks)
         run: node tests/verify-stats.js
       - name: a stem that points at a picture is caught, and the count is honest (36 checks)
         run: node tests/verify-figaudit.js
       - name: a dead suite is diagnosed by what killed it, not by what it last printed (32 checks)
         run: node tests/verify-cause-pure.js
-      - name: nothing a model says can become something the page runs (39 checks)
+      - name: nothing a model says can become something the page runs (38 checks)
         run: node tests/verify-md-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
       - name: a splash that cannot load the bank says which failure it was (51 checks)
         run: node tests/verify-loader-pure.js
-      - name: a split build cannot be half of one build and half of another (52 checks)
+      - name: a split build cannot be half of one build and half of another (53 checks)
         run: node tests/verify-provenance-pure.js
       - name: a deploy landing under a running app leaves a pair that is noticed (49 checks)
         run: node tests/verify-swupdate-pure.js
@@ -279,12 +277,12 @@ jobs:
         run: node tests/verify-echo-pure.js
       - name: Echo Studio computes only what was measured (58 checks)
         run: node tests/verify-echoui-pure.js
-      - name: echo-patch's anchors still exist where it runs (24 checks)
-        run: node tests/verify-echoanchor-pure.js
-      - name: the notes search ranks, quotes and escapes (41 checks)
+      - name: the notes search ranks, quotes and escapes (35 checks)
         run: node tests/verify-notesearch-pure.js
-      - name: the heart loads a mesh baked at build time, and refuses any other copy (36 checks)
+      - name: the heart loads a mesh baked at build time, and refuses any other copy (37 checks)
         run: node tests/verify-heartbake-pure.js
+      - name: the pearls found at build time are the ones the search finds (23 checks)
+        run: node tests/verify-pearlbake-pure.js
       - name: the split build ships src/ without its comments, and nothing else changes (28 checks)
         run: node tests/verify-stripcomments-pure.js
       - name: the note figures load after the home screen, one unit at a time (29 checks)
@@ -295,7 +293,7 @@ jobs:
         run: node tests/verify-phrase-pure.js
       - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, no word of it is printed, a key its own commentary contradicts is refused, a question with no explanation says so, a merged build carries exactly the staging, a bold heading naming no "Question" starts one, every figure type is served as an image, and an unanswered explanation is probed letter by letter (176 checks)
         run: node tests/verify-olderacc-pure.js
-      - name: extraction refuses an unsafe id, an image whose bytes are not its mime, damaged base64, and a bank that breaks the content schema, and a refusal leaves the last good content untouched (30 checks)
+      - name: extraction refuses an unsafe id, an image whose bytes are not its mime, damaged base64, and a bank that breaks the content schema, and a refusal leaves the last good content untouched (33 checks)
         run: node tests/verify-extract-pure.js
       - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing; the reference notes travel in it too, and the written schema names the version the code enforces (28 checks)
         run: node tests/verify-bankpack-pure.js
@@ -305,7 +303,9 @@ jobs:
         run: node tests/verify-cichanges-pure.js
       - name: the counts record in two halves — Systole's written from a run where every Systole suite passed, the Memorizer's likewise, the other half kept (31 checks)
         run: node tests/verify-record-pure.js
-      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (42 checks)
+      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (28 checks)
+        run: node tests/verify-suitetime-pure.js
+      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (49 checks)
         run: node tests/verify-devtools-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (250 checks)
         run: node tests/verify-memorizer-chunk-pure.js
@@ -413,16 +413,16 @@ jobs:
           npm ci
           npx playwright install --with-deps ${{ matrix.engine }}
       - if: ${{ !cancelled() }}
-        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (483 checks)
+        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (484 checks)
         run: node tests/verify-memorizer.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (64 checks)
+        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (69 checks)
         run: node tests/verify-memorizer-hardening.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (69 checks)
+        name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (72 checks)
         run: node tests/verify-memorizer-studyimport.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut (12 checks)
+        name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut, and outside WebKit a closed tab reopened with the origin down keeps its saved data and readers (16 checks)
         run: node tests/verify-memorizer-offline.js
       - if: ${{ !cancelled() }}
         name: Memorizer — your data and what the page may do — the backup reminder on the app's own backup, an orphan that would spoil a backup removed, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (18 checks)
@@ -624,7 +624,254 @@ jobs:
         name: neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone (31 checks)
         run: node tests/verify-glass.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the notes search opens, keeps the caret, and opens a note with its figures (17 checks)
+        name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
+        run: node tests/verify-notesearch.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the home hero beats on the rhythm, and the home screen spends no WebGL (31 checks)
+        run: node tests/verify-heroart.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: Apex can take the whole page, and a numbered list stays numbered (19 checks)
+        run: node tests/verify-apexpage.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a chapter you left is the chapter you come back to (27 checks)
+        run: node tests/verify-resume.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: no figure is drawn wider than the pixels it has (9 checks)
+        run: node tests/verify-figsharp.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: navigating the app does not spend WebGL contexts (25 checks)
+        run: node tests/verify-heartreuse.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a reply can be stopped, and the last chunk is painted however the stream ends (27 checks)
+        run: node tests/verify-flushguard.js build/synthetic/systole.html
+
+  # ── the same app, in WebKit: the engine the iPad runs ───────────────────────
+  #
+  # The device this app is for is an iPad, and an iPad is WebKit; until this
+  # job, nothing in CI ran Systole there (memorizer-browser's WebKit entry is
+  # the other app). It runs the synthetic job's suites in WebKit, chosen from
+  # two runs of all of them, not from a guess. Left out, each with the reason
+  # measured on the PR that added this job:
+  #
+  #   homeprog   WebKit's page crashed in most runs, at its reduced-motion
+  #       page. The browser's own log ends in "No provider of eglDestroySync
+  #       found": the runner has no GPU, Mesa cannot make a hardware EGL
+  #       display, and the compositor aborts.
+  #   layout, apex   the 3D heart's texture upload hits a Mesa driver error
+  #       (TextureGL setImageHelper, "Unexpected driver error") and the context
+  #       is lost, which the suites' console checks rightly report. layout in
+  #       every run, apex in most.
+  #   physio   WebKit delivered 2 animation frames in 2.8 s, so the cursor its
+  #       check watches had nothing to advance on.
+  #
+  # IN, ON THE OWNER'S DECISION, KNOWING THEY CAN FAIL FOR THE RUNNER'S REASONS:
+  # selftest (the page crashed in 2 of 11 runs on that PR, then on master's
+  # merge run and on #205's), pearl (1 of 10, not caught with the browser's log
+  # on), and polish (its double-tap check failed in 1 of 10; its detail now
+  # prints the gap between the taps).
+  # selftest WAS caught with the log on, in a session container with
+  # Playwright's WebKit installed: the page crashed in all 8 runs that finished,
+  # at four different sections, 3 of them with
+  # WEBKIT_DISABLE_COMPOSITING_MODE=1. The log has the libEGL/ZINK warnings
+  # every launch prints and no abort, so by the rule below it is not shown
+  # to be the runner's. Narrowed further on 2026-10-09 (details on #205): it
+  # needs the self-test started through #selftest (openSelfTest, the hashchange
+  # path) and then run again; runSelfTest() alone, on fresh pages or repeated
+  # on one page, never crashed. Not the panel's blur, shadow or translucency,
+  # not will-change on the figure, not memory. Cause not yet found.
+  # THE DEVICE SAYS IT IS THE HARNESS. The owner ran Settings > Self-test on
+  # the iPad the same day, the path that crashes here (#selftest, then Run
+  # again), against the real bank's figures, in portrait and in landscape,
+  # several times: every run finished, every check held, no crash. As with the
+  # resize crash in tests/_render.js, this is Playwright's WPE WebKit on Linux,
+  # not iPadOS Safari. The step stays in this job and still fails when the page
+  # dies; a red verify-selftest with "the browser CRASHED the page" and nothing
+  # logged is this, and is read as such. Any other failure in it is real.
+  # A red one here is read before it is re-run: a crash with that abort in the
+  # log is the runner; anything else is the app's or the suite's.
+  #
+  # Neither WEBKIT_DISABLE_DMABUF_RENDERER=1 nor LIBGL_ALWAYS_SOFTWARE=1, nor
+  # both, changed any of this: the crashes and the driver error came back under
+  # each, in a side-by-side run with a control.
+  #
+  # The crash is not confined to the suites named above: later runs also lost
+  # chatfigs' page, and selftest's again. Any suite here can crash on this
+  # runner, so a red job is read before it is trusted.
+  #
+  # A GPU is what the evidence points to, and two ways to one were looked at
+  # and set aside (October 2026):
+  #   GitHub's GPU runners exist only for organizations on the Team or
+  #       Enterprise plans; this repository belongs to a personal account.
+  #   A self-hosted runner on the owner's Windows laptop, through WSL 2, does
+  #       not reach the GPU: glxinfo reports llvmpipe, Mesa forced onto d3d12
+  #       fails to start (Intel HD 5500 and Radeon R5 M255, 2014-15 parts),
+  #       and homeprog crashed there at the same line as here. A self-hosted
+  #       runner on this public repository could also be reached by a fork's
+  #       pull request, whose run uses the fork's own workflow files, on a
+  #       machine that holds the licensed export: see the `full` job's WHY
+  #       NOT pull_request for what actually prevents that.
+  #
+  # The ones left out all run in Chromium in the job above. Not here either: update handling
+  # and offline loading of the split build, which are verify-pwa's; it asserts
+  # the real bank's question and figure counts, so it cannot run on this bank.
+  #
+  # Same build, same suites, same assertions as the job above; only
+  # SYSTOLE_ENGINE differs (tests/_engine.js). Playwright's WebKit on Linux is
+  # not Safari on iPadOS: it shares the engine, the JavaScript core and
+  # IndexedDB, and it is not a substitute for opening the app on the iPad.
+  synthetic-webkit:
+    name: synthetic-webkit — the real app, built around an invented bank, in WebKit, the engine the iPad runs
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.synthetic != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SYSTOLE_ENGINE: webkit
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: install the pinned test tools, WebKit, and what verify-figreview needs
+        run: |
+          npm ci
+          npx playwright install --with-deps webkit
+          python3 -m pip install Pillow==12.3.0 numpy==2.4.6
+      - name: build the app from app/systole.html around the synthetic export
+        run: |
+          node scripts/synthetic-export.js build/synthetic/export.html
+          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the single-file build is stable and works offline (27 checks)
+        run: node tests/verify-stage0.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: FSRS-5 scheduling replaces SM-2 (25 checks)
+        run: node tests/verify-stage2.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: Apex can read figures and remembers who it teaches (31 checks)
+        run: node tests/verify-stage3.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: Pencil feel, the hero heart, the rhythm library (79 checks)
+        run: node tests/verify-polish.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: grounded mode answers only from your references (24 checks)
+        run: node tests/verify-braunwald.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the 12-lead morphology falls out of one dipole (25 checks)
+        run: node tests/verify-leads.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: nine palettes, two axes, unthemed semantics (41 checks)
+        run: node tests/verify-theme.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the welcome bar, the progress bar, three layouts (66 checks)
+        run: node tests/verify-home.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the photographed heart paints before the app parses (14 checks)
+        run: node tests/verify-splash-heart.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: every canvas backs itself at high device-pixel density (8 checks)
+        run: node tests/verify-crisp.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: one modular type scale and one spacing scale, still held (12 checks)
+        run: node tests/verify-type.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the worked reference notes obey the guide, and are retrievable (39 checks)
+        run: node tests/verify-references.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a free provider with real vision, wired to its own wire shape (53 checks)
+        run: node tests/verify-gemini.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: Apex still knows you next time, and you can see what it kept (46 checks)
+        run: node tests/verify-memory.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: an imported chapter brings its figures, and keeps them (33 checks)
+        run: node tests/verify-assets.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the figure Apex is reasoning from is one you can see (41 checks)
+        run: node tests/verify-chatfigs.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the home screen opens with something worth knowing (69 checks)
+        run: node tests/verify-pearl.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a retrieved note is material to teach from, never an instruction (54 checks)
+        run: node tests/verify-boundary.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the panel keeps what you typed, and sends a window not an archive (32 checks)
+        run: node tests/verify-chat.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the big stores live in a database, and nothing is ever in neither place (39 checks)
+        run: node tests/verify-store.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: going back never re-grades a question or re-schedules a card (24 checks)
+        run: node tests/verify-quiznav.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
+        run: node tests/verify-planscreen.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
+        run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave (21 checks)
+        run: node tests/verify-voicescreen.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day (17 checks)
+        run: node tests/verify-examdate.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the Study cards draw the app's own numbers, every icon resolves, and the voice dock runs and stops a session (26 checks)
+        run: node tests/verify-studyvisuals.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the chapter grid staggers in, and its bar fills instead of arriving drawn (21 checks)
+        run: node tests/verify-chapters.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
+        run: node tests/verify-failsafe.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a restored backup appears now, not only after the next launch (19 checks)
+        run: node tests/verify-backup.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the semantic colour names alias the legacy hue names, not just resemble them (119 checks)
+        run: node tests/verify-tokens.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: confidence is an option not a gate, and a tagged miss updates one row (28 checks)
+        run: node tests/verify-calibrate.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a figure can be examined, and still has four ways out (44 checks)
+        run: node tests/verify-figzoom.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
+        run: node tests/verify-focus.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
+        run: node tests/verify-schema.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the on-device self-test reports honestly, and can actually fail (27 checks)
+        run: node tests/verify-selftest.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the review sheet records the box in original pixels, not preview pixels (35 checks)
+        run: node tests/verify-figreview.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
+        run: node tests/verify-render.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the policy contains an injection without breaking anything the app does (20 checks)
+        run: node tests/verify-csp.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: Echo Studio routes, delegates and keeps the caret where it was (26 checks)
+        run: node tests/verify-echo.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a figure that never rendered is told apart from one that rendered invisibly (10 checks)
+        run: node tests/verify-figprobe.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the Coronary view draws the left bed collapsing in systole, on one scale (8 checks)
+        run: node tests/verify-coronaryview.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL (27 checks)
+        run: node tests/verify-ambient.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone (31 checks)
+        run: node tests/verify-glass.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (31 checks)
@@ -653,33 +900,36 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
-      - name: build.js exits non-zero and explains why, with no source present
+      - name: npm run build exits non-zero and explains why, with no source present
         run: |
           set +e
-          output="$(node scripts/build.js 2>&1)"
+          output="$(npm run --silent build 2>&1)"
           status=$?
           set -e
           echo "$output"
           if [ "$status" -eq 0 ]; then
-            echo "::error::scripts/build.js exited 0 with no source file present — it must refuse to build."
+            echo "::error::npm run build exited 0 with no source file present — it must refuse to build."
             exit 1
           fi
           if ! echo "$output" | grep -q "deliberately not in this repository"; then
-            echo "::error::scripts/build.js failed, but not with its documented refusal message — the guard may have changed shape."
+            echo "::error::npm run build failed, but not with its documented refusal message — the guard may have changed shape."
             exit 1
           fi
 
   # ── the other 1552 checks, on a machine that has the export ────────────────
   #
   # Everything above runs on GitHub's runners and therefore cannot build the
-  # app: scripts/build.js refuses without the ACCSAP 12 export, the export is
+  # app: npm run build refuses without the ACCSAP 12 export, the export is
   # licensed, and it is deliberately not in this repository nor in any secret
   # GitHub holds. That is why the three jobs above are "the honest subset".
   #
   # This job closes that gap the only way it can be closed — by running on a
   # machine that already has the export, which means the owner's laptop acting
   # as a self-hosted runner. It is opt-in: with no runner registered it simply
-  # never starts, and the jobs above are unaffected.
+  # never starts, and the jobs above are unaffected. BUT THIS REPOSITORY IS
+  # PUBLIC: register no runner for it until the repository is private or every
+  # control under WHY NOT pull_request below is in place (docs/BUILD.md says
+  # the same before its registration steps).
   #
   # ─ WHY IT PRINTS SO LITTLE ─────────────────────────────────────────────────
   #
@@ -710,10 +960,19 @@ jobs:
   # A self-hosted runner executes whatever the workflow says, on real hardware
   # with the licensed corpus and the owner's home directory on it. On a
   # pull_request trigger, that is code from the PR's branch. This repository is
-  # private and single-author, so the exposure is small — but the mitigation is
-  # free, so this job runs only on pushes to master and on manual dispatch.
-  # Do not add pull_request here without reading GitHub's own warning about
-  # self-hosted runners and untrusted workflows.
+  # PUBLIC: anyone can open a pull request, and a fork's run uses the fork's
+  # copy of the workflow files, so it can drop this job's trigger restriction
+  # or add a workflow of its own that asks for [self-hosted, systole]. Nothing
+  # written in a workflow file keeps fork code off this runner. What does:
+  # register no self-hosted runner while the repository is public (GitHub's
+  # own advice), or make it private, or set "Require approval for all external
+  # contributors" for fork workflows and never approve a fork's run at all: an
+  # approved job that asks for this runner waits in the queue (up to 24 hours)
+  # and starts when a runner comes online, so before registering or starting
+  # one, cancel every queued or waiting run. This job runs only on manual
+  # dispatch on master (its `if`
+  # below; the push arm is still commented out), so it does not start for pull
+  # requests on its own; never add pull_request or pull_request_target to it.
   full:
     name: full — the browser suites, on a machine with the export
     runs-on: [self-hosted, systole]

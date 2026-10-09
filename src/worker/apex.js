@@ -50,7 +50,7 @@ const MAX_BODY = 6 * 1024 * 1024;
 
 /* The scan that finds generationConfig used to start with a 64 KB window over
    the head of the body, on the theory that the field is near the front. It was
-   removed with the indexOf anchor it belonged to — see topLevelKey() below.
+   removed with the indexOf anchor it belonged to — see objectKeys() below.
 
    Worth keeping the reason the window was already known to be wrong, because
    it is the same shape of mistake: the streaming body is ordered
@@ -116,110 +116,114 @@ const json = (status, body) =>
    reads .error.message and turns it into a sentence a fellow can act on. */
 const fail = (status, message) => json(status, { error: { message } });
 
-/* Where the object opened at `from` ends, by brace matching. String contents
-   are skipped so a brace inside a prompt cannot close the object early, and a
-   backslash-escaped quote cannot end the string early. Returns -1 if the
-   object never closes. */
-function objectEnd(raw, from) {
-  let depth = 0, inStr = false, esc = false;
-  for (let i = from; i < raw.length; i++) {
-    const c = raw[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (c === '\\') esc = true;
-      else if (c === '"') inStr = false;
-      continue;
-    }
-    if (c === '"') inStr = true;
-    else if (c === '{') depth++;
-    else if (c === '}' && --depth === 0) return i + 1;
-  }
-  return -1;
-}
+/* The keys of the JSON object that opens at `open`, at that object's own
+   level: [{ name, at, valueAt }], plus where the object ends. null if it never
+   closes.
 
-/* Clamp maxOutputTokens without parsing the body.
-   Returns { body, error }. */
-/* Find a KEY of the top-level object, rather than the first place its name
-   happens to appear.
-
-   WHY THIS IS NOT indexOf. The old anchor was
-   raw.indexOf('"generationConfig"'), and the comment beside it credited
-   anchoring with protecting the fellow's own prose from being rewritten. That
-   protection was real but it came from somewhere else: JSON escapes a quote
-   inside a string value as \", so the byte sequence "generationConfig" with
-   bare quotes cannot appear inside prose at all. The anchor was correct by
-   luck, not by construction.
-
-   The luck runs out when the name is a whole string VALUE, which is not
-   escaped. A message whose text is exactly "generationConfig" puts a real
-   "generationConfig" token in the body, indexOf stops there, the next { is
-   some unrelated object, and a request carrying a perfectly good
-   generationConfig is refused with "maxOutputTokens is required" — a 400 on
-   the fellow's own question because of a word in it. Reproduced before this
-   was written, against the identical request with the word changed.
-
-   So: track string state, require depth 1, and require a colon after the
-   name. A value fails the colon test; a nested key fails the depth test.
+   WHY NOT indexOf. The first anchor was raw.indexOf('"generationConfig"'). JSON
+   escapes a quote inside a string as \", so the name with bare quotes cannot
+   appear inside prose — but it can be a whole string VALUE, and then indexOf
+   stopped on a word in the fellow's question and the request was refused with
+   "maxOutputTokens is required". So: track string state, count depth, and call
+   a string a key only when a colon follows it.
 
    STRINGS ARE JUMPED, NOT WALKED. A vision request carries figures as inline
-   base64 and runs to megabytes, so stepping character by character through it
-   would be a real cost on every call. indexOf finds each closing quote
-   natively, and base64 contains neither quotes nor backslashes, so a figure is
-   crossed in one call. That is why HEAD_WINDOW is gone: it existed to keep the
-   common case off a full-body scan, and a scan that skips the payload no
-   longer needs it. */
-function topLevelKey(raw, name) {
-  const needle = `"${name}"`;
+   base64 and runs to megabytes; indexOf finds each closing quote natively and
+   base64 holds neither quotes nor backslashes, so a figure is crossed in one
+   call. That is also why the body is not JSON.parse'd and re-serialised: it
+   would be the whole payload twice, on a CPU-metered platform, on every turn.
+
+   A quote closes a string only when an EVEN number of backslashes precedes
+   it: \\" ends the string, \" does not. */
+function objectKeys(raw, open) {
+  const keys = [];
   let depth = 0;
-  for (let i = 0; i < raw.length; i++) {
+  for (let i = open; i < raw.length; i++) {
     const c = raw[i];
     if (c === '"') {
-      if (depth === 1 && raw.startsWith(needle, i)) {
-        let j = i + needle.length;
-        while (j < raw.length && (raw[j] === ' ' || raw[j] === '\n' ||
-                                  raw[j] === '\r' || raw[j] === '\t')) j++;
-        if (raw[j] === ':') return i;
-      }
-      /* Skip to this string's unescaped closing quote. A quote is closing only
-         when an EVEN number of backslashes precedes it — \\" ends the string,
-         \" does not. */
-      for (let j = i; ;) {
-        j = raw.indexOf('"', j + 1);
-        if (j < 0) return -1;
-        let b = j - 1, slashes = 0;
+      let close = i;
+      for (;;) {
+        close = raw.indexOf('"', close + 1);
+        if (close < 0) return null;
+        let b = close - 1, slashes = 0;
         while (b >= 0 && raw[b] === '\\') { slashes++; b--; }
-        if (slashes % 2 === 0) { i = j; break; }
+        if (slashes % 2 === 0) break;
       }
+      if (depth === 1) {
+        let j = close + 1;
+        while (j < raw.length && /\s/.test(raw[j])) j++;
+        if (raw[j] === ':') {
+          let v = j + 1;
+          while (v < raw.length && /\s/.test(raw[v])) v++;
+          keys.push({ name: raw.slice(i + 1, close), at: i, valueAt: v });
+        }
+      }
+      i = close;
     } else if (c === '{' || c === '[') depth++;
-    else if (c === '}' || c === ']') depth--;
+    else if ((c === '}' || c === ']') && --depth === 0) return { keys, end: i + 1 };
   }
-  return -1;
+  return null;
 }
 
-function clampOutput(raw, max) {
-  const at = topLevelKey(raw, 'generationConfig');
-  if (at < 0) return { error: 'generationConfig is required.' };
-  /* Anchored to the generationConfig object rather than searched for globally:
-     a note quoting the literal text "maxOutputTokens": 99999 must not be
-     rewritten, because that would corrupt the fellow's own prose.
+/* The one key of that name at the object's own level, or why there is not
+   exactly one. Every way the scan and Google's parser could disagree about
+   which value counts is refused rather than guessed at:
 
-     BOUNDED BY THE OBJECT, NOT BY A FIXED NUMBER OF CHARACTERS. This was a
-     400-character window, which is ample for {maxOutputTokens:2000} and quietly
-     wrong for anything larger: add stopSequences or a responseSchema and the
-     field slides out of the window, whereupon a request carrying a perfectly
-     good maxOutputTokens is refused with "maxOutputTokens is required". Brace
-     matching costs one pass over an object that is small by construction, and
-     it cannot be outgrown. */
-  const open = raw.indexOf('{', at);
-  const end = open < 0 ? -1 : objectEnd(raw, open);
-  if (end < 0) return { error: 'generationConfig is malformed.' };
-  const slice = raw.slice(at, end);
-  const m = /"maxOutputTokens"\s*:\s*(\d+)/.exec(slice);
-  if (!m) return { error: 'generationConfig.maxOutputTokens is required.' };
-  const asked = +m[1];
-  if (asked <= max) return { body: raw };
-  const fixed = slice.replace(m[0], `"maxOutputTokens":${max}`);
-  return { body: raw.slice(0, at) + fixed + raw.slice(at + slice.length) };
+     - the key twice: a parser may keep the first or the last, so a request
+       carrying "maxOutputTokens":2000 and then 100000 was judged on one and
+       sent with both;
+     - a key name with a backslash in it: "generationConfig" is the
+       same key to a parser and a different string to this scan, so it would
+       be a second copy the duplicate check could not see. JSON.stringify,
+       which is how the app writes its body, never escapes a letter. */
+function onlyKey(raw, obj, name, where) {
+  if (obj.keys.some(k => k.name.includes('\\')))
+    return { error: `${where} has a key written with an escape; send plain key names.` };
+  const hits = obj.keys.filter(k => k.name === name);
+  if (!hits.length) return { error: `${where === 'the request' ? '' : where + '.'}${name} is required.` };
+  if (hits.length > 1) return { error: `${name} appears ${hits.length} times in ${where}; send it once.` };
+  return { key: hits[0] };
+}
+
+/* Clamp maxOutputTokens without rebuilding the body. Returns { body } or
+   { error }.
+
+   THE VALUE IS READ AS A WHOLE JSON NUMBER. It was /(\d+)/, the leading
+   digits, so "maxOutputTokens":1e5 read as 1 and went to Google as 100,000
+   tokens against a 2,000 cap. Now the whole number token is read, it must
+   end where the value ends, and it must be a positive whole number; anything
+   else is refused, not reinterpreted. A string such as "100000", which
+   Google's int32 parsing would accept, is not a number token and is refused.
+
+   BOUNDED BY THE OBJECT, NOT BY A FIXED NUMBER OF CHARACTERS: only a key at
+   generationConfig's own level counts, so a field of the same name inside a
+   responseSchema, or a note quoting "maxOutputTokens": 99999, is neither
+   read nor rewritten. */
+const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
+function clampOutput(raw, max) {
+  let open = 0;
+  while (open < raw.length && /\s/.test(raw[open])) open++;
+  if (raw[open] !== '{') return { error: 'The request must be a JSON object.' };
+  const root = objectKeys(raw, open);
+  if (!root) return { error: 'The request is malformed.' };
+  if (raw.slice(root.end).trim()) return { error: 'The request has something after its closing brace.' };
+  const gc = onlyKey(raw, root, 'generationConfig', 'the request');
+  if (gc.error) return gc;
+  if (raw[gc.key.valueAt] !== '{') return { error: 'generationConfig must be an object.' };
+  const cfg = objectKeys(raw, gc.key.valueAt);
+  if (!cfg) return { error: 'generationConfig is malformed.' };
+  const mo = onlyKey(raw, cfg, 'maxOutputTokens', 'generationConfig');
+  if (mo.error) return mo;
+
+  const at = mo.key.valueAt;
+  const m = NUMBER.exec(raw.slice(at, at + 64));
+  let after = at + (m ? m[0].length : 0);
+  while (after < raw.length && /\s/.test(raw[after])) after++;
+  const n = m ? Number(m[0]) : NaN;
+  if (!m || (raw[after] !== ',' && raw[after] !== '}') || !Number.isInteger(n) || n < 1)
+    return { error: 'generationConfig.maxOutputTokens must be a positive whole number.' };
+  if (n <= max) return { body: raw };
+  return { body: raw.slice(0, at) + String(max) + raw.slice(at + m[0].length) };
 }
 
 export async function handleApex(request, env, fetchImpl) {

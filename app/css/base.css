@@ -1,0 +1,94 @@
+
+
+
+/* The display's own edges, named once. iPadOS draws the status bar OVER a
+   standalone web app — that is what makes it full screen — so the page has to
+   reserve the strip it sits in. Written as variables rather than env() at each
+   site because env() cannot be given a value in a test, and a variable can. */
+:root{
+  --sat:env(safe-area-inset-top,0px);
+  --sab:env(safe-area-inset-bottom,0px);
+  --sal:env(safe-area-inset-left,0px);
+  --sar:env(safe-area-inset-right,0px);
+  /* The reading measure, in one place. #app and the bar's contents both use
+     it, which is what keeps the wordmark above the column it belongs to. */
+  --measure:780px;
+  /* And the bar's own height, which the panes below have to step around. It
+     grows at the tablet breakpoint, so it cannot be a literal in three rules. */
+  --navh:58px;
+}
+@media(min-width:768px){:root{--measure:900px;--navh:62px}}
+@media(min-width:1024px){:root{--measure:960px}}
+/* AND env() CANNOT TELL US ABOUT AN IPAD. iPadOS reports
+   safe-area-inset-top: 0 even for an installed web app, because on a device
+   with no notch there is no geometrically unsafe area — yet the status bar is
+   still DRAWN OVER the page, so the clock lands on the wordmark. The inset is
+   honest and useless.
+
+   Being installed is the fact that matters, and it is knowable: Home Screen
+   apps get .installed on <html>. Then reserve the 24pt the status bar
+   occupies, keeping whatever env() reports when that is larger — an iPhone
+   notch is 47-59pt and must win. Gated on height because iPhone landscape
+   hides the status bar entirely, and reserving room for a bar that is not
+   there is the same bug in the other direction. */
+@media (min-height:600px){
+  html.installed{--sat:max(env(safe-area-inset-top,0px),24px)}
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+
+:root{
+  /* Core palette */
+  --bg:#EFF3F8;--white:#FFFFFF;--card:#FFFFFF;
+  --border:#D1DCE8;--border2:#E8EEF4;--border3:#CBD5E1;
+  --navy:#0F1E3D;--navy2:#1B3461;--navy3:#2C4A82;
+  --accent:#0284C7;--accent-2:#0EA5E9;--teal:var(--accent);--teal2:var(--accent-2);--teal3:#BAE6FD;--teal4:#E0F2FE;
+  --text:#0F172A;--muted:#475569;--dim:#94A3B8;--faint:#CBD5E1;
+  --success:#059669;--success-2:#10B981;--green:var(--success);--green2:var(--success-2);--green-bg:#ECFDF5;--green-b:#A7F3D0;
+  --danger:#DC2626;--danger-2:#EF4444;--red:var(--danger);--red2:var(--danger-2);--red-bg:#FFF1F1;--red-b:#FECACA;
+  --warning:#B45309;--warning-2:#D97706;--amber:var(--warning);--amber2:var(--warning-2);--amber-bg:#FFFBEB;--amber-b:#FDE68A;
+  --purple:#7C3AED;
+  /* Type — a minor third (1.2) from a 16px body. Named by role rather than by
+     size, because a role survives a change of ratio and "--t-14" does not. */
+  --t-micro:9px;--t-tiny:11px;--t-meta:13px;--t-body:16px;--t-lead:19px;
+  --t-h4:23px;--t-h3:28px;--t-h2:33px;--t-h1:40px;--t-display:48px;--t-hero:58px;
+  /* Spacing — a 4-point scale. Four rather than eight because this UI leans on
+     the middle steps (12, 20, 28) that an 8-only scale rounds away. --s0 is the
+     hairline exception for insets inside a chip or a mark, not page rhythm. */
+  --s0:2px;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;
+  --s6:24px;--s7:28px;--s8:32px;--s9:40px;--s10:48px;--s11:64px;
+  /* Radius & shadows */
+  --r:16px;--r2:12px;--r3:8px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
+  --shadow:0 2px 6px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.06);
+  --shadow-md:0 4px 12px rgba(0,0,0,.08),0 16px 40px rgba(0,0,0,.08);
+  --shadow-glow:0 0 0 3px rgba(14,165,233,.15);
+  /* Typography */
+  --font-sans:'DM Sans',system-ui,sans-serif;
+  --font-display:'DM Serif Display',Georgia,serif;
+  --font-mono:'JetBrains Mono',monospace;
+  /* Transitions */
+  --ease:cubic-bezier(.16,1,.3,1);
+  --ease-spring:cubic-bezier(.34,1.56,.64,1);
+}
+
+/* One ring for every element a keyboard or trackpad can land on, so tabbing
+   through the app is never silent. :focus-visible (not :focus) so a mouse or
+   touch tap — already answered by :active — never gets an outline it did not
+   ask for. */
+:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px;border-radius:6px}
+
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#0A1628;--white:#0F1E3D;--card:#111E35;
+    --border:#1E3358;--border2:#1A2F50;--border3:#243B60;
+    --text:#F1F5F9;--muted:#94A3B8;--dim:#64748B;--faint:#334155;
+    --green-bg:#022C22;--green-b:#065F46;
+    --red-bg:#2D0A0A;--red-b:#7F1D1D;
+    --amber-bg:#271B04;--amber-b:#78350F;
+  }
+}
+
+html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{font-family:var(--font-sans);background:var(--bg);color:var(--text);min-height:100vh;min-height:100dvh;font-size:16px;line-height:1.5}
+#app{max-width:780px;margin:0 auto;padding:0 16px;min-height:100vh;min-height:100dvh}
+

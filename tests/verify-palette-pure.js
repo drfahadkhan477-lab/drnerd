@@ -53,9 +53,13 @@ const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
-const HC_RAW = read('scripts/highcontrast-patch.js');
-const CT_RAW = read('scripts/calibrationtrack-patch.js');
-const THEME_RAW = read('scripts/theme-patch.js');
+/* The app's own stylesheet, which is what ships. This suite used to read the
+   palettes out of the retired patch scripts (theme-, highcontrast- and
+   calibrationtrack-patch.js), and by the time the chain was retired those had
+   drifted: the app renamed --teal/--teal2 to --accent/--accent-2, so the
+   Monitor comparison below was reading a fallback literal, not the palette. */
+const CSS_RAW = require('./_appcut.js').stylesheet();
+const HC_RAW = CSS_RAW, CT_RAW = CSS_RAW, THEME_RAW = CSS_RAW;
 /* Blanked for anything that hunts a PATTERN, raw only where the comments are
    deliberately the subject. Both halves of that are load-bearing: the sweep
    in verify-figfade-pure went red on its own documentation before it was
@@ -101,9 +105,9 @@ function palette(src, id, where) {
   return out;
 }
 
-const CONTRAST = palette(HC, 'contrast', 'highcontrast-patch.js');
+const CONTRAST = palette(HC, 'contrast', 'the stylesheet');
 const NAMED = ['slate', 'parchment', 'nocturne', 'cathlab', 'monitor']
-  .reduce((a, id) => (a[id] = palette(THEME, id, 'theme-patch.js'), a), {});
+  .reduce((a, id) => (a[id] = palette(THEME, id, 'the stylesheet'), a), {});
 
 head('the palettes were actually read');
 {
@@ -113,8 +117,8 @@ head('the palettes were actually read');
   const missing = need.filter(k => !CONTRAST[k]);
   ok('the Contrast palette parsed, with every token this suite reads',
      missing.length === 0, missing.length ? `missing ${missing.join(', ')}` : Object.keys(CONTRAST).length + ' tokens');
-  const thin = Object.entries(NAMED).filter(([, p]) => !p['--border2'] || !p['--border3']).map(([id]) => id);
-  ok('and all five named palettes parsed their border weights',
+  const thin = Object.entries(NAMED).filter(([, p]) => !p['--border2'] || !p['--border3'] || !p['--accent'] || !p['--accent-2']).map(([id]) => id);
+  ok('and all five named palettes parsed their border weights and accents',
      thin.length === 0, thin.length ? `thin: ${thin.join(', ')}` : Object.keys(NAMED).join(', '));
 }
 
@@ -148,14 +152,14 @@ head('the properties Contrast exists for — floors, not snapshots');
      composite nothing has measured — so this asserts the ordering, which
      survives either palette being retuned, rather than a fixed figure. */
   ok('the Contrast accent is no brighter than Monitor’s, the brightest already swept',
-     lum(CONTRAST['--accent']) <= lum(NAMED.monitor['--teal'] || '#2DD4BF'),
-     `${l3(lum(CONTRAST['--accent']))} vs ${l3(lum(NAMED.monitor['--teal'] || '#2DD4BF'))}`);
+     lum(CONTRAST['--accent']) <= lum(NAMED.monitor['--accent']),
+     `${l3(lum(CONTRAST['--accent']))} vs ${l3(lum(NAMED.monitor['--accent']))}`);
   ok('and neither is its accent-2',
-     lum(CONTRAST['--accent-2']) <= lum(NAMED.monitor['--teal2'] || '#5EEAD4'),
-     `${l3(lum(CONTRAST['--accent-2']))} vs ${l3(lum(NAMED.monitor['--teal2'] || '#5EEAD4'))}`);
+     lum(CONTRAST['--accent-2']) <= lum(NAMED.monitor['--accent-2']),
+     `${l3(lum(CONTRAST['--accent-2']))} vs ${l3(lum(NAMED.monitor['--accent-2']))}`);
 }
 
-head('and the figures quoted in highcontrast-patch.js are those figures');
+head('and the figures quoted beside the Contrast palette are those figures');
 {
   /* Read from the RAW source: these live in the comments, which is exactly
      what is being checked. */
@@ -190,7 +194,7 @@ head('and the figures quoted in highcontrast-patch.js are those figures');
   }
 }
 
-head('and the tick figures quoted in calibrationtrack-patch.js are too');
+head('and the tick figures quoted beside the progress track are too');
 {
   const NAME = { Slate: 'slate', Parchment: 'parchment', Nocturne: 'nocturne',
                  'Cath Lab': 'cathlab', Monitor: 'monitor', Contrast: 'contrast' };

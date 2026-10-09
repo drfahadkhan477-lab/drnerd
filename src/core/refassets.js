@@ -164,6 +164,43 @@ function add(bytes, filename) {
 function get(key) { return mem[key] || ''; }
 function has(key) { return !!mem[key]; }
 function keys() { return Object.keys(mem); }
+/* Backups carry only cited user assets, never the build's bundled corpus.
+   A cited image that is not here (a version 5 backup restored on a new device,
+   or an image the store refused and a relaunch then lost) is left out and
+   listed in `missing`, never a reason to refuse: refusing withheld the ink,
+   notes and progress too, on every export after, with no way to recover. */
+async function backup(bodies) {
+  await ready();
+  const assets = Object.create(null), missing = [], re = /refimg:\/\/(u\/[a-z0-9]+-[a-z0-9]+\.[a-z]+)/g;
+  for (const body of bodies || []) {
+    let m; re.lastIndex = 0;
+    while ((m = re.exec(String(body || '')))) {
+      if (has(m[1])) assets[m[1]] = get(m[1]);
+      else if (!missing.includes(m[1])) missing.push(m[1]);
+    }
+  }
+  return { assets, missing };
+}
+function validateBackup(assets) {
+  if (!assets || typeof assets !== 'object' || Array.isArray(assets)) throw new Error('Invalid image backup.');
+  return Object.keys(assets).map(key => {
+    if (!/^u\/[a-z0-9]+-[a-z0-9]+\.(jpg|jpeg|png|webp|gif|avif)$/.test(key)) throw new Error('Invalid image key.');
+    const value = assets[key];
+    const head = 'data:' + mimeFor(key) + ';base64,';
+    if (typeof value !== 'string' || !value.startsWith(head)) throw new Error('Invalid image data.');
+    const encoded = value.slice(head.length);
+    if (!encoded || encoded.length % 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw new Error('Invalid image encoding.');
+    const raw = atob(encoded), bytes = Uint8Array.from(raw, c => c.charCodeAt(0));
+    if (PREFIX + hashBytes(bytes) + '.' + key.split('.').pop() !== key) throw new Error('Image checksum does not match.');
+    return [key, value];
+  });
+}
+async function restoreBackup(assets) {
+  const entries = validateBackup(assets); // validate every asset before any write
+  await ready();
+  const stored = await Promise.all(entries.map(([key, value]) => write(key, value)));
+  return stored.every(ok => ok !== false);
+}
 function count() { return keys().length; }
 function bytes() {
   let n = 0;
@@ -210,6 +247,7 @@ function sweep(bodies, opts) {
 }
 
 root.RefAssets = { ready, add, get, has, keys, count, bytes, drop, sweep, flush, pending,
+                   backup, validateBackup, restoreBackup,
                    isImageName, mimeFor, hashBytes, PREFIX,
                    _mem: () => mem };
 

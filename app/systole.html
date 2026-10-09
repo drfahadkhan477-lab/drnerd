@@ -18,7 +18,7 @@
 @font-face{font-family:'DM Sans';font-style:italic;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSans-Italic.woff2]@@) format('woff2')}
 @font-face{font-family:'DM Serif Display';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSerifDisplay.woff2]@@) format('woff2')}
 @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/JetBrainsMono.woff2]@@) format('woff2')}
-@@SLOT[app:app/css/systole.css]@@</style>
+@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@</style>
 <script>
 /* Home Screen apps only. navigator.standalone is the iOS spelling and
    display-mode:standalone is everyone else's; either one means the browser
@@ -1372,7 +1372,7 @@ root.Wiggers = { mount, VIEWS };
 })(typeof window !== 'undefined' ? window : this);
 
 /* the heart's surfaces, baked by scripts/apex-patch.js — build-pwa moves the base64 into content/ */
-window.HEART3D_MESH_KEY='503405c9e1b9f5a1';
+window.HEART3D_MESH_KEY='e3900ba5129647e7';
 window.HEART3D_MESH_B64='@@SLOT[payload:HEART_MESH]@@';
 
 /* ═══════════ cardiac waveform engine — original, offline, no external assets ═══════════
@@ -2079,9 +2079,12 @@ function mountInk(){
 function currentQ(){ return (S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null; }
 
 /* ── export / import (survives file:// storage limits) ────────────────────── */
-function exportMarkup(){
+async function exportMarkup(){
+  try{
+  await Store.ready();
   if(typeof flushLog==='function') flushLog();
-  const blob=new Blob([JSON.stringify({v:5,ink:INK,notes:NOTES,
+  const {assets,missing}=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{assets:{},missing:[]};
+  const blob=new Blob([JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
     refs:(typeof REF!=='undefined'?REF:[]),
     log:(typeof LOG!=='undefined'?LOG:[]),
     chat:loadJSON('accsap12.chat',{}),stats:loadJSON('accsap12.v2',{}),
@@ -2092,6 +2095,23 @@ function exportMarkup(){
   a.href=URL.createObjectURL(blob);
   a.download='accsap12-annotations-'+new Date().toISOString().slice(0,10)+'.json';
   a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
+  return true;
+  }catch(_){ toast('Backup could not be exported.'); return false; }
+}
+function validateAnnotationBackup(d){
+  const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+  if(!record(d)||(d.v!=null&&(!Number.isInteger(d.v)||d.v<1||d.v>6))) throw new Error('Invalid backup.');
+  const safe=v=>{ if(v&&typeof v==='object') for(const k of Object.keys(v)){
+    if(['__proto__','constructor','prototype'].includes(k)) throw new Error('Unsafe backup key.'); safe(v[k]);
+  }};
+  safe(d);
+  for(const k of ['ink','notes','chat','stats']) if(d[k]!=null&&!record(d[k])) throw new Error('Invalid '+k);
+  for(const k of ['refs','log','mem']) if(d[k]!=null&&!Array.isArray(d[k])) throw new Error('Invalid '+k);
+  if(d.refs&&d.refs.some(r=>!record(r)||typeof r.body!=='string')) throw new Error('Invalid reference.');
+  if(d.v===6&&!record(d.assets)) throw new Error('Missing backup images.');
+  if(d.assets!=null) RefAssets.validateBackup(d.assets);
+  return d.stats?progressFromBackup(d.stats):null;
 }
 function importMarkup(){
   const inp=document.createElement('input');
@@ -2099,9 +2119,12 @@ function importMarkup(){
   inp.onchange=()=>{
     const f=inp.files[0]; if(!f)return;
     const r=new FileReader();
-    r.onload=()=>{
+    r.onload=async()=>{
       try{
         const d=JSON.parse(r.result);
+        const progress=validateAnnotationBackup(d);
+        await Store.ready();
+        const assetsStored=d.assets==null||await RefAssets.restoreBackup(d.assets);
         if(d.ink)  { INK=d.ink;   saveJSON(INK_KEY,INK); }
         if(d.notes){ NOTES=d.notes; saveJSON(NOTE_KEY,NOTES); }
         if(d.refs&&typeof REF!=='undefined'){ REF=d.refs; saveJSON('accsap12.ref',REF);
@@ -2111,9 +2134,14 @@ function importMarkup(){
            store; this one only wrote, so a restored backup's conversations
            did not appear until the app was next launched. */
         if(d.chat){ CHATS=d.chat; saveJSON('accsap12.chat',CHATS); }
-        if(d.stats)saveJSON('accsap12.v2',d.stats);
+        if(d.stats){
+          Object.assign(S,progress);
+          FOREIGN={}; for(const k of Object.keys(d.stats)) if(!SCHEMA_KEYS.includes(k)) FOREIGN[k]=d.stats[k];
+          saveJSON('accsap12.v2',d.stats);
+          applyTheme();
+        }
         if(d.mem&&typeof Memory!=='undefined') Memory.replaceAll(d.mem);
-        toast('Annotations restored.'); render();
+        toast(assetsStored?'Annotations restored.':'Annotations restored for this visit, but the images could not be saved. Export a backup before closing.'); render();
       }catch(e){ toast('That file could not be read.'); }
     };
     r.readAsText(f);
@@ -2136,6 +2164,9 @@ function toast(msg){
 
 const REF_KEY='accsap12.ref';
 const REF_SEED = /*REF_SEED_START*/@@SLOT[payload:REF_SEED]@@/*REF_SEED_END*/;
+/* Where each seeded note's pearl is, found at build time (scripts/pearl-bake.js);
+   no note text, only positions and scores, checked against the note at use. */
+const REF_PEARLS = /*REF_PEARLS_START*/@@SLOT[payload:REF_PEARLS]@@/*REF_PEARLS_END*/;
 /* Keyed by the CONTENT of the seed, not by a version number somebody has to
    remember to bump.
  *
@@ -3133,6 +3164,9 @@ function buildPhysio(){
     ${physioView==='pv'?`<div class="physio-chips iv-chips">${Physio.INTERVENTIONS.map(iv=>
       `<button class="chip${physioIv===iv.id?' hot':''}" data-physio-iv="${iv.id}">${e(iv.label)}</button>`).join('')}</div>`:''}
     <div class="physio-note" id="physioNote"></div>
+    <div class="ref-hint physio-model" id="physioModel">A teaching model: every curve is computed from
+      textbook resting values, not recorded from a patient. Use it to understand the cycle, not to
+      measure or interpret one.</div>
   </div>`;
 }
 function physioNoteHtml(){
@@ -3292,12 +3326,6 @@ function mountTwelve(){
   /* The canvas is sized from its box, and the box is not final until layout
      settles after a screen change — redraw once it is. */
   requestAnimationFrame(()=>twelve&&twelve.draw());
-}let __webgl2Checked=null;
-function hasWebGL2(){
-  if(__webgl2Checked!==null) return __webgl2Checked;
-  try{ const c=document.createElement('canvas'); __webgl2Checked=!!c.getContext('webgl2'); }
-  catch(_){ __webgl2Checked=false; }
-  return __webgl2Checked;
 }
 function setLab(k){
   /* A lead selected on one rhythm is still the lead you want to watch on the
@@ -3486,7 +3514,7 @@ function peekQuestion(id){
         <div><div class="peek-ch">${e(q.ch)} · item ${q.n}</div>
              <div class="peek-sub">related item from your question bank</div></div>
         <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"
-          onclick="closePeek()">${icon('x','icon-sm')}</button>
+          aria-label="Close" onclick="closePeek()">${icon('x','icon-sm')}</button>
       </div>
       <div class="peek-body">
         <p>${e(q.s)}</p>
@@ -4145,6 +4173,13 @@ var AMBIENT = (function(){
 
   var NAMES = { heart: 'The heart', ecg: 'The 12-lead', pvloop: 'The pressure–volume loop' };
   var last = Date.now(), active = false, view = null, el = null, live = null;
+  /* THE HEART IS BUILT ONCE and kept, stopped, between visits, as the home hero's is
+     (mountHeroHeart3d). WebKit caps a page at sixteen WebGL contexts and does not
+     return a released one's slot, so a heart made on every visit filled the cap and
+     WebKit began evicting the oldest context on the page, which can be a live one
+     (synthetic-webkit: eleven evictions in twenty visits). verify-ambient counts the
+     contexts. Rebuilt only after a real loss, which no reattachment can revive. */
+  var heart = null, heartCanvas = null;
   var dwell = 0, closing = 0, moved = 0, lastX = null, lastY = null, lastScreen = null;
 
   function shellOpen(){ var sh = document.getElementById('shell'); return !!(sh && sh.classList.contains('ai-open')); }
@@ -4169,7 +4204,8 @@ var AMBIENT = (function(){
   }
 
   function release(){
-    if (live && live.destroy) { try { live.destroy(); } catch(_) {} }
+    if (live && live === heart) { try { heart.stop(); } catch(_) {} }
+    else if (live && live.destroy) { try { live.destroy(); } catch(_) {} }
     live = null;
   }
 
@@ -4179,12 +4215,24 @@ var AMBIENT = (function(){
     release();
     var stage = el.querySelector('.ambient-stage');
     stage.innerHTML = '';
-    var cv = document.createElement('canvas');
-    cv.className = 'ambient-canvas';
-    stage.appendChild(cv);
-    if (v === 'heart' && window.Heart3D) live = Heart3D.create(cv, { rhythm: 'sinus', mode: 'whole' });
-    else if (v === 'ecg' && window.ECG12) live = ECG12.mount(cv, { kind: 'sinus', hr: 68, dark: true });
-    else if (v === 'pvloop' && window.Wiggers) live = Wiggers.mount(cv, { view: 'pv', dark: true, hr: 68 });
+    if (v === 'heart' && heart && !heart.lost) {
+      stage.appendChild(heartCanvas);
+      live = heart.start();
+    } else {
+      var cv = document.createElement('canvas');
+      cv.className = 'ambient-canvas';
+      stage.appendChild(cv);
+      if (v === 'heart' && window.Heart3D) {
+        /* onLost drops the kept handles, as the hero mount does: Heart3D clears its lost flag on
+           restore but does not rebuild its GPU objects, so a restored instance cannot draw and
+           the next visit must build anew. The one showing at the time is destroyed by release(). */
+        var h = Heart3D.create(cv, { rhythm: 'sinus', mode: 'whole',
+          onLost: function(){ if (heart === h) { heart = null; heartCanvas = null; } } });
+        live = heart = h; heartCanvas = cv;
+      }
+      else if (v === 'ecg' && window.ECG12) live = ECG12.mount(cv, { kind: 'sinus', hr: 68, dark: true });
+      else if (v === 'pvloop' && window.Wiggers) live = Wiggers.mount(cv, { view: 'pv', dark: true, hr: 68 });
+    }
     view = v;
     el.setAttribute('data-view', v);
     el.setAttribute('data-live', live ? '1' : '0');
@@ -4928,7 +4976,7 @@ function aiSettings(){
   const wrap=document.getElementById('ai');
   wrap.innerHTML=`<div class="ai-head"><div class="ai-avatar">${icon("settings")}</div>
       <div style="flex:1"><div class="ai-title">Tutor settings</div></div>
-      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)" onclick="buildAI()">${icon("x")}</button></div>`+
+      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)" aria-label="Close" onclick="buildAI()">${icon("x")}</button></div>`+
     setupHtml()+
     `<div class="setup" style="padding-top:0">
        <button class="btn" style="width:100%;background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
@@ -5519,6 +5567,34 @@ const SCHEMA_KEYS=['schemaVersion','chStats','missed','theme','homeLayout',
   'practice','sinceBackup','lastBackup','resume','focusMode','examDate'];
 let FOREIGN={};
 
+function progressFromBackup(raw){
+  const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+  for(const k of ['chStats','srs','daily','practice','resume']) if(raw[k]!=null&&!record(raw[k])) throw new Error('Invalid statistics.');
+  /* Every entry too, before anything is stored: the Progress screen and the
+     scheduler read them field by field (d.a in buildStats, S.srs[id].due in
+     forecast7), so one null day passed here, was saved, and crashed Progress
+     on every later launch. A field is checked where the app reads it; one
+     that is absent is left to the reader's own default, as it always was. */
+  const count=v=>v==null||(Number.isFinite(v)&&v>=0);
+  const entries=(k,fields,need,extra)=>{ for(const v of Object.values(raw[k]||{})){
+    if(!record(v)||fields.some(f=>!count(v[f]))||need.some(f=>v[f]==null)||(extra&&!extra(v))) throw new Error('Invalid statistics.');
+  }};
+  entries('daily',['a','c','r'],['a','c']);
+  entries('chStats',['correct','total'],[]);
+  entries('practice',['n','c','t'],[]);
+  entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string'));
+  entries('resume',['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')));
+  for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
+    if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');
+  for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');
+  if(raw.missed!=null&&(!Array.isArray(raw.missed)||raw.missed.some(x=>typeof x!=='string'))) throw new Error('Invalid missed list.');
+  return {resume:raw.resume||{},resumed:false,sessionCorrect:raw.sessionCorrect||0,sessionTotal:raw.sessionTotal||0,
+    chStats:raw.chStats||{},missed:new Set(raw.missed||[]),srs:raw.srs||{},reviewStreak:raw.reviewStreak||0,
+    lastReviewDay:raw.lastReviewDay||null,daily:raw.daily||{},practice:raw.practice||{},
+    sinceBackup:raw.sinceBackup||0,lastBackup:raw.lastBackup||null,theme:raw.theme||'auto',homeLayout:raw.homeLayout||'signal',
+    focusMode:!!raw.focusMode,examDate:/^\d{4}-\d{2}-\d{2}$/.test(raw.examDate||'')?raw.examDate:null};
+}
+
 function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOREIGN,{
   schemaVersion:DATA_SCHEMA_VERSION,
   chStats:S.chStats,missed:[...S.missed],theme:S.theme,homeLayout:S.homeLayout,
@@ -5738,7 +5814,7 @@ function planNow(minutes){
 }
 function startPlan(minutes){
   const qs=planNow(minutes).items.map(it=>QBYID[it.id]).filter(q=>q&&!q.bad);
-  if(!qs.length){alert('Nothing to plan: there are no questions to draw from.');return;}
+  if(!qs.length){toast('Nothing to plan: there are no questions to draw from.');return;}
   startQuiz(null,'due',qs);
 }
 /* ── Topic runs — src/core/topicrun.js groups questions that are about the same thing (shared distinctive
@@ -5762,7 +5838,7 @@ function runLabel(r){
 function startRun(i){
   const r=_runsShown[i]; if(!r) return;
   const qs=r.ids.map(id=>QBYID[id]).filter(q=>q&&!q.bad);
-  if(qs.length<2){alert('That run is no longer available.');return;}
+  if(qs.length<2){toast('That run is no longer available.');return;}
   startQuiz(null,'due',qs);
 }
 /* ── Voice session — src/core/voicemode.js decides what to say and how to read what was said; the browser's
@@ -5817,10 +5893,10 @@ function voiceDock(state,text){
 }
 function voiceLive(v){ return _voice===v && S.screen==='quiz' && S.questions===v.deck; }
 function startVoice(){
-  if(!voiceAvailable()){alert('This browser cannot speak and listen. Try Safari or Chrome.');return;}
+  if(!voiceAvailable()){toast('This browser cannot speak and listen. Try Safari or Chrome.');return;}
   const ids=planNow(10).items.map(it=>it.id);
   const qs=ids.map(id=>QBYID[id]).filter(q=>q&&!q.bad&&q.o&&q.o.length);
-  if(!qs.length){alert('Nothing to ask: there are no questions to draw from.');return;}
+  if(!qs.length){toast('Nothing to ask: there are no questions to draw from.');return;}
   startQuiz(null,'due',qs);
   if(S.screen!=='quiz') return;
   const v=_voice={deck:S.questions,state:VoiceMode.init(S.questions.length),pending:[]};
@@ -6383,7 +6459,13 @@ function mountHeroHeart3d(){
      stays alive with its context; only the render loop stops, because a rAF
      loop drawing into a detached canvas is a frame budget spent on nothing. */
   if(!slot){ if(heroHeart3d) heroHeart3d.stop(); return; }
-  if(typeof Heart3D==='undefined'||!hasWebGL2()){
+  /* NO TEST CONTEXT FIRST. This asked hasWebGL2(), which made a throwaway
+     canvas and a WebGL2 context just to see if one could be had, and then
+     Heart3D.create asked again on the real canvas: two contexts per launch,
+     the first measured at 0.04 s with the CPU slowed 4x, and a slot of WebKit's sixteen held
+     until it was collected. create() returns null when there is no WebGL2,
+     and that is handled below exactly as the test's "no" was. */
+  if(typeof Heart3D==='undefined'){
     document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
     return;
   }
@@ -6435,8 +6517,9 @@ function mountHeroHeart3d(){
        restore could not re-mount even when asked. */
     /* A lost context cannot be revived by re-attaching its canvas, so this
        drops the canvas too and the next mount builds a new one. It is the only
-       remaining path in the app that allocates a second context, and it fires
-       when the GPU resets or iPadOS reclaims memory — not on navigation. */
+       path that gives the hero a second context (ambient mode builds one heart
+       of its own, once), and it fires when the GPU resets or iPadOS reclaims
+       memory — not on navigation. */
     onLost:function(){
       if(heroHeart3dCanvas&&heroHeart3dCanvas.parentNode) heroHeart3dCanvas.remove();
       heroHeart3d=null; heroHeart3dCanvas=null;
@@ -6445,7 +6528,11 @@ function mountHeroHeart3d(){
     onRestored:function(){
       if(S.screen==='home') mountHeroHeart3d();
     }});
-  if(!heroHeart3d){ cv.remove(); return; }
+  if(!heroHeart3d){
+    cv.remove();
+    document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
+    return;
+  }
   heroHeart3dCanvas=cv;
   cv.style.pointerEvents='none';           // decorative — never eats a home-screen scroll
   document.getElementById('heroHeart')?.classList.add('heart-3d-active');
@@ -6479,13 +6566,16 @@ function greet(){
   return h<5?'Burning the midnight oil':h<12?'Good morning':h<17?'Good afternoon':h<22?'Good evening':'Late session';
 }
 
-/* Harvested once — a few hundred notes is a few milliseconds of regex, but
-   render() is called on every answer, and paying it there would be careless.
-   Rebuilt when the library changes, which is what invalidateIndex signals. */
+/* Harvested once, and cached: render() is called on every answer. "A few
+   milliseconds of regex" was true of a few hundred notes; with the full shelf
+   it was the largest cost left at launch on an iPad's CPU, so the seeded notes'
+   pearls are found at build time (REF_PEARLS) and only notes edited or added
+   on this device are searched here. Rebuilt when the library changes, which is
+   what invalidateIndex signals. */
 let pearlCache=null, pearlCurrent=null;
 function pearlAll(){
   if(pearlCache) return pearlCache;
-  try{ pearlCache=(typeof Pearl!=='undefined'&&typeof REF!=='undefined')?Pearl.harvest(REF):[]; }
+  try{ pearlCache=(typeof Pearl!=='undefined'&&typeof REF!=='undefined')?Pearl.harvest(REF, typeof REF_PEARLS==='object'?REF_PEARLS:null):[]; }
   catch(_){ pearlCache=[]; }
   return pearlCache;
 }

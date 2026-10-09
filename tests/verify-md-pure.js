@@ -34,13 +34,11 @@
  * browser — the same division tests/verify-ipad-pure.js draws for the same
  * reason.
  *
- * THE FUNCTION IS REBUILT, NOT COPIED. A copy of md() pasted here would be
- * wrong the first time anybody patched the real one, and would keep passing.
- * So the chain is walked: start from read-patch's MD_NEW and apply every later
- * patch whose anchor appears in the text, in chain order, each exactly once —
- * the chain's own safety model. Seven patches across five steps currently
- * apply, two of which (figview, apexpage) were not found by grepping for
- * "function md(" and would have been missed by a hand-written list.
+ * THE FUNCTION IS LIFTED, NOT COPIED. A copy of md() pasted here would be
+ * wrong the first time anybody changed the real one, and would keep passing.
+ * So it is cut out of app/systole.html, the page that ships. (It used to be
+ * rebuilt by replaying the patch chain onto read-patch's MD_NEW; the chain is
+ * retired and every edit to md() now goes into the page.)
  */
 'use strict';
 const fs = require('fs');
@@ -59,40 +57,23 @@ const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
-/* ── rebuilding md() ─────────────────────────────────────────────────────── */
-const applied = [];
-function buildMd() {
-  const m = read('scripts/read-patch.js')
-    .match(/const MD_NEW = (\[[\s\S]*?\n\])\.join\('\\n'\);/);
-  if (!m) throw new Error('read-patch.js no longer defines MD_NEW as a line array');
-  /* eslint-disable no-eval */
-  let md = eval(m[1]).join('\n');
-
-  const chain = read('scripts/build.js').match(/const CHAIN = \[([\s\S]*?)\];/)[1];
-  const names = [...chain.matchAll(/'([a-z0-9-]+)'/g)].map(x => x[1]);
-  const after = names.slice(names.indexOf('read') + 1);
-  const CALL = /patch\(\s*(['"`])((?:\\.|(?!\1).)*)\1\s*,\s*`((?:\\.|[^\\`])*)`\s*,\s*`((?:\\.|[^\\`])*)`\s*\)/g;
-  const un = t => t.replace(/\\`/g, '`').replace(/\\\$/g, '$').replace(/\\\\/g, '\\');
-
-  for (const n of after) {
-    const f = path.join(ROOT, 'scripts', `${n}-patch.js`);
-    if (!fs.existsSync(f)) continue;
-    for (const p of fs.readFileSync(f, 'utf8').matchAll(CALL)) {
-      const find = un(p[3]);
-      if (find.length < 20) continue;          // too short to be md-specific
-      const hits = md.split(find).length - 1;
-      if (hits === 0) continue;
-      /* The chain's rule, kept: an anchor that matches twice is not an anchor.
-         Reporting it rather than guessing which one was meant. */
-      if (hits > 1) { applied.push(`AMBIGUOUS ${n}: ${p[2]}`); continue; }
-      md = md.split(find).join(un(p[4]));
-      applied.push(`${n}: ${p[2]}`);
-    }
-  }
-  return md;
+/* ── md() as the page ships it ────────────────────────────────────────────
+   Until the patch chain was retired this suite rebuilt md() by taking
+   read-patch.js's MD_NEW and replaying every later patch step whose anchor
+   matched it. Since then md() lives in app/systole.html and every edit goes
+   there, so it is cut out of the page: from its one `function md(t){` to the
+   first closing brace at column 0 after it. */
+function liftMd() {
+  const page = read('app/systole.html');
+  const open = 'function md(t){';
+  const n = page.split(open).length - 1;
+  if (n !== 1) throw new Error(`app/systole.html: expected one "${open}", found ${n}`);
+  const i = page.indexOf(open), j = page.indexOf('\n}\n', i);
+  if (j < 0) throw new Error('md() has no closing brace at column 0');
+  return page.slice(i, j + 2);
 }
 
-const MD_SRC = buildMd();
+const MD_SRC = liftMd();
 
 /* An escaper that does what e() is assumed to do. Named REFERENCE rather than
    `e`, because it is this suite's assumption made visible — not the app's. */
@@ -113,18 +94,16 @@ function compile(escaper, figures) {
 }
 const md = compile(REFERENCE, { k: 'data:image/png;base64,AAAA' });
 
-head('the function under test is the one the chain builds');
+head('the function under test is the one the page ships');
 {
-  const bad = applied.filter(a => a.startsWith('AMBIGUOUS'));
-  ok('MD_NEW was found and is a whole function',
+  ok('md() was found and is a whole function',
      /^function md\(t\)\{/.test(MD_SRC.trim()) && /return s;/.test(MD_SRC),
      `${MD_SRC.split('\n').length} lines`);
-  /* Vacuity guard. "Apply every patch that matches and expect no failures" is
-     also what applying none looks like. */
-  ok('later patches were applied to it', applied.length >= 5, `${applied.length} applied`);
-  ok('and none of their anchors was ambiguous', bad.length === 0, bad.join('; ') || 'none');
+  /* Vacuity guard: a cut that stopped early would still compile and would
+     test a fragment. The figure branch is the last thing md() learned. */
+  ok('the cut runs past the figure branch to the end of the function',
+     /refImgSrc\(/.test(MD_SRC) && MD_SRC.trim().endsWith('}'), `${MD_SRC.length} characters`);
   ok('it compiles to a callable function', typeof md === 'function');
-  for (const a of applied) console.log(`          ${a}`);
 }
 
 /* ── looking at tags, not at substrings ─────────────────────────────────────

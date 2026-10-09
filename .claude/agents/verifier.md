@@ -15,7 +15,7 @@ named) and, if given, the claim being made ("fixes X", "adds check Y").
 
 ## Run, in this order, tailing only result lines
 1. `node --check` on every changed `.js` file.
-2. `npm run steps` and `npm run suites`: both listings must still work.
+2. `npm run suites`: the suite listing must still work.
 3. `npm run test:pure`.
 4. `node tests/verify-stats.js`.
 5. `node scripts/leak-guard.js` on each changed file.

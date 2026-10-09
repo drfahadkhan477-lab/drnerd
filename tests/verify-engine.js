@@ -302,8 +302,13 @@ head('a run reported from somewhere else says where it came from');
      /git status --porcelain/.test(v));
   /* Provenance on the green line too. A green run from a stale tree is the
      more dangerous of the two: nobody re-reads a summary that says green. */
+  /* Compared as the expression each line prints, not as the literal
+     provenance(): since the 2026-10-08 record it is asked once, into
+     STARTED_ON, and both lines print that. */
+  const greenSays = (v.match(/all green[^\n]{0,40}?\$\{([^}]+)\}/) || [])[1];
+  const failSays = (v.match(/checkout: \$\{([^}]+)\}/) || [])[1];
   ok('a green run carries the same provenance as a failing one',
-     /all green[\s\S]{0,60}provenance\(\)/.test(v));
+     !!greenSays && greenSays === failSays && /^(provenance\(\)|STARTED_ON)$/.test(greenSays), `${greenSays} / ${failSays}`);
   ok('the log header names the engine and the build it tested, not only the code',
      /engine\s+\$\{ENGINE\}/.test(v) && /statSync\(TARGET\)/.test(v));
   /* The transcript quotes suite output verbatim, and suite output quotes note
@@ -319,7 +324,7 @@ head('the tools the suites need are pinned, and named before they are missed');
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const dev = pkg.devDependencies || {};
   /* PINNED, NOT RANGED. A suite that measures a browser is measuring a specific
-     browser: "^1.56.0" makes a green run mean "green on whatever shipped this
+     browser: "^1.63.0" makes a green run mean "green on whatever shipped this
      week", which is not a claim anybody can act on later. */
   ok('playwright is a devDependency', !!dev.playwright, dev.playwright || 'absent');
   ok('and pinned to one exact version', /^\d+\.\d+\.\d+$/.test(dev.playwright || ''), dev.playwright || '');

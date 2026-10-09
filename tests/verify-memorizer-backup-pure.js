@@ -44,6 +44,66 @@ module.exports = (async () => {
     await assert.rejects(backup.restore(JSON.stringify({ ...JSON.parse(text), payload, checksum })), /Invalid binary payload/);
     assert.deepEqual(Array.from(new Uint8Array((await store.get('files', 'unit')).bytes)), bytes);
   }
+  // A rejected backup must leave every store exactly as it was, so compare the
+  // whole database before and after, not only the record each case corrupts.
+  const state = async () => JSON.parse(await backup.exportText()).payload;
+  const resealed = async records => { const payload = JSON.stringify(records); return JSON.stringify({ ...JSON.parse(text), payload, checksum: await root.MemProvenance.fingerprint(payload) }); };
+  // Start from a known, full database: "unchanged" proves nothing about an
+  // empty one, which a defect upstream of this block could already have left.
+  await backup.restore(text);
+  const before = await state();
+  assert.equal(JSON.parse(before).docs.length, 1, 'the unchanged-database cases need data to lose');
+  const truncated = text.slice(0, Math.floor(text.length / 2));
+  await assert.rejects(backup.restore(truncated));
+  assert.equal(await state(), before, 'a truncated backup changed the database');
+  const unsafe = JSON.parse(JSON.parse(text).payload);
+  unsafe.cards[0].srs = JSON.parse('{"__proto__": {"polluted": true}, "due": "2026-10-10", "reps": 4}');
+  await assert.rejects(backup.restore(await resealed(unsafe)), /Unsafe record key/);
+  assert.equal(await state(), before, 'an unsafe record key changed the database');
+  const badView = JSON.parse(JSON.parse(text).payload);
+  badView.meta.find(r => r.id === 'binary-view').bytes.$binary = 'Function';
+  await assert.rejects(backup.restore(await resealed(badView)), /Invalid binary view/);
+  assert.equal(await state(), before, 'an unknown binary view type changed the database');
+  // Text outside ASCII survives the round trip: accents, Greek, CJK, an emoji
+  // outside the BMP, a combining mark, a right-to-left run and a NUL.
+  const unicode = 'Δ β‑blocker — Müller é 心臓 🫀 שלום \u0000 end';
+  await store.batch([{ store: 'docs', value: { ...document, name: unicode, clusters: [{ ...document.clusters[0], title: unicode, text: unicode, segments: [{ text: unicode, page: 1 }] }] } },
+    { store: 'meta', value: { id: 'notes', recs: { 'unit:0': { text: unicode } } } }]);
+  const unicodeBackup = await backup.exportText();
+  await store.batch([{ store: 'docs', value: document }, { store: 'meta', value: { id: 'notes', recs: {} } }]);
+  await backup.restore(unicodeBackup);
+  const restoredDoc = await store.get('docs', 'unit');
+  assert.equal(restoredDoc.name, unicode); assert.equal(restoredDoc.clusters[0].segments[0].text, unicode);
+  assert.equal((await store.get('meta', 'notes')).recs['unit:0'].text, unicode);
+  // An empty database exports, and restoring it empties every store: a
+  // restore replaces, it does not merge.
+  await store.batch(root.MemStore.STORES.map(s => ({ store: s, clear: true })));
+  const emptyBackup = await backup.exportText();
+  assert.equal((await backup.inspect(emptyBackup)).docs, 0);
+  await backup.restore(unicodeBackup);
+  assert.equal((await store.all('docs')).length, 1, 'the empty-restore case needs data to remove');
+  await backup.restore(emptyBackup);
+  for (const s of root.MemStore.STORES) assert.equal((await store.all(s)).length, 0, s + ' kept records after an empty restore');
+  await backup.restore(text);
+  // Writes queued before a restore belong to the replaced data: none of them
+  // may land on top of the restored database. Enqueue enough small writes
+  // that they are still pending when the restore commits, plus a stale note
+  // and a stale study step, and do not await any of them before restoring.
+  const pending = [];
+  for (let i = 0; i < 100; i++) pending.push(store.put('meta', { id: 'stale-' + i, at: i }));
+  pending.push(store.put('meta', { id: 'notes', recs: { 'unit:0': { text: 'STALE' } } }));
+  pending.push(store.saveStep({ id: 'unit', state: { docId: 'unit', titles: ['One'], per: { 0: { done: false, stale: true } } } }, []));
+  await backup.restore(text);
+  await Promise.allSettled(pending);
+  assert.equal((await store.get('meta', 'notes')).recs['unit:0'].text, 'My note', 'a write queued before the restore overwrote the restored note');
+  assert.equal((await store.get('sessions', 'unit')).state.per[0].stale, undefined, 'a study step queued before the restore overwrote the restored session');
+  assert.equal((await store.all('meta')).length, JSON.parse(JSON.parse(text).payload).meta.length, 'writes queued before the restore left records the backup does not have');
+  assert.equal(await state(), before, 'the database after a raced restore differs from the backup');
+  // A refused replacement leaves the database as it was. (Whether it also
+  // keeps writes waiting for retry is not measured here: the memory fallback
+  // has no way to make a write fail.)
+  await assert.rejects(store.replace([{ store: 'meta', clear: true }, { store: 'meta', value: { id: 7 } }]), /invalid storage operation/);
+  assert.equal(await state(), before, 'a refused replacement changed the database');
   // Keep the version 1 format compatible with an independent encoder,
   // including padding on either side of a binary conversion boundary.
   for (const length of [0, 1, 2, 3, 8189, 8190, 8191, 16379, 16380, 16381]) {
@@ -75,5 +135,8 @@ module.exports = (async () => {
   console.log('PASS version 1 base64 matches an independent encoder across padding/chunk boundaries');
   console.log('PASS 8 MiB backup preserves every byte within the conversion budget; malformed base64 is rejected without writes');
   console.log('PASS backup restores PDF bytes, notes, progress and SRS; excludes keys and refuses corruption/incomplete records');
+  console.log('PASS truncated, unsafe-key and unknown-view backups are refused with the whole database unchanged');
+  console.log('PASS writes queued before a restore cannot land on the restored database; a refused replacement changes nothing');
+  console.log('PASS non-ASCII text round-trips exactly, and an empty backup restores to empty stores');
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });

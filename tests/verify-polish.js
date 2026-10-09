@@ -9,7 +9,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted } = require('./_render.js');
+const { booted, settled, watchTransitions } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-polish.js <patched.html>'); process.exit(1); }
@@ -33,6 +33,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const page = watch(await browser.newPage({ viewport: { width: 900, height: 1000 } }), events, 'main');
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
+  await watchTransitions(page);
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   /* The Stage 1 build injects app.js only after its content fetch resolves,
@@ -196,6 +197,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      the same or the click passes straight through with no error at all. */
   await page.evaluate(() => { T.tool = 'pen'; T.active = true; T.erase = false; T.sizeKey = 'L'; syncInkMode(); });
   await page.waitForTimeout(300);
+  /* PRECONDITION: no screen transition still in flight. synthetic-webkit
+     once died here with "Element is not attached to the DOM": a view
+     transition started earlier (home to quiz) committed its renderNow()
+     while the canvas below was being scrolled to, and the card it belonged
+     to was replaced. Waiting on the live transition's `finished` is the
+     same precondition resized() uses; it asserts nothing. */
+  await page.evaluate(() => (window.__vtLive && window.__vtLive.finished
+    ? window.__vtLive.finished.catch(() => {}) : null));
   const inkCanvas = page.locator('.q-card .ink-canvas');
   await inkCanvas.scrollIntoViewIfNeeded();
   const inkBox = await inkCanvas.boundingBox();
@@ -618,7 +627,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const touchPage = watch(await browser.newPage({ viewport: { width: 900, height: 1000 }, hasTouch: true }), events, 'touch');
     await touchPage.goto(URL, { waitUntil: 'load', timeout: 250000 });
     await booted(touchPage, { timeout: 150000 });
-    const touch = await touchPage.evaluate(async () => {
+    const onPlainSurface = await touchPage.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       /* WATCH THE CALL, NOT THE FLAG. This read `second.defaultPrevented`,
          which is only true if the browser HONOURS preventDefault() on a
@@ -655,9 +664,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         const mk = () => new TouchEvent('touchend', { bubbles: true, cancelable: true });
         const first = at();
         if (!first) return { asked: false, honoured: false, cancelable: null, connected: null, missing: true };
+        const t1 = Date.now();
         first.dispatchEvent(mk());
         await wait(60);
         const el = at() || first;
+        /* The app suppresses a second tap within 350 ms of the first, by Date.now(). A busy
+           page can hold this 60 ms wait past that; the gap goes in the detail so the reader
+           can tell a stretched wait from a handler that did not ask. */
+        const gap = Date.now() - t1;
         const second = mk();
         let asked = false;
         const orig = second.preventDefault;
@@ -676,24 +690,52 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         const connected = el.isConnected;
         el.dispatchEvent(second);
         return { asked, honoured: second.defaultPrevented,
-                 cancelable: second.cancelable, connected };
+                 cancelable: second.cancelable, connected, gap };
       };
       goHome(); render();
       const loose = document.createElement('div');
       document.body.appendChild(loose);
       /* A plain div nothing re-renders, so the element itself is stable. */
-      const onPlainSurface = await doubleTap(loose);
+      const r = await doubleTap(loose);
       loose.remove();
-
-      /* render() runs inside a view transition on a screen change, so the
-         quiz DOM is not there synchronously. Poll rather than guess. */
-      startQuiz(CHAPTERS[0], 'all');
-      for (let i = 0; i < 60 && !document.querySelector('.opt'); i++) await wait(50);
-      const optEl = document.querySelector('.opt');
-      /* By selector, so the second tap finds the row the re-render left. */
-      const onOption = optEl ? await doubleTap(() => document.querySelector('.opt')) : null;
-      return { onPlainSurface, onOption, foundOption: !!optEl };
+      /* Kept for the second half below, which runs after a wait this
+         evaluate cannot make. */
+      window.__doubleTap = doubleTap;
+      return r;
     });
+
+    /* render() runs inside a view transition on a screen change, so the quiz
+       DOM is not there synchronously. This was sixty 50 ms polls inside the
+       page; on the real build they take about 9 s, measured, not the 3 s
+       they read as. Late in one full run the option had not arrived by then,
+       foundOption came back false, and the check below went red without
+       saying whether the quiz was slow or the handler was wrong. Why that
+       render was so late was not established. The option row is a
+       precondition of that check and not what it asserts (it asserts that
+       preventDefault was called), so it takes settled(): its standard
+       timeout, and a failure that names the wait. */
+    await touchPage.evaluate(() => { startQuiz(CHAPTERS[0], 'all'); });
+    await settled(touchPage, () => !!document.querySelector('.opt'), { label: 'the first quiz option, for the double tap' });
+    const touch = await touchPage.evaluate(async (onPlainSurface) => {
+      const optEl = document.querySelector('.opt');
+      /* By selector, so the second tap finds the row the re-render left.
+         A DOUBLE TAP IS A PRECONDITION HERE, NOT THE CLAIM. On CI's WebKit the
+         page was still busy after the quiz drew, and the 60 ms wait between
+         the taps stretched to 685 and 694 ms in two runs: past the app's 350 ms
+         window, so no double tap was made and the check went red without
+         measuring the handler. So the pair is retried until one lands inside
+         the window, a pause between attempts so each starts afresh; the
+         assertion reads only that attempt. If none ever lands, `inWindow` is
+         false and the check fails saying so, rather than passing. */
+      let onOption = null; const gaps = [];
+      for (let i = 0; optEl && i < 6; i++) {
+        if (i) await new Promise(r => setTimeout(r, 400));
+        onOption = await window.__doubleTap(() => document.querySelector('.opt'));
+        gaps.push(onOption.gap);
+        if (onOption.gap < 350) break;
+      }
+      return { onPlainSurface, onOption, foundOption: !!optEl, gaps, inWindow: !!onOption && onOption.gap < 350 };
+    }, onPlainSurface);
     await touchPage.close();
     ok('a rapid double tap on a plain surface is no longer swallowed',
        touch.onPlainSurface.asked === false, JSON.stringify(touch.onPlainSurface));
@@ -702,7 +744,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        finger. The app's half is exactly this call, and it is what the scoping
        in curate-patch changed. */
     ok('but the app still asks to suppress it on a quiz option, where it misfires',
-       touch.foundOption === true && touch.onOption && touch.onOption.asked === true,
+       touch.foundOption === true && touch.inWindow === true && touch.onOption && touch.onOption.asked === true,
        JSON.stringify(touch));
   }
 
