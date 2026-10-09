@@ -271,6 +271,10 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     ok('a malformed escape is a 400', malformed.status === 400, String(malformed.status));
     const after1 = await get('/index.html');
     ok('and the server is still there afterwards', after1.status === 200 && exited === null, `status ${after1.status}, exit ${exited}`);
+    const nul = await get('/%00');
+    ok('a decoded NUL is a 400', nul.status === 400, String(nul.status));
+    const afterNul = await get('/index.html');
+    ok('the server survives a decoded NUL request', afterNul.status === 200 && exited === null);
     if (badHow) {
       const unread = await get('/unreadable.bin');
       /* Narrow: a crashed server also answers "not a 200". Whether the

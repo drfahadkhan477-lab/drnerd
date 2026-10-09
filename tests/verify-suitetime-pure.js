@@ -85,6 +85,20 @@ const MIN = 60000;
     ok('a child that finishes in time is left alone, and its timer cancelled', !fired);
   }
   ok('no ceiling means no timer', typeof watch({}, null, () => {}) === 'function');
+  for (const group of [false, true]) {
+    const ch = spawn(process.execPath, ['-e',
+      "const c=require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},8000)'],{stdio:'inherit'});console.log(c.pid);setInterval(()=>{},1000)"],
+      { detached: group && process.platform !== 'win32' });
+    let descendant;
+    await new Promise(resolve => ch.stdout.once('data', d => { descendant = Number(String(d).trim()); resolve(); }));
+    const t = Date.now();
+    watch(ch, 100, () => {}, group);
+    const closed = await Promise.race([new Promise(r => ch.once('close', () => r(true))),
+      new Promise(r => setTimeout(() => r(false), 3000))]);
+    try { process.kill(descendant, 'SIGKILL'); } catch (_) {}
+    try { ch.kill('SIGKILL'); } catch (_) {}
+    ok(`inherited pipes do not hold a timed-out suite open (group ${group})`, closed && Date.now() - t < 2500);
+  }
 
   head('the runner, end to end');
   {
@@ -101,6 +115,39 @@ const MIN = 60000;
     ok('a bad --suite-timeout stops the run before any suite starts', r2.status === 2 && /wants minutes/.test(r2.stderr || ''),
        `exit ${r2.status}`);
   }
+
+  if (process.platform !== 'win32') {
+    const fs = require('fs'), dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'systole-interrupt-'));
+    const preload = path.join(dir, 'hold.js'), marker = path.join(dir, 'pids.json');
+    fs.writeFileSync(preload, `if(require('path').basename(process.argv[1]||'')==='verify-cause-pure.js'){
+      const ch=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'inherit'});
+      require('fs').writeFileSync(${JSON.stringify(marker)},JSON.stringify([process.pid,ch.pid]));setInterval(()=>{},1000);
+    }`);
+    const runner = spawn(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--only', 'cause-pure'],
+      { cwd: ROOT, env: { ...process.env, NODE_OPTIONS: ((process.env.NODE_OPTIONS || '') + ' --require=' + preload).trim() } });
+    let pids = [], timer;
+    const closed = new Promise(r => runner.once('close', code => r(code)));
+    const alive = pid => {
+      try { process.kill(pid, 0); } catch (_) { return false; }
+      if (process.platform === 'linux') try { return !/\) Z /.test(fs.readFileSync('/proc/' + pid + '/stat', 'utf8')); } catch (_) { return false; }
+      return true;
+    };
+    try {
+      const until = Date.now() + 10000;
+      while (!fs.existsSync(marker) && Date.now() < until) await new Promise(r => setTimeout(r, 50));
+      if (fs.existsSync(marker)) pids = JSON.parse(fs.readFileSync(marker, 'utf8'));
+      runner.kill('SIGINT');
+      const status = await Promise.race([closed, new Promise(r => { timer = setTimeout(() => r(null), 3000); })]);
+      clearTimeout(timer);
+      for (let n = 0; n < 40 && pids.some(alive); n++) await new Promise(r => setTimeout(r, 50));
+      ok('interrupting the runner reports cancellation', pids.length === 2 && status === 130);
+      ok('cancellation terminates the detached suite and its descendant', pids.length === 2 && pids.every(pid => !alive(pid)));
+    } finally {
+      clearTimeout(timer); try { runner.kill('SIGKILL'); } catch (_) {}
+      pids.forEach(pid => { try { process.kill(pid, 'SIGKILL'); } catch (_) {} });
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } else console.log('  POSIX interruption checks not run on Windows');
 
   head('the --pwa phases are held to the ceiling too');
   {

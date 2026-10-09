@@ -286,12 +286,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('progress screen shows log size and backup age', /reviews logged/.test(storage.hint), storage.hint);
 
   head('export carries the log');
-  const exported = await page.evaluate(() => {
+  const exported = await page.evaluate(async () => {
     let blob = null;
     const create = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
     URL.createObjectURL = b => { blob = b; return 'blob:stub'; };
     HTMLAnchorElement.prototype.click = function () {};
-    exportMarkup();
+    await exportMarkup();
     URL.createObjectURL = create; HTMLAnchorElement.prototype.click = click;
     return blob ? blob.text().then(t => {
       const d = JSON.parse(t);

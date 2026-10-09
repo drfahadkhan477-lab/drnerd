@@ -44,6 +44,7 @@ const server = http.createServer((req, res) => {
   let p;
   try { p = decodeURIComponent(req.url.split('?')[0]); }
   catch (_) { res.writeHead(400).end('bad request'); return; }
+  if (p.includes('\0')) { res.writeHead(400).end('bad request'); return; }
   if (p.endsWith('/')) p += 'index.html';
   /* resolve, not join, and "./" in front so a path that starts with "/" stays
      under DIR rather than being read as absolute. Same result as join for
