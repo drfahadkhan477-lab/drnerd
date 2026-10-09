@@ -63,3 +63,44 @@ jobs:
       - name: and the rest of the WebKit browser suites that crashed or stalled in the release check
         if: ${{ !cancelled() }}
         run: node scripts/verify.js build/synthetic/systole.html --engine webkit --only flushguard,figsharp,layout,chatfigs,resume,gemini,lab,voicescreen --jobs 1
+
+  # From the release check on baaa1e2: memorizer-hardening hit the 20-minute
+  # limit on the owner's Windows WebKit with nothing reported (it passes on
+  # Linux WebKit), and memorizer died on a 30 s click timeout on Chromium,
+  # four runs out of four there (it passes on Linux). Run straight, not
+  # through verify.js, so the output streams and shows where each one stops.
+  windows-memorizer:
+    name: windows-memorizer — hardening on WebKit, the whole app on Chromium
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: the pinned playwright, from the lockfile, and its WebKit and Chromium
+        run: |
+          npm ci
+          npx playwright install webkit chromium
+
+      - name: memorizer-hardening on WebKit (stopped at 15 minutes, so the next steps still run)
+        if: ${{ !cancelled() }}
+        env:
+          SYSTOLE_ENGINE: webkit
+        run: timeout 900 node tests/verify-memorizer-hardening.js
+
+      - name: memorizer on Chromium, first run
+        if: ${{ !cancelled() }}
+        env:
+          SYSTOLE_ENGINE: chromium
+        run: timeout 1200 node tests/verify-memorizer.js
+
+      - name: memorizer on Chromium, second run
+        if: ${{ !cancelled() }}
+        env:
+          SYSTOLE_ENGINE: chromium
+        run: timeout 1200 node tests/verify-memorizer.js
