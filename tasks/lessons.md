@@ -153,3 +153,14 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   browser job, run its suites at least three times and treat a single failure as a
   race to root-cause in the test, not as noise; print frame counts and wall time in
   a timing check's detail so the failing run says which cause it was.
+
+- **A bake that re-derives its own address keeps the cost it was meant to remove.** The
+  first pearl table named each pearl by paragraph and sentence index. It was proven
+  correct and was faster in Node, but the owner's laptop profile showed `fromTable`
+  still costing 0.64 s of the 0.77 s scan: reaching "paragraph p" meant cleaning the
+  whole note, which was most of what the search had cost. My Node benchmark ran
+  only the Arrhythmias notes (235, ~1 KB each), not the owner's full seed, so it
+  under-weighted the walk. → Rule: when caching a computed answer, the cached address
+  must be readable without redoing the work that found it (here, a raw character
+  span rather than an index into a derived structure). Break the lookup itself into
+  its steps and time each one before calling the cache done.

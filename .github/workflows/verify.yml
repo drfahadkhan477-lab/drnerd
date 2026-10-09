@@ -49,7 +49,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 88 suites that are pure Node with no Playwright and no
+#   logic        the 89 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -281,6 +281,8 @@ jobs:
         run: node tests/verify-notesearch-pure.js
       - name: the heart loads a mesh baked at build time, and refuses any other copy (37 checks)
         run: node tests/verify-heartbake-pure.js
+      - name: the pearls found at build time are the ones the search finds (25 checks)
+        run: node tests/verify-pearlbake-pure.js
       - name: the split build ships src/ without its comments, and nothing else changes (28 checks)
         run: node tests/verify-stripcomments-pure.js
       - name: the note figures load after the home screen, one unit at a time (29 checks)
@@ -663,15 +665,43 @@ jobs:
   #       check watches had nothing to advance on.
   #
   # IN, ON THE OWNER'S DECISION, KNOWING THEY CAN FAIL FOR THE RUNNER'S REASONS:
-  # selftest (the page crashed in 2 of 11 runs) and pearl (1 of 10), neither
-  # caught with the browser's log on, and polish (its double-tap check failed in
-  # 1 of 10; its detail now prints the gap between the taps).
+  # selftest (the page crashed in 2 of 11 runs on that PR, then on master's
+  # merge run and on #205's), pearl (1 of 10, not caught with the browser's log
+  # on), and polish (its double-tap check failed in 1 of 10; its detail now
+  # prints the gap between the taps).
+  # selftest WAS caught with the log on, in a session container with
+  # Playwright's WebKit installed: the page crashed in all 8 runs that finished,
+  # at four different sections, 3 of them with
+  # WEBKIT_DISABLE_COMPOSITING_MODE=1. The log has the libEGL/ZINK warnings
+  # every launch prints and no abort, so by the rule below it is not shown
+  # to be the runner's. Narrowed further on 2026-10-09 (details on #205): it
+  # needs the self-test started through #selftest (openSelfTest, the hashchange
+  # path) and then run again; runSelfTest() alone, on fresh pages or repeated
+  # on one page, never crashed. Not the panel's blur, shadow or translucency,
+  # not will-change on the figure, not memory. Cause not yet found.
   # A red one here is read before it is re-run: a crash with that abort in the
   # log is the runner; anything else is the app's or the suite's.
   #
   # Neither WEBKIT_DISABLE_DMABUF_RENDERER=1 nor LIBGL_ALWAYS_SOFTWARE=1, nor
   # both, changed any of this: the crashes and the driver error came back under
   # each, in a side-by-side run with a control.
+  #
+  # The crash is not confined to the suites named above: later runs also lost
+  # chatfigs' page, and selftest's again. Any suite here can crash on this
+  # runner, so a red job is read before it is trusted.
+  #
+  # A GPU is what the evidence points to, and two ways to one were looked at
+  # and set aside (October 2026):
+  #   GitHub's GPU runners exist only for organizations on the Team or
+  #       Enterprise plans; this repository belongs to a personal account.
+  #   A self-hosted runner on the owner's Windows laptop, through WSL 2, does
+  #       not reach the GPU: glxinfo reports llvmpipe, Mesa forced onto d3d12
+  #       fails to start (Intel HD 5500 and Radeon R5 M255, 2014-15 parts),
+  #       and homeprog crashed there at the same line as here. A self-hosted
+  #       runner on this public repository could also be reached by a fork's
+  #       pull request, whose run uses the fork's own workflow files, on a
+  #       machine that holds the licensed export: see the `full` job's WHY
+  #       NOT pull_request for what actually prevents that.
   #
   # The ones left out all run in Chromium in the job above. Not here either: update handling
   # and offline loading of the split build, which are verify-pwa's; it asserts
@@ -888,7 +918,10 @@ jobs:
   # This job closes that gap the only way it can be closed — by running on a
   # machine that already has the export, which means the owner's laptop acting
   # as a self-hosted runner. It is opt-in: with no runner registered it simply
-  # never starts, and the jobs above are unaffected.
+  # never starts, and the jobs above are unaffected. BUT THIS REPOSITORY IS
+  # PUBLIC: register no runner for it until the repository is private or every
+  # control under WHY NOT pull_request below is in place (docs/BUILD.md says
+  # the same before its registration steps).
   #
   # ─ WHY IT PRINTS SO LITTLE ─────────────────────────────────────────────────
   #
@@ -919,10 +952,19 @@ jobs:
   # A self-hosted runner executes whatever the workflow says, on real hardware
   # with the licensed corpus and the owner's home directory on it. On a
   # pull_request trigger, that is code from the PR's branch. This repository is
-  # private and single-author, so the exposure is small — but the mitigation is
-  # free, so this job runs only on pushes to master and on manual dispatch.
-  # Do not add pull_request here without reading GitHub's own warning about
-  # self-hosted runners and untrusted workflows.
+  # PUBLIC: anyone can open a pull request, and a fork's run uses the fork's
+  # copy of the workflow files, so it can drop this job's trigger restriction
+  # or add a workflow of its own that asks for [self-hosted, systole]. Nothing
+  # written in a workflow file keeps fork code off this runner. What does:
+  # register no self-hosted runner while the repository is public (GitHub's
+  # own advice), or make it private, or set "Require approval for all external
+  # contributors" for fork workflows and never approve a fork's run at all: an
+  # approved job that asks for this runner waits in the queue (up to 24 hours)
+  # and starts when a runner comes online, so before registering or starting
+  # one, cancel every queued or waiting run. This job runs only on manual
+  # dispatch on master (its `if`
+  # below; the push arm is still commented out), so it does not start for pull
+  # requests on its own; never add pull_request or pull_request_target to it.
   full:
     name: full — the browser suites, on a machine with the export
     runs-on: [self-hosted, systole]

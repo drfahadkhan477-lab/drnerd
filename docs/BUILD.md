@@ -544,7 +544,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/systole.css   (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        153 suites · 88 need no browser · + pwa
+tests/        153 suites · 89 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
@@ -587,6 +587,14 @@ your own machine. It is opt-in: with no runner registered it never starts, and
 nothing else changes.
 
 ### Registering it
+
+> **Stop first: this repository is public.** Do not register this runner, put
+> the export's path in its environment, or start it while the repository is
+> public. A fork's pull request can run its own workflow code on any
+> self-hosted runner the repository has, and this one would sit on the machine
+> that holds the licensed export. Make the repository private first, or apply
+> every control in [Why it does not run on pull requests](#why-it-does-not-run-on-pull-requests)
+> below, before any step in this section.
 
 Settings → Actions → Runners → New self-hosted runner, then follow the
 commands GitHub gives you. Three things must match this repository rather than
@@ -671,5 +679,23 @@ report into the run summary — that is the leak. Read it locally.
 
 A self-hosted runner executes the workflow on real hardware that has the
 licensed corpus and your home directory on it, and on a `pull_request` trigger
-that workflow comes from the PR's branch. This repository is private and
-single-author so the exposure is small, but the mitigation costs nothing.
+that workflow comes from the PR's branch. This repository is public, so anyone
+can open a pull request, and a fork's run uses the fork's own copy of the
+workflow files: it can drop this job's restriction, or add a workflow of its own
+that asks for this runner. Nothing written in a workflow file stops that. What
+does:
+
+- **Register no self-hosted runner while the repository is public** (GitHub's
+  own advice), or make the repository private first.
+- If a runner must exist on a public repository: Settings → Actions → General →
+  fork pull request workflows, set **Require approval for all external
+  contributors**, and never approve a fork's run at all. An approved job that
+  asks for this runner waits in the queue, for up to 24 hours, and starts as
+  soon as a runner comes online, so approving one "while no runner exists" is
+  not safe either.
+- **Before registering or starting the runner**, cancel every queued or
+  waiting workflow run in the Actions tab.
+
+The job itself runs only when started by hand on `master` (it is manual only,
+above), so it does not start for pull requests on its own; never add
+`pull_request` or `pull_request_target` to it.
