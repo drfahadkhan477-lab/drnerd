@@ -24,6 +24,21 @@
                default 90% target retention (see fsrsIvl for why that makes
                ivl and stability numerically the same thing at this target).
 
+   WHERE THIS DEPARTS FROM UPSTREAM FSRS-5, on purpose (the scheduler
+   contract; tests/verify-oracle.js compares the arithmetic against ts-fsrs):
+     · whole local calendar days only: no sub-day learning or relearning
+       steps, and no same-day short-term stability update;
+     · interval = stability rounded UP (fsrsIvl), never down or to nearest;
+     · interval capped at 36500 days, the same as upstream's default;
+     · no interval fuzz, so the same card and rating always give the same day;
+     · Again never raises stability above what the card had
+       (fsrsNextStabilityFail) — upstream's formula can;
+     · a legacy SM-2 card is seeded from its old interval at difficulty 5
+       (fsrsSeed); malformed stored fields fall back to first-review values;
+     · a non-numeric rating counts as Good; out-of-range ones are clamped;
+     · target retention is fixed at 90%, and the weights are the population
+       defaults, never fitted to a deck.
+
    Usage:
      const next = fsrsUpdate(S.srs[q.id], grade);   // grade: 1 Again .. 4 Easy
      S.srs[q.id] = next;
@@ -188,8 +203,18 @@ function fsrsNextStabilityFail(difficulty, stability, retrievability) {
    keeps a fresh Again (stability ≈0.4d) and a fresh Hard (≈1.2d) from both
    collapsing onto the same "tomorrow" — the exact failure mode this module
    replaces. */
+/* CAPPED AT A CENTURY, as upstream FSRS is (ts-fsrs: maximum_interval =
+   36500). Without it the interval has no ceiling at all: five Easy ratings in
+   a row schedule a card 107 years out, and a few more carry its due date past
+   the year 9999. Every due check in both apps compares ISO strings
+   (`due <= today`), and '13442-02-25' sorts BEFORE '2026-10-09' — so the most
+   thoroughly learned card in the deck would come due on every visit. Kept on
+   its own schedule that takes millennia, so the realistic routes are a wrong
+   device clock or an edited backup; the cap closes all of them. Only the
+   interval is capped: stability is the model's state, and stays the model's. */
+const FSRS_MAX_IVL = 36500;
 function fsrsIvl(stability) {
-  return Math.max(1, Math.ceil(stability));
+  return Math.min(FSRS_MAX_IVL, Math.max(1, Math.ceil(stability)));
 }
 
 /* Seed a "previous state" for a card FSRS has never scheduled before —
@@ -273,7 +298,7 @@ root.FSRS = {
   update: fsrsUpdate, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
   ivl: fsrsIvl, daysBetween, todayISO, isoToLocalDate, localDateToISO,
-  W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR,
+  W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR, MAX_IVL: FSRS_MAX_IVL,
   SCHEDULER_VERSION, paramsFingerprint: fsrsParamsFingerprint,
 };
 

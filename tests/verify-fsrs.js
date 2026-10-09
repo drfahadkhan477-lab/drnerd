@@ -267,6 +267,143 @@ const control = F.update({ difficulty: 5, stability: 10, ivl: 10, reps: 2, lapse
 ok('a well-formed card is still scheduled on its own merits, not the fallback',
    control.ivl > 10 && control.stability > 10, `ivl=${control.ivl}`);
 
+head('generated histories, not hand-picked cards');
+/* The checks above take one step from a grid of states. A fellow takes
+   hundreds, in whatever order life allows: on the due day, early, months late,
+   twice in one day, or after the device clock went backwards. So these walk
+   seeded random histories through update() and assert, at EVERY step, what
+   must hold for the stored card to be usable by the next one. Seeded, so a
+   failure names a history that replays exactly. */
+const rng = seed => () => {   /* mulberry32 */
+  seed = (seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+function history(seed, steps) {
+  const R = rng(seed), out = [];
+  let c = null, day = DAY0;
+  for (let i = 0; i < steps; i++) {
+    const rating = 1 + Math.floor(R() * 4);
+    const prev = c;
+    const u = F.update(prev, rating, day);
+    out.push({ day, rating, prev, card: u });
+    c = u;
+    const t = R();
+    day = t < 0.5 ? c.due                                                  /* on time */
+        : t < 0.65 ? plus(c.last, Math.floor(R() * c.ivl))                /* early, or same day */
+        : t < 0.9 ? plus(c.due, 1 + Math.floor(R() * 400))                 /* late, up to ~a year */
+        : F.localDateToISO(new Date(2026, 0, 1 - Math.floor(R() * 30)));   /* clock went back */
+  }
+  return out;
+}
+{
+  const SEEDS = 400, STEPS = 60;
+  let bad = null, n = 0;
+  for (let seed = 1; seed <= SEEDS && !bad; seed++) {
+    let lapses = 0, streak = 0;
+    for (const { day, rating, prev, card: c } of history(seed, STEPS)) {
+      n++;
+      lapses += rating === 1 ? 1 : 0;
+      streak = rating === 1 ? 0 : streak + 1;
+      const why =
+          !(Number.isFinite(c.stability) && c.stability > 0) ? 'stability'
+        : !(c.difficulty >= 1 && c.difficulty <= 10) ? 'difficulty'
+        : !(Number.isInteger(c.ivl) && c.ivl >= 1 && c.ivl <= F.MAX_IVL) ? 'ivl out of [1, MAX_IVL]'
+        : !(ISO.test(c.due) && ISO.test(c.last)) ? 'due or last is not a 4-digit-year date'
+        : c.last !== day ? 'last is not the day it was rated'
+        : F.daysBetween(c.last, c.due) !== c.ivl ? 'due is not ivl days after last'
+        : !(c.due > c.last) ? 'due does not sort after last as a string'
+        : c.lapses !== lapses ? `lapses ${c.lapses}, Agains ${lapses}`
+        : c.reps !== streak ? `reps ${c.reps}, streak ${streak}`
+        : null;
+      if (why) { bad = { seed, step: n, why, day, rating, prev, c }; break; }
+    }
+  }
+  ok('every step of every generated history leaves a card the next step can use',
+     !bad, bad ? JSON.stringify(bad).slice(0, 300) : `${SEEDS} histories, ${n} reviews`);
+
+  /* Upstream FSRS fuzzes intervals with a random draw; this module does not
+     (see its header), so a stored history is a function of its inputs alone. */
+  const a = JSON.stringify(history(7, STEPS)), b = JSON.stringify(history(7, STEPS));
+  ok('and replaying a history gives the identical schedule, day for day', a === b);
+}
+
+head('long horizons');
+/* The interval has to stop somewhere. Uncapped, five Easy ratings in a row
+   scheduled a card 107 years out and a few more pushed its due date past
+   9999 — and every due check compares ISO strings, where '13442-…' sorts
+   BEFORE '2026-…', so the best-known card in the deck came due on every visit. */
+for (const [label, g] of [['Easy', 4], ['Good', 3]]) {
+  let c = null, day = DAY0, bad = null, top = 0;
+  for (let i = 0; i < 40; i++) {
+    c = F.update(c, g, day);
+    top = Math.max(top, c.ivl);
+    if (!(ISO.test(c.due) && c.ivl <= F.MAX_IVL && c.due > c.last)) { bad = `review ${i + 1}: ivl ${c.ivl}, due ${c.due}`; break; }
+    day = c.due;
+  }
+  ok(`${label} forty times, each on its due day, never leaves the calendar`, !bad, bad || `longest ${top} d`);
+}
+{
+  /* The route a fellow could actually take: a backup carrying a card whose
+     stability is absurd, by hand or by a wrong clock years ago. */
+  const c = F.update({ difficulty: 1, stability: 1e9, ivl: 1e9, reps: 9, lapses: 0, last: '2026-08-20' }, 4, '2026-08-30');
+  ok('a restored card with an absurd stability is still due inside a century',
+     c.ivl === F.MAX_IVL && ISO.test(c.due) && c.due > '2026-08-30' && c.due < '2127-01-01',
+     `ivl ${c.ivl}, due ${c.due}`);
+}
+ok('the cap is upstream FSRS\'s own default, one hundred years of days', F.MAX_IVL === 36500, String(F.MAX_IVL));
+
+head('a deck, simulated for three years');
+/* 600 cards, 20 new a day for 30 days, every due card reviewed every day for
+   three years. The learner is the model's own: recalls with probability equal
+   to the card's retrievability that day, and when recalling answers Good, with
+   some Hard and Easy. Measured over seeds 1–3 when written: month-two load
+   23–24 a day, year-three load ~1 a day, busiest day 51–55 during intake and
+   24–27 after it, recall 0.894–0.901. */
+function deck(seed) {
+  const R = rng(seed), cards = [], load = [];
+  let day = DAY0, recalled = 0, reviews = 0;
+  for (let d = 0; d < 3 * 365; d++) {
+    if (d < 30) for (let i = 0; i < 20; i++) cards.push(F.update(null, 3, day));
+    let k = 0;
+    for (let i = 0; i < cards.length; i++) {
+      const c = cards[i];
+      if (!(c.due <= day && c.last !== day)) continue;
+      const got = R() < F.retrievability(c.stability, F.daysBetween(c.last, day));
+      k++; reviews++; recalled += got ? 1 : 0;
+      cards[i] = F.update(c, got ? (R() < 0.1 ? 2 : R() < 0.9 ? 3 : 4) : 1, day);
+    }
+    load.push(k);
+    day = plus(day, 1);
+  }
+  const mean = (a, b) => load.slice(a, b).reduce((x, y) => x + y, 0) / (b - a);
+  return { intake: mean(30, 60), year3: mean(730, 1095), peakIn: Math.max(...load.slice(0, 60)),
+           peakAfter: Math.max(...load.slice(60)), recall: recalled / reviews, reviews };
+}
+for (const seed of [1, 2, 3]) {
+  const r = deck(seed);
+  const at = `seed ${seed}`;
+  /* Nothing new enters after day 30, and every success lengthens an interval:
+     a deck that is not getting cheaper is a deck whose intervals are not
+     growing. */
+  ok(`${at}: the daily load in year three is under a fifth of month two's`,
+     r.year3 < r.intake / 5, `${r.intake.toFixed(1)} → ${r.year3.toFixed(1)} a day`);
+  /* With no new cards, a day busier than the busiest intake day is cards
+     piling onto the same date — the review burst §3.4 asks about. Proven
+     against due dates snapped to the 1st of a month (51 → 323 in a day). It
+     does NOT see intervals quantised to a common length: cards that started
+     on different days stay apart, and that defect passed it. */
+  ok(`${at}: no day after intake is busier than the busiest day during it`,
+     r.peakAfter <= r.peakIn, `${r.peakIn} during, ${r.peakAfter} after`);
+  /* The schedule claims 90% recall on the due day, and ceil() only ever
+     brings the review earlier, so recall lands at or a little under 0.9.
+     ±0.03 is about six standard errors at ~4500 reviews. */
+  ok(`${at}: the learner recalls about the 90% the schedule targets`,
+     r.recall > 0.87 && r.recall < 0.93, `${r.recall.toFixed(3)} over ${r.reviews} reviews`);
+}
+
 head('the scheduler says which scheduler it is');
 {
   /* THIS PIN IS LOAD-BEARING. It is the whole mechanism: change any FSRS
