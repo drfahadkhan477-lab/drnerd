@@ -942,8 +942,11 @@ jobs:
   # written in a workflow file keeps fork code off this runner. What does:
   # register no self-hosted runner while the repository is public (GitHub's
   # own advice), or make it private, or set "Require approval for all external
-  # contributors" for fork workflows and never approve one while a runner is
-  # registered. This job runs only on manual dispatch on master (its `if`
+  # contributors" for fork workflows and never approve a fork's run at all: an
+  # approved job that asks for this runner waits in the queue (up to 24 hours)
+  # and starts when a runner comes online, so before registering or starting
+  # one, cancel every queued or waiting run. This job runs only on manual
+  # dispatch on master (its `if`
   # below; the push arm is still commented out), so it does not start for pull
   # requests on its own; never add pull_request or pull_request_target to it.
   full:
