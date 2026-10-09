@@ -18,6 +18,10 @@
  *     verify-memorizer-hardening.js.)
  *   · under the page's Content-Security-Policy the browser refuses a request
  *     to any host but the ones the app uses; the policy never grants eval;
+ *   · under the built page's policy an injected inline handler or <script>
+ *     does not run, a script from another package on the app's CDN is
+ *     refused, a flowchart is drawn by the pinned Mermaid and any other
+ *     kind of Mermaid diagram is shown as text (fetches the Mermaid file);
  *   · the on-device model's files are read back from the browser's own
  *     stores, laid out as WebLLM 0.2.85 lays them out (Cache API, and
  *     IndexedDB with { url, data } records), one at a time, hashed, and a
@@ -169,6 +173,44 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
     const own = fs.readdirSync(path.join(ROOT, 'memorizer', 'src')).filter(f => f.endsWith('.js'))
       .filter(f => /new Function\(|[^.\w]eval\(/.test(blankComments(fs.readFileSync(path.join(ROOT, 'memorizer', 'src', f), 'utf8'))));
     ok('and the app\u2019s own code builds no function from a string', own.length === 0, own.join(', '));
+
+    /* Script injection, under the BUILT page's policy: its inline scripts are
+       allowed by hash (build-memorizer.js hashInlineScripts), which makes a
+       browser ignore 'unsafe-inline', so anything else inline is refused. The
+       injected markup is the page's own DOM, held to its policy, though the
+       harness's evaluate() that inserts it is not. */
+    const inj = await p.evaluate(async () => {
+      const refused = [];
+      window.addEventListener('securitypolicyviolation', e => refused.push(e.violatedDirective + ' ' + (e.blockedURI || '')));
+      document.body.insertAdjacentHTML('beforeend', '<img alt="" src="data:," onerror="window.__handler = 1">');
+      const s = document.createElement('script'); s.textContent = 'window.__inline = 1'; document.body.appendChild(s);
+      /* another package on the same CDN: the policy names the three the app
+         loads, not the host, which serves any package or repository */
+      const other = document.createElement('script'); other.src = 'https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js';
+      document.body.appendChild(other);
+      await new Promise(r => setTimeout(r, 500));
+      return { handler: window.__handler === 1, inline: window.__inline === 1, refused };
+    });
+    ok('an injected inline event handler does not run: the policy\u2019s hashes leave no \u2019unsafe-inline\u2019', inj.handler === false &&
+       inj.refused.some(r => /^script-src/.test(r)), JSON.stringify(inj));
+    ok('nor does an injected inline <script>', inj.inline === false, JSON.stringify(inj));
+    ok('a script from another package on the app\u2019s CDN is refused by the policy', inj.refused.some(r => /^script-src(-elem)? https:\/\/cdn\.jsdelivr\.net\/npm\/lodash/.test(r)), JSON.stringify(inj.refused));
+
+    /* Mermaid: the pinned file, served here as the network would serve it,
+       so its integrity hash and the page's policy both apply */
+    const MERMAID_URL = /url: '(https:\/\/cdn\.jsdelivr\.net\/npm\/mermaid@[^']+)'/.exec(fs.readFileSync(path.join(ROOT, 'memorizer', 'src', 'ui.js'), 'utf8'))[1];
+    const mermaidBytes = Buffer.from(await (await fetch(MERMAID_URL)).arrayBuffer());
+    await p.route(MERMAID_URL, r => r.fulfill({ status: 200, body: mermaidBytes, headers: { 'content-type': 'application/javascript', 'access-control-allow-origin': '*' } }));
+    const drawn = await p.evaluate(async () => {
+      const flow = Memorizer.flowchart('flowchart TD\n  A["Preload"] --- B["Afterload"]');
+      const seq = Memorizer.flowchart('sequenceDiagram\n  A->>B: hello');
+      document.body.append(flow, seq);
+      for (let i = 0; i < 200 && !flow.querySelector('svg') && !flow.querySelector('pre'); i++) await new Promise(r => setTimeout(r, 100));
+      return { flow: !!flow.querySelector('svg'), flowText: flow.textContent.slice(0, 40), seqText: !!seq.querySelector('pre.chart-src'), seqSvg: !!seq.querySelector('svg'),
+               loaded: [...document.scripts].some(s => /mermaid@/.test(s.src)) };
+    });
+    ok('a flowchart is drawn by the pinned Mermaid, its integrity and the page policy both in force', drawn.flow && drawn.loaded, JSON.stringify(drawn));
+    ok('another kind of Mermaid diagram never reaches Mermaid: it is shown as its text', drawn.seqText && !drawn.seqSvg, JSON.stringify(drawn));
     await ctx.close();
     server.close();
 

@@ -1391,20 +1391,30 @@ function buildSurfaces(res, lo, hi) {
      pace, projectToSurface sampling the distance field for every point. They
      do not depend on the grid; they ride in the same copy because they come
      from the same code, under the same key. */
-  return { outer: one(sdOuter), cav: one(sdCavities), coron: buildCoronaries() };
+  /* And the conduction system and the valves, for the same reason: fixed
+     geometry, built from this file at every launch until they rode here too
+     (cold first calls of 5 and 8 ms in Node, chamberWeights sampled per vertex). */
+  return { outer: one(sdOuter), cav: one(sdCavities), coron: buildCoronaries(),
+           cond: buildConduction(), valves: buildValves() };
 }
 
-/* One ArrayBuffer: an 80-byte header, then per mesh its five Float32 blocks,
-   then the three index lists as Uint32.
-     0  'HM02'           4  key, 16 ASCII bytes     20  res, 3 × Uint32
-     32 lo, hi, 6 × Float32                          56  vertices, indices × 3 meshes
-   HM01 carried two meshes and no coronaries; its tag is refused, so a copy in
-   the old layout is never read as the new one. */
-const MESH_MAGIC = 0x32304d48;   // 'HM02', little-endian
-const MESH_HEADER = 80, MESH_FLOATS = 16;   // 3 position + 3 normal + 4 weight + 3 colour + 3 extra
+/* One ArrayBuffer: a 96-byte header, then per mesh its Float32 blocks, then
+   the five index lists as Uint32.
+     0  'HM03'           4  key, 16 ASCII bytes     20  res, 3 × Uint32
+     32 lo, hi, 6 × Float32                          56  vertices, indices × 5 meshes
+   Four meshes carry position, normal, weight, colour and extra; the valves
+   carry their hinges and leaflet ids in place of colour and extra. HM01 had
+   two meshes and HM02 three; their tags are refused, so a copy in an old
+   layout is never read as the new one. */
+const MESH_MAGIC = 0x33304d48;   // 'HM03', little-endian
+const MESH_HEADER = 96;
 const MESH_PARTS = [['positions', 3], ['normals', 3], ['weights', 4], ['color', 3], ['extra', 3]];
-const MESH_NAMES = ['outer', 'cav', 'coron'];
-const meshBytes = (nv, ni) => MESH_HEADER + 4 * MESH_FLOATS * nv.reduce((a, b) => a + b, 0) + 4 * ni.reduce((a, b) => a + b, 0);
+const VALVE_PARTS = [['positions', 3], ['normals', 3], ['weights', 4], ['hingeP', 3], ['hingeA', 3], ['vid', 1]];
+const MESHES = [['outer', MESH_PARTS], ['cav', MESH_PARTS], ['coron', MESH_PARTS], ['cond', MESH_PARTS], ['valves', VALVE_PARTS]];
+const MESH_NAMES = MESHES.map(m => m[0]);
+const floatsOf = parts => parts.reduce((a, p) => a + p[1], 0);
+const meshBytes = (nv, ni) => MESH_HEADER +
+  4 * MESHES.reduce((a, m, i) => a + floatsOf(m[1]) * nv[i], 0) + 4 * ni.reduce((a, b) => a + b, 0);
 
 function packSurfaces(s, key, res, lo, hi) {
   const surf = MESH_NAMES.map(n => s[n]);
@@ -1419,7 +1429,7 @@ function packSurfaces(s, key, res, lo, hi) {
   for (let i = 0; i < 3; i++) { u32[5 + i] = res[i]; f32[8 + i] = lo[i]; f32[11 + i] = hi[i]; }
   for (let i = 0; i < surf.length; i++) { u32[14 + 2 * i] = nv[i]; u32[15 + 2 * i] = ni[i]; }
   let at = MESH_HEADER;
-  for (let i = 0; i < surf.length; i++) for (const [name, w] of MESH_PARTS) {
+  for (let i = 0; i < surf.length; i++) for (const [name, w] of MESHES[i][1]) {
     new Float32Array(buf, at, nv[i] * w).set(surf[i][name]);
     at += 4 * nv[i] * w;
   }
@@ -1443,12 +1453,12 @@ function unpackSurfaces(buf, key, res, lo, hi) {
   if (buf.byteLength !== meshBytes(nv, ni)) return null;
   const out = MESH_NAMES.map(() => ({}));
   let at = MESH_HEADER;
-  for (let i = 0; i < out.length; i++) for (const [name, w] of MESH_PARTS) {
+  for (let i = 0; i < out.length; i++) for (const [name, w] of MESHES[i][1]) {
     out[i][name] = new Float32Array(buf, at, nv[i] * w);
     at += 4 * nv[i] * w;
   }
   for (let i = 0; i < out.length; i++) { out[i].indices = new Uint32Array(buf, at, ni[i]); at += 4 * ni[i]; }
-  return { outer: out[0], cav: out[1], coron: out[2] };
+  return { outer: out[0], cav: out[1], coron: out[2], cond: out[3], valves: out[4] };
 }
 
 /* The baked copy arrives one of two ways: as an ArrayBuffer the split build's
@@ -1481,12 +1491,9 @@ function create(canvas, opts) {
 
   const t0 = performance.now();
   const baked = bakedSurfaces(RES, LO, HI);
-  const { outer, cav, coron } = baked || buildSurfaces(RES, LO, HI);
+  const { outer, cav, coron, cond, valves } = baked || buildSurfaces(RES, LO, HI);
   const meshSource = baked ? 'baked' : 'computed';
   const buildMs = performance.now() - t0;
-
-  const valves = buildValves();
-  const cond = buildConduction();
 
   const prog = program(gl, VERT, FRAG);
   const U = n => gl.getUniformLocation(prog, n);

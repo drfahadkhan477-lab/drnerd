@@ -178,7 +178,7 @@ head('a reply that does not parse is never a drill');
 head('the Claude request has the Messages wire shape');
 {
   const prompt = P.lesson(A);
-  const a = Provider.build({ provider: 'anthropic', model: 'claude-opus-5', key: 'sk-ant-TEST' }, prompt, P.SCHEMAS.lesson);
+  const a = Provider.build({ provider: 'anthropic', model: 'claude-opus-5-5', key: 'sk-ant-TEST' }, prompt, P.SCHEMAS.lesson);
   const ab = JSON.parse(a.init.body);
   ok('anthropic: Messages endpoint', a.url === 'https://api.anthropic.com/v1/messages');
   ok('anthropic: key in x-api-key, with the browser-access header', a.init.headers['x-api-key'] === 'sk-ant-TEST' &&
@@ -188,10 +188,18 @@ head('the Claude request has the Messages wire shape');
   ok('anthropic: the phase schema is sent as the output format',
      ab.output_config && ab.output_config.format.type === 'json_schema' &&
      JSON.stringify(ab.output_config.format.schema) === JSON.stringify(P.SCHEMAS.lesson));
-  ok('anthropic: Opus 5 asks for default fallbacks, with its beta header',
+  ok('anthropic: Opus 5.5 asks for default fallbacks, with its beta header',
      ab.fallbacks === 'default' && a.init.headers['anthropic-beta'] === 'server-side-fallback-2026-07-01');
-  const s5 = Provider.build({ provider: 'anthropic', model: 'claude-sonnet-5', key: 'k' }, prompt, P.SCHEMAS.lesson);
-  ok('anthropic: other models do not send fallbacks', !('fallbacks' in JSON.parse(s5.init.body)) && !s5.init.headers['anthropic-beta']);
+  const s55 = Provider.build({ provider: 'anthropic', model: 'claude-sonnet-5-5', key: 'k' }, prompt, P.SCHEMAS.lesson);
+  ok('anthropic: so does Sonnet 5.5', JSON.parse(s55.init.body).fallbacks === 'default' && s55.init.headers['anthropic-beta'] === 'server-side-fallback-2026-07-01');
+  const h55 = Provider.build({ provider: 'anthropic', model: 'claude-haiku-5-5', key: 'k' }, prompt, P.SCHEMAS.lesson);
+  ok('anthropic: Haiku 5.5, which has no server-side fallback, does not send one', !('fallbacks' in JSON.parse(h55.init.body)) && !h55.init.headers['anthropic-beta']);
+  ok('anthropic: every listed model is asked for high effort (Opus 5.5 and Haiku 5.5 default to medium)',
+     Provider.PROVIDERS.anthropic.models.every(([m]) => JSON.parse(Provider.build({ provider: 'anthropic', model: m, key: 'k' }, prompt, P.SCHEMAS.lesson).init.body).output_config.effort === 'high'));
+  ok('anthropic: the listed models are the current Claude generation', JSON.stringify(Provider.PROVIDERS.anthropic.models.map(m => m[0])) === '["claude-opus-5-5","claude-sonnet-5-5","claude-haiku-5-5"]',
+     JSON.stringify(Provider.PROVIDERS.anthropic.models.map(m => m[0])));
+  ok('anthropic: nothing a 5.5 model refuses is sent (thinking settings, sampling, a prefill)', ['thinking', 'temperature', 'top_p', 'top_k'].every(k => !(k in ab)) &&
+     ab.messages[ab.messages.length - 1].role === 'user');
 
   let threw = '';
   try { Provider.build({ provider: 'nope', model: 'x', key: 'k' }, prompt); } catch (e) { threw = e.message; }
@@ -200,7 +208,7 @@ head('the Claude request has the Messages wire shape');
 
 head('a call that goes wrong says so');
 (async () => {
-  const cfg = { provider: 'anthropic', model: 'claude-opus-5', key: 'k' };
+  const cfg = { provider: 'anthropic', model: 'claude-opus-5-5', key: 'k' };
   const reply = (status, body) => () => Promise.resolve({ ok: status < 400, status, text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)) });
   const msg = text => ({ stop_reason: 'end_turn', content: [{ type: 'text', text }] });
   const grade = JSON.stringify({ questions: [{ question: 'Which drives betaA?', quote: '', options: ['alphaA', 'deltaA', 'gammaA', 'epsilonA'], answer: 0, explain: 'alphaA drives betaA.', page: 3 }] });
@@ -264,8 +272,8 @@ head('a call that goes wrong says so');
   const fresh = Provider.loadConfig(mem(null));
   ok('with nothing saved, the coach is the built-in one', fresh.provider === 'builtin' && fresh.key === '', JSON.stringify(fresh));
   ok('which is ready without any key', Provider.ready(fresh) && !Provider.needsKey(fresh));
-  ok('while Claude without a key is not ready', !Provider.ready({ provider: 'anthropic', model: 'claude-opus-5', key: '' }) &&
-     Provider.ready({ provider: 'anthropic', model: 'claude-opus-5', key: 'k' }));
+  ok('while Claude without a key is not ready', !Provider.ready({ provider: 'anthropic', model: 'claude-opus-5-5', key: '' }) &&
+     Provider.ready({ provider: 'anthropic', model: 'claude-opus-5-5', key: 'k' }));
   /* The owner's own browser has a Gemini setting saved. It must come back as
      the built-in coach — and the Gemini key must not survive to be sent to
      Anthropic. */
@@ -275,10 +283,12 @@ head('a call that goes wrong says so');
        c.provider === 'builtin' && c.key === '', JSON.stringify(c));
   }
   const stale = Provider.loadConfig(mem(JSON.stringify({ provider: 'anthropic', model: 'claude-2.1', key: 'sk-KEEP' })));
-  ok('a saved Claude model the app no longer lists is replaced by the first listed', stale.model === 'claude-opus-5', stale.model);
+  ok('a saved Claude model the app no longer lists is replaced by the first listed', stale.model === 'claude-opus-5-5', stale.model);
   ok('and the saved key survives that replacement', stale.key === 'sk-KEEP');
-  const kept = Provider.loadConfig(mem(JSON.stringify({ provider: 'anthropic', model: 'claude-haiku-4-5', key: 'k' })));
-  ok('a saved model that is still listed is kept, not reset', kept.model === 'claude-haiku-4-5', kept.model);
+  const kept = Provider.loadConfig(mem(JSON.stringify({ provider: 'anthropic', model: 'claude-haiku-5-5', key: 'k' })));
+  ok('a saved model that is still listed is kept, not reset', kept.model === 'claude-haiku-5-5', kept.model);
+  const opus5 = Provider.loadConfig(mem(JSON.stringify({ provider: 'anthropic', model: 'claude-opus-5', key: 'sk-KEEP' })));
+  ok('a saved Claude Opus 5 setting moves to Opus 5.5, its key kept', opus5.model === 'claude-opus-5-5' && opus5.key === 'sk-KEEP', JSON.stringify(opus5));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

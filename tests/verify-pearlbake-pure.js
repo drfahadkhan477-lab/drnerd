@@ -71,8 +71,12 @@ const table = P.bake(NOTES);
 const unused = NOTES.filter(n => Array.isArray(table[P.bodyKey(n.body)]) && !P.entryFits(n.body, table[P.bodyKey(n.body)]));
 ok('every pearl the build bakes is one harvest uses, not one it searches past', unused.length === 0 &&
    NOTES.some(n => Array.isArray(table[P.bodyKey(n.body)])), unused.map(n => n.id).join(', ') || 'all used');
-ok('the table has one entry per note, both kinds present', Object.keys(table).length === NOTES.length &&
-   Object.values(table).some(v => typeof v === 'number') && Object.values(table).some(Array.isArray), J(Object.values(table)));
+/* A note with no pearl gets no entry: "none" cannot be re-checked, so it is
+   searched at every launch (see A NOTE WITH NO PEARL HAS NO ENTRY in pearl.js). */
+const pearled = new Set(plainOut.map(x => x.id));
+ok('an entry for every note with a pearl, and none for a note without',
+   NOTES.every(n => Object.prototype.hasOwnProperty.call(table, P.bodyKey(n.body)) === pearled.has(n.id)) &&
+   Object.keys(table).length === pearled.size && pearled.size < NOTES.length, J(Object.values(table)));
 
 head('with the table, harvest returns exactly what it finds without one');
 ok('the same pearls, field for field', J(P.harvest(NOTES, table)) === J(plainOut));
@@ -82,11 +86,7 @@ head('the table carries positions and scores, never the notes\' text');
 const flat = J(table);
 const leaked = NOTES.some(n => n.body.split(/(?<=\.)\s/).some(s => s.length >= 20 && flat.includes(s.slice(0, 20))));
 ok('no run of note text appears in it', !leaked);
-ok('every entry is a length or three integers', Object.values(table).every(v => Number.isInteger(v) || (Array.isArray(v) && v.length === 3 && v.every(Number.isInteger))));
-/* A no-pearl entry is the note's length, and the one entry harvest takes
-   without re-deriving it — checking "no pearl" is the search. */
-ok('each note with no pearl is baked as its length', NOTES.every(n => {
-     const v = table[P.bodyKey(n.body)]; return Array.isArray(v) || v === n.body.length; }));
+ok('every entry is three integers', Object.values(table).every(v => Array.isArray(v) && v.length === 3 && v.every(Number.isInteger)));
 
 head('it is consulted, and an entry that does not fit is refused');
 /* Point note b's entry at its OTHER candidate — a real pearl, with its real
@@ -126,14 +126,13 @@ ok('an edited note is not in the table and is searched as it now reads',
    J(P.harvest(edited, table)) === J(P.harvest(edited)) && P.harvest(edited, table).find(x => x.id === 'd').text.includes('150 mmHg'));
 
 /* A fingerprint collision, made by hand: note a has a pearl, and its key is
-   given a no-pearl entry. With a length that is not a's, the entry is not a's
-   and a is searched; with a's own length, the entry is taken on trust, which
-   is what a no-pearl entry is for (see "NONE" IS TAKEN ON TRUST in pearl.js). */
+   given an entry that is not a span — the length a no-pearl entry used to carry,
+   0, a's own length. Nothing but a span that re-checks is ever used, so a is
+   searched and keeps its pearl every time. */
 const ka = P.bodyKey(NOTES[0].body), aOut = plainOut.find(x => x.id === 'a');
-const clash = len => P.harvest(NOTES, Object.assign({}, table, { [ka]: len })).find(x => x.id === 'a');
-ok('a no-pearl entry whose length is not the note\'s does not hide its pearl',
-   !!aOut && J(clash(NOTES[0].body.length + 1)) === J(aOut) && J(clash(0)) === J(aOut));
-ok('and one that matches it is used, not searched past', !!aOut && clash(NOTES[0].body.length) === undefined);
+const clash = v => P.harvest(NOTES, Object.assign({}, table, { [ka]: v })).find(x => x.id === 'a');
+ok('an entry that is not a span never hides a note\'s pearl, whatever it says',
+   !!aOut && [0, NOTES[0].body.length, NOTES[0].body.length + 1, null, true].every(v => J(clash(v)) === J(aOut)));
 
 head('a lookup reads the pearl\'s own span, not the whole note');
 /* The point of the span. With the run named by paragraph and sentence index,

@@ -148,21 +148,21 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     fs.mkdirSync(fakeMods, { recursive: true });
     fs.writeFileSync(path.join(fakeMods, 'index.js'), `const e = { executablePath: () => ${JSON.stringify(process.execPath)} }; module.exports = { chromium: e, webkit: e, firefox: e };`);
     const fakeBrowsers = path.join(TMP, 'fake-browsers');
-    /* SYSTOLE_ENGINE IS PINNED, because the stand-in below is made for
-       chromium's path alone. verify.js hands its own engine to every suite,
-       this one included, so in the release check's WebKit step the inner run
-       inherited webkit, looked for a webkit binary that was never faked, and
-       stopped before the split build: "no report (exit 1)", on a pure suite. */
-    const pwEnv = { NODE_PATH: path.join(TMP, 'fake_modules'), PLAYWRIGHT_BROWSERS_PATH: fakeBrowsers, SYSTOLE_ENGINE: 'chromium' };
-    const wants = spawnSync(process.execPath, ['-e',
-      `try { process.stdout.write(require(require.resolve('playwright', { paths: [${JSON.stringify(ROOT)}] })).chromium.executablePath()); } catch (_) {}`],
-      { encoding: 'utf8', env: Object.assign({}, process.env, pwEnv) }).stdout;
-    /* Only ever inside fakeBrowsers. With no real playwright the probe finds
-       the stand-in module above, whose answer is node's own binary: the first
-       draft of this line tried to overwrite it, and was stopped only by the
-       file being in use. */
-    if (wants && path.resolve(wants).startsWith(fakeBrowsers + path.sep) && !fs.existsSync(wants)) {
-      fs.mkdirSync(path.dirname(wants), { recursive: true }); fs.writeFileSync(wants, '');
+    const pwEnv = { NODE_PATH: path.join(TMP, 'fake_modules'), PLAYWRIGHT_BROWSERS_PATH: fakeBrowsers };
+    /* Every engine, not just Chromium: verify.js asks for the one
+       SYSTOLE_ENGINE names, and a stand-in at Chromium's path alone made this
+       check fail on every WebKit run (the owner's release check, b4c0b79). */
+    for (const engine of ['chromium', 'webkit', 'firefox']) {
+      const wants = spawnSync(process.execPath, ['-e',
+        `try { process.stdout.write(require(require.resolve('playwright', { paths: [${JSON.stringify(ROOT)}] }))[${JSON.stringify(engine)}].executablePath()); } catch (_) {}`],
+        { encoding: 'utf8', env: Object.assign({}, process.env, pwEnv) }).stdout;
+      /* Only ever inside fakeBrowsers. With no real playwright the probe finds
+         the stand-in module above, whose answer is node's own binary: the first
+         draft of this line tried to overwrite it, and was stopped only by the
+         file being in use. */
+      if (wants && path.resolve(wants).startsWith(fakeBrowsers + path.sep) && !fs.existsSync(wants)) {
+        fs.mkdirSync(path.dirname(wants), { recursive: true }); fs.writeFileSync(wants, '');
+      }
     }
     const pw = node([path.join(ROOT, 'scripts', 'verify.js'), target, '--only', 'engine', '--pwa', '--report-json', rp], pwEnv);
     let pd = null; try { pd = JSON.parse(fs.readFileSync(rp, 'utf8')); } catch (_) {}
