@@ -905,7 +905,10 @@ jobs:
   # This job closes that gap the only way it can be closed — by running on a
   # machine that already has the export, which means the owner's laptop acting
   # as a self-hosted runner. It is opt-in: with no runner registered it simply
-  # never starts, and the jobs above are unaffected.
+  # never starts, and the jobs above are unaffected. BUT THIS REPOSITORY IS
+  # PUBLIC: register no runner for it until the repository is private or every
+  # control under WHY NOT pull_request below is in place (docs/BUILD.md says
+  # the same before its registration steps).
   #
   # ─ WHY IT PRINTS SO LITTLE ─────────────────────────────────────────────────
   #

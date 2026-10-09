@@ -588,6 +588,14 @@ nothing else changes.
 
 ### Registering it
 
+> **Stop first: this repository is public.** Do not register this runner, put
+> the export's path in its environment, or start it while the repository is
+> public. A fork's pull request can run its own workflow code on any
+> self-hosted runner the repository has, and this one would sit on the machine
+> that holds the licensed export. Make the repository private first, or apply
+> every control in [Why it does not run on pull requests](#why-it-does-not-run-on-pull-requests)
+> below, before any step in this section.
+
 Settings → Actions → Runners → New self-hosted runner, then follow the
 commands GitHub gives you. Three things must match this repository rather than
 the defaults:
