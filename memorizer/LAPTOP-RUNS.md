@@ -14,7 +14,7 @@ New-Item -ItemType Directory -Path $memorizerRunDir | Out-Null
 $memorizerReport = Join-Path $memorizerRunDir 'results.json'
 $memorizerLog = Join-Path $memorizerRunDir 'private-run.log'
 $ErrorActionPreference = 'Continue'
-npm run test:private -- --pwa --report-json "$memorizerReport" *> "$memorizerLog"
+npm run test:private -- --engine chromium --pwa --report-json "$memorizerReport" *> "$memorizerLog"
 $memorizerExitCode = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
 ```
