@@ -653,6 +653,13 @@ function kindOf(user) {
      JSON.stringify(rec.figures[0]));
   ok('and the PDF itself is kept on the device, to draw them from', await page.evaluate(id => MemStore.get('files', id).then(f => !!f && f.bytes.byteLength > 1000), rec.id));
   ok('pdf.js and its worker came from the pinned CDN', cdnHits >= 2, `${cdnHits} requests`);
+  /* pdf.js on the page's own thread froze it for 8 s and more, about thirty
+     times a run, and past 30 s under load: the click after it timed out
+     (memorizer/src/pdf.js, crossOrigin). Its fallback announces itself by
+     defining window.pdfjsWorker in the page. pdf.js must have loaded for
+     the absence to mean anything, so that is part of the claim. */
+  const thread = await page.evaluate(() => ({ lib: !!window.pdfjsLib, fake: !!window.pdfjsWorker, port: !!(window.pdfjsLib && pdfjsLib.GlobalWorkerOptions.workerPort) }));
+  ok('pdf.js reads the PDF on a worker, not on the page\u2019s own thread', thread.lib && !thread.fake, JSON.stringify(thread));
   /* Provenance: the unit knows exactly which bytes it came from, and what
      read them. The digest is computed here, in Node, from the PDF handed
      in — not read back from the page and compared with itself. */
