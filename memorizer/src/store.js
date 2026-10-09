@@ -55,6 +55,10 @@ var writeQueue = Promise.resolve(), removed = Object.create(null), removedDocs =
 function serialWrite(run) {
   var next = writeQueue.then(run); writeQueue = next.catch(function () {}); return next;
 }
+/* A read waits for the writes queued before it, so the app reads what it has
+   just written: a write that is called and not awaited, then a read, was in
+   that order when each write opened its transaction at once. */
+function afterWrites(run) { return writeQueue.then(run); }
 function revive(ops) {
   ops.forEach(function (o) {
     if (!o.value) return;
@@ -393,14 +397,16 @@ function failureMessage() {
 function retryFailures() {
   return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta, f.ops); }));
 }
-api.forgetFailures = function () { failures = {}; latest = {}; }; api.snapshot = snapshot; api.STORES = STORES.slice(); api.health = health; api.persist = persist; api.failureMessage = failureMessage; api.retryFailures = retryFailures;
+api.forgetFailures = function () { failures = {}; latest = {}; }; api.snapshot = function () { return afterWrites(snapshot); }; api.STORES = STORES.slice(); api.health = health; api.persist = persist; api.failureMessage = failureMessage; api.retryFailures = retryFailures;
 api.update = update; api.removalOps = removalOps; api.cleanImports = cleanImports; api.sweep = sweep; api.batch = batch; api.open = open; api.put = function (store, value) {
   var v = clone(value);
   return tracked(store + ':' + v.id, function () { return put(store, v); }, store === 'meta' ? v : null, [{ store: store, value: v }]);
 }; api.get = function (store, id) {
-  var f = failures[store + ':' + id];
-  return store === 'meta' && f && f.meta ? Promise.resolve(clone(f.meta)) : get(store, id);
-}; api.all = all; api.del = function (store, id) { return tracked(store + ':' + id, function () { return del(store, id); }, null, [{ store: store, id: id, delete: true }]); };
+  return afterWrites(function () {
+    var f = failures[store + ':' + id];
+    return store === 'meta' && f && f.meta ? clone(f.meta) : get(store, id);
+  });
+}; api.all = function (store) { return afterWrites(function () { return all(store); }); }; api.del = function (store, id) { return tracked(store + ':' + id, function () { return del(store, id); }, null, [{ store: store, id: id, delete: true }]); };
 api.deleteDoc = deleteDoc; api.deleteBook = deleteBook; api.mergeCards = mergeCards; api.saveStep = function (session, cards) {
   var s = clone(session), cs = clone(cards);
   return tracked('sessions:' + s.id, function () { return saveStep(s, cs); }, null, [{ store: 'sessions', value: s }].concat(cs.map(function (c) { return { store: 'cards', value: c, history: true }; })));
