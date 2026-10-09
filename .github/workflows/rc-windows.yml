@@ -1,0 +1,68 @@
+name: rc — Windows WebKit, the screen-change crash
+
+# The owner's Windows machine, on Playwright 1.63 (WebKit 26.6), crashed the
+# page on every first screen change of the real build: a view transition
+# tearing down layers mid-animation. render() now stops the outgoing screen's
+# animations first (stillOutgoing). Linux WebKit never crashed, so the main
+# workflow cannot show whether that fixed it. This runs on a Windows runner,
+# on pushes to `rc` only, against the synthetic build (the real export never
+# reaches CI).
+#
+# A CONTROL FIRST. The same app with the stillOutgoing() call removed must
+# crash here, or the runner cannot reproduce the bug and a green fixed run
+# proves nothing; tools/rc-webkit-probe.js fails the job in that case rather
+# than let it read as coverage.
+
+on:
+  push:
+    branches: [rc]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-webkit:
+    name: windows-webkit — control must crash, the fix must not
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: the pinned playwright, from the lockfile, and its WebKit
+        run: |
+          npm ci
+          npx playwright install webkit
+
+      - name: the synthetic export, and the app built around it as committed
+        run: |
+          node scripts/synthetic-export.js build/synthetic/export.html
+          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
+
+      - name: the control build, with render()'s stillOutgoing() call removed
+        run: |
+          node -e "const fs=require('fs');const p='app/systole.html';const s=fs.readFileSync(p,'utf8');const a='      stillOutgoing();\n';if(s.split(a).length!==2){console.error('the stillOutgoing() call is not where this step expects it');process.exit(1)}fs.writeFileSync(p,s.replace(a,''))"
+          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/control.html
+          git checkout -- app/systole.html
+          git diff --exit-code
+
+      - name: control — the first screen change crashes this WebKit without the fix
+        run: node tools/rc-webkit-probe.js build/synthetic/control.html --expect crash --runs 3
+
+      - name: the fix — the same screen change, as committed, does not
+        if: ${{ !cancelled() }}
+        run: node tools/rc-webkit-probe.js build/synthetic/systole.html --expect ok --runs 3
+
+      - name: the six suites that crashed on the owner's machine, one at a time
+        if: ${{ !cancelled() }}
+        run: node scripts/verify.js build/synthetic/systole.html --engine webkit --only stage3,chat,heartreuse,type,boundary,memory --jobs 1
