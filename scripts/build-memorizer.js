@@ -70,7 +70,7 @@ const HEADERS = [
    CSP Level 2. Run last, on the final markup: a hash is of the exact text. */
 function hashInlineScripts(html) {
   const hashes = [];
-  html.replace(/<script>([\s\S]*?)<\/script>/g, (_, code) => {
+  html.replace(/<script>([\s\S]*?)<\/script>/gi, (_, code) => {
     hashes.push("'sha256-" + crypto.createHash('sha256').update(code, 'utf8').digest('base64') + "'");
     return _;
   });

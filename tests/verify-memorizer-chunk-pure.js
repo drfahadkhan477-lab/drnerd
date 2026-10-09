@@ -951,7 +951,7 @@ head('scanned pages: text recognition, in the shape pdf.js gives text');
   {
     const built = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
     const crypto = require('crypto');
-    const inline = [...built.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => "'sha256-" + crypto.createHash('sha256').update(m[1], 'utf8').digest('base64') + "'");
+    const inline = [...built.matchAll(/<script>([\s\S]*?)<\/script>/gi)].map(m => "'sha256-" + crypto.createHash('sha256').update(m[1], 'utf8').digest('base64') + "'");
     const policy = ((/script-src ([^;]*);/.exec(built) || [])[1] || '').split(/\s+/);
     const unhashed = inline.filter(h => policy.indexOf(h) === -1).length;
     ok('every inline script in the built page is hashed in its script-src, and nothing else is', inline.length > 10 && unhashed === 0 &&
