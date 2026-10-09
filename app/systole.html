@@ -5842,12 +5842,21 @@ function voiceSay(text){
     try{ const u=new SpeechSynthesisUtterance(text); u.onend=fin; u.onerror=fin; speechSynthesis.speak(u); }catch(_){ fin(); }
   });
 }
+/* The listener that is open now, so stopVoice() can close it at once. It used
+   to close only when its own 250 ms watch next looked, and the watch asked
+   whether ANY session was running: stop, start again inside that quarter
+   second, and the old listener stayed open and took the new session's first
+   answer, which its ended session then threw away ("I did not catch that").
+   verify-voicescreen found it once WebKit's screen swaps became instant. */
+let _hearing=null;
 function voiceHear(){
   if(_voice) voiceDock('listening','Say a letter, or “repeat”');
+  const session=_voice;
   return new Promise(res=>{
-    let done=false, rec=null; const fin=v=>{ if(!done){done=true;clearTimeout(t);clearInterval(watch);try{rec&&rec.stop();}catch(_){} res(v);} };
+    let done=false, rec=null; const fin=v=>{ if(!done){done=true;clearTimeout(t);clearInterval(watch);if(_hearing===fin)_hearing=null;try{rec&&rec.stop();}catch(_){} res(v);} };
+    _hearing=fin;
     const t=setTimeout(()=>fin(null),9000);
-    const watch=setInterval(()=>{ if(_voice===null||S.screen!=='quiz'){ clearInterval(watch); fin(null); } },250);   // the microphone does not stay open on another screen
+    const watch=setInterval(()=>{ if(_voice!==session||S.screen!=='quiz'){ clearInterval(watch); fin(null); } },250);   // the microphone does not stay open on another screen, or past its own session
     try{
       rec=new (VOICE_SR())(); rec.lang='en-US'; rec.interimResults=false; rec.maxAlternatives=1;
       rec.onresult=ev=>{ try{ fin(ev.results[0][0].transcript); }catch(_){ fin(null); } };
@@ -5887,7 +5896,7 @@ function startVoice(){
   const v=_voice={deck:S.questions,state:VoiceMode.init(S.questions.length),pending:[]};
   runVoice(v,{type:'start'});
 }
-function stopVoice(){ _voice=null; voiceDock(null); try{speechSynthesis.cancel();}catch(_){} }
+function stopVoice(){ _voice=null; if(_hearing) _hearing(null); voiceDock(null); try{speechSynthesis.cancel();}catch(_){} }
 async function runVoice(v,event){
   let queue=[event];
   while(queue.length&&_voice===v){

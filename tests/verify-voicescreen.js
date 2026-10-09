@@ -39,9 +39,12 @@ const STUB = () => {
   window.SpeechSynthesisUtterance = function (t) { this.text = t; };
   /* speechSynthesis is a read-only property of window: plain assignment is silently ignored. */
   Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: { speak(u) { window.__said.push(u.text); setTimeout(() => u.onend && u.onend(), 0); }, cancel() {} } });
+  window.__recs = [];
   window.SpeechRecognition = function () {
+    window.__recs.push(this);
     /* Listening waits for the test to say something, as a person would; the page's own timeout ends it otherwise. */
     this.start = () => {
+      this.started = true;
       window.__listens++;
       const tick = () => {
         if (this.stopped) return;   // a listener the page has stopped must not take the next section's words
@@ -83,15 +86,7 @@ const STUB = () => {
     await onScreen(page, 'study', { marker: '#planCard' });
     await quiet(page);
   };
-  /* POLLED ON A TIMER, NOT ON FRAMES. waitForFunction re-checks on
-     requestAnimationFrame by default, and a page that is not painting gives it
-     none: with WebKit's screen swaps instant (tests/_engine.js takes view
-     transitions away there) this page sat idle while the scripted voice
-     talked, and a wait whose condition was already true timed out (4 runs in
-     12 on WebKit, and once in CI). Every wait here is on page state the voice
-     sets from timers, not on paint, so a 100 ms poll is what it needs: 0 in 20
-     with it, on WebKit with transitions off and on. */
-  const waitFor = (page, fn, arg) => page.waitForFunction(fn, arg, { timeout: 15000, polling: 100 });
+  const waitFor = (page, fn, arg) => page.waitForFunction(fn, arg, { timeout: 15000 });
 
   head('no speech in the browser: no card, and the rest is there');
   {
@@ -167,6 +162,27 @@ const STUB = () => {
   ok('"Not quite" was spoken, naming the answer', done.said === 1);
   ok('a wrong answer was rated Again: a lapse, due again tomorrow at the latest', done.srs !== null && done.srs.lapses === 1 && done.srs.ivl <= 1, JSON.stringify(done.srs));
   ok('"stop" ended the session with a spoken summary', done.fin.length === 1 && /1 of 1 correct|0 of 1 correct/.test(done.fin[0]), done.fin[0]);
+
+  head('stopping closes the microphone at once, so a quick restart keeps its first answer');
+  /* stopVoice() used to leave the open listener running until its own 250 ms
+     watch noticed, and the watch asked whether any session was running. A new
+     session started inside that window kept the old listener open, and it took
+     the new session's first answer ("I did not catch that"): with WebKit's
+     screen swaps instant, "a wrong letter, and stop" failed 4 runs in 12 on it.
+     Counted in the same task as the stop, so no timing can rescue it. */
+  await fresh();
+  await toStudy(page);
+  await page.click('#voiceStart');
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await waitFor(page, () => window.__listens >= 1);
+  const open = await page.evaluate(() => {
+    const live = () => window.__recs.filter(r => r.started && !r.stopped).length;
+    const before = live();
+    stopVoice();
+    return { before, after: live() };
+  });
+  ok('a listener was open before the stop, so the count can catch one left behind', open.before >= 1, JSON.stringify(open));
+  ok('and none is open the moment stopVoice() returns', open.after === 0, JSON.stringify(open));
 
   head('leaving the quiz ends the session');
   await fresh();
