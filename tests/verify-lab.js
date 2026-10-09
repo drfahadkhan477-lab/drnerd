@@ -38,6 +38,19 @@ const ok = (label, cond, detail = '') => {
 };
 let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
+/* A CLAIM ABOUT WHAT IS HEARD NEEDS A BROWSER THAT PLAYS. Playwright's Windows
+   WebKit (26.6) has no AudioContext at all: the Lab says so on screen and never
+   makes a buffer, and the first wait for one timed out the suite (the owner's
+   release check, and rc's Windows job). There those checks are counted not
+   measurable; failing them would blame the Lab for the browser, and passing
+   them would report sound nobody heard. Everything else in the same sections
+   still runs. */
+let hasAudio = true, unmeasured = 0;
+const heard = (label, cond, detail = '') => {
+  if (hasAudio) return ok(label, cond, detail);
+  unmeasured++;
+  console.log('  ----  ' + label + '  → not measurable here: this browser has no Web Audio');
+};
 const errors = [], events = [];
 const die = onDeath(() => ({ section, checks: passed + failed, errors, events }));
 
@@ -153,6 +166,7 @@ const pixels = () => {
   /* ── heart sounds: what is played is what is asked ─────────────────── */
   head('heart sounds: what is played is the item the answer key names');
   {
+    hasAudio = await p.evaluate(() => !!(window.AudioContext || window.webkitAudioContext));
     await p.click('[data-kind="sounds"]');
     const asked = [], wrong = [];
     for (let i = 0; i < 12; i++) {
@@ -162,10 +176,10 @@ const pixels = () => {
       const body = await p.evaluate(() => document.querySelector('#app').innerHTML);   // the page, not the scripts it carries
       const info = await p.evaluate(k => { const it = window.LabItems.byId(k); return { key: it.key, name: it.name, blurb: it.blurb, phase: window.HeartMap.phaseOf(it.key) }; }, st.item);
       await p.click('[data-act="play"]');
-      await p.waitForFunction(n => window.__audio.buffers.length > n, i, T);
-      const e = await p.evaluate(energy, 4);
+      if (hasAudio) await p.waitForFunction(n => window.__audio.buffers.length > n, i, T);
+      const e = hasAudio ? await p.evaluate(energy, 4) : { sys: 0, dia: 0, rate: 0, len: 0, peak: 0 };
       const loud = 0.02;
-      const fits = info.phase === 'systolic' ? e.sys >= loud && e.sys >= 2 * e.dia
+      const fits = !hasAudio ? true : info.phase === 'systolic' ? e.sys >= loud && e.sys >= 2 * e.dia
         : info.phase === 'diastolic' ? e.dia >= loud && e.dia >= 2 * e.sys
         : info.phase === 'continuous' ? e.sys >= loud && e.dia >= loud
         : e.sys < loud;
@@ -175,13 +189,13 @@ const pixels = () => {
       if (i < 11) await p.click('#next');
     }
     ok('twelve questions were twelve different heart sounds, as new ones come first', new Set(asked.map(a => a.st.item)).size === 12, asked.map(a => a.info.key).join(' '));
-    ok('the audio handed to the browser is the lesion asked about: loud in systole, or diastole, or both, or in neither, as the heart map says, for all twelve', wrong.length === 0, wrong.join(' | ') || asked.map(a => a.info.key + ':' + a.info.phase).join(' '));
-    ok('it is 8 kHz mono, a few seconds long, and well above silence', asked.every(a => a.e.rate === 8000 && a.e.len > 8000 * 2 && a.e.len < 8000 * 6 && a.e.peak > 0.5), asked[0].e.len + ' samples');
+    heard('the audio handed to the browser is the lesion asked about: loud in systole, or diastole, or both, or in neither, as the heart map says, for all twelve', wrong.length === 0, wrong.join(' | ') || asked.map(a => a.info.key + ':' + a.info.phase).join(' '));
+    heard('it is 8 kHz mono, a few seconds long, and well above silence', asked.every(a => a.e.rate === 8000 && a.e.len > 8000 * 2 && a.e.len < 8000 * 6 && a.e.peak > 0.5), asked[0].e.len + ' samples');
     ok('each question offers four different answers, one of them the answer key\'s', asked.every(a => a.names.length === 4 && new Set(a.names).size === 4 && a.names.includes(a.info.name)));
     ok('and nothing names the answer before it is given: its description is not in the page', asked.every(a => !a.leaked));
     ok('nor are its S1 and S2 marks on the waveform, which appear only afterwards', asked.every(a => a.pre === 0));
     const log = await p.evaluate(() => ({ loops: window.__audio.loops, started: window.__audio.started }));
-    ok('Play loops, so a murmur can be listened to for as long as it takes', log.started === 12 && log.loops.every(l => l === true), JSON.stringify(log));
+    heard('Play loops, so a murmur can be listened to for as long as it takes', log.started === 12 && log.loops.every(l => l === true), JSON.stringify(log));
     const sum = await p.evaluate(() => window.__lab.progress());
     ok('all twelve answered correctly are twelve cards, and a tally of twelve right', Object.keys(sum.cards).length === 12 && Object.values(sum.days).every(d => d.n === 12 && d.c === 12), JSON.stringify(Object.values(sum.days)));
   }
@@ -194,12 +208,12 @@ const pixels = () => {
     ok('the player starts stopped', (await btn.getAttribute('aria-pressed')) === 'false');
     const before = await p.evaluate(() => window.__audio.started);
     await btn.click();
-    ok('Play starts it, and the button says Stop and is pressed', (await p.evaluate(() => window.__audio.started)) === before + 1 && (await btn.getAttribute('aria-pressed')) === 'true' && /Stop/.test(await btn.innerText()));
+    heard('Play starts it, and the button says Stop and is pressed', (await p.evaluate(() => window.__audio.started)) === before + 1 && (await btn.getAttribute('aria-pressed')) === 'true' && /Stop/.test(await btn.innerText()));
     const cur = await p.evaluate(() => new Promise(r => setTimeout(() => r(document.querySelector('.cursor').className + '|' + document.querySelector('.cursor').style.left), 250)));
-    ok('and a cursor follows it across the waveform', /on/.test(cur) && /%/.test(cur), cur);
+    heard('and a cursor follows it across the waveform', /on/.test(cur) && /%/.test(cur), cur);
     const stoppedBefore = await p.evaluate(() => window.__audio.stopped);
     await btn.click();
-    ok('Stop stops it', (await p.evaluate(() => window.__audio.stopped)) === stoppedBefore + 1 && (await btn.getAttribute('aria-pressed')) === 'false');
+    heard('Stop stops it', (await p.evaluate(() => window.__audio.stopped)) === stoppedBefore + 1 && (await btn.getAttribute('aria-pressed')) === 'false');
     await btn.click();
     const st = await state(p);
     const right = st.options.find(id => id === st.item);
@@ -207,9 +221,9 @@ const pixels = () => {
     const after = await p.evaluate(pixels);
     ok('answering draws the S1 and S2 marks on the waveform, in the accent colour', after.accent > 40, after.accent + ' accent pixels');
     ok('and the waveform itself is on the canvas throughout', after.ink > 200, after.ink + ' ink pixels');
-    ok('a sound that was playing keeps playing while the answer is shown', (await btn.getAttribute('aria-pressed')) === 'true');
+    heard('a sound that was playing keeps playing while the answer is shown', (await btn.getAttribute('aria-pressed')) === 'true');
     await p.click('#next');
-    ok('and the next question starts silent', (await p.locator('[data-act="play"]').getAttribute('aria-pressed')) === 'false');
+    heard('and the next question starts silent', (await p.locator('[data-act="play"]').getAttribute('aria-pressed')) === 'false');
   }
 
   /* ── tracings ──────────────────────────────────────────────────────── */
@@ -341,11 +355,11 @@ const pixels = () => {
     ok('and the picker keeps focus and the page says which condition it is showing', /Mitral stenosis/.test(await text(p, '#ex-title')) && (await p.evaluate(() => document.activeElement.id)) === 'ex-pick');
     const before = await p.evaluate(() => window.__audio.started);
     await p.click('[data-act="play"]');
-    const e = await p.evaluate(energy, 3);   // the heart map plays three beats, the drill four
-    ok('Play here plays that condition\'s own sound: a diastolic rumble for mitral stenosis', (await p.evaluate(() => window.__audio.started)) === before + 1 && e.dia > 2 * e.sys, `sys ${e.sys.toFixed(3)} dia ${e.dia.toFixed(3)}`);
+    const e = hasAudio ? await p.evaluate(energy, 3) : { sys: 0, dia: 0 };   // the heart map plays three beats, the drill four
+    heard('Play here plays that condition\'s own sound: a diastolic rumble for mitral stenosis', (await p.evaluate(() => window.__audio.started)) === before + 1 && e.dia > 2 * e.sys, `sys ${e.sys.toFixed(3)} dia ${e.dia.toFixed(3)}`);
     await p.selectOption('#ex-pick', 'trc:ra-constriction');
     ok('a tracing shows the pericardium and its waves labelled, where a sound would not', (await p.locator('svg.heart ellipse').count()) === 1 && (await p.evaluate(pixels)).accent > 20);
-    ok('and switching away stops the sound', (await p.evaluate(() => window.__audio.stopped)) >= 1);
+    heard('and switching away stops the sound', (await p.evaluate(() => window.__audio.stopped)) >= 1);
     await p.click('[data-act="home"]');
     await p.click('[data-kind="sounds"]');
     const st = await state(p);
@@ -405,6 +419,6 @@ const pixels = () => {
   await browser.close();
   server.close();
   fs.rmSync(dir, { recursive: true, force: true });
-  console.log(`\n${passed} passed, ${failed} failed`);
+  console.log(`\n${passed} passed, ${failed} failed` + (unmeasured ? `, ${unmeasured} not measurable on ${engineName()}` : ''));
   process.exit(failed ? 1 : 0);
 })().catch(die);
