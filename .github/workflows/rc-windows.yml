@@ -66,3 +66,7 @@ jobs:
       - name: the six suites that crashed on the owner's machine, one at a time
         if: ${{ !cancelled() }}
         run: node scripts/verify.js build/synthetic/systole.html --engine webkit --only stage3,chat,heartreuse,type,boundary,memory --jobs 1
+
+      - name: experiments — which way of quieting the old screen survives (control build)
+        if: ${{ !cancelled() }}
+        run: node tools/rc-vt-experiments.js build/synthetic/control.html --runs 2
