@@ -88,7 +88,7 @@ const suite = (n, body) => fs.writeFileSync(path.join(TMP, 'tests', n + '.js'), 
 suite('verify-a', 'process.exit(0)');
 suite('verify-b', 'console.log("  FAIL  zq"); process.exit(1)');
 suite('verify-c', 'process.exit(process.env.SYSTOLE_ENGINE === "webkit" ? 0 : 3)');
-suite('verify-g', 'process.exit(["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"].some(k => k in process.env) ? 4 : 0)');
+suite('verify-g', 'process.exit(["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0"].some(k => k in process.env) ? 4 : 0)');
 const go = (logic, br, opts, syn) => {
   const lines = [];
   const r = run(Object.assign({ root: TMP, yml: Y(logic, br, null, syn), log: s => lines.push(s) }, opts));
@@ -129,11 +129,15 @@ const go = (logic, br, opts, syn) => {
   ok('a logic job with no suites is refused, not reported as a pass', /invokes no suites/.test(msg), msg || 'accepted');
 }
 {
-  /* What a linked worktree's pre-push hook hands this runner (git sets these
-     there and only there). A suite that inherits them runs its throwaway
-     repositories' git commands against the real one. */
-  const keep = {}; for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) keep[k] = process.env[k];
-  Object.assign(process.env, { GIT_DIR: path.join(TMP, 'not-this'), GIT_WORK_TREE: TMP, GIT_INDEX_FILE: path.join(TMP, 'idx') });
+  /* What git hands the commands it runs: a linked worktree's pre-push hook
+     gets GIT_DIR and its siblings, and `git -c …` (or `rebase -x`, `bisect
+     run`) passes its settings on. A suite that inherits them runs its
+     throwaway repositories' git commands against the real one, or with the
+     caller's settings. */
+  const VARS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0'];
+  const keep = {}; for (const k of VARS) keep[k] = process.env[k];
+  Object.assign(process.env, { GIT_DIR: path.join(TMP, 'not-this'), GIT_WORK_TREE: TMP, GIT_INDEX_FILE: path.join(TMP, 'idx'),
+    GIT_CONFIG_PARAMETERS: "'commit.gpgsign'='true'", GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.bare' });
   let r;
   try { r = go(['verify-g'], [], { pure: true }); }
   finally { for (const k in keep) { if (keep[k] === undefined) delete process.env[k]; else process.env[k] = keep[k]; } }

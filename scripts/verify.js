@@ -46,6 +46,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, spawnSync, execSync } = require('child_process');
+const { childEnv } = require('./gitenv.js');   // a suite never inherits where git looks for a repository
 
 const ROOT = path.join(__dirname, '..');
 
@@ -835,7 +836,7 @@ function runSuite(name, claim) {
   return new Promise(resolve => {
     const t = Date.now();
     const ch = spawn(process.execPath, [path.join(ROOT, 'tests', `verify-${name}.js`), TARGET], {
-      env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE },
+      env: childEnv({ NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE }),
       detached: process.platform !== 'win32',
     });
     activeChildren.add(ch);
@@ -1160,7 +1161,7 @@ if (flag('--pwa')) {
   pt = Date.now();
 
   const r = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
-                      { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE } }, PHASE_LIMIT, 'verify-pwa');
+                      { encoding: 'utf8', maxBuffer: 1 << 26, env: childEnv({ NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE }) }, PHASE_LIMIT, 'verify-pwa');
   const out = (r.stdout || '') + (r.stderr || '');
   phase('pwa', out, r.status, Date.now() - pt);
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);

@@ -658,8 +658,25 @@ function kindOf(user) {
      (memorizer/src/pdf.js, crossOrigin). Its fallback announces itself by
      defining window.pdfjsWorker in the page. pdf.js must have loaded for
      the absence to mean anything, so that is part of the claim. */
-  const thread = await page.evaluate(() => ({ lib: !!window.pdfjsLib, fake: !!window.pdfjsWorker, port: !!(window.pdfjsLib && pdfjsLib.GlobalWorkerOptions.workerPort) }));
+  const thread = await page.evaluate(() => ({ lib: !!window.pdfjsLib, fake: !!window.pdfjsWorker }));
   ok('pdf.js reads the PDF on a worker, not on the page\u2019s own thread', thread.lib && !thread.fake, JSON.stringify(thread));
+  /* One worker per document (memorizer/src/pdf.js openPdf). A worker shared
+     through workerPort was owned by every document at once: a figure drawn
+     for another file (which disposes the cached document) and an import
+     started together failed the import with "the worker is being
+     destroyed". The port is used only where the page is a local file, as
+     Chromium opens it here; elsewhere each document has pdf.js's own worker,
+     and this passes either way. pdf.js is released after, so nothing that
+     follows inherits these documents. */
+  const together = await page.evaluate(b64 => {
+    const mk = () => Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer;
+    const settle = p => p.then(() => 'ok', e => 'failed: ' + e.message);
+    return MemPdf.renderBox('check-a', mk(), 1, null).then(() => Promise.all([
+      settle(MemPdf.renderBox('check-b', mk(), 1, null)),
+      settle(MemPdf.read(mk(), null, null, { figures: false })),
+    ])).then(r => MemPdf.release().then(() => ({ figure: r[0], read: r[1] })));
+  }, pdf.buffer.toString('base64'));
+  ok('a figure for another file and an import, started together, both finish', together.figure === 'ok' && together.read === 'ok', JSON.stringify(together));
   /* Provenance: the unit knows exactly which bytes it came from, and what
      read them. The digest is computed here, in Node, from the PDF handed
      in — not read back from the page and compared with itself. */

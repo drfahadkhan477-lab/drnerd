@@ -38,10 +38,16 @@ function loadScript(src, sri, failure) {
    own thread: the page stops answering for seconds at a time (measured:
    8 s and more, about thirty times in one run of verify-memorizer, and
    past 30 s under load). Handing pdf.js a worker already started
-   (workerPort) skips the wrapper. Only there, and only once the worker has
-   said it is ready; otherwise workerSrc stands and pdf.js does what it did.
-   The test is pdf.js's own (isSameOrigin, 3.11), not location.origin, which
-   Chromium reports as "file://" for the same page. */
+   (a PDFWorker made from a port) skips the wrapper. Only there, and only
+   once a first worker has said it is ready; otherwise workerSrc stands and
+   pdf.js does what it did. The test is pdf.js's own (isSameOrigin, 3.11),
+   not location.origin, which Chromium reports as "file://" for the same
+   page.
+   EACH DOCUMENT GETS A WORKER OF ITS OWN (openPdf), as pdf.js gives each on
+   its normal path. One worker shared through GlobalWorkerOptions.workerPort
+   was owned by every loading task at once: disposing any document destroyed
+   it under the others, so an import started while a figure's file was being
+   swapped failed with "the worker is being destroyed". */
 function crossOrigin(src) {
   try {
     if (typeof root.Worker !== 'function') return false;
@@ -49,13 +55,14 @@ function crossOrigin(src) {
     return !base.origin || base.origin === 'null' || base.origin !== new URL(src, base).origin;
   } catch (_) { return false; }
 }
+var portSrc = null, portEnds = typeof WeakMap === 'function' ? new WeakMap() : null;
 function portFor(L, src) {
   return new Promise(function (resolve) {
     var w, done = false;
     var finish = function (ok) {
       if (done) return; done = true; clearTimeout(t);
-      if (w) { w.onmessage = null; w.onerror = null; }
-      if (ok) L.GlobalWorkerOptions.workerPort = w; else if (w) w.terminate();
+      if (w) { w.onmessage = null; w.onerror = null; w.terminate(); }
+      if (ok && portEnds) portSrc = src;
       resolve(L);
     };
     var t = setTimeout(function () { finish(false); }, 10000);
@@ -450,9 +457,7 @@ function read(buffer, onProgress, onStatus, opts) {
   function check() { if (opts && opts.cancelled && opts.cancelled()) { var e = new Error('Import cancelled.'); e.cancelled = true; throw e; } }
   return lib().then(function (L) {
     check(); Lib = L;
-    /* pdf.js may take ownership of the buffer it is given, so it gets a copy:
-       the caller keeps the original to store. */
-    return L.getDocument({ data: new Uint8Array(buffer.slice(0)), isEvalSupported: false }).promise;
+    return openPdf(L, buffer);
   }).then(function (doc) {
     opened = doc;
     var pages = [], counts = [], figures = [];
@@ -508,7 +513,22 @@ function read(buffer, onProgress, onStatus, opts) {
   }).then(function (value) { return dispose(opened).then(function () { return value; }); }, function (e) { return dispose(opened).then(function () { throw e; }); });
 }
 
-function dispose(doc) { return doc && doc.destroy ? Promise.resolve(doc.destroy()).catch(function () {}) : Promise.resolve(); }
+/* pdf.js may take ownership of the buffer it is given, so it gets a copy:
+   the caller keeps the original to store. Where the page needs a port
+   (portSrc), the document's worker is started here and ended by dispose(). */
+function openPdf(L, buffer) {
+  var data = new Uint8Array(buffer.slice(0));
+  if (!portSrc) return L.getDocument({ data: data, isEvalSupported: false }).promise;
+  var w = new root.Worker(portSrc), pw = new L.PDFWorker({ port: w });
+  var end = function () { try { pw.destroy(); } catch (_) {} w.terminate(); };
+  return L.getDocument({ data: data, isEvalSupported: false, worker: pw }).promise.then(function (doc) { portEnds.set(doc, end); return doc; }, function (e) { end(); throw e; });
+}
+function dispose(doc) {
+  if (!doc || !doc.destroy) return Promise.resolve();
+  var end = portEnds && portEnds.get(doc);
+  if (end) portEnds.delete(doc);
+  return Promise.resolve(doc.destroy()).catch(function () {}).then(function () { if (end) end(); });
+}
 
 /* The PDF's own bookmarks, flattened: [{ title, page, depth }], depth 0 at
    the top. An entry whose destination cannot be resolved to a page is left
@@ -583,9 +603,7 @@ var docCache = { key: null, doc: null };
 function openStored(key, buffer) {
   if (docCache.key === key && docCache.buffer === buffer && docCache.doc) return Promise.resolve(docCache.doc);
   var old = docCache.doc; docCache = { key: null, doc: null };
-  return dispose(old).then(lib).then(function (L) {
-    return L.getDocument({ data: new Uint8Array(buffer.slice(0)), isEvalSupported: false }).promise;
-  }).then(function (doc) { docCache = { key: key, buffer: buffer, doc: doc }; return doc; });
+  return dispose(old).then(lib).then(function (L) { return openPdf(L, buffer); }).then(function (doc) { docCache = { key: key, buffer: buffer, doc: doc }; return doc; });
 }
 function renderBoxNow(key, buffer, pageNo, box, scale, margin) {
   scale = scale || 2;

@@ -5929,7 +5929,7 @@ async function runVoice(v,event){
       if(!voiceLive(v)) { stopVoice(); return; }
       if(fx.type==='ask'){
         while(S.qIdx<fx.i&&S.qIdx<S.questions.length-1) nextQ();   // a skipped question leaves the screen behind
-        for(const part of VoiceMode.speakable(v.deck[fx.i]).parts){ if(!voiceLive(v)){stopVoice();return;} await voiceSay(part); }
+        for(const part of VoiceMode.speakable(v.deck[fx.i]).parts){ if(!voiceLive(v)){ if(_voice===v) stopVoice(); return; } await voiceSay(part); }   // after an await, _voice may be a newer session: end only this one
         queue.push({type:'questionRead'});
       }else if(fx.type==='speak'){
         await voiceSay(fx.text);

@@ -38,6 +38,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { childEnv } = require('./gitenv.js');   // a suite never inherits where git looks for a repository
 
 const ROOT = path.join(__dirname, '..');
 
@@ -74,22 +75,6 @@ function suitesFromWorkflow(yml) {
 
 /* opts: { root, yml, pure, engine, executablePath, log } — the seams the
    suite drives. Returns { code, ran, failed, notRun }. */
-/* WHERE GIT LOOKS FOR A REPOSITORY IS NOT INHERITED. Git exports GIT_DIR to
-   the hooks of a linked worktree (and only there), and the pre-push hook runs
-   this. Several suites build throwaway repositories in a temp directory and
-   run git there by cwd; with GIT_DIR in their environment every one of those
-   commands went to the real repository instead. Pushing from a worktree once
-   moved its branch onto sixteen fixture commits and set core.bare on the
-   whole clone. A suite finds this repository by its cwd, like a person does. */
-const REPO_ENV = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_IMPLICIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR',
-  'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_GRAFT_FILE', 'GIT_SHALLOW_FILE',
-  'GIT_NO_REPLACE_OBJECTS', 'GIT_REPLACE_REF_BASE', 'GIT_PREFIX'];
-function childEnv(extra) {
-  const env = Object.assign({}, process.env, extra);
-  for (const k of REPO_ENV) delete env[k];
-  return env;
-}
-
 function run(opts) {
   const o = opts || {};
   const root = o.root || ROOT;

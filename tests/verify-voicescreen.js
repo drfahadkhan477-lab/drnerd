@@ -38,7 +38,10 @@ const STUB = () => {
   window.__said = []; window.__heard = []; window.__listens = 0;
   window.SpeechSynthesisUtterance = function (t) { this.text = t; };
   /* speechSynthesis is a read-only property of window: plain assignment is silently ignored. */
-  Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: { speak(u) { window.__said.push(u.text); setTimeout(() => u.onend && u.onend(), 0); }, cancel() {} } });
+  /* With window.__holdSpeech set, an utterance is kept in window.__heldSpeech until the test ends it, as a long sentence would be. */
+  window.__heldSpeech = [];
+  Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: { speak(u) { window.__said.push(u.text);
+    if (window.__holdSpeech) window.__heldSpeech.push(u); else setTimeout(() => u.onend && u.onend(), 0); }, cancel() {} } });
   window.__recs = [];
   window.SpeechRecognition = function () {
     window.__recs.push(this);
@@ -183,6 +186,30 @@ const STUB = () => {
   });
   ok('a listener was open before the stop, so the count can catch one left behind', open.before >= 1, JSON.stringify(open));
   ok('and none is open the moment stopVoice() returns', open.after === 0, JSON.stringify(open));
+
+  head('a session that finishes its sentence after a restart does not end the new one');
+  /* The owner leaves the quiz mid-question and starts voice again. The old
+     session is still waiting on its sentence; when that sentence ends it
+     finds itself no longer live and used to call stopVoice(), which ended
+     whichever session was running: the new one. */
+  await fresh();
+  await toStudy(page);
+  await page.evaluate(() => { window.__holdSpeech = true; window.__heldSpeech = []; });
+  await page.click('#voiceStart');
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await waitFor(page, () => window.__heldSpeech.length >= 1);
+  const restart = await page.evaluate(async () => {
+    const A = _voice, parts = VoiceMode.speakable(A.deck[A.state.i]).parts.length, first = window.__heldSpeech[0];
+    goStudy();
+    startVoice();
+    const B = _voice;
+    first.onend();                                   // A's sentence ends; A runs on in this task's microtasks
+    await new Promise(r => setTimeout(r, 0));        // a task boundary, so they have all run
+    return { parts, restarted: !!B && B !== A, bLive: _voice === B && B !== null, dock: !!document.getElementById('voiceDock') };
+  });
+  await page.evaluate(() => { window.__holdSpeech = false; window.__heldSpeech.splice(0).forEach(u => u.onend && u.onend()); });
+  ok('(the old session had more of its question to say, and a new session started)', restart.parts >= 2 && restart.restarted, JSON.stringify(restart));
+  ok('the new session is still running after the old one’s sentence ends', restart.bLive && restart.dock, JSON.stringify(restart));
 
   head('leaving the quiz ends the session');
   await fresh();
