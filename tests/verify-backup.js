@@ -95,7 +95,7 @@ const restore = `(text) => new Promise(resolve => {
     refs: [{ id: 'r1', title: 'Restored reference', tags: [], body: 'body text', ts: Date.now(), source: 'backup' }],
     log: [{ id: 'BKUP_1', ts: Date.now(), correct: true }],
     chat: { _general: [{ err: false, content: 'restored assistant reply' }] },
-    stats: { chStats: { Arrhythmias: { seen: 3 } }, sessionCorrect:37,sessionTotal:41,
+    stats: { chStats: { Arrhythmias: { correct: 2, total: 3 } }, sessionCorrect:37,sessionTotal:41,
       missed:['BKUP_1'],srs:{BKUP_1:{reps:3,due:'2026-11-01',stability:4,difficulty:5}},
       futurePreference:{keep:true} },
     mem: [{ id: 'm1', text: 'the fellow prefers terse explanations', kind: 'fact', created: Date.now(), seq: 1 }],
@@ -222,7 +222,14 @@ const restore = `(text) => new Promise(resolve => {
     'a card whose last review is not a date string': { srs: { BKUP_1: { due: '2026-11-01', last: 12345 } } },
     'a null chapter': { chStats: { Arrhythmias: null } },
     'a chapter count that is negative': { chStats: { Arrhythmias: { correct: -1, total: 2 } } },
+    /* Answering a question does st.total++ and st.correct++ on the stored
+       record (selectOpt), and a practice drill does pr.n++ and pr.c++: a
+       missing count turns into NaN, saved as null, and the chapter drops off
+       Progress. Both counts are required, as a day's a and c are. */
+    'a chapter with no counts': { chStats: { Arrhythmias: {} } },
+    'a chapter with a total but no correct count': { chStats: { Arrhythmias: { total: 2 } } },
     'a null practice record': { practice: { BKUP_1: null } },
+    'a practice record with no counts': { practice: { BKUP_1: { t: 1 } } },
     'a null resume record': { resume: { all: null } },
     'a resume record whose ids are not a list': { resume: { all: { ids: 'BKUP_1', i: 1 } } },
   };
@@ -243,8 +250,12 @@ const restore = `(text) => new Promise(resolve => {
 
   /* The valid round trip: a whole day record is restored and read. */
   const dayToast = await importToast(JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 } },
-    srs: { BKUP_1: { reps: 3, due: '2026-11-01', last: '2026-10-01', stability: 4, difficulty: 5 } } } }));
+    srs: { BKUP_1: { reps: 3, due: '2026-11-01', last: '2026-10-01', stability: 4, difficulty: 5 } },
+    chStats: { Arrhythmias: { correct: 4, total: 5 } }, practice: { BKUP_1: { n: 2, c: 1, t: 1 } } } }));
   ok('a backup with a well-formed day record is restored', dayToast === 'Annotations restored.', JSON.stringify(dayToast));
+  /* 4/5, not the 2/3 the first restore left: a refused import must not pass this. */
+  ok('and a whole chapter and practice record are restored with it', await page.evaluate(() =>
+    S.chStats.Arrhythmias.total === 5 && S.chStats.Arrhythmias.correct === 4 && (S.practice.BKUP_1 || {}).n === 2 && S.practice.BKUP_1.c === 1));
   ok('and the Progress screen reads it', await page.evaluate(() => {
     try { buildStats(); forecast7(); } catch (e) { return e.message; }
     return S.daily['2026-10-09'].a === 7 && JSON.parse(localStorage.getItem('accsap12.v2')).daily['2026-10-09'].c === 5;

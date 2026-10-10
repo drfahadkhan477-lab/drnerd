@@ -5580,8 +5580,8 @@ function progressFromBackup(raw){
     if(!record(v)||fields.some(f=>!count(v[f]))||need.some(f=>v[f]==null)||(extra&&!extra(v))) throw new Error('Invalid statistics.');
   }};
   entries('daily',['a','c','r'],['a','c']);
-  entries('chStats',['correct','total'],[]);
-  entries('practice',['n','c','t'],[]);
+  entries('chStats',['correct','total'],['correct','total']);  // selectOpt does st.total++, st.correct++
+  entries('practice',['n','c','t'],['n','c']);               // and pr.n++, pr.c++: a missing count is NaN
   entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string'));
   entries('resume',['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')));
   for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
