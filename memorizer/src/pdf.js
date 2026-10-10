@@ -553,7 +553,7 @@ function openStored(key, buffer) {
     return L.getDocument({ data: new Uint8Array(buffer.slice(0)), isEvalSupported: false }).promise;
   }).then(function (doc) { docCache = { key: key, buffer: buffer, doc: doc }; return doc; });
 }
-function renderBoxNow(key, buffer, pageNo, box, scale) {
+function renderBoxNow(key, buffer, pageNo, box, scale, margin) {
   scale = scale || 2;
   return openStored(key, buffer).then(function (doc) { return doc.getPage(pageNo); }).then(function (page) {
     var vp = page.getViewport({ scale: scale });
@@ -561,7 +561,7 @@ function renderBoxNow(key, buffer, pageNo, box, scale) {
     canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
     return page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise.then(function () {
       if (!box) { var full = canvas.toDataURL('image/png'); canvas.width = canvas.height = 0; return full; }
-      var r = vp.convertToViewportRectangle(padBox(box, page.view));
+      var r = vp.convertToViewportRectangle(padBox(box, page.view, margin));
       var x = Math.max(0, Math.floor(Math.min(r[0], r[2]))), y = Math.max(0, Math.floor(Math.min(r[1], r[3])));
       var w = Math.min(canvas.width - x, Math.ceil(Math.abs(r[2] - r[0]))), hh = Math.min(canvas.height - y, Math.ceil(Math.abs(r[3] - r[1])));
       out = document.createElement('canvas');
@@ -577,12 +577,13 @@ var storedQueue = Promise.resolve();
 function storedJob(run) { var p = storedQueue.then(run); storedQueue = p.catch(function () {}); return p; }
 function figuresOn(key, buffer, pageNos) { return storedJob(function () { return figuresOnNow(key, buffer, pageNos); }); }
 var renders = [], renderBuffer = null, renderFile = null, RENDER_LIMIT = 8, RENDER_CHARS = 4 * 1024 * 1024;
-function renderBox(key, buffer, pageNo, box, scale) {
+/* margin: padBox's, CROP_MARGIN unless given */
+function renderBox(key, buffer, pageNo, box, scale, margin) {
   if (renderBuffer !== buffer || renderFile !== key) { renders = []; renderBuffer = buffer; renderFile = key; }
-  var id = [key, pageNo, JSON.stringify(box), scale || 2].join('|');
+  var id = [key, pageNo, JSON.stringify(box), scale || 2, margin == null ? CROP_MARGIN : margin].join('|');
   var at = renders.findIndex(function (r) { return r.id === id; });
   if (at >= 0) { var hit = renders.splice(at, 1)[0]; renders.push(hit); return hit.promise; }
-  var entry = { id: id, chars: 0 }, p = storedJob(function () { return renderBoxNow(key, buffer, pageNo, box, scale); });
+  var entry = { id: id, chars: 0 }, p = storedJob(function () { return renderBoxNow(key, buffer, pageNo, box, scale, margin); });
   entry.promise = p.then(function (url) {
     entry.chars = url.length;
     while (renders.length > RENDER_LIMIT || renders.reduce(function (n, r) { return n + r.chars; }, 0) > RENDER_CHARS) renders.shift();

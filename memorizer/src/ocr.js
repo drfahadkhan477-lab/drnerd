@@ -139,21 +139,19 @@ var START_FAIL_FIX = { find: 'i.dispatchHandlers(e,(function(t){return postMessa
    bytes locally with the core's existing fallback, rather than fetching
    the multi-MB URL again from a worker. External URLs keep their loader. */
 var CORE_BINARY_FIX = { find: 'if(!pa&&(fa||ha))', replace: 'if(!pa&&!a.startsWith(Ja)&&(fa||ha))' };
-function fixCore(text) {
+/* The one rule for every fix above, in one place: each anchor matches
+   exactly once, or this throws rather than guess. */
+function applyFixes(text, fixes, part) {
   text = String(text);
-  var n = text.split(CORE_BINARY_FIX.find).length - 1;
-  if (n !== 1) throw new Error('the text reader\'s core has changed (anchor found ' + n + ' times)');
-  return text.replace(CORE_BINARY_FIX.find, CORE_BINARY_FIX.replace);
-}
-function fixWorker(text) {
-  text = String(text);
-  [WORKER_FIX, CORE_FIX, START_FAIL_FIX].forEach(function (fix) {
+  fixes.forEach(function (fix) {
     var n = text.split(fix.find).length - 1;
-    if (n !== 1) throw new Error('the text reader\'s worker has changed (anchor found ' + n + ' times)');
+    if (n !== 1) throw new Error('the text reader\'s ' + part + ' has changed (anchor found ' + n + ' times)');
     text = text.replace(fix.find, fix.replace);
   });
   return text;
 }
+function fixCore(text) { return applyFixes(text, [CORE_BINARY_FIX], 'core'); }
+function fixWorker(text) { return applyFixes(text, [WORKER_FIX, CORE_FIX, START_FAIL_FIX], 'worker'); }
 
 var starting = null, current = null;
 function engine(onStatus) {
@@ -178,7 +176,9 @@ function engine(onStatus) {
         }, START_TIMEOUT_MS);
         function fail(e) {
           if (settled) return;
-          settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); reject(e);
+          /* 5.1.1 posts a failed job as its message string; an Error keeps
+             a message every caller can read */
+          settled = true; clearTimeout(timer); URL.revokeObjectURL(workerUrl); reject(e instanceof Error ? e : new Error(String(e)));
         }
         try {
           var started = T.createWorker([{ code: 'eng', data: new Uint8Array(r[2]) }], 1, {
@@ -228,12 +228,14 @@ var RECOGNIZE_OUT = { text: false, blocks: true, hocr: false, tsv: false };
    here, no page is ever in flight on a worker that is being ended. The
    worker ran one page at a time anyway, so nothing is slower. */
 var queue = Promise.resolve();
-function recognize(canvas, onStatus) {
-  var job = queue.then(function () { return recognizeNow(canvas, onStatus); });
+function recognize(canvas, onStatus, retried) {
+  var job = queue.then(function () { return recognizeNow(canvas, onStatus, retried); });
   queue = job.then(function () {}, function () {});
   return job;
 }
-function recognizeNow(canvas, onStatus) {
+/* retried: the page already had its one fresh reader (readPage, for a
+   fault while starting), so a fault now is reported, not retried again */
+function recognizeNow(canvas, onStatus, retried) {
   /* a worker that faults is discarded whether or not the page is retried,
      so the page after a second fault never inherits the faulted instance */
   function run(worker) {
@@ -243,7 +245,7 @@ function recognizeNow(canvas, onStatus) {
     });
   }
   return engine(onStatus).then(run).catch(function (e) {
-    if (!isWasmFault(e)) throw e;
+    if (retried || !isWasmFault(e)) throw e;
     return engine(onStatus).then(run);
   });
 }
@@ -251,10 +253,13 @@ function recognizeNow(canvas, onStatus) {
 /* Read one pdf.js page: draw it, recognise it, return pdf.js-shaped items.
    The reader is started first so the download is announced before the page
    is drawn; a WebAssembly fault while it starts gets the same one fresh
-   reader that recognize() gives a fault while reading. */
+   reader that recognize() gives a fault while reading, and that one reader
+   is the page's only retry. */
 function readPage(page, onStatus) {
+  var retried = false;
   return engine(onStatus).catch(function (e) {
     if (!isWasmFault(e)) throw e;
+    retried = true;
     return engine(onStatus);
   }).then(function () {
     var vp = page.getViewport({ scale: SCALE });
@@ -263,7 +268,7 @@ function readPage(page, onStatus) {
     var ctx = canvas.getContext('2d');
     ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
-      return recognize(canvas, onStatus);
+      return recognize(canvas, onStatus, retried);
     }).then(function (res) {
       return ocrItems(res.data.blocks, SCALE, page.getViewport({ scale: 1 }).height);
     }).then(function (v) { canvas.width = canvas.height = 0; return v; }, function (e) { canvas.width = canvas.height = 0; throw e; });
