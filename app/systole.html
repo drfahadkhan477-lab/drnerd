@@ -3495,9 +3495,7 @@ function flushNav(){
   else if(nav.kind==='quiz'){
     const qs=nav.ids.map(id=>ALL_Q.find(q=>q.id===id)).filter(Boolean);
     if(!qs.length)return;
-    Object.assign(S,{screen:'quiz',chapter:null,questions:shuf(qs),qIdx:0,selected:null,
-      answered:false,zoomed:-1,mode:'all',quizCorrect:0,quizTotal:0});
-    render(); toTop();
+    startAdhocQuiz(shuf(qs),null);
   }
 }
 
@@ -3705,12 +3703,20 @@ function openFigureFrom(el){
     (cap?cap.childNodes[0]&&cap.childNodes[0].textContent:'')||img.alt||'',
     src?src.textContent:'');
 }
+/* A deck nobody dealt from a chapter: a search's hits, one question jumped to, a deck Apex built. It starts
+   clean, as startQuiz's do: the deck before's answers stayed in S.answers, and restoreQuizState() replayed
+   them onto these questions by position, so question 2 opened answered, its options locked, never scored.
+   And it has no saved place ('pick' is no mode resumeKey() keeps): as 'all' it took the chapter's or the
+   whole bank's place, overwrote it with its own at the first answer, and deleted it when it finished. */
+function startAdhocQuiz(qs,ch){
+  Object.assign(S,{screen:'quiz',chapter:ch,questions:qs,qIdx:0,selected:null,
+    answered:false,zoomed:-1,mode:'pick',quizCorrect:0,quizTotal:0,answers:{},resumed:false});
+  render(); toTop(); markShown();
+}
 function jumpTo(id){
   const q=ALL_Q.find(x=>x.id===id); if(!q||q.bad)return;
   closePeek();
-  Object.assign(S,{screen:'quiz',chapter:q.ch,questions:[q],qIdx:0,selected:null,
-    answered:false,zoomed:-1,mode:'all',quizCorrect:0,quizTotal:0});
-  render(); toTop();
+  startAdhocQuiz([q],q.ch);
 }
 
 /* ── the reference library screen ─────────────────────────────────────────── */
@@ -3941,9 +3947,7 @@ function openSearch(){ S.screen='search'; if(!SQ.ran)runSearch(''); render(); to
 function quizFromSearch(){
   const qs=SQ.hits.map(h=>h.q);
   if(!qs.length)return;
-  Object.assign(S,{screen:'quiz',chapter:null,questions:shuf(qs),qIdx:0,selected:null,
-    answered:false,zoomed:-1,mode:'all',quizCorrect:0,quizTotal:0});
-  render(); toTop();
+  startAdhocQuiz(shuf(qs),null);
   toast(`Quiz built from “${SQ.q}” — ${qs.length} questions.`);
 }
 
