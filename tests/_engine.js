@@ -180,10 +180,40 @@ function isEngineNoiseError(err, name = engineName()) {
   return /^Cannot load blob:\S+ due to access control checks\.$/.test(stack.split('\n')[0]) && /\bPDFWorker\b/.test(stack);
 }
 
-function launch(opts = {}) {
+/* ── view transitions are off in Playwright's WebKit ───────────────────────────
+
+   NOT THE APP, THE TEST BROWSER. Playwright 1.63's WebKit (26.6) crashes the
+   page when a view transition starts while the outgoing screen holds animated
+   layers: every first screen change on the owner's Windows machine, and on a
+   Windows runner on the synthetic build (the rc branch reproduces it 3 of 3).
+   Linux WebKit asserts on the same thing intermittently (#211). The iPad's
+   Safari has not been seen to: the owner uses the app there daily, and it ran
+   the self-test cleanly (#215). Making the app wait out the test browser's
+   bug changed screen-change timing for every user and broke suites in turn,
+   so the harness takes the transition away instead: every WebKit page loses
+   startViewTransition before any script runs, and render() takes the instant
+   swap it already has for browsers without the API.
+
+   WHAT THIS COSTS, SAID OUT LOUD. A WebKit run does not exercise the fade.
+   Chromium and Firefox still do. launch() prints that on every WebKit run, so
+   a green one is never read as covering it, and SYSTOLE_WEBKIT_TRANSITIONS=1
+   puts the API back (rc does, to show the crash is still there). */
+const NO_TRANSITIONS = () => { try { delete Document.prototype.startViewTransition; } catch (_) {} };
+function webkitTransitionsOff(name = engineName()) {
+  return name === 'webkit' && process.env.SYSTOLE_WEBKIT_TRANSITIONS !== '1';
+}
+
+async function launch(opts = {}) {
   const name = engineName();
   const playwright = require('playwright');
-  return playwright[name].launch(launchOptions(opts, name));
+  const browser = await playwright[name].launch(launchOptions(opts, name));
+  if (!webkitTransitionsOff(name)) return browser;
+  console.log('  note: view transitions are OFF in this WebKit run (Playwright WebKit 26.6 crashes on them); screens swap instantly. SYSTOLE_WEBKIT_TRANSITIONS=1 restores them.');
+  /* browser.newPage() makes its own context through newContext(), so one
+     wrapper covers both. */
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async (o) => { const ctx = await newContext(o); await ctx.addInitScript(NO_TRANSITIONS); return ctx; };
+  return browser;
 }
 
 /* ── a page whose requests a test can actually intercept ──────────────────────
@@ -217,5 +247,5 @@ async function routablePage(browser, opts = {}) {
   return context.newPage();
 }
 
-module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch, routablePage,
+module.exports = { ENGINES, DEFAULT_ENGINE, engineName, launchOptions, launch, routablePage, webkitTransitionsOff,
                    cpuThrottle, heapUsedBytes, isEngineNoise, isEngineNoiseError, clipboardPermissions };

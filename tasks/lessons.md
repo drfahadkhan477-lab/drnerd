@@ -109,6 +109,16 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
 
 ## Process
 
+- **A debug copy that edited a different line than the one I then read.** To see
+  why verify-voicescreen timed out, I replaced "line 163" in a copy, but an edit
+  just before had moved the wait I meant; the state I printed belonged to another
+  wait, I read it as "the condition was already true", blamed rAF polling, and
+  pushed a 100 ms poll that passed 20 runs here by luck and failed CI. The real
+  cause was in the app (a voice listener outliving its session). -> Rule: in a
+  debug copy, anchor the edit on the line's text, not its number, and print which
+  wait fired with the state; and treat "0 of N" on a flake as evidence only when N
+  is several times the runs a failure took before.
+
 - **A browser upgrade judged on Chromium alone.** I moved playwright 1.56 -> 1.64
   (released the day before) after a green local Chromium run; both CI WebKit jobs
   then hit their time limits still passing, because 1.64's WebKit 27.2 drew 2-3
