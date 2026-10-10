@@ -272,6 +272,31 @@ const STUB = () => {
   ok('a letter heard after a move by hand is not recorded, answered aloud or rated on the moved-to question', !heard.answered && !heard.rated && heard.feedback === 0, JSON.stringify(heard));
   ok('and the session ends', !heard.live, JSON.stringify(heard));
 
+  head('an option tapped while the voice listens is not graded with the voice’s verdict');
+  /* The quiz is not moved, only answered: a wrong option tapped while the
+     microphone is open. The voice then hears the key. Its record found the
+     question already answered and did nothing, but it still said "Correct"
+     and rated the card Good: the tapped wrong answer graded as the spoken
+     right one (found in review of the fix above). */
+  await fresh();
+  await toStudy(page);
+  await page.click('#voiceStart');
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await waitFor(page, () => window.__listens >= 1);
+  const tapped = await page.evaluate(() => {
+    const q0 = S.questions[0], wrong = (q0.ci + 1) % q0.o.length;
+    selectOpt(wrong);
+    return { live: _voice !== null, idx: S.qIdx, id0: q0.id, answered: S.answered, wrongTapped: S.selected === wrong && wrong !== q0.ci, key: 'ABCDEFGH'[q0.ci] };
+  });
+  await page.evaluate(l => { window.__heard.push('option ' + l); }, tapped.key);
+  await waitFor(page, id => _voice === null || S.srs[id] != null, tapped.id0);
+  const graded = await page.evaluate(id => ({ live: _voice !== null, unheard: window.__heard.length, rated: S.srs[id] != null,
+    feedback: window.__said.filter(t => /^(Correct|Not quite)\./.test(t)).length }), tapped.id0);
+  ok('(a session was listening, a wrong option was tapped on the same question, and the key was heard)',
+     tapped.live && tapped.idx === 0 && tapped.answered && tapped.wrongTapped && graded.unheard === 0, JSON.stringify({ tapped, unheard: graded.unheard }));
+  ok('the card is not rated with the voice’s verdict, and no verdict is spoken', !graded.rated && graded.feedback === 0, JSON.stringify(graded));
+  ok('and the session ends', !graded.live, JSON.stringify(graded));
+
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);

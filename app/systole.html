@@ -5956,6 +5956,9 @@ async function runVoice(v,event){
         if(t!=null&&_voice===v) voiceDock('speaking',`Heard “${t}”`);
         queue.push(t==null?{type:'silence'}:{type:'heard',transcript:t});
       }else if(fx.type==='record'){
+        /* Answered by hand while the voice listened (an option tapped, the quiz not moved): the letter heard is
+           not this card's answer, and rating it with the voice's verdict graded the tapped answer as the spoken one. */
+        if(S.answered){ stopVoice(); return; }
         selectOpt(fx.choice);
       }
     }
