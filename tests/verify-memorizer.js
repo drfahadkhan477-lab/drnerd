@@ -1693,13 +1693,23 @@ function kindOf(user) {
     await page.locator('#occlusion img').scrollIntoViewIfNeeded();
     await page.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
     const mask = await page.evaluate(() => { const m = document.querySelector('#occlusion .occlusion-mask'), i = document.querySelector('#occlusion img');
-      return { style: m.getAttribute('style'), drawn: !!i && /^data:image/.test(i.src) && i.naturalWidth > 0, natural: i ? [i.naturalWidth, i.naturalHeight] : null }; });
+      const r = i && i.getBoundingClientRect(), o = document.querySelector('#occlusion').getBoundingClientRect();
+      return { style: m.getAttribute('style'), drawn: !!i && /^data:image/.test(i.src) && i.naturalWidth > 0, natural: i ? [i.naturalWidth, i.naturalHeight] : null,
+               shown: r ? [r.width, r.height] : null, frame: [o.width, o.height], fit: i ? getComputedStyle(i).objectFit : '' }; });
     /* The mask is in fractions of the figure's box (study.js maskOf), so it
        sits on its label only if the image is that box, with no crop margin:
        at the scale it is drawn at (2), the box's own size in pixels. */
     const boxPx = [2 * Math.abs(oc.figure.box[2] - oc.figure.box[0]), 2 * Math.abs(oc.figure.box[3] - oc.figure.box[1])];
-    ok('the figure is drawn as its box exactly, so the mask\'s fractions are fractions of the image', !!mask.natural &&
+    ok('the figure is drawn as its box exactly', !!mask.natural &&
        Math.abs(mask.natural[0] - boxPx[0]) <= 2 && Math.abs(mask.natural[1] - boxPx[1]) <= 2, JSON.stringify({ natural: mask.natural, box: boxPx }));
+    /* And shown that way: the mask is placed in fractions of .occlusion, so
+       the picture must fill that frame, in its own proportions. Equal rects
+       alone would pass a picture letterboxed inside a held box (object-fit:
+       contain), so the shown ratio is held to the drawn one as well. */
+    const ratio = a => a[0] / a[1];
+    ok('and shown filling its frame, unstretched, so the mask\'s fractions are fractions of the picture', !!mask.shown &&
+       Math.abs(mask.shown[0] - mask.frame[0]) <= 1 && Math.abs(mask.shown[1] - mask.frame[1]) <= 1 &&
+       Math.abs(ratio(mask.shown) / ratio(mask.natural) - 1) < 0.02, JSON.stringify({ shown: mask.shown, frame: mask.frame, natural: mask.natural, fit: mask.fit }));
     ok('a figure card: the book’s figure, drawn from the PDF, with a mask where its label was printed, and four labels to choose from', mask.drawn &&
        mask.style.indexOf('left:' + (100 * oc.mask.left).toFixed(2) + '%') !== -1 && mask.style.indexOf('top:' + (100 * oc.mask.top).toFixed(2) + '%') !== -1 &&
        await page.locator('#mcq .option').count() === 4, JSON.stringify(mask));

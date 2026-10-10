@@ -2739,16 +2739,25 @@ function viewReview() {
     markStudied(); logActivity('review', {});
     /* A write that is slow to settle (waitForSave) moves on to the next
        card: the rating is put in memory so this card is not asked again
-       while it waits, and it is counted when it is stored. */
-    waitForSave(Store.put('cards', upd).then(function () {
-      if (dr) dr.done[card.id] = true;
-      if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id);
-      ui.saveError = Store.failureMessage() || ui.actionError; ui.reviewDone++;
-      return refresh();
-    }, saveFailed), function () {
+       while it waits, a confident miss is queued to be asked again as a
+       stored one is, and it is counted when it is stored. However the
+       rating ends, the next one is taken. A refresh() that fails after the
+       write landed (a lost IndexedDB connection) used to leave ui.rating set
+       and every later tap ignored; it now moves on with the rating put in
+       memory, as a slow one is. No "not saved" banner: the rating was
+       stored, and that banner's advice, to repeat it, would rate it twice. */
+    var askAgain = function () { if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id); };
+    var inMemory = function () {
       ui.cards = ui.cards.map(function (c) { return c.id === card.id ? upd : c; });
       if (dr) dr.done[card.id] = true;
-    }).then(next);
+      askAgain();
+    };
+    waitForSave(Store.put('cards', upd).then(function () {
+      if (dr) dr.done[card.id] = true;
+      askAgain();
+      ui.saveError = Store.failureMessage() || ui.actionError; ui.reviewDone++;
+      return refresh();
+    }, saveFailed), inMemory).then(next, function () { try { inMemory(); } finally { next(); } });
   };
   var head = h('div.review-head', h('span.count', isAgain ? 'Asked again · ' + ui.againQ.length + ' left' : dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'),
     h('span.muted', (names[card.docId] || '') + ' · ' + card.title));

@@ -250,7 +250,7 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
   const heldRating = await p.evaluate(id => { const m = document.querySelector('#mcq'), c = Memorizer.ui.cards.find(x => x.id === id);
     return { held: window.__putHeld, rating: Memorizer.ui.rating, slow: Memorizer.ui.slowSaves, redrawn: !m || !m.__old, reps: c && c.srs ? c.srs.reps : 0, done: Memorizer.ui.reviewDone }; }, card0.id);
   ok('(the rating\'s write was really held)', heldRating.held === 1, JSON.stringify(heldRating));
-  ok('a rating whose write is held moves on: taps work, the card is rated in memory, not counted until stored',
+  ok('a rating whose write is held moves on: the rating lock is let go and the screen redrawn, the card rated in memory, not counted until stored',
      !heldRating.rating && heldRating.slow === 1 && heldRating.redrawn && heldRating.reps === 1 && heldRating.done === 0, JSON.stringify(heldRating));
   await p.evaluate(() => { MemStore.put = window.__realStorePut; return window.__putReleases.splice(0).reduce((q, f) => q.then(f), Promise.resolve()); });
   await p.waitForFunction(() => Memorizer.ui.slowSaves === 0, null, T).catch(() => {});
@@ -258,6 +258,60 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
   const card2 = await p.evaluate(id => MemStore.get('cards', id), card0.id);
   ok('rated again, tapped twice: counted once, and stored', await p.evaluate(() => Memorizer.ui.reviewDone) === 1 && !!card2.srs && card2.srs.reps === 1 &&
      await p.locator('#store-banner').count() === 0, JSON.stringify({ done: await p.evaluate(() => Memorizer.ui.reviewDone), srs: card2.srs }));
+
+  /* The same card, due again as it was before it was rated. */
+  const dueAgain = async () => {
+    await p.evaluate(c => MemStore.put('cards', c), card0);
+    await p.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p.locator('nav.dock').getByRole('button', { name: /Review/ }).click();
+    await p.locator('#mcq').waitFor(T);
+  };
+  const missed = (card0.answer + 1) % card0.options.length;
+
+  head('a confident miss whose write is held is still asked again');
+  /* A sure miss is queued to be asked again. With its write held past the
+     bound, the card left the due list in memory but was not queued, so
+     Review said nothing was due. */
+  await dueAgain();
+  await p.evaluate(() => { Memorizer.ui.againQ.length = 0; window.__putHeld = 0; window.__putReleases = [];
+    MemStore.put = function (store) { if (store !== 'cards') return window.__realStorePut.apply(MemStore, arguments);
+      window.__putHeld++; const a = arguments; return new Promise(res => { window.__putReleases.push(() => window.__realStorePut.apply(MemStore, a).then(res)); }); }; });
+  await p.locator('#sure').click();
+  await p.locator(`.option[data-i="${missed}"]`).click();
+  await p.locator('#next').click();
+  /* a precondition, not the claim: the bound has had its chance */
+  await p.waitForFunction(() => Memorizer.ui.slowSaves > 0, null, { timeout: 20000 }).catch(() => {});
+  /* Only the queue is claimed: the fixture has other cards due here, so
+     the asking itself (once nothing else is due) is not shown. */
+  const missHeld = await p.evaluate(id => ({ held: window.__putHeld, slow: Memorizer.ui.slowSaves, queued: Memorizer.ui.againQ.indexOf(id) !== -1,
+    due: MemSession.dueCards(Memorizer.ui.cards, FSRS.todayISO()).length }), card0.id);
+  ok('(the miss\'s write was really held)', missHeld.held === 1 && missHeld.slow === 1, JSON.stringify(missHeld));
+  ok('the miss is queued to be asked again while its write is held', missHeld.queued, JSON.stringify(missHeld));
+  await p.evaluate(() => { MemStore.put = window.__realStorePut; return window.__putReleases.splice(0).reduce((q, f) => q.then(f), Promise.resolve()); });
+  await p.waitForFunction(() => Memorizer.ui.slowSaves === 0, null, T).catch(() => {});
+  await settled(p);
+  await p.evaluate(() => { Memorizer.ui.againQ.length = 0; });
+
+  head('a rating whose refresh fails still lets the next one in');
+  /* The write lands; the re-read after it fails (WebKit's "Connection to
+     Indexed Database server lost"). That left ui.rating set: every later
+     Again, Good or Next was ignored until a reload, with nothing on screen. */
+  await dueAgain();
+  await p.evaluate(() => { window.__realAll = MemStore.all; window.__allRefused = 0;
+    MemStore.all = function (store) { if (store === 'cards' && !window.__allRefused) { window.__allRefused = 1; return Promise.reject(new Error('refresh refused by the test')); }
+      return window.__realAll.apply(MemStore, arguments); }; });
+  await p.locator(`.option[data-i="${card0.answer}"]`).click();
+  await p.locator('#next').click();
+  /* a precondition, not the claim: the refused read has happened. What the
+     app does with it runs in the same task's microtasks, before this read. */
+  await p.waitForFunction(() => window.__allRefused === 1, null, T);
+  const refused = await p.evaluate(id => { const c = Memorizer.ui.cards.find(x => x.id === id);
+    return { rating: Memorizer.ui.rating, reps: c && c.srs ? c.srs.reps : 0, banner: (document.getElementById('store-banner') || {}).textContent || '' }; }, card0.id);
+  await p.evaluate(() => { MemStore.all = window.__realAll; });
+  const storedAfter = await p.evaluate(id => MemStore.get('cards', id), card0.id);
+  ok('the next rating is taken, with this one in memory as stored, and no "not saved" claim',
+     refused.rating === false && refused.reps === 1 && !!storedAfter.srs && storedAfter.srs.reps === 1 && !/not saved/.test(refused.banner),
+     JSON.stringify({ rating: refused.rating, reps: refused.reps, stored: storedAfter.srs && storedAfter.srs.reps, banner: refused.banner.slice(0, 80) }));
 
   head('a unit whose save is held still opens');
   /* openDoc stores the opened session before drawing it: a save that never
