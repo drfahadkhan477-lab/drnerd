@@ -35,7 +35,7 @@ var ui = {
   docId: null, docRec: null, state: null,
   busy: '', busyKey: '', stepSeq: 0, moving: false, slowSaves: 0, rating: false, saveError: '', notice: '',
   error: '', choice: null, pasting: false,
-  importing: '', reviewShown: false, reviewDone: 0, drill: null,
+  importing: '', recutting: false, reviewShown: false, reviewDone: 0, drill: null,
 };
 
 /* ── tiny DOM helper: h('div.cls', {attrs}, children…) ─────────────────── */
@@ -412,7 +412,9 @@ function bookName(files) {
 /* Chapters → units. A chapter whose pages are unchanged keeps its unit, and
    so its progress and cards, whatever it is now called (cutting by another
    method renames chapters); the others are built from the book's stored
-   text, and units no chapter uses any more are deleted. */
+   text, and units no chapter uses any more are deleted. `book.chapters`
+   must be the chapters as stored: their units are the ones kept or
+   dropped (recut reads the book from the store for this). */
 function applyChapters(book, chapters, pages) {
   var old = {};
   (book.chapters || []).forEach(function (c) { if (c.docId) old[c.pageStart + ':' + c.pageEnd] = c.docId; });
@@ -529,15 +531,30 @@ function openBook(id) {
   refresh().then(function () { render(); root.scrollTo(0, 0); });
 }
 /* Cut the book again: by another method, or with one chapter joined to the
-   one before. Chapters left as they were keep their progress. */
+   one before. Chapters left as they were keep their progress.
+   One cut at a time, and no delete while one runs (viewBook disables both):
+   a second cut from the same screen dropped units the first had kept, and a
+   delete was undone by the cut's write — each left a book no backup would
+   restore. The flag holds until the screen is redrawn from the store. The
+   cut starts from the book as stored, so one tapped after Delete (whose
+   screen leaves only when it lands) finds no book. */
 function recut(book, chapters, method) {
-  ui.importing = 'Cutting the chapters again…'; render();
-  return bookPages(book).then(function (pages) {
-    var next = Object.assign({}, book, { method: method || book.method });
-    return applyChapters(next, chapters || Book.candidates(pages, book.outline, book.pages)[next.method], pages);
-  }).then(function () { ui.importing = ''; return refresh(); }).then(render, function (e) {
-    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+  if (ui.recutting) return Promise.resolve();
+  ui.recutting = true; ui.importing = 'Cutting the chapters again…'; render();
+  return Store.get('books', book.id).then(function (stored) {
+    if (!stored) return;
+    return bookPages(stored).then(function (pages) {
+      var next = Object.assign({}, stored, { method: method || stored.method });
+      return applyChapters(next, chapters || Book.candidates(pages, stored.outline, stored.pages)[next.method], pages);
+    });
+  }).then(function () { return refresh(); }).then(function () { ui.recutting = false; ui.importing = ''; render(); }, function (e) {
+    ui.recutting = false; ui.importing = ''; ui.error = (e && e.message) || String(e); render();
   });
+}
+function removeBook(b) {
+  if (ui.recutting) return;
+  if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
+  docsChanged(); return Store.deleteBook(b.id).then(function () { leave('shelf'); }, actionFailed);
 }
 
 function openDoc(id, section) {
@@ -1574,12 +1591,12 @@ function viewBook() {
           i > 0 ? button('Join to the chapter before', function () {
             if (!root.confirm('Join "' + c.title + '" to the chapter before it? Both start again; every other chapter keeps its progress.')) return;
             recut(b, Book.merge(b.chapters, i));
-          }, 'quiet', { 'data-join': String(i) }) : null)) : null);
+          }, 'quiet', { 'data-join': String(i), disabled: ui.recutting ? true : null }) : null)) : null);
   });
   var real = b.chapters.filter(function (c) { return !c.front; }).length;
   var studied = b.chapters.filter(function (c) { var d = c.docId && byId[c.docId]; return d && Home.unitPct(d, ui.sessions[d.id]) === 100; }).length;
   var methods = h('div.seg', { role: 'radiogroup', 'aria-label': 'Chapters found by', id: 'methods' }, Book.METHODS.map(function (m) {
-    return h('button', { type: 'button', role: 'radio', 'aria-checked': String(m === b.method), 'data-method': m,
+    return h('button', { type: 'button', role: 'radio', 'aria-checked': String(m === b.method), 'data-method': m, disabled: ui.recutting ? true : null,
         onclick: function () {
           if (m === b.method) return;
           if (!root.confirm('Cut "' + b.name + '" into chapters by ' + Book.LABELS[m].toLowerCase() + '? Chapters that change start again; the others keep their progress.')) return;
@@ -1598,10 +1615,7 @@ function viewBook() {
     h('h2.grid-title', 'Chapters (' + real + ')'),
     h('ul.units.tiles', { id: 'chapters' }, rows),
     b.scanned.length ? h('p.warn', 'Pages with no readable text: ' + b.scanned.slice(0, 12).join(', ') + (b.scanned.length > 12 ? '…' : '') + '.') : null,
-    h('div.row', button('Delete this book', function () {
-      if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
-      docsChanged(); Store.deleteBook(b.id).then(function () { leave('shelf'); }, actionFailed);
-    }, 'quiet danger', { id: 'delete-book' })));
+    h('div.row', button('Delete this book', function () { removeBook(b); }, 'quiet danger', { id: 'delete-book', disabled: ui.recutting ? true : null })));
 }
 
 /* Compare the sections taught so far, side by side, as one figure. */
