@@ -1108,11 +1108,50 @@ step('every content path the code names is on disk', () => {
   if (missing.length) throw new Error(`the code fetches ${missing.join(', ')}, which was not copied`);
 });
 
-/* Cache version is derived from the content digest, so publishing a new
-   export invalidates the old caches instead of serving a stale bank. */
+/* THE CONTENT CACHE IS KEYED ON THE CONTENT THAT SHIPS. It was keyed on
+   content/manifest.json's sourceDigest, and that is a digest of the whole
+   single-file build (extract-content.js), code and CSS as well as the bank:
+   staleContent() above makes it match the build being split. So a stylesheet
+   fix renamed accsap-content-*, activate() deleted the old bucket, and every
+   figure the fellow had downloaded went with it.
+
+   This hashes what build-pwa.js wrote under dist/content/ instead, every
+   file's path and bytes in path order, and must run after the last write
+   there. Two files are left out. manifest.json records the build (its
+   digest, the commit, the time), not content, and the app never fetches it.
+   The heart mesh is named by a digest of its own bytes (splitHeartMesh), so
+   a new one is a new URL and needs no version; it is baked from heart3d.js,
+   which is code, so hashing it would let a code change evict the figures
+   again (the old mesh stays in the bucket until the content next changes).
+   Anything else under content/ is served cache-first under a fixed name, so
+   it is in here or a change to it would never reach a device: the splash
+   heart included.
+
+   staleContent() still pairs content/ with its build; this only decides when
+   a device's copy is out of date. tests/verify-swupdate-pure.js drives it
+   over two synthetic builds that differ only in code. */
+function contentVersion(dir) {
+  const files = [];
+  (function walk(d) {
+    for (const ent of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, ent.name);
+      if (ent.isDirectory()) walk(p);
+      else files.push(path.relative(dir, p).split(path.sep).join('/'));
+    }
+  })(dir);
+  const h = crypto.createHash('sha256');
+  for (const rel of files.sort()) {
+    if (rel === 'manifest.json' || /^heart-mesh-[0-9a-f]+\.bin$/.test(rel)) continue;
+    const bytes = fs.readFileSync(path.join(dir, rel));
+    h.update(rel + '\0' + bytes.length + '\0').update(bytes);
+  }
+  return h.digest('hex').slice(0, 16);
+}
+
 /* THE SHELL NEEDS A VERSION OF ITS OWN. Both cache names were keyed on the
-   content digest, which is a hash of the ACCSAP export — so every change to
-   the app's own code produced a byte-identical sw.js. The browser saw no new
+   content digest, and with content/ left over from an earlier extraction (as
+   it usually was before staleContent() refused one) every change to the
+   app's own code produced a byte-identical sw.js. The browser saw no new
    worker, never ran install, never re-primed the shell cache, and an installed
    app went on serving the old code; the only route to an update was the
    background refresh in the fetch handler, which lands on the launch AFTER
@@ -1130,7 +1169,7 @@ const SW = `/* ACCSAP 12 service worker.
    sake of questions you may never open. iOS can still evict this cache under
    pressure, so every miss falls through to the network rather than assuming
    what was cached once is cached forever. */
-const CONTENT_V = '${contentManifest.sourceDigest}';
+const CONTENT_V = '${contentVersion(path.join(DIST, 'content'))}';
 const SHELL_V   = '${shellDigest}';
 /* The same stamp index.html and app.js carry, so the three can be compared
    from the outside — by a test, or by anyone reading a deployed directory. */

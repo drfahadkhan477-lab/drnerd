@@ -19,6 +19,11 @@
  *   · BOOKMARKS AT THE CHAPTER LEVEL, and only when they cover the book.
  *   · NO PAGE LOST. Chapters run from one start to the page before the next;
  *     pages before the first are kept as front matter; merging keeps them.
+ *   · CUT AGAIN, ONE CUT AT A TIME. ui.js's recut, lifted from the file that
+ *     ships and run on the real store, book, chunk and backup code: a second
+ *     join tapped on the same screen, or Delete during a cut, is refused, and
+ *     a join tapped after Delete does not bring the book back. Each case is
+ *     measured by what a backup of the device would say.
  */
 'use strict';
 const path = require('path');
@@ -212,5 +217,99 @@ ok('edition numbers cannot reorder trailing page ranges', JSON.stringify(B.order
 ok('explicit part numbers take precedence over dates and editions', JSON.stringify(B.orderParts(['Text2026 part 10.pdf', 'Text2026 part 2.pdf', 'Text2026 part 1.pdf'])) === '[2,1,0]');
 ok('part preview identifies filename range gaps and overlaps', B.partWarnings(['Book12_1-500.pdf', 'Book12_600-1000.pdf', 'Book12_900-1500.pdf']).length === 2);
 ok('contiguous ranges produce no warnings', B.partWarnings(['Book12_1-500.pdf', 'Book12_501-1000.pdf']).length === 0);
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+
+/* ── cut again ─────────────────────────────────────────────────────────────
+   ui.js's applyChapters, bookPages, recut and removeBook, lifted from the
+   comment-blanked ui.js between anchors that each occur once, and run on the
+   real chunk.js, book.js, store.js (in memory), provenance.js and backup.js,
+   in the page's order.
+   Only the screen is stood in for: render() draws nothing, refresh() reads
+   the books back as ui.js's does, and `gate` can hold it, as a slow redraw
+   would. The book is made by applyChapters itself, as an import makes it. */
+async function recuts() {
+  head('a book cut again: one cut at a time, from the book as stored');
+  const fs = require('fs'), vm = require('vm');
+  const { blankComments } = require('./_source');
+  const SRC = path.join(ROOT, 'memorizer', 'src');
+  const uiSrc = blankComments(fs.readFileSync(path.join(SRC, 'ui.js'), 'utf8'));
+  const lift = (from, to) => {
+    const a = uiSrc.indexOf(from), z = uiSrc.indexOf(to);
+    if (a < 0 || z < a || uiSrc.indexOf(from, a + 1) >= 0 || uiSrc.indexOf(to, z + 1) >= 0) throw new Error('ui.js anchors not each found once: ' + from + ' … ' + to);
+    return uiSrc.slice(a, z);
+  };
+  const code = lift('function applyChapters(', 'function previewBook(') + lift('function recut(', 'function openDoc(');
+  const pages = makeBook([{ n: 1, title: 'Heart Failure', pages: 6 }, { n: 2, title: 'Valve Disease', pages: 5 }, { n: 3, title: 'Arrhythmias', pages: 7 }]);
+  const total = pages.length;
+  async function made() {
+    const w = { console, setTimeout, Promise, TextEncoder, Uint8Array, ArrayBuffer, crypto: require('crypto').webcrypto,
+      btoa: s => Buffer.from(s, 'binary').toString('base64'), atob: s => Buffer.from(s, 'base64').toString('binary') };
+    w.window = w; vm.createContext(w);
+    for (const f of ['chunk.js', 'book.js', 'store.js', 'provenance.js', 'backup.js']) vm.runInContext(fs.readFileSync(path.join(SRC, f), 'utf8'), w, { filename: f });
+    vm.runInContext(`var Store = MemStore, Book = MemBook, Chunk = MemChunk, root = window, gate = null, ui = { importing: '', error: '', books: [] };
+      root.confirm = function () { return true; };
+      function render() {} function docsChanged() {} function leave() {} function actionFailed(e) { ui.error = String(e); }
+      function refresh() { return (gate || Promise.resolve()).then(function () { return Store.all('books'); }).then(function (b) { ui.books = b; }); }
+      ` + code, w, { filename: 'ui.js (lifted)' });
+    const book = { id: 'b1', name: 'Book', addedAt: 1, pages: total, parts: [{ fileId: 'b1:f0', name: 'book.pdf', first: 1, last: total }], scanned: [], ocr: [], ocrError: '', outline: [] };
+    await w.MemStore.batch([{ store: 'files', value: { id: 'b1:f0', bytes: new Uint8Array([37, 80, 68, 70]).buffer } }, { store: 'bookpages', value: { id: 'b1:0', pages } }]);
+    const c = w.MemBook.candidates(pages, [], total);
+    book.method = w.MemBook.pick(c, total); book.found = {};
+    await w.applyChapters(book, c[book.method], pages);
+    await w.refresh();
+    return w;
+  }
+  /* What a backup of the device would say, and why: a chapter naming a unit
+     that is gone, a unit of the book that no chapter names. */
+  async function state(w) {
+    const [books, docs, files] = await Promise.all(['books', 'docs', 'files'].map(s => w.MemStore.all(s)));
+    const b = books.find(x => x.id === 'b1'), ids = docs.map(d => d.id);
+    let backup = 'restores';
+    try { await w.MemBackup.inspect(await w.MemBackup.exportText()); } catch (e) { backup = 'refused: ' + e.message; }
+    return { book: !!b, cut: b ? b.chapters.map(c => c.pageStart + '-' + c.pageEnd).join() : '',
+      missing: b ? b.chapters.filter(c => c.docId && ids.indexOf(c.docId) < 0).length : 0,
+      unlisted: docs.filter(d => !(b && b.chapters.some(c => c.docId === d.id))).length, units: docs.length, files: files.length, backup };
+  }
+  const whole = s => s.missing === 0 && s.unlisted === 0 && s.backup === 'restores';
+  {
+    const w = await made(), s0 = await state(w);
+    ok('precondition: the book as imported, three chapters, each with its unit, and it restores', s0.cut === '1-6,7-11,12-18' && s0.units === 3 && whole(s0), JSON.stringify(s0));
+    let b = w.ui.books[0]; await w.recut(b, w.MemBook.merge(b.chapters, 1));
+    b = w.ui.books[0]; await w.recut(b, w.MemBook.merge(b.chapters, 1));
+    const s = await state(w);
+    ok('two joins, each tapped on the screen the last one left, are both made, and the book restores', s.cut === '1-18' && whole(s), JSON.stringify(s));
+  }
+  {
+    const w = await made(), b = w.ui.books[0];
+    await Promise.all([w.recut(b, w.MemBook.merge(b.chapters, 1)), w.recut(b, w.MemBook.merge(b.chapters, 2))]);
+    const s = await state(w);
+    ok('a second join tapped on the same screen while the first runs is refused: the first cut stands, and the book restores', s.cut === '1-11,12-18' && whole(s), JSON.stringify(s));
+  }
+  {
+    const w = await made(), b = w.ui.books[0];
+    let open; w.gate = new Promise(r => { open = r; });
+    const first = w.recut(b, w.MemBook.merge(b.chapters, 1));
+    let written = false;
+    for (let i = 0; i < 200 && !written; i++) { written = (await w.MemStore.get('books', 'b1')).chapters.length === 2; if (!written) await new Promise(r => setImmediate(r)); }
+    const second = w.recut(b, w.MemBook.merge(b.chapters, 2));
+    open(); await Promise.all([first, second]);
+    const s = await state(w);
+    ok('so is one tapped after the first cut is written but before the screen is redrawn', written && s.cut === '1-11,12-18' && whole(s), 'written first: ' + written + ' ' + JSON.stringify(s));
+  }
+  {
+    const w = await made(), b = w.ui.books[0];
+    await Promise.all([w.recut(b, w.MemBook.merge(b.chapters, 1)), w.removeBook(b)]);
+    const s = await state(w);
+    ok('Delete tapped while a cut runs is refused: the cut is made, the book keeps its units and its PDF, and restores', s.book && s.cut === '1-11,12-18' && s.files === 1 && whole(s), JSON.stringify(s));
+  }
+  {
+    const w = await made(), b = w.ui.books[0];
+    await Promise.all([w.removeBook(b), w.recut(b, w.MemBook.merge(b.chapters, 1))]);
+    const s = await state(w);
+    ok('a join tapped after Delete, before its screen leaves, does not bring the book back', !s.book && s.units === 0 && s.files === 0 && s.backup === 'restores', JSON.stringify(s));
+  }
+}
+
+recuts().catch(e => ok('the cut-again checks ran to the end', false, e && e.stack)).then(() => {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+});

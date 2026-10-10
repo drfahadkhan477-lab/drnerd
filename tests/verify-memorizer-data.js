@@ -114,6 +114,28 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
     ok('and the reminder goes, the day remembered', await p.evaluate(() => MemStore.get('meta', 'last-backup').then(m => m && m.day)) === day());
     await ctx.close();
 
+    head('a copy the app would not restore is handed over, not counted');
+    /* A book whose chapter names a unit that is gone: what a second cut over
+       a running one left (ui.js recut). The copy still holds every book and
+       note, so it is downloaded; but restore() would refuse it, so no day is
+       recorded and the reminder stays, saying why where the tap was. It used
+       to be counted as a backup, and the reminder went quiet. */
+    ({ ctx, p } = await fresh('nudge-refused'));
+    await addUnit(p);
+    await p.evaluate(() => MemStore.put('books', { id: 'bad-book', name: 'Invented book', parts: [], outline: [], scanned: [],
+      chapters: [{ title: 'One', pageStart: 1, pageEnd: 1, docId: Memorizer.ui.docs[0].id }, { title: 'Two', pageStart: 2, pageEnd: 2, docId: 'gone-unit' }] }));
+    ok('(the app itself would refuse to restore this state)', /Incomplete book/.test(await p.evaluate(() => MemBackup.exportChecked().then(r => r.problem || ''))));
+    await p.waitForSelector('#nudge-backup', T);
+    const [refusedCopy] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }).catch(() => null), p.click('#nudge-backup')]);
+    /* a precondition, not the claim: the export has finished, whichever way */
+    await p.waitForFunction(() => !/Preparing/.test((document.getElementById('nudge-status') || {}).textContent || 'x'), null, T).catch(() => {});
+    const refused = await p.evaluate(() => MemStore.get('meta', 'last-backup').then(m => ({ day: m ? m.day : null,
+      nudge: !!document.getElementById('backup-nudge'), note: (document.getElementById('nudge-status') || {}).textContent || '' })));
+    ok('the copy is still handed over, since it holds everything', !!refusedCopy);
+    ok('but no backup day is recorded, so the reminder stays', refused.day === null && refused.nudge, JSON.stringify(refused));
+    ok('and the reminder says why, naming the book', /would not restore it: Incomplete book: "Invented book"\./.test(refused.note), refused.note);
+    await ctx.close();
+
     head('an orphan from an older build does not spoil a backup');
     ({ ctx, p } = await fresh('orphan'));
     await addUnit(p);

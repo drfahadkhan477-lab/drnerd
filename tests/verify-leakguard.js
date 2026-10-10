@@ -117,6 +117,26 @@ head('it refuses the licensed bank, by every route in');
   r = run([write('later-line.md', 'intro\n# systole verify \u2014 2026-01-01T00:00:00.000Z\n')]);
   ok('and the header only counts on the first line, where verify.js writes it',
      r.code === 0, r.out.trim().slice(0, 60));
+  /* WHAT A REDIRECT ACTUALLY WRITES, not last-run.log's header typed by hand.
+     verify.js used to write that header only into last-run.log: a run kept
+     with `node scripts/verify.js > 1.txt` began with a blank line and
+     "Verifying \u2026", and walked past this rule (the 2026-10-10 review). So the
+     runner itself runs here, on one suite that needs no browser and writes
+     nothing, and its stdout is the fixture: what `>` keeps. Then the same
+     bytes as Windows PowerShell 5.1's `>` writes them (UTF-16LE, with a BOM),
+     with the BOM `Out-File -Encoding utf8` adds, and after the lines
+     `npm run verify > 1.txt` puts first. */
+  const redirected = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--only', 'record-pure'],
+    { encoding: 'utf8', cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] });
+  ok('(the runner\u2019s stdout is a real run of a suite)', /record-pure\s+\S+\s+\d+ passed/.test(redirected), redirected.split('\n').slice(0, 3).join(' | '));
+  r = run([write('run.txt', redirected)]);
+  ok('a run kept with `node scripts/verify.js > 1.txt` is refused', r.code === 1 && /LOG/.test(r.out), r.out.trim().slice(0, 80));
+  r = run([write('run-ps.txt', Buffer.concat([Buffer.from([0xFF, 0xFE]), Buffer.from(redirected, 'utf16le')]))]);
+  ok('and so is the same run as PowerShell\u2019s `>` writes it, UTF-16 with a BOM', r.code === 1 && /LOG/.test(r.out), r.out.trim().slice(0, 80));
+  r = run([write('run-bom.txt', '\ufeff' + redirected)]);
+  ok('and as UTF-8 with a BOM', r.code === 1 && /LOG/.test(r.out), r.out.trim().slice(0, 80));
+  r = run([write('run-npm.txt', '\n> systole@1.0.0 verify\n> node scripts/verify.js\n\n' + redirected)]);
+  ok('and after npm\u2019s own lines, as `npm run verify > 1.txt` keeps it', r.code === 1 && /LOG/.test(r.out), r.out.trim().slice(0, 80));
 
   /* 6. PACK — the owner's textbook, by way of Memorizer's study pack
      (memorizer/src/pack.js). Both fixtures are made here by pack.js itself,

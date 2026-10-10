@@ -169,8 +169,10 @@ specific haemodynamic finding.
      /source: Braunwald/.test(sysText));
   ok('no retrieved question-bank items are included',
      !/RELATED ITEM/.test(sysText));
+  /* The commentary heading alone let the keyed option go out marked. */
   ok('the answer key itself is withheld',
-     !/OFFICIAL ACC COMMENTARY/.test(sysText) && /commentary for this item is withheld/i.test(sysText));
+     !/OFFICIAL ACC COMMENTARY/.test(sysText) && /commentary for this item is withheld/i.test(sysText) &&
+     !/← CORRECT/.test(sysText));
   ok('but the stem is still there, so it knows what was asked',
      /CURRENT QUESTION/.test(sysText) && /STEM/.test(sysText));
 

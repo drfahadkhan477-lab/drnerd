@@ -3404,8 +3404,15 @@ function toggleGrounded(){
 function runTool(name,input){
   try{
     if(name==='search_question_bank'){
-      const hits=search(String(input.query||''),{limit:Math.min(Math.max(input.limit||4,1),6)});
-      if(!hits.length) return {result:'No matching items in the bank.'};
+      const n=Math.min(Math.max(input.limit||4,1),6);
+      /* Grounded mode leaves the bank out of this door as groundedContext()
+         does: a bank item carries its answer and commentary, the key that mode
+         withholds. Notes only, searched as wide as groundedContext() searches. */
+      let hits=search(String(input.query||''),{limit:AI_GROUNDED?40:n});
+      if(AI_GROUNDED) hits=hits.filter(h=>h.meta.kind==='r').slice(0,n);
+      if(!hits.length) return {result:AI_GROUNDED
+        ? 'No matching notes in the fellow\'s reference library. Grounded mode leaves the question bank out.'
+        : 'No matching items in the bank.'};
       const byId=Object.fromEntries(ALL_Q.map(x=>[x.id,x]));
       const rows=hits.map(h=>{
         if(h.meta.kind==='r'){
@@ -3495,9 +3502,7 @@ function flushNav(){
   else if(nav.kind==='quiz'){
     const qs=nav.ids.map(id=>ALL_Q.find(q=>q.id===id)).filter(Boolean);
     if(!qs.length)return;
-    Object.assign(S,{screen:'quiz',chapter:null,questions:shuf(qs),qIdx:0,selected:null,
-      answered:false,zoomed:-1,mode:'all',quizCorrect:0,quizTotal:0});
-    render(); toTop();
+    startAdhocQuiz(shuf(qs),null);
   }
 }
 
@@ -3705,12 +3710,20 @@ function openFigureFrom(el){
     (cap?cap.childNodes[0]&&cap.childNodes[0].textContent:'')||img.alt||'',
     src?src.textContent:'');
 }
+/* A deck nobody dealt from a chapter: a search's hits, one question jumped to, a deck Apex built. It starts
+   clean, as startQuiz's do: the deck before's answers stayed in S.answers, and restoreQuizState() replayed
+   them onto these questions by position, so question 2 opened answered, its options locked, never scored.
+   And it has no saved place ('pick' is no mode resumeKey() keeps): as 'all' it took the chapter's or the
+   whole bank's place, overwrote it with its own at the first answer, and deleted it when it finished. */
+function startAdhocQuiz(qs,ch){
+  Object.assign(S,{screen:'quiz',chapter:ch,questions:qs,qIdx:0,selected:null,
+    answered:false,zoomed:-1,mode:'pick',quizCorrect:0,quizTotal:0,answers:{},resumed:false});
+  render(); toTop(); markShown();
+}
 function jumpTo(id){
   const q=ALL_Q.find(x=>x.id===id); if(!q||q.bad)return;
   closePeek();
-  Object.assign(S,{screen:'quiz',chapter:q.ch,questions:[q],qIdx:0,selected:null,
-    answered:false,zoomed:-1,mode:'all',quizCorrect:0,quizTotal:0});
-  render(); toTop();
+  startAdhocQuiz([q],q.ch);
 }
 
 /* ── the reference library screen ─────────────────────────────────────────── */
@@ -3941,9 +3954,7 @@ function openSearch(){ S.screen='search'; if(!SQ.ran)runSearch(''); render(); to
 function quizFromSearch(){
   const qs=SQ.hits.map(h=>h.q);
   if(!qs.length)return;
-  Object.assign(S,{screen:'quiz',chapter:null,questions:shuf(qs),qIdx:0,selected:null,
-    answered:false,zoomed:-1,mode:'all',quizCorrect:0,quizTotal:0});
-  render(); toTop();
+  startAdhocQuiz(shuf(qs),null);
   toast(`Quiz built from “${SQ.q}” — ${qs.length} questions.`);
 }
 
@@ -4599,7 +4610,9 @@ function aiCtx(q){
   if(!q) return 'The fellow is browsing the question index; no question is open.'
     + ((typeof Profile!=='undefined') ? Profile.build() : '')
     + ((typeof Memory!=='undefined') ? Memory.build() : '');
-  const opts=q.o.map((o,i)=>`  ${o.l}. ${o.t}  [${o.p}% of candidates chose this]${i===q.ci?'  ← CORRECT':''}`).join('\n');
+  /* The mark on the keyed option IS the answer key, so grounded mode, which
+     tells the model the key is withheld, sends the options unmarked. */
+  const opts=q.o.map((o,i)=>`  ${o.l}. ${o.t}  [${o.p}% of candidates chose this]${!AI_GROUNDED&&i===q.ci?'  ← CORRECT':''}`).join('\n');
   const own=(typeof NOTES!=='undefined'&&NOTES[q.id]||[]).map(n=>n.text).filter(Boolean);
   const ownBlock=own.length?`\n\nTHE FELLOW'S OWN NOTE ON THIS ITEM (they wrote this while working through it — engage with it directly, and correct it if it is wrong):\n${own.map(t=>'• '+t).join('\n')}`:'';
   const profileBlock = (typeof Profile!=='undefined') ? Profile.build() : '';
@@ -5845,7 +5858,7 @@ function startRun(i){
    speechSynthesis speaks and SpeechRecognition listens. It drives the ordinary quiz screen (startQuiz in review
    mode), so an answer is scored by selectOpt and rated by rateReview exactly as when tapped: right → Good, wrong →
    Again. Nothing starts without a tap (iPad Safari will not speak or listen otherwise), and a browser without
-   both speech halves simply has no card. Leaving the quiz screen ends the session. ── */
+   both speech halves simply has no card. Leaving the quiz screen, or moving it by hand, ends the session. ── */
 const VOICE_SR=()=>window.SpeechRecognition||window.webkitSpeechRecognition;
 function voiceAvailable(){ return !!(window.speechSynthesis&&window.SpeechSynthesisUtterance&&VOICE_SR()); }
 let _voice=null;
@@ -5900,7 +5913,10 @@ function voiceDock(state,text){
   d.querySelector('.vd-state').textContent=state==='listening'?'Listening':state==='speaking'?'Speaking':'Voice';
   d.querySelector('.vd-sub').textContent=[of?`Question ${n} of ${of}`:'',text||''].filter(Boolean).join(' · ');
 }
-function voiceLive(v){ return _voice===v && S.screen==='quiz' && S.questions===v.deck; }
+/* v.at is the question the session last put on the screen. The screen stays live while the voice runs, so a tap,
+   a key or Skip can move the quiz without it, and a letter heard after that used to be recorded on the question
+   the screen had moved to and rated with the verdict for the one read out. Off its question, a session is over. */
+function voiceLive(v){ return _voice===v && S.screen==='quiz' && S.questions===v.deck && S.qIdx===v.at; }
 function startVoice(){
   if(!voiceAvailable()){toast('This browser cannot speak and listen. Try Safari or Chrome.');return;}
   const ids=planNow(10).items.map(it=>it.id);
@@ -5908,7 +5924,7 @@ function startVoice(){
   if(!qs.length){toast('Nothing to ask: there are no questions to draw from.');return;}
   startQuiz(null,'due',qs);
   if(S.screen!=='quiz') return;
-  const v=_voice={deck:S.questions,state:VoiceMode.init(S.questions.length),pending:[]};
+  const v=_voice={deck:S.questions,state:VoiceMode.init(S.questions.length),pending:[],at:S.qIdx};
   runVoice(v,{type:'start'});
 }
 function stopVoice(){ _voice=null; if(_hearing) _hearing(null); voiceDock(null); try{speechSynthesis.cancel();}catch(_){} }
@@ -5920,7 +5936,7 @@ async function runVoice(v,event){
        or, after the last question, to the results screen; the spoken summary still follows. */
     if(ev.type==='feedbackRead'&&voiceLive(v)){
       const last=v.state.results[v.state.results.length-1];
-      rateReview(last&&last.correct?3:1);
+      rateReview(last&&last.correct?3:1); v.at=S.qIdx;   // the session's own move
     }
     const r=VoiceMode.step(v.state,ev,{q:v.deck[v.state.i]||{}}); v.state=r.state;
     for(const fx of r.effects){
@@ -5929,7 +5945,8 @@ async function runVoice(v,event){
       if(!voiceLive(v)) { stopVoice(); return; }
       if(fx.type==='ask'){
         while(S.qIdx<fx.i&&S.qIdx<S.questions.length-1) nextQ();   // a skipped question leaves the screen behind
-        for(const part of VoiceMode.speakable(v.deck[fx.i]).parts){ if(!voiceLive(v)){stopVoice();return;} await voiceSay(part); }
+        v.at=S.qIdx;
+        for(const part of VoiceMode.speakable(v.deck[fx.i]).parts){ if(!voiceLive(v)){ if(_voice===v) stopVoice(); return; } await voiceSay(part); }   // after an await, _voice may be a newer session: end only this one
         queue.push({type:'questionRead'});
       }else if(fx.type==='speak'){
         await voiceSay(fx.text);
@@ -5939,6 +5956,9 @@ async function runVoice(v,event){
         if(t!=null&&_voice===v) voiceDock('speaking',`Heard “${t}”`);
         queue.push(t==null?{type:'silence'}:{type:'heard',transcript:t});
       }else if(fx.type==='record'){
+        /* Answered by hand while the voice listened (an option tapped, the quiz not moved): the letter heard is
+           not this card's answer, and rating it with the voice's verdict graded the tapped answer as the spoken one. */
+        if(S.answered){ stopVoice(); return; }
         selectOpt(fx.choice);
       }
     }
