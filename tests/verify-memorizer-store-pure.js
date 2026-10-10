@@ -100,13 +100,17 @@ module.exports = (async () => {
   assert.equal(hungRoot.MemStore.persistent, false);
   console.log('PASS an open that never answers falls back to memory after its bound, says why, and closes a late connection');
 
-  const okRoot = { indexedDB: { open() { const r = {}; queueMicrotask(() => { r.result = {}; r.onsuccess(); }); return r; } }, setTimeout, clearTimeout };
+  /* cleared counts the bound being cancelled: the timer's own guard would
+     hold openTimedOut false even with the clear removed */
+  let cleared = 0;
+  const okRoot = { indexedDB: { open() { const r = {}; queueMicrotask(() => { r.result = {}; r.onsuccess(); }); return r; } }, setTimeout, clearTimeout: t => { cleared++; clearTimeout(t); } };
   vm.runInNewContext(source, { window: okRoot, ArrayBuffer, DataView });
   okRoot.MemStore.OPEN_TIMEOUT_MS = 30;
   const db = await okRoot.MemStore.open();
   await sleep(80);
   assert.ok(db, 'an open that answers resolves with its connection');
-  assert.equal(okRoot.MemStore.openTimedOut, false, 'and its bound, cleared, never fires');
+  assert.equal(cleared, 1, 'its bound is cleared when the open answers');
+  assert.equal(okRoot.MemStore.openTimedOut, false, 'and never fires');
   assert.equal(okRoot.MemStore.persistent, true);
   console.log('PASS an open that answers in time is used, and its bound never fires');
 
