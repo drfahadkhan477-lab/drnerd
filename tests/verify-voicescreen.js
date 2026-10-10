@@ -12,7 +12,9 @@
  *   · a spoken letter is scored by the ordinary answer path (chStats moves, the miss list follows), the
  *     feedback is read, and the answer is rated: right → a later due date, wrong → due again today;
  *   · "skip" moves the quiz screen on and records no answer; "stop" ends with a spoken summary;
- *   · leaving the quiz screen ends the session and nothing more is spoken.
+ *   · leaving the quiz screen ends the session and nothing more is spoken;
+ *   · so does moving the quiz by hand (an option and a rating tapped), mid-sentence or while listening, and a
+ *     letter heard after the move is not recorded or rated on the question the screen moved to.
  * What it cannot show: that a real microphone hears a letter. That is the owner's, on the iPad.
  */
 'use strict';
@@ -225,6 +227,50 @@ const STUB = () => {
   const after = await p3.evaluate(() => ({ said: window.__said.length, listens: window.__listens, live: _voice !== null }));
   ok('nothing more is spoken or listened for after leaving', after.said === before.said && after.listens === before.listens, JSON.stringify({ before, after }));
   ok('the session itself is over, not just quiet', after.live === false, JSON.stringify(after));
+
+  head('moving the quiz by hand ends the session, and no letter lands on the question it moved to');
+  /* The screen stays live under the voice: on an iPad the fellow can tap an option and a rating while the
+     question is still being read. That moves the quiz on without the voice, which used to hear a letter for
+     the question it had read, record it on the one the screen had moved to, and rate that card with the read
+     question's verdict, one question out of step from then on. The taps call what the option and Good
+     buttons call, once mid-sentence and once with the microphone open. */
+  await fresh();
+  await toStudy(page);
+  await page.evaluate(() => { window.__holdSpeech = true; window.__heldSpeech = []; });
+  await page.click('#voiceStart');
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await waitFor(page, () => window.__heldSpeech.length >= 1);
+  const midRead = await page.evaluate(() => {
+    const live = _voice !== null;
+    selectOpt(S.questions[0].ci); rateReview(3);
+    return { live, idx: S.qIdx };
+  });
+  await page.evaluate(() => { window.__holdSpeech = false; window.__heldSpeech.splice(0).forEach(u => u.onend && u.onend()); });
+  await waitFor(page, () => _voice === null || window.__listens >= 1);
+  const read = await page.evaluate(() => ({ live: _voice !== null, listens: window.__listens, dock: !!document.getElementById('voiceDock') }));
+  ok('(a session was reading, and the taps moved the screen on to the second question)', midRead.live && midRead.idx === 1, JSON.stringify(midRead));
+  ok('a move by hand mid-sentence ends the session before it listens', !read.live && read.listens === 0 && !read.dock, JSON.stringify(read));
+
+  await fresh();
+  await toStudy(page);
+  await page.click('#voiceStart');
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await waitFor(page, () => window.__listens >= 1);
+  /* The letter is the moved-to question's key where the read question has that option (recording it there would
+     even look right), else A: it must be one both questions have, or neither would take it, fixed or not. */
+  const midListen = await page.evaluate(() => {
+    const live = _voice !== null, q0 = S.questions[0], q1 = S.questions[1];
+    const k = q1 && q1.ci < q0.o.length ? q1.ci : 0;
+    selectOpt(q0.ci); rateReview(3);
+    return { live, idx: S.qIdx, id1: q1 && q1.id, l1: 'ABCDEFGH'[k], both: !!q1 && k < q0.o.length && k < q1.o.length };
+  });
+  await page.evaluate(l => { window.__heard.push('option ' + l); }, midListen.l1);
+  await waitFor(page, id => _voice === null || S.srs[id] != null, midListen.id1);
+  const heard = await page.evaluate(id => ({ live: _voice !== null, unheard: window.__heard.length, answered: !!S.answers[1], rated: S.srs[id] != null,
+    feedback: window.__said.filter(t => /^(Correct|Not quite)\./.test(t)).length }), midListen.id1);
+  ok('(a session was listening, the taps moved the screen on, and the letter was heard)', midListen.live && midListen.idx === 1 && midListen.both && heard.unheard === 0, JSON.stringify({ midListen, unheard: heard.unheard }));
+  ok('a letter heard after a move by hand is not recorded, answered aloud or rated on the moved-to question', !heard.answered && !heard.rated && heard.feedback === 0, JSON.stringify(heard));
+  ok('and the session ends', !heard.live, JSON.stringify(heard));
 
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();

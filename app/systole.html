@@ -5849,7 +5849,7 @@ function startRun(i){
    speechSynthesis speaks and SpeechRecognition listens. It drives the ordinary quiz screen (startQuiz in review
    mode), so an answer is scored by selectOpt and rated by rateReview exactly as when tapped: right → Good, wrong →
    Again. Nothing starts without a tap (iPad Safari will not speak or listen otherwise), and a browser without
-   both speech halves simply has no card. Leaving the quiz screen ends the session. ── */
+   both speech halves simply has no card. Leaving the quiz screen, or moving it by hand, ends the session. ── */
 const VOICE_SR=()=>window.SpeechRecognition||window.webkitSpeechRecognition;
 function voiceAvailable(){ return !!(window.speechSynthesis&&window.SpeechSynthesisUtterance&&VOICE_SR()); }
 let _voice=null;
@@ -5904,7 +5904,10 @@ function voiceDock(state,text){
   d.querySelector('.vd-state').textContent=state==='listening'?'Listening':state==='speaking'?'Speaking':'Voice';
   d.querySelector('.vd-sub').textContent=[of?`Question ${n} of ${of}`:'',text||''].filter(Boolean).join(' · ');
 }
-function voiceLive(v){ return _voice===v && S.screen==='quiz' && S.questions===v.deck; }
+/* v.at is the question the session last put on the screen. The screen stays live while the voice runs, so a tap,
+   a key or Skip can move the quiz without it, and a letter heard after that used to be recorded on the question
+   the screen had moved to and rated with the verdict for the one read out. Off its question, a session is over. */
+function voiceLive(v){ return _voice===v && S.screen==='quiz' && S.questions===v.deck && S.qIdx===v.at; }
 function startVoice(){
   if(!voiceAvailable()){toast('This browser cannot speak and listen. Try Safari or Chrome.');return;}
   const ids=planNow(10).items.map(it=>it.id);
@@ -5912,7 +5915,7 @@ function startVoice(){
   if(!qs.length){toast('Nothing to ask: there are no questions to draw from.');return;}
   startQuiz(null,'due',qs);
   if(S.screen!=='quiz') return;
-  const v=_voice={deck:S.questions,state:VoiceMode.init(S.questions.length),pending:[]};
+  const v=_voice={deck:S.questions,state:VoiceMode.init(S.questions.length),pending:[],at:S.qIdx};
   runVoice(v,{type:'start'});
 }
 function stopVoice(){ _voice=null; if(_hearing) _hearing(null); voiceDock(null); try{speechSynthesis.cancel();}catch(_){} }
@@ -5924,7 +5927,7 @@ async function runVoice(v,event){
        or, after the last question, to the results screen; the spoken summary still follows. */
     if(ev.type==='feedbackRead'&&voiceLive(v)){
       const last=v.state.results[v.state.results.length-1];
-      rateReview(last&&last.correct?3:1);
+      rateReview(last&&last.correct?3:1); v.at=S.qIdx;   // the session's own move
     }
     const r=VoiceMode.step(v.state,ev,{q:v.deck[v.state.i]||{}}); v.state=r.state;
     for(const fx of r.effects){
@@ -5933,6 +5936,7 @@ async function runVoice(v,event){
       if(!voiceLive(v)) { stopVoice(); return; }
       if(fx.type==='ask'){
         while(S.qIdx<fx.i&&S.qIdx<S.questions.length-1) nextQ();   // a skipped question leaves the screen behind
+        v.at=S.qIdx;
         for(const part of VoiceMode.speakable(v.deck[fx.i]).parts){ if(!voiceLive(v)){ if(_voice===v) stopVoice(); return; } await voiceSay(part); }   // after an await, _voice may be a newer session: end only this one
         queue.push({type:'questionRead'});
       }else if(fx.type==='speak'){
