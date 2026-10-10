@@ -76,6 +76,9 @@ function exportText() {
       stores.bookpages = stores.bookpages.filter(function (p) { return (r.pages || []).indexOf(p.id) === -1; });
     });
     stores.meta = stores.meta.filter(function (r) { return r.kind !== 'pending-import'; });
+    // A file restore() would refuse is not a backup: make inspect()'s record
+    // checks here, before any file is written or the day recorded (ui.js).
+    try { validate(stores); } catch (e) { throw new Error('Not backed up, because a restore would refuse it: ' + e.message); }
     var payload = JSON.stringify(map(stores, false));
     return Prov.fingerprint(payload).then(function (checksum) { return JSON.stringify({ format: FORMAT, version: VERSION, created: new Date().toISOString(), checksum: checksum, payload: payload }); });
   });
