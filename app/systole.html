@@ -3404,8 +3404,15 @@ function toggleGrounded(){
 function runTool(name,input){
   try{
     if(name==='search_question_bank'){
-      const hits=search(String(input.query||''),{limit:Math.min(Math.max(input.limit||4,1),6)});
-      if(!hits.length) return {result:'No matching items in the bank.'};
+      const n=Math.min(Math.max(input.limit||4,1),6);
+      /* Grounded mode leaves the bank out of this door as groundedContext()
+         does: a bank item carries its answer and commentary, the key that mode
+         withholds. Notes only, searched as wide as groundedContext() searches. */
+      let hits=search(String(input.query||''),{limit:AI_GROUNDED?40:n});
+      if(AI_GROUNDED) hits=hits.filter(h=>h.meta.kind==='r').slice(0,n);
+      if(!hits.length) return {result:AI_GROUNDED
+        ? 'No matching notes in the fellow\'s reference library. Grounded mode leaves the question bank out.'
+        : 'No matching items in the bank.'};
       const byId=Object.fromEntries(ALL_Q.map(x=>[x.id,x]));
       const rows=hits.map(h=>{
         if(h.meta.kind==='r'){
@@ -4603,7 +4610,9 @@ function aiCtx(q){
   if(!q) return 'The fellow is browsing the question index; no question is open.'
     + ((typeof Profile!=='undefined') ? Profile.build() : '')
     + ((typeof Memory!=='undefined') ? Memory.build() : '');
-  const opts=q.o.map((o,i)=>`  ${o.l}. ${o.t}  [${o.p}% of candidates chose this]${i===q.ci?'  ← CORRECT':''}`).join('\n');
+  /* The mark on the keyed option IS the answer key, so grounded mode, which
+     tells the model the key is withheld, sends the options unmarked. */
+  const opts=q.o.map((o,i)=>`  ${o.l}. ${o.t}  [${o.p}% of candidates chose this]${!AI_GROUNDED&&i===q.ci?'  ← CORRECT':''}`).join('\n');
   const own=(typeof NOTES!=='undefined'&&NOTES[q.id]||[]).map(n=>n.text).filter(Boolean);
   const ownBlock=own.length?`\n\nTHE FELLOW'S OWN NOTE ON THIS ITEM (they wrote this while working through it — engage with it directly, and correct it if it is wrong):\n${own.map(t=>'• '+t).join('\n')}`:'';
   const profileBlock = (typeof Profile!=='undefined') ? Profile.build() : '';
