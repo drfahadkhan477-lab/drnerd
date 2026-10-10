@@ -253,7 +253,13 @@ head('(d), driven: a code deploy keeps the content cache, a content deploy renam
    with contentVersion() lifted from build-pwa.js, and the worker it produces
    is run in a sandbox. A whole build-pwa run would also write the notes, the
    splash and the mesh under content/, and draw icons in a browser; the rule
-   for those files is driven on its own at the end. */
+   for those files is driven on its own at the end.
+
+   WHAT THIS DOES NOT SEE: the folder hashed here is extract-content's, not
+   what build-pwa finally leaves in dist/content. build-pwa rewrites
+   questions.json there, so if it ever wrote something build-specific into
+   it (a stamp, a commit), a code deploy would rename the bucket again and
+   this would stay green. A real split build is what would show that. */
 (async () => {
   const os = require('os');
   const vm = require('vm');
