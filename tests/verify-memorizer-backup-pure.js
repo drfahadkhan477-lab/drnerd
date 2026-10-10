@@ -65,26 +65,31 @@ module.exports = (async () => {
   badView.meta.find(r => r.id === 'binary-view').bytes.$binary = 'Function';
   await assert.rejects(backup.restore(await resealed(badView)), /Invalid binary view/);
   assert.equal(await state(), before, 'an unknown binary view type changed the database');
-  // A database a restore would refuse (here a book chapter whose unit is gone)
-  // is not exported, and the export the Settings button and the home reminder
-  // run (ui.js exportBackup, lifted) downloads nothing and records no day.
+  // A database a restore would refuse (here a book chapter whose unit is gone).
+  // The export the Settings button and the home reminder run (ui.js
+  // exportBackup, lifted) still hands the copy over, since it holds every
+  // book and note, but does not count it as a backup: no day is recorded, so
+  // the reminder stays, and the note it shows names the book.
   const ui = blankComments(fs.readFileSync(path.join(__dirname, '../memorizer/src/ui.js'), 'utf8'));
   const from = ui.indexOf('function exportBackup() {'), to = ui.indexOf('function downloadBackup(text) {');
   assert.ok(from > 0 && to > from && ui.lastIndexOf('function exportBackup() {') === from && ui.lastIndexOf('function downloadBackup(text) {') === to, 'exportBackup is not where this suite lifts it from');
   const shell = {}, downloads = [];
   const exportBackup = new Function('root', 'Store', 'ui', 'render', 'today', 'downloadBackup', ui.slice(from, to) + 'return exportBackup;')(
     root, store, shell, () => {}, () => '2026-10-10', t => downloads.push(t));
-  await store.put('books', { id: 'book', parts: [{ fileId: 'unit' }], chapters: [{ docId: 'unit' }, { docId: 'gone' }] });
-  await assert.rejects(backup.exportText(), /Not backed up, because a restore would refuse it: Incomplete book\./);
+  await store.put('books', { id: 'book', name: 'Invented book', parts: [{ fileId: 'unit' }], chapters: [{ docId: 'unit' }, { docId: 'gone' }] });
+  const checked = await backup.exportChecked();
+  assert.equal(checked.problem, 'Incomplete book: "Invented book".');
+  await assert.rejects(backup.inspect(checked.text), /Incomplete book: "Invented book"\./);
   await exportBackup();
-  assert.deepEqual([downloads.length, await store.get('meta', 'last-backup')], [0, null], 'a backup a restore would refuse was downloaded or its day recorded');
-  assert.equal(shell.backupStatus, 'Not backed up, because a restore would refuse it: Incomplete book.');
-  // The same export of restorable data does download and record, so the
-  // zero above is the refusal, not an instrument that cannot count.
+  assert.deepEqual([downloads.length, await store.get('meta', 'last-backup')], [1, null], 'a copy a restore would refuse was withheld, or counted as a backup');
+  assert.match(shell.exportNote, /^Saved a copy, but the app would not restore it: Incomplete book: "Invented book"\. /);
+  assert.equal(shell.backupStatus, shell.exportNote);
+  // The same export of restorable data downloads and records the day, so
+  // the null above is the refusal, not an instrument that cannot count.
   await store.del('books', 'book');
   await exportBackup();
-  assert.equal(downloads.length, 1); assert.equal((await store.get('meta', 'last-backup')).day, '2026-10-10');
-  assert.equal((await backup.inspect(downloads[0])).docs, 1);
+  assert.equal(downloads.length, 2); assert.equal((await store.get('meta', 'last-backup')).day, '2026-10-10'); assert.equal(shell.exportNote, '');
+  assert.equal((await backup.inspect(downloads[1])).docs, 1);
   await store.del('meta', 'last-backup');
   assert.equal(await state(), before, 'the export cases left records behind');
   // Text outside ASCII survives the round trip: accents, Greek, CJK, an emoji
@@ -159,7 +164,7 @@ module.exports = (async () => {
   console.log('PASS 8 MiB backup preserves every byte within the conversion budget; malformed base64 is rejected without writes');
   console.log('PASS backup restores PDF bytes, notes, progress and SRS; excludes keys and refuses corruption/incomplete records');
   console.log('PASS truncated, unsafe-key and unknown-view backups are refused with the whole database unchanged');
-  console.log('PASS data a restore would refuse is not exported: no download, the reason shown, no backup day recorded');
+  console.log('PASS a copy a restore would refuse is handed over but not counted: no backup day recorded, the book named in the note');
   console.log('PASS writes queued before a restore cannot land on the restored database; a refused replacement changes nothing');
   console.log('PASS non-ASCII text round-trips exactly, and an empty backup restores to empty stores');
 })();

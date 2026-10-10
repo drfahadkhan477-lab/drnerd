@@ -3874,13 +3874,23 @@ function appearanceCard() {
 /* One export for the Settings button and the home reminder: the backup
    (backup.js), its download, and the day it was made, which the reminder
    counts from (Home.backupDue). */
+/* A copy the app would refuse to restore (MemBackup.exportChecked) is still
+   handed over, since it holds every book and note, but it is not counted as
+   a backup: the day is not recorded, so the reminder stays, and the reason
+   is said where the tap was (Settings, or the reminder on Home), with what
+   to do. It used to be counted, and the reminder went quiet over a file no
+   restore would take. */
 function exportBackup() {
-  ui.backupStatus = 'Preparing backup\u2026'; render();
-  return root.MemBackup.exportText().then(function (text) {
-    downloadBackup(text);
-    ui.lastBackup = today(); ui.backupStatus = 'Backup prepared. Save the downloaded file privately; it contains your books and notes.';
+  ui.backupStatus = ui.exportNote = 'Preparing backup\u2026'; render();
+  return root.MemBackup.exportChecked().then(function (r) {
+    downloadBackup(r.text);
+    if (r.problem) {
+      ui.backupStatus = ui.exportNote = 'Saved a copy, but the app would not restore it: ' + r.problem + ' Fix or delete what it names, then back up again.';
+      return;
+    }
+    ui.lastBackup = today(); ui.backupStatus = 'Backup prepared. Save the downloaded file privately; it contains your books and notes.'; ui.exportNote = '';
     return Store.put('meta', { id: 'last-backup', day: ui.lastBackup }).then(null, function () {});
-  }).then(render, function (err) { ui.backupStatus = err.message; render(); });
+  }).then(render, function (err) { ui.backupStatus = ui.exportNote = err.message; render(); });
 }
 function downloadBackup(text) {
   var url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = doc.createElement('a');
@@ -3984,7 +3994,8 @@ function backupNudge() {
   return h('div.card.note.backup-nudge', { id: 'backup-nudge', role: 'status' },
     h('p', h('strong', 'Back up your study. '), b.why),
     h('div.row', button('Back up now', function () { exportBackup(); }, 'primary', { id: 'nudge-backup' }),
-      button('Later', function () { ui.backupSnooze = today(); Store.put('meta', { id: 'backup-snooze', day: ui.backupSnooze }).then(null, function () {}); render(); }, 'quiet', { id: 'nudge-later' })));
+      button('Later', function () { ui.backupSnooze = today(); Store.put('meta', { id: 'backup-snooze', day: ui.backupSnooze }).then(null, function () {}); render(); }, 'quiet', { id: 'nudge-later' })),
+    ui.exportNote ? h('p', { id: 'nudge-status', role: 'status' }, ui.exportNote) : null);
 }
 
 /* ── Prepare for offline ──────────────────────────────────────────────────

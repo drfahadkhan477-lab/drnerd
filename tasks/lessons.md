@@ -233,3 +233,10 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   had the check that commit added. I caught it before pushing. → Rule: a
   number in a commit message comes from a run of that commit's own tree; after
   any merge or patch, run again and quote that run.
+- **A fix that refused the action left the fellow worse off.** A backup that
+  a restore would refuse was counted as a backup; my fix stopped exporting it
+  at all. Review caught that one bad record then left no copy of any book or
+  note, and the reason showed in Settings, not on the Home reminder where the
+  tap was. → Rule: before a fix refuses an action, say what the user is left
+  holding if it does; prefer doing the action and not counting it, and show
+  the reason where the user acted.
