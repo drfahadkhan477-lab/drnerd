@@ -31,6 +31,40 @@ function loadScript(src, sri, failure) {
   });
 }
 
+/* A PAGE OPENED AS A LOCAL FILE HAS NO ORIGIN ("null"), and pdf.js then
+   judges its own blob: worker to be cross-origin and wraps it in a second
+   blob that importScripts() the first. Chromium refuses that, pdf.js says
+   "Setting up fake worker", and every PDF is read and drawn on the page's
+   own thread: the page stops answering for seconds at a time (measured:
+   8 s and more, about thirty times in one run of verify-memorizer, and
+   past 30 s under load). Handing pdf.js a worker already started
+   (workerPort) skips the wrapper. Only there, and only once the worker has
+   said it is ready; otherwise workerSrc stands and pdf.js does what it did.
+   The test is pdf.js's own (isSameOrigin, 3.11), not location.origin, which
+   Chromium reports as "file://" for the same page. */
+function crossOrigin(src) {
+  try {
+    if (typeof root.Worker !== 'function') return false;
+    var base = new URL(root.location.href);
+    return !base.origin || base.origin === 'null' || base.origin !== new URL(src, base).origin;
+  } catch (_) { return false; }
+}
+function portFor(L, src) {
+  return new Promise(function (resolve) {
+    var w, done = false;
+    var finish = function (ok) {
+      if (done) return; done = true; clearTimeout(t);
+      if (w) { w.onmessage = null; w.onerror = null; }
+      if (ok) L.GlobalWorkerOptions.workerPort = w; else if (w) w.terminate();
+      resolve(L);
+    };
+    var t = setTimeout(function () { finish(false); }, 10000);
+    try { w = new root.Worker(src); } catch (_) { finish(false); return; }
+    w.onmessage = function (e) { if (e.data && e.data.action === 'ready') finish(true); };
+    w.onerror = function () { finish(false); };
+  });
+}
+
 function lib() {
   if (loading) return loading;
   loading = loadScript(LIB.url, LIB.sri).then(function () {
@@ -39,8 +73,8 @@ function lib() {
     return fetch(WORKER.url, { integrity: WORKER.sri, mode: 'cors' })
       .then(function (r) { if (!r.ok) throw new Error('worker ' + r.status); return r.text(); })
       .then(function (code) {
-        L.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
-        return L;
+        var src = L.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+        return crossOrigin(src) ? portFor(L, src) : L;
       }, function () { throw new Error('The PDF worker could not be verified or downloaded. Retry when connected.'); });
   });
   loading.catch(function () { loading = null; });
