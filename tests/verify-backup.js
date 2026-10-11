@@ -230,6 +230,9 @@ const restore = `(text) => new Promise(resolve => {
     'a card whose due date is not a date string': { srs: { BKUP_1: { due: 5 } } },
     'a card whose last review is not a date string': { srs: { BKUP_1: { due: '2026-11-01', last: 12345 } } },
     'a null chapter': { chStats: { Arrhythmias: null } },
+    /* A list has no entries for the entry rules to refuse: only the check
+       that each map is an object stops it. */
+    'a chapter map that is a list': { chStats: [] },
     'a chapter count that is negative': { chStats: { Arrhythmias: { correct: -1, total: 2 } } },
     /* Answering a question does st.total++ and st.correct++ on the stored
        record (selectOpt), and a practice drill does pr.n++ and pr.c++: a
@@ -285,6 +288,49 @@ const restore = `(text) => new Promise(resolve => {
     const stored = (JSON.parse(localStorage.getItem('accsap12.v2')) || {}).daily || {};
     return (S.daily['2026-10-09'] || {}).a === 7 && (stored['2026-10-09'] || {}).c === 5;
   }) === true);
+
+  /* A device that took a partial record from a backup before the import
+     checked for one still holds it, and its export carried it, so its own
+     backup was refused whole, ink and notes with it. Seeded where such a
+     device keeps it, in the stored blob a launch reads: a chapter with a total
+     but no correct count, a drill with no counts, a day with no correct count,
+     and the {correct:7,total:1} that a chapter with no total turns into. */
+  head('a backup from a device holding records its import refuses still restores');
+  const DEVICE = {
+    chStats: { Arrhythmias: { correct: 6, total: 9 }, 'Valvular Disease': { total: 3 },
+               'Vascular Disease': { correct: 7, total: 1 } },
+    practice: { BKUP_1: { n: 3, c: 2, t: 1 }, BKUP_2: { t: 1 } },
+    daily: { '2026-10-01': { a: 4, c: 3, r: 0 }, '2026-10-02': { a: 1 } },
+    sessionCorrect: 11, sessionTotal: 13,
+  };
+  await page.evaluate(d => localStorage.setItem('accsap12.v2', JSON.stringify(d)), DEVICE);
+  await boot(page);
+  const dev = await page.evaluate(async () => {
+    let refused = false;
+    try { progressFromBackup(JSON.parse(localStorage.getItem('accsap12.v2'))); } catch (_) { refused = true; }
+    const create = URL.createObjectURL, click = HTMLAnchorElement.prototype.click; let blob = null;
+    URL.createObjectURL = b => { blob = b; return 'blob:stub'; }; HTMLAnchorElement.prototype.click = () => {};
+    try { await exportMarkup(); } finally { URL.createObjectURL = create; HTMLAnchorElement.prototype.click = click; }
+    return { refused, text: blob ? await blob.text() : null };
+  });
+  /* A precondition, not the claim: with no record the import refuses in the
+     seed, everything below passes whether or not the export leaves any out. */
+  ok('the device holds statistics its own import refuses', dev.refused);
+  const devStats = dev.text ? JSON.parse(dev.text).stats || {} : {};
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  ok('the export leaves out exactly the records the import refuses',
+     same(devStats.chStats, { Arrhythmias: DEVICE.chStats.Arrhythmias }) &&
+     same(devStats.practice, { BKUP_1: DEVICE.practice.BKUP_1 }) &&
+     same(devStats.daily, { '2026-10-01': DEVICE.daily['2026-10-01'] }) && devStats.sessionCorrect === 11,
+     JSON.stringify(devStats.chStats));
+  /* Emptied, so a restore that did not happen cannot pass the ink check. */
+  await page.evaluate(() => { INK = {}; });
+  const devToast = await importToast(dev.text || '');
+  ok('and that backup restores', devToast === 'Annotations restored.', JSON.stringify(devToast));
+  ok('with its usable statistics and its annotations', await page.evaluate(() =>
+    (S.chStats.Arrhythmias || {}).total === 9 && !('Valvular Disease' in S.chStats) && !('Vascular Disease' in S.chStats) &&
+    (S.practice.BKUP_1 || {}).n === 3 && !('BKUP_2' in S.practice) &&
+    (S.daily['2026-10-01'] || {}).a === 4 && !('2026-10-02' in S.daily) && !!INK['BKUP_1:0']));
 
   head('reference images survive a backup on a different device');
   const exported=await page.evaluate(async()=>{

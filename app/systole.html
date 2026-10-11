@@ -2087,7 +2087,7 @@ async function exportMarkup(){
   const blob=new Blob([JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
     refs:(typeof REF!=='undefined'?REF:[]),
     log:(typeof LOG!=='undefined'?LOG:[]),
-    chat:loadJSON('accsap12.chat',{}),stats:loadJSON('accsap12.v2',{}),
+    chat:loadJSON('accsap12.chat',{}),stats:usableStats(loadJSON('accsap12.v2',{})),
     mem:(typeof Memory!=='undefined'?Memory.all():[])},null,0)],
     {type:'application/json'});
   try{ S.sinceBackup=0; S.lastBackup=Date.now(); save(); }catch(_){}
@@ -5593,29 +5593,54 @@ const SCHEMA_KEYS=['schemaVersion','chStats','missed','theme','homeLayout',
   'practice','sinceBackup','lastBackup','resume','focusMode','examDate'];
 let FOREIGN={};
 
+/* What one entry of each statistics map must hold. The import refuses a file
+   with an entry that fails (progressFromBackup), and an export leaves such
+   an entry out (usableStats), from this one table so the two cannot drift.
+   The Progress screen and the scheduler read entries field by field (d.a in
+   buildStats, S.srs[id].due in forecast7), so one null day passed the
+   import, was saved, and crashed Progress on every later launch. A field is
+   checked where the app reads it; one that is absent is left to the
+   reader's own default, as it always was. Per map: the fields that must be
+   counts, the counts that must be there, and a rule over the whole entry.
+
+   A correct answer is only ever counted as one of the answers (logAnswer,
+   selectOpt), so more correct than answered is a record the app never
+   wrote: 9 of 2 drew a Results row at 450%, and a day's c over its a can
+   put Progress's accuracy over 100%. Written as not-greater, not at-most:
+   undefined<=n is false as well, which would refuse a missing count there
+   and leave the need lists with nothing to prove. */
+const STAT_ENTRY={
+  daily:   [['a','c','r'],['a','c'],v=>!(v.c>v.a)],
+  chStats: [['correct','total'],['correct','total'],v=>!(v.correct>v.total)],  // selectOpt does st.total++, st.correct++
+  practice:[['n','c','t'],['n','c'],v=>!(v.c>v.n)],                          // and pr.n++, pr.c++: a missing count is NaN
+  srs:     [['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string')],
+  resume:  [['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string'))]};
+const statRecord=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+function statEntryOk(k,v){
+  const [fields,need,rule]=STAT_ENTRY[k], count=x=>x==null||(Number.isFinite(x)&&x>=0);
+  return statRecord(v)&&fields.every(f=>count(v[f]))&&need.every(f=>v[f]!=null)&&rule(v);
+}
+/* The statistics an export writes: the stored blob less every map entry the
+   import would refuse, so that the app's own backup restores. A device that
+   took a partial record from a backup before the import checked for one
+   still holds it: a chapter {total:2}, or {correct:7,total:1}, which a
+   {correct:5} becomes after a correct answer in each of two launches (the
+   NaN is saved as null, and null++ is 1). The import refuses a whole file
+   over one such entry, ink, notes and memory with it, so leaving the entry
+   out loses far less. The device keeps its own copy. Only map entries are
+   checked: anything else in the blob is exported as stored. */
+function usableStats(raw){
+  if(!statRecord(raw)) return raw;
+  const out=Object.assign({},raw);
+  for(const k in STAT_ENTRY) if(statRecord(out[k]))
+    out[k]=Object.fromEntries(Object.entries(out[k]).filter(([,v])=>statEntryOk(k,v)));
+  return out;
+}
+
 function progressFromBackup(raw){
-  const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
-  for(const k of ['chStats','srs','daily','practice','resume']) if(raw[k]!=null&&!record(raw[k])) throw new Error('Invalid statistics.');
-  /* Every entry too, before anything is stored: the Progress screen and the
-     scheduler read them field by field (d.a in buildStats, S.srs[id].due in
-     forecast7), so one null day passed here, was saved, and crashed Progress
-     on every later launch. A field is checked where the app reads it; one
-     that is absent is left to the reader's own default, as it always was. */
-  const count=v=>v==null||(Number.isFinite(v)&&v>=0);
-  const entries=(k,fields,need,extra)=>{ for(const v of Object.values(raw[k]||{})){
-    if(!record(v)||fields.some(f=>!count(v[f]))||need.some(f=>v[f]==null)||(extra&&!extra(v))) throw new Error('Invalid statistics.');
-  }};
-  /* A correct answer is only ever counted as one of the answers (logAnswer,
-     selectOpt), so more correct than answered is a record the app never
-     wrote: 9 of 2 drew a Results row at 450%, and a day's c over its a can
-     put Progress's accuracy over 100%. Written as not-greater, not
-     at-most: undefined<=n is false as well, which would refuse a missing
-     count here and leave the need lists with nothing to prove. */
-  entries('daily',['a','c','r'],['a','c'],v=>!(v.c>v.a));
-  entries('chStats',['correct','total'],['correct','total'],v=>!(v.correct>v.total));  // selectOpt does st.total++, st.correct++
-  entries('practice',['n','c','t'],['n','c'],v=>!(v.c>v.n));                          // and pr.n++, pr.c++: a missing count is NaN
-  entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string'));
-  entries('resume',['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')));
+  for(const k in STAT_ENTRY) if(raw[k]!=null&&!statRecord(raw[k])) throw new Error('Invalid statistics.');
+  /* Every entry too, before anything is stored: see STAT_ENTRY. */
+  for(const k in STAT_ENTRY) for(const v of Object.values(raw[k]||{})) if(!statEntryOk(k,v)) throw new Error('Invalid statistics.');
   for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
     if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');
   for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');
