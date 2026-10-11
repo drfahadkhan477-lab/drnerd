@@ -1283,7 +1283,10 @@ function segBar(pct) {
 function tileState(pct, started) { return pct >= 100 ? 'done' : pct > 0 || started ? 'in progress' : 'not started'; }
 /* A section deleted by the owner (session.js dropSection): its progress,
    review cards and pack entry go, the sections after it move up one, and
-   the unit's search vectors are made again when next needed. */
+   the unit's search vectors are made again when next needed. Written in the
+   store's queue (Store.commit), which drops a failed save of this unit's
+   session still waiting for retry: that save held the deleted section, and
+   replayed after the deletion it made every later backup unrestorable. */
 function deleteSection(i) {
   var d = ui.docRec, st0 = ui.state, c = d && d.clusters[i];
   if (!c) return Promise.resolve();
@@ -1298,9 +1301,10 @@ function deleteSection(i) {
   if (pack2) ops.push({ store: 'packs', value: pack2 });
   cards.drop.forEach(function (id) { ops.push({ store: 'cards', id: id, delete: true }); });
   cards.renumbered.forEach(function (x) { ops.push({ store: 'cards', value: x }); });
-  return Store.batch(ops).then(function () {
+  return Store.commit(ops).then(function () {
     docsChanged(); ui.docRec = doc2; ui.state = st; ui.pack = pack2; ui.notes = notes; ui.checks = checks;
     ui.figsFor = null; ui.packReport = null; ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} };
+    ui.saveError = Store.failureMessage() || ui.actionError;
     return refresh();
   }).then(function () { ui.notice = 'Deleted “' + c.title + '”.'; render(); }, function (e) { saveFailed(e, true); render(); });
 }
@@ -1789,7 +1793,9 @@ function micButton(onText, id) {
 }
 /* CORRECT THE TEXT: a paragraph of a section read by text recognition,
    corrected by you (study.js correctSegment) and kept with what it said
-   before; the lesson is taught again from the corrected text. */
+   before; the lesson is taught again from the corrected text. Written as
+   deleteSection's is (Store.commit), for the same reason: a failed session
+   save waiting for retry still held the section's old lesson and cards. */
 function fixCard(c) {
   var d = ui.docRec, ci = ui.state.section;
   if (!(d.source === 'photo' || Prov.ocrPagesIn(d, c).length)) return null;
@@ -1815,8 +1821,9 @@ function saveFix(ci, si, text) {
   if (pack) ops.push({ store: 'packs', value: pack });
   ui.cards.filter(function (x) { return x.docId === id && x.cluster === ci; }).forEach(function (x) { ops.push({ store: 'cards', id: x.id, delete: true }); });
   ui.stepSeq++; ui.busy = ''; ui.fixOpen = true;
-  return Store.batch(ops).then(function () {
+  return Store.commit(ops).then(function () {
     clearDraft('fix:' + si); docsChanged(); ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} }; ui.askIdx = null; ui.secVecs = null;
+    ui.saveError = Store.failureMessage() || ui.actionError;
     if (ui.docId === id) { ui.docRec = fixed; ui.state = st; ui.pack = pack; ui.checks = checks; ui.notice = 'Corrected. Questions and review cards from the changed section were retired; study it again from the corrected text.'; }
     return refresh();
   }).then(render, function (e) { saveFailed(e, true); render(); });

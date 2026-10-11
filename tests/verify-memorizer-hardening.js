@@ -662,6 +662,65 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('repeating the action applies the deletion once', await r.evaluate(async () => (await MemStore.get('docs', Memorizer.ui.docId)).clusters.length === 1));
   }
 
+  /* A step whose save failed is in the screen's state, so a section deleted
+     or corrected afterwards is made from it and replaces that save. Kept for
+     retry, the save went into every export and "Try saving again" put the
+     old session back: two sections where the unit now has one, which no
+     backup would restore, or the corrected section's progress, which the
+     correction retires (here its memorisation, as in the corrections block
+     above; its lesson is taught again from the corrected text either way). */
+  for (const action of ['delete', 'correct']) {
+    head(`a section ${action === 'delete' ? 'deleted' : 'corrected'} after a failed save: the save is not put back`);
+    const r = await context('replaced-' + action);
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Replaced ' + action); await r.locator('#learn-unit').waitFor(T);
+    r.on('dialog', dl => dl.accept());
+    if (action === 'correct') {
+      await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+      await r.evaluate(async () => {
+        const u = Memorizer.ui; u.docRec.source = 'photo'; u.fixOpen = true; u.state.per[0].memorized = true;
+        await MemStore.batch([{ store: 'docs', value: u.docRec }, { store: 'sessions', value: { id: u.docId, state: u.state, at: Date.now() } }]);
+      });
+    }
+    /* the sessions store refuses the next write, as a full disk would */
+    await r.evaluate(async action => {
+      const put = IDBObjectStore.prototype.put; window.__refuse = 1;
+      IDBObjectStore.prototype.put = function () {
+        if (this.name === 'sessions' && window.__refuse > 0) { window.__refuse--; throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); }
+        return put.apply(this, arguments);
+      };
+      try { await Memorizer.openDoc(Memorizer.ui.docId, action === 'correct' ? 0 : undefined); } finally { IDBObjectStore.prototype.put = put; }
+    }, action);
+    const failed = await r.evaluate(() => ({ pending: MemStore.failureMessage(), banner: !!document.getElementById('store-banner'), memorized: !!Memorizer.ui.state.per[0].memorized }));
+    ok('(the step\'s save failed and is waiting for retry)', /out of space/.test(failed.pending) && failed.banner && (action === 'delete' || failed.memorized), JSON.stringify(failed));
+    if (action === 'delete') {
+      await r.locator('#sections .section-del').first().click();
+      await r.waitForFunction(() => /^Deleted/.test(Memorizer.ui.notice), null, T);
+    } else {
+      /* The corrected section is taught again at once, and that save writes
+         the whole session, which retires the failed save by itself (an
+         earlier version of this check passed with the correction written
+         outside the queue for that reason). Here the lesson cannot be made,
+         as when Claude is slow or offline, so nothing is saved after the
+         correction and what it left behind is what is measured. */
+      const text = await r.evaluate(() => { MemCoach.lesson = () => { throw new Error('no lesson in this test'); }; return Memorizer.ui.docRec.clusters[0].segments.find(s => !s.heading && !s.table).text; });
+      await r.locator('#fix-text textarea').first().fill(text.replace('2 percent', '20 percent'));
+      await r.locator('#fix-text [data-fix]').first().click();
+      await r.waitForFunction(() => Memorizer.ui.docRec.revision === 1, null, T);
+    }
+    const got = await r.evaluate(async () => {
+      const pending = MemStore.failureMessage(), banner = !!document.getElementById('store-banner'), checked = await MemBackup.exportChecked();
+      await MemStore.retryFailures();
+      const s = (await MemStore.get('sessions', Memorizer.ui.docId)).state;
+      return { pending, banner, problem: checked.problem, titles: s.titles.length, memorized: !!s.per[0].memorized };
+    });
+    ok('the failed save it replaced is no longer waiting for retry', got.pending === '', JSON.stringify(got));
+    ok('and the "not saved" banner goes with it', !got.banner, JSON.stringify(got));
+    if (action === 'delete') {
+      ok('a backup made now is one the app would restore', got.problem === null, String(got.problem));
+      ok('and "Try saving again" does not put the two-section session back', got.titles === 1, JSON.stringify(got));
+    } else ok('and "Try saving again" does not bring back the progress the correction retired', !got.memorized, JSON.stringify(got));
+  }
+
   head('backup rescue and transactional restore');
   {
     const r = await context('backup');

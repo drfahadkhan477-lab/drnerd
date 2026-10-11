@@ -253,16 +253,47 @@ function removalOps(ids) {
   });
 }
 function finishDeletion(ids, ops) {
-  return batch(ops).then(function () {
-    ids.filter(Boolean).forEach(function (id) { removedDocs[id] = true; });
-    ops.filter(function (o) { return o.delete; }).forEach(function (o) { removed[o.store + ':' + o.id] = o.docId || true; });
-    Object.keys(failures).forEach(function (key) {
-      var f = failures[key];
-      if (f.ops.some(function (o) { return o.value && (removed[o.store + ':' + o.value.id] ||
-        (o.value.docId && removedDocs[o.value.docId])); }) ||
-        ops.some(function (o) { return o.value && key === o.store + ':' + o.value.id; })) delete failures[key];
+  return batch(ops).then(function () { forget(ids, ops); });
+}
+/* Units deleted, once their deletion has committed: a write for them that
+   comes later is refused, and a failed write waiting for retry that would put
+   back a record of theirs is dropped. */
+function forget(ids, ops) {
+  ids.filter(Boolean).forEach(function (id) { removedDocs[id] = true; });
+  ops.filter(function (o) { return o.delete; }).forEach(function (o) { removed[o.store + ':' + o.id] = o.docId || true; });
+  Object.keys(failures).forEach(function (key) {
+    var f = failures[key];
+    if (f.ops.some(function (o) { return o.value && (removed[o.store + ':' + o.value.id] ||
+      (o.value.docId && removedDocs[o.value.docId])); }) ||
+      ops.some(function (o) { return o.value && key === o.store + ':' + o.value.id; })) delete failures[key];
+  });
+}
+/* A change to a unit that rewrites several of its records at once (a section
+   deleted, a paragraph corrected, a book's chapters cut again): one
+   transaction, and one turn of the write queue, so it lands after every write
+   asked for before it. It is made from what the screen holds, a step whose
+   save failed included, so it replaces that save: once it commits, every
+   failed write waiting for retry that touches a record it wrote or deleted is
+   dropped. Kept, the older write went into every export and was replayed by
+   "Try saving again", putting back what the change had taken away: after a
+   section was deleted, a session with that section still in it and a card
+   for it, which every backup from then on refused. Units it removes (`gone`)
+   go as deleteDoc's do: their cleanup is read in the same turn, and a write
+   for them that comes later is refused. A change that is refused is not kept
+   for retry: the caller says so, and the owner repeats it. */
+function commit(ops, gone) {
+  gone = (gone || []).filter(Boolean);
+  return serialWrite(function () {
+    return (gone.length ? removalOps(gone) : Promise.resolve([])).then(function (drops) {
+      var all = ops.concat(drops);
+      return batch(all).then(function () { if (gone.length) forget(gone, drops); supersede(all); });
     });
   });
+}
+function supersede(ops) {
+  var key = function (o) { return o.store + ':' + (o.value ? o.value.id : o.id); }, hit = {};
+  ops.forEach(function (o) { hit[key(o)] = true; });
+  Object.keys(failures).forEach(function (k) { if (failures[k].ops.some(function (o) { return hit[key(o)]; })) delete failures[k]; });
 }
 function deleteDoc(id) { return serialWrite(function () { return removalOps([id]).then(function (ops) { return finishDeletion([id], ops); }); }); }
 function deleteBook(id) {
@@ -411,9 +442,12 @@ function persist() { var st = root.navigator && root.navigator.storage; return s
 /* Retain failed writes for this visit. Unrelated successful writes cannot
    acknowledge them, and refresh must not overwrite a pending note. */
 var failures = {}, latest = {}, ticket = 0;
-function tracked(key, run, meta, ops) {
+function tracked(key, run, meta, ops, retrying) {
   var seq = ++ticket; latest[key] = seq;
   return serialWrite(function () {
+    /* A retry whose failed write was replaced by its turn (a commit queued
+       ahead of it dropped it) has nothing to put back. */
+    if (retrying && failures[key] !== retrying) return;
     if (ops.some(wasRemoved)) { var e = new Error('This unit was deleted.'); e.name = 'DeletedDocumentError'; throw e; }
     ops.forEach(function (o) {
       if (o.store === 'meta' && o.value && o.value.recs && (o.value.id === 'notes' || o.value.id === 'checks'))
@@ -435,7 +469,7 @@ function failureMessage() {
   }).join('; ');
 }
 function retryFailures() {
-  return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta, f.ops); }));
+  return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta, f.ops, f); }));
 }
 /* Replace the whole database (a backup restore) as one turn of the write
    queue. Every write queued before it runs first and is then cleared away
@@ -447,7 +481,7 @@ function retryFailures() {
 function replace(ops) {
   return serialWrite(function () { return batch(ops).then(function () { failures = {}; latest = {}; }); });
 }
-api.replace = replace;
+api.replace = replace; api.commit = commit;
 api.snapshot = function () { return afterWrites(snapshot); }; api.STORES = STORES.slice(); api.health = health; api.persist = persist; api.failureMessage = failureMessage; api.retryFailures = retryFailures;
 api.update = update; api.removalOps = removalOps; api.cleanImports = cleanImports; api.sweep = sweep; api.batch = batch; api.open = open; api.put = function (store, value) {
   var v = clone(value);
