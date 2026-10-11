@@ -197,7 +197,10 @@ function isEngineNoiseError(err, name = engineName()) {
    WHAT THIS COSTS, SAID OUT LOUD. A WebKit run does not exercise the fade.
    Chromium and Firefox still do. launch() prints that on every WebKit run, so
    a green one is never read as covering it, and SYSTOLE_WEBKIT_TRANSITIONS=1
-   puts the API back (rc does, to show the crash is still there). */
+   puts the API back for a run by hand. That the crash is still there is
+   re-checked on every push to rc, by rc-windows.yml's control step
+   (tools/rc-webkit-probe.js: raw Playwright, transitions left on, must crash),
+   not through this switch. */
 const NO_TRANSITIONS = () => { try { delete Document.prototype.startViewTransition; } catch (_) {} };
 function webkitTransitionsOff(name = engineName()) {
   return name === 'webkit' && process.env.SYSTOLE_WEBKIT_TRANSITIONS !== '1';

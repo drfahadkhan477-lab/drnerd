@@ -35,7 +35,7 @@ var ui = {
   docId: null, docRec: null, state: null,
   busy: '', busyKey: '', stepSeq: 0, moving: false, slowSaves: 0, rating: false, saveError: '', notice: '',
   error: '', choice: null, pasting: false,
-  importing: '', reviewShown: false, reviewDone: 0, drill: null,
+  importing: '', recutting: false, reviewShown: false, reviewDone: 0, drill: null,
 };
 
 /* ── tiny DOM helper: h('div.cls', {attrs}, children…) ─────────────────── */
@@ -412,7 +412,9 @@ function bookName(files) {
 /* Chapters → units. A chapter whose pages are unchanged keeps its unit, and
    so its progress and cards, whatever it is now called (cutting by another
    method renames chapters); the others are built from the book's stored
-   text, and units no chapter uses any more are deleted. */
+   text, and units no chapter uses any more are deleted. `book.chapters`
+   must be the chapters as stored: their units are the ones kept or
+   dropped (recut reads the book from the store for this). */
 function applyChapters(book, chapters, pages) {
   var old = {};
   (book.chapters || []).forEach(function (c) { if (c.docId) old[c.pageStart + ':' + c.pageEnd] = c.docId; });
@@ -529,15 +531,30 @@ function openBook(id) {
   refresh().then(function () { render(); root.scrollTo(0, 0); });
 }
 /* Cut the book again: by another method, or with one chapter joined to the
-   one before. Chapters left as they were keep their progress. */
+   one before. Chapters left as they were keep their progress.
+   One cut at a time, and no delete while one runs (viewBook disables both):
+   a second cut from the same screen dropped units the first had kept, and a
+   delete was undone by the cut's write — each left a book no backup would
+   restore. The flag holds until the screen is redrawn from the store. The
+   cut starts from the book as stored, so one tapped after Delete (whose
+   screen leaves only when it lands) finds no book. */
 function recut(book, chapters, method) {
-  ui.importing = 'Cutting the chapters again…'; render();
-  return bookPages(book).then(function (pages) {
-    var next = Object.assign({}, book, { method: method || book.method });
-    return applyChapters(next, chapters || Book.candidates(pages, book.outline, book.pages)[next.method], pages);
-  }).then(function () { ui.importing = ''; return refresh(); }).then(render, function (e) {
-    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+  if (ui.recutting) return Promise.resolve();
+  ui.recutting = true; ui.importing = 'Cutting the chapters again…'; render();
+  return Store.get('books', book.id).then(function (stored) {
+    if (!stored) return;
+    return bookPages(stored).then(function (pages) {
+      var next = Object.assign({}, stored, { method: method || stored.method });
+      return applyChapters(next, chapters || Book.candidates(pages, stored.outline, stored.pages)[next.method], pages);
+    });
+  }).then(function () { return refresh(); }).then(function () { ui.recutting = false; ui.importing = ''; render(); }, function (e) {
+    ui.recutting = false; ui.importing = ''; ui.error = (e && e.message) || String(e); render();
   });
+}
+function removeBook(b) {
+  if (ui.recutting) return;
+  if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
+  docsChanged(); return Store.deleteBook(b.id).then(function () { leave('shelf'); }, actionFailed);
 }
 
 function openDoc(id, section) {
@@ -1574,12 +1591,12 @@ function viewBook() {
           i > 0 ? button('Join to the chapter before', function () {
             if (!root.confirm('Join "' + c.title + '" to the chapter before it? Both start again; every other chapter keeps its progress.')) return;
             recut(b, Book.merge(b.chapters, i));
-          }, 'quiet', { 'data-join': String(i) }) : null)) : null);
+          }, 'quiet', { 'data-join': String(i), disabled: ui.recutting ? true : null }) : null)) : null);
   });
   var real = b.chapters.filter(function (c) { return !c.front; }).length;
   var studied = b.chapters.filter(function (c) { var d = c.docId && byId[c.docId]; return d && Home.unitPct(d, ui.sessions[d.id]) === 100; }).length;
   var methods = h('div.seg', { role: 'radiogroup', 'aria-label': 'Chapters found by', id: 'methods' }, Book.METHODS.map(function (m) {
-    return h('button', { type: 'button', role: 'radio', 'aria-checked': String(m === b.method), 'data-method': m,
+    return h('button', { type: 'button', role: 'radio', 'aria-checked': String(m === b.method), 'data-method': m, disabled: ui.recutting ? true : null,
         onclick: function () {
           if (m === b.method) return;
           if (!root.confirm('Cut "' + b.name + '" into chapters by ' + Book.LABELS[m].toLowerCase() + '? Chapters that change start again; the others keep their progress.')) return;
@@ -1598,10 +1615,7 @@ function viewBook() {
     h('h2.grid-title', 'Chapters (' + real + ')'),
     h('ul.units.tiles', { id: 'chapters' }, rows),
     b.scanned.length ? h('p.warn', 'Pages with no readable text: ' + b.scanned.slice(0, 12).join(', ') + (b.scanned.length > 12 ? '…' : '') + '.') : null,
-    h('div.row', button('Delete this book', function () {
-      if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
-      docsChanged(); Store.deleteBook(b.id).then(function () { leave('shelf'); }, actionFailed);
-    }, 'quiet danger', { id: 'delete-book' })));
+    h('div.row', button('Delete this book', function () { removeBook(b); }, 'quiet danger', { id: 'delete-book', disabled: ui.recutting ? true : null })));
 }
 
 /* Compare the sections taught so far, side by side, as one figure. */
@@ -2739,16 +2753,25 @@ function viewReview() {
     markStudied(); logActivity('review', {});
     /* A write that is slow to settle (waitForSave) moves on to the next
        card: the rating is put in memory so this card is not asked again
-       while it waits, and it is counted when it is stored. */
-    waitForSave(Store.put('cards', upd).then(function () {
-      if (dr) dr.done[card.id] = true;
-      if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id);
-      ui.saveError = Store.failureMessage() || ui.actionError; ui.reviewDone++;
-      return refresh();
-    }, saveFailed), function () {
+       while it waits, a confident miss is queued to be asked again as a
+       stored one is, and it is counted when it is stored. However the
+       rating ends, the next one is taken. A refresh() that fails after the
+       write landed (a lost IndexedDB connection) used to leave ui.rating set
+       and every later tap ignored; it now moves on with the rating put in
+       memory, as a slow one is. No "not saved" banner: the rating was
+       stored, and that banner's advice, to repeat it, would rate it twice. */
+    var askAgain = function () { if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id); };
+    var inMemory = function () {
       ui.cards = ui.cards.map(function (c) { return c.id === card.id ? upd : c; });
       if (dr) dr.done[card.id] = true;
-    }).then(next);
+      askAgain();
+    };
+    waitForSave(Store.put('cards', upd).then(function () {
+      if (dr) dr.done[card.id] = true;
+      askAgain();
+      ui.saveError = Store.failureMessage() || ui.actionError; ui.reviewDone++;
+      return refresh();
+    }, saveFailed), inMemory).then(next, function () { try { inMemory(); } finally { next(); } });
   };
   var head = h('div.review-head', h('span.count', isAgain ? 'Asked again · ' + ui.againQ.length + ' left' : dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'),
     h('span.muted', (names[card.docId] || '') + ' · ' + card.title));
@@ -3851,13 +3874,23 @@ function appearanceCard() {
 /* One export for the Settings button and the home reminder: the backup
    (backup.js), its download, and the day it was made, which the reminder
    counts from (Home.backupDue). */
+/* A copy the app would refuse to restore (MemBackup.exportChecked) is still
+   handed over, since it holds every book and note, but it is not counted as
+   a backup: the day is not recorded, so the reminder stays, and the reason
+   is said where the tap was (Settings, or the reminder on Home), with what
+   to do. It used to be counted, and the reminder went quiet over a file no
+   restore would take. */
 function exportBackup() {
-  ui.backupStatus = 'Preparing backup\u2026'; render();
-  return root.MemBackup.exportText().then(function (text) {
-    downloadBackup(text);
-    ui.lastBackup = today(); ui.backupStatus = 'Backup prepared. Save the downloaded file privately; it contains your books and notes.';
+  ui.backupStatus = ui.exportNote = 'Preparing backup\u2026'; render();
+  return root.MemBackup.exportChecked().then(function (r) {
+    downloadBackup(r.text);
+    if (r.problem) {
+      ui.backupStatus = ui.exportNote = 'Saved a copy, but the app would not restore it: ' + r.problem + ' Fix or delete what it names, then back up again.';
+      return;
+    }
+    ui.lastBackup = today(); ui.backupStatus = 'Backup prepared. Save the downloaded file privately; it contains your books and notes.'; ui.exportNote = '';
     return Store.put('meta', { id: 'last-backup', day: ui.lastBackup }).then(null, function () {});
-  }).then(render, function (err) { ui.backupStatus = err.message; render(); });
+  }).then(render, function (err) { ui.backupStatus = ui.exportNote = err.message; render(); });
 }
 function downloadBackup(text) {
   var url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = doc.createElement('a');
@@ -3961,7 +3994,8 @@ function backupNudge() {
   return h('div.card.note.backup-nudge', { id: 'backup-nudge', role: 'status' },
     h('p', h('strong', 'Back up your study. '), b.why),
     h('div.row', button('Back up now', function () { exportBackup(); }, 'primary', { id: 'nudge-backup' }),
-      button('Later', function () { ui.backupSnooze = today(); Store.put('meta', { id: 'backup-snooze', day: ui.backupSnooze }).then(null, function () {}); render(); }, 'quiet', { id: 'nudge-later' })));
+      button('Later', function () { ui.backupSnooze = today(); Store.put('meta', { id: 'backup-snooze', day: ui.backupSnooze }).then(null, function () {}); render(); }, 'quiet', { id: 'nudge-later' })),
+    ui.exportNote ? h('p', { id: 'nudge-status', role: 'status' }, ui.exportNote) : null);
 }
 
 /* ── Prepare for offline ──────────────────────────────────────────────────

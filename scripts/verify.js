@@ -46,6 +46,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, spawnSync, execSync } = require('child_process');
+const { childEnv } = require('./gitenv.js');   // a suite never inherits where git looks for a repository
 
 const ROOT = path.join(__dirname, '..');
 
@@ -736,6 +737,12 @@ const JOBS = jobsArg === 'auto' ? Math.max(1, Math.min(4, CORES - 1))
    against 23.6 serial, bought nothing, and cost three suites. Printing the
    comparison is enough; someone who knows their machine better than this does
    should still be able to ask for it. */
+/* THE FIRST LINE OF EVERY RUN ON STDOUT, and the same header the failure log
+   opens with. `node scripts/verify.js > 1.txt` keeps the failing suites' FAIL
+   lines, which can quote question text; leak-guard knows such a file by this
+   line (its rule 1b), so a redirect has to carry it. Before this, only
+   tests/last-run.log did, and a redirected run was not recognised. */
+console.log(`# systole verify — ${new Date().toISOString()}`);
 if (JOBS > 1 && JOBS >= CORES) {
   console.log(`\n  note: --jobs ${JOBS} on ${CORES} core${CORES === 1 ? '' : 's'}.`
     + ` Suites will contend; --jobs ${Math.max(1, CORES - 1)} or the default 1 is usually faster.`);
@@ -835,7 +842,7 @@ function runSuite(name, claim) {
   return new Promise(resolve => {
     const t = Date.now();
     const ch = spawn(process.execPath, [path.join(ROOT, 'tests', `verify-${name}.js`), TARGET], {
-      env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE },
+      env: childEnv({ NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE }),
       detached: process.platform !== 'win32',
     });
     activeChildren.add(ch);
@@ -1160,7 +1167,7 @@ if (flag('--pwa')) {
   pt = Date.now();
 
   const r = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
-                      { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE } }, PHASE_LIMIT, 'verify-pwa');
+                      { encoding: 'utf8', maxBuffer: 1 << 26, env: childEnv({ NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE }) }, PHASE_LIMIT, 'verify-pwa');
   const out = (r.stdout || '') + (r.stderr || '');
   phase('pwa', out, r.status, Date.now() - pt);
   const m = out.match(/(\d+)\s+passed,\s+(\d+)\s+failed/);

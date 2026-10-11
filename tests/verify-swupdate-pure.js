@@ -4,9 +4,12 @@
  *
  *   node tests/verify-swupdate-pure.js
  *
- * No browser, no build, no served directory. This lifts two things out of
- * scripts/build-pwa.js — the loader's build-pairing decision and the service
- * worker's cache-name derivation — and drives them directly.
+ * No browser, no build-pwa run, no served directory. This lifts two things out
+ * of scripts/build-pwa.js — the loader's build-pairing decision and the service
+ * worker's cache-name derivation — and drives them directly. For the second it
+ * assembles and extracts three small synthetic builds into a temporary folder
+ * (the last section), because what the content cache is keyed on is decided
+ * by the build, not by the worker.
  *
  * ── WHY THESE FIVE CASES ──────────────────────────────────────────────────
  *
@@ -75,7 +78,9 @@ function literal(open, close) {
 const LOADER = literal('const LOADER = `<script>', '</script>`;');
 const SW = literal('const SW = `', '\n`;');
 
-function lift(src, name, ...args) {
+/* scope: the names the lifted function reads from the file around it (fs,
+   path, …), handed in under the same names. */
+function lift(src, name, scope = {}) {
   const at = src.indexOf('function ' + name + '(');
   if (at < 0) throw new Error(`${name}() is no longer defined where this expects it`);
   let depth = 0, end = -1;
@@ -85,7 +90,7 @@ function lift(src, name, ...args) {
   }
   if (end < 0) throw new Error(`could not find the end of ${name}()`);
   /* eslint-disable-next-line no-new-func */
-  return new Function(`${src.slice(at, end)}\nreturn ${name};`)(...args);
+  return new Function(...Object.keys(scope), `${src.slice(at, end)}\nreturn ${name};`)(...Object.values(scope));
 }
 
 const pairVerdict = lift(LOADER, 'pairVerdict');
@@ -183,46 +188,17 @@ head('(c) a mismatch is a mismatch, down to one character');
 
 head('(d) an update must not cost the figures already on the device');
 {
-  /* A MODEL OF THE WORKER'S TWO CACHE NAMES, and it is a model — this helper
-     does not move when the worker does. So the three checks under it hold the
-     worker's own text to the same derivation, and they are what catches a
-     change there: keying CONTENT on SHELL_V instead fails the second of them
-     and none of the arithmetic below. Same division as (b) above — the rule
-     is checked by driving it, the wiring by reading it. */
-  const names = (shellV, contentV) => ({
-    shell: 'accsap-shell-' + shellV,
-    content: 'accsap-content-' + contentV,
-  });
-  ok('the worker derives the shell cache from the shell digest',
+  /* THE WIRING, read from the worker's text. What the two versions are and
+     what activate does with them is driven in the last section, over real
+     builds. A model stood here once: it named its own versions ('contentX'
+     before and after a code deploy) and stayed green while every code deploy
+     renamed the content bucket, because nothing it compared came from a build. */
+  ok('the worker derives the shell cache from SHELL_V',
      /const SHELL\s*=\s*'accsap-shell-'\s*\+\s*SHELL_V;/.test(SW));
-  ok('and the content cache from the content digest',
+  ok('and the content cache from CONTENT_V',
      /const CONTENT\s*=\s*'accsap-content-'\s*\+\s*CONTENT_V;/.test(SW));
   ok('and activate deletes everything that is neither',
      /ks\.filter\(k => k !== SHELL && k !== CONTENT\)/.test(SW));
-
-  /* A CODE-ONLY DEPLOY: the shell moves, the content does not. This is the
-     common case — a fix, a stylesheet, a new screen — and the 19 MB the
-     fellow pressed a button to download must survive it. */
-  const before = names('shellA', 'contentX');
-  const after = names('shellB', 'contentX');
-  const survives = n => n === after.shell || n === after.content;
-  ok('a code-only deploy renames the shell cache', before.shell !== after.shell);
-  ok('and does NOT rename the content cache', before.content === after.content);
-  ok('so the figures already downloaded survive it', survives(before.content));
-  ok('while the stale shell is evicted', !survives(before.shell));
-
-  /* A CONTENT DEPLOY: a new bank really is new, and the old figures are stale
-     rather than precious. Both halves, or "it never evicts" would pass. */
-  const newBank = names('shellB', 'contentY');
-  ok('a content deploy does rename the content cache', before.content !== newBank.content);
-  ok('so the old bank is evicted rather than served forever',
-     before.content !== newBank.shell && before.content !== newBank.content);
-
-  /* AND NOTHING ELSE SURVIVES. An earlier version keyed both buckets on the
-     content digest, so a code change evicted 15 MB; the check that the two
-     are keyed differently is what stops that coming back. */
-  ok('the two buckets are not keyed on the same thing',
-     names('same', 'same').shell !== names('same', 'same').content);
 }
 
 head('(e) the first install is not an update');
@@ -263,5 +239,145 @@ head('the build cannot ship a pair this would reject');
      /html\.indexOf\('__BUILD_ID__'\) < 0/.test(SRC) && /html\.indexOf\('__BUILD_ID__'\) >= 0/.test(SRC));
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+head('(d), driven: a code deploy keeps the content cache, a content deploy renames it');
+/* WHAT CONTENT_V IS MADE FROM IS DECIDED BY THE BUILD, so this builds. It was
+   content/manifest.json's sourceDigest, a digest of the whole single-file
+   build with its code and CSS, so a stylesheet fix renamed the content bucket
+   and activate deleted every figure a fellow had downloaded.
+
+   Three small synthetic builds, in a temporary folder: A; B, with one comment
+   added to app/css/base.css; C, with one question's stem changed. Each is
+   assembled by scripts/assemble-app.js and extracted by
+   scripts/extract-content.js into <build>/content, where dist/content would
+   be. Then build-pwa.js's own worker template is evaluated over that folder,
+   with contentVersion() lifted from build-pwa.js, and the worker it produces
+   is run in a sandbox. A whole build-pwa run would also write the notes, the
+   splash and the mesh under content/, and draw icons in a browser; the rule
+   for those files is driven on its own at the end.
+
+   WHAT THIS DOES NOT SEE: the folder hashed here is extract-content's, not
+   what build-pwa finally leaves in dist/content. build-pwa rewrites
+   questions.json there, so if it ever wrote something build-specific into
+   it (a stamp, a commit), a code deploy would rename the bucket again and
+   this would stay green. A real split build is what would show that. */
+(async () => {
+  const os = require('os');
+  const vm = require('vm');
+  const crypto = require('crypto');
+  const { spawnSync } = require('child_process');
+  const S = p => path.join(ROOT, 'scripts', p);
+  const Assemble = require(S('assemble-app.js'));
+  const Syn = require(S('synthetic-export.js'));
+  const contentVersion = lift(SRC, 'contentVersion', { fs, path, crypto });
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'swupdate-'));
+  try {
+    /* The notes go in the temporary folder too: left to its defaults the
+       assembler reads content/refs, the licensed library. */
+    const refsDir = path.join(tmp, 'refs'), imagesDir = path.join(tmp, 'refs-images');
+    fs.mkdirSync(refsDir); fs.mkdirSync(imagesDir);
+    const lib = Syn.syntheticRefs(1);
+    for (const [n, t] of lib.files) fs.writeFileSync(path.join(refsDir, n), t);
+    for (const [k, b] of lib.images) fs.writeFileSync(path.join(imagesDir, k), b);
+    const base = Assemble.producers({ exportHtml: Syn.syntheticExport(2), refsDir, imagesDir });
+    const shell = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
+    const variant = {
+      A: base,
+      B: (kind, name) => kind === 'app' && name === 'app/css/base.css'
+        ? base(kind, name) + '\n/* a code-only change */\n' : base(kind, name),
+      C: (kind, name) => {
+        if (kind !== 'payload' || name !== 'ALL_Q') return base(kind, name);
+        const bank = JSON.parse(base(kind, name));
+        bank[bank.length - 1].s += ' One more invented sentence.';
+        return JSON.stringify(bank);
+      },
+    };
+
+    /* The worker as build-pwa.js writes it: the template evaluated with the
+       names it interpolates. contentManifest is handed in as the build has it,
+       so a worker keyed on the build's digest again is measured rather than
+       refused as an unknown name. The shell digests are inputs to the
+       template, as in a build: B's code differs from A's, C's does not. */
+    const open = 'const SW = `', at = SRC.indexOf(open), end = SRC.indexOf('\n`;', at);
+    const template = new Function('contentVersion', 'path', 'DIST', 'contentManifest', 'shellDigest',
+      'BUILD_ID', 'COMMIT', 'NO_CONTENT', 'fontAssets', 'return `' + SRC.slice(at + open.length, end) + '\n`;');
+    const shellDigest = { A: 'aaaaaaaaaaaaaaaa', B: 'bbbbbbbbbbbbbbbb', C: 'aaaaaaaaaaaaaaaa' };
+    /* Run in a sandbox over a CacheStorage holding what a device already has;
+       activate's deletions are recorded. */
+    const deploy = async (sw, have) => {
+      const on = {}, kept = new Set(have);
+      const self = { addEventListener: (t, f) => { on[t] = f; }, clients: { claim: async () => {} } };
+      const caches = { keys: async () => [...kept], delete: async k => kept.delete(k) };
+      const names = vm.runInNewContext(sw + '\n;({ SHELL, CONTENT, CONTENT_V });', { self, caches });
+      let job;
+      on.activate({ waitUntil: p => { job = p; } });
+      await job;
+      return { names, kept: [...kept] };
+    };
+
+    const b = {};
+    for (const k of Object.keys(variant)) {
+      const html = path.join(tmp, k + '.html'), dist = path.join(tmp, k), dc = path.join(dist, 'content');
+      fs.writeFileSync(html, Assemble.assembleApp({ shell, resolve: variant[k], commit: 'abc123def456' }).out);
+      const x = spawnSync(process.execPath, [S('extract-content.js'), html, dc], { encoding: 'utf8' });
+      if (x.status !== 0) throw new Error(`extract-content refused build ${k} (exit ${x.status})`);
+      const manifest = JSON.parse(fs.readFileSync(path.join(dc, 'manifest.json'), 'utf8'));
+      const sw = template(contentVersion, path, dist, manifest, shellDigest[k], '0123456789abcdef', 'abc123def456', false, []);
+      const figs = fs.readdirSync(path.join(dc, 'figures')).sort();
+      b[k] = { sw, manifest, figs, names: (await deploy(sw, [])).names,
+               bank: fs.readFileSync(path.join(dc, 'questions.json')),
+               figBytes: Buffer.concat(figs.map(f => fs.readFileSync(path.join(dc, 'figures', f)))) };
+    }
+    const { A, B, C } = b;
+
+    /* Preconditions: B is a different build with the same content, C a
+       different bank. Without them the checks after would compare nothing
+       that moved. */
+    ok('the code-only change reached the build: A and B have different digests',
+       A.manifest.sourceDigest !== B.manifest.sourceDigest, `${A.manifest.sourceDigest} / ${B.manifest.sourceDigest}`);
+    ok('and left the bank and every figure byte for byte as they were',
+       A.figs.length > 0 && A.bank.equals(B.bank) && A.figs.join() === B.figs.join() && A.figBytes.equals(B.figBytes),
+       `${A.figs.length} figures`);
+    ok('the content change reached the bank', !A.bank.equals(C.bank));
+
+    const v = k => b[k].names.CONTENT_V;
+    ok('each worker names a content version', ['A', 'B', 'C'].every(k => /^[0-9a-f]{16}$/.test(v(k))),
+       `${v('A')} / ${v('B')} / ${v('C')}`);
+    ok('a code-only deploy keeps the content cache\'s name', v('A') === v('B'), `${v('A')} / ${v('B')}`);
+    ok('a content deploy renames it', v('A') !== v('C'));
+
+    /* The device has A's two caches when B arrives, or when C does. */
+    const device = [A.names.SHELL, A.names.CONTENT];
+    const afterB = (await deploy(B.sw, device)).kept, afterC = (await deploy(C.sw, device)).kept;
+    ok('so the figures a fellow downloaded survive a code deploy', afterB.includes(A.names.CONTENT), afterB.join(', '));
+    ok('while the old shell is deleted', !afterB.includes(A.names.SHELL), afterB.join(', '));
+    ok('and a content deploy deletes the old bank rather than serving it forever',
+       !afterC.includes(A.names.CONTENT), afterC.join(', '));
+
+    /* THE REST OF dist/content/, which only a whole build-pwa run writes: a
+       folder in its shape, changed one file at a time. */
+    const dc = path.join(tmp, 'rule');
+    const put = (rel, body) => {
+      fs.mkdirSync(path.dirname(path.join(dc, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dc, rel), body);
+    };
+    put('questions.json', '[]'); put('figures/X_1.png', 'f'); put('refs-seed.json', '[]');
+    put('refs-images/u.json', '{}'); put('splash-heart/heart.webp', 'h');
+    put('heart-mesh-0123456789ab.bin', 'm'); put('manifest.json', '{}');
+    const v0 = contentVersion(dc);
+    put('refs-images/u.json', '{"u/a.png":"x"}');
+    const v1 = contentVersion(dc);
+    ok('a note figure file is content: changing one renames the bucket', v1 !== v0);
+    put('splash-heart/heart.webp', 'h2');
+    const v2 = contentVersion(dc);
+    ok('so is the splash heart, which is served under a fixed name', v2 !== v1);
+    fs.rmSync(path.join(dc, 'heart-mesh-0123456789ab.bin'));
+    put('heart-mesh-ba9876543210.bin', 'm2');
+    ok('a new heart mesh, named by its own digest and baked from code, is not', contentVersion(dc) === v2);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+})().catch(e => ok('the driven deploys ran to the end', false, e.message))
+  .then(() => {
+    console.log(`\n${passed} passed, ${failed} failed`);
+    process.exit(failed ? 1 : 0);
+  });

@@ -47,6 +47,9 @@ function map(value, decode) {
     out[k] = map(value[k], decode);
   }); return out;
 }
+/* A reason that names the record, by the name the fellow knows it by, where
+   it has one: "Incomplete book" alone left nothing to act on. */
+function which(reason, r) { return r && typeof r.name === 'string' && r.name ? reason + ': "' + r.name + '".' : reason + '.'; }
 function validate(stores) {
   if (!stores || typeof stores !== 'object' || Object.keys(stores).length !== Store.STORES.length) throw new Error('Incomplete backup stores.');
   Store.STORES.forEach(function (s) {
@@ -60,14 +63,14 @@ function validate(stores) {
   var docs = {}, files = {};
   stores.files.forEach(function (r) { if (!(r.bytes instanceof ArrayBuffer) && !ArrayBuffer.isView(r.bytes)) throw new Error('PDF bytes are missing.'); files[r.id] = true; });
   stores.docs.forEach(function (d) { if (!Array.isArray(d.clusters) || !d.clusters.length || d.clusters.some(function (c) { return !c || typeof c.text !== 'string' || !Array.isArray(c.segments); })) throw new Error('Invalid document.'); docs[d.id] = d; });
-  stores.docs.forEach(function (d) { if (d.hasFile && !(d.parts ? d.parts.every(function (p) { return files[p.fileId]; }) : files[d.id])) throw new Error('A document is missing its PDF.'); });
+  stores.docs.forEach(function (d) { if (d.hasFile && !(d.parts ? d.parts.every(function (p) { return files[p.fileId]; }) : files[d.id])) throw new Error(which('A document is missing its PDF', d)); });
   stores.sessions.forEach(function (r) { if (!docs[r.id] || !r.state || r.state.docId !== r.id || !r.state.per || !Array.isArray(r.state.titles) || r.state.titles.length !== docs[r.id].clusters.length) throw new Error('Invalid session.'); });
   stores.cards.forEach(function (c) { if (!docs[c.docId] || !Number.isInteger(c.cluster) || !docs[c.docId].clusters[c.cluster]) throw new Error('A card has no source section.'); });
-  stores.books.forEach(function (b) { if (!Array.isArray(b.parts) || !Array.isArray(b.chapters) || b.parts.some(function (p) { return !files[p.fileId]; }) || b.chapters.some(function (c) { return c.docId && !docs[c.docId]; })) throw new Error('Incomplete book.'); });
+  stores.books.forEach(function (b) { if (!Array.isArray(b.parts) || !Array.isArray(b.chapters) || b.parts.some(function (p) { return !files[p.fileId]; }) || b.chapters.some(function (c) { return c.docId && !docs[c.docId]; })) throw new Error(which('Incomplete book', b)); });
   ['packs', 'vectors'].forEach(function (s) { stores[s].forEach(function (r) { if (!docs[r.id]) throw new Error('Derived data has no document.'); }); });
   return stores;
 }
-function exportText() {
+function exportStores() {
   return Store.snapshot().then(function (stores) {
     // Incomplete imports are temporary, not user-visible study data.
     var staged = stores.meta.filter(function (r) { return r.kind === 'pending-import'; });
@@ -76,8 +79,25 @@ function exportText() {
       stores.bookpages = stores.bookpages.filter(function (p) { return (r.pages || []).indexOf(p.id) === -1; });
     });
     stores.meta = stores.meta.filter(function (r) { return r.kind !== 'pending-import'; });
-    var payload = JSON.stringify(map(stores, false));
-    return Prov.fingerprint(payload).then(function (checksum) { return JSON.stringify({ format: FORMAT, version: VERSION, created: new Date().toISOString(), checksum: checksum, payload: payload }); });
+    return stores;
+  });
+}
+function seal(stores) {
+  var payload = JSON.stringify(map(stores, false));
+  return Prov.fingerprint(payload).then(function (checksum) { return JSON.stringify({ format: FORMAT, version: VERSION, created: new Date().toISOString(), checksum: checksum, payload: payload }); });
+}
+function exportText() { return exportStores().then(seal); }
+/* The file, and whether restore() would take it (problem: inspect()'s
+   reason, or null). The file is made either way. One a restore would refuse
+   still holds every book and note, and refusing to make it left a fellow
+   whose data had one bad record (a chapter whose unit is gone) with no copy
+   at all; ui.js exportBackup hands it over but does not count it as a
+   backup. validate() reads the records as stored, before map() encodes them. */
+function exportChecked() {
+  return exportStores().then(function (stores) {
+    var problem = null;
+    try { validate(stores); } catch (e) { problem = e.message; }
+    return seal(stores).then(function (text) { return { text: text, problem: problem }; });
   });
 }
 function inspect(text) {
@@ -98,5 +118,5 @@ function restore(text) {
     return Store.replace(ops).then(function () { return r; });
   });
 }
-root.MemBackup = { exportText: exportText, inspect: inspect, restore: restore, VERSION: VERSION };
+root.MemBackup = { exportText: exportText, exportChecked: exportChecked, inspect: inspect, restore: restore, VERSION: VERSION };
 })(typeof window !== 'undefined' ? window : this);

@@ -130,8 +130,8 @@ const FILES = ['tests/last-run.log'];
 /* RULE 1b, AND IT IS HERE BECAUSE OF A FILE CALLED tests/1.txt.
  *
  * `node scripts/verify.js > 1.txt` is the obvious thing to type when you want
- * to keep a run, and what it writes is byte-for-byte what tests/last-run.log
- * holds — suite output, which quotes question text. FILES above blocks that
+ * to keep a run, and what it writes carries the failing suites' output, as
+ * tests/last-run.log does — and suite output quotes question text. FILES above blocks that
  * log BY NAME, so the identical content under any other name walked past
  * every rule in this file: not in a licensed directory, not an ACCSAP
  * filename, and a failing run's log is comfortably under both the 1 MB cap
@@ -142,8 +142,10 @@ const FILES = ['tests/last-run.log'];
  * file's header draws about .gitignore — a default is not a boundary.
  *
  * So the log is recognised by what it SAYS rather than what it is called.
- * scripts/verify.js writes this header as the first line of every run, so
- * there is one spelling of it and the guard moves when the runner does. */
+ * scripts/verify.js prints this header as the first line of every run on
+ * stdout, and opens tests/last-run.log with it, so there is one spelling of
+ * it and the guard moves when the runner does. (Until the master review of
+ * 2026-10-10 only the log carried it, and a redirected run walked past.) */
 const LOGHEAD = /^#\s*systole verify\s+—/;
 /* RULE 6: THE OWNER'S TEXTBOOK, BY WAY OF MEMORIZER.
  *
@@ -252,7 +254,7 @@ function blobSources(entries) {
   return entries.map(e => ({ file: e.file, src: {
     size: size.get(e.blob),
     head: n => body.has(e.blob) ? body.get(e.blob).slice(0, n) : Buffer.alloc(0),
-    text: () => body.get(e.blob).toString('utf8'),
+    text: () => decode(body.get(e.blob)),
   } }));
 }
 
@@ -269,8 +271,19 @@ function diskSource(file) {
       try { const b = Buffer.alloc(Math.min(n, st.size)); fs.readSync(fd, b, 0, b.length, 0); return b; }
       finally { fs.closeSync(fd); }
     },
-    text: () => fs.readFileSync(file, 'utf8'),
+    text: () => decode(fs.readFileSync(file)),
   };
+}
+
+/* TEXT AS ITS WRITER ENCODED IT. Windows PowerShell 5.1's `>` writes UTF-16LE
+   with a byte-order mark, and `Out-File -Encoding utf8` writes UTF-8 with one;
+   read as plain UTF-8 the first is noise and the second does not start with
+   what it says, so every text rule below looked straight past them. */
+function decode(buf) {
+  if (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) return buf.subarray(3).toString('utf8');
+  if (buf[0] === 0xFF && buf[1] === 0xFE) return buf.subarray(2).toString('utf16le');
+  if (buf[0] === 0xFE && buf[1] === 0xFF) return Buffer.from(buf.subarray(2, buf.length - (buf.length % 2))).swap16().toString('utf16le');
+  return buf.toString('utf8');
 }
 
 function inspect(file, src) {
@@ -295,7 +308,10 @@ function inspect(file, src) {
      line is enough to recognise it and costs nothing on anything else. */
   if (st.size > 0) {
     let head;
-    try { head = st.head(200).toString('utf8').split('\n')[0]; } catch (e) { cannot(`read ${file}`, e); }
+    /* The first line that is not blank and not npm's own echo of the script
+       (`npm run verify > 1.txt` starts with "> systole@… verify" lines). A
+       file that only mentions the header further down is not a log. */
+    try { head = decode(st.head(600)).split(/\r?\n/).find(l => l.trim() && !/^> /.test(l)) || ''; } catch (e) { cannot(`read ${file}`, e); }
     if (LOGHEAD.test(head))
       return { rule: 'LOG', why: 'a verify run log under another name — suite output quotes question text' };
   }
