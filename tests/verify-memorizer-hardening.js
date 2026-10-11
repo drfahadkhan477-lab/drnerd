@@ -849,6 +849,46 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
        got.method === 'pages' && got.unit && got.problem === null, JSON.stringify(got));
   }
 
+  head('an import is refused while a backup is being restored');
+  /* The other order: an import's parts are staged as they are read, outside
+     the write queue, so one staged before the restore's replacement commits
+     is cleared by it. Here the replacement is held until __landRestore. */
+  {
+    const r = await context('import-restore');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Restore first'); await r.locator('#learn-unit').waitFor(T);
+    const backup = await r.evaluate(() => MemBackup.exportText());
+    await r.evaluate(() => {
+      window.__realReplace = MemStore.replace;
+      MemStore.replace = ops => new Promise((res, no) => { window.__landRestore = () => window.__realReplace(ops).then(res, no); });
+      MemPdf.read = () => Promise.resolve({ pages: [], wordCounts: [], numPages: 1, figures: [], ocr: [], outline: [] });
+    });
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await r.locator('#backup-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+    await r.locator('#backup-restore').waitFor(T);
+    await r.locator('#backup-restore').click();
+    await r.waitForFunction(() => typeof window.__landRestore === 'function', null, T);
+    /* an import the guard let through is cancelled at once, so the rest still runs */
+    const during = await r.evaluate(() => { Memorizer.importBook([new File(['first'], 'Late_1-1.pdf')]); const job = Memorizer.ui.importJob; if (job) job.cancelled = true; return { job: !!job, notice: Memorizer.ui.notice }; });
+    ok('an import tapped while a backup is being restored is refused, and says why',
+       !during.job && during.notice === 'A backup is being restored. Import once it has finished.', JSON.stringify(during));
+    await r.waitForFunction(() => !Memorizer.ui.importJob, null, T);
+    await r.evaluate(() => { MemStore.replace = window.__realReplace; window.__landRestore(); });
+    await r.waitForFunction(() => Memorizer.ui.notice === 'Backup restored.', null, T);
+    const after = await r.evaluate(() => { Memorizer.importBook([new File(['first'], 'Late_1-1.pdf')]); const job = Memorizer.ui.importJob; if (job) job.cancelled = true; return { job: !!job, restoring: Memorizer.ui.restoring }; });
+    ok('and once the restore has landed, an import starts', after.job && after.restoring === false, JSON.stringify(after));
+    /* and once one has failed: the replacement refused, as a full disk would */
+    await r.waitForFunction(() => !Memorizer.ui.importJob, null, T);
+    await r.evaluate(() => { MemStore.replace = () => Promise.reject(new Error('synthetic restore refusal')); });
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await r.locator('#backup-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+    await r.locator('#backup-restore').waitFor(T);
+    await r.locator('#backup-restore').click();
+    await r.waitForFunction(() => Memorizer.ui.backupStatus === 'synthetic restore refusal', null, T);
+    const failed = await r.evaluate(() => { MemStore.replace = window.__realReplace; Memorizer.importBook([new File(['first'], 'Late_1-1.pdf')]); const job = Memorizer.ui.importJob; if (job) job.cancelled = true; return { job: !!job, restoring: Memorizer.ui.restoring }; });
+    ok('and once a restore has failed, an import starts too', failed.job && failed.restoring === false, JSON.stringify(failed));
+    await r.waitForFunction(() => !Memorizer.ui.importJob, null, T);
+  }
+
   head('a study pack whose write is held is still applied, and so is its removal');
   /* The pack's own write was the one write of an import, or of a removal,
      not waited on as a step's save is: held, the screen waited on it for

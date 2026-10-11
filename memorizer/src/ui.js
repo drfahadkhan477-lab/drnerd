@@ -35,7 +35,7 @@ var ui = {
   docId: null, docRec: null, state: null,
   busy: '', busyKey: '', stepSeq: 0, moving: false, slowSaves: 0, rating: false, saveError: '', notice: '',
   error: '', choice: null, pasting: false,
-  importing: '', recutting: false, reviewShown: false, reviewDone: 0, drill: null,
+  importing: '', recutting: false, restoring: false, reviewShown: false, reviewDone: 0, drill: null,
 };
 
 /* ── tiny DOM helper: h('div.cls', {attrs}, children…) ─────────────────── */
@@ -326,9 +326,14 @@ function duplicate(fp) {
   return true;
 }
 /* Only one import owns progress and staged records at a time. Cancellation
-   is checked between pages and immediately before the final transaction. */
+   is checked between pages and immediately before the final transaction.
+   None starts while a backup is being restored: its parts are staged as they
+   are read, outside the write queue, and one staged before the restore's
+   replacement committed was cleared by it, as a restore tapped during an
+   import cleared them (the restore refuses that order). */
 function beginImport() {
   if (ui.importJob) { ui.notice = 'An import is already running. Finish or cancel it first.'; render(); return null; }
+  if (ui.restoring) { ui.notice = 'A backup is being restored. Import once it has finished.'; render(); return null; }
   var job = { cancelled: false, committing: false }; ui.importJob = job; return job;
 }
 function checkImport(job) { if (job && job.cancelled) { var e = new Error('Import cancelled.'); e.cancelled = true; throw e; } }
@@ -3936,12 +3941,12 @@ function storageCard() {
              Refused, the data is as it was and the file is still to hand. */
           var busy = ui.importJob ? 'an import is running. Finish or cancel it' : ui.recutting ? 'a book’s chapters are being cut again. Wait for that to finish' : '';
           if (busy) { ui.backupStatus = 'Not restored: ' + busy + ', then restore the backup.'; render(); return; }
-          ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; render();
+          ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; ui.restoring = true; render();
           root.MemBackup.restore(text).then(function () {
-            ui.lastBackup = undefined; ui.backupSnooze = undefined;
+            ui.restoring = false; ui.lastBackup = undefined; ui.backupSnooze = undefined;
             ui.docId = null; ui.docRec = null; ui.state = null; ui.bytesFor = null; ui.bytes = null; byteLoads = {}; Pdf.release(); ui.drafts = {}; ui.actionError = ''; ui.saveError = ''; ui.askIdx = null; ui.secVecs = null; ui.storageHealth = null;
             docsChanged(); ui.view = 'library'; ui.notice = 'Backup restored.'; return refresh();
-          }).then(render, function (err) { ui.backupStatus = err.message; render(); });
+          }).then(render, function (err) { ui.restoring = false; ui.backupStatus = err.message; render(); });
         }, 'primary', { id: 'backup-restore' })));
       close = Dialog.open(el, doc.getElementById('app'));
     }); }).catch(function (err) { ui.backupStatus = 'Not restored: ' + err.message; render(); });
