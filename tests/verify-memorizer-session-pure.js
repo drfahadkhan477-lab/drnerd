@@ -442,6 +442,17 @@ head('a section deleted: everything that names a section is renumbered');
      /review/.test(threw(() => S.dropSection(Object.assign({}, st, { phase: 'review', review: {} }), 0))) &&
      /no section 7/.test(threw(() => S.dropSection(st, 7))) && /no section -1/.test(threw(() => S.dropSection(st, -1))) &&
      /at least one section/.test(threw(() => S.dropSection(S.init('v', ['only']), 0))));
+  /* A review round left by Back (toUnit) is left: the unit page that follows
+     must let a section go. A round kept in the state after it was left
+     refused this with "leave the review first", from a review already left. */
+  let lr = drill(S.init('lr', ['A', 'B', 'C']), 0, 2, [false, true]);
+  lr = drill(lr, 1, 2, [true, true]);
+  lr = go(lr, { type: 'toReview' });
+  const inRound = lr.phase === 'review' && !!lr.review;
+  lr = go(lr, { type: 'toUnit' });
+  const leftRound = threw(() => S.dropSection(lr, 2));
+  ok('a review round left for the unit page is left: its sections can be deleted', inRound && lr.phase === 'unit' && lr.review === null && leftRound === '',
+     JSON.stringify({ inRound, phase: lr.phase, review: !!lr.review, threw: leftRound }));
   const kept = S.dropCards([{ id: 'a', docId: 'u', cluster: 1 }, { id: 'b', docId: 'u', cluster: 2, srs: { s: 1 } }, { id: 'c', docId: 'u', cluster: 0 }, { id: 'd', docId: 'w', cluster: 1 }], 'u', 1);
   ok('the review cards on the device: the deleted section’s to remove, the later renumbered, other units untouched',
      JSON.stringify(kept.drop) === '["a"]' && kept.renumbered.length === 1 && kept.renumbered[0].id === 'b' && kept.renumbered[0].cluster === 1 && kept.renumbered[0].srs.s === 1,
