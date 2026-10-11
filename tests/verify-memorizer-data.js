@@ -110,8 +110,14 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
     const nb = dl ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
     ok('"Back up now" saves the app’s backup, named for the day', !!dl && /^memorizer-backup-\d{4}-\d\d-\d\d\.json$/.test(dl.suggestedFilename()) &&
        nb.format === 'memorizer-backup' && /^(sha256|fnv1a64):/.test(nb.checksum) && typeof nb.payload === 'string', dl ? dl.suggestedFilename() + ' ' + Object.keys(nb).join(',') : 'no download');
-    await p.waitForFunction(() => !document.getElementById('backup-nudge'), null, { timeout: 5000 }).catch(() => {});
-    ok('and the reminder goes, the day remembered', await p.evaluate(() => MemStore.get('meta', 'last-backup').then(m => m && m.day)) === day());
+    /* a precondition, not the claim: the export has finished and been drawn
+       ("Preparing backup…" is on screen from the tap until the redraw that
+       follows the day being stored). Both halves are then the check: the
+       reminder used to be waited for here with its timeout swallowed, and
+       only the stored day was asserted, so a reminder that stayed passed. */
+    await p.waitForFunction(() => !/Preparing/.test((document.getElementById('nudge-status') || {}).textContent || ''), null, T).catch(() => {});
+    const after = await p.evaluate(() => MemStore.get('meta', 'last-backup').then(m => ({ day: m ? m.day : null, nudge: !!document.getElementById('backup-nudge') })));
+    ok('and the reminder goes, the day remembered', !after.nudge && after.day === day(), JSON.stringify(after));
     await ctx.close();
 
     head('a copy the app would not restore is handed over, not counted');
