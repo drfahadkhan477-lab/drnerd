@@ -4964,6 +4964,7 @@ async function geminiModels(key){
     }catch(err){ return {error:networkErrorMsg(err,'Gemini'), models:[], raw:[]}; }
     if(apexSessionLapsed(r)) return {error:APEX_LAPSED, models:[], raw:[]};
     if(!r.ok) return {error:await apiError(r,'gemini'), models:[], raw:[]};
+    relayAnswered(r);
     let j={}; try{ j=await r.json(); }catch(_){}
     for(const m of (j.models||[])){
       const id=String(m.name||'').replace(/^models\//,'');
@@ -5244,7 +5245,8 @@ async function oneShot(prompt,maxTokens){
       headers:gemHeaders(k,true),
       body:JSON.stringify({generationConfig:{maxOutputTokens:maxTokens},
         contents:[{role:'user',parts:[{text:prompt}]}]})});
-    if(!r.ok) return '';
+    if(!r.ok || apexSessionLapsed(r)) return '';
+    relayAnswered(r);
     const j=await r.json();
     const parts=((j.candidates||[])[0]||{}).content;
     return ((parts&&parts.parts)||[]).map(x=>x.text||'').join('');
@@ -5260,8 +5262,12 @@ async function summariseSession(){
   if(typeof Memory==='undefined') return;
   sessionSummarised=true;
   try{
-    /* Hosted needs no key, as in buildAI and oneShot. */
-    if(!cur().key && !(AI.provider==='gemini' && apexHosted())) return;
+    /* Hosted needs no key, as in buildAI and oneShot. But a summary is a call
+       nobody asked for, so hosted it waits until this site's relay has
+       answered one that was asked for (relayKnown): served with no Worker
+       behind it (scripts/serve.js on a LAN, IPAD.md), the relay is a 404 that
+       every sitting would otherwise send, and the browser log. */
+    if(!cur().key && !(AI.provider==='gemini' && apexHosted() && relayKnown())) return;
     const answered=S.sessionTotal||0;
     const turns=Object.values(CHATS||{}).reduce((n,t)=>n+(t?t.length:0),0);
     if(answered<5 && turns<4) return;
@@ -5334,6 +5340,7 @@ async function oneTurnGemini(q,wire,extra){
   });
   if(apexSessionLapsed(r)) throw new Error(APEX_LAPSED);
   if(!r.ok) throw new Error(await apiError(r,'gemini'));
+  relayAnswered(r);
   const rd=r.body.getReader(), dec=new TextDecoder();
   const live=document.getElementById('aiLive'), body=document.getElementById('aiBody');
   /* Gemini streams whole parts, not token deltas inside a block envelope: a
@@ -5408,6 +5415,11 @@ function errMsg(j){
 function viaRelay(r){
   try{ return new URL(r.url,location.href).pathname.indexOf(APEX_API+'/')===0; }catch(_){ return false; }
 }
+/* Whether this site's relay has ever answered: set by a hosted call that came
+   back ok and was not Access's sign-in page. summariseSession reads it. */
+const RELAY_OK_KEY='accsap12.relayok';
+function relayAnswered(r){ if(r&&r.ok&&viaRelay(r)){ try{ localStorage.setItem(RELAY_OK_KEY,'1'); }catch(_){} } }
+function relayKnown(){ try{ return localStorage.getItem(RELAY_OK_KEY)==='1'; }catch(_){ return false; } }
 async function apiError(r,provider){
   let d=''; try{ d=errMsg(await r.json()); }catch(_){}
   const name='Gemini';

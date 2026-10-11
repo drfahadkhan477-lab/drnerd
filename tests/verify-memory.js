@@ -370,11 +370,34 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
     await page.goto(HOSTED_PAGE, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
   }
-  hosted.length = 0; gem.length = 0; hostedAnswers = true;
-  const hostedRun = await page.evaluate(async () => {
+  /* But a summary is a call nobody asked for, so hosted it waits until this
+     site's relay has answered one that was asked for. Served with no Worker
+     behind it (scripts/serve.js on a LAN, docs/IPAD.md) the relay is a 404,
+     which every sitting would otherwise send and the browser log. This origin
+     is fresh, so nothing has answered here yet; and Access's sign-in page, all
+     a lapsed session gets, is not the relay answering. */
+  hosted.length = 0; gem.length = 0; hostedAnswers = false;
+  const unasked = await page.evaluate(async () => {
     Memory.clear();
     AI.provider = 'gemini';
     AI.gemini = { key: '', model: 'gemini-9.9-flash' };
+    const listed = await geminiModels('');
+    S.sessionCorrect = 14; S.sessionTotal = 20; sessionSummarised = false;
+    await summariseSession();
+    return { lapsed: listed.error === APEX_LAPSED, known: relayKnown(), n: Memory.count() };
+  });
+  const sentBefore = hosted.filter(h => /\/api\/apex\/gemini\/generate\?/.test(h.url)).length;
+  ok('(so far the relay has sent only Access\'s sign-in page, to a models call)',
+     unasked.lapsed && hosted.length === 1, `${hosted.length} relay calls, lapsed ${unasked.lapsed}`);
+  ok('which is not the relay answering, so the sitting\'s summary is not sent',
+     !unasked.known && sentBefore === 0 && unasked.n === 0, JSON.stringify(Object.assign({ sentBefore }, unasked)));
+
+  hostedAnswers = true;
+  const marked = await page.evaluate(async () => { await geminiModels(''); return relayKnown(); });
+  ok('(a models call the fellow makes is answered by the relay)', marked === true);
+  hosted.length = 0; gem.length = 0;
+  const hostedRun = await page.evaluate(async () => {
+    Memory.clear();
     S.sessionCorrect = 14; S.sessionTotal = 20; sessionSummarised = false;
     const wasHosted = apexHosted();
     await summariseSession();
