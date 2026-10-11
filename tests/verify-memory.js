@@ -33,12 +33,6 @@ let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 const flat = t => String(t || '').replace(/\s+/g, ' ');
 
-const SSE = [
-  'data: {"choices":[{"delta":{"content":"Noted."}}]}',
-  'data: [DONE]',
-  '',
-].join('\n\n');
-
 const GEM_SSE = 'data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Noted."}]}}]}\n\n';
 
 /* What the summariser's one-shot call returns. Three lines plus a blank and a
@@ -67,18 +61,10 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
-  const mist = [], gem = [];
-  await page.route('**/v1/chat/completions', route => {
-    let b = null; try { b = JSON.parse(route.request().postData() || '{}'); } catch (_) {}
-    mist.push(b);
-    /* The summariser is the only non-streaming Mistral call this app makes. */
-    if (b && !b.stream) {
-      route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ choices: [{ message: { content: SUMMARY } }] }) });
-      return;
-    }
-    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
-  });
+  /* Gemini only. A capture for the retired Mistral route stayed here after
+     nothing could reach it, and a check counted it: an array that can only be
+     empty passes every "no call was made" asked of it. */
+  const gem = [];
   await page.route('**/generativelanguage.googleapis.com/**', route => {
     const url = route.request().url();
     let b = null; try { b = JSON.parse(route.request().postData() || '{}'); } catch (_) {}
@@ -167,7 +153,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   ok('memories are still there after a reload', survived.n === 3 && survived.has, 'count ' + survived.n);
 
   const ask = async (provider) => {
-    mist.length = 0; gem.length = 0;
+    gem.length = 0;
     await page.evaluate(async (provider) => {
       AI.provider = provider;
       AI.gemini = { key: 'AQ.test', model: 'gemini-9.9-flash' };
@@ -179,8 +165,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
       fire('why is this the answer?');
     }, provider);
     await page.waitForTimeout(1500);
-    return provider === 'mistral' ? mist.find(Boolean)
-      : (gem.find(g => /:streamGenerateContent/.test(g.url)) || {}).body;
+    return (gem.find(g => /:streamGenerateContent/.test(g.url)) || {}).body;
   };
 
   /* THIS SECTION USED TO RUN TWICE, once per provider, and the point of the
@@ -298,10 +283,16 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   ok('list punctuation is stripped from the model output',
      summ.texts.every(t => !/^[-•*\d.]/.test(t)), JSON.stringify(summ.texts));
 
-  mist.length = 0;
+  /* Counted on the wire the summariser uses. This read the Mistral capture,
+     which nothing has called since that provider was retired, so it was always
+     empty and passed with the sessionSummarised guard deleted. "Exactly one
+     non-streaming call was made", above, is what shows this capture sees a
+     one-shot call at all. */
+  gem.length = 0;
   await page.evaluate(() => summariseSession());
   await page.waitForTimeout(500);
-  ok('it will not fire twice for one sitting', mist.filter(b => b && !b.stream).length === 0);
+  const again = gem.filter(g => /:generateContent/.test(g.url)).length;
+  ok('it will not fire twice for one sitting', again === 0, again + ' more call(s)');
 
   const thin = await page.evaluate(async () => {
     Memory.clear();
