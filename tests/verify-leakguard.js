@@ -161,11 +161,69 @@ head('it refuses the licensed bank, by every route in');
   ok('an ACCSAP export is refused wherever it has been moved to',
      r.code === 1 && /NAME/.test(r.out));
 
-  /* 3. SIZE — a figure, or anything else outsized, under a name nobody guessed. */
+  /* 3. SIZE — anything outsized, under a name nobody guessed. Not a figure:
+     the bytes are not an image, and a real figure is far under the cap (3b). */
   const big = write('holiday-photo.bin', Buffer.alloc(1024 * 1024 + 1, 7));
   r = run([big]);
   ok('anything over 1 MB is refused', r.code === 1 && /SIZE/.test(r.out),
      r.out.match(/SIZE.*/)?.[0]?.trim().slice(0, 50));
+
+  /* 3b. IMAGE — A REAL FIGURE, AT A REAL FIGURE'S SIZE. The guard's header
+     gave "drags a figure into assets/" as the reason .gitignore is not enough,
+     and no rule caught one: SIZE starts at 1 MB and the content rules read
+     text (found by review). The fixture is a genuine PNG of noise, tens of
+     KB, made here so no figure is involved; it is judged at the path someone
+     would drop it at, under its own name, renamed, and as a PDF. */
+  const zlib = require('zlib');
+  const png = (() => {
+    const w = 128, h = 96, rows = [];
+    for (let y = 0; y < h; y++) rows.push(Buffer.concat([Buffer.alloc(1), require('crypto').randomBytes(w * 3)]));
+    const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+    const crc = b => { let c = 0xFFFFFFFF; for (const x of b) c = crcTable[(c ^ x) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+    const chunk = (type, data) => {
+      const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+      const td = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+      const c = Buffer.alloc(4); c.writeUInt32BE(crc(td));
+      return Buffer.concat([len, td, c]);
+    };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+    return Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+      chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
+  })();
+  ok('(the figure fixture is tens of KB, under every size rule)', png.length > 10 * 1024 && png.length < 200 * 1024, png.length + ' bytes');
+  const inTmp = (rel, body) => {
+    fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true });
+    fs.writeFileSync(path.join(tmp, rel), body);
+    try { return { code: 0, out: execFileSync(process.execPath, [GUARD, rel], { cwd: tmp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+  };
+  r = inTmp('assets/figure-3.png', png);
+  ok('a figure dragged into assets/ is refused', r.code === 1 && /IMAGE\s+assets\/figure-3\.png/.test(r.out),
+     r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('assets/figure-3.bin', png);
+  ok('and so is the same figure renamed, by its first bytes', r.code === 1 && /IMAGE/.test(r.out) && /a PNG/.test(r.out),
+     r.out.match(/IMAGE.*|a PNG.*/)?.[0] || r.out.trim().slice(0, 60));
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n', 'latin1');
+  r = inTmp('notes/chapter-7.pdf', pdf);
+  ok('a split PDF far under 1 MB is refused', r.code === 1 && /IMAGE\s+notes\/chapter-7\.pdf/.test(r.out),
+     r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('notes/chapter-7.txt', pdf);
+  ok('and renamed, by its first bytes', r.code === 1 && /a PDF/.test(r.out), r.out.match(/IMAGE.*|a PDF.*/)?.[0] || r.out.trim().slice(0, 60));
+  /* By name alone, for a format with no signature to sniff: an SVG is text. */
+  r = inTmp('assets/diagram.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>\n');
+  ok('an SVG figure is refused by its extension', r.code === 1 && /IMAGE\s+assets\/diagram\.svg/.test(r.out) && /by its name/.test(r.out),
+     r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('memorizer/samples/notes.md', 'a page of a chapter\n');
+  ok('anything under memorizer/samples/, where a book chapter is kept, is refused', r.code === 1 && /PATH\s+memorizer\/samples/.test(r.out),
+     r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 60));
+  /* And what must pass: the one binary the repository ships on purpose, by
+     the list that names it, and a text file whose name only mentions one. */
+  r = run(['assets/hero-heart/heart.webp']);
+  ok('the binary the repository ships on purpose passes, by name', r.code === 0, r.out.trim().slice(0, 60));
+  r = inTmp('assets/heart.webp', fs.readFileSync(path.join(ROOT, 'assets', 'hero-heart', 'heart.webp')));
+  ok('but the same bytes at any other path are refused', r.code === 1 && /a WebP/.test(r.out), r.out.match(/IMAGE.*|a WebP.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('png-notes.md', 'notes on the png encoder\n');
+  ok('while a text file that only mentions an image format is fine', r.code === 0, r.out.trim().slice(0, 60));
 
   /* 4. PAYLOAD — the export renamed to something innocuous and trimmed below
      the size rule. This is the rule that earns its keep. */

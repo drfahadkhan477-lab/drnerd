@@ -27,13 +27,15 @@
  * repository, published under the owner's name — and git history is not
  * something you can quietly take back.
  *
- * SIX RULES, in the order they fire. Each names what it is for, because a
+ * SEVEN RULES, in the order they fire. Each names what it is for, because a
  * guard that refuses without saying why gets disabled the first time it is
  * inconvenient:
  *
  *   1. PATH      anything under content/, build/, dist/ or source/, plus
  *                tests/last-run.log, whose output quotes question text, plus
- *                graphify-out/, which is not the corpus but is built from it.
+ *                graphify-out/, which is not the corpus but is built from it,
+ *                plus memorizer/samples/, where the chapters Memorizer is
+ *                tried on are kept.
  *   1b. LOG      the same log SAVED UNDER ANOTHER NAME, recognised by the
  *                header scripts/verify.js writes rather than by its filename.
  *                `verify.js > 1.txt` produces identical content and rule 1
@@ -44,6 +46,11 @@
  *                so the day anything tracked crosses the limit is a red check
  *                rather than a surprise. (This said 168 KB, lottie.min.js,
  *                until app/ was frozen; no number here, so it cannot go stale.)
+ *   3b. IMAGE    an image or a PDF, by its extension or by its first bytes,
+ *                at any size, unless KNOWN_BINARIES lists its exact path. A
+ *                real figure is tens of KB and a split PDF can be too: both
+ *                walk under rule 3, and neither carries the text the content
+ *                rules read.
  *   4. PAYLOAD   `const ALL_Q=[` or `const IMGS={` in a file over 200 KB. The
  *                marker ALONE is not enough and must not be: eight tracked
  *                source files contain it on purpose — the patch scripts that
@@ -131,6 +138,11 @@ const DIRS  = ['content/', 'build/', 'dist/', 'source/'];
  * what it caught is the kind that gets argued with. */
 const DERIVED = ['graphify-out/'];
 const FILES = ['tests/last-run.log'];
+/* RULE 1, THIRD HALF: NOT THE CORPUS, AND STILL NOT OURS. memorizer/samples/
+   is gitignored as the place to keep the PDFs Memorizer is tried on — a
+   chapter of somebody's book. Kept apart from DIRS so the refusal says that,
+   not "licensed content". */
+const OWN = ['memorizer/samples/'];
 /* RULE 1b, AND IT IS HERE BECAUSE OF A FILE CALLED tests/1.txt.
  *
  * `node scripts/verify.js > 1.txt` is the obvious thing to type when you want
@@ -173,6 +185,28 @@ const NAME  = /ACCSAP|_super_v\d|question-bank|questions\.json$/i;
 const PAYLOAD = /const\s+(ALL_Q\s*=\s*\[|IMGS\s*=\s*\{)/;
 const B64IMG  = /data:image\/(?:webp|jpeg|png|gif);base64,/g;
 const B64_MANY = 8;
+
+/* RULE 3b: A FIGURE, OR A SPLIT PDF, AT THE SIZE THEY REALLY ARE.
+   The header has always said .gitignore is not enough because someone
+   "drags a figure into assets/", and nothing here caught one: a real figure
+   is tens of KB, rule 3 starts at 1 MB, and the content rules read text a
+   picture does not have (found by review). So an image or a PDF is refused
+   wherever it is and whatever it weighs, by extension and, for a renamed one,
+   by its first bytes — unless it is one of the binaries this repository
+   ships on purpose, each named here with what it is. Narrower than ALLOW:
+   a path listed here is exempt from this rule and no other. */
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|tiff?|heic|svg|pdf)$/i;
+const KNOWN_BINARIES = [
+  'assets/hero-heart/heart.webp',   // the home screen's heart, drawn for this app
+];
+function imageMagic(b) {
+  if (b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) return 'PNG';
+  if (b.length >= 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'JPEG';
+  if (b.length >= 6 && /^GIF8[79]a$/.test(b.subarray(0, 6).toString('latin1'))) return 'GIF';
+  if (b.length >= 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') return 'WebP';
+  if (b.length >= 5 && b.subarray(0, 5).toString('latin1') === '%PDF-') return 'PDF';
+  return null;
+}
 
 /* Paths a person has decided are fine, with the reason. Nothing is here yet;
    when something is, it should say why on the same line. */
@@ -360,6 +394,8 @@ function inspect(file, src) {
     return { rule: 'PATH', why: `${p.split('/')[0]}/ is licensed content and is never committed` };
   if (DERIVED.some(d => p.startsWith(d)))
     return { rule: 'PATH', why: `${p.split('/')[0]}/ is built from the licensed corpus and is never committed` };
+  if (OWN.some(d => p.startsWith(d)))
+    return { rule: 'PATH', why: `${OWN.find(d => p.startsWith(d))} holds study material from someone's book, which is not this repository's to publish` };
   if (FILES.includes(p))
     return { rule: 'PATH', why: 'its output quotes question text' };
   if (NAME.test(path.basename(p)))
@@ -385,6 +421,13 @@ function inspect(file, src) {
   if (st.size > MAX_BYTES)
     return { rule: 'SIZE', why: `${(st.size / 1048576).toFixed(1)} MB — nothing here legitimately exceeds 1 MB` };
   if (st.size === 0) return null;
+
+  if (!KNOWN_BINARIES.includes(p)) {
+    let kind;
+    try { kind = imageMagic(st.head(12)); } catch (e) { cannot(`read ${file}`, e); }
+    if (kind || IMAGE_EXT.test(p))
+      return { rule: 'IMAGE', why: `${kind ? 'a ' + kind : 'an image or PDF by its name'} — a figure or a split PDF is refused at any size; list a deliberate one in KNOWN_BINARIES` };
+  }
 
   let text;
   try { text = st.text(); } catch (e) { cannot(`read ${file}`, e); }
