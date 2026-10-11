@@ -112,16 +112,54 @@ function open() {
   return dbp;
 }
 
-function tx(store, mode, fn) {
+/* A write that never finishes (no complete, no error, no abort, which WebKit
+   has shipped) held the write queue for ever, and every read with it, since a
+   read waits for the writes before it: after one hung save no unit opened and
+   no list was redrawn. ui.js waitForSave's bound frees only the taps. So each
+   write the queue runs (tx, saveStep, batch) is given TX_TIMEOUT_MS, the same
+   5 s the screen waits for a save, plus a millisecond for every
+   TX_BYTES_PER_MS bytes it carries: a restore or a PDF part is hundreds of
+   megabytes, and must not be cut off for being large. Past that it is aborted
+   and rejects with a TimeoutError, the queue moves on, and a tracked write is
+   kept for "Try saving again" like any other failure. It rejects whether or
+   not the abort is answered, since a backend that has stopped answering will
+   not answer that either. Reads are not bounded. Outside the queue a read
+   holds up nothing but its caller, and the export's read of every PDF can
+   rightly be slow. The two the queue runs (a deletion's look at the cards and
+   notes, deleteBook's read of the book) hold it up only if the database has
+   stopped answering reads as well, and then nothing can be read anyway.
+   update(), which the queue does not run, is left as it was. */
+api.TX_TIMEOUT_MS = 5000;
+api.TX_BYTES_PER_MS = 1000;
+function weight(v) {
+  if (v == null) return 0;
+  if (typeof v === 'string') return v.length;
+  if (typeof v !== 'object') return 8;
+  if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) return v.byteLength;
+  return Object.keys(v).reduce(function (n, k) { return n + k.length + weight(v[k]); }, 0);
+}
+function bound(t, reject, size) {
+  if (!root.setTimeout) return function () {};
+  var ms = api.TX_TIMEOUT_MS + Math.floor((size || 0) / api.TX_BYTES_PER_MS);
+  var timer = root.setTimeout(function () {
+    try { t.abort(); } catch (_) {}
+    var e = new Error('storage did not answer within ' + (ms >= 1000 ? Math.round(ms / 1000) : ms / 1000) + ' seconds');
+    e.name = 'TimeoutError'; reject(e);
+  }, ms);
+  return function () { if (root.clearTimeout) root.clearTimeout(timer); };
+}
+
+function tx(store, mode, fn, size) {
   return open().then(function (db) {
     if (!db) return fn(null);
     return new Promise(function (resolve, reject) {
       var t = db.transaction(store, mode);
       var out = fn(t.objectStore(store));
       var isReq = typeof root.IDBRequest !== 'undefined' && out instanceof root.IDBRequest;
-      t.oncomplete = function () { resolve(isReq ? out.result : out); };
-      t.onerror = function () { reject(t.error); };
-      t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+      var done = mode === 'readwrite' ? bound(t, reject, size) : function () {};
+      t.oncomplete = function () { done(); resolve(isReq ? out.result : out); };
+      t.onerror = function () { done(); reject(t.error); };
+      t.onabort = function () { done(); reject(t.error || new Error('transaction aborted')); };
     });
   });
 }
@@ -145,7 +183,7 @@ function put(store, value) {
   return tx(store, 'readwrite', function (os) {
     if (!os) { mem[store][value.id] = clone(value); return value; }
     os.put(value); return value;
-  });
+  }, weight(value));
 }
 function get(store, id) {
   return tx(store, 'readonly', function (os) {
@@ -186,12 +224,13 @@ function batch(ops) {
       mem = next; revive(snapshot); return;
     }
     return new Promise(function (resolve, reject) {
-      var t;
+      var t, done = function () {};
       try {
         t = db.transaction(snapshot.map(function (o) { return o.store; }).filter(function (s, i, a) { return a.indexOf(s) === i; }), 'readwrite');
-        t.oncomplete = function () { revive(snapshot); resolve(); };
-        t.onerror = t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+        t.oncomplete = function () { done(); revive(snapshot); resolve(); };
+        t.onerror = t.onabort = function () { done(); reject(t.error || new Error('transaction aborted')); };
         snapshot.forEach(function (o) { var os = t.objectStore(o.store); if (o.clear) os.clear(); else if (o.delete) os.delete(o.id); else os.put(o.value); });
+        done = bound(t, reject, weight(snapshot));
       } catch (e) { if (t) try { t.abort(); } catch (_) {} reject(e); }
     });
   });
@@ -314,11 +353,11 @@ function saveStep(session, cards) {
       return Object.keys(mem.cards).map(function (k) { return JSON.parse(JSON.stringify(mem.cards[k])); });
     }
     return new Promise(function (resolve, reject) {
-      var t, out = null;
+      var t, out = null, done = function () {};
       try { t = db.transaction(['sessions', 'cards'], 'readwrite'); } catch (e) { reject(e); return; }
-      t.oncomplete = function () { resolve(out); };
-      t.onerror = function () { reject(t.error); };
-      t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+      t.oncomplete = function () { done(); resolve(out); };
+      t.onerror = function () { done(); reject(t.error); };
+      t.onabort = function () { done(); reject(t.error || new Error('transaction aborted')); };
       try {
         var cs = t.objectStore('cards');
         t.objectStore('sessions').put(session);
@@ -335,6 +374,7 @@ function saveStep(session, cards) {
           } catch (e) { try { t.abort(); } catch (_) {} reject(e); }
         };
       } catch (e) { try { t.abort(); } catch (_) {} reject(e); }
+      done = bound(t, reject, weight(session) + weight(cards));
     });
   });
 }

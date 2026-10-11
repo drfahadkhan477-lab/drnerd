@@ -139,5 +139,93 @@ module.exports = (async () => {
   assert.equal(await deck.get('bookpages', 'orphan-pages'), null);
   console.log('PASS atomic cleanup, abandoned-import recovery and late figure updates');
 
+  /* ── on an IndexedDB whose transactions can be held, hung or failed ──────
+     (tests/_fakeidb.js). `idb.data` is what landed and `idb.transactions`
+     what was asked of the database: read below the store's own account. */
+  const { makeIDB } = require('./_fakeidb.js');
+  const onFake = opts => {
+    const idb = makeIDB(opts), r = { indexedDB: idb.indexedDB, IDBRequest: idb.IDBRequest, setTimeout, clearTimeout };
+    vm.runInNewContext(source, { window: r, ArrayBuffer, DataView });
+    assert.ok(r.MemStore, 'store.js did not load');
+    return { store: r.MemStore, idb };
+  };
+  const within = (p, ms) => Promise.race([p.then(v => ({ v }), e => ({ e })), sleep(ms).then(() => ({ waiting: true }))]);
+
+  /* A WRITE THAT NEVER FINISHES. Every read waits for the writes queued
+     before it, so one hung transaction left openDoc and every refresh()
+     waiting for ever. Past its bound a write is aborted and rejects, it is
+     kept for retry, and the queue moves on. Each kind of write the queue
+     runs (a tracked put, a study step, a batch) is hung in turn, the first
+     two with an abort that is never answered. */
+  for (const kind of ['put', 'saveStep', 'batch']) {
+    let hangNext = false, hungN = -1;
+    const { store, idb } = onFake({ onTransaction: t => {
+      if (t.mode !== 'readwrite' || !hangNext) return undefined;
+      hangNext = false; hungN = t.n; return kind === 'batch' ? 'hang' : 'wedge';
+    } });
+    store.TX_TIMEOUT_MS = 40;
+    const cluster = { title: 'One', text: 'Synthetic.', segments: [] };
+    await store.batch([{ store: 'docs', value: { id: 'u', clusters: [cluster] } }, { store: 'meta', value: { id: 'before', v: 1 } }]);
+    hangNext = true;
+    const hung = kind === 'put' ? store.put('meta', { id: 'notes', recs: { 'u:0': { text: 'Kept for retry' } } })
+      : kind === 'saveStep' ? store.saveStep({ id: 'u', state: { docId: 'u', titles: ['One'], per: {} } }, [{ id: 'u:card', docId: 'u', cluster: 0 }])
+      : store.deleteDoc('u');
+    const behind = store.get('meta', 'before');
+    const got = await within(hung, 2000), ht = idb.transactions[hungN];
+    assert.ok(ht, kind + ': (the write was really hung)');
+    assert.equal(got.waiting, undefined, kind + ': a write that never finishes still had not settled after 2 s');
+    assert.equal(got.e && got.e.name, 'TimeoutError', kind + ': it rejects with a TimeoutError once its bound has passed');
+    assert.ok(ht.aborted && ht.abortCalls === 1, kind + ': and its transaction is aborted, so it cannot land later');
+    const read = await within(behind, 2000);
+    assert.deepEqual(read.v, { id: 'before', v: 1 }, kind + ': a read queued behind the hung write settles');
+    if (kind === 'batch') {
+      assert.ok(idb.data.get('docs').has('u'), 'batch: nothing of the aborted deletion landed');
+      await store.deleteDoc('u');
+      assert.equal(idb.data.get('docs').has('u'), false, 'batch: the queue moved on: the deletion asked again lands');
+    } else {
+      assert.match(store.failureMessage(), /^storage did not answer within 0\.04 seconds$/, kind + ': the write is kept for "Try saving again", saying why');
+      assert.equal(idb.data.get(kind === 'put' ? 'meta' : 'sessions').has(kind === 'put' ? 'notes' : 'u'), false, kind + ': nothing of it landed');
+      await store.retryFailures();
+      assert.equal(store.failureMessage(), '', kind + ': the retry lands');
+      assert.ok(kind === 'put' ? idb.data.get('meta').get('notes').recs['u:0'].text === 'Kept for retry' : idb.data.get('cards').has('u:card'), kind + ': with what the hung write carried');
+    }
+  }
+  console.log('PASS a write that never finishes (a put, a study step, a batch) is aborted past its bound and rejects; a read behind it settles; it is kept for retry');
+
+  /* A write that lands in time is never aborted afterwards (its bound is
+     let go), and a read is never bounded: one held past the write bound
+     still answers. */
+  {
+    let holdReads = 0;
+    const { store, idb } = onFake({ onTransaction: t => (t.mode === 'readonly' && holdReads ? sleep(holdReads) : undefined) });
+    store.TX_TIMEOUT_MS = 40;
+    await store.put('meta', { id: 'landed', v: 2 });
+    await store.saveStep({ id: 's', state: {} }, []);
+    await store.batch([{ store: 'meta', value: { id: 'batched' } }]);
+    await sleep(160);
+    assert.deepEqual(idb.transactions.filter(t => t.mode === 'readwrite').map(t => t.abortCalls), [0, 0, 0], 'a write that landed in time was aborted later');
+    holdReads = 150;
+    const slowRead = await within(store.get('meta', 'landed'), 2000);
+    assert.deepEqual(slowRead.v, { id: 'landed', v: 2 }, 'a read held past the write bound was cut off: ' + (slowRead.e && slowRead.e.name));
+  }
+  console.log('PASS a write that lands in time is never aborted afterwards, and a slow read is not bounded');
+
+  /* A large write is given longer, in proportion to what it carries: a
+     restore or a PDF part must not be cut off for its size. Here the bound
+     is 40 ms and a byte buys a millisecond; a write of ~400 bytes held for
+     150 ms lands, and a write of a few bytes held as long does not. */
+  {
+    let hold = 0;
+    const { store, idb } = onFake({ onTransaction: t => (t.mode === 'readwrite' && hold ? sleep(hold) : undefined) });
+    store.TX_TIMEOUT_MS = 40; store.TX_BYTES_PER_MS = 1;
+    hold = 150;
+    const big = await within(store.put('files', { id: 'big', bytes: new Uint8Array(400).buffer }), 2000);
+    assert.equal(big.e, undefined, 'a 400-byte write held 150 ms was cut off: ' + (big.e && big.e.name));
+    assert.ok(idb.data.get('files').has('big'), 'and it landed');
+    const small = await within(store.put('files', { id: 'small', bytes: new Uint8Array(4).buffer }), 2000);
+    assert.equal(small.e && small.e.name, 'TimeoutError', 'a 4-byte write held 150 ms was not bounded at all');
+  }
+  console.log('PASS a write is given time in proportion to the bytes it carries');
+
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });
