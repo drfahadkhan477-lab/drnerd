@@ -5921,14 +5921,16 @@ function voiceSay(text){
    answer, which its ended session then threw away ("I did not catch that").
    verify-voicescreen found it once WebKit's screen swaps became instant. */
 let _hearing=null;
-function voiceHear(){
+function voiceHear(session){
   if(_voice) voiceDock('listening','Say a letter, or “repeat”');
-  const session=_voice;
   return new Promise(res=>{
     let done=false, rec=null; const fin=v=>{ if(!done){done=true;clearTimeout(t);clearInterval(watch);if(_hearing===fin)_hearing=null;try{rec&&rec.stop();}catch(_){} res(v);} };
     _hearing=fin;
     const t=setTimeout(()=>fin(null),9000);
-    const watch=setInterval(()=>{ if(_voice!==session||S.screen!=='quiz'){ clearInterval(watch); fin(null); } },250);   // the microphone does not stay open on another screen, or past its own session
+    /* The microphone does not stay open on another screen, past its own session, or on a question moved to by hand:
+       it asked only the first two, so a tap that moved the quiz left it open, the dock saying "Listening", until the
+       timeout above. Off its question a session is over, so this ends it as the other paths do (this one only). */
+    const watch=setInterval(()=>{ if(!voiceLive(session)){ clearInterval(watch); if(_voice===session) stopVoice(); fin(null); } },250);
     try{
       rec=new (VOICE_SR())(); rec.lang='en-US'; rec.interimResults=false; rec.maxAlternatives=1;
       rec.onresult=ev=>{ try{ fin(ev.results[0][0].transcript); }catch(_){ fin(null); } };
@@ -5996,7 +5998,7 @@ async function runVoice(v,event){
         await voiceSay(fx.text);
         if(v.state.phase==='feedback') queue.push({type:'feedbackRead'});
       }else if(fx.type==='listen'){
-        const t=await voiceHear();
+        const t=await voiceHear(v);
         if(t!=null&&_voice===v) voiceDock('speaking',`Heard “${t}”`);
         queue.push(t==null?{type:'silence'}:{type:'heard',transcript:t});
       }else if(fx.type==='record'){
