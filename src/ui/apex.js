@@ -67,7 +67,14 @@ function avatar(canvas, opts) {
   function fit() {
     const r = canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    if (!r.width) return false;
+    /* BOTH dimensions, and enough of each to draw. draw() takes
+       R = Math.min(w,h)/2 - 2, so under 4px R goes negative and
+       createRadialGradient throws IndexSizeError — inside the rAF loop, which
+       stops the animation for the rest of the session rather than skipping a
+       frame. This tested only !r.width, so a canvas with width and no height
+       went straight through: exactly what a collapsing panel produces
+       mid-animation, and what rotating an iPad produces for a frame or two. */
+    if (!(r.width >= 4) || !(r.height >= 4)) return false;
     const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

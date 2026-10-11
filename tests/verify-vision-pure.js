@@ -45,13 +45,17 @@ const V = root.Vision;
 
 /* A real, decodable 1x1 GIF — dataUrlToSource must accept it. */
 const PIX = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-/* 'anthropic', not 'gemini'. This loads the SOURCE module, where
-   VISION_PROVIDERS is still {anthropic:true, groq:false} — onetutor-patch
-   rewrites it to {gemini:true} later in the chain. Testing the pre-patch
-   module with the post-patch provider name is a test that silently exercises
-   the no-vision path and passes by doing nothing, which is how the first
-   version of this file reported a wire "untouched" and called it correct. */
-const SEEING = 'anthropic';
+/* 'gemini', the one provider the app offers. This loads src/core/vision.js,
+   which is now the slot the shell is filled from (verify-app-slots-pure holds
+   that), so the module tested here is the module that ships. It used to be a
+   stale copy still reading {anthropic:true, groq:false} while the app shipped
+   {gemini:true}, and this said 'anthropic' to match it. A provider name the
+   module does not know is a test that silently exercises the no-vision path
+   and passes by doing nothing, which is how the first version of this file
+   reported a wire "untouched" and called it correct; 'and one with vision is
+   recognised' below is what holds SEEING to the module, and it went red when
+   the module changed under the old name. */
+const SEEING = 'gemini';
 const q1 = { id: 'VAL_1', img: 1 };
 const q2 = { id: 'VAL_2', img: 2 };
 
