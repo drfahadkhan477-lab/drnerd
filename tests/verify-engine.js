@@ -159,9 +159,15 @@ head('every browser suite goes through the helper, none launches an engine itsel
     const src = fs.readFileSync(path.join(TESTS, f), 'utf8');
     /* Scanned on the BLANKED copy, which is the rule applying to itself: the
        paragraph above quotes what it hunts for, and reading it would report
-       this very check as a violation. The exemption is requiring _source —
-       a file that uses the shared helper is not rolling its own. */
-    if (/_source/.test(src)) continue;
+       this very check as a violation.
+
+       NO OTHER EXEMPTION. This used to skip any file whose text mentioned
+       _source anywhere, comments included, on the theory that a file using
+       the shared helper is not rolling its own. This file both uses it and
+       rolled its own, a stripper of the kind that drifted, and passed. Only
+       _source.js itself may hold a blanker. What is matched is the
+       block-comment shape, a lazy [\s\S] run up to the closing star-slash; a
+       copy that handled only // comments would not be seen. */
     if (/\[\\s\\S\]\*\?\\\*\\\//.test(blankComments(src))) rolled.push(f);
   }
   ok('no suite rolls its own comment blanker — it is in tests/_source.js',
@@ -511,10 +517,10 @@ head('a suite pointed at a URL either runs whole or does not run');
      back "takes no target argument", which reads like the pure-logic suites
      that genuinely take none. So the two are told apart by the source itself
      rather than by a list of names — a suite that mentions process.argv[2]
-     must have been parsed. */
-  const uncommented = src => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+     must have been parsed. Read through the shared blanker: this used to
+     strip comments with a pair of regular expressions of its own. */
   const mentionsArgv = all.filter(n =>
-    /process\.argv\[2\]/.test(uncommented(fs.readFileSync(path.join(TESTS, `verify-${n}.js`), 'utf8'))));
+    /process\.argv\[2\]/.test(blankComments(fs.readFileSync(path.join(TESTS, `verify-${n}.js`), 'utf8'))));
   const unparsed = mentionsArgv.filter(n => T.classify(n).reason === 'takes no target argument');
   ok('every suite that binds a target argument was understood to bind one',
      unparsed.length === 0, unparsed.join(', ') || `${mentionsArgv.length} parsed, none missed`);
