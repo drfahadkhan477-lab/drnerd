@@ -849,6 +849,55 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
        got.method === 'pages' && got.unit && got.problem === null, JSON.stringify(got));
   }
 
+  head('a study pack whose write is held is still applied, and so is its removal');
+  /* The pack's own write was the one write of an import, or of a removal,
+     not waited on as a step's save is: held, the screen waited on it for
+     ever. Past the bound the pack is applied (or removed), a note says the
+     save is still going, and it is stored when the write lands. */
+  {
+    const r = await context('pack-held');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Pack held'); await r.locator('#learn-unit').waitFor(T);
+    r.on('dialog', dl => dl.accept());
+    const reply = await r.evaluate(() => {
+      const d = Memorizer.ui.docRec, c0 = d.clusters[0], text = c0.segments.find(s => !s.heading && !s.table).text;
+      return 'Reply 1.\n```json\n' + JSON.stringify({ format: 'memorizer-pack', version: 1, unit: d.name, sections: [{ section: 1, title: c0.title, lesson: { points: [{ text, page: 1 }] } }] }) + '\n```';
+    });
+    await r.evaluate(() => {
+      window.__packPut = MemStore.put; window.__packDel = MemStore.del; window.__packHeld = 0; window.__packReleases = [];
+      const hold = (real, a) => { window.__packHeld++; return new Promise((res, no) => { window.__packReleases.push(() => real.apply(MemStore, a).then(res, no)); }); };
+      MemStore.put = function (store) { return store === 'packs' ? hold(window.__packPut, arguments) : window.__packPut.apply(MemStore, arguments); };
+      MemStore.del = function (store) { return store === 'packs' ? hold(window.__packDel, arguments) : window.__packDel.apply(MemStore, arguments); };
+      window.__releasePack = () => window.__packReleases.splice(0).reduce((q, f) => q.then(f), Promise.resolve());
+    });
+    /* slow counts every save past the bound, the session save that follows
+       the pack's included, so only "some" is claimed, not how many */
+    const seen = () => r.evaluate(async () => ({ held: window.__packHeld, slow: Memorizer.ui.slowSaves, pack: !!(Memorizer.ui.pack && Memorizer.ui.pack.sections[0]),
+      card: (document.getElementById('pack-status') || {}).textContent || '', note: !!document.getElementById('store-saving'), stored: !!(await MemStore.get('packs', Memorizer.ui.docId)) }));
+    await r.locator('#pack-go').click();
+    await r.fill('#pack-text', reply);
+    await r.locator('#pack-import').click();
+    /* a precondition, not the claim: the bound has had its chance */
+    await r.waitForFunction(() => Memorizer.ui.slowSaves > 0, null, { timeout: 20000 }).catch(() => {});
+    const imported = await seen();
+    ok('(the pack\'s write was really held)', imported.held === 1 && !imported.stored, JSON.stringify(imported));
+    ok('a pack whose write is held is applied past the bound: the card counts it, and a note says the save is still going',
+       imported.pack && /^1 of 2 sections/.test(imported.card) && imported.slow > 0 && imported.note, JSON.stringify(imported));
+    await r.evaluate(() => window.__releasePack());
+    await r.waitForFunction(() => Memorizer.ui.slowSaves === 0, null, T).catch(() => {});
+    const landed = await seen();
+    ok('when the write lands the note goes, and the pack is stored', landed.stored && !landed.note && landed.slow === 0, JSON.stringify(landed));
+    await r.locator('#pack-remove').click();
+    await r.waitForFunction(() => Memorizer.ui.slowSaves > 0, null, { timeout: 20000 }).catch(() => {});
+    const removed = await seen();
+    ok('(the removal\'s write was really held)', removed.held === 2 && removed.stored, JSON.stringify(removed));
+    ok('a removal whose write is held is applied past the bound: the card says none, and a note says the save is still going',
+       !removed.pack && /none yet/.test(removed.card) && removed.slow > 0 && removed.note, JSON.stringify(removed));
+    await r.evaluate(() => { MemStore.put = window.__packPut; MemStore.del = window.__packDel; return window.__releasePack(); });
+    await r.waitForFunction(() => Memorizer.ui.slowSaves === 0, null, T).catch(() => {});
+    const gone = await seen();
+    ok('when it lands the note goes, and the pack is deleted', !gone.stored && !gone.note, JSON.stringify(gone));
+  }
+
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));
   head('deletion cancels failed writes without losing other units’ pending notes');

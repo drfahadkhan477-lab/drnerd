@@ -1494,7 +1494,9 @@ function packReportView(r) {
 }
 /* A reply, checked and stored: its sections replace the built-in lessons
    and questions (session.js 'packed'); nothing is stored when nothing
-   passed. */
+   passed. The pack's own write is waited on as a step's save is
+   (waitForSave): one that never settled left the import, and the screen,
+   waiting on it for ever. So does removePack's. */
 function importPack(text) {
   var d = ui.docRec, got = Pack.parse(text);
   if (!got.ok) { ui.packReport = { error: got.error }; render(); return Promise.resolve(); }
@@ -1502,7 +1504,7 @@ function importPack(text) {
   ui.packReport = { report: Pack.report(checked), refused: checked.refused, dropped: checked.dropped };
   if (!checked.sections.length) { render(); return Promise.resolve(); }
   var rec = Pack.merge(ui.pack, checked, d, Date.now());
-  return Store.put('packs', rec).then(function () {
+  return waitForSave(Store.put('packs', rec)).then(function () {
     ui.pack = rec; ui.packText = '';
     clearDraft('pack-text');
     return waitForSave(dispatch({ type: 'packed', value: { sections: checked.sections.map(function (s) { return Pack.safeSection(rec, s.index, d); }).filter(Boolean) } }));
@@ -1513,7 +1515,7 @@ function importPack(text) {
    (session.js 'unpacked'); scores and cards stay. */
 function removePack(d) {
   if (!root.confirm('Remove the study pack from "' + d.name + '"? Its sections are taught by the built-in coach again; your scores and review cards are kept.')) return Promise.resolve();
-  return Store.del('packs', d.id).then(function () {
+  return waitForSave(Store.del('packs', d.id)).then(function () {
     ui.pack = null; ui.packReport = null;
     return waitForSave(dispatch({ type: 'unpacked' }));
   }).then(render, function (e) { saveFailed(e); render(); });
