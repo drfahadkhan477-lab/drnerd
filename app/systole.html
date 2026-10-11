@@ -3350,7 +3350,11 @@ function goLab(){ S.screen='lab'; render(); toTop(); }
 
 const TOOLS=[
  {name:'search_question_bank',
-  description:"Search the fellow's own ACCSAP question bank and personal reference notes. Use this whenever a concept would be better taught across several cases, when the fellow asks about something not covered by the current item, or when you want to check what they have already written on a topic. Returns matching items with their commentary.",
+  /* Grounded mode searches the notes alone (runTool), so the description is
+     read as each request is built, and in that mode says what comes back. */
+  get description(){ return AI_GROUNDED
+    ? "Search the fellow's personal reference notes. Grounded mode leaves the question bank out, so this returns matching notes only, never a bank item, its answer or its commentary. Use it when the fellow asks about something the notes in front of you do not cover, or to check what they have already written on a topic."
+    : "Search the fellow's own ACCSAP question bank and personal reference notes. Use this whenever a concept would be better taught across several cases, when the fellow asks about something not covered by the current item, or when you want to check what they have already written on a topic. Returns matching items with their commentary."; },
   input_schema:{type:'object',properties:{
     query:{type:'string',description:'Clinical concept to search for, e.g. "cardiac amyloidosis apical sparing"'},
     limit:{type:'integer',description:'How many items to return (1-6, default 4)'}},required:['query']}},

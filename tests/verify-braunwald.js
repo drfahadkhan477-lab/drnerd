@@ -156,6 +156,13 @@ specific haemodynamic finding.
   /* Collapse whitespace before matching: the prompt is hard-wrapped for
      readability in source, so a phrase can straddle a newline. */
   const flat = t => String(t || '').replace(/\s+/g, ' ');
+  /* What the request tells the model the bank search returns: its
+     description as sent, or nothing when the tool is not in the request. */
+  const searchDesc = req => {
+    const fns = ((((req && req.tools) || [])[0]) || {}).functionDeclarations || [];
+    const d = fns.find(f => f && f.name === 'search_question_bank');
+    return d ? flat(d.description) : '';
+  };
   const sysText = flat(systemText(groundedReq));
   ok('a request was captured', !!groundedReq);
   ok('the prohibition is in the system prompt', /GROUNDED MODE IS ON/.test(sysText));
@@ -177,6 +184,11 @@ specific haemodynamic finding.
      The options must still be there, or this would pass on none. */
   ok('the options go out without how many candidates chose each',
      /OPTIONS A\. \S/.test(sysText) && !/of candidates chose/.test(sysText));
+  /* The bank search returns notes alone in this mode (runTool), so the tool
+     must not be described as returning bank items with their commentary. */
+  const gDesc = searchDesc(groundedReq);
+  ok('the bank search tool is described as returning notes only, not bank items',
+     /notes only/i.test(gDesc) && !/items with their commentary/i.test(gDesc), gDesc.slice(0, 90) || 'the tool is not in the request');
   ok('but the stem is still there, so it knows what was asked',
      /CURRENT QUESTION/.test(sysText) && /STEM/.test(sysText));
 
@@ -187,6 +199,9 @@ specific haemodynamic finding.
   ok('the prohibition is gone', !/GROUNDED MODE IS ON/.test(openSys));
   ok('the answer key and bank come back', /OFFICIAL ACC COMMENTARY/.test(openSys));
   ok('and so does how many candidates chose each option', /OPTIONS A\. \S/.test(openSys) && /of candidates chose this/.test(openSys));
+  const oDesc = searchDesc(openReq);
+  ok('and the bank search tool offers bank items with their commentary again',
+     /question bank/i.test(oDesc) && /items with their commentary/i.test(oDesc), oDesc.slice(0, 90) || 'the tool is not in the request');
 
   head('grounded with nothing to read');
   const empty = await page.evaluate(() => {
