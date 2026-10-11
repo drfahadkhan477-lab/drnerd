@@ -38,6 +38,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { childEnv } = require('./gitenv.js');   // a suite never inherits where git looks for a repository
 
 const ROOT = path.join(__dirname, '..');
 
@@ -108,7 +109,7 @@ function run(opts) {
     else if (!fs.existsSync(file)) status = 'missing';
     else {
       const r = spawnSync(process.execPath, [file].concat(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'],
-        env: Object.assign({}, process.env, { SYSTOLE_ENGINE: engine }), maxBuffer: 64 * 1048576 });
+        env: childEnv({ SYSTOLE_ENGINE: engine }), maxBuffer: 64 * 1048576 });
       status = r.status === 0 ? 'pass' : (r.status === null ? `killed (${r.signal})` : `exit ${r.status}`);
       if (status !== 'pass') {
         const out = (String(r.stdout || '') + String(r.stderr || '')).split('\n').filter(l => /FAIL|Error|error/.test(l)).slice(0, 8);
@@ -127,7 +128,7 @@ function run(opts) {
     let broke = null;
     for (const [script, ...args] of synthetic.build) {
       log(`  build  node ${script} ${args.join(' ')}`);
-      const r = spawnSync(process.execPath, [path.join(root, script)].concat(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1048576 });
+      const r = spawnSync(process.execPath, [path.join(root, script)].concat(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: childEnv(), maxBuffer: 64 * 1048576 });
       if (r.status !== 0) { broke = `synthetic build failed at ${script}`; log('      ' + String(r.stderr || r.stdout || '').trim().split('\n').slice(-3).join('\n      ')); break; }
     }
     synthetic.suites.forEach(x => runOne({ name: x.name, args: [x.target], refused: broke }));

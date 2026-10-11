@@ -338,10 +338,11 @@ async function heapAfterBoot(page, url) {
     const sw = await (await fetch(new URL('sw.js', target).href)).text();
     const contentV = (/const CONTENT_V\s*=\s*'([^']+)'/.exec(sw) || [])[1];
     const shellV = (/const SHELL_V\s*=\s*'([^']+)'/.exec(sw) || [])[1];
-    /* Both cache names were keyed on the content digest — a hash of the ACCSAP
-       export — so every change to the app's own code produced a byte-identical
-       sw.js. The browser saw no new worker, never re-primed the shell cache,
-       and an installed app went on serving old code. */
+    /* Both cache names were keyed on content/manifest.json's sourceDigest,
+       and with a content/ left over from an earlier extraction every change to
+       the app's own code produced a byte-identical sw.js. The browser saw no
+       new worker, never re-primed the shell cache, and an installed app went
+       on serving old code. */
     ok('the shell is versioned by its own bytes', !!shellV && shellV !== contentV,
        `shell ${shellV}, content ${contentV}`);
     ok('the shell cache is keyed on the shell version',
@@ -352,8 +353,10 @@ async function heapAfterBoot(page, url) {
        /content/figures/; it is called CONTENT and holds all of /content/,
        because the two large JSON files were falling through to the shell.
        tests/verify-cachebuckets.js is where that routing is checked; here it
-       is only the key that matters. */
-    ok('but the content cache is keyed on the content, so a code change keeps them',
+       is only the key that matters. This reads the name, not what CONTENT_V
+       is made from: it passed while CONTENT_V was the whole build's digest.
+       tests/verify-swupdate-pure.js builds twice and compares. */
+    ok('but the content cache is keyed on CONTENT_V',
        new RegExp(`CONTENT\\s*=\\s*'accsap-content-'\\s*\\+\\s*CONTENT_V`).test(sw));
   }
 
