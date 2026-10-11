@@ -535,13 +535,14 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
   {
     const r = await context('recut-failure'); await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Recut'); await r.locator('#learn-unit').waitFor(T);
     /* A second chapter, page 2 with no text, so the screen has a Join. The
-       cut's write is held until __failRecut rejects it. */
+       cut's write (Store.commit, with the book in it) is held until
+       __failRecut rejects it. */
     await r.evaluate(async () => {
       const id = Memorizer.ui.docId, b = { id: 'synthetic-book', name: 'Synthetic book', pages: 2, method: 'numbered', scanned: [], outline: [],
         parts: [{ fileId: 'synthetic-part', first: 1, last: 2 }], chapters: [{ title: 'One', pageStart: 1, pageEnd: 1, docId: id }, { title: 'Two', pageStart: 2, pageEnd: 2, docId: null }], found: {} };
       await MemStore.batch([{ store: 'books', value: b }, { store: 'bookpages', value: { id: b.id + ':0', pages: [{ page: 1, lines: [{ text: 'A synthetic paragraph with enough readable words to retain this source during chapter cutting.', size: 10, y: 10 }] }] } }]);
-      window.__recutBatch = MemStore.batch;
-      MemStore.batch = ops => ops.some(o => o.store === 'books') ? new Promise((_, no) => { window.__failRecut = () => no(new Error('synthetic recut failure')); }) : window.__recutBatch(ops);
+      window.__recutCommit = MemStore.commit;
+      MemStore.commit = (ops, gone) => ops.some(o => o.store === 'books') ? new Promise((_, no) => { window.__failRecut = () => no(new Error('synthetic recut failure')); }) : window.__recutCommit(ops, gone);
       Memorizer.openBook(b.id);
     });
     await r.locator('#methods').waitFor(T); r.on('dialog', dl => dl.accept()); await r.locator('#methods [data-method=pages]').click();
@@ -557,7 +558,7 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     const freed = await tappable();
     ok('and once the cut has failed, they can be tapped again', JSON.stringify(freed.map(g => g.length)) === JSON.stringify(held.map(g => g.length)) && held.every(g => g.length) &&
        !freed.some(g => g.some(Boolean)), JSON.stringify(freed));
-    await r.evaluate(() => { MemStore.batch = window.__recutBatch; });
+    await r.evaluate(() => { MemStore.commit = window.__recutCommit; });
   }
 
   head('a first practice miss survives reload without an SRS review');

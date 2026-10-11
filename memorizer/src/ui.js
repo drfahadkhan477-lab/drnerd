@@ -414,7 +414,13 @@ function bookName(files) {
    method renames chapters); the others are built from the book's stored
    text, and units no chapter uses any more are deleted. `book.chapters`
    must be the chapters as stored: their units are the ones kept or
-   dropped (recut reads the book from the store for this). */
+   dropped (recut reads the book from the store for this). Written in the
+   store's queue (Store.commit), and the units no chapter keeps go as a
+   deleted unit does: their cleanup is read in that turn, a failed save of
+   theirs waiting for retry is dropped, and a later save for one is refused.
+   Written with a raw batch, the failed save stayed in every export and came
+   back on "Try saving again": a session for a unit that was gone, which no
+   backup would restore. */
 function applyChapters(book, chapters, pages) {
   var old = {};
   (book.chapters || []).forEach(function (c) { if (c.docId) old[c.pageStart + ':' + c.pageEnd] = c.docId; });
@@ -441,9 +447,9 @@ function applyChapters(book, chapters, pages) {
   });
   return Promise.all(puts).then(function (list) {
     var gone = Object.keys(old).map(function (k) { return old[k]; }).filter(function (id) { return !keep[id]; });
-    return Store.removalOps(gone).then(function (drops) {
-      var next = Object.assign({}, book, { chapters: list });
-      return Store.batch(ops.concat(drops, [{ store: 'books', value: next }, { store: 'meta', id: 'import:' + book.id, delete: true }])).then(function () { book.chapters = list; docsChanged(); });
+    var next = Object.assign({}, book, { chapters: list });
+    return Store.commit(ops.concat([{ store: 'books', value: next }, { store: 'meta', id: 'import:' + book.id, delete: true }]), gone).then(function () {
+      book.chapters = list; docsChanged(); ui.saveError = Store.failureMessage() || ui.actionError;
     });
   });
 }

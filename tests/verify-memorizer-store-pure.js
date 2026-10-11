@@ -332,6 +332,23 @@ module.exports = (async () => {
     assert.equal(store.failureMessage(), '', 'and the refused save is not kept for retry');
   }
   console.log('PASS units a change removes go with their records, notes and failed saves, and a later save for one is refused');
+  {
+    /* Their cleanup (their cards, their keys in the notes) is read in the
+       change's own turn, after the writes asked for before it. Read before
+       it, as ui.js's book cut did, a notes save still on its way was then
+       overwritten by the notes as they had been. */
+    const f = await fixture(), { store, idb } = f;
+    await store.batch([{ store: 'docs', value: { id: 'g', clusters: unit(1).clusters } }, { store: 'meta', value: { id: 'notes', recs: { 'g:0': { text: 'Gone' } } } }]);
+    f.holdNext(t => t.stores.join() === 'meta');
+    const note = store.put('meta', { id: 'notes', recs: { 'g:0': { text: 'Gone' }, 'w:0': { text: 'Saved just before the change' } } });
+    const change = store.commit([], ['g']);
+    await sleep(30);
+    f.release();
+    await Promise.all([note, change]);
+    assert.deepEqual(stored(idb, 'meta', 'notes').recs, { 'w:0': { text: 'Saved just before the change' } },
+      'a note saved just before a change that removes a unit was lost, or the removed unit\'s note was kept');
+  }
+  console.log('PASS a change reads the removed units\' cleanup in its own turn: a note saved just before it is kept');
 
 })();
 if (require.main === module) module.exports.catch(error => { console.error(error); process.exitCode = 1; });
