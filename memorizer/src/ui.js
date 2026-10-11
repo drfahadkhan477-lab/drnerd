@@ -3926,7 +3926,15 @@ function storageCard() {
         h('p', r.docs + ' units, ' + r.books + ' books and ' + r.cards + ' cards. Created ' + r.created + '.'),
         h('p', 'This replaces all study data on this device. Export the current data first if you need to keep it. Provider keys and model downloads stay on this device.'),
         h('div.row', button('Cancel', function () { close(); }, 'quiet'), button('Replace study data', function () {
-          close(); ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; render();
+          close();
+          /* Not while an import or a cut is running. A restore replaces every
+             record, the parts an import has staged with them, and the import
+             then committed a book whose earlier parts had no PDF or text; a
+             cut made from the old data landed on the restored data after it.
+             Refused, the data is as it was and the file is still to hand. */
+          var busy = ui.importJob ? 'an import is running. Finish or cancel it' : ui.recutting ? 'a book’s chapters are being cut again. Wait for that to finish' : '';
+          if (busy) { ui.backupStatus = 'Not restored: ' + busy + ', then restore the backup.'; render(); return; }
+          ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; render();
           root.MemBackup.restore(text).then(function () {
             ui.lastBackup = undefined; ui.backupSnooze = undefined;
             ui.docId = null; ui.docRec = null; ui.state = null; ui.bytesFor = null; ui.bytes = null; byteLoads = {}; Pdf.release(); ui.drafts = {}; ui.actionError = ''; ui.saveError = ''; ui.askIdx = null; ui.secVecs = null; ui.storageHealth = null;

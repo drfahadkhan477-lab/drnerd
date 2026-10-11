@@ -778,6 +778,77 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('writes queued before a restore cannot land on the restored IndexedDB database', raced.ids === raced.want && !raced.stale, JSON.stringify(raced).slice(0, 200));
   }
 
+  /* A restore replaces every record. Tapped while a whole-book import ran,
+     it cleared the parts already staged and the import then committed a book
+     whose first part had no PDF or text; tapped while a cut ran, the cut made
+     from the old data landed on the restored data. The backup here is made
+     before the book exists, as one from an earlier day would be. */
+  const restoreNow = async (r, backup) => {
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await r.locator('#backup-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+    await r.locator('#backup-restore').waitFor(T);
+    await r.locator('#backup-restore').click();
+    /* a precondition: the tap has been answered, one way or the other */
+    await r.waitForFunction(() => /^Not restored/.test(Memorizer.ui.backupStatus || '') || Memorizer.ui.notice === 'Backup restored.', null, T);
+    return r.evaluate(() => Memorizer.ui.backupStatus);
+  };
+  head('a restore is refused while a whole book is being imported');
+  {
+    const r = await context('restore-import');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Before the book'); await r.locator('#learn-unit').waitFor(T);
+    const backup = await r.evaluate(() => MemBackup.exportText());
+    /* two parts: the first is read and staged, the second's reading is held */
+    await r.evaluate(() => {
+      const part = () => ({ pages: [{ page: 1, lines: [{ text: 'A synthetic paragraph with enough readable words to make a section of this part of the book.', size: 10, y: 10 }] }],
+        wordCounts: [16], numPages: 1, figures: [], ocr: [], outline: [] });
+      let n = 0;
+      MemPdf.read = () => ++n === 1 ? Promise.resolve(part()) : new Promise(resolve => { window.__readPart2 = () => resolve(part()); });
+      Memorizer.importBook([new File(['first'], 'Book_1-1.pdf'), new File(['second'], 'Book_2-2.pdf')]);
+    });
+    await r.waitForFunction(() => typeof window.__readPart2 === 'function', null, T);
+    ok('(the first part is staged while the second is read)', await r.evaluate(async () => (await MemStore.all('files')).length) === 1);
+    const status = await restoreNow(r, backup);
+    ok('the restore is refused while the import runs, and says why', /^Not restored: an import is running\. Finish or cancel it, then restore the backup\.$/.test(status), status);
+    await r.evaluate(() => window.__readPart2());
+    await r.waitForFunction(() => !Memorizer.ui.importJob, null, T);
+    const got = await r.evaluate(async () => {
+      const books = await MemStore.all('books'), files = (await MemStore.all('files')).map(f => f.id);
+      return { books: books.length, parts: books[0] ? books[0].parts.map(p => files.indexOf(p.fileId) >= 0) : [], problem: (await MemBackup.exportChecked()).problem };
+    });
+    ok('and the import commits a whole book: each part has its PDF, and a backup of it would restore',
+       got.books === 1 && got.parts.length === 2 && got.parts.every(Boolean) && got.problem === null, JSON.stringify(got));
+  }
+  head('a restore is refused while a book is being cut again');
+  {
+    const r = await context('restore-recut');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Recut restore'); await r.locator('#learn-unit').waitFor(T);
+    const backup = await r.evaluate(() => MemBackup.exportText());
+    /* the synthetic book of the "failed recuts" block, with its PDF; the
+       cut's write is held until __landCut lets it go */
+    await r.evaluate(async () => {
+      const id = Memorizer.ui.docId, b = { id: 'synthetic-book', name: 'Synthetic book', pages: 2, method: 'numbered', scanned: [], outline: [],
+        parts: [{ fileId: 'synthetic-part', first: 1, last: 2 }], chapters: [{ title: 'One', pageStart: 1, pageEnd: 1, docId: id }, { title: 'Two', pageStart: 2, pageEnd: 2, docId: null }], found: {} };
+      await MemStore.batch([{ store: 'books', value: b }, { store: 'files', value: { id: 'synthetic-part', bytes: new Uint8Array([37, 80, 68, 70]).buffer } },
+        { store: 'bookpages', value: { id: b.id + ':0', pages: [{ page: 1, lines: [{ text: 'A synthetic paragraph with enough readable words to retain this source during chapter cutting.', size: 10, y: 10 }] }] } }]);
+      window.__realCommit = MemStore.commit;
+      MemStore.commit = (ops, gone) => ops.some(o => o.store === 'books') ? new Promise((res, no) => { window.__landCut = () => window.__realCommit(ops, gone).then(res, no); }) : window.__realCommit(ops, gone);
+      Memorizer.openBook(b.id);
+    });
+    await r.locator('#methods').waitFor(T); r.on('dialog', dl => dl.accept()); await r.locator('#methods [data-method=pages]').click();
+    await r.waitForFunction(() => typeof window.__landCut === 'function', null, T);
+    const status = await restoreNow(r, backup);
+    ok('the restore is refused while the cut runs, and says why', /^Not restored: a book’s chapters are being cut again\. Wait for that to finish, then restore the backup\.$/.test(status), status);
+    await r.evaluate(() => { window.__landCut(); });
+    await r.waitForFunction(() => !Memorizer.ui.recutting, null, T);
+    const got = await r.evaluate(async () => {
+      MemStore.commit = window.__realCommit;
+      const b = await MemStore.get('books', 'synthetic-book');
+      return { method: b && b.method, unit: !!(await MemStore.get('docs', b && b.chapters[0].docId)), problem: (await MemBackup.exportChecked()).problem };
+    });
+    ok('and the cut lands on the data it was made from: the book, cut by pages, with its unit, and a backup of it would restore',
+       got.method === 'pages' && got.unit && got.problem === null, JSON.stringify(got));
+  }
+
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));
   head('deletion cancels failed writes without losing other units’ pending notes');
