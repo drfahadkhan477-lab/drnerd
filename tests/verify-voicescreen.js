@@ -356,19 +356,49 @@ const STUB = () => {
   await page.click('#voiceStart');
   await onScreen(page, 'quiz', { marker: '.q-card' });
   await waitFor(page, () => window.__listens >= 1);
+  /* The key is heard in the same task as the tap: the listen's watch now ends the listen at its next look after
+     a tap (below), so a letter lands after one only inside that window, and this puts it there every run. */
   const tapped = await page.evaluate(() => {
     const q0 = S.questions[0], wrong = (q0.ci + 1) % q0.o.length;
+    const live = _voice !== null;
     selectOpt(wrong);
-    return { live: _voice !== null, idx: S.qIdx, id0: q0.id, answered: S.answered, wrongTapped: S.selected === wrong && wrong !== q0.ci, key: 'ABCDEFGH'[q0.ci] };
+    const answered = S.answered, wrongTapped = S.selected === wrong && wrong !== q0.ci;
+    const took = window.__hear('option ' + 'ABCDEFGH'[q0.ci]);
+    return { live, idx: S.qIdx, id0: q0.id, answered, wrongTapped, took };
   });
-  await page.evaluate(l => { window.__heard.push('option ' + l); }, tapped.key);
   await waitFor(page, id => _voice === null || S.srs[id] != null, tapped.id0);
-  const graded = await page.evaluate(id => ({ live: _voice !== null, unheard: window.__heard.length, rated: S.srs[id] != null,
+  const graded = await page.evaluate(id => ({ live: _voice !== null, rated: S.srs[id] != null,
     feedback: window.__said.filter(t => /^(Correct|Not quite)\./.test(t)).length }), tapped.id0);
   ok('(a session was listening, a wrong option was tapped on the same question, and the key was heard)',
-     tapped.live && tapped.idx === 0 && tapped.answered && tapped.wrongTapped && graded.unheard === 0, JSON.stringify({ tapped, unheard: graded.unheard }));
+     tapped.live && tapped.idx === 0 && tapped.answered && tapped.wrongTapped && tapped.took === true, JSON.stringify(tapped));
   ok('the card is not rated with the voice’s verdict, and no verdict is spoken', !graded.rated && graded.feedback === 0, JSON.stringify(graded));
   ok('and the session ends', !graded.live, JSON.stringify(graded));
+
+  /* With nothing said after the tap, the microphone used to stay open, the dock reading "Listening", until the
+     listen's 9 s timeout: the watch asked whether the session was live, and a tap that does not move the quiz
+     leaves it live. The read waits for the watch to have looked once since the tap, never for a length of time. */
+  await fresh();
+  await toStudy(page);
+  await page.click('#voiceStart');
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await waitFor(page, () => window.__listens >= 1);
+  const quietTap = await page.evaluate(() => {
+    const rec = window.__recs[window.__recs.length - 1], d = document.getElementById('voiceDock');
+    const was = { live: _voice !== null, open: !!rec && rec.started === true && !rec.stopped, dock: d ? d.querySelector('.vd-state').textContent : null };
+    const q0 = S.questions[0];
+    selectOpt((q0.ci + 1) % q0.o.length);
+    return { ...was, idx: S.qIdx, answered: S.answered, id0: q0.id, watch: rec ? rec.watch : null, ticks: rec ? (window.__ivTicks[rec.watch] || 0) : 0 };
+  });
+  /* No watch found is the first check's failure to report, not a wait to time out on. */
+  await waitFor(page, w => w.watch == null || (window.__ivTicks[w.watch] || 0) > w.ticks, quietTap);
+  const tapClosed = await page.evaluate(id => {
+    const rec = window.__recs[window.__recs.length - 1], d = document.getElementById('voiceDock');
+    return { stopped: !!rec && rec.stopped === true, dock: d ? d.querySelector('.vd-state').textContent : null, live: _voice !== null, rated: S.srs[id] != null };
+  }, quietTap.id0);
+  ok('(a session was listening, the dock said so, and an option was tapped without moving the quiz)',
+     quietTap.live && quietTap.open && quietTap.dock === 'Listening' && quietTap.idx === 0 && quietTap.answered && quietTap.watch != null, JSON.stringify(quietTap));
+  ok('a tap while listening closes the microphone at the listen’s next look, not at its 9 s timeout', tapClosed.stopped, JSON.stringify(tapClosed));
+  ok('and the dock no longer says Listening, the session over, the card unrated', tapClosed.dock !== 'Listening' && !tapClosed.live && !tapClosed.rated, JSON.stringify(tapClosed));
 
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();

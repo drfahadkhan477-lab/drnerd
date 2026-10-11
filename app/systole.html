@@ -5947,7 +5947,9 @@ function voiceHear(session){
     /* The microphone does not stay open on another screen, past its own session, or on a question moved to by hand:
        it asked only the first two, so a tap that moved the quiz left it open, the dock saying "Listening", until the
        timeout above. Off its question a session is over, so this ends it as the other paths do (this one only). */
-    const watch=setInterval(()=>{ if(!voiceLive(session)){ clearInterval(watch); if(_voice===session) stopVoice(); fin(null); } },250);
+    /* Nor on a question answered by hand: the voice listens only before it records an answer (src/core/voicemode.js),
+       so an answer during a listen is a tap, and a session whose question is answered has nothing left to hear. */
+    const watch=setInterval(()=>{ if(!voiceLive(session)||S.answered){ clearInterval(watch); if(_voice===session) stopVoice(); fin(null); } },250);
     try{
       rec=new (VOICE_SR())(); rec.lang='en-US'; rec.interimResults=false; rec.maxAlternatives=1;
       rec.onresult=ev=>{ try{ fin(ev.results[0][0].transcript); }catch(_){ fin(null); } };
