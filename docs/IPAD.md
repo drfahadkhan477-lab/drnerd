@@ -165,9 +165,24 @@ rather than left to be rediscovered.
 1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
    **Upload assets**. Give it a name, then choose the zip.
 2. **Settings → Access** on the new project → require your email address.
+   Cloudflare's Pages docs say this switch covers the preview addresses; their
+   "Enable Access on your `*.pages.dev` domain" steps put the `*.pages.dev`
+   address itself behind Access, and that is the address the iPad opens.
 3. **Settings → Environment variables → Add variable**, name `GEMINI_API_KEY`,
-   paste your AI Studio key, and press **Encrypt** before saving. Redeploy once
-   so the running Worker picks it up.
+   paste your AI Studio key, and press **Encrypt** before saving. Then add two
+   more the same way. They tell the Worker which Access sign-in to believe:
+   - `ACCESS_TEAM_DOMAIN`: your Zero Trust team domain, such as
+     `yourteam.cloudflareaccess.com`;
+   - `ACCESS_AUD`: the **Application Audience (AUD) Tag** of the Access
+     application in front of that `*.pages.dev` address. It is shown on the
+     application in the Zero Trust dashboard (**Access → Applications**).
+     Preview addresses sit behind a different Access application with a
+     different tag, so the hosted key refuses requests made from a preview.
+
+   Redeploy once so the running Worker picks them up. Until both are set, the
+   hosted key refuses every request and the refusal names the missing variable
+   (the app reports it as a rejected API key). A key pasted into Apex settings
+   still works, because it never goes through the Worker.
 4. Open the `*.pages.dev` URL on the iPad, sign in once, **Add to Home Screen**.
 5. Press **Download the rest** on the home screen.
 
@@ -183,7 +198,12 @@ the moment you paste a key into Apex settings — a key you typed always wins.
 The single-file `systole.html` has no server at all, so it is always BYOK.
 
 What bounds the cost: Access means only your signed-in address can reach the
-endpoint; the Worker clamps `maxOutputTokens` to 2000 whatever the browser asks
+endpoint, and the Worker checks that itself instead of assuming it. It reads
+the token Access signs on each request (`Cf-Access-Jwt-Assertion`) and checks
+it against your team's published keys, `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`.
+It does not trust a header that only names you, because anyone can type that
+header. With no Access in front, it refuses rather than serves. Beyond that,
+the Worker clamps `maxOutputTokens` to 2000 whatever the browser asks
 for, caps the request body at 6 MB, and refuses any model that is not a Gemini
 one. The per-minute limiter is **best-effort** — a Worker isolate has no shared
 counter, so it is a speed bump against a runaway loop rather than a quota. If
