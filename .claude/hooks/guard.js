@@ -9,8 +9,10 @@
  *
  *   1. Read / Grep / Glob / Edit / Write / NotebookEdit aimed inside source/,
  *      content/, build/, dist/ or at tests/last-run.log.
- *   2. A shell command whose reader (cat, grep, sed, …, or inline python/node
- *      code) names one of those paths. Running a suite ON a build
+ *   2. A shell command whose reader (cat, grep, sed, sort, …, or inline
+ *      python/node/perl/ruby code: an eval flag, a heredoc, a program on
+ *      stdin, rule 2c) names one of those paths, or that redirects input
+ *      from one (`cat <content/x`). Running a suite ON a build
  *      (`node tests/verify-x.js build/systole.html`) is not reading it into
  *      the transcript and is allowed. A recursive grep/rg is judged by the
  *      protected paths its walk reaches, not the words it names, unless the
@@ -41,10 +43,11 @@ const FILES = ['tests/last-run.log'];
    the corpus, and reading them quotes it into the transcript. */
 const ALLOW = [];
 
-const READERS = new Set(['cat', 'head', 'tail', 'less', 'more', 'grep', 'egrep', 'fgrep', 'rg',
+const READERS = new Set(['cat', 'head', 'tail', 'less', 'more', 'grep', 'egrep', 'fgrep', 'rg', 'zgrep',
+  'sort', 'uniq', 'paste', 'fmt', 'rev', 'pr', 'bat', 'batcat', 'comm', 'join', 'expand', 'unexpand', 'look', 'xzcat', 'bzcat', 'zless', 'zmore',
   'sed', 'awk', 'strings', 'xxd', 'od', 'hexdump', 'base64', 'jq', 'cut', 'tac', 'nl',
   'diff', 'cmp', 'unzip', 'zcat', 'pdftotext', 'tr', 'fold', 'column', 'iconv', 'view', 'vi', 'vim', 'nano']);
-const PATTERNED = new Set(['grep', 'egrep', 'fgrep', 'rg', 'sed', 'awk', 'jq']);
+const PATTERNED = new Set(['grep', 'egrep', 'fgrep', 'rg', 'zgrep', 'sed', 'awk', 'jq', 'look']);
 const INLINE = new Set(['python', 'python3', 'node', 'perl', 'ruby']);
 
 function protectedRel(rel) {
@@ -211,6 +214,38 @@ function inspectSearch(name, rest, root, cwd) {
   return null;
 }
 
+/* ── Inline code (rule 2c) ───────────────────────────────────────────────
+   An interpreter is running code that is not in a script file when:
+     - a flag says so: python -c (alone or ending a cluster, -Ic); node -e,
+       -p, -pe, --eval, --print; perl and ruby -e/-E alone or in a cluster
+       (-ne, -pe, -lne, -0777ne);
+     - its segment has a heredoc or here-string (`python3 <<'EOF'`), even
+       one fed to a script file, whose body is then data it may open;
+     - it has no script operand, or `-`, so it reads its program from stdin
+       (`cat x.py | python3`, `node - <<EOF`); `python -m mod` is a module.
+   In each case what it runs or opens is in the command text, so the whole
+   command is scanned. A script file run with no heredoc is not inline code. */
+const INLINE_PATH = new RegExp(`(?:^|[\\s'"(\\[,=<])((?:\\./)?(?:${DIRS.join('|')})/[^\\s'"),\\]]*|tests/last-run\\.log)`, 'g');
+const EVAL_FLAG = {
+  python: /^-[a-zA-Z]*c/, python3: /^-[a-zA-Z]*c/,
+  node: /^(?:-[ep]{1,2}|--(?:eval|print)(?:=.*)?)$/,
+  perl: /^-[a-zA-Z0-9:.]*[eE]/, ruby: /^-[a-zA-Z0-9:.]*[eE]/,
+};
+const INLINE_ARG = new Set(['-W', '-X', '-r', '--require', '--import', '-C', '--loader', '--experimental-loader', '-I']);
+function inlineCode(name, rest, seg) {
+  if (/<</.test(seg)) return true;
+  if (rest.some(w => { const u = unquote(w); return (name === 'node' || !u.startsWith('--')) && EVAL_FLAG[name].test(u); })) return true;
+  for (let i = 0; i < rest.length; i++) {
+    const w = unquote(rest[i]);
+    if (/^\d*[<>]/.test(w)) { if (/^\d*[<>]+&?$/.test(w)) i++; continue; }
+    if (w === '-') return true;
+    if (w === '-m') return false;
+    if (INLINE_ARG.has(w)) { i++; continue; }
+    if (!w.startsWith('-')) return false;
+  }
+  return true;
+}
+
 function segments(cmd) {
   return cmd.split(/\|\||&&|[|;\n&]/).map(s => s.trim()).filter(Boolean);
 }
@@ -240,10 +275,20 @@ function inspectBash(cmd, root, cwd) {
         const hit = wordHits(w, root, cwd); if (hit) return { rule: 'read', hit };
       }
     }
-    if (INLINE.has(name) && rest.some(w => /^-[ce]$/.test(w))) {
-      /* Inline code: any protected path anywhere in it, quoted or not. */
-      const m = seg.match(new RegExp(`(?:^|[\\s'"(\\[,=])((?:\\./)?(?:${DIRS.join('|')})/[^\\s'"),\\]]*|tests/last-run\\.log)`));
-      if (m) { const hit = protectedRel(m[1]); if (hit) return { rule: 'read', hit }; }
+    /* `cat <content/x`, `while read l; do …; done < build/x`: an input
+       redirection reads its file whatever the program is. */
+    for (let i = 0; i < ws.length; i++) {
+      const m = unquote(ws[i]).match(/^\d*<(?![<(])&?(.*)$/);
+      if (!m) continue;
+      const hit = wordHits(m[1] || ws[i + 1] || '', root, cwd); if (hit) return { rule: 'read', hit };
+    }
+    const iname = /^python[0-9.]*$/.test(name) ? 'python' : name === 'nodejs' ? 'node' : name;
+    if (INLINE.has(iname) && inlineCode(iname, rest, seg)) {
+      /* Inline code: any protected path anywhere in the WHOLE command, quoted
+         or not. Whole, because a heredoc body sits on lines after this
+         segment, a piped-in program in a segment before it, and `||` inside
+         the quoted code splits it across segments. */
+      for (const m of cmd.matchAll(INLINE_PATH)) { const hit = protectedRel(m[1]); if (hit) return { rule: 'read', hit }; }
     }
     if (GREP_ARG_SHORT[name]) { const r = inspectSearch(name, rest, root, cwd); if (r) return r; }
     if (name === 'git' && rest.includes('grep') &&

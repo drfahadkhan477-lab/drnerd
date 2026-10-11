@@ -83,6 +83,58 @@ head('the shell: reading refused, running allowed');
   ok('and running a suite on a build, listing, or grepping for the word is not', a.length === 0, a.join(' | ') || `${allowed.length} allowed`);
 }
 
+head('inline code, heredocs, redirections and filters: the other ways a file is printed');
+{
+  /* Each of these was allowed while inline code meant a bare -c or -e. */
+  const inline = [
+    `node -p "require('fs').readFileSync('build/systole.html','utf8').slice(0,500)"`,
+    `node --eval "console.log(require('fs').readFileSync('dist/app.js','utf8'))"`,
+    `node --print="require('fs').readFileSync('content/q.json','utf8')"`,
+    `node -e "a || require('fs').readFileSync('build/systole.html')"`,
+    `python3.12 -c "print(open('content/x').read())"`,
+    `python3 -Ic "print(open('content/x').read())"`,
+    `perl -ne 'print if /stem/' content/questions.json`,
+    `perl -lne 'print' source/x.txt`,
+    `perl -0777 -pe 's/a/b/' build/systole.html`,
+    `ruby -ne 'puts $_' content/x`,
+  ];
+  const ri = inline.filter(c => !blocks(c));
+  ok('an eval or print flag in any spelling is inline code', ri.length === 0, ri.join(' | ') || `${inline.length} refused`);
+  const heredoc = [
+    `python3 <<'EOF'\nprint(open('content/questions.json').read()[:500])\nEOF`,
+    `node <<'EOF'\nconsole.log(require('fs').readFileSync("build/systole.html", "utf8"))\nEOF`,
+    `node - <<EOF\nconsole.log(require('fs').readFileSync("tests/last-run.log", "utf8"))\nEOF`,
+    `python3 <<< "print(open('content/x').read())"`,
+    `echo "print(open('dist/app.js').read())" | python3`,
+    `python3 tools/show.py <<'EOF'\ncontent/questions.json\nEOF`,
+  ];
+  const rh = heredoc.filter(c => !blocks(c));
+  ok('so is a program on stdin (a heredoc body, a here-string, a pipe), and a heredoc fed to a script', rh.length === 0, rh.join(' | ') || `${heredoc.length} refused`);
+  const redirect = [
+    'cat <content/questions.json',
+    'while read l; do echo "$l"; done < build/x.txt',
+    'python3 x.py 0<content/q.json',
+    'sort content/questions.json',
+    'uniq -c build/x.txt',
+    'paste dist/a dist/b',
+  ];
+  const rr = redirect.filter(c => !blocks(c));
+  ok('an input redirection reads its file, and so do the line filters', rr.length === 0, rr.join(' | ') || `${redirect.length} refused`);
+  const allowed = [
+    `python3 <<'EOF'\nimport json\nprint(json.load(open('package.json'))['name'])\nEOF`,
+    `node <<'EOF'\nconsole.log(require('./package.json').name)\nEOF`,
+    'node -e "console.log(process.version)"',
+    'node tests/x.js',
+    'python3 tools/x.py build/synthetic/export.html',
+    'node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --out build/synthetic/systole.html',
+    'python3 -m http.server',
+    'sort package.json | uniq -c | head',
+    `cat > /tmp/note.md <<'EOF'\nbuild/ and content/ stay gitignored\nEOF`,
+  ];
+  const a = allowed.filter(c => bash(c));
+  ok('while a heredoc that touches no protected path, and a script run on a build, are not', a.length === 0, a.join(' | ') || `${allowed.length} allowed`);
+}
+
 head('a recursive search: judged by what it reaches, not what it names');
 {
   /* `grep -rn X .` names no protected path and reads every one of them. */
