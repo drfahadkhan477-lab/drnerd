@@ -200,6 +200,38 @@ head('what it reports about itself');
      !!partial&&!!partial.assets&&partial.assets[kept]===part.get(kept)&&!(lost in partial.assets),String(partial&&partial.message||''));
   ok('and the missing image is reported, once',
      !!partial&&Array.isArray(partial.missing)&&partial.missing.length===1&&partial.missing[0]===lost);
+  head('a database whose open never answers');
+  {
+    /* Same failure as store.js: an open that fires none of success, error or
+       blocked left ready(), backup() and every write waiting for ever, and
+       Export awaits backup(). The module's setTimeout is swapped for one that
+       runs its delay in a few milliseconds and records what it was asked for;
+       the fake web keeps the real timers. */
+    const { makeWeb } = require('./_fakeweb.js');
+    const asked = [];
+    const quick = (fn, ms) => { asked.push(ms); return setTimeout(fn, Math.min(ms, 30)); };
+    const load = web => { const root = {}; new Function('indexedDB', 'setTimeout', SRC).call(root, web.indexedDB, quick); return root.RefAssets; };
+    const HUNG = 'still waiting after 2 s';
+    const within = p => Promise.race([p, new Promise(res => setTimeout(() => res(HUNG), 2000))]);
+    const H = load(makeWeb({ openHangs: true }));
+    const n = await within(H.ready());
+    ok('ready() settles instead of waiting for ever', n === 0, String(n));
+    ok('after giving the database a few seconds (1-10 s), not none',
+       asked.some(ms => ms >= 1000 && ms <= 10000), asked.join(', ') || 'no timer was set');
+    const k = H.add(bytesOf('imported while the database hung'), 'h.png');
+    const flushed = await within(H.flush());
+    ok('a write settles, and reports it was not stored', flushed === false, String(flushed));
+    ok('while the figure is still there for this session', !!k && H.has(k));
+    const b = await within(H.backup([`![](refimg://${k})`]));
+    ok('and a backup completes with it', b !== HUNG && !!b.assets && b.assets[k] === H.get(k));
+
+    const lateWeb = makeWeb({ openAfter: 150 });
+    const L = load(lateWeb);
+    await L.ready();
+    await new Promise(res => setTimeout(res, 250));
+    ok('a connection that arrives after the give-up is closed', lateWeb.closed === 1, `${lateWeb.closed} closed`);
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch(e=>{console.error(e);process.exit(1);});

@@ -232,19 +232,34 @@ const wholeAtLoad = Object.create(null);
     wholeAtLoad[key] = lsGet(key) !== undefined && (stamped.indexOf(key) < 0 || whole.indexOf(key) > -1);
 }
 
+/* AN OPEN THAT NEVER ANSWERS is a third way to have no database, and it was
+   the one with no exit. If indexedDB.open() fires none of success, error or
+   blocked, usable stays null, so set() never takes the localStorage fallback
+   and every write waits on a promise that never settles, while ready() — and
+   Export and Import, which await it — waits for ever without a word. After
+   OPEN_TIMEOUT_MS the session gives up and runs exactly as it does with no
+   database: stamped localStorage writes, which the next launch's migration
+   folds in. A connection that arrives late is closed rather than kept, so the
+   session cannot end up half on each store. */
+const OPEN_TIMEOUT_MS = 4000;
+
 function open() {
   if (opened) return opened;
   opened = new Promise(resolve => {
-    let req;
+    let req, done = false;
+    const settle = d => { if (done) return false; done = true; resolve(d); return true; };
     try { req = indexedDB.open(DB_NAME, VERSION); }
-    catch (_) { return resolve(null); }             // private mode, file://, disabled
+    catch (_) { return settle(null); }             // private mode, file://, disabled
+    setTimeout(() => settle(null), OPEN_TIMEOUT_MS);
     req.onupgradeneeded = () => {
       const d = req.result;
       if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE);
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => resolve(null);
-    req.onblocked = () => resolve(null);
+    req.onsuccess = () => {
+      if (!settle(req.result)) { try { req.result.close(); } catch (_) {} }
+    };
+    req.onerror = () => settle(null);
+    req.onblocked = () => settle(null);
   }).then(d => { db = d; usable = !!d; return d; });
   return opened;
 }
