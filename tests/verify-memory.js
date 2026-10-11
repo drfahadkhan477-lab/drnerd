@@ -82,6 +82,24 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
     route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ candidates: [{ content: { parts: [{ text: SUMMARY }] } }] }) });
   });
+  /* Hosted: a served build with no key typed calls Gemini through this site's
+     /api/apex/gemini/ route, where the Worker holds the key. Matched on the
+     path, whatever origin serves the page. Until the hosted section at the end
+     turns answers on, a call here gets what Cloudflare Access sends a lapsed
+     session, 200 and a sign-in page, so the app has nothing to keep and nothing
+     leaves the test. Before that section only a served target makes one (the
+     no-key case in the summariser section); the single file makes none. */
+  const hosted = [];
+  let hostedAnswers = false;
+  await page.route(u => u.pathname.startsWith('/api/apex/gemini/'), route => {
+    hosted.push({ url: route.request().url(), method: route.request().method() });
+    if (!hostedAnswers) {
+      route.fulfill({ status: 200, headers: { 'content-type': 'text/html' }, body: '<!doctype html><title>Sign in</title>' });
+      return;
+    }
+    route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ candidates: [{ content: { parts: [{ text: SUMMARY }] } }] }) });
+  });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   await booted(page);
@@ -306,7 +324,13 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   const survivesError = await page.evaluate(async () => {
     Memory.clear();
     S.sessionCorrect = 9; S.sessionTotal = 12; sessionSummarised = false;
-    AI.gemini = { key: '', model: 'gemini-9.9-flash' };   // no key → oneShot bails
+    /* No key. In the single file nothing can host the call; served, no key
+       means hosted, and the hosted route above answers as a lapsed sign-in
+       does. Either way there is nothing to keep, which is all this measures.
+       That the single file makes no call at all is held only by the console
+       check at the end, and only on Chromium, which refuses a fetch of a
+       file: URL and logs it. Other engines were not checked. */
+    AI.gemini = { key: '', model: 'gemini-9.9-flash' };
     let threw = false;
     try { await summariseSession(); } catch (_) { threw = true; }
     AI.gemini = { key: 'AQ.test', model: 'gemini-9.9-flash' };
@@ -328,6 +352,39 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   });
   ok('memory is wiped by a clear, as expected', backup.afterWipe === 0);
   ok('and comes back from a backup', backup.restored === 2 && /boards in October/.test(backup.text));
+
+  /* HOSTED, which is how the app is deployed. A served build with no key typed
+     sends its Gemini calls through /api/apex/gemini/ (apexHosted, gemUrl), and
+     the panel has opened straight into a conversation there since hosting
+     arrived. The summariser's two guards, in summariseSession and oneShot,
+     stopped at "no key" all the same, so in the default deployment it never
+     kept a note; either guard alone turns both checks below red. A single
+     file is never hosted, since file: has no server, so given one this serves
+     the same build from disk at an https name that cannot resolve (.test is
+     reserved); given a URL, the page is served already. Last, because it
+     leaves the page on that origin. */
+  head('hosted: no key typed, and the sitting is still summarised');
+  if (!/^https?:\/\//.test(target)) {
+    const HOSTED_PAGE = 'https://systole.test/systole.html';
+    await page.route(HOSTED_PAGE, route => route.fulfill({ path: path.resolve(target), contentType: 'text/html' }));
+    await page.goto(HOSTED_PAGE, { waitUntil: 'load', timeout: 200000 });
+    await booted(page);
+  }
+  hosted.length = 0; gem.length = 0; hostedAnswers = true;
+  const hostedRun = await page.evaluate(async () => {
+    Memory.clear();
+    AI.provider = 'gemini';
+    AI.gemini = { key: '', model: 'gemini-9.9-flash' };
+    S.sessionCorrect = 14; S.sessionTotal = 20; sessionSummarised = false;
+    const wasHosted = apexHosted();
+    await summariseSession();
+    return { wasHosted, n: Memory.count() };
+  });
+  hostedAnswers = false;
+  const viaSite = hosted.filter(h => h.method === 'POST' && /\/api\/apex\/gemini\/generate\?/.test(h.url));
+  ok('its one call goes through this site', viaSite.length === 1,
+     `${viaSite.length} to /api/apex/gemini/generate, ${gem.length} to Google, apexHosted() ${hostedRun.wasHosted}`);
+  ok('and what comes back is kept', hostedRun.n > 0, hostedRun.n + ' kept');
 
   head('regression');
   ok('no console or page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));

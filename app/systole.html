@@ -5230,7 +5230,10 @@ function makeStreamPainter(live,body,getText){
    Returns '' rather than throwing: every caller here is best-effort. */
 async function oneShot(prompt,maxTokens){
   const p=AI.provider, k=cur().key, model=cur().model;
-  if(!k) return '';
+  /* No key is not the end of it when the build is hosted: gemUrl and
+     gemHeaders already send a keyless call through this site. The same
+     condition buildAI opens the panel on. */
+  if(!k && !(p==='gemini' && apexHosted())) return '';
   try{
     const r=await fetch(gemUrl('generate',model,k),{method:'POST',
       headers:gemHeaders(k,true),
@@ -5252,7 +5255,8 @@ async function summariseSession(){
   if(typeof Memory==='undefined') return;
   sessionSummarised=true;
   try{
-    if(!cur().key) return;
+    /* Hosted needs no key, as in buildAI and oneShot. */
+    if(!cur().key && !(AI.provider==='gemini' && apexHosted())) return;
     const answered=S.sessionTotal||0;
     const turns=Object.values(CHATS||{}).reduce((n,t)=>n+(t?t.length:0),0);
     if(answered<5 && turns<4) return;
