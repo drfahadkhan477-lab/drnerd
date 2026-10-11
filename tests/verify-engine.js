@@ -225,6 +225,8 @@ head('the shared comment blanker blanks comments, and only comments');
      '<p>one ` tick</p> /* b */\n', ['/* b */']],
     ['a // straight after a colon is a URL written in markup, not a comment',
      '<a href=https://x.org/y>z</a> // c', ['// c']],
+    ['a / after a % in CSS divides, so a comment later on its line is still found',
+     'a { border-radius: 50% / 10%; /* oval */ }', ['/* oval */']],
   ];
   for (const [label, src, comments] of FIXTURES) {
     const got = blankComments(src), want = blankOut(src, comments);
@@ -267,6 +269,31 @@ head('the shared comment blanker blanks comments, and only comments');
      broken.length === 0, broken.length ? `${broken.length}: ${broken.slice(0, 8).join(', ')}` : 'none');
   ok('and every one keeps its length and its line breaks',
      misshapen.length === 0, misshapen.length ? `${misshapen.length}: ${misshapen.slice(0, 8).join(', ')}` : `${corpus.length} files`);
+
+  /* The page, not only its scripts. verify-stats, verify-heartbake-pure and
+     verify-icons-pure blank app/systole.html whole, and the blanker carries
+     what it reads in the markup into the script after it: tried on a copy, a
+     stray backtick in prose opened a template that the first script's
+     backtick closed, and a slash-star in prose opened a comment that a
+     script's comment closed. Either way the script read differently, and
+     every scan of it with it. So each inline script must come out of the
+     whole page exactly as it comes out alone. */
+  const page = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
+  const wholePage = blankComments(page);
+  let inline = 0;
+  const leaked = [];
+  for (const m of page.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
+    const at = m.index + m[0].indexOf('>') + 1, body = m[1];
+    if (!body.trim()) continue;
+    inline++;
+    if (wholePage.slice(at, at + body.length) !== blankComments(body)) {
+      leaked.push(`the script at line ${page.slice(0, at).split('\n').length}`);
+    }
+  }
+  /* Vacuity guard: no script found would leak nothing too. */
+  ok('the app template has inline scripts to compare', inline > 0, `${inline} found`);
+  ok('and each blanks the same inside the page as alone, so nothing in the markup reaches it',
+     leaked.length === 0, leaked.join(', ') || 'none');
 }
 
 head('the runner can actually be told which engine to use');

@@ -50,14 +50,23 @@
  *
  * Not a parser, and the callers do not only hand it JavaScript: the app
  * template app/systole.html is HTML and CSS around its scripts, and some read
- * CSS alone. So where JavaScript would be malformed it falls back to reading
- * the character as plain text, never to swallowing the rest of the file:
+ * CSS alone. So where JavaScript would be malformed it reads the character as
+ * plain text rather than let it run on:
  *
  *   · a quote with no partner on its line is not a string (an apostrophe in
- *     prose), and a regular expression not closed on its line is a division;
+ *     prose), and a regular expression not closed on its line, or closed only
+ *     by the first slash of a comment, is a division (CSS's 50% / 10%, and
+ *     the / of a closing tag, would otherwise eat a comment's opening);
  *   · a backtick whose template never closes is not a template;
  *   · a // straight after a : or a \ is not a comment, as before — the // in
  *     a URL written outside quotes in markup or CSS.
+ *
+ * That has limits, found by trying them on a copy of the template: a stray
+ * backtick in prose that a later backtick closes is read as a template, and
+ * a slash-star in prose that a later comment closes is read as a comment, and
+ * either carries on into the script after it. An apostrophe does not. So
+ * verify-engine holds app/systole.html to it: each inline script must blank
+ * the same inside the page as it does alone.
  *
  * What it cannot know: whether a / after ) or } begins a regular expression.
  * It reads division there, as strip-comments does. What was measured, at the
@@ -146,9 +155,9 @@ function blankPass(s, plainBackticks) {
         else if (r === '/') break;
         j++;
       }
-      /* Closed on its line, and not by the first slash of a comment — in CSS,
-         `50% / 10%; /* … *\/` would otherwise read as a regular expression
-         that eats the comment's opening. */
+      /* Closed on its line, and not by the first slash of a comment: CSS's
+         `50% / 10%; /* … *\/`, and markup's `</p> /* … *\/`, would otherwise
+         read as a regular expression that eats the comment's opening. */
       if (j < n && s[j] === '/' && s[j + 1] !== '*' && s[j + 1] !== '/') {
         j++;
         while (j < n && isNamePart(s.charCodeAt(j))) j++;      // its flags
