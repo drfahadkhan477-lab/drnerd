@@ -32,6 +32,9 @@ const GUARD = path.join(ROOT, '.claude', 'hooks', 'guard.js');
 const { decide } = require(GUARD);
 const call = (tool_name, tool_input, root = ROOT) => decide({ tool_name, tool_input, cwd: root }, root);
 const bash = (command, root) => call('Bash', { command }, root);
+/* Refused as Claude Code would see it: a guard that throws exits 1, which
+   blocks nothing, so a throw counts as "let through", not as a refusal. */
+const blocks = (command, root) => { try { return !!bash(command, root); } catch (_) { return false; } };
 
 head('the file tools: licensed paths refused, look-alikes not');
 {
@@ -78,6 +81,56 @@ head('the shell: reading refused, running allowed');
   ];
   const a = allowed.filter(c => bash(c));
   ok('and running a suite on a build, listing, or grepping for the word is not', a.length === 0, a.join(' | ') || `${allowed.length} allowed`);
+}
+
+head('a recursive search: judged by what it reaches, not what it names');
+{
+  /* `grep -rn X .` names no protected path and reads every one of them. */
+  const refused = [
+    'grep -rn "stem" .',
+    'grep -rn "stem"',
+    'grep -Rn stem',
+    'egrep -r stem',
+    'grep -n -d recurse stem',
+    'grep --recursive stem ..',
+    'grep -rn stem *',
+    'grep -rn -A 3 stem',
+    'grep -rn stem . 2>/dev/null | head',
+    'cd tests && grep -rn stem',
+    'grep -rn stem --exclude-dir=content .',
+    'grep -rn --include="*.js" stem .',
+    'rg -u stem',
+    'rg --no-ignore stem .',
+    'git grep --no-index stem',
+    `grep -rn stem --exclude-dir='[z-a]' .`,
+  ];
+  const r = refused.filter(c => !blocks(c));
+  ok('a recursive grep from the root, a subtree holding a protected path, or rg told to ignore .gitignore, is refused',
+     r.length === 0, r.join(' | ') || `${refused.length} refused`);
+  const why = bash('grep -rn stem .');
+  ok('and the refusal says how to scope it', /--exclude-dir=content/.test(why || '') && /rg/.test(why || ''), String(why).slice(0, 80));
+  const allowed = [
+    'grep -rn stem src/',
+    'grep -rn stem src/ scripts/ tests/*.js',
+    'cd src && grep -rn stem',
+    'grep -rn stem --exclude-dir=content --exclude-dir=build --exclude-dir=dist --exclude-dir=source --exclude=last-run.log .',
+    'grep -rn stem --exclude-dir={content,build,dist,source} --exclude="*.log"',
+    'rg stem',
+    'rg stem . -g "*.js"',
+    'rg -u -g "!content" -g "!build" -g "!dist" -g "!source" -g "!*.log" stem',
+    'git grep stem',
+    'grep -c build package.json',
+  ];
+  const a = allowed.filter(c => bash(c));
+  ok('while a scoped grep, one excluding every protected path, and plain rg are not', a.length === 0, a.join(' | ') || `${allowed.length} allowed`);
+  /* rg's pass rests on .gitignore. In a checkout whose .gitignore does not
+     list the export, the same rg is a read of it. */
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-guard-rg-'));
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  ok('rg from a root whose .gitignore does not list the export is refused', !!bash('rg stem', repo));
+  fs.writeFileSync(path.join(repo, '.gitignore'), 'content/\nbuild/\ndist/\nsource/\n*.log\n');
+  ok('and allowed once it does', bash('rg stem', repo) === null, String(bash('rg stem', repo)).slice(0, 80));
+  fs.rmSync(repo, { recursive: true, force: true });
 }
 
 head('a commit: refused while leak-guard refuses what is staged');
