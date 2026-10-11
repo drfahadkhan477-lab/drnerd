@@ -28,7 +28,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { launch, cpuThrottle, isEngineNoise } = require('./_engine');
+const { launch, isEngineNoise } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -85,24 +85,32 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }
 
   head('it actually renders — a decoded image in a real box');
-  /* The splash is a genuinely transient element: boot() removes it from the
-     DOM 520ms after the app starts, by design, once its fade-out finishes.
-     That is correct behaviour and not something this suite should fight —
-     but a real-time wait racing a hardcoded removal timer is exactly the kind
-     of test that passes locally and flakes in CI. Throttling the CPU slows
-     that timer in wall-clock terms right along with everything else, the same
-     trick the splash's own screenshot check uses, so the window to look is
-     comfortably wide instead of a coin flip. */
+  /* The splash is a genuinely transient element: dismissSplash() adds .gone
+     (opacity 0, visibility hidden) and removes it from the DOM 520 ms later.
+     This suite used to race that timer, slowed by throttling the CPU — which
+     only Chromium can do. In WebKit the splash was gone before the first read:
+     four failures with a working image, and two animation checks "passed" on
+     no samples at all.
+
+     So the removal is held, by the test, for the splash alone: remove() on
+     #splash records that the app asked and does nothing. The app's own code
+     runs unchanged, .gone included — it hides the splash but keeps its box
+     and its animation, which is what is measured. This is a precondition (the
+     element is still there to read), never the claim: no check below asserts
+     that the splash stays. */
+  const HOLD = `(() => {
+    const remove = Element.prototype.remove;
+    Element.prototype.remove = function () {
+      if (this.id === 'splash') { window.__splashRemoveAsked = true; return; }
+      return remove.apply(this, arguments);
+    };
+  })()`;
   const browser = await launch();
   const errors = [], events = [];
   onDeath(() => ({ section, checks: passed + failed, errors,
                    events: events.length ? events.join(', ') : 'none' }));
   const page = watch(await browser.newPage({ viewport: { width: 440, height: 900 }, deviceScaleFactor: 2 }), events, 'main');
-  /* See _engine.js: false on any engine without CDP. The section below
-     already treats "the splash went before both samples" as inconclusive
-     rather than as a failure, which is exactly the case an unthrottled run
-     makes more likely, so nothing here needs to change shape. */
-  const throttled = await cpuThrottle(page, 4);
+  await page.addInitScript(HOLD);
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
   await page.goto(URL, { waitUntil: 'commit', timeout: 250000 });
@@ -147,18 +155,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const a = await frame();
   await page.waitForTimeout(150);
   const b = await frame();
-  /* A null sample means the splash's own 520ms removal timer won the race
-     against the environment's real fetch latency this run — an artifact of
-     the transient element being transient, not a claim about the animation.
-     Report it plainly rather than as a hard failure either way. */
+  /* Two real samples or a failure. This was `: true` when a sample was
+     missing, so the check counted as a pass having measured nothing — what
+     every WebKit run did. With the removal held a missing sample means the
+     image is not there, which is a failure in its own right. */
   ok('the image transform changes from one moment to the next',
-     a !== null && b !== null ? a !== b : true,
-     a === null || b === null ? '(splash removed before both samples — inconclusive, not a failure)'
-                               : (a === b ? 'identical' : `${a} → ${b}`));
+     a !== null && b !== null && a !== b,
+     a === null || b === null ? 'no image to sample' : (a === b ? 'identical' : `${a} → ${b}`));
 
   head('reduced motion actually stops it');
   const rmPage = watch(await browser.newPage({ viewport: { width: 440, height: 900 }, deviceScaleFactor: 2, reducedMotion: 'reduce' }), events, 'reduced-motion');
-  await cpuThrottle(rmPage, 4);
+  await rmPage.addInitScript(HOLD);
   await rmPage.goto(URL, { waitUntil: 'commit', timeout: 250000 });
   await rmPage.waitForFunction(() => {
     const im = document.querySelector('#spHeartMount img');
@@ -172,9 +179,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await rmPage.waitForTimeout(150);
   const r2 = await rmFrame();
   ok('under prefers-reduced-motion the frame holds still',
-     r1 !== null && r2 !== null ? r1 === r2 : true,
-     r1 === null || r2 === null ? '(splash removed before both samples — inconclusive, not a failure)'
-                                 : (r1 === r2 ? 'held' : 'still animating'));
+     r1 !== null && r2 !== null && r1 === r2,
+     r1 === null || r2 === null ? 'no image to sample' : (r1 === r2 ? 'held' : 'still animating'));
   await rmPage.close();
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));

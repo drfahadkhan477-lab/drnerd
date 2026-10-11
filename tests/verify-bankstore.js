@@ -196,6 +196,36 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
   ok('and leaves the previous bank active, all of it', swap.failQ === 2 && swap.failF === 2, `${swap.failQ} questions, ${swap.failF} figures`);
   ok('a completed import replaces it whole — the old figures go with it, none left in the store', swap.newIds && swap.newIds.join(',') === 'ZQ_9' && swap.newF === 1 && swap.rawFigs === 1,
      `${swap.newIds} · ${swap.newF} active figure(s), ${swap.rawFigs} in the store`);
+  /* Two imports stamped with the same millisecond (the `now` option; a coarse
+     clock, or two tabs, do the same). The generation was only the timestamp,
+     so the second wrote into the first's namespace and nothing it lacked was
+     removed: the active bank said one figure and no extras, and loaded two
+     figures and the first package's reference seed. */
+  const same = (await within(pg.evaluate(async ({ good, one }) => {
+    if (typeof BankStore === 'undefined') return null;
+    const v = async b => BankPack.validate((await ZipRead.read(new Uint8Array(b).buffer)).files);
+    const G = await v(good), O = await v(one);
+    const rawFigs = () => new Promise((res, rej) => { const r = indexedDB.open(BankStore.DB); r.onsuccess = () => {
+      const q = r.result.transaction('figs').objectStore('figs').count(); q.onsuccess = () => { res(q.result); r.result.close(); }; q.onerror = rej; }; r.onerror = rej; });
+    const seen = l => l && { ids: l.questions.map(q => q.id).join(','), figs: l.figures, extras: Object.keys(l.extras).sort().join(',') };
+    await BankStore.save(G, { now: 1000 });
+    const first = seen(await BankStore.load({ makeURL: () => 'u' }));
+    await BankStore.save(O, { now: 1000 });
+    const second = seen(await BankStore.load({ makeURL: () => 'u' })), afterSecond = await rawFigs();
+    const both = await Promise.allSettled([BankStore.save(G, { now: 2000 }), BankStore.save(O, { now: 2000 })]);
+    const raced = seen(await BankStore.load({ makeURL: () => 'u' })), afterRace = await rawFigs();
+    return { first, second, afterSecond, saved: both.map(s => s.status).join(','), raced, afterRace };
+  }, { good: Array.from(GOOD), one: Array.from(ONE) }), 30000)) || {};
+  ok('(the first package was stored with its extras)', !!same.first && same.first.ids === 'ZQ_1,OAB_2' && same.first.extras !== '',
+     JSON.stringify(same.first));
+  ok('an import in the same millisecond replaces it whole: its own question and figure, no extras',
+     !!same.second && same.second.ids === 'ZQ_9' && same.second.figs === 1 && same.second.extras === '', JSON.stringify(same.second));
+  ok('and nothing of the earlier package is left in the store', same.afterSecond === 1, String(same.afterSecond));
+  ok('two imports at once in the same millisecond both commit', same.saved === 'fulfilled,fulfilled', String(same.saved));
+  ok('and the bank left active is one of them, whole, with nothing of the other in the store',
+     !!same.raced && ((same.raced.ids === 'ZQ_9' && same.raced.figs === 1 && same.raced.extras === '' && same.afterRace === 1) ||
+                      (same.raced.ids === 'ZQ_1,OAB_2' && same.raced.figs === 2 && same.afterRace === 2 + same.raced.extras.split(',').length)),
+     JSON.stringify(same.raced) + ' · ' + same.afterRace + ' in the store');
   /* Which form the store took, read from its own meta record. */
   /* Bounded like the save above: a read queued behind a transaction that
      never ends would otherwise wait with it. */

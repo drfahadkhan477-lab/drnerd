@@ -30,8 +30,16 @@
  * — because stage0 strips the Google Fonts links and embeds the faces ("This
  * file requests nothing from the network"), and onetutor reduces the provider
  * map to a single entry. Two hosts is a tight enough surface that connect-src
- * is worth having: an injected script can still run, but it cannot post the
- * key anywhere.
+ * is worth having, and img-src closes the next-easiest route: an injected
+ * script can still run, but it cannot fetch, beacon or load an image from
+ * anywhere else.
+ *
+ * THAT IS ALL IT CONTAINS. An injected script can still carry data out by the
+ * routes this policy leaves open on purpose (see "WHY THERE IS NO default-src"):
+ * a <script src>, a stylesheet or font from another host, a media element, or
+ * simply navigating the page to one. Each of those directives would need the
+ * app's own use of it proven first, and none has been. So read this policy as
+ * closing fetch, XHR, beacons, WebSockets and images, not as "nothing leaves".
  *
  * ── WHY THERE IS NO default-src ──────────────────────────────────────────
  *
@@ -59,6 +67,15 @@
    tab from bytes it already holds, so it opens no route to any other host. */
 const CONNECT = ["'self'", 'blob:', 'https://generativelanguage.googleapis.com'];
 
+/* Every image the app shows is one of three kinds, and none needs another
+   host: 'self' for content/figures/* and the icons; data: for the baked
+   reference figures, imported ones (RefAssets) and the single-file figures;
+   blob: for the code-only deploy's figures (src/core/bankstore.js). A note
+   imported with an https:// image link keeps the link as text: md() renders
+   only refimg:// images, so nothing loads it. Without this, `new Image().src`
+   carried anything to any host while connect-src refused the same request. */
+const IMG = ["'self'", 'data:', 'blob:'];
+
 /* Each of these is a thing the app provably does not do, so denying it cannot
    cost anything and closes a real exfiltration or hijack route:
      base-uri    an injected <base> silently repoints every relative URL in the
@@ -72,6 +89,7 @@ const DIRECTIVES = [
   "form-action 'none'",
   "frame-src 'none'",
   `connect-src ${CONNECT.join(' ')}`,
+  `img-src ${IMG.join(' ')}`,
 ];
 
 const POLICY = DIRECTIVES.join('; ');
@@ -92,4 +110,4 @@ const HEADERS_FILE = `/*
   X-Content-Type-Options: nosniff
 `;
 
-module.exports = { CONNECT, DIRECTIVES, POLICY, HEADER_POLICY, META, HEADERS_FILE };
+module.exports = { CONNECT, IMG, DIRECTIVES, POLICY, HEADER_POLICY, META, HEADERS_FILE };

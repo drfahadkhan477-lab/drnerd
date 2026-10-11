@@ -712,8 +712,9 @@ jobs:
   #       NOT pull_request for what actually prevents that.
   #
   # The ones left out all run in Chromium in the job above. Not here either: update handling
-  # and offline loading of the split build, which are verify-pwa's; it asserts
-  # the real bank's question and figure counts, so it cannot run on this bank.
+  # and offline loading of the split build, which are verify-pwa's. It now holds
+  # a synthetic build to the synthetic generator's own totals, but no job here
+  # builds and serves the split build for it yet.
   #
   # Same build, same suites, same assertions as the job above; only
   # SYSTOLE_ENGINE differs (tests/_engine.js). Playwright's WebKit on Linux is

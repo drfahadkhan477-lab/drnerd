@@ -107,12 +107,23 @@ const asBlob = v => (v && v.b !== undefined && !(v instanceof root.Blob)) ? new 
 async function saveAs(verdict, o, buffers) {
   const db = await open(o.idb);
   try {
-    const gen = 'g' + (o.now || Date.now());
     const t = db.transaction(['meta', 'bank', 'figs'], 'readwrite');
     const finished = done(t);
     finished.catch(() => {});                  // observed here; awaited below, so a failure is thrown, never unhandled
     const meta = t.objectStore('meta'), bank = t.objectStore('bank'), figs = t.objectStore('figs');
     const old = await req(meta.get('active'));
+    /* A generation no stored bank uses, chosen INSIDE this transaction. The
+       timestamp alone was the name, so two imports in one millisecond (the
+       `now` option, a coarse clock, two tabs) wrote into one namespace, and
+       the second never removed what the first had and it lacked: its meta
+       said one figure and no extras, its load returned the first's too.
+       Readwrite transactions on these stores never overlap, in this tab or
+       another, so a name found free here is still free when this commits.
+       The bank record is enough to look at: a generation's figures are only
+       ever written and deleted in the same transaction as its record. */
+    const stamp = 'g' + (o.now || Date.now());
+    let gen = stamp;
+    for (let n = 1; await req(bank.count(gen)); n++) gen = stamp + '-' + n;
     bank.put({ questions: verdict.questions, manifest: verdict.manifest }, gen);
     for (const f of verdict.figures) figs.put(asStored(f.bytes, f.type, buffers), gen + '/' + f.name);
     /* The notes' seed and figure files, beside the figures and in the same
