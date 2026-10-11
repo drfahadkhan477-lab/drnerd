@@ -482,6 +482,20 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   });
   ok('a 403 reads as a rejected key, not a raw status code', /rejected/i.test(badKeyMsg), badKeyMsg);
 
+  /* Hosted, no key typed: the call went to this site's /api/apex/gemini/, and
+     the Worker refused it (here, Access not configured — its real wording).
+     There is no key to re-enter, so the Worker's own reason is what is shown.
+     The Response is made in the page and given the URL a hosted fetch has:
+     a file: page cannot fetch its own site, and the URL is all apiError reads. */
+  const relayMsg = await page.evaluate(async () => {
+    const r = new Response(JSON.stringify({ error: { message: 'This deployment cannot check who is asking: ACCESS_TEAM_DOMAIN and ACCESS_AUD are not set.' } }),
+      { status: 403, headers: { 'content-type': 'application/json' } });
+    Object.defineProperty(r, 'url', { value: 'https://systole.pages.dev/api/apex/gemini/stream?model=gemini-9.9-flash' });
+    return apiError(r, 'gemini');
+  });
+  ok('a 403 from this site\'s relay says what the site said, not "re-enter your key"',
+     /ACCESS_TEAM_DOMAIN and ACCESS_AUD/.test(relayMsg) && !/re-enter/i.test(relayMsg), relayMsg);
+
   await page.route('**/generativelanguage.googleapis.com/**', route => {
     route.fulfill({ status: 429, headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ error: { message: 'You exceeded your current quota, please check your plan.' } }) });

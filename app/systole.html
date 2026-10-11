@@ -5391,9 +5391,18 @@ function errMsg(j){
   if(m==null) return '';
   try{ return JSON.stringify(m).slice(0,300); }catch(_){ return ''; }
 }
+/* A refusal from this site's own relay (hosted: no key typed) is not about a
+   key the fellow can re-enter. It is the Worker's gate (Access not set up, or
+   its token refused) or the site's key, and the Worker's message says which,
+   in words for whoever deployed the site. Told apart by where the response
+   came from, not by what is typed now: that is the request that failed. */
+function viaRelay(r){
+  try{ return new URL(r.url,location.href).pathname.indexOf(APEX_API+'/')===0; }catch(_){ return false; }
+}
 async function apiError(r,provider){
   let d=''; try{ d=errMsg(await r.json()); }catch(_){}
   const name='Gemini';
+  if((r.status===401||r.status===403)&&viaRelay(r)) return `This site refused to pass the request to Gemini${d?': '+e(d):'.'}`;
   if(r.status===401) return 'Your API key was rejected. Tap the settings icon to re-enter it.';
   if(r.status===403&&provider==='gemini') return 'Your API key was rejected. Tap the settings icon to re-enter it.';
   if(r.status===400&&provider==='gemini'&&/api key not valid/i.test(d)) return 'Your API key was rejected. Tap the settings icon to re-enter it.';
