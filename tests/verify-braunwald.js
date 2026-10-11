@@ -173,6 +173,10 @@ specific haemodynamic finding.
   ok('the answer key itself is withheld',
      !/OFFICIAL ACC COMMENTARY/.test(sysText) && /commentary for this item is withheld/i.test(sysText) &&
      !/← CORRECT/.test(sysText));
+  /* How many candidates chose each option hints at the key as the mark does.
+     The options must still be there, or this would pass on none. */
+  ok('the options go out without how many candidates chose each',
+     /OPTIONS A\. \S/.test(sysText) && !/of candidates chose/.test(sysText));
   ok('but the stem is still there, so it knows what was asked',
      /CURRENT QUESTION/.test(sysText) && /STEM/.test(sysText));
 
@@ -182,6 +186,7 @@ specific haemodynamic finding.
   const openSys = flat(systemText(openReq));
   ok('the prohibition is gone', !/GROUNDED MODE IS ON/.test(openSys));
   ok('the answer key and bank come back', /OFFICIAL ACC COMMENTARY/.test(openSys));
+  ok('and so does how many candidates chose each option', /OPTIONS A\. \S/.test(openSys) && /of candidates chose this/.test(openSys));
 
   head('grounded with nothing to read');
   const empty = await page.evaluate(() => {

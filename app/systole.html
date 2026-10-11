@@ -4610,9 +4610,10 @@ function aiCtx(q){
   if(!q) return 'The fellow is browsing the question index; no question is open.'
     + ((typeof Profile!=='undefined') ? Profile.build() : '')
     + ((typeof Memory!=='undefined') ? Memory.build() : '');
-  /* The mark on the keyed option IS the answer key, so grounded mode, which
-     tells the model the key is withheld, sends the options unmarked. */
-  const opts=q.o.map((o,i)=>`  ${o.l}. ${o.t}  [${o.p}% of candidates chose this]${!AI_GROUNDED&&i===q.ci?'  ← CORRECT':''}`).join('\n');
+  /* The mark on the keyed option IS the answer key, and how many candidates
+     chose each option hints at it, so grounded mode, which tells the model the
+     key is withheld, sends each option as its letter and text alone. */
+  const opts=q.o.map((o,i)=>`  ${o.l}. ${o.t}`+(AI_GROUNDED?'':`  [${o.p}% of candidates chose this]${i===q.ci?'  ← CORRECT':''}`)).join('\n');
   const own=(typeof NOTES!=='undefined'&&NOTES[q.id]||[]).map(n=>n.text).filter(Boolean);
   const ownBlock=own.length?`\n\nTHE FELLOW'S OWN NOTE ON THIS ITEM (they wrote this while working through it — engage with it directly, and correct it if it is wrong):\n${own.map(t=>'• '+t).join('\n')}`:'';
   const profileBlock = (typeof Profile!=='undefined') ? Profile.build() : '';
