@@ -69,8 +69,14 @@ function extractConst(html, name) {
   }
 }
 
-const html = fs.readFileSync(SRC, 'utf8');
-const sourceDigest = crypto.createHash('sha256').update(html).digest('hex').slice(0, 16);
+/* The digest is over the BYTES, as build-pwa.js's staleness check and
+   stamp.js take it. It was over the decoded text, which is the same thing
+   only for valid UTF-8: a stray 0x92 decodes to U+FFFD, the two digests
+   part, and build-pwa refuses content/ extracted from the very file it is
+   splitting. tests/verify-provenance-pure.js runs both over such a file. */
+const srcBytes = fs.readFileSync(SRC);
+const html = srcBytes.toString('utf8');
+const sourceDigest = crypto.createHash('sha256').update(srcBytes).digest('hex').slice(0, 16);
 const questions = extractConst(html, 'ALL_Q');
 const imgs = extractConst(html, 'IMGS');
 
