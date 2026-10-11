@@ -269,6 +269,52 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const freshChrome = await page.evaluate(() => !!document.querySelector('.q-restart'));
   ok('a fresh quiz does not', freshChrome === false);
 
+  head('a deck from search, a jump or Apex starts clean, and leaves saved places alone');
+  /* quizFromSearch, jumpTo and Apex's start_quiz (flushNav) dealt their decks
+     with Object.assign under mode 'all'. They kept the deck before's answers,
+     which restoreQuizState() replayed by position (question 2 opened answered,
+     its options locked), and they took the chapter's or the whole bank's saved
+     place: overwritten at the first answer, deleted at the end. Each launcher
+     here follows a deck left part-way with answers in it, so there is a place
+     to lose and an answer to inherit. */
+  const adhoc = await page.evaluate(() => {
+    const place = key => S.resume[key] ? S.resume[key].i + '/' + S.resume[key].ids.length : null;
+    const leaveWorked = ch => { startQuiz(ch); for (let k = 0; k < 3; k++) { selectOpt(0); nextQ(); } goHome(); };
+    const out = {};
+    const ch = CHAPTERS[0], key = 'all|' + ch;
+    goHome(); S.resume = {};
+    /* Apex: a deck of ids from the chapter left part-way */
+    leaveWorked(ch);
+    out.placeBefore = place(key);
+    pendingNav = { kind: 'quiz', ids: POOL.filter(q => q.ch === ch).slice(0, 4).map(q => q.id) };
+    S.shownAt = 0;   // a stamp no launch leaves behind, so an unstamped first question cannot pass
+    flushNav();
+    out.shownFresh = S.shownAt > 0;
+    selectOpt(0); nextQ();
+    out.apexSecond = { answered: S.answered, selected: S.selected };
+    goHome();
+    /* a jump to one question of the chapter, answered and finished */
+    jumpTo(POOL.find(q => q.ch === ch).id);
+    selectOpt(0); nextQ();
+    out.placeAfterJump = place(key);
+    /* search: the whole bank's place, left part-way */
+    goHome(); leaveWorked(null);
+    out.bankBefore = place('all|*');
+    SQ.q = 'test'; SQ.hits = POOL.slice(0, 3).map(q => ({ q }));
+    quizFromSearch();
+    selectOpt(0); nextQ();
+    out.searchSecond = { answered: S.answered };
+    out.bankAfter = place('all|*');
+    goHome();
+    return out;
+  });
+  ok('(there were saved places to lose: a chapter’s and the whole bank’s)', !!adhoc.placeBefore && !!adhoc.bankBefore, JSON.stringify(adhoc));
+  ok('Apex’s deck does not open its second question already answered', adhoc.apexSecond.answered === false && adhoc.apexSecond.selected === null, JSON.stringify(adhoc.apexSecond));
+  ok('nor does a search’s deck', adhoc.searchSecond.answered === false, JSON.stringify(adhoc.searchSecond));
+  ok('a jump to one question leaves the chapter’s place as it was', adhoc.placeAfterJump === adhoc.placeBefore, `${adhoc.placeBefore} → ${adhoc.placeAfterJump}`);
+  ok('a search’s deck leaves the whole bank’s place as it was', adhoc.bankAfter === adhoc.bankBefore, `${adhoc.bankBefore} → ${adhoc.bankAfter}`);
+  ok('and its first answer is timed from when it was shown', adhoc.shownFresh === true);
+
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);

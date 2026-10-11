@@ -35,7 +35,7 @@ var ui = {
   docId: null, docRec: null, state: null,
   busy: '', busyKey: '', stepSeq: 0, moving: false, slowSaves: 0, rating: false, saveError: '', notice: '',
   error: '', choice: null, pasting: false,
-  importing: '', reviewShown: false, reviewDone: 0, drill: null,
+  importing: '', recutting: false, reviewShown: false, reviewDone: 0, drill: null,
 };
 
 /* ── tiny DOM helper: h('div.cls', {attrs}, children…) ─────────────────── */
@@ -254,12 +254,12 @@ function pump() {
      against the book when it was imported, so nothing to ask for. */
   var fromPack = Pack.safeSection(ui.pack, s.section, ui.docRec);
   if (s.phase === 'teach' && !c.lesson && fromPack) {
-    dispatch({ type: 'taught', value: JSON.parse(JSON.stringify(fromPack.lesson)) }).then(render);
+    waitForSave(dispatch({ type: 'taught', value: JSON.parse(JSON.stringify(fromPack.lesson)) })).then(render);
   } else if (s.phase === 'drill' && !c.quiz && fromPack && fromPack.quiz.questions.length) {
-    dispatch({ type: 'quizReady', value: JSON.parse(JSON.stringify(fromPack.quiz)) }).then(render);
+    waitForSave(dispatch({ type: 'quizReady', value: JSON.parse(JSON.stringify(fromPack.quiz)) })).then(render);
   } else if (s.phase === 'teach' && !c.lesson) {
     ask('Preparing the lesson…', 'lesson', [cluster()], [cluster()])
-      .then(function (v) { return dispatch({ type: 'taught', value: v }); })
+      .then(function (v) { return waitForSave(dispatch({ type: 'taught', value: v })); })
       .then(render, function () {});
   } else if (s.phase === 'drill' && !c.quiz) {
     ask('Writing your questions…', 'quiz', [cluster(), c.lesson, ui.docRec.clusters], [cluster(), c.lesson])
@@ -275,7 +275,7 @@ function pump() {
           return { questions: all.slice(0, Coach.QUIZ_SIZE + ai.length) };
         });
       })
-      .then(function (v) { return dispatch({ type: 'quizReady', value: v }); })
+      .then(function (v) { return waitForSave(dispatch({ type: 'quizReady', value: v })); })
       .then(render, function () {});
   } else if (s.phase === 'exam' && !s.exam.questions) {
     var weak = Session.weakest(s, 2), n = Session.examSize(s), lessons = {};
@@ -283,11 +283,11 @@ function pump() {
     /* With a pack, the exam asks its questions for the sections it covers
        (pack.js exam) and the built-in coach's for the rest. */
     if (builtin() && Pack.coverage(ui.pack, ui.docRec).have) {
-      dispatch({ type: 'examReady', value: Pack.exam(Pack.safeRecord(ui.pack, ui.docRec), Coach.exam(ui.docRec.clusters, Session.asked(s), weak, n), weak, n) }).then(render);
+      waitForSave(dispatch({ type: 'examReady', value: Pack.exam(Pack.safeRecord(ui.pack, ui.docRec), Coach.exam(ui.docRec.clusters, Session.asked(s), weak, n), weak, n) })).then(render);
       return;
     }
     ask('Setting your final exam…', 'exam', [ui.docRec.clusters, Session.asked(s), weak, n], [ui.docRec.clusters, lessons, weak, n])
-      .then(function (v) { return dispatch({ type: 'examReady', value: v }); })
+      .then(function (v) { return waitForSave(dispatch({ type: 'examReady', value: v })); })
       .then(render, function () {});
   }
 }
@@ -412,7 +412,9 @@ function bookName(files) {
 /* Chapters → units. A chapter whose pages are unchanged keeps its unit, and
    so its progress and cards, whatever it is now called (cutting by another
    method renames chapters); the others are built from the book's stored
-   text, and units no chapter uses any more are deleted. */
+   text, and units no chapter uses any more are deleted. `book.chapters`
+   must be the chapters as stored: their units are the ones kept or
+   dropped (recut reads the book from the store for this). */
 function applyChapters(book, chapters, pages) {
   var old = {};
   (book.chapters || []).forEach(function (c) { if (c.docId) old[c.pageStart + ':' + c.pageEnd] = c.docId; });
@@ -529,15 +531,30 @@ function openBook(id) {
   refresh().then(function () { render(); root.scrollTo(0, 0); });
 }
 /* Cut the book again: by another method, or with one chapter joined to the
-   one before. Chapters left as they were keep their progress. */
+   one before. Chapters left as they were keep their progress.
+   One cut at a time, and no delete while one runs (viewBook disables both):
+   a second cut from the same screen dropped units the first had kept, and a
+   delete was undone by the cut's write — each left a book no backup would
+   restore. The flag holds until the screen is redrawn from the store. The
+   cut starts from the book as stored, so one tapped after Delete (whose
+   screen leaves only when it lands) finds no book. */
 function recut(book, chapters, method) {
-  ui.importing = 'Cutting the chapters again…'; render();
-  return bookPages(book).then(function (pages) {
-    var next = Object.assign({}, book, { method: method || book.method });
-    return applyChapters(next, chapters || Book.candidates(pages, book.outline, book.pages)[next.method], pages);
-  }).then(function () { ui.importing = ''; return refresh(); }).then(render, function (e) {
-    ui.importing = ''; ui.error = (e && e.message) || String(e); render();
+  if (ui.recutting) return Promise.resolve();
+  ui.recutting = true; ui.importing = 'Cutting the chapters again…'; render();
+  return Store.get('books', book.id).then(function (stored) {
+    if (!stored) return;
+    return bookPages(stored).then(function (pages) {
+      var next = Object.assign({}, stored, { method: method || stored.method });
+      return applyChapters(next, chapters || Book.candidates(pages, stored.outline, stored.pages)[next.method], pages);
+    });
+  }).then(function () { return refresh(); }).then(function () { ui.recutting = false; ui.importing = ''; render(); }, function (e) {
+    ui.recutting = false; ui.importing = ''; ui.error = (e && e.message) || String(e); render();
   });
+}
+function removeBook(b) {
+  if (ui.recutting) return;
+  if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
+  docsChanged(); return Store.deleteBook(b.id).then(function () { leave('shelf'); }, actionFailed);
 }
 
 function openDoc(id, section) {
@@ -556,21 +573,46 @@ function openDoc(id, section) {
     if (typeof section === 'number') ui.state = Session.next(ui.state, { type: 'open', section: section });
     ui.view = 'session'; ui.error = ''; ui.choice = null;
     ensureFigures(ui.docRec);
-    return save();
+    return waitForSave(save());
   }).then(function () { if (seq === ui.openSeq) { render(); root.scrollTo(0, 0); } }, function (e) { if (seq === ui.openSeq) { ui.error = e.message; render(); } });
+}
+/* A save that never settles (an IndexedDB transaction or open that hangs,
+   which WebKit has shipped) used to leave the screen waiting on it for ever:
+   a step, a rating, a unit opened, a lesson filed — each drawn only when its
+   save settled, with nothing on screen to say why. waitForSave(p) settles
+   with p, or after SAVE_WAIT_MS, whichever is first; a save that slow is
+   counted in ui.slowSaves, which puts a note on screen until it settles.
+   When one is already that slow, the next does not wait at all: IndexedDB
+   runs writes to the same stores in order, so it is queued behind the first
+   and would only wait out the bound again on every step. onSlow, if given,
+   puts in memory what the save will store, for a screen that reads it.
+   Nothing is lost by drawing early: every session save writes the whole
+   session, so the next one that works stores this step too. */
+var SAVE_WAIT_MS = 5000;
+function waitForSave(p, onSlow) {
+  return new Promise(function (resolve, reject) {
+    var slow = false, done = false, timer = null;
+    function late() {
+      if (done) return;
+      done = slow = true; ui.slowSaves++;
+      try { if (onSlow) onSlow(); resolve(); } catch (e) { reject(e); }
+    }
+    p.then(function (v) {
+      root.clearTimeout(timer);
+      if (slow) { ui.slowSaves--; render(); } else { done = true; resolve(v); }
+    }, function (e) {
+      root.clearTimeout(timer);
+      if (slow) { ui.slowSaves--; saveFailed(e); render(); } else { done = true; reject(e); }
+    });
+    if (ui.slowSaves > 0) late(); else timer = root.setTimeout(late, SAVE_WAIT_MS);
+  });
 }
 /* One transition at a time. A second tap before the first has been stored
    and drawn lands on the OLD screen's button: on "I knew it" that skipped a
    memorise card, and on Next it filed an answer with no choice. While a
-   step is being stored, taps are ignored.
-   But not for ever. A save that never settles (an IndexedDB transaction or
-   open that hangs, which WebKit has shipped) used to leave every later tap
-   ignored with nothing on screen to say why. After SAVE_WAIT_MS the step is
-   drawn anyway, taps work again, and a note says the save has not finished
-   (ui.slowSaves); it goes when the save does. Nothing is lost by drawing
-   early: every save writes the whole session, so the next one that works
-   stores this step too. */
-var SAVE_WAIT_MS = 5000;
+   step is being stored, taps are ignored — until waitForSave gives up on
+   it. However the step ends, taps work again: a rejected save or a throw
+   while drawing rejects go() with ui.moving cleared. */
 function go(event) {
   if (ui.moving) return Promise.resolve();
   if (event && /^(?:open|toUnit|toExam)$/.test(event.type)) ui.recall = null;
@@ -578,15 +620,8 @@ function go(event) {
   ui.choice = null; ui.sure = false; ui.error = ''; ui.back = 0; ui.notice = '';
   var p;
   try { p = dispatch(event); } catch (e) { ui.moving = false; throw e; }
-  return new Promise(function (resolve, reject) {
-    var drawn = false, slow = false;
-    function draw() { if (drawn) return; drawn = true; ui.moving = false; render(); root.scrollTo(0, 0); resolve(); }
-    var timer = root.setTimeout(function () { if (!drawn) { slow = true; ui.slowSaves++; draw(); } }, SAVE_WAIT_MS);
-    p.then(function () {
-      root.clearTimeout(timer);
-      if (slow) { ui.slowSaves--; render(); } else draw();
-    }, function (e) { root.clearTimeout(timer); if (slow) ui.slowSaves--; reject(e); });
-  });
+  return waitForSave(p).then(function () { ui.moving = false; render(); root.scrollTo(0, 0); },
+    function (e) { ui.moving = false; throw e; });
 }
 
 /* ── speech: the lesson can be listened to ───────────────────────────────── */
@@ -749,31 +784,48 @@ function withBytes(fileId) {
   byteLoads[fileId] = p; p.then(function () { delete byteLoads[fileId]; }, function () { delete byteLoads[fileId]; }); return p;
 }
 var imageObserver = null;
-function lazyImage(alt, pageNo, box, scale, d) {
-  var img = h('img', { alt: alt, loading: 'lazy' }), at = where(d || ui.docRec, pageNo);
-  /* The figure's shape before it is drawn. The crop is the box with
-     Pdf.CROP_MARGIN round it (pdf.js padBox), so width and height in that
-     ratio let the browser hold the space from the first paint. Without them
-     the image was 0 px tall until it scrolled near, then grew to its full
-     height, and everything below it jumped: in the lesson, the "now memorise
-     it" button moved 324 px under a tap that had already been aimed at it. */
+/* margin: the crop's margin round the box, Pdf.CROP_MARGIN unless given
+   (the occlusion figure draws the box exactly: its mask is placed in
+   fractions of the box). */
+function lazyImage(alt, pageNo, box, scale, d, margin) {
+  var img = h('img', { alt: alt, loading: 'lazy' }), at = where(d || ui.docRec, pageNo), held = false;
+  /* The figure's shape before it is drawn. The crop is the box with its
+     margin round it (pdf.js padBox), so a box in that ratio lets the
+     browser hold the space from the first paint. Without it the image was
+     0 px tall until it scrolled near, then grew to its full height, and
+     everything below it jumped: in the lesson, the "now memorise it"
+     button moved 324 px under a tap that had already been aimed at it. */
+  var m = margin == null ? (Pdf.CROP_MARGIN || 0) : margin;
   if (box && box.length === 4) {
-    var m = Pdf.CROP_MARGIN || 0, bw = Math.abs(box[2] - box[0]) + 2 * m, bh = Math.abs(box[3] - box[1]) + 2 * m;
+    var bw = Math.abs(box[2] - box[0]) + 2 * m, bh = Math.abs(box[3] - box[1]) + 2 * m;
     /* The attributes alone are not enough: WebKit (Safari, the iPad) takes no
        ratio from them while the image has no src, and held 29 px of a 128 px
        figure: it shows the alt text, one line tall, and "aspect-ratio: auto
-       W / H" defers to that. A plain ratio holds in every engine, and
-       object-fit keeps a crop clipped at the page edge from stretching. */
+       W / H" defers to that. A plain CSS ratio holds in Chromium, Firefox and
+       Safari 15 and later. Safari 14 and earlier (iPadOS 13.4 to 14) have no
+       CSS aspect-ratio: there the space is not held, and the figure grows
+       as it is drawn, as it did before. */
     if (bw > 0 && bh > 0) {
       img.setAttribute('width', String(Math.round(bw))); img.setAttribute('height', String(Math.round(bh)));
-      img.style.aspectRatio = Math.round(bw) + ' / ' + Math.round(bh); img.style.objectFit = 'contain';
+      img.style.aspectRatio = Math.round(bw) + ' / ' + Math.round(bh); held = true;
     }
   }
+  /* Drawn, the image takes its own shape and size again. The held box is
+     only a guess at it: a crop clamped at the page edge is narrower, a
+     page with /Rotate turns it on its side, and held there the picture was
+     shrunk inside it with white bars (and an occlusion mask, placed in
+     fractions of the image, missed its label). In the lightbox the width
+     attribute, in PDF points, drew "Enlarge" at 1x instead of the 2.5x
+     render, smaller than the figure it enlarged. */
+  img.onload = function () {
+    if (!held) return;
+    held = false; img.removeAttribute('width'); img.removeAttribute('height'); img.style.aspectRatio = '';
+  };
   function load() {
     (at ? withBytes(at.fileId) : Promise.resolve(null)).then(function (bytes) {
       if (!img.isConnected) return null;
       if (!bytes) throw new Error('no file');
-      return Pdf.renderBox(at.fileId, bytes, at.page, box, scale);
+      return Pdf.renderBox(at.fileId, bytes, at.page, box, scale, margin);
     }).then(function (url) { if (url && img.isConnected) img.src = url; }, function () { img.alt = alt + ' (could not be drawn)'; });
   }
   if (root.IntersectionObserver) {
@@ -1443,7 +1495,7 @@ function importPack(text) {
   return Store.put('packs', rec).then(function () {
     ui.pack = rec; ui.packText = '';
     clearDraft('pack-text');
-    return dispatch({ type: 'packed', value: { sections: checked.sections.map(function (s) { return Pack.safeSection(rec, s.index, d); }).filter(Boolean) } });
+    return waitForSave(dispatch({ type: 'packed', value: { sections: checked.sections.map(function (s) { return Pack.safeSection(rec, s.index, d); }).filter(Boolean) } }));
   }).then(render, function (e) { saveFailed(e); render(); });
 }
 
@@ -1453,7 +1505,7 @@ function removePack(d) {
   if (!root.confirm('Remove the study pack from "' + d.name + '"? Its sections are taught by the built-in coach again; your scores and review cards are kept.')) return Promise.resolve();
   return Store.del('packs', d.id).then(function () {
     ui.pack = null; ui.packReport = null;
-    return dispatch({ type: 'unpacked' });
+    return waitForSave(dispatch({ type: 'unpacked' }));
   }).then(render, function (e) { saveFailed(e); render(); });
 }
 
@@ -1539,12 +1591,12 @@ function viewBook() {
           i > 0 ? button('Join to the chapter before', function () {
             if (!root.confirm('Join "' + c.title + '" to the chapter before it? Both start again; every other chapter keeps its progress.')) return;
             recut(b, Book.merge(b.chapters, i));
-          }, 'quiet', { 'data-join': String(i) }) : null)) : null);
+          }, 'quiet', { 'data-join': String(i), disabled: ui.recutting ? true : null }) : null)) : null);
   });
   var real = b.chapters.filter(function (c) { return !c.front; }).length;
   var studied = b.chapters.filter(function (c) { var d = c.docId && byId[c.docId]; return d && Home.unitPct(d, ui.sessions[d.id]) === 100; }).length;
   var methods = h('div.seg', { role: 'radiogroup', 'aria-label': 'Chapters found by', id: 'methods' }, Book.METHODS.map(function (m) {
-    return h('button', { type: 'button', role: 'radio', 'aria-checked': String(m === b.method), 'data-method': m,
+    return h('button', { type: 'button', role: 'radio', 'aria-checked': String(m === b.method), 'data-method': m, disabled: ui.recutting ? true : null,
         onclick: function () {
           if (m === b.method) return;
           if (!root.confirm('Cut "' + b.name + '" into chapters by ' + Book.LABELS[m].toLowerCase() + '? Chapters that change start again; the others keep their progress.')) return;
@@ -1563,10 +1615,7 @@ function viewBook() {
     h('h2.grid-title', 'Chapters (' + real + ')'),
     h('ul.units.tiles', { id: 'chapters' }, rows),
     b.scanned.length ? h('p.warn', 'Pages with no readable text: ' + b.scanned.slice(0, 12).join(', ') + (b.scanned.length > 12 ? '…' : '') + '.') : null,
-    h('div.row', button('Delete this book', function () {
-      if (!root.confirm('Delete "' + b.name + '", its chapters and their review cards from this device?')) return;
-      docsChanged(); Store.deleteBook(b.id).then(function () { leave('shelf'); }, actionFailed);
-    }, 'quiet danger', { id: 'delete-book' })));
+    h('div.row', button('Delete this book', function () { removeBook(b); }, 'quiet danger', { id: 'delete-book', disabled: ui.recutting ? true : null })));
 }
 
 /* Compare the sections taught so far, side by side, as one figure. */
@@ -2702,12 +2751,27 @@ function viewReview() {
     var upd = Session.review(card, r, today(), FSRS);
     if (how && how.hazard) upd.hazard = true;
     markStudied(); logActivity('review', {});
-    Store.put('cards', upd).then(function () {
+    /* A write that is slow to settle (waitForSave) moves on to the next
+       card: the rating is put in memory so this card is not asked again
+       while it waits, a confident miss is queued to be asked again as a
+       stored one is, and it is counted when it is stored. However the
+       rating ends, the next one is taken. A refresh() that fails after the
+       write landed (a lost IndexedDB connection) used to leave ui.rating set
+       and every later tap ignored; it now moves on with the rating put in
+       memory, as a slow one is. No "not saved" banner: the rating was
+       stored, and that banner's advice, to repeat it, would rate it twice. */
+    var askAgain = function () { if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id); };
+    var inMemory = function () {
+      ui.cards = ui.cards.map(function (c) { return c.id === card.id ? upd : c; });
       if (dr) dr.done[card.id] = true;
-      if (how && how.again && ui.againQ.indexOf(card.id) === -1) ui.againQ.push(card.id);
+      askAgain();
+    };
+    waitForSave(Store.put('cards', upd).then(function () {
+      if (dr) dr.done[card.id] = true;
+      askAgain();
       ui.saveError = Store.failureMessage() || ui.actionError; ui.reviewDone++;
       return refresh();
-    }, saveFailed).then(next);
+    }, saveFailed), inMemory).then(next, function () { try { inMemory(); } finally { next(); } });
   };
   var head = h('div.review-head', h('span.count', isAgain ? 'Asked again · ' + ui.againQ.length + ' left' : dr ? 'Drill · ' + due.length + ' left' : due.length + ' due'),
     h('span.muted', (names[card.docId] || '') + ' · ' + card.title));
@@ -2758,12 +2822,14 @@ function clozeCard(card, tag, rate) {
 }
 /* The figure with its label hidden: the image drawn from the stored PDF,
    and a mask where the label was printed (study.js maskOf). Answered, the
-   mask lifts. */
+   mask lifts. The mask is in fractions of the figure's box, so the image is
+   the box exactly, with no crop margin: drawn with the margin, the mask
+   sat up to 8 pt off its label, and the label's first letter showed. */
 function occlusionFigure(card) {
   var d = ui.docs.filter(function (x) { return x.id === card.docId; })[0];
   var m = card.mask, pc = function (v) { return (100 * v).toFixed(2) + '%'; };
   return h('div.occlusion' + (ui.choice != null ? '.revealed' : ''), { id: 'occlusion' },
-    lazyImage('A figure with one label hidden', card.figure.page, card.figure.box, 2, d),
+    lazyImage('A figure with one label hidden', card.figure.page, card.figure.box, 2, d, 0),
     h('span.occlusion-mask', { 'aria-hidden': 'true', style: 'left:' + pc(m.left) + ';top:' + pc(m.top) + ';width:' + pc(m.width) + ';height:' + pc(m.height) }));
 }
 
@@ -3808,13 +3874,23 @@ function appearanceCard() {
 /* One export for the Settings button and the home reminder: the backup
    (backup.js), its download, and the day it was made, which the reminder
    counts from (Home.backupDue). */
+/* A copy the app would refuse to restore (MemBackup.exportChecked) is still
+   handed over, since it holds every book and note, but it is not counted as
+   a backup: the day is not recorded, so the reminder stays, and the reason
+   is said where the tap was (Settings, or the reminder on Home), with what
+   to do. It used to be counted, and the reminder went quiet over a file no
+   restore would take. */
 function exportBackup() {
-  ui.backupStatus = 'Preparing backup\u2026'; render();
-  return root.MemBackup.exportText().then(function (text) {
-    downloadBackup(text);
-    ui.lastBackup = today(); ui.backupStatus = 'Backup prepared. Save the downloaded file privately; it contains your books and notes.';
+  ui.backupStatus = ui.exportNote = 'Preparing backup\u2026'; render();
+  return root.MemBackup.exportChecked().then(function (r) {
+    downloadBackup(r.text);
+    if (r.problem) {
+      ui.backupStatus = ui.exportNote = 'Saved a copy, but the app would not restore it: ' + r.problem + ' Fix or delete what it names, then back up again.';
+      return;
+    }
+    ui.lastBackup = today(); ui.backupStatus = 'Backup prepared. Save the downloaded file privately; it contains your books and notes.'; ui.exportNote = '';
     return Store.put('meta', { id: 'last-backup', day: ui.lastBackup }).then(null, function () {});
-  }).then(render, function (err) { ui.backupStatus = err.message; render(); });
+  }).then(render, function (err) { ui.backupStatus = ui.exportNote = err.message; render(); });
 }
 function downloadBackup(text) {
   var url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = doc.createElement('a');
@@ -3918,7 +3994,8 @@ function backupNudge() {
   return h('div.card.note.backup-nudge', { id: 'backup-nudge', role: 'status' },
     h('p', h('strong', 'Back up your study. '), b.why),
     h('div.row', button('Back up now', function () { exportBackup(); }, 'primary', { id: 'nudge-backup' }),
-      button('Later', function () { ui.backupSnooze = today(); Store.put('meta', { id: 'backup-snooze', day: ui.backupSnooze }).then(null, function () {}); render(); }, 'quiet', { id: 'nudge-later' })));
+      button('Later', function () { ui.backupSnooze = today(); Store.put('meta', { id: 'backup-snooze', day: ui.backupSnooze }).then(null, function () {}); render(); }, 'quiet', { id: 'nudge-later' })),
+    ui.exportNote ? h('p', { id: 'nudge-status', role: 'status' }, ui.exportNote) : null);
 }
 
 /* ── Prepare for offline ──────────────────────────────────────────────────

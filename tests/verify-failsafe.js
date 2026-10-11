@@ -28,9 +28,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { booted } = require('./_render.js');
+let unmeasured = 0;
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-failsafe.js <patched.html>'); process.exit(1); }
@@ -116,8 +117,18 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const page = watch(await browser.newPage(), events, 'rendernow-vt', errors);
     await page.goto(url, { waitUntil: 'load', timeout: 250000 });
     await page.waitForTimeout(1200);
-    const crash = await page.evaluate(crashButton);
-    ok('the crash screen appears when the throw happens inside startViewTransition\'s own callback', crash);
+    /* With no startViewTransition on the page (Playwright's WebKit runs with it
+       taken away: tests/_engine.js) the throw lands in the plain renderNow()
+       path, which the section above already covers. Passing here would report
+       a callback nobody exercised, so it is counted as not measurable. */
+    const hasVT = await page.evaluate(() => typeof document.startViewTransition === 'function');
+    if (!hasVT) {
+      unmeasured++;
+      console.log('  ----  the crash screen appears when the throw happens inside startViewTransition\'s own callback  → not measurable here: this page has no startViewTransition');
+    } else {
+      const crash = await page.evaluate(crashButton);
+      ok('the crash screen appears when the throw happens inside startViewTransition\'s own callback', crash);
+    }
     await page.close();
   }
 
@@ -144,6 +155,6 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   await browser.close();
   fs.rmSync(DIR, { recursive: true, force: true });
-  console.log(`\n${passed} passed, ${failed} failed`);
+  console.log(`\n${passed} passed, ${failed} failed` + (unmeasured ? `, ${unmeasured} not measurable on ${engineName()}` : ''));
   process.exit(failed ? 1 : 0);
 })();

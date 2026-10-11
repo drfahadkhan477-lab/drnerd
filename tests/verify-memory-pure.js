@@ -10,7 +10,7 @@
  * through the built app, which is thorough and also means every check costs a
  * forty-minute build on the one laptop that has the licensed export.
  *
- * TWO THINGS ARE PROVEN HERE.
+ * WHAT IS PROVEN HERE.
  *
  * 1. PROVENANCE. Both writers are the model — the `remember` tool and the
  *    summariser — and nothing recorded which, nor the difference that matters
@@ -26,6 +26,9 @@
  *    a full store came out at 1641. Over the bound, in a check that only runs
  *    on the laptop. The worst case is asserted here now, so the next person to
  *    lengthen that preamble finds out in CI.
+ *
+ * 3. GROUNDED MODE, where the memory block meets the rule about the answer
+ *    key. Cut from app/systole.html, so it reads the page and not memory.js.
  */
 'use strict';
 const fs = require('fs');
@@ -128,6 +131,66 @@ head('the block fits the prompt budget it claims to');
   ok('and it is not trivially short — the budget is actually being used',
      block.length > 900, `${block.length} chars`);
   ok('an empty store says nothing at all', fresh().M.build() === '');
+}
+
+head('grounded mode keeps who is taught, and withholds the key');
+{
+  /* verify-memory.js's grounded section, without a build, and with the half
+     it never measured. aiCtx() sends this block in both modes, because a
+     memory is who is taught, not what is taught from; grounded mode also tells
+     the model the answer key is withheld. The check that said so read only the
+     commentary heading, while the keyed option went out marked "← CORRECT"
+     and search_question_bank handed back bank items with their answer. So the
+     ranker, the fences, aiCtx() and runTool() are cut from app/systole.html and
+     run here as the page runs them, over one invented question keyed C and
+     one invented note, both of which the query below finds. */
+  const { cut } = require('./_appcut.js');
+  const vm = require('vm');
+  const APP = 'app/systole.html';
+  const code = [
+    cut(APP, 'const STOP=new Set((', 'function refAdd(title,body,tags,source){'),
+    cut(APP, 'function runTool(name,input){', '\nfunction flushNav(){'),
+    cut(APP, 'function aiCtx(q){', '\nconst CHIPS=['),
+  ].join('\n');
+  const { M } = fresh();
+  M.add('Sitting the boards in October 2026.', 'fact', { src: 'tool', said: true });
+  const q = { id: 'ZZ_7', ch: 'Invented chapter', n: 7, ci: 2,
+    s: 'An invented stem: transthyretin amyloidosis, tafamidis or not.',
+    o: ['alpha', 'beta', 'gamma', 'delta', 'epsilon'].map((t, i) => ({ l: 'ABCDE'[i], t: t + 'opt', p: 10 + i })),
+    ex: 'Invented commentary, keyed sentinel kz9.' };
+  const ctx = { ALL_Q: [q], REF: [{ id: 'r1', title: 'Amyloidosis note', tags: '', body: 'Apical sparing on strain is the amyloidosis pattern.' }],
+    Memory: M, Vision: { figureContextLine: () => '' }, AI: { provider: 'gemini' }, AI_GROUNDED: false };
+  vm.runInNewContext(code, ctx);
+  /* A note outranks a question on shared words (notes are boosted), so the
+     query carries words only the question has: both must come back. */
+  const tool = () => ctx.runTool('search_question_bank', { query: 'tafamidis transthyretin amyloidosis' });
+
+  /* Each option's line, and its shape with nothing appended: any mark on the
+     keyed line, in any wording, breaks the shape. */
+  const line = (t, L) => (t.match(new RegExp(`^  ${L}\\. .*$`, 'm')) || [''])[0];
+  const BARE = /^  [A-E]\. [a-z]+opt  \[\d+% of candidates chose this\]$/;
+  const kinds = r => (r.cite || []).map(c => c.kind).join(',') || 'nothing cited';
+
+  const open = ctx.aiCtx(q), openTool = tool();
+  /* The fixture can show the leak: open mode marks the key and the tool
+     returns the bank item with its answer. Unchanged behaviour, and the
+     reason the grounded checks below are not passing on an empty fixture. */
+  ok('open mode marks the keyed option, and only it, as it always has',
+     /  ← CORRECT$/.test(line(open, 'C')) && [...'ABDE'].every(L => BARE.test(line(open, L))), line(open, 'C').trim());
+  ok('and the bank tool returns the item with its answer, beside the note',
+     /Correct: gammaopt/.test(openTool.result) && /Amyloidosis note/.test(openTool.result), kinds(openTool));
+
+  ctx.AI_GROUNDED = true;
+  const g = ctx.aiCtx(q), gTool = tool();
+  ok('grounded mode is genuinely on', /commentary for this item is withheld/.test(g));
+  ok('the memory is still there', /WHAT YOU ALREADY KNOW ABOUT THIS FELLOW/.test(g) && /boards in October 2026/.test(g));
+  ok('every option is there, and none is marked as the key',
+     [...'ABCDE'].every(L => BARE.test(line(g, L))) && !/← CORRECT/.test(g), line(g, 'C').trim());
+  ok('and the commentary is not in it', !/kz9/.test(g) && !/OFFICIAL ACC COMMENTARY/.test(g));
+  ok('the bank tool returns the note, fenced',
+     /<<<NOTE-[A-Z0-9]{12}>>>/.test(gTool.result) && /Amyloidosis note/.test(gTool.result), kinds(gTool));
+  ok('and no bank item: no answer, no commentary, no id',
+     !/Correct:|Commentary:|kz9|ZZ_7/.test(gTool.result) && (gTool.cite || []).every(c => c.kind === 'r'), kinds(gTool));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

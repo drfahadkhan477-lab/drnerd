@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * A code deploy does not evict the content.
+ * Every /content/ file goes to the cache a code deploy keeps.
  *
  *   node tests/verify-cachebuckets.js [dist]     # defaults to ./dist
  *
@@ -12,6 +12,12 @@
  * neither, because only /content/figures/ was routed to the content bucket and
  * everything else same-origin fell through to the shell. A CSS tweak therefore
  * evicted 15.1 MB that had not changed.
+ *
+ * WHAT THIS DOES NOT CHECK: what CONTENT_V is made from. This suite passed
+ * while CONTENT_V was the digest of the whole single-file build, so the
+ * content cache was renamed by every code deploy anyway. That a code-only
+ * build leaves CONTENT_V alone is checked in tests/verify-swupdate-pure.js,
+ * which builds two and compares.
  *
  * WHY THIS READS sw.js RATHER THAN DRIVING A BROWSER. The failure is not
  * something a page can be made to show: it needs two deploys with different
@@ -52,7 +58,7 @@ head('the two buckets, and what keys them');
 const shellDecl = /const SHELL\s*=\s*'accsap-shell-'\s*\+\s*SHELL_V/.test(sw);
 const contentDecl = /const CONTENT\s*=\s*'accsap-content-'\s*\+\s*CONTENT_V/.test(sw);
 ok('the shell cache is keyed by the shell digest', shellDecl);
-ok('the content cache is keyed by the content digest', contentDecl);
+ok('the content cache is keyed by CONTENT_V', contentDecl);
 /* The bug in one line: a bucket named for figures could only ever hold
    figures, so everything else under /content/ had nowhere to go but the shell. */
 ok('nothing is still keyed as a figures-only bucket',

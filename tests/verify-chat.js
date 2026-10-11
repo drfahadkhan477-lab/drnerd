@@ -18,7 +18,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch, isEngineNoise, routablePage } = require('./_engine');
+const { launch, isEngineNoise, routablePage, engineName } = require('./_engine');
 const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
@@ -26,7 +26,7 @@ const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chat.js <patched.html|url>'); process.exit(1); }
 const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
-let passed = 0, failed = 0;
+let passed = 0, failed = 0, unmeasured = 0;
 const ok = (label, cond, detail = '') => {
   cond ? passed++ : failed++;
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
@@ -318,13 +318,23 @@ const TOOL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
       const twStyle = getComputedStyle(tw).touchAction;
       tw.remove();
       return { overscroll: getComputedStyle(bd).overscrollBehavior,
+               supportsOverscroll: CSS.supports('overscroll-behavior', 'contain'),
                minHeight: getComputedStyle(bd).minHeight,
                twTouch: twStyle,
                scrollH: bd.scrollHeight,
                scrollable: bd.scrollHeight - bd.clientHeight };
     });
-    ok('the gesture stops at the thread instead of chaining to a locked parent',
-       /contain/.test(css.overscroll), css.overscroll);
+    /* A browser that does not support overscroll-behavior at all (Playwright's
+       Windows WebKit 26.6: CSS.supports says no) cannot report contain, so
+       there it is counted not measurable rather than failed: the property is
+       the claim, and iOS Safari has supported it since 16. */
+    if (css.supportsOverscroll) {
+      ok('the gesture stops at the thread instead of chaining to a locked parent',
+         /contain/.test(css.overscroll), css.overscroll);
+    } else {
+      unmeasured++;
+      console.log('  ----  the gesture stops at the thread instead of chaining to a locked parent  → not measurable here: this browser does not support overscroll-behavior');
+    }
     /* This asserted min-height:0 exactly, which snapshotted the MECHANISM
        rather than the property in its own label. The answer now carries an
        8rem floor so the figure strip cannot crush it to one line (chain step
@@ -376,6 +386,6 @@ const TOOL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 2).join(' | '));
 
   await browser.close();
-  console.log(`\n${passed} passed, ${failed} failed`);
+  console.log(`\n${passed} passed, ${failed} failed` + (unmeasured ? `, ${unmeasured} not measurable on ${engineName()}` : ''));
   process.exit(failed ? 1 : 0);
 })();

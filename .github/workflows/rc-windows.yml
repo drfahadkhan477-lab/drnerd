@@ -1,0 +1,106 @@
+name: rc — Windows WebKit, the screen-change crash
+
+# Playwright 1.63's WebKit (26.6) crashes the page when a view transition
+# starts over animated layers: every first screen change on the owner's
+# Windows machine, and on this runner on the synthetic build. The owner chose
+# not to change the app for a test browser's bug: tests/_engine.js takes
+# startViewTransition away in every WebKit page instead, and says so on every
+# WebKit run. This job shows both halves on Windows, on pushes to `rc` only
+# (the real export never reaches CI):
+#
+#   control  the app as built, opened with raw Playwright (transitions left
+#            on), must still crash. If it stops crashing (a fixed WebKit), the
+#            harness switch is no longer needed, and this step says so.
+#   suites   the six suites that crashed on the owner's machine, through the
+#            normal harness (transitions off), must pass.
+
+on:
+  push:
+    branches: [rc]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-webkit:
+    name: windows-webkit — transitions on still crash; the harness keeps the suites alive
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: the pinned playwright, from the lockfile, and its WebKit
+        run: |
+          npm ci
+          npx playwright install webkit
+
+      - name: the synthetic export, and the app built around it
+        run: |
+          node scripts/synthetic-export.js build/synthetic/export.html
+          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
+
+      - name: what this WebKit supports (Web Audio, overscroll-behavior)
+        run: node tools/rc-webkit-caps.js
+
+      - name: control — with transitions left on, the first screen change still crashes this WebKit
+        run: node tools/rc-webkit-probe.js build/synthetic/systole.html --expect crash --runs 3
+
+      - name: the six suites that crashed on the owner's machine, through the harness, one at a time
+        if: ${{ !cancelled() }}
+        run: node scripts/verify.js build/synthetic/systole.html --engine webkit --only stage3,chat,heartreuse,type,boundary,memory --jobs 1
+
+      - name: and the rest of the WebKit browser suites that crashed or stalled in the release check
+        if: ${{ !cancelled() }}
+        run: node scripts/verify.js build/synthetic/systole.html --engine webkit --only flushguard,figsharp,layout,chatfigs,resume,gemini,lab,voicescreen --jobs 1
+
+  # From the release check on baaa1e2: memorizer-hardening hit the 20-minute
+  # limit on the owner's Windows WebKit with nothing reported (it passes on
+  # Linux WebKit), and memorizer died on a 30 s click timeout on Chromium,
+  # four runs out of four there (it passes on Linux). Run straight, not
+  # through verify.js, so the output streams and shows where each one stops.
+  windows-memorizer:
+    name: windows-memorizer — hardening on WebKit, the whole app on Chromium
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: the pinned playwright, from the lockfile, and its WebKit and Chromium
+        run: |
+          npm ci
+          npx playwright install webkit chromium
+
+      - name: memorizer-hardening on WebKit (stopped at 15 minutes, so the next steps still run)
+        if: ${{ !cancelled() }}
+        env:
+          SYSTOLE_ENGINE: webkit
+        run: timeout 900 node tests/verify-memorizer-hardening.js
+
+      - name: memorizer on Chromium, first run
+        if: ${{ !cancelled() }}
+        env:
+          SYSTOLE_ENGINE: chromium
+        run: timeout 1200 node tests/verify-memorizer.js
+
+      - name: memorizer on Chromium, second run
+        if: ${{ !cancelled() }}
+        env:
+          SYSTOLE_ENGINE: chromium
+        run: timeout 1200 node tests/verify-memorizer.js

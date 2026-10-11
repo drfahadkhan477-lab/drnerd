@@ -91,7 +91,33 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   → Rule: when a test changes the fake's behaviour mid-run, assert the effect
   (the value is in the database) as a precondition before the claim.
 
+- **A check that reads the input, not the output.** "It opens full size" read the
+  lightbox image's `naturalWidth > 0`, true whatever size it was shown at, so a held
+  `width` attribute that drew "Enlarge" at 1x of a 2.5x render passed (three reviews
+  found it; no suite did). → Rule: a claim about what the reader sees measures the
+  rendered box (`getBoundingClientRect`) against what it should be, never a property
+  of the source.
+- **A shared helper changed for one caller.** Space held for lazy figures in the lesson
+  also applied in the lightbox and the occlusion card, whose CSS took the held size
+  differently. → Rule: before changing a helper's output, grep every caller and read the
+  CSS each one's output lands in; measure at each, not only at the caller that prompted it.
+- **A fix placed in one caller of a shared hazard.** The hung-save bound went into
+  `go()`; Review's rating, opening a unit and filing a lesson waited on the same kind of
+  save and still froze. → Rule: fix the hazard where it happens or at every caller that
+  waits on it — grep for every `.then` on that promise before calling it fixed, and
+  narrow the commit title to what was covered.
+
 ## Process
+
+- **A debug copy that edited a different line than the one I then read.** To see
+  why verify-voicescreen timed out, I replaced "line 163" in a copy, but an edit
+  just before had moved the wait I meant; the state I printed belonged to another
+  wait, I read it as "the condition was already true", blamed rAF polling, and
+  pushed a 100 ms poll that passed 20 runs here by luck and failed CI. The real
+  cause was in the app (a voice listener outliving its session). -> Rule: in a
+  debug copy, anchor the edit on the line's text, not its number, and print which
+  wait fired with the state; and treat "0 of N" on a flake as evidence only when N
+  is several times the runs a failure took before.
 
 - **A browser upgrade judged on Chromium alone.** I moved playwright 1.56 -> 1.64
   (released the day before) after a green local Chromium run; both CI WebKit jobs
@@ -189,3 +215,28 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   count (PR #211: 14/24 crashed as built, 0/36 with motion off, 0/32 with the fix).
 
 - **A handoff inherited a different browser.** A laptop task required Chromium but its command omitted --engine, so SYSTOLE_ENGINE could select Firefox or WebKit. → Rule: when a result requires a specific browser, pin it in the command and verify the flag wins over the inherited environment.
+
+- **A push from a worktree rewrote the repository it was pushing from.** I used `git worktree add` to prepare the `rc` branch. Its pre-push hook ran the pure suites with `GIT_DIR` set, because git exports it to a linked worktree's hooks (and `rebase -x`, `bisect run` and `git -c` pass such variables on too). Two suites ran fixture git commands by cwd with the inherited environment. Sixteen fixture commits landed on `rc` and `core.bare=true` was set on the clone. The hook failed, so nothing was pushed, and I noticed only because `git log` showed commits by "t". → Rule: anything that spawns git for a throwaway repository must not inherit `GIT_DIR` and its siblings (`scripts/gitenv.js` strips git's own list of them for `test-public.js` and `verify.js`). After a hook fails, look at `git log` and `git config core.bare` before retrying.
+
+- **Branch counts read from a shallow clone.** The cloud clone is shallow, so
+  `git rev-list --count master..branch` reported 36 branches as 800 commits
+  ahead and 241 behind: a "history rewrite" that was only the clone's depth.
+  → Rule: run `git rev-parse --is-shallow-repository` before comparing
+  branches, and `git fetch --unshallow` first if it says true.
+- **"Merged" is not "unused".** A branch with no commits beyond master was a
+  live session's working branch; a PR was opened from it minutes after I had
+  listed it for deletion. → Rule: before deleting a branch, check open PRs,
+  sessions working on it, and when it last moved; list, don't delete, anything
+  that moved in the last day.
+- **A result quoted from a different tree.** I wrote "verify-memorizer 486
+  passed" into a commit message from a run on an earlier tree, before the tree
+  had the check that commit added. I caught it before pushing. → Rule: a
+  number in a commit message comes from a run of that commit's own tree; after
+  any merge or patch, run again and quote that run.
+- **A fix that refused the action left the fellow worse off.** A backup that
+  a restore would refuse was counted as a backup; my fix stopped exporting it
+  at all. Review caught that one bad record then left no copy of any book or
+  note, and the reason showed in Settings, not on the Home reminder where the
+  tap was. → Rule: before a fix refuses an action, say what the user is left
+  holding if it does; prefer doing the action and not counting it, and show
+  the reason where the user acted.

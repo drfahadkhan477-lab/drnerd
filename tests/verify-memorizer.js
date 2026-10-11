@@ -653,6 +653,30 @@ function kindOf(user) {
      JSON.stringify(rec.figures[0]));
   ok('and the PDF itself is kept on the device, to draw them from', await page.evaluate(id => MemStore.get('files', id).then(f => !!f && f.bytes.byteLength > 1000), rec.id));
   ok('pdf.js and its worker came from the pinned CDN', cdnHits >= 2, `${cdnHits} requests`);
+  /* pdf.js on the page's own thread froze it for 8 s and more, about thirty
+     times a run, and past 30 s under load: the click after it timed out
+     (memorizer/src/pdf.js, crossOrigin). Its fallback announces itself by
+     defining window.pdfjsWorker in the page. pdf.js must have loaded for
+     the absence to mean anything, so that is part of the claim. */
+  const thread = await page.evaluate(() => ({ lib: !!window.pdfjsLib, fake: !!window.pdfjsWorker }));
+  ok('pdf.js reads the PDF on a worker, not on the page\u2019s own thread', thread.lib && !thread.fake, JSON.stringify(thread));
+  /* One worker per document (memorizer/src/pdf.js openPdf). A worker shared
+     through workerPort was owned by every document at once: a figure drawn
+     for another file (which disposes the cached document) and an import
+     started together failed the import with "the worker is being
+     destroyed". The port is used only where the page is a local file, as
+     Chromium opens it here; elsewhere each document has pdf.js's own worker,
+     and this passes either way. pdf.js is released after, so nothing that
+     follows inherits these documents. */
+  const together = await page.evaluate(b64 => {
+    const mk = () => Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer;
+    const settle = p => p.then(() => 'ok', e => 'failed: ' + e.message);
+    return MemPdf.renderBox('check-a', mk(), 1, null).then(() => Promise.all([
+      settle(MemPdf.renderBox('check-b', mk(), 1, null)),
+      settle(MemPdf.read(mk(), null, null, { figures: false })),
+    ])).then(r => MemPdf.release().then(() => ({ figure: r[0], read: r[1] })));
+  }, pdf.buffer.toString('base64'));
+  ok('a figure for another file and an import, started together, both finish', together.figure === 'ok' && together.read === 'ok', JSON.stringify(together));
   /* Provenance: the unit knows exactly which bytes it came from, and what
      read them. The digest is computed here, in Node, from the PDF handed
      in — not read back from the page and compared with itself. */
@@ -879,14 +903,17 @@ function kindOf(user) {
      landed on <main> about one run in four, and the memorise screen never
      came. Measured on the figures not yet drawn when the page appears (at
      least one, or this measures nothing), against their drawn height. The
-     wait for them to be drawn is a precondition; the heights are the check. */
-  const undrawn = await page.evaluate(() => [...document.querySelectorAll('main img[loading="lazy"]')].filter(i => !i.getAttribute('src'))
-    .map((i, k) => { i.dataset.held = String(k); return Math.round(i.getBoundingClientRect().height); }));
+     wait for them to be drawn is a precondition; the heights are the check.
+     The images are held by reference, not found again by a selector: a
+     redraw in between would leave a selector nothing to wait for, and the
+     wait would pass on the empty set. A redraw replaces them, and says so. */
+  const undrawn = await page.evaluate(() => { window.__heldImgs = [...document.querySelectorAll('main img[loading="lazy"]')].filter(i => !i.getAttribute('src'));
+    return window.__heldImgs.map(i => Math.round(i.getBoundingClientRect().height)); });
   await page.evaluate(() => document.querySelector('#to-drill').scrollIntoView({ block: 'center' }));
-  await page.waitForFunction(() => [...document.querySelectorAll('main img[data-held]')].every(i => i.naturalWidth > 0), null, T);
-  const drawn = await page.evaluate(() => [...document.querySelectorAll('main img[data-held]')].map(i => Math.round(i.getBoundingClientRect().height)));
+  await page.waitForFunction(() => window.__heldImgs.every(i => !i.isConnected || i.naturalWidth > 0), null, T);
+  const drawn = await page.evaluate(() => window.__heldImgs.map(i => i.isConnected ? Math.round(i.getBoundingClientRect().height) : 'replaced by a redraw'));
   ok('a figure holds its space before it is drawn, so nothing below it jumps when it appears',
-     undrawn.length >= 1 && drawn.length === undrawn.length && undrawn.every((hgt, k) => hgt > 0 && Math.abs(drawn[k] - hgt) <= 0.05 * drawn[k]),
+     undrawn.length >= 1 && drawn.length === undrawn.length && undrawn.every((hgt, k) => hgt > 0 && typeof drawn[k] === 'number' && Math.abs(drawn[k] - hgt) <= 0.05 * drawn[k]),
      JSON.stringify({ undrawn, drawn }));
 
   head('memorise it before the drill');
@@ -1277,7 +1304,15 @@ function kindOf(user) {
   await page.locator('#pearl-visual .pearl-fig').click();
   await page.locator('.lightbox img').waitFor(T).catch(() => {});
   await page.waitForFunction(() => { const i = document.querySelector('.lightbox img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
-  ok('and it opens full size', await page.evaluate(() => { const i = document.querySelector('.lightbox img'); return !!i && i.naturalWidth > 0; }));
+  /* Full size: the drawing at its own size, made smaller only to fit the
+     lightbox (max-width and max-height 100%) — not held at the figure's
+     size in PDF points, 1x of a 2.5x drawing, as it once was. */
+  const big = await page.evaluate(() => { const i = document.querySelector('.lightbox img'), lb = document.querySelector('.lightbox');
+    if (!i || !i.naturalWidth) return null;
+    const cs = getComputedStyle(lb), cw = lb.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      ch = lb.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom), k = Math.min(1, cw / i.naturalWidth, ch / i.naturalHeight), r = i.getBoundingClientRect();
+    return { natural: [i.naturalWidth, i.naturalHeight], fit: [Math.round(i.naturalWidth * k), Math.round(i.naturalHeight * k)], shown: [Math.round(r.width), Math.round(r.height)] }; });
+  ok('and it opens full size, fitted to the screen', !!big && Math.abs(big.shown[0] - big.fit[0]) <= 2 && Math.abs(big.shown[1] - big.fit[1]) <= 2, JSON.stringify(big));
   await page.locator('.lightbox .btn').click();
   await page.locator('.lightbox').waitFor({ state: 'detached', timeout: 60000 });
   /* Surfaces are frosted glass over the aurora: translucent and blurred,
@@ -1682,7 +1717,23 @@ function kindOf(user) {
     await page.locator('#occlusion img').scrollIntoViewIfNeeded();
     await page.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
     const mask = await page.evaluate(() => { const m = document.querySelector('#occlusion .occlusion-mask'), i = document.querySelector('#occlusion img');
-      return { style: m.getAttribute('style'), drawn: !!i && /^data:image/.test(i.src) && i.naturalWidth > 0 }; });
+      const r = i && i.getBoundingClientRect(), o = document.querySelector('#occlusion').getBoundingClientRect();
+      return { style: m.getAttribute('style'), drawn: !!i && /^data:image/.test(i.src) && i.naturalWidth > 0, natural: i ? [i.naturalWidth, i.naturalHeight] : null,
+               shown: r ? [r.width, r.height] : null, frame: [o.width, o.height], fit: i ? getComputedStyle(i).objectFit : '' }; });
+    /* The mask is in fractions of the figure's box (study.js maskOf), so it
+       sits on its label only if the image is that box, with no crop margin:
+       at the scale it is drawn at (2), the box's own size in pixels. */
+    const boxPx = [2 * Math.abs(oc.figure.box[2] - oc.figure.box[0]), 2 * Math.abs(oc.figure.box[3] - oc.figure.box[1])];
+    ok('the figure is drawn as its box exactly', !!mask.natural &&
+       Math.abs(mask.natural[0] - boxPx[0]) <= 2 && Math.abs(mask.natural[1] - boxPx[1]) <= 2, JSON.stringify({ natural: mask.natural, box: boxPx }));
+    /* And shown that way: the mask is placed in fractions of .occlusion, so
+       the picture must fill that frame, in its own proportions. Equal rects
+       alone would pass a picture letterboxed inside a held box (object-fit:
+       contain), so the shown ratio is held to the drawn one as well. */
+    const ratio = a => a[0] / a[1];
+    ok('and shown filling its frame, unstretched, so the mask\'s fractions are fractions of the picture', !!mask.shown &&
+       Math.abs(mask.shown[0] - mask.frame[0]) <= 1 && Math.abs(mask.shown[1] - mask.frame[1]) <= 1 &&
+       Math.abs(ratio(mask.shown) / ratio(mask.natural) - 1) < 0.02, JSON.stringify({ shown: mask.shown, frame: mask.frame, natural: mask.natural, fit: mask.fit }));
     ok('a figure card: the book’s figure, drawn from the PDF, with a mask where its label was printed, and four labels to choose from', mask.drawn &&
        mask.style.indexOf('left:' + (100 * oc.mask.left).toFixed(2) + '%') !== -1 && mask.style.indexOf('top:' + (100 * oc.mask.top).toFixed(2) + '%') !== -1 &&
        await page.locator('#mcq .option').count() === 4, JSON.stringify(mask));
@@ -2009,6 +2060,17 @@ function kindOf(user) {
     stale.clusters[0].title = 'hy = rly: ' + base;
     stale.clusters[1].title = 'hy = rly: ' + base + ' (cont.)';
     await page.evaluate(d => MemStore.put('docs', d), stale);
+    /* NOT THE APP, THE TEST BROWSER. Playwright's Firefox 155 now and then
+       crashes the page when it reloads with pdf.js still holding a document.
+       Round 2 of the #212 probe: as the suite was, 8 crashes in 150 runs, all
+       at this section's second reload; with MemPdf.release() (it waits out
+       queued renders, then destroys the document and its worker) before that
+       reload, 0 there in 149, and 1 at the first reload, not released. So
+       both reloads here release first: a precondition, not a claim. What it
+       costs: this section no longer reloads over a live pdf.js document in
+       any engine; the suite's other reloads still do. */
+    const releasePdf = () => page.evaluate(() => MemPdf.release());
+    await releasePdf();
     await page.reload();
     await page.locator('#home-hero').waitFor(T);
     await page.evaluate(id => Memorizer.openDoc(id), planId);
@@ -2025,6 +2087,7 @@ function kindOf(user) {
        isEngineNoiseError.) */
     await page.waitForFunction(() => !Memorizer.ui.figuresBusy, null, T);
     await page.evaluate(d => MemStore.put('docs', d), orig);
+    await releasePdf();
     await page.reload();
     await page.locator('#home-hero').waitFor(T);
   }
