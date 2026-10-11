@@ -282,7 +282,10 @@ head('the shared comment blanker blanks comments, and only comments');
   const wholePage = blankComments(page);
   let inline = 0;
   const leaked = [];
-  for (const m of page.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
+  /* An end tag is </script then anything up to >, as a browser reads it:
+     `</script >` ends a script too, and a pattern that wanted `</script>`
+     exactly would run that script on into the next one's. */
+  for (const m of page.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)) {
     const at = m.index + m[0].indexOf('>') + 1, body = m[1];
     if (!body.trim()) continue;
     inline++;
