@@ -611,38 +611,60 @@ head('a reload is not a boot, and the split build is why');
 
      THE RULE IS "WAIT FOR SOMETHING", deliberately loose. Every other reload in
      the repository already does: booted(), a waitForFunction naming an app
-     global, a waitForSelector, or a poll on `typeof S`. Requiring booted()
-     specifically would have flagged five suites that are already correct —
-     verify-splash reloads with `commit` precisely to catch the page BEFORE the
-     app, and being made to wait for it would destroy the check. So the guard
-     asks only that something between the reload and the next read is capable
-     of being false before the app is up. It has no exemption list because it
-     needs none. */
-  const RELOAD = /await\s+page\.reload\s*\(/;
-  const WAITS = /booted\s*\(|waitFor[A-Za-z]*\s*\(|typeof\s+[A-Za-z_$]/;
+     global, a waitForSelector, a locator's waitFor(), or a poll on `typeof S`.
+     Requiring booted() specifically would have flagged five suites that are
+     already correct — verify-splash reloads with `commit` precisely to catch
+     the page BEFORE the app, and being made to wait for it would destroy the
+     check. So the guard asks only that something between the reload and the
+     next read is capable of being false before the app is up. It has no
+     exemption list because it needs none.
+
+     ANY PAGE, NOT ONLY ONE NAMED page. This matched `await page.reload(`
+     alone, so a reload on p, r, p2 or other was never examined: twelve of the
+     thirty-three at c6f12d9, the Memorizer suites' and verify-lab's among
+     them, while the label said "every one of them". The second check below
+     fails if the scan ever again sees reloads on `page` alone.
+
+     A SLEEP IS NOT A WAIT. waitForTimeout passed, because it begins with
+     waitFor; a fixed sleep cannot be false before the app is up, which is
+     the whole of the rule. */
+  const RELOAD = /await\s+([\w$.]+)\.reload\s*\(/;
+  const WAITS = /booted\s*\(|waitFor(?!Timeout\b)[A-Za-z]*\s*\(|typeof\s+[A-Za-z_$]/;
   const suites = fs.readdirSync(TESTS).filter(n => /^verify-.+\.js$/.test(n));
   let reloads = 0;
-  const blind = [];
+  const blind = [], receivers = {};
   for (const f of suites) {
     const lines = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8')).split('\n');
     lines.forEach((l, i) => {
-      if (!RELOAD.test(l)) return;
+      const m = RELOAD.exec(l);
+      if (!m) return;
       reloads++;
+      receivers[m[1]] = (receivers[m[1]] || 0) + 1;
       /* AS FAR AS THE NEXT SECTION, not a fixed handful of lines. A reload
          may legitimately be followed by reads that must happen BEFORE the app
          is back — verify-theme reads the pre-paint attributes, verify-splash
          catches the splash — and the wait then comes after those. A six-line
          window called verify-theme's own fix a violation. The section is the
          real boundary: whatever a reload sets up, it sets up for the checks
-         under the same heading. */
+         under the same heading.
+
+         And FROM THE RELOAD ITSELF, not from the next line. Six reloads wait
+         on their own line — `await r.reload(); await r.waitForFunction(…)` —
+         and a window that began on the following line called five of them
+         blind the moment their receivers were looked at; the sixth passed
+         only by borrowing the next reload's wait. */
       let end = i + 1;
       while (end < lines.length && !/^\s*head\s*\(/.test(lines[end]) && end - i < 60) end++;
-      if (!WAITS.test(lines.slice(i + 1, end).join('\n'))) blind.push(`${f}:${i + 1}`);
+      const after = [l.slice(m.index + m[0].length)].concat(lines.slice(i + 1, end)).join('\n');
+      if (!WAITS.test(after)) blind.push(`${f}:${i + 1}`);
     });
   }
   /* Vacuity guard: "count the blind reloads and expect none" is also what a
      scan that found no reloads at all returns. */
   ok('there are reloads to check', reloads >= 8, `${reloads} across ${suites.length} suites`);
+  ok('and they include reloads on page variables not named page',
+     Object.keys(receivers).some(r => r !== 'page'),
+     Object.entries(receivers).map(([r, n]) => `${r} ${n}`).join(', ') || 'none');
   ok('and every one of them waits for something afterwards',
      blind.length === 0, blind.join(', ') || 'none');
 }
