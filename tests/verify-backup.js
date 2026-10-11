@@ -222,6 +222,10 @@ const restore = `(text) => new Promise(resolve => {
        cannot show that each one is. */
     'a day with answers but no correct count': { daily: { '2026-10-09': { a: 2 } } },
     'a day with a correct count but no answers': { daily: { '2026-10-09': { c: 1 } } },
+    /* A correct answer is counted only as one of the answers, here and for
+       chapters and practice: more correct than answered is a record the app
+       never wrote (9 of 2 drew a Results row at 450%). */
+    'a day with more correct answers than answers': { daily: { '2026-10-09': { a: 1, c: 2 } } },
     'a null card': { srs: { BKUP_1: null } },
     'a card whose due date is not a date string': { srs: { BKUP_1: { due: 5 } } },
     'a card whose last review is not a date string': { srs: { BKUP_1: { due: '2026-11-01', last: 12345 } } },
@@ -236,10 +240,12 @@ const restore = `(text) => new Promise(resolve => {
     'a chapter with no counts': { chStats: { Arrhythmias: {} } },
     'a chapter with a total but no correct count': { chStats: { Arrhythmias: { total: 2 } } },
     'a chapter with a correct count but no total': { chStats: { Arrhythmias: { correct: 2 } } },
+    'a chapter with more correct answers than answers': { chStats: { Arrhythmias: { correct: 3, total: 2 } } },
     'a null practice record': { practice: { BKUP_1: null } },
     'a practice record with no counts': { practice: { BKUP_1: { t: 1 } } },
     'a practice record with no attempt count': { practice: { BKUP_1: { c: 1, t: 1 } } },
     'a practice record with no correct count': { practice: { BKUP_1: { n: 2, t: 1 } } },
+    'a practice record with more correct answers than attempts': { practice: { BKUP_1: { n: 1, c: 2, t: 1 } } },
     'a null resume record': { resume: { all: null } },
     'a resume record whose ids are not a list': { resume: { all: { ids: 'BKUP_1', i: 1 } } },
   };
@@ -258,17 +264,26 @@ const restore = `(text) => new Promise(resolve => {
     ok('and the Progress screen still builds', built === true, String(built));
   }
 
-  /* The valid round trip: a whole day record is restored and read. */
-  const dayToast = await importToast(JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 } },
+  /* The valid round trip: a whole day record is restored and read. It carries
+     a perfect day, chapter and drill as well (correct equal to answered), the
+     edge the more-correct-than-answered cases above must not refuse. */
+  const dayToast = await importToast(JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 },
+      '2026-10-08': { a: 3, c: 3, r: 0 } },
     srs: { BKUP_1: { reps: 3, due: '2026-11-01', last: '2026-10-01', stability: 4, difficulty: 5 } },
-    chStats: { Arrhythmias: { correct: 4, total: 5 } }, practice: { BKUP_1: { n: 2, c: 1, t: 1 } } } }));
+    chStats: { Arrhythmias: { correct: 4, total: 5 }, 'Valvular Disease': { correct: 3, total: 3 } },
+    practice: { BKUP_1: { n: 2, c: 1, t: 1 }, BKUP_2: { n: 2, c: 2, t: 1 } } } }));
   ok('a backup with a well-formed day record is restored', dayToast === 'Annotations restored.', JSON.stringify(dayToast));
   /* 4/5, not the 2/3 the first restore left: a refused import must not pass this. */
   ok('and a whole chapter and practice record are restored with it', await page.evaluate(() =>
     S.chStats.Arrhythmias.total === 5 && S.chStats.Arrhythmias.correct === 4 && (S.practice.BKUP_1 || {}).n === 2 && S.practice.BKUP_1.c === 1));
+  ok('and so are a perfect day, chapter and practice record', await page.evaluate(() =>
+    (S.daily['2026-10-08'] || {}).c === 3 && (S.chStats['Valvular Disease'] || {}).correct === 3 && (S.practice.BKUP_2 || {}).c === 2));
   ok('and the Progress screen reads it', await page.evaluate(() => {
     try { buildStats(); forecast7(); } catch (e) { return e.message; }
-    return S.daily['2026-10-09'].a === 7 && JSON.parse(localStorage.getItem('accsap12.v2')).daily['2026-10-09'].c === 5;
+    /* Guarded, so a refused round trip fails here rather than killing the
+       suite before the sections below it run. */
+    const stored = (JSON.parse(localStorage.getItem('accsap12.v2')) || {}).daily || {};
+    return (S.daily['2026-10-09'] || {}).a === 7 && (stored['2026-10-09'] || {}).c === 5;
   }) === true);
 
   head('reference images survive a backup on a different device');

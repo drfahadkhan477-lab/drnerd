@@ -5605,9 +5605,15 @@ function progressFromBackup(raw){
   const entries=(k,fields,need,extra)=>{ for(const v of Object.values(raw[k]||{})){
     if(!record(v)||fields.some(f=>!count(v[f]))||need.some(f=>v[f]==null)||(extra&&!extra(v))) throw new Error('Invalid statistics.');
   }};
-  entries('daily',['a','c','r'],['a','c']);
-  entries('chStats',['correct','total'],['correct','total']);  // selectOpt does st.total++, st.correct++
-  entries('practice',['n','c','t'],['n','c']);               // and pr.n++, pr.c++: a missing count is NaN
+  /* A correct answer is only ever counted as one of the answers (logAnswer,
+     selectOpt), so more correct than answered is a record the app never
+     wrote: 9 of 2 drew a Results row at 450%, and a day's c over its a can
+     put Progress's accuracy over 100%. Written as not-greater, not
+     at-most: undefined<=n is false as well, which would refuse a missing
+     count here and leave the need lists with nothing to prove. */
+  entries('daily',['a','c','r'],['a','c'],v=>!(v.c>v.a));
+  entries('chStats',['correct','total'],['correct','total'],v=>!(v.correct>v.total));  // selectOpt does st.total++, st.correct++
+  entries('practice',['n','c','t'],['n','c'],v=>!(v.c>v.n));                          // and pr.n++, pr.c++: a missing count is NaN
   entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string'));
   entries('resume',['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')));
   for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
