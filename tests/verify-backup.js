@@ -217,6 +217,11 @@ const restore = `(text) => new Promise(resolve => {
     'a null day': { daily: { '2026-10-09': null } },
     'a day whose count is not a number': { daily: { '2026-10-09': { a: 'many', c: 0 } } },
     'a day with no counts': { daily: { '2026-10-09': {} } },
+    /* One case per required count, here and for chapters and practice below:
+       an empty record is refused by whichever count is still required, so it
+       cannot show that each one is. */
+    'a day with answers but no correct count': { daily: { '2026-10-09': { a: 2 } } },
+    'a day with a correct count but no answers': { daily: { '2026-10-09': { c: 1 } } },
     'a null card': { srs: { BKUP_1: null } },
     'a card whose due date is not a date string': { srs: { BKUP_1: { due: 5 } } },
     'a card whose last review is not a date string': { srs: { BKUP_1: { due: '2026-11-01', last: 12345 } } },
@@ -224,12 +229,17 @@ const restore = `(text) => new Promise(resolve => {
     'a chapter count that is negative': { chStats: { Arrhythmias: { correct: -1, total: 2 } } },
     /* Answering a question does st.total++ and st.correct++ on the stored
        record (selectOpt), and a practice drill does pr.n++ and pr.c++: a
-       missing count turns into NaN, saved as null, and the chapter drops off
-       Progress. Both counts are required, as a day's a and c are. */
+       missing count turns into NaN, saved as null. A chapter with no total
+       then drops off the Results screen's chapter list, and one with no
+       correct count shows a wrong percentage there. Both counts are required,
+       as a day's a and c are. */
     'a chapter with no counts': { chStats: { Arrhythmias: {} } },
     'a chapter with a total but no correct count': { chStats: { Arrhythmias: { total: 2 } } },
+    'a chapter with a correct count but no total': { chStats: { Arrhythmias: { correct: 2 } } },
     'a null practice record': { practice: { BKUP_1: null } },
     'a practice record with no counts': { practice: { BKUP_1: { t: 1 } } },
+    'a practice record with no attempt count': { practice: { BKUP_1: { c: 1, t: 1 } } },
+    'a practice record with no correct count': { practice: { BKUP_1: { n: 2, t: 1 } } },
     'a null resume record': { resume: { all: null } },
     'a resume record whose ids are not a list': { resume: { all: { ids: 'BKUP_1', i: 1 } } },
   };
