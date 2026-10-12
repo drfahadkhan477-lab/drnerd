@@ -25,7 +25,7 @@ source/
 __pycache__/
 *.pyc
 
-# The working plan for the task in hand (CLAUDE.md, "Working method").
+# The working plan for the task in hand, if one is kept there.
 # tasks/lessons.md IS tracked: it is the record of corrections.
 tasks/todo.md
 

@@ -7,7 +7,7 @@ Keep entries short and keep them true — prune one that stops being so.
 Format: `- **Pattern.** What went wrong. → Rule: what to do instead.`
 
 This file is for rules about how to work. Facts about the code belong in the
-code's own comments; facts the whole project must obey belong in `CLAUDE.md`
+code's own comments; facts the whole project must obey belong in `AGENTS.md`
 (and only after the second time).
 
 ## Checks
@@ -16,7 +16,7 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   below the path it claimed to cover (`readImage()` for a scanned-PDF fix; the
   review bot caught it, the author did not). → Rule: name the entry point the
   user hits, and call *that* in the test. Then inject the defect and watch the
-  check fail before trusting it (`/prove-red`).
+  check fail before trusting it (`AGENTS.md`, section 2).
 - **An anchor tested only against a stand-in.** A string patch can pass its own
   synthetic fixture and still miss the real pinned file. → Rule: when a patch
   targets third-party code pinned by SRI, run the real fixed file through the
