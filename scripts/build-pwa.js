@@ -604,7 +604,18 @@ step('link the manifest and the iOS icon', () => {
 
    The static parts of the splash — ground, wordmark, ECG sweep — still paint
    instantly either way. Only the heart itself arrives a beat later here, which
-   is exactly the trade the Lottie pair made before it. */
+   is exactly the trade the Lottie pair made before it.
+
+   NAMED BY ITS OWN DIGEST, as the heart mesh is (splitHeartMesh). The worker
+   serves content/ cache-first, so under a fixed name a new picture reached a
+   device only by renaming the content bucket, and that deleted every figure
+   the fellow had downloaded (contentVersion below). A new picture is a new
+   name now, so contentVersion leaves it out. A plain function of the bytes,
+   so tests/verify-swupdate-pure.js can hold contentVersion to the names this
+   gives, not to names the test makes up. */
+function splashHeartName(bytes) {
+  return 'heart-' + crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 12) + '.webp';
+}
 const splashAssets = [];
 step('pull the heart image out of the splash', () => {
   const re = /(<img class="sp-heart-img" data-splash-heart="img" alt="" decoding="sync" src=")data:image\/webp;base64,([A-Za-z0-9+/=]+)(">)/;
@@ -614,8 +625,10 @@ step('pull the heart image out of the splash', () => {
   if (bytes.slice(0, 4).toString('ascii') !== 'RIFF' || bytes.slice(8, 12).toString('ascii') !== 'WEBP') {
     throw new Error('the splash heart data: URI did not decode to a WebP');
   }
-  splashAssets.push(['heart.webp', bytes]);
-  html = html.replace(m[0], m[1] + 'content/splash-heart/heart.webp' + m[3]);
+  const name = splashHeartName(bytes);
+  const url = 'content/splash-heart/' + name;
+  splashAssets.push([name, bytes]);
+  html = html.replace(m[0], m[1] + url + m[3]);
 
   /* AND THE HERO'S COPY, WHICH IS THE ONE THAT IS EASY TO MISS. heroart-patch
      reads the picture out of the splash markup so the two hearts can never be
@@ -627,7 +640,7 @@ step('pull the heart image out of the splash', () => {
      is how this was noticed. Both copies point at the one file. */
   const heroRe = /(<img data-hero-heart="img" src=")data:image\/webp;base64,[A-Za-z0-9+/=]+(")/;
   if (!heroRe.test(appCode)) throw new Error('the hero heart <img> with an inline data: URI was not found in the app code');
-  appCode = appCode.replace(heroRe, (mm, a, b) => a + 'content/splash-heart/heart.webp' + b);
+  appCode = appCode.replace(heroRe, (mm, a, b) => a + url + b);
 
   /* Neither copy may survive as base64. Checked rather than assumed: this is
      a size regression that no test screen would show and no feature would
@@ -1117,15 +1130,17 @@ step('every content path the code names is on disk', () => {
 
    This hashes what build-pwa.js wrote under dist/content/ instead, every
    file's path and bytes in path order, and must run after the last write
-   there. Two files are left out. manifest.json records the build (its
+   there. Three files are left out. manifest.json records the build (its
    digest, the commit, the time), not content, and the app never fetches it.
-   The heart mesh is named by a digest of its own bytes (splitHeartMesh), so
-   a new one is a new URL and needs no version; it is baked from heart3d.js,
-   which is code, so hashing it would let a code change evict the figures
-   again (the old mesh stays in the bucket until the content next changes).
-   Anything else under content/ is served cache-first under a fixed name, so
-   it is in here or a change to it would never reach a device: the splash
-   heart included.
+   The heart mesh and the splash heart are each named by a digest of their
+   own bytes (splitHeartMesh, and the splash step above), so a new one is a
+   new URL and needs no version. The mesh is baked from heart3d.js, which is
+   code, and the splash picture comes in with the shell, so hashing either
+   would let a change that is not content evict the figures again. The old
+   file stays in the bucket until the content next changes. Only those two
+   names are left out: anything else under content/ is served cache-first
+   under a fixed name, so it is in here or a change to it would never reach
+   a device.
 
    staleContent() still pairs content/ with its build; this only decides when
    a device's copy is out of date. tests/verify-swupdate-pure.js drives it
@@ -1141,7 +1156,7 @@ function contentVersion(dir) {
   })(dir);
   const h = crypto.createHash('sha256');
   for (const rel of files.sort()) {
-    if (rel === 'manifest.json' || /^heart-mesh-[0-9a-f]+\.bin$/.test(rel)) continue;
+    if (rel === 'manifest.json' || /^heart-mesh-[0-9a-f]+\.bin$/.test(rel) || /^splash-heart\/heart-[0-9a-f]{12}\.webp$/.test(rel)) continue;
     const bytes = fs.readFileSync(path.join(dir, rel));
     h.update(rel + '\0' + bytes.length + '\0').update(bytes);
   }

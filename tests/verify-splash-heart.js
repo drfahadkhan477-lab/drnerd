@@ -8,7 +8,7 @@
  * Runs against either target. The single-file build carries the picture inline
  * as a data:image/webp URI, right in the splash markup; the split PWA build
  * (served over http, reached via a URL) has it pulled out to
- * content/splash-heart/heart.webp and fetches it, because base64 of an
+ * content/splash-heart/heart-<digest>.webp and fetches it, because base64 of an
  * already-compressed image does not gzip and the split shell has a transfer
  * budget that was hard-won earlier in this project. The file-content checks
  * below only make sense against the single-file source, so they are skipped

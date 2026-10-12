@@ -412,13 +412,21 @@ async function heapAfterBoot(page, url) {
        of an already-compressed WebP does not gzip, and the shell went from
        229 KB transferred to 276 against a 280 KB budget. Nothing visible would
        have broken — it would just have been slower, permanently. */
-    ok('the splash heart is referenced as a file, not inlined',
-       /content\/splash-heart\/heart\.webp/.test(idx));
+    const heartRef = (idx.match(/content\/splash-heart\/heart-([0-9a-f]{12})\.webp/) || [])[0];
+    ok('the splash heart is referenced as a file, not inlined', !!heartRef, heartRef || 'no content/splash-heart/heart-<digest>.webp in index.html');
     const inlined = ((idx + app).match(/data:image\/webp;base64,/g) || []).length;
     ok('and neither the shell nor the app code carries a copy of it as base64',
        inlined === 0, `${inlined} inline WebP data: URI(s)`);
-    const heart = await fetch(ORIGIN + '/content/splash-heart/heart.webp');
+    const heart = heartRef ? await fetch(ORIGIN + '/' + heartRef) : { status: 'not requested' };
     ok('and that file is actually served', heart.status === 200, String(heart.status));
+    /* NAMED BY ITS OWN BYTES. The content cache's version leaves this file out
+       (build-pwa.js contentVersion), which is right only while a new picture
+       is a new name: under a fixed one, a device would keep the old picture.
+       So the name is held to a digest of what is served under it. */
+    const heartBytes = heart.status === 200 ? Buffer.from(await heart.arrayBuffer()) : null;
+    const heartDigest = heartBytes && require('crypto').createHash('sha256').update(heartBytes).digest('hex').slice(0, 12);
+    ok('and its name is a digest of the bytes served under it, so a new picture is a new name',
+       !!heartDigest && heartRef.indexOf('heart-' + heartDigest + '.webp') > 0, `${heartRef} / ${heartDigest}`);
   }
 
   head('content is served intact');
