@@ -3502,21 +3502,33 @@ function kindOf(user) {
     await p5r.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
     await p5r.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
     await p5r.locator('#occlusion').waitFor(T).catch(() => {});
-    await p5r.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
-    const seen = await p5r.evaluate(() => {
+    /* Complete, not only sized: an image reports its size while it is still
+       partly loaded, and drawImage() draws nothing from one that is not fully
+       decodable. In WebKit this read no magenta while it waited on the size
+       alone. */
+    await p5r.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.complete && i.naturalWidth > 0; }, null, T).catch(() => {});
+    const seen = await p5r.evaluate(async () => {
       const i = document.querySelector('#occlusion img'), m = document.querySelector('#occlusion .occlusion-mask');
       if (!i || !i.naturalWidth || !m) return { card: !!document.querySelector('#occlusion'), drawn: !!(i && i.naturalWidth) };
+      await i.decode().catch(() => {});
       const c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight;
       const g = c.getContext('2d'); g.drawImage(i, 0, 0);
       const px = g.getImageData(0, 0, c.width, c.height).data;
-      let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+      let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1, inked = 0;
       for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
         const k = (y * c.width + x) * 4;
+        if (px[k + 3]) inked++;
         if (px[k] > 200 && px[k + 1] < 80 && px[k + 2] > 200) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
       }
       const r = i.getBoundingClientRect(), q = m.getBoundingClientRect(), f = v => +v.toFixed(3);
-      return { patch: x1 < 0 ? null : [x0 / c.width, y0 / c.height, (x1 + 1) / c.width, (y1 + 1) / c.height].map(f),
-               mask: [(q.left - r.left) / r.width, (q.top - r.top) / r.height, (q.right - r.left) / r.width, (q.bottom - r.top) / r.height].map(f) };
+      const mask = [(q.left - r.left) / r.width, (q.top - r.top) / r.height, (q.right - r.left) / r.width, (q.bottom - r.top) / r.height].map(f);
+      /* For the report only: the pixel under the mask's centre and how much of
+         the canvas was drawn at all, so a miss says whether the patch came out
+         in another colour or no picture was read. */
+      const cx = Math.max(0, Math.min(c.width - 1, Math.floor((mask[0] + mask[2]) / 2 * c.width)));
+      const cy = Math.max(0, Math.min(c.height - 1, Math.floor((mask[1] + mask[3]) / 2 * c.height))), ck = (cy * c.width + cx) * 4;
+      return { patch: x1 < 0 ? null : [x0 / c.width, y0 / c.height, (x1 + 1) / c.width, (y1 + 1) / c.height].map(f), mask,
+               centre: [px[ck], px[ck + 1], px[ck + 2], px[ck + 3]], inked: f(inked / (c.width * c.height)) };
     });
     ok('a figure card from the turned page hides its label where the drawn picture shows it',
        !!seen.patch && !!seen.mask && seen.mask[0] <= seen.patch[0] + 0.01 && seen.mask[1] <= seen.patch[1] + 0.01 &&

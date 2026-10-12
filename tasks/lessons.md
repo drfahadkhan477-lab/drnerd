@@ -106,6 +106,16 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   save and still froze. → Rule: fix the hazard where it happens or at every caller that
   waits on it — grep for every `.then` on that promise before calling it fixed, and
   narrow the commit title to what was covered.
+- **A pixel read that waited on a size.** My occlusion check drew the card's `<img>`
+  into a canvas once `naturalWidth > 0` and looked for the label's magenta. Chromium
+  and Firefox found it; CI's WebKit found none (`patch: null`), and its log could not
+  say whether the patch came out in another colour or nothing was drawn. A size can
+  be known before the picture is fully decodable, and `drawImage()` draws nothing
+  from such an image; the suite's other image wait already asked for `complete`.
+  → Rule: before reading an image's pixels, wait for `complete && naturalWidth > 0`
+  and `await img.decode()`, and put what was read in the check's detail (the pixel
+  where the answer should be, how much was drawn), so a miss in an engine this
+  container cannot run says which it was.
 
 ## Process
 
