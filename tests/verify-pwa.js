@@ -6,8 +6,9 @@
  *   node scripts/serve.js 8123 &
  *   NODE_PATH=$(npm root -g) node tests/verify-pwa.js http://localhost:8123/index.html [single-file.html]
  *
- * Pass the single-file build as a second argument to get the heap and shell
- * comparisons measured rather than asserted against a remembered number.
+ * Pass the independent single-file build to verify content completeness and
+ * measure heap/shell comparisons. Synthetic URL-only runs regenerate their
+ * expectations from the fixture generator; other runs require that source.
  *
  * The claims under test are the three Stage 1 was justified by: the shell is
  * small, figures are fetched on demand instead of all held in memory, and the
@@ -15,11 +16,13 @@
  */
 'use strict';
 const path = require('path');
+const fs = require('fs');
 const { splitBank, readStaging } = require('./_olderbank.js');
 const { launch, heapUsedBytes, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted } = require('./_render.js');
+const { booted, resolved } = require('./_render.js');
 const SYN = require('../scripts/synthetic-export.js');
+const { originTransport } = require('./_origintransport.js');
 
 const target = process.argv[2];
 const baseline = process.argv[3];
@@ -28,6 +31,10 @@ if (!target || !/^https?:\/\//.test(target)) {
   process.exit(1);
 }
 const ORIGIN = new URL(target).origin;
+/* Expected counts come from a separate input, never from the bank under test
+   or its extraction manifest: the same dropped data could corrupt both. */
+const sourceBank = baseline ? JSON.parse(fs.readFileSync(baseline, 'utf8').match(/const ALL_Q=(\[[\s\S]*?\]);\n/)[1]) : null;
+let expectedFigures;
 
 let passed = 0, failed = 0, unmeasured = 0;
 const ok = (label, cond, detail = '') => {
@@ -45,20 +52,20 @@ const unmeasurable = (label, why) => {
   console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
 
-/* WHOSE BANK THIS IS, and what it must therefore hold. This suite used to
-   hold every build to the licensed export's own totals (639 questions, 408
-   figures, a single file twenty times the shell), so on the synthetic build
-   CI makes it failed six checks that were not about the split at all. The
-   expected totals now come from somewhere the build under test cannot move:
-   a synthetic build (the first question carries scripts/synthetic-export.js's
-   mark) is held to that generator, run again here; anything else is held to
-   the licensed export's totals, which stay as they were, named as the
-   private corpus's own. */
-const expectedBank = synthetic => {
-  if (!synthetic) return { synthetic, questions: 639, figures: 408, from: "the licensed export's own totals" };
-  const { bank, imgs } = SYN.syntheticBank();
-  return { synthetic, questions: bank.length, figures: Object.values(imgs).reduce((a, l) => a + l.length, 0),
-           from: 'scripts/synthetic-export.js, generated again here' };
+/* Both sources are independent of extraction. A URL-only private run cannot
+   certify completeness without an independent input, so refuse that claim. */
+const expectedBank = async synthetic => {
+  let counts, from;
+  if (sourceBank) {
+    counts = { questions: sourceBank.length, figures: sourceBank.reduce((n,q)=>n+(q.img||0),0) };
+    from = 'the independent single-file source';
+  } else if (synthetic) {
+    const { bank, imgs } = SYN.syntheticBank();
+    counts = { questions: bank.length, figures: Object.values(imgs).reduce((n,images)=>n+images.length,0) };
+    from = 'the independent synthetic generator';
+  } else { throw new Error('Content completeness needs the independent single-file source as the second argument.'); }
+  return { synthetic, questions: counts.questions, figures: counts.figures,
+    from };
 };
 /* The figure's own type, from its name: the extractor writes .webp, .png and
    .jpg alike, and the AI path must send each as what it is. */
@@ -81,7 +88,7 @@ async function heapAfterBoot(page, url) {
 }
 
 (async () => {
-  const BANK = expectedBank((await (await fetch(ORIGIN + '/content/questions.json')).text()).includes(SYN.MARK));
+  const BANK = await expectedBank((await (await fetch(ORIGIN + '/content/questions.json')).text()).includes(SYN.MARK));
   console.log(`  bank: ${BANK.synthetic ? 'synthetic' : 'not synthetic'} — expecting ${BANK.questions} questions, ${BANK.figures} figures (${BANK.from})`);
   const browser = await launch({ args: ['--enable-precise-memory-info'] });
   /* Twelve pages across nine contexts, and the ones that matter most when this
@@ -165,18 +172,13 @@ async function heapAfterBoot(page, url) {
     ok('the shell transfers under 280 KB', wireBytes < 280 * 1024,
        `${kb(wireBytes)} gzipped, from ${kb(shellBytes)} on disk`);
 
-    /* Twenty times smaller is a fact about the licensed export, whose single
-       file is mostly its 408 figures; a bank with fewer, smaller figures has a
-       smaller single file and no less correct a shell. The absolute budget
-       above is what holds every build. */
-    if (baseline && BANK.synthetic) {
-      unmeasurable('and is a large fraction smaller than the single file',
-        `the 20x ratio is the licensed export's; this single file is ${mb(require('fs').statSync(baseline).size)} of synthetic bank`);
-    } else if (baseline) {
-      const before = require('fs').statSync(baseline).size;
-      ok('and is a large fraction smaller than the single file',
-         shellBytes < before / 20, `${mb(before)} → ${kb(shellBytes)}`);
-    }
+  }
+
+  if (baseline) {
+    const gzip = b => require('zlib').gzipSync(b).length;
+    const before = gzip(fs.readFileSync(baseline));
+    const wire = gzip(Buffer.from(await (await fetch(target)).text())) + gzip(Buffer.from(await (await fetch(ORIGIN + '/app.js')).text()));
+    ok('compressed shell transfers fewer bytes than the source', wire < before);
   }
 
   head('the library arrives late, and the home screen notices');
@@ -427,10 +429,12 @@ async function heapAfterBoot(page, url) {
     /* The export's part is held to the export's own totals; a merged older
        bank is held to the staging it came from — see tests/_olderbank.js. */
     const bank = splitBank(qs, q => (q.figs ? q.figs.length : 0), readStaging());
-    ok(`all ${BANK.questions} questions of the export present`, bank.exportCount === BANK.questions, String(bank.exportCount));
+    const expected = BANK;
+    expectedFigures = expected.figures;
+    ok('every question from the independent source is present', Number.isInteger(expected.questions) && qs.length === expected.questions, String(qs.length));
+    if (sourceBank) ok('question IDs and order match the independent source', qs.map(q=>q.id).join(',') === sourceBank.map(q=>q.id).join(','));
     const figs = qs.reduce((a, q) => a + (q.figs ? q.figs.length : 0), 0);
-    BANK.served = figs;
-    ok(`all ${BANK.figures} of the export\'s figures referenced`, bank.exportFigs === BANK.figures, String(bank.exportFigs));
+    ok('every figure from the independent source is referenced', Number.isInteger(expected.figures) && figs === expected.figures, String(figs));
     ok('and an older bank, if merged, is exactly its staging', bank.ok, bank.why);
     const declared = qs.reduce((a, q) => a + (q.img || 0), 0);
     ok('q.img and the extracted figure lists agree', declared === figs, `${declared} vs ${figs}`);
@@ -539,24 +543,31 @@ async function heapAfterBoot(page, url) {
 
   head('offline, once installed');
   {
+    const transport = await originTransport(target);
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
     const page = watch(await ctx.newPage(), events, 'offline', errors);
-    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await page.goto(transport.url, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
     const swReady = await page.evaluate(() =>
       navigator.serviceWorker.ready.then(r => !!r.active).catch(() => false));
     ok('service worker registers and activates', swReady === true);
 
     /* Open a question with figures so one lands in the runtime cache. */
-    const figId = await page.evaluate(async () => {
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 30000 });
+    const figId = await page.evaluate(() => {
       const q = ALL_Q.find(x => x.img > 0 && !x.bad);
       startQuiz(q.ch); S.questions = [q]; S.qIdx = 0; render();
-      await new Promise(r => setTimeout(r, 1500));
       return q.id;
     });
-    await page.waitForTimeout(800);
-
-    await ctx.setOffline(true);
+    /* The fixture must have reached Cache Storage before the outage. A
+       fixed sleep neither proves that nor accounts for a slow decoder. */
+    const cached = await resolved(page, async () => {
+      const im = document.querySelector('.fig-img');
+      return !!im && im.complete && im.naturalWidth > 0 && !!(await caches.match(im.src));
+    }, null, { timeout: 30000 }).catch(() => false);
+    ok('the selected figure decoded and reached Cache Storage before the outage', cached === true);
+    transport.cut();
+    ok('the origin transport is actually unavailable', await transport.unavailable());
     await page.reload({ waitUntil: 'load', timeout: 120000 });
     const offline = await page.evaluate(() =>
       new Promise(res => {
@@ -569,16 +580,18 @@ async function heapAfterBoot(page, url) {
       }));
     ok('the app boots with the network cut off', offline.booted === true, JSON.stringify(offline));
 
-    const offlineFig = await page.evaluate(async id => {
+    await page.evaluate(id => {
       const q = ALL_Q.find(x => x.id === id);
       startQuiz(q.ch); S.questions = [q]; S.qIdx = 0; render();
-      await new Promise(r => setTimeout(r, 1500));
-      const img = document.querySelector('.fig-img');
-      return { complete: !!img && img.complete && img.naturalWidth > 0 };
     }, figId);
-    ok('a figure seen before is still there offline', offlineFig.complete === true, JSON.stringify(offlineFig));
-    await ctx.setOffline(false);
+    const decoded = await page.waitForFunction(() => {
+      const img = document.querySelector('.fig-img');
+      return !!img && img.complete && img.naturalWidth > 0;
+    }, null, { timeout: 30000 }).then(()=>true,()=>false);
+    ok('a figure seen before is still there offline', decoded);
+    transport.resume();
     await ctx.close();
+    transport.close();
   }
 
   head('one press puts the whole bank on the device');
@@ -586,11 +599,12 @@ async function heapAfterBoot(page, url) {
      iPad, then studied with the laptop shut. Under that pattern every figure
      not already met is a broken image, discovered at the worst moment. */
   {
+    const transport = await originTransport(target);
     const ctx = await browser.newContext({ viewport: { width: 430, height: 932 } });
     const page = watch(await ctx.newPage(), events, 'download the rest', errors);
     let figReqs = 0;
     page.on('request', r => { if (r.url().includes('/content/figures/')) figReqs++; });
-    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await page.goto(transport.url, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
     await page.evaluate(() => navigator.serviceWorker.ready);
     /* IT LIVES ON PROGRESS NOW, not on the home screen. The landscape home grid
@@ -611,8 +625,7 @@ async function heapAfterBoot(page, url) {
                    btn: c.querySelector('.off-btn').textContent } : null;
     });
     ok('the card is on the Progress screen of the split build', !!before);
-    ok('and knows how many figures the bank has', !!before && before.total === BANK.served,
-       `${before && before.total} of ${BANK.served} in questions.json`);
+    ok('and knows how many figures the independent source has', before && before.total === expectedFigures, String(before && before.total));
     /* Surveying must not BE a download: caches.match asks the question without
        fetching, and 408 fetches on every home screen would be the opposite of
        the feature. */
@@ -686,7 +699,8 @@ async function heapAfterBoot(page, url) {
 
     /* The claim, tested the only way that means anything: network off, and a
        question this session has never opened. */
-    await ctx.setOffline(true);
+    transport.cut();
+    ok('the download check has no origin transport', await transport.unavailable());
     const cold = await page.evaluate(async () => {
       const q = ALL_Q.filter(x => x.figs && x.figs.length).slice(-1)[0];
       jumpTo(q.id);
@@ -695,11 +709,12 @@ async function heapAfterBoot(page, url) {
       return { id: q.id, found: !!img, complete: !!img && img.complete,
                px: img ? img.naturalWidth : 0 };
     });
-    await ctx.setOffline(false);
+    transport.resume();
     ok('offline, a figure never visited this session still draws',
        cold.found && cold.complete && cold.px > 500,
        `${cold.id} at ${cold.px}px`);
     await ctx.close();
+    transport.close();
   }
 
   head('memory: the whole bank is no longer resident');

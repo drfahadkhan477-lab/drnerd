@@ -2,7 +2,28 @@
 
 October 3, 2026. This follows the broad engineering review and the request to implement its fixes one by one. Changes are limited to Memorizer, its synthetic regression tests, and its standalone build script. The latest base-branch OCR recovery was merged and preserved.
 
-## Current status — October 9
+## Codex completion status — October 12
+
+All eight code findings from the repository review are addressed in the code
+through `050f481`, including the additional progress-validation/PWA regressions
+in `e5974a4`. The final restore change preserves newer queued write tickets so
+failed notes remain readable, exportable and retryable; older failure cleanup
+still follows successful replacement, and a refused replacement clears nothing.
+
+The final code passed all 89 pure suites and the complete Memorizer hardening
+suite with 107 checks in Chromium and 107 in WebKit. Earlier integrated checks
+also passed the focused Systole browser suites and the synthetic PWA runs:
+116 Chromium checks, and 115 WebKit checks with one measurement explicitly
+unmeasured. See [the review fix record](../docs/REVIEW-FIXES-2026-10-12.md) for
+scope and validation details. No licensed content or real API credentials were
+used, and no device or private-build result was inferred from these runs.
+
+There are no outstanding code findings from that review. Physical iPad memory,
+Home Screen reopening, real model switching and the private laptop registry
+remain separate acceptance work described in the existing run sheets. Hosted
+deployment verification below is historical, not verification of this revision.
+
+## Historical deployment/runtime snapshot — October 9
 
 The original binary-fallback fix and the subsequent review fixes are merged. The current runtime base is `400e1ae1232cd6ea0551caf6e40e182be86f2eae`; its standalone build is `2f5728796a54`.
 

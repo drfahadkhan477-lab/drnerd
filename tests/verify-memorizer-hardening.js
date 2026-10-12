@@ -718,6 +718,53 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('writes queued before a restore cannot land on the restored IndexedDB database', raced.ids === raced.want && !raced.stale, JSON.stringify(raced).slice(0, 200));
   }
 
+  head('restore preserves rescue and retry for newer queued failures');
+  for (const refused of [false, true]) {
+    const r = await context('restore newer failures'); await r.goto(URL); await r.locator('#home-hero').waitFor(T);
+    const result = await r.evaluate(async refused => {
+      const Store = MemStore, Backup = MemBackup;
+      await Store.put('docs', { id: 'ticket-unit', source: 'text', clusters: [{ index: 0, title: 'Synthetic', text: 'Synthetic source.', segments: [] }] });
+      await Store.put('meta', { id: 'notes', recs: { 'ticket-unit:0': { text: 'RESTORED' } } });
+      const backup = await Backup.exportText(), put = IDBObjectStore.prototype.put, replace = Store.replace;
+      let pending, writeError = '', restoreError = '';
+      IDBObjectStore.prototype.put = function (value) {
+        if (value.id === 'synthetic-old-failure' || (this.name === 'meta' && value.id === 'notes' && value.recs['ticket-unit:0'].text === 'NEW FAILED'))
+          throw new DOMException('synthetic full disk', 'QuotaExceededError');
+        if (refused && this.name === 'docs') throw new Error('synthetic refused restore');
+        return put.apply(this, arguments);
+      };
+      try {
+        await Store.put('meta', { id: 'synthetic-old-failure', value: 'old pending data' }).catch(() => {});
+        // Queue a genuinely newer write immediately behind the replacement.
+        // Its put fails only after the replacement's cleanup has run.
+        Store.replace = function (ops) {
+          const committed = replace(ops);
+          pending = Store.put('meta', { id: 'notes', recs: { 'ticket-unit:0': { text: 'NEW FAILED' } } });
+          pending.catch(() => {});
+          return committed;
+        };
+        await Backup.restore(backup).catch(e => { restoreError = e.message; });
+        await pending.catch(e => { writeError = e.name; });
+      } finally { IDBObjectStore.prototype.put = put; Store.replace = replace; }
+      const note = await Store.get('meta', 'notes'), old = await Store.get('meta', 'synthetic-old-failure');
+      const exported = (await Backup.inspect(await Backup.exportText())).stores;
+      const rescued = exported.meta.find(m => m.id === 'notes');
+      const warned = !!Store.failureMessage();
+      await Store.retryFailures();
+      const retried = await Store.get('meta', 'notes');
+      return { persistent: Store.persistent, writeError, restoreError, warned,
+        note: note.recs['ticket-unit:0'].text, exported: rescued.recs['ticket-unit:0'].text,
+        oldRetained: !!old, oldExported: exported.meta.some(m => m.id === 'synthetic-old-failure'),
+        retried: retried.recs['ticket-unit:0'].text, failureAfterRetry: Store.failureMessage() };
+    }, refused);
+    const label = refused ? 'refused restore' : 'committed restore';
+    ok(label + ': the newer native write really failed', result.persistent && result.writeError === 'QuotaExceededError');
+    ok(label + ': the newer failed note stays readable and is reported', result.warned && result.note === 'NEW FAILED');
+    ok(label + ': backup rescues the exact newer failed note', result.exported === 'NEW FAILED');
+    ok(label + ': old failure cleanup respects commit/rollback', result.oldRetained === refused && result.oldExported === refused && !!result.restoreError === refused);
+    ok(label + ': retry stores the newer note and clears the failures', result.retried === 'NEW FAILED' && result.failureAfterRetry === '');
+  }
+
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');
   ok('and nothing threw on the page throughout', errors.length === 0, errors.join(' | '));
   head('deletion cancels failed writes without losing other units’ pending notes');

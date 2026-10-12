@@ -1166,7 +1166,7 @@ if (flag('--pwa')) {
   }
   pt = Date.now();
 
-  const r = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
+  const r = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`, TARGET],
                       { encoding: 'utf8', maxBuffer: 1 << 26, env: childEnv({ NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE }) }, PHASE_LIMIT, 'verify-pwa');
   const out = (r.stdout || '') + (r.stderr || '');
   phase('pwa', out, r.status, Date.now() - pt);

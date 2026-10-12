@@ -5597,6 +5597,15 @@ function progressFromBackup(raw){
   entries('practice',['n','c','t'],['n','c']);               // and pr.n++, pr.c++: a missing count is NaN
   entries('srs',['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string'));
   entries('resume',['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')));
+  const day=s=>{if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
+    const d=FSRS.isoToLocalDate(s);return !!d&&FSRS.localDateToISO(d)===s;};
+  for(const [date,v] of Object.entries(raw.daily||{})) if(!day(date)) throw new Error('Invalid statistics.');
+  for(const v of Object.values(raw.srs||{})) for(const k of ['due','last'])
+    if(v[k]!=null&&!day(v[k])) throw new Error('Invalid statistics.');
+  for(const v of Object.values(raw.resume||{})){
+    if(v.i!=null&&(!Number.isInteger(v.i)||v.i<0||(v.ids&&v.i>=v.ids.length))) throw new Error('Invalid statistics.');
+    if(v.answers!=null&&!record(v.answers)) throw new Error('Invalid statistics.');
+  }
   for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
     if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');
   for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');
