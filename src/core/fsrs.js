@@ -76,8 +76,8 @@ const SCHEDULER_VERSION = 2;
    determine every interval the module produces (the weights, the decay and
    the interval cap); verify-fsrs.js pins the
    result. Change a weight without bumping SCHEDULER_VERSION and the pin fails
-   and says so — the same bargain scripts/build.js makes with its exact-match
-   patches, and the same one SHELL_V makes by deriving itself from content.
+   and says so — the same bargain SHELL_V makes by deriving itself from
+   content.
 
    FNV-1a: this module runs in a browser with no crypto import, and the job is
    to notice a change, not to resist an adversary. */

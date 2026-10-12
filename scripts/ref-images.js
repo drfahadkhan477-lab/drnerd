@@ -55,8 +55,9 @@ const path = require('path');
 const { findMarkdownFiles } = require('./ref-seed.js');
 
 /* Overridable so a test can point this at a fixture corpus instead of the
-   licensed one. Unset in every real build, where the defaults are the only
-   thing build.js ever uses. */
+   licensed one. Unset in a real build, which reads these defaults unless
+   scripts/assemble-app.js is given --refs and --ref-images (the synthetic
+   build is). */
 const REFS_DIR = process.env.SYSTOLE_REFS_DIR || path.join(__dirname, '..', 'content', 'refs');
 const IMAGES_DIR = process.env.SYSTOLE_REF_IMAGES_DIR || path.join(__dirname, '..', 'content', 'refs-images');
 
