@@ -472,8 +472,9 @@ function read(buffer, onProgress, onStatus, opts) {
             counts.push(wordsIn(lines));
             if (!withFigures) return null;
             return page.getOperatorList().then(function (ops) {
+              var on = pageOf(page);
               figureBoxes(ops, Lib.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
-                var f = { page: n, box: b }, cap = captionFor(b, lines, h) || tableTitleFor(b, lines, h);
+                var f = { page: n, box: b, view: on.view, rotate: on.rotate }, cap = captionFor(b, lines, h) || tableTitleFor(b, lines, h);
                 if (cap) { if (cap.number) f.number = cap.number; f.label = cap.label; f.caption = cap.text; if (cap.kind) f.kind = cap.kind; }
                 var labs = labelsIn(b, lines, h);
                 if (labs.length) f.labels = labs;
@@ -570,8 +571,9 @@ function figuresOnNow(key, buffer, pageNos) {
         return page.getTextContent().then(function (tc) {
           var lines = linesOf(tc.items, h);
           return page.getOperatorList().then(function (ops) {
+            var on = pageOf(page);
             figureBoxes(ops, L.OPS, page.view, textBoxesOf(tc.items), lines).forEach(function (b) {
-              var f = { page: n, box: b }, cap = captionFor(b, lines, h) || tableTitleFor(b, lines, h);
+              var f = { page: n, box: b, view: on.view, rotate: on.rotate }, cap = captionFor(b, lines, h) || tableTitleFor(b, lines, h);
               if (cap) { if (cap.number) f.number = cap.number; f.label = cap.label; f.caption = cap.text; if (cap.kind) f.kind = cap.kind; }
               var labs = labelsIn(b, lines, h);
               if (labs.length) f.labels = labs;
@@ -593,11 +595,22 @@ function figuresOnNow(key, buffer, pageNos) {
    outer line. */
 var CROP_MARGIN = 8;
 /* The finder's version, stored with the figures it found. 2: annotations
-   skipped. 3: a table in a box named by its own title. */
-var FIGURES_V = 4;
+   skipped. 3: a table in a box named by its own title. 4: the labels
+   printed inside it (labelsIn). 5: each figure carries its page's view and
+   rotation (pageOf), so its space is held at the shape it is drawn at. */
+var FIGURES_V = 5;
 function padBox(box, view, m) {
   m = m == null ? CROP_MARGIN : m;
   return [Math.max(view[0], box[0] - m), Math.max(view[1], box[1] - m), Math.min(view[2], box[2] + m), Math.min(view[3], box[3] + m)];
+}
+/* What a figure needs of its page to know its drawn shape. */
+function pageOf(page) { return { view: Array.prototype.slice.call(page.view), rotate: page.rotate || 0 }; }
+/* [width, height] of the crop renderBoxNow draws, in PDF units: the box
+   with its margin, kept on the page (padBox), and on its side when the page
+   is turned a quarter (/Rotate 90 or 270), as the page's viewport turns it. */
+function cropShape(box, view, rotate, m) {
+  var p = padBox(box, view, m), w = Math.abs(p[2] - p[0]), h = Math.abs(p[3] - p[1]);
+  return (rotate || 0) % 180 ? [h, w] : [w, h];
 }
 var docCache = { key: null, doc: null };
 function openStored(key, buffer) {
@@ -645,6 +658,6 @@ function renderBox(key, buffer, pageNo, box, scale, margin) {
 }
 function release() { renders = []; renderBuffer = null; renderFile = null; return storedJob(function () { var d = docCache.doc; docCache = { key: null, doc: null }; return dispose(d); }); }
 
-root.MemPdf = { release: release, labelsIn: labelsIn, LABEL_MAX_WORDS: LABEL_MAX_WORDS, LABEL_MAX: LABEL_MAX, TABLE_TOP: TABLE_TOP, tableTitleFor: tableTitleFor, PDFJS_V: /pdfjs-dist@([\d.]+)/.exec(BASE)[1], FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
+root.MemPdf = { release: release, labelsIn: labelsIn, LABEL_MAX_WORDS: LABEL_MAX_WORDS, LABEL_MAX: LABEL_MAX, TABLE_TOP: TABLE_TOP, tableTitleFor: tableTitleFor, PDFJS_V: /pdfjs-dist@([\d.]+)/.exec(BASE)[1], FIGURES_V: FIGURES_V, CROP_MARGIN: CROP_MARGIN, padBox: padBox, cropShape: cropShape, outlineOf: outlineOf, figuresOn: figuresOn, loadScript: loadScript, VECTOR_MIN_PATHS: VECTOR_MIN_PATHS, TABLE_ROWS: TABLE_ROWS, pathBounds: pathBounds, read: read, linesOf: linesOf, captionFor: captionFor, figureBoxes: figureBoxes, imageBoxes: imageBoxes, textBoxesOf: textBoxesOf, renderBox: renderBox, LIB: LIB, WORKER: WORKER };
 if (typeof module !== 'undefined' && module.exports) module.exports = root.MemPdf;
 })(typeof window !== 'undefined' ? window : this);
