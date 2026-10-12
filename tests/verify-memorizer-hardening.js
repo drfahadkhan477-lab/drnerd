@@ -705,8 +705,15 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
          correction and what it left behind is what is measured. */
       const text = await r.evaluate(() => { MemCoach.lesson = () => { throw new Error('no lesson in this test'); }; return Memorizer.ui.docRec.clusters[0].segments.find(s => !s.heading && !s.table).text; });
       await r.locator('#fix-text textarea').first().fill(text.replace('2 percent', '20 percent'));
+      /* a precondition: the screen has been drawn since the correction. saveFix
+         sets the corrected record (and clears saveError) before refresh() and
+         render(), so a banner read as soon as the revision shows can be the one
+         drawn before the correction. Any redraw made once the record is the
+         corrected one is drawn from the cleared error; the banner is not read. */
+      await r.evaluate(() => { window.__drawnFixed = false; new MutationObserver((_, o) => { if (Memorizer.ui.docRec.revision === 1) { window.__drawnFixed = true; o.disconnect(); } }).observe(document.body, { childList: true, subtree: true }); });
       await r.locator('#fix-text [data-fix]').first().click();
       await r.waitForFunction(() => Memorizer.ui.docRec.revision === 1, null, T);
+      await r.waitForFunction(() => window.__drawnFixed, null, T);
     }
     const got = await r.evaluate(async () => {
       const pending = MemStore.failureMessage(), banner = !!document.getElementById('store-banner'), checked = await MemBackup.exportChecked();
@@ -936,6 +943,53 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     await r.waitForFunction(() => Memorizer.ui.slowSaves === 0, null, T).catch(() => {});
     const gone = await seen();
     ok('when it lands the note goes, and the pack is deleted', !gone.stored && !gone.note, JSON.stringify(gone));
+  }
+
+  head('restore preserves rescue and retry for newer queued failures');
+  for (const refused of [false, true]) {
+    const r = await context('restore newer failures'); await r.goto(URL); await r.locator('#home-hero').waitFor(T);
+    const result = await r.evaluate(async refused => {
+      const Store = MemStore, Backup = MemBackup;
+      await Store.put('docs', { id: 'ticket-unit', source: 'text', clusters: [{ index: 0, title: 'Synthetic', text: 'Synthetic source.', segments: [] }] });
+      await Store.put('meta', { id: 'notes', recs: { 'ticket-unit:0': { text: 'RESTORED' } } });
+      const backup = await Backup.exportText(), put = IDBObjectStore.prototype.put, replace = Store.replace;
+      let pending, writeError = '', restoreError = '';
+      IDBObjectStore.prototype.put = function (value) {
+        if (value.id === 'synthetic-old-failure' || (this.name === 'meta' && value.id === 'notes' && value.recs['ticket-unit:0'].text === 'NEW FAILED'))
+          throw new DOMException('synthetic full disk', 'QuotaExceededError');
+        if (refused && this.name === 'docs') throw new Error('synthetic refused restore');
+        return put.apply(this, arguments);
+      };
+      try {
+        await Store.put('meta', { id: 'synthetic-old-failure', value: 'old pending data' }).catch(() => {});
+        // Queue a genuinely newer write immediately behind the replacement.
+        // Its put fails only after the replacement's cleanup has run.
+        Store.replace = function (ops) {
+          const committed = replace(ops);
+          pending = Store.put('meta', { id: 'notes', recs: { 'ticket-unit:0': { text: 'NEW FAILED' } } });
+          pending.catch(() => {});
+          return committed;
+        };
+        await Backup.restore(backup).catch(e => { restoreError = e.message; });
+        await pending.catch(e => { writeError = e.name; });
+      } finally { IDBObjectStore.prototype.put = put; Store.replace = replace; }
+      const note = await Store.get('meta', 'notes'), old = await Store.get('meta', 'synthetic-old-failure');
+      const exported = (await Backup.inspect(await Backup.exportText())).stores;
+      const rescued = exported.meta.find(m => m.id === 'notes');
+      const warned = !!Store.failureMessage();
+      await Store.retryFailures();
+      const retried = await Store.get('meta', 'notes');
+      return { persistent: Store.persistent, writeError, restoreError, warned,
+        note: note.recs['ticket-unit:0'].text, exported: rescued.recs['ticket-unit:0'].text,
+        oldRetained: !!old, oldExported: exported.meta.some(m => m.id === 'synthetic-old-failure'),
+        retried: retried.recs['ticket-unit:0'].text, failureAfterRetry: Store.failureMessage() };
+    }, refused);
+    const label = refused ? 'refused restore' : 'committed restore';
+    ok(label + ': the newer native write really failed', result.persistent && result.writeError === 'QuotaExceededError');
+    ok(label + ': the newer failed note stays readable and is reported', result.warned && result.note === 'NEW FAILED');
+    ok(label + ': backup rescues the exact newer failed note', result.exported === 'NEW FAILED');
+    ok(label + ': old failure cleanup respects commit/rollback', result.oldRetained === refused && result.oldExported === refused && !!result.restoreError === refused);
+    ok(label + ': retry stores the newer note and clears the failures', result.retried === 'NEW FAILED' && result.failureAfterRetry === '');
   }
 
   ok('nothing left the device but calls to the model, throughout', outside.length === 0, outside.join(', ') || 'none');

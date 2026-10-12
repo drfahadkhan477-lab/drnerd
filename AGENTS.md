@@ -1,121 +1,68 @@
-# Systole Agent Instructions
+# Working on drnerd
 
-These instructions apply to Codex and other coding agents working in this repository.
+Rules for any coding agent in this repository. Codex reads this file; Claude
+Code reads it through `CLAUDE.md`. What the project is: `README.md`. How to
+build and verify it: `docs/BUILD.md`. Each rule is here because it was broken
+at least once.
 
-## Project goal
+## 1. Licensed content stays out of transcripts and out of git
 
-Systole is an iPad-first cardiology board-review PWA. The long-term engineering goal is to make normal development, testing, and deployment independent of a laptop-local Chromium installation and independent of the licensed ACCSAP export.
+The ACCSAP 12 export, and everything built or derived from it, is licensed:
+`source/`, `content/` (with `content/refs-repo`), `build/`, `dist/` and
+`tests/last-run.log`.
 
-## Non-negotiable safety and licensing rules
+- Build from it and run suites on the build. Never read it as a document: no
+  printing, grepping or quoting it, and never commit it in any form.
+- Never paste suite output or CI logs whole; they can quote question text.
+  Tail the result lines and grep for `FAIL`.
+- Never put an API key or secret in source, a fixture, a log or a commit.
+- Never weaken `scripts/leak-guard.js`, `.githooks/`, `.claude/hooks/guard.js`
+  or their tests. Run `npm run hooks` once per clone, and never commit with
+  `--no-verify`.
 
-- Never commit, print, upload, embed, or recreate licensed ACCSAP question-bank content or figures.
-- Never weaken `scripts/leak-guard.js`, `.githooks/pre-commit`, or their tests.
-- Never add `content/`, `build/`, `dist/`, `source/`, ACCSAP exports, private question-bank JSON, or licensed generated artifacts to Git.
-- Never expose API keys or secrets in client-side source, logs, fixtures, tests, commits, or CI output.
-- Never turn a skipped or unmeasured check into a passing result.
-- Never remove provenance, schema, backup, service-worker, or WebKit/iPad guards simply to make a test green.
+## 2. A check you have not seen fail is a check you have not written
 
-## Architecture direction
+This project's recurring bug is a check that passes without measuring
+anything: `ok(label, true)`, a skipped step counted as a pass, a loop over
+nothing, a probe compared against `undefined` (which a probe that never ran
+also returns), a timeout in the wrong argument of `waitForFunction`.
 
-Normal public engineering should converge toward:
+- For every new or changed check: break the code it guards (never the check),
+  watch that check's own `FAIL` line appear, restore, and see the same count
+  pass. Put a table of what you broke and what failed in the commit or PR.
+- If it stays green, narrow its comment. Never widen the test to fit the prose.
+- Never move a threshold, timeout or expected count to turn a suite green.
+- `tests/test-stats.json` is written by full green runs; never edit it by hand.
+  `node tests/verify-stats.js` checks the counts in the prose: change only the
+  sentences it names, and write no count of suites or checks it does not check.
 
-```text
-src/ + synthetic fixtures + public assets
-        -> build
-        -> GitHub CI
-        -> Chromium/WebKit/Firefox checks
-        -> deployable PWA shell
-```
+## 3. Build and test
 
-Private licensed content should remain a separate path:
+- `npm run build` fills the slots in `app/systole.html` from the export, the
+  reference notes, `src/` and `assets/`. Edit `app/`, `src/` and `assets/`
+  directly; never add a `*-patch.js` step or a find-and-replace build.
+- No export needed: `npm test` (every suite CI runs) and `npm run test:pure`
+  (no browser, no build: CI's `logic` job). With the export:
+  `npm run build -- <export>`, then `npm run test:private`.
+- Before every push: `node --check` on changed `.js` files, `npm run suites`,
+  `npm run test:pure` and `node tests/verify-stats.js`.
+- A new suite that needs no browser goes in `SUITES` and `PENDING_RECORD` in
+  `scripts/verify.js`, and in a `logic` step of `.github/workflows/verify.yml`
+  named with its check count. A deleted one goes in `RETIRED_RECORD`. Only a
+  full green run on the owner's machine empties either list.
+- Use the shared helpers: `tests/_source.js` to scan this repo's own source
+  with its comments blanked (they quote the patterns being hunted),
+  `tests/_render.js` for render waits, and the `--engine` flag rather than a
+  suite launching a browser itself.
+- The target is Safari on iPadOS 13.4 and later. Chromium is fast, not the
+  truth about an iPad: use `--engine webkit` for anything iPad-sensitive.
 
-```text
-licensed/private source
-        -> private ingestion
-        -> normalized private corpus
-        -> local/private Systole storage
-```
+## 4. Reporting
 
-The current patch chain is legacy application assembly and must be preserved until equivalent behavior is proven. Do not rewrite Systole from scratch.
-
-## Primary target
-
-- iPad/iPadOS Safari/WebKit is the primary runtime target.
-- Chromium is useful for fast CI but is not the source of truth for iPad behavior.
-- Preserve offline-first behavior and installability as a PWA.
-
-## Before changing code
-
-1. Read the relevant existing source and tests first.
-2. Identify the invariant the existing code is defending.
-3. Prefer the smallest change that preserves that invariant.
-4. Add or update a regression test for any bug fix or behavior change.
-5. Run the narrow affected tests first.
-6. Run all source-independent regression tests that are practical in the environment.
-7. Report anything that could not be tested and why.
-
-## Testing rules
-
-- Prefer pure/unit tests for logic that does not require a browser.
-- Use synthetic, non-licensed fixtures for CI browser/PWA coverage.
-- Do not make public CI depend on the ACCSAP export.
-- Keep WebKit coverage mandatory for iPad-sensitive behavior.
-- Do not depend on globally installed packages; use repository dependencies.
-- Do not reduce existing assertions merely because a refactor changes implementation details.
-
-## Change discipline
-
-Do not:
-
-- mass-reformat unrelated files;
-- rename broad parts of the repository without need;
-- migrate frameworks only for modernization;
-- delete patch scripts before parity is demonstrated;
-- alter licensing boundaries as a convenience;
-- commit generated private build output;
-- replace fail-closed behavior with warnings;
-- bypass a failing test without documenting the reason.
-
-Prefer:
-
-- small reviewable commits;
-- explicit schemas and data contracts;
-- deterministic/reproducible builds;
-- atomic writes and atomic build output replacement;
-- structured test metadata instead of hard-coded suite knowledge;
-- test-only bridges rather than production globals when browser tests need internals.
-
-## Commands to understand first
-
-Read `package.json`, then use the repository's own commands. Common source-independent checks include:
-
-```bash
-npm run suites
-npm run leak-guard
-```
-
-Do not assume `npm run build` is available in a clean cloud environment: the build intentionally requires the private ACCSAP source.
-
-## Codex task style
-
-For architectural work, handle one bounded migration step at a time.
-
-Good task:
-
-```text
-Create a synthetic non-licensed fixture corpus and make one browser suite run against it in CI without changing private build behavior.
-```
-
-Bad task:
-
-```text
-Rewrite the whole app architecture and remove the patch chain.
-```
-
-For each task, finish with:
-
-- changed files;
-- tests run;
-- tests not run;
-- remaining risk;
-- next smallest recommended step.
+- Say what ran, what passed, what did not run and why. Skipped is not passed:
+  CI's `full` job needs the export and never runs on a push or PR, and
+  `scripts/ci-changes.js` can skip a browser job a PR cannot reach.
+- Report what you found, including what came back clean and what you got
+  wrong.
+- Read `tasks/lessons.md` at the start of a session. After a correction, add
+  the pattern and the rule that would have prevented it.

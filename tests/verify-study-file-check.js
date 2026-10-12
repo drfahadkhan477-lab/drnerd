@@ -5,14 +5,14 @@
  *   node tests/verify-study-file-check.js
  *
  * Pure Node. The checker exists so a session writing a study file can fix
- * it before the owner imports it, and the memorizer-study-file skill tells
- * Claude to trust its "clean". So each kind of problem the app would drop,
- * refuse or flag is planted in an otherwise clean file and must make it
- * report not-clean, and the clean file must pass. The fixtures start from
- * the app's own STUDY_EXAMPLE, which is what the prompt shows Claude.
+ * it before the owner imports it, and trust its "clean". So each kind of
+ * problem the app would drop, refuse or flag is planted in an otherwise
+ * clean file and must make it report not-clean, and the clean file must
+ * pass. The fixtures start from the app's own STUDY_EXAMPLE, which is what
+ * the prompt shows Claude.
  *
  * It also holds the checker to printing no item's text, and its command
- * line to the exit codes the skill relies on.
+ * line to the exit codes such a session relies on.
  *
  * NOT CLAIMED: that the app's checks are right. tests/verify-memorizer-
  * studyimport-pure.js holds those; this holds the checker to running them.

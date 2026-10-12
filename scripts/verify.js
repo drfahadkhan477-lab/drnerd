@@ -180,13 +180,7 @@ const SUITES = [
      read of the licensed paths and a commit leak-guard would refuse, before
      the tool runs, and lets a suite run on build/ through. */
   ['claude-guard', 'a Claude Code session cannot read the licensed export, or commit what leak-guard refuses'],
-  /* The subagents in .claude/agents: each well formed, on a cheap model, and
-     granted no tool that edits a file. */
-  ['claude-agents', 'the Claude Code subagents are cheap, explicit about their tools, and cannot edit files'],
-  /* The skills in .claude/skills: each where Claude Code looks for it, granting
-     no tools, and citing only files, scripts, sections and agents that exist. */
-  ['claude-skills', 'the Claude Code skills are found, widen no permissions, and cite only what exists'],
-  /* tools/study-file-check.js, which the memorizer-study-file skill trusts:
+  /* tools/study-file-check.js, which a session writing a study file trusts:
      it runs Memorizer's own import path and reports what the app would drop,
      refuse or flag, without printing the file's text. */
   ['study-file-check', 'a study file is checked by the app\u2019s own import code before it is handed over'],
@@ -477,8 +471,11 @@ const PENDING_RECORD = ['pearlbake-pure'];
    directions like PENDING_RECORD: a name here must still be in the record and
    must not be registered, so the next write forces it out of this list. */
 /* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
-   survived the chain to the step that used them; deleted with the chain. */
-const RETIRED_RECORD = [];
+   survived the chain to the step that used them; deleted with the chain.
+   claude-agents and claude-skills checked the subagents in .claude/agents and
+   the skills in .claude/skills; the owner deleted both directories for a
+   leaner setup, and the suites went with them. */
+const RETIRED_RECORD = ['claude-agents', 'claude-skills'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -1168,7 +1165,7 @@ if (flag('--pwa')) {
   }
   pt = Date.now();
 
-  const r = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`],
+  const r = spawnLimited(process.execPath, [path.join(ROOT, 'tests', 'verify-pwa.js'), `http://localhost:${PORT}`, TARGET],
                       { encoding: 'utf8', maxBuffer: 1 << 26, env: childEnv({ NODE_PATH: nodePath, SYSTOLE_ENGINE: ENGINE }) }, PHASE_LIMIT, 'verify-pwa');
   const out = (r.stdout || '') + (r.stderr || '');
   phase('pwa', out, r.status, Date.now() - pt);

@@ -476,10 +476,16 @@ function retryFailures() {
    with the data it belonged to; run outside the queue, those writes landed
    on top of the restored records. Writes waiting for retry belonged to the
    old data too, so they are forgotten, but only once the replacement has
-   committed: a refused one leaves them to retry. Uses the raw batch, never a
-   queued write, which would wait on this turn for ever. */
+   committed: a refused one leaves them to retry. A later queued write has
+   already registered its ticket in latest; preserve that ticket so a later
+   failure is still kept for read/export rescue and retry. Uses the raw batch,
+   never a queued write, which would wait on this turn for ever. */
 function replace(ops) {
-  return serialWrite(function () { return batch(ops).then(function () { failures = {}; latest = {}; }); });
+  var boundary = ticket;
+  return serialWrite(function () { return batch(ops).then(function () {
+    Object.keys(failures).forEach(function (key) { if (failures[key].seq <= boundary) delete failures[key]; });
+    Object.keys(latest).forEach(function (key) { if (latest[key] <= boundary) delete latest[key]; });
+  }); });
 }
 api.replace = replace; api.commit = commit;
 api.snapshot = function () { return afterWrites(snapshot); }; api.STORES = STORES.slice(); api.health = health; api.persist = persist; api.failureMessage = failureMessage; api.retryFailures = retryFailures;

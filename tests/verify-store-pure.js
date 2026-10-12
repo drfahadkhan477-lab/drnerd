@@ -123,6 +123,17 @@ function reload(prev, opts) {
        JSON.parse(b.ls.get('accsap12.store.fellback') || '[]').indexOf(KEY) < 0);
   }
 
+  head('fallback snapshots preserve deletions, including an empty map');
+  for (const key of ['accsap12.notes', 'accsap12.ink', 'accsap12.chat']) {
+    for (const value of [{ keep: [{ text: 'kept' }] }, {}]) {
+      const a = makeWeb({ putFails: true, seed: { [key]: { keep: [{ text: 'kept' }], deleted: [{ text: 'removed' }] } } });
+      const A = loadStore(a); await A.ready(); A.set(key, value); await settle();
+      const b = reload(a), B = loadStore(b); await B.ready(); await settle();
+      ok(key + ' restores the exact newer snapshot', JSON.stringify(B.get(key)) === JSON.stringify(value));
+      ok('the deleted entry is absent from durable storage', !('deleted' in b.db.get(key)));
+    }
+  }
+
   head('an interrupted migration still lets the database win');
   {
     /* The other way both copies exist, and the one the old comment described.

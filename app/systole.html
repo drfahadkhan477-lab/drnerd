@@ -4248,6 +4248,12 @@ const SCHEMA_KEYS=['schemaVersion','chStats','missed','theme','homeLayout',
   'practice','sinceBackup','lastBackup','resume','focusMode','examDate'];
 let FOREIGN={};
 
+/* A calendar day as the app writes one (FSRS.localDateToISO): a daily key,
+   an srs due or last. One that does not read back as itself is a day the
+   scheduler and Progress cannot place. */
+const statDay=s=>{ if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d=FSRS.isoToLocalDate(s); return !!d&&FSRS.localDateToISO(d)===s; };
+
 /* What one entry of each statistics map must hold. The import refuses a file
    with an entry that fails (progressFromBackup), and an export leaves such
    an entry out (usableStats), from this one table so the two cannot drift.
@@ -4265,37 +4271,29 @@ let FOREIGN={};
    undefined<=n is false as well, which would refuse a missing count there
    and leave the need lists with nothing to prove. */
 const STAT_ENTRY={
-  daily:   [['a','c','r'],['a','c'],v=>!(v.c>v.a)],
+  daily:   [['a','c','r'],['a','c'],(v,day)=>!(v.c>v.a)&&statDay(day)],
   chStats: [['correct','total'],['correct','total'],v=>!(v.correct>v.total)],  // selectOpt does st.total++, st.correct++
   practice:[['n','c','t'],['n','c'],v=>!(v.c>v.n)],                          // and pr.n++, pr.c++: a missing count is NaN
-  srs:     [['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||typeof v.due==='string')&&(v.last==null||typeof v.last==='string')],
-  resume:  [['i','correct','total','ts'],[],v=>v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string'))]};
+  srs:     [['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||statDay(v.due))&&(v.last==null||statDay(v.last))],
+  resume:  [['i','correct','total','ts'],[],v=>(v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')))
+    &&(v.i==null||(Number.isInteger(v.i)&&!(v.ids&&v.i>=v.ids.length)))&&(v.answers==null||statRecord(v.answers))]};
 const statRecord=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
-function statEntryOk(k,v){
+function statEntryOk(k,v,key){
   const [fields,need,rule]=STAT_ENTRY[k], count=x=>x==null||(Number.isFinite(x)&&x>=0);
-  return statRecord(v)&&fields.every(f=>count(v[f]))&&need.every(f=>v[f]!=null)&&rule(v);
+  return statRecord(v)&&fields.every(f=>count(v[f]))&&need.every(f=>v[f]!=null)&&rule(v,key);
 }
-/* The statistics an export writes: the stored blob less every map entry the
-   import would refuse, so that the app's own backup restores. A device that
-   took a partial record from a backup before the import checked for one
-   still holds it: a chapter {total:2}, or {correct:7,total:1}, which a
-   {correct:5} becomes after a correct answer in each of two launches (the
-   NaN is saved as null, and null++ is 1). The import refuses a whole file
-   over one such entry, ink, notes and memory with it, so leaving the entry
-   out loses far less. The device keeps its own copy. Only map entries are
-   checked: anything else in the blob is exported as stored. */
 function usableStats(raw){
   if(!statRecord(raw)) return raw;
   const out=Object.assign({},raw);
   for(const k in STAT_ENTRY) if(statRecord(out[k]))
-    out[k]=Object.fromEntries(Object.entries(out[k]).filter(([,v])=>statEntryOk(k,v)));
+    out[k]=Object.fromEntries(Object.entries(out[k]).filter(([key,v])=>statEntryOk(k,v,key)));
   return out;
 }
 
 function progressFromBackup(raw){
   for(const k in STAT_ENTRY) if(raw[k]!=null&&!statRecord(raw[k])) throw new Error('Invalid statistics.');
   /* Every entry too, before anything is stored: see STAT_ENTRY. */
-  for(const k in STAT_ENTRY) for(const v of Object.values(raw[k]||{})) if(!statEntryOk(k,v)) throw new Error('Invalid statistics.');
+  for(const k in STAT_ENTRY) for(const [key,v] of Object.entries(raw[k]||{})) if(!statEntryOk(k,v,key)) throw new Error('Invalid statistics.');
   for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
     if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');
   for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');

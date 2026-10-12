@@ -214,6 +214,10 @@ const restore = `(text) => new Promise(resolve => {
     stored: localStorage.getItem('accsap12.v2'), ink: INK, notes: NOTES }));
   const nestedBefore = await statState();
   const badNested = {
+    'an impossible day': { daily: { '2026-02-30': { a: 1, c: 1 } } },
+    'an impossible card due date': { srs: { BKUP_1: { due: '2026-99-99' } } },
+    'an out-of-range resume index': { resume: { all: { ids: ['BKUP_1'], i: 4 } } },
+    'resume answers that are not a map': { resume: { all: { ids: ['BKUP_1'], i: 0, answers: [] } } },
     'a null day': { daily: { '2026-10-09': null } },
     'a day whose count is not a number': { daily: { '2026-10-09': { a: 'many', c: 0 } } },
     'a day with no counts': { daily: { '2026-10-09': {} } },
