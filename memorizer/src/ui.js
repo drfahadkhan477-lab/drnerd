@@ -2858,10 +2858,13 @@ function clozeCard(card, tag, rate) {
    and a mask where the label was printed (study.js maskOf). Answered, the
    mask lifts. The mask is in fractions of the figure's box, so the image is
    the box exactly, with no crop margin: drawn with the margin, the mask
-   sat up to 8 pt off its label, and the label's first letter showed. */
+   sat up to 8 pt off its label, and the label's first letter showed. On a
+   turned page the picture is drawn on its side, and the mask turns with it
+   (study.js turnMask), by the turn the unit's figure record knows. */
 function occlusionFigure(card) {
   var d = ui.docs.filter(function (x) { return x.id === card.docId; })[0];
-  var m = card.mask, pc = function (v) { return (100 * v).toFixed(2) + '%'; };
+  var rec = figureRecord(d, card.figure.page, card.figure.box);
+  var m = Study.turnMask(card.mask, rec && rec.rotate), pc = function (v) { return (100 * v).toFixed(2) + '%'; };
   return h('div.occlusion' + (ui.choice != null ? '.revealed' : ''), { id: 'occlusion' },
     lazyImage('A figure with one label hidden', card.figure.page, card.figure.box, 2, d, 0),
     h('span.occlusion-mask', { 'aria-hidden': 'true', style: 'left:' + pc(m.left) + ';top:' + pc(m.top) + ';width:' + pc(m.width) + ';height:' + pc(m.height) }));

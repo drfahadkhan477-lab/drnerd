@@ -261,12 +261,15 @@ function makeDiagramPdf() {
    turned a quarter (/Rotate 90, as a wide table or chart is printed in a
    book), so its 300 × 150 picture is drawn on its side; page 2 is upright
    and its 80 × 240 picture runs to the page's left edge, so the crop's
-   margin stops there. Text on both, so neither is read as a scan. */
+   margin stops there. Text on both, so neither is read as a scan. A magenta
+   patch is printed inside the turned picture, near its bottom left as the
+   page is printed, to stand where a label would: it is found again in the
+   drawn picture's pixels. */
 function makeTurnedPdf() {
   const T = (t, size, x, y) => `BT /F1 ${size} Tf ${x} ${y} Td (${t}) Tj ET`;
   const img = B => `q ${B[2] - B[0]} 0 0 ${B[3] - B[1]} ${B[0]} ${B[1]} cm /Im1 Do Q`;
   const p1 = [T('Turned Figures', 18, 72, 740), T('This page is printed on its side, as a wide table or chart is in a book.', 11, 72, 700),
-    T('Its picture is drawn across the page and read with the book turned.', 11, 72, 684), img([150, 300, 450, 450])];
+    T('Its picture is drawn across the page and read with the book turned.', 11, 72, 684), img([150, 300, 450, 450]), 'q 1 0 1 rg 170 320 60 20 re f Q'];
   const p2 = [T('The second page is upright, and its picture runs to the left edge of the page.', 11, 100, 740),
     T('A figure printed to the trim is cropped at the page, not past it.', 11, 100, 724), img([0, 300, 80, 540])];
   const pixels = Buffer.from([200, 40, 40, 40, 200, 40, 40, 40, 200, 220, 220, 40]).toString('latin1');
@@ -3480,6 +3483,44 @@ function kindOf(user) {
        heldBoxes.length === 2 && heldBoxes.every((b, k) => { const d = drawnBoxes[k];
          return !b.drawn && b.h > 0 && d && d.drawn === true && Math.abs(d.h - b.h) <= 0.02 * d.h; }),
        JSON.stringify({ held: heldBoxes, drawn: drawnBoxes }));
+
+    /* A FIGURE CARD FROM THE TURNED PAGE HIDES ITS LABEL WHERE THE READER SEES
+       IT. The mask is measured in the figure as printed (study.js maskOf), and
+       the picture is drawn on its side. The hidden label here is the magenta
+       patch, so where it shows is read from the drawn picture's own pixels,
+       which no mask arithmetic can move, and the mask's box on screen must
+       cover it. Its first label is the one hidden (occlusionOf, k = 0). */
+    const todayT = await p5r.evaluate(() => FSRS.todayISO());
+    await p5r.evaluate(t => MemStore.all('docs').then(ds => {
+      const d = ds[0], f = d.figures.find(x => x.page === 1);
+      const labels = [['Patch', [170, 320, 230, 340]], ['Atrium', [300, 400, 340, 412]], ['Ventricle', [380, 330, 430, 342]], ['Septum', [250, 420, 290, 432]]]
+        .map(([text, box]) => ({ text, box }));
+      const c = MemStudy.occlusionCards(d, 0, [Object.assign({}, f, { labels })])[0];
+      c.dueFrom = t;
+      return MemStore.put('cards', c);
+    }), todayT);
+    await p5r.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p5r.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
+    await p5r.locator('#occlusion').waitFor(T).catch(() => {});
+    await p5r.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
+    const seen = await p5r.evaluate(() => {
+      const i = document.querySelector('#occlusion img'), m = document.querySelector('#occlusion .occlusion-mask');
+      if (!i || !i.naturalWidth || !m) return { card: !!document.querySelector('#occlusion'), drawn: !!(i && i.naturalWidth) };
+      const c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight;
+      const g = c.getContext('2d'); g.drawImage(i, 0, 0);
+      const px = g.getImageData(0, 0, c.width, c.height).data;
+      let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+      for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+        const k = (y * c.width + x) * 4;
+        if (px[k] > 200 && px[k + 1] < 80 && px[k + 2] > 200) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      }
+      const r = i.getBoundingClientRect(), q = m.getBoundingClientRect(), f = v => +v.toFixed(3);
+      return { patch: x1 < 0 ? null : [x0 / c.width, y0 / c.height, (x1 + 1) / c.width, (y1 + 1) / c.height].map(f),
+               mask: [(q.left - r.left) / r.width, (q.top - r.top) / r.height, (q.right - r.left) / r.width, (q.bottom - r.top) / r.height].map(f) };
+    });
+    ok('a figure card from the turned page hides its label where the drawn picture shows it',
+       !!seen.patch && !!seen.mask && seen.mask[0] <= seen.patch[0] + 0.01 && seen.mask[1] <= seen.patch[1] + 0.01 &&
+       seen.mask[2] >= seen.patch[2] - 0.01 && seen.mask[3] >= seen.patch[3] - 0.01, JSON.stringify(seen));
   }
 
   head('opened as a data: URL, the way the iPad\u2019s Files app hands a file to Safari');
