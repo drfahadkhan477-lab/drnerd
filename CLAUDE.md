@@ -22,8 +22,11 @@ the folder exists only on the owner's machine, under the gitignored `content/`.
 It is still licensed material — the guards that refuse to read it stay — and
 never re-add it to git in any form.
 
-`scripts/leak-guard.js` enforces this on drnerd's staged files. Run
-`npm run hooks` once per clone to get it on pre-commit (and the pure suites on pre-push); CI runs it regardless.
+`scripts/leak-guard.js` enforces this on drnerd's staged files, and on every
+commit a push sends: a file deleted in a later commit is still in the history.
+Run `npm run hooks` once per clone to get it on pre-commit and pre-push (with
+the pure suites on pre-push); CI runs it regardless, on the tree and on every
+commit a pull request adds.
 
 ## The failure mode this project keeps producing
 

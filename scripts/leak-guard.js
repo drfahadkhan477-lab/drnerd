@@ -5,11 +5,15 @@
  *   node scripts/leak-guard.js                 # whatever is staged
  *   node scripts/leak-guard.js <path>...       # specific files
  *   node scripts/leak-guard.js --all-tracked   # everything git already has
+ *   node scripts/leak-guard.js --push [remote] # every commit a push sends (pre-push stdin)
+ *   node scripts/leak-guard.js --range <revs>  # every commit in a rev-list range (CI)
  *
  * Exit 0: nothing licensed. 1: something refused, named. 2: it could not look
  * (git did not answer, a named file could not be read), so it certifies
  * nothing. The staged and --all-tracked routes judge the blobs in git's index,
- * which is what a commit takes; named paths are read from disk.
+ * which is what a commit takes; named paths are read from disk; --push and
+ * --range judge every blob the commits add, in any of them, so a file added
+ * and deleted again is still caught (historyEntries below).
  *
  * WHY .gitignore IS NOT ENOUGH, which is the whole point. content/, build/,
  * dist/ and source/ are ignored, and that holds right up until someone types
@@ -66,7 +70,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 /* A failure to look is not a pass. Enumerating files or reading one the
    guard was asked about exits 2, never 0 with "0 file(s) checked". */
@@ -203,7 +207,7 @@ function staged() {
   for (let i = 0; i + 1 < out.length; i += 2) {
     if (!out[i + 1]) continue;
     const [, mode, , blob] = out[i].split(' ');
-    if (mode === '160000') gitlinks.push(out[i + 1]); else files.push({ file: out[i + 1], blob });
+    if (mode === '160000') gitlinks.push({ file: out[i + 1] }); else files.push({ file: out[i + 1], blob });
   }
   return files;
 }
@@ -217,9 +221,71 @@ function tracked() {
   const files = [];
   for (const line of lines) {
     const tab = line.indexOf('\t'), [mode, blob] = line.slice(0, tab).split(' '), file = line.slice(tab + 1);
-    if (mode === '160000') gitlinks.push(file); else files.push({ file, blob });
+    if (mode === '160000') gitlinks.push({ file }); else files.push({ file, blob });
   }
   return files;
+}
+
+/* WHAT A PUSH SENDS IS EVERY COMMIT, NOT THE LAST ONE. The pre-commit hook
+   sees a commit only when `git commit` makes it: a merge, a rebase, a cherry-
+   pick, `git am` and a commit made before the hooks were on never run it.
+   The pre-push hook then ran the pure suites, whose leak check is
+   --all-tracked: the checked-out tree. So a licensed file added in one commit
+   and deleted in the next passed both hooks and CI, and stayed in the
+   history the push published; so did any branch pushed while another was
+   checked out. Reproduced with the hooks on: content/leak.json added, then
+   removed, then pushed, and the 89 pure suites passed.
+
+   So these routes judge every blob each commit adds or changes, against each
+   parent (-m: a merge brings in what its other side added), with --root for
+   a first commit. Each entry keeps the commit it came in, for the refusal. */
+function historyEntries(commits) {
+  if (!commits.length) return [];
+  let out;
+  try {
+    out = execFileSync('git', ['diff-tree', '--stdin', '-r', '--root', '-m', '--raw', '--no-abbrev', '--no-renames', '-z', '--diff-filter=ACMT'],
+      { input: commits.join('\n') + '\n', encoding: 'utf8', maxBuffer: 1024 * 1024 * 1024 }).split('\0');
+  } catch (e) { cannot('ask git what those commits add', e); }
+  /* -z output: a commit id, then ":old new sha sha status" NUL path NUL for
+     each change in it. */
+  const files = [], seen = new Set();
+  let commit = '';
+  for (let i = 0; i < out.length; i++) {
+    if (!out[i]) continue;
+    if (out[i][0] !== ':') { commit = out[i].split(' ')[0].slice(0, 12); continue; }
+    const [, mode, , blob] = out[i].split(' '), file = out[++i];
+    if (seen.has(mode + blob + '\0' + file)) continue;
+    seen.add(mode + blob + '\0' + file);
+    if (mode === '160000') gitlinks.push({ file, commit }); else files.push({ file, blob, commit });
+  }
+  return files;
+}
+function revList(revs) {
+  try {
+    return execFileSync('git', ['rev-list', ...revs], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).split('\n').filter(Boolean);
+  } catch (e) { cannot('list the commits to check', e); }
+}
+/* The commits a push sends, from the lines git hands the pre-push hook on
+   stdin: "<local ref> <local sha> <remote ref> <remote sha>". Everything the
+   pushed tips reach that the remote's own tip, or this remote's tracking
+   refs, do not. A deletion sends nothing. A remote tip this clone has never
+   fetched cannot be excluded, so more is checked, never less. */
+function pushed(remote) {
+  let spec;
+  try { spec = fs.readFileSync(0, 'utf8'); } catch (e) { cannot('read the refs git is pushing', e); }
+  const ZERO = /^0+$/, tips = [], not = [];
+  for (const line of spec.split('\n').map(l => l.trim()).filter(Boolean)) {
+    const f = line.split(/\s+/);
+    if (f.length !== 4 || !/^[0-9a-f]{40,64}$/.test(f[1]) || !/^[0-9a-f]{40,64}$/.test(f[3]))
+      cannot('read the refs git is pushing', new Error(`not a pre-push line: ${line.slice(0, 80)}`));
+    if (ZERO.test(f[1])) continue;
+    tips.push(f[1]);
+    if (!ZERO.test(f[3]) && spawnSync('git', ['cat-file', '-e', f[3] + '^{commit}']).status === 0) not.push(f[3]);
+  }
+  if (!tips.length) return [];
+  /* A remote's name, not a URL: a push to a bare URL has no tracking refs. */
+  const mine = remote && /^[A-Za-z0-9._-]+$/.test(remote) ? ['--remotes=' + remote] : [];
+  return revList([...tips, '--not', ...not, ...mine]);
 }
 
 /* Sizes of every blob in one call, then the contents of those small enough
@@ -251,7 +317,7 @@ function blobSources(entries) {
     body.set(id, buf.slice(nl + 1, nl + 1 + Number(n)));
     at = nl + 1 + Number(n) + 1;
   }
-  return entries.map(e => ({ file: e.file, src: {
+  return entries.map(e => ({ file: e.file, commit: e.commit, src: {
     size: size.get(e.blob),
     head: n => body.has(e.blob) ? body.get(e.blob).slice(0, n) : Buffer.alloc(0),
     text: () => decode(body.get(e.blob)),
@@ -337,26 +403,42 @@ function inspect(file, src) {
 }
 
 const argv = process.argv.slice(2);
-const named = argv.filter(a => !a.startsWith('--'));
-const files = argv.includes('--all-tracked') ? blobSources(tracked())
+/* --range takes everything after it, in rev-list's own syntax (A..B, or a tip
+   and --not ...); --push takes the remote's name git passes the hook. */
+const rangeAt = argv.indexOf('--range'), pushAt = argv.indexOf('--push');
+let commits = null;
+if (rangeAt >= 0) {
+  const revs = argv.slice(rangeAt + 1).filter(a => a !== '--quiet');
+  if (!revs.length) cannot('check a range', new Error('--range names no commits'));
+  commits = revList(revs);
+} else if (pushAt >= 0) {
+  const remote = argv[pushAt + 1] && !argv[pushAt + 1].startsWith('--') ? argv[pushAt + 1] : '';
+  commits = pushed(remote);
+}
+const named = commits ? [] : argv.filter(a => !a.startsWith('--'));
+const files = commits ? blobSources(historyEntries(commits))
+            : argv.includes('--all-tracked') ? blobSources(tracked())
             : named.length ? named.map(file => ({ file }))
             : blobSources(staged());
 
 const hits = [];
-for (const { file, src } of files) { const h = inspect(file, src); if (h) hits.push({ file, ...h }); }
+for (const { file, commit, src } of files) { const h = inspect(file, src); if (h) hits.push({ file, commit, ...h }); }
 for (const g of gitlinks) {
-  const p = g.split(path.sep).join('/');
+  const p = g.file.split(path.sep).join('/');
   if (ALLOW.includes(p)) continue;
   if (DIRS.some(d => p.startsWith(d)) || DERIVED.some(d => p.startsWith(d)))
-    hits.push({ file: g, rule: 'PATH', why: `a submodule under ${p.split('/')[0]}/ links licensed content from this public repository` });
+    hits.push({ file: g.file, commit: g.commit, rule: 'PATH', why: `a submodule under ${p.split('/')[0]}/ links licensed content from this public repository` });
 }
 
 if (!hits.length) {
-  if (!argv.includes('--quiet')) console.log(`leak-guard: ${files.length} file(s) checked, nothing licensed`);
+  if (!argv.includes('--quiet')) console.log(`leak-guard: ${files.length} file(s) checked, nothing licensed` + (commits ? ` (in ${commits.length} commit(s))` : ''));
   process.exit(0);
 }
 console.error(`\nleak-guard: refusing ${hits.length} file(s)\n`);
-for (const h of hits) console.error(`  ${h.rule.padEnd(8)} ${h.file}\n           ${h.why}`);
+for (const h of hits) console.error(`  ${h.rule.padEnd(8)} ${h.file}${h.commit ? `  (in ${h.commit})` : ''}\n           ${h.why}`);
+if (commits) console.error(`
+Deleting it in a later commit does not take it out of what the push sends:
+every commit named above must be rewritten (git rebase -i) before pushing.`);
 console.error(`
 This repository is public and the question bank is not yours to publish.
 git history is not something you can quietly take back.
