@@ -12,7 +12,7 @@ This follow-up adds:
   resume indexes and answer maps before backup import writes anything.
 - Regressions for concurrent bank replacement at one timestamp and deletion
   recovery from a known complete snapshot, including clearing the final entry.
-- Independent source/manifest counts and question-order checks in PWA tests,
+- Independent source/generator counts and question-order checks in PWA tests,
   with a compressed transfer comparison and the existing absolute shell budget.
 - A forwarding-origin fixture that cuts actual network transport, independently
   checks that requests fail, and exercises the unchanged service worker in both
@@ -52,3 +52,15 @@ Validation of this final fix: the focused storage/backup pure regressions and al
 in Chromium and 107 in WebKit, including the ten new native assertions. Staged
 content and whitespace guards passed; the full browser registry and physical
 iPad trials were not rerun for this bounded storage change.
+
+## PR publication follow-up
+
+The transport fixture now fixes its destination to the configured upstream and
+refuses absolute, authority-form, backslash-host and malformed request paths.
+Its regression verifies that none reaches a separate synthetic endpoint.
+
+PWA completeness never uses the extraction manifest as its own oracle. The
+normal runner passes the assembled source, synthetic URL-only runs regenerate
+the independent fixture, and other URL-only runs require a source before
+claiming completeness. Regressions reject a shortened bank with a matching
+shortened manifest and check the runner's source wiring.

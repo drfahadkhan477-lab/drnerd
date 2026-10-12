@@ -9,7 +9,17 @@ async function originTransport(target) {
   let online = true;
   const server = http.createServer((req, res) => {
     if (!online) { req.socket.destroy(); return; }
-    const upstream = client.request(new URL(req.url, base.origin), {
+    /* Browser requests use origin-form paths. Reject absolute/authority URLs
+       and backslash variants, and never take the destination from a request. */
+    let route;
+    try { route = new URL(req.url, 'http://fixture.invalid'); }
+    catch (_) { res.writeHead(403); res.end('invalid fixture path'); return; }
+    if (!req.url.startsWith('/') || route.origin !== 'http://fixture.invalid') {
+      res.writeHead(403); res.end('invalid fixture path'); return;
+    }
+    const upstream = client.request({
+      protocol: base.protocol, hostname: base.hostname, port: base.port,
+      path: route.pathname + route.search,
       method: req.method, headers: { ...req.headers, host: base.host },
     }, response => { res.writeHead(response.statusCode, response.headers); response.pipe(res); });
     requests.add(upstream);

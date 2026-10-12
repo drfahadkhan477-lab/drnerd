@@ -333,17 +333,49 @@ async function transportChecks() {
   const http = require('http'), { originTransport } = require('./_origintransport.js');
   const server = http.createServer((req,res)=>res.end('synthetic upstream'));
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  let foreignHits = 0;
+  const foreign = http.createServer((req,res)=>{foreignHits++;res.end('foreign');});
+  await new Promise(r=>foreign.listen(0,'127.0.0.1',r));
   const transport = await originTransport('http://127.0.0.1:'+server.address().port+'/index.html');
   try {
     ok('the live fixture forwards the actual upstream bytes', await (await fetch(transport.url)).text() === 'synthetic upstream');
+    const raw = requestPath => new Promise((resolve,reject)=>{
+      const endpoint = new URL(transport.url);
+      const r = http.get({ hostname: endpoint.hostname, port: endpoint.port, path: requestPath }, response=>{
+        response.resume(); response.on('end',()=>resolve(response.statusCode));
+      }); r.on('error',reject);
+    });
+    const address = '127.0.0.1:'+foreign.address().port;
+    for (const requestPath of ['http://'+address+'/steal','//'+address+'/steal','/\\'+address+'/steal','//['])
+      ok('a request cannot redirect the configured upstream', await raw(requestPath) === 403 && foreignHits === 0);
     transport.cut();
     ok('cutting it refuses a direct request without any service worker', await transport.unavailable());
     transport.resume();
     ok('resuming it restores the same upstream', await (await fetch(transport.url)).text() === 'synthetic upstream');
-  } finally { transport.close(); server.closeAllConnections(); server.close(); }
+  } finally { transport.close(); server.closeAllConnections(); server.close(); foreign.closeAllConnections(); foreign.close(); }
 }
 
-splitChecks().then(transportChecks).catch(e => { failed++; console.log('  FAIL  the split checks threw  → ' + e.message); }).then(() => {
+async function completenessChecks() {
+  head('PWA completeness uses inputs independent of extraction');
+  const src = fs.readFileSync(path.join(__dirname, 'verify-pwa.js'), 'utf8');
+  const fn = src.match(/const expectedBank = (async synthetic => \{[\s\S]*?\n\});/)[1];
+  const SYN = require('../scripts/synthetic-export.js'), generated = SYN.syntheticBank();
+  const count = { questions: generated.bank.length, figures: Object.values(generated.imgs).reduce((n,images)=>n+images.length,0) };
+  const shortened = { questions: count.questions - 1, figures: count.figures - 1 };
+  const make = source => new Function('sourceBank','SYN','fetch','ORIGIN','return ('+fn+');')(source,SYN,
+    async()=>({ json:async()=>shortened }), 'http://fixture.invalid');
+  const expected = await make(null)(true);
+  ok('URL-only synthetic expectations match the independent generator', expected.questions === count.questions && expected.figures === count.figures);
+  ok('a shortened bank and matching shortened manifest cannot certify completeness', expected.questions !== shortened.questions && expected.figures !== shortened.figures);
+  const fromSource = await make([{img:1},{img:2}])(false);
+  ok('an explicit source takes precedence over extracted metadata', fromSource.questions === 2 && fromSource.figures === 3);
+  let refused = false; try { await make(null)(false); } catch (e) { refused = /independent single-file source/.test(e.message); }
+  ok('an unknown URL-only corpus cannot claim independent completeness', refused);
+  const runner = fs.readFileSync(path.join(__dirname, '../scripts/verify.js'), 'utf8');
+  ok('the normal --pwa runner passes its independent assembled source', /verify-pwa\.js'\),\s*`http:\/\/localhost:\$\{PORT\}`,\s*TARGET/.test(runner));
+}
+
+splitChecks().then(transportChecks).then(completenessChecks).catch(e => { failed++; console.log('  FAIL  the split checks threw  → ' + e.message); }).then(() => {
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 });

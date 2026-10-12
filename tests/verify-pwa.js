@@ -6,8 +6,9 @@
  *   node scripts/serve.js 8123 &
  *   NODE_PATH=$(npm root -g) node tests/verify-pwa.js http://localhost:8123/index.html [single-file.html]
  *
- * Pass the single-file build as a second argument to get the heap and shell
- * comparisons measured rather than asserted against a remembered number.
+ * Pass the independent single-file build to verify content completeness and
+ * measure heap/shell comparisons. Synthetic URL-only runs regenerate their
+ * expectations from the fixture generator; other runs require that source.
  *
  * The claims under test are the three Stage 1 was justified by: the shell is
  * small, figures are fetched on demand instead of all held in memory, and the
@@ -30,9 +31,8 @@ if (!target || !/^https?:\/\//.test(target)) {
   process.exit(1);
 }
 const ORIGIN = new URL(target).origin;
-/* Expected counts come from a separate input, never the bank under test.
-   The baseline is assembled before extraction; a URL-only run uses the
-   extractor's manifest. Neither path assumes one private export's size. */
+/* Expected counts come from a separate input, never from the bank under test
+   or its extraction manifest: the same dropped data could corrupt both. */
 const sourceBank = baseline ? JSON.parse(fs.readFileSync(baseline, 'utf8').match(/const ALL_Q=(\[[\s\S]*?\]);\n/)[1]) : null;
 let expectedFigures;
 
@@ -52,13 +52,20 @@ const unmeasurable = (label, why) => {
   console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
 
-/* Expectations come from the separate assembly input or extraction manifest,
-   rather than the served bank or a particular private corpus's fixed totals. */
+/* Both sources are independent of extraction. A URL-only private run cannot
+   certify completeness without an independent input, so refuse that claim. */
 const expectedBank = async synthetic => {
-  const counts = sourceBank ? { questions: sourceBank.length, figures: sourceBank.reduce((n,q)=>n+(q.img||0),0) }
-    : await (await fetch(ORIGIN + '/content/manifest.json')).json();
+  let counts, from;
+  if (sourceBank) {
+    counts = { questions: sourceBank.length, figures: sourceBank.reduce((n,q)=>n+(q.img||0),0) };
+    from = 'the independent single-file source';
+  } else if (synthetic) {
+    const { bank, imgs } = SYN.syntheticBank();
+    counts = { questions: bank.length, figures: Object.values(imgs).reduce((n,images)=>n+images.length,0) };
+    from = 'the independent synthetic generator';
+  } else { throw new Error('Content completeness needs the independent single-file source as the second argument.'); }
   return { synthetic, questions: counts.questions, figures: counts.figures,
-    from: sourceBank ? 'the independent single-file source' : 'the extraction manifest' };
+    from };
 };
 /* The figure's own type, from its name: the extractor writes .webp, .png and
    .jpg alike, and the AI path must send each as what it is. */
