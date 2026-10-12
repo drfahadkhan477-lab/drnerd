@@ -5,7 +5,7 @@
  * A library: scripts/assemble-app.js calls buildRefSeed() to fill REF_SEED.
  * (It was the refs-patch.js step of the patch chain, now deleted.)
  *
- * The library and the importer already exist (braunwald-patch). What was
+ * The library and the importer already exist (app/systole.html). What was
  * missing is that a fresh install starts empty, so grounded mode has nothing
  * to be grounded against until somebody remembers to import a folder. This
  * step reads content/refs/*.md at build time and bakes the resulting notes in
@@ -41,7 +41,7 @@
 const fs = require('fs');
 const path = require('path');
 
-/* Overridable as ref-images-patch's is, and by the same variable: the two
+/* Overridable as ref-images.js's is, and by the same variable: the two
    read one corpus, and a caller that redirects only one of them pairs the
    real notes with the fixture's figures. */
 const REFS_DIR = process.env.SYSTOLE_REFS_DIR || path.join(__dirname, '..', 'content', 'refs');

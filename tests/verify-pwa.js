@@ -406,8 +406,8 @@ async function heapAfterBoot(page, url) {
 
     /* THE SPLASH HEART IS FETCHED, NOT INLINED — IN BOTH FILES. This replaces
        the old "the player is loaded as a script instead" check, and it guards
-       a regression that already happened once: heroart-patch reads the picture
-       out of the splash markup, where at that point in the chain it is still a
+       a regression that already happened once: heroart-patch read the picture
+       out of the splash markup, where at that point in the chain it was still a
        data: URI, so a second 57 KB base64 copy was ending up in app.js. Base64
        of an already-compressed WebP does not gzip, and the shell went from
        229 KB transferred to 276 against a 280 KB budget. Nothing visible would
@@ -451,7 +451,7 @@ async function heapAfterBoot(page, url) {
        single-file build had them right. A wrong key fails silently in the worst
        possible way: it marks a correct answer wrong and teaches the distractor.
        Asserted here against the shipped JSON, on the ids and letters from
-       keys-patch's own table. */
+       scripts/answer-keys.js's own table. */
     const KEYS = [['CON_16', 'C'], ['MIS_25', 'D'], ['PER_9', 'A'],
                   ['SYS_9', 'A'], ['SYS_26', 'C'], ['SYS_44', 'E']];
     const byId = new Map(qs.map(q => [q.id, q]));

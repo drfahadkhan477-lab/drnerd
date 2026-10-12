@@ -90,7 +90,7 @@ specific haemodynamic finding.
 
   head('importing a corpus');
   await page.evaluate(() => { goRefs(); render(); });
-  /* The build ships a seeded library now (refs-patch), so the importer's own
+  /* The build ships a seeded library now (ref-seed.js), so the importer's own
      fixture has to start from a known-empty one. The assertions below are
      absolute counts, and they are about what the IMPORTER produced — not
      about what happened to be on the shelf when it ran. */

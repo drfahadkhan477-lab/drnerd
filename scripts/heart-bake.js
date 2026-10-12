@@ -3,8 +3,8 @@
  * The heart's mesh, baked at build time.
  *
  * Meshing the muscle and the chambers was 78% of the app's launch — see
- * "a copy baked at build time" in src/core/heart3d.js. scripts/apex-patch.js
- * calls bake() while it embeds heart3d.js, so the build carries the meshed
+ * "a copy baked at build time" in src/core/heart3d.js. scripts/assemble-app.js
+ * calls bake() to fill the HEART_MESH slot, so the build carries the meshed
  * surfaces and create() loads them instead of meshing again.
  *
  * bake() runs heart3d.js's OWN buildSurfaces() and packSurfaces(), in Node, on
@@ -16,18 +16,19 @@
  * embeds the same key beside the code, and create() refuses a copy whose key
  * differs — a mesh from other code is never drawn.
  *
- * A module of its own, not inline in apex-patch, so the bake can be tested
- * without the licensed export apex-patch needs (tests/verify-heartbake-pure.js).
+ * A module of its own, not inline in the assembler, so the bake can be tested
+ * without the licensed export a build needs (tests/verify-heartbake-pure.js).
  */
 const crypto = require('crypto');
 
 /* THE GRID IS THE HERO'S. create() takes a copy only if it was meshed on the
    grid it is asked for, and the heart that costs the launch is the hero,
-   which scripts/heroart-patch.js mounts at this grid, not heart3d.js's
-   default. The first bake used the default: every check here passed, and the
-   built app meshed at every launch anyway, because the hero asked for a grid
-   the copy was not. heroart-patch reads its resolution from here, so the two
-   cannot drift apart again. The lab and ambient hearts keep the default grid
+   which app/systole.html mounts at this grid (the hero's resolution:[…]),
+   not heart3d.js's default. The first bake used the default: every check here
+   passed, and the built app meshed at every launch anyway, because the hero
+   asked for a grid the copy was not. The page writes the grid as a literal and
+   tests/verify-heartbake-pure.js holds it to HERO_RES, so the two cannot drift
+   apart again. The lab and ambient hearts keep the default grid
    and mesh themselves when opened, which was never on the launch path. */
 const HERO_RES = [58, 76, 48];
 

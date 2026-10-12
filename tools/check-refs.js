@@ -119,7 +119,7 @@ const median = lens.length ? lens[Math.floor(lens.length / 2)] : 0;
 const figTitles = new Set(notes.filter(n => /refimg:\/\//.test(n.body)).map(n => n.title));
 const withFig = pearls.filter(p => figTitles.has(p.title)).length;
 
-check('refs-patch: no section under 40 words', thin.length === 0, thin.slice(0, 3).join('; ') || 'none');
+check('ref-seed: no section under 40 words', thin.length === 0, thin.slice(0, 3).join('; ') || 'none');
 check('guide: no section over 600 words', fat.length === 0, fat.slice(0, 3).join('; ') || 'none');
 check('guide: no section refers to another', backref.length === 0, backref.slice(0, 3).join('; ') || 'none');
 check('guide: every file carries title, tags and source', noFront.length === 0, noFront.slice(0, 3).join(', ') || 'none');

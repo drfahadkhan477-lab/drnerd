@@ -207,8 +207,8 @@ function icon(name, cls){
 @@SLOT[src:src/ui/conductionWave.js]@@
 @@SLOT[src:src/ui/coronaryTree.js]@@
 
-/* the heart's surfaces, baked by scripts/apex-patch.js — build-pwa moves the base64 into content/ */
-window.HEART3D_MESH_KEY='e3900ba5129647e7';
+/* the heart's surfaces, baked by scripts/heart-bake.js — build-pwa moves the base64 into content/ */
+window.HEART3D_MESH_KEY='6db48e68a30d011e';
 window.HEART3D_MESH_B64='@@SLOT[payload:HEART_MESH]@@';
 
 /* ═══════════ cardiac waveform engine — original, offline, no external assets ═══════════
@@ -6094,10 +6094,10 @@ Store.ready().then(r=>{
    an iPad cannot take the cards with them. See src/core/store.js.
 
    DRIVEN FROM HERE RATHER THAN FROM save(). The obvious place is the end of
-   save() itself, and it is the wrong place: save()'s last line is the anchor
-   scripts/resume-patch.js matches on, and appending to it breaks the build
+   save() itself, and it was the wrong place: save()'s last line was the anchor
+   scripts/resume-patch.js matched on, and appending to it broke the build
    with "expected exactly 1 match, found 0". The patch chain's exact-match rule
-   is the whole safety model, so the call moved instead of the anchor.
+   was the whole safety model, so the call moved instead of the anchor.
 
    Nothing is lost by that. Store.mirror() compares the stored text against
    what it last copied, so a call with nothing to do is one string comparison —

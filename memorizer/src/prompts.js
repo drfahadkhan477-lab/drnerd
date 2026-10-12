@@ -7,10 +7,10 @@
    GROUNDING. The point of studying YOUR PDF is that you are examined on what
    it says. A model told to "prefer" a source still smooths over a gap with
    what it already knows, and from the outside you cannot tell which sentences
-   came from where. So, as in scripts/braunwald-patch.js, the instruction is a
-   prohibition with a named escape hatch: say NOT_IN_PDF rather than fill the
-   gap. Every prompt carries it, and tests/verify-memorizer-prompts-pure.js
-   holds that.
+   came from where. So, as in Systole's GROUNDED prompt (app/systole.html),
+   the instruction is a prohibition with a named escape hatch: say NOT_IN_PDF
+   rather than fill the gap. Every prompt carries it, and
+   tests/verify-memorizer-prompts-pure.js holds that.
 
    ONE SCHEMA, TWO USES. Each phase's schema is sent to the provider as a
    structured-output constraint where the provider supports one, AND checked

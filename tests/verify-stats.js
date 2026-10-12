@@ -465,7 +465,7 @@ head('no assertion is incapable of failing');
 
    scripts/verify.js describes each suite in one line. The theme suite's line
    said "eight palettes" from the day it was written until well after the ninth
-   arrived: highcontrast-patch.js appends Contrast to THEMES fifty-odd steps
+   arrived: highcontrast-patch.js appended Contrast to THEMES fifty-odd steps
    into the chain, verify-theme.js was updated to assert nine, and the sentence
    describing the suite was not. Nothing connected the two, so nothing said so.
 

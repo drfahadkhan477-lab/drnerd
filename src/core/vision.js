@@ -66,8 +66,8 @@ function dataUrlToSource(url) {
    "Figure 2" and mean the same panel. */
 /* THE ONE CHANNEL A FENCE CANNOT REACH.
 
-   boundary-patch and toolfence-patch fence every route by which outside text
-   reaches the model — retrieved notes, notes in open mode, remembered facts,
+   app/systole.html fences every route by which outside text reaches the
+   model — retrieved notes, notes in open mode, remembered facts,
    the writing around a figure, and the tool results Apex asks for itself. Each
    one passes through refSafe() inside a nonced block, and verify-boundary
    proves it.

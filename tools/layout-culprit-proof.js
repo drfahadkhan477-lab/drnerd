@@ -127,8 +127,9 @@ const MIXED = page_(`.glow{position:absolute;left:-20%;right:-20%;top:0;height:8
      overflow is in the grid's contents but no one element. gridRows() reports
      the used size of each row. The two fixtures are the two answers that lead
      to different fixes: the 1fr row at 0 (the left column alone is too tall)
-     and the 1fr row opened by a long pearl. Same CSS shape as homewide-patch:
-     auto auto 1fr auto, areas hero/prog/gap/doors with the pearl spanning. */
+     and the 1fr row opened by a long pearl. Same CSS shape as the home grid in
+     app/css/tablet.css: auto auto 1fr auto, areas hero/prog/gap/doors with the
+     pearl spanning. */
   const gs = pwa.indexOf('function gridRows() {');
   const ge = pwa.indexOf('\n      }\n', pwa.indexOf("' px]';")) + 8;
   if (gs < 0 || ge < 8) { console.error('could not extract gridRows'); process.exit(1); }

@@ -506,7 +506,7 @@ function reload(prev, opts) {
   head('mirroring is cheap enough to call on a timer');
   {
     /* The caller is a visibility handler and an interval, not save() — save()'s
-       last line is the anchor scripts/resume-patch.js matches on. So mirror()
+       last line was the anchor scripts/resume-patch.js matched on. So mirror()
        has to be free when nothing changed. */
     const web = makeWeb({});
     web.ls.set(V2, JSON.stringify(PROGRESS));

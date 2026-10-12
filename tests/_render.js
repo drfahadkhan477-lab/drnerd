@@ -187,7 +187,8 @@ async function afterRender(page, pred, opts = {}) {
 
    The watch is an init script so it survives the reloads several suites do. It
    wraps rather than replaces, so the page still goes through
-   document.startViewTransition exactly as failsafe-patch wrote it. */
+   document.startViewTransition exactly as render() in app/systole.html
+   calls it. */
 async function watchTransitions(page) {
   await page.addInitScript(() => {
     const orig = Document.prototype.startViewTransition;

@@ -6,8 +6,8 @@
  *
  * Pure Node, no browser, no build. vision.js depends on nothing but itself.
  *
- * THE GAP THIS COVERS. boundary-patch and toolfence-patch fence every route by
- * which outside text reaches the model — retrieved notes, open-mode notes,
+ * THE GAP THIS COVERS. app/systole.html fences every route by which outside
+ * text reaches the model — retrieved notes, open-mode notes,
  * remembered facts, the writing around a figure, and the tool results Apex asks
  * for itself. Each passes through refSafe() inside a nonced block, and
  * verify-boundary proves it across eleven headings.

@@ -76,8 +76,8 @@ const IMAGES_DIR = process.env.SYSTOLE_REF_IMAGES_DIR || path.join(__dirname, '.
    scripts/assemble-app.js fills the frozen shell's REF_IMGS slot with exactly
    what this step writes; the script below calls it with the two directories. */
 function buildRefImages(refsDir = REFS_DIR, imagesDir = IMAGES_DIR) {
-  /* The notes refs-patch seeds, found the way refs-patch finds them. This
-     read only the top level of refsDir while refs-patch walks into
+  /* The notes ref-seed.js seeds, found the way it finds them. This
+     read only the top level of refsDir while ref-seed.js walks into
      subfolders, so a note filed in a subfolder was seeded and its figures
      were not. */
   const mdFiles = fs.existsSync(refsDir) ? findMarkdownFiles(refsDir) : [];

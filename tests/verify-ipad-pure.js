@@ -158,9 +158,10 @@ head('nothing in src/ ships a regex lookbehind');
 
    FEATURE-GUARDED USE IS NOT A FLOOR, and the app already does this properly:
    ResizeObserver is behind `typeof ResizeObserver!=='undefined'` with a resize
-   listener as the fallback, and startViewTransition is guarded four times in
-   failsafe-patch. Those are not caught here because they are not in src/;
-   if one appears here it will be flagged, and a guard around it is the fix. */
+   listener as the fallback, and startViewTransition is guarded where render()
+   calls it in app/systole.html. Those are not caught here because they are
+   not in src/; if one appears here it will be flagged, and a guard around it
+   is the fix. */
 const FLOOR = '13.4';
 const ABOVE_FLOOR = [
   ['Array.prototype.at', /\.at\(\s*-?\d/, 'Safari 15.4'],

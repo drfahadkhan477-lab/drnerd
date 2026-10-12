@@ -14,8 +14,8 @@
  *   - the bank is in the fields the app reads, under the app's own chapters,
  *     with ids numbered as the bank's are, and every text invented;
  *   - every figure is a PNG that decodes, of a realistic size and number;
- *   - the reference library seeds through refs-patch and yields pearls;
- *   - it assembles into the app, with keys-patch's corrections applied;
+ *   - the reference library seeds through ref-seed.js and yields pearls;
+ *   - it assembles into the app, with answer-keys.js's corrections applied;
  *   - the build carries the mark, and scripts/verify.js reads the mark and
  *     will not write tests/test-stats.json for it.
  */
@@ -99,7 +99,7 @@ try {
   const prefixes = [...new Set(ids.map(i => i.split('_')[0]))];
   ok('every chapter is numbered from 1', prefixes.every(p => ids.includes(p + '_1') && ids.includes(p + '_2')), prefixes.join(' '));
   const missing = [...CORRECTIONS.map(c => c.id), ...FLAGS.map(f => f.id)].filter(id => !ids.includes(id));
-  ok('every id keys-patch and flags-patch correct is present', missing.length === 0, missing.join(', '));
+  ok('every id answer-keys.js and content-flags.js correct is present', missing.length === 0, missing.join(', '));
   const flaggedEx = new Set(FLAGS.filter(f => f.wantEx !== undefined).map(f => f.id));
   const real = bank.filter(q => !/^Synthetic stem /.test(q.s) || q.o.some(o => !/^Synthetic option /.test(o.t))
     || (!flaggedEx.has(q.id) && !/^Synthetic commentary /.test(q.ex)));
@@ -123,7 +123,7 @@ try {
   ok('over 100 figures, median height over 400px (what verify-figzoom reads)', figs.length > 100 && medianH > 400,
      `${figs.length} figures, median ${medianH}px`);
   const flaggedFigs = FLAGS.filter(f => f.wantFigs != null).filter(f => { const q = bank.find(x => x.id === f.id); return !q || q.img !== f.wantFigs; });
-  ok('a flagged question carries the figures flags-patch records', flaggedFigs.length === 0, flaggedFigs.map(f => f.id).join(', '));
+  ok('a flagged question carries the figures content-flags.js records', flaggedFigs.length === 0, flaggedFigs.map(f => f.id).join(', '));
 
   /* ── 4 ── */
   head('the reference library seeds, and yields pearls');
@@ -132,14 +132,14 @@ try {
   for (const [n, t] of r1.files) fs.writeFileSync(path.join(refs, n), t);
   for (const [k, b] of r1.images) fs.writeFileSync(path.join(refImgs, k), b);
   let seed = null, refImages = null;
-  try { seed = buildRefSeed(refs); } catch (e) { ok('refs-patch seeds the library', false, e.message.split('\n')[0]); }
-  if (seed) ok('refs-patch seeds the library', seed.notes.length >= 100, seed.notes.length + ' notes');
+  try { seed = buildRefSeed(refs); } catch (e) { ok('ref-seed.js seeds the library', false, e.message.split('\n')[0]); }
+  if (seed) ok('ref-seed.js seeds the library', seed.notes.length >= 100, seed.notes.length + ' notes');
   ok('every source names the one book, "Heart" in its title (what verify-pearl tests aiming against)',
      !!seed && seed.notes.every(n => /\bHeart\b/.test(n.source)));
-  try { refImages = buildRefImages(refs, refImgs); } catch (e) { ok('ref-images-patch finds every cited figure', false, e.message.split('\n')[0]); }
+  try { refImages = buildRefImages(refs, refImgs); } catch (e) { ok('ref-images.js finds every cited figure', false, e.message.split('\n')[0]); }
   if (refImages) {
     const bad = Object.entries(JSON.parse(refImages.json)).filter(([, u]) => decodePng(fromDataUrl(u)).why);
-    ok('ref-images-patch finds every cited figure, and each decodes', refImages.keys.size > 0 && bad.length === 0,
+    ok('ref-images.js finds every cited figure, and each decodes', refImages.keys.size > 0 && bad.length === 0,
        bad.map(([k]) => k).join(', ') || refImages.keys.size + ' figures');
   }
   global.window = {};
@@ -163,7 +163,7 @@ try {
     const m = ALL_Q_RE.exec(html);
     const out = m ? JSON.parse(m[1]) : [];
     const unkeyed = CORRECTIONS.filter(c => { const q = out.find(x => x.id === c.id); return !q || LET[q.ci] !== c.now; });
-    ok('keys-patch\'s corrections are applied in the built bank', !!m && unkeyed.length === 0,
+    ok('answer-keys.js\'s corrections are applied in the built bank', !!m && unkeyed.length === 0,
        unkeyed.map(c => c.id).join(', ') || CORRECTIONS.length + ' corrected');
 
     /* ── 6 ── */
