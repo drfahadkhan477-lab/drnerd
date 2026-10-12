@@ -29,9 +29,8 @@
  * WHAT THIS CHANGES ABOUT DELIVERY. A fetch() will not cross file:// origins,
  * so this build has to be served over http(s); it is not a thing you drop in
  * Files and open. That is inherent to splitting content out, not incidental
- * to how it is done here, and it is why scripts/polish-patch.js and the
- * single-file build stay exactly where they are — that remains the artifact
- * for the Files-app workflow.
+ * to how it is done here, and it is why the single-file build stays exactly
+ * where it is — that remains the artifact for the Files-app workflow.
  */
 'use strict';
 const fs = require('fs');
@@ -69,7 +68,7 @@ if (!fs.existsSync(path.join(CONTENT, 'questions.json'))) {
  * happens to be sitting in content/. Until now it checked only that content/
  * EXISTED. Nothing checked that it came from the file being split.
  *
- * So: rebuild build/systole.html — a patch changed, a key was corrected, a
+ * So: rebuild build/systole.html — the app's code changed, a key was corrected, a
  * figure was re-cut — and then run
  *
  *     node scripts/build-pwa.js build/systole.html
@@ -630,11 +629,11 @@ step('pull the heart image out of the splash', () => {
   splashAssets.push([name, bytes]);
   html = html.replace(m[0], m[1] + url + m[3]);
 
-  /* AND THE HERO'S COPY, WHICH IS THE ONE THAT IS EASY TO MISS. heroart-patch
-     reads the picture out of the splash markup so the two hearts can never be
-     different images — but at that point in the chain the splash still holds
-     the inline data: URI, so buildHome() ends up with a second 57 KB base64
-     string baked into it. That one lives in appCode, not html, and pulling
+  /* AND THE HERO'S COPY, WHICH IS THE ONE THAT IS EASY TO MISS. The build
+     fills the splash's <img> and the hero's in buildHome() from the same
+     asset (assets/hero-heart/heart.webp, two slots in app/systole.html), so
+     the two hearts can never be different images, and each is a 57 KB base64
+     string. The hero's lives in appCode, not html, and pulling
      only the splash copy left the split build shipping the image twice: the
      shell went from 229 KB gzipped to 276 KB against a 280 KB budget, which
      is how this was noticed. Both copies point at the one file. */
@@ -650,7 +649,8 @@ step('pull the heart image out of the splash', () => {
 });
 
 /* ── 3.6 the reference seed ───────────────────────────────────────────────
-   refs-patch bakes the Braunwald corpus in as a seed so the app opens with
+   The build bakes the reference notes in as a seed (the REF_SEED slot,
+   scripts/ref-seed.js) so the app opens with
    the library already populated. That is ~295 KB, which is nothing against a
    27 MB single file and fatal against an 800 KB shell. Out it comes, and a
    loader appended to app.js applies it once the code that owns REF exists.
@@ -660,7 +660,7 @@ let refSeed = null;
 step('pull the reference seed out of the app code', () => {
   const re = /\/\*REF_SEED_START\*\/([\s\S]*?)\/\*REF_SEED_END\*\//;
   const m = re.exec(appCode);
-  if (!m) throw new Error('REF_SEED markers not found — did refs-patch run?');
+  if (!m) throw new Error('REF_SEED markers not found — was this built by scripts/assemble-app.js, which fills the REF_SEED slot?');
   JSON.parse(m[1]);   // fail loudly here, not silently at runtime
   refSeed = m[1];
   appCode = appCode.replace(re, '[]');
@@ -704,7 +704,8 @@ var REF_SEED_READY = (function(){
 });
 
 /* ── 3.7 the reference figures ────────────────────────────────────────────
-   ref-images-patch embeds every figure a reference note cites — a few
+   The build embeds every figure a reference note cites (the REF_IMGS slot,
+   scripts/ref-images.js) — a few
    megabytes raw, base64'd, which is nothing against 27 MB and fatal against
    800 KB. Same move as the reference seed: pull it out, fetch it, apply it
    once the binding it fills exists. */
@@ -767,8 +768,9 @@ step('pull the reference figures out of the app code, one file per unit', () => 
   appCode += require('./ref-images-loader.js').REF_IMG_LOADER.replace('__PARTS__', () => JSON.stringify(urls));
 });
 
-/* THE HEART'S BAKED MESH comes out of app.js the same way. apex-patch embeds it
-   as one line of base64 beside heart3d.js — 3.3 MB, which the shell budget
+/* THE HEART'S BAKED MESH comes out of app.js the same way. The build embeds it
+   (the HEART_MESH slot, scripts/heart-bake.js) as one line of base64 beside
+   heart3d.js — 3.3 MB, which the shell budget
    (280 KB gzipped for index.html + app.js, tests/verify-pwa.js) could never
    hold. It becomes a binary file the loader fetches in parallel with the bank.
 
@@ -979,9 +981,10 @@ step('copy only the content the app asks for', () => {
 
    THIS STEP USED TO APPLY THEM AGAIN HERE, and the comment justifying it
    opened "content/questions.json is the licensed export". That was true once
-   and is not now: extract-content.js reads build/systole.html, which the chain
-   has ALREADY corrected, so the extracted bank arrives carrying them. Applying
-   the list a second time hit keys-patch's own `was` assertion and stopped the
+   and is not now: extract-content.js reads build/systole.html, which the build
+   has ALREADY corrected (assemble-app applies scripts/answer-keys.js), so the
+   extracted bank arrives carrying them. Applying the list a second time hit
+   the corrections' own `was` assertion (keys-patch's, then) and stopped the
    build:
 
        [CON_16] the export now keys C, not A as recorded here.
