@@ -33,7 +33,22 @@ reopening, Firefox, licensed-export parity and live API/model access remain
 outside this verification. WebKit heap measurements must be reported as
 unmeasurable when the browser cannot provide them.
 
-The separate restore failure-bookkeeping finding remains open: replacement
-clears tickets for newer queued writes, preventing rescue/retry after a quota
-failure. Its next bounded fix should scope cleanup to the replaced state and
-test native failure, export rescue and retry.
+## Remaining restore finding completed
+
+Restore now captures the current write ticket when its replacement is queued.
+After commit it removes failure/latest entries only at or before that boundary;
+tickets for newer queued writes remain. A refused replacement clears nothing.
+This preserves the original ordering fix while retaining newer failed notes for
+live reads, backup export and retry.
+
+Native regressions cover both successful and refused replacement, inject a quota
+failure into a newer queued note, compare the exact read/export payload, verify
+old failure cleanup follows commit/rollback, and retry after removing the
+refusal. All eight code findings from the review are now addressed. Device-only
+acceptance items above remain unmeasured.
+
+Validation of this final fix: the focused storage/backup pure regressions and all
+89 pure suites passed. The complete Memorizer hardening suite passed 107 checks
+in Chromium and 107 in WebKit, including the ten new native assertions. Staged
+content and whitespace guards passed; the full browser registry and physical
+iPad trials were not rerun for this bounded storage change.
