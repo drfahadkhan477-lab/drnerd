@@ -234,6 +234,22 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
     r.onerror = () => res(null); })), 5000);
   if (engineName() === 'chromium')
     ok('where the browser stores Blobs, the figures are stored as Blobs', await storedAs(pg) === 'blobs', String(await storedAs(pg)));
+
+  head('repeated timestamps and concurrent imports use distinct generations');
+  const collision = await pg.evaluate(async ({ good, one }) => {
+    const first = BankPack.validate((await ZipRead.read(new Uint8Array(good).buffer)).files);
+    const second = BankPack.validate((await ZipRead.read(new Uint8Array(one).buffer)).files);
+    const a = await BankStore.save(first, { buffers: true, now: 12345 });
+    const b = await BankStore.save(second, { buffers: true, now: 12345 });
+    const loaded = await BankStore.load({ makeURL: ()=>'u' });
+    const concurrent = await Promise.all([BankStore.save(first, { buffers: true, now: 12345 }), BankStore.save(second, { buffers: true, now: 12345 })]);
+    const final = await BankStore.load({ makeURL: ()=>'u' });
+    return { distinct: a.gen !== b.gen && concurrent[0].gen !== concurrent[1].gen,
+      figures: loaded.figures, extras: Object.keys(loaded.extras), finalFigures: final.figures };
+  }, { good: Array.from(GOOD), one: Array.from(ONE) });
+  ok('generation identity is unique even at the same clock tick', collision.distinct);
+  ok('replacement drops old figures and optional reference files', collision.figures === 1 && collision.extras.length === 0);
+  ok('concurrent replacements leave exactly the last package', collision.finalFigures === 1);
   await ctx.close();
 
   section = 'blobs refused';

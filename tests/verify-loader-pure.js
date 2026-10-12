@@ -328,7 +328,22 @@ const preloadChecks = () => {
 
 preloadChecks();
 
-splitChecks().catch(e => { failed++; console.log('  FAIL  the split checks threw  → ' + e.message); }).then(() => {
+async function transportChecks() {
+  head('the offline fixture cuts the actual origin transport');
+  const http = require('http'), { originTransport } = require('./_origintransport.js');
+  const server = http.createServer((req,res)=>res.end('synthetic upstream'));
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const transport = await originTransport('http://127.0.0.1:'+server.address().port+'/index.html');
+  try {
+    ok('the live fixture forwards the actual upstream bytes', await (await fetch(transport.url)).text() === 'synthetic upstream');
+    transport.cut();
+    ok('cutting it refuses a direct request without any service worker', await transport.unavailable());
+    transport.resume();
+    ok('resuming it restores the same upstream', await (await fetch(transport.url)).text() === 'synthetic upstream');
+  } finally { transport.close(); server.closeAllConnections(); server.close(); }
+}
+
+splitChecks().then(transportChecks).catch(e => { failed++; console.log('  FAIL  the split checks threw  → ' + e.message); }).then(() => {
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 });
