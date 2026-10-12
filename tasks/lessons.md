@@ -116,6 +116,21 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   and `await img.decode()`, and put what was read in the check's detail (the pixel
   where the answer should be, how much was drawn), so a miss in an engine this
   container cannot run says which it was.
+- **A state wait before a DOM read.** A hardening check waited on
+  `ui.docRec.revision`, which `saveFix` sets before `refresh()` and `render()`, then
+  read the banner from the DOM; it failed once in four runs on the #232 merge. My
+  first fix waited on `#notice`, which only the unit screen draws, so it timed out
+  on the lesson screen where the check runs. → Rule: when a check reads the DOM,
+  its precondition must be a redraw made after the state it waits on (a
+  `MutationObserver` that checks that state when it fires), never the state alone.
+  Before waiting on an element, grep which view draws it. Reproduce the race by
+  delaying the app's redraw, and show the old wait failing and the new one passing.
+- **A fault injection that broke the syntax, not the rule.** To prove a date rule
+  was guarded, I rewrote `s=>{…}` as `s=>true||{…}`. That made an object literal and
+  a syntax error, and the suite's one FAIL was "no uncaught page error". → Rule: an
+  injection must leave the code valid and change only the guarded behaviour (here
+  `s=>true, unused=s=>{…}`). Read the FAIL lines it produces: only the checks that
+  name the rule failing counts as proof.
 
 ## Process
 
