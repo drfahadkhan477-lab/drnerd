@@ -222,6 +222,10 @@ head('it refuses the licensed bank, by every route in');
      r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
   r = inTmp('assets/diagram-2.txt', '<!DOCTYPE svg [ <!ENTITY red "#c00"> ]>\n<svg xmlns="http://www.w3.org/2000/svg"><rect fill="&red;" width="1" height="1"/></svg>\n');
   ok('and past a doctype with an internal subset', r.code === 1 && /an SVG/.test(r.out), r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
+  /* However far in the root is: the whole text is read, not its first 4 KB
+     (found by review, #241: a 5 KB comment hid the root). */
+  r = inTmp('assets/diagram-3.bin', '<!-- ' + 'licence text '.repeat(500) + '-->\n<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>\n');
+  ok('and behind a comment longer than 4 KB', r.code === 1 && /an SVG/.test(r.out), r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
   /* A doctype that never closes, with "][" pairs the first SVG reading could
      split two ways each: exponential, so forty pairs took hours and would
      have hung the commit hook (found by CodeQL, #241). The guard is given

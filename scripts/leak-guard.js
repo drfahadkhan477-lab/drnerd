@@ -450,15 +450,23 @@ function inspect(file, src) {
     return { rule: 'SIZE', why: `${(st.size / 1048576).toFixed(1)} MB — nothing here legitimately exceeds 1 MB` };
   if (st.size === 0) return null;
 
+  let text;
+  const readText = () => {
+    if (text === undefined) { try { text = st.text(); } catch (e) { cannot(`read ${file}`, e); } }
+    return text;
+  };
   if (!KNOWN_BINARIES.includes(p)) {
     let kind;
-    try { kind = imageMagic(st.head(12), st.size) || (isSvg(decode(st.head(4096))) ? 'an SVG' : null); } catch (e) { cannot(`read ${file}`, e); }
+    try { kind = imageMagic(st.head(12), st.size); } catch (e) { cannot(`read ${file}`, e); }
+    /* An SVG's root can sit behind a prolog or a comment of any length, so it
+       is looked for in the whole text, which the rules below read anyway. This
+       read the first 4 KB, and an SVG behind a 5 KB comment passed (found by
+       review, #241). */
+    if (!kind && isSvg(readText())) kind = 'an SVG';
     if (kind || IMAGE_EXT.test(p))
       return { rule: 'IMAGE', why: `${kind || 'an image or PDF by its name'} — a figure or a split PDF is refused at any size; list a deliberate one in KNOWN_BINARIES` };
   }
-
-  let text;
-  try { text = st.text(); } catch (e) { cannot(`read ${file}`, e); }
+  readText();
 
   /* FIGURES first, and unconditionally: it has no floor (rule 5's comment
      says why), so it runs on every file rule 3 let through, not just the
