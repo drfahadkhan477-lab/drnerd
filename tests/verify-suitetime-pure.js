@@ -34,9 +34,16 @@ for (const helpFlag of ['--help', '-h']) {
     path.join(ROOT, 'build', 'missing-help-fixture.html'), '--only', 'cause-pure'],
     { cwd: ROOT, encoding: 'utf8', timeout: 10000 });
   const out = (r.stdout || '') + (r.stderr || '');
-  ok(`${helpFlag} prints usage and exits without launching suites or requiring a build`,
+  ok(`${helpFlag} prints usage and exits without launching the selected suite`,
      r.status === 0 && /Usage:/.test(out) && /--engine/.test(out) && /--jobs/.test(out) &&
      !/\bPASS\b|all green|counts (?:not )?written/.test(out));
+}
+{
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--help',
+    path.join(ROOT, 'build', 'missing-help-fixture.html')],
+    { cwd: ROOT, encoding: 'utf8', timeout: 10000 });
+  ok('help for the default full run needs no assembled build', r.status === 0 &&
+     /Usage:/.test(r.stdout || '') && !/No build/.test(r.stderr || ''));
 }
 
 (async () => {
