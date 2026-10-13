@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6605 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6522.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6870 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6787.
 # The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
@@ -76,7 +76,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6522 real checks, up
+#                Across every job, 6787 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -171,7 +171,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
-      - name: FSRS-5–derived scheduling (89 checks)
+      - name: FSRS-5–derived scheduling (104 checks)
         run: node tests/verify-fsrs.js
       - name: the scheduler against ts-fsrs, on our own weights (15 checks)
         run: node tests/verify-oracle.js
@@ -181,7 +181,7 @@ jobs:
         run: node tests/verify-physio-pure.js
       - name: the 12-lead's geometry and morphology (47 checks)
         run: node tests/verify-leads-pure.js
-      - name: the ZIP reader's memory ceiling (12 checks)
+      - name: the ZIP reader's memory ceiling (16 checks)
         run: node tests/verify-zip.js
       - name: the calibration arithmetic (26 checks)
         run: node tests/verify-calib-pure.js
@@ -205,7 +205,7 @@ jobs:
         run: node tests/verify-coronarytree-pure.js
       - name: the engine is a flag, not thirty-four hardcoded copies of one (96 checks)
         run: node tests/verify-engine.js
-      - name: the licensed question bank cannot be committed (46 checks)
+      - name: the licensed question bank cannot be committed (54 checks)
         run: node tests/verify-leakguard.js
       - name: public reader pins, cache integrity, retries and bounded downloads (12 checks)
         run: node tests/verify-reader-assets-pure.js
@@ -235,19 +235,19 @@ jobs:
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
         run: node tests/verify-contentrules.js
-      - name: an inference is not read back as something the fellow said (20 checks)
+      - name: an inference is not read back as something the fellow said (28 checks)
         run: node tests/verify-memory-pure.js
       - name: text inside a figure is data, never an instruction (23 checks)
         run: node tests/verify-vision-pure.js
       - name: a torn store costs the profile line, never the turn (20 checks)
         run: node tests/verify-profile-pure.js
-      - name: imported figures survive a note list that has not loaded (36 checks)
+      - name: imported figures survive a note list that has not loaded (43 checks)
         run: node tests/verify-refassets-pure.js
       - name: every arrhythmia the picker offers has something that draws it (23 checks)
         run: node tests/verify-rhythms-pure.js
       - name: nothing in src/ uses syntax an iPad cannot parse (13 checks)
         run: node tests/verify-ipad-pure.js
-      - name: the newer copy survives and a refused write is not lost (56 checks)
+      - name: the newer copy survives and a refused write is not lost (93 checks)
         run: node tests/verify-store-pure.js
       - name: the counts in the docs are the counts the tests produced (52 checks)
         run: node tests/verify-stats.js
@@ -259,11 +259,11 @@ jobs:
         run: node tests/verify-md-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
-      - name: a splash that cannot load the bank says which failure it was (51 checks)
+      - name: a splash that cannot load the bank says which failure it was (69 checks)
         run: node tests/verify-loader-pure.js
       - name: a split build cannot be half of one build and half of another (53 checks)
         run: node tests/verify-provenance-pure.js
-      - name: a deploy landing under a running app leaves a pair that is noticed (49 checks)
+      - name: a deploy landing under a running app leaves a pair that is noticed (54 checks)
         run: node tests/verify-swupdate-pure.js
       - name: no native dialog arrives unmeant, and an icon is not a name (18 checks)
         run: node tests/verify-ui-pure.js
@@ -275,7 +275,7 @@ jobs:
         run: node tests/verify-echoui-pure.js
       - name: the notes search ranks, quotes and escapes (35 checks)
         run: node tests/verify-notesearch-pure.js
-      - name: the heart loads a mesh baked at build time, and refuses any other copy (37 checks)
+      - name: the heart loads a mesh baked at build time, and refuses any other copy (39 checks)
         run: node tests/verify-heartbake-pure.js
       - name: the pearls found at build time are the ones the search finds (23 checks)
         run: node tests/verify-pearlbake-pure.js
@@ -293,15 +293,15 @@ jobs:
         run: node tests/verify-extract-pure.js
       - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing; the reference notes travel in it too, and the written schema names the version the code enforces (28 checks)
         run: node tests/verify-bankpack-pure.js
-      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (33 checks)
+      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (37 checks)
         run: node tests/verify-testpublic-pure.js
-      - name: a pull request skips a browser job only when none of its files can reach it (48 checks)
+      - name: a pull request skips a browser job only when none of its files can reach it (54 checks)
         run: node tests/verify-cichanges-pure.js
       - name: the counts record in two halves — Systole's written from a run where every Systole suite passed, the Memorizer's likewise, the other half kept (31 checks)
         run: node tests/verify-record-pure.js
-      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (28 checks)
+      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (32 checks)
         run: node tests/verify-suitetime-pure.js
-      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (49 checks)
+      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (54 checks)
         run: node tests/verify-devtools-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (261 checks)
         run: node tests/verify-memorizer-chunk-pure.js
@@ -427,7 +427,7 @@ jobs:
         name: Memorizer — your data and what the page may do — the backup reminder on the app's own backup, an orphan that would spoil a backup removed, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (27 checks)
         run: node tests/verify-memorizer-data.js
       - if: ${{ !cancelled() }}
-        name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (25 checks)
+        name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (33 checks)
         run: node tests/verify-bankstore.js
       - if: ${{ !cancelled() }}
         name: the Lab, built and driven — the audio played is the heart sound asked, nothing names an answer early, progress is stored and survives a reload, and the heart map is drawn from the map (67 checks)
@@ -503,7 +503,7 @@ jobs:
         name: the 12-lead morphology falls out of one dipole (25 checks)
         run: node tests/verify-leads.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the cardiac cycle is computed, not drawn, and keeps its own clock (44 checks)
+        name: the cardiac cycle is computed, not drawn, and keeps its own clock (45 checks)
         run: node tests/verify-physio.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: nine palettes, two axes, unthemed semantics (41 checks)
@@ -560,7 +560,7 @@ jobs:
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave (21 checks)
+        name: the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave (33 checks)
         run: node tests/verify-voicescreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day (17 checks)
@@ -575,7 +575,7 @@ jobs:
         name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
         run: node tests/verify-failsafe.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: a restored backup appears now, not only after the next launch (19 checks)
+        name: a restored backup appears now, not only after the next launch (86 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the semantic colour names alias the legacy hue names, not just resemble them (119 checks)
@@ -605,7 +605,7 @@ jobs:
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the policy contains an injection without breaking anything the app does (20 checks)
+        name: the policy contains an injection without breaking anything the app does (24 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: Echo Studio routes, delegates and keeps the caret where it was (26 checks)
@@ -617,7 +617,7 @@ jobs:
         name: the Coronary view draws the left bed collapsing in systole, on one scale (8 checks)
         run: node tests/verify-coronaryview.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL (27 checks)
+        name: the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL (31 checks)
         run: node tests/verify-ambient.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone (31 checks)
@@ -632,13 +632,13 @@ jobs:
         name: Apex can take the whole page, and a numbered list stays numbered (19 checks)
         run: node tests/verify-apexpage.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: a chapter you left is the chapter you come back to (27 checks)
+        name: a chapter you left is the chapter you come back to (33 checks)
         run: node tests/verify-resume.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: no figure is drawn wider than the pixels it has (9 checks)
         run: node tests/verify-figsharp.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: navigating the app does not spend WebGL contexts (25 checks)
+        name: navigating the app does not spend WebGL contexts (30 checks)
         run: node tests/verify-heartreuse.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a reply can be stopped, and the last chunk is painted however the stream ends (27 checks)
@@ -811,7 +811,7 @@ jobs:
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave (21 checks)
+        name: the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave (33 checks)
         run: node tests/verify-voicescreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day (17 checks)
@@ -826,7 +826,7 @@ jobs:
         name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
         run: node tests/verify-failsafe.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: a restored backup appears now, not only after the next launch (19 checks)
+        name: a restored backup appears now, not only after the next launch (86 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the semantic colour names alias the legacy hue names, not just resemble them (119 checks)
@@ -853,7 +853,7 @@ jobs:
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the policy contains an injection without breaking anything the app does (20 checks)
+        name: the policy contains an injection without breaking anything the app does (24 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: Echo Studio routes, delegates and keeps the caret where it was (26 checks)
@@ -865,7 +865,7 @@ jobs:
         name: the Coronary view draws the left bed collapsing in systole, on one scale (8 checks)
         run: node tests/verify-coronaryview.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL (27 checks)
+        name: the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL (31 checks)
         run: node tests/verify-ambient.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone (31 checks)
@@ -880,13 +880,13 @@ jobs:
         name: Apex can take the whole page, and a numbered list stays numbered (19 checks)
         run: node tests/verify-apexpage.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: a chapter you left is the chapter you come back to (27 checks)
+        name: a chapter you left is the chapter you come back to (33 checks)
         run: node tests/verify-resume.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: no figure is drawn wider than the pixels it has (9 checks)
         run: node tests/verify-figsharp.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: navigating the app does not spend WebGL contexts (25 checks)
+        name: navigating the app does not spend WebGL contexts (30 checks)
         run: node tests/verify-heartreuse.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a reply can be stopped, and the last chunk is painted however the stream ends (27 checks)

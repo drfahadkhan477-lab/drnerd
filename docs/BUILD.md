@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
-node scripts/verify.js --pwa                           # → 6605 + 134 checks
+node scripts/verify.js --pwa                           # → 6870 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -65,8 +65,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 149
-  run normally — it is 35 of the 6605 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 151
+  run normally — it is 35 of the 6870 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -249,7 +249,7 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 150 suites, 6605 checks, plus 134 more on the split build. Those numbers are
+Across 152 suites, 6870 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
@@ -261,7 +261,9 @@ The totals exclude suites named in `RETIRED_RECORD` while their historical
 measurements remain in the record. The qualifying Memorizer run at `9bcb827`
 removed the three retired Claude suites and refreshed Memorizer's counts.
 Systole's active counts and the split-build count remain from their previous
-qualifying runs; `PENDING_RECORD` still names its two unrecorded suites.
+qualifying runs in that record. The later complete Systole run at `391f7c5`
+refreshed its half too and emptied `PENDING_RECORD`; the split-build figure
+remains carried over from its previous measurement.
 
 ### Prepared reader libraries for public browser checks
 
@@ -327,12 +329,27 @@ family qualified for recording, which includes the seven reference-dependent
 suites unavailable in the earlier cloud run. This is evidence for that laptop
 checkout, not a passing run of the later master or this review branch.
 
-The uploaded note archive has since been installed into ignored `content/refs/`:
+The uploaded note archive was installed into ignored `content/refs/`:
 49 Markdown files produce 1,141 notes, and the reference-format suite passed
-39 checks. Rebuilding stops because cited figure files are absent. The image
-archive exceeds the workspace's 32 MiB attachment-transfer limit and has not
-been installed; a retrieval attempt against the retained earlier build is not
+39 checks. Rebuilding initially stopped because cited figure files were absent.
+The first image archive exceeded the workspace's 32 MiB attachment-transfer
+limit and could not be installed; a retrieval attempt against the retained earlier build was not
 validation of the newly supplied notes.
+
+The owner then supplied all six image folders as smaller archives. All 661
+cited images are now present, the rebuilt app includes the 1,141 reference
+notes, and the seven previously blocked suites plus reference-format checks
+passed all 302 checks. A complete Systole family run at `391f7c5` subsequently
+passed all 126 suites and 4,635 checks, Chromium, two workers. The record keeps
+the passing Memorizer family from `9bcb827` (26 suites, 2,235 checks), giving
+152 recorded suites and 6,870 checks. These are two qualifying family runs,
+not one new full-registry invocation. The 134 split-build checks were not
+remeasured; physical iPad and real model execution remain unmeasured.
+
+Both source exports and reference archives stay outside Git. Full transcripts
+and structured reports remain in ignored `build/private-validation/`; only
+measured counts and provenance are committed. Later master changes have not
+been integrated into or validated by these runs.
 
 ### Branch review handoff
 
@@ -647,7 +664,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        150 suites · 87 need no browser · + pwa
+tests/        152 suites · 87 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
