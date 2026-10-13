@@ -236,6 +236,11 @@ head('a command line is read as the shell reads it: quotes, comments, heredocs')
   ];
   const rc = code.filter(c => !blocks(c));
   ok('while quoted text run as code (bash -c, sh -c, eval) is still split and read', rc.length === 0, rc.join(' | ') || `${code.length} refused`);
+  /* A quote the reading cannot close means bash refuses the line, or the
+     reading missed how bash closes it. The old split then judges searches
+     too, so a construct the reading does not know hides none. */
+  ok('and after a quote that never closes, a search is judged on the old split',
+     blocks('echo "it is ; rg -uuu stem .'));
 }
 
 head('a command inside another: substitutions, loops, branches, subshells, wrappers');
@@ -251,9 +256,34 @@ head('a command inside another: substitutions, loops, branches, subshells, wrapp
     /* A ) inside a comment closes nothing (found by review, #241): taken
        for the close, it left the search on the next line unjudged. */
     'echo "$(echo hi # )\nrg -uuu stem .)"',
+    /* A heredoc's body substitutes as a double-quoted string does, so its
+       apostrophe quotes nothing; and in backquotes \` is a backquote. */
+    "cat <<EOF\nit's $(head build/systole.html)\nEOF",
+    'echo `echo \\`tail dist/app.js\\``',
   ];
   const ri = inner.filter(c => !blocks(c));
   ok('a read inside $( … ), backticks or <( … ) is refused', ri.length === 0, ri.join(' | ') || `${inner.length} refused`);
+  /* Where a substitution ends is bash's grammar, not a count of parentheses
+     (found by review, #241). Each ) below is one bash reads inside something
+     the count did not know: a parameter's default, a case pattern, a
+     heredoc's body, $'…', a quote in a substitution in a quote, backquotes,
+     a comment. The count closed the substitution there, and the search bash
+     runs after it was read as quoted text. */
+  const ends = [
+    'echo "$(echo ${x:-)}\nrg -uuu stem .)"',
+    'echo "$(echo ${x:-${y:-)}} ; rg -uuu stem .)"',
+    'echo "$(case a in a) echo;; esac; rg -uuu stem .)"',
+    'echo "$(case a in (a) echo;; b|esac) echo;; esac; rg -uuu stem .)"',
+    'echo "$(f() case a in a) echo;; esac; f; rg -uuu stem .)"',
+    'echo "$(cat <<EOF\n)\nEOF\nrg -uuu stem .)"',
+    "echo \"$(echo $'\\' ) ' ; rg -uuu stem .)\"",
+    "echo $'\\'' ; rg -uuu stem .",
+    'echo "$(echo "$(echo ")")" ; rg -uuu stem .)"',
+    'echo "$(echo `echo )` ; rg -uuu stem .)"',
+    'echo "$( (# )\necho) ; rg -uuu stem .)"',
+  ];
+  const re = ends.filter(c => !blocks(c));
+  ok('and a substitution ends where bash ends it, not at a ) in ${…}, a case, a heredoc or a quote', re.length === 0, re.join(' | ') || `${ends.length} refused`);
   /* A cd inside a substitution happens in a subshell, so it moves nothing
      after it: the second read here is from where the line started. */
   ok('and a cd inside one does not move the reads after it',
@@ -273,6 +303,20 @@ head('a command inside another: substitutions, loops, branches, subshells, wrapp
   ];
   const rw = wrapped.filter(c => !blocks(c));
   ok('a read that a loop, a branch, a subshell or a wrapper opens is refused', rw.length === 0, rw.join(' | ') || `${wrapped.length} refused`);
+  /* A redirection can stand before the program, and the shell runs a quoted
+     or escaped name as the program it spells (\grep is grep, past an
+     alias). Each of these was taken for the program, and nothing was read. */
+  const named = [
+    '2>/dev/null cat content/questions.json',
+    '2> /dev/null head build/systole.html',
+    '<<EOF rg -uuu stem .\nEOF',
+    '\\cat content/questions.json',
+    '"cat" content/questions.json',
+    "c''at dist/app.js",
+    '\\rg -uuu stem .',
+  ];
+  const rn = named.filter(c => !blocks(c));
+  ok('so is one behind a redirection, or run by a quoted or escaped name', rn.length === 0, rn.join(' | ') || `${named.length} refused`);
   const fine = [
     'for f in tests/*.js; do node --check "$f"; done',
     'if [ -d build ]; then echo built; fi',
@@ -283,6 +327,9 @@ head('a command inside another: substitutions, loops, branches, subshells, wrapp
     '(cd tests && node verify-x.js ../build/systole.html)',
     'echo then cat is a word here',
     `echo '$(cat content/x)' is quoted text`,
+    '2>/dev/null node tests/verify-csp.js',
+    '>build/run.log node tests/verify-x.js build/systole.html',
+    '"node" tests/verify-csp.js',
   ];
   const f = fine.filter(c => bash(c));
   ok('while the same shapes running a suite, listing or echoing are not', f.length === 0, f.join(' | ') || `${fine.length} allowed`);

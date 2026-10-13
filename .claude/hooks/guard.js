@@ -257,74 +257,65 @@ function inlineCode(name, rest, seg) {
    code (`bash -c "make; cat content/q.json"`, eval '…'), which is why
    inspectBash still reads it.
 
-   commands() reads quotes the way the shell does, so an operator inside
-   them is text. A word starting with # comments out the rest of its line,
+   commands() reads the line as bash (5.2) does, so an operator inside
+   quotes is text. A word starting with # comments out the rest of its line,
    a backslash-newline joins two lines, and the & in 2>&1 or &>file belongs
    to its redirection. A heredoc's body is read a line at a time, so an
    apostrophe in its prose opens nothing past that line. A $( … ), ` … `,
-   <( … ) or >( … ), bare or inside double quotes, is a command line of its
-   own: its commands are read too, in a scope of their own, as a heredoc's
-   body is, so a cd inside one moves nothing after it. */
+   <( … ) or >( … ), wherever it stands, is a command line of its own: its
+   commands are read too, in a scope of their own, as a heredoc's body is,
+   so a cd inside one moves nothing after it.
+
+   A substitution ends where bash's grammar ends it. Counting parentheses
+   took for its close a ) that bash reads inside ${x:-)}, a case pattern, a
+   heredoc's body, $'\'' or a quote in a substitution in a quote, and the
+   rest of the substitution was read as quoted text, unjudged (found by
+   review, #241). So one reader reads a substitution and the line around
+   it, and a substitution ends at the ) that closes nothing it opened. */
 function words(seg) {
   return (seg.match(/'[^']*'|"[^"]*"|\S+/g) || []);
 }
 function split(text) {
   return text.split(/\|\||&&|[|;\n&]/).map(t => t.trim()).filter(Boolean).map(t => ({ words: words(t), text: t }));
 }
-/* A substitution starting at `at`, which is $( … ), <( … ), >( … ) or ` … `,
-   is a command line the shell runs. This returns where it ends and that line,
-   or null if it never closes, in which case its characters are only text. */
-function substitution(cmd, at) {
-  if (cmd[at] === '`') {
-    let j = at + 1;
-    while (j < cmd.length && cmd[j] !== '`') j += cmd[j] === '\\' ? 2 : 1;
-    return j < cmd.length ? { end: j + 1, inner: cmd.slice(at + 1, j) } : null;
-  }
-  let depth = 1, j = at + 2;
-  while (j < cmd.length) {
-    const c = cmd[j];
-    if (c === '\\') { j += 2; continue; }
-    if (c === "'") { const q = cmd.indexOf("'", j + 1); if (q < 0) return null; j = q + 1; continue; }
-    if (c === '"') { j++; while (j < cmd.length && cmd[j] !== '"') j += cmd[j] === '\\' ? 2 : 1; j++; continue; }
-    /* A comment runs to its line's end, and a ) in it closes nothing: read as
-       the close, it left the next line outside the substitution and unjudged
-       (found by review, #241). A # opens one only at the start of a word. */
-    if (c === '#' && (j === at + 2 || /[\s;&|()]/.test(cmd[j - 1]))) { while (j < cmd.length && cmd[j] !== '\n') j++; continue; }
-    if (c === '(') depth++;
-    else if (c === ')' && --depth === 0) return { end: j + 1, inner: cmd.slice(at + 2, j) };
-    j++;
-  }
-  return null;
-}
 function commands(cmd) {
-  const out = [], heredocs = [];
-  let ws = [], word = null, start = 0, i = 0;
-  const endWord = () => { if (word !== null) { ws.push(word); word = null; } };
-  const endCmd = end => {
-    endWord();
-    if (ws.length) out.push({ words: ws, text: cmd.slice(start, end).trim() });
-    ws = [];
+  const ctx = { unclosed: false, heredocs: [] };
+  const list = read(cmd, 0, false, ctx).out;
+  list.unclosed = ctx.unclosed;
+  return list;
+}
+/* The commands from `from` on: to the end of cmd or, in a substitution
+   (sub), to the ) that closes it, whose index + 1 is returned as `end` (-1
+   if none does). ctx carries the heredocs waiting for the end of the line,
+   and whether a quote or an expansion never closed.
+
+   case … in opens a list of patterns, each ended by a ) that closes
+   nothing (a leading ( and an extglob's parentheses aside). esac ends the
+   list where a command or a pattern could start, not as a word of either:
+   `a|esac)` and `(esac)` are patterns. A pattern's words are no command. */
+function read(cmd, from, sub, ctx) {
+  const out = [], cases = [];
+  let ws = [], word = null, start = from, i = from, depth = 0, last = ['', ''];
+  const add = s => { word = (word || '') + s; };
+  const push = end => { if (ws.length) out.push({ words: ws, text: cmd.slice(start, end).trim() }); ws = []; };
+  const endWord = () => {
+    if (word === null) return;
+    const w = word, top = cases[cases.length - 1];
+    word = null;
+    if (w === 'esac' && top && !ws.length && !top.opener) { cases.pop(); return; }
+    ws.push(w);
+    if (w === 'in' && last[0] === 'case') { cases.push({ pattern: true, opener: false, nest: 0 }); push(i); start = i; }
+    last = [last[1], w];
   };
   while (i < cmd.length) {
     const c = cmd[i];
-    if (c === "'") {
-      let j = i + 1;
-      while (j < cmd.length && cmd[j] !== "'") j++;
-      word = (word || '') + cmd.slice(i, j + 1);
-      i = j + 1;
-    } else if (c === '"') {
-      /* A double-quoted string still runs what it substitutes. */
-      let j = i + 1;
-      while (j < cmd.length && cmd[j] !== '"') {
-        if (cmd[j] === '\\') { j += 2; continue; }
-        const sub = cmd[j] === '`' || (cmd[j] === '$' && cmd[j + 1] === '(') ? substitution(cmd, j) : null;
-        if (sub) { out.push({ scope: commands(sub.inner) }); j = sub.end; continue; }
-        j++;
-      }
-      word = (word || '') + cmd.slice(i, j + 1);
-      i = j + 1;
+    if (c === "'" || c === '"' || (c === '$' && cmd[i + 1] === "'") || opens(cmd, i) || ('<>'.includes(c) && cmd[i + 1] === '(')) {
+      const e = c === "'" ? single(cmd, i, ctx) : c === '"' ? double(cmd, i, out, ctx)
+        : cmd[i + 1] === "'" ? ansi(cmd, i, ctx) : expansion(cmd, i, out, ctx, false);
+      add(cmd.slice(i, e));
+      i = e;
     } else if (c === '\\') {
-      if (cmd[i + 1] !== '\n') word = (word || '') + cmd.slice(i, i + 2);
+      if (cmd[i + 1] !== '\n') add(cmd.slice(i, i + 2));
       i += 2;
     } else if (c === '#' && word === null) {
       while (i < cmd.length && cmd[i] !== '\n') i++;
@@ -341,66 +332,159 @@ function commands(cmd) {
         if (cmd[k] === "'" || cmd[k] === '"') { const q = cmd.indexOf(cmd[k], k + 1); k = q < 0 ? cmd.length : q + 1; }
         else k += cmd[k] === '\\' ? 2 : 1;
       }
-      heredocs.push({ end: cmd.slice(j, k).replace(/['"\\]/g, ''), dash });
-      ws.push('<<' + (dash ? '-' : '') + cmd.slice(j, k));
+      const delim = cmd.slice(j, k);
+      ctx.heredocs.push({ end: delim.replace(/['"\\]/g, ''), dash, quoted: /['"\\]/.test(delim) });
+      ws.push('<<' + (dash ? '-' : '') + delim);
       i = k;
-    } else if (c === '`' || ('$<>'.includes(c) && cmd[i + 1] === '(')) {
-      const sub = substitution(cmd, i);
-      if (sub) { out.push({ scope: commands(sub.inner) }); word = (word || '') + cmd.slice(i, sub.end); i = sub.end; }
-      else { word = (word || '') + c; i++; }
     } else if (c === '\n') {
-      endCmd(i);
-      i++;
-      while (heredocs.length) {
-        const { end, dash } = heredocs.shift();
-        const scope = [];
-        while (i < cmd.length) {
-          let e = cmd.indexOf('\n', i);
-          if (e < 0) e = cmd.length;
-          const line = cmd.slice(i, e);
-          i = e + 1;
-          if ((dash ? line.replace(/^\t+/, '') : line) === end) break;
-          scope.push(...commands(line));
-        }
-        out.push({ scope });
-      }
+      endWord();
+      push(i);
+      i = bodies(cmd, i + 1, ctx, out);
       start = i;
+    } else if (c === '(' || c === ')') {
+      endWord();
+      const top = cases[cases.length - 1];
+      if (top && top.pattern) {
+        if (c === ')' && !top.nest) { Object.assign(top, { pattern: false, opener: false }); ws = []; start = i + 1; }
+        else if (c === '(' && !ws.length && !top.opener) top.opener = true;
+        else top.nest += c === '(' ? 1 : -1;
+      } else if (!top) {
+        if (c === '(') depth++;
+        else if (depth) depth--;
+        else if (sub) { push(i); return { out, end: i + 1 }; }
+      }
+      i++;
     } else if (c === '&' && ((word !== null && /[<>]$/.test(word)) || cmd[i + 1] === '>')) {
-      word = (word || '') + c;
+      add(c);
       i++;
     } else if (c === '|' || c === '&' || c === ';') {
-      endCmd(i);
-      i += cmd[i + 1] === c || (c === '|' && cmd[i + 1] === '&') ? 2 : 1;
+      endWord();
+      const top = cases[cases.length - 1];
+      if (c === '|' && top && top.pattern) { i++; continue; }
+      push(i);
+      const n = c === ';' && cmd[i + 1] === ';' && cmd[i + 2] === '&' ? 3
+        : cmd[i + 1] === c || (c === '|' && cmd[i + 1] === '&') || (c === ';' && cmd[i + 1] === '&') ? 2 : 1;
+      if (top && c === ';' && n > 1) Object.assign(top, { pattern: true, opener: false, nest: 0 });
+      i += n;
       start = i;
     } else if (c === ' ' || c === '\t') {
       endWord();
       i++;
     } else {
-      word = (word || '') + c;
+      add(c);
       i++;
     }
   }
-  endCmd(cmd.length);
-  return out;
+  endWord();
+  push(cmd.length);
+  return { out, end: -1 };
+}
+/* The bodies of the heredocs waiting for this line to end, read from `i`.
+   Each line is read as a command, since a body can be a script (bash
+   <<EOF). Unless its delimiter is quoted, a body is also text the way a
+   double-quoted string is: what it substitutes runs, and an apostrophe in
+   it is a letter (`it's $(cat x)` runs cat). */
+function bodies(cmd, i, ctx, out) {
+  while (ctx.heredocs.length) {
+    const { end, dash, quoted } = ctx.heredocs.shift();
+    const scope = [], lines = [];
+    while (i < cmd.length) {
+      let e = cmd.indexOf('\n', i);
+      if (e < 0) e = cmd.length;
+      const line = cmd.slice(i, e);
+      i = e + 1;
+      if ((dash ? line.replace(/^\t+/, '') : line) === end) break;
+      scope.push(...read(line, 0, false, { unclosed: false, heredocs: [] }).out);
+      lines.push(line);
+    }
+    if (!quoted) {
+      const text = lines.join('\n'), inner = { unclosed: false, heredocs: [] };
+      for (let j = 0; j < text.length; ) j = text[j] === '\\' ? j + 2 : opens(text, j) ? expansion(text, j, scope, inner, true) : j + 1;
+      if (inner.unclosed) ctx.unclosed = true;
+    }
+    out.push({ scope });
+  }
+  return i;
+}
+/* Each of these takes the index where a quote or an expansion opens and
+   returns the index past its close, or cmd's length, marking ctx, if it
+   never closes. A substitution met on the way is read, and added to `out`
+   as a scope. */
+const opens = (cmd, j) => cmd[j] === '`' || (cmd[j] === '$' && (cmd[j + 1] === '(' || cmd[j + 1] === '{'));
+function unclosed(cmd, ctx) {
+  ctx.unclosed = true;
+  return cmd.length;
+}
+function single(cmd, at, ctx) {
+  const q = cmd.indexOf("'", at + 1);
+  return q < 0 ? unclosed(cmd, ctx) : q + 1;
+}
+/* $'…', in which \' is a quote, not the close. */
+function ansi(cmd, at, ctx) {
+  for (let j = at + 2; j < cmd.length; j++) {
+    if (cmd[j] === '\\') j++;
+    else if (cmd[j] === "'") return j + 1;
+  }
+  return unclosed(cmd, ctx);
+}
+function double(cmd, at, out, ctx) {
+  for (let j = at + 1; j < cmd.length; ) {
+    if (cmd[j] === '"') return j + 1;
+    j = cmd[j] === '\\' ? j + 2 : opens(cmd, j) ? expansion(cmd, j, out, ctx, true) : j + 1;
+  }
+  return unclosed(cmd, ctx);
+}
+/* $( … ), <( … ), >( … ), ` … ` or ${ … }. In ${ … } only a ${ nests, and a
+   } inside quotes or another expansion closes nothing; `quoted` is whether
+   it stands in double quotes, where $'…' is not a quote. Inside backquotes,
+   \` \$ and \\ are the characters themselves: `echo \`cat x\`` runs cat. */
+function expansion(cmd, at, out, ctx, quoted) {
+  if (cmd[at] === '$' && cmd[at + 1] === '{') {
+    for (let j = at + 2; j < cmd.length; ) {
+      const c = cmd[j];
+      if (c === '}') return j + 1;
+      if (c === '\\') j += 2;
+      else if (c === '$' && cmd[j + 1] === "'" && !quoted) j = ansi(cmd, j, ctx);
+      else if (c === "'") j = single(cmd, j, ctx);
+      else if (c === '"') j = double(cmd, j, out, ctx);
+      else j = opens(cmd, j) ? expansion(cmd, j, out, ctx, quoted) : j + 1;
+    }
+    return unclosed(cmd, ctx);
+  }
+  if (cmd[at] === '`') {
+    let j = at + 1;
+    while (j < cmd.length && cmd[j] !== '`') j += cmd[j] === '\\' ? 2 : 1;
+    const inner = { unclosed: false, heredocs: [] };
+    out.push({ scope: read(cmd.slice(at + 1, j).replace(/\\([\\`$])/g, '$1'), 0, false, inner).out });
+    if (inner.unclosed) ctx.unclosed = true;
+    return j < cmd.length ? j + 1 : unclosed(cmd, ctx);
+  }
+  const r = read(cmd, at + 2, true, ctx);
+  out.push({ scope: r.out });
+  return r.end < 0 ? unclosed(cmd, ctx) : r.end;
 }
 /* The program a command runs, past whatever only opens or wraps it:
    - env assignments;
    - the shell's words that open a command (! then do else elif if while
      until), and a ( or { on its own or written against the word it opens;
    - the commands that run the next word as the program, with their options
-     and, for timeout, its duration.
-   A loop body (`do cat x`), a branch (`then head x`), a subshell (`(cat x)`)
-   or `timeout 5 cat x` named its opener or wrapper as the program, and no
-   rule read the command. Each letter listed after a wrapper is an option
-   that takes the next word as its argument. */
+     and, for timeout, its duration;
+   - redirections, and a redirection's target written apart from it.
+   A loop body (`do cat x`), a branch (`then head x`), a subshell (`(cat x)`),
+   `timeout 5 cat x` or `2>/dev/null cat x` named its opener, wrapper or
+   redirection as the program, and no rule read the command. Each letter
+   listed after a wrapper is an option that takes the next word as its
+   argument. Each word is read with its quotes and backslashes removed, as
+   the shell runs it: `\grep` (past an alias) and "cat" are grep and cat. */
 const OPENERS = new Set(['!', 'then', 'do', 'else', 'elif', 'if', 'while', 'until']);
 const WRAPPERS = { sudo: 'ugCDhpUrt', command: '', builtin: '', exec: 'a', env: 'uCS', nohup: '', time: '',
   nice: 'n', ionice: 'cnp', stdbuf: 'ioe', timeout: 'sk', xargs: 'InPLsdEa' };
 function program(ws) {
   let i = 0;
   while (i < ws.length) {
-    const w = ws[i].replace(/^[({]+/, '');
+    const w = ws[i].replace(/\$(?=['"])/g, '').replace(/['"\\]/g, '').replace(/^[({]+/, '');
     if (!w || OPENERS.has(w) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) { i++; continue; }
+    if (/^(?:\d*[<>]|&>)/.test(w)) { i += /^(?:\d*[<>]+|&>>?)&?$/.test(w) ? 2 : 1; continue; }
     if (!Object.prototype.hasOwnProperty.call(WRAPPERS, w)) return { name: path.basename(w), rest: ws.slice(i + 1) };
     i++;
     while (i < ws.length && ws[i].startsWith('-') && ws[i] !== '-') {
@@ -416,9 +500,12 @@ function program(ws) {
 /* Every rule reads the commands as the shell runs them. All but the search
    rule also read the old split, so nothing it refused is let through. The
    search rule does not: on the old split a quoted | leaves a pattern with no
-   directory, and the search is judged as one from ".". */
+   directory, and the search is judged as one from ".". Unless a quote or an
+   expansion never closed: bash refuses such a line, or the reading missed
+   how bash closes it, so the old split judges the searches too. */
 function inspectBash(cmd, root, cwd) {
-  return judge(commands(cmd), true, cwd) || judge(split(cmd), false, cwd);
+  const list = commands(cmd);
+  return judge(list, true, cwd) || judge(split(cmd), list.unclosed, cwd);
   function judge(list, searches, cwd) {
     for (const item of list) {
       /* A substitution or a heredoc's body is judged where it stands, and a
