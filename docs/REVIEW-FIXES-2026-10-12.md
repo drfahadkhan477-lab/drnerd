@@ -64,3 +64,23 @@ normal runner passes the assembled source, synthetic URL-only runs regenerate
 the independent fixture, and other URL-only runs require a source before
 claiming completeness. Regressions reject a shortened bank with a matching
 shortened manifest and check the runner's source wiring.
+
+## Pending branch integration — 2026-10-13
+
+PR #245's process lessons are already on master. PR #241 is integrated on a
+separate branch to preserve the fresh setup: its deleted Claude hook and test
+stay deleted, while the licensing guard, CSP checks and supported Node versions
+are retained. Node 22 is the minimum; local defaults and CI select Node 24.
+
+The licensing guard detects renamed BMP, TIFF, AVIF/HEIC and SVG files. It reads
+the complete bounded SVG text and scans doctypes without regex backtracking,
+honoring quoted brackets and comments. Namespace-prefixed SVG roots are checked
+against their namespace declaration. These last two cases address the remaining
+SVG review findings on #241. CSP source checks inspect every srcset and preload
+candidate, with a regression for an external second candidate.
+
+Focused validation on Node 24.19: licensing regressions 99 passed; CSP 26 passed
+in Chromium and 26 in WebKit. The earlier measured private family records remain
+historical results of their recorded commits; these selected checks do not
+replace them or claim a new full private run. Physical iPad acceptance and live
+model execution remain unmeasured. Old scratch branches are retained for diagnosis.
