@@ -246,11 +246,97 @@ function inlineCode(name, rest, seg) {
   return true;
 }
 
-function segments(cmd) {
-  return cmd.split(/\|\||&&|[|;\n&]/).map(s => s.trim()).filter(Boolean);
-}
+/* ── Reading a command line (all of rule 2) ───────────────────────────────
+   Two readings, each a list of simple commands as their words (raw, quotes
+   kept, which is what the rules unquote) and their text.
+
+   split() is the old one: every |, ;, & and newline splits, quoted or not.
+   It cuts `grep -c 'a|b' content/q.json` ahead of its file, so the file
+   lands in a fragment no rule reads, and it cuts `grep -rn "a\|b" scripts`
+   ahead of its directory. But it also splits quoted text the shell runs as
+   code (`bash -c "make; cat content/q.json"`, eval '…'), which is why
+   inspectBash still reads it.
+
+   commands() reads quotes the way the shell does, so an operator inside
+   them is text. A word starting with # comments out the rest of its line,
+   a backslash-newline joins two lines, and the & in 2>&1 or &>file belongs
+   to its redirection. A heredoc's body is read a line at a time, so an
+   apostrophe in its prose opens nothing past that line. */
 function words(seg) {
   return (seg.match(/'[^']*'|"[^"]*"|\S+/g) || []);
+}
+function split(text) {
+  return text.split(/\|\||&&|[|;\n&]/).map(t => t.trim()).filter(Boolean).map(t => ({ words: words(t), text: t }));
+}
+function commands(cmd) {
+  const out = [], heredocs = [];
+  let ws = [], word = null, start = 0, i = 0;
+  const endWord = () => { if (word !== null) { ws.push(word); word = null; } };
+  const endCmd = end => {
+    endWord();
+    if (ws.length) out.push({ words: ws, text: cmd.slice(start, end).trim() });
+    ws = [];
+  };
+  while (i < cmd.length) {
+    const c = cmd[i];
+    if (c === "'" || c === '"') {
+      let j = i + 1;
+      while (j < cmd.length && cmd[j] !== c) j += c === '"' && cmd[j] === '\\' ? 2 : 1;
+      word = (word || '') + cmd.slice(i, j + 1);
+      i = j + 1;
+    } else if (c === '\\') {
+      if (cmd[i + 1] !== '\n') word = (word || '') + cmd.slice(i, i + 2);
+      i += 2;
+    } else if (c === '#' && word === null) {
+      while (i < cmd.length && cmd[i] !== '\n') i++;
+    } else if (c === '<' && cmd[i + 1] === '<' && cmd[i + 2] !== '<') {
+      /* A heredoc. Its delimiter is the next word, quotes removed; the body
+         starts on the line after this one. */
+      endWord();
+      let j = i + 2;
+      const dash = cmd[j] === '-';
+      if (dash) j++;
+      while (cmd[j] === ' ' || cmd[j] === '\t') j++;
+      let k = j;
+      while (k < cmd.length && !/[\s;|&<>()]/.test(cmd[k])) {
+        if (cmd[k] === "'" || cmd[k] === '"') { const q = cmd.indexOf(cmd[k], k + 1); k = q < 0 ? cmd.length : q + 1; }
+        else k += cmd[k] === '\\' ? 2 : 1;
+      }
+      heredocs.push({ end: cmd.slice(j, k).replace(/['"\\]/g, ''), dash });
+      ws.push('<<' + (dash ? '-' : '') + cmd.slice(j, k));
+      i = k;
+    } else if (c === '\n') {
+      endCmd(i);
+      i++;
+      while (heredocs.length) {
+        const { end, dash } = heredocs.shift();
+        while (i < cmd.length) {
+          let e = cmd.indexOf('\n', i);
+          if (e < 0) e = cmd.length;
+          const line = cmd.slice(i, e);
+          i = e + 1;
+          if ((dash ? line.replace(/^\t+/, '') : line) === end) break;
+          out.push(...commands(line));
+        }
+      }
+      start = i;
+    } else if (c === '&' && ((word !== null && /[<>]$/.test(word)) || cmd[i + 1] === '>')) {
+      word = (word || '') + c;
+      i++;
+    } else if (c === '|' || c === '&' || c === ';') {
+      endCmd(i);
+      i += cmd[i + 1] === c || (c === '|' && cmd[i + 1] === '&') ? 2 : 1;
+      start = i;
+    } else if (c === ' ' || c === '\t') {
+      endWord();
+      i++;
+    } else {
+      word = (word || '') + c;
+      i++;
+    }
+  }
+  endCmd(cmd.length);
+  return out;
 }
 /* The program a segment runs, past env assignments and sudo/command/xargs. */
 function program(ws) {
@@ -259,44 +345,49 @@ function program(ws) {
   return { name: path.basename(ws[i] || ''), rest: ws.slice(i + 1) };
 }
 
+/* Every rule reads the commands as the shell runs them. All but the search
+   rule also read the old split, so nothing it refused is let through. The
+   search rule does not: on the old split a quoted | leaves a pattern with no
+   directory, and the search is judged as one from ".". */
 function inspectBash(cmd, root, cwd) {
-  for (const seg of segments(cmd)) {
-    const ws = words(seg);
-    const { name, rest } = program(ws);
-    /* `cd tests && cat ../dist/x` — later segments resolve from where cd went. */
-    if (name === 'cd') { cwd = path.resolve(cwd, (rest[0] || root).replace(/^['"]|['"]$/g, '')); continue; }
-    if (READERS.has(name)) {
-      /* grep's first operand is a pattern and sed's a script, not a file:
-         `grep -n build scripts/build.js` reads no build/. Unless the pattern
-         came by -e/-f, the first non-option word is skipped for these. */
-      let skip = PATTERNED.has(name) && !rest.some(w => /^-[a-zA-Z]*[ef]$/.test(w));
-      for (const w of rest) {
-        if (skip && !w.startsWith('-')) { skip = false; continue; }
-        const hit = wordHits(w, root, cwd); if (hit) return { rule: 'read', hit };
+  return judge(commands(cmd), true, cwd) || judge(split(cmd), false, cwd);
+  function judge(list, searches, cwd) {
+    for (const { words: ws, text: seg } of list) {
+      const { name, rest } = program(ws);
+      /* `cd tests && cat ../dist/x` — later segments resolve from where cd went. */
+      if (name === 'cd') { cwd = path.resolve(cwd, (rest[0] || root).replace(/^['"]|['"]$/g, '')); continue; }
+      if (READERS.has(name)) {
+        /* grep's first operand is a pattern and sed's a script, not a file:
+           `grep -n build scripts/build.js` reads no build/. Unless the pattern
+           came by -e/-f, the first non-option word is skipped for these. */
+        let skip = PATTERNED.has(name) && !rest.some(w => /^-[a-zA-Z]*[ef]$/.test(w));
+        for (const w of rest) {
+          if (skip && !w.startsWith('-')) { skip = false; continue; }
+          const hit = wordHits(w, root, cwd); if (hit) return { rule: 'read', hit };
+        }
       }
+      /* `cat <content/x`, `while read l; do …; done < build/x`: an input
+         redirection reads its file whatever the program is. */
+      for (let i = 0; i < ws.length; i++) {
+        const m = unquote(ws[i]).match(/^\d*<(?![<(])&?(.*)$/);
+        if (!m) continue;
+        const hit = wordHits(m[1] || ws[i + 1] || '', root, cwd); if (hit) return { rule: 'read', hit };
+      }
+      const iname = /^python[0-9.]*$/.test(name) ? 'python' : name === 'nodejs' ? 'node' : name;
+      if (INLINE.has(iname) && inlineCode(iname, rest, seg)) {
+        /* Inline code: any protected path anywhere in the WHOLE command, quoted
+           or not. Whole, because a heredoc body sits on lines after this
+           command and a piped-in program in a command before it. */
+        for (const m of cmd.matchAll(INLINE_PATH)) { const hit = protectedRel(m[1]); if (hit) return { rule: 'read', hit }; }
+      }
+      if (searches && GREP_ARG_SHORT[name]) { const r = inspectSearch(name, rest, root, cwd); if (r) return r; }
+      if (name === 'git' && rest.includes('grep') &&
+          ((rest.includes('--no-index') && !rest.includes('--exclude-standard')) || rest.includes('--no-exclude-standard')))
+        return { rule: 'recursive', hit: PROTECTED.join(', '), from: 'git grep over ignored files' };
+      if (name === 'git' && rest.includes('commit')) return { rule: 'commit' };
     }
-    /* `cat <content/x`, `while read l; do …; done < build/x`: an input
-       redirection reads its file whatever the program is. */
-    for (let i = 0; i < ws.length; i++) {
-      const m = unquote(ws[i]).match(/^\d*<(?![<(])&?(.*)$/);
-      if (!m) continue;
-      const hit = wordHits(m[1] || ws[i + 1] || '', root, cwd); if (hit) return { rule: 'read', hit };
-    }
-    const iname = /^python[0-9.]*$/.test(name) ? 'python' : name === 'nodejs' ? 'node' : name;
-    if (INLINE.has(iname) && inlineCode(iname, rest, seg)) {
-      /* Inline code: any protected path anywhere in the WHOLE command, quoted
-         or not. Whole, because a heredoc body sits on lines after this
-         segment, a piped-in program in a segment before it, and `||` inside
-         the quoted code splits it across segments. */
-      for (const m of cmd.matchAll(INLINE_PATH)) { const hit = protectedRel(m[1]); if (hit) return { rule: 'read', hit }; }
-    }
-    if (GREP_ARG_SHORT[name]) { const r = inspectSearch(name, rest, root, cwd); if (r) return r; }
-    if (name === 'git' && rest.includes('grep') &&
-        ((rest.includes('--no-index') && !rest.includes('--exclude-standard')) || rest.includes('--no-exclude-standard')))
-      return { rule: 'recursive', hit: PROTECTED.join(', '), from: 'git grep over ignored files' };
-    if (name === 'git' && rest.includes('commit')) return { rule: 'commit' };
+    return null;
   }
-  return null;
 }
 
 function leakGuard(root) {

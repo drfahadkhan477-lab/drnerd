@@ -185,6 +185,59 @@ head('a recursive search: judged by what it reaches, not what it names');
   fs.rmSync(repo, { recursive: true, force: true });
 }
 
+head('a command line is read as the shell reads it: quotes, comments, heredocs');
+{
+  /* The guard split a line on every |, ; and & before reading its words,
+     quoted or not. A quoted operator in an earlier argument then cut the
+     file off into a fragment no rule read: each of the first three was let
+     through. */
+  const quoted = [
+    `grep -c 'a|b' content/questions.json`,
+    'cat "a;b" build/systole.html',
+    'grep -n "x&y" dist/app.js',
+  ];
+  const rq = quoted.filter(c => !blocks(c));
+  ok('a file after a quoted |, ; or & is still a file the command reads', rq.length === 0, rq.join(' | ') || `${quoted.length} refused`);
+  /* The other side of the same split: the search below lost its directory
+     to it and was judged as one from ".". */
+  const kept = [
+    'grep -rn "a\\|b" scripts',
+    `grep -c 'build|dist' package.json`,
+    'grep -rn stem \\\n  scripts',
+    'grep -rn stem 2>&1 scripts',
+    `cat > /tmp/note.md <<'EOF'\nit's here\nEOF\necho done`,
+  ];
+  const k = kept.filter(c => bash(c));
+  ok("while a quoted operator, a line continued with \\, 2>&1, or an apostrophe in a heredoc moves nothing",
+     k.length === 0, k.join(' | ') || `${kept.length} allowed`);
+  /* Reading quotes the shell's way must not let an apostrophe the shell does
+     not read as a quote swallow the next command: one in a comment, or in a
+     heredoc's prose. Searches, because only the shell's reading judges
+     them; a plain read is caught by the old split as well (below). */
+  const swallowed = [
+    `echo hi # it's\ngrep -rn stem .  # it's`,
+    `cat > /tmp/a.md <<'EOF'\nit's\nEOF\ngrep -rn stem .\ncat > /tmp/b.md <<'EOF'\nthat's\nEOF`,
+    `bash <<'EOF'\ngrep -rn stem .\nEOF`,
+    'grep -rn stem \\\n  .',
+  ];
+  const rs = swallowed.filter(c => !blocks(c));
+  ok('and an apostrophe in a comment or a heredoc hides no command after it, nor does a heredoc body', rs.length === 0, rs.join(' | ') || `${swallowed.length} refused`);
+  /* NEVER WEAKER THAN THE OLD SPLIT. Quoted text is sometimes code the
+     shell runs, and the old split, cutting inside the quotes, judged the
+     commands in it. Read the shell's way alone, each of these is one
+     command, bash or eval, that no rule reads; so the reading rules read
+     the old split too. */
+  const code = [
+    'bash -c "make; cat content/questions.json"',
+    `sh -c 'true | head build/systole.html'`,
+    `eval 'x=1; tail dist/app.js'`,
+    'timeout 5 bash -c "sleep 1 && cat content/q.json"',
+    `cat 'x content/questions.json`,
+  ];
+  const rc = code.filter(c => !blocks(c));
+  ok('while quoted text run as code (bash -c, sh -c, eval) is still split and read', rc.length === 0, rc.join(' | ') || `${code.length} refused`);
+}
+
 head('a commit: refused while leak-guard refuses what is staged');
 {
   /* The real leak-guard, in a throwaway repository, so this one's index is
