@@ -87,9 +87,9 @@ const LADDER = [9, 11, 13, 16, 19, 23, 28, 33, 40, 48, 58];
     await page.evaluate(() => startQuiz(null));
     /* WAS a fixed 900ms sleep. startQuiz sets S.screen='quiz' and calls
        render(), which on a screen change hands the DOM swap to
-       startViewTransition — the same async gap CLAUDE.md names as having
-       caused four separate suite races (this is a fifth, in a different
-       shape: a SLEEP standing in for the render, not a state read outrunning
+       startViewTransition — the same async gap AGENTS.md names as a cause
+       of suite races again and again (this one in a different shape: a
+       SLEEP standing in for the render, not a state read outrunning
        it). 900ms was enough on whatever this was authored against and not
        enough on a slower shared vCPU, so it read '.q-card' before the card
        existed and reported the honest result of that: fs2 === null,

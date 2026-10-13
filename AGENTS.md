@@ -50,10 +50,48 @@ does not disable the app's requests or replace the real parsers and OCR engine.
 For public build checks, use `scripts/synthetic-export.js` with the assembler;
 see `docs/BUILD.md`. Keep isolated test builds from overwriting private output.
 
+## Checks and records
+
+The code's comments cite these rules; each was broken at least once.
+
+- **A check you have not seen fail is a check you have not written.** This
+  project's recurring bug is a check that passes without measuring anything.
+  It has come in these disguises: `ok(label, true)`; a skipped step counted as
+  a pass; a timeout in the wrong argument of `waitForFunction(fn, arg,
+  options)`; a scan of a field the data does not have; a probe compared against
+  `undefined`, which a probe that never ran also returns; a fixer with the same
+  blind spot as the lint it fixes; a test whose input a later build step
+  rewrites. For every new or changed check, inject the defect it claims to
+  catch, watch that check's own `FAIL` line, restore, and put the evidence in
+  the commit or PR.
+- **When a check stays green, narrow its comment.** Never widen the test to fit
+  the prose. Never move a threshold, timeout or expected count to turn a suite
+  green.
+- **Prose follows the record.** `tests/test-stats.json` is written only by full
+  green runs (`scripts/record.js`), never by hand. `tests/verify-stats.js`
+  checks the counts quoted in `README.md`, `docs/BUILD.md` and
+  `.github/workflows/verify.yml` against it, so a checked number that disagrees
+  with reality is correct until the next full run. If you write a sentence
+  containing a number, guard it or do not write it: a guard with a hole in it
+  is worse than no guard, because the green around an unguarded sentence reads
+  as coverage of it. `PENDING_RECORD` and `RETIRED_RECORD` in
+  `scripts/verify.js` list suites added or deleted since the record was written.
+- **Scan this repository's own source through `tests/_source.js`**, which
+  blanks comments and keeps positions and lines. The comments quote the
+  patterns being hunted, so a scan that reads them reports the warning as the
+  bug.
+- **Wait with `tests/_render.js`.** A wait is a precondition, never the
+  proposition under test. `render()` swaps the DOM inside an async
+  `startViewTransition` callback, a gap that has caused suite races again and
+  again.
+
 ## Boundaries
 
 - Never print, commit, upload, or recreate licensed question text or figures.
-  Keep `source/`, `content/`, `build/`, and `dist/` out of Git.
+  Build from the export; never read it as a document. Keep `source/`,
+  `content/` (with `content/refs-repo`), `build/`, and `dist/` out of Git.
+- Suite output, CI logs and `tests/last-run.log` can quote question text: tail
+  their result lines and look for `FAIL`; never paste them whole.
 - Preserve `scripts/leak-guard.js`, Git hooks, provenance, schema validation,
   atomic storage/restore behavior, service-worker guards, and their tests.
 - Keep credentials out of client source, fixtures, logs, and commits.

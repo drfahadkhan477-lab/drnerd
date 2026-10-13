@@ -303,7 +303,7 @@ const ALLOW = [
    never opened — but they are still held to the path rules. They used to be
    skipped outright, because content/refs-repo was a sanctioned submodule of
    the owner's private notes. That repository is gone and the exception with
-   it (CLAUDE.md), so a pointer under content/, source/, build/ or dist/ is
+   it (AGENTS.md), so a pointer under content/, source/, build/ or dist/ is
    refused like a file there: it would link a licensed corpus from this public
    repository. Collected here, checked by path only below. */
 const gitlinks = [];

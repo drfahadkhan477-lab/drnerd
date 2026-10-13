@@ -231,7 +231,7 @@ async function resized(page, width, height, opts = {}) {
    and so measured nothing. They held on file:// only because the work they
    "waited" for usually finished first; served over http, as WebKit runs it,
    one did not, and the next line read null and killed the suite 441 checks
-   in. It is the same disguise CLAUDE.md lists, a check that passes without
+   in. It is the same disguise AGENTS.md lists, a check that passes without
    measuring, arriving through a wait.
 
    resolved() polls page.evaluate, which does await, until the answer is

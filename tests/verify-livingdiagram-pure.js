@@ -91,7 +91,7 @@ head('eligible: three reasons to refuse the home screen anyway');
      L.eligible('home', { focusMode: true }) === false);
   ok('reduced motion refuses it outright, not at a lower intensity',
      L.eligible('home', { reducedMotion: true }) === false);
-  /* NON-VACUITY, the shape CLAUDE.md names three times over: a guard that
+  /* NON-VACUITY, the first shape AGENTS.md warns about: a guard that
      refuses everything would pass every check above by accident. Confirm
      the "clean" case actually differs from the refused ones. */
   ok('and a clean home screen is not accidentally refused too',

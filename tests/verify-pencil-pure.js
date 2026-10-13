@@ -169,7 +169,7 @@ head('tiltFactor: the result is a fraction, never something a canvas cannot use'
    not fire and actually fire — not just that arming and cancelling one
    doesn't throw, which a literal `true` would have "proven" just as well.
    That was this suite's own first draft, and tests/verify-stats.js caught
-   it: `ok(label, true)` is the exact failure mode CLAUDE.md opens with. */
+   it: `ok(label, true)` is the first disguise AGENTS.md lists. */
 (async () => {
 head('armAutoMinimize: a plain, cancellable countdown, nothing more');
 {

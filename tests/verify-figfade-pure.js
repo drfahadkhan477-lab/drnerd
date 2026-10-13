@@ -157,7 +157,7 @@ head('and a figure that FAILS is revealed too — the regression');
 
 head('the css agrees: hiding is opt-in, so nothing can get stuck in it');
 {
-  /* BLANKED, AND THIS SUITE LEARNED WHY THE HARD WAY. The rule in CLAUDE.md
+  /* BLANKED, AND THIS SUITE LEARNED WHY THE HARD WAY. The rule in AGENTS.md
      is that any scan of this repository's own source reads the blanked copy,
      because the files explain themselves at length and the explanations quote
      the very patterns being hunted. The first draft of the sweep below

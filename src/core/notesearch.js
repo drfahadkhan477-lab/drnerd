@@ -9,7 +9,7 @@
    typing "sotalol" into the question search and getting "0 matches".
 
    The question search could not simply learn to show notes: its code lives in
-   the licensed export, which this repository does not read (CLAUDE.md), and no
+   the licensed export, which this repository does not read (AGENTS.md), and no
    earlier step had ever anchored into it. So the notes get a search of their
    own — a screen built entirely from what the chain already provides: the
    app's own search() index, which already holds every note as kind 'r', and

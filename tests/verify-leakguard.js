@@ -13,7 +13,7 @@
  * gets switched off. So the last block runs the guard over every file git
  * actually tracks — it said 211 here while the number was 240 — and asserts it
  * refuses none. No count on purpose now: it moves with every file added, and
- * an unguarded number in a comment is the thing CLAUDE.md says not to write.
+ * an unguarded number in a comment is the thing AGENTS.md says not to write.
  * That is a check against reality rather than against fixtures, and it keeps
  * rule 4 honest: eight tracked source files contain `const ALL_Q=` on purpose,
  * being the patch scripts that search for it, and a marker-only rule would

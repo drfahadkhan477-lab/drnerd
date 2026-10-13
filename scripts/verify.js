@@ -108,7 +108,7 @@ const SUITES = [
   ['figfade-pure',  'a figure that fails to load still appears, rather than being silently blank'],
   /* Written because two patch headers quoted luminances and contrast ratios to
      justify every colour they picked, and nothing checked a single one of them
-     — the rule in CLAUDE.md that says guard a number or do not write it. */
+     — the rule in AGENTS.md that says guard a number or do not write it. */
   ['palette-pure',  'the contrast figures quoted in the palette patches are the figures those palettes produce'],
   /* Written because heroRhythm.js says in its own header that it is shaped
      this way — no DOM, no timers — so its rules can be called from a test

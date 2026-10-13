@@ -228,7 +228,7 @@ const CASES = [
     await visitAQuestion(p);
   }],
   /* render() swaps the DOM inside an async startViewTransition callback, which
-     CLAUDE.md records as the cause of four separate suite races. The app has a
+     AGENTS.md names as a cause of suite races again and again. The app has a
      documented fallback for browsers without it, so taking it away exercises
      the same screen change through plain DOM replacement. */
   ['a question and back, with startViewTransition removed at boot',
