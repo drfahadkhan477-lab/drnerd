@@ -1,10 +1,11 @@
 # Building Systole
 
-Two commands.
+Build the standalone app, then extract its content before verifying the split PWA.
 
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
-node scripts/verify.js --pwa                           # → 7090 + 134 checks
+node scripts/extract-content.js build/systole.html # refresh content for the split build
+node scripts/verify.js --pwa                           # → 7145 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -66,7 +67,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   ```
 
   Without it that one suite refuses with the install command and the other 151
-  run normally — it is 35 of the 7090 checks. The suite tries `python3`,
+  run normally — it is 35 of the 7145 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -249,7 +250,7 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 152 suites, 7090 checks, plus 134 more on the split build. Those numbers are
+Across 152 suites, 7145 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
@@ -372,11 +373,19 @@ did not establish a passing integrated Systole family. A complete Systole run
 with corrected scheduling was the remaining gate for that record.
 
 That complete Systole run at `8864490` passed all 126 suites and 4,823 checks.
-Both families now have qualifying integrated runs: Systole at `8864490` and
+At that point, both families had qualifying integrated runs: Systole at `8864490` and
 Memorizer at `348045d` (26 suites, 2,267 checks), for 152 recorded suites and
 7,090 checks. This combines two family runs; the earlier full-registry failure
-is retained in its structured report. The 134 split-build checks remain from
-their older measurement.
+is retained in its structured report. At that point, the split-build checks
+remained from their older measurement.
+
+A later complete private Chromium run on `master @ c4de36a` passed every
+registry suite with two workers and prepared reader libraries in offline
+mode. It refreshed both families from the same checkout. The split build
+initially refused stale extracted content; after refreshing the extraction,
+its browser, Worker and cache checks passed separately. The quick-start
+commands above now include that required extraction step. These desktop
+results do not measure physical iPad behavior or live model execution.
 
 Inspection also found the backup fixture could stop waiting after five seconds
 or an unrelated toast change, before the real asynchronous import finished.
