@@ -96,8 +96,29 @@ const figDir = path.join(DIST, 'content', 'refs-images');
 const figFiles = fs.existsSync(figDir) ? fs.readdirSync(figDir).filter(f => f.endsWith('.json')) : [];
 sizes['refs-images/'] = figFiles.reduce((n, f) => n + fs.statSync(path.join(figDir, f)).size, 0);
 const atRisk = sizes['refs-images/'] + sizes['refs-seed.json'];
-ok('the runtime-fetched content files are on disk to be protected',
-   atRisk > 1e6, `${(atRisk / 1048576).toFixed(1)} MB across ${figFiles.length} unit figure file(s) + refs-seed.json`);
+/* A SYNTHETIC BUILD IS HELD TO ITS OWN GENERATOR, not to the real library's
+   size. CI's split-build job makes dist/ from the invented bank, whose notes
+   carry a handful of tiny figures, so "more than a megabyte" would call them
+   missing when they are all there. Its questions.json carries the generator's
+   mark, as verify-pwa reads it; then every figure the independent generator
+   draws must be on disk in the unit files, beside a refs-seed.json that is not
+   empty. A build without the mark keeps the megabyte. */
+const SYN = require('../scripts/synthetic-export.js');
+const qFile = path.join(DIST, 'content', 'questions.json');
+if (fs.existsSync(qFile) && fs.readFileSync(qFile, 'utf8').includes(SYN.MARK)) {
+  const drawn = SYN.syntheticRefs().images.map(([key]) => key);
+  const onDisk = new Set();
+  for (const f of figFiles) for (const key of Object.keys(JSON.parse(fs.readFileSync(path.join(figDir, f), 'utf8')))) onDisk.add(key);
+  const missing = drawn.filter(key => !onDisk.has(key));
+  ok('the runtime-fetched content files are on disk to be protected',
+     drawn.length > 0 && missing.length === 0 && sizes['refs-seed.json'] > 0,
+     `synthetic bank: ${drawn.length - missing.length} of the generator's ${drawn.length} figures across ` +
+     `${figFiles.length} unit figure file(s), refs-seed.json ${sizes['refs-seed.json']} bytes` +
+     (missing.length ? `; missing ${missing.slice(0, 3).join(', ')}` : ''));
+} else {
+  ok('the runtime-fetched content files are on disk to be protected',
+     atRisk > 1e6, `${(atRisk / 1048576).toFixed(1)} MB across ${figFiles.length} unit figure file(s) + refs-seed.json`);
+}
 ok('and they are not named in PRECACHE, so they are fetched at runtime',
    !/PRECACHE[^\]]*refs-images/.test(sw),
    'they reach the cache through the fetch handler, which is why its routing decides their bucket');

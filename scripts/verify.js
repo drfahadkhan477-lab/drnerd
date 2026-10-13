@@ -551,6 +551,7 @@ if (flag('--help') || flag('-h')) {
   --report-json <file>   Write counts and timings without suite output
   --bail                Stop at the first failure
   --pwa                 Build, serve and verify the split build
+                        (with --only pwa, and no other suite)
   --list                List suites and their tags
   --help, -h            Show this help without starting verification
 `);
@@ -632,6 +633,17 @@ if (TARGET_IS_URL && flag('--pwa')) {
 }
 
 const only = list(opt('--only')), skip = list(opt('--skip'));
+/* --only pwa: THE SPLIT BUILD ALONE. pwa is not a registry suite; it is the
+   --pwa phase at the end of this file. CI's split-build job runs that phase
+   by itself, on a synthetic build, so a run that selects no registry suite is
+   allowed when it names pwa AND asks for --pwa. Named without --pwa it would
+   select nothing and run nothing, which is a usage error, so it is refused as
+   one. Such a run never writes the record: no family has all its suites run. */
+const PWA_ALONE = only.includes('pwa');
+if (PWA_ALONE && !flag('--pwa')) {
+  console.error('\n  --only pwa names the split build, which runs only with --pwa: add --pwa.\n');
+  process.exit(2);
+}
 /* --suite-timeout N: minutes any one suite may run before it is stopped; 0 for
    no limit. Without it each suite gets three times its recorded time, never
    under 20 minutes (scripts/suitetime.js). */
@@ -730,7 +742,7 @@ const chosen = SUITES
     return false;
   });
 
-if (!chosen.length) { console.error('No suites selected.'); process.exit(1); }
+if (!chosen.length && !PWA_ALONE) { console.error('No suites selected.'); process.exit(1); }
 
 /* Playwright is installed globally in this environment; the suites require it
    by bare name, so NODE_PATH has to point at the global root. Resolved once

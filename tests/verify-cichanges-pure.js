@@ -107,6 +107,21 @@ head('each list is held against the files the job it skips really runs');
   const reads = synFiles.filter(f => fs.existsSync(path.join(ROOT, f)))
     .filter(f => /['"`/](?:lab|memorizer)\/|join\([^)]*['"](?:lab|memorizer)['"]/.test(blankComments(fs.readFileSync(path.join(ROOT, f), 'utf8'))));
   ok('no file the synthetic job runs names lab/ or memorizer/', synFiles.length >= 30 && reads.length === 0, reads.join(', ') || `${synFiles.length} files read`);
+  /* split-build is skipped on the same answer. It names a few scripts, and the
+     last, verify.js --pwa, runs more: build-pwa, the static server and the
+     split build's suites. Those are read from verify.js's --pwa block, so a
+     phase added there is held here too. */
+  const v = fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8');
+  const pwaBlock = v.slice(v.indexOf("if (flag('--pwa')) {"));
+  const pwaFiles = [...pwaBlock.matchAll(/path\.join\(ROOT,\s*'(scripts|tests)',\s*'([a-z0-9_-]+\.js)'\)/g)].map(m => `${m[1]}/${m[2]}`);
+  const splitFiles = [...new Set(runs(jobBody('split-build')).concat(pwaFiles))];
+  ok('the split-build job’s files are found, with what verify.js --pwa runs',
+     splitFiles.includes('scripts/verify.js') && splitFiles.includes('tests/verify-pwa.js') && splitFiles.length >= 8, splitFiles.join(', '));
+  const splitSkipped = splitFiles.filter(f => !classify([f]).synthetic);
+  ok('and every one of them, changed alone, runs it', splitSkipped.length === 0, splitSkipped.join(', ') || 'none');
+  const splitReads = splitFiles.filter(f => fs.existsSync(path.join(ROOT, f)))
+    .filter(f => /['"`/](?:lab|memorizer)\/|join\([^)]*['"](?:lab|memorizer)['"]/.test(blankComments(fs.readFileSync(path.join(ROOT, f), 'utf8'))));
+  ok('and none of them names lab/ or memorizer/', splitReads.length === 0, splitReads.join(', ') || `${splitFiles.length} files read`);
 }
 
 head('the workflow is wired so a failed decision runs both');
@@ -119,7 +134,8 @@ head('the workflow is wired so a failed decision runs both');
      /memorizer:\s*\$\{\{\s*steps\.which\.outputs\.memorizer\s*\}\}/.test(ch) &&
      /synthetic:\s*\$\{\{\s*steps\.which\.outputs\.synthetic\s*\}\}/.test(ch) && /id:\s*which\b/.test(ch));
   for (const [name, body, key] of [['memorizer-browser', mem, 'memorizer'], ['synthetic-browser', syn, 'synthetic'],
-                                    ['synthetic-webkit', jobBody('synthetic-webkit'), 'synthetic']]) {
+                                    ['synthetic-webkit', jobBody('synthetic-webkit'), 'synthetic'],
+                                    ['split-build', jobBody('split-build'), 'synthetic']]) {
     const cond = (body.match(/\n    if:\s*(.+)/) || [])[1] || '';
     ok(`${name} is in the workflow`, body.length > 0);
     ok(`${name} waits for the decision`, /\n    needs:\s*\[?\s*changes\s*\]?\s*\n/.test(body));

@@ -240,7 +240,7 @@ went instead of leaving it to be guessed.
 
 | Where | What | When |
 |---|---|---|
-| GitHub, by itself | every suite that needs no export: the pure ones, the Memorizer in three browsers, and the app's own browser suites on an invented bank, in Chromium, and most of them again in WebKit, the iPad's engine (`synthetic-webkit`; the workflow names the ones left out and why) | on every pull request and every merge; nothing to do |
+| GitHub, by itself | every suite that needs no export: the pure ones, the Memorizer in three browsers, and the app's own browser suites on an invented bank, in Chromium, and most of them again in WebKit, the iPad's engine (`synthetic-webkit`; the workflow names the ones left out and why), and the split build made from that bank, served and checked in Chromium and WebKit (`split-build`; not in the totals below) | on every pull request and every merge; nothing to do |
 | Laptop, quick: `npm run test:laptop` | the suites tagged `laptop` (see `--list`): the ones no CI job runs, because they need your export | after a change to the app, in a few minutes |
 | Laptop, full: `npm run test:private` | the whole registry on your real build; the only run that writes `tests/test-stats.json` | before a release, or when the record should move |
 | iPad | Settings → Self-test, which checks the figure viewer and layout in the iPad's own Safari; and by hand, voice mode and the Lab's sounds | after installing a new version |
@@ -704,6 +704,20 @@ in the same run and agree with each other. `build-pwa.js` compares
 `content/manifest.json`'s `sourceDigest` against the file it is splitting and
 refuses the pair; `tests/verify-provenance-pure.js` holds it to that.
 
+CI runs it too, on a split build of the invented bank, in the `split-build`
+job (and `npm test` runs the same commands):
+
+```bash
+node scripts/extract-content.js build/synthetic/systole.html
+node scripts/verify.js build/synthetic/systole.html --pwa --only pwa
+```
+
+`--only pwa` runs the split build and no other suite. verify-pwa and
+verify-cachebuckets hold a synthetic build to the synthetic generator's own
+totals, so that run checks how the split build is made, served and kept
+offline, but not your bank: its count is not the record's, and only a run on
+your real build writes that.
+
 ---
 
 ## Repository shape
@@ -746,8 +760,8 @@ its green as "did not run".
 CI runs the honest subset because GitHub's runners cannot build the app from
 the real bank — the ACCSAP 12 export is licensed and is not in this
 repository nor in any secret GitHub holds. They build it around an invented
-one, which leaves the suites about the real bank itself, and the split build,
-running only when you remember to run them. Before the synthetic build that
+one, which leaves the suites about the real bank itself, and the split build
+made from it, running only when you remember to run them. Before the synthetic build that
 was every browser suite, which is why "CSP has never met the real app" was
 true for weeks.
 

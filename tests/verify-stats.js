@@ -219,6 +219,15 @@ head('CI runs what the workflow says it runs');
   const wrong = labels.filter(m => !PENDING.includes(m[3]) && stats.suites[m[3]] !== +m[2])
                       .map(m => `${m[3]}: says ${m[2]}, is ${stats.suites[m[3]]}`);
   ok('and each label is the count that suite reported', wrong.length === 0, wrong.join('; ') || 'none');
+  /* AND A COUNT NOWHERE ELSE. The labels above are the counts that sit right
+     over `run: node tests/verify-X.js`; a count on any other step would be
+     compared with nothing here and believed everywhere else. The split-build
+     job is the case in point: its checks run through verify.js --pwa on a
+     synthetic build, the record holds no count for that, so its steps carry
+     none. Every "(N checks)" in a step name must be one of the labels above. */
+  const counts = [...yml.matchAll(/^\s*(?:-\s+)?name:[^\n]*\(\d+\s+checks?\)/gm)];
+  ok('and no other step carries a count', counts.length === labels.length,
+     `${counts.length} counts in step names, ${labels.length} of them over a suite`);
 }
 
 head('the browser-free count is not every suite CI runs');
