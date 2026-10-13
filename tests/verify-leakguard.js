@@ -241,6 +241,8 @@ head('it refuses the licensed bank, by every route in');
       `<s:svg xmlns:s="${namespace}"/>`);
     ok('XML references in an SVG namespace cannot hide a renamed figure', r.code === 1 && /an SVG/.test(r.out));
   }
+  r = inTmp('assets/default-namespace.bin', '<!DOCTYPE s:svg [<!ATTLIST s:svg xmlns:s CDATA "http://www.w3.org/2000/svg">]><s:svg/>');
+  ok('a DTD-defaulted SVG namespace cannot hide a renamed figure', r.code === 1 && /an SVG/.test(r.out));
   /* However far in the root is: the whole text is read, not its first 4 KB
      (found by review, #241: a 5 KB comment hid the root). */
   r = inTmp('assets/diagram-3.bin', '<!-- ' + 'licence text '.repeat(500) + '-->\n<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>\n');

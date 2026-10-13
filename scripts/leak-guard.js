@@ -285,9 +285,12 @@ function isSvg(text) {
     pos = next + 1;
     // References can spell SVG's URI or depend on a DTD entity. Refuse them
     // conservatively; never expand a DTD or load external entities in a hook.
-    if (name === `xmlns:${root[1]}` && (value === 'http://www.w3.org/2000/svg' || value.includes('&'))) return true;
+    if (name === `xmlns:${root[1]}`) return value === 'http://www.w3.org/2000/svg' || value.includes('&');
   }
-  return false;
+  // A DTD can default the namespace declaration, including from an external
+  // subset. Without an explicit unrelated namespace, refuse this SVG-shaped
+  // root conservatively rather than resolve a DTD in a licensing hook.
+  return true;
 }
 
 /* Paths a person has decided are fine, with the reason. Nothing is here yet;
