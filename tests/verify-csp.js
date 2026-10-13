@@ -140,26 +140,59 @@ head('the allowlist covers every host the shipped app can reach');
      another host would be reported too, and would be refused as well.
      A srcset (or a preload's imagesrcset) is a list, and the browser may
      pick any candidate in it, a later one on a high-density iPad, so every
-     candidate is read. This read only the first (found by review, #240). */
+     candidate is read. This read only the first (found by review, #240).
+     A URL with no scheme, //host/…, takes the page's, which is https in
+     production, so it is judged as https://host/…; read only with an
+     explicit scheme, one in a srcset passed (found by review, #246). */
   const imgHosts = new Set(CSP.IMG.filter(s => s.startsWith('https://')).map(s => s.slice('https://'.length)));
   const refused = url => {
-    const m = url.match(/^(https?:)\/\/([a-z0-9.-]+)/i);
-    return !!m && (m[1].toLowerCase() === 'http:' || !imgHosts.has(m[2].toLowerCase()));
+    const m = url.match(/^(https?:)?\/\/([a-z0-9.-]+)/i);
+    return !!m && ((m[1] || '').toLowerCase() === 'http:' || !imgHosts.has(m[2].toLowerCase()));
   };
-  const IMG_AT = /(?:url\(\s*["']?|\b(?:src|poster)\s*=\s*["'`]?)(https?:\/\/[a-z0-9.-]+)/gi;
+  const IMG_AT = /(?:url\(\s*["']?|\b(?:src|poster)\s*=\s*["'`]?)((?:https?:)?\/\/[a-z0-9.-]+)/gi;
+  const URL_COLON_AT = /\burl\s*:((?:https?:)?\/\/[a-z0-9.-]+)/gi;
   const SRCSET = /\b(?:image)?srcset\s*=\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`|([^\s>]+))/gi;
   const pictureViolations = source => {
-    const text = blankComments(source), found = [];
-    for (const m of text.matchAll(IMG_AT)) if (refused(m[1])) found.push(m[0]);
+    const text = blankComments(source), found = new Map();
+    for (const m of text.matchAll(IMG_AT)) if (refused(m[1])) found.set(m.index, m[0]);
+    /* CSS has no // comments, but the blanker reads the // of an unquoted
+       url(//host/…) as one and blanks the rest of the line, and the shell
+       writes its url()s unquoted. A // straight after a colon is not a
+       comment to it (a URL's scheme), so that url( is written url: in its
+       place, the same length, and the text is blanked and read again. A //
+       comment that mentions such a url() still starts before it, and goes. */
+    const kept = blankComments(source.replace(/\burl\((\s*)(?=\/\/)/gi, (m, ws) => 'url' + ws + ':'));
+    for (const m of kept.matchAll(URL_COLON_AT))
+      if (!found.has(m.index) && refused(m[1])) found.set(m.index, source.slice(m.index, m.index + m[0].length));
     for (const m of text.matchAll(SRCSET))
       for (const candidate of (m[1] ?? m[2] ?? m[3] ?? m[4]).split(','))
-        if (refused(candidate.trim())) found.push(`srcset … ${candidate.trim()}`);
-    return found;
+        if (refused(candidate.trim())) found.set(`srcset ${m.index} ${candidate.trim()}`, `srcset … ${candidate.trim()}`);
+    return [...found.values()];
   };
   ok('later srcset and preload candidates are checked; local candidates remain allowed',
      pictureViolations('<img srcset="/local.png 1x, https://unlisted.invalid/image.png 2x">').length === 1 &&
      pictureViolations("<link imagesrcset='/local.png 1x, http://unlisted.invalid/image.png 2x'>").length === 1 &&
      pictureViolations('<img srcset="/local.png 1x, /large.png 2x">').length === 0);
+  {
+    /* Each place a picture is read from, with the host given scheme-relative;
+       and what stays allowed: a path that merely starts with one slash, and a
+       // comment in a script that only mentions such a URL. */
+    const cases = [
+      ['a later srcset candidate', '<img srcset="/local.png 1x, //unlisted.invalid/image.png 2x">', 1],
+      ['a src', '<img src="//unlisted.invalid/image.png">', 1],
+      ['a poster', '<video poster="//unlisted.invalid/still.png"></video>', 1],
+      ['a quoted url() in a <style>', '<style>.x { background: url("//unlisted.invalid/image.png") }</style>', 1],
+      ['an unquoted url() in a <style>', '<style>.x { background: url(//unlisted.invalid/image.png) }</style>', 1],
+      ['an unquoted url() in a style attribute', '<div style="background: url(//unlisted.invalid/image.png)"></div>', 1],
+      ['an unquoted url() in a stylesheet', '.x { background: url(//unlisted.invalid/image.png) }', 1],
+      ['a script .src =', "<script>img.src = '//unlisted.invalid/image.png';</script>", 1],
+      ['a local path', '<img src="/local.png" srcset="/large.png 2x">', 0],
+      ['a script comment', '<script>// was url(//unlisted.invalid/image.png)\nlet x = 1;</script>', 0],
+    ];
+    const missed = cases.filter(([, html, n]) => pictureViolations(html).length !== n).map(([what]) => what);
+    ok('a scheme-relative //host picture is judged as the page’s https: a srcset candidate, src, poster, url() or .src on another host is refused',
+       missed.length === 0, missed.join(', ') || `${cases.length} cases`);
+  }
   const offHost = SHELL_FILES.flatMap(f => pictureViolations(fs.readFileSync(f, 'utf8'))
     .map(violation => `${relPath(f)}: ${violation}`));
   ok('no picture in the shell or a stylesheet comes from a host img-src refuses',

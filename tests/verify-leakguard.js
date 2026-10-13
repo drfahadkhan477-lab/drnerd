@@ -289,12 +289,32 @@ head('it refuses the licensed bank, by every route in');
     return b;
   };
   const tiff = order => Buffer.concat([Buffer.from(order === 'II' ? [0x49, 0x49, 0x2A, 0x00, 8, 0, 0, 0] : [0x4D, 0x4D, 0x00, 0x2A, 0, 0, 0, 8]), Buffer.alloc(6)]);
+  /* An ftyp box from its brands, with none but those named: its size, the
+     major brand, a minor version of 0, the compatible brands. The size field
+     can be the box's length (the default), 0 (to the end of the file) or 1
+     (a 64-bit length after the type), and bytes can follow the box. The
+     fixture above lists mif1, itself a still-image brand, among the
+     compatible ones, so it cannot tell where the guard found its brand. */
+  const ftyp = (major, compatible, { sizeField, after } = {}) => {
+    const wide = sizeField === 1, head = wide ? 16 : 8;
+    const b = Buffer.alloc(head + 8 + 4 * compatible.length);
+    b.writeUInt32BE(sizeField === undefined ? b.length : sizeField, 0); b.write('ftyp', 4, 'latin1');
+    if (wide) b.writeBigUInt64BE(BigInt(b.length), 8);
+    b.write(major, head, 'latin1');
+    compatible.forEach((c, i) => b.write(c, head + 8 + 4 * i, 'latin1'));
+    return after ? Buffer.concat([b, after]) : b;
+  };
   for (const [what, rel, body, says] of [
     ['a BMP', 'assets/scan-2.bin', bmp, /a BMP/],
     ['a little-endian TIFF', 'assets/scan-4.dat', tiff('II'), /a TIFF/],
     ['a big-endian TIFF', 'assets/scan-5.dat', tiff('MM'), /a TIFF/],
     ['an AVIF', 'assets/photo-1.bin', bmff('avif'), /an AVIF or HEIC image/],
     ['a HEIC', 'assets/photo-2.bin', bmff('heic'), /an AVIF or HEIC image/],
+    /* The brand that says "still image" can be a compatible one alone, after
+       a generic major brand (found by review, #246). */
+    ['an AVIF with a generic major brand and avif only among its compatible brands', 'assets/photo-3.bin', ftyp('iso8', ['iso8', 'avif']), /an AVIF or HEIC image/],
+    ['an AVIF like that with a 64-bit box size', 'assets/photo-4.bin', ftyp('iso8', ['iso8', 'avif'], { sizeField: 1 }), /an AVIF or HEIC image/],
+    ['an AVIF like that whose box runs to the end of the file', 'assets/photo-5.bin', ftyp('iso8', ['iso8', 'avif'], { sizeField: 0 }), /an AVIF or HEIC image/],
   ]) {
     r = inTmp(rel, body);
     ok(`${what} renamed is refused, by its first bytes`, r.code === 1 && says.test(r.out), r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
@@ -308,6 +328,15 @@ head('it refuses the licensed bank, by every route in');
   ok('a page holding an inline <svg> is fine', r.code === 0, r.out.trim().slice(0, 60));
   r = inTmp('notes/readme.md', '<!-- generated -->\n# Notes\n\n<svg> is how the figures are drawn.\n');
   ok('markdown that opens with a comment is fine', r.code === 0, r.out.trim().slice(0, 60));
+  /* And ISO media files that are not still images: a video's brands, and a
+     still-image brand in the box after the ftyp box, which is not one of its
+     brands. */
+  r = inTmp('notes/clip.bin', ftyp('isom', ['isom', 'iso2', 'avc1', 'mp41']));
+  ok('a video’s ftyp box is fine', r.code === 0, r.out.trim().slice(0, 60));
+  const freeBox = Buffer.alloc(12);
+  freeBox.writeUInt32BE(12, 0); freeBox.write('freeavif', 4, 'latin1');
+  r = inTmp('notes/clip-2.bin', ftyp('isom', ['isom'], { after: freeBox }));
+  ok('and a brand in the box after it is not one of its brands', r.code === 0, r.out.trim().slice(0, 60));
   r = inTmp('memorizer/samples/notes.md', 'a page of a chapter\n');
   ok('anything under memorizer/samples/, where a book chapter is kept, is refused', r.code === 1 && /PATH\s+memorizer\/samples/.test(r.out),
      r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 60));
