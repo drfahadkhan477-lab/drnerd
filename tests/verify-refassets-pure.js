@@ -216,8 +216,13 @@ head('what it reports about itself');
     const H = load(makeWeb({ openHangs: true }));
     const n = await within(H.ready());
     ok('ready() settles instead of waiting for ever', n === 0, String(n));
-    ok('after giving the database a few seconds (1-10 s), not none',
-       asked.some(ms => ms >= 1000 && ms <= 10000), asked.join(', ') || 'no timer was set');
+    /* 10-30 s. The floor is why this moved from 4 s: on a loaded machine an
+       open that was fine took longer, and the images restored in that visit
+       were lost at the next reload (src/core/refassets.js, OPEN_TIMEOUT_MS).
+       The ceiling keeps a hung open a bounded wait. */
+    ok('after giving the database 10-30 s, longer than a slow first open, not none',
+       asked.some(ms => ms >= 10000 && ms <= 30000), asked.join(', ') || 'no timer was set');
+    ok('and says it gave up', H.openInfo().state === 'gave up', JSON.stringify(H.openInfo()));
     const k = H.add(bytesOf('imported while the database hung'), 'h.png');
     const flushed = await within(H.flush());
     ok('a write settles, and reports it was not stored', flushed === false, String(flushed));
@@ -230,6 +235,12 @@ head('what it reports about itself');
     await L.ready();
     await new Promise(res => setTimeout(res, 250));
     ok('a connection that arrives after the give-up is closed', lateWeb.closed === 1, `${lateWeb.closed} closed`);
+    /* And an open that answers in time says so, with how long it took. */
+    const O = load(makeWeb({}));
+    await O.ready();
+    const info = O.openInfo();
+    ok('an open that answers in time is reported open, with its time',
+       info.state === 'open' && typeof info.ms === 'number' && info.ms >= 0 && info.ms < 10000, JSON.stringify(info));
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

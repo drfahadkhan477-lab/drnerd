@@ -21,6 +21,7 @@
 const path = require('path');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
+const { resolved } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-backup.js <patched.html|url>'); process.exit(1); }
@@ -338,10 +339,14 @@ const restore = `(text) => new Promise((resolve, reject) => {
   await page.evaluate(() => { INK = {}; });
   const devToast = await importToast(dev.text || '');
   ok('and that backup restores', devToast === 'Annotations restored.', JSON.stringify(devToast));
-  ok('with its usable statistics and its annotations', await page.evaluate(() =>
+  /* left is for the report only. This failed once in a loaded run, not
+     explained, and its line did not say which part. */
+  const devLeft = await page.evaluate(() => ({ ok:
     (S.chStats.Arrhythmias || {}).total === 9 && !('Valvular Disease' in S.chStats) && !('Vascular Disease' in S.chStats) &&
     (S.practice.BKUP_1 || {}).n === 3 && !('BKUP_2' in S.practice) &&
-    (S.daily['2026-10-01'] || {}).a === 4 && !('2026-10-02' in S.daily) && !!INK['BKUP_1:0']));
+    (S.daily['2026-10-01'] || {}).a === 4 && !('2026-10-02' in S.daily) && !!INK['BKUP_1:0'],
+    left: JSON.stringify({ chStats: S.chStats, practice: S.practice, daily: S.daily, ink: Object.keys(INK) }) }));
+  ok('with its usable statistics and its annotations', devLeft.ok === true, devLeft.left);
 
   head('reference images survive a backup on a different device');
   const exported=await page.evaluate(async()=>{
@@ -369,11 +374,56 @@ const restore = `(text) => new Promise((resolve, reject) => {
   });
   await other.evaluate(async({fn,text})=>{await(new Function('return '+fn)())(text);},{fn:restore,text:exported.text});
   ok('a new storage context restores the image and its citation',await other.evaluate(({key,value})=>RefAssets.get(key)===value&&REF[0].body.includes(key),exported));
+  /* For the report only: how the image store's open ended on each page, and
+     what the restore said, so a failure here says whether the images were
+     ever stored. */
+  const atRestore=await other.evaluate(()=>({open:RefAssets.openInfo(),toast:(document.getElementById('toast')||{}).textContent||''}));
   await other.reload();
   await other.waitForFunction(()=>typeof RefAssets!=='undefined');
   await other.evaluate(()=>RefAssets.ready());
-  ok('restored image bytes survive reload',await other.evaluate(({key,value})=>RefAssets.get(key)===value,exported));
+  const afterReload=await other.evaluate(()=>RefAssets.openInfo());
+  ok('restored image bytes survive reload',await other.evaluate(({key,value})=>RefAssets.get(key)===value,exported),
+     JSON.stringify({atRestore,afterReload}));
   await context.close();
+
+  /* AN OPEN THAT IS SLOW, NOT HUNG. The image store once gave its database
+     4 s; on a loaded machine an open that was fine took longer, so the
+     restored images were kept in memory only and were gone after a reload.
+     Here every open of that database answers 5 s late. */
+  head('an image store whose database answers 5 s late still keeps a restored image');
+  {
+    const slowContext=await browser.newContext(),slow=watch(await slowContext.newPage(),events,'idb-open-slow');
+    /* The connection opens as usual; the image store hears of it 5 s later.
+       __held records how long the answer was held once it was handed over. */
+    await slow.addInitScript(()=>{
+      const real=IDBFactory.prototype.open;
+      IDBFactory.prototype.open=function(name){
+        const req=real.apply(this,arguments);
+        if(name!=='accsap12.assets') return req;
+        let handler=null;
+        Object.defineProperty(req,'onsuccess',{configurable:true,get(){return handler;},set(fn){handler=fn;}});
+        req.addEventListener('success',ev=>{const at=Date.now();setTimeout(()=>{
+          window.__held=Date.now()-at; if(handler)handler.call(req,ev);},5000);});
+        return req;
+      };
+    });
+    await boot(slow);
+    await slow.evaluate(async({fn,text})=>{await(new Function('return '+fn)())(text);},{fn:restore,text:exported.text});
+    const toast=await slow.evaluate(()=>(document.getElementById('toast')||{}).textContent||'');
+    /* Waited for, because a store that gave up has finished the restore
+       before the answer is handed over. */
+    const held=await resolved(slow,()=>window.__held,null,{timeout:20000}).catch(()=>null);
+    ok('(the database\'s answer really was held for 5 s)',typeof held==='number'&&held>=5000,String(held));
+    const opened=await slow.evaluate(()=>RefAssets.openInfo());
+    ok('the image store waited for that answer instead of giving up',opened.state==='open'&&opened.ms>=5000,JSON.stringify(opened));
+    ok('and the restore says the images were saved',toast==='Annotations restored.',JSON.stringify(toast));
+    await slow.reload();
+    await slow.waitForFunction(()=>typeof RefAssets!=='undefined');
+    await slow.evaluate(()=>RefAssets.ready());
+    ok('the restored image survives a reload',await slow.evaluate(({key,value})=>RefAssets.get(key)===value,exported),
+       JSON.stringify(await slow.evaluate(()=>RefAssets.openInfo())));
+    await slowContext.close();
+  }
 
   /* A version 5 backup restored on a new device brings citations without their
      images. Export used to refuse from then on, ink and progress with it. */
@@ -401,12 +451,13 @@ const restore = `(text) => new Promise((resolve, reject) => {
      fires none of success, error or blocked used to keep that promise pending
      for ever: the buttons did nothing, and said nothing. Each case gets its own
      context, because the stub has to be in place before the modules first open. */
-  const STUB_EXPORT = `async () => {
+  /* hung: how long counts as for ever. 8 s unless a case says otherwise. */
+  const STUB_EXPORT = `async (hung = 8000) => {
     const create=URL.createObjectURL,click=HTMLAnchorElement.prototype.click;let blob=null;
     URL.createObjectURL=b=>{blob=b;return 'blob:stub';};HTMLAnchorElement.prototype.click=()=>{};
     const t=document.getElementById('toast'); if(t) t.textContent='';
     let result;
-    try{ result=await Promise.race([exportMarkup(),new Promise(r=>setTimeout(()=>r('HUNG'),8000))]); }
+    try{ result=await Promise.race([exportMarkup(),new Promise(r=>setTimeout(()=>r('HUNG'),hung))]); }
     finally{URL.createObjectURL=create;HTMLAnchorElement.prototype.click=click;}
     return {result,text:blob?await blob.text():null,toast:(document.getElementById('toast')||{}).textContent||''};
   }`;
@@ -432,8 +483,11 @@ const restore = `(text) => new Promise((resolve, reject) => {
     ok('Store.ready() settles, without a database', !!ready && ready.available === false, JSON.stringify(ready));
     await p.evaluate(() => { INK = { 'HANG:0': [{ p: [1] }] }; saveJSON(INK_KEY, INK); });
     ok('a write lands in localStorage', /HANG:0/.test(await p.evaluate(() => localStorage.getItem('accsap12.ink')) || ''));
-    const ex = await p.evaluate(async fn => (new Function('return ' + fn)())(), STUB_EXPORT);
-    ok('Export completes rather than waiting for ever', ex.result === true, JSON.stringify(ex.result) + ' ' + ex.toast);
+    /* Export waits out the image store's own open timeout here, so for ever
+       is that timeout plus the 4 s the old 8 s bound had over the old 4 s one. */
+    const hung = await p.evaluate(() => RefAssets.OPEN_TIMEOUT_MS + 4000);
+    const ex = await p.evaluate(async ({ fn, hung }) => (new Function('return ' + fn)())(hung), { fn: STUB_EXPORT, hung });
+    ok('Export completes rather than waiting for ever', ex.result === true, JSON.stringify(ex.result) + ' within ' + hung + ' ms ' + ex.toast);
     ok('with the ink this session wrote', !!ex.text && !!JSON.parse(ex.text).ink['HANG:0']);
     ok('no page error', errs.length === 0, errs.slice(0, 2).join(' | '));
     await context.close();
