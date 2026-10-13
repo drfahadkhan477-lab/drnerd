@@ -8,57 +8,58 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../memorizer/src/store.js'), 'utf8');
 
 module.exports = (async () => {
-  for (const nativeClone of [true, false]) {
-    for (const failure of ['missing', 'throws', 'error', 'blocked']) {
-      const root = { structuredClone: nativeClone ? structuredClone : undefined };
-      if (failure === 'throws') root.indexedDB = { open() { throw new Error('refused'); } };
-      if (failure === 'error' || failure === 'blocked') root.indexedDB = {
-        open() {
-          const req = {};
-          queueMicrotask(() => req[failure === 'error' ? 'onerror' : 'onblocked']());
-          return req;
-        }
-      };
-      vm.runInNewContext(source, { window: root, ArrayBuffer, DataView });
-      const store = root.MemStore;
-      const expected = [37, 80, 68, 70, 45, 49, 46, 55, 10, 0, 255]; // %PDF-1.7 plus binary bytes
-      const input = { id: 'synthetic-pdf', bytes: Uint8Array.from(expected).buffer,
-        metadata: { tags: ['synthetic'] } };
-      await store.put('files', input);
-      assert.equal(store.persistent, false);
-      new Uint8Array(input.bytes).fill(0);
-      input.metadata.tags.push('mutated input');
-      const read = await store.get('files', input.id);
-      assert.ok(read.bytes instanceof ArrayBuffer);
-      assert.deepEqual(Array.from(new Uint8Array(read.bytes)), expected);
-      assert.deepEqual(Array.from(read.metadata.tags), ['synthetic']);
-      new Uint8Array(read.bytes).fill(1);
-      read.metadata.tags.push('mutated get');
-      const listed = await store.all('files');
-      assert.deepEqual(Array.from(new Uint8Array(listed[0].bytes)), expected);
-      assert.deepEqual(Array.from(listed[0].metadata.tags), ['synthetic']);
-      new Uint8Array(listed[0].bytes).fill(2);
-      listed[0].metadata.tags.push('mutated all');
-      const reread = await store.get('files', input.id);
-      assert.deepEqual(Array.from(new Uint8Array(reread.bytes)), expected);
-      assert.deepEqual(Array.from(reread.metadata.tags), ['synthetic']);
-
-      // Views keep their type, range and bytes, without sharing the input buffer.
-      for (const view of [new Uint8Array(Uint8Array.from(expected).buffer, 2, 5),
-        new DataView(Uint8Array.from(expected).buffer, 2, 5)]) {
-        await store.put('files', { id: 'view', bytes: view });
-        new Uint8Array(view.buffer).fill(0);
-        const result = (await store.get('files', 'view')).bytes;
-        assert.equal(result.constructor, view.constructor);
-        assert.equal(result.byteOffset, 2);
-        assert.equal(result.byteLength, 5);
-        assert.deepEqual(Array.from(new Uint8Array(result.buffer, 2, 5)), expected.slice(2, 7));
+  /* Each way IndexedDB can be unavailable, falling back to the in-memory
+     store. Its copies are made by store.js's own clone(); the store never
+     uses structuredClone, so whether the page has one is not a case here. */
+  for (const failure of ['missing', 'throws', 'error', 'blocked']) {
+    const root = {};
+    if (failure === 'throws') root.indexedDB = { open() { throw new Error('refused'); } };
+    if (failure === 'error' || failure === 'blocked') root.indexedDB = {
+      open() {
+        const req = {};
+        queueMicrotask(() => req[failure === 'error' ? 'onerror' : 'onblocked']());
+        return req;
       }
-      assert.equal(await store.get('files', 'missing'), null);
-      await store.del('files', input.id);
-      assert.equal(await store.get('files', input.id), null);
-      console.log(`PASS fallback ${failure}, structuredClone ${nativeClone ? 'available' : 'unavailable'}: PDF bytes and copy isolation`);
+    };
+    vm.runInNewContext(source, { window: root, ArrayBuffer, DataView });
+    const store = root.MemStore;
+    const expected = [37, 80, 68, 70, 45, 49, 46, 55, 10, 0, 255]; // %PDF-1.7 plus binary bytes
+    const input = { id: 'synthetic-pdf', bytes: Uint8Array.from(expected).buffer,
+      metadata: { tags: ['synthetic'] } };
+    await store.put('files', input);
+    assert.equal(store.persistent, false);
+    new Uint8Array(input.bytes).fill(0);
+    input.metadata.tags.push('mutated input');
+    const read = await store.get('files', input.id);
+    assert.ok(read.bytes instanceof ArrayBuffer);
+    assert.deepEqual(Array.from(new Uint8Array(read.bytes)), expected);
+    assert.deepEqual(Array.from(read.metadata.tags), ['synthetic']);
+    new Uint8Array(read.bytes).fill(1);
+    read.metadata.tags.push('mutated get');
+    const listed = await store.all('files');
+    assert.deepEqual(Array.from(new Uint8Array(listed[0].bytes)), expected);
+    assert.deepEqual(Array.from(listed[0].metadata.tags), ['synthetic']);
+    new Uint8Array(listed[0].bytes).fill(2);
+    listed[0].metadata.tags.push('mutated all');
+    const reread = await store.get('files', input.id);
+    assert.deepEqual(Array.from(new Uint8Array(reread.bytes)), expected);
+    assert.deepEqual(Array.from(reread.metadata.tags), ['synthetic']);
+
+    // Views keep their type, range and bytes, without sharing the input buffer.
+    for (const view of [new Uint8Array(Uint8Array.from(expected).buffer, 2, 5),
+      new DataView(Uint8Array.from(expected).buffer, 2, 5)]) {
+      await store.put('files', { id: 'view', bytes: view });
+      new Uint8Array(view.buffer).fill(0);
+      const result = (await store.get('files', 'view')).bytes;
+      assert.equal(result.constructor, view.constructor);
+      assert.equal(result.byteOffset, 2);
+      assert.equal(result.byteLength, 5);
+      assert.deepEqual(Array.from(new Uint8Array(result.buffer, 2, 5)), expected.slice(2, 7));
     }
+    assert.equal(await store.get('files', 'missing'), null);
+    await store.del('files', input.id);
+    assert.equal(await store.get('files', input.id), null);
+    console.log(`PASS fallback ${failure}: PDF bytes and copy isolation, by the store's own clone()`);
   }
   const root = {};
   vm.runInNewContext(source, { window: root, ArrayBuffer, DataView });

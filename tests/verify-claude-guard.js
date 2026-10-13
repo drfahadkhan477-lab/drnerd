@@ -32,6 +32,9 @@ const GUARD = path.join(ROOT, '.claude', 'hooks', 'guard.js');
 const { decide } = require(GUARD);
 const call = (tool_name, tool_input, root = ROOT) => decide({ tool_name, tool_input, cwd: root }, root);
 const bash = (command, root) => call('Bash', { command }, root);
+/* Refused as Claude Code would see it: a guard that throws exits 1, which
+   blocks nothing, so a throw counts as "let through", not as a refusal. */
+const blocks = (command, root) => { try { return !!bash(command, root); } catch (_) { return false; } };
 
 head('the file tools: licensed paths refused, look-alikes not');
 {
@@ -78,6 +81,161 @@ head('the shell: reading refused, running allowed');
   ];
   const a = allowed.filter(c => bash(c));
   ok('and running a suite on a build, listing, or grepping for the word is not', a.length === 0, a.join(' | ') || `${allowed.length} allowed`);
+}
+
+head('inline code, heredocs, redirections and filters: the other ways a file is printed');
+{
+  /* Each of these was allowed while inline code meant a bare -c or -e. */
+  const inline = [
+    `node -p "require('fs').readFileSync('build/systole.html','utf8').slice(0,500)"`,
+    `node --eval "console.log(require('fs').readFileSync('dist/app.js','utf8'))"`,
+    `node --print="require('fs').readFileSync('content/q.json','utf8')"`,
+    `node -e "a || require('fs').readFileSync('build/systole.html')"`,
+    `python3.12 -c "print(open('content/x').read())"`,
+    `python3 -Ic "print(open('content/x').read())"`,
+    `perl -ne 'print if /stem/' content/questions.json`,
+    `perl -lne 'print' source/x.txt`,
+    `perl -0777 -pe 's/a/b/' build/systole.html`,
+    `ruby -ne 'puts $_' content/x`,
+  ];
+  const ri = inline.filter(c => !blocks(c));
+  ok('an eval or print flag in any spelling is inline code', ri.length === 0, ri.join(' | ') || `${inline.length} refused`);
+  const heredoc = [
+    `python3 <<'EOF'\nprint(open('content/questions.json').read()[:500])\nEOF`,
+    `node <<'EOF'\nconsole.log(require('fs').readFileSync("build/systole.html", "utf8"))\nEOF`,
+    `node - <<EOF\nconsole.log(require('fs').readFileSync("tests/last-run.log", "utf8"))\nEOF`,
+    `python3 <<< "print(open('content/x').read())"`,
+    `echo "print(open('dist/app.js').read())" | python3`,
+    `python3 tools/show.py <<'EOF'\ncontent/questions.json\nEOF`,
+  ];
+  const rh = heredoc.filter(c => !blocks(c));
+  ok('so is a program on stdin (a heredoc body, a here-string, a pipe), and a heredoc fed to a script', rh.length === 0, rh.join(' | ') || `${heredoc.length} refused`);
+  const redirect = [
+    'cat <content/questions.json',
+    'while read l; do echo "$l"; done < build/x.txt',
+    'python3 x.py 0<content/q.json',
+    'sort content/questions.json',
+    'uniq -c build/x.txt',
+    'paste dist/a dist/b',
+  ];
+  const rr = redirect.filter(c => !blocks(c));
+  ok('an input redirection reads its file, and so do the line filters', rr.length === 0, rr.join(' | ') || `${redirect.length} refused`);
+  const allowed = [
+    `python3 <<'EOF'\nimport json\nprint(json.load(open('package.json'))['name'])\nEOF`,
+    `node <<'EOF'\nconsole.log(require('./package.json').name)\nEOF`,
+    'node -e "console.log(process.version)"',
+    'node tests/x.js',
+    'python3 tools/x.py build/synthetic/export.html',
+    'node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --out build/synthetic/systole.html',
+    'python3 -m http.server',
+    'sort package.json | uniq -c | head',
+    `cat > /tmp/note.md <<'EOF'\nbuild/ and content/ stay gitignored\nEOF`,
+  ];
+  const a = allowed.filter(c => bash(c));
+  ok('while a heredoc that touches no protected path, and a script run on a build, are not', a.length === 0, a.join(' | ') || `${allowed.length} allowed`);
+}
+
+head('a recursive search: judged by what it reaches, not what it names');
+{
+  /* `grep -rn X .` names no protected path and reads every one of them. */
+  const refused = [
+    'grep -rn "stem" .',
+    'grep -rn "stem"',
+    'grep -Rn stem',
+    'egrep -r stem',
+    'grep -n -d recurse stem',
+    'grep --recursive stem ..',
+    'grep -rn stem *',
+    'grep -rn -A 3 stem',
+    'grep -rn stem . 2>/dev/null | head',
+    'cd tests && grep -rn stem',
+    'grep -rn stem --exclude-dir=content .',
+    'grep -rn --include="*.js" stem .',
+    'rg -u stem',
+    'rg --no-ignore stem .',
+    'git grep --no-index stem',
+    `grep -rn stem --exclude-dir='[z-a]' .`,
+  ];
+  const r = refused.filter(c => !blocks(c));
+  ok('a recursive grep from the root, a subtree holding a protected path, or rg told to ignore .gitignore, is refused',
+     r.length === 0, r.join(' | ') || `${refused.length} refused`);
+  const why = bash('grep -rn stem .');
+  ok('and the refusal says how to scope it', /--exclude-dir=content/.test(why || '') && /rg/.test(why || ''), String(why).slice(0, 80));
+  const allowed = [
+    'grep -rn stem src/',
+    'grep -rn stem src/ scripts/ tests/*.js',
+    'cd src && grep -rn stem',
+    'grep -rn stem --exclude-dir=content --exclude-dir=build --exclude-dir=dist --exclude-dir=source --exclude=last-run.log .',
+    'grep -rn stem --exclude-dir={content,build,dist,source} --exclude="*.log"',
+    'rg stem',
+    'rg stem . -g "*.js"',
+    'rg -u -g "!content" -g "!build" -g "!dist" -g "!source" -g "!*.log" stem',
+    'git grep stem',
+    'grep -c build package.json',
+  ];
+  const a = allowed.filter(c => bash(c));
+  ok('while a scoped grep, one excluding every protected path, and plain rg are not', a.length === 0, a.join(' | ') || `${allowed.length} allowed`);
+  /* rg's pass rests on .gitignore. In a checkout whose .gitignore does not
+     list the export, the same rg is a read of it. */
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-guard-rg-'));
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  ok('rg from a root whose .gitignore does not list the export is refused', !!bash('rg stem', repo));
+  fs.writeFileSync(path.join(repo, '.gitignore'), 'content/\nbuild/\ndist/\nsource/\n*.log\n');
+  ok('and allowed once it does', bash('rg stem', repo) === null, String(bash('rg stem', repo)).slice(0, 80));
+  fs.rmSync(repo, { recursive: true, force: true });
+}
+
+head('a command line is read as the shell reads it: quotes, comments, heredocs');
+{
+  /* The guard split a line on every |, ; and & before reading its words,
+     quoted or not. A quoted operator in an earlier argument then cut the
+     file off into a fragment no rule read: each of the first three was let
+     through. */
+  const quoted = [
+    `grep -c 'a|b' content/questions.json`,
+    'cat "a;b" build/systole.html',
+    'grep -n "x&y" dist/app.js',
+  ];
+  const rq = quoted.filter(c => !blocks(c));
+  ok('a file after a quoted |, ; or & is still a file the command reads', rq.length === 0, rq.join(' | ') || `${quoted.length} refused`);
+  /* The other side of the same split: the search below lost its directory
+     to it and was judged as one from ".". */
+  const kept = [
+    'grep -rn "a\\|b" scripts',
+    `grep -c 'build|dist' package.json`,
+    'grep -rn stem \\\n  scripts',
+    'grep -rn stem 2>&1 scripts',
+    `cat > /tmp/note.md <<'EOF'\nit's here\nEOF\necho done`,
+  ];
+  const k = kept.filter(c => bash(c));
+  ok("while a quoted operator, a line continued with \\, 2>&1, or an apostrophe in a heredoc moves nothing",
+     k.length === 0, k.join(' | ') || `${kept.length} allowed`);
+  /* Reading quotes the shell's way must not let an apostrophe the shell does
+     not read as a quote swallow the next command: one in a comment, or in a
+     heredoc's prose. Searches, because only the shell's reading judges
+     them; a plain read is caught by the old split as well (below). */
+  const swallowed = [
+    `echo hi # it's\ngrep -rn stem .  # it's`,
+    `cat > /tmp/a.md <<'EOF'\nit's\nEOF\ngrep -rn stem .\ncat > /tmp/b.md <<'EOF'\nthat's\nEOF`,
+    `bash <<'EOF'\ngrep -rn stem .\nEOF`,
+    'grep -rn stem \\\n  .',
+  ];
+  const rs = swallowed.filter(c => !blocks(c));
+  ok('and an apostrophe in a comment or a heredoc hides no command after it, nor does a heredoc body', rs.length === 0, rs.join(' | ') || `${swallowed.length} refused`);
+  /* NEVER WEAKER THAN THE OLD SPLIT. Quoted text is sometimes code the
+     shell runs, and the old split, cutting inside the quotes, judged the
+     commands in it. Read the shell's way alone, each of these is one
+     command, bash or eval, that no rule reads; so the reading rules read
+     the old split too. */
+  const code = [
+    'bash -c "make; cat content/questions.json"',
+    `sh -c 'true | head build/systole.html'`,
+    `eval 'x=1; tail dist/app.js'`,
+    'timeout 5 bash -c "sleep 1 && cat content/q.json"',
+    `cat 'x content/questions.json`,
+  ];
+  const rc = code.filter(c => !blocks(c));
+  ok('while quoted text run as code (bash -c, sh -c, eval) is still split and read', rc.length === 0, rc.join(' | ') || `${code.length} refused`);
 }
 
 head('a commit: refused while leak-guard refuses what is staged');

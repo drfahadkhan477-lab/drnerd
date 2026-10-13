@@ -190,9 +190,12 @@ function next(state, event) {
        a finished unit is one whose exam has a score, not a phase to be
        stuck in (the first version kept 'done' here, and "Back to sections"
        redrew the result). An exam left part-way resumes where it stopped:
-       toExam keeps its questions until it is finished. */
+       toExam keeps its questions until it is finished. A review round
+       left part-way does not: nothing resumes one (toReview and toExam
+       always open a fresh round), and one kept here went on blocking a
+       section's deletion with "leave the review first" after it was left. */
     case 'toUnit':
-      s.phase = 'unit';
+      s.phase = 'unit'; s.review = null;
       return s;
 
     case 'taught':

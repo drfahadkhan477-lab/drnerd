@@ -148,6 +148,23 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   `s=>true, unused=s=>{…}`). Read the FAIL lines it produces: only the checks that
   name the rule failing counts as proof.
 
+- **A bound set to the screen's patience aborted real work.** #232 cut off
+  every Memorizer write at 5 s, "the same 5 s the screen waits for a save".
+  The screen's 5 s is when it says the save is still going, not when the save
+  has failed. On the owner's laptop a first save took longer, and the import
+  failed (#238 moved the bound to 30 s). → Rule: a timeout that aborts work
+  needs headroom over the slowest legitimate case. When adding one, say what
+  that case is and where it was measured. Never borrow a number that means
+  something else.
+- **A parser more correct than the one it replaced, and weaker.** I made the
+  guard read quotes the way the shell does. That fixed reads the old
+  quote-blind split let through, but it stopped judging `bash -c "make; cat x"`.
+  The old split had caught that by cutting inside the quotes. AGENTS.md's
+  "never weaken the guard" caught it before the push. → Rule: when replacing a
+  guard's reading of its input, keep the old reading and refuse if either
+  refuses, then list what the old one refused and prove each case is still
+  refused.
+
 ## Process
 
 - **A debug copy that edited a different line than the one I then read.** To see
@@ -288,3 +305,12 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   tap was. → Rule: before a fix refuses an action, say what the user is left
   holding if it does; prefer doing the action and not counting it, and show
   the reason where the user acted.
+- **Three sessions fixed one report.** My findings report went to other
+  sessions while mine was stopped by usage limits. Three of my unpushed fixes
+  had landed from another session, theirs more thorough, and a second
+  session's PR (#238) was open on my branch. I found this only because the
+  owner asked me to check before I integrated. → Rule: before integrating
+  work held back for a while, fetch; list every branch and PR that moved since
+  its base; diff each held commit's files against them; and drop what has
+  landed. Never push onto a branch another session is driving; wait for its
+  PR, or ask.

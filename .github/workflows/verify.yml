@@ -23,14 +23,17 @@
 #
 # READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6634 checks in
 # `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6467.
-# The other 301 all drive something this workflow cannot have: the real
-# bank. The app is built here, but around an invented bank (the
-# synthetic-browser job), because the real one is the ACCSAP 12 export — the
-# licensed question bank, deliberately never committed to this repository or
-# to any secret GitHub holds. What needs the real bank itself (its corrected
-# answer keys, its content flags, search quality over its library, how long
-# it takes to load) and the split build under --pwa are measured only on a
-# machine with the export, so there is no way to run those 301 checks here.
+# The other 301 all drive something this workflow does not have: the real
+# bank, or the split build served to a browser. The app is built here, but
+# around an invented bank (the synthetic-browser job), because the real one is
+# the ACCSAP 12 export — the licensed question bank, deliberately never
+# committed to this repository or to any secret GitHub holds. What needs the
+# real bank itself (its corrected answer keys, its content flags, search
+# quality over its library, how long it takes to load) is measured only on a
+# machine with the export. Most of the split build's checks under --pwa can
+# run without it, since verify-pwa holds a synthetic split build to the
+# synthetic generator's own totals, but no job here builds and serves one.
+# Until one does, there is no way to run those 301 checks here.
 # See docs/BUILD.md and the comment at the top of scripts/assemble-app.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
@@ -945,12 +948,12 @@ jobs:
             exit 1
           fi
 
-  # ── the other 1552 checks, on a machine that has the export ────────────────
+  # ── the checks CI cannot run, on a machine that has the export ─────────────
   #
   # Everything above runs on GitHub's runners and therefore cannot build the
   # app: npm run build refuses without the ACCSAP 12 export, the export is
   # licensed, and it is deliberately not in this repository nor in any secret
-  # GitHub holds. That is why the three jobs above are "the honest subset".
+  # GitHub holds. That is why the jobs above are "the honest subset".
   #
   # This job closes that gap the only way it can be closed — by running on a
   # machine that already has the export, which means the owner's laptop acting

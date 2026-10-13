@@ -23,13 +23,16 @@
  */
 'use strict';
 
-/* opts: { openFails, putFails, seed } — the two failure modes plus the
-   database's starting contents. */
+/* opts: { openFails, putFails, seed, openHangs, openAfter } — the failure
+   modes plus the database's starting contents. openHangs: open() fires none of
+   success, error or blocked, ever. openAfter: open() succeeds, but only after
+   that many milliseconds; web.closed counts the connections closed. */
 function makeWeb(opts) {
   const o = opts || {};
   const ls = new Map();
   const db = new Map(Object.entries(o.seed || {}));
   const later = fn => setTimeout(fn, 0);
+  const counters = { closed: 0 };
 
   const localStorage = {
     getItem: k => (ls.has(k) ? ls.get(k) : null),
@@ -40,9 +43,11 @@ function makeWeb(opts) {
   const indexedDB = {
     open() {
       const req = {};
-      later(() => {
+      if (o.openHangs) return req;
+      setTimeout(() => {
         if (o.openFails) { req.onerror && req.onerror(); return; }
         req.result = {
+          close() { counters.closed++; },
           objectStoreNames: { contains: () => true },
           createObjectStore: () => {},
           transaction(_name, mode) {
@@ -66,12 +71,12 @@ function makeWeb(opts) {
           },
         };
         req.onsuccess && req.onsuccess();
-      });
+      }, o.openAfter || 0);
       return req;
     },
   };
 
-  return { localStorage, indexedDB, ls, db };
+  return { localStorage, indexedDB, ls, db, get closed() { return counters.closed; } };
 }
 
 /* Loads a module fresh against one fake web. Fresh matters: these modules hold

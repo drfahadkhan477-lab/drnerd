@@ -915,9 +915,19 @@ function mountInk(){
 function currentQ(){ return (S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null; }
 
 /* ── export / import (survives file:// storage limits) ────────────────────── */
+/* Store.ready(), but not for ever. Store.open() gives up on a database that
+   never answers, but a database that opens and then stops answering partway
+   through hydration would still leave Export and Import waiting without a
+   word. Resolves null instead, and the caller says so: an export taken before
+   hydration would hold only what localStorage had, and an import written then
+   would land nowhere durable. */
+const STORE_WAIT_MS=15000;
+function storeReadyOrNull(){
+  return Promise.race([Store.ready(),new Promise(r=>setTimeout(()=>r(null),STORE_WAIT_MS))]);
+}
 async function exportMarkup(){
   try{
-  await Store.ready();
+  if(!(await storeReadyOrNull())){ toast('Storage is not responding, so the backup was not exported. Reload and try again.'); return false; }
   if(typeof flushLog==='function') flushLog();
   const {assets,missing}=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{assets:{},missing:[]};
   const blob=new Blob([JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
@@ -959,7 +969,7 @@ function importMarkup(){
       try{
         const d=JSON.parse(r.result);
         const progress=validateAnnotationBackup(d);
-        await Store.ready();
+        if(!(await storeReadyOrNull())){ toast('Storage is not responding, so nothing was restored. Reload and try again.'); return; }
         const assetsStored=d.assets==null||await RefAssets.restoreBackup(d.assets);
         if(d.ink)  { INK=d.ink;   saveJSON(INK_KEY,INK); }
         if(d.notes){ NOTES=d.notes; saveJSON(NOTE_KEY,NOTES); }

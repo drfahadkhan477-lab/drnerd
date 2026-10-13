@@ -380,6 +380,101 @@ const restore = `(text) => new Promise(resolve => {
      !!partialEnv&&!!partialEnv.ink['synthetic-ink']&&!!partialEnv.assets[partial.kept]&&!(partial.lost in partialEnv.assets));
   ok('and the user is told an image was left out',/without 1 image/.test(partial.toast),JSON.stringify(partial.toast));
 
+  /* Export and Import both await Store.ready(). An indexedDB.open() that
+     fires none of success, error or blocked used to keep that promise pending
+     for ever: the buttons did nothing, and said nothing. Each case gets its own
+     context, because the stub has to be in place before the modules first open. */
+  const STUB_EXPORT = `async () => {
+    const create=URL.createObjectURL,click=HTMLAnchorElement.prototype.click;let blob=null;
+    URL.createObjectURL=b=>{blob=b;return 'blob:stub';};HTMLAnchorElement.prototype.click=()=>{};
+    const t=document.getElementById('toast'); if(t) t.textContent='';
+    let result;
+    try{ result=await Promise.race([exportMarkup(),new Promise(r=>setTimeout(()=>r('HUNG'),8000))]); }
+    finally{URL.createObjectURL=create;HTMLAnchorElement.prototype.click=click;}
+    return {result,text:blob?await blob.text():null,toast:(document.getElementById('toast')||{}).textContent||''};
+  }`;
+
+  head('a database whose open never answers: the app falls back, and Export still works');
+  {
+    const context = await browser.newContext();
+    const p = watch(await context.newPage(), events, 'idb-open-hangs');
+    const errs = [];
+    p.on('pageerror', e => errs.push(e.message));
+    await p.addInitScript(() => {
+      const real = IDBFactory.prototype.open;
+      IDBFactory.prototype.open = function (name) {
+        if (name === 'accsap12.store' || name === 'accsap12.assets') return new EventTarget();  // never fires
+        return real.apply(this, arguments);
+      };
+    });
+    await p.goto(URL, { waitUntil: 'load', timeout: 200000 });
+    await p.waitForFunction(() => typeof S !== 'undefined' && typeof Store !== 'undefined' &&
+      typeof exportMarkup === 'function', null, { timeout: 120000 });
+    const ready = await p.evaluate(() =>
+      Promise.race([Store.ready(), new Promise(r => setTimeout(() => r('HUNG'), 15000))]));
+    ok('Store.ready() settles, without a database', !!ready && ready.available === false, JSON.stringify(ready));
+    await p.evaluate(() => { INK = { 'HANG:0': [{ p: [1] }] }; saveJSON(INK_KEY, INK); });
+    ok('a write lands in localStorage', /HANG:0/.test(await p.evaluate(() => localStorage.getItem('accsap12.ink')) || ''));
+    const ex = await p.evaluate(async fn => (new Function('return ' + fn)())(), STUB_EXPORT);
+    ok('Export completes rather than waiting for ever', ex.result === true, JSON.stringify(ex.result) + ' ' + ex.toast);
+    ok('with the ink this session wrote', !!ex.text && !!JSON.parse(ex.text).ink['HANG:0']);
+    ok('no page error', errs.length === 0, errs.slice(0, 2).join(' | '));
+    await context.close();
+  }
+
+  head('a database that opens and then stops answering: Export and Import say so');
+  {
+    const context = await browser.newContext();
+    const p = watch(await context.newPage(), events, 'idb-hydration-hangs');
+    const errs = [];
+    p.on('pageerror', e => errs.push(e.message));
+    await p.addInitScript(() => {
+      const real = IDBFactory.prototype.open;
+      IDBFactory.prototype.open = function (name) {
+        if (name !== 'accsap12.store') return real.apply(this, arguments);
+        const never = () => ({});                    // a request whose handlers never fire
+        const db = { objectStoreNames: { contains: () => true }, createObjectStore() {}, close() {},
+          transaction: () => ({ objectStore: () => ({ get: never, put: never, delete: never, openCursor: never }) }) };
+        const req = { result: db };
+        setTimeout(() => req.onsuccess && req.onsuccess(), 0);
+        return req;
+      };
+      /* The wait Export and Import allow is long; run any timer of 10 s or
+         more in 50 ms while a test holds it, and record what was asked for. */
+      const st = window.setTimeout;
+      window.__longWaits = null;
+      window.setTimeout = function (fn, ms, ...a) {
+        if (window.__longWaits && ms >= 10000) { window.__longWaits.push(ms); ms = 50; }
+        return st.call(this, fn, ms, ...a);
+      };
+    });
+    await p.goto(URL, { waitUntil: 'load', timeout: 200000 });
+    await p.waitForFunction(() => typeof S !== 'undefined' && typeof Store !== 'undefined' &&
+      typeof exportMarkup === 'function', null, { timeout: 120000 });
+    ok('the stub holds hydration: Store.ready() has not settled after 5 s',
+       await p.evaluate(() => Promise.race([Store.ready().then(() => 'settled'),
+         new Promise(r => setTimeout(() => r('pending'), 5000))])) === 'pending');
+    const ex = await p.evaluate(async fn => { window.__longWaits = [];
+      try { return Object.assign(await (new Function('return ' + fn)())(), { waits: window.__longWaits }); }
+      finally { window.__longWaits = null; } }, STUB_EXPORT);
+    ok('Export gives up rather than waiting for ever', ex.result === false, JSON.stringify(ex.result));
+    ok('writes no file', ex.text === null);
+    ok('and says why', /not responding/i.test(ex.toast), JSON.stringify(ex.toast));
+    ok('after a wait longer than the store\'s own open timeout, and under a minute',
+       ex.waits.some(ms => ms > 4000 && ms <= 60000), ex.waits.join(', ') || 'no long wait was set');
+    const im = await p.evaluate(async ({ fn, text }) => {
+      INK = { 'BEFORE:0': [{ p: [2] }] };
+      const t = document.getElementById('toast'); if (t) t.textContent = '';
+      window.__longWaits = [];
+      try { await (new Function('return ' + fn)())(text); } finally { window.__longWaits = null; }
+      return { ink: Object.keys(INK), toast: (document.getElementById('toast') || {}).textContent || '' };
+    }, { fn: restore, text: JSON.stringify({ v: 5, ink: { 'AFTER:0': [{ p: [3] }] } }) });
+    ok('Import says why it restored nothing', /not responding/i.test(im.toast), JSON.stringify(im.toast));
+    ok('and leaves the live ink as it was', im.ink.join() === 'BEFORE:0', im.ink.join());
+    ok('no page error', errs.length === 0, errs.slice(0, 2).join(' | '));
+    await context.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed\n`);
   process.exit(failed ? 1 : 0);
