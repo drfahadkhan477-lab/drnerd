@@ -228,6 +228,10 @@ head('it refuses the licensed bank, by every route in');
   }
   r = inTmp('assets/prefixed.bin', '<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:rect width="1" height="1"/></s:svg>');
   ok('a namespace-prefixed SVG renamed is refused', r.code === 1 && /an SVG/.test(r.out));
+  for (const prefix of ['é', '\u{10000}', '\u200Cname']) {
+    r = inTmp('assets/unicode-prefix.bin', `<${prefix}:svg xmlns:${prefix}="http://www.w3.org/2000/svg"/>`);
+    ok('a non-ASCII XML namespace prefix cannot hide a renamed SVG', r.code === 1 && /an SVG/.test(r.out));
+  }
   r = inTmp('notes/other-namespace.xml', '<s:svg xmlns:s="urn:unrelated"/>');
   ok('an unrelated namespace is not mistaken for an SVG', r.code === 0);
   r = inTmp('notes/quoted-namespace.xml', '<s:svg title=" xmlns:s=\'http://www.w3.org/2000/svg\'" xmlns:s="urn:unrelated"/>');

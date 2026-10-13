@@ -252,7 +252,9 @@ function isSvg(text) {
       if (!closed) return false;
     } else break;
   }
-  const root = text.slice(at).match(/^<(?:(\w[\w.-]*):)?svg(?=[\s/>])/i);
+  // XML names include non-ASCII and astral characters. Tokenize conservatively;
+  // the namespace declaration below decides whether this root denotes SVG.
+  const root = text.slice(at).match(/^<(?:([^:\s<>/]+):)?svg(?=[\s/>])/i);
   if (!root) return false;
   if (!root[1]) return true;
   // A prefixed root must bind its prefix to the SVG namespace.
