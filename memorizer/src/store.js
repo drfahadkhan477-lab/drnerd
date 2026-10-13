@@ -116,20 +116,26 @@ function open() {
    has shipped) held the write queue for ever, and every read with it, since a
    read waits for the writes before it: after one hung save no unit opened and
    no list was redrawn. ui.js waitForSave's bound frees only the taps. So each
-   write the queue runs (tx, saveStep, batch) is given TX_TIMEOUT_MS, the same
-   5 s the screen waits for a save, plus a millisecond for every
-   TX_BYTES_PER_MS bytes it carries: a restore or a PDF part is hundreds of
-   megabytes, and must not be cut off for being large. Past that it is aborted
-   and rejects with a TimeoutError, the queue moves on, and a tracked write is
-   kept for "Try saving again" like any other failure. It rejects whether or
-   not the abort is answered, since a backend that has stopped answering will
-   not answer that either. Reads are not bounded. Outside the queue a read
-   holds up nothing but its caller, and the export's read of every PDF can
-   rightly be slow. The two the queue runs (a deletion's look at the cards and
-   notes, deleteBook's read of the book) hold it up only if the database has
-   stopped answering reads as well, and then nothing can be read anyway.
-   update(), which the queue does not run, is left as it was. */
-api.TX_TIMEOUT_MS = 5000;
+   write the queue runs (tx, saveStep, batch) is given TX_TIMEOUT_MS, plus a
+   millisecond for every TX_BYTES_PER_MS bytes it carries: a restore or a PDF
+   part is hundreds of megabytes, and must not be cut off for being large.
+   TX_TIMEOUT_MS is 30 s, not the 5 s the screen waits for a save (ui.js
+   SAVE_WAIT_MS). The screen moves on at 5 s and says the save is still going;
+   this bound is only for a backend that has stopped answering. When the two
+   were the same 5 s, every save slower than that was aborted as the note went
+   up: on the owner's laptop the first save into a new database sometimes
+   was, and the import failed with "storage did not answer within 5 seconds"
+   (verify-memorizer-store-pure holds the two apart). Past its bound a write
+   is aborted and rejects with a TimeoutError, the queue moves on, and a
+   tracked write is kept for "Try saving again" like any other failure. It
+   rejects whether or not the abort is answered, since a backend that has
+   stopped answering will not answer that either. Reads are not bounded.
+   Outside the queue a read holds up nothing but its caller, and the export's
+   read of every PDF can rightly be slow. The two the queue runs (a deletion's
+   look at the cards and notes, deleteBook's read of the book) hold it up only
+   if the database has stopped answering reads as well, and then nothing can
+   be read anyway. update(), which the queue does not run, is left as it was. */
+api.TX_TIMEOUT_MS = 30000;
 api.TX_BYTES_PER_MS = 1000;
 function weight(v) {
   if (v == null) return 0;
