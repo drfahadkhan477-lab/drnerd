@@ -106,16 +106,24 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   save and still froze. → Rule: fix the hazard where it happens or at every caller that
   waits on it — grep for every `.then` on that promise before calling it fixed, and
   narrow the commit title to what was covered.
-- **A pixel read that waited on a size.** My occlusion check drew the card's `<img>`
-  into a canvas once `naturalWidth > 0` and looked for the label's magenta. Chromium
-  and Firefox found it; CI's WebKit found none (`patch: null`), and its log could not
-  say whether the patch came out in another colour or nothing was drawn. A size can
-  be known before the picture is fully decodable, and `drawImage()` draws nothing
-  from such an image; the suite's other image wait already asked for `complete`.
-  → Rule: before reading an image's pixels, wait for `complete && naturalWidth > 0`
-  and `await img.decode()`, and put what was read in the check's detail (the pixel
-  where the answer should be, how much was drawn), so a miss in an engine this
-  container cannot run says which it was.
+- **Two causes reasoned, neither reproduced; CI runners said which.** My occlusion
+  check drew the card's `<img>` into a canvas and looked for the label's magenta.
+  CI's WebKit read nothing. I blamed an image not yet decoded, waited for `complete`
+  and `decode()`, and called it fixed unseen; it failed again (`inked: 0`). Six
+  copies on CI runners with the read instrumented failed in 3: the PNG decoded whole
+  and the canvas read back its own pixels, but the `<img>` drew nothing. A
+  `willReadFrequently` canvas had read it whole, so I blamed WebKit's GPU-backed
+  canvas; six more copies with that fix and plain-canvas controls drawn in the same
+  tick failed in 4, every canvas empty. The CPU read had worked only because it ran
+  later: the `<img>` was complete, sized and decoded and still not drawable for a
+  moment. Waiting until a draw left ink, six more passed, the old read empty in 2 of
+  them; the wait took 12 to 25 ms. This container never failed it in seven runs.
+  → Rule: before reading an image's pixels, wait until a draw of it leaves ink (a
+  precondition; the claim is read after it), and keep what was read in the check's
+  detail. When a failure shows only in CI, reproduce it there (a scratch branch
+  whose own workflow runs the suite several times in parallel, the read
+  instrumented), and try a fix with a control in the same tick, so a cause is told
+  apart from a delay.
 - **A state wait before a DOM read.** A hardening check waited on
   `ui.docRec.revision`, which `saveFix` sets before `refresh()` and `render()`, then
   read the banner from the DOM; it failed once in four runs on the #232 merge. My

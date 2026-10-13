@@ -3503,16 +3503,32 @@ function kindOf(user) {
     await p5r.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
     await p5r.locator('#occlusion').waitFor(T).catch(() => {});
     /* Complete, not only sized: an image reports its size while it is still
-       partly loaded, and drawImage() draws nothing from one that is not fully
-       decodable. In WebKit this read no magenta while it waited on the size
-       alone. */
+       partly loaded. */
     await p5r.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.complete && i.naturalWidth > 0; }, null, T).catch(() => {});
+    /* A precondition, not the claim: the picture can be read. In WebKit on CI's
+       runners the <img> was complete, sized and decoded and still drew nothing
+       into a canvas in about half the runs: every canvas drawn from it at that
+       moment read empty, and moments later it drew whole. So this waits until
+       a draw of it leaves ink. Where the label shows, and whether the mask
+       covers it, is still the check; a picture never drawn times out into it
+       and fails on what was read. willReadFrequently, as it is read back on
+       every try. */
+    const waitFrom = Date.now();
+    await p5r.waitForFunction(() => {
+      const i = document.querySelector('#occlusion img');
+      if (!i || !i.complete || !i.naturalWidth) return false;
+      const c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight;
+      const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(i, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      for (let k = 3; k < d.length; k += 4) if (d[k]) return true;
+      return false;
+    }, null, T).catch(() => {});
+    const waited = Date.now() - waitFrom;
     const seen = await p5r.evaluate(async () => {
       const i = document.querySelector('#occlusion img'), m = document.querySelector('#occlusion .occlusion-mask');
       if (!i || !i.naturalWidth || !m) return { card: !!document.querySelector('#occlusion'), drawn: !!(i && i.naturalWidth) };
-      await i.decode().catch(() => {});
       const c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight;
-      const g = c.getContext('2d'); g.drawImage(i, 0, 0);
+      const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(i, 0, 0);
       const px = g.getImageData(0, 0, c.width, c.height).data;
       let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1, inked = 0;
       for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
@@ -3530,6 +3546,7 @@ function kindOf(user) {
       return { patch: x1 < 0 ? null : [x0 / c.width, y0 / c.height, (x1 + 1) / c.width, (y1 + 1) / c.height].map(f), mask,
                centre: [px[ck], px[ck + 1], px[ck + 2], px[ck + 3]], inked: f(inked / (c.width * c.height)) };
     });
+    seen.waitedMs = waited;
     ok('a figure card from the turned page hides its label where the drawn picture shows it',
        !!seen.patch && !!seen.mask && seen.mask[0] <= seen.patch[0] + 0.01 && seen.mask[1] <= seen.patch[1] + 0.01 &&
        seen.mask[2] >= seen.patch[2] - 0.01 && seen.mask[3] >= seen.patch[3] - 0.01, JSON.stringify(seen));
