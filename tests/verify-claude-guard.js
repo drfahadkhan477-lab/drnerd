@@ -248,6 +248,9 @@ head('a command inside another: substitutions, loops, branches, subshells, wrapp
     'x=$(head -c 100 build/systole.html)',
     'echo `tail dist/app.js`',
     'wc -l <(sort content/questions.json)',
+    /* A ) inside a comment closes nothing (found by review, #241): taken
+       for the close, it left the search on the next line unjudged. */
+    'echo "$(echo hi # )\nrg -uuu stem .)"',
   ];
   const ri = inner.filter(c => !blocks(c));
   ok('a read inside $( … ), backticks or <( … ) is refused', ri.length === 0, ri.join(' | ') || `${inner.length} refused`);

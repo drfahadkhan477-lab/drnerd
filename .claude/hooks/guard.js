@@ -286,6 +286,10 @@ function substitution(cmd, at) {
     if (c === '\\') { j += 2; continue; }
     if (c === "'") { const q = cmd.indexOf("'", j + 1); if (q < 0) return null; j = q + 1; continue; }
     if (c === '"') { j++; while (j < cmd.length && cmd[j] !== '"') j += cmd[j] === '\\' ? 2 : 1; j++; continue; }
+    /* A comment runs to its line's end, and a ) in it closes nothing: read as
+       the close, it left the next line outside the substitution and unjudged
+       (found by review, #241). A # opens one only at the start of a word. */
+    if (c === '#' && (j === at + 2 || /[\s;&|()]/.test(cmd[j - 1]))) { while (j < cmd.length && cmd[j] !== '\n') j++; continue; }
     if (c === '(') depth++;
     else if (c === ')' && --depth === 0) return { end: j + 1, inner: cmd.slice(at + 2, j) };
     j++;
