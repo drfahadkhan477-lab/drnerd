@@ -448,6 +448,8 @@ function kindOf(user) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'memorizer-'));
   const built = build(dir);
   const pdf = makePdf();
+  const readers = require('./_reader-assets.js').createClient();
+  await readers.prepare(); // dependency failures precede any browser profile
   /* SOFTWARE RENDERING, AS CI HAS IT. On the owner's Windows laptop the page
      closed itself in "memorise it before the drill", 86 checks in, on the
      first 3D card flip: Chromium's GPU process logged shared_image_manager
@@ -471,37 +473,10 @@ function kindOf(user) {
      (NODE_EXTRA_CA_CERTS). Measured: in this repository's cloud sandbox the
      browser failed pdf.min.js with ERR_CERT_AUTHORITY_INVALID. */
   let cdnHits = 0;
-  /* Each CDN request, answered or still waiting, for the report a stalled
-     import prints (below, at the first PDF). */
   const cdnLog = [];
-  /* ONE FETCH PER FILE, RETRIED, AND A FAILURE SAID. Each request used to
-     refetch from Node, unhandled: one dropped Node fetch threw inside the
-     route, the request was never answered, and WebKit reported that as
-     "Fetch API cannot load …pdf.worker.min.js due to access control checks".
-     A page error, which "with no errors" counts. It failed two sections of one
-     run on 0b9613b while the parallel run of the same commit passed. The
-     bytes are still jsDelivr's own and still checked against the pinned
-     hashes; what changes is that the network between this machine and the
-     CDN is not what the assertions measure. Three tries. A file that still
-     cannot be had is a logged 502, so the page's own error path is what runs
-     next, not a hung request. */
-  const cdnCache = new Map();
-  const cdnGet = url => {
-    if (!cdnCache.has(url)) cdnCache.set(url, (async () => {
-      let last = '';
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) return { body: Buffer.from(await res.arrayBuffer()), type: res.headers.get('content-type') || 'application/javascript' };
-          last = 'HTTP ' + res.status;
-        } catch (e) { last = e.message; }
-        await new Promise(r => setTimeout(r, 500 * attempt));
-      }
-      console.log(`  [cdn] ${url} failed three times: ${last}`);
-      cdnCache.delete(url);
-      return null;
-    })());
-    return cdnCache.get(url);
+  const cdnGet = async url => {
+    try { return await readers.get(url); }
+    catch (error) { console.error('  [reader] ' + error.message); return null; }
   };
   /* ON WEBKIT THE APP IS SERVED, NOT OPENED AS A FILE. The first WebKit run
      opened it from file:// as Chromium does, and WebKit gives a file page the
@@ -2143,6 +2118,11 @@ function kindOf(user) {
     await page.locator('#home-hero').waitFor(T);
   }
 
+  // This profile's assertions are finished. Its animated home and PDF worker
+  // must not keep running underneath the independent profiles that follow.
+  await page.context().close();
+  ok('the completed first profile releases its browser context', browser.contexts().length === 0);
+
   head('the built-in coach: no key, no AI, nothing sent');
   {
     /* A fresh browser profile with nothing saved — what a new user gets. */
@@ -2687,6 +2667,8 @@ function kindOf(user) {
     await p2.waitForFunction(id => Memorizer.ui.docRec && Memorizer.ui.docRec.id === id && Memorizer.ui.docRec.figuresV === MemPdf.FIGURES_V, stale.id, T);
     const refound = await p2.evaluate(id => MemStore.get('docs', id).then(d => JSON.stringify(d.figures)), stale.id);
     ok('figures stored by an older finder are found again, and kept', refound === stale.was, refound.slice(0, 120));
+    await p2.context().close();
+    ok('the completed built-in profile releases its browser context', browser.contexts().length === 0);
   }
 
   head('skip a question in the drill');
@@ -3421,6 +3403,7 @@ function kindOf(user) {
     const ptext = prec2.clusters.map(c => c.text).join(' ');
     ok('a photo of a page is read the same way, heading and all', /Venous return is the main determinant of preload in a healthy heart, and preload rises with volume\./.test(ptext) &&
        prec2.clusters.some(c => c.headings.indexOf('Scanned Page Heading') !== -1) && JSON.stringify(prec2.ocr) === '[1]', ptext.slice(0, 160));
+    await p3.context().close();
 
     const p4 = await fresh('ocr-offline', true);
     await p4.setInputFiles('#pdf-input', { name: 'scan.pdf', mimeType: 'application/pdf', buffer: scanPdf });
@@ -3431,6 +3414,7 @@ function kindOf(user) {
     ok('when the text reader cannot load, the scanned page is still named, with the reason', JSON.stringify(orec.scanned) === '[2]' && orec.ocr.length === 0 &&
        /text reader could not run/.test(await p4.locator('.unit-row').innerText()), JSON.stringify({ scanned: orec.scanned, err: orec.ocrError }));
     ok('and the rest of the PDF is imported all the same', orec.clusters.some(c => /This first page carries real text/.test(c.text)));
+    await p4.context().close();
 
     /* A table in a shaded box, found as a drawing, is named by its own title */
     const p5t = await fresh('boxed-table', true);
@@ -3444,6 +3428,7 @@ function kindOf(user) {
     await p5t.locator('#visuals .figs figure').first().waitFor(T);
     ok('and the lesson shows it under that name', await p5t.locator('#visuals .figs button[aria-label="Enlarge Table 9.1"]').count() === 1 &&
        /TABLE 9\.1/.test(await p5t.locator('#visuals .figs figcaption').first().innerText()), await p5t.locator('#visuals .figs figcaption').first().innerText());
+    await p5t.context().close();
 
     /* A labelled diagram: the labels printed inside it are kept, and a figure card is made from them */
     const p5d = await fresh('diagram', true);
@@ -3464,6 +3449,7 @@ function kindOf(user) {
     await p5d.waitForFunction(v => Memorizer.ui.docRec && Memorizer.ui.docRec.figuresV === v, await p5d.evaluate(() => MemPdf.FIGURES_V), T).catch(() => {});
     const again = await p5d.evaluate(id => MemStore.get('docs', id).then(d => (d.figures[0] && d.figures[0].labels || []).map(l => l.text).sort()), drec.id);
     ok('and a unit whose figures are found again keeps its labels too', JSON.stringify(again) === JSON.stringify(['Aorta', 'Left atrium', 'Left ventricle', 'Right atrium', 'Right ventricle']), JSON.stringify(again));
+    await p5d.context().close();
 
     /* A FIGURE HOLDS THE SHAPE IT IS DRAWN AT, on a turned page and where its
        margin runs off the page (makeTurnedPdf). The space held was the box
@@ -3569,6 +3555,7 @@ function kindOf(user) {
     ok('a figure card from the turned page hides its label where the drawn picture shows it',
        !!seen.patch && !!seen.mask && seen.mask[0] <= seen.patch[0] + 0.01 && seen.mask[1] <= seen.patch[1] + 0.01 &&
        seen.mask[2] >= seen.patch[2] - 0.01 && seen.mask[3] >= seen.patch[3] - 0.01, JSON.stringify(seen));
+    await p5r.context().close();
   }
 
   head('opened as a data: URL, the way the iPad\u2019s Files app hands a file to Safari');
