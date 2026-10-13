@@ -75,11 +75,12 @@ are retained. Node 22 is the minimum; local defaults and CI select Node 24.
 The licensing guard detects renamed BMP, TIFF, AVIF/HEIC and SVG files. It reads
 the complete bounded SVG text and scans doctypes without regex backtracking,
 honoring quoted brackets and comments. Namespace-prefixed SVG roots, including non-ASCII XML names, are checked
-against their namespace declaration. These last two cases address the remaining
+against their namespace declaration. Namespace references are conservatively
+refused without expanding DTD entities. These last two cases address the remaining
 SVG review findings on #241. CSP source checks inspect every srcset and preload
 candidate, with a regression for an external second candidate.
 
-Focused validation on Node 24.19: licensing regressions 103 passed; CSP 26 passed
+Focused validation on Node 24.19: licensing regressions 106 passed; CSP 26 passed
 in Chromium and 26 in WebKit. The earlier measured private family records remain
 historical results of their recorded commits; these selected checks do not
 replace them or claim a new full private run. Physical iPad acceptance and live

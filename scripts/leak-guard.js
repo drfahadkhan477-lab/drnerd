@@ -283,7 +283,9 @@ function isSvg(text) {
     if (next < 0 || next > end) return false;
     const value = text.slice(pos, next);
     pos = next + 1;
-    if (name === `xmlns:${root[1]}` && value === 'http://www.w3.org/2000/svg') return true;
+    // References can spell SVG's URI or depend on a DTD entity. Refuse them
+    // conservatively; never expand a DTD or load external entities in a hook.
+    if (name === `xmlns:${root[1]}` && (value === 'http://www.w3.org/2000/svg' || value.includes('&'))) return true;
   }
   return false;
 }

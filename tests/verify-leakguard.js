@@ -236,6 +236,11 @@ head('it refuses the licensed bank, by every route in');
   ok('an unrelated namespace is not mistaken for an SVG', r.code === 0);
   r = inTmp('notes/quoted-namespace.xml', '<s:svg title=" xmlns:s=\'http://www.w3.org/2000/svg\'" xmlns:s="urn:unrelated"/>');
   ok('a namespace mentioned inside another attribute is not a declaration', r.code === 0);
+  for (const namespace of ['http:&#x2f;&#x2f;www.w3.org/2000/svg', 'http:&#47;&#47;www.w3.org/2000/svg', '&svgNS;']) {
+    r = inTmp('assets/referenced-namespace.bin', '<!DOCTYPE s:svg [<!ENTITY svgNS "http://www.w3.org/2000/svg">]>' +
+      `<s:svg xmlns:s="${namespace}"/>`);
+    ok('XML references in an SVG namespace cannot hide a renamed figure', r.code === 1 && /an SVG/.test(r.out));
+  }
   /* However far in the root is: the whole text is read, not its first 4 KB
      (found by review, #241: a 5 KB comment hid the root). */
   r = inTmp('assets/diagram-3.bin', '<!-- ' + 'licence text '.repeat(500) + '-->\n<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>\n');
