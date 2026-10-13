@@ -28,6 +28,24 @@ const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
 const MIN = 60000;
 
+head('the verification CLI can describe itself without starting a run');
+for (const helpFlag of ['--help', '-h']) {
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), helpFlag,
+    path.join(ROOT, 'build', 'missing-help-fixture.html'), '--only', 'cause-pure'],
+    { cwd: ROOT, encoding: 'utf8', timeout: 10000 });
+  const out = (r.stdout || '') + (r.stderr || '');
+  ok(`${helpFlag} prints usage and exits without launching the selected suite`,
+     r.status === 0 && /Usage:/.test(out) && /--engine/.test(out) && /--jobs/.test(out) &&
+     !/\bPASS\b|all green|counts (?:not )?written/.test(out));
+}
+{
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--help',
+    path.join(ROOT, 'build', 'missing-help-fixture.html')],
+    { cwd: ROOT, encoding: 'utf8', timeout: 10000 });
+  ok('help for the default full run needs no assembled build', r.status === 0 &&
+     /Usage:/.test(r.stdout || '') && !/No build/.test(r.stderr || ''));
+}
+
 (async () => {
   head('the ceiling');
   ok('a quick suite gets the 20-minute floor', limitFor(100) === FLOOR_MS && FLOOR_MS === 20 * MIN, String(limitFor(100)));

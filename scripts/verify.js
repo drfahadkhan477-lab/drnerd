@@ -539,6 +539,24 @@ const flag = n => argv.includes(n);
 const opt = (n, fb) => { const i = argv.indexOf(n); return i > -1 && argv[i + 1] ? argv[i + 1] : fb; };
 const list = v => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
 
+if (flag('--help') || flag('-h')) {
+  console.log(`Usage: node scripts/verify.js [build/systole.html | URL] [options]
+
+  --only <names>         Run these comma-separated suites
+  --skip <names>         Exclude these comma-separated suites
+  --tag <tags>           Select pure, browser, build, serial or laptop suites
+  --engine <engine>      Select chromium, webkit or firefox
+  --jobs <N|auto>        Set parallel workers; serial suites still run alone
+  --suite-timeout <N>    Set the per-suite limit in minutes (0 disables it)
+  --report-json <file>   Write counts and timings without suite output
+  --bail                Stop at the first failure
+  --pwa                 Build, serve and verify the split build
+  --list                List suites and their tags
+  --help, -h            Show this help without starting verification
+`);
+  process.exit(0);
+}
+
 const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
 const { mergeRecord } = require(path.join(ROOT, 'scripts', 'record.js'));
 const { limitFor, sectionClock, slowest, stop, watch, spawnLimited, fmtMin } = require(path.join(ROOT, 'scripts', 'suitetime.js'));
