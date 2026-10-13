@@ -62,6 +62,14 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   asserts: a wait on `S.screen` before a check on `S.screen` leaves the check nothing to
   catch (found in review of #180). Reproduce by making the app slow (a `setTimeout` around
   the step), not by loading the CPU, which did not reproduce any of them.
+- **A build handed to the browser in one message.** #232's hosted section of
+  verify-memory served the build through `route.fulfill({ path })`. CI's 5 MB
+  synthetic build passed; on the owner's 92 MB build the page closed at that
+  `goto` and the suite died 45 checks in, with no FAIL line to say why. → Rule:
+  serve a build from a server of the suite's own on 127.0.0.1, streamed, never
+  through `route.fulfill`. Before pushing a suite change that loads the build in a
+  new way, run it once on a synthetic build padded to the real one's size (an HTML
+  comment after it); that reproduced this one here.
 
 - **A stub in the wrong provider's wire format.** verify-chat opened the panel on
   Gemini and fed it OpenAI-shaped stream lines, which Gemini's reader skips. The
@@ -195,6 +203,13 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   ran as a continuation of the release-check line (`>>`), so a 90-minute run tested
   old code. → Rule: give each command its own block, and before a long run ask for
   `git log --oneline -1` and check the commit against the one just merged.
+- **A pull on the wrong branch.** I told the owner to `git pull` and check for the
+  merge commit, but not to switch to master first. The checkout was an old session
+  branch, so the pull changed nothing, and the full run tested a tree 115 commits
+  behind (`claude/new-session-t4ftue @ baaa1e2`). → Rule: hand the owner
+  `git switch master` before `git pull`, and the exact `git log --oneline -1` line
+  to expect; check the `checkout:` line of their run against it before reading any
+  result.
 - **Prose that leads the record.** → Rule: before editing a number in
   `README.md`, `docs/BUILD.md` or `verify.yml`, run `node tests/verify-stats.js`
   and find out whether it is guarded.

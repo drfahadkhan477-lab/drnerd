@@ -227,6 +227,36 @@ module.exports = (async () => {
   }
   console.log('PASS a write is given time in proportion to the bytes it carries');
 
+  /* A WRITE SLOWER THAN THE SCREEN'S WAIT STILL LANDS. The screen stops
+     waiting for a save at ui.js's SAVE_WAIT_MS and says it is still going;
+     the store's bound is for a backend that has stopped answering. When both
+     were 5 s, every save slower than that was aborted as the note went up: on
+     the owner's laptop the first save into a new database sometimes was, and
+     the import failed with "storage did not answer within 5 seconds". Here the
+     store's own timers run 100 times fast and its defaults are untouched: a
+     batch held 1.4 times the screen's wait lands, and one that never finishes
+     is still cut off. */
+  {
+    const { blankComments } = require('./_source.js');
+    const uiSrc = blankComments(fs.readFileSync(path.join(__dirname, '../memorizer/src/ui.js'), 'utf8'));
+    const saveWait = +((/\bvar SAVE_WAIT_MS = (\d+);/.exec(uiSrc) || [])[1]);
+    assert.ok(saveWait > 0, '(ui.js SAVE_WAIT_MS was read)');
+    const FAST = 100;
+    let hold = null;
+    const idb = makeIDB({ onTransaction: t => (t.mode !== 'readwrite' || hold === null ? undefined : hold === 'hang' ? 'hang' : sleep(hold / FAST)) });
+    const r = { indexedDB: idb.indexedDB, IDBRequest: idb.IDBRequest, setTimeout: (fn, ms) => setTimeout(fn, ms / FAST), clearTimeout };
+    vm.runInNewContext(source, { window: r, ArrayBuffer, DataView });
+    const store = r.MemStore;
+    hold = saveWait * 1.4;
+    const slow = await within(store.batch([{ store: 'docs', value: { id: 'slow', clusters: [] } }]), 10000);
+    assert.equal(slow.e, undefined, `a batch held ${saveWait * 1.4 / 1000} s, longer than the screen waits, was cut off: ${slow.e && slow.e.message}`);
+    assert.ok(idb.data.get('docs').has('slow'), 'and it landed');
+    hold = 'hang';
+    const hung = await within(store.batch([{ store: 'docs', value: { id: 'never', clusters: [] } }]), 10000);
+    assert.equal(hung.e && hung.e.name, 'TimeoutError', 'a batch that never finishes is still cut off at the default bound: ' + JSON.stringify(hung.waiting ? 'still waiting' : hung.e && hung.e.name));
+  }
+  console.log('PASS a write slower than the screen\'s wait still lands; one that never finishes is still cut off');
+
   /* A CHANGE THAT REPLACES A FAILED WRITE (Store.commit: a section deleted, a
      paragraph corrected, a book cut again). Made from what the screen held,
      the failed step included, it supersedes the step's save. Kept for retry,

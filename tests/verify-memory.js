@@ -14,6 +14,8 @@
  * model was actually told.
  */
 'use strict';
+const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted, settled } = require('./_render.js');
@@ -360,14 +362,24 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
      stopped at "no key" all the same, so in the default deployment it never
      kept a note; either guard alone turns both checks below red. A single
      file is never hosted, since file: has no server, so given one this serves
-     the same build from disk at an https name that cannot resolve (.test is
-     reserved); given a URL, the page is served already. Last, because it
-     leaves the page on that origin. */
+     the same build from disk on 127.0.0.1, a fresh origin each run; given a
+     URL, the page is served already. Only the build is served, every other
+     path is a 404, and /api/apex/gemini/ never reaches this server: the route
+     above answers it. A server of its own, not route.fulfill, which hands the
+     browser the whole body in one message: the real build is 92 MB, and the
+     page closed under it (the owner's full run died here, 45 checks in, while
+     CI's 5 MB build passed). Last, because it leaves the page on that origin. */
   head('hosted: no key typed, and the sitting is still summarised');
+  let hostServer = null;
   if (!/^https?:\/\//.test(target)) {
-    const HOSTED_PAGE = 'https://systole.test/systole.html';
-    await page.route(HOSTED_PAGE, route => route.fulfill({ path: path.resolve(target), contentType: 'text/html' }));
-    await page.goto(HOSTED_PAGE, { waitUntil: 'load', timeout: 200000 });
+    const built = path.resolve(target);
+    hostServer = http.createServer((req, res) => {
+      if (req.url.split('?')[0] !== '/systole.html') { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      fs.createReadStream(built).pipe(res);
+    });
+    await new Promise(r => hostServer.listen(0, '127.0.0.1', r));
+    await page.goto(`http://127.0.0.1:${hostServer.address().port}/systole.html`, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
   }
   /* But a summary is a call nobody asked for, so hosted it waits until this
@@ -412,6 +424,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   head('regression');
   ok('no console or page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
+  if (hostServer) hostServer.close();
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
