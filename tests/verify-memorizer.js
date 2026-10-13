@@ -471,6 +471,9 @@ function kindOf(user) {
      (NODE_EXTRA_CA_CERTS). Measured: in this repository's cloud sandbox the
      browser failed pdf.min.js with ERR_CERT_AUTHORITY_INVALID. */
   let cdnHits = 0;
+  /* Each CDN request, answered or still waiting, for the report a stalled
+     import prints (below, at the first PDF). */
+  const cdnLog = [];
   /* ONE FETCH PER FILE, RETRIED, AND A FAILURE SAID. Each request used to
      refetch from Node, unhandled: one dropped Node fetch threw inside the
      route, the request was never answered, and WebKit reported that as
@@ -528,7 +531,10 @@ function kindOf(user) {
   });
   await page.route('https://cdn.jsdelivr.net/**', async route => {
     cdnHits++;
+    const asked = { file: new (require('url').URL)(route.request().url()).pathname.split('/').slice(-1)[0], at: Date.now(), ms: null, ok: null };
+    cdnLog.push(asked);
     const got = await cdnGet(route.request().url());
+    asked.ms = Date.now() - asked.at; asked.ok = !!got;
     return route.fulfill(got ? { status: 200, body: got.body, headers: {
       'content-type': got.type, 'access-control-allow-origin': '*' } }
       : { status: 502, body: '', headers: { 'access-control-allow-origin': '*' } });
@@ -639,7 +645,20 @@ function kindOf(user) {
 
   head('a real PDF becomes the sections it was written as');
   await page.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
-  await page.locator('#sections .section-card').first().waitFor(T);
+  /* WHERE AN IMPORT STOPPED, when its sections do not come. The owner's Windows
+     run died here with nothing in the page's log, while CI and this container
+     pass it, and the CDN answered that machine in 300 ms. So before the wait's
+     own error ends the suite, print the import's stage (ui.importing: opening,
+     reading page n, splitting), its error, whether pdf.js loaded, and each CDN
+     request with its time. Diagnostic only: no check reads it. */
+  await page.locator('#sections .section-card').first().waitFor(T).catch(async e => {
+    const at = await page.evaluate(() => { const u = Memorizer.ui;
+      return { importing: u.importing, error: u.error, busy: u.busy, notice: u.notice, slowSaves: u.slowSaves, saveError: u.saveError, pdfjs: typeof window.pdfjsLib, phase: u.state && u.state.phase }; })
+      .catch(x => ({ unreadable: String(x && x.message || x).slice(0, 120) }));
+    const cdn = cdnLog.map(c => ({ file: c.file, ms: c.ms === null ? 'waiting ' + (Date.now() - c.at) : c.ms, ok: c.ok }));
+    console.log('  [import stalled] ' + JSON.stringify(at) + '  cdn ' + JSON.stringify(cdn));
+    throw e;
+  });
   ok('the import lands on the unit’s sections, before any lesson', await page.evaluate(() => Memorizer.ui.state.phase === 'unit') && stub.requests.length === 0,
      `${stub.requests.length} requests`);
   ok('one card per section, numbered and titled by its heading',
