@@ -7,9 +7,9 @@
  * Builds memorizer/ with scripts/build-memorizer.js and serves it over HTTP
  * from this process, because a service worker never runs on file://.
  *
- * NEEDS THE NETWORK, like verify-memorizer: the pinned readers (pdf.js,
- * Tesseract and its English data, Mermaid) are fetched from jsDelivr by this
- * suite and handed to the browser through a local test transport, which
+ * Uses the prepared reader cache, like verify-memorizer: the pinned readers
+ * (pdf.js, Tesseract and its English data, Mermaid) are integrity-checked and
+ * handed to the browser through a local test transport, which
  * checks them against the app's integrity hashes as it would in use.
  * The generated worker delegates only its CDN network fetch to that
  * transport; its production caching code and original URL keys are intact.
@@ -74,6 +74,8 @@ const { build } = require(path.join(ROOT, 'scripts', 'build-memorizer.js'));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 
 (async () => {
+  const readerAssets = require('./_reader-assets.js').createClient();
+  await readerAssets.prepare();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'memorizer-offline-'));
   build(dir);
   const bytes = new Map(), attempts = [];
@@ -99,28 +101,12 @@ self.fetch = function (input, init) {
       if (transport === 'offline') return r.destroy();
       r.setHeader('access-control-allow-origin', '*');
       if (transport === 'different' || transport === 'corrupt') { r.setHeader('content-type', 'text/plain'); return r.end('NOT FROM THE CACHE'); }
-      /* THREE TRIES, as tests/verify-memorizer.js's cdnGet. One dropped Node
-         fetch here was a 502 to the worker, which cached one reader file of
-         two: "after preparing, all three are ready offline" failed on WebKit
-         CI, and the next check died reading a cache entry that was not
-         there. The network between the runner and jsDelivr is not what this
-         suite measures; the bytes are still jsDelivr's and still checked
-         against the pinned hashes. A file still missing after three tries is
-         a logged 502, as before. */
+      // Preparation verifies the real pinned bytes before browser scenarios.
+      // Keep transport failures and corruption above this cache lookup so the
+      // service worker still has to prove its own offline and integrity rules.
       try {
-        if (!bytes.has(url)) {
-          let last = '';
-          for (let attempt = 1; attempt <= 3 && !bytes.has(url); attempt++) {
-            try {
-              const res = await fetch(url);
-              if (res.ok) bytes.set(url, { type: res.headers.get('content-type'), body: Buffer.from(await res.arrayBuffer()) });
-              else last = 'CDN returned HTTP ' + res.status;
-            } catch (e) { last = e.message; }
-            if (!bytes.has(url)) await new Promise(res => setTimeout(res, 500 * attempt));
-          }
-          if (!bytes.has(url)) { console.log(`  [cdn] ${url} failed three times: ${last}`); throw new Error(last); }
-        }
-        const b = bytes.get(url);
+        const b = await readerAssets.get(url);
+        bytes.set(url, b);
         r.setHeader('content-type', b.type || 'application/octet-stream');
         return r.end(b.body);
       } catch (error) { r.writeHead(502); return r.end(error.message); }

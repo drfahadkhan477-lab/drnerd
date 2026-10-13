@@ -11,6 +11,7 @@
     "build": "node scripts/assemble-app.js --out build/systole.html",
     "verify": "node scripts/verify.js",
     "test": "node scripts/test-public.js",
+    "test:prepare": "node tests/_reader-assets.js --prepare",
     "test:pure": "node scripts/test-public.js --pure",
     "test:private": "node scripts/verify.js",
     "test:laptop": "node scripts/verify.js --tag laptop",

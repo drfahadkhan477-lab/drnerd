@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
-node scripts/verify.js --pwa                           # → 6930 + 134 checks
+node scripts/verify.js --pwa                           # → 7090 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -66,7 +66,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   ```
 
   Without it that one suite refuses with the install command and the other 151
-  run normally — it is 35 of the 6930 checks. The suite tries `python3`,
+  run normally — it is 35 of the 7090 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -249,13 +249,167 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 152 suites, 6930 checks, plus 134 more on the split build. Those numbers are
+Across 152 suites, 7090 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
 fails if this sentence, the README or the CI header disagrees with it. They used to be maintained from memory in three files,
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
+
+The totals exclude suites named in `RETIRED_RECORD` while their historical
+measurements remain in the record. The qualifying Memorizer run at `9bcb827`
+removed the three retired Claude suites and refreshed Memorizer's counts.
+Systole's active counts and the split-build count remain from their previous
+qualifying runs in that record. The later complete Systole run at `391f7c5`
+refreshed its half too and emptied `PENDING_RECORD`; the split-build figure
+remains carried over from its previous measurement.
+
+### Prepared reader libraries for public browser checks
+
+```bash
+npm run test:prepare
+SYSTOLE_TEST_READERS_OFFLINE=1 npm test
+```
+
+Preparation downloads the nine version-pinned PDF, OCR, flowchart, and WebLLM
+runtime files and verifies their existing SHA-384 pins. It stores only these
+public reader assets under `node_modules/.cache/systole-reader-assets/`, including
+the English OCR model; no study content or language-model weights are cached
+there. The browser still checks the app's
+SRI hashes and runs the real parser and recognition engine.
+
+Downloads have a 20-second ceiling per attempt and at most three attempts.
+Missing files fail in reader-offline mode, and corrupt cache files fail rather
+than being silently replaced. Remove a corrupt cache file and rerun preparation
+to repair it. Changing a URL or integrity pin selects a new cache file.
+
+The Memorizer CI job prepares these libraries before its browser scenarios and
+uses reader-offline mode for those scenarios. This controls reader downloads;
+it does not claim that every browser scenario is disconnected from the network.
+
+Observed on 2026-10-13 with Node 24.19.0 and repository-pinned Playwright 1.63.0:
+all 148 public suites passed in Chromium (87 pure and 61 browser suites).
+The complete Memorizer scenario passed 492 checks in WebKit, and its data and
+security suite passed 27. After connecting the service-worker offline suite
+to the prepared reader cache as well, that suite passed 16 checks in Chromium,
+16 in Firefox and 12 in WebKit. WebKit explicitly did not run tab reopening
+because of its documented idle-origin Cache Storage issue.
+
+All seven suites from the Firefox `memorizer-browser` CI job passed: Memorizer
+492, hardening 107, study import 72, offline 16, data/security 27, bankstore 32,
+and Lab 67 (813 checks total). These targeted runs used reader-offline mode.
+WebKit used local shared libraries and the repository's existing
+view-transition workaround. Physical iPad trials, real language-model execution,
+and a full Firefox `npm test` remain unmeasured.
+
+### Private export validation
+
+On 2026-10-13, the uploaded export built successfully at `9bcb827` with 639
+questions and 305 figures. The full Chromium registry ran with `--jobs 2` and
+reader-offline mode: 152 suites ran, 145 passed, and seven failed or stopped.
+The missing `content/refs/` and `content/refs-images/` library prevented
+`home`, `pearl`, `chatfigs`, `chat`, `layout`, `retrieval`, and `figsharp` from
+completing successfully. The run is not a private-release pass.
+
+Only the fully passing Memorizer family qualified to refresh
+`tests/test-stats.json`; Systole's active measurements were retained. Detailed
+output and the structured run report stay in ignored `build/private-validation/`.
+Provide the separate reference library and rebuild before rerunning the affected
+suites and seeking a complete private baseline. No licensed content belongs in
+the measured counts record or Git.
+
+The owner subsequently supplied an uncommitted laptop record for
+`master @ c324c21`, Chromium, three workers. Its Systole family contains 126
+suites and 4,774 checks; all 152 names in the combined record match that commit's
+registry. The combined total is 6,930 checks because Memorizer's 26 suites and
+2,156 checks are retained from `28a8df4`. The split-build figure remains 134;
+the diff alone does not establish that the split build was rerun. The Systole
+family qualified for recording, which includes the seven reference-dependent
+suites unavailable in the earlier cloud run. This is evidence for that laptop
+checkout, not a passing run of the later master or this review branch.
+
+The uploaded note archive was installed into ignored `content/refs/`:
+49 Markdown files produce 1,141 notes, and the reference-format suite passed
+39 checks. Rebuilding initially stopped because cited figure files were absent.
+The first image archive exceeded the workspace's 32 MiB attachment-transfer
+limit and could not be installed; a retrieval attempt against the retained earlier build was not
+validation of the newly supplied notes.
+
+The owner then supplied all six image folders as smaller archives. All 661
+cited images are now present, the rebuilt app includes the 1,141 reference
+notes, and the seven previously blocked suites plus reference-format checks
+passed all 302 checks. A complete Systole family run at `391f7c5` subsequently
+passed all 126 suites and 4,635 checks, Chromium, two workers. The record keeps
+the passing Memorizer family from `9bcb827` (26 suites, 2,235 checks), giving
+152 recorded suites and 6,870 checks. These are two qualifying family runs,
+not one new full-registry invocation. The 134 split-build checks were not
+remeasured; physical iPad and real model execution remain unmeasured.
+
+Both source exports and reference archives stay outside Git. Full transcripts
+and structured reports remain in ignored `build/private-validation/`; only
+measured counts and provenance are committed. At those measurement points,
+later master changes had not been integrated into or validated by those runs.
+
+Master at `db8c0d5` was subsequently reconciled with this review branch. Its
+application fixes, test assertions and history licensing checks were retained,
+along with prepared reader caching and test-profile cleanup. The owner's lean
+`AGENTS.md` setup was retained instead of restoring the deleted Claude files.
+All 87 public pure suites passed on the combined source; that result does not
+yet establish that the combined private browser suite passes. Its prior
+per-family measurements remain in the record until a qualifying run replaces
+them.
+
+The first integrated private run at `348045d` completed all 152 suites: 151
+passed and backup failed only its imported-image reload assertion. Backup then
+passed all 131 checks in isolated Chromium and WebKit runs, with its assertions
+unchanged. The runner now places backup in the existing serial group to keep
+its cold database and bounded-open persistence measurement clear of concurrent
+browser work. The complete integrated Memorizer scenario also passed all 495
+checks in WebKit, using the same local runtime setup described above. The first
+integrated run qualified only the Memorizer family to refresh its counts; it
+did not establish a passing integrated Systole family. A complete Systole run
+with corrected scheduling was the remaining gate for that record.
+
+That complete Systole run at `8864490` passed all 126 suites and 4,823 checks.
+Both families now have qualifying integrated runs: Systole at `8864490` and
+Memorizer at `348045d` (26 suites, 2,267 checks), for 152 recorded suites and
+7,090 checks. This combines two family runs; the earlier full-registry failure
+is retained in its structured report. The 134 split-build checks remain from
+their older measurement.
+
+Inspection also found the backup fixture could stop waiting after five seconds
+or an unrelated toast change, before the real asynchronous import finished.
+A six-second asset-restore delay reproduced two failures with the old helper.
+The helper now awaits the real FileReader handler, including its awaited
+storage writes, while restoring its temporary interception immediately.
+With the delay and the same 131 assertions, backup passed in Chromium and
+WebKit. Application storage deadlines and assertions were not relaxed. This
+fixture correction followed the full-family run; application source is
+unchanged, and its strengthened backup scenario was verified separately.
+
+### Branch review handoff
+
+The remote snapshot inspected on 2026-10-13 has master at `db8c0d5`. It contains
+60 commits absent from the review branch's original `f28fa2c` base, including
+changes after the laptop measurement at `c324c21`. Fifteen test files changed
+between that measurement and the inspected master. Master's committed counts
+still retain the older Systole run at `2aefc81`; the owner's newer laptop record
+has not been published there.
+
+Only three remote branches contain commits absent from that master snapshot:
+
+| Branch | Unmerged work | Treatment |
+|---|---|---|
+| `claude/exciting-fermi-330ukl` | eight commits covering guards, CSP, and Node/CI setup | review separately; no newer committed run record |
+| `claude/compassionate-goodall-szcar9` | one commit retiring the deleted Claude checks | overlaps this review's cleanup, on an older base |
+| `claude/repro-webkit-figure-card` | three commits explicitly marked scratch | diagnostic work, not a merge candidate |
+
+The review branch's passing measurements and the owner's laptop measurements
+describe different source trees. Keep their provenance; do not copy either
+record over the other or count them as validation of an integrated tree. Master
+also restored Claude configuration after the owner requested its deletion, so
+reconciliation must retain the chosen lean contributor setup deliberately.
 
 ### When a screen overflows
 
@@ -362,20 +516,16 @@ Every suite launches through `tests/_engine.js`, so the engine is a flag:
 node scripts/verify.js --engine webkit     # or firefox; chromium is the default
 ```
 
-**They have not been run on WebKit yet, and that matters.** The target device
-for this app is an iPad, which is WebKit — Blink was never the engine that
-mattered most here, it was the engine that was easy. All thirty-four browser
-suites opened with `chromium.launch()`, not as a decision but because each was
-copied from the one before it. That is now one line instead of thirty-four, and
-`verify-engine` is what stops it drifting back: it fails if any suite launches
-an engine itself.
+The target device is an iPad, so WebKit validation matters. CI runs the
+Memorizer job in Chromium, WebKit and Firefox, and the synthetic app job also
+has a WebKit counterpart with explicit exclusions. `verify-engine` enforces
+the shared launcher so suites cannot silently select a different engine.
 
-What this does *not* do is claim the suites pass on WebKit. Nobody has run them
-there, because Playwright's WebKit build could not be downloaded in the
-environment this was written in. Expect real failures the first time — WebKit
-differs on `performance.memory` (absent, already guarded), on IndexedDB timing,
-on `hasTouch` pointer coalescing, and on how it resolves fonts. Those are worth
-finding. Finding them is the next piece of work, not this one.
+The prepared-reader section above records the latest local measurements.
+Engine differences and unavailable measurements remain explicit: WebKit has
+no Chromium heap API, and the launcher documents its view-transition
+workaround. Browser automation does not establish behavior on a physical
+iPad; use the device checks above for that validation.
 
 Every suite asserts the *claim*, not that something rendered. `verify-physio`
 checks that valve events are measured pressure crossings and that raising

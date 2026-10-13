@@ -259,6 +259,11 @@ head('CI runs everything it is capable of running');
      missing.length ? missing.join(', ') + ' — registered, browser-free, not in the workflow' : 'none missing');
 }
 
+/* Keep the measured record intact. Retired suites still have historical
+   counts there, but cannot contribute to claims about today's registry. */
+const activeTotal = Object.entries(stats.suites).reduce((n, [name, count]) => n + (RETIRED.includes(name) ? 0 : count), 0);
+const activeSuiteCount = Object.keys(stats.suites).filter(name => !RETIRED.includes(name)).length;
+
 head('the prose agrees with the record');
 {
   /* Each of these is one sentence somebody would otherwise maintain from
@@ -267,7 +272,7 @@ head('the prose agrees with the record');
      changing the number is not. */
   const claims = [
     ['README.md', 'the headline count and suite count',
-     /#\s*(\d+)\s+checks,\s*(\d+)\s+suites/, r => [+r[1] === stats.total, +r[2] === stats.suiteCount]],
+     /#\s*(\d+)\s+checks,\s*(\d+)\s+suites/, r => [+r[1] === activeTotal, +r[2] === activeSuiteCount]],
     /* THE LINE BETWEEN THE OTHER TWO, WHICH IS HOW IT DRIFTED. The command
        block in the README has three numbers in it and only two of them were
        guarded — this one sat between them, said "+ 76 more on the split build"
@@ -278,21 +283,21 @@ head('the prose agrees with the record');
      /#\s*\+\s*(\d+)\s+more on the split build/, r => [+r[1] === stats.pwa]],
     ['README.md', 'the badge caveat',
      /badge is not the (\d+) \+ (\d+) checks above — read it as (\d+), not (\d+)\./,
-     r => [+r[1] === stats.total, +r[2] === stats.pwa, +r[3] === ciTotal, +r[4] === stats.total + stats.pwa]],
+     r => [+r[1] === activeTotal, +r[2] === stats.pwa, +r[3] === ciTotal, +r[4] === activeTotal + stats.pwa]],
     ['docs/BUILD.md', 'the --pwa command comment',
-     /→\s*(\d+)\s*\+\s*(\d+)\s+checks/, r => [+r[1] === stats.total, +r[2] === stats.pwa]],
+     /→\s*(\d+)\s*\+\s*(\d+)\s+checks/, r => [+r[1] === activeTotal, +r[2] === stats.pwa]],
     ['docs/BUILD.md', 'the suites paragraph',
      /(\d+) suites, (\d+) checks, plus (\d+) more on the split build/,
-     r => [+r[1] === stats.suiteCount, +r[2] === stats.total, +r[3] === stats.pwa]],
+     r => [+r[1] === activeSuiteCount, +r[2] === activeTotal, +r[3] === stats.pwa]],
     ['.github/workflows/verify.yml', 'the "read this before trusting a green checkmark" header',
      /Of the (\d+) checks in[\s\S]{0,120}?plus (\d+) more under `--pwa`, this workflow runs (\d+)\./,
-     r => [+r[1] === stats.total, +r[2] === stats.pwa, +r[3] === ciTotal]],
+     r => [+r[1] === activeTotal, +r[2] === stats.pwa, +r[3] === ciTotal]],
     ['.github/workflows/verify.yml', 'the count of what CI cannot run',
-     /The other (\d+) all drive/, r => [+r[1] === stats.total + stats.pwa - ciTotal]],
+     /The other (\d+) all drive/, r => [+r[1] === activeTotal + stats.pwa - ciTotal]],
     ['.github/workflows/verify.yml', 'the same figure, second mention',
-     /there is no way to run those (\d+) checks here/, r => [+r[1] === stats.total + stats.pwa - ciTotal]],
+     /there is no way to run those (\d+) checks here/, r => [+r[1] === activeTotal + stats.pwa - ciTotal]],
     ['.github/workflows/verify.yml', 'the same figure, third mention',
-     /Adding the other (\d+) checks to this file/, r => [+r[1] === stats.total + stats.pwa - ciTotal]],
+     /Adding the other (\d+) checks to this file/, r => [+r[1] === activeTotal + stats.pwa - ciTotal]],
     ['.github/workflows/verify.yml', 'the honest subset total',
      /(\d+) real checks/, r => [+r[1] === ciTotal]],
     /* THE SAME HOLE AGAIN, in the README this time, and it had been open long
@@ -308,7 +313,7 @@ head('the prose agrees with the record');
      r => [+r[1] === pureCI.length]],
     ['README.md', 'the count of what CI cannot run',
      /why the other (\d+) checks can't run here/,
-     r => [+r[1] === stats.total + stats.pwa - ciTotal]],
+     r => [+r[1] === activeTotal + stats.pwa - ciTotal]],
     /* THE ONE UNGUARDED SENTENCE IN A BLOCK OF GUARDED ONES. The header
        describing the logic job opened "the nine suites that are pure Node" and
        still said nine when there were eighteen — it had been maintained by
@@ -334,14 +339,14 @@ head('the prose agrees with the record');
        not have to, so the sentence went half-stale and kept reading as fact. */
     ['docs/BUILD.md', 'the paragraph on building without Python',
      /the other (\d+)\s+run normally\s*—\s*it is (\d+) of the (\d+) checks/,
-     r => [+r[1] === stats.suiteCount - 1, +r[2] === stats.suites.figreview, +r[3] === stats.total]],
+     r => [+r[1] === activeSuiteCount - 1, +r[2] === stats.suites.figreview, +r[3] === activeTotal]],
     /* The repository-shape sketch, which reads as a diagram and so gets
        re-read often and re-checked never. It said 71 patch scripts against 85
        (a count dropped with the chain), and "35 Playwright suites (34 single-file + pwa)" against a registry of
        75 — a sentence that had been wrong through roughly forty additions. */
     ['docs/BUILD.md', 'the suite counts in the repository sketch',
      /(\d+) suites · (\d+) need no browser/,
-     r => [+r[1] === stats.suiteCount, +r[2] === pureCI.length]],
+     r => [+r[1] === activeSuiteCount, +r[2] === pureCI.length]],
     /* The corpus prerequisite quotes the two floors verify-retrieval enforces.
        They were added the day a run was spent discovering them, so they are
        held to the suite that owns them rather than to whoever remembers —
@@ -353,7 +358,7 @@ head('the prose agrees with the record');
        record. Correcting a number without guarding it buys one commit. */
     ['scripts/verify.js', 'the header describing the suite count and total',
      /There are (\d+) suites and roughly (\d+) checks/,
-     r => [+r[1] === stats.suiteCount, +r[2] === stats.total]],
+     r => [+r[1] === activeSuiteCount, +r[2] === activeTotal]],
     ['docs/BUILD.md', 'the corpus floors quoted in the prerequisite',
      /more than (\d+) notes, and an index over (\d+) documents/,
      r => {
@@ -379,8 +384,8 @@ head('the arithmetic in the header is self-consistent');
     .map(m => +(m[1] || m[2] || m[3]));
   ok('every mention of "what CI cannot run" is the same number',
      new Set(nums).size <= 1, nums.join(' vs ') || 'none found');
-  ok('and it is exactly what is left over', nums.every(n => n === stats.total + stats.pwa - ciTotal),
-     `${stats.total} + ${stats.pwa} − ${ciTotal} = ${stats.total + stats.pwa - ciTotal}`);
+  ok('and it is exactly what is left over', nums.every(n => n === activeTotal + stats.pwa - ciTotal),
+     `${activeTotal} + ${stats.pwa} − ${ciTotal} = ${activeTotal + stats.pwa - ciTotal}`);
 }
 
 

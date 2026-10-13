@@ -46,10 +46,10 @@ const boot = async page => {
    does for the chapter importer — importMarkup() creates its own <input>
    and never hands it back, so the only way to reach it without reimplementing
    the restore logic is to intercept document.createElement for the moment
-   it runs. importMarkup()'s onchange is not async (it uses FileReader's
-   callback style, not a Promise), so callers wait on the toast appearing
-   rather than on the handler returning. */
-const restore = `(text) => new Promise(resolve => {
+   it runs. The input's onchange does not return the asynchronous FileReader
+   handler. Await that real handler instead of a toast change or a timer: both
+   could finish the fixture before its image transaction had committed. */
+const restore = `(text) => new Promise((resolve, reject) => {
   const file = new File([text], 'backup.json', { type: 'application/json' });
   const orig = document.createElement;
   let input = null;
@@ -63,15 +63,22 @@ const restore = `(text) => new Promise(resolve => {
   const dt = new DataTransfer();
   dt.items.add(file);
   Object.defineProperty(input, 'files', { value: dt.files, configurable: true });
-  const t = document.getElementById('toast');
-  const before = t ? t.textContent : null;
-  input.onchange();
-  const t0 = Date.now();
-  (function poll() {
-    const now = document.getElementById('toast');
-    if ((now && now.textContent !== before) || Date.now() - t0 > 5000) return resolve();
-    setTimeout(poll, 25);
-  })();
+  const read = FileReader.prototype.readAsText;
+  FileReader.prototype.readAsText = function () {
+    const loaded = this.onload;
+    this.onload = function () {
+      const reader = this, args = arguments;
+      Promise.resolve().then(() => loaded.apply(reader, args)).then(resolve, reject);
+    };
+    const errored = this.onerror;
+    this.onerror = function (event) {
+      if (errored) errored.call(this, event);
+      reject(this.error || new Error('The backup fixture could not be read.'));
+    };
+    return read.apply(this, arguments);
+  };
+  try { input.onchange(); }
+  finally { FileReader.prototype.readAsText = read; }
 })`;
 
 (async () => {
@@ -350,6 +357,16 @@ const restore = `(text) => new Promise(resolve => {
   const envelope=JSON.parse(exported.text);
   ok('version 6 exports the cited imported image bytes',envelope.v===6&&envelope.assets[exported.key]===exported.value);
   const context=await browser.newContext(),other=await context.newPage(); await boot(other);
+  /* A restore can take longer than the helper's former five-second poll.
+     Delay the real asset restore, then prove its bytes survive a reload.
+     This holds completion, not the bytes or the persistence assertions. */
+  await other.evaluate(()=>{
+    const restore=RefAssets.restoreBackup;
+    RefAssets.restoreBackup=async assets=>{
+      await new Promise(resolve=>setTimeout(resolve,6000));
+      return restore(assets);
+    };
+  });
   await other.evaluate(async({fn,text})=>{await(new Function('return '+fn)())(text);},{fn:restore,text:exported.text});
   ok('a new storage context restores the image and its citation',await other.evaluate(({key,value})=>RefAssets.get(key)===value&&REF[0].body.includes(key),exported));
   await other.reload();

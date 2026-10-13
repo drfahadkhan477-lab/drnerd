@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 152 suites and roughly 6930 checks, and they
+ * WHY THIS EXISTS. There are 152 suites and roughly 7090 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -176,13 +176,7 @@ const SUITES = [
      remote, and .gitignore stops being a boundary the moment somebody types
      `git add -f`. */
   ['leakguard',    'the licensed question bank cannot be committed, however it is renamed'],
-  /* Its sibling for Claude Code sessions: .claude/hooks/guard.js refuses a
-     read of the licensed paths and a commit leak-guard would refuse, before
-     the tool runs, and lets a suite run on build/ through. */
-  ['claude-guard', 'a Claude Code session cannot read the licensed export, or commit what leak-guard refuses'],
-  /* tools/study-file-check.js, which a session writing a study file trusts:
-     it runs Memorizer's own import path and reports what the app would drop,
-     refuse or flag, without printing the file's text. */
+  ['reader-assets-pure', 'pinned public readers are prepared once, checked before use, and failed or unbounded downloads cannot enter the test cache'],
   ['study-file-check', 'a study file is checked by the app\u2019s own import code before it is handed over'],
   /* Step 1 of retiring the patch chain: the chain's output cuts into the app
      and its payloads losslessly, and the app carries none of what was cut. */
@@ -466,22 +460,19 @@ const SUITES = [
    suites, the Memorizer half kept as recorded at 28a8df4), which measured the
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
+/* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
 const PENDING_RECORD = [];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
-   tests/test-stats.json until the next green run of its half rewrites it
-   (scripts/record.js drops a name that is no longer registered), and until
+   tests/test-stats.json until a qualifying family run rewrites the record
+   (scripts/record.js drops unregistered names from both halves), and until
    then verify-stats would read it as the record holding something that is no
    longer a suite. Naming it here says that is on purpose. Checked in both
    directions like PENDING_RECORD: a name here must still be in the record and
    must not be registered, so the next write forces it out of this list. */
-/* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
-   survived the chain to the step that used them; deleted with the chain.
-   claude-agents and claude-skills checked the subagents in .claude/agents and
-   the skills in .claude/skills; the owner deleted both directories for a
-   leaner setup, and the suites went with them. The Systole run at c324c21
-   rewrote that half and dropped both, so the list is empty again. */
+/* The passing Memorizer family run at 9bcb827 removed the retired Claude
+   entries. Systole's active counts still come from its previous green run. */
 const RETIRED_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
@@ -535,8 +526,12 @@ const RETIRED_RECORD = [];
    Everything else in the registry asserts on content, geometry or arithmetic,
    and was verified to give the same result under --jobs 3 as it does alone —
    that comparison is the evidence, not this list. */
+/* Backup restores and reloads a cold database with bounded open waits. The
+   integrated two-worker run failed its image reload once, while the isolated
+   unchanged suite passed all 131 checks. Keep that persistence measurement
+   clear of other browser work, as the rendering budgets below already are. */
 const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
-                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs',
+                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs', 'backup',
                         'memorizer', 'memorizer-hardening', 'memorizer-studyimport']);
 
 const argv = process.argv.slice(2);

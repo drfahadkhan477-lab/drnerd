@@ -23,7 +23,7 @@
  *     NOT memorizer-only: verify-csp scans it, and verify-bankstore uses it.
  *   - No suite or build step in memorizer-browser reads app/ or assets/.
  *   - No browser suite reads docs/, tasks/, .claude/ or a top-level .md; the
- *     suites that do (verify-stats, claude-*) are in the logic job, which
+ *     suites that do (such as verify-stats) are in the logic job, which
  *     always runs, as do syntax and build-guard.
  * tests/verify-cichanges-pure.js holds each list against the jobs it skips.
  *

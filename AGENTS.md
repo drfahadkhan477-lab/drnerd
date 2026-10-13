@@ -1,68 +1,65 @@
-# Working on drnerd
+# Working on Systole
 
-Rules for any coding agent in this repository. Codex reads this file; Claude
-Code reads it through `CLAUDE.md`. What the project is: `README.md`. How to
-build and verify it: `docs/BUILD.md`. Each rule is here because it was broken
-at least once.
+Systole is an iPad-first, offline-capable cardiology study PWA. Public development
+must work with synthetic fixtures; the licensed question bank stays private.
 
-## 1. Licensed content stays out of transcripts and out of git
+## Current architecture
 
-The ACCSAP 12 export, and everything built or derived from it, is licensed:
-`source/`, `content/` (with `content/refs-repo`), `build/`, `dist/` and
-`tests/last-run.log`.
+- `app/systole.html` and `app/css/`: the application shell and styles.
+- `src/`: shared logic, visualizations, and worker code.
+- `scripts/assemble-app.js`: fills the shell's payload, source, and asset slots.
+  The legacy patch chain has been retired; use the assembler.
+- `memorizer/`: PDF and study-file learning app, with its own storage and backup.
+- `lab/` and `src/lab/`: interactive learning tools.
+- `tests/`: logic and browser suites. `scripts/verify.js` is the suite registry;
+  `scripts/test-public.js` derives the public test run from the CI workflow.
 
-- Build from it and run suites on the build. Never read it as a document: no
-  printing, grepping or quoting it, and never commit it in any form.
-- Never paste suite output or CI logs whole; they can quote question text.
-  Tail the result lines and grep for `FAIL`.
-- Never put an API key or secret in source, a fixture, a log or a commit.
-- Never weaken `scripts/leak-guard.js`, `.githooks/`, `.claude/hooks/guard.js`
-  or their tests. Run `npm run hooks` once per clone, and never commit with
-  `--no-verify`.
+## Start a task
 
-## 2. A check you have not seen fail is a check you have not written
+1. Check the branch and working tree; preserve existing changes.
+2. Read `package.json`, the affected source, and its tests.
+3. Use `npm run doctor` to diagnose setup. Install pinned dependencies with
+   `npm ci`; use repository Playwright browsers, not global packages.
+4. State the intended behavior and choose a bounded change. Keep refactors
+   separate from bug fixes unless they are needed for the fix.
 
-This project's recurring bug is a check that passes without measuring
-anything: `ok(label, true)`, a skipped step counted as a pass, a loop over
-nothing, a probe compared against `undefined` (which a probe that never ran
-also returns), a timeout in the wrong argument of `waitForFunction`.
+## Validate changes
 
-- For every new or changed check: break the code it guards (never the check),
-  watch that check's own `FAIL` line appear, restore, and see the same count
-  pass. Put a table of what you broke and what failed in the commit or PR.
-- If it stays green, narrow its comment. Never widen the test to fit the prose.
-- Never move a threshold, timeout or expected count to turn a suite green.
-- `tests/test-stats.json` is written by full green runs; never edit it by hand.
-  `node tests/verify-stats.js` checks the counts in the prose: change only the
-  sentences it names, and write no count of suites or checks it does not check.
+Add a regression for a bug fix, and run the affected suite first. Then use:
 
-## 3. Build and test
+```sh
+npm run test:pure       # source-independent logic checks
+npm run leak-guard      # licensing guard over tracked files
+npm run suites         # registry and suite descriptions
+npm test               # public browser checks with synthetic content
+SYSTOLE_ENGINE=webkit npm test
+```
 
-- `npm run build` fills the slots in `app/systole.html` from the export, the
-  reference notes, `src/` and `assets/`. Edit `app/`, `src/` and `assets/`
-  directly; never add a `*-patch.js` step or a find-and-replace build.
-- No export needed: `npm test` (every suite CI runs) and `npm run test:pure`
-  (no browser, no build: CI's `logic` job). With the export:
-  `npm run build -- <export>`, then `npm run test:private`.
-- Before every push: `node --check` on changed `.js` files, `npm run suites`,
-  `npm run test:pure` and `node tests/verify-stats.js`.
-- A new suite that needs no browser goes in `SUITES` and `PENDING_RECORD` in
-  `scripts/verify.js`, and in a `logic` step of `.github/workflows/verify.yml`
-  named with its check count. A deleted one goes in `RETIRED_RECORD`. Only a
-  full green run on the owner's machine empties either list.
-- Use the shared helpers: `tests/_source.js` to scan this repo's own source
-  with its comments blanked (they quote the patterns being hunted),
-  `tests/_render.js` for render waits, and the `--engine` flag rather than a
-  suite launching a browser itself.
-- The target is Safari on iPadOS 13.4 and later. Chromium is fast, not the
-  truth about an iPad: use `--engine webkit` for anything iPad-sensitive.
+Browser checks require `npx playwright install chromium webkit` and the host
+libraries those browsers need. WebKit is required for iPad-sensitive changes;
+Chromium alone does not establish iPad compatibility. Report unavailable
+measurements and checks that did not run, with their reasons.
 
-## 4. Reporting
+Use `npm run test:prepare` to download and verify the pinned public reader
+libraries, then `SYSTOLE_TEST_READERS_OFFLINE=1 npm test` to exercise the public
+run without downloading those libraries during browser scenarios. This mode
+does not disable the app's requests or replace the real parsers and OCR engine.
 
-- Say what ran, what passed, what did not run and why. Skipped is not passed:
-  CI's `full` job needs the export and never runs on a push or PR, and
-  `scripts/ci-changes.js` can skip a browser job a PR cannot reach.
-- Report what you found, including what came back clean and what you got
-  wrong.
-- Read `tasks/lessons.md` at the start of a session. After a correction, add
-  the pattern and the rule that would have prevented it.
+`npm run build` and `npm run test:private` require the owner's private export.
+For public build checks, use `scripts/synthetic-export.js` with the assembler;
+see `docs/BUILD.md`. Keep isolated test builds from overwriting private output.
+
+## Boundaries
+
+- Never print, commit, upload, or recreate licensed question text or figures.
+  Keep `source/`, `content/`, `build/`, and `dist/` out of Git.
+- Preserve `scripts/leak-guard.js`, Git hooks, provenance, schema validation,
+  atomic storage/restore behavior, service-worker guards, and their tests.
+- Keep credentials out of client source, fixtures, logs, and commits.
+- Preserve offline behavior and the supported Safari floor. Use synthetic
+  fixtures for public CI and browser tests.
+- Do not count skipped, unavailable, or unmeasured checks as passing. Keep
+  recorded test results distinct from newly observed results.
+
+Finish with the changed behavior, validation results, remaining limits, and
+the next useful step. Update this guide only when the working facts change.
