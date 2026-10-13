@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6526 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6443.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6605 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6522.
 # The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
@@ -76,7 +76,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6443 real checks, up
+#                Across every job, 6522 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -303,9 +303,9 @@ jobs:
         run: node tests/verify-suitetime-pure.js
       - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (49 checks)
         run: node tests/verify-devtools-pure.js
-      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (250 checks)
+      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (261 checks)
         run: node tests/verify-memorizer-chunk-pure.js
-      - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (89 checks)
+      - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (94 checks)
         run: node tests/verify-memorizer-prompts-pure.js
       - name: Memorizer — teach, memorise, then drill; every miss typed, one card, and kept until it graduates; review rounds interleaved (142 checks)
         run: node tests/verify-memorizer-session-pure.js
@@ -315,7 +315,7 @@ jobs:
         run: node tests/verify-memorizer-appearance-pure.js
       - name: Memorizer — the home screen's progress, streak, brain and its live impulses, pearl, the pearl's figure or table, and weak spots say true things (133 checks)
         run: node tests/verify-memorizer-home-pure.js
-      - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (43 checks)
+      - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (49 checks)
         run: node tests/verify-memorizer-book-pure.js
       - name: Memorizer — asking your book answers in its own sentences, with pages, or says nothing was found (38 checks)
         run: node tests/verify-memorizer-ask-pure.js
@@ -335,7 +335,7 @@ jobs:
         run: node tests/verify-memorizer-provenance-pure.js
       - name: Memorizer — a study pack written with Claude, its prompt carrying the chapter and its reply held to the book before any of it is used (105 checks)
         run: node tests/verify-memorizer-pack-pure.js
-      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text, a deleted section's diagrams with it (52 checks)
+      - name: Memorizer — a study file, markdown or a saved HTML page, made a unit — every question read, an unmarked answer never guessed, its points and questions held to the unit's own text, a deleted section's diagrams with it (54 checks)
         run: node tests/verify-memorizer-studyimport-pure.js
       - name: Memorizer — what the misses say — the pairs taken for one another, each missed item's attempts in order, a lapse named (13 checks)
         run: node tests/verify-memorizer-misses-pure.js
@@ -412,10 +412,10 @@ jobs:
       - name: prepare the pinned public reader libraries
         run: npm run test:prepare
       - if: ${{ !cancelled() }}
-        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (484 checks)
+        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (492 checks)
         run: node tests/verify-memorizer.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (69 checks)
+        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (107 checks)
         run: node tests/verify-memorizer-hardening.js
       - if: ${{ !cancelled() }}
         name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (72 checks)
@@ -424,7 +424,7 @@ jobs:
         name: Memorizer — Prepare for offline with the app's service worker — nothing ready before, every pinned reader kept after, served from the cache byte for byte while the network answers otherwise, and with the network cut, and outside WebKit a closed tab reopened with the origin down keeps its saved data and readers (16 checks)
         run: node tests/verify-memorizer-offline.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — your data and what the page may do — the backup reminder on the app's own backup, an orphan that would spoil a backup removed, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (18 checks)
+        name: Memorizer — your data and what the page may do — the backup reminder on the app's own backup, an orphan that would spoil a backup removed, the policy keeping requests to the app's own hosts, the AI model's files read back and checked (27 checks)
         run: node tests/verify-memorizer-data.js
       - if: ${{ !cancelled() }}
         name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (25 checks)

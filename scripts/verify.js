@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 150 suites and roughly 6526 checks, and they
+ * WHY THIS EXISTS. There are 150 suites and roughly 6605 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -456,15 +456,15 @@ const PENDING_RECORD = ['pearlbake-pure', 'reader-assets-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
-   tests/test-stats.json until the next green run of its half rewrites it
-   (scripts/record.js drops a name that is no longer registered), and until
+   tests/test-stats.json until a qualifying family run rewrites the record
+   (scripts/record.js drops unregistered names from both halves), and until
    then verify-stats would read it as the record holding something that is no
    longer a suite. Naming it here says that is on purpose. Checked in both
    directions like PENDING_RECORD: a name here must still be in the record and
    must not be registered, so the next write forces it out of this list. */
-/* Claude configuration was deleted on master. Keep its historical counts
-   in the measured record until the next complete Systole run. */
-const RETIRED_RECORD = ['claude-guard', 'claude-agents', 'claude-skills'];
+/* The passing Memorizer family run at 9bcb827 removed the retired Claude
+   entries. Systole's active counts still come from its previous green run. */
+const RETIRED_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

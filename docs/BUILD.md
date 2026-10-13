@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
-node scripts/verify.js --pwa                           # → 6526 + 134 checks
+node scripts/verify.js --pwa                           # → 6605 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -66,7 +66,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   ```
 
   Without it that one suite refuses with the install command and the other 149
-  run normally — it is 35 of the 6526 checks. The suite tries `python3`,
+  run normally — it is 35 of the 6605 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -249,7 +249,7 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 150 suites, 6526 checks, plus 134 more on the split build. Those numbers are
+Across 150 suites, 6605 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
@@ -257,11 +257,11 @@ fails if this sentence, the README or the CI header disagrees with it. They used
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
 
-The totals exclude suites named in `RETIRED_RECORD`, even while their historical
-measurements remain in the record. The deleted Claude configuration accounts for
-three such suites and 108 checks. The record itself is preserved until a complete
-green run updates it; these counts do not claim newly added assertions have
-already been measured in that run.
+The totals exclude suites named in `RETIRED_RECORD` while their historical
+measurements remain in the record. The qualifying Memorizer run at `9bcb827`
+removed the three retired Claude suites and refreshed Memorizer's counts.
+Systole's active counts and the split-build count remain from their previous
+qualifying runs; `PENDING_RECORD` still names its two unrecorded suites.
 
 ### Prepared reader libraries for public browser checks
 
@@ -298,9 +298,24 @@ All seven suites from the Firefox `memorizer-browser` CI job passed: Memorizer
 492, hardening 107, study import 72, offline 16, data/security 27, bankstore 32,
 and Lab 67 (813 checks total). These targeted runs used reader-offline mode.
 WebKit used local shared libraries and the repository's existing
-view-transition workaround. The private export, physical iPad trials,
-real language-model execution, and a full Firefox `npm test` remain unmeasured.
-These observations do not replace the historical `tests/test-stats.json` record.
+view-transition workaround. Physical iPad trials, real language-model execution,
+and a full Firefox `npm test` remain unmeasured.
+
+### Private export validation
+
+On 2026-10-13, the uploaded export built successfully at `9bcb827` with 639
+questions and 305 figures. The full Chromium registry ran with `--jobs 2` and
+reader-offline mode: 152 suites ran, 145 passed, and seven failed or stopped.
+The missing `content/refs/` and `content/refs-images/` library prevented
+`home`, `pearl`, `chatfigs`, `chat`, `layout`, `retrieval`, and `figsharp` from
+completing successfully. The run is not a private-release pass.
+
+Only the fully passing Memorizer family qualified to refresh
+`tests/test-stats.json`; Systole's active measurements were retained. Detailed
+output and the structured run report stay in ignored `build/private-validation/`.
+Provide the separate reference library and rebuild before rerunning the affected
+suites and seeking a complete private baseline. No licensed content belongs in
+the measured counts record or Git.
 
 ### When a screen overflows
 
