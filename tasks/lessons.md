@@ -314,3 +314,17 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   its base; diff each held commit's files against them; and drop what has
   landed. Never push onto a branch another session is driving; wait for its
   PR, or ask.
+- **A one-suite run read as a full one.** The owner pasted the last line of
+  verify.js, "all green — master @ a48fec8 on chromium", from the one-suite
+  run I had asked for. I told them it was a full green run that had rewritten
+  the record. Every run whose chosen suites all pass ends with that line, one
+  suite or all of them; their clean `git status` gave it away. → Rule: before
+  saying what a run did, read the line near its top that counts the suites
+  it chose ("1 suite" against "152 suites") and the "counts written" or
+  "counts not written" line, or ask for them.
+- **A cause guessed from the wrong setting.** The owner's full run recorded
+  `jobs: 3`, and I told them three suites at once was likely part of why
+  verify-memorizer passed its 20-minute limit. verify.js runs its SERIAL
+  suites, memorizer among them, one at a time after the shared pool, so that
+  suite had the machine to itself. → Rule: before naming a setting as a likely
+  cause, read the code that applies it to the thing that failed.
