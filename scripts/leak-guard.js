@@ -217,10 +217,26 @@ function imageMagic(b, size) {
   if (b.length >= 10 && b[0] === 0x42 && b[1] === 0x4D && b.readUInt32LE(2) === size && b.readUInt32LE(6) === 0) return 'a BMP';
   const four = b.subarray(0, 4).toString('latin1');
   if (['II*\0', 'MM\0*', 'II+\0', 'MM\0+'].includes(four)) return 'a TIFF';
-  /* An ISO media file holding a still image, by the major brand of its ftyp
-     box. A video's brands are not listed. */
-  if (b.length >= 12 && b.subarray(4, 8).toString('latin1') === 'ftyp' && BMFF_STILL.has(b.subarray(8, 12).toString('latin1'))) return 'an AVIF or HEIC image';
+  /* An ISO media file holding a still image, by any brand of its ftyp box. A
+     video's brands are not listed. */
+  if (ftypBrands(b).some(brand => BMFF_STILL.has(brand))) return 'an AVIF or HEIC image';
   return null;
+}
+/* The brands of an ftyp box at the start of the file: the major brand, then
+   the compatible brands after the minor version, up to the box's own length.
+   An AVIF may name a generic major brand (iso8, say) and list avif only among
+   its compatible brands, and reading the major brand alone let that file
+   through (found by review, #246). The major brand is read whatever the size
+   field says, as it was before; a 64-bit size (1) and a box running to the end
+   of the file (0) are read as ISO BMFF defines them. */
+function ftypBrands(b) {
+  if (b.length < 12 || b.subarray(4, 8).toString('latin1') !== 'ftyp') return [];
+  let size = b.readUInt32BE(0), at = 8;
+  if (size === 1 && b.length >= 16) { size = Number(b.readBigUInt64BE(8)); at = 16; }
+  const end = size === 0 ? b.length : Math.min(size, b.length), brands = [];
+  if (b.length >= at + 4) brands.push(b.subarray(at, at + 4).toString('latin1'));
+  for (let i = at + 8; i + 4 <= end; i += 4) brands.push(b.subarray(i, i + 4).toString('latin1'));
+  return brands;
 }
 /* Read the XML prolog once, honoring quotes and comments inside a DTD.
    A bracket inside an entity value must not end the subset. No backtracking
@@ -514,7 +530,9 @@ function inspect(file, src) {
   };
   if (!KNOWN_BINARIES.includes(p)) {
     let kind;
-    try { kind = imageMagic(st.head(12), st.size); } catch (e) { cannot(`read ${file}`, e); }
+    /* 256 bytes: every signature above, and an ftyp box with up to sixty
+       compatible brands. It read 12, the major brand and no further. */
+    try { kind = imageMagic(st.head(256), st.size); } catch (e) { cannot(`read ${file}`, e); }
     /* An SVG's root can sit behind a prolog or a comment of any length, so it
        is looked for in the whole text, which the rules below read anyway. This
        read the first 4 KB, and an SVG behind a 5 KB comment passed (found by
