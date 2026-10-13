@@ -350,3 +350,11 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   suites, memorizer among them, one at a time after the shared pool, so that
   suite had the machine to itself. → Rule: before naming a setting as a likely
   cause, read the code that applies it to the thing that failed.
+- **An afternoon spent on a file an open PR was deleting.** Codex found
+  another hole in the Claude guard's reader on #241, and I rewrote the
+  reader, fuzzed it against bash and proved each check red. #244, opened
+  before I started, removed the guard with the rest of the Claude Code setup,
+  and merged while I worked; I learned it at the fetch before pushing. →
+  Rule: before substantial work on a file, list the open PRs and the branches
+  that moved since the base, and check whether any changes or deletes that
+  file; if one does, ask before building on it.
