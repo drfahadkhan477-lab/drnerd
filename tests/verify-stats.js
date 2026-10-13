@@ -515,6 +515,17 @@ head('the palette count in a suite claim is the count the app defines');
      count === ids.size, `claim says ${count}, the app defines ${ids.size}`);
   ok('verify-theme.js asserts that same number, so suite and claim cannot drift',
      Number(asserted) === ids.size, `verify-theme says ${asserted}, the app defines ${ids.size}`);
+  /* THE SAME CLAIM, COPIED. The workflow names the theme suite's steps with
+     its line ("nine palettes, two axes, …"), once per browser job, and those
+     copies were read by nothing: a tenth palette would have moved the claim
+     above and left both steps saying nine. Comments are not step names, so
+     the workflow is read as it stands; a step that names no count is not one
+     of these. */
+  const steps = [...yml.matchAll(/^\s*-?\s*name:[^\n]*?\b([a-z]+|\d+)\s+palettes\b/gm)]
+    .map(m => (WORD[m[1]] !== undefined ? WORD[m[1]] : Number(m[1])));
+  ok('every workflow step that names a palette count names that count',
+     steps.length > 0 && steps.every(n => n === ids.size),
+     `steps say ${steps.join(', ') || 'nothing'}, the app defines ${ids.size}`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -34,8 +34,9 @@
  */
 
 /* ── BEFORE MIGRATING A waitForTimeout TO settled(), READ THIS ────────────
- * There are 113 fixed sleeps left in tests/, and 66 of them are immediately
- * followed by an evaluate() that reads the thing the next assertion checks.
+ * Many of the fixed sleeps left in tests/ are immediately followed by an
+ * evaluate() that reads the thing the next assertion checks. (No count: it
+ * moves with every suite, and nothing here would hold it to the code.)
  * That makes the conversion look mechanical. It is not, and doing it the
  * obvious way is worse than leaving the sleep alone.
  *
