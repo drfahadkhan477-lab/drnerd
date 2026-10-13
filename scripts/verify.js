@@ -557,6 +557,29 @@ if (flag('--help') || flag('-h')) {
   process.exit(0);
 }
 
+const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout', '--jobs'];
+const SWITCHES = new Set(['--bail', '--pwa', '--list']);
+const positional = [], seenOptions = new Set();
+const argumentError = message => {
+  console.error(`${message}\nUse --help to see verification options.`);
+  process.exit(2);
+};
+// Reject malformed options before list/build/browser setup. Silently ignoring
+// a typo or defaulting a missing selector can start a much larger run.
+for (let i = 0; i < argv.length; i++) {
+  const arg = argv[i];
+  if (VALUED.includes(arg)) {
+    if (seenOptions.has(arg)) argumentError(`${arg} was specified more than once.`);
+    const value = argv[i + 1];
+    if (!value || !value.trim() || value.startsWith('--')) argumentError(`${arg} requires a value.`);
+    seenOptions.add(arg);
+    i++;
+  } else if (SWITCHES.has(arg)) continue;
+  else if (arg.startsWith('-')) argumentError(`Unknown option: ${arg}`);
+  else positional.push(arg);
+}
+if (positional.length > 1) argumentError('Only one target path or URL is allowed.');
+
 const { tagsOf } = require(path.join(ROOT, 'tests', '_targets.js'));
 const { mergeRecord } = require(path.join(ROOT, 'scripts', 'record.js'));
 const { limitFor, sectionClock, slowest, stop, watch, spawnLimited, fmtMin } = require(path.join(ROOT, 'scripts', 'suitetime.js'));
@@ -575,8 +598,6 @@ if (flag('--list')) {
   process.exit(0);
 }
 
-const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout', '--jobs'];
-const positional = argv.filter((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
 /* A PATH OR A URL. Every suite already takes either — `file://` is just how a
    path reaches them — and the split build can only be driven over HTTP,
    because a fetch() will not cross file:// origins. Until now this file

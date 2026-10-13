@@ -161,6 +161,22 @@ function ciSuites(yml) {
 module.exports = { suitesFromWorkflow, run, jobBody, ciSuites };
 
 if (require.main === module) {
-  try { process.exit(run({ pure: process.argv.includes('--pure') }).code); }
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage: node scripts/test-public.js [--pure] [--help]
+
+  --pure       Run only suites that need no browser or private export
+  --help, -h   Show help without starting tests
+
+Set SYSTOLE_ENGINE to chromium, webkit or firefox to choose the browser.
+`);
+    process.exit(0);
+  }
+  const unexpected = args.find(arg => arg !== '--pure');
+  if (unexpected !== undefined) {
+    console.error(`Unexpected argument: ${unexpected}\nUse --help to see public test options.`);
+    process.exit(2);
+  }
+  try { process.exit(run({ pure: args.includes('--pure') }).code); }
   catch (e) { console.error('\n  ' + e.message + '\n'); process.exit(1); }
 }
