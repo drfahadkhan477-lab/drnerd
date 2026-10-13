@@ -46,6 +46,27 @@ for (const helpFlag of ['--help', '-h']) {
      /Usage:/.test(r.stdout || '') && !/No build/.test(r.stderr || ''));
 }
 
+head('malformed verification arguments are refused before any run');
+const invalidArgs = [
+  ['an unknown long option', ['--onyl', '--list'], /Unknown option.*--onyl/],
+  ['an unknown option on a selected run', ['--only', 'cause-pure', '--onyl'], /Unknown option.*--onyl/],
+  ['an unknown short option', ['-x', '--list'], /Unknown option.*-x/],
+  ['an extra target', ['first.html', 'second.html', '--list'], /Only one target/],
+  ['an option used as a value', ['--only', '--list'], /--only.*requires a value/],
+  ['a blank value', ['--only', '  ', '--list'], /--only.*requires a value/],
+  ['a repeated valued option', ['--only', 'cause-pure', '--only', 'keys', '--list'], /--only.*more than once/],
+  ...['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout', '--jobs']
+    .map(option => [`a missing ${option} value`, ['--list', option], new RegExp(option + '.*requires a value')]),
+];
+for (const [label, args, diagnostic] of invalidArgs) {
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), ...args],
+    { cwd: ROOT, encoding: 'utf8', timeout: 10000 });
+  const out = (r.stdout || '') + (r.stderr || '');
+  ok(`${label} exits with a CLI error before listing or launching suites`,
+     r.status === 2 && diagnostic.test(r.stderr || '') &&
+     !/Suites, their tags|\bPASS\b|all green|No build/.test(out));
+}
+
 (async () => {
   head('the ceiling');
   ok('a quick suite gets the 20-minute floor', limitFor(100) === FLOOR_MS && FLOOR_MS === 20 * MIN, String(limitFor(100)));

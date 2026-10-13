@@ -188,6 +188,31 @@ head('the synthetic build, then its suites');
   const p = go(['verify-a'], [], { pure: true }, { build: [['scripts/mk.js', T]], suites: ['verify-s'], target: T });
   ok('--pure names them among the suites it did not run', p.notRun.includes('verify-s') && !fs.existsSync(T), JSON.stringify(p.notRun));
 }
+head('the public CLI refuses unexpected arguments and help starts no suite');
+{
+  const { spawnSync } = require('child_process');
+  for (const file of ['test-public.js', 'gitenv.js'])
+    fs.copyFileSync(path.join(ROOT, 'scripts', file), path.join(TMP, 'scripts', file));
+  fs.mkdirSync(path.join(TMP, '.github', 'workflows'), { recursive: true });
+  fs.writeFileSync(path.join(TMP, '.github', 'workflows', 'verify.yml'), Y(['verify-cli-probe'], ['verify-c']));
+  fs.writeFileSync(path.join(TMP, 'tests', '_engine.js'),
+    'module.exports={ENGINES:["chromium","webkit","firefox"],DEFAULT_ENGINE:"chromium"};');
+  const marker = path.join(TMP, 'tests', 'cli-was-run');
+  suite('verify-cli-probe', 'require("fs").writeFileSync(require("path").join(__dirname,"cli-was-run"),"yes");');
+  for (const [label, args, status, diagnostic] of [
+    ['--help', ['--pure', '--help'], 0, /Usage:/],
+    ['-h', ['--pure', '-h'], 0, /Usage:/],
+    ['an unknown option', ['--pure', '--typo'], 2, /Unexpected argument.*--typo/],
+    ['an unexpected target', ['--pure', 'extra.html'], 2, /Unexpected argument.*extra.html/],
+  ]) {
+    fs.rmSync(marker, { force: true });
+    const r = spawnSync(process.execPath, [path.join(TMP, 'scripts', 'test-public.js'), ...args],
+      { cwd: TMP, encoding: 'utf8', timeout: 10000 });
+    ok(`${label} starts no public suite`, r.status === status &&
+       diagnostic.test((r.stdout || '') + (r.stderr || '')) && !fs.existsSync(marker),
+       `exit ${r.status}; suite launched ${fs.existsSync(marker)}`);
+  }
+}
 fs.rmSync(TMP, { recursive: true, force: true });
 
 head('the commands say what they run');
