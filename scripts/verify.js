@@ -453,8 +453,14 @@ const SUITES = [
    suites, the Memorizer half kept from the tenth emptying), which measured
    the one that had been waiting: suitetime-pure. The split build was measured
    by this run for the first time since the ninth emptying, and came to the
-   same 134. */
-/* The complete Systole family run at 391f7c5 measured both pending suites. */
+   same 134.
+
+   Emptied a thirteenth time by the Systole-only green Chromium run on the
+   owner's laptop at c324c21, three suites at a time (6930 checks across 152
+   suites, the Memorizer half kept as recorded at 28a8df4), which measured the
+   one that had been waiting: pearlbake-pure. The split-build figure is still
+   134; the record does not say whether this run measured it again. */
+/* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
 const PENDING_RECORD = [];
 
 /* ── suites deleted since their half of the record was last written ─────────
