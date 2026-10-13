@@ -209,10 +209,52 @@ head('it refuses the licensed bank, by every route in');
      r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
   r = inTmp('notes/chapter-7.txt', pdf);
   ok('and renamed, by its first bytes', r.code === 1 && /a PDF/.test(r.out), r.out.match(/IMAGE.*|a PDF.*/)?.[0] || r.out.trim().slice(0, 60));
-  /* By name alone, for a format with no signature to sniff: an SVG is text. */
-  r = inTmp('assets/diagram.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>\n');
-  ok('an SVG figure is refused by its extension', r.code === 1 && /IMAGE\s+assets\/diagram\.svg/.test(r.out) && /by its name/.test(r.out),
+  /* An SVG is refused by its name, and renamed by its root element, since an
+     SVG is text and has no magic bytes. */
+  const svg = '<?xml version="1.0" encoding="UTF-8"?>\n<!-- drawn for the test -->\n' +
+    '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>\n';
+  r = inTmp('assets/diagram.svg', svg);
+  ok('an SVG figure is refused by its extension', r.code === 1 && /IMAGE\s+assets\/diagram\.svg/.test(r.out),
      r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('assets/diagram.txt', svg);
+  ok('and renamed, by its root element past the prolog, comment and doctype', r.code === 1 && /an SVG/.test(r.out),
+     r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
+  /* Every other format the extension rule names, renamed (found by review,
+     #240: only PNG, JPEG, GIF, WebP and PDF were known by their bytes). Each
+     fixture is a valid header for its format, made here. */
+  const bmp = (() => {
+    const row = 8, b = Buffer.alloc(14 + 40 + row * 2);           // 2 x 2, 24-bit, rows padded to 4
+    b.write('BM', 0, 'latin1'); b.writeUInt32LE(b.length, 2); b.writeUInt32LE(54, 10);
+    b.writeUInt32LE(40, 14); b.writeInt32LE(2, 18); b.writeInt32LE(2, 22); b.writeUInt16LE(1, 26); b.writeUInt16LE(24, 28);
+    b.fill(0x7f, 54);
+    return b;
+  })();
+  const bmff = brand => {
+    const b = Buffer.alloc(28);
+    b.writeUInt32BE(28, 0); b.write('ftyp', 4, 'latin1'); b.write(brand, 8, 'latin1'); b.write('mif1miaf' + brand, 16, 'latin1');
+    return b;
+  };
+  const tiff = order => Buffer.concat([Buffer.from(order === 'II' ? [0x49, 0x49, 0x2A, 0x00, 8, 0, 0, 0] : [0x4D, 0x4D, 0x00, 0x2A, 0, 0, 0, 8]), Buffer.alloc(6)]);
+  for (const [what, rel, body, says] of [
+    ['a BMP', 'assets/scan-2.bin', bmp, /a BMP/],
+    ['a little-endian TIFF', 'assets/scan-4.dat', tiff('II'), /a TIFF/],
+    ['a big-endian TIFF', 'assets/scan-5.dat', tiff('MM'), /a TIFF/],
+    ['an AVIF', 'assets/photo-1.bin', bmff('avif'), /an AVIF or HEIC image/],
+    ['a HEIC', 'assets/photo-2.bin', bmff('heic'), /an AVIF or HEIC image/],
+  ]) {
+    r = inTmp(rel, body);
+    ok(`${what} renamed is refused, by its first bytes`, r.code === 1 && says.test(r.out), r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  }
+  /* And the look-alikes those must not catch: text that starts with BM, a
+     page that contains an <svg> without being one, and markdown that opens
+     with a comment. */
+  r = inTmp('notes/bmi.txt', 'BMI by age, a table\n18 22.5\n');
+  ok('a text file that starts with "BM" is fine', r.code === 0, r.out.trim().slice(0, 60));
+  r = inTmp('notes/page.html', '<!doctype html>\n<html><body><svg viewBox="0 0 1 1"><rect width="1" height="1"/></svg></body></html>\n');
+  ok('a page holding an inline <svg> is fine', r.code === 0, r.out.trim().slice(0, 60));
+  r = inTmp('notes/readme.md', '<!-- generated -->\n# Notes\n\n<svg> is how the figures are drawn.\n');
+  ok('markdown that opens with a comment is fine', r.code === 0, r.out.trim().slice(0, 60));
   r = inTmp('memorizer/samples/notes.md', 'a page of a chapter\n');
   ok('anything under memorizer/samples/, where a book chapter is kept, is refused', r.code === 1 && /PATH\s+memorizer\/samples/.test(r.out),
      r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 60));
