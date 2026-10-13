@@ -67,7 +67,7 @@ shortened manifest and check the runner's source wiring.
 
 ## Pending branch integration — 2026-10-13
 
-PR #245's process lessons are already on master. PR #241 is integrated on a
+PR #245's process lessons are already on master. PR #241, including follow-ups through ca588d8, is integrated on a
 separate branch to preserve the fresh setup: its deleted Claude hook and test
 stay deleted, while the licensing guard, CSP checks and supported Node versions
 are retained. Node 22 is the minimum; local defaults and CI select Node 24.
@@ -80,7 +80,7 @@ refused without expanding DTD entities. These last two cases address the remaini
 SVG review findings on #241. CSP source checks inspect every srcset and preload
 candidate, with a regression for an external second candidate.
 
-Focused validation on Node 24.19: licensing regressions 107 passed; CSP 26 passed
+Focused validation on Node 24.19: licensing regressions 109 passed; CSP 26 passed
 in Chromium and 26 in WebKit. The earlier measured private family records remain
 historical results of their recorded commits; these selected checks do not
 replace them or claim a new full private run. Physical iPad acceptance and live

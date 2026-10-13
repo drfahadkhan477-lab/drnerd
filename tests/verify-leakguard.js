@@ -243,6 +243,17 @@ head('it refuses the licensed bank, by every route in');
   }
   r = inTmp('assets/default-namespace.bin', '<!DOCTYPE s:svg [<!ATTLIST s:svg xmlns:s CDATA "http://www.w3.org/2000/svg">]><s:svg/>');
   ok('a DTD-defaulted SVG namespace cannot hide a renamed figure', r.code === 1 && /an SVG/.test(r.out));
+  /* A ] or > the doctype quotes, or holds in a comment, ends nothing (found
+     by review, #241: an entity's quoted ] ended the subset there, and the
+     SVG passed). */
+  const quoted = [
+    '<!DOCTYPE svg [<!ENTITY label "]">]>',
+    '<!DOCTYPE svg [<!-- ] --><!ENTITY red "#c00">]>',
+    '<!DOCTYPE svg SYSTEM "svg[1]>.dtd">',
+  ].map((doctype, n) => inTmp(`assets/diagram-q${n}.txt`, doctype + '\n<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>\n'));
+  const missed = quoted.filter(q => !(q.code === 1 && /an SVG/.test(q.out)));
+  ok('and past a ] or > quoted in its doctype, or in a comment there', missed.length === 0,
+     missed.map(q => q.out.trim().slice(0, 60)).join(' | ') || `${quoted.length} refused`);
   /* However far in the root is: the whole text is read, not its first 4 KB
      (found by review, #241: a 5 KB comment hid the root). */
   r = inTmp('assets/diagram-3.bin', '<!-- ' + 'licence text '.repeat(500) + '-->\n<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>\n');
@@ -255,6 +266,13 @@ head('it refuses the licensed bank, by every route in');
   r = inTmp('notes/doctype.txt', '<!doctype[' + ']['.repeat(40) + '\n', 10000);
   ok('a doctype that never closes is judged at once, not after an exponential search', r.code === 0,
      `${Date.now() - started} ms` + (r.code === 0 ? '' : ': ' + r.out.trim().slice(-60)));
+  /* The same for a subset of comments with no ]: read lazily inside the
+     subset's loop, each comment could also stretch to the next one's close,
+     two ways each. */
+  const started2 = Date.now();
+  r = inTmp('notes/doctype-2.txt', '<!DOCTYPE x [' + '<!-- a -->'.repeat(40) + '\n', 10000);
+  ok('nor does a subset of comments that never closes', r.code === 0,
+     `${Date.now() - started2} ms` + (r.code === 0 ? '' : ': ' + r.out.trim().slice(-60)));
   /* Every other format the extension rule names, renamed (found by review,
      #240: only PNG, JPEG, GIF, WebP and PDF were known by their bytes). Each
      fixture is a valid header for its format, made here. */
