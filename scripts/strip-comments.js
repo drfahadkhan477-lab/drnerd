@@ -14,15 +14,17 @@
  * each src/ module it finds verbatim in app.js through strip() below, so the
  * device downloads the code without the prose about it.
  *
- * WHY A LEXER, NOT tests/_source.js. blankComments() says of itself that it is
- * not a lexer: a // inside a string is blanked as though it opened a comment.
- * Right for scanning, wrong for shipping — here a mistake is a broken app, not
- * a missed pattern. So this reads strings, template literals (with nested
- * ${...}), regular-expression literals and division properly. What it cannot
- * know is whether a / after `)` or `}` begins a regex; it treats it as
- * division, which is what every one of those sites in src/ is. Anything it
- * misreads either fails to compile, which build-pwa checks before it ships a
- * module, or survives verify-stripcomments-pure's round trips.
+ * WHY NOT tests/_source.js. blankComments() reads strings now too, but it is
+ * handed HTML and CSS as well as JavaScript, so where JavaScript would be
+ * malformed it reads the character as plain text and carries on. Right for
+ * scanning, wrong for shipping — here a mistake is a broken app, not a missed
+ * pattern, so this one throws on what it cannot read. It reads strings,
+ * template literals (with nested ${...}), regular-expression literals and
+ * division. What it cannot know is whether a / after `)` or `}` begins a
+ * regex; it treats it as division, which is what every one of those sites in
+ * src/ is. Anything it misreads either fails to compile, which build-pwa
+ * checks before it ships a module, or survives verify-stripcomments-pure's
+ * round trips.
  *
  * WHAT A COMMENT BECOMES. A block comment that spans a line break becomes one
  * line break, so automatic semicolon insertion sees what it saw before; any

@@ -49,8 +49,8 @@ scope and why the other 217 checks can't run here.
 
 These totals use the last recorded measurements for active suites. The three
 Claude configuration suites were retired when that configuration was deleted;
-their historical measurements stay in the record but are excluded from these
-totals. New assertions are counted when the next complete run updates the record.
+their measurements were removed by qualifying family runs. New assertions
+are counted when the next complete run updates the record.
 
 ### The device this is for
 

@@ -83,10 +83,17 @@ const STEPS = [
     cmd: ['node', ['scripts/extract-content.js', () => BUILD]], after: 'build', needs: () => fs.existsSync(BUILD) },
   { id: 'pwabuild',  what: 'the split build assembles',
     cmd: ['node', ['scripts/build-pwa.js', () => BUILD]], after: 'build', needs: () => fs.existsSync(BUILD) },
+  /* THE ENGINE IS NAMED, NOT INHERITED. verify.js takes SYSTOLE_ENGINE from
+     the environment when no --engine is given, and every step is spawned with
+     the caller's environment — so a shell with SYSTOLE_ENGINE=webkit set ran
+     both of these on WebKit while the report said "on chromium" and the
+     verdict said CERTIFIED (found by review). The flag wins over the variable
+     in verify.js, so naming it here is the whole fix; verify-release drives
+     the gate with the variable set and checks the command each step shows. */
   { id: 'chromium',  what: 'the full suite, on chromium',
-    cmd: ['node', ['scripts/verify.js', () => BUILD]], after: 'build', needs: () => fs.existsSync(BUILD) },
+    cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'chromium']], after: 'build', needs: () => fs.existsSync(BUILD) },
   { id: 'pwa',       what: 'the full suite, against the split build over http',
-    cmd: ['node', ['scripts/verify.js', () => BUILD, '--pwa']], after: 'pwabuild', needs: () => fs.existsSync(DIST) },
+    cmd: ['node', ['scripts/verify.js', () => BUILD, '--pwa', '--engine', 'chromium']], after: 'pwabuild', needs: () => fs.existsSync(DIST) },
   /* WebKit is the ACTUAL TARGET — the app is used on an iPad — so it is on by
      default and skipping it costs you the CERTIFIED line rather than passing
      quietly. It is also the engine where the 42 MB single file takes ~100s to
@@ -94,6 +101,15 @@ const STEPS = [
   { id: 'webkit',    what: 'the full suite, on webkit — the engine the app actually runs on',
     cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'webkit']], after: 'build', needs: () => fs.existsSync(BUILD) },
 ];
+
+/* What a step would run, for the dry run to say. The source is shown as a
+   placeholder rather than resolved: its filename is the export's, and this
+   line reaches the console and the report (see safeDetail below). */
+function shown(step) {
+  const [bin, args] = step.cmd;
+  return [bin].concat(args.map(a => typeof a !== 'function' ? a
+    : a() === SRC ? '<source>' : path.relative(ROOT, a()))).join(' ');
+}
 
 /* ── running one ─────────────────────────────────────────────────────────── */
 /* ── what a step is allowed to say about itself ──────────────────────────────
@@ -231,7 +247,7 @@ for (const step of STEPS) {
      executed nothing — the exact overclaim the header above forbids, written
      by the person who had just finished writing the header. It survives here
      as the reason the rule is stated in code rather than in prose. */
-  if (DRY) { record(step, 'SKIP', 'dry run — the step was not executed', 0); continue; }
+  if (DRY) { record(step, 'SKIP', 'dry run — the step was not executed' + (step.cmd ? `; would run: ${shown(step)}` : ''), 0); continue; }
   try {
     let detail = '';
     if (step.run) detail = step.run() || '';

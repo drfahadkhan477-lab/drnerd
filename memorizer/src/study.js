@@ -193,6 +193,19 @@ function maskOf(fig, lab) {
   var top = clamp((fig[3] - (lab[3] + pad)) / hgt), bottom = clamp((fig[3] - (lab[1] - pad)) / hgt);
   return { left: left, top: top, width: right - left, height: bottom - top };
 }
+/* The mask on the figure AS IT IS DRAWN. maskOf measures in the page's own
+   frame, and a card keeps it that way; a page with /Rotate is drawn turned
+   (clockwise, as PDF says), so the fractions turn with it. Unturned, the
+   mask covered some other part of the picture and the label it was meant to
+   hide stayed in view. */
+function turnMask(m, rotate) {
+  switch (((Number(rotate) || 0) % 360 + 360) % 360) {
+    case 90: return { left: 1 - m.top - m.height, top: m.left, width: m.height, height: m.width };
+    case 180: return { left: 1 - m.left - m.width, top: 1 - m.top - m.height, width: m.width, height: m.height };
+    case 270: return { left: m.top, top: 1 - m.left - m.width, width: m.height, height: m.width };
+    default: return m;
+  }
+}
 function occlusionCards(doc, ci, figures, max) {
   var c = doc.clusters[ci], out = [];
   (figures || []).forEach(function (f, fi) {
@@ -791,7 +804,7 @@ var MemStudy = {
   socratic: socratic, rubricOf: rubricOf, TYPE_RANK: TYPE_RANK, reviewOrder: reviewOrder, EXAM_PACE_S: EXAM_PACE_S, examClock: examClock, contextAction: contextAction,
   BLANK: BLANK, NUMBER: NUMBER, CLOZE_WORDS: CLOZE_WORDS, CLOZE_PER_SECTION: CLOZE_PER_SECTION, clozeOf: clozeOf, clozeCards: clozeCards,
   checkTyped: checkTyped, TYPED_RATING: TYPED_RATING,
-  OCCLUDE_MIN: OCCLUDE_MIN, occlusionOf: occlusionOf, maskOf: maskOf, occlusionCards: occlusionCards,
+  OCCLUDE_MIN: OCCLUDE_MIN, occlusionOf: occlusionOf, maskOf: maskOf, turnMask: turnMask, occlusionCards: occlusionCards,
   CHECK_DAYS: CHECK_DAYS, CHECK_SIZE: CHECK_SIZE, nextCheck: nextCheck, checksDue: checksDue, checkTaken: checkTaken, checkQuestions: checkQuestions,
   PER_MINUTE: PER_MINUTE, timedSet: timedSet, practiceTrend: practiceTrend,
   rateWith: rateWith,

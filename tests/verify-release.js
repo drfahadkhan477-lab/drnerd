@@ -113,6 +113,49 @@ head('--skip is honoured and held against the verdict');
      /asked for with --skip/.test(r.out));
 }
 
+head('a step that says chromium runs on chromium, whatever the shell has set');
+{
+  /* verify.js takes SYSTOLE_ENGINE from the environment when it is given no
+     --engine, and the gate spawns every step with the caller's environment.
+     The chromium and pwa steps named no engine, so with the variable set to
+     webkit they ran on WebKit under a report saying "on chromium" (found by
+     review). The gate is driven here the way that shell would drive it, and
+     the command each step would run is read from the dry run's own line. */
+  const r = spawnSync(process.execPath, [GATE, '--dry-run'],
+    { cwd: ROOT, encoding: 'utf8', env: { ...process.env, SYSTOLE_ENGINE: 'webkit' } });
+  const out = (r.stdout || '') + (r.stderr || '');
+  const cmdOf = id => {
+    const m = out.match(new RegExp(`[–✓✗] ${id}\\s[^\\n]*\\n[^\\n]*would run: ([^\\n]*)`));
+    return m ? m[1].trim().split(/\s+/) : null;
+  };
+  const engineOf = argv => argv && argv.indexOf('--engine') > 0 ? argv[argv.indexOf('--engine') + 1] : null;
+  for (const [id, want] of [['chromium', 'chromium'], ['pwa', 'chromium'], ['webkit', 'webkit']]) {
+    const argv = cmdOf(id);
+    ok(`the ${id} step shows the command it would run`, !!argv && /verify\.js$/.test(argv[1] || ''),
+       argv ? argv.join(' ') : 'no "would run" line');
+    ok(`and it names --engine ${want} with SYSTOLE_ENGINE=webkit in the shell`, engineOf(argv) === want,
+       String(engineOf(argv)));
+  }
+  /* AND verify.js LETS THAT FLAG WIN. The fix rests on verify.js preferring
+     --engine to SYSTOLE_ENGINE; if that precedence were ever reversed, the
+     check above would stay green over a WebKit run. So each step's own
+     arguments go to verify.js, with the variable set to something that is not
+     an engine and the build path pointed nowhere: verify.js validates the
+     engine before it looks for a build, so refusing the variable means the
+     environment won, and "No build at" means the engine came from the command
+     and verify.js got past it. Nothing runs either way. */
+  for (const id of ['chromium', 'pwa']) {
+    const argv = cmdOf(id) || [];
+    const v = spawnSync(process.execPath,
+      [path.join(ROOT, 'scripts', 'verify.js'), path.join(ROOT, 'no-such-dir', 'systole.html'), ...argv.slice(3)],
+      { cwd: ROOT, encoding: 'utf8', env: { ...process.env, SYSTOLE_ENGINE: 'not-an-engine' } });
+    const vout = (v.stdout || '') + (v.stderr || '');
+    ok(`verify.js, given the ${id} step's arguments, ignores the shell's engine`,
+       argv.length > 3 && !/is not an engine/.test(vout) && /No build at/.test(vout),
+       (vout.match(/is not an engine|No build at/) || [vout.trim().split('\n')[0] || `exit ${v.status}`])[0]);
+  }
+}
+
 head('the report is written, and is safe to share');
 {
   run('--dry-run');

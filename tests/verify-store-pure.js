@@ -517,7 +517,7 @@ function reload(prev, opts) {
   head('mirroring is cheap enough to call on a timer');
   {
     /* The caller is a visibility handler and an interval, not save() — save()'s
-       last line is the anchor scripts/resume-patch.js matches on. So mirror()
+       last line was the anchor scripts/resume-patch.js matched on. So mirror()
        has to be free when nothing changed. */
     const web = makeWeb({});
     web.ls.set(V2, JSON.stringify(PROGRESS));
@@ -572,6 +572,55 @@ function reload(prev, opts) {
     await settle();
     ok('mirror() only takes the keys it was told about', S.mirror(KEY) === false);
     ok('and wrote no copy of one it was not', web.db.get('mirror:' + KEY) === undefined);
+  }
+
+  head('a database whose open never answers');
+  {
+    /* indexedDB.open() firing none of success, error or blocked used to leave
+       usable at null for the whole session: set() never took the fallback, so
+       every write waited on a promise that never settled, and ready() — which
+       Export and Import await — never resolved. The module's own setTimeout is
+       swapped for one that runs its delay in a few milliseconds, and records
+       the delay it was asked for, so the wait is checked without being spent.
+       The fake web keeps the real timers. */
+    const asked = [];
+    const quick = (fn, ms) => { asked.push(ms); return setTimeout(fn, Math.min(ms, 30)); };
+    const HUNG = 'still waiting after 2 s';
+    const web = makeWeb({ openHangs: true });
+    const S = loadModule(fs, path, 'src/core/store.js', web, { setTimeout: quick }).Store;
+    const r = await Promise.race([S.ready(), new Promise(res => setTimeout(() => res(HUNG), 2000))]);
+    ok('ready() settles instead of waiting for ever', r !== HUNG && !!r && r.available === false,
+       JSON.stringify(r));
+    ok('after giving the database a few seconds (1-10 s), not none',
+       asked.some(ms => ms >= 1000 && ms <= 10000), asked.join(', ') || 'no timer was set');
+    S.set(KEY, { kept: 'written while the database hung' });
+    await settle();
+    ok('a write then lands in localStorage', String(web.ls.get(KEY) || '').indexOf('hung') > -1,
+       web.ls.get(KEY) === undefined ? 'LOST — neither store has it' : web.ls.get(KEY));
+    ok('and is stamped as having fallen back',
+       JSON.parse(web.ls.get('accsap12.store.fellback') || '[]').indexOf(KEY) > -1);
+    /* No health().usable check here: it reads `usable === true`, so it is
+       false for a session still waiting on the open too, and it stayed green
+       with the timeout removed. */
+  }
+
+  head('a database that answers only after the session gave up on it');
+  {
+    /* The late connection is closed, not adopted: the session has already
+       fallen back, and half of it on each store is the state migrate() exists
+       to untangle, not one to create. */
+    const quick = (fn, ms) => setTimeout(fn, Math.min(ms, 30));
+    const web = makeWeb({ openAfter: 150 });
+    const S = loadModule(fs, path, 'src/core/store.js', web, { setTimeout: quick }).Store;
+    const r = await S.ready();
+    ok('the session fell back first', r.available === false, JSON.stringify(r));
+    await new Promise(res => setTimeout(res, 250));
+    ok('the connection that arrived later was closed', web.closed === 1, `${web.closed} closed`);
+    S.set(KEY, { after: 'late' });
+    await settle();
+    ok('and writes still go to localStorage, not the late database',
+       String(web.ls.get(KEY) || '').indexOf('late') > -1 && web.db.get(KEY) === undefined,
+       `ls=${web.ls.get(KEY)} db=${JSON.stringify(web.db.get(KEY))}`);
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

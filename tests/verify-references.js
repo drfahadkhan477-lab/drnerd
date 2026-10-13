@@ -113,7 +113,7 @@ const RETRIEVAL = [
 
   const payload = files.map(f => ({ name: f, raw: fs.readFileSync(path.join(DIR, f), 'utf8') }));
   const imported = await page.evaluate(fs_ => {
-    /* The build ships a seeded library now (refs-patch). Start from empty:
+    /* The build ships a seeded library now (ref-seed.js). Start from empty:
        the count below is a claim about what THIS corpus produced, and the
        retrieval check further down wants your notes ranked against each
        other rather than against whatever else happened to be on the shelf. */
@@ -142,7 +142,7 @@ const RETRIEVAL = [
     const results = await page.evaluate(qs => qs.map(([q, want]) => {
       const r = retrievedContext(q, null) || {};
       const text = typeof r === 'string' ? r : (r.text || '');
-      /* Retrieved notes are fenced with a per-turn nonce now (boundary-patch),
+      /* Retrieved notes are fenced with a per-turn nonce now (refFence()),
          so the title is the first line inside the opening fence rather than
          part of a plain heading. */
       const hits = [...text.matchAll(/<<<NOTE-[A-Z0-9]{12}>>>\ntitle: ([^\n]+)/g)].map(m => m[1]);

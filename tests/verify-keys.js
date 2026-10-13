@@ -39,7 +39,7 @@ const ok = (l, c, d = '') => { c ? passed++ : failed++; console.log((c ? '  PASS
 let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
-/* What keys-patch.js claims to have done. */
+/* What scripts/answer-keys.js claims to have done. */
 const CORRECTED = [
   ['CON_16', 'C', 'Antihypertensive therapy.'],
   ['MIS_25', 'D', 'Refer for genetic testing.'],

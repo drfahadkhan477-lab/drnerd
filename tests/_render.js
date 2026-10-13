@@ -34,8 +34,9 @@
  */
 
 /* ── BEFORE MIGRATING A waitForTimeout TO settled(), READ THIS ────────────
- * There are 113 fixed sleeps left in tests/, and 66 of them are immediately
- * followed by an evaluate() that reads the thing the next assertion checks.
+ * Many of the fixed sleeps left in tests/ are immediately followed by an
+ * evaluate() that reads the thing the next assertion checks. (No count: it
+ * moves with every suite, and nothing here would hold it to the code.)
  * That makes the conversion look mechanical. It is not, and doing it the
  * obvious way is worse than leaving the sleep alone.
  *
@@ -187,7 +188,8 @@ async function afterRender(page, pred, opts = {}) {
 
    The watch is an init script so it survives the reloads several suites do. It
    wraps rather than replaces, so the page still goes through
-   document.startViewTransition exactly as failsafe-patch wrote it. */
+   document.startViewTransition exactly as render() in app/systole.html
+   calls it. */
 async function watchTransitions(page) {
   await page.addInitScript(() => {
     const orig = Document.prototype.startViewTransition;

@@ -14,6 +14,8 @@
  * model was actually told.
  */
 'use strict';
+const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted, settled } = require('./_render.js');
@@ -32,12 +34,6 @@ const ok = (label, cond, detail = '') => {
 let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 const flat = t => String(t || '').replace(/\s+/g, ' ');
-
-const SSE = [
-  'data: {"choices":[{"delta":{"content":"Noted."}}]}',
-  'data: [DONE]',
-  '',
-].join('\n\n');
 
 const GEM_SSE = 'data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Noted."}]}}]}\n\n';
 
@@ -67,18 +63,10 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
-  const mist = [], gem = [];
-  await page.route('**/v1/chat/completions', route => {
-    let b = null; try { b = JSON.parse(route.request().postData() || '{}'); } catch (_) {}
-    mist.push(b);
-    /* The summariser is the only non-streaming Mistral call this app makes. */
-    if (b && !b.stream) {
-      route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ choices: [{ message: { content: SUMMARY } }] }) });
-      return;
-    }
-    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
-  });
+  /* Gemini only. A capture for the retired Mistral route stayed here after
+     nothing could reach it, and a check counted it: an array that can only be
+     empty passes every "no call was made" asked of it. */
+  const gem = [];
   await page.route('**/generativelanguage.googleapis.com/**', route => {
     const url = route.request().url();
     let b = null; try { b = JSON.parse(route.request().postData() || '{}'); } catch (_) {}
@@ -91,6 +79,24 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
     }
     if (/:streamGenerateContent/.test(url)) {
       route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: GEM_SSE });
+      return;
+    }
+    route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ candidates: [{ content: { parts: [{ text: SUMMARY }] } }] }) });
+  });
+  /* Hosted: a served build with no key typed calls Gemini through this site's
+     /api/apex/gemini/ route, where the Worker holds the key. Matched on the
+     path, whatever origin serves the page. Until the hosted section at the end
+     turns answers on, a call here gets what Cloudflare Access sends a lapsed
+     session, 200 and a sign-in page, so the app has nothing to keep and nothing
+     leaves the test. Before that section only a served target makes one (the
+     no-key case in the summariser section); the single file makes none. */
+  const hosted = [];
+  let hostedAnswers = false;
+  await page.route(u => u.pathname.startsWith('/api/apex/gemini/'), route => {
+    hosted.push({ url: route.request().url(), method: route.request().method() });
+    if (!hostedAnswers) {
+      route.fulfill({ status: 200, headers: { 'content-type': 'text/html' }, body: '<!doctype html><title>Sign in</title>' });
       return;
     }
     route.fulfill({ status: 200, headers: { 'content-type': 'application/json' },
@@ -167,7 +173,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   ok('memories are still there after a reload', survived.n === 3 && survived.has, 'count ' + survived.n);
 
   const ask = async (provider) => {
-    mist.length = 0; gem.length = 0;
+    gem.length = 0;
     await page.evaluate(async (provider) => {
       AI.provider = provider;
       AI.gemini = { key: 'AQ.test', model: 'gemini-9.9-flash' };
@@ -179,8 +185,7 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
       fire('why is this the answer?');
     }, provider);
     await page.waitForTimeout(1500);
-    return provider === 'mistral' ? mist.find(Boolean)
-      : (gem.find(g => /:streamGenerateContent/.test(g.url)) || {}).body;
+    return (gem.find(g => /:streamGenerateContent/.test(g.url)) || {}).body;
   };
 
   /* THIS SECTION USED TO RUN TWICE, once per provider, and the point of the
@@ -298,10 +303,16 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   ok('list punctuation is stripped from the model output',
      summ.texts.every(t => !/^[-•*\d.]/.test(t)), JSON.stringify(summ.texts));
 
-  mist.length = 0;
+  /* Counted on the wire the summariser uses. This read the Mistral capture,
+     which nothing has called since that provider was retired, so it was always
+     empty and passed with the sessionSummarised guard deleted. "Exactly one
+     non-streaming call was made", above, is what shows this capture sees a
+     one-shot call at all. */
+  gem.length = 0;
   await page.evaluate(() => summariseSession());
   await page.waitForTimeout(500);
-  ok('it will not fire twice for one sitting', mist.filter(b => b && !b.stream).length === 0);
+  const again = gem.filter(g => /:generateContent/.test(g.url)).length;
+  ok('it will not fire twice for one sitting', again === 0, again + ' more call(s)');
 
   const thin = await page.evaluate(async () => {
     Memory.clear();
@@ -315,7 +326,13 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   const survivesError = await page.evaluate(async () => {
     Memory.clear();
     S.sessionCorrect = 9; S.sessionTotal = 12; sessionSummarised = false;
-    AI.gemini = { key: '', model: 'gemini-9.9-flash' };   // no key → oneShot bails
+    /* No key. In the single file nothing can host the call; served, no key
+       means hosted, and the hosted route above answers as a lapsed sign-in
+       does. Either way there is nothing to keep, which is all this measures.
+       That the single file makes no call at all is held only by the console
+       check at the end, and only on Chromium, which refuses a fetch of a
+       file: URL and logs it. Other engines were not checked. */
+    AI.gemini = { key: '', model: 'gemini-9.9-flash' };
     let threw = false;
     try { await summariseSession(); } catch (_) { threw = true; }
     AI.gemini = { key: 'AQ.test', model: 'gemini-9.9-flash' };
@@ -338,9 +355,76 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   ok('memory is wiped by a clear, as expected', backup.afterWipe === 0);
   ok('and comes back from a backup', backup.restored === 2 && /boards in October/.test(backup.text));
 
+  /* HOSTED, which is how the app is deployed. A served build with no key typed
+     sends its Gemini calls through /api/apex/gemini/ (apexHosted, gemUrl), and
+     the panel has opened straight into a conversation there since hosting
+     arrived. The summariser's two guards, in summariseSession and oneShot,
+     stopped at "no key" all the same, so in the default deployment it never
+     kept a note; either guard alone turns both checks below red. A single
+     file is never hosted, since file: has no server, so given one this serves
+     the same build from disk on 127.0.0.1, a fresh origin each run; given a
+     URL, the page is served already. Only the build is served, every other
+     path is a 404, and /api/apex/gemini/ never reaches this server: the route
+     above answers it. A server of its own, not route.fulfill, which hands the
+     browser the whole body in one message: the real build is 92 MB, and the
+     page closed under it (the owner's full run died here, 45 checks in, while
+     CI's 5 MB build passed). Last, because it leaves the page on that origin. */
+  head('hosted: no key typed, and the sitting is still summarised');
+  let hostServer = null;
+  if (!/^https?:\/\//.test(target)) {
+    const built = path.resolve(target);
+    hostServer = http.createServer((req, res) => {
+      if (req.url.split('?')[0] !== '/systole.html') { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      fs.createReadStream(built).pipe(res);
+    });
+    await new Promise(r => hostServer.listen(0, '127.0.0.1', r));
+    await page.goto(`http://127.0.0.1:${hostServer.address().port}/systole.html`, { waitUntil: 'load', timeout: 200000 });
+    await booted(page);
+  }
+  /* But a summary is a call nobody asked for, so hosted it waits until this
+     site's relay has answered one that was asked for. Served with no Worker
+     behind it (scripts/serve.js on a LAN, docs/IPAD.md) the relay is a 404,
+     which every sitting would otherwise send and the browser log. This origin
+     is fresh, so nothing has answered here yet; and Access's sign-in page, all
+     a lapsed session gets, is not the relay answering. */
+  hosted.length = 0; gem.length = 0; hostedAnswers = false;
+  const unasked = await page.evaluate(async () => {
+    Memory.clear();
+    AI.provider = 'gemini';
+    AI.gemini = { key: '', model: 'gemini-9.9-flash' };
+    const listed = await geminiModels('');
+    S.sessionCorrect = 14; S.sessionTotal = 20; sessionSummarised = false;
+    await summariseSession();
+    return { lapsed: listed.error === APEX_LAPSED, known: relayKnown(), n: Memory.count() };
+  });
+  const sentBefore = hosted.filter(h => /\/api\/apex\/gemini\/generate\?/.test(h.url)).length;
+  ok('(so far the relay has sent only Access\'s sign-in page, to a models call)',
+     unasked.lapsed && hosted.length === 1, `${hosted.length} relay calls, lapsed ${unasked.lapsed}`);
+  ok('which is not the relay answering, so the sitting\'s summary is not sent',
+     !unasked.known && sentBefore === 0 && unasked.n === 0, JSON.stringify(Object.assign({ sentBefore }, unasked)));
+
+  hostedAnswers = true;
+  const marked = await page.evaluate(async () => { await geminiModels(''); return relayKnown(); });
+  ok('(a models call the fellow makes is answered by the relay)', marked === true);
+  hosted.length = 0; gem.length = 0;
+  const hostedRun = await page.evaluate(async () => {
+    Memory.clear();
+    S.sessionCorrect = 14; S.sessionTotal = 20; sessionSummarised = false;
+    const wasHosted = apexHosted();
+    await summariseSession();
+    return { wasHosted, n: Memory.count() };
+  });
+  hostedAnswers = false;
+  const viaSite = hosted.filter(h => h.method === 'POST' && /\/api\/apex\/gemini\/generate\?/.test(h.url));
+  ok('its one call goes through this site', viaSite.length === 1,
+     `${viaSite.length} to /api/apex/gemini/generate, ${gem.length} to Google, apexHosted() ${hostedRun.wasHosted}`);
+  ok('and what comes back is kept', hostedRun.n > 0, hostedRun.n + ' kept');
+
   head('regression');
   ok('no console or page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
+  if (hostServer) hostServer.close();
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

@@ -101,6 +101,15 @@ head('the allowlist covers every host the shipped app can reach');
     if (f.isDirectory()) walk(p); else if (f.name.endsWith('.js')) files.push(p);
   });
   roots.forEach(r => walk(path.join(__dirname, '..', r)));
+  /* AND THE SHELL. app/systole.html holds the app logic between the src/
+     slots, and app/css/*.css is every stylesheet the app has. With the patch
+     chain gone both are plain source, so a host either one names is a host
+     the shipped app reaches, and neither was read here: a host added to the
+     shell was checked by nothing. */
+  const appDir = path.join(__dirname, '..', 'app');
+  const SHELL_FILES = [path.join(appDir, 'systole.html'),
+    ...fs.readdirSync(path.join(appDir, 'css')).filter(f => f.endsWith('.css')).sort().map(f => path.join(appDir, 'css', f))];
+  files.push(...SHELL_FILES);
 
   const loaders = Object.keys(NOT_SHIPPED).map(tool => {
     const base = path.basename(tool);
@@ -121,6 +130,23 @@ head('the allowlist covers every host the shipped app can reach');
   ok('every https host in the tree is either allowed or removed by a named step',
      unaccounted.length === 0, unaccounted.join(', ') || 'none');
   ok('and the allowlist is not empty', allowed.size > 0, [...allowed].join(', '));
+  /* The host check reads every URL as a connection, and img-src is narrower
+     than connect-src: it allows no other host at all. So a picture fetched
+     from the one host connect-src allows passes the check above and is
+     refused by the browser at runtime, on the owner's device, with no test
+     saying so. The places a page fetches a picture from are read here, in
+     the shell and its stylesheets, blanked: a url() in CSS, and a src,
+     srcset or poster in markup or a .src = in script. A <script src> from
+     another host would be reported too, and would be refused as well. */
+  const imgHosts = new Set(CSP.IMG.filter(s => s.startsWith('https://')).map(s => s.slice('https://'.length)));
+  const IMG_AT = /(?:url\(\s*["']?|\b(?:src|srcset|poster)\s*=\s*["'`]?)(https?:)\/\/([a-z0-9.-]+)/gi;
+  const offHost = [];
+  for (const f of SHELL_FILES) {
+    for (const m of blankComments(fs.readFileSync(f, 'utf8')).matchAll(IMG_AT))
+      if (m[1].toLowerCase() === 'http:' || !imgHosts.has(m[2].toLowerCase())) offHost.push(`${relPath(f)}: ${m[0]}`);
+  }
+  ok('no picture in the shell or a stylesheet comes from a host img-src refuses',
+     offHost.length === 0 && SHELL_FILES.length > 1, offHost.join('; ') || `${SHELL_FILES.length} files read`);
   /* The other direction: a host allowed by the policy but contacted by nothing
      is a permission granted for no reason. */
   const unused = [...allowed].filter(h => !hosts.has(h));

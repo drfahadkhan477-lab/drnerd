@@ -19,7 +19,7 @@
  *
  * WHAT IT DOES, per unit (each folder under --from that holds .md files):
  *
- *   1. Splits every .md into notes exactly as the importer and refs-patch do —
+ *   1. Splits every .md into notes exactly as the importer and ref-seed.js do —
  *      one note per "## " section, titled by the file's front-matter title.
  *   2. Collapses the unit's own repeats. A unit ships its text more than once
  *      (a whole-unit file and the same pages split into ranges); a section
@@ -51,7 +51,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const MIN_WORDS = 40;          // the importer's own floor (refs-patch rejects thinner notes)
+const MIN_WORDS = 40;          // the importer's own floor (ref-seed.js rejects thinner notes)
 const SHINGLE = 5;             // words per shingle
 const DUP_WITHIN = 0.8;        // a section this much inside one already kept is the same section
 const COVERED = 0.6;           // this much of a section already in the notes is covered

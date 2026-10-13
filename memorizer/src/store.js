@@ -112,16 +112,60 @@ function open() {
   return dbp;
 }
 
-function tx(store, mode, fn) {
+/* A write that never finishes (no complete, no error, no abort, which WebKit
+   has shipped) held the write queue for ever, and every read with it, since a
+   read waits for the writes before it: after one hung save no unit opened and
+   no list was redrawn. ui.js waitForSave's bound frees only the taps. So each
+   write the queue runs (tx, saveStep, batch) is given TX_TIMEOUT_MS, plus a
+   millisecond for every TX_BYTES_PER_MS bytes it carries: a restore or a PDF
+   part is hundreds of megabytes, and must not be cut off for being large.
+   TX_TIMEOUT_MS is 30 s, not the 5 s the screen waits for a save (ui.js
+   SAVE_WAIT_MS). The screen moves on at 5 s and says the save is still going;
+   this bound is only for a backend that has stopped answering. When the two
+   were the same 5 s, every save slower than that was aborted as the note went
+   up: on the owner's laptop the first save into a new database sometimes
+   was, and the import failed with "storage did not answer within 5 seconds"
+   (verify-memorizer-store-pure holds the two apart). Past its bound a write
+   is aborted and rejects with a TimeoutError, the queue moves on, and a
+   tracked write is kept for "Try saving again" like any other failure. It
+   rejects whether or not the abort is answered, since a backend that has
+   stopped answering will not answer that either. Reads are not bounded.
+   Outside the queue a read holds up nothing but its caller, and the export's
+   read of every PDF can rightly be slow. The two the queue runs (a deletion's
+   look at the cards and notes, deleteBook's read of the book) hold it up only
+   if the database has stopped answering reads as well, and then nothing can
+   be read anyway. update(), which the queue does not run, is left as it was. */
+api.TX_TIMEOUT_MS = 30000;
+api.TX_BYTES_PER_MS = 1000;
+function weight(v) {
+  if (v == null) return 0;
+  if (typeof v === 'string') return v.length;
+  if (typeof v !== 'object') return 8;
+  if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) return v.byteLength;
+  return Object.keys(v).reduce(function (n, k) { return n + k.length + weight(v[k]); }, 0);
+}
+function bound(t, reject, size) {
+  if (!root.setTimeout) return function () {};
+  var ms = api.TX_TIMEOUT_MS + Math.floor((size || 0) / api.TX_BYTES_PER_MS);
+  var timer = root.setTimeout(function () {
+    try { t.abort(); } catch (_) {}
+    var e = new Error('storage did not answer within ' + (ms >= 1000 ? Math.round(ms / 1000) : ms / 1000) + ' seconds');
+    e.name = 'TimeoutError'; reject(e);
+  }, ms);
+  return function () { if (root.clearTimeout) root.clearTimeout(timer); };
+}
+
+function tx(store, mode, fn, size) {
   return open().then(function (db) {
     if (!db) return fn(null);
     return new Promise(function (resolve, reject) {
       var t = db.transaction(store, mode);
       var out = fn(t.objectStore(store));
       var isReq = typeof root.IDBRequest !== 'undefined' && out instanceof root.IDBRequest;
-      t.oncomplete = function () { resolve(isReq ? out.result : out); };
-      t.onerror = function () { reject(t.error); };
-      t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+      var done = mode === 'readwrite' ? bound(t, reject, size) : function () {};
+      t.oncomplete = function () { done(); resolve(isReq ? out.result : out); };
+      t.onerror = function () { done(); reject(t.error); };
+      t.onabort = function () { done(); reject(t.error || new Error('transaction aborted')); };
     });
   });
 }
@@ -145,7 +189,7 @@ function put(store, value) {
   return tx(store, 'readwrite', function (os) {
     if (!os) { mem[store][value.id] = clone(value); return value; }
     os.put(value); return value;
-  });
+  }, weight(value));
 }
 function get(store, id) {
   return tx(store, 'readonly', function (os) {
@@ -186,12 +230,13 @@ function batch(ops) {
       mem = next; revive(snapshot); return;
     }
     return new Promise(function (resolve, reject) {
-      var t;
+      var t, done = function () {};
       try {
         t = db.transaction(snapshot.map(function (o) { return o.store; }).filter(function (s, i, a) { return a.indexOf(s) === i; }), 'readwrite');
-        t.oncomplete = function () { revive(snapshot); resolve(); };
-        t.onerror = t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+        t.oncomplete = function () { done(); revive(snapshot); resolve(); };
+        t.onerror = t.onabort = function () { done(); reject(t.error || new Error('transaction aborted')); };
         snapshot.forEach(function (o) { var os = t.objectStore(o.store); if (o.clear) os.clear(); else if (o.delete) os.delete(o.id); else os.put(o.value); });
+        done = bound(t, reject, weight(snapshot));
       } catch (e) { if (t) try { t.abort(); } catch (_) {} reject(e); }
     });
   });
@@ -214,16 +259,47 @@ function removalOps(ids) {
   });
 }
 function finishDeletion(ids, ops) {
-  return batch(ops).then(function () {
-    ids.filter(Boolean).forEach(function (id) { removedDocs[id] = true; });
-    ops.filter(function (o) { return o.delete; }).forEach(function (o) { removed[o.store + ':' + o.id] = o.docId || true; });
-    Object.keys(failures).forEach(function (key) {
-      var f = failures[key];
-      if (f.ops.some(function (o) { return o.value && (removed[o.store + ':' + o.value.id] ||
-        (o.value.docId && removedDocs[o.value.docId])); }) ||
-        ops.some(function (o) { return o.value && key === o.store + ':' + o.value.id; })) delete failures[key];
+  return batch(ops).then(function () { forget(ids, ops); });
+}
+/* Units deleted, once their deletion has committed: a write for them that
+   comes later is refused, and a failed write waiting for retry that would put
+   back a record of theirs is dropped. */
+function forget(ids, ops) {
+  ids.filter(Boolean).forEach(function (id) { removedDocs[id] = true; });
+  ops.filter(function (o) { return o.delete; }).forEach(function (o) { removed[o.store + ':' + o.id] = o.docId || true; });
+  Object.keys(failures).forEach(function (key) {
+    var f = failures[key];
+    if (f.ops.some(function (o) { return o.value && (removed[o.store + ':' + o.value.id] ||
+      (o.value.docId && removedDocs[o.value.docId])); }) ||
+      ops.some(function (o) { return o.value && key === o.store + ':' + o.value.id; })) delete failures[key];
+  });
+}
+/* A change to a unit that rewrites several of its records at once (a section
+   deleted, a paragraph corrected, a book's chapters cut again): one
+   transaction, and one turn of the write queue, so it lands after every write
+   asked for before it. It is made from what the screen holds, a step whose
+   save failed included, so it replaces that save: once it commits, every
+   failed write waiting for retry that touches a record it wrote or deleted is
+   dropped. Kept, the older write went into every export and was replayed by
+   "Try saving again", putting back what the change had taken away: after a
+   section was deleted, a session with that section still in it and a card
+   for it, which every backup from then on refused. Units it removes (`gone`)
+   go as deleteDoc's do: their cleanup is read in the same turn, and a write
+   for them that comes later is refused. A change that is refused is not kept
+   for retry: the caller says so, and the owner repeats it. */
+function commit(ops, gone) {
+  gone = (gone || []).filter(Boolean);
+  return serialWrite(function () {
+    return (gone.length ? removalOps(gone) : Promise.resolve([])).then(function (drops) {
+      var all = ops.concat(drops);
+      return batch(all).then(function () { if (gone.length) forget(gone, drops); supersede(all); });
     });
   });
+}
+function supersede(ops) {
+  var key = function (o) { return o.store + ':' + (o.value ? o.value.id : o.id); }, hit = {};
+  ops.forEach(function (o) { hit[key(o)] = true; });
+  Object.keys(failures).forEach(function (k) { if (failures[k].ops.some(function (o) { return hit[key(o)]; })) delete failures[k]; });
 }
 function deleteDoc(id) { return serialWrite(function () { return removalOps([id]).then(function (ops) { return finishDeletion([id], ops); }); }); }
 function deleteBook(id) {
@@ -314,11 +390,11 @@ function saveStep(session, cards) {
       return Object.keys(mem.cards).map(function (k) { return JSON.parse(JSON.stringify(mem.cards[k])); });
     }
     return new Promise(function (resolve, reject) {
-      var t, out = null;
+      var t, out = null, done = function () {};
       try { t = db.transaction(['sessions', 'cards'], 'readwrite'); } catch (e) { reject(e); return; }
-      t.oncomplete = function () { resolve(out); };
-      t.onerror = function () { reject(t.error); };
-      t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+      t.oncomplete = function () { done(); resolve(out); };
+      t.onerror = function () { done(); reject(t.error); };
+      t.onabort = function () { done(); reject(t.error || new Error('transaction aborted')); };
       try {
         var cs = t.objectStore('cards');
         t.objectStore('sessions').put(session);
@@ -335,6 +411,7 @@ function saveStep(session, cards) {
           } catch (e) { try { t.abort(); } catch (_) {} reject(e); }
         };
       } catch (e) { try { t.abort(); } catch (_) {} reject(e); }
+      done = bound(t, reject, weight(session) + weight(cards));
     });
   });
 }
@@ -371,9 +448,12 @@ function persist() { var st = root.navigator && root.navigator.storage; return s
 /* Retain failed writes for this visit. Unrelated successful writes cannot
    acknowledge them, and refresh must not overwrite a pending note. */
 var failures = {}, latest = {}, ticket = 0;
-function tracked(key, run, meta, ops) {
+function tracked(key, run, meta, ops, retrying) {
   var seq = ++ticket; latest[key] = seq;
   return serialWrite(function () {
+    /* A retry whose failed write was replaced by its turn (a commit queued
+       ahead of it dropped it) has nothing to put back. */
+    if (retrying && failures[key] !== retrying) return;
     if (ops.some(wasRemoved)) { var e = new Error('This unit was deleted.'); e.name = 'DeletedDocumentError'; throw e; }
     ops.forEach(function (o) {
       if (o.store === 'meta' && o.value && o.value.recs && (o.value.id === 'notes' || o.value.id === 'checks'))
@@ -395,7 +475,7 @@ function failureMessage() {
   }).join('; ');
 }
 function retryFailures() {
-  return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta, f.ops); }));
+  return Promise.all(Object.keys(failures).map(function (k) { var f = failures[k]; return tracked(k, f.run, f.meta, f.ops, f); }));
 }
 /* Replace the whole database (a backup restore) as one turn of the write
    queue. Every write queued before it runs first and is then cleared away
@@ -413,7 +493,7 @@ function replace(ops) {
     Object.keys(latest).forEach(function (key) { if (latest[key] <= boundary) delete latest[key]; });
   }); });
 }
-api.replace = replace;
+api.replace = replace; api.commit = commit;
 api.snapshot = function () { return afterWrites(snapshot); }; api.STORES = STORES.slice(); api.health = health; api.persist = persist; api.failureMessage = failureMessage; api.retryFailures = retryFailures;
 api.update = update; api.removalOps = removalOps; api.cleanImports = cleanImports; api.sweep = sweep; api.batch = batch; api.open = open; api.put = function (store, value) {
   var v = clone(value);

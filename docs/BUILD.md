@@ -348,8 +348,17 @@ remeasured; physical iPad and real model execution remain unmeasured.
 
 Both source exports and reference archives stay outside Git. Full transcripts
 and structured reports remain in ignored `build/private-validation/`; only
-measured counts and provenance are committed. Later master changes have not
-been integrated into or validated by these runs.
+measured counts and provenance are committed. At those measurement points,
+later master changes had not been integrated into or validated by those runs.
+
+Master at `db8c0d5` was subsequently reconciled with this review branch. Its
+application fixes, test assertions and history licensing checks were retained,
+along with prepared reader caching and test-profile cleanup. The owner's lean
+`AGENTS.md` setup was retained instead of restoring the deleted Claude files.
+All 87 public pure suites passed on the combined source; that result does not
+yet establish that the combined private browser suite passes. Its prior
+per-family measurements remain in the record until a qualifying run replaces
+them.
 
 ### Branch review handoff
 

@@ -40,7 +40,7 @@ var MAX_RESULTS = 25;     // a result list longer than a screenful is a list nob
 var SNIPPET = 170;        // characters of context around the first match
 
 /* "Arrhythmias · Therapy — Sotalol: reverse use dependence…" → chapter and
-   section, split on the em dash the importer and refs-patch both put there. */
+   section, split on the em dash the importer and ref-seed.js both put there. */
 function splitTitle(title) {
   var t = String(title || '');
   var i = t.indexOf(' — ');

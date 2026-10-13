@@ -13,7 +13,7 @@
  * The split build is assembled from TWO inputs that are produced by two
  * different commands:
  *
- *     scripts/build.js            → build/systole.html
+ *     scripts/assemble-app.js     → build/systole.html  (npm run build)
  *     scripts/extract-content.js  → content/            (from that html)
  *     scripts/build-pwa.js        → dist/               (from both)
  *
@@ -61,6 +61,9 @@ const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
 const PWA = fs.readFileSync(path.join(ROOT, 'scripts', 'build-pwa.js'), 'utf8');
 const EXTRACT = fs.readFileSync(path.join(ROOT, 'scripts', 'extract-content.js'), 'utf8');
+/* The comment-blanked copy, for scans that must not read the explanations. */
+const { blankComments } = require('./_source.js');
+const EXTRACT_CODE = blankComments(EXTRACT);
 
 /* Lifted, not copied: a copy here would stop matching build-pwa.js the first
    time either changed, and would go on passing. `crypto` is passed in because
@@ -145,10 +148,58 @@ head('the digest compared is the digest extract-content writes');
   ok('build-pwa hashes the file, not the variable it is about to cut up',
      /const SRC_DIGEST = crypto\.createHash\('sha256'\)\s*\n\s*\.update\(fs\.readFileSync\(SRC\)\)/.test(PWA));
 
-  /* And the two really do agree on the same bytes. */
-  const bytes = Buffer.from('a stand-in for build/systole.html');
-  const d1 = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 16);
-  ok('a digest of the same bytes matches itself', staleContent(d1, { sourceDigest: d1 }) === null, d1);
+  /* AND THE TWO REALLY DO AGREE ON THE SAME FILE, measured by running them.
+     The shapes above match the algorithm and the slice and nothing else: the
+     same pattern holds for `update(html)` over the decoded text, and that
+     is what extract-content did while build-pwa hashed the raw bytes. On
+     valid UTF-8 the two agree; on a file with a byte that is not (0x92, a
+     Windows-1252 apostrophe, the shape an export pasted from Word takes)
+     decoding replaces it with U+FFFD, the digests part, and build-pwa
+     refuses content/ that was extracted from the very file it is splitting.
+     (This replaced a check that handed one digest to staleContent() as both
+     arguments, which could not fail.)
+
+     So: a small synthetic build with a 0x92 byte appended, extracted by
+     scripts/extract-content.js itself, and build-pwa's own SRC_DIGEST
+     expression evaluated over the same file. */
+  const os = require('os');
+  const { spawnSync } = require('child_process');
+  const Assemble = require(path.join(ROOT, 'scripts', 'assemble-app.js'));
+  const Syn = require(path.join(ROOT, 'scripts', 'synthetic-export.js'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'provenance-'));
+  try {
+    /* The notes in the temporary folder too: left to its defaults the
+       assembler reads content/refs, the licensed library. */
+    const refsDir = path.join(tmp, 'refs'), imagesDir = path.join(tmp, 'refs-images');
+    fs.mkdirSync(refsDir); fs.mkdirSync(imagesDir);
+    const lib = Syn.syntheticRefs(1);
+    for (const [n, t] of lib.files) fs.writeFileSync(path.join(refsDir, n), t);
+    for (const [k, b] of lib.images) fs.writeFileSync(path.join(imagesDir, k), b);
+    const shell = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
+    const resolve = Assemble.producers({ exportHtml: Syn.syntheticExport(2), refsDir, imagesDir });
+    const built = Buffer.from(Assemble.assembleApp({ shell, resolve, commit: 'abc123def456' }).out, 'utf8');
+    const src = path.join(tmp, 'systole.html');
+    fs.writeFileSync(src, Buffer.concat([built, Buffer.from('<!-- it'), Buffer.from([0x92]), Buffer.from('s -->\n')]));
+    const raw = fs.readFileSync(src);
+    ok('the fixture carries a byte that is not UTF-8', raw.includes(0x92) && !raw.equals(Buffer.from(raw.toString('utf8'), 'utf8')));
+
+    const x = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'extract-content.js'), src, path.join(tmp, 'content')], { encoding: 'utf8' });
+    ok('extract-content extracted it', x.status === 0, `exit ${x.status}`);
+    let written = null;
+    try { written = JSON.parse(fs.readFileSync(path.join(tmp, 'content', 'manifest.json'), 'utf8')).sourceDigest; } catch (_) {}
+
+    /* build-pwa's expression, found in the code rather than its comments and
+       evaluated as written, over the same file. */
+    const m = /const SRC_DIGEST = (crypto\.createHash\([\s\S]*?\.slice\(0, 16\));/.exec(blankComments(PWA));
+    let computed = null;
+    if (m) computed = new Function('crypto', 'fs', 'SRC', 'return ' + PWA.slice(m.index + m[0].indexOf(m[1]), m.index + m[0].indexOf(m[1]) + m[1].length) + ';')(crypto, fs, src);
+    ok('build-pwa\'s SRC_DIGEST expression was found and ran', /^[0-9a-f]{16}$/.test(String(computed)), String(computed));
+    ok('and extract-content wrote the digest build-pwa computes for that file',
+       /^[0-9a-f]{16}$/.test(String(written)) && staleContent(computed, { sourceDigest: written }) === null,
+       `content ${written} / build ${computed}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 head('the one-command split build runs the extract it depends on');
@@ -208,9 +259,10 @@ head('the artifact names the commit that produced it');
      it — in the manifest LITERAL, where the two fields simply sit on adjacent
      lines. That is adjacency, not hashing. The property is about the one line
      that computes the digest, so that is the line it reads. */
-  const digestLine = /const sourceDigest = crypto[\s\S]{0,120}?;/.exec(EXTRACT);
+  const digestLine = /const sourceDigest = crypto[\s\S]{0,120}?;/.exec(EXTRACT_CODE);
   ok('the content digest is over the source bytes and nothing else',
-     !!digestLine && /update\(html\)/.test(digestLine[0]) && !/commit/i.test(digestLine[0]),
+     !!digestLine && /\.update\(srcBytes\)\.digest/.test(digestLine[0]) && !/commit/i.test(digestLine[0])
+     && /const srcBytes = fs\.readFileSync\(SRC\);/.test(EXTRACT_CODE),
      digestLine ? digestLine[0].replace(/\s+/g, ' ') : 'not found');
   ok('and nothing on either side hashes the commit in',
      ![...PWA.matchAll(/\.update\(([^)]*)\)/g)].some(m => /COMMIT/.test(m[1]))

@@ -159,15 +159,144 @@ head('every browser suite goes through the helper, none launches an engine itsel
     const src = fs.readFileSync(path.join(TESTS, f), 'utf8');
     /* Scanned on the BLANKED copy, which is the rule applying to itself: the
        paragraph above quotes what it hunts for, and reading it would report
-       this very check as a violation. The exemption is requiring _source —
-       a file that uses the shared helper is not rolling its own. */
-    if (/_source/.test(src)) continue;
+       this very check as a violation.
+
+       NO OTHER EXEMPTION. This used to skip any file whose text mentioned
+       _source anywhere, comments included, on the theory that a file using
+       the shared helper is not rolling its own. This file both uses it and
+       rolled its own, a stripper of the kind that drifted, and passed. Only
+       _source.js itself may hold a blanker. What is matched is the
+       block-comment shape, a lazy [\s\S] run up to the closing star-slash; a
+       copy that handled only // comments would not be seen. */
     if (/\[\\s\\S\]\*\?\\\*\\\//.test(blankComments(src))) rolled.push(f);
   }
   ok('no suite rolls its own comment blanker — it is in tests/_source.js',
      rolled.length === 0, rolled.join(', ') || 'none');
   ok('no suite requires playwright behind the helper’s back',
      unwired.length === 0, unwired.join(', ') || 'none');
+}
+
+head('the shared comment blanker blanks comments, and only comments');
+{
+  /* Every scan in this file reads tests/_source.js's blanked copy, and so do
+     a dozen other suites, so a hole in it is a hole in all of them at once —
+     and none of them can see it, because a scan shown less code simply finds
+     less. It had one. A slash-star inside a string (the provider route glob
+     the chat suites stub with) opened a "comment" that ran to the next real
+     one's close; _source.js has what that hid.
+
+     Each fixture is listed with the comments it holds, and what must come back
+     is the fixture with exactly those turned to spaces. */
+  const blankOut = (src, comments) => {
+    let out = src, from = 0;
+    for (const c of comments) {
+      const at = out.indexOf(c, from);
+      if (at < 0) throw new Error('fixture comment not in its fixture: ' + JSON.stringify(c));
+      out = out.slice(0, at) + c.replace(/[^\n]/g, ' ') + out.slice(at + c.length);
+      from = at + c.length;
+    }
+    return out;
+  };
+  /* The contract every caller leans on: blanked, not stripped. */
+  const keepsShape = (src, out) => {
+    if (typeof out !== 'string' || out.length !== src.length) return false;
+    for (let k = 0; k < src.length; k++) if ((src[k] === '\n') !== (out[k] === '\n')) return false;
+    return true;
+  };
+  const FIXTURES = [
+    ['a slash-star inside a quoted string opens no comment, so the line after it is still read',
+     "page.route('**/x/**', r => {});\nkeep('x');\n/* c */", ['/* c */']],
+    ['nor inside a double-quoted one, and a // inside a string is not a comment either',
+     'const g = "**/*.js", u = \'a // b\';\nkeep(g, u);\n/* c */', ['/* c */']],
+    ['a template literal is text, and a comment inside its ${…} is still a comment',
+     'const t = `a /* b ${ x /* real */ + `in ${ "**/" } ner` } // c`;\ndone(t);\n// tail', ['/* real */', '// tail']],
+    ['a regular expression is not a comment, even one holding a slash-star',
+     'const re = /[/*]/g, sl = /\\/\\//;\nkeep(re, sl);\n/* c */', ['/* c */']],
+    ['a slash-star inside a // comment opens nothing',
+     '// globs like **/*.js\nconst kept = 1;\n/* c */', ['// globs like **/*.js', '/* c */']],
+    ['a comment across lines is blanked with its line breaks kept, and the code after it is read',
+     'a = 1; /* one\ntwo */ b = 2;\n', ['/* one\ntwo */']],
+    ['a / after a name divides, so the backtick after it opens a template of its own',
+     'const h = a / 2 + `/`;\nkeep(h);\n/* c */\nconst t = `x`;', ['/* c */']],
+    /* Not JavaScript: callers hand it the HTML template and CSS too. */
+    ['an apostrophe in prose is not a string, so a comment after it is still found',
+     "<p>Don't panic</p> /* a */\nx = 'b';", ['/* a */']],
+    ['a backtick that never closes is not a template, so a comment after it is still found',
+     '<p>one ` tick</p> /* b */\n', ['/* b */']],
+    ['a // straight after a colon is a URL written in markup, not a comment',
+     '<a href=https://x.org/y>z</a> // c', ['// c']],
+    ['a / after a % in CSS divides, so a comment later on its line is still found',
+     'a { border-radius: 50% / 10%; /* oval */ }', ['/* oval */']],
+  ];
+  for (const [label, src, comments] of FIXTURES) {
+    const got = blankComments(src), want = blankOut(src, comments);
+    ok(label, got === want, got === want ? '' : JSON.stringify(got));
+  }
+
+  /* And on the real thing. Every .js file in the tree that compiles must still
+     compile once blanked: blanking part of a string, or the code after a
+     slash-star that was not a comment, leaves a file that does not. The two
+     regular expressions this replaced failed that on 37 files, this one among
+     them once its fixtures were written. What it cannot see is a comment left
+     standing, which compiles too; the fixtures above are for that. */
+  const vm = require('vm');
+  const corpus = [];
+  const walk = dir => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p); else if (e.name.endsWith('.js')) corpus.push(p);
+    }
+  };
+  ['tests', 'scripts', 'tools', 'src', 'memorizer/src', 'memorizer/tools', 'lab/src']
+    .forEach(d => walk(path.join(ROOT, d)));
+  const compiles = code => {
+    try { vm.compileFunction(code.replace(/^#!.*/, ''), ['exports', 'require', 'module', '__filename', '__dirname']); return true; }
+    catch (e) { return false; }
+  };
+  let compiled = 0;
+  const broken = [], misshapen = [];
+  for (const f of corpus) {
+    const src = fs.readFileSync(f, 'utf8'), out = blankComments(src);
+    if (!keepsShape(src, out)) misshapen.push(path.relative(ROOT, f));
+    if (!compiles(src)) continue;            // an ES module: nothing to hold it to
+    compiled++;
+    if (!compiles(out)) broken.push(path.relative(ROOT, f));
+  }
+  /* Vacuity guard: "none fails to compile" is also what a corpus of nothing
+     returns, and what a compile that never ran returns. */
+  ok('there is a corpus to blank', compiled > 250, `${compiled} of ${corpus.length} .js files compile as they stand`);
+  ok('every .js file in the tree that compiles still compiles once blanked',
+     broken.length === 0, broken.length ? `${broken.length}: ${broken.slice(0, 8).join(', ')}` : 'none');
+  ok('and every one keeps its length and its line breaks',
+     misshapen.length === 0, misshapen.length ? `${misshapen.length}: ${misshapen.slice(0, 8).join(', ')}` : `${corpus.length} files`);
+
+  /* The page, not only its scripts. verify-stats, verify-heartbake-pure and
+     verify-icons-pure blank app/systole.html whole, and the blanker carries
+     what it reads in the markup into the script after it: tried on a copy, a
+     stray backtick in prose opened a template that the first script's
+     backtick closed, and a slash-star in prose opened a comment that a
+     script's comment closed. Either way the script read differently, and
+     every scan of it with it. So each inline script must come out of the
+     whole page exactly as it comes out alone. */
+  const page = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
+  const wholePage = blankComments(page);
+  let inline = 0;
+  const leaked = [];
+  /* An end tag is </script then anything up to >, as a browser reads it:
+     `</script >` ends a script too, and a pattern that wanted `</script>`
+     exactly would run that script on into the next one's. */
+  for (const m of page.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)) {
+    const at = m.index + m[0].indexOf('>') + 1, body = m[1];
+    if (!body.trim()) continue;
+    inline++;
+    if (wholePage.slice(at, at + body.length) !== blankComments(body)) {
+      leaked.push(`the script at line ${page.slice(0, at).split('\n').length}`);
+    }
+  }
+  /* Vacuity guard: no script found would leak nothing too. */
+  ok('the app template has inline scripts to compare', inline > 0, `${inline} found`);
+  ok('and each blanks the same inside the page as alone, so nothing in the markup reaches it',
+     leaked.length === 0, leaked.join(', ') || 'none');
 }
 
 head('the runner can actually be told which engine to use');
@@ -418,10 +547,10 @@ head('a suite pointed at a URL either runs whole or does not run');
      back "takes no target argument", which reads like the pure-logic suites
      that genuinely take none. So the two are told apart by the source itself
      rather than by a list of names — a suite that mentions process.argv[2]
-     must have been parsed. */
-  const uncommented = src => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+     must have been parsed. Read through the shared blanker: this used to
+     strip comments with a pair of regular expressions of its own. */
   const mentionsArgv = all.filter(n =>
-    /process\.argv\[2\]/.test(uncommented(fs.readFileSync(path.join(TESTS, `verify-${n}.js`), 'utf8'))));
+    /process\.argv\[2\]/.test(blankComments(fs.readFileSync(path.join(TESTS, `verify-${n}.js`), 'utf8'))));
   const unparsed = mentionsArgv.filter(n => T.classify(n).reason === 'takes no target argument');
   ok('every suite that binds a target argument was understood to bind one',
      unparsed.length === 0, unparsed.join(', ') || `${mentionsArgv.length} parsed, none missed`);
@@ -512,38 +641,60 @@ head('a reload is not a boot, and the split build is why');
 
      THE RULE IS "WAIT FOR SOMETHING", deliberately loose. Every other reload in
      the repository already does: booted(), a waitForFunction naming an app
-     global, a waitForSelector, or a poll on `typeof S`. Requiring booted()
-     specifically would have flagged five suites that are already correct —
-     verify-splash reloads with `commit` precisely to catch the page BEFORE the
-     app, and being made to wait for it would destroy the check. So the guard
-     asks only that something between the reload and the next read is capable
-     of being false before the app is up. It has no exemption list because it
-     needs none. */
-  const RELOAD = /await\s+page\.reload\s*\(/;
-  const WAITS = /booted\s*\(|waitFor[A-Za-z]*\s*\(|typeof\s+[A-Za-z_$]/;
+     global, a waitForSelector, a locator's waitFor(), or a poll on `typeof S`.
+     Requiring booted() specifically would have flagged five suites that are
+     already correct — verify-splash reloads with `commit` precisely to catch
+     the page BEFORE the app, and being made to wait for it would destroy the
+     check. So the guard asks only that something between the reload and the
+     next read is capable of being false before the app is up. It has no
+     exemption list because it needs none.
+
+     ANY PAGE, NOT ONLY ONE NAMED page. This matched `await page.reload(`
+     alone, so a reload on p, r, p2 or other was never examined: twelve of the
+     thirty-three at c6f12d9, the Memorizer suites' and verify-lab's among
+     them, while the label said "every one of them". The second check below
+     fails if the scan ever again sees reloads on `page` alone.
+
+     A SLEEP IS NOT A WAIT. waitForTimeout passed, because it begins with
+     waitFor; a fixed sleep cannot be false before the app is up, which is
+     the whole of the rule. */
+  const RELOAD = /await\s+([\w$.]+)\.reload\s*\(/;
+  const WAITS = /booted\s*\(|waitFor(?!Timeout\b)[A-Za-z]*\s*\(|typeof\s+[A-Za-z_$]/;
   const suites = fs.readdirSync(TESTS).filter(n => /^verify-.+\.js$/.test(n));
   let reloads = 0;
-  const blind = [];
+  const blind = [], receivers = {};
   for (const f of suites) {
     const lines = blankComments(fs.readFileSync(path.join(TESTS, f), 'utf8')).split('\n');
     lines.forEach((l, i) => {
-      if (!RELOAD.test(l)) return;
+      const m = RELOAD.exec(l);
+      if (!m) return;
       reloads++;
+      receivers[m[1]] = (receivers[m[1]] || 0) + 1;
       /* AS FAR AS THE NEXT SECTION, not a fixed handful of lines. A reload
          may legitimately be followed by reads that must happen BEFORE the app
          is back — verify-theme reads the pre-paint attributes, verify-splash
          catches the splash — and the wait then comes after those. A six-line
          window called verify-theme's own fix a violation. The section is the
          real boundary: whatever a reload sets up, it sets up for the checks
-         under the same heading. */
+         under the same heading.
+
+         And FROM THE RELOAD ITSELF, not from the next line. Six reloads wait
+         on their own line — `await r.reload(); await r.waitForFunction(…)` —
+         and a window that began on the following line called five of them
+         blind the moment their receivers were looked at; the sixth passed
+         only by borrowing the next reload's wait. */
       let end = i + 1;
       while (end < lines.length && !/^\s*head\s*\(/.test(lines[end]) && end - i < 60) end++;
-      if (!WAITS.test(lines.slice(i + 1, end).join('\n'))) blind.push(`${f}:${i + 1}`);
+      const after = [l.slice(m.index + m[0].length)].concat(lines.slice(i + 1, end)).join('\n');
+      if (!WAITS.test(after)) blind.push(`${f}:${i + 1}`);
     });
   }
   /* Vacuity guard: "count the blind reloads and expect none" is also what a
      scan that found no reloads at all returns. */
   ok('there are reloads to check', reloads >= 8, `${reloads} across ${suites.length} suites`);
+  ok('and they include reloads on page variables not named page',
+     Object.keys(receivers).some(r => r !== 'page'),
+     Object.entries(receivers).map(([r, n]) => `${r} ${n}`).join(', ') || 'none');
   ok('and every one of them waits for something afterwards',
      blind.length === 0, blind.join(', ') || 'none');
 }

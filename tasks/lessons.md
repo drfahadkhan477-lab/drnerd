@@ -7,7 +7,7 @@ Keep entries short and keep them true — prune one that stops being so.
 Format: `- **Pattern.** What went wrong. → Rule: what to do instead.`
 
 This file is for rules about how to work. Facts about the code belong in the
-code's own comments; facts the whole project must obey belong in `CLAUDE.md`
+code's own comments; facts the whole project must obey belong in `AGENTS.md`
 (and only after the second time).
 
 ## Checks
@@ -16,7 +16,7 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   below the path it claimed to cover (`readImage()` for a scanned-PDF fix; the
   review bot caught it, the author did not). → Rule: name the entry point the
   user hits, and call *that* in the test. Then inject the defect and watch the
-  check fail before trusting it (`/prove-red`).
+  check fail before trusting it (`AGENTS.md`, section 2).
 - **An anchor tested only against a stand-in.** A string patch can pass its own
   synthetic fixture and still miss the real pinned file. → Rule: when a patch
   targets third-party code pinned by SRI, run the real fixed file through the
@@ -62,6 +62,14 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   asserts: a wait on `S.screen` before a check on `S.screen` leaves the check nothing to
   catch (found in review of #180). Reproduce by making the app slow (a `setTimeout` around
   the step), not by loading the CPU, which did not reproduce any of them.
+- **A build handed to the browser in one message.** #232's hosted section of
+  verify-memory served the build through `route.fulfill({ path })`. CI's 5 MB
+  synthetic build passed; on the owner's 92 MB build the page closed at that
+  `goto` and the suite died 45 checks in, with no FAIL line to say why. → Rule:
+  serve a build from a server of the suite's own on 127.0.0.1, streamed, never
+  through `route.fulfill`. Before pushing a suite change that loads the build in a
+  new way, run it once on a synthetic build padded to the real one's size (an HTML
+  comment after it); that reproduced this one here.
 
 - **A stub in the wrong provider's wire format.** verify-chat opened the panel on
   Gemini and fed it OpenAI-shaped stream lines, which Gemini's reader skips. The
@@ -106,6 +114,56 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   save and still froze. → Rule: fix the hazard where it happens or at every caller that
   waits on it — grep for every `.then` on that promise before calling it fixed, and
   narrow the commit title to what was covered.
+- **Two causes reasoned, neither reproduced; CI runners said which.** My occlusion
+  check drew the card's `<img>` into a canvas and looked for the label's magenta.
+  CI's WebKit read nothing. I blamed an image not yet decoded, waited for `complete`
+  and `decode()`, and called it fixed unseen; it failed again (`inked: 0`). Six
+  copies on CI runners with the read instrumented failed in 3: the PNG decoded whole
+  and the canvas read back its own pixels, but the `<img>` drew nothing. A
+  `willReadFrequently` canvas had read it whole, so I blamed WebKit's GPU-backed
+  canvas; six more copies with that fix and plain-canvas controls drawn in the same
+  tick failed in 4, every canvas empty. The CPU read had worked only because it ran
+  later: the `<img>` was complete, sized and decoded and still not drawable for a
+  moment. Waiting until a draw left ink, six more passed, the old read empty in 2 of
+  them; the wait took 12 to 25 ms. This container never failed it in seven runs.
+  → Rule: before reading an image's pixels, wait until a draw of it leaves ink (a
+  precondition; the claim is read after it), and keep what was read in the check's
+  detail. When a failure shows only in CI, reproduce it there (a scratch branch
+  whose own workflow runs the suite several times in parallel, the read
+  instrumented), and try a fix with a control in the same tick, so a cause is told
+  apart from a delay.
+- **A state wait before a DOM read.** A hardening check waited on
+  `ui.docRec.revision`, which `saveFix` sets before `refresh()` and `render()`, then
+  read the banner from the DOM; it failed once in four runs on the #232 merge. My
+  first fix waited on `#notice`, which only the unit screen draws, so it timed out
+  on the lesson screen where the check runs. → Rule: when a check reads the DOM,
+  its precondition must be a redraw made after the state it waits on (a
+  `MutationObserver` that checks that state when it fires), never the state alone.
+  Before waiting on an element, grep which view draws it. Reproduce the race by
+  delaying the app's redraw, and show the old wait failing and the new one passing.
+- **A fault injection that broke the syntax, not the rule.** To prove a date rule
+  was guarded, I rewrote `s=>{…}` as `s=>true||{…}`. That made an object literal and
+  a syntax error, and the suite's one FAIL was "no uncaught page error". → Rule: an
+  injection must leave the code valid and change only the guarded behaviour (here
+  `s=>true, unused=s=>{…}`). Read the FAIL lines it produces: only the checks that
+  name the rule failing counts as proof.
+
+- **A bound set to the screen's patience aborted real work.** #232 cut off
+  every Memorizer write at 5 s, "the same 5 s the screen waits for a save".
+  The screen's 5 s is when it says the save is still going, not when the save
+  has failed. On the owner's laptop a first save took longer, and the import
+  failed (#238 moved the bound to 30 s). → Rule: a timeout that aborts work
+  needs headroom over the slowest legitimate case. When adding one, say what
+  that case is and where it was measured. Never borrow a number that means
+  something else.
+- **A parser more correct than the one it replaced, and weaker.** I made the
+  guard read quotes the way the shell does. That fixed reads the old
+  quote-blind split let through, but it stopped judging `bash -c "make; cat x"`.
+  The old split had caught that by cutting inside the quotes. AGENTS.md's
+  "never weaken the guard" caught it before the push. → Rule: when replacing a
+  guard's reading of its input, keep the old reading and refuse if either
+  refuses, then list what the old one refused and prove each case is still
+  refused.
 
 ## Process
 
@@ -162,6 +220,13 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   ran as a continuation of the release-check line (`>>`), so a 90-minute run tested
   old code. → Rule: give each command its own block, and before a long run ask for
   `git log --oneline -1` and check the commit against the one just merged.
+- **A pull on the wrong branch.** I told the owner to `git pull` and check for the
+  merge commit, but not to switch to master first. The checkout was an old session
+  branch, so the pull changed nothing, and the full run tested a tree 115 commits
+  behind (`claude/new-session-t4ftue @ baaa1e2`). → Rule: hand the owner
+  `git switch master` before `git pull`, and the exact `git log --oneline -1` line
+  to expect; check the `checkout:` line of their run against it before reading any
+  result.
 - **Prose that leads the record.** → Rule: before editing a number in
   `README.md`, `docs/BUILD.md` or `verify.yml`, run `node tests/verify-stats.js`
   and find out whether it is guarded.
@@ -240,3 +305,12 @@ code's own comments; facts the whole project must obey belong in `CLAUDE.md`
   tap was. → Rule: before a fix refuses an action, say what the user is left
   holding if it does; prefer doing the action and not counting it, and show
   the reason where the user acted.
+- **Three sessions fixed one report.** My findings report went to other
+  sessions while mine was stopped by usage limits. Three of my unpushed fixes
+  had landed from another session, theirs more thorough, and a second
+  session's PR (#238) was open on my branch. I found this only because the
+  owner asked me to check before I integrated. → Rule: before integrating
+  work held back for a while, fetch; list every branch and PR that moved since
+  its base; diff each held commit's files against them; and drop what has
+  landed. Never push onto a branch another session is driving; wait for its
+  PR, or ask.

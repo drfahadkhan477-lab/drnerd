@@ -12,7 +12,7 @@
  * the unit (a whole-unit file and a page-range file), a new section dense with
  * thresholds and guideline classes, a new narrative section, a "History"
  * section, and a fragment under the importer's floor. And what it writes must
- * split back into notes the way refs-patch splits them, figures intact.
+ * split back into notes the way ref-seed.js splits them, figures intact.
  */
 const fs = require('fs');
 const os = require('os');

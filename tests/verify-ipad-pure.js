@@ -56,19 +56,29 @@ function walk(dir, out = []) {
 const rel = p => path.relative(ROOT, p).split(path.sep).join('/');
 const blanked = p => blankComments(fs.readFileSync(p, 'utf8'));
 
-/* Everything under src/ is embedded into the app by the chain, so every
-   character of it is parsed by Safari.
-
-   NOT QUITE "VERBATIM", WHICH IS WHAT THIS SAID. Measured: at least eight
-   patch steps rewrite text that lives in src/ — three of them inside
-   src/core/vision.js alone, which is why that file still reads
-   {anthropic:true, groq:false} while the app ships {gemini:true}. The
-   direction of the error is safe for the rule below, since a line the chain
-   later replaces is still scanned, but the claim was wider than the check:
-   syntax a PATCH introduces is invisible here, and the comment implied
-   otherwise. The bundle-level version in verify-apex is the one that covers
-   that, and it needs a build. */
+/* Everything under src/ but the Worker is parsed by Safari: assemble-app
+   fills each module into its slot in the shell byte for byte (one slot per
+   module, which verify-app-slots-pure holds), and build-pwa inlines the two
+   bank modules into the split build. The patch chain that once rewrote src/
+   text on the way in, so that this scan read text the app did not ship, is
+   deleted. src/lab is scanned with the rest; a file scanned that does not
+   ship can only add a hit, never hide one. */
 const SRC_FILES = walk(path.join(ROOT, 'src'));
+
+/* AND THE SHELL, which is most of what Safari parses. app/systole.html holds
+   the app logic between the src/ slots, and app/css/*.css is every stylesheet
+   the app has, assembled into its one <style>. The patch chain is gone, so
+   both are plain source: the file text is the shipped text, less the slots
+   assemble-app fills (src/, scanned here anyway, and payloads, which are
+   data). The shell is read blanked like everything else; the blanker is not
+   an HTML lexer, so a `//` or `/*` in markup can blank text that is not a
+   comment. That can only hide a hit, never invent one, and the sentinels
+   below catch it hiding a stretch of script that holds one. */
+const SHELL = path.join(ROOT, 'app', 'systole.html');
+const CSS_FILES = fs.readdirSync(path.join(ROOT, 'app', 'css'))
+  .filter(n => n.endsWith('.css')).map(n => path.join(ROOT, 'app', 'css', n));
+const SHELL_SENTINELS = ['function icon(', 'async function exportMarkup(', 'async function openSelfTest('];
+
 head('the scan has something to scan');
 {
   /* Vacuity guard. Every check below is "count the hits and expect zero",
@@ -79,9 +89,14 @@ head('the scan has something to scan');
      SRC_FILES.every(f => blanked(f).trim().length > 40));
   ok('and blanking leaves the code behind',
      /function\s|const\s/.test(blanked(path.join(ROOT, 'src', 'core', 'pearl.js'))));
+  const shell = blanked(SHELL);
+  const lost = SHELL_SENTINELS.filter(t => shell.indexOf(t) < 0);
+  ok('the shell is read, and blanking leaves its script from first function to last',
+     lost.length === 0, lost.length ? 'blanked away: ' + lost.join(', ') : `${SHELL_SENTINELS.length} sentinels`);
+  ok('app/css has the stylesheets', CSS_FILES.length > 5, `${CSS_FILES.length} files`);
 }
 
-head('nothing in src/ ships a regex lookbehind');
+head('nothing in src/ or the shell ships a regex lookbehind');
 {
   /* A lookbehind is a parse-time SyntaxError on iPadOS Safari below 16.4 — not
      a caught exception but a dead <script> block, and in this app that block
@@ -92,50 +107,58 @@ head('nothing in src/ ships a regex lookbehind');
      stronger — it covers whatever the chain emits, including the ACCSAP base.
      It also needs a build and a browser, so it runs on one machine, when
      someone remembers. This is the same rule where it can run on every push,
-     over the files whose every character is embedded verbatim. Narrower and
-     immediate; that one stays broader and occasional. */
+     over the files whose every character is embedded verbatim: src/ and the
+     shell. Narrower and immediate; that one stays broader and occasional. */
   const hits = [];
-  for (const f of SRC_FILES) {
+  for (const f of [...SRC_FILES, SHELL]) {
     const m = blanked(f).match(/\(\?<[=!]/g);
     if (m) hits.push(`${rel(f)} ×${m.length}`);
   }
-  ok('no lookbehind assertion in any src/ module', hits.length === 0, hits.join(', '));
+  ok('no lookbehind assertion in any src/ module or the shell', hits.length === 0, hits.join(', '));
 }
 
-/* ── WHY THE backdrop-filter RULE IS NOT HERE ──────────────────────────────
-   iPadOS Safari shipped backdrop-filter behind -webkit- until Safari 18, and
-   three of this app's nine glass surfaces once carried the plain property
-   alone and simply did not blur on the one device this is for. That is a real
-   rule and it belongs in a test. It was written here first, and taken out,
-   because a source-level version cannot be honest:
+head('every glass surface blurs on an iPad');
+{
+  /* iPadOS Safari shipped backdrop-filter behind -webkit- until Safari 18, and
+     three of this app's glass surfaces once carried the plain property alone
+     and simply did not blur on the one device this is for.
 
-   1. THE CSS LIVES IN PATCH SCRIPTS, AND A PATCH HOLDS BOTH STATES. The fix
-      itself reads
+     THIS RULE WAS TAKEN OUT OF HERE ONCE, for a reason that no longer holds:
+     the CSS lived in patch scripts, and a patch's find string is the
+     unprefixed BEFORE, so a scan of the source reported the fix as the
+     defect. The patch chain is deleted; app/css/*.css and the shell are the
+     CSS that ships, with no before-state. verify-apex still asserts the same
+     over the built bundle, which also covers whatever a src/ module writes.
 
-          patch('safari: the navigation bar blurs on an iPad too',
-            `…backdrop-filter:blur(8px);`,                          // find: BEFORE
-            `…backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);`);
-
-      so a scan over the file text counts the unprefixed "before" as a live
-      declaration and reports the fix as the defect. Every mismatch the first
-      version found was one of these.
-
-   2. READING ONLY THE REPLACEMENTS DOES NOT REACH FAR ENOUGH. Extracting the
-      third argument of each patch() call captures 541 of 678 — the rest use
-      shapes a regex over template literals does not follow. A rule that
-      silently skips a fifth of the files and prints PASS is worse than no
-      rule, because the green reads as coverage of all of them.
-
-   So it is asserted against the BUILT BUNDLE in verify-apex instead, beside
-   the lookbehind check, where there is no before-state and no extraction: the
-   text is the CSS that ships. That costs a build and a browser, which is the
-   honest price of a check that is actually exact.
-
-   The lookbehind rule above survives here because src/ has neither problem —
-   every character of it is embedded verbatim, so the file text IS the shipped
-   text. Same constraint, same device; one can be checked cheaply and one
-   cannot, and pretending otherwise is the failure this repository keeps
-   finding in itself. */
+     Paired by value and count rather than by proximity, as verify-apex does:
+     a new unprefixed rule written beside a correct one sits inside any
+     proximity window and reads as fine. Inline style strings in the shell's
+     script count too, so the shell is read with the stylesheets. */
+  const norm = v => v.trim().replace(/\s+/g, ' ').toLowerCase();
+  const webkit = new Map(), plain = new Map(), where = new Map();
+  for (const f of [...CSS_FILES, SHELL]) {
+    const src = blanked(f);
+    for (const [re, into] of [[/-webkit-backdrop-filter\s*:\s*([^;}\n"'`]+)/g, webkit],
+                              [/(?:^|[^-\w])backdrop-filter\s*:\s*([^;}\n"'`]+)/g, plain]]) {
+      let m;
+      while ((m = re.exec(src))) {
+        const k = norm(m[1]);
+        into.set(k, (into.get(k) || 0) + 1);
+        if (into === plain && !where.has(k))
+          where.set(k, `${rel(f)}:${src.slice(0, m.index + m[0].indexOf('backdrop')).split('\n').length}`);
+      }
+    }
+  }
+  const bare = [];
+  for (const [val, n] of plain) {
+    const have = webkit.get(val) || 0;
+    if (have < n) bare.push(`${val.slice(0, 28)}: ${n} plain, ${have} prefixed (first at ${where.get(val)})`);
+  }
+  /* Vacuity guard: this is a zero-count, and a source with no glass at all
+     would satisfy it for ever. */
+  ok('the stylesheets have glass surfaces to check', plain.size > 0, `${plain.size} distinct values`);
+  ok('each is declared as often with -webkit- as without', bare.length === 0, bare.join(' | '));
+}
 
 /* ── the floor, written down once and held to ───────────────────────────────
    THE PROJECT NEVER SAID WHICH iPadOS IT SUPPORTS. It defends against a
@@ -151,16 +174,17 @@ head('nothing in src/ ships a regex lookbehind');
    first. So 13.4 is not chosen here; it is read off the code and written down.
 
    WHAT THIS CHECKS IS THE CEILING ON NEW WORK. Everything below shipped AFTER
-   Safari 13.4, so any of it appearing in src/ would raise the floor silently.
+   Safari 13.4, so any of it appearing in src/ or the shell would raise the
+   floor silently.
    Each one is the kind of thing that gets reached for without thinking —
    .at(-1) instead of [len-1], structuredClone instead of a JSON round trip —
    and none of them announces that it has just dropped support for a tablet.
 
    FEATURE-GUARDED USE IS NOT A FLOOR, and the app already does this properly:
    ResizeObserver is behind `typeof ResizeObserver!=='undefined'` with a resize
-   listener as the fallback, and startViewTransition is guarded four times in
-   failsafe-patch. Those are not caught here because they are not in src/;
-   if one appears here it will be flagged, and a guard around it is the fix. */
+   listener as the fallback, and startViewTransition is guarded in the shell.
+   Neither is in the list below, so neither is flagged. A listed construct is
+   flagged guarded or not, and the fix is the older spelling. */
 const FLOOR = '13.4';
 const ABOVE_FLOOR = [
   ['Array.prototype.at', /\.at\(\s*-?\d/, 'Safari 15.4'],
@@ -201,10 +225,13 @@ head('the worker is server code, and is excluded on that basis');
   ok('so what Safari parses is the rest', SAFARI_FILES.length > 5, `${SAFARI_FILES.length} files`);
 }
 
-head(`nothing Safari parses needs a Safari newer than the floor (iPadOS ${FLOOR})`);
+head(`no script Safari parses needs a Safari newer than the floor (iPadOS ${FLOOR})`);
 {
+  /* Script only: src/ less the worker, and the shell. The list is of script
+     constructs, so the stylesheets are not scanned against it, and a CSS
+     feature newer than the floor is not something this check would see. */
   const hits = [];
-  for (const f of SAFARI_FILES) {
+  for (const f of [...SAFARI_FILES, SHELL]) {
     const src = blanked(f);
     for (const [name, re, since] of ABOVE_FLOOR) {
       const g = new RegExp(re.source, 'g');

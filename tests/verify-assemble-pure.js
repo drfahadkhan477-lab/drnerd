@@ -167,7 +167,7 @@ head('the command line');
 
 head('a flagged question that now ships a figure stops the build');
 {
-  /* flags-patch records wantFigs: 0 for questions flagged for a missing
+  /* content-flags.js records wantFigs: 0 for questions flagged for a missing
      figure. If the export starts shipping one, the flag is stale and the
      step must refuse. The single-file bank says how many through img, not
      figs, so that is the case that matters. */
@@ -183,7 +183,7 @@ head('a flagged question that now ships a figure stops the build');
 
 head('a note in a subfolder is seeded with its figures');
 {
-  /* refs-patch walks subfolders; ref-images-patch read only the top level,
+  /* ref-seed.js walks subfolders; ref-images-patch read only the top level,
      so a figure cited from a subfolder's note was never embedded. */
   const { buildRefImages } = require(S('ref-images.js'));
   const { buildRefSeed } = require(S('ref-seed.js'));

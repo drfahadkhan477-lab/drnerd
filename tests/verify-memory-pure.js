@@ -139,8 +139,9 @@ head('grounded mode keeps who is taught, and withholds the key');
      it never measured. aiCtx() sends this block in both modes, because a
      memory is who is taught, not what is taught from; grounded mode also tells
      the model the answer key is withheld. The check that said so read only the
-     commentary heading, while the keyed option went out marked "← CORRECT"
-     and search_question_bank handed back bank items with their answer. So the
+     commentary heading, while the keyed option went out marked "← CORRECT",
+     every option with how many candidates chose it, and search_question_bank
+     handed back bank items with their answer. So the
      ranker, the fences, aiCtx() and runTool() are cut from app/systole.html and
      run here as the page runs them, over one invented question keyed C and
      one invented note, both of which the query below finds. */
@@ -166,9 +167,12 @@ head('grounded mode keeps who is taught, and withholds the key');
   const tool = () => ctx.runTool('search_question_bank', { query: 'tafamidis transthyretin amyloidosis' });
 
   /* Each option's line, and its shape with nothing appended: any mark on the
-     keyed line, in any wording, breaks the shape. */
+     keyed line, in any wording, breaks the shape. Grounded mode sends less:
+     how many candidates chose each option hints at the key as the mark does,
+     so a grounded line is the letter and the text alone. */
   const line = (t, L) => (t.match(new RegExp(`^  ${L}\\. .*$`, 'm')) || [''])[0];
   const BARE = /^  [A-E]\. [a-z]+opt  \[\d+% of candidates chose this\]$/;
+  const BARE_GROUNDED = /^  [A-E]\. [a-z]+opt$/;
   const kinds = r => (r.cite || []).map(c => c.kind).join(',') || 'nothing cited';
 
   const open = ctx.aiCtx(q), openTool = tool();
@@ -184,8 +188,8 @@ head('grounded mode keeps who is taught, and withholds the key');
   const g = ctx.aiCtx(q), gTool = tool();
   ok('grounded mode is genuinely on', /commentary for this item is withheld/.test(g));
   ok('the memory is still there', /WHAT YOU ALREADY KNOW ABOUT THIS FELLOW/.test(g) && /boards in October 2026/.test(g));
-  ok('every option is there, and none is marked as the key',
-     [...'ABCDE'].every(L => BARE.test(line(g, L))) && !/← CORRECT/.test(g), line(g, 'C').trim());
+  ok('every option is there as its letter and text alone: none marked as the key, none with how many candidates chose it',
+     [...'ABCDE'].every(L => BARE_GROUNDED.test(line(g, L))) && !/← CORRECT|of candidates chose/.test(g), line(g, 'C').trim());
   ok('and the commentary is not in it', !/kz9/.test(g) && !/OFFICIAL ACC COMMENTARY/.test(g));
   ok('the bank tool returns the note, fenced',
      /<<<NOTE-[A-Z0-9]{12}>>>/.test(gTool.result) && /Amyloidosis note/.test(gTool.result), kinds(gTool));

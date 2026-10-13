@@ -132,7 +132,7 @@ const thin = inject('thin', d => {
   fs.writeFileSync(path.join(d, 'alpha.md'),
     fs.readFileSync(f, 'utf8').replace(/## Aspect alpha 0\n[^\n]+/, '## Aspect alpha 0\nToo short to retrieve.'));
 });
-ok('a section under 40 words is caught', /FAIL  refs-patch: no section under 40 words/.test(thin.out) && thin.code === 1,
+ok('a section under 40 words is caught', /FAIL  ref-seed: no section under 40 words/.test(thin.out) && thin.code === 1,
    `exit ${thin.code}`);
 
 const fat = inject('fat', d => {

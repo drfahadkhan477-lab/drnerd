@@ -240,9 +240,12 @@ async function recuts() {
   const code = lift('function applyChapters(', 'function previewBook(') + lift('function recut(', 'function openDoc(');
   const pages = makeBook([{ n: 1, title: 'Heart Failure', pages: 6 }, { n: 2, title: 'Valve Disease', pages: 5 }, { n: 3, title: 'Arrhythmias', pages: 7 }]);
   const total = pages.length;
-  async function made() {
+  /* idb: a tests/_fakeidb.js database to run the store on, where a write can
+     fail; without one the store runs in memory, where none can. */
+  async function made(idb) {
     const w = { console, setTimeout, Promise, TextEncoder, Uint8Array, ArrayBuffer, crypto: require('crypto').webcrypto,
       btoa: s => Buffer.from(s, 'binary').toString('base64'), atob: s => Buffer.from(s, 'base64').toString('binary') };
+    if (idb) Object.assign(w, { indexedDB: idb.indexedDB, IDBRequest: idb.IDBRequest, clearTimeout });
     w.window = w; vm.createContext(w);
     for (const f of ['chunk.js', 'book.js', 'store.js', 'provenance.js', 'backup.js']) vm.runInContext(fs.readFileSync(path.join(SRC, f), 'utf8'), w, { filename: f });
     vm.runInContext(`var Store = MemStore, Book = MemBook, Chunk = MemChunk, root = window, gate = null, ui = { importing: '', error: '', books: [] };
@@ -306,6 +309,31 @@ async function recuts() {
     await Promise.all([w.removeBook(b), w.recut(b, w.MemBook.merge(b.chapters, 1))]);
     const s = await state(w);
     ok('a join tapped after Delete, before its screen leaves, does not bring the book back', !s.book && s.units === 0 && s.files === 0 && s.backup === 'restores', JSON.stringify(s));
+  }
+  /* The units a cut removes go as a deleted unit does (ui.js applyChapters,
+     Store.commit). Chapter 2's unit has a step save that failed and waits for
+     retry, then chapter 2 is joined to chapter 1, which removes its unit.
+     Written with a raw batch, the failed save stayed: every export carried a
+     session for a unit that was gone, and "Try saving again" stored it. */
+  {
+    const { makeIDB } = require('./_fakeidb.js');
+    let failNext = null;
+    const idb = makeIDB({ onRequest: r => { if (!failNext || !failNext(r)) return null; failNext = null; const e = new Error('The quota has been exceeded.'); e.name = 'QuotaExceededError'; return e; } });
+    const w = await made(idb), b = w.ui.books[0], gone = b.chapters[1].docId;
+    const step = (cards) => w.MemStore.saveStep({ id: gone, state: { docId: gone, titles: ['Valve Disease'], per: {} } }, cards);
+    failNext = r => r.store === 'cards' && r.kind === 'put';
+    const failed = await step([{ id: gone + ':miss', docId: gone, cluster: 0 }]).then(() => 'stored', e => e.name);
+    ok('precondition: on IndexedDB, chapter 2\'s unit has a failed save waiting for retry', failed === 'QuotaExceededError' && !!w.MemStore.failureMessage() && (await state(w)).backup === 'restores',
+       failed + ' / ' + w.MemStore.failureMessage());
+    w.ui.saveError = w.MemStore.failureMessage();
+    await w.recut(b, w.MemBook.merge(b.chapters, 1));
+    const s = await state(w);
+    ok('a join that removes that unit drops its failed save: no export carries it, the banner goes, and the book restores',
+       s.cut === '1-11,12-18' && whole(s) && !w.MemStore.failureMessage() && !w.ui.saveError, JSON.stringify(s) + ' pending: ' + w.MemStore.failureMessage());
+    await w.MemStore.retryFailures();
+    const late = await step([]).then(() => 'stored', e => e.name), s2 = await state(w);
+    ok('"Try saving again" stores nothing for it, and a save for it asked for after the cut is refused',
+       late === 'DeletedDocumentError' && !idb.data.get('sessions').has(gone) && whole(s2), late + ' ' + JSON.stringify(s2));
   }
 }
 

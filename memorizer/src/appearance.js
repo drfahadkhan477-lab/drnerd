@@ -8,7 +8,7 @@
    white cards, system blue — by day; B, a clinical dark — near-black,
    graphite cards, monitor green — at night; and asked to keep the aurora
    behind the page and the frosted glass over it. Auto pairs them. Contrast
-   is Systole's still (scripts/highcontrast-patch.js), and the suite still
+   is Systole's still (app/css/themes.css), and the suite still
    holds it colour for colour to that source.
 
    The colours that MEAN something (green right, red wrong, amber partly) are
@@ -152,7 +152,7 @@ var THEMES = [
 ];
 /* GLOW: the second accent a gradient runs to, and the aurora behind the
    page. Contrast's are Systole's (--teal2, --aura-1..3 in
-   highcontrast-patch.js), read out by the suite. The owner's two are drawn
+   app/css/themes.css), read out by the suite. The owner's two are drawn
    from their own accents, faint — the aurora is a colour in the corner of
    the eye, not a picture: Daylight's the iPad's blue, cyan and violet;
    Clinical's monitor green, with a cold blue. */

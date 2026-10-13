@@ -39,19 +39,29 @@ let mem = Object.create(null);      // key -> data: URL
 let db = null;                      // null once we know there is no IndexedDB
 let opened = null;                  // the open() promise, so boot only opens once
 
+/* An open that fires none of success, error or blocked would leave ready(),
+   backup() and every write waiting for ever. Same answer as store.js (see its
+   OPEN_TIMEOUT_MS): give up, run on the memory mirror as with no database,
+   and close a connection that arrives late. */
+const OPEN_TIMEOUT_MS = 4000;
+
 function open() {
   if (opened) return opened;
   opened = new Promise(resolve => {
-    let req;
+    let req, done = false;
+    const settle = d => { if (done) return false; done = true; resolve(d); return true; };
     try { req = indexedDB.open(DB_NAME, 1); }
-    catch (_) { return resolve(null); }        // private mode, file://, disabled
+    catch (_) { return settle(null); }        // private mode, file://, disabled
+    setTimeout(() => settle(null), OPEN_TIMEOUT_MS);
     req.onupgradeneeded = () => {
       const d = req.result;
       if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE);
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => resolve(null);
-    req.onblocked = () => resolve(null);
+    req.onsuccess = () => {
+      if (!settle(req.result)) { try { req.result.close(); } catch (_) {} }
+    };
+    req.onerror = () => settle(null);
+    req.onblocked = () => settle(null);
   }).then(d => { db = d; return d; });
   return opened;
 }

@@ -257,6 +257,38 @@ function makeDiagramPdf() {
   return Buffer.from(out, 'latin1');
 }
 
+/* A two-page PDF whose figures are NOT DRAWN AT THEIR BOX'S SHAPE: page 1 is
+   turned a quarter (/Rotate 90, as a wide table or chart is printed in a
+   book), so its 300 × 150 picture is drawn on its side; page 2 is upright
+   and its 80 × 240 picture runs to the page's left edge, so the crop's
+   margin stops there. Text on both, so neither is read as a scan. A magenta
+   patch is printed inside the turned picture, near its bottom left as the
+   page is printed, to stand where a label would: it is found again in the
+   drawn picture's pixels. */
+function makeTurnedPdf() {
+  const T = (t, size, x, y) => `BT /F1 ${size} Tf ${x} ${y} Td (${t}) Tj ET`;
+  const img = B => `q ${B[2] - B[0]} 0 0 ${B[3] - B[1]} ${B[0]} ${B[1]} cm /Im1 Do Q`;
+  const p1 = [T('Turned Figures', 18, 72, 740), T('This page is printed on its side, as a wide table or chart is in a book.', 11, 72, 700),
+    T('Its picture is drawn across the page and read with the book turned.', 11, 72, 684), img([150, 300, 450, 450]), 'q 1 0 1 rg 170 320 60 20 re f Q'];
+  const p2 = [T('The second page is upright, and its picture runs to the left edge of the page.', 11, 100, 740),
+    T('A figure printed to the trim is cropped at the page, not past it.', 11, 100, 724), img([0, 300, 80, 540])];
+  const pixels = Buffer.from([200, 40, 40, 40, 200, 40, 40, 40, 200, 220, 220, 40]).toString('latin1');
+  const s1 = p1.join('\n'), s2 = p2.join('\n');
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 90 /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 7 0 R >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 8 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 12 >>\nstream\n${pixels}\nendstream`,
+    `<< /Length ${s1.length} >>\nstream\n${s1}\nendstream`, `<< /Length ${s2.length} >>\nstream\n${s2}\nendstream`];
+  let out = '%PDF-1.4\n';
+  const off = [];
+  objs.forEach((o, i) => { off.push(Buffer.byteLength(out, 'latin1')); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = Buffer.byteLength(out, 'latin1');
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + off.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+
 /* A two-page PDF: page 1 has a text layer, page 2 is a SCAN — one JPEG of
    a page of text, drawn by the browser (makeScanJpeg below), no text at
    all — so only text recognition can read it. */
@@ -441,6 +473,7 @@ function kindOf(user) {
      (NODE_EXTRA_CA_CERTS). Measured: in this repository's cloud sandbox the
      browser failed pdf.min.js with ERR_CERT_AUTHORITY_INVALID. */
   let cdnHits = 0;
+  const cdnLog = [];
   const cdnGet = async url => {
     try { return await readers.get(url); }
     catch (error) { console.error('  [reader] ' + error.message); return null; }
@@ -473,7 +506,10 @@ function kindOf(user) {
   });
   await page.route('https://cdn.jsdelivr.net/**', async route => {
     cdnHits++;
+    const asked = { file: new (require('url').URL)(route.request().url()).pathname.split('/').slice(-1)[0], at: Date.now(), ms: null, ok: null };
+    cdnLog.push(asked);
     const got = await cdnGet(route.request().url());
+    asked.ms = Date.now() - asked.at; asked.ok = !!got;
     return route.fulfill(got ? { status: 200, body: got.body, headers: {
       'content-type': got.type, 'access-control-allow-origin': '*' } }
       : { status: 502, body: '', headers: { 'access-control-allow-origin': '*' } });
@@ -584,7 +620,20 @@ function kindOf(user) {
 
   head('a real PDF becomes the sections it was written as');
   await page.setInputFiles('#pdf-input', { name: 'unit.pdf', mimeType: 'application/pdf', buffer: pdf.buffer });
-  await page.locator('#sections .section-card').first().waitFor(T);
+  /* WHERE AN IMPORT STOPPED, when its sections do not come. The owner's Windows
+     run died here with nothing in the page's log, while CI and this container
+     pass it, and the CDN answered that machine in 300 ms. So before the wait's
+     own error ends the suite, print the import's stage (ui.importing: opening,
+     reading page n, splitting), its error, whether pdf.js loaded, and each CDN
+     request with its time. Diagnostic only: no check reads it. */
+  await page.locator('#sections .section-card').first().waitFor(T).catch(async e => {
+    const at = await page.evaluate(() => { const u = Memorizer.ui;
+      return { importing: u.importing, error: u.error, busy: u.busy, notice: u.notice, slowSaves: u.slowSaves, saveError: u.saveError, pdfjs: typeof window.pdfjsLib, phase: u.state && u.state.phase }; })
+      .catch(x => ({ unreadable: String(x && x.message || x).slice(0, 120) }));
+    const cdn = cdnLog.map(c => ({ file: c.file, ms: c.ms === null ? 'waiting ' + (Date.now() - c.at) : c.ms, ok: c.ok }));
+    console.log('  [import stalled] ' + JSON.stringify(at) + '  cdn ' + JSON.stringify(cdn));
+    throw e;
+  });
   ok('the import lands on the unit’s sections, before any lesson', await page.evaluate(() => Memorizer.ui.state.phase === 'unit') && stub.requests.length === 0,
      `${stub.requests.length} requests`);
   ok('one card per section, numbered and titled by its heading',
@@ -3401,6 +3450,112 @@ function kindOf(user) {
     const again = await p5d.evaluate(id => MemStore.get('docs', id).then(d => (d.figures[0] && d.figures[0].labels || []).map(l => l.text).sort()), drec.id);
     ok('and a unit whose figures are found again keeps its labels too', JSON.stringify(again) === JSON.stringify(['Aorta', 'Left atrium', 'Left ventricle', 'Right atrium', 'Right ventricle']), JSON.stringify(again));
     await p5d.context().close();
+
+    /* A FIGURE HOLDS THE SHAPE IT IS DRAWN AT, on a turned page and where its
+       margin runs off the page (makeTurnedPdf). The space held was the box
+       with its margin: on a turned page the drawn image is that on its side,
+       and at the edge it is narrower, so the figure changed height when it
+       was drawn and what was under it moved. Every figure's drawing is held
+       at MemPdf.renderBox, which the held box does not come from, so the
+       undrawn boxes can be read; then they are let go and the drawn ones
+       read. The hold and the wait for the drawings are preconditions, and
+       the hold is checked (nothing drawn when the held boxes are read); the
+       heights are the check. */
+    const p5r = await fresh('turned', true);
+    await p5r.setInputFiles('#pdf-input', { name: 'turned.pdf', mimeType: 'application/pdf', buffer: makeTurnedPdf() });
+    await p5r.locator('#sections .section-card').first().waitFor({ timeout: 60000 });
+    const rfigs = await p5r.evaluate(() => MemStore.all('docs').then(d => d[0].figures.map(f => ({ page: f.page, box: f.box, rotate: f.rotate }))));
+    ok('a turned page’s figure and one at a page’s edge are found, each with the turn of its page',
+       JSON.stringify(rfigs) === JSON.stringify([{ page: 1, box: [150, 300, 450, 450], rotate: 90 }, { page: 2, box: [0, 300, 80, 540], rotate: 0 }]), JSON.stringify(rfigs));
+    await p5r.evaluate(() => {
+      const draw = MemPdf.renderBox;
+      window.__figDrawsAsked = 0;
+      window.__drawsHeld = new Promise(r => { window.__letDraw = r; });
+      MemPdf.renderBox = function () { const args = arguments, self = this; if (args[3]) window.__figDrawsAsked++; return window.__drawsHeld.then(() => draw.apply(self, args)); };
+    });
+    await p5r.locator('#sections .section-card').first().click();
+    /* Each wait gives up into the check rather than ending the suite: with no
+       figures, or none drawn, the check says so with what it read. */
+    await p5r.locator('#visuals .figs img').nth(1).waitFor(T).catch(() => {});
+    await p5r.evaluate(() => { const f = document.querySelector('#visuals .figs'); if (f) f.scrollIntoView({ block: 'center' }); });
+    await p5r.waitForFunction(() => window.__figDrawsAsked >= 2, null, T).catch(() => {});
+    const heldBoxes = await p5r.evaluate(() => { window.__turnedImgs = [...document.querySelectorAll('#visuals .figs img')];
+      return window.__turnedImgs.map(i => ({ drawn: !!i.getAttribute('src') || i.naturalWidth > 0, h: Math.round(i.getBoundingClientRect().height) })); });
+    await p5r.evaluate(() => window.__letDraw());
+    await p5r.waitForFunction(() => window.__turnedImgs.every(i => !i.isConnected || i.naturalWidth > 0), null, T).catch(() => {});
+    const drawnBoxes = await p5r.evaluate(() => window.__turnedImgs.map(i => i.isConnected ? { drawn: i.naturalWidth > 0, h: Math.round(i.getBoundingClientRect().height) } : 'replaced by a redraw'));
+    ok('and each holds the height it is drawn at, so nothing under it moves: on its side on the turned page, cut at the edge on the other',
+       heldBoxes.length === 2 && heldBoxes.every((b, k) => { const d = drawnBoxes[k];
+         return !b.drawn && b.h > 0 && d && d.drawn === true && Math.abs(d.h - b.h) <= 0.02 * d.h; }),
+       JSON.stringify({ held: heldBoxes, drawn: drawnBoxes }));
+
+    /* A FIGURE CARD FROM THE TURNED PAGE HIDES ITS LABEL WHERE THE READER SEES
+       IT. The mask is measured in the figure as printed (study.js maskOf), and
+       the picture is drawn on its side. The hidden label here is the magenta
+       patch, so where it shows is read from the drawn picture's own pixels,
+       which no mask arithmetic can move, and the mask's box on screen must
+       cover it. Its first label is the one hidden (occlusionOf, k = 0). */
+    const todayT = await p5r.evaluate(() => FSRS.todayISO());
+    await p5r.evaluate(t => MemStore.all('docs').then(ds => {
+      const d = ds[0], f = d.figures.find(x => x.page === 1);
+      const labels = [['Patch', [170, 320, 230, 340]], ['Atrium', [300, 400, 340, 412]], ['Ventricle', [380, 330, 430, 342]], ['Septum', [250, 420, 290, 432]]]
+        .map(([text, box]) => ({ text, box }));
+      const c = MemStudy.occlusionCards(d, 0, [Object.assign({}, f, { labels })])[0];
+      c.dueFrom = t;
+      return MemStore.put('cards', c);
+    }), todayT);
+    await p5r.locator('nav.dock').getByRole('button', { name: 'Home' }).click();
+    await p5r.locator('nav.dock').getByRole('button', { name: 'Review' }).click();
+    await p5r.locator('#occlusion').waitFor(T).catch(() => {});
+    /* Complete, not only sized: an image reports its size while it is still
+       partly loaded. */
+    await p5r.waitForFunction(() => { const i = document.querySelector('#occlusion img'); return i && i.complete && i.naturalWidth > 0; }, null, T).catch(() => {});
+    /* A precondition, not the claim: the picture can be read. In WebKit on CI's
+       runners the <img> was complete, sized and decoded and still drew nothing
+       into a canvas in about half the runs: every canvas drawn from it at that
+       moment read empty, and moments later it drew whole. So this waits until
+       a draw of it leaves ink. Where the label shows, and whether the mask
+       covers it, is still the check; a picture never drawn times out into it
+       and fails on what was read. willReadFrequently, as it is read back on
+       every try. */
+    const waitFrom = Date.now();
+    await p5r.waitForFunction(() => {
+      const i = document.querySelector('#occlusion img');
+      if (!i || !i.complete || !i.naturalWidth) return false;
+      const c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight;
+      const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(i, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      for (let k = 3; k < d.length; k += 4) if (d[k]) return true;
+      return false;
+    }, null, T).catch(() => {});
+    const waited = Date.now() - waitFrom;
+    const seen = await p5r.evaluate(async () => {
+      const i = document.querySelector('#occlusion img'), m = document.querySelector('#occlusion .occlusion-mask');
+      if (!i || !i.naturalWidth || !m) return { card: !!document.querySelector('#occlusion'), drawn: !!(i && i.naturalWidth) };
+      const c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight;
+      const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(i, 0, 0);
+      const px = g.getImageData(0, 0, c.width, c.height).data;
+      let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1, inked = 0;
+      for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+        const k = (y * c.width + x) * 4;
+        if (px[k + 3]) inked++;
+        if (px[k] > 200 && px[k + 1] < 80 && px[k + 2] > 200) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      }
+      const r = i.getBoundingClientRect(), q = m.getBoundingClientRect(), f = v => +v.toFixed(3);
+      const mask = [(q.left - r.left) / r.width, (q.top - r.top) / r.height, (q.right - r.left) / r.width, (q.bottom - r.top) / r.height].map(f);
+      /* For the report only: the pixel under the mask's centre and how much of
+         the canvas was drawn at all, so a miss says whether the patch came out
+         in another colour or no picture was read. */
+      const cx = Math.max(0, Math.min(c.width - 1, Math.floor((mask[0] + mask[2]) / 2 * c.width)));
+      const cy = Math.max(0, Math.min(c.height - 1, Math.floor((mask[1] + mask[3]) / 2 * c.height))), ck = (cy * c.width + cx) * 4;
+      return { patch: x1 < 0 ? null : [x0 / c.width, y0 / c.height, (x1 + 1) / c.width, (y1 + 1) / c.height].map(f), mask,
+               centre: [px[ck], px[ck + 1], px[ck + 2], px[ck + 3]], inked: f(inked / (c.width * c.height)) };
+    });
+    seen.waitedMs = waited;
+    ok('a figure card from the turned page hides its label where the drawn picture shows it',
+       !!seen.patch && !!seen.mask && seen.mask[0] <= seen.patch[0] + 0.01 && seen.mask[1] <= seen.patch[1] + 0.01 &&
+       seen.mask[2] >= seen.patch[2] - 0.01 && seen.mask[3] >= seen.patch[3] - 0.01, JSON.stringify(seen));
+    await p5r.context().close();
   }
 
   head('opened as a data: URL, the way the iPad\u2019s Files app hands a file to Safari');

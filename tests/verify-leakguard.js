@@ -161,11 +161,69 @@ head('it refuses the licensed bank, by every route in');
   ok('an ACCSAP export is refused wherever it has been moved to',
      r.code === 1 && /NAME/.test(r.out));
 
-  /* 3. SIZE — a figure, or anything else outsized, under a name nobody guessed. */
+  /* 3. SIZE — anything outsized, under a name nobody guessed. Not a figure:
+     the bytes are not an image, and a real figure is far under the cap (3b). */
   const big = write('holiday-photo.bin', Buffer.alloc(1024 * 1024 + 1, 7));
   r = run([big]);
   ok('anything over 1 MB is refused', r.code === 1 && /SIZE/.test(r.out),
      r.out.match(/SIZE.*/)?.[0]?.trim().slice(0, 50));
+
+  /* 3b. IMAGE — A REAL FIGURE, AT A REAL FIGURE'S SIZE. The guard's header
+     gave "drags a figure into assets/" as the reason .gitignore is not enough,
+     and no rule caught one: SIZE starts at 1 MB and the content rules read
+     text (found by review). The fixture is a genuine PNG of noise, tens of
+     KB, made here so no figure is involved; it is judged at the path someone
+     would drop it at, under its own name, renamed, and as a PDF. */
+  const zlib = require('zlib');
+  const png = (() => {
+    const w = 128, h = 96, rows = [];
+    for (let y = 0; y < h; y++) rows.push(Buffer.concat([Buffer.alloc(1), require('crypto').randomBytes(w * 3)]));
+    const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+    const crc = b => { let c = 0xFFFFFFFF; for (const x of b) c = crcTable[(c ^ x) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+    const chunk = (type, data) => {
+      const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+      const td = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+      const c = Buffer.alloc(4); c.writeUInt32BE(crc(td));
+      return Buffer.concat([len, td, c]);
+    };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+    return Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+      chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
+  })();
+  ok('(the figure fixture is tens of KB, under every size rule)', png.length > 10 * 1024 && png.length < 200 * 1024, png.length + ' bytes');
+  const inTmp = (rel, body) => {
+    fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true });
+    fs.writeFileSync(path.join(tmp, rel), body);
+    try { return { code: 0, out: execFileSync(process.execPath, [GUARD, rel], { cwd: tmp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+  };
+  r = inTmp('assets/figure-3.png', png);
+  ok('a figure dragged into assets/ is refused', r.code === 1 && /IMAGE\s+assets\/figure-3\.png/.test(r.out),
+     r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('assets/figure-3.bin', png);
+  ok('and so is the same figure renamed, by its first bytes', r.code === 1 && /IMAGE/.test(r.out) && /a PNG/.test(r.out),
+     r.out.match(/IMAGE.*|a PNG.*/)?.[0] || r.out.trim().slice(0, 60));
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n', 'latin1');
+  r = inTmp('notes/chapter-7.pdf', pdf);
+  ok('a split PDF far under 1 MB is refused', r.code === 1 && /IMAGE\s+notes\/chapter-7\.pdf/.test(r.out),
+     r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('notes/chapter-7.txt', pdf);
+  ok('and renamed, by its first bytes', r.code === 1 && /a PDF/.test(r.out), r.out.match(/IMAGE.*|a PDF.*/)?.[0] || r.out.trim().slice(0, 60));
+  /* By name alone, for a format with no signature to sniff: an SVG is text. */
+  r = inTmp('assets/diagram.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>\n');
+  ok('an SVG figure is refused by its extension', r.code === 1 && /IMAGE\s+assets\/diagram\.svg/.test(r.out) && /by its name/.test(r.out),
+     r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('memorizer/samples/notes.md', 'a page of a chapter\n');
+  ok('anything under memorizer/samples/, where a book chapter is kept, is refused', r.code === 1 && /PATH\s+memorizer\/samples/.test(r.out),
+     r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 60));
+  /* And what must pass: the one binary the repository ships on purpose, by
+     the list that names it, and a text file whose name only mentions one. */
+  r = run(['assets/hero-heart/heart.webp']);
+  ok('the binary the repository ships on purpose passes, by name', r.code === 0, r.out.trim().slice(0, 60));
+  r = inTmp('assets/heart.webp', fs.readFileSync(path.join(ROOT, 'assets', 'hero-heart', 'heart.webp')));
+  ok('but the same bytes at any other path are refused', r.code === 1 && /a WebP/.test(r.out), r.out.match(/IMAGE.*|a WebP.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('png-notes.md', 'notes on the png encoder\n');
+  ok('while a text file that only mentions an image format is fine', r.code === 0, r.out.trim().slice(0, 60));
 
   /* 4. PAYLOAD — the export renamed to something innocuous and trimmed below
      the size rule. This is the rule that earns its keep. */
@@ -335,6 +393,132 @@ head('the pre-commit route: what is staged');
   fs.rmSync(repo, { recursive: true, force: true });
 }
 
+head('the pre-push route: every commit the push sends');
+{
+  /* The pre-commit hook sees a commit only when `git commit` makes it, and
+     the pre-push hook used to judge the checked-out tree. A licensed file
+     added in one commit and deleted in the next passed both and was pushed.
+     A throwaway repository and a bare remote; hooks off for the fixture's own
+     commands, so only the hook under test below ever runs. */
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'leakguard-push-'));
+  const repo = path.join(work, 'repo'), remote = path.join(work, 'remote.git'), noHooks = path.join(work, 'no-hooks');
+  fs.mkdirSync(repo); fs.mkdirSync(noHooks);
+  const git = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'core.hooksPath=' + noHooks, ...a],
+                                     { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const guard = (args, input) => {
+    try { return { code: 0, out: execFileSync(process.execPath, [GUARD, ...args], { cwd: repo, encoding: 'utf8', input: input || '', stdio: ['pipe', 'pipe', 'pipe'] }) }; }
+    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+  };
+  const put = (name, body) => { fs.mkdirSync(path.dirname(path.join(repo, name)), { recursive: true }); fs.writeFileSync(path.join(repo, name), body); };
+  const ZERO = '0'.repeat(40);
+  /* The line git writes to the hook for one ref. */
+  const line = (ref, local, remoteSha) => `refs/heads/${ref} ${local} refs/heads/${ref} ${remoteSha}\n`;
+
+  execFileSync('git', ['init', '-q', '--bare', remote]);
+  git('init', '-q', '-b', 'master');
+  git('remote', 'add', 'origin', remote);
+  put('notes.md', 'ordinary\n'); git('add', 'notes.md'); git('commit', '-q', '-m', 'base');
+  const base = git('rev-parse', 'HEAD');
+  git('push', '-q', 'origin', 'master');
+
+  put('content/leak.json', '{"stem": "x"}'); git('add', '-f', 'content/leak.json'); git('commit', '-q', '-m', 'add');
+  const added = git('rev-parse', '--short=12', 'HEAD');
+  git('rm', '-q', 'content/leak.json'); git('commit', '-q', '-m', 'remove it again');
+  const tip = git('rev-parse', 'HEAD');
+  let r = guard(['--all-tracked']);
+  ok('(the checked-out tree is clean, so the route the pre-push check used to read passes it)', r.code === 0 && /checked, nothing licensed/.test(r.out), r.out.trim().slice(0, 70));
+  r = guard(['--push', 'origin'], line('master', tip, base));
+  ok('a file added in one commit and deleted in the next is refused, naming the commit it came in',
+     r.code === 1 && new RegExp(`PATH\\s+content/leak\\.json\\s+\\(in ${added}\\)`).test(r.out), r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 70));
+  r = guard(['--range', `${base}..${tip}`]);
+  ok('and --range, the route CI takes, refuses the same history', r.code === 1 && /PATH\s+content\/leak\.json/.test(r.out), r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 70));
+  git('reset', '-q', '--hard', base);
+
+  const dump = Array.from({ length: 8 }, (_, i) => `"f${i}": "data:image/png;base64,AAAA"`).join(',\n');
+  git('checkout', '-q', '-b', 'side');
+  put('slides.json', '{' + dump + '}'); git('add', 'slides.json'); git('commit', '-q', '-m', 'figures');
+  const side = git('rev-parse', 'HEAD');
+  git('checkout', '-q', 'master');
+  r = guard(['--push', 'origin'], line('side', side, ZERO));
+  ok('a new branch that is not checked out is judged by what it sends', r.code === 1 && /FIGURES\s+slides\.json/.test(r.out), r.out.match(/FIGURES.*/)?.[0] || r.out.trim().slice(0, 70));
+
+  /* Only what is new to this remote: a new branch off master is judged on
+     its own commit, not on master's, which the remote already holds. */
+  git('checkout', '-q', '-b', 'own', base);
+  put('own.md', 'ordinary\n'); git('add', 'own.md'); git('commit', '-q', '-m', 'own');
+  r = guard(['--push', 'origin'], line('own', git('rev-parse', 'HEAD'), ZERO));
+  ok('a new branch is judged on its own commits, not on what the remote already holds', r.code === 0 && /\(in 1 commit\(s\)\)/.test(r.out), r.out.trim().slice(0, 80));
+  /* A remote tip this clone never fetched cannot be excluded: the push is
+     still judged, on more, rather than refused for it. */
+  r = guard(['--push', 'origin'], line('master', tip, 'f'.repeat(40)));
+  ok('a remote tip this clone has never fetched widens the check rather than stopping it', r.code === 1 && /PATH\s+content\/leak\.json/.test(r.out), r.out.match(/PATH.*|could not.*/)?.[0] || r.out.trim().slice(0, 70));
+  /* A first commit has no parent to be read against (--root). */
+  git('checkout', '-q', '--orphan', 'fresh');
+  git('rm', '-q', '-r', '--cached', '.');
+  put('content/root.json', '{}'); git('add', '-f', 'content/root.json'); git('commit', '-q', '-m', 'root');
+  r = guard(['--push', 'origin'], line('fresh', git('rev-parse', 'HEAD'), ZERO));
+  ok('a first commit, with no parent, is read too', r.code === 1 && /PATH\s+content\/root\.json/.test(r.out), r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 70));
+  git('checkout', '-q', '-f', 'master');
+  put('more.md', 'ordinary too\n'); git('add', 'more.md'); git('commit', '-q', '-m', 'clean');
+  const clean = git('rev-parse', 'HEAD');
+  r = guard(['--push', 'origin'], line('master', clean, base));
+  ok('a clean push is read, not waved through: its one new file, in its one commit', r.code === 0 && /\b1 file\(s\) checked, nothing licensed \(in 1 commit\(s\)\)/.test(r.out), r.out.trim().slice(0, 80));
+  r = guard(['--push', 'origin'], `(delete) ${ZERO} refs/heads/side ${side}\n`);
+  ok('a push that only deletes sends nothing, and is let through', r.code === 0 && /\b0 file\(s\) checked, nothing licensed \(in 0 commit\(s\)\)/.test(r.out), r.out.trim().slice(0, 80));
+
+  /* A merge whose other side is already on the remote: only the merge commit
+     is new, and what it adds itself shows only against each parent. */
+  git('checkout', '-q', '-b', 'other', base);
+  put('other.md', 'from the other side\n'); git('add', 'other.md'); git('commit', '-q', '-m', 'other');
+  git('push', '-q', 'origin', 'other');
+  git('checkout', '-q', 'master');
+  git('merge', '-q', '--no-ff', '--no-commit', 'other');
+  put('content/evil.json', '{}'); git('add', '-f', 'content/evil.json'); git('commit', '-q', '-m', 'merge other');
+  const merge = git('rev-parse', 'HEAD'), mshort = git('rev-parse', '--short=12', 'HEAD');
+  r = guard(['--push', 'origin'], line('master', merge, base));
+  ok('a merge is read against each parent, so what it brings in itself is refused',
+     r.code === 1 && new RegExp(`PATH\\s+content/evil\\.json\\s+\\(in ${mshort}\\)`).test(r.out), r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 70));
+
+  git('reset', '-q', '--hard', base);
+  git('update-index', '--add', '--cacheinfo', '160000,' + '1'.repeat(40) + ',content/refs-repo'); git('commit', '-q', '-m', 'pointer');
+  r = guard(['--push', 'origin'], line('master', git('rev-parse', 'HEAD'), base));
+  ok('a submodule pointer under content/ in a pushed commit is refused', r.code === 1 && /PATH\s+content\/refs-repo/.test(r.out), r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 70));
+  git('reset', '-q', '--hard', base);
+
+  r = guard(['--range', 'no-such-revision..HEAD']);
+  ok('when git cannot list the commits, it exits 2 and certifies nothing', r.code === 2 && !/nothing licensed/.test(r.out), `exit ${r.code}`);
+  r = guard(['--push', 'origin'], 'not a line git writes\n');
+  ok('and a pre-push line it cannot read is an error, not a pass', r.code === 2 && !/nothing licensed/.test(r.out), `exit ${r.code}`);
+
+  /* THE HOOK ITSELF, run by git from a real push: a copy of .githooks/
+     pre-push with the guard beside it, as they sit in this repository. The
+     suites it runs next are stood in for by a script that says it ran, so
+     a push that gets past the guard shows it. */
+  fs.mkdirSync(path.join(repo, '.githooks')); fs.mkdirSync(path.join(repo, 'scripts'));
+  fs.copyFileSync(path.join(ROOT, '.githooks', 'pre-push'), path.join(repo, '.githooks', 'pre-push'));
+  fs.chmodSync(path.join(repo, '.githooks', 'pre-push'), 0o755);
+  fs.copyFileSync(GUARD, path.join(repo, 'scripts', 'leak-guard.js'));
+  fs.writeFileSync(path.join(repo, 'scripts', 'test-public.js'), "console.log('stand-in suites ran');\n");
+  const push = (...a) => {
+    try { return { code: 0, out: execFileSync('git', ['-c', 'core.hooksPath=.githooks', 'push', ...a], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+  };
+  const onRemote = ref => execFileSync('git', ['ls-remote', remote, 'refs/heads/' + ref], { encoding: 'utf8' }).trim().length > 0;
+  git('checkout', '-q', '-b', 'leaky', base);
+  put('content/hook.json', '{}'); git('add', '-f', 'content/hook.json'); git('commit', '-q', '-m', 'add');
+  git('rm', '-q', 'content/hook.json'); git('commit', '-q', '-m', 'remove it again');
+  r = push('origin', 'leaky');
+  ok('the pre-push hook refuses such a push, and the remote never receives it',
+     r.code !== 0 && /content\/hook\.json/.test(r.out) && !/stand-in suites ran/.test(r.out) && !onRemote('leaky'),
+     r.out.match(/PATH.*/)?.[0] || r.out.trim().split('\n').slice(-1)[0]);
+  git('checkout', '-q', '-b', 'tidy', base);
+  put('tidy.md', 'ordinary\n'); git('add', 'tidy.md'); git('commit', '-q', '-m', 'tidy');
+  r = push('origin', 'tidy');
+  ok('and lets a clean one through to the suites and the remote', r.code === 0 && /stand-in suites ran/.test(r.out) && onRemote('tidy'),
+     r.out.trim().split('\n').slice(-1)[0]);
+  fs.rmSync(work, { recursive: true, force: true });
+}
+
 head('the knowledge graph cannot read what leak-guard refuses');
 {
   /* graphify reads .gitignore and then .graphifyignore — and under
@@ -400,6 +584,26 @@ head('the hook is wired the way the README says');
   })();
   ok('git records it as executable, so a fresh clone can run it',
      mode === '100755', mode || 'git could not be asked');
+  /* The pre-push hook: what it runs, read without its comments, which name
+     the guard before the code does. */
+  const pushHook = fs.readFileSync(path.join(ROOT, '.githooks', 'pre-push'), 'utf8')
+    .split('\n').filter(l => !/^\s*#/.test(l)).join('\n');
+  const guardAt = pushHook.search(/node scripts\/leak-guard\.js --push "\$1"/), suitesAt = pushHook.indexOf('scripts/test-public.js');
+  ok('the pre-push hook hands the guard the refs git sends it, before the suites run',
+     guardAt >= 0 && suitesAt > guardAt, `guard at ${guardAt}, suites at ${suitesAt}`);
+  const pushMode = (() => {
+    try {
+      return execFileSync('git', ['ls-files', '-s', '.githooks/pre-push'], { cwd: ROOT, encoding: 'utf8' }).trim().split(/\s+/)[0];
+    } catch (_) { return ''; }
+  })();
+  ok('and git records it as executable too', pushMode === '100755', pushMode || 'git could not be asked');
+  /* And CI reads every commit a pull request adds, from a checkout that has
+     them. The logic job, without its comments. */
+  const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
+  const logicJob = yml.slice(yml.indexOf('\n  logic:'), yml.indexOf('\n  memorizer-browser:')).split('\n').filter(l => !/^\s*#/.test(l)).join('\n');
+  ok('CI\u2019s logic job reads every commit a pull request adds, from a checkout that has them',
+     /node scripts\/leak-guard\.js --range HEAD\^1\.\.HEAD\^2/.test(logicJob) && /fetch-depth:\s*0\b/.test(logicJob),
+     `range ${/--range HEAD\^1/.test(logicJob)}, fetch-depth 0 ${/fetch-depth:\s*0\b/.test(logicJob)}`);
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

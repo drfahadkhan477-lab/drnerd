@@ -12,6 +12,13 @@
  *
  * The one claim it cannot make is "this runs on Cloudflare". That is verified
  * by deploying it.
+ *
+ * Nor does it reach Cloudflare Access. The Worker checks the token Access
+ * signs against the keys the team publishes; here the team is a key pair this
+ * file generates with WebCrypto, its tokens are signed locally, and the global
+ * fetch is replaced for the whole file so the Worker's request for the team's
+ * keys is answered from that pair. Anything else that reaches the global fetch
+ * throws, so no check here can pass by touching the network.
  */
 'use strict';
 
@@ -22,7 +29,53 @@ const ok = (label, cond, detail = '') => {
 };
 const head = t => console.log('\n── ' + t + ' ──');
 
-const ENV = { GEMINI_API_KEY: 'AQ.server-side-secret' };
+/* The team and the application the Worker is told to trust. ISS is what Access
+   writes into iss for that team. */
+const TEAM = 'systole-test.cloudflareaccess.com';
+const ISS = 'https://' + TEAM;
+const AUD = 'a1'.repeat(32);
+const ENV = { GEMINI_API_KEY: 'AQ.server-side-secret', ACCESS_TEAM_DOMAIN: TEAM, ACCESS_AUD: AUD };
+
+/* ── a stand-in for Access: a team key, an intruder's key, and tokens ──── */
+const { subtle } = globalThis.crypto;
+const RSA = { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' };
+const b64u = bytes => Buffer.from(bytes).toString('base64url');
+async function keyPair(kid) {
+  const k = await subtle.generateKey(RSA, true, ['sign', 'verify']);
+  const { n, e } = await subtle.exportKey('jwk', k.publicKey);
+  /* Shaped like an entry in the team's certs "keys" list. */
+  return { kid, privateKey: k.privateKey, jwk: { kid, kty: 'RSA', alg: 'RS256', use: 'sig', n, e } };
+}
+const nowS = () => Math.floor(Date.now() / 1000);
+/* What Access puts in a token for a signed-in person, for this application. */
+const claims = (over = {}) => Object.assign({
+  aud: [AUD], email: 'fellow@example.org', exp: nowS() + 3600, iat: nowS(), nbf: nowS(),
+  iss: ISS, type: 'app', sub: '00000000-0000-4000-8000-000000000001', country: 'GB',
+}, over);
+let TEAM_KEY = null, INTRUDER = null;
+async function sign(payload, { key = TEAM_KEY, kid = key.kid, alg = 'RS256', header = {} } = {}) {
+  const h = b64u(JSON.stringify({ alg, kid, typ: 'JWT', ...header }));
+  const p = b64u(JSON.stringify(payload));
+  const sig = await subtle.sign('RSASSA-PKCS1-v1_5', key.privateKey, Buffer.from(h + '.' + p));
+  return `${h}.${p}.${b64u(sig)}`;
+}
+
+/* THE GLOBAL FETCH, for the whole file. The Worker's deployed gate fetches the
+   team's keys with it, so the team's certs URL answers from TEAM_KEY. `google`
+   is what a test wants the rest of the network to say; when it is null,
+   anything else that arrives here throws instead of leaving the machine. */
+const CERTS = new Map();
+const ATTACKER_KEYS = 'https://keys.attacker.example/certs';
+let google = null;
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : input.url;
+  if (CERTS.has(url)) {
+    return new Response(JSON.stringify(CERTS.get(url)), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
+  if (google) return google(url, init);
+  throw new Error('verify-worker reached for the network: ' + url);
+};
+
 const body = (extra = {}) => JSON.stringify(Object.assign({
   systemInstruction: { parts: [{ text: 'you are apex' }] },
   generationConfig: { maxOutputTokens: 2000 },
@@ -48,8 +101,13 @@ function stub(reply) {
    header is added HERE rather than at each call site so that the gate's own
    tests, which deliberately omit it, are the only place in this file where its
    absence appears. Adding it site by site would have meant sixty chances to
-   write an authenticated test that was quietly testing the anonymous path. */
-const ACCESS = { 'cf-access-authenticated-user-email': 'fellow@example.org' };
+   write an authenticated test that was quietly testing the anonymous path.
+
+   The identity is a token signed with the team's key (for fellow@example.org,
+   good for an hour), not the cf-access-authenticated-user-email header it
+   used to be: a header anyone can type is what the gate no longer accepts.
+   Assigned once the key exists, before the first check. */
+let ACCESS = null;
 const req = (path, init = {}) => new Request('https://systole.pages.dev' + path,
   { ...init, headers: { ...ACCESS, ...(init.headers || {}) } });
 const post = (path, b) => req(path, { method: 'POST', body: b === undefined ? body() : b });
@@ -58,7 +116,14 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
   { method: 'POST', body: b === undefined ? body() : b });
 
 (async () => {
-  const { handleApex, default: worker } = await import('file://' + require('path').resolve(__dirname, '..', 'src', 'worker', 'apex.js'));
+  const { handleApex, accessVerifier, default: worker } = await import('file://' + require('path').resolve(__dirname, '..', 'src', 'worker', 'apex.js'));
+  TEAM_KEY = await keyPair('team-key-1');
+  INTRUDER = await keyPair('intruder-key');
+  CERTS.set(ISS + '/cdn-cgi/access/certs', { keys: [TEAM_KEY.jwk] });
+  /* A key server the intruder runs, answering for real: a token that names it
+     (jku) would verify, if the Worker ever asked a token where its keys are. */
+  CERTS.set(ATTACKER_KEYS, { keys: [INTRUDER.jwk] });
+  ACCESS = { 'cf-access-jwt-assertion': await sign(claims()) };
 
   head('the site still works — the line that matters most');
   /* In advanced mode the Worker owns EVERY request to the project. Forgetting
@@ -75,6 +140,187 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
     await worker.fetch(post('/api/apex/gemini/generate?model=gemini-3-flash-preview'),
       { ...env, GEMINI_API_KEY: '' });
     ok('but an /api/apex path never reaches ASSETS', asked === null, String(asked));
+  }
+
+  head('who is asking is what Access signed, not what the request says');
+  {
+    /* THE FINDING THIS CLOSES. The gate read cf-access-authenticated-user-email.
+       Access sets that header when it is in front; where it is not — the very
+       deployment the gate exists for — the header is the client's own word, and
+       one typed header got the key handed out (reproduced: 200, Google called).
+       The identity is now the email in the token Access signs, checked against
+       the team's keys, the team, this application's AUD and the token's
+       lifetime.
+
+       Every refusal is checked for its REASON as well as its status. The checks
+       overlap — a token for another application is refused by the aud check,
+       and would be by others behind it — so a check that read only 403 would
+       stay green with the very check it names removed.
+
+       APEX_RPM '0' unless the check is about the limiter: the buckets are shared
+       by the whole file.
+
+       This section runs before the routing checks, in the handler's own order.
+       A gate that refused every request would otherwise crash the suite at the
+       first check below that reads a forwarded call (f.calls[0].url), and none
+       of these would ever report which of them failed. */
+    const NORATE = { ...ENV, APEX_RPM: '0' };
+    const PATH = 'https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview';
+    const send = async (headers, env = NORATE, verify) => {
+      const f = stub();
+      const r = await handleApex(new Request(PATH, { method: 'POST', body: body(), headers }), env, f, verify);
+      const said = r.status === 200 ? '' : String(((await r.json()).error || {}).message || '');
+      return { status: r.status, google: f.calls.length, said };
+    };
+    const jwt = token => ({ 'cf-access-jwt-assertion': token });
+    const TYPED = { 'cf-access-authenticated-user-email': 'fellow@example.org' };
+    const show = r => `${r.status}, Google called ${r.google}x${r.said ? ', ' + r.said.slice(0, 90) : ''}`;
+    const GOOD = await sign(claims());
+
+    const forged = await send(TYPED);
+    ok('a typed cf-access-authenticated-user-email with no token is refused', forged.status === 403 && forged.google === 0, show(forged));
+    ok('and the refusal says the request carries no Access token', /no Cloudflare Access token/.test(forged.said), show(forged));
+
+    const good = await send(jwt(GOOD));
+    ok('a token the team signed, for this application, in date, is served', good.status === 200 && good.google === 1, show(good));
+    const strAud = await send(jwt(await sign(claims({ aud: AUD }))));
+    ok('an aud written as one string rather than a list, as RFC 7519 allows, is read', strAud.status === 200, show(strAud));
+    const early = await send(jwt(await sign(claims({ iat: nowS() + 5, nbf: nowS() + 5 }))));
+    ok('a token minted a few seconds ahead of this clock is not refused for it', early.status === 200, show(early));
+
+    /* alg none and HS256 are the two classic ways round an RS256 check: no
+       signature at all, or an HMAC keyed on the public key, which anyone has. */
+    const segs = alg => [b64u(JSON.stringify({ alg, kid: TEAM_KEY.kid, typ: 'JWT' })), b64u(JSON.stringify(claims()))];
+    const [nh, np] = segs('none');
+    const [hh, hp] = segs('HS256');
+    const hs256 = `${hh}.${hp}.` + require('crypto').createHmac('sha256', TEAM_KEY.jwk.n).update(`${hh}.${hp}`).digest('base64url');
+    const refusals = [
+      ['signed with another key under the team key\'s kid', await sign(claims(), { key: INTRUDER, kid: TEAM_KEY.kid }), /signature does not verify/],
+      ['signed with a key the team does not publish', await sign(claims(), { key: INTRUDER }), /key the team does not publish/],
+      ['that names its own key server (jku) and is signed by it', await sign(claims(), { key: INTRUDER, header: { jku: ATTACKER_KEYS } }), /key the team does not publish/],
+      ['that has expired', await sign(claims({ exp: nowS() - 60 })), /has expired/],
+      ['with no exp at all', await sign(claims({ exp: undefined })), /no expiry/],
+      ['for another Access application (aud)', await sign(claims({ aud: ['b2'.repeat(32)] })), /audience \(aud\)/],
+      ['whose one-string aud names another application', await sign(claims({ aud: 'b2'.repeat(32) })), /audience \(aud\)/],
+      /* String.prototype.includes is a substring test: an aud read as a string
+         and asked .includes(AUD) would accept any longer string containing it. */
+      ['whose one-string aud only contains this application\'s', await sign(claims({ aud: 'b2' + AUD })), /audience \(aud\)/],
+      ['issued by another team (iss)', await sign(claims({ iss: 'https://another-team.cloudflareaccess.com' })), /issuer \(iss\)/],
+      ['not valid for another hour (nbf)', await sign(claims({ nbf: nowS() + 3600 })), /not valid yet/],
+      ['that names no email', await sign(claims({ email: undefined })), /no email/],
+      ['with alg none and no signature', `${nh}.${np}.`, /RS256/],
+      ['with alg HS256, keyed on the team\'s public key', hs256, /RS256/],
+      ['that is not a JWT at all', 'fellow@example.org', /not a JWT/],
+    ];
+    for (const [label, token, why] of refusals) {
+      /* With the typed header beside it, so the header cannot rescue a bad token. */
+      const r = await send({ ...jwt(token), ...TYPED });
+      ok(`a token ${label} is refused, for that reason`, r.status === 403 && r.google === 0 && why.test(r.said), show(r));
+    }
+
+    /* Without the two variables the gate cannot know which team or application
+       to trust, so it refuses everything — a good token included. */
+    const { ACCESS_TEAM_DOMAIN: _team, ...noTeam } = NORATE;
+    const { ACCESS_AUD: _aud, ...noAud } = NORATE;
+    for (const [label, env, missing] of [
+      ['neither variable', { ...NORATE, ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '' }, /ACCESS_TEAM_DOMAIN and ACCESS_AUD are not set/],
+      ['no ACCESS_AUD', noAud, /: ACCESS_AUD is not set/],
+      ['no ACCESS_TEAM_DOMAIN', noTeam, /: ACCESS_TEAM_DOMAIN is not set/],
+    ]) {
+      const r = await send({ ...jwt(GOOD), ...TYPED }, env);
+      ok(`with ${label} set, even a good token is refused`, r.status === 403 && r.google === 0, show(r));
+      ok('and the refusal says what is missing, and names both variables',
+         missing.test(r.said) && /ACCESS_TEAM_DOMAIN \(/.test(r.said) && /ACCESS_AUD \(/.test(r.said), show(r));
+    }
+    for (const v of ['http://' + TEAM, TEAM + '/cdn-cgi/access/certs', TEAM + ':8443', 'systole-test']) {
+      const r = await send(jwt(GOOD), { ...NORATE, ACCESS_TEAM_DOMAIN: v });
+      ok(`ACCESS_TEAM_DOMAIN "${v}" is refused by name, not guessed at`,
+         r.status === 403 && r.google === 0 && /ACCESS_TEAM_DOMAIN is not a team domain/.test(r.said), show(r));
+    }
+    for (const v of [ISS, TEAM + '/', TEAM.toUpperCase()]) {
+      const r = await send(jwt(GOOD), { ...NORATE, ACCESS_TEAM_DOMAIN: v });
+      ok(`ACCESS_TEAM_DOMAIN "${v}" names the same team`, r.status === 200, show(r));
+    }
+
+    /* The keys: where they come from, how long they are kept, and what happens
+       when they cannot be had. Each verifier here is new, so its cache starts
+       empty and its fetches can be counted. */
+    const asked = [];
+    const listed = accessVerifier(async url => {
+      asked.push(url);
+      /* Two keys, as the real endpoint lists: the token has to pick its own. */
+      return new Response(JSON.stringify({ keys: [INTRUDER.jwk, TEAM_KEY.jwk] }), { status: 200 });
+    });
+    const three = [];
+    for (let i = 0; i < 3; i++) three.push((await send(jwt(GOOD), NORATE, listed)).status);
+    ok('the keys are asked of the team in ACCESS_TEAM_DOMAIN, at its certs path', asked[0] === ISS + '/cdn-cgi/access/certs', String(asked[0]));
+    ok('the token is checked against the key its kid names, out of several listed', three[0] === 200, three.join(','));
+    ok('and the keys are fetched once for three requests, not three times', three.join(',') === '200,200,200' && asked.length === 1,
+       `${three.join(',')} after ${asked.length} fetch(es)`);
+    const realNow = Date.now;
+    let later;
+    Date.now = () => realNow() + 6 * 60 * 1000;
+    try { later = await send(jwt(GOOD), NORATE, listed); } finally { Date.now = realNow; }
+    ok('and fetched again once they are more than five minutes old', later.status === 200 && asked.length === 2,
+       `${later.status} after ${asked.length} fetch(es)`);
+
+    for (const [label, src] of [
+      /* With the team's real key set in the body, so the status is the only
+         thing that can refuse it. */
+      ['answers 500, whatever its body says', async () => new Response(JSON.stringify({ keys: [TEAM_KEY.jwk] }), { status: 500 })],
+      ['cannot be reached', async () => { throw new Error('getaddrinfo ENOTFOUND'); }],
+      ['lists no keys', async () => new Response(JSON.stringify({ keys: [] }), { status: 200 })],
+      ['answers with a sign-in page', async () => new Response('<!doctype html><title>Sign in</title>', { status: 200 })],
+    ]) {
+      const r = await send(jwt(GOOD), NORATE, accessVerifier(src));
+      ok(`when the team's certs endpoint ${label}, a good token is refused, not let through`,
+         r.status === 503 && r.google === 0 && /signing keys/.test(r.said), show(r));
+    }
+    let tries = 0;
+    const recovers = accessVerifier(async () => new Response(JSON.stringify({ keys: ++tries === 1 ? [] : [TEAM_KEY.jwk] }), { status: 200 }));
+    const first = await send(jwt(GOOD), NORATE, recovers), second = await send(jwt(GOOD), NORATE, recovers);
+    ok('a failed fetch is not remembered: the next request asks again, and is served',
+       first.status === 503 && second.status === 200 && tries === 2, `${first.status} then ${second.status}, ${tries} fetch(es)`);
+
+    /* The rate limiter's bucket is the signed email. The clock is pinned so
+       these requests cannot straddle a minute and start a fresh bucket. */
+    const RPM1 = { ...ENV, APEX_RPM: '1' };
+    const A = await sign(claims({ email: 'bucket-a@example.org' }));
+    const B = await sign(claims({ email: 'bucket-b@example.org' }));
+    const OPEN = { GEMINI_API_KEY: ENV.GEMINI_API_KEY, APEX_RPM: '1', APEX_ALLOW_UNAUTHENTICATED: 'yes' };
+    const at = realNow();
+    const lim = [];
+    Date.now = () => at;
+    try {
+      lim.push(await send({ ...jwt(A), 'cf-access-authenticated-user-email': 'x1@example.org', 'cf-connecting-ip': '192.0.2.50' }, RPM1));
+      lim.push(await send({ ...jwt(A), 'cf-access-authenticated-user-email': 'x2@example.org', 'cf-connecting-ip': '192.0.2.50' }, RPM1));
+      lim.push(await send({ ...jwt(B), 'cf-access-authenticated-user-email': 'x2@example.org', 'cf-connecting-ip': '192.0.2.50' }, RPM1));
+      /* The escape hatch: no token to read, so the bucket is the connecting
+         address — and a fresh typed email per request must not be a fresh
+         allowance per request. */
+      lim.push(await send({ 'cf-access-authenticated-user-email': 'y1@example.org', 'cf-connecting-ip': '192.0.2.60' }, OPEN));
+      lim.push(await send({ 'cf-access-authenticated-user-email': 'y2@example.org', 'cf-connecting-ip': '192.0.2.60' }, OPEN));
+    } finally { Date.now = realNow; }
+    const codes = lim.map(x => x.status).join(',');
+    ok('the limiter counts the signed email: a second request on one token is limited, whatever email header it carries',
+       lim[0].status === 200 && lim[1].status === 429, codes);
+    ok('and another signed email, from the same address with the same header, has its own allowance', lim[2].status === 200, codes);
+    ok('with the gate opened on purpose (and no Access variables), the request is served',
+       lim[3].status === 200, codes);
+    ok('and a new typed email is not a new allowance there either', lim[4].status === 429, codes);
+
+    /* The entry point Cloudflare actually runs, with its own verifier and the
+       platform fetch: the property above must hold there, not only in the
+       handler a test can hand a verifier to. */
+    const ASSETS = { fetch: async () => new Response('site') };
+    let viaForged, viaGood;
+    google = async () => new Response('ok', { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    try {
+      viaForged = await worker.fetch(new Request(PATH, { method: 'POST', body: body(), headers: TYPED }), { ...NORATE, ASSETS });
+      viaGood = await worker.fetch(new Request(PATH, { method: 'POST', body: body(), headers: jwt(GOOD) }), { ...NORATE, ASSETS });
+    } finally { google = null; }
+    ok('through the deployed entry point, the typed header alone is refused', viaForged.status === 403, String(viaForged.status));
+    ok('and a signed token is served', viaGood.status === 200, String(viaGood.status));
   }
 
   head('what it refuses');
@@ -282,10 +528,12 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
        produce that shape rather than an empty 502. */
     const env2 = { ...ENV, ASSETS: { fetch: () => ({ status: 200 }) } };
     const bad = { ...env2 };
-    const orig = globalThis.fetch;
-    globalThis.fetch = async () => { throw new Error('network down'); };
+    /* Google is down; Access's keys are not. The global fetch still answers the
+       team's certs URL, so the request gets past the gate on its own merits and
+       what fails is the call this check is about. */
+    google = async () => { throw new Error('network down'); };
     const r2 = await worker.fetch(post('/api/apex/gemini/stream?model=gemini-3-flash-preview'), bad);
-    globalThis.fetch = orig;
+    google = null;
     const j2 = await r2.json();
     ok('and a network failure is a 502 in Google\'s own error shape',
        r2.status === 502 && typeof j2.error.message === 'string', j2.error.message);
@@ -300,9 +548,10 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
        burst test sharing the default identity counts against every other test
        in this file and starts already spent. It is also the more realistic
        key: behind Access, one person on two networks is one caller. */
+    const burst = await sign(claims({ email: 'burst@example.org' }));
     const mk = () => handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
       { method: 'POST', body: body(),
-        headers: { 'cf-access-authenticated-user-email': 'burst@example.org',
+        headers: { 'cf-access-jwt-assertion': burst,
                    'cf-connecting-ip': '203.0.113.9' } }), env, f);
     const codes = [];
     for (let i = 0; i < 5; i++) codes.push((await mk()).status);
@@ -553,6 +802,7 @@ head('the size cap counts bytes, not characters');
     { ...ENV, APEX_RPM: '0' }, f2);
   ok('an ordinary request is unaffected', r2.status === 200, String(r2.status));
 }
+
 
 console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
