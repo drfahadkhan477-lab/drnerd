@@ -238,6 +238,53 @@ head('a command line is read as the shell reads it: quotes, comments, heredocs')
   ok('while quoted text run as code (bash -c, sh -c, eval) is still split and read', rc.length === 0, rc.join(' | ') || `${code.length} refused`);
 }
 
+head('a command inside another: substitutions, loops, branches, subshells, wrappers');
+{
+  /* Each of these was let through: the reading was a word inside another
+     command ($( … ), ` … `, <( … )), or the command's first word was a loop,
+     a branch, a subshell or a wrapper, which the rules took for the program. */
+  const inner = [
+    'echo "$(cat content/questions.json)"',
+    'x=$(head -c 100 build/systole.html)',
+    'echo `tail dist/app.js`',
+    'wc -l <(sort content/questions.json)',
+  ];
+  const ri = inner.filter(c => !blocks(c));
+  ok('a read inside $( … ), backticks or <( … ) is refused', ri.length === 0, ri.join(' | ') || `${inner.length} refused`);
+  /* A cd inside a substitution happens in a subshell, so it moves nothing
+     after it: the second read here is from where the line started. */
+  ok('and a cd inside one does not move the reads after it',
+     blocks('echo "$(cd /tmp)" "$(cat content/questions.json)"'));
+  const wrapped = [
+    'for f in a b; do cat content/$f.json; done',
+    'if true; then head build/systole.html; fi',
+    '! grep -q x content/questions.json',
+    '(cd content && cat questions.json)',
+    '{ cat dist/app.js; }',
+    'for d in a; do grep -rn stem; done',
+    'timeout 5 cat content/questions.json',
+    'timeout -k 3 5 cat content/questions.json',
+    'nohup tail -f tests/last-run.log',
+    'nice -n 5 sort content/questions.json',
+    `timeout 60 node -e "require('fs').readFileSync('build/x')"`,
+  ];
+  const rw = wrapped.filter(c => !blocks(c));
+  ok('a read that a loop, a branch, a subshell or a wrapper opens is refused', rw.length === 0, rw.join(' | ') || `${wrapped.length} refused`);
+  const fine = [
+    'for f in tests/*.js; do node --check "$f"; done',
+    'if [ -d build ]; then echo built; fi',
+    'echo "$(git rev-parse HEAD)"',
+    'x=$(ls build/ | wc -l)',
+    'timeout 600 node tests/verify-csp.js',
+    'nice -n 10 npm run test:pure',
+    '(cd tests && node verify-x.js ../build/systole.html)',
+    'echo then cat is a word here',
+    `echo '$(cat content/x)' is quoted text`,
+  ];
+  const f = fine.filter(c => bash(c));
+  ok('while the same shapes running a suite, listing or echoing are not', f.length === 0, f.join(' | ') || `${fine.length} allowed`);
+}
+
 head('a commit: refused while leak-guard refuses what is staged');
 {
   /* The real leak-guard, in a throwaway repository, so this one's index is

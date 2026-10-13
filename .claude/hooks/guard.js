@@ -261,12 +261,36 @@ function inlineCode(name, rest, seg) {
    them is text. A word starting with # comments out the rest of its line,
    a backslash-newline joins two lines, and the & in 2>&1 or &>file belongs
    to its redirection. A heredoc's body is read a line at a time, so an
-   apostrophe in its prose opens nothing past that line. */
+   apostrophe in its prose opens nothing past that line. A $( … ), ` … `,
+   <( … ) or >( … ), bare or inside double quotes, is a command line of its
+   own: its commands are read too, in a scope of their own, as a heredoc's
+   body is, so a cd inside one moves nothing after it. */
 function words(seg) {
   return (seg.match(/'[^']*'|"[^"]*"|\S+/g) || []);
 }
 function split(text) {
   return text.split(/\|\||&&|[|;\n&]/).map(t => t.trim()).filter(Boolean).map(t => ({ words: words(t), text: t }));
+}
+/* A substitution starting at `at`, which is $( … ), <( … ), >( … ) or ` … `,
+   is a command line the shell runs. This returns where it ends and that line,
+   or null if it never closes, in which case its characters are only text. */
+function substitution(cmd, at) {
+  if (cmd[at] === '`') {
+    let j = at + 1;
+    while (j < cmd.length && cmd[j] !== '`') j += cmd[j] === '\\' ? 2 : 1;
+    return j < cmd.length ? { end: j + 1, inner: cmd.slice(at + 1, j) } : null;
+  }
+  let depth = 1, j = at + 2;
+  while (j < cmd.length) {
+    const c = cmd[j];
+    if (c === '\\') { j += 2; continue; }
+    if (c === "'") { const q = cmd.indexOf("'", j + 1); if (q < 0) return null; j = q + 1; continue; }
+    if (c === '"') { j++; while (j < cmd.length && cmd[j] !== '"') j += cmd[j] === '\\' ? 2 : 1; j++; continue; }
+    if (c === '(') depth++;
+    else if (c === ')' && --depth === 0) return { end: j + 1, inner: cmd.slice(at + 2, j) };
+    j++;
+  }
+  return null;
 }
 function commands(cmd) {
   const out = [], heredocs = [];
@@ -279,9 +303,20 @@ function commands(cmd) {
   };
   while (i < cmd.length) {
     const c = cmd[i];
-    if (c === "'" || c === '"') {
+    if (c === "'") {
       let j = i + 1;
-      while (j < cmd.length && cmd[j] !== c) j += c === '"' && cmd[j] === '\\' ? 2 : 1;
+      while (j < cmd.length && cmd[j] !== "'") j++;
+      word = (word || '') + cmd.slice(i, j + 1);
+      i = j + 1;
+    } else if (c === '"') {
+      /* A double-quoted string still runs what it substitutes. */
+      let j = i + 1;
+      while (j < cmd.length && cmd[j] !== '"') {
+        if (cmd[j] === '\\') { j += 2; continue; }
+        const sub = cmd[j] === '`' || (cmd[j] === '$' && cmd[j + 1] === '(') ? substitution(cmd, j) : null;
+        if (sub) { out.push({ scope: commands(sub.inner) }); j = sub.end; continue; }
+        j++;
+      }
       word = (word || '') + cmd.slice(i, j + 1);
       i = j + 1;
     } else if (c === '\\') {
@@ -305,19 +340,25 @@ function commands(cmd) {
       heredocs.push({ end: cmd.slice(j, k).replace(/['"\\]/g, ''), dash });
       ws.push('<<' + (dash ? '-' : '') + cmd.slice(j, k));
       i = k;
+    } else if (c === '`' || ('$<>'.includes(c) && cmd[i + 1] === '(')) {
+      const sub = substitution(cmd, i);
+      if (sub) { out.push({ scope: commands(sub.inner) }); word = (word || '') + cmd.slice(i, sub.end); i = sub.end; }
+      else { word = (word || '') + c; i++; }
     } else if (c === '\n') {
       endCmd(i);
       i++;
       while (heredocs.length) {
         const { end, dash } = heredocs.shift();
+        const scope = [];
         while (i < cmd.length) {
           let e = cmd.indexOf('\n', i);
           if (e < 0) e = cmd.length;
           const line = cmd.slice(i, e);
           i = e + 1;
           if ((dash ? line.replace(/^\t+/, '') : line) === end) break;
-          out.push(...commands(line));
+          scope.push(...commands(line));
         }
+        out.push({ scope });
       }
       start = i;
     } else if (c === '&' && ((word !== null && /[<>]$/.test(word)) || cmd[i + 1] === '>')) {
@@ -338,11 +379,34 @@ function commands(cmd) {
   endCmd(cmd.length);
   return out;
 }
-/* The program a segment runs, past env assignments and sudo/command/xargs. */
+/* The program a command runs, past whatever only opens or wraps it:
+   - env assignments;
+   - the shell's words that open a command (! then do else elif if while
+     until), and a ( or { on its own or written against the word it opens;
+   - the commands that run the next word as the program, with their options
+     and, for timeout, its duration.
+   A loop body (`do cat x`), a branch (`then head x`), a subshell (`(cat x)`)
+   or `timeout 5 cat x` named its opener or wrapper as the program, and no
+   rule read the command. Each letter listed after a wrapper is an option
+   that takes the next word as its argument. */
+const OPENERS = new Set(['!', 'then', 'do', 'else', 'elif', 'if', 'while', 'until']);
+const WRAPPERS = { sudo: 'ugCDhpUrt', command: '', builtin: '', exec: 'a', env: 'uCS', nohup: '', time: '',
+  nice: 'n', ionice: 'cnp', stdbuf: 'ioe', timeout: 'sk', xargs: 'InPLsdEa' };
 function program(ws) {
   let i = 0;
-  while (i < ws.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(ws[i]) || ['sudo', 'command', 'xargs', 'env', 'time', 'nice'].includes(ws[i]))) i++;
-  return { name: path.basename(ws[i] || ''), rest: ws.slice(i + 1) };
+  while (i < ws.length) {
+    const w = ws[i].replace(/^[({]+/, '');
+    if (!w || OPENERS.has(w) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) { i++; continue; }
+    if (!Object.prototype.hasOwnProperty.call(WRAPPERS, w)) return { name: path.basename(w), rest: ws.slice(i + 1) };
+    i++;
+    while (i < ws.length && ws[i].startsWith('-') && ws[i] !== '-') {
+      const o = ws[i++];
+      if ((/^-[A-Za-z]$/.test(o) && WRAPPERS[w].includes(o[1])) ||
+          /^--(?:signal|kill-after|user|group|adjustment|unset|chdir|input|output|error)$/.test(o)) i++;
+    }
+    if (w === 'timeout' && i < ws.length) i++;
+  }
+  return { name: '', rest: [] };
 }
 
 /* Every rule reads the commands as the shell runs them. All but the search
@@ -352,10 +416,14 @@ function program(ws) {
 function inspectBash(cmd, root, cwd) {
   return judge(commands(cmd), true, cwd) || judge(split(cmd), false, cwd);
   function judge(list, searches, cwd) {
-    for (const { words: ws, text: seg } of list) {
+    for (const item of list) {
+      /* A substitution or a heredoc's body is judged where it stands, and a
+         cd inside it moves nothing outside it. */
+      if (item.scope) { const r = judge(item.scope, searches, cwd); if (r) return r; continue; }
+      const { words: ws, text: seg } = item;
       const { name, rest } = program(ws);
       /* `cd tests && cat ../dist/x` — later segments resolve from where cd went. */
-      if (name === 'cd') { cwd = path.resolve(cwd, (rest[0] || root).replace(/^['"]|['"]$/g, '')); continue; }
+      if (name === 'cd') { cwd = path.resolve(cwd, (rest[0] || root).replace(/^['"]|['"]$/g, '').replace(/\)+$/, '')); continue; }
       if (READERS.has(name)) {
         /* grep's first operand is a pattern and sed's a script, not a file:
            `grep -n build scripts/build.js` reads no build/. Unless the pattern
