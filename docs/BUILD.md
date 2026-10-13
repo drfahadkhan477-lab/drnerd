@@ -5,7 +5,7 @@ Build the standalone app, then extract its content before verifying the split PW
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
 node scripts/extract-content.js build/systole.html # refresh content for the split build
-node scripts/verify.js --pwa                           # → 7145 + 134 checks
+node scripts/verify.js --pwa                           # → 7145 + 142 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -250,7 +250,7 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 152 suites, 7145 checks, plus 134 more on the split build. Those numbers are
+Across 152 suites, 7145 checks, plus 142 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
@@ -263,8 +263,8 @@ measurements remain in the record. The qualifying Memorizer run at `9bcb827`
 removed the three retired Claude suites and refreshed Memorizer's counts.
 Systole's active counts and the split-build count remain from their previous
 qualifying runs in that record. The later complete Systole run at `391f7c5`
-refreshed its half too and emptied `PENDING_RECORD`; the split-build figure
-remains carried over from its previous measurement.
+refreshed its half too and emptied `PENDING_RECORD`; that older record
+carried the split-build figure over from its previous measurement.
 
 ### Prepared reader libraries for public browser checks
 
@@ -386,6 +386,9 @@ initially refused stale extracted content; after refreshing the extraction,
 its browser, Worker and cache checks passed separately. The quick-start
 commands above now include that required extraction step. These desktop
 results do not measure physical iPad behavior or live model execution.
+A complete Systole follow-up on `chore/fresh-private-record @ ab45f67`
+then passed with `--pwa`, refreshing the split-build record through the
+normal qualifying-run writer while keeping the fresh Memorizer measurement.
 
 Inspection also found the backup fixture could stop waiting after five seconds
 or an unrelated toast change, before the real asynchronous import finished.

@@ -22,8 +22,8 @@
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
 # READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 7145 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 7062.
-# The other 217 all drive something this workflow does not have: the real
+# `node scripts/verify.js` plus 142 more under `--pwa`, this workflow runs 7062.
+# The other 225 all drive something this workflow does not have: the real
 # bank, or the split build served to a browser. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
 # the ACCSAP 12 export — the licensed question bank, deliberately never
@@ -33,7 +33,7 @@
 # machine with the export. Most of the split build's checks under --pwa can
 # run without it, since verify-pwa holds a synthetic split build to the
 # synthetic generator's own totals, but no job here builds and serves one.
-# Until one does, there is no way to run those 217 checks here.
+# Until one does, there is no way to run those 225 checks here.
 # See docs/BUILD.md and the comment at the top of scripts/assemble-app.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
@@ -104,7 +104,7 @@
 #                needs; scripts/ci-changes.js. A job it skips shows as
 #                skipped, not passed. Master and manual runs get both.
 #
-# Adding the other 217 checks to this file is possible — GitHub Actions
+# Adding the other 225 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
