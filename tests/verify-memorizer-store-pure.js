@@ -193,21 +193,57 @@ module.exports = (async () => {
   }
   console.log('PASS a write that never finishes (a put, a study step, a batch) is aborted past its bound and rejects; a read behind it settles; it is kept for retry');
 
+  /* A CLOCK THE TEST TURNS BY HAND, for the store's own timers, in the three
+     checks below that set a write's hold against its bound. On real timers
+     the two raced: a machine busy enough to stall the event loop past both
+     could run the bound first. The owner's full run on Windows failed "a
+     400-byte write held 150 ms was cut off"; starved of CPU here, the suite
+     failed that check and the screen's-wait one. Here a bound fires only
+     when the clock is turned past it, and a held write lands only when the
+     check lets it go, so the order is the check's and not the scheduler's.
+     until() waits, in real time, only for the fake database and the store's
+     promises to move. */
+  const handClock = () => {
+    let now = 0, seq = 0;
+    const due = new Map();
+    return {
+      setTimeout: (fn, ms) => { const id = ++seq; due.set(id, { at: now + (+ms || 0), fn }); return id; },
+      clearTimeout: id => { due.delete(id); },
+      turn(ms) {
+        now += ms;
+        [...due].filter(([, t]) => t.at <= now).sort((a, b) => a[1].at - b[1].at).forEach(([id, t]) => { if (due.delete(id)) t.fn(); });
+      },
+    };
+  };
+  const onHand = onTransaction => {
+    const clock = handClock(), idb = makeIDB({ onTransaction });
+    const r = { indexedDB: idb.indexedDB, IDBRequest: idb.IDBRequest, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout };
+    vm.runInNewContext(source, { window: r, ArrayBuffer, DataView });
+    assert.ok(r.MemStore, 'store.js did not load');
+    return { store: r.MemStore, idb, clock };
+  };
+  const watch = p => { const w = { state: 'waiting' }; p.then(v => { w.state = 'landed'; w.v = v; }, e => { w.state = (e && e.name) || 'rejected'; w.e = e; }); return w; };
+  const until = async (cond, ms = 5000) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await sleep(2); return cond(); };
+
   /* A write that lands in time is never aborted afterwards (its bound is
      let go), and a read is never bounded: one held past the write bound
      still answers. */
   {
-    let holdReads = 0;
-    const { store, idb } = onFake({ onTransaction: t => (t.mode === 'readonly' && holdReads ? sleep(holdReads) : undefined) });
+    const heldReads = []; let holdReads = false;
+    const { store, idb, clock } = onHand(t => (t.mode === 'readonly' && holdReads ? new Promise(r => heldReads.push(r)) : undefined));
     store.TX_TIMEOUT_MS = 40;
     await store.put('meta', { id: 'landed', v: 2 });
     await store.saveStep({ id: 's', state: {} }, []);
     await store.batch([{ store: 'meta', value: { id: 'batched' } }]);
-    await sleep(160);
+    clock.turn(160);
     assert.deepEqual(idb.transactions.filter(t => t.mode === 'readwrite').map(t => t.abortCalls), [0, 0, 0], 'a write that landed in time was aborted later');
-    holdReads = 150;
-    const slowRead = await within(store.get('meta', 'landed'), 2000);
-    assert.deepEqual(slowRead.v, { id: 'landed', v: 2 }, 'a read held past the write bound was cut off: ' + (slowRead.e && slowRead.e.name));
+    holdReads = true;
+    const slowRead = watch(store.get('meta', 'landed'));
+    assert.ok(await until(() => heldReads.length === 1), '(the read was really held)');
+    clock.turn(150);
+    heldReads.splice(0).forEach(f => f());
+    await until(() => slowRead.state !== 'waiting');
+    assert.deepEqual(slowRead.v, { id: 'landed', v: 2 }, 'a read held past the write bound was cut off: ' + slowRead.state);
   }
   console.log('PASS a write that lands in time is never aborted afterwards, and a slow read is not bounded');
 
@@ -216,15 +252,23 @@ module.exports = (async () => {
      is 40 ms and a byte buys a millisecond; a write of ~400 bytes held for
      150 ms lands, and a write of a few bytes held as long does not. */
   {
-    let hold = 0;
-    const { store, idb } = onFake({ onTransaction: t => (t.mode === 'readwrite' && hold ? sleep(hold) : undefined) });
+    const held = []; let hold = false;
+    const { store, idb, clock } = onHand(t => (t.mode === 'readwrite' && hold ? new Promise(r => held.push(r)) : undefined));
     store.TX_TIMEOUT_MS = 40; store.TX_BYTES_PER_MS = 1;
-    hold = 150;
-    const big = await within(store.put('files', { id: 'big', bytes: new Uint8Array(400).buffer }), 2000);
-    assert.equal(big.e, undefined, 'a 400-byte write held 150 ms was cut off: ' + (big.e && big.e.name));
+    hold = true;
+    const big = watch(store.put('files', { id: 'big', bytes: new Uint8Array(400).buffer }));
+    assert.ok(await until(() => held.length === 1), '(the 400-byte write was really held)');
+    clock.turn(150);
+    held.splice(0).forEach(f => f());
+    await until(() => big.state !== 'waiting');
+    assert.equal(big.state, 'landed', 'a 400-byte write held 150 ms was cut off: ' + big.state);
     assert.ok(idb.data.get('files').has('big'), 'and it landed');
-    const small = await within(store.put('files', { id: 'small', bytes: new Uint8Array(4).buffer }), 2000);
-    assert.equal(small.e && small.e.name, 'TimeoutError', 'a 4-byte write held 150 ms was not bounded at all');
+    const small = watch(store.put('files', { id: 'small', bytes: new Uint8Array(4).buffer }));
+    assert.ok(await until(() => held.length === 1), '(the 4-byte write was really held)');
+    clock.turn(150);
+    await until(() => small.state !== 'waiting');
+    assert.equal(small.state, 'TimeoutError', 'a 4-byte write held 150 ms was not bounded at all: ' + small.state);
+    held.splice(0).forEach(f => f());
   }
   console.log('PASS a write is given time in proportion to the bytes it carries');
 
@@ -233,28 +277,30 @@ module.exports = (async () => {
      the store's bound is for a backend that has stopped answering. When both
      were 5 s, every save slower than that was aborted as the note went up: on
      the owner's laptop the first save into a new database sometimes was, and
-     the import failed with "storage did not answer within 5 seconds". Here the
-     store's own timers run 100 times fast and its defaults are untouched: a
-     batch held 1.4 times the screen's wait lands, and one that never finishes
-     is still cut off. */
+     the import failed with "storage did not answer within 5 seconds". With
+     the store's defaults untouched: a batch held 1.4 times the screen's wait
+     lands, and one that never finishes is cut off within a minute. */
   {
     const { blankComments } = require('./_source.js');
     const uiSrc = blankComments(fs.readFileSync(path.join(__dirname, '../memorizer/src/ui.js'), 'utf8'));
     const saveWait = +((/\bvar SAVE_WAIT_MS = (\d+);/.exec(uiSrc) || [])[1]);
     assert.ok(saveWait > 0, '(ui.js SAVE_WAIT_MS was read)');
-    const FAST = 100;
-    let hold = null;
-    const idb = makeIDB({ onTransaction: t => (t.mode !== 'readwrite' || hold === null ? undefined : hold === 'hang' ? 'hang' : sleep(hold / FAST)) });
-    const r = { indexedDB: idb.indexedDB, IDBRequest: idb.IDBRequest, setTimeout: (fn, ms) => setTimeout(fn, ms / FAST), clearTimeout };
-    vm.runInNewContext(source, { window: r, ArrayBuffer, DataView });
-    const store = r.MemStore;
-    hold = saveWait * 1.4;
-    const slow = await within(store.batch([{ store: 'docs', value: { id: 'slow', clusters: [] } }]), 10000);
-    assert.equal(slow.e, undefined, `a batch held ${saveWait * 1.4 / 1000} s, longer than the screen waits, was cut off: ${slow.e && slow.e.message}`);
+    const held = []; let hold = null;
+    const { store, idb, clock } = onHand(t => (t.mode !== 'readwrite' || hold === null ? undefined : hold === 'hang' ? 'hang' : new Promise(r => held.push(r))));
+    hold = 'hold';
+    const slow = watch(store.batch([{ store: 'docs', value: { id: 'slow', clusters: [] } }]));
+    assert.ok(await until(() => held.length === 1), '(the batch was really held)');
+    clock.turn(saveWait * 1.4);
+    held.splice(0).forEach(f => f());
+    await until(() => slow.state !== 'waiting');
+    assert.equal(slow.state, 'landed', `a batch held ${saveWait * 1.4 / 1000} s, longer than the screen waits, was cut off: ${slow.e ? slow.e.message : slow.state}`);
     assert.ok(idb.data.get('docs').has('slow'), 'and it landed');
     hold = 'hang';
-    const hung = await within(store.batch([{ store: 'docs', value: { id: 'never', clusters: [] } }]), 10000);
-    assert.equal(hung.e && hung.e.name, 'TimeoutError', 'a batch that never finishes is still cut off at the default bound: ' + JSON.stringify(hung.waiting ? 'still waiting' : hung.e && hung.e.name));
+    const hung = watch(store.batch([{ store: 'docs', value: { id: 'never', clusters: [] } }]));
+    assert.ok(await until(() => idb.transactions.filter(t => t.mode === 'readwrite').length === 2), '(the second batch reached the database)');
+    clock.turn(60000);
+    await until(() => hung.state !== 'waiting');
+    assert.equal(hung.state, 'TimeoutError', 'a batch that never finishes is still cut off within a minute: ' + hung.state);
   }
   console.log('PASS a write slower than the screen\'s wait still lands; one that never finishes is still cut off');
 
