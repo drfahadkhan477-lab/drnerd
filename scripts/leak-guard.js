@@ -225,10 +225,14 @@ function imageMagic(b, size) {
 /* An SVG is text with no magic bytes. What makes a file one is that its root
    element is <svg>, past an XML declaration, comments and a doctype (decode()
    has already dropped a byte-order mark). A page or a script that contains an
-   <svg> does not start with one, and is not refused for it. */
+   <svg> does not start with one, and is not refused for it. The doctype's
+   internal subset ends at its first ], so each character has one way to be
+   read: the first version let a "][" sit inside the brackets or outside
+   them, and a file opening <!doctype[ with forty of those took hours
+   (found by CodeQL, #241). */
 function isSvg(text) {
   let t = text;
-  for (let m; (m = t.match(/^\s*(?:<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE(?:[^[>]|\[[\s\S]*?\])*>)/i)); ) t = t.slice(m[0].length);
+  for (let m; (m = t.match(/^\s*(?:<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^[>]*(?:\[[^\]]*\][^[>]*)*>)/i)); ) t = t.slice(m[0].length);
   return /^\s*<svg[\s>/]/.test(t);
 }
 

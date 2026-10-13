@@ -191,11 +191,11 @@ head('it refuses the licensed bank, by every route in');
       chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
   })();
   ok('(the figure fixture is tens of KB, under every size rule)', png.length > 10 * 1024 && png.length < 200 * 1024, png.length + ' bytes');
-  const inTmp = (rel, body) => {
+  const inTmp = (rel, body, timeout) => {
     fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true });
     fs.writeFileSync(path.join(tmp, rel), body);
-    try { return { code: 0, out: execFileSync(process.execPath, [GUARD, rel], { cwd: tmp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
-    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+    try { return { code: 0, out: execFileSync(process.execPath, [GUARD, rel], { cwd: tmp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout }) }; }
+    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') + (e.signal ? ` (killed by ${e.signal})` : '') }; }
   };
   r = inTmp('assets/figure-3.png', png);
   ok('a figure dragged into assets/ is refused', r.code === 1 && /IMAGE\s+assets\/figure-3\.png/.test(r.out),
@@ -220,6 +220,16 @@ head('it refuses the licensed bank, by every route in');
   r = inTmp('assets/diagram.txt', svg);
   ok('and renamed, by its root element past the prolog, comment and doctype', r.code === 1 && /an SVG/.test(r.out),
      r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('assets/diagram-2.txt', '<!DOCTYPE svg [ <!ENTITY red "#c00"> ]>\n<svg xmlns="http://www.w3.org/2000/svg"><rect fill="&red;" width="1" height="1"/></svg>\n');
+  ok('and past a doctype with an internal subset', r.code === 1 && /an SVG/.test(r.out), r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
+  /* A doctype that never closes, with "][" pairs the first SVG reading could
+     split two ways each: exponential, so forty pairs took hours and would
+     have hung the commit hook (found by CodeQL, #241). The guard is given
+     ten seconds and is killed past them. */
+  const started = Date.now();
+  r = inTmp('notes/doctype.txt', '<!doctype[' + ']['.repeat(40) + '\n', 10000);
+  ok('a doctype that never closes is judged at once, not after an exponential search', r.code === 0,
+     `${Date.now() - started} ms` + (r.code === 0 ? '' : ': ' + r.out.trim().slice(-60)));
   /* Every other format the extension rule names, renamed (found by review,
      #240: only PNG, JPEG, GIF, WebP and PDF were known by their bytes). Each
      fixture is a valid header for its format, made here. */
