@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 153 suites and roughly 6634 checks, and they
+ * WHY THIS EXISTS. There are 152 suites and roughly 6930 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -459,8 +459,14 @@ const SUITES = [
    suites, the Memorizer half kept from the tenth emptying), which measured
    the one that had been waiting: suitetime-pure. The split build was measured
    by this run for the first time since the ninth emptying, and came to the
-   same 134. */
-const PENDING_RECORD = ['pearlbake-pure'];
+   same 134.
+
+   Emptied a thirteenth time by the Systole-only green Chromium run on the
+   owner's laptop at c324c21, three suites at a time (6930 checks across 152
+   suites, the Memorizer half kept as recorded at 28a8df4), which measured the
+   one that had been waiting: pearlbake-pure. The split-build figure is still
+   134; the record does not say whether this run measured it again. */
+const PENDING_RECORD = [];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
@@ -474,8 +480,9 @@ const PENDING_RECORD = ['pearlbake-pure'];
    survived the chain to the step that used them; deleted with the chain.
    claude-agents and claude-skills checked the subagents in .claude/agents and
    the skills in .claude/skills; the owner deleted both directories for a
-   leaner setup, and the suites went with them. */
-const RETIRED_RECORD = ['claude-agents', 'claude-skills'];
+   leaner setup, and the suites went with them. The Systole run at c324c21
+   rewrote that half and dropped both, so the list is empty again. */
+const RETIRED_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
