@@ -263,9 +263,26 @@ function isSvg(text) {
     else if (c === '"' || c === "'") quote = c;
     else if (c === '>') break;
   }
-  const attrs = text.slice(at + root[0].length, end);
-  for (const m of attrs.matchAll(/\s+([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g))
-    if (m[1] === `xmlns:${root[1]}` && (m[2] ?? m[3]) === 'http://www.w3.org/2000/svg') return true;
+  // Read attributes once, without matching a namespace inside another value.
+  let pos = at + root[0].length;
+  while (pos < end) {
+    while (pos < end && /\s/.test(text[pos])) pos++;
+    const start = pos;
+    while (pos < end && !/[\s=/>]/.test(text[pos])) pos++;
+    const name = text.slice(start, pos);
+    if (!name) { pos++; continue; }
+    while (pos < end && /\s/.test(text[pos])) pos++;
+    if (text[pos] !== '=') continue;
+    pos++;
+    while (pos < end && /\s/.test(text[pos])) pos++;
+    const delimiter = text[pos++];
+    if (delimiter !== '"' && delimiter !== "'") continue;
+    const next = text.indexOf(delimiter, pos);
+    if (next < 0 || next > end) return false;
+    const value = text.slice(pos, next);
+    pos = next + 1;
+    if (name === `xmlns:${root[1]}` && value === 'http://www.w3.org/2000/svg') return true;
+  }
   return false;
 }
 
