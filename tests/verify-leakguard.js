@@ -191,11 +191,11 @@ head('it refuses the licensed bank, by every route in');
       chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
   })();
   ok('(the figure fixture is tens of KB, under every size rule)', png.length > 10 * 1024 && png.length < 200 * 1024, png.length + ' bytes');
-  const inTmp = (rel, body) => {
+  const inTmp = (rel, body, timeout) => {
     fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true });
     fs.writeFileSync(path.join(tmp, rel), body);
-    try { return { code: 0, out: execFileSync(process.execPath, [GUARD, rel], { cwd: tmp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
-    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+    try { return { code: 0, out: execFileSync(process.execPath, [GUARD, rel], { cwd: tmp, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout }) }; }
+    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') + (e.signal ? ` (killed by ${e.signal})` : '') }; }
   };
   r = inTmp('assets/figure-3.png', png);
   ok('a figure dragged into assets/ is refused', r.code === 1 && /IMAGE\s+assets\/figure-3\.png/.test(r.out),
@@ -209,10 +209,105 @@ head('it refuses the licensed bank, by every route in');
      r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
   r = inTmp('notes/chapter-7.txt', pdf);
   ok('and renamed, by its first bytes', r.code === 1 && /a PDF/.test(r.out), r.out.match(/IMAGE.*|a PDF.*/)?.[0] || r.out.trim().slice(0, 60));
-  /* By name alone, for a format with no signature to sniff: an SVG is text. */
-  r = inTmp('assets/diagram.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>\n');
-  ok('an SVG figure is refused by its extension', r.code === 1 && /IMAGE\s+assets\/diagram\.svg/.test(r.out) && /by its name/.test(r.out),
+  /* An SVG is refused by its name, and renamed by its root element, since an
+     SVG is text and has no magic bytes. */
+  const svg = '<?xml version="1.0" encoding="UTF-8"?>\n<!-- drawn for the test -->\n' +
+    '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>\n';
+  r = inTmp('assets/diagram.svg', svg);
+  ok('an SVG figure is refused by its extension', r.code === 1 && /IMAGE\s+assets\/diagram\.svg/.test(r.out),
      r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('assets/diagram.txt', svg);
+  ok('and renamed, by its root element past the prolog, comment and doctype', r.code === 1 && /an SVG/.test(r.out),
+     r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
+  r = inTmp('assets/diagram-2.txt', '<!DOCTYPE svg [ <!ENTITY red "#c00"> ]>\n<svg xmlns="http://www.w3.org/2000/svg"><rect fill="&red;" width="1" height="1"/></svg>\n');
+  ok('and past a doctype with an internal subset', r.code === 1 && /an SVG/.test(r.out), r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
+  for (const subset of ['<!ENTITY label "]">', "<!ENTITY label ']'>", '<!-- ]> --> <!ENTITY label "[">']) {
+    r = inTmp('assets/quoted-dtd.bin', '<!DOCTYPE svg [' + subset + ']><svg xmlns="http://www.w3.org/2000/svg"/>');
+    ok('quoted brackets and DTD comments cannot hide an SVG root', r.code === 1 && /an SVG/.test(r.out));
+  }
+  r = inTmp('assets/prefixed.bin', '<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:rect width="1" height="1"/></s:svg>');
+  ok('a namespace-prefixed SVG renamed is refused', r.code === 1 && /an SVG/.test(r.out));
+  for (const prefix of ['é', '\u{10000}', '\u200Cname']) {
+    r = inTmp('assets/unicode-prefix.bin', `<${prefix}:svg xmlns:${prefix}="http://www.w3.org/2000/svg"/>`);
+    ok('a non-ASCII XML namespace prefix cannot hide a renamed SVG', r.code === 1 && /an SVG/.test(r.out));
+  }
+  r = inTmp('notes/other-namespace.xml', '<s:svg xmlns:s="urn:unrelated"/>');
+  ok('an unrelated namespace is not mistaken for an SVG', r.code === 0);
+  r = inTmp('notes/quoted-namespace.xml', '<s:svg title=" xmlns:s=\'http://www.w3.org/2000/svg\'" xmlns:s="urn:unrelated"/>');
+  ok('a namespace mentioned inside another attribute is not a declaration', r.code === 0);
+  for (const namespace of ['http:&#x2f;&#x2f;www.w3.org/2000/svg', 'http:&#47;&#47;www.w3.org/2000/svg', '&svgNS;']) {
+    r = inTmp('assets/referenced-namespace.bin', '<!DOCTYPE s:svg [<!ENTITY svgNS "http://www.w3.org/2000/svg">]>' +
+      `<s:svg xmlns:s="${namespace}"/>`);
+    ok('XML references in an SVG namespace cannot hide a renamed figure', r.code === 1 && /an SVG/.test(r.out));
+  }
+  r = inTmp('assets/default-namespace.bin', '<!DOCTYPE s:svg [<!ATTLIST s:svg xmlns:s CDATA "http://www.w3.org/2000/svg">]><s:svg/>');
+  ok('a DTD-defaulted SVG namespace cannot hide a renamed figure', r.code === 1 && /an SVG/.test(r.out));
+  /* A ] or > the doctype quotes, or holds in a comment, ends nothing (found
+     by review, #241: an entity's quoted ] ended the subset there, and the
+     SVG passed). */
+  const quoted = [
+    '<!DOCTYPE svg [<!ENTITY label "]">]>',
+    '<!DOCTYPE svg [<!-- ] --><!ENTITY red "#c00">]>',
+    '<!DOCTYPE svg SYSTEM "svg[1]>.dtd">',
+  ].map((doctype, n) => inTmp(`assets/diagram-q${n}.txt`, doctype + '\n<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>\n'));
+  const missed = quoted.filter(q => !(q.code === 1 && /an SVG/.test(q.out)));
+  ok('and past a ] or > quoted in its doctype, or in a comment there', missed.length === 0,
+     missed.map(q => q.out.trim().slice(0, 60)).join(' | ') || `${quoted.length} refused`);
+  /* However far in the root is: the whole text is read, not its first 4 KB
+     (found by review, #241: a 5 KB comment hid the root). */
+  r = inTmp('assets/diagram-3.bin', '<!-- ' + 'licence text '.repeat(500) + '-->\n<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>\n');
+  ok('and behind a comment longer than 4 KB', r.code === 1 && /an SVG/.test(r.out), r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
+  /* A doctype that never closes, with "][" pairs the first SVG reading could
+     split two ways each: exponential, so forty pairs took hours and would
+     have hung the commit hook (found by CodeQL, #241). The guard is given
+     ten seconds and is killed past them. */
+  const started = Date.now();
+  r = inTmp('notes/doctype.txt', '<!doctype[' + ']['.repeat(40) + '\n', 10000);
+  ok('a doctype that never closes is judged at once, not after an exponential search', r.code === 0,
+     `${Date.now() - started} ms` + (r.code === 0 ? '' : ': ' + r.out.trim().slice(-60)));
+  /* The same for a subset of comments with no ]: read lazily inside the
+     subset's loop, each comment could also stretch to the next one's close,
+     two ways each. */
+  const started2 = Date.now();
+  r = inTmp('notes/doctype-2.txt', '<!DOCTYPE x [' + '<!-- a -->'.repeat(40) + '\n', 10000);
+  ok('nor does a subset of comments that never closes', r.code === 0,
+     `${Date.now() - started2} ms` + (r.code === 0 ? '' : ': ' + r.out.trim().slice(-60)));
+  /* Every other format the extension rule names, renamed (found by review,
+     #240: only PNG, JPEG, GIF, WebP and PDF were known by their bytes). Each
+     fixture is a valid header for its format, made here. */
+  const bmp = (() => {
+    const row = 8, b = Buffer.alloc(14 + 40 + row * 2);           // 2 x 2, 24-bit, rows padded to 4
+    b.write('BM', 0, 'latin1'); b.writeUInt32LE(b.length, 2); b.writeUInt32LE(54, 10);
+    b.writeUInt32LE(40, 14); b.writeInt32LE(2, 18); b.writeInt32LE(2, 22); b.writeUInt16LE(1, 26); b.writeUInt16LE(24, 28);
+    b.fill(0x7f, 54);
+    return b;
+  })();
+  const bmff = brand => {
+    const b = Buffer.alloc(28);
+    b.writeUInt32BE(28, 0); b.write('ftyp', 4, 'latin1'); b.write(brand, 8, 'latin1'); b.write('mif1miaf' + brand, 16, 'latin1');
+    return b;
+  };
+  const tiff = order => Buffer.concat([Buffer.from(order === 'II' ? [0x49, 0x49, 0x2A, 0x00, 8, 0, 0, 0] : [0x4D, 0x4D, 0x00, 0x2A, 0, 0, 0, 8]), Buffer.alloc(6)]);
+  for (const [what, rel, body, says] of [
+    ['a BMP', 'assets/scan-2.bin', bmp, /a BMP/],
+    ['a little-endian TIFF', 'assets/scan-4.dat', tiff('II'), /a TIFF/],
+    ['a big-endian TIFF', 'assets/scan-5.dat', tiff('MM'), /a TIFF/],
+    ['an AVIF', 'assets/photo-1.bin', bmff('avif'), /an AVIF or HEIC image/],
+    ['a HEIC', 'assets/photo-2.bin', bmff('heic'), /an AVIF or HEIC image/],
+  ]) {
+    r = inTmp(rel, body);
+    ok(`${what} renamed is refused, by its first bytes`, r.code === 1 && says.test(r.out), r.out.match(/IMAGE.*/)?.[0] || r.out.trim().slice(0, 60));
+  }
+  /* And the look-alikes those must not catch: text that starts with BM, a
+     page that contains an <svg> without being one, and markdown that opens
+     with a comment. */
+  r = inTmp('notes/bmi.txt', 'BMI by age, a table\n18 22.5\n');
+  ok('a text file that starts with "BM" is fine', r.code === 0, r.out.trim().slice(0, 60));
+  r = inTmp('notes/page.html', '<!doctype html>\n<html><body><svg viewBox="0 0 1 1"><rect width="1" height="1"/></svg></body></html>\n');
+  ok('a page holding an inline <svg> is fine', r.code === 0, r.out.trim().slice(0, 60));
+  r = inTmp('notes/readme.md', '<!-- generated -->\n# Notes\n\n<svg> is how the figures are drawn.\n');
+  ok('markdown that opens with a comment is fine', r.code === 0, r.out.trim().slice(0, 60));
   r = inTmp('memorizer/samples/notes.md', 'a page of a chapter\n');
   ok('anything under memorizer/samples/, where a book chapter is kept, is refused', r.code === 1 && /PATH\s+memorizer\/samples/.test(r.out),
      r.out.match(/PATH.*/)?.[0] || r.out.trim().slice(0, 60));

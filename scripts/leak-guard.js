@@ -46,8 +46,9 @@
  *                so the day anything tracked crosses the limit is a red check
  *                rather than a surprise. (This said 168 KB, lottie.min.js,
  *                until app/ was frozen; no number here, so it cannot go stale.)
- *   3b. IMAGE    an image or a PDF, by its extension or by its first bytes,
- *                at any size, unless KNOWN_BINARIES lists its exact path. A
+ *   3b. IMAGE    an image or a PDF, by its extension or by its first bytes
+ *                (an SVG by its root element), at any size, unless
+ *                KNOWN_BINARIES lists its exact path. A
  *                real figure is tens of KB and a split PDF can be too: both
  *                walk under rule 3, and neither carries the text the content
  *                rules read.
@@ -199,13 +200,97 @@ const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|tiff?|heic|svg|pdf)$/i;
 const KNOWN_BINARIES = [
   'assets/hero-heart/heart.webp',   // the home screen's heart, drawn for this app
 ];
-function imageMagic(b) {
-  if (b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) return 'PNG';
-  if (b.length >= 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'JPEG';
-  if (b.length >= 6 && /^GIF8[79]a$/.test(b.subarray(0, 6).toString('latin1'))) return 'GIF';
-  if (b.length >= 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') return 'WebP';
-  if (b.length >= 5 && b.subarray(0, 5).toString('latin1') === '%PDF-') return 'PDF';
+/* Every format IMAGE_EXT names is recognised renamed too, by its first bytes
+   or, for an SVG, by its root element. This listed only PNG, JPEG, GIF, WebP
+   and PDF, so a BMP, a TIFF, an AVIF or HEIC, or an SVG renamed to .bin
+   passed as "nothing licensed" (found by review, #240). */
+const BMFF_STILL = new Set(['avif', 'avis', 'heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'mif1', 'msf1']);
+function imageMagic(b, size) {
+  if (b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) return 'a PNG';
+  if (b.length >= 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'a JPEG';
+  if (b.length >= 6 && /^GIF8[79]a$/.test(b.subarray(0, 6).toString('latin1'))) return 'a GIF';
+  if (b.length >= 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') return 'a WebP';
+  if (b.length >= 5 && b.subarray(0, 5).toString('latin1') === '%PDF-') return 'a PDF';
+  /* "BM" alone would match a text file that starts with those letters, so
+     the header must also give the file's own length, and its reserved bytes
+     must be zero, which no text has. */
+  if (b.length >= 10 && b[0] === 0x42 && b[1] === 0x4D && b.readUInt32LE(2) === size && b.readUInt32LE(6) === 0) return 'a BMP';
+  const four = b.subarray(0, 4).toString('latin1');
+  if (['II*\0', 'MM\0*', 'II+\0', 'MM\0+'].includes(four)) return 'a TIFF';
+  /* An ISO media file holding a still image, by the major brand of its ftyp
+     box. A video's brands are not listed. */
+  if (b.length >= 12 && b.subarray(4, 8).toString('latin1') === 'ftyp' && BMFF_STILL.has(b.subarray(8, 12).toString('latin1'))) return 'an AVIF or HEIC image';
   return null;
+}
+/* Read the XML prolog once, honoring quotes and comments inside a DTD.
+   A bracket inside an entity value must not end the subset. No backtracking
+   regex is used: malformed doctypes also take one bounded pass. */
+function isSvg(text) {
+  let at = 0;
+  for (;;) {
+    while (at < text.length && /\s/.test(text[at])) at++;
+    if (text.startsWith('<?', at) || text.startsWith('<!--', at)) {
+      const comment = text.startsWith('<!--', at), end = comment ? '-->' : '?>';
+      const next = text.indexOf(end, at + (comment ? 4 : 2));
+      if (next < 0) return false;
+      at = next + end.length;
+    } else if (/^<!DOCTYPE\b/i.test(text.slice(at, at + 10))) {
+      let quote = '', depth = 0, closed = false;
+      for (at += 9; at < text.length; at++) {
+        const c = text[at];
+        if (quote) { if (c === quote) quote = ''; continue; }
+        if (text.startsWith('<!--', at) || text.startsWith('<?', at)) {
+          const comment = text.startsWith('<!--', at), end = comment ? '-->' : '?>';
+          const next = text.indexOf(end, at + (comment ? 4 : 2));
+          if (next < 0) return false;
+          at = next + end.length - 1;
+        } else if (c === '"' || c === "'") quote = c;
+        else if (c === '[') depth++;
+        else if (c === ']') depth = Math.max(0, depth - 1);
+        else if (c === '>' && depth === 0) { at++; closed = true; break; }
+      }
+      if (!closed) return false;
+    } else break;
+  }
+  // XML names include non-ASCII and astral characters. Tokenize conservatively;
+  // the namespace declaration below decides whether this root denotes SVG.
+  const root = text.slice(at).match(/^<(?:([^:\s<>/]+):)?svg(?=[\s/>])/i);
+  if (!root) return false;
+  if (!root[1]) return true;
+  // A prefixed root must bind its prefix to the SVG namespace.
+  let end = at + root[0].length, quote = '';
+  for (; end < text.length; end++) {
+    const c = text[end];
+    if (quote) { if (c === quote) quote = ''; }
+    else if (c === '"' || c === "'") quote = c;
+    else if (c === '>') break;
+  }
+  // Read attributes once, without matching a namespace inside another value.
+  let pos = at + root[0].length;
+  while (pos < end) {
+    while (pos < end && /\s/.test(text[pos])) pos++;
+    const start = pos;
+    while (pos < end && !/[\s=/>]/.test(text[pos])) pos++;
+    const name = text.slice(start, pos);
+    if (!name) { pos++; continue; }
+    while (pos < end && /\s/.test(text[pos])) pos++;
+    if (text[pos] !== '=') continue;
+    pos++;
+    while (pos < end && /\s/.test(text[pos])) pos++;
+    const delimiter = text[pos++];
+    if (delimiter !== '"' && delimiter !== "'") continue;
+    const next = text.indexOf(delimiter, pos);
+    if (next < 0 || next > end) return false;
+    const value = text.slice(pos, next);
+    pos = next + 1;
+    // References can spell SVG's URI or depend on a DTD entity. Refuse them
+    // conservatively; never expand a DTD or load external entities in a hook.
+    if (name === `xmlns:${root[1]}`) return value === 'http://www.w3.org/2000/svg' || value.includes('&');
+  }
+  // A DTD can default the namespace declaration, including from an external
+  // subset. Without an explicit unrelated namespace, refuse this SVG-shaped
+  // root conservatively rather than resolve a DTD in a licensing hook.
+  return true;
 }
 
 /* Paths a person has decided are fine, with the reason. Nothing is here yet;
@@ -422,15 +507,23 @@ function inspect(file, src) {
     return { rule: 'SIZE', why: `${(st.size / 1048576).toFixed(1)} MB — nothing here legitimately exceeds 1 MB` };
   if (st.size === 0) return null;
 
+  let text;
+  const readText = () => {
+    if (text === undefined) { try { text = st.text(); } catch (e) { cannot(`read ${file}`, e); } }
+    return text;
+  };
   if (!KNOWN_BINARIES.includes(p)) {
     let kind;
-    try { kind = imageMagic(st.head(12)); } catch (e) { cannot(`read ${file}`, e); }
+    try { kind = imageMagic(st.head(12), st.size); } catch (e) { cannot(`read ${file}`, e); }
+    /* An SVG's root can sit behind a prolog or a comment of any length, so it
+       is looked for in the whole text, which the rules below read anyway. This
+       read the first 4 KB, and an SVG behind a 5 KB comment passed (found by
+       review, #241). */
+    if (!kind && isSvg(readText())) kind = 'an SVG';
     if (kind || IMAGE_EXT.test(p))
-      return { rule: 'IMAGE', why: `${kind ? 'a ' + kind : 'an image or PDF by its name'} — a figure or a split PDF is refused at any size; list a deliberate one in KNOWN_BINARIES` };
+      return { rule: 'IMAGE', why: `${kind || 'an image or PDF by its name'} — a figure or a split PDF is refused at any size; list a deliberate one in KNOWN_BINARIES` };
   }
-
-  let text;
-  try { text = st.text(); } catch (e) { cannot(`read ${file}`, e); }
+  readText();
 
   /* FIGURES first, and unconditionally: it has no floor (rule 5's comment
      says why), so it runs on every file rule 3 let through, not just the
