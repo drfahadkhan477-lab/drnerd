@@ -270,6 +270,22 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     fs.mkdirSync(dir + '-old'); fs.writeFileSync(path.join(dir + '-old', 'secret.txt'), 'next door');
     const sib = await get('/../' + path.basename(dir) + '-old/secret.txt');
     ok('a sibling folder sharing the root\'s name prefix is not served', sib.status === 403 || sib.status === 404, `${sib.status} ${sib.body.slice(0, 20)}`);
+    /* A normalised URL can still escape through a filesystem link. Use
+       invented files only; an internal link remains a supported asset. */
+    let linked = false;
+    try {
+      fs.symlinkSync(path.join(dir + '-old', 'secret.txt'), path.join(dir, 'outside.txt'));
+      fs.symlinkSync(dir + '-old', path.join(dir, 'outside-dir'), process.platform === 'win32' ? 'junction' : 'dir');
+      fs.symlinkSync(path.join(dir, 'index.html'), path.join(dir, 'inside.html'));
+      linked = true;
+    } catch (_) {}
+    if (linked) {
+      const outside = await get('/outside.txt'), nested = await get('/outside-dir/secret.txt');
+      ok('a file link outside the serving root is forbidden', outside.status === 403 && !outside.body.includes('next door'));
+      ok('a directory link outside the serving root is forbidden', nested.status === 403 && !nested.body.includes('next door'));
+      const inside = await get('/inside.html');
+      ok('a link to an asset within the root is still served', inside.status === 200 && inside.body === 'home');
+    } else console.log('  UNMEASURED  filesystem links unavailable: serving-root link boundary');
     const up = await get('/../../../../../../etc/hostname');
     ok('and neither is a walk upwards', up.status === 403 || up.status === 404, String(up.status));
     const malformed = await get('/%ZZ');

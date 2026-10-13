@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
-node scripts/verify.js --pwa                           # → 6634 + 134 checks
+node scripts/verify.js --pwa                           # → 6526 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -65,8 +65,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 152
-  run normally — it is 35 of the 6634 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 149
+  run normally — it is 35 of the 6526 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -249,13 +249,58 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 153 suites, 6634 checks, plus 134 more on the split build. Those numbers are
+Across 150 suites, 6526 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
 fails if this sentence, the README or the CI header disagrees with it. They used to be maintained from memory in three files,
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
+
+The totals exclude suites named in `RETIRED_RECORD`, even while their historical
+measurements remain in the record. The deleted Claude configuration accounts for
+three such suites and 108 checks. The record itself is preserved until a complete
+green run updates it; these counts do not claim newly added assertions have
+already been measured in that run.
+
+### Prepared reader libraries for public browser checks
+
+```bash
+npm run test:prepare
+SYSTOLE_TEST_READERS_OFFLINE=1 npm test
+```
+
+Preparation downloads the nine version-pinned PDF, OCR, flowchart, and WebLLM
+runtime files and verifies their existing SHA-384 pins. It stores only these
+public reader assets under `node_modules/.cache/systole-reader-assets/`, including
+the English OCR model; no study content or language-model weights are cached
+there. The browser still checks the app's
+SRI hashes and runs the real parser and recognition engine.
+
+Downloads have a 20-second ceiling per attempt and at most three attempts.
+Missing files fail in reader-offline mode, and corrupt cache files fail rather
+than being silently replaced. Remove a corrupt cache file and rerun preparation
+to repair it. Changing a URL or integrity pin selects a new cache file.
+
+The Memorizer CI job prepares these libraries before its browser scenarios and
+uses reader-offline mode for those scenarios. This controls reader downloads;
+it does not claim that every browser scenario is disconnected from the network.
+
+Observed on 2026-10-13 with Node 24.19.0 and repository-pinned Playwright 1.63.0:
+all 148 public suites passed in Chromium (87 pure and 61 browser suites).
+The complete Memorizer scenario passed 492 checks in WebKit, and its data and
+security suite passed 27. After connecting the service-worker offline suite
+to the prepared reader cache as well, that suite passed 16 checks in Chromium,
+16 in Firefox and 12 in WebKit. WebKit explicitly did not run tab reopening
+because of its documented idle-origin Cache Storage issue.
+
+All seven suites from the Firefox `memorizer-browser` CI job passed: Memorizer
+492, hardening 107, study import 72, offline 16, data/security 27, bankstore 32,
+and Lab 67 (813 checks total). These targeted runs used reader-offline mode.
+WebKit used local shared libraries and the repository's existing
+view-transition workaround. The private export, physical iPad trials,
+real language-model execution, and a full Firefox `npm test` remain unmeasured.
+These observations do not replace the historical `tests/test-stats.json` record.
 
 ### When a screen overflows
 
@@ -362,20 +407,16 @@ Every suite launches through `tests/_engine.js`, so the engine is a flag:
 node scripts/verify.js --engine webkit     # or firefox; chromium is the default
 ```
 
-**They have not been run on WebKit yet, and that matters.** The target device
-for this app is an iPad, which is WebKit — Blink was never the engine that
-mattered most here, it was the engine that was easy. All thirty-four browser
-suites opened with `chromium.launch()`, not as a decision but because each was
-copied from the one before it. That is now one line instead of thirty-four, and
-`verify-engine` is what stops it drifting back: it fails if any suite launches
-an engine itself.
+The target device is an iPad, so WebKit validation matters. CI runs the
+Memorizer job in Chromium, WebKit and Firefox, and the synthetic app job also
+has a WebKit counterpart with explicit exclusions. `verify-engine` enforces
+the shared launcher so suites cannot silently select a different engine.
 
-What this does *not* do is claim the suites pass on WebKit. Nobody has run them
-there, because Playwright's WebKit build could not be downloaded in the
-environment this was written in. Expect real failures the first time — WebKit
-differs on `performance.memory` (absent, already guarded), on IndexedDB timing,
-on `hasTouch` pointer coalescing, and on how it resolves fonts. Those are worth
-finding. Finding them is the next piece of work, not this one.
+The prepared-reader section above records the latest local measurements.
+Engine differences and unavailable measurements remain explicit: WebKit has
+no Chromium heap API, and the launcher documents its view-transition
+workaround. Browser automation does not establish behavior on a physical
+iPad; use the device checks above for that validation.
 
 Every suite asserts the *claim*, not that something rendered. `verify-physio`
 checks that valve events are measured pressure crossings and that raising
@@ -551,7 +592,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        153 suites · 89 need no browser · + pwa
+tests/        150 suites · 87 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

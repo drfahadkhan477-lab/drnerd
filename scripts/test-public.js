@@ -112,7 +112,13 @@ function run(opts) {
         env: childEnv({ SYSTOLE_ENGINE: engine }), maxBuffer: 64 * 1048576 });
       status = r.status === 0 ? 'pass' : (r.status === null ? `killed (${r.signal})` : `exit ${r.status}`);
       if (status !== 'pass') {
-        const out = (String(r.stdout || '') + String(r.stderr || '')).split('\n').filter(l => /FAIL|Error|error/.test(l)).slice(0, 8);
+        /* Diagnostics belong ahead of successful assertions that happen to
+           mention an error. A locator timeout need not contain "Error". */
+        const lines = String(r.stdout || '').split('\n').filter(l => l.trim());
+        let out = String(r.stderr || '').split('\n').filter(l => l.trim()).slice(-8)
+          .concat(lines.filter(l => /^\s*FAIL\b/.test(l)).slice(0, 8));
+        if (!out.length) out = lines.slice(-8);
+        if (r.error) out.unshift(r.error.message);
         if (out.length) log(out.map(l => '      ' + l).join('\n'));
       }
     }

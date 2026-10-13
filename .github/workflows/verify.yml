@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6634 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6551.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6526 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6443.
 # The other 217 all drive something this workflow cannot have: the real
 # bank. The app is built here, but around an invented bank (the
 # synthetic-browser job), because the real one is the ACCSAP 12 export — the
@@ -49,7 +49,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 89 suites that are pure Node with no Playwright and no
+#   logic        the 87 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -76,7 +76,7 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
-#                Across every job, 6551 real checks, up
+#                Across every job, 6443 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -207,12 +207,8 @@ jobs:
         run: node tests/verify-engine.js
       - name: the licensed question bank cannot be committed (46 checks)
         run: node tests/verify-leakguard.js
-      - name: a Claude Code session cannot read the licensed export (24 checks)
-        run: node tests/verify-claude-guard.js
-      - name: the Claude Code subagents cannot edit files (47 checks)
-        run: node tests/verify-claude-agents.js
-      - name: the Claude Code skills are found and cite only what exists (37 checks)
-        run: node tests/verify-claude-skills.js
+      - name: public reader pins, cache integrity, retries and bounded downloads (12 checks)
+        run: node tests/verify-reader-assets-pure.js
       - name: a study file is checked by Memorizer's own import code (26 checks)
         run: node tests/verify-study-file-check.js
       - name: the built file cuts into the app and its payloads losslessly, and the app carries none of the bank (45 checks)
@@ -361,13 +357,13 @@ jobs:
   # output reaching the chunker, a session surviving a reload, a failed save
   # being said) was proven only when someone remembered to run it.
   #
-  # NETWORK: verify-memorizer fetches pdf.js, and the text reader for scanned
-  # pages, from jsDelivr at pinned versions and checks them against their
-  # integrity hashes, as the app does. verify-memorizer-hardening uses pasted
+  # NETWORK: preparation fetches pinned reader libraries from jsDelivr and
+  # verifies their integrity. Memorizer, offline and data scenarios consume
+  # that cache with reader downloads disabled. The browser still checks the
+  # original integrity hashes. verify-memorizer-hardening uses pasted
   # notes only and fails any request that leaves the page other than to the
   # stubbed model. verify-memorizer-studyimport fetches nothing: its HTML pages
-  # are written in the suite. verify-memorizer-offline fetches the pinned
-  # readers from jsDelivr, as verify-memorizer does.
+  # are written in the suite.
   #
   # IN WEBKIT TOO, because the device this is for is an iPad and an iPad is
   # WebKit. Every suite here launches through tests/_engine.js, so the engine
@@ -403,6 +399,7 @@ jobs:
             label: Firefox
     env:
       SYSTOLE_ENGINE: ${{ matrix.engine }}
+      SYSTOLE_TEST_READERS_OFFLINE: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -412,6 +409,8 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps ${{ matrix.engine }}
+      - name: prepare the pinned public reader libraries
+        run: npm run test:prepare
       - if: ${{ !cancelled() }}
         name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (484 checks)
         run: node tests/verify-memorizer.js

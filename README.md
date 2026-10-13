@@ -23,7 +23,7 @@ and a row of glass doors to everything else.
 ```bash
 npm test                                            # no export needed: every suite CI runs
 npm run build -- path/to/ACCSAP_export.html       # → build/systole.html
-node scripts/verify.js                              # 6634 checks, 153 suites
+node scripts/verify.js                              # 6526 checks, 150 suites
 node scripts/verify.js --pwa                        # + 134 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
@@ -34,7 +34,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 6634 + 134 checks above — read it as 6551, not 6768.**
+**That badge is not the 6526 + 134 checks above — read it as 6443, not 6660.**
 CI cannot build the app from the real bank: that needs the licensed export,
 which is deliberately never committed here and never will be, on GitHub or
 anywhere else that isn't your own devices. So it builds the real app around
@@ -43,9 +43,14 @@ on that, except the few whose subject is the real bank itself. On every push
 it also checks, with no source file: every script parses, the test-suite
 list still lists without crashing, `npm run build` still refuses to run and
 explains why when no source is present, and
-the 89 suites that need neither a browser nor a build all stay green. See
+the 87 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 217 checks can't run here.
+
+These totals use the last recorded measurements for active suites. The three
+Claude configuration suites were retired when that configuration was deleted;
+their historical measurements stay in the record but are excluded from these
+totals. New assertions are counted when the next complete run updates the record.
 
 ### The device this is for
 

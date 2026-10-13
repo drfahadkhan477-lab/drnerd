@@ -1,5 +1,8 @@
 # Models, usage, and limits in Claude Code
 
+Historical reference: `CLAUDE.md` and `.claude/` were removed from master.
+The repository-specific agents and rules described below are no longer provided.
+
 Owner-facing reference for keeping Claude Code sessions on this repo cheap and
 sharp. `CLAUDE.md` carries only the short rules Claude acts on; this file is
 the full explanation, kept out of `CLAUDE.md` because that file is resent on

@@ -221,7 +221,7 @@ const MD = ['---', 'unit: Ventricular Loading', '---', '', '## Teaching Points',
     /* Mermaid: the pinned file, served here as the network would serve it,
        so its integrity hash and the page's policy both apply */
     const MERMAID_URL = /url: '(https:\/\/cdn\.jsdelivr\.net\/npm\/mermaid@[^']+)'/.exec(fs.readFileSync(path.join(ROOT, 'memorizer', 'src', 'ui.js'), 'utf8'))[1];
-    const mermaidBytes = Buffer.from(await (await fetch(MERMAID_URL)).arrayBuffer());
+    const mermaidBytes = (await require('./_reader-assets.js').createClient().get(MERMAID_URL)).body;
     await p.route(MERMAID_URL, r => r.fulfill({ status: 200, body: mermaidBytes, headers: { 'content-type': 'application/javascript', 'access-control-allow-origin': '*' } }));
     const drawn = await p.evaluate(async () => {
       const flow = Memorizer.flowchart('flowchart TD\n  A["Preload"] --- B["Afterload"]');

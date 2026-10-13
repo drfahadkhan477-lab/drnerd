@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 153 suites and roughly 6634 checks, and they
+ * WHY THIS EXISTS. There are 150 suites and roughly 6526 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -176,19 +176,7 @@ const SUITES = [
      remote, and .gitignore stops being a boundary the moment somebody types
      `git add -f`. */
   ['leakguard',    'the licensed question bank cannot be committed, however it is renamed'],
-  /* Its sibling for Claude Code sessions: .claude/hooks/guard.js refuses a
-     read of the licensed paths and a commit leak-guard would refuse, before
-     the tool runs, and lets a suite run on build/ through. */
-  ['claude-guard', 'a Claude Code session cannot read the licensed export, or commit what leak-guard refuses'],
-  /* The subagents in .claude/agents: each well formed, on a cheap model, and
-     granted no tool that edits a file. */
-  ['claude-agents', 'the Claude Code subagents are cheap, explicit about their tools, and cannot edit files'],
-  /* The skills in .claude/skills: each where Claude Code looks for it, granting
-     no tools, and citing only files, scripts, sections and agents that exist. */
-  ['claude-skills', 'the Claude Code skills are found, widen no permissions, and cite only what exists'],
-  /* tools/study-file-check.js, which the memorizer-study-file skill trusts:
-     it runs Memorizer's own import path and reports what the app would drop,
-     refuse or flag, without printing the file's text. */
+  ['reader-assets-pure', 'pinned public readers are prepared once, checked before use, and failed or unbounded downloads cannot enter the test cache'],
   ['study-file-check', 'a study file is checked by the app\u2019s own import code before it is handed over'],
   /* Step 1 of retiring the patch chain: the chain's output cuts into the app
      and its payloads losslessly, and the app carries none of what was cut. */
@@ -464,7 +452,7 @@ const SUITES = [
    the one that had been waiting: suitetime-pure. The split build was measured
    by this run for the first time since the ninth emptying, and came to the
    same 134. */
-const PENDING_RECORD = ['pearlbake-pure'];
+const PENDING_RECORD = ['pearlbake-pure', 'reader-assets-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
@@ -474,9 +462,9 @@ const PENDING_RECORD = ['pearlbake-pure'];
    longer a suite. Naming it here says that is on purpose. Checked in both
    directions like PENDING_RECORD: a name here must still be in the record and
    must not be registered, so the next write forces it out of this list. */
-/* echoanchor-pure and shellanchor-pure checked that patch steps' anchors
-   survived the chain to the step that used them; deleted with the chain. */
-const RETIRED_RECORD = [];
+/* Claude configuration was deleted on master. Keep its historical counts
+   in the measured record until the next complete Systole run. */
+const RETIRED_RECORD = ['claude-guard', 'claude-agents', 'claude-skills'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

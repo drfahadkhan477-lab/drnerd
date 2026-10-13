@@ -18,6 +18,9 @@ const path = require('path');
 
 const PORT = Number(process.argv[2]) || 8123;
 const DIR = path.resolve(process.argv[3] || path.join(__dirname, '..', 'dist'));
+/* The serving directory itself may be a link, but its assets must resolve
+   beneath that directory. URL normalisation alone cannot constrain links. */
+const REAL_DIR = fs.existsSync(DIR) ? fs.realpathSync(DIR) : DIR;
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -62,24 +65,31 @@ const server = http.createServer((req, res) => {
      path reaching fs.stat whenever file === DIR). */
   if (!file.startsWith(DIR + path.sep)) { res.writeHead(403).end('forbidden'); return; }
 
-  fs.stat(file, (err, st) => {
-    if (err || !st.isFile()) { res.writeHead(404).end('not found'); return; }
-    const ext = path.extname(file).toLowerCase();
-    const headers = { 'content-type': TYPES[ext] || 'application/octet-stream', 'content-length': st.size };
-    /* Figures are immutable once written; everything else should revalidate so
-       a rebuild is visible without clearing the browser cache by hand. */
-    headers['cache-control'] = p.includes('/content/figures/')
-      ? 'public, max-age=31536000, immutable'
-      : 'no-cache';
-    /* Headers wait for the file to open, so a file that cannot be read gets a
-       500 rather than a 200 with no body; an error after that ends the
-       response. Either way it is this request that fails, not the server: an
-       'error' on a stream with no listener used to be an uncaught exception. */
-    const stream = fs.createReadStream(file);
-    stream.on('open', () => { res.writeHead(200, headers); stream.pipe(res); });
-    stream.on('error', () => {
-      if (!res.headersSent) res.writeHead(500).end('could not read');
-      else res.destroy();
+  fs.realpath(file, (err, realFile) => {
+    if (err) { res.writeHead(404).end('not found'); return; }
+    const relative = path.relative(REAL_DIR, realFile);
+    if (!relative || relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+      res.writeHead(403).end('forbidden'); return;
+    }
+    fs.stat(realFile, (err, st) => {
+      if (err || !st.isFile()) { res.writeHead(404).end('not found'); return; }
+      const ext = path.extname(file).toLowerCase();
+      const headers = { 'content-type': TYPES[ext] || 'application/octet-stream', 'content-length': st.size };
+      /* Figures are immutable once written; everything else should revalidate so
+         a rebuild is visible without clearing the browser cache by hand. */
+      headers['cache-control'] = p.includes('/content/figures/')
+        ? 'public, max-age=31536000, immutable'
+        : 'no-cache';
+      /* Headers wait for the file to open, so a file that cannot be read gets a
+         500 rather than a 200 with no body; an error after that ends the
+         response. Either way it is this request that fails, not the server: an
+         'error' on a stream with no listener used to be an uncaught exception. */
+      const stream = fs.createReadStream(realFile);
+      stream.on('open', () => { res.writeHead(200, headers); stream.pipe(res); });
+      stream.on('error', () => {
+        if (!res.headersSent) res.writeHead(500).end('could not read');
+        else res.destroy();
+      });
     });
   });
 });
