@@ -44,13 +44,13 @@
  * through a listener nobody re-attaches, that typing does not move the caret,
  * and that a derived row appears only when the inputs it needs are there.
  *
- * THE CARET CHECK IS THE REASON THIS SUITE EXISTS. echo-patch repaints
- * .echo-out alone on every keystroke instead of calling render(), and its
- * header says why: re-rendering the screen rebuilds the input being typed
- * into, so the caret jumps to the end after every digit. That is an argument
- * in a comment, and an argument in a comment is not a check. Typing three
- * characters into one field settles it — if the node is rebuilt after the
- * first, focus is gone and the other two never land.
+ * THE CARET CHECK IS THE REASON THIS SUITE EXISTS. The page's Echo glue
+ * repaints .echo-out alone on every keystroke instead of calling render(),
+ * and echo-patch.js's header said why: re-rendering the screen rebuilds the
+ * input being typed into, so the caret jumps to the end after every digit.
+ * That is an argument in a comment, and an argument in a comment is not a
+ * check. Typing three characters into one field settles it — if the node is
+ * rebuilt after the first, focus is gone and the other two never land.
  */
 'use strict';
 const fs = require('fs');

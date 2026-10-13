@@ -106,6 +106,39 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   save and still froze. → Rule: fix the hazard where it happens or at every caller that
   waits on it — grep for every `.then` on that promise before calling it fixed, and
   narrow the commit title to what was covered.
+- **Two causes reasoned, neither reproduced; CI runners said which.** My occlusion
+  check drew the card's `<img>` into a canvas and looked for the label's magenta.
+  CI's WebKit read nothing. I blamed an image not yet decoded, waited for `complete`
+  and `decode()`, and called it fixed unseen; it failed again (`inked: 0`). Six
+  copies on CI runners with the read instrumented failed in 3: the PNG decoded whole
+  and the canvas read back its own pixels, but the `<img>` drew nothing. A
+  `willReadFrequently` canvas had read it whole, so I blamed WebKit's GPU-backed
+  canvas; six more copies with that fix and plain-canvas controls drawn in the same
+  tick failed in 4, every canvas empty. The CPU read had worked only because it ran
+  later: the `<img>` was complete, sized and decoded and still not drawable for a
+  moment. Waiting until a draw left ink, six more passed, the old read empty in 2 of
+  them; the wait took 12 to 25 ms. This container never failed it in seven runs.
+  → Rule: before reading an image's pixels, wait until a draw of it leaves ink (a
+  precondition; the claim is read after it), and keep what was read in the check's
+  detail. When a failure shows only in CI, reproduce it there (a scratch branch
+  whose own workflow runs the suite several times in parallel, the read
+  instrumented), and try a fix with a control in the same tick, so a cause is told
+  apart from a delay.
+- **A state wait before a DOM read.** A hardening check waited on
+  `ui.docRec.revision`, which `saveFix` sets before `refresh()` and `render()`, then
+  read the banner from the DOM; it failed once in four runs on the #232 merge. My
+  first fix waited on `#notice`, which only the unit screen draws, so it timed out
+  on the lesson screen where the check runs. → Rule: when a check reads the DOM,
+  its precondition must be a redraw made after the state it waits on (a
+  `MutationObserver` that checks that state when it fires), never the state alone.
+  Before waiting on an element, grep which view draws it. Reproduce the race by
+  delaying the app's redraw, and show the old wait failing and the new one passing.
+- **A fault injection that broke the syntax, not the rule.** To prove a date rule
+  was guarded, I rewrote `s=>{…}` as `s=>true||{…}`. That made an object literal and
+  a syntax error, and the suite's one FAIL was "no uncaught page error". → Rule: an
+  injection must leave the code valid and change only the guarded behaviour (here
+  `s=>true, unused=s=>{…}`). Read the FAIL lines it produces: only the checks that
+  name the rule failing counts as proof.
 
 ## Process
 

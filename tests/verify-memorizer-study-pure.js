@@ -96,6 +96,15 @@ head('image occlusion: the figure’s own label, hidden where it was printed');
   const m = S.maskOf(fig.box, [120, 380, 200, 392]);
   ok('the mask sits where the label was printed, as fractions from the top left (PDF boxes count up), padded',
      Math.abs(m.left - 18 / 400) < 1e-9 && Math.abs(m.width - 84 / 400) < 1e-9 && Math.abs(m.top - 206 / 300) < 1e-9 && Math.abs(m.height - 16 / 300) < 1e-9, JSON.stringify(m));
+  /* Turned with its page: a label near the box's top left is drawn top right
+     a quarter turn clockwise, bottom right a half, bottom left three quarters.
+     Whether that is where the reader sees it is verify-memorizer's to
+     measure, from the drawn picture's pixels; this holds the arithmetic. */
+  const tm = { left: 0.1, top: 0.2, width: 0.3, height: 0.1 }, near = (a, b) => ['left', 'top', 'width', 'height'].every(k => Math.abs(a[k] - b[k]) < 1e-9);
+  ok('a mask turns with its page: a quarter, a half and three quarters clockwise, and not at all unturned',
+     near(S.turnMask(tm, 90), { left: 0.7, top: 0.1, width: 0.1, height: 0.3 }) && near(S.turnMask(tm, 180), { left: 0.6, top: 0.7, width: 0.3, height: 0.1 }) &&
+     near(S.turnMask(tm, 270), { left: 0.2, top: 0.6, width: 0.1, height: 0.3 }) && near(S.turnMask(tm, -90), S.turnMask(tm, 270)) &&
+     S.turnMask(tm, 0) === tm && S.turnMask(tm, undefined) === tm, JSON.stringify([90, 180, 270].map(r => S.turnMask(tm, r))));
   ok('different k, different label; the right option is not always first', S.occlusionOf(fig, 0).hidden.text === 'Left atrium' &&
      new Set([0, 1, 2, 3, 4].map(k => S.occlusionOf(fig, k).answer)).size > 1);
   const few = Object.assign({}, fig, { labels: fig.labels.slice(0, 3) });

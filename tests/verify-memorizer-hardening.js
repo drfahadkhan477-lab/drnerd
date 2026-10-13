@@ -535,13 +535,14 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
   {
     const r = await context('recut-failure'); await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Recut'); await r.locator('#learn-unit').waitFor(T);
     /* A second chapter, page 2 with no text, so the screen has a Join. The
-       cut's write is held until __failRecut rejects it. */
+       cut's write (Store.commit, with the book in it) is held until
+       __failRecut rejects it. */
     await r.evaluate(async () => {
       const id = Memorizer.ui.docId, b = { id: 'synthetic-book', name: 'Synthetic book', pages: 2, method: 'numbered', scanned: [], outline: [],
         parts: [{ fileId: 'synthetic-part', first: 1, last: 2 }], chapters: [{ title: 'One', pageStart: 1, pageEnd: 1, docId: id }, { title: 'Two', pageStart: 2, pageEnd: 2, docId: null }], found: {} };
       await MemStore.batch([{ store: 'books', value: b }, { store: 'bookpages', value: { id: b.id + ':0', pages: [{ page: 1, lines: [{ text: 'A synthetic paragraph with enough readable words to retain this source during chapter cutting.', size: 10, y: 10 }] }] } }]);
-      window.__recutBatch = MemStore.batch;
-      MemStore.batch = ops => ops.some(o => o.store === 'books') ? new Promise((_, no) => { window.__failRecut = () => no(new Error('synthetic recut failure')); }) : window.__recutBatch(ops);
+      window.__recutCommit = MemStore.commit;
+      MemStore.commit = (ops, gone) => ops.some(o => o.store === 'books') ? new Promise((_, no) => { window.__failRecut = () => no(new Error('synthetic recut failure')); }) : window.__recutCommit(ops, gone);
       Memorizer.openBook(b.id);
     });
     await r.locator('#methods').waitFor(T); r.on('dialog', dl => dl.accept()); await r.locator('#methods [data-method=pages]').click();
@@ -557,7 +558,7 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     const freed = await tappable();
     ok('and once the cut has failed, they can be tapped again', JSON.stringify(freed.map(g => g.length)) === JSON.stringify(held.map(g => g.length)) && held.every(g => g.length) &&
        !freed.some(g => g.some(Boolean)), JSON.stringify(freed));
-    await r.evaluate(() => { MemStore.batch = window.__recutBatch; });
+    await r.evaluate(() => { MemStore.commit = window.__recutCommit; });
   }
 
   head('a first practice miss survives reload without an SRS review');
@@ -662,6 +663,72 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
     ok('repeating the action applies the deletion once', await r.evaluate(async () => (await MemStore.get('docs', Memorizer.ui.docId)).clusters.length === 1));
   }
 
+  /* A step whose save failed is in the screen's state, so a section deleted
+     or corrected afterwards is made from it and replaces that save. Kept for
+     retry, the save went into every export and "Try saving again" put the
+     old session back: two sections where the unit now has one, which no
+     backup would restore, or the corrected section's progress, which the
+     correction retires (here its memorisation, as in the corrections block
+     above; its lesson is taught again from the corrected text either way). */
+  for (const action of ['delete', 'correct']) {
+    head(`a section ${action === 'delete' ? 'deleted' : 'corrected'} after a failed save: the save is not put back`);
+    const r = await context('replaced-' + action);
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Replaced ' + action); await r.locator('#learn-unit').waitFor(T);
+    r.on('dialog', dl => dl.accept());
+    if (action === 'correct') {
+      await r.locator('#learn-unit').click(); await r.locator('#note-text').waitFor(T);
+      await r.evaluate(async () => {
+        const u = Memorizer.ui; u.docRec.source = 'photo'; u.fixOpen = true; u.state.per[0].memorized = true;
+        await MemStore.batch([{ store: 'docs', value: u.docRec }, { store: 'sessions', value: { id: u.docId, state: u.state, at: Date.now() } }]);
+      });
+    }
+    /* the sessions store refuses the next write, as a full disk would */
+    await r.evaluate(async action => {
+      const put = IDBObjectStore.prototype.put; window.__refuse = 1;
+      IDBObjectStore.prototype.put = function () {
+        if (this.name === 'sessions' && window.__refuse > 0) { window.__refuse--; throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); }
+        return put.apply(this, arguments);
+      };
+      try { await Memorizer.openDoc(Memorizer.ui.docId, action === 'correct' ? 0 : undefined); } finally { IDBObjectStore.prototype.put = put; }
+    }, action);
+    const failed = await r.evaluate(() => ({ pending: MemStore.failureMessage(), banner: !!document.getElementById('store-banner'), memorized: !!Memorizer.ui.state.per[0].memorized }));
+    ok('(the step\'s save failed and is waiting for retry)', /out of space/.test(failed.pending) && failed.banner && (action === 'delete' || failed.memorized), JSON.stringify(failed));
+    if (action === 'delete') {
+      await r.locator('#sections .section-del').first().click();
+      await r.waitForFunction(() => /^Deleted/.test(Memorizer.ui.notice), null, T);
+    } else {
+      /* The corrected section is taught again at once, and that save writes
+         the whole session, which retires the failed save by itself (an
+         earlier version of this check passed with the correction written
+         outside the queue for that reason). Here the lesson cannot be made,
+         as when Claude is slow or offline, so nothing is saved after the
+         correction and what it left behind is what is measured. */
+      const text = await r.evaluate(() => { MemCoach.lesson = () => { throw new Error('no lesson in this test'); }; return Memorizer.ui.docRec.clusters[0].segments.find(s => !s.heading && !s.table).text; });
+      await r.locator('#fix-text textarea').first().fill(text.replace('2 percent', '20 percent'));
+      /* a precondition: the screen has been drawn since the correction. saveFix
+         sets the corrected record (and clears saveError) before refresh() and
+         render(), so a banner read as soon as the revision shows can be the one
+         drawn before the correction. Any redraw made once the record is the
+         corrected one is drawn from the cleared error; the banner is not read. */
+      await r.evaluate(() => { window.__drawnFixed = false; new MutationObserver((_, o) => { if (Memorizer.ui.docRec.revision === 1) { window.__drawnFixed = true; o.disconnect(); } }).observe(document.body, { childList: true, subtree: true }); });
+      await r.locator('#fix-text [data-fix]').first().click();
+      await r.waitForFunction(() => Memorizer.ui.docRec.revision === 1, null, T);
+      await r.waitForFunction(() => window.__drawnFixed, null, T);
+    }
+    const got = await r.evaluate(async () => {
+      const pending = MemStore.failureMessage(), banner = !!document.getElementById('store-banner'), checked = await MemBackup.exportChecked();
+      await MemStore.retryFailures();
+      const s = (await MemStore.get('sessions', Memorizer.ui.docId)).state;
+      return { pending, banner, problem: checked.problem, titles: s.titles.length, memorized: !!s.per[0].memorized };
+    });
+    ok('the failed save it replaced is no longer waiting for retry', got.pending === '', JSON.stringify(got));
+    ok('and the "not saved" banner goes with it', !got.banner, JSON.stringify(got));
+    if (action === 'delete') {
+      ok('a backup made now is one the app would restore', got.problem === null, String(got.problem));
+      ok('and "Try saving again" does not put the two-section session back', got.titles === 1, JSON.stringify(got));
+    } else ok('and "Try saving again" does not bring back the progress the correction retired', !got.memorized, JSON.stringify(got));
+  }
+
   head('backup rescue and transactional restore');
   {
     const r = await context('backup');
@@ -716,6 +783,166 @@ const kindOf = user => /TASK:\nTEACH /.test(user) ? 'lesson' : /TASK:\nDRILL\./.
       return { ids: meta.map(m => m.id).sort().join(','), want: want.join(','), stale: !!(notes && JSON.stringify(notes).includes('STALE')) };
     }, backup);
     ok('writes queued before a restore cannot land on the restored IndexedDB database', raced.ids === raced.want && !raced.stale, JSON.stringify(raced).slice(0, 200));
+  }
+
+  /* A restore replaces every record. Tapped while a whole-book import ran,
+     it cleared the parts already staged and the import then committed a book
+     whose first part had no PDF or text; tapped while a cut ran, the cut made
+     from the old data landed on the restored data. The backup here is made
+     before the book exists, as one from an earlier day would be. */
+  const restoreNow = async (r, backup) => {
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await r.locator('#backup-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+    await r.locator('#backup-restore').waitFor(T);
+    await r.locator('#backup-restore').click();
+    /* a precondition: the tap has been answered, one way or the other */
+    await r.waitForFunction(() => /^Not restored/.test(Memorizer.ui.backupStatus || '') || Memorizer.ui.notice === 'Backup restored.', null, T);
+    return r.evaluate(() => Memorizer.ui.backupStatus);
+  };
+  head('a restore is refused while a whole book is being imported');
+  {
+    const r = await context('restore-import');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Before the book'); await r.locator('#learn-unit').waitFor(T);
+    const backup = await r.evaluate(() => MemBackup.exportText());
+    /* two parts: the first is read and staged, the second's reading is held */
+    await r.evaluate(() => {
+      const part = () => ({ pages: [{ page: 1, lines: [{ text: 'A synthetic paragraph with enough readable words to make a section of this part of the book.', size: 10, y: 10 }] }],
+        wordCounts: [16], numPages: 1, figures: [], ocr: [], outline: [] });
+      let n = 0;
+      MemPdf.read = () => ++n === 1 ? Promise.resolve(part()) : new Promise(resolve => { window.__readPart2 = () => resolve(part()); });
+      Memorizer.importBook([new File(['first'], 'Book_1-1.pdf'), new File(['second'], 'Book_2-2.pdf')]);
+    });
+    await r.waitForFunction(() => typeof window.__readPart2 === 'function', null, T);
+    ok('(the first part is staged while the second is read)', await r.evaluate(async () => (await MemStore.all('files')).length) === 1);
+    const status = await restoreNow(r, backup);
+    ok('the restore is refused while the import runs, and says why', /^Not restored: an import is running\. Finish or cancel it, then restore the backup\.$/.test(status), status);
+    await r.evaluate(() => window.__readPart2());
+    await r.waitForFunction(() => !Memorizer.ui.importJob, null, T);
+    const got = await r.evaluate(async () => {
+      const books = await MemStore.all('books'), files = (await MemStore.all('files')).map(f => f.id);
+      return { books: books.length, parts: books[0] ? books[0].parts.map(p => files.indexOf(p.fileId) >= 0) : [], problem: (await MemBackup.exportChecked()).problem };
+    });
+    ok('and the import commits a whole book: each part has its PDF, and a backup of it would restore',
+       got.books === 1 && got.parts.length === 2 && got.parts.every(Boolean) && got.problem === null, JSON.stringify(got));
+  }
+  head('a restore is refused while a book is being cut again');
+  {
+    const r = await context('restore-recut');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Recut restore'); await r.locator('#learn-unit').waitFor(T);
+    const backup = await r.evaluate(() => MemBackup.exportText());
+    /* the synthetic book of the "failed recuts" block, with its PDF; the
+       cut's write is held until __landCut lets it go */
+    await r.evaluate(async () => {
+      const id = Memorizer.ui.docId, b = { id: 'synthetic-book', name: 'Synthetic book', pages: 2, method: 'numbered', scanned: [], outline: [],
+        parts: [{ fileId: 'synthetic-part', first: 1, last: 2 }], chapters: [{ title: 'One', pageStart: 1, pageEnd: 1, docId: id }, { title: 'Two', pageStart: 2, pageEnd: 2, docId: null }], found: {} };
+      await MemStore.batch([{ store: 'books', value: b }, { store: 'files', value: { id: 'synthetic-part', bytes: new Uint8Array([37, 80, 68, 70]).buffer } },
+        { store: 'bookpages', value: { id: b.id + ':0', pages: [{ page: 1, lines: [{ text: 'A synthetic paragraph with enough readable words to retain this source during chapter cutting.', size: 10, y: 10 }] }] } }]);
+      window.__realCommit = MemStore.commit;
+      MemStore.commit = (ops, gone) => ops.some(o => o.store === 'books') ? new Promise((res, no) => { window.__landCut = () => window.__realCommit(ops, gone).then(res, no); }) : window.__realCommit(ops, gone);
+      Memorizer.openBook(b.id);
+    });
+    await r.locator('#methods').waitFor(T); r.on('dialog', dl => dl.accept()); await r.locator('#methods [data-method=pages]').click();
+    await r.waitForFunction(() => typeof window.__landCut === 'function', null, T);
+    const status = await restoreNow(r, backup);
+    ok('the restore is refused while the cut runs, and says why', /^Not restored: a book’s chapters are being cut again\. Wait for that to finish, then restore the backup\.$/.test(status), status);
+    await r.evaluate(() => { window.__landCut(); });
+    await r.waitForFunction(() => !Memorizer.ui.recutting, null, T);
+    const got = await r.evaluate(async () => {
+      MemStore.commit = window.__realCommit;
+      const b = await MemStore.get('books', 'synthetic-book');
+      return { method: b && b.method, unit: !!(await MemStore.get('docs', b && b.chapters[0].docId)), problem: (await MemBackup.exportChecked()).problem };
+    });
+    ok('and the cut lands on the data it was made from: the book, cut by pages, with its unit, and a backup of it would restore',
+       got.method === 'pages' && got.unit && got.problem === null, JSON.stringify(got));
+  }
+
+  head('an import is refused while a backup is being restored');
+  /* The other order: an import's parts are staged as they are read, outside
+     the write queue, so one staged before the restore's replacement commits
+     is cleared by it. Here the replacement is held until __landRestore. */
+  {
+    const r = await context('import-restore');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Restore first'); await r.locator('#learn-unit').waitFor(T);
+    const backup = await r.evaluate(() => MemBackup.exportText());
+    await r.evaluate(() => {
+      window.__realReplace = MemStore.replace;
+      MemStore.replace = ops => new Promise((res, no) => { window.__landRestore = () => window.__realReplace(ops).then(res, no); });
+      MemPdf.read = () => Promise.resolve({ pages: [], wordCounts: [], numPages: 1, figures: [], ocr: [], outline: [] });
+    });
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await r.locator('#backup-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+    await r.locator('#backup-restore').waitFor(T);
+    await r.locator('#backup-restore').click();
+    await r.waitForFunction(() => typeof window.__landRestore === 'function', null, T);
+    /* an import the guard let through is cancelled at once, so the rest still runs */
+    const during = await r.evaluate(() => { Memorizer.importBook([new File(['first'], 'Late_1-1.pdf')]); const job = Memorizer.ui.importJob; if (job) job.cancelled = true; return { job: !!job, notice: Memorizer.ui.notice }; });
+    ok('an import tapped while a backup is being restored is refused, and says why',
+       !during.job && during.notice === 'A backup is being restored. Import once it has finished.', JSON.stringify(during));
+    await r.waitForFunction(() => !Memorizer.ui.importJob, null, T);
+    await r.evaluate(() => { MemStore.replace = window.__realReplace; window.__landRestore(); });
+    await r.waitForFunction(() => Memorizer.ui.notice === 'Backup restored.', null, T);
+    const after = await r.evaluate(() => { Memorizer.importBook([new File(['first'], 'Late_1-1.pdf')]); const job = Memorizer.ui.importJob; if (job) job.cancelled = true; return { job: !!job, restoring: Memorizer.ui.restoring }; });
+    ok('and once the restore has landed, an import starts', after.job && after.restoring === false, JSON.stringify(after));
+    /* and once one has failed: the replacement refused, as a full disk would */
+    await r.waitForFunction(() => !Memorizer.ui.importJob, null, T);
+    await r.evaluate(() => { MemStore.replace = () => Promise.reject(new Error('synthetic restore refusal')); });
+    await r.locator('nav.dock').getByRole('button', { name: 'Settings' }).click();
+    await r.locator('#backup-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+    await r.locator('#backup-restore').waitFor(T);
+    await r.locator('#backup-restore').click();
+    await r.waitForFunction(() => Memorizer.ui.backupStatus === 'synthetic restore refusal', null, T);
+    const failed = await r.evaluate(() => { MemStore.replace = window.__realReplace; Memorizer.importBook([new File(['first'], 'Late_1-1.pdf')]); const job = Memorizer.ui.importJob; if (job) job.cancelled = true; return { job: !!job, restoring: Memorizer.ui.restoring }; });
+    ok('and once a restore has failed, an import starts too', failed.job && failed.restoring === false, JSON.stringify(failed));
+    await r.waitForFunction(() => !Memorizer.ui.importJob, null, T);
+  }
+
+  head('a study pack whose write is held is still applied, and so is its removal');
+  /* The pack's own write was the one write of an import, or of a removal,
+     not waited on as a step's save is: held, the screen waited on it for
+     ever. Past the bound the pack is applied (or removed), a note says the
+     save is still going, and it is stored when the write lands. */
+  {
+    const r = await context('pack-held');
+    await r.goto(URL); await r.locator('#door-add').waitFor(T); await paste(r, 'Pack held'); await r.locator('#learn-unit').waitFor(T);
+    r.on('dialog', dl => dl.accept());
+    const reply = await r.evaluate(() => {
+      const d = Memorizer.ui.docRec, c0 = d.clusters[0], text = c0.segments.find(s => !s.heading && !s.table).text;
+      return 'Reply 1.\n```json\n' + JSON.stringify({ format: 'memorizer-pack', version: 1, unit: d.name, sections: [{ section: 1, title: c0.title, lesson: { points: [{ text, page: 1 }] } }] }) + '\n```';
+    });
+    await r.evaluate(() => {
+      window.__packPut = MemStore.put; window.__packDel = MemStore.del; window.__packHeld = 0; window.__packReleases = [];
+      const hold = (real, a) => { window.__packHeld++; return new Promise((res, no) => { window.__packReleases.push(() => real.apply(MemStore, a).then(res, no)); }); };
+      MemStore.put = function (store) { return store === 'packs' ? hold(window.__packPut, arguments) : window.__packPut.apply(MemStore, arguments); };
+      MemStore.del = function (store) { return store === 'packs' ? hold(window.__packDel, arguments) : window.__packDel.apply(MemStore, arguments); };
+      window.__releasePack = () => window.__packReleases.splice(0).reduce((q, f) => q.then(f), Promise.resolve());
+    });
+    /* slow counts every save past the bound, the session save that follows
+       the pack's included, so only "some" is claimed, not how many */
+    const seen = () => r.evaluate(async () => ({ held: window.__packHeld, slow: Memorizer.ui.slowSaves, pack: !!(Memorizer.ui.pack && Memorizer.ui.pack.sections[0]),
+      card: (document.getElementById('pack-status') || {}).textContent || '', note: !!document.getElementById('store-saving'), stored: !!(await MemStore.get('packs', Memorizer.ui.docId)) }));
+    await r.locator('#pack-go').click();
+    await r.fill('#pack-text', reply);
+    await r.locator('#pack-import').click();
+    /* a precondition, not the claim: the bound has had its chance */
+    await r.waitForFunction(() => Memorizer.ui.slowSaves > 0, null, { timeout: 20000 }).catch(() => {});
+    const imported = await seen();
+    ok('(the pack\'s write was really held)', imported.held === 1 && !imported.stored, JSON.stringify(imported));
+    ok('a pack whose write is held is applied past the bound: the card counts it, and a note says the save is still going',
+       imported.pack && /^1 of 2 sections/.test(imported.card) && imported.slow > 0 && imported.note, JSON.stringify(imported));
+    await r.evaluate(() => window.__releasePack());
+    await r.waitForFunction(() => Memorizer.ui.slowSaves === 0, null, T).catch(() => {});
+    const landed = await seen();
+    ok('when the write lands the note goes, and the pack is stored', landed.stored && !landed.note && landed.slow === 0, JSON.stringify(landed));
+    await r.locator('#pack-remove').click();
+    await r.waitForFunction(() => Memorizer.ui.slowSaves > 0, null, { timeout: 20000 }).catch(() => {});
+    const removed = await seen();
+    ok('(the removal\'s write was really held)', removed.held === 2 && removed.stored, JSON.stringify(removed));
+    ok('a removal whose write is held is applied past the bound: the card says none, and a note says the save is still going',
+       !removed.pack && /none yet/.test(removed.card) && removed.slow > 0 && removed.note, JSON.stringify(removed));
+    await r.evaluate(() => { MemStore.put = window.__packPut; MemStore.del = window.__packDel; return window.__releasePack(); });
+    await r.waitForFunction(() => Memorizer.ui.slowSaves === 0, null, T).catch(() => {});
+    const gone = await seen();
+    ok('when it lands the note goes, and the pack is deleted', !gone.stored && !gone.note, JSON.stringify(gone));
   }
 
   head('restore preserves rescue and retry for newer queued failures');

@@ -719,6 +719,16 @@ head('figures drawn as lines, not pictures');
   const annotated = [].concat(...marks.map((m, i) => [[80, ['a' + i, [80, 600 - i * 14, 380, 612 - i * 14], [1, 0, 0, 1, 0, 0], [1, 0, 0, 1, 0, 0], false]]].concat(m, [[81]])));
   ok(`a crop has a ${Pdf.CROP_MARGIN}-unit margin, never past the page`, JSON.stringify(Pdf.padBox([100, 300, 400, 500], view)) === JSON.stringify([100 - Pdf.CROP_MARGIN, 300 - Pdf.CROP_MARGIN, 400 + Pdf.CROP_MARGIN, 500 + Pdf.CROP_MARGIN]) &&
      JSON.stringify(Pdf.padBox([2, 3, 610, 790], view)) === '[0,0,612,792]', JSON.stringify(Pdf.padBox([2, 3, 610, 790], view)));
+  /* The shape the crop is drawn at, which lazyImage holds before it is
+     drawn. Whether that is the drawn image's shape is verify-memorizer's
+     to measure, on a turned page and at an edge; this holds the arithmetic. */
+  const shapes = { flat: Pdf.cropShape([100, 300, 400, 500], view, 0), quarter: Pdf.cropShape([100, 300, 400, 500], view, 90),
+    threeQuarters: Pdf.cropShape([100, 300, 400, 500], view, 270), half: Pdf.cropShape([100, 300, 400, 500], view, 180),
+    edge: Pdf.cropShape([0, 300, 80, 540], view, 0), exact: Pdf.cropShape([100, 300, 400, 500], view, 90, 0) };
+  const M2 = 2 * Pdf.CROP_MARGIN;
+  ok('a crop is drawn at its padded box, on its side on a page turned a quarter, and narrower where its margin runs off the page',
+     JSON.stringify(shapes) === JSON.stringify({ flat: [300 + M2, 200 + M2], quarter: [200 + M2, 300 + M2], threeQuarters: [200 + M2, 300 + M2],
+       half: [300 + M2, 200 + M2], edge: [80 + M2 / 2, 240 + M2], exact: [200, 300] }), JSON.stringify(shapes));
   ok('a reader\u2019s highlights are annotations, never a figure — and a chart beside them still is',
      Pdf.figureBoxes(ops([].concat(...marks)), OPS, view, []).length === 1 &&
      JSON.stringify(Pdf.figureBoxes(ops(annotated.concat(chart)), OPS, view, [])) === '[[100,300,400,500]]',

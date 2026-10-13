@@ -35,7 +35,7 @@ var ui = {
   docId: null, docRec: null, state: null,
   busy: '', busyKey: '', stepSeq: 0, moving: false, slowSaves: 0, rating: false, saveError: '', notice: '',
   error: '', choice: null, pasting: false,
-  importing: '', recutting: false, reviewShown: false, reviewDone: 0, drill: null,
+  importing: '', recutting: false, restoring: false, reviewShown: false, reviewDone: 0, drill: null,
 };
 
 /* ── tiny DOM helper: h('div.cls', {attrs}, children…) ─────────────────── */
@@ -326,9 +326,14 @@ function duplicate(fp) {
   return true;
 }
 /* Only one import owns progress and staged records at a time. Cancellation
-   is checked between pages and immediately before the final transaction. */
+   is checked between pages and immediately before the final transaction.
+   None starts while a backup is being restored: its parts are staged as they
+   are read, outside the write queue, and one staged before the restore's
+   replacement committed was cleared by it, as a restore tapped during an
+   import cleared them (the restore refuses that order). */
 function beginImport() {
   if (ui.importJob) { ui.notice = 'An import is already running. Finish or cancel it first.'; render(); return null; }
+  if (ui.restoring) { ui.notice = 'A backup is being restored. Import once it has finished.'; render(); return null; }
   var job = { cancelled: false, committing: false }; ui.importJob = job; return job;
 }
 function checkImport(job) { if (job && job.cancelled) { var e = new Error('Import cancelled.'); e.cancelled = true; throw e; } }
@@ -414,7 +419,13 @@ function bookName(files) {
    method renames chapters); the others are built from the book's stored
    text, and units no chapter uses any more are deleted. `book.chapters`
    must be the chapters as stored: their units are the ones kept or
-   dropped (recut reads the book from the store for this). */
+   dropped (recut reads the book from the store for this). Written in the
+   store's queue (Store.commit), and the units no chapter keeps go as a
+   deleted unit does: their cleanup is read in that turn, a failed save of
+   theirs waiting for retry is dropped, and a later save for one is refused.
+   Written with a raw batch, the failed save stayed in every export and came
+   back on "Try saving again": a session for a unit that was gone, which no
+   backup would restore. */
 function applyChapters(book, chapters, pages) {
   var old = {};
   (book.chapters || []).forEach(function (c) { if (c.docId) old[c.pageStart + ':' + c.pageEnd] = c.docId; });
@@ -441,9 +452,9 @@ function applyChapters(book, chapters, pages) {
   });
   return Promise.all(puts).then(function (list) {
     var gone = Object.keys(old).map(function (k) { return old[k]; }).filter(function (id) { return !keep[id]; });
-    return Store.removalOps(gone).then(function (drops) {
-      var next = Object.assign({}, book, { chapters: list });
-      return Store.batch(ops.concat(drops, [{ store: 'books', value: next }, { store: 'meta', id: 'import:' + book.id, delete: true }])).then(function () { book.chapters = list; docsChanged(); });
+    var next = Object.assign({}, book, { chapters: list });
+    return Store.commit(ops.concat([{ store: 'books', value: next }, { store: 'meta', id: 'import:' + book.id, delete: true }]), gone).then(function () {
+      book.chapters = list; docsChanged(); ui.saveError = Store.failureMessage() || ui.actionError;
     });
   });
 }
@@ -784,20 +795,34 @@ function withBytes(fileId) {
   byteLoads[fileId] = p; p.then(function () { delete byteLoads[fileId]; }, function () { delete byteLoads[fileId]; }); return p;
 }
 var imageObserver = null;
+/* The unit's own record of the figure at this box, which knows its page's
+   view and rotation (pdf.js pageOf). The callers hand on a copy's page and
+   box (the pearl's visual, an occlusion card), so it is found by those. */
+function figureRecord(d, pageNo, box) {
+  var key = box.join(',');
+  return ((d && d.figures) || []).filter(function (f) { return f.page === pageNo && f.box && f.box.join(',') === key; })[0] || null;
+}
 /* margin: the crop's margin round the box, Pdf.CROP_MARGIN unless given
    (the occlusion figure draws the box exactly: its mask is placed in
    fractions of the box). */
 function lazyImage(alt, pageNo, box, scale, d, margin) {
   var img = h('img', { alt: alt, loading: 'lazy' }), at = where(d || ui.docRec, pageNo), held = false;
-  /* The figure's shape before it is drawn. The crop is the box with its
-     margin round it (pdf.js padBox), so a box in that ratio lets the
-     browser hold the space from the first paint. Without it the image was
-     0 px tall until it scrolled near, then grew to its full height, and
-     everything below it jumped: in the lesson, the "now memorise it"
-     button moved 324 px under a tap that had already been aimed at it. */
+  /* The figure's shape before it is drawn: the shape of the crop the
+     renderer will make (pdf.js cropShape: the box with its margin, kept on
+     the page, on its side when the page is turned), so the browser holds
+     the space from the first paint. Without it the image was 0 px tall
+     until it scrolled near, then grew to its full height, and everything
+     below it jumped: in the lesson, the "now memorise it" button moved
+     324 px under a tap that had already been aimed at it. A record found
+     before the page's view and rotation were kept (FIGURES_V 5) gets the
+     box and its margin, which is the crop's shape unless the page is
+     turned or the margin runs off its edge; the unit's figures are found
+     again on its next opening. */
   var m = margin == null ? (Pdf.CROP_MARGIN || 0) : margin;
   if (box && box.length === 4) {
-    var bw = Math.abs(box[2] - box[0]) + 2 * m, bh = Math.abs(box[3] - box[1]) + 2 * m;
+    var rec = figureRecord(d || ui.docRec, pageNo, box);
+    var shape = rec && rec.view ? Pdf.cropShape(box, rec.view, rec.rotate, m) : [Math.abs(box[2] - box[0]) + 2 * m, Math.abs(box[3] - box[1]) + 2 * m];
+    var bw = shape[0], bh = shape[1];
     /* The attributes alone are not enough: WebKit (Safari, the iPad) takes no
        ratio from them while the image has no src, and held 29 px of a 128 px
        figure: it shows the alt text, one line tall, and "aspect-ratio: auto
@@ -810,13 +835,13 @@ function lazyImage(alt, pageNo, box, scale, d, margin) {
       img.style.aspectRatio = Math.round(bw) + ' / ' + Math.round(bh); held = true;
     }
   }
-  /* Drawn, the image takes its own shape and size again. The held box is
-     only a guess at it: a crop clamped at the page edge is narrower, a
-     page with /Rotate turns it on its side, and held there the picture was
-     shrunk inside it with white bars (and an occlusion mask, placed in
-     fractions of the image, missed its label). In the lightbox the width
-     attribute, in PDF points, drew "Enlarge" at 1x instead of the 2.5x
-     render, smaller than the figure it enlarged. */
+  /* Drawn, the image takes its own shape and size again. The held box can
+     still be a guess (a record from before FIGURES_V 5, or a box no record
+     matches), and held at a wrong shape the picture was shrunk inside it
+     with white bars (and an occlusion mask, placed in fractions of the
+     image, missed its label). In the lightbox the width attribute, in PDF
+     points, drew "Enlarge" at 1x instead of the 2.5x render, smaller than
+     the figure it enlarged. */
   img.onload = function () {
     if (!held) return;
     held = false; img.removeAttribute('width'); img.removeAttribute('height'); img.style.aspectRatio = '';
@@ -1283,7 +1308,10 @@ function segBar(pct) {
 function tileState(pct, started) { return pct >= 100 ? 'done' : pct > 0 || started ? 'in progress' : 'not started'; }
 /* A section deleted by the owner (session.js dropSection): its progress,
    review cards and pack entry go, the sections after it move up one, and
-   the unit's search vectors are made again when next needed. */
+   the unit's search vectors are made again when next needed. Written in the
+   store's queue (Store.commit), which drops a failed save of this unit's
+   session still waiting for retry: that save held the deleted section, and
+   replayed after the deletion it made every later backup unrestorable. */
 function deleteSection(i) {
   var d = ui.docRec, st0 = ui.state, c = d && d.clusters[i];
   if (!c) return Promise.resolve();
@@ -1298,9 +1326,10 @@ function deleteSection(i) {
   if (pack2) ops.push({ store: 'packs', value: pack2 });
   cards.drop.forEach(function (id) { ops.push({ store: 'cards', id: id, delete: true }); });
   cards.renumbered.forEach(function (x) { ops.push({ store: 'cards', value: x }); });
-  return Store.batch(ops).then(function () {
+  return Store.commit(ops).then(function () {
     docsChanged(); ui.docRec = doc2; ui.state = st; ui.pack = pack2; ui.notes = notes; ui.checks = checks;
     ui.figsFor = null; ui.packReport = null; ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} };
+    ui.saveError = Store.failureMessage() || ui.actionError;
     return refresh();
   }).then(function () { ui.notice = 'Deleted “' + c.title + '”.'; render(); }, function (e) { saveFailed(e, true); render(); });
 }
@@ -1484,7 +1513,9 @@ function packReportView(r) {
 }
 /* A reply, checked and stored: its sections replace the built-in lessons
    and questions (session.js 'packed'); nothing is stored when nothing
-   passed. */
+   passed. The pack's own write is waited on as a step's save is
+   (waitForSave): one that never settled left the import, and the screen,
+   waiting on it for ever. So does removePack's. */
 function importPack(text) {
   var d = ui.docRec, got = Pack.parse(text);
   if (!got.ok) { ui.packReport = { error: got.error }; render(); return Promise.resolve(); }
@@ -1492,7 +1523,7 @@ function importPack(text) {
   ui.packReport = { report: Pack.report(checked), refused: checked.refused, dropped: checked.dropped };
   if (!checked.sections.length) { render(); return Promise.resolve(); }
   var rec = Pack.merge(ui.pack, checked, d, Date.now());
-  return Store.put('packs', rec).then(function () {
+  return waitForSave(Store.put('packs', rec)).then(function () {
     ui.pack = rec; ui.packText = '';
     clearDraft('pack-text');
     return waitForSave(dispatch({ type: 'packed', value: { sections: checked.sections.map(function (s) { return Pack.safeSection(rec, s.index, d); }).filter(Boolean) } }));
@@ -1503,7 +1534,7 @@ function importPack(text) {
    (session.js 'unpacked'); scores and cards stay. */
 function removePack(d) {
   if (!root.confirm('Remove the study pack from "' + d.name + '"? Its sections are taught by the built-in coach again; your scores and review cards are kept.')) return Promise.resolve();
-  return Store.del('packs', d.id).then(function () {
+  return waitForSave(Store.del('packs', d.id)).then(function () {
     ui.pack = null; ui.packReport = null;
     return waitForSave(dispatch({ type: 'unpacked' }));
   }).then(render, function (e) { saveFailed(e); render(); });
@@ -1789,7 +1820,9 @@ function micButton(onText, id) {
 }
 /* CORRECT THE TEXT: a paragraph of a section read by text recognition,
    corrected by you (study.js correctSegment) and kept with what it said
-   before; the lesson is taught again from the corrected text. */
+   before; the lesson is taught again from the corrected text. Written as
+   deleteSection's is (Store.commit), for the same reason: a failed session
+   save waiting for retry still held the section's old lesson and cards. */
 function fixCard(c) {
   var d = ui.docRec, ci = ui.state.section;
   if (!(d.source === 'photo' || Prov.ocrPagesIn(d, c).length)) return null;
@@ -1815,8 +1848,9 @@ function saveFix(ci, si, text) {
   if (pack) ops.push({ store: 'packs', value: pack });
   ui.cards.filter(function (x) { return x.docId === id && x.cluster === ci; }).forEach(function (x) { ops.push({ store: 'cards', id: x.id, delete: true }); });
   ui.stepSeq++; ui.busy = ''; ui.fixOpen = true;
-  return Store.batch(ops).then(function () {
+  return Store.commit(ops).then(function () {
     clearDraft('fix:' + si); docsChanged(); ui.ai.lesson = {}; ui.ai.miss = {}; ui.tutor = { v: {}, asking: {} }; ui.askIdx = null; ui.secVecs = null;
+    ui.saveError = Store.failureMessage() || ui.actionError;
     if (ui.docId === id) { ui.docRec = fixed; ui.state = st; ui.pack = pack; ui.checks = checks; ui.notice = 'Corrected. Questions and review cards from the changed section were retired; study it again from the corrected text.'; }
     return refresh();
   }).then(render, function (e) { saveFailed(e, true); render(); });
@@ -2824,10 +2858,13 @@ function clozeCard(card, tag, rate) {
    and a mask where the label was printed (study.js maskOf). Answered, the
    mask lifts. The mask is in fractions of the figure's box, so the image is
    the box exactly, with no crop margin: drawn with the margin, the mask
-   sat up to 8 pt off its label, and the label's first letter showed. */
+   sat up to 8 pt off its label, and the label's first letter showed. On a
+   turned page the picture is drawn on its side, and the mask turns with it
+   (study.js turnMask), by the turn the unit's figure record knows. */
 function occlusionFigure(card) {
   var d = ui.docs.filter(function (x) { return x.id === card.docId; })[0];
-  var m = card.mask, pc = function (v) { return (100 * v).toFixed(2) + '%'; };
+  var rec = figureRecord(d, card.figure.page, card.figure.box);
+  var m = Study.turnMask(card.mask, rec && rec.rotate), pc = function (v) { return (100 * v).toFixed(2) + '%'; };
   return h('div.occlusion' + (ui.choice != null ? '.revealed' : ''), { id: 'occlusion' },
     lazyImage('A figure with one label hidden', card.figure.page, card.figure.box, 2, d, 0),
     h('span.occlusion-mask', { 'aria-hidden': 'true', style: 'left:' + pc(m.left) + ';top:' + pc(m.top) + ';width:' + pc(m.width) + ';height:' + pc(m.height) }));
@@ -3913,12 +3950,20 @@ function storageCard() {
         h('p', r.docs + ' units, ' + r.books + ' books and ' + r.cards + ' cards. Created ' + r.created + '.'),
         h('p', 'This replaces all study data on this device. Export the current data first if you need to keep it. Provider keys and model downloads stay on this device.'),
         h('div.row', button('Cancel', function () { close(); }, 'quiet'), button('Replace study data', function () {
-          close(); ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; render();
+          close();
+          /* Not while an import or a cut is running. A restore replaces every
+             record, the parts an import has staged with them, and the import
+             then committed a book whose earlier parts had no PDF or text; a
+             cut made from the old data landed on the restored data after it.
+             Refused, the data is as it was and the file is still to hand. */
+          var busy = ui.importJob ? 'an import is running. Finish or cancel it' : ui.recutting ? 'a book’s chapters are being cut again. Wait for that to finish' : '';
+          if (busy) { ui.backupStatus = 'Not restored: ' + busy + ', then restore the backup.'; render(); return; }
+          ui.openSeq++; ui.stepSeq++; ui.busy = ''; stopPractice(); ui.backupStatus = 'Restoring…'; ui.restoring = true; render();
           root.MemBackup.restore(text).then(function () {
-            ui.lastBackup = undefined; ui.backupSnooze = undefined;
+            ui.restoring = false; ui.lastBackup = undefined; ui.backupSnooze = undefined;
             ui.docId = null; ui.docRec = null; ui.state = null; ui.bytesFor = null; ui.bytes = null; byteLoads = {}; Pdf.release(); ui.drafts = {}; ui.actionError = ''; ui.saveError = ''; ui.askIdx = null; ui.secVecs = null; ui.storageHealth = null;
             docsChanged(); ui.view = 'library'; ui.notice = 'Backup restored.'; return refresh();
-          }).then(render, function (err) { ui.backupStatus = err.message; render(); });
+          }).then(render, function (err) { ui.restoring = false; ui.backupStatus = err.message; render(); });
         }, 'primary', { id: 'backup-restore' })));
       close = Dialog.open(el, doc.getElementById('app'));
     }); }).catch(function (err) { ui.backupStatus = 'Not restored: ' + err.message; render(); });

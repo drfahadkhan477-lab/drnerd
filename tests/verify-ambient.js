@@ -53,7 +53,7 @@ process.on('exit', () => { try { fs.rmSync(TMP, { recursive: true, force: true }
 /* The environment the earlier steps would supply: the modules, an S with a
    screen, a #shell the Apex panel toggles `ai-open` on, and one door under
    the middle of the screen, to find out whether a tap on the overlay presses
-   it. The anchor is spelled as ambient-patch spells it. */
+   it. The anchor is spelled as ambient-patch.js spelled it. */
 const MODULES = ['src/core/physio.js', 'src/core/leads12.js', 'src/ui/ecg12.js',
                  'src/ui/wiggers.js', 'src/core/heart3d.js', 'src/ui/livingDiagram.js'];
 const SCAFFOLD = `<!doctype html><html><head><meta charset="utf-8"><style>

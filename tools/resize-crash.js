@@ -69,7 +69,8 @@ const rebuild = page => page.evaluate(async () => {
 
 /* Keeps hold of whatever transition the app starts, so a case can wait for it
    or skip it. Wraps rather than replaces: the page still goes through
-   document.startViewTransition exactly as failsafe-patch wrote it. */
+   document.startViewTransition exactly as render() in app/systole.html
+   calls it. */
 const STASH_VT = () => {
   const orig = Document.prototype.startViewTransition;
   if (!orig) return;
@@ -163,7 +164,7 @@ const CASES = [
      a jump into a question and back is the only thing that kills it, at both
      scale factors, and the source suggested this:
 
-       scripts/stage0-patch.js registers an ink host per question card —
+       app/systole.html registers an ink host per question card —
            host.__ro = new ResizeObserver(fit); host.__ro.observe(host);
        and sweepInkHosts(), which disconnects the observers of hosts that have
        left the document, is called from EXACTLY ONE PLACE: mountInk().
@@ -239,7 +240,7 @@ const CASES = [
 
   /* ── ROUND THREE: the transition, and whether skipping it is the fix ─────
      Round two's three survivors all say the same thing. A view transition
-     only starts when the SCREEN CHANGES — failsafe-patch.js:
+     only starts when the SCREEN CHANGES — render() in app/systole.html:
 
          const changingScreen = lastScreen!==null && lastScreen!==S.screen;
          if(changingScreen && document.startViewTransition && !reduced){
@@ -289,7 +290,7 @@ const CASES = [
 
      Twenty screen changes at 110 and 210 milliseconds. Every one starts a view
      transition, and they start faster than they settle — which the app already
-     knows about: failsafe-patch swallows the AbortError that ready and
+     knows about: render() swallows the AbortError that ready and
      finished reject with "whenever a newer transition starts before the
      current one settles". Harmless on Chromium. The question is whether it is
      harmless here.

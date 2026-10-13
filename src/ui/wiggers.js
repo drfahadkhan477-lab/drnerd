@@ -53,6 +53,11 @@ function mount(canvas, opts) {
     view: opts.view || 'wiggers',
     dark: !!opts.dark,
     hr: opts.hr || 75,
+    /* How much slower than real time the animation runs. NOT a change to the
+       heart rate: the rate is a fact about the patient and the slowdown is a
+       fact about the playback, and a diagram that expressed one as the other
+       would be labelling a slow-motion replay as a bradycardia. */
+    slow: opts.slow || 1,
     t: 0,
     playing: opts.playing !== false,
     iv: 'base',
@@ -898,7 +903,7 @@ function mount(canvas, opts) {
       const t = S.src();
       if (t != null && t >= 0) S.t = Ph.wrap(t);
     } else if (S.playing && !S.scrub && S.view !== 'curves') {
-      S.t = Ph.wrap(S.t + dt / secs());
+      S.t = Ph.wrap(S.t + dt / (secs() * (S.slow || 1)));
     }
     draw();
     if (S.onFrame) S.onFrame(S.t);
@@ -910,6 +915,8 @@ function mount(canvas, opts) {
     setView(v) { S.view = v; draw(); return api; },
     setDark(d) { S.dark = !!d; draw(); return api; },
     setRate(hr) { S.hr = hr || 75; rOffset = null; draw(); return api; },
+    setSlow(n) { S.slow = n > 0 ? n : 1; return api; },
+    slow: () => S.slow,
     setTime(t) { S.t = Ph.wrap(t); draw(); return api; },
     time: () => S.t,
     setIntervention(id) { S.iv = id; draw(); return api; },

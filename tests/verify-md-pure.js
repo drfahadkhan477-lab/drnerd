@@ -210,7 +210,7 @@ head('what a model says cannot become what the page runs');
 
 head('the figure rule is the one place md() writes an attribute');
 {
-  /* ref-images-patch builds `<img src="${src}" alt="${cap}">` from a caption
+  /* The figure rule builds `<img src="${src}" alt="${cap}">` from a caption
      taken out of the escaped string. It is the only interpolation in md() that
      lands inside quotes, which makes it the only one whose safety depends on
      e() escaping the quote character rather than just the angle brackets. */

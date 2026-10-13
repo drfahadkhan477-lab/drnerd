@@ -13,7 +13,7 @@
  * The split build is assembled from TWO inputs that are produced by two
  * different commands:
  *
- *     scripts/build.js            → build/systole.html
+ *     scripts/assemble-app.js     → build/systole.html  (npm run build)
  *     scripts/extract-content.js  → content/            (from that html)
  *     scripts/build-pwa.js        → dist/               (from both)
  *

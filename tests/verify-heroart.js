@@ -48,9 +48,9 @@ if (!target) { console.error('usage: node tests/verify-heroart.js <patched.html>
 const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
 let passed = 0, failed = 0, unmeasured = 0;
-/* The baked mesh was made from src/core/heart3d.js as apex-patch embedded it
-   (step 4). A later step that rewrote any of the heart's text would leave the
-   copy describing code the build no longer runs, under a key that still
+/* The baked mesh is made from src/core/heart3d.js as scripts/assemble-app.js
+   embeds it. Anything later that rewrote any of the heart's text would leave
+   the copy describing code the build no longer runs, under a key that still
    matches — so the finished build must still carry that file byte for byte. */
 const heartVerbatim = /^https?:\/\//.test(target) ? null
   : require('fs').readFileSync(target, 'utf8').includes(require('fs').readFileSync(path.join(__dirname, '..', 'src', 'core', 'heart3d.js'), 'utf8'));

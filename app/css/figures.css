@@ -314,7 +314,7 @@ html[data-theme="light"]{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-
 /* AI panel: real provenance */
 .ai-powered{font-size:9px;color:var(--muted);text-align:center;padding:3px 0 8px;letter-spacing:.02em}
 /* Never --dim: it fails AA at every theme, which is what contrastfix-patch.js
-   exists to have settled. A disclaimer nobody can read is not a disclaimer.
+   existed to settle. A disclaimer nobody can read is not a disclaimer.
    Sizes are steps on the type ladder, not round numbers — verify-type.js
    rejects any fixed font-size that is not, and rejected 10px here first. */
 /* The standard visually-hidden idiom: reachable by assistive technology,

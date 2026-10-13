@@ -295,9 +295,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      onto a canvas this test creates itself.
 
      The hero mounts the module again now, in the specimen style — but the
-     evidence stays on this test's own canvas deliberately. What polish-patch
-     is responsible for is re-embedding heart3d.js in one piece, and that claim
-     should not depend on which screen happens to use it this month.
+     evidence stays on this test's own canvas deliberately. What is held here
+     is heart3d.js embedded in one piece, and that claim should not depend on
+     which screen happens to use it this month.
      tests/verify-heroart.js owns the hero. */
   const heartModule = await page.evaluate(() => {
     goHome(); render();

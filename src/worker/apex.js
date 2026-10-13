@@ -32,7 +32,10 @@
         and nothing in the code would have said so. It is now enforced here
         rather than assumed of the deployment: no identity, no request, unless
         APEX_ALLOW_UNAUTHENTICATED is set to exactly "yes" by someone who meant
-        it (wrangler dev, or a deployment kept private some other way).
+        it (wrangler dev, or a deployment kept private some other way). And the
+        identity is the token Access SIGNS, checked here against the team's
+        published keys (ACCESS_TEAM_DOMAIN, ACCESS_AUD) — not a header naming
+        someone, which any client can type. See accessVerifier() below.
      2. The output clamp below, which bounds what any single request can cost.
      3. The body cap.
      4. The rate limiter, which is best-effort and says so: a Worker isolate has
@@ -226,7 +229,178 @@ function clampOutput(raw, max) {
   return { body: raw.slice(0, at) + String(max) + raw.slice(at + m[0].length) };
 }
 
-export async function handleApex(request, env, fetchImpl) {
+/* ── WHO IS ASKING: the token Access signs, checked here ─────────────────────
+   The gate in handleApex used to take the caller's word for it. It read
+   cf-access-authenticated-user-email, which Access sets when Access is in
+   front — but a deployment WITHOUT Access in front is the case the gate
+   exists for, and there that header is whatever the client sent. One typed
+   header was an identity, and the key went out.
+
+   What a client cannot type is Cf-Access-Jwt-Assertion: a JWT Access signs
+   (RS256) with the team's key on every request it lets through. So that is
+   what is checked, with WebCrypto, before the key is used:
+
+     - the signature, against the keys the team publishes at
+       <team domain>/cdn-cgi/access/certs, picked by the token's kid;
+     - iss, which must be that same team;
+     - aud, which must include this application's AUD tag. Every application
+       in a team is signed with the same keys, so a token for another of the
+       owner's Access applications verifies perfectly and is still not for
+       this one;
+     - exp, which is required, and nbf when it is present;
+     - email, which becomes the identity. Nothing else in the request does.
+
+   Which team and which application come from the Worker's own environment,
+   and the gate fails closed without them:
+
+     ACCESS_TEAM_DOMAIN  the Zero Trust team domain, yourteam.cloudflareaccess.com
+     ACCESS_AUD          the Application Audience (AUD) tag of the Access
+                         application in front of this project
+
+   The keys are fetched from ACCESS_TEAM_DOMAIN and nowhere else — never from
+   anything the token names, since a token is free to name a key server its
+   author runs. They are kept for CERTS_TTL_MS per isolate. A key Access
+   starts signing with is therefore accepted at most that long after it is
+   published; until then a token signed with it is refused, never let
+   through. A fetch that fails is not remembered, so the next request tries
+   again.
+
+   fetchCerts(url) is how the keys are fetched: the platform's fetch in
+   production (checkAccess below), a stub in tests/verify-worker.js. */
+const CERTS_TTL_MS = 5 * 60 * 1000;
+/* Access mints the token on one machine and this reads it on another, so a
+   token minted this second can carry an nbf a moment ahead of this clock. It
+   is not refused for that. exp gets no such allowance. */
+const NBF_SKEW_S = 60;
+
+const SET_ACCESS = 'Set ACCESS_TEAM_DOMAIN (your Zero Trust team domain, like ' +
+  'yourteam.cloudflareaccess.com) and ACCESS_AUD (the Application Audience (AUD) tag of the ' +
+  'Access application in front of this project) in Settings → Environment variables — or, if ' +
+  'this deployment is private by other means, set APEX_ALLOW_UNAUTHENTICATED to "yes". ' +
+  'Until then the Gemini key is not handed out.';
+
+/* ACCESS_TEAM_DOMAIN as typed into a dashboard field: the bare domain Zero
+   Trust shows, or the same with https:// in front (Cloudflare's own examples
+   write it that way), with or without a trailing slash, in any case. Anything
+   else — a path, a port, http — is refused by name rather than guessed at: a
+   wrong team is a gate that refuses everyone, and the refusal should say
+   which setting did it. Returns the bare host, lower-cased, or null. */
+function teamHost(value) {
+  const host = value.replace(/^https:\/\//i, '').replace(/\/$/, '').toLowerCase();
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? host : null;
+}
+
+/* base64url as a JWT writes it — no padding, - and _ for + and / — to bytes,
+   or null if it is not that. */
+function unb64url(s) {
+  if (!/^[A-Za-z0-9_-]*$/.test(s) || s.length % 4 === 1) return null;
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4));
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+/* A JWT segment that must decode to a JSON object, or null. */
+function jsonPart(s) {
+  const bytes = unb64url(s);
+  if (!bytes) return null;
+  try {
+    const v = JSON.parse(new TextDecoder().decode(bytes));
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  } catch (_) { return null; }
+}
+
+/* Returns verifyAccess(request, env), which resolves to { email } for a
+   request Access let through, or { status, message } for one it did not. */
+export function accessVerifier(fetchCerts) {
+  const cache = new Map();          // certs URL → { at, keys: Map(kid → CryptoKey) }
+
+  async function teamKeys(url) {
+    const hit = cache.get(url);
+    if (hit && Date.now() - hit.at < CERTS_TTL_MS) return hit.keys;
+    const r = await fetchCerts(url);
+    if (!r.ok) throw new Error(`the certs endpoint answered ${r.status}`);
+    const listed = ((await r.json()) || {}).keys;
+    const keys = new Map();
+    for (const k of Array.isArray(listed) ? listed : []) {
+      if (!k || k.kty !== 'RSA' || typeof k.kid !== 'string') continue;
+      try {
+        keys.set(k.kid, await crypto.subtle.importKey('jwk', { kty: 'RSA', n: k.n, e: k.e },
+          { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']));
+      } catch (_) { /* one key that will not import does not cost the others */ }
+    }
+    if (!keys.size) throw new Error('the certs endpoint listed no usable key');
+    cache.set(url, { at: Date.now(), keys });
+    return keys;
+  }
+
+  const refuse = (status, message) => ({ status, message });
+  const bad = why => refuse(403, `The Cloudflare Access token on this request was refused: ${why}.`);
+
+  return async function verifyAccess(request, env) {
+    const domain = String(env.ACCESS_TEAM_DOMAIN || '');
+    const aud = String(env.ACCESS_AUD || '');
+    if (!domain || !aud) {
+      const missing = [!domain && 'ACCESS_TEAM_DOMAIN', !aud && 'ACCESS_AUD'].filter(Boolean);
+      return refuse(403, `This deployment cannot check who is asking: ${missing.join(' and ')} ` +
+        `${missing.length > 1 ? 'are' : 'is'} not set. ${SET_ACCESS}`);
+    }
+    const host = teamHost(domain);
+    if (!host) {
+      return refuse(403, 'ACCESS_TEAM_DOMAIN is not a team domain: it should read like ' +
+        `yourteam.cloudflareaccess.com. ${SET_ACCESS}`);
+    }
+    const iss = 'https://' + host;
+
+    const token = request.headers.get('cf-access-jwt-assertion');
+    if (!token) {
+      return refuse(403,
+        'This request carries no Cloudflare Access token, so nothing says who is asking. Put ' +
+        'Cloudflare Access in front of the project so only you can reach it — or, if it is ' +
+        'private by other means, set APEX_ALLOW_UNAUTHENTICATED to "yes" in Settings → ' +
+        'Environment variables. Until one of those is true the Gemini key is not handed out.');
+    }
+    const parts = token.split('.');
+    const head = parts.length === 3 ? jsonPart(parts[0]) : null;
+    if (!head) return bad('it is not a JWT');
+    if (head.alg !== 'RS256') return bad('it is not signed with RS256');
+    const claims = jsonPart(parts[1]);
+    const sig = unb64url(parts[2]);
+    if (!claims || !sig) return bad('it is not a JWT');
+
+    const now = Date.now() / 1000;
+    if (claims.iss !== iss) return bad('its issuer (iss) is not the team in ACCESS_TEAM_DOMAIN');
+    if (!(Array.isArray(claims.aud) ? claims.aud : [claims.aud]).includes(aud)) {
+      return bad('its audience (aud) does not include ACCESS_AUD');
+    }
+    if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp)) return bad('it carries no expiry (exp)');
+    if (now >= claims.exp) return bad('it has expired (exp); reload the page and sign in again');
+    if (claims.nbf !== undefined && !(typeof claims.nbf === 'number' && claims.nbf <= now + NBF_SKEW_S)) {
+      return bad('it is not valid yet (nbf)');
+    }
+    if (typeof claims.email !== 'string' || !claims.email.trim()) return bad('it names no email address');
+
+    let keys;
+    try { keys = await teamKeys(iss + '/cdn-cgi/access/certs'); }
+    catch (_) {
+      return refuse(503, `Could not fetch the signing keys of ${host} to check the Cloudflare ` +
+        'Access token, so the request was refused rather than let through. Try again in a ' +
+        'moment; if it keeps happening, check ACCESS_TEAM_DOMAIN.');
+    }
+    const key = typeof head.kid === 'string' && keys.get(head.kid);
+    if (!key) return bad('it is signed with a key the team does not publish');
+    let verified = false;
+    try {
+      verified = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, sig,
+        new TextEncoder().encode(parts[0] + '.' + parts[1]));
+    } catch (_) { verified = false; }
+    if (!verified) return bad('its signature does not verify');
+    return { email: claims.email };
+  };
+}
+
+/* The deployed gate: Access's keys fetched with the platform's own fetch. Its
+   cache lives in module scope, so every request this isolate serves shares it. */
+const checkAccess = accessVerifier(url => fetch(url));
+
+export async function handleApex(request, env, fetchImpl, verifyAccess) {
   const doFetch = fetchImpl || fetch;
   const url = new URL(request.url);
   const op = url.pathname.replace(/^\/api\/apex\/gemini\//, '').replace(/\/+$/, '');
@@ -243,22 +417,24 @@ export async function handleApex(request, env, fetchImpl) {
      path — was a public proxy to the owner's Gemini key, spending their quota
      for anyone who found the URL, and nothing anywhere would have said so.
 
-     So it fails closed. No Access identity, no request. The escape hatch is
+     So it fails closed. No verified Access identity, no request — and
+     "verified" means the token Access signed, not a header that names
+     someone; accessVerifier() above says why. The escape hatch is
      deliberate and explicit, because a local `wrangler dev` has no Access in
      front of it and neither does a deployment someone has decided to keep
      private by other means — but it has to be TYPED, once, by a person who
      meant it, and it is named so that it cannot be set by accident. */
-  const identity = request.headers.get('cf-access-authenticated-user-email');
-  if (!identity && String(env.APEX_ALLOW_UNAUTHENTICATED || '') !== 'yes') {
-    return fail(403,
-      'This deployment is not protected. Put Cloudflare Access in front of the ' +
-      'project so only you can reach it — or, if it is private by other means, set ' +
-      'APEX_ALLOW_UNAUTHENTICATED to "yes" in Settings → Environment variables. ' +
-      'Until one of those is true the Gemini key is not handed out.');
+  let identity = null;
+  if (String(env.APEX_ALLOW_UNAUTHENTICATED || '') !== 'yes') {
+    const access = await (verifyAccess || checkAccess)(request, env);
+    if (!access.email) return fail(access.status, access.message);
+    identity = access.email;
   }
   const rpm = positiveInt(env.APEX_RPM, DEFAULT_RPM);
-  /* Rate limiting still prefers the identity and falls back, because once the
-     gate above has passed, the only question left is how to bucket a caller. */
+  /* Rate limiting buckets on the verified identity, and on the connecting
+     address where there is none (the escape hatch). Never on the typed email
+     header: under the hatch that is still the client's word, and a new word
+     per request was a new allowance per request. */
   const who = identity || request.headers.get('cf-connecting-ip') || 'anon';
   if (rpm > 0 && overRate(who, rpm)) {
     return fail(429, 'Too many requests in a minute — wait a moment and try again.');

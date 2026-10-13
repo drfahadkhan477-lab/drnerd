@@ -210,5 +210,27 @@ head('freeze-shell writes app/ only when every check holds');
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+head('every module of src/ the app runs is a slot of the committed shell');
+{
+  /* "src/ stays the source of truth" holds for a module only when the shell
+     names it as a slot. One the shell carries inline is a copy: an edit to the
+     file never reaches the app, and nothing above would say so, because a
+     module left inline is reported only at a cut. apex.js, wiggers.js and
+     vision.js were such copies, the inline ones newer, until they were cut.
+     src/worker and src/lab are other deployables. The two bank modules are
+     read by the split build's own scripts (build-pwa, csp, extract-content),
+     not by the shell. */
+  const SHELL = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
+  const NOT_IN_SHELL = ['src/core/bankpack.js', 'src/core/bankstore.js'];
+  const mods = Object.keys(Slots.repoSources(ROOT).srcs).filter(n => !/^src\/(worker|lab)\//.test(n)).sort();
+  const slots = n => SHELL.split(Slots.token('src', n)).length - 1;
+  const loose = mods.filter(n => !NOT_IN_SHELL.includes(n) && slots(n) !== 1);
+  /* Vacuity guard: a walk that found nothing would leave nothing loose too. */
+  ok('every src/ module the app runs is exactly one slot in the shell',
+     mods.length > 20 && loose.length === 0, loose.length ? loose.map(n => `${n} (${slots(n)})`).join(', ') : `${mods.length} modules`);
+  const stale = NOT_IN_SHELL.filter(n => !mods.includes(n) || slots(n) !== 0);
+  ok('and each named exception is a real module the shell does not carry', stale.length === 0, stale.join(', ') || NOT_IN_SHELL.join(', '));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

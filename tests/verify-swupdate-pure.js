@@ -269,6 +269,7 @@ head('(d), driven: a code deploy keeps the content cache, a content deploy renam
   const Assemble = require(S('assemble-app.js'));
   const Syn = require(S('synthetic-export.js'));
   const contentVersion = lift(SRC, 'contentVersion', { fs, path, crypto });
+  const splashHeartName = lift(SRC, 'splashHeartName', { crypto });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'swupdate-'));
   try {
     /* The notes go in the temporary folder too: left to its defaults the
@@ -360,19 +361,31 @@ head('(d), driven: a code deploy keeps the content cache, a content deploy renam
       fs.mkdirSync(path.dirname(path.join(dc, rel)), { recursive: true });
       fs.writeFileSync(path.join(dc, rel), body);
     };
+    /* The splash heart goes in under the name build-pwa.js gives it
+       (splashHeartName, lifted), not one written here. */
+    const heart1 = splashHeartName(Buffer.from('h')), heart2 = splashHeartName(Buffer.from('h2'));
     put('questions.json', '[]'); put('figures/X_1.png', 'f'); put('refs-seed.json', '[]');
-    put('refs-images/u.json', '{}'); put('splash-heart/heart.webp', 'h');
+    put('refs-images/u.json', '{}'); put('splash-heart/' + heart1, 'h');
     put('heart-mesh-0123456789ab.bin', 'm'); put('manifest.json', '{}');
     const v0 = contentVersion(dc);
     put('refs-images/u.json', '{"u/a.png":"x"}');
     const v1 = contentVersion(dc);
     ok('a note figure file is content: changing one renames the bucket', v1 !== v0);
-    put('splash-heart/heart.webp', 'h2');
+    fs.rmSync(path.join(dc, 'splash-heart', heart1));
+    put('splash-heart/' + heart2, 'h2');
+    ok('a new splash heart is a new name, so it needs no version and is not',
+       heart1 !== heart2 && contentVersion(dc) === v1, `${heart1} / ${heart2}`);
+    /* Each change below is compared with the version just before it, so one
+       that fails does not fail the next one with it. */
     const v2 = contentVersion(dc);
-    ok('so is the splash heart, which is served under a fixed name', v2 !== v1);
     fs.rmSync(path.join(dc, 'heart-mesh-0123456789ab.bin'));
     put('heart-mesh-ba9876543210.bin', 'm2');
-    ok('a new heart mesh, named by its own digest and baked from code, is not', contentVersion(dc) === v2);
+    const v3 = contentVersion(dc);
+    ok('nor is a new heart mesh, named by its own digest and baked from code', v3 === v2);
+    /* Left out by name, so only those names: a file beside the picture under
+       a fixed name is served cache-first like any other, and must count. */
+    put('splash-heart/heart.webp', 'h3');
+    ok('but a file under a fixed name beside the splash heart still renames the bucket', contentVersion(dc) !== v3);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

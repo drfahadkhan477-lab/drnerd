@@ -14,7 +14,9 @@
  *   · "skip" moves the quiz screen on and records no answer; "stop" ends with a spoken summary;
  *   · leaving the quiz screen ends the session and nothing more is spoken;
  *   · so does moving the quiz by hand (an option and a rating tapped), mid-sentence or while listening, and a
- *     letter heard after the move is not recorded or rated on the question the screen moved to.
+ *     letter heard after the move is not recorded or rated on the question the screen moved to;
+ *   · with the microphone open and nothing said, that move closes it at the listen's next look (every 250 ms),
+ *     not at its 9 s timeout, and an old listener's look never ends a session started after it.
  * What it cannot show: that a real microphone hears a letter. That is the owner's, on the iPad.
  */
 'use strict';
@@ -38,6 +40,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 /* A scripted voice. Speaking is instant; listening waits for the next line pushed onto window.__heard. */
 const STUB = () => {
   window.__said = []; window.__heard = []; window.__listens = 0;
+  /* Every interval's ticks are counted, so a test can wait for the listen's own 250 ms watch to have looked,
+     rather than for a length of time. A recognizer notes the interval set just before it was made: in
+     voiceHear, that is the watch. */
+  window.__ivTicks = {}; window.__lastIv = null;
+  const setIv = window.setInterval;
+  window.setInterval = function (fn, ms, ...rest) {
+    let id = null;
+    const counted = typeof fn !== 'function' ? fn
+      : function () { try { return fn.apply(this, arguments); } finally { window.__ivTicks[id] = (window.__ivTicks[id] || 0) + 1; } };
+    id = setIv.call(window, counted, ms, ...rest);
+    window.__lastIv = id;
+    return id;
+  };
   window.SpeechSynthesisUtterance = function (t) { this.text = t; };
   /* speechSynthesis is a read-only property of window: plain assignment is silently ignored. */
   /* With window.__holdSpeech set, an utterance is kept in window.__heldSpeech until the test ends it, as a long sentence would be. */
@@ -47,6 +62,7 @@ const STUB = () => {
   window.__recs = [];
   window.SpeechRecognition = function () {
     window.__recs.push(this);
+    this.watch = window.__lastIv;
     /* Listening waits for the test to say something, as a person would; the page's own timeout ends it otherwise. */
     this.start = () => {
       this.started = true;
@@ -59,6 +75,14 @@ const STUB = () => {
       tick();
     };
     this.stop = () => { this.stopped = true; };
+  };
+  /* The microphone hears a phrase this instant: the open listener's onresult, run in the caller's own task.
+     True when an open listener took it. */
+  window.__hear = t => {
+    const r = window.__recs.filter(x => x.started && !x.stopped).pop();
+    if (!r || !r.onresult) return false;
+    r.onresult({ results: [[{ transcript: t }]] });
+    return true;
   };
 };
 
@@ -213,6 +237,27 @@ const STUB = () => {
   ok('(the old session had more of its question to say, and a new session started)', restart.parts >= 2 && restart.restarted, JSON.stringify(restart));
   ok('the new session is still running after the old one’s sentence ends', restart.bLive && restart.dock, JSON.stringify(restart));
 
+  /* The same from a listener. The old session was listening when the fellow left and started again; its watch
+     ends its own session when it finds it no longer live, and must leave the new one running. The read waits
+     for that watch to have looked once since the restart. */
+  await fresh();
+  await toStudy(page);
+  await page.click('#voiceStart');
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await waitFor(page, () => window.__listens >= 1);
+  const swap = await page.evaluate(() => {
+    const A = _voice, rec = window.__recs[window.__recs.length - 1];
+    const was = { aOpen: !!A && !!rec && rec.started === true && !rec.stopped, watch: rec ? rec.watch : null, ticks: rec ? (window.__ivTicks[rec.watch] || 0) : 0 };
+    goStudy();
+    startVoice();
+    window.__B = _voice;
+    return { ...was, restarted: !!_voice && _voice !== A };
+  });
+  await waitFor(page, w => w.watch == null || (window.__ivTicks[w.watch] || 0) > w.ticks, swap);
+  const kept = await page.evaluate(() => ({ bLive: _voice !== null && _voice === window.__B, dock: !!document.getElementById('voiceDock') }));
+  ok('(the old session was listening, and a new session started)', swap.aOpen && swap.restarted && swap.watch != null, JSON.stringify(swap));
+  ok('the old listener’s watch, looking after the restart, leaves the new session running', kept.bLive && kept.dock, JSON.stringify(kept));
+
   head('leaving the quiz ends the session');
   await fresh();
   const p3 = page;
@@ -251,24 +296,52 @@ const STUB = () => {
   ok('(a session was reading, and the taps moved the screen on to the second question)', midRead.live && midRead.idx === 1, JSON.stringify(midRead));
   ok('a move by hand mid-sentence ends the session before it listens', !read.live && read.listens === 0 && !read.dock, JSON.stringify(read));
 
+  /* With the microphone open and nothing said, the same taps used to leave it open, the dock reading "Listening",
+     until the listen's own 9 s timeout: its 250 ms watch asked only whether the session was running and the screen
+     was the quiz. The read waits for that watch to have looked once since the move (the stub counts its ticks),
+     never for a length of time, so a microphone left open cannot be rescued by waiting longer. */
+  await fresh();
+  await toStudy(page);
+  await page.click('#voiceStart');
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await waitFor(page, () => window.__listens >= 1);
+  const quietMove = await page.evaluate(() => {
+    const rec = window.__recs[window.__recs.length - 1], d = document.getElementById('voiceDock');
+    const was = { live: _voice !== null, open: !!rec && rec.started === true && !rec.stopped, dock: d ? d.querySelector('.vd-state').textContent : null };
+    selectOpt(S.questions[0].ci); rateReview(3);
+    return { ...was, idx: S.qIdx, watch: rec ? rec.watch : null, ticks: rec ? (window.__ivTicks[rec.watch] || 0) : 0 };
+  });
+  /* No watch found is the first check's failure to report, not a wait to time out on. */
+  await waitFor(page, w => w.watch == null || (window.__ivTicks[w.watch] || 0) > w.ticks, quietMove);
+  const closed = await page.evaluate(() => {
+    const rec = window.__recs[window.__recs.length - 1], d = document.getElementById('voiceDock');
+    return { stopped: !!rec && rec.stopped === true, dock: d ? d.querySelector('.vd-state').textContent : null, live: _voice !== null };
+  });
+  ok('(a session was listening, the dock said so, and the taps moved the screen on)',
+     quietMove.live && quietMove.open && quietMove.dock === 'Listening' && quietMove.idx === 1 && quietMove.watch != null, JSON.stringify(quietMove));
+  ok('a move by hand while listening closes the microphone at the listen’s next look, not at its 9 s timeout', closed.stopped, JSON.stringify(closed));
+  ok('and the dock no longer says Listening, because the session is over', closed.dock !== 'Listening' && !closed.live, JSON.stringify(closed));
+
   await fresh();
   await toStudy(page);
   await page.click('#voiceStart');
   await onScreen(page, 'quiz', { marker: '.q-card' });
   await waitFor(page, () => window.__listens >= 1);
   /* The letter is the moved-to question's key where the read question has that option (recording it there would
-     even look right), else A: it must be one both questions have, or neither would take it, fixed or not. */
+     even look right), else A: it must be one both questions have, or neither would take it, fixed or not.
+     It is heard in the same task as the taps: the listen's watch closes the microphone at its next look after a
+     move (above), so a letter lands after one only inside that window, and this puts it there every run. */
   const midListen = await page.evaluate(() => {
     const live = _voice !== null, q0 = S.questions[0], q1 = S.questions[1];
     const k = q1 && q1.ci < q0.o.length ? q1.ci : 0;
     selectOpt(q0.ci); rateReview(3);
-    return { live, idx: S.qIdx, id1: q1 && q1.id, l1: 'ABCDEFGH'[k], both: !!q1 && k < q0.o.length && k < q1.o.length };
+    const took = window.__hear('option ' + 'ABCDEFGH'[k]);
+    return { live, idx: S.qIdx, id1: q1 && q1.id, took, both: !!q1 && k < q0.o.length && k < q1.o.length };
   });
-  await page.evaluate(l => { window.__heard.push('option ' + l); }, midListen.l1);
   await waitFor(page, id => _voice === null || S.srs[id] != null, midListen.id1);
-  const heard = await page.evaluate(id => ({ live: _voice !== null, unheard: window.__heard.length, answered: !!S.answers[1], rated: S.srs[id] != null,
+  const heard = await page.evaluate(id => ({ live: _voice !== null, answered: !!S.answers[1], rated: S.srs[id] != null,
     feedback: window.__said.filter(t => /^(Correct|Not quite)\./.test(t)).length }), midListen.id1);
-  ok('(a session was listening, the taps moved the screen on, and the letter was heard)', midListen.live && midListen.idx === 1 && midListen.both && heard.unheard === 0, JSON.stringify({ midListen, unheard: heard.unheard }));
+  ok('(a session was listening, the taps moved the screen on, and the letter was heard)', midListen.live && midListen.idx === 1 && midListen.both && midListen.took === true, JSON.stringify(midListen));
   ok('a letter heard after a move by hand is not recorded, answered aloud or rated on the moved-to question', !heard.answered && !heard.rated && heard.feedback === 0, JSON.stringify(heard));
   ok('and the session ends', !heard.live, JSON.stringify(heard));
 
@@ -283,19 +356,49 @@ const STUB = () => {
   await page.click('#voiceStart');
   await onScreen(page, 'quiz', { marker: '.q-card' });
   await waitFor(page, () => window.__listens >= 1);
+  /* The key is heard in the same task as the tap: the listen's watch now ends the listen at its next look after
+     a tap (below), so a letter lands after one only inside that window, and this puts it there every run. */
   const tapped = await page.evaluate(() => {
     const q0 = S.questions[0], wrong = (q0.ci + 1) % q0.o.length;
+    const live = _voice !== null;
     selectOpt(wrong);
-    return { live: _voice !== null, idx: S.qIdx, id0: q0.id, answered: S.answered, wrongTapped: S.selected === wrong && wrong !== q0.ci, key: 'ABCDEFGH'[q0.ci] };
+    const answered = S.answered, wrongTapped = S.selected === wrong && wrong !== q0.ci;
+    const took = window.__hear('option ' + 'ABCDEFGH'[q0.ci]);
+    return { live, idx: S.qIdx, id0: q0.id, answered, wrongTapped, took };
   });
-  await page.evaluate(l => { window.__heard.push('option ' + l); }, tapped.key);
   await waitFor(page, id => _voice === null || S.srs[id] != null, tapped.id0);
-  const graded = await page.evaluate(id => ({ live: _voice !== null, unheard: window.__heard.length, rated: S.srs[id] != null,
+  const graded = await page.evaluate(id => ({ live: _voice !== null, rated: S.srs[id] != null,
     feedback: window.__said.filter(t => /^(Correct|Not quite)\./.test(t)).length }), tapped.id0);
   ok('(a session was listening, a wrong option was tapped on the same question, and the key was heard)',
-     tapped.live && tapped.idx === 0 && tapped.answered && tapped.wrongTapped && graded.unheard === 0, JSON.stringify({ tapped, unheard: graded.unheard }));
+     tapped.live && tapped.idx === 0 && tapped.answered && tapped.wrongTapped && tapped.took === true, JSON.stringify(tapped));
   ok('the card is not rated with the voice’s verdict, and no verdict is spoken', !graded.rated && graded.feedback === 0, JSON.stringify(graded));
   ok('and the session ends', !graded.live, JSON.stringify(graded));
+
+  /* With nothing said after the tap, the microphone used to stay open, the dock reading "Listening", until the
+     listen's 9 s timeout: the watch asked whether the session was live, and a tap that does not move the quiz
+     leaves it live. The read waits for the watch to have looked once since the tap, never for a length of time. */
+  await fresh();
+  await toStudy(page);
+  await page.click('#voiceStart');
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  await waitFor(page, () => window.__listens >= 1);
+  const quietTap = await page.evaluate(() => {
+    const rec = window.__recs[window.__recs.length - 1], d = document.getElementById('voiceDock');
+    const was = { live: _voice !== null, open: !!rec && rec.started === true && !rec.stopped, dock: d ? d.querySelector('.vd-state').textContent : null };
+    const q0 = S.questions[0];
+    selectOpt((q0.ci + 1) % q0.o.length);
+    return { ...was, idx: S.qIdx, answered: S.answered, id0: q0.id, watch: rec ? rec.watch : null, ticks: rec ? (window.__ivTicks[rec.watch] || 0) : 0 };
+  });
+  /* No watch found is the first check's failure to report, not a wait to time out on. */
+  await waitFor(page, w => w.watch == null || (window.__ivTicks[w.watch] || 0) > w.ticks, quietTap);
+  const tapClosed = await page.evaluate(id => {
+    const rec = window.__recs[window.__recs.length - 1], d = document.getElementById('voiceDock');
+    return { stopped: !!rec && rec.stopped === true, dock: d ? d.querySelector('.vd-state').textContent : null, live: _voice !== null, rated: S.srs[id] != null };
+  }, quietTap.id0);
+  ok('(a session was listening, the dock said so, and an option was tapped without moving the quiz)',
+     quietTap.live && quietTap.open && quietTap.dock === 'Listening' && quietTap.idx === 0 && quietTap.answered && quietTap.watch != null, JSON.stringify(quietTap));
+  ok('a tap while listening closes the microphone at the listen’s next look, not at its 9 s timeout', tapClosed.stopped, JSON.stringify(tapClosed));
+  ok('and the dock no longer says Listening, the session over, the card unrated', tapClosed.dock !== 'Listening' && !tapClosed.live && !tapClosed.rated, JSON.stringify(tapClosed));
 
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();

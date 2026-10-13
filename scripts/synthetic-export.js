@@ -20,15 +20,15 @@
  * `const IMGS={…};`, in the field names the app reads (id, ch, n, s, o[{t}],
  * ci, ex, img). Every stem, option and commentary is invented placeholder
  * text. The chapters are the app's own CH_COLORS names. The ids that
- * keys-patch and flags-patch correct are included, keyed and shaped as their
- * CORRECTIONS and FLAGS record, because the assembler applies those
+ * answer-keys.js and content-flags.js correct are included, keyed and shaped
+ * as their CORRECTIONS and FLAGS record, because the assembler applies those
  * corrections and refuses a bank they do not fit. Those ids and letters are
  * already in this repository; nothing else about those questions is.
  *
  * THE REFERENCE LIBRARY. Without notes the app's REF is empty, and every suite
  * that reads a note (pearls, the Apex figure strip) fails on the empty library
  * rather than on the app. So this also writes one markdown file per chapter in
- * the format refs-patch parses (front matter, one note per `##` section), each
+ * the format ref-seed.js parses (front matter, one note per `##` section), each
  * note carrying a sentence Pearl.harvest accepts and citing a refimg://
  * figure. Every note, which the real library does not do: verify-chatfigs
  * sends its question before it pins the note it reads, so what reaches the
@@ -120,8 +120,8 @@ function question(id, ch, n, ci, opts = {}) {
 }
 
 /* Ids run PREFIX_1 upward, as the bank's do, so a suite naming ARR_2 finds a
-   question. The ids keys-patch and flags-patch correct take the shape those
-   steps expect, wherever they fall. Every other question has a figure. */
+   question. The ids answer-keys.js and content-flags.js correct take the
+   shape those expect, wherever they fall. Every other question has a figure. */
 function syntheticBank(perChapter = 20) {
   const need = new Map();
   for (const c of CORRECTIONS) need.set(c.id, Object.assign(need.get(c.id) || {}, { was: c.was }));
@@ -134,7 +134,7 @@ function syntheticBank(perChapter = 20) {
   let seed = 0;
   const add = (id, ch, n) => {
     const want = need.get(id) || {};
-    /* A flagged question carries the figures flags-patch records for it. */
+    /* A flagged question carries the figures content-flags.js records. */
     const img = want.wantFigs != null ? want.wantFigs : n % 2 === 0 ? 1 : 0;
     bank.push(question(id, ch, n, want.was ? LETTERS.indexOf(want.was) : (n - 1) % LETTERS.length,
                        { img, ex: want.wantEx }));
@@ -149,11 +149,12 @@ function syntheticBank(perChapter = 20) {
   return { bank, imgs };
 }
 
-/* THE MARK. The first question carries "_synthetic":true, and keys-patch and
-   flags-patch keep unknown fields, so the mark survives into the built app's
-   ALL_Q. scripts/verify.js reads it and will not write tests/test-stats.json
-   for a synthetic build: a record of suites run on invented questions, quoted
-   in the docs as the app's numbers, would be prose about the wrong thing.
+/* THE MARK. The first question carries "_synthetic":true, and the key
+   corrections and content flags keep unknown fields, so the mark survives
+   into the built app's ALL_Q. scripts/verify.js reads it and will not write
+   tests/test-stats.json for a synthetic build: a record of suites run on
+   invented questions, quoted in the docs as the app's numbers, would be
+   prose about the wrong thing.
    The exact text cannot occur inside any string in a JSON bank, because
    JSON.stringify escapes every quote a string contains. */
 const MARK_KEY = '_synthetic';
@@ -164,7 +165,7 @@ function isSyntheticBuild(file) {
 
 /* syntheticRefs(perChapter) → { files: [[name, text]], images: [[key, Buffer]] }
    One file per chapter, perChapter notes in each, every one of them over the
-   forty-word floor refs-patch enforces. */
+   forty-word floor ref-seed.js enforces. */
 function syntheticRefs(perChapter = 10) {
   const files = [], images = [];
   for (const [ch, p] of CHAPTERS) {

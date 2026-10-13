@@ -24,7 +24,7 @@
  * four bare file names, forward slashes by construction, stored at the zip's
  * root where Pages looks for index.html.
  *
- * UNLIKE scripts/build.js, THIS NEEDS NO LICENSED SOURCE. Memorizer carries no
+ * UNLIKE THE APP'S OWN BUILD (scripts/assemble-app.js), THIS NEEDS NO LICENSED SOURCE. Memorizer carries no
  * content of its own: the PDF is the user's, read in their browser, and never
  * stored anywhere but their device. So this builds anywhere — CI included —
  * and dist-memorizer/ is gitignored only because it is output, not because it

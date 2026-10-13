@@ -76,6 +76,10 @@
 #                    BUILD.md are the counts the tests actually produced —
 #                    this file said both "1052" and "1210" for one quantity
 #                    until that check existed).
+#                Before them, scripts/leak-guard.js reads every commit the
+#                run adds, not only the tree checked out: a licensed file
+#                added and deleted again inside a pull request would still
+#                reach master's history if it were merged.
 #                Across every job, 6467 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
@@ -168,9 +172,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Every commit, not only the last: the history step below reads
+          # each commit this run adds. The whole history is about 15 MB.
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
+      # NOT ONLY THE TREE THAT IS CHECKED OUT. verify-leakguard below reads
+      # this commit's files; a licensed file added in one commit of a pull
+      # request and deleted in a later one is not among them, and merging the
+      # pull request would put it in master's history all the same. This
+      # reads every blob each new commit adds: a pull request's own commits
+      # (its merge ref's second parent, less its first), or what a push to
+      # master brought. A manual run adds no commits.
+      - name: nothing licensed in any commit this run adds
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          case "$EVENT" in
+            pull_request) node scripts/leak-guard.js --range HEAD^1..HEAD^2 ;;
+            push)
+              if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+                node scripts/leak-guard.js --range "$BEFORE..HEAD"
+              else
+                # No earlier master to stand on (a first push, or one that
+                # rewrote it): every commit no other branch already holds.
+                node scripts/leak-guard.js --range HEAD --not --exclude=origin/master --remotes
+              fi ;;
+            *) echo "a $EVENT run adds no commits; verify-leakguard below reads the tree" ;;
+          esac
       - name: FSRS-5–derived scheduling (89 checks)
         run: node tests/verify-fsrs.js
       - name: the scheduler against ts-fsrs, on our own weights (15 checks)

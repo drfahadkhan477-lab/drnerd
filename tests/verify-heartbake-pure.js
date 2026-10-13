@@ -8,8 +8,9 @@
  * WHY. Meshing the heart's muscle and chambers was 78% of the launch — 6.3 s of
  * main thread on the owner's laptop at an iPad's CPU pace, before the home
  * screen could appear. scripts/heart-bake.js now meshes them during the build
- * with heart3d.js's own code, apex-patch embeds the result, build-pwa moves it
- * into a file of its own, and create() loads it instead of meshing.
+ * with heart3d.js's own code, scripts/assemble-app.js embeds the result,
+ * build-pwa moves it into a file of its own, and create() loads it instead of
+ * meshing.
  *
  * WHAT IS CLAIMED, AND HELD HERE:
  *   · the copy is the mesh, value for value — not an approximation of it;

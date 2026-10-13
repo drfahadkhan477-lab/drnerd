@@ -11,7 +11,7 @@
  * THE FAILURE THIS EXISTS FOR. The module holds two things that must agree and
  * are written hundreds of lines apart: EXTRA, the table of {name, hr, desc}
  * that the picker reads, and a switch that turns a key into millivolts.
- * polish-patch merges the first into the app's shared registry —
+ * app/systole.html merges the first into the app's shared registry —
  *
  *     Object.assign(RHYTHMS, RhythmsExtra.EXTRA);
  *

@@ -332,8 +332,8 @@ function mirror(key) {
   const raw = lsRaw(key);
   if (raw == null) return false;                    // nothing to copy
   /* CHEAP TO CALL, so the caller does not have to know when the value changed.
-     The alternative was hooking save() itself, and save()'s last line is the
-     anchor scripts/resume-patch.js matches on — editing it would have broken
+     The alternative was hooking save() itself, and save()'s last line was the
+     anchor scripts/resume-patch.js matched on — editing it would have broken
      the build with `expected exactly 1 match, found 0`. A caller that mirrors
      on a timer and on page-hide is worth more than one that is exactly timely,
      and this is what makes that caller free: an unchanged blob costs one

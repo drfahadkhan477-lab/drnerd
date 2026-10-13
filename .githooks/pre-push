@@ -1,7 +1,13 @@
 #!/bin/sh
-# Run every suite that needs no browser and no build before anything is
-# pushed (npm run test:pure, about a minute). CI runs the same suites first
+# Before anything is pushed: nothing licensed in any commit the push sends
+# (scripts/leak-guard.js --push), then every suite that needs no browser and
+# no build (npm run test:pure, about a minute). CI runs the same suites first
 # in its `logic` job; this is the same answer without a ten-minute round trip.
+#
+# The leak check reads the commits, not the checkout. The pre-commit hook does
+# not run for a merge, a rebase or a cherry-pick, and the suites' leak check
+# reads only the tree that is checked out, so a licensed file added in one
+# commit and deleted in the next used to pass both and be published anyway.
 #
 # Installed with the pre-commit hook, once per clone: npm run hooks
 #
@@ -9,15 +15,24 @@
 # so on purpose: git push --no-verify.
 #
 # Git feeds this one line per ref on stdin: "<local ref> <local sha> <remote
-# ref> <remote sha>". A deletion has an all-zero local sha.
+# ref> <remote sha>". A deletion has an all-zero local sha. It is read once
+# here and handed to the leak check whole; $1 is the remote's name.
+refs=$(cat)
 only_deletes=1
 while read -r _ local_sha _ _; do
   case "$local_sha" in
     *[!0]*) only_deletes=0 ;;
   esac
-done
+done <<EOF
+$refs
+EOF
 [ "$only_deletes" = 1 ] && exit 0
 cd "$(dirname "$0")/.." || exit 1
+echo "pre-push: nothing licensed in any commit this push sends"
+if ! printf '%s\n' "$refs" | node scripts/leak-guard.js --push "$1"; then
+  echo "pre-push: a commit this push sends was refused, so nothing was pushed." >&2
+  exit 1
+fi
 echo "pre-push: the suites that need no browser and no build"
 if ! node scripts/test-public.js --pure; then
   echo "pre-push: a suite failed, so nothing was pushed. Fix it, or push with --no-verify on purpose." >&2

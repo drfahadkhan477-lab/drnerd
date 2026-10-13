@@ -221,19 +221,38 @@ const restore = `(text) => new Promise(resolve => {
     'a null day': { daily: { '2026-10-09': null } },
     'a day whose count is not a number': { daily: { '2026-10-09': { a: 'many', c: 0 } } },
     'a day with no counts': { daily: { '2026-10-09': {} } },
+    /* One case per required count, here and for chapters and practice below:
+       an empty record is refused by whichever count is still required, so it
+       cannot show that each one is. */
+    'a day with answers but no correct count': { daily: { '2026-10-09': { a: 2 } } },
+    'a day with a correct count but no answers': { daily: { '2026-10-09': { c: 1 } } },
+    /* A correct answer is counted only as one of the answers, here and for
+       chapters and practice: more correct than answered is a record the app
+       never wrote (9 of 2 drew a Results row at 450%). */
+    'a day with more correct answers than answers': { daily: { '2026-10-09': { a: 1, c: 2 } } },
     'a null card': { srs: { BKUP_1: null } },
     'a card whose due date is not a date string': { srs: { BKUP_1: { due: 5 } } },
     'a card whose last review is not a date string': { srs: { BKUP_1: { due: '2026-11-01', last: 12345 } } },
     'a null chapter': { chStats: { Arrhythmias: null } },
+    /* A list has no entries for the entry rules to refuse: only the check
+       that each map is an object stops it. */
+    'a chapter map that is a list': { chStats: [] },
     'a chapter count that is negative': { chStats: { Arrhythmias: { correct: -1, total: 2 } } },
     /* Answering a question does st.total++ and st.correct++ on the stored
        record (selectOpt), and a practice drill does pr.n++ and pr.c++: a
-       missing count turns into NaN, saved as null, and the chapter drops off
-       Progress. Both counts are required, as a day's a and c are. */
+       missing count turns into NaN, saved as null. A chapter with no total
+       then drops off the Results screen's chapter list, and one with no
+       correct count shows a wrong percentage there. Both counts are required,
+       as a day's a and c are. */
     'a chapter with no counts': { chStats: { Arrhythmias: {} } },
     'a chapter with a total but no correct count': { chStats: { Arrhythmias: { total: 2 } } },
+    'a chapter with a correct count but no total': { chStats: { Arrhythmias: { correct: 2 } } },
+    'a chapter with more correct answers than answers': { chStats: { Arrhythmias: { correct: 3, total: 2 } } },
     'a null practice record': { practice: { BKUP_1: null } },
     'a practice record with no counts': { practice: { BKUP_1: { t: 1 } } },
+    'a practice record with no attempt count': { practice: { BKUP_1: { c: 1, t: 1 } } },
+    'a practice record with no correct count': { practice: { BKUP_1: { n: 2, t: 1 } } },
+    'a practice record with more correct answers than attempts': { practice: { BKUP_1: { n: 1, c: 2, t: 1 } } },
     'a null resume record': { resume: { all: null } },
     'a resume record whose ids are not a list': { resume: { all: { ids: 'BKUP_1', i: 1 } } },
   };
@@ -252,18 +271,70 @@ const restore = `(text) => new Promise(resolve => {
     ok('and the Progress screen still builds', built === true, String(built));
   }
 
-  /* The valid round trip: a whole day record is restored and read. */
-  const dayToast = await importToast(JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 } },
+  /* The valid round trip: a whole day record is restored and read. It carries
+     a perfect day, chapter and drill as well (correct equal to answered), the
+     edge the more-correct-than-answered cases above must not refuse. */
+  const dayToast = await importToast(JSON.stringify({ v: 5, stats: { daily: { '2026-10-09': { a: 7, c: 5, r: 2 },
+      '2026-10-08': { a: 3, c: 3, r: 0 } },
     srs: { BKUP_1: { reps: 3, due: '2026-11-01', last: '2026-10-01', stability: 4, difficulty: 5 } },
-    chStats: { Arrhythmias: { correct: 4, total: 5 } }, practice: { BKUP_1: { n: 2, c: 1, t: 1 } } } }));
+    chStats: { Arrhythmias: { correct: 4, total: 5 }, 'Valvular Disease': { correct: 3, total: 3 } },
+    practice: { BKUP_1: { n: 2, c: 1, t: 1 }, BKUP_2: { n: 2, c: 2, t: 1 } } } }));
   ok('a backup with a well-formed day record is restored', dayToast === 'Annotations restored.', JSON.stringify(dayToast));
   /* 4/5, not the 2/3 the first restore left: a refused import must not pass this. */
   ok('and a whole chapter and practice record are restored with it', await page.evaluate(() =>
     S.chStats.Arrhythmias.total === 5 && S.chStats.Arrhythmias.correct === 4 && (S.practice.BKUP_1 || {}).n === 2 && S.practice.BKUP_1.c === 1));
+  ok('and so are a perfect day, chapter and practice record', await page.evaluate(() =>
+    (S.daily['2026-10-08'] || {}).c === 3 && (S.chStats['Valvular Disease'] || {}).correct === 3 && (S.practice.BKUP_2 || {}).c === 2));
   ok('and the Progress screen reads it', await page.evaluate(() => {
     try { buildStats(); forecast7(); } catch (e) { return e.message; }
-    return S.daily['2026-10-09'].a === 7 && JSON.parse(localStorage.getItem('accsap12.v2')).daily['2026-10-09'].c === 5;
+    /* Guarded, so a refused round trip fails here rather than killing the
+       suite before the sections below it run. */
+    const stored = (JSON.parse(localStorage.getItem('accsap12.v2')) || {}).daily || {};
+    return (S.daily['2026-10-09'] || {}).a === 7 && (stored['2026-10-09'] || {}).c === 5;
   }) === true);
+
+  /* A device that took a partial record from a backup before the import
+     checked for one still holds it, and its export carried it, so its own
+     backup was refused whole, ink and notes with it. Seeded where such a
+     device keeps it, in the stored blob a launch reads: a chapter with a total
+     but no correct count, a drill with no counts, a day with no correct count,
+     and the {correct:7,total:1} that a chapter with no total turns into. */
+  head('a backup from a device holding records its import refuses still restores');
+  const DEVICE = {
+    chStats: { Arrhythmias: { correct: 6, total: 9 }, 'Valvular Disease': { total: 3 },
+               'Vascular Disease': { correct: 7, total: 1 } },
+    practice: { BKUP_1: { n: 3, c: 2, t: 1 }, BKUP_2: { t: 1 } },
+    daily: { '2026-10-01': { a: 4, c: 3, r: 0 }, '2026-10-02': { a: 1 } },
+    sessionCorrect: 11, sessionTotal: 13,
+  };
+  await page.evaluate(d => localStorage.setItem('accsap12.v2', JSON.stringify(d)), DEVICE);
+  await boot(page);
+  const dev = await page.evaluate(async () => {
+    let refused = false;
+    try { progressFromBackup(JSON.parse(localStorage.getItem('accsap12.v2'))); } catch (_) { refused = true; }
+    const create = URL.createObjectURL, click = HTMLAnchorElement.prototype.click; let blob = null;
+    URL.createObjectURL = b => { blob = b; return 'blob:stub'; }; HTMLAnchorElement.prototype.click = () => {};
+    try { await exportMarkup(); } finally { URL.createObjectURL = create; HTMLAnchorElement.prototype.click = click; }
+    return { refused, text: blob ? await blob.text() : null };
+  });
+  /* A precondition, not the claim: with no record the import refuses in the
+     seed, everything below passes whether or not the export leaves any out. */
+  ok('the device holds statistics its own import refuses', dev.refused);
+  const devStats = dev.text ? JSON.parse(dev.text).stats || {} : {};
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  ok('the export leaves out exactly the records the import refuses',
+     same(devStats.chStats, { Arrhythmias: DEVICE.chStats.Arrhythmias }) &&
+     same(devStats.practice, { BKUP_1: DEVICE.practice.BKUP_1 }) &&
+     same(devStats.daily, { '2026-10-01': DEVICE.daily['2026-10-01'] }) && devStats.sessionCorrect === 11,
+     JSON.stringify(devStats.chStats));
+  /* Emptied, so a restore that did not happen cannot pass the ink check. */
+  await page.evaluate(() => { INK = {}; });
+  const devToast = await importToast(dev.text || '');
+  ok('and that backup restores', devToast === 'Annotations restored.', JSON.stringify(devToast));
+  ok('with its usable statistics and its annotations', await page.evaluate(() =>
+    (S.chStats.Arrhythmias || {}).total === 9 && !('Valvular Disease' in S.chStats) && !('Vascular Disease' in S.chStats) &&
+    (S.practice.BKUP_1 || {}).n === 3 && !('BKUP_2' in S.practice) &&
+    (S.daily['2026-10-01'] || {}).a === 4 && !('2026-10-02' in S.daily) && !!INK['BKUP_1:0']));
 
   head('reference images survive a backup on a different device');
   const exported=await page.evaluate(async()=>{

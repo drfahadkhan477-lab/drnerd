@@ -187,8 +187,9 @@ const SUITES = [
   /* Step 1 of retiring the patch chain: the chain's output cuts into the app
      and its payloads losslessly, and the app carries none of what was cut. */
   ['app-slots-pure', 'the built file cuts into the app and its payloads byte for byte, and the app carries none of the bank'],
-  /* Step 2: the frozen shell's slots filled from where the chain gets them,
-     ALL_Q held to keys-patch and flags-patch run as the chain runs them. */
+  /* Step 2: the frozen shell's slots filled from the export and the
+     repository, ALL_Q held field by field to answer-keys.js and
+     content-flags.js applied as the assembler applies them. */
   ['assemble-pure', 'the app assembles from app/systole.html, the export and the repository, stamped once'],
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
@@ -283,16 +284,17 @@ const SUITES = [
   ['echo-pure',    'the echo tables point at what exists, and the arithmetic is the arithmetic'],
   ['echoui-pure',  'Echo Studio computes only what was measured, and restates no cutoff'],
   /* The three above stop where strings become a document. This one starts
-     there: it runs echo-patch over a scaffold and drives the result, so the
-     glue, the delegated listeners and the caret are held rather than argued
-     about in a comment. It needs no build — see its header for what that
-     buys and what it costs. */
+     there: it cuts Echo out of app/ into a scaffold and drives the result, so
+     the glue, the delegated listeners and the caret are held rather than
+     argued about in a comment. It needs no build — see its header for what
+     that buys and what it costs. */
   ['echo',         'Echo Studio routes, delegates and keeps the caret where it was'],
   /* Needs no build: the repository's own physio, coronaryTree and wiggers in
      a real browser, measured for the physiology the view is there to show. */
   ['coronaryview', 'the Coronary view draws the left bed collapsing in systole, on one scale'],
-  /* Needs no build: the shipped ambient-patch over a scaffold, with the
-     repository's own Heart3D, ECG12, Wiggers and LivingDiagram. */
+  /* Needs no build: the shipped ambient block, cut out of app/ into a
+     scaffold, with the repository's own Heart3D, ECG12, Wiggers and
+     LivingDiagram. */
   ['ambient',      'the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL'],
   /* Search your notes: the ranking, quoting and markup in pure Node (with the
      proof that its four anchors are echo's own output), then the patched

@@ -1363,13 +1363,13 @@ function program(gl, vs, fs) {
    The muscle and the chambers are the same on every launch: the same fields
    meshed on the same grid. Meshing them was 78% of the app's launch — 6.3 s of
    main thread on the owner's laptop with the CPU slowed to an iPad's pace, all
-   of it before the home screen could appear. So scripts/apex-patch.js runs
-   buildSurfaces() below in Node during the build and embeds the result, and
-   create() takes that copy instead of meshing again.
+   of it before the home screen could appear. So scripts/heart-bake.js runs
+   buildSurfaces() below in Node during the build, scripts/assemble-app.js
+   embeds the result, and create() takes that copy instead of meshing again.
 
    Nothing is approximated: the baked copy is these functions' own output,
    stored as the Float32 and index values makeMesh() would have uploaded anyway.
-   It is used only if it says it was made from this code (the key apex-patch
+   It is used only if it says it was made from this code (the key heart-bake.js
    derives from this file's text) on this grid, and is exactly as long as that
    implies. Anything else — no copy, an old copy, a truncated one — and the
    surfaces are meshed here as they always were. */
