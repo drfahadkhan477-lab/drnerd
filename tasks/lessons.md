@@ -175,6 +175,17 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   a comment names a set (formats, candidates, routes, spellings), write one
   case per member, disguised the way the rule claims to see through. Where a
   member cannot be covered, narrow the claim to the members that are.
+- **A race between two real timers, judged by the scheduler.** My #232 check
+  "a write is given time in proportion to the bytes it carries" held a write
+  with a real sleep against the store's real bound. It passed here, in CI,
+  and under my own load test (eight busy loops on four CPUs). It failed on
+  the owner's laptop in a full run: "a 400-byte write held 150 ms was cut
+  off". Session 01Nk4 reproduced it with three copies pinned to one CPU at
+  nice 19, and moved it onto a clock the test turns (#242). → Rule: a check
+  about which of two timers fires first owns the clock; with real timers the
+  scheduler decides the result. And a load test that passes has not shown
+  much: make it harsher (one CPU, low priority, copies side by side) before
+  calling a timing check robust.
 
 ## Process
 
