@@ -164,6 +164,17 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   guard's reading of its input, keep the old reading and refuse if either
   refuses, then list what the old one refused and prove each case is still
   refused.
+- **A rule over a set, tested on its first members.** Codex's review of #240
+  caught two of mine in one day:
+  - leak-guard's image rule said it knew a renamed image "by its first
+    bytes", while the extension list named ten formats and the bytes were
+    read for five;
+  - verify-csp read a srcset as one URL, so only its first candidate was
+    judged.
+  Each test exercised the first members and stopped. → Rule: when a rule or
+  a comment names a set (formats, candidates, routes, spellings), write one
+  case per member, disguised the way the rule claims to see through. Where a
+  member cannot be covered, narrow the claim to the members that are.
 
 ## Process
 
