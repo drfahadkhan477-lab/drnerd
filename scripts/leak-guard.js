@@ -222,29 +222,75 @@ function imageMagic(b, size) {
   if (b.length >= 12 && b.subarray(4, 8).toString('latin1') === 'ftyp' && BMFF_STILL.has(b.subarray(8, 12).toString('latin1'))) return 'an AVIF or HEIC image';
   return null;
 }
-/* An SVG is text with no magic bytes. What makes a file one is that its root
-   element is <svg>, past an XML declaration, comments and a doctype (decode()
-   has already dropped a byte-order mark). A page or a script that contains an
-   <svg> does not start with one, and is not refused for it.
-
-   The doctype is read as XML reads it: a ] or > inside a quoted literal, a
-   comment or a processing instruction ends nothing (found by review, #241:
-   <!ENTITY a "]"> ended the internal subset at its quoted ], and the SVG
-   passed renamed). Each character still has one way to be read, so the time
-   is linear: each alternative opens on a character of its own, and none
-   stretches past its first close. The first version let a "][" sit inside
-   the brackets or outside them, and a file opening <!doctype[ with forty of
-   those took hours (found by CodeQL, #241); a lazy comment in the subset's
-   loop does the same with forty comments and no ]. */
-const XML_PI = '<\\?(?:[^?]|\\?(?!>))*\\?>', XML_COMMENT = '<!--(?:[^-]|-(?!->))*-->', LITERAL = `"[^"]*"|'[^']*'`;
-const PROLOG = new RegExp(`\\s*(?:${XML_PI}|${XML_COMMENT}|<!DOCTYPE(?:[^[>"']|${LITERAL})*` +
-  `(?:\\[(?:[^\\]"'<]|${LITERAL}|${XML_COMMENT}|${XML_PI}|<(?!!--|\\?))*\\]\\s*)?>)`, 'iy');
-const SVG_ROOT = /\s*<svg[\s>/]/y;
+/* Read the XML prolog once, honoring quotes and comments inside a DTD.
+   A bracket inside an entity value must not end the subset. No backtracking
+   regex is used: malformed doctypes also take one bounded pass. */
 function isSvg(text) {
   let at = 0;
-  for (PROLOG.lastIndex = 0; PROLOG.test(text); ) at = PROLOG.lastIndex;
-  SVG_ROOT.lastIndex = at;
-  return SVG_ROOT.test(text);
+  for (;;) {
+    while (at < text.length && /\s/.test(text[at])) at++;
+    if (text.startsWith('<?', at) || text.startsWith('<!--', at)) {
+      const comment = text.startsWith('<!--', at), end = comment ? '-->' : '?>';
+      const next = text.indexOf(end, at + (comment ? 4 : 2));
+      if (next < 0) return false;
+      at = next + end.length;
+    } else if (/^<!DOCTYPE\b/i.test(text.slice(at, at + 10))) {
+      let quote = '', depth = 0, closed = false;
+      for (at += 9; at < text.length; at++) {
+        const c = text[at];
+        if (quote) { if (c === quote) quote = ''; continue; }
+        if (text.startsWith('<!--', at) || text.startsWith('<?', at)) {
+          const comment = text.startsWith('<!--', at), end = comment ? '-->' : '?>';
+          const next = text.indexOf(end, at + (comment ? 4 : 2));
+          if (next < 0) return false;
+          at = next + end.length - 1;
+        } else if (c === '"' || c === "'") quote = c;
+        else if (c === '[') depth++;
+        else if (c === ']') depth = Math.max(0, depth - 1);
+        else if (c === '>' && depth === 0) { at++; closed = true; break; }
+      }
+      if (!closed) return false;
+    } else break;
+  }
+  // XML names include non-ASCII and astral characters. Tokenize conservatively;
+  // the namespace declaration below decides whether this root denotes SVG.
+  const root = text.slice(at).match(/^<(?:([^:\s<>/]+):)?svg(?=[\s/>])/i);
+  if (!root) return false;
+  if (!root[1]) return true;
+  // A prefixed root must bind its prefix to the SVG namespace.
+  let end = at + root[0].length, quote = '';
+  for (; end < text.length; end++) {
+    const c = text[end];
+    if (quote) { if (c === quote) quote = ''; }
+    else if (c === '"' || c === "'") quote = c;
+    else if (c === '>') break;
+  }
+  // Read attributes once, without matching a namespace inside another value.
+  let pos = at + root[0].length;
+  while (pos < end) {
+    while (pos < end && /\s/.test(text[pos])) pos++;
+    const start = pos;
+    while (pos < end && !/[\s=/>]/.test(text[pos])) pos++;
+    const name = text.slice(start, pos);
+    if (!name) { pos++; continue; }
+    while (pos < end && /\s/.test(text[pos])) pos++;
+    if (text[pos] !== '=') continue;
+    pos++;
+    while (pos < end && /\s/.test(text[pos])) pos++;
+    const delimiter = text[pos++];
+    if (delimiter !== '"' && delimiter !== "'") continue;
+    const next = text.indexOf(delimiter, pos);
+    if (next < 0 || next > end) return false;
+    const value = text.slice(pos, next);
+    pos = next + 1;
+    // References can spell SVG's URI or depend on a DTD entity. Refuse them
+    // conservatively; never expand a DTD or load external entities in a hook.
+    if (name === `xmlns:${root[1]}`) return value === 'http://www.w3.org/2000/svg' || value.includes('&');
+  }
+  // A DTD can default the namespace declaration, including from an external
+  // subset. Without an explicit unrelated namespace, refuse this SVG-shaped
+  // root conservatively rather than resolve a DTD in a licensing hook.
+  return true;
 }
 
 /* Paths a person has decided are fine, with the reason. Nothing is here yet;

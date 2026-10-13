@@ -17,7 +17,8 @@ must work with synthetic fixtures; the licensed question bank stays private.
 ## Start a task
 
 1. Check the branch and working tree; preserve existing changes.
-2. Read `package.json`, the affected source, and its tests.
+2. Read `package.json`, the affected source, and its tests. Use Node 22 or newer;
+   `.node-version` and CI select Node 24.
 3. Use `npm run doctor` to diagnose setup. Install pinned dependencies with
    `npm ci`; use repository Playwright browsers, not global packages.
 4. State the intended behavior and choose a bounded change. Keep refactors

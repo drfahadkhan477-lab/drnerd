@@ -222,6 +222,27 @@ head('it refuses the licensed bank, by every route in');
      r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
   r = inTmp('assets/diagram-2.txt', '<!DOCTYPE svg [ <!ENTITY red "#c00"> ]>\n<svg xmlns="http://www.w3.org/2000/svg"><rect fill="&red;" width="1" height="1"/></svg>\n');
   ok('and past a doctype with an internal subset', r.code === 1 && /an SVG/.test(r.out), r.out.match(/IMAGE.*|an SVG.*/)?.[0] || r.out.trim().slice(0, 60));
+  for (const subset of ['<!ENTITY label "]">', "<!ENTITY label ']'>", '<!-- ]> --> <!ENTITY label "[">']) {
+    r = inTmp('assets/quoted-dtd.bin', '<!DOCTYPE svg [' + subset + ']><svg xmlns="http://www.w3.org/2000/svg"/>');
+    ok('quoted brackets and DTD comments cannot hide an SVG root', r.code === 1 && /an SVG/.test(r.out));
+  }
+  r = inTmp('assets/prefixed.bin', '<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:rect width="1" height="1"/></s:svg>');
+  ok('a namespace-prefixed SVG renamed is refused', r.code === 1 && /an SVG/.test(r.out));
+  for (const prefix of ['é', '\u{10000}', '\u200Cname']) {
+    r = inTmp('assets/unicode-prefix.bin', `<${prefix}:svg xmlns:${prefix}="http://www.w3.org/2000/svg"/>`);
+    ok('a non-ASCII XML namespace prefix cannot hide a renamed SVG', r.code === 1 && /an SVG/.test(r.out));
+  }
+  r = inTmp('notes/other-namespace.xml', '<s:svg xmlns:s="urn:unrelated"/>');
+  ok('an unrelated namespace is not mistaken for an SVG', r.code === 0);
+  r = inTmp('notes/quoted-namespace.xml', '<s:svg title=" xmlns:s=\'http://www.w3.org/2000/svg\'" xmlns:s="urn:unrelated"/>');
+  ok('a namespace mentioned inside another attribute is not a declaration', r.code === 0);
+  for (const namespace of ['http:&#x2f;&#x2f;www.w3.org/2000/svg', 'http:&#47;&#47;www.w3.org/2000/svg', '&svgNS;']) {
+    r = inTmp('assets/referenced-namespace.bin', '<!DOCTYPE s:svg [<!ENTITY svgNS "http://www.w3.org/2000/svg">]>' +
+      `<s:svg xmlns:s="${namespace}"/>`);
+    ok('XML references in an SVG namespace cannot hide a renamed figure', r.code === 1 && /an SVG/.test(r.out));
+  }
+  r = inTmp('assets/default-namespace.bin', '<!DOCTYPE s:svg [<!ATTLIST s:svg xmlns:s CDATA "http://www.w3.org/2000/svg">]><s:svg/>');
+  ok('a DTD-defaulted SVG namespace cannot hide a renamed figure', r.code === 1 && /an SVG/.test(r.out));
   /* A ] or > the doctype quotes, or holds in a comment, ends nothing (found
      by review, #241: an entity's quoted ] ended the subset there, and the
      SVG passed). */

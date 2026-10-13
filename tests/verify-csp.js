@@ -148,14 +148,20 @@ head('the allowlist covers every host the shipped app can reach');
   };
   const IMG_AT = /(?:url\(\s*["']?|\b(?:src|poster)\s*=\s*["'`]?)(https?:\/\/[a-z0-9.-]+)/gi;
   const SRCSET = /\b(?:image)?srcset\s*=\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`|([^\s>]+))/gi;
-  const offHost = [];
-  for (const f of SHELL_FILES) {
-    const text = blankComments(fs.readFileSync(f, 'utf8'));
-    for (const m of text.matchAll(IMG_AT)) if (refused(m[1])) offHost.push(`${relPath(f)}: ${m[0]}`);
+  const pictureViolations = source => {
+    const text = blankComments(source), found = [];
+    for (const m of text.matchAll(IMG_AT)) if (refused(m[1])) found.push(m[0]);
     for (const m of text.matchAll(SRCSET))
       for (const candidate of (m[1] ?? m[2] ?? m[3] ?? m[4]).split(','))
-        if (refused(candidate.trim())) offHost.push(`${relPath(f)}: srcset … ${candidate.trim()}`);
-  }
+        if (refused(candidate.trim())) found.push(`srcset … ${candidate.trim()}`);
+    return found;
+  };
+  ok('later srcset and preload candidates are checked; local candidates remain allowed',
+     pictureViolations('<img srcset="/local.png 1x, https://unlisted.invalid/image.png 2x">').length === 1 &&
+     pictureViolations("<link imagesrcset='/local.png 1x, http://unlisted.invalid/image.png 2x'>").length === 1 &&
+     pictureViolations('<img srcset="/local.png 1x, /large.png 2x">').length === 0);
+  const offHost = SHELL_FILES.flatMap(f => pictureViolations(fs.readFileSync(f, 'utf8'))
+    .map(violation => `${relPath(f)}: ${violation}`));
   ok('no picture in the shell or a stylesheet comes from a host img-src refuses',
      offHost.length === 0 && SHELL_FILES.length > 1, offHost.join('; ') || `${SHELL_FILES.length} files read`);
   /* The other direction: a host allowed by the policy but contacted by nothing
