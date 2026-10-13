@@ -150,7 +150,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: every .js file parses
         run: |
           set -e
@@ -181,7 +181,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       # NOT ONLY THE TREE THAT IS CHECKED OUT. verify-leakguard below reads
       # this commit's files; a licensed file added in one commit of a pull
       # request and deleted in a later one is not among them, and merging the
@@ -438,7 +438,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: install the pinned test tools, and the browser
         run: |
           npm ci
@@ -503,7 +503,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: install the pinned test tools, the browser, and what verify-figreview needs
         run: |
           npm ci
@@ -763,7 +763,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: install the pinned test tools, WebKit, and what verify-figreview needs
         run: |
           npm ci
@@ -931,7 +931,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: npm run build exits non-zero and explains why, with no source present
         run: |
           set +e
@@ -1164,7 +1164,7 @@ jobs:
           fetch-depth: 2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - id: which
         name: read the changed files
         run: node scripts/ci-changes.js

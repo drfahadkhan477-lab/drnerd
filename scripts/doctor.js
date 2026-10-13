@@ -58,9 +58,9 @@ async function diagnose(opts) {
   const out = [];
   const add = (name, level, ok, detail, fix) => out.push({ name, level, ok: !!ok, detail: detail || '', fix: fix || '' });
 
-  let engines = '>=20';
+  let engines = '>=22';
   try { engines = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).engines.node || engines; } catch (_) {}
-  const need = +((engines.match(/(\d+)/) || [])[1] || 20);
+  const need = +((engines.match(/(\d+)/) || [])[1] || 22);
   const have = String(p.nodeVersion() || '0');
   add('Node', 'required', +have.split('.')[0] >= need, `${have} (package.json wants ${engines})`,
       `install Node ${need} or newer (.node-version says which)`);
