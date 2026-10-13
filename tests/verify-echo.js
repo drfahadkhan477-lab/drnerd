@@ -269,7 +269,7 @@ const MARK = 'echomark';
      rejected any em-dash in it — but the grade column is an em-dash by design
      for stroke volume, which has no severity table, so the check failed on a
      correct row. It was scanning a field the data does not have, which is the
-     shape CLAUDE.md lists among the seven. Narrowed to the cell it meant. */
+     shape AGENTS.md lists among its disguises. Narrowed to the cell it meant. */
   const svRow = () => page.evaluate(() => {
     const tr = [...document.querySelectorAll('.echo-results tbody tr')]
       .find(r => /Stroke volume/.test(r.textContent));

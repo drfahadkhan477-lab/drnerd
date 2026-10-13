@@ -241,7 +241,7 @@ head('CI runs everything it is capable of running');
      never asked whether a suite the workflow COULD run is absent from it — and
      one was: verify-cause-pure, registered in scripts/verify.js, 32 checks, no
      browser, and the workflow had never heard of it. Nineteen green steps read
-     as "the logic suites pass", which is exactly the shape CLAUDE.md warns
+     as "the logic suites pass", which is exactly the shape AGENTS.md warns
      about: a guard with a hole in it is worse than no guard, because the
      surrounding green reads as coverage of the whole paragraph.
 
@@ -327,7 +327,7 @@ head('the prose agrees with the record');
     ['.github/workflows/verify.yml', 'the size of the logic job',
      /the (\d+) suites that are pure Node/, r => [+r[1] === pureCI.length]],
     /* FIVE MORE IN docs/BUILD.md, ALL OF THEM STALE WHEN THIS WAS WRITTEN, and
-       every one the same shape as the two CLAUDE.md already names: an
+       every one the same shape AGENTS.md names: an
        unguarded sentence sitting near a guarded one, so the green around it
        read as coverage of it. They are grouped here because they were found
        in one sweep, not because they are related.
@@ -474,7 +474,7 @@ head('no assertion is incapable of failing');
    into the chain, verify-theme.js was updated to assert nine, and the sentence
    describing the suite was not. Nothing connected the two, so nothing said so.
 
-   It is the shape CLAUDE.md refuses — a sentence with a number in it and no
+   It is the shape AGENTS.md refuses — a sentence with a number in it and no
    check under it — and it is worse than usual here, because every other number
    in that file's neighbourhood IS guarded, so the surrounding green read as
    coverage of this line too.

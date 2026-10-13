@@ -493,7 +493,7 @@ const LOADER = `<script>
     /* BOTH HAVE TO BE PRESENT before equality means anything. Written as a
        a bare appId === shellId comparison this answered 'run' to two absent
        stamps (NO BACKTICKS IN HERE: this block is inside the LOADER template
-       literal, and a backtick in a comment ends it — see CLAUDE.md),
+       literal, and a backtick in a comment ends it),
        which is this repository's most-repeated defect wearing a new hat: a
        comparison that passes hardest when nothing is there to compare. It is
        unreachable from the shipped loader — build-pwa.js throws if the

@@ -705,7 +705,7 @@ head('every figure type the split build writes is served as an image');
      bank's figures are the only JPEGs in the bank; extract-content.js named
      them .jpg and scripts/serve.js had no type for .jpg, so they went out as
      application/octet-stream and offlineIsImage() refused every one. Read
-     blanked, per CLAUDE.md, from both files' own tables. */
+     blanked, per AGENTS.md, from both files' own tables. */
   const fs = require('fs'), path = require('path');
   const { blankComments } = require('./_source.js');
   const src = f => blankComments(fs.readFileSync(path.join(__dirname, '..', 'scripts', f), 'utf8'));
@@ -792,7 +792,7 @@ head('a key its own commentary contradicts is not staged');
     hist: { bank: Array(10).fill(0), self: Array(10).fill(0) }, threshold: 0.5, bankStems: 9, stemKey: 's' });
   ok('the report counts them and names their pages', /key disagrees with its own commentary \(not staged\) 1/.test(rep) && /disagreeing: SECOND p12/.test(rep),
      rep.split('\n').find(l => /commentary/.test(l)) || 'no such line');
-  /* Read blanked, per CLAUDE.md: a comment quoting the pattern must not pass for the code. */
+  /* Read blanked, per AGENTS.md: a comment quoting the pattern must not pass for the code. */
   const { blankComments } = require('./_source.js');
   const src = blankComments(require('fs').readFileSync(require('path').join(__dirname, '..', 'tools', 'older-acc-import.js'), 'utf8'));
   ok('and the importer checks every question before staging it', /if \(keyVsProse\(bq\)\.disagrees\)\s*\{[\s\S]{0,160}?continue;/.test(src));

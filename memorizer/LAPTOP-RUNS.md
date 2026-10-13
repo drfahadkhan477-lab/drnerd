@@ -2,7 +2,7 @@
 
 This task is for the owner's Claude Code “Runs only” session with access to the Windows 10 laptop. It is prepared in the repository; this cloud session has no tool that sends it directly to that session. Private results remain **not run** until that session returns evidence.
 
-Read AGENTS.md, CLAUDE.md and tasks/lessons.md. Stay on the assigned branch and preserve existing changes. Record branch, HEAD and working-tree status first. Runtime target: `400e1ae1232cd6ea0551caf6e40e182be86f2eae`, Memorizer build `2f5728796a54`. Confirm the target is in the tree being tested; do not silently label a different revision as this one. A documentation-only descendant is fine when its runtime files match. Use a safe fast-forward if appropriate; report a blocker instead of resetting work.
+Read AGENTS.md and tasks/lessons.md. Stay on the assigned branch and preserve existing changes. Record branch, HEAD and working-tree status first. Runtime target: `400e1ae1232cd6ea0551caf6e40e182be86f2eae`, Memorizer build `2f5728796a54`. Confirm the target is in the tree being tested; do not silently label a different revision as this one. A documentation-only descendant is fine when its runtime files match. Use a safe fast-forward if appropriate; report a blocker instead of resetting work.
 
 The owner confirms the repository and licensed export/build are already on the laptop. Use that existing source locally to build the code actually being tested. An older generated build is not validation of newer code. Use `npm run build` with the configured local export, or pass its existing local path. Capture build output in a gitignored/local log. Do not upload or quote the export, figures, raw HTML, question/answer text or raw build/test logs.
 

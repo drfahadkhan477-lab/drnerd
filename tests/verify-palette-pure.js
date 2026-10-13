@@ -5,7 +5,7 @@
  *
  *   node tests/verify-palette-pure.js
  *
- * No browser, no build. CLAUDE.md's rule is blunt — "If you write a sentence
+ * No browser, no build. AGENTS.md's rule is blunt — "If you write a sentence
  * containing a number, guard it or do not write it" — and two patch headers
  * broke it the day they were written. highcontrast-patch.js quotes relative
  * luminances and contrast ratios to justify every colour it picks;
