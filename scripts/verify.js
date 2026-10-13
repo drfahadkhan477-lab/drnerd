@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 152 suites and roughly 6870 checks, and they
+ * WHY THIS EXISTS. There are 152 suites and roughly 6902 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -520,8 +520,12 @@ const RETIRED_RECORD = [];
    Everything else in the registry asserts on content, geometry or arithmetic,
    and was verified to give the same result under --jobs 3 as it does alone —
    that comparison is the evidence, not this list. */
+/* Backup restores and reloads a cold database with bounded open waits. The
+   integrated two-worker run failed its image reload once, while the isolated
+   unchanged suite passed all 131 checks. Keep that persistence measurement
+   clear of other browser work, as the rendering budgets below already are. */
 const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
-                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs',
+                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs', 'backup',
                         'memorizer', 'memorizer-hardening', 'memorizer-studyimport']);
 
 const argv = process.argv.slice(2);

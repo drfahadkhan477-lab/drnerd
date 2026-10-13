@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6870 checks in
-# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6787.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6902 checks in
+# `node scripts/verify.js` plus 134 more under `--pwa`, this workflow runs 6819.
 # The other 217 all drive something this workflow does not have: the real
 # bank, or the split build served to a browser. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
@@ -83,7 +83,7 @@
 #                run adds, not only the tree checked out: a licensed file
 #                added and deleted again inside a pull request would still
 #                reach master's history if it were merged.
-#                Across every job, 6787 real checks, up
+#                Across every job, 6819 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -338,11 +338,11 @@ jobs:
         run: node tests/verify-suitetime-pure.js
       - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (54 checks)
         run: node tests/verify-devtools-pure.js
-      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (261 checks)
+      - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (262 checks)
         run: node tests/verify-memorizer-chunk-pure.js
       - name: Memorizer — held to your PDF, only one section sent, a bad reply never a pass, the protocol cached (94 checks)
         run: node tests/verify-memorizer-prompts-pure.js
-      - name: Memorizer — teach, memorise, then drill; every miss typed, one card, and kept until it graduates; review rounds interleaved (142 checks)
+      - name: Memorizer — teach, memorise, then drill; every miss typed, one card, and kept until it graduates; review rounds interleaved (143 checks)
         run: node tests/verify-memorizer-session-pure.js
       - name: Memorizer — the built-in coach needs no key, invents nothing, asks multiple-choice questions that test reasoning, explains them, makes the cards to memorise, and re-teaches by the kind of miss (166 checks)
         run: node tests/verify-memorizer-coach-pure.js
@@ -350,7 +350,7 @@ jobs:
         run: node tests/verify-memorizer-appearance-pure.js
       - name: Memorizer — the home screen's progress, streak, brain and its live impulses, pearl, the pearl's figure or table, and weak spots say true things (133 checks)
         run: node tests/verify-memorizer-home-pure.js
-      - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (49 checks)
+      - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (52 checks)
         run: node tests/verify-memorizer-book-pure.js
       - name: Memorizer — asking your book answers in its own sentences, with pages, or says nothing was found (38 checks)
         run: node tests/verify-memorizer-ask-pure.js
@@ -364,7 +364,7 @@ jobs:
         run: node tests/verify-memorizer-figure-pure.js
       - name: Memorizer — the Coach as an agent — it picks a tool, remembers the topic, and uses a model's plan only when it names a real tool, names what is still weak, and runs a message as steps, each decided by what the last found — and, with the on-device model, a loop whose answer holds to what its tools found, the new tools, and what it remembers (76 checks)
         run: node tests/verify-memorizer-agent-pure.js
-      - name: Memorizer — studying beyond the drill — recall and figure cards from the book, section checks days apart, timed practice, confidence, cases, an exam plan, teach-back, corrections, notes, the mastery map, the week and the streak (110 checks)
+      - name: Memorizer — studying beyond the drill — recall and figure cards from the book, section checks days apart, timed practice, confidence, cases, an exam plan, teach-back, corrections, notes, the mastery map, the week and the streak (111 checks)
         run: node tests/verify-memorizer-study-pure.js
       - name: Memorizer — where a unit came from — a real SHA-256 of its bytes, a duplicate recognised, an import report that counts what happened (31 checks)
         run: node tests/verify-memorizer-provenance-pure.js
@@ -447,10 +447,10 @@ jobs:
       - name: prepare the pinned public reader libraries
         run: npm run test:prepare
       - if: ${{ !cancelled() }}
-        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (492 checks)
+        name: Memorizer — a real PDF through lesson, drill, exam, review, reload, figures and scanned pages (495 checks)
         run: node tests/verify-memorizer.js
       - if: ${{ !cancelled() }}
-        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (107 checks)
+        name: Memorizer — a double tap lands once, a failed save stores nothing half-way and says so, a late reply is dropped, a dialog holds focus (130 checks)
         run: node tests/verify-memorizer-hardening.js
       - if: ${{ !cancelled() }}
         name: Memorizer — a saved HTML page and the Import Study dialog — options and answers read right, a modal that closes every way, too large refused, and no half-imported unit (72 checks)

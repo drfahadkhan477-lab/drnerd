@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
-node scripts/verify.js --pwa                           # → 6870 + 134 checks
+node scripts/verify.js --pwa                           # → 6902 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -66,7 +66,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   ```
 
   Without it that one suite refuses with the install command and the other 151
-  run normally — it is 35 of the 6870 checks. The suite tries `python3`,
+  run normally — it is 35 of the 6902 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -249,7 +249,7 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 152 suites, 6870 checks, plus 134 more on the split build. Those numbers are
+Across 152 suites, 6902 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
@@ -359,6 +359,17 @@ All 87 public pure suites passed on the combined source; that result does not
 yet establish that the combined private browser suite passes. Its prior
 per-family measurements remain in the record until a qualifying run replaces
 them.
+
+The first integrated private run at `348045d` completed all 152 suites: 151
+passed and backup failed only its imported-image reload assertion. Backup then
+passed all 131 checks in isolated Chromium and WebKit runs, with its assertions
+unchanged. The runner now places backup in the existing serial group to keep
+its cold database and bounded-open persistence measurement clear of concurrent
+browser work. The complete integrated Memorizer scenario also passed all 495
+checks in WebKit, using the same local runtime setup described above. The first
+integrated run qualified only the Memorizer family to refresh its counts; it
+did not establish a passing integrated Systole family. A complete Systole run
+with corrected scheduling is the remaining gate for that record.
 
 ### Branch review handoff
 
