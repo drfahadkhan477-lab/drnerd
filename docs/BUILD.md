@@ -317,6 +317,46 @@ Provide the separate reference library and rebuild before rerunning the affected
 suites and seeking a complete private baseline. No licensed content belongs in
 the measured counts record or Git.
 
+The owner subsequently supplied an uncommitted laptop record for
+`master @ c324c21`, Chromium, three workers. Its Systole family contains 126
+suites and 4,774 checks; all 152 names in the combined record match that commit's
+registry. The combined total is 6,930 checks because Memorizer's 26 suites and
+2,156 checks are retained from `28a8df4`. The split-build figure remains 134;
+the diff alone does not establish that the split build was rerun. The Systole
+family qualified for recording, which includes the seven reference-dependent
+suites unavailable in the earlier cloud run. This is evidence for that laptop
+checkout, not a passing run of the later master or this review branch.
+
+The uploaded note archive has since been installed into ignored `content/refs/`:
+49 Markdown files produce 1,141 notes, and the reference-format suite passed
+39 checks. Rebuilding stops because cited figure files are absent. The image
+archive exceeds the workspace's 32 MiB attachment-transfer limit and has not
+been installed; a retrieval attempt against the retained earlier build is not
+validation of the newly supplied notes.
+
+### Branch review handoff
+
+The remote snapshot inspected on 2026-10-13 has master at `db8c0d5`. It contains
+60 commits absent from the review branch's original `f28fa2c` base, including
+changes after the laptop measurement at `c324c21`. Fifteen test files changed
+between that measurement and the inspected master. Master's committed counts
+still retain the older Systole run at `2aefc81`; the owner's newer laptop record
+has not been published there.
+
+Only three remote branches contain commits absent from that master snapshot:
+
+| Branch | Unmerged work | Treatment |
+|---|---|---|
+| `claude/exciting-fermi-330ukl` | eight commits covering guards, CSP, and Node/CI setup | review separately; no newer committed run record |
+| `claude/compassionate-goodall-szcar9` | one commit retiring the deleted Claude checks | overlaps this review's cleanup, on an older base |
+| `claude/repro-webkit-figure-card` | three commits explicitly marked scratch | diagnostic work, not a merge candidate |
+
+The review branch's passing measurements and the owner's laptop measurements
+describe different source trees. Keep their provenance; do not copy either
+record over the other or count them as validation of an integrated tree. Master
+also restored Claude configuration after the owner requested its deletion, so
+reconciliation must retain the chosen lean contributor setup deliberately.
+
 ### When a screen overflows
 
 Two checks can fail with a bare pixel count, one per axis, and both now name
