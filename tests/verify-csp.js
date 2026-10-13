@@ -137,13 +137,24 @@ head('the allowlist covers every host the shipped app can reach');
      saying so. The places a page fetches a picture from are read here, in
      the shell and its stylesheets, blanked: a url() in CSS, and a src,
      srcset or poster in markup or a .src = in script. A <script src> from
-     another host would be reported too, and would be refused as well. */
+     another host would be reported too, and would be refused as well.
+     A srcset (or a preload's imagesrcset) is a list, and the browser may
+     pick any candidate in it, a later one on a high-density iPad, so every
+     candidate is read. This read only the first (found by review, #240). */
   const imgHosts = new Set(CSP.IMG.filter(s => s.startsWith('https://')).map(s => s.slice('https://'.length)));
-  const IMG_AT = /(?:url\(\s*["']?|\b(?:src|srcset|poster)\s*=\s*["'`]?)(https?:)\/\/([a-z0-9.-]+)/gi;
+  const refused = url => {
+    const m = url.match(/^(https?:)\/\/([a-z0-9.-]+)/i);
+    return !!m && (m[1].toLowerCase() === 'http:' || !imgHosts.has(m[2].toLowerCase()));
+  };
+  const IMG_AT = /(?:url\(\s*["']?|\b(?:src|poster)\s*=\s*["'`]?)(https?:\/\/[a-z0-9.-]+)/gi;
+  const SRCSET = /\b(?:image)?srcset\s*=\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`|([^\s>]+))/gi;
   const offHost = [];
   for (const f of SHELL_FILES) {
-    for (const m of blankComments(fs.readFileSync(f, 'utf8')).matchAll(IMG_AT))
-      if (m[1].toLowerCase() === 'http:' || !imgHosts.has(m[2].toLowerCase())) offHost.push(`${relPath(f)}: ${m[0]}`);
+    const text = blankComments(fs.readFileSync(f, 'utf8'));
+    for (const m of text.matchAll(IMG_AT)) if (refused(m[1])) offHost.push(`${relPath(f)}: ${m[0]}`);
+    for (const m of text.matchAll(SRCSET))
+      for (const candidate of (m[1] ?? m[2] ?? m[3] ?? m[4]).split(','))
+        if (refused(candidate.trim())) offHost.push(`${relPath(f)}: srcset … ${candidate.trim()}`);
   }
   ok('no picture in the shell or a stylesheet comes from a host img-src refuses',
      offHost.length === 0 && SHELL_FILES.length > 1, offHost.join('; ') || `${SHELL_FILES.length} files read`);
