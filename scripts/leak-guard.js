@@ -225,15 +225,26 @@ function imageMagic(b, size) {
 /* An SVG is text with no magic bytes. What makes a file one is that its root
    element is <svg>, past an XML declaration, comments and a doctype (decode()
    has already dropped a byte-order mark). A page or a script that contains an
-   <svg> does not start with one, and is not refused for it. The doctype's
-   internal subset ends at its first ], so each character has one way to be
-   read: the first version let a "][" sit inside the brackets or outside
-   them, and a file opening <!doctype[ with forty of those took hours
-   (found by CodeQL, #241). */
+   <svg> does not start with one, and is not refused for it.
+
+   The doctype is read as XML reads it: a ] or > inside a quoted literal, a
+   comment or a processing instruction ends nothing (found by review, #241:
+   <!ENTITY a "]"> ended the internal subset at its quoted ], and the SVG
+   passed renamed). Each character still has one way to be read, so the time
+   is linear: each alternative opens on a character of its own, and none
+   stretches past its first close. The first version let a "][" sit inside
+   the brackets or outside them, and a file opening <!doctype[ with forty of
+   those took hours (found by CodeQL, #241); a lazy comment in the subset's
+   loop does the same with forty comments and no ]. */
+const XML_PI = '<\\?(?:[^?]|\\?(?!>))*\\?>', XML_COMMENT = '<!--(?:[^-]|-(?!->))*-->', LITERAL = `"[^"]*"|'[^']*'`;
+const PROLOG = new RegExp(`\\s*(?:${XML_PI}|${XML_COMMENT}|<!DOCTYPE(?:[^[>"']|${LITERAL})*` +
+  `(?:\\[(?:[^\\]"'<]|${LITERAL}|${XML_COMMENT}|${XML_PI}|<(?!!--|\\?))*\\]\\s*)?>)`, 'iy');
+const SVG_ROOT = /\s*<svg[\s>/]/y;
 function isSvg(text) {
-  let t = text;
-  for (let m; (m = t.match(/^\s*(?:<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^[>]*(?:\[[^\]]*\][^[>]*)*>)/i)); ) t = t.slice(m[0].length);
-  return /^\s*<svg[\s>/]/.test(t);
+  let at = 0;
+  for (PROLOG.lastIndex = 0; PROLOG.test(text); ) at = PROLOG.lastIndex;
+  SVG_ROOT.lastIndex = at;
+  return SVG_ROOT.test(text);
 }
 
 /* Paths a person has decided are fine, with the reason. Nothing is here yet;
