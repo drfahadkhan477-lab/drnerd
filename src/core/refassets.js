@@ -42,29 +42,47 @@ let opened = null;                  // the open() promise, so boot only opens on
 /* An open that fires none of success, error or blocked would leave ready(),
    backup() and every write waiting for ever. Same answer as store.js (see its
    OPEN_TIMEOUT_MS): give up, run on the memory mirror as with no database,
-   and close a connection that arrives late. */
-const OPEN_TIMEOUT_MS = 4000;
+   and close a connection that arrives late.
+
+   But a slow open is not a hung one, and giving up costs more here than in
+   store.js. Store falls back to localStorage, which the next launch folds in,
+   so a slow open there loses nothing. This falls back to memory, so every
+   image imported or restored in that visit is gone at the next reload. The
+   4 s this first had was too short: on a loaded machine the page can take
+   longer than that to hear from an open that is fine, and verify-backup lost
+   a restored image that way, in a full run on the owner's laptop and in a
+   container running four suites at once. 15 s, as the Memorizer's store
+   gives its database. openInfo() says how the open ended and how long it
+   took, so the next slow one is measured, not guessed. */
+const OPEN_TIMEOUT_MS = 15000;
+let openState = { state: 'not asked', ms: null };
 
 function open() {
   if (opened) return opened;
+  const asked = Date.now();
+  openState = { state: 'waiting', ms: null };
   opened = new Promise(resolve => {
     let req, done = false;
-    const settle = d => { if (done) return false; done = true; resolve(d); return true; };
+    const settle = (d, how) => {
+      if (done) return false;
+      done = true; openState = { state: how, ms: Date.now() - asked }; resolve(d); return true;
+    };
     try { req = indexedDB.open(DB_NAME, 1); }
-    catch (_) { return settle(null); }        // private mode, file://, disabled
-    setTimeout(() => settle(null), OPEN_TIMEOUT_MS);
+    catch (_) { return settle(null, 'refused'); }   // private mode, file://, disabled
+    setTimeout(() => settle(null, 'gave up'), OPEN_TIMEOUT_MS);
     req.onupgradeneeded = () => {
       const d = req.result;
       if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE);
     };
     req.onsuccess = () => {
-      if (!settle(req.result)) { try { req.result.close(); } catch (_) {} }
+      if (!settle(req.result, 'open')) { try { req.result.close(); } catch (_) {} }
     };
-    req.onerror = () => settle(null);
-    req.onblocked = () => settle(null);
+    req.onerror = () => settle(null, 'error');
+    req.onblocked = () => settle(null, 'blocked');
   }).then(d => { db = d; return d; });
   return opened;
 }
+function openInfo() { return { state: openState.state, ms: openState.ms }; }
 
 /* Read everything into memory. Failure is not fatal anywhere: an import in
    this session still works, it just will not survive a reload. */
@@ -257,7 +275,7 @@ function sweep(bodies, opts) {
 }
 
 root.RefAssets = { ready, add, get, has, keys, count, bytes, drop, sweep, flush, pending,
-                   backup, validateBackup, restoreBackup,
+                   backup, validateBackup, restoreBackup, openInfo, OPEN_TIMEOUT_MS,
                    isImageName, mimeFor, hashBytes, PREFIX,
                    _mem: () => mem };
 
