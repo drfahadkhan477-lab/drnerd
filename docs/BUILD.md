@@ -4,7 +4,7 @@ Two commands.
 
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
-node scripts/verify.js --pwa                           # → 6902 + 134 checks
+node scripts/verify.js --pwa                           # → 7090 + 134 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -66,7 +66,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   ```
 
   Without it that one suite refuses with the install command and the other 151
-  run normally — it is 35 of the 6902 checks. The suite tries `python3`,
+  run normally — it is 35 of the 7090 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -249,7 +249,7 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 152 suites, 6902 checks, plus 134 more on the split build. Those numbers are
+Across 152 suites, 7090 checks, plus 134 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
@@ -369,7 +369,24 @@ browser work. The complete integrated Memorizer scenario also passed all 495
 checks in WebKit, using the same local runtime setup described above. The first
 integrated run qualified only the Memorizer family to refresh its counts; it
 did not establish a passing integrated Systole family. A complete Systole run
-with corrected scheduling is the remaining gate for that record.
+with corrected scheduling was the remaining gate for that record.
+
+That complete Systole run at `8864490` passed all 126 suites and 4,823 checks.
+Both families now have qualifying integrated runs: Systole at `8864490` and
+Memorizer at `348045d` (26 suites, 2,267 checks), for 152 recorded suites and
+7,090 checks. This combines two family runs; the earlier full-registry failure
+is retained in its structured report. The 134 split-build checks remain from
+their older measurement.
+
+Inspection also found the backup fixture could stop waiting after five seconds
+or an unrelated toast change, before the real asynchronous import finished.
+A six-second asset-restore delay reproduced two failures with the old helper.
+The helper now awaits the real FileReader handler, including its awaited
+storage writes, while restoring its temporary interception immediately.
+With the delay and the same 131 assertions, backup passed in Chromium and
+WebKit. Application storage deadlines and assertions were not relaxed. This
+fixture correction followed the full-family run; application source is
+unchanged, and its strengthened backup scenario was verified separately.
 
 ### Branch review handoff
 
