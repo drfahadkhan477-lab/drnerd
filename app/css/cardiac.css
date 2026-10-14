@@ -605,6 +605,10 @@ html[data-palette="contrast"] .ref-card{background:var(--card);border-color:var(
 .door,.home-progress{
   background:linear-gradient(145deg,var(--gl-shine),transparent 52%),
     linear-gradient(160deg,color-mix(in srgb,var(--card) 94%,transparent),color-mix(in srgb,var(--card) 76%,transparent));
+  /* Gradient-only shorthand resets the base colour to transparent. Keep a
+     themed ground underneath the refraction, including a color-mix fallback. */
+  background-color:var(--card);
+  background-color:color-mix(in srgb,var(--card) 86%,transparent);
   box-shadow:inset 0 1px 0 var(--gl-rim),inset 1px 0 0 var(--gl-shine),
     inset 0 -1px 0 var(--gl-edge),0 16px 34px -22px rgba(3,12,24,.25)}
 .door-ic{border:1px solid color-mix(in srgb,var(--teal) 12%,transparent);
