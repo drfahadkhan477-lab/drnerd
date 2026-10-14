@@ -152,6 +152,13 @@ makes of it. The bank is checked first by `src/core/bankpack.js`, the check
 the iPad runs on an import, so a bank the device would refuse is refused here,
 naming ids and files and never a word of a question.
 
+The questions are written into the page inside a `<script>` element, and a
+bank's text is not the app's own: a stem that quotes `</script>` would end the
+element and break the page. So every payload is written with `</script` and
+`<!--` escaped as `\u003c`, which the string reads back as the same `<`; a
+payload with neither is written byte for byte
+(`tests/verify-bankbuild-pure.js`).
+
 The assembler gives the bank the shape the export has: the figures go inline
 as the export's do, an option written as a plain string becomes the
 `{l, t}` the app reads, and a question without `img` or `n` gets the number
@@ -166,9 +173,11 @@ say. A bank whose manifest names another bank (`"bank": { "id": …, "name": …
 gets none of the ACCSAP corrections or flags, and the split build
 (`scripts/build-pwa.js`) ships it as it is. The older ACC import
 (`tools/older-acc-import.js --merge`) refuses such a build.
-A bank of your own is made the same way from study files: drafted by Claude
-from your reading, reviewed and signed by you, and built by
-`scripts/build-bank.js` (`npm run bank`). `docs/OWN-BANK.md` has the steps.
+A bank of your own is made the same way from study files, drafted by Claude
+from your reading or written by you, reviewed and signed by you, and built by
+`scripts/build-bank.js` (`npm run bank`); a bank you hold a licence to is
+imported from its publisher's CSV or JSON export by `scripts/import-bank.js`
+(`npm run bank:import`). `docs/OWN-BANK.md` has the steps for all three.
 Built from the folder or the package `extract-content.js` writes from a
 build, the app is the same bytes as that build; `tests/verify-bankbuild-pure.js`
 holds that on the synthetic bank (`node scripts/synthetic-export.js out.html
@@ -764,7 +773,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        152 suites · 89 need no browser · + pwa
+tests/        152 suites · 90 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

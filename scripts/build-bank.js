@@ -7,6 +7,17 @@
  *   node scripts/build-bank.js --sign <study-file.md>
  *   npm run build -- build/bank          then the app is built from it
  *
+ * and, to write the questions yourself rather than have Claude draft them:
+ *
+ *   node scripts/build-bank.js --init "My Cardiology Bank" [--by "…"] [source/bank]
+ *   node scripts/build-bank.js --new source/bank/<file>.md --chapter "Valvular Disease"
+ *                              [--prefix valve] [--questions 5]
+ *   node scripts/build-bank.js --check source/bank/<file>.md
+ *
+ * --init writes bank.json; --new a study file of numbered question blocks
+ * with every field empty, to fill in; --check says what the builder would
+ * refuse in one file, or that it is ready to sign.
+ *
  * THE SOURCE is a folder (source/bank by default: gitignored, so a bank
  * drafted from your books stays on your own machine) holding
  *
@@ -32,6 +43,8 @@
  *     question ships only with why each distractor is wrong;
  *   - two options alike, or an "all of the above" or "none of the above";
  *   - a question with no number, a number used twice, an id another file gives;
+ *   - a question begun and not finished: a "### Question N" heading with no
+ *     stem and options under it, which the parser would pass over in silence;
  *   - a file you have not signed off, or have changed since: --sign records a
  *     digest of its questions, and an edit after that means reading it again.
  * --draft builds unsigned files too, to look at in the app, and names the
@@ -55,6 +68,7 @@ const ROOT = path.join(__dirname, '..');
 const SI = require(path.join(ROOT, 'memorizer', 'src', 'studyImport.js'));
 const Spec = require(path.join(ROOT, 'memorizer', 'src', 'spec.js'));
 const { ACCSAP } = require('./which-bank.js');
+const { writeBankFolder } = require('./bank-folder.js');
 
 const LETTERS = 'ABCDEFGH';
 const SAFE_PREFIX = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,60}$/;
@@ -74,13 +88,25 @@ function digestOf(questions) {
   return crypto.createHash('sha256').update(JSON.stringify(canon)).digest('hex').slice(0, 12);
 }
 const signedDigest = meta => { const m = /sha256:([0-9a-f]{12})\b/.exec(String(meta.reviewed || '')); return m ? m[1] : ''; };
+
+/* The numbers of the "### Question N" headings in the text the parser reads:
+   as it does, without a fence around the whole file, the front matter, HTML
+   comments or code blocks, so a question commented out is not one begun. */
+function numberedHeadings(text) {
+  let src = String(text || '').replace(/\r\n?/g, '\n');
+  const fenced = src.trim().match(/^(`{3,}|~{3,})\s*(?:markdown|md)?\s*\n([\s\S]*)\n\1\s*$/i);
+  if (fenced) src = fenced[2];
+  src = src.replace(/^---\n[\s\S]*?\n---\s*(?:\n|$)/, '').replace(/<!--[\s\S]*?-->/g, '\n').replace(/```[^\n]*\n[\s\S]*?(?:```|$)/g, '\n');
+  return [...new Set([...src.matchAll(/^#{1,6}[ \t]+q(?:uestion)?[ \t]*(\d+)\b/gim)].map(m => +m[1]))];
+}
 const norm = t => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 /* readStudyFile(file) → { name, chapter, prefix, questions, digest, signed, problems }
    problems are "<file>, question N: why", ids and numbers only. */
 function readStudyFile(file) {
   const name = path.basename(file);
-  const p = SI.parseMarkdown(fs.readFileSync(file, 'utf8'));
+  const text = fs.readFileSync(file, 'utf8');
+  const p = SI.parseMarkdown(text);
   const meta = p.meta || {};
   const problems = [];
   const where = q => `${name}, question ${q.num || '(unnumbered)'}`;
@@ -104,6 +130,11 @@ function readStudyFile(file) {
     const unreasoned = q.options.map((_, k) => k).filter(k => k !== q.answer && !String(q.why[k] || '').trim()).map(k => LETTERS[k]);
     if (unreasoned.length) problems.push(`${where(q)}: no reason why ${unreasoned.join(', ')} ${unreasoned.length === 1 ? 'is' : 'are'} wrong ("Why the distractors are wrong")`);
   }
+  /* A question begun and not finished: a heading with no stem and options
+     under it is no question to the parser, and would leave the bank without
+     a word. So every numbered question heading must come back as a question. */
+  const parsed = new Set(p.questions.map(q => q.num));
+  for (const n of numberedHeadings(text)) if (!parsed.has(n)) problems.push(`${name}, question ${n}: not finished (no stem with options under its heading)`);
   const digest = digestOf(p.questions);
   return { file, name, chapter, prefix, questions: p.questions, digest, signed: signedDigest(meta) === digest, wasSigned: !!signedDigest(meta), problems };
 }
@@ -130,9 +161,15 @@ const studyFilesIn = dir => fs.readdirSync(dir).filter(f => /\.(md|markdown)$/i.
    Throws, listing every problem, and leaves out as it was. */
 function buildBank({ src, out, draft = false }) {
   const problems = [], warnings = [];
-  let which = null;
-  try { which = JSON.parse(fs.readFileSync(path.join(src, 'bank.json'), 'utf8')); }
-  catch (e) { problems.push(`${path.join(path.basename(src), 'bank.json')}: ${e.code === 'ENOENT' ? 'missing' : 'not JSON'}. It says which bank this is: { "id": "my-bank", "name": "My bank" }`); }
+  let which = null, parsed = false;
+  const bankJson = path.join(path.basename(src), 'bank.json');
+  try { which = JSON.parse(fs.readFileSync(path.join(src, 'bank.json'), 'utf8')); parsed = true; }
+  catch (e) { problems.push(`${bankJson}: ${e.code === 'ENOENT' ? 'missing' : 'not JSON'}. It says which bank this is: { "id": "my-bank", "name": "My bank" }`); }
+  /* null, a list, a number or a string is JSON, and no bank block. */
+  if (parsed && (!which || typeof which !== 'object' || Array.isArray(which))) {
+    problems.push(`${bankJson}: not an object. It says which bank this is: { "id": "my-bank", "name": "My bank" }`);
+    which = null;
+  }
   if (which && which.id === ACCSAP.id) problems.push(`bank.json gives ACCSAP 12's id (${ACCSAP.id}); a bank of your own needs its own, or ACCSAP's corrections would be applied to it`);
   const files = fs.existsSync(src) ? studyFilesIn(src) : [];
   if (!files.length) problems.push(`${src}: no study files (.md) in it`);
@@ -170,15 +207,9 @@ function buildBank({ src, out, draft = false }) {
   const verdict = bankPack().validate(written.map(f => ({ name: f.name, bytes: new Uint8Array(f.bytes) })));
   if (!verdict.ok) throw new Error(`the bank would be refused on the iPad (${verdict.problemCount} problem(s)):\n  ` + verdict.problems.slice(0, 10).join('\n  '));
 
-  /* Written beside, swapped in whole: a refusal or a crash leaves the last
-     good bank where it was. */
-  const work = out.replace(/[\\/]+$/, '') + '.tmp-' + process.pid, old = out.replace(/[\\/]+$/, '') + '.old-' + process.pid;
-  fs.rmSync(work, { recursive: true, force: true });
-  fs.mkdirSync(path.join(work, 'figures'), { recursive: true });
-  for (const f of written) fs.writeFileSync(path.join(work, f.name), f.bytes);
-  if (fs.existsSync(out)) fs.renameSync(out, old);
-  fs.renameSync(work, out);
-  fs.rmSync(old, { recursive: true, force: true });
+  /* Written beside, swapped in whole, and only over a bank: a refusal or a
+     crash leaves the last good bank where it was. */
+  writeBankFolder(out, written);
   return { questions: questions.length, files: read.length, draft: isDraft, warnings, bank };
 }
 
@@ -202,12 +233,79 @@ function signStudyFile(file, today = new Date().toISOString().slice(0, 10)) {
   return { file: sf.name, questions: sf.questions.length, digest: sf.digest };
 }
 
-module.exports = { buildBank, signStudyFile, readStudyFile, digestOf };
+/* --init: bank.json, which says which bank this is. The id is the name's,
+   lowercased, unless given; the block is held to the rules the app's own
+   check holds a manifest's bank to. An existing bank.json is never replaced. */
+function initBank(dir, { name, id, by } = {}) {
+  if (!name || !String(name).trim()) throw new Error('a bank needs a name: --init "My Cardiology Bank"');
+  const block = { id: String(id || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40), name: String(name).trim() };
+  if (by) block.by = String(by).trim();
+  if (block.id === ACCSAP.id) throw new Error(`${ACCSAP.id} is ACCSAP 12's id; a bank of your own needs its own`);
+  const v = bankPack().validate([
+    { name: 'manifest.json', bytes: new TextEncoder().encode(JSON.stringify({ schemaVersion: bankPack().SCHEMA, bank: block })) },
+    { name: 'questions.json', bytes: new TextEncoder().encode('[{"id":"q_1","ch":"c","o":["a","b"],"ci":0}]') }]);
+  if (!v.ok) throw new Error('the app would refuse it: ' + v.problems.join('; '));
+  const file = path.join(dir, 'bank.json');
+  if (fs.existsSync(file)) throw new Error(`${file} already exists: edit it, or move it away first`);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(block, null, 2) + '\n');
+  return block;
+}
+
+/* --new: a study file to write questions into by hand, in the format the
+   builder reads. Every field is empty: one left so is refused, never built
+   (an empty question is caught by its heading, above). */
+function questionBlock(n) {
+  return [`### Question ${n}:`, '**Stem**: ', '', '**Options**:', '- A) ', '- B) ', '- C) ', '- D) ', '',
+    '**Correct Answer**: ', '', '**Explanation**: ', '', '**Why the distractors are wrong**:', '- A) ', '- B) ', '- C) ', '- D) ', '', '---', ''].join('\n');
+}
+function newStudyFile(file, { chapter, prefix, questions = 5 } = {}) {
+  if (!chapter || !String(chapter).trim()) throw new Error('say which chapter its questions go under: --chapter "Valvular Disease"');
+  if (prefix && !SAFE_PREFIX.test(prefix)) throw new Error('the prefix is letters, digits, _ . - only');
+  if (fs.existsSync(file)) throw new Error(`${file} already exists`);
+  const n = Math.max(1, Math.min(50, parseInt(questions, 10) || 5));
+  const text = ['---', `chapter: ${String(chapter).trim()}`, ...(prefix ? [`prefix: ${prefix}`] : []), '---',
+    `# ${String(chapter).trim()}`, '',
+    '<!-- Fill in every field. Under "Why the distractors are wrong", give a reason for each',
+    '     wrong option and delete the line for the right one. Keep each question\'s number:',
+    '     it becomes the question\'s id. Then: node scripts/build-bank.js --check this file. -->', '',
+    '## Practice Questions', '', ...Array.from({ length: n }, (_, k) => questionBlock(k + 1))].join('\n');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text);
+  return { file: path.basename(file), questions: n };
+}
+
+module.exports = { buildBank, signStudyFile, readStudyFile, digestOf, initBank, newStudyFile };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
   const opt = f => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
+  /* The values the flags take are never the source folder. */
+  const VALUED = ['--out', '--sign', '--init', '--id', '--by', '--new', '--chapter', '--prefix', '--questions', '--check'];
+  const positional = args.find((a, i) => !a.startsWith('--') && !VALUED.includes(args[i - 1]));
+  const shown = p => { const r = path.relative(ROOT, p); return r && !r.startsWith('..') && !path.isAbsolute(r) ? r : p; };
   try {
+    if (args.includes('--init')) {
+      const dir = path.resolve(positional || path.join(ROOT, 'source', 'bank'));
+      const b = initBank(dir, { name: opt('--init'), id: opt('--id'), by: opt('--by') });
+      console.log(`wrote ${shown(path.join(dir, 'bank.json'))}: ${b.name} (id ${b.id})`);
+      process.exit(0);
+    }
+    if (args.includes('--new')) {
+      const file = opt('--new');
+      if (!file) { console.error('usage: node scripts/build-bank.js --new <file.md> --chapter "…" [--prefix …] [--questions N]'); process.exit(2); }
+      const r = newStudyFile(path.resolve(file), { chapter: opt('--chapter'), prefix: opt('--prefix'), questions: opt('--questions') });
+      console.log(`wrote ${r.file}: ${r.questions} empty questions to fill in. Then: node scripts/build-bank.js --check ${file}`);
+      process.exit(0);
+    }
+    if (args.includes('--check')) {
+      const file = opt('--check');
+      if (!file) { console.error('usage: node scripts/build-bank.js --check <study-file.md>'); process.exit(2); }
+      const sf = readStudyFile(path.resolve(file));
+      if (sf.problems.length) { console.log(`${sf.name}: ${sf.problems.length} problem(s)\n  ` + sf.problems.join('\n  ')); process.exit(1); }
+      console.log(`${sf.name}: ${sf.questions.length} questions, ${sf.signed ? 'signed' : 'ready to read and sign (--sign)'}`);
+      process.exit(0);
+    }
     if (args.includes('--sign')) {
       const file = opt('--sign');
       if (!file) { console.error('usage: node scripts/build-bank.js --sign <study-file.md>'); process.exit(2); }
@@ -215,12 +313,12 @@ if (require.main === module) {
       console.log(`signed ${r.file}: ${r.questions} questions, sha256:${r.digest}. An edit to any of them needs signing again.`);
       process.exit(0);
     }
-    const src = path.resolve(args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--out') || path.join(ROOT, 'source', 'bank'));
+    const src = path.resolve(positional || path.join(ROOT, 'source', 'bank'));
     const out = path.resolve(opt('--out') || path.join(ROOT, 'build', 'bank'));
     const r = buildBank({ src, out, draft: args.includes('--draft') });
     r.warnings.forEach(w => console.log('  draft: ' + w));
-    console.log(`built ${r.bank.name}: ${r.questions} questions from ${r.files} study file(s) → ${path.relative(ROOT, out) || out}`);
-    console.log(`next: npm run build -- ${path.relative(ROOT, out) || out}`);
+    console.log(`built ${r.bank.name}: ${r.questions} questions from ${r.files} study file(s) → ${shown(out)}`);
+    console.log(`next: npm run build -- ${shown(out)}`);
   } catch (e) {
     console.error('build-bank: ' + e.message);
     process.exit(1);

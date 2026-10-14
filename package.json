@@ -10,6 +10,7 @@
   "scripts": {
     "build": "node scripts/assemble-app.js --out build/systole.html",
     "bank": "node scripts/build-bank.js",
+    "bank:import": "node scripts/import-bank.js",
     "verify": "node scripts/verify.js",
     "test": "node scripts/test-public.js",
     "test:prepare": "node tests/_reader-assets.js --prepare",

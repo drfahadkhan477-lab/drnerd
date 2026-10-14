@@ -160,10 +160,22 @@ function cut(html, sources = repoSources()) {
   return { shell, payloads, report: { slots, inline } };
 }
 
+/* A payload is data written into a <script> element, and in a page that element
+   ends at the first "</script", and "<!--" changes how what follows is read,
+   wherever either sits, in a string or not. A bank's text is not the app's own:
+   a stem that quotes a tag, or an export that carries one, must not end the
+   element that holds it, or the page breaks there and what follows is read as
+   markup. Those two sequences are written with the JS escape <, which a
+   string reads back as the same "<". A payload is JSON, whose only "<" are in
+   strings, so nothing else is touched, and a payload with neither sequence
+   comes through byte for byte (tests/verify-bankbuild-pure.js holds that). */
+const scriptSafe = text => text.replace(/<(?=\/script|!--)/gi, '\\u003c');
+
 /* assemble(shell, resolve) — resolve(kind, name) returns the span's text.
    A payload or src token may appear once; an asset token may repeat, as the
    asset did in the build. An unknown kind, a missing payload or a token left
-   over is an error, never an empty string. */
+   over is an error, never an empty string. A payload is made safe to sit in
+   its script element (scriptSafe); code and assets are written as they are. */
 function assemble(shell, resolve) {
   const seen = new Set();
   const out = shell.replace(TOKEN_RE, (_, kind, name) => {
@@ -172,7 +184,7 @@ function assemble(shell, resolve) {
     seen.add(key);
     const text = resolve(kind, name);
     if (typeof text !== 'string') throw new Error(`slot ${key} has nothing to fill it`);
-    return text;
+    return kind === 'payload' ? scriptSafe(text) : text;
   });
   if (out.includes('@@SLOT[')) throw new Error('a slot token survived assembly');
   return out;

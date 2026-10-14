@@ -22,7 +22,14 @@
  *     outside its questions does not count; --draft builds it, and says so
  *     in the bank's name; --sign refuses a file that breaks a rule;
  *   - deleting a question renumbers none of the others;
- *   - a refused build leaves the last good bank as it was.
+ *   - a refused build leaves the last good bank as it was, and a bank
+ *     replaces only a bank: an --out folder holding anything else is refused;
+ *   - to write the questions yourself: --init writes bank.json and never
+ *     replaces one, nor takes ACCSAP 12's id or a name the app would refuse;
+ *     --new writes a study file of empty numbered questions and never replaces
+ *     a file; a question begun and not finished, which the parser would pass
+ *     over in silence, is refused even in a draft, but one commented out is
+ *     not; filled in, the file checks, signs and builds; --check says which.
  *
  * Every question here is invented placeholder text.
  */
@@ -203,12 +210,180 @@ head('a refused build leaves the last good bank as it was');
   const now = bytes();
   ok('the bank written before is still there, byte for byte', !!first.r && !second.r && !!now && !!snapshot && now.equals(snapshot) &&
      !fs.readdirSync(dir).some(f => /^kept\.(tmp|old)-/.test(f)), second.r ? 'the second build went through' : now ? 'kept' : 'gone');
+  /* --out build, or a folder of your own: a bank takes the place of a bank,
+     and of nothing else. */
+  const fine = source({ 'f.md': studyFile([good(1)]) });
+  sign(fine, 'f.md');
+  const mine = path.join(dir, 'not-a-bank');
+  fs.mkdirSync(mine);
+  fs.writeFileSync(path.join(mine, 'notes.txt'), 'kept');
+  const over = tryBuild(fine, { out: mine });
+  ok('an --out folder that holds no bank is refused, and left as it was', !over.r && /not-a-bank is there and holds no bank/.test(over.why) &&
+     fs.readdirSync(mine).join() === 'notes.txt' && fs.readFileSync(path.join(mine, 'notes.txt'), 'utf8') === 'kept', over.r ? 'it was replaced' : over.why.split('\n')[0]);
+}
+
+head('a failure while the bank is written or swapped in leaves the last good bank where it was');
+{
+  /* One step of the write made to fail, as a full disk or a lock on a folder
+     does it; the function is put back whatever happens. */
+  const failing = (fn, when, run) => {
+    const real = fs[fn];
+    fs[fn] = function (...a) { if (when(...a)) throw Object.assign(new Error('injected ' + fn), { code: 'EINJECTED' }); return real.apply(this, a); };
+    try { return run(); } finally { fs[fn] = real; }
+  };
+  /* A bank already built at out, and a next build with something else to say
+     (two questions, not one), so a swap that went through would show. */
+  const setup = withBank => {
+    const src = source({ 'f.md': studyFile([good(1)]) });
+    sign(src, 'f.md');
+    const out = path.join(dir, 'swap-' + (++n));
+    const first = withBank ? tryBuild(src, { out }) : null;
+    fs.writeFileSync(path.join(src, 'f.md'), studyFile([good(1), good(2)]));
+    sign(src, 'f.md');
+    const read = f => { try { return fs.readFileSync(path.join(out, f)); } catch (_) { return null; } };
+    return { src, out, read, before: first && first.r ? read('questions.json') : null,
+      aside: () => fs.readdirSync(dir).filter(f => f.startsWith(path.basename(out) + '.')) };
+  };
+  /* The rename that brings the new bank into place, and only it: the one that
+     puts the old bank back has the same target. */
+  const toOut = out => (from, to) => path.resolve(String(to)) === path.resolve(out) && String(from).includes('.tmp-');
+  const same = (a, b) => !!a && !!b && a.equals(b);
+
+  const s1 = setup(true);
+  const r1 = failing('renameSync', toOut(s1.out), () => tryBuild(s1.src, { out: s1.out }));
+  ok('the rename into place fails: the build fails with that error alone, and the bank written before is back, byte for byte, with nothing left beside it',
+     !r1.r && /injected renameSync/.test(r1.why) && !/put back/.test(r1.why) && same(s1.read('questions.json'), s1.before) && s1.aside().length === 0,
+     r1.r ? 'the build went through' : `${r1.why.split('\n')[0]}; bank ${s1.read('questions.json') ? 'there' : 'gone'}; beside it: ${s1.aside().join(' ') || 'nothing'}`);
+
+  const s2 = setup(true);
+  const r2 = failing('renameSync', (_from, to) => String(to).includes('.old-'), () => tryBuild(s2.src, { out: s2.out }));
+  ok('moving the old bank aside fails: the same, and no claim that a bank was put back that never moved', !r2.r && /injected renameSync/.test(r2.why) && !/put back/.test(r2.why) && same(s2.read('questions.json'), s2.before) && s2.aside().length === 0,
+     r2.r ? 'the build went through' : `${r2.why.split('\n')[0]}; beside it: ${s2.aside().join(' ') || 'nothing'}`);
+
+  const s3 = setup(true);
+  const r3 = failing('writeFileSync', f => String(f).includes('.tmp-') && String(f).endsWith('questions.json'), () => tryBuild(s3.src, { out: s3.out }));
+  ok('a file cannot be written into the new bank: the same', !r3.r && /injected writeFileSync/.test(r3.why) && !/put back/.test(r3.why) && same(s3.read('questions.json'), s3.before) && s3.aside().length === 0,
+     r3.r ? 'the build went through' : `${r3.why.split('\n')[0]}; beside it: ${s3.aside().join(' ') || 'nothing'}`);
+
+  const s4 = setup(false);
+  const r4 = failing('renameSync', toOut(s4.out), () => tryBuild(s4.src, { out: s4.out }));
+  ok('with no bank before, a failed swap leaves no bank and nothing beside it', !r4.r && !fs.existsSync(s4.out) && s4.aside().length === 0,
+     r4.r ? 'the build went through' : `${fs.existsSync(s4.out) ? 'a folder is there' : 'no folder'}; beside it: ${s4.aside().join(' ') || 'nothing'}`);
+
+  const s5 = setup(true);
+  const r5 = failing('rmSync', p => String(p).includes('.old-'), () => tryBuild(s5.src, { out: s5.out }));
+  const left5 = s5.aside();
+  ok('the swap went through but the old bank cannot be removed: it says so, and the new bank is the one in place',
+     !r5.r && /the new bank is in place, but the previous one could not be removed from .*\.old-\d+/.test(r5.why) &&
+     JSON.parse(s5.read('manifest.json') || '{}').questions === 2 && left5.length === 1 && /\.old-\d+$/.test(left5[0]),
+     r5.r ? 'it said nothing' : `${r5.why.split('\n')[0].slice(0, 110)}; beside it: ${left5.join(' ') || 'nothing'}`);
+  for (const f of left5) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+
+  const s6 = setup(true);
+  let k6 = 0;
+  const r6 = failing('renameSync', () => ++k6 >= 2, () => tryBuild(s6.src, { out: s6.out }));
+  const left6 = s6.aside();
+  const keptOld = left6.filter(f => /\.old-\d+$/.test(f)).map(f => { try { return fs.readFileSync(path.join(dir, f, 'questions.json')); } catch (_) { return null; } });
+  ok('and when the old bank cannot be put back either, it says where it is, and it is there, whole',
+     !r6.r && /could not be put back, it is at .*\.old-\d+/.test(r6.why) && keptOld.length === 1 && same(keptOld[0], s6.before) && !left6.some(f => /\.tmp-/.test(f)),
+     r6.r ? 'the build went through' : `${r6.why.split('\n')[0].slice(0, 120)}; beside it: ${left6.join(' ') || 'nothing'}`);
+  for (const f of left6) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+}
+
+head('a bank.json that is not an object is refused, not a crash');
+{
+  const kinds = [['null', 'null'], ['a list', '[]'], ['a number', '5'], ['a string', '"my-bank"'], ['true', 'true']];
+  const results = kinds.map(([label, text]) => {
+    const src = source({ 'f.md': studyFile([good(1)]) });
+    sign(src, 'f.md');
+    fs.writeFileSync(path.join(src, 'bank.json'), text);
+    return [label, tryBuild(src)];
+  });
+  const bad = results.filter(([, b]) => b.r || !/bank\.json: not an object\. It says which bank this is/.test(b.why) || /Cannot read|TypeError/.test(b.why));
+  ok('bank.json holding null, a list, a number, a string or true is refused as not an object, in the one sentence',
+     bad.length === 0, bad.map(([l, b]) => `${l}: ${b.r ? 'built' : b.why.split('\n')[0].slice(0, 90)}`).join(' | ') || `${results.length} kinds refused`);
+}
+
+head('writing the questions yourself: --init, --new, --check');
+/* The template --new writes, with the questions numbered in nums filled in
+   as a fellow would: a stem, four options, the key, the explanation, and a
+   reason for each wrong option, the right one's line deleted. */
+const fillIn = (text, nums) => text.split(/(?=^### Question \d+:)/m).map(part => {
+  const m = /^### Question (\d+):/.exec(part);
+  if (!m || !nums.includes(+m[1])) return part;
+  const k = m[1];
+  return part.replace(/^### Question \d+:/, `### Question ${k}: invented point ${k}`)
+    .replace('**Stem**: ', `**Stem**: Invented stem ${k}, about an invented finding?`)
+    .replace(/(\*\*Options\*\*:\n)- A\) \n- B\) \n- C\) \n- D\) /, `$1- A) Invented one ${k}\n- B) Invented two ${k}\n- C) Invented three ${k}\n- D) Invented four ${k}`)
+    .replace('**Correct Answer**: ', '**Correct Answer**: B')
+    .replace('**Explanation**: ', '**Explanation**: Invented reason the key is right.')
+    .replace(/(\*\*Why the distractors are wrong\*\*:\n)- A\) \n- B\) \n- C\) \n- D\) /, '$1- A) Invented reason A fails.\n- C) Invented reason C fails.\n- D) Invented reason D fails.');
+}).join('');
+const attempt = fn => { try { return { r: fn(), why: '' }; } catch (e) { return { r: null, why: e.message }; } };
+{
+  const own = path.join(dir, 'own');
+  const i1 = attempt(() => B.initBank(own, { name: 'My Cardiology Bank', by: 'Dr Invented' }));
+  const bj = attempt(() => readJSON(path.join(own, 'bank.json')));
+  ok('--init writes bank.json: the name, an id made from it, and whose commentary it is',
+     JSON.stringify(bj.r) === JSON.stringify({ id: 'my-cardiology-bank', name: 'My Cardiology Bank', by: 'Dr Invented' }), i1.why || bj.why || JSON.stringify(bj.r));
+  const before = fs.existsSync(path.join(own, 'bank.json')) ? fs.readFileSync(path.join(own, 'bank.json'), 'utf8') : null;
+  const again = attempt(() => B.initBank(own, { name: 'Another Name' }));
+  ok('it never replaces a bank.json already there', !again.r && /already exists/.test(again.why) && before !== null && fs.readFileSync(path.join(own, 'bank.json'), 'utf8') === before,
+     again.why || 'replaced');
+  const asAccsap = attempt(() => B.initBank(path.join(dir, 'own-accsap'), { name: 'Mine', id: 'accsap-12' }));
+  ok('it refuses ACCSAP 12\'s id', !asAccsap.r && /ACCSAP 12's id/.test(asAccsap.why) && !fs.existsSync(path.join(dir, 'own-accsap', 'bank.json')), asAccsap.why || 'written');
+  const badName = attempt(() => B.initBank(path.join(dir, 'own-bad'), { name: 'Mine <b>' }));
+  ok('and a name the app\'s own check would refuse', !badName.r && !fs.existsSync(path.join(dir, 'own-bad', 'bank.json')), badName.why || 'written');
+
+  /* Named apart from its prefix, so the ids show which one they come from. */
+  const file = path.join(own, 'valvular-disease.md');
+  const n1 = attempt(() => B.newStudyFile(file, { chapter: 'Valvular Disease', prefix: 'valve', questions: 3 }));
+  const blank = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const heads = [...blank.matchAll(/^### Question (\d+):$/gm)].map(m => +m[1]);
+  ok('--new writes a study file of the questions asked for, numbered, under its chapter and prefix',
+     heads.join() === '1,2,3' && /^---\nchapter: Valvular Disease\nprefix: valve\n---\n/.test(blank), n1.why || heads.join() || 'no file');
+  const asIs = attempt(() => B.readStudyFile(file));
+  const notFinished = asIs.r ? asIs.r.problems.filter(p => /^valvular-disease\.md, question \d: not finished \(no stem with options under its heading\)$/.test(p)) : [];
+  ok('left as it is, each of its questions is refused as not finished, by number', notFinished.length === 3, asIs.why || asIs.r.problems.join(' | '));
+  const kept = attempt(() => B.newStudyFile(file, { chapter: 'Elsewhere' }));
+  ok('--new never replaces a file', !kept.r && /already exists/.test(kept.why) && fs.readFileSync(file, 'utf8') === blank, kept.why || 'replaced');
+  const noChapter = attempt(() => B.newStudyFile(path.join(own, 'nochapter.md'), {}));
+  ok('and asks which chapter, writing nothing without one', !noChapter.r && /--chapter/.test(noChapter.why) && !fs.existsSync(path.join(own, 'nochapter.md')), noChapter.why || 'written');
+
+  /* The silent drop this guards: a question whose heading is written and
+     whose stem and options are not is no question to the parser, so without
+     the check the file would build, a question short, and say nothing. */
+  fs.writeFileSync(file, fillIn(blank, [1, 3]));
+  const begun = attempt(() => B.readStudyFile(file));
+  const left = begun.r ? begun.r.problems : [begun.why];
+  ok('a question begun and not finished is refused even when the rest are done',
+     left.length === 1 && left[0] === 'valvular-disease.md, question 2: not finished (no stem with options under its heading)', left.join(' | ') || 'no problem found');
+  const draftToo = tryBuild(own, { draft: true });
+  ok('and even a draft build refuses it', !draftToo.r && /question 2: not finished/.test(draftToo.why), draftToo.r ? `built ${draftToo.r.questions} questions` : draftToo.why.split('\n')[1]);
+  /* Question 2's block, as the template wrote it, between a comment's two ends. */
+  fs.writeFileSync(file, fillIn(blank, [1, 3]).replace(/### Question 2:[\s\S]*?---\n/, m => '<!--\n' + m + '-->\n'));
+  const commented = attempt(() => B.readStudyFile(file));
+  ok('a question commented out is not one begun', !!commented.r && commented.r.problems.length === 0 && commented.r.questions.length === 2,
+     commented.r ? commented.r.problems.join(' | ') : commented.why);
+
+  fs.writeFileSync(file, fillIn(blank, [1, 2, 3]));
+  const filled = attempt(() => B.readStudyFile(file));
+  const signed = sign(own, 'valvular-disease.md');
+  const built = tryBuild(own);
+  const qs = built.r ? readJSON(path.join(built.out, 'questions.json')) : [];
+  const m = built.r ? readJSON(path.join(built.out, 'manifest.json')) : {};
+  ok('filled in, it checks clean, signs, and builds under its prefix, in its chapter, as the bank --init named',
+     !!filled.r && filled.r.problems.length === 0 && signed === '' && qs.map(q => q.id).join() === 'valve_1,valve_2,valve_3' &&
+     qs.every(q => q.ch === 'Valvular Disease') && JSON.stringify(m.bank) === JSON.stringify({ id: 'my-cardiology-bank', name: 'My Cardiology Bank', by: 'Dr Invented' }),
+     (filled.r ? filled.r.problems.join(' | ') : filled.why) || signed.split('\n')[0] || built.why.split('\n')[1] || qs.map(q => q.id).join());
 }
 
 head('the command line');
 {
   const src = source({ 'f.md': studyFile([good(1)]) });
-  const cli = (...a) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'build-bank.js'), ...a], { encoding: 'utf8' });
+  /* From a folder of its own, so a flag's value taken for a folder lands in
+     the scratch folder, not in the repository. */
+  const cli = (...a) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'build-bank.js'), ...a], { encoding: 'utf8', cwd: dir });
   const out = path.join(dir, 'cli-out');
   const r1 = cli(src, '--out', out);
   ok('an unsigned file stops it, exit 1', r1.status === 1 && /not signed off/.test(r1.stderr), `exit ${r1.status}`);
@@ -216,6 +391,25 @@ head('the command line');
   ok('--sign signs it, exit 0', r2.status === 0 && /^signed f\.md: 1 questions, sha256:[0-9a-f]{12}/.test(r2.stdout), `exit ${r2.status}: ${r2.stdout.trim()}`);
   const r3 = cli(src, '--out', out);
   ok('then it builds, and says what to run next', r3.status === 0 && /^built My Bank: 1 questions from 1 study file/.test(r3.stdout) && /next: npm run build -- /.test(r3.stdout), `exit ${r3.status}`);
+
+  const mine = path.join(dir, 'cli-own');
+  const i = cli('--init', 'Clinic Bank', '--by', 'Me', mine);
+  const ib = attempt(() => readJSON(path.join(mine, 'bank.json')));
+  ok('--init "…" --by "…" <folder> writes bank.json in that folder, exit 0',
+     i.status === 0 && JSON.stringify(ib.r) === JSON.stringify({ id: 'clinic-bank', name: 'Clinic Bank', by: 'Me' }) && /^wrote .*bank\.json: Clinic Bank \(id clinic-bank\)/.test(i.stdout),
+     `exit ${i.status}: ${(i.stdout + i.stderr).trim()}`);
+  const f = path.join(mine, 'unit.md');
+  const nw = cli('--new', f, '--chapter', 'Invented Chapter', '--questions', '2');
+  ok('--new <file> --chapter "…" --questions 2 writes it, exit 0', nw.status === 0 && /^wrote unit\.md: 2 empty questions to fill in/.test(nw.stdout), `exit ${nw.status}: ${(nw.stdout + nw.stderr).trim()}`);
+  const c1 = cli('--check', f);
+  ok('--check says each unfinished question, exit 1', c1.status === 1 && /^unit\.md: \d+ problem\(s\)/.test(c1.stdout) && /question 1: not finished/.test(c1.stdout) && /question 2: not finished/.test(c1.stdout),
+     `exit ${c1.status}: ${c1.stdout.split('\n')[0]}`);
+  if (fs.existsSync(f)) fs.writeFileSync(f, fillIn(fs.readFileSync(f, 'utf8'), [1, 2]));
+  const c2 = cli('--check', f);
+  ok('filled in, it is ready to read and sign, exit 0', c2.status === 0 && c2.stdout.trim() === 'unit.md: 2 questions, ready to read and sign (--sign)', `exit ${c2.status}: ${c2.stdout.trim()}`);
+  cli('--sign', f);
+  const c3 = cli('--check', f);
+  ok('and once signed, says so', c3.status === 0 && c3.stdout.trim() === 'unit.md: 2 questions, signed', `exit ${c3.status}: ${c3.stdout.trim()}`);
 }
 
 fs.rmSync(dir, { recursive: true, force: true });

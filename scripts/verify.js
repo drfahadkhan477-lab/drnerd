@@ -194,9 +194,12 @@ const SUITES = [
      instead of the export: the first step of running on a bank that is not
      ACCSAP's. Pure Node, on the synthetic bank. */
   ['bankbuild-pure', 'a bank folder or package builds the app its export builds, byte for byte; ACCSAP\'s corrections touch its bank alone; and a bank the iPad would refuse is refused, naming no question text'],
-  /* A bank of your own, from study files Claude drafts and you review
-     (scripts/build-bank.js, docs/OWN-BANK.md). */
+  /* A bank of your own, from study files Claude drafts or you write, and you
+     review (scripts/build-bank.js, docs/OWN-BANK.md). */
   ['buildbank-pure', 'a bank of your own is built from study files you have reviewed, and from nothing less'],
+  /* A bank you hold a licence to, from its publisher's CSV or JSON export
+     (scripts/import-bank.js, docs/OWN-BANK.md). */
+  ['importbank-pure', 'a licensed bank\'s export becomes a bank the app runs on, and a file that cannot be read as one is refused without a word of it'],
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
   ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],
@@ -473,7 +476,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['bankbuild-pure', 'bankname', 'buildbank-pure'];
+const PENDING_RECORD = ['bankbuild-pure', 'bankname', 'buildbank-pure', 'importbank-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
