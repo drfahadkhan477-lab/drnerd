@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 152 suites and roughly 7145 checks, and they
+ * WHY THIS EXISTS. There are 152 suites and roughly 7167 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -62,6 +62,10 @@ const SUITES = [
   ['polish',       'Pencil feel, the hero heart, the rhythm library'],
   ['splash',       'the pre-paint loading screen, on a throttled CPU'],
   ['braunwald',    'grounded mode answers only from your references'],
+  /* The app's words for its bank come from the bank's label: run as a bank
+     that is not ACCSAP's, through the code-only deploy's hand-off, it names
+     that bank and claims no peer statistics it does not have. */
+  ['bankname',     'the app calls the bank what the bank calls itself, and claims nothing a bank without ACCSAP\'s data cannot back'],
   ['leads',        'the 12-lead morphology falls out of one dipole'],
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
   ['theme',        'nine palettes, two axes, unthemed semantics'],
@@ -186,6 +190,13 @@ const SUITES = [
      repository, ALL_Q held field by field to answer-keys.js and
      content-flags.js applied as the assembler applies them. */
   ['assemble-pure', 'the app assembles from app/systole.html, the export and the repository, stamped once'],
+  /* The same build from a bank in the content schema (docs/CONTENT-SCHEMA.md)
+     instead of the export: the first step of running on a bank that is not
+     ACCSAP's. Pure Node, on the synthetic bank. */
+  ['bankbuild-pure', 'a bank folder or package builds the app its export builds, byte for byte; ACCSAP\'s corrections touch its bank alone; and a bank the iPad would refuse is refused, naming no question text'],
+  /* A bank of your own, from study files Claude drafts and you review
+     (scripts/build-bank.js, docs/OWN-BANK.md). */
+  ['buildbank-pure', 'a bank of your own is built from study files you have reviewed, and from nothing less'],
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
   ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],
@@ -462,7 +473,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['bankbuild-pure', 'bankname', 'buildbank-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

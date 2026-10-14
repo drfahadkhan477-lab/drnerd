@@ -148,7 +148,10 @@ head('grounded mode keeps who is taught, and withholds the key');
   const { cut } = require('./_appcut.js');
   const vm = require('vm');
   const APP = 'app/systole.html';
+  /* The bank's name, as the page defines it, for the build that carries
+     ACCSAP 12's (scripts/which-bank.js): the prompt names the bank from it. */
   const code = [
+    cut(APP, 'const BANK=(window.SYSTOLE_BANK', '\n/* ═══════════ custom line-icon system'),
     cut(APP, 'const STOP=new Set((', 'function refAdd(title,body,tags,source){'),
     cut(APP, 'function runTool(name,input){', '\nfunction flushNav(){'),
     cut(APP, 'function aiCtx(q){', '\nconst CHIPS=['),
@@ -160,7 +163,8 @@ head('grounded mode keeps who is taught, and withholds the key');
     o: ['alpha', 'beta', 'gamma', 'delta', 'epsilon'].map((t, i) => ({ l: 'ABCDE'[i], t: t + 'opt', p: 10 + i })),
     ex: 'Invented commentary, keyed sentinel kz9.' };
   const ctx = { ALL_Q: [q], REF: [{ id: 'r1', title: 'Amyloidosis note', tags: '', body: 'Apical sparing on strain is the amyloidosis pattern.' }],
-    Memory: M, Vision: { figureContextLine: () => '' }, AI: { provider: 'gemini' }, AI_GROUNDED: false };
+    Memory: M, Vision: { figureContextLine: () => '' }, AI: { provider: 'gemini' }, AI_GROUNDED: false,
+    window: {}, BANK_INFO: require('../scripts/which-bank.js').ACCSAP };
   vm.runInNewContext(code, ctx);
   /* A note outranks a question on shared words (notes are boosted), so the
      query carries words only the question has: both must come back. */

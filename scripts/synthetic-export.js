@@ -2,12 +2,18 @@
 /*
  * A synthetic export: the shape of the ACCSAP 12 export, none of its content.
  *
- *   node scripts/synthetic-export.js [out.html] [--per-chapter N]
+ *   node scripts/synthetic-export.js [out.html] [--per-chapter N] [--bank <dir>]
  *   node scripts/assemble-app.js out.html --refs <dir>/refs --ref-images <dir>/refs-images \
  *                                --out build/systole.html
  *
  * Beside out.html it writes refs/ and refs-images/: a synthetic reference
  * library, in the shape content/refs and content/refs-images have.
+ *
+ * --bank <dir> also writes the same bank in the content schema
+ * (docs/CONTENT-SCHEMA.md): manifest.json, questions.json and figures/, the
+ * folder assemble-app.js builds from as it builds from the export. The
+ * questions are the export's, uncorrected as the export's are, each naming
+ * its figure files as extract-content.js names them.
  *
  * WHY. The real app could only be built on the owner's machine, where the
  * licensed export is, so every browser suite that needs a build ran there or
@@ -17,8 +23,8 @@
  * run the browser suites on it.
  *
  * WHAT IS IN IT. Only the two lines assemble-app reads: `const ALL_Q=[…];` and
- * `const IMGS={…};`, in the field names the app reads (id, ch, n, s, o[{t}],
- * ci, ex, img). Every stem, option and commentary is invented placeholder
+ * `const IMGS={…};`, in the field names the app reads (id, ch, n, s,
+ * o[{l, t, p}], ci, ex, img). Every stem, option and commentary is invented placeholder
  * text. The chapters are the app's own CH_COLORS names. The ids that
  * answer-keys.js and content-flags.js correct are included, keyed and shaped
  * as their CORRECTIONS and FLAGS record, because the assembler applies those
@@ -112,7 +118,10 @@ function question(id, ch, n, ci, opts = {}) {
   return {
     id, ch, n,
     s: `Synthetic stem ${id}: an invented patient with ${TOPICS[n % TOPICS.length]} presents with an invented finding. Which invented next step is best?`,
-    o: [...LETTERS].map(L => ({ l: L, t: `Synthetic option ${L} for ${id}` })),
+    /* p, the share of candidates who chose each option, as the export carries
+       it: invented, with the keyed option the most chosen, as every keyed
+       option in the export is (scripts/answer-keys.js). */
+    o: [...LETTERS].map((L, i) => ({ l: L, t: `Synthetic option ${L} for ${id}`, p: i === ci ? 60 : 10 })),
     ci,
     ex: opts.ex !== undefined ? opts.ex : `Synthetic commentary for ${id}. Option ${LETTERS[ci]} is keyed as correct in this invented bank.`,
     img: opts.img || 0,
@@ -184,6 +193,34 @@ function syntheticRefs(perChapter = 10) {
   return { files, images };
 }
 
+/* writeBankFolder(dir, { bank, imgs }, which) — a bank and its data-URL
+   figures as a content-schema folder. Figures are named <id>_<n>.<ext>,
+   extract-content's names; each question keeps img and gains figs. which, a
+   bank block for the manifest ({ id, name, by }), is left out by default: a
+   manifest without one is ACCSAP 12's (scripts/which-bank.js), as this bank's
+   shape is. */
+const EXT = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg' };
+function writeBankFolder(dir, { bank, imgs }, which) {
+  fs.mkdirSync(path.join(dir, 'figures'), { recursive: true });
+  let figures = 0;
+  const questions = bank.map(q => {
+    const figs = (imgs[q.id] || []).map((url, i) => {
+      const m = /^data:([^;]+);base64,(.*)$/s.exec(url);
+      const name = `${q.id}_${i + 1}.${EXT[m[1]]}`;
+      fs.writeFileSync(path.join(dir, 'figures', name), Buffer.from(m[2], 'base64'));
+      figures++;
+      return name;
+    });
+    return { ...q, figs };
+  });
+  fs.writeFileSync(path.join(dir, 'questions.json'), JSON.stringify(questions));
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
+    schemaVersion: 1, ...(which ? { bank: which } : {}),
+    questions: questions.length, figures, chapters: [...new Set(questions.map(q => q.ch))].sort(),
+  }, null, 2));
+  return { questions: questions.length, figures };
+}
+
 function syntheticExport(perChapter) {
   const { bank, imgs } = syntheticBank(perChapter);
   return '<!doctype html><html><head><meta charset="utf-8"><title>synthetic export</title></head><body>\n' +
@@ -194,11 +231,17 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const i = args.indexOf('--per-chapter');
   const per = i >= 0 ? parseInt(args[i + 1], 10) : undefined;
-  const out = args.find((a, k) => !a.startsWith('--') && args[k - 1] !== '--per-chapter') || path.join(__dirname, '..', 'build', 'synthetic-export.html');
+  const b = args.indexOf('--bank');
+  const bankDir = b >= 0 ? args[b + 1] : undefined;
+  const out = args.find((a, k) => !a.startsWith('--') && !['--per-chapter', '--bank'].includes(args[k - 1])) || path.join(__dirname, '..', 'build', 'synthetic-export.html');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, syntheticExport(per));
   const { bank, imgs } = syntheticBank(per);
   console.log(`synthetic export → ${out}  (${bank.length} questions, ${Object.keys(imgs).length} with a figure, none real)`);
+  if (bankDir) {
+    const w = writeBankFolder(bankDir, { bank, imgs });
+    console.log(`synthetic bank   → ${bankDir}  (${w.questions} questions, ${w.figures} figures, the same bank)`);
+  }
   const dir = path.dirname(out), refs = syntheticRefs();
   fs.mkdirSync(path.join(dir, 'refs'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'refs-images'), { recursive: true });
@@ -207,4 +250,4 @@ if (require.main === module) {
   console.log(`synthetic refs   → ${path.join(dir, 'refs')}  (${refs.files.length} files, ${refs.images.length} figures)`);
 }
 
-module.exports = { syntheticBank, syntheticExport, syntheticRefs, figurePng, isSyntheticBuild, MARK, CHAPTERS };
+module.exports = { syntheticBank, syntheticExport, syntheticRefs, writeBankFolder, figurePng, isSyntheticBuild, MARK, CHAPTERS };

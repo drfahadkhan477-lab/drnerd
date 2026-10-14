@@ -3,8 +3,9 @@
  * Questions the export ships broken in a way the fellow cannot see.
  *
  * A library: scripts/assemble-app.js and build-pwa.js call
- * applyContentFlags() on the bank. (It was the flags-patch.js step of the
- * patch chain, now deleted.)
+ * applyContentFlags() on the bank, when it is ACCSAP 12's
+ * (scripts/which-bank.js). (It was the flags-patch.js step of the patch
+ * chain, now deleted.)
  *
  * TWO DEFECTS, ONE SHAPE. A handful of ACCSAP items ask the fellow to pick
  * between lettered panels — "ECG A" through "ECG E", "Pattern A" through

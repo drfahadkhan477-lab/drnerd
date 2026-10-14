@@ -215,7 +215,11 @@ function parseMarkdown(text) {
       if (Q_HEAD.test(h) || (sec && sec.quiz && level >= 3)) {
         endQ();
         var rest = h.replace(Q_HEAD, '').replace(/^\s*[:.)\-–—]\s*/, '').trim();
-        q = { question: '', title: rest, options: [], answer: -1, explain: '', why: [], mode: '' };
+        /* num: the number its heading gives it ("Question 3"), or 0. A bank built
+           from the file (scripts/build-bank.js) names the question by it, so
+           deleting one question renumbers none of the others. */
+        var nm = h.match(/^q(?:uestion)?\s*(\d+)/i);
+        q = { question: '', title: rest, num: nm ? +nm[1] : 0, options: [], answer: -1, explain: '', why: [], mode: '' };
         continue;
       }
       endQ();

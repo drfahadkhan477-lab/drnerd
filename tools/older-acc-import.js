@@ -433,6 +433,11 @@ function merge() {
      itself, so nothing can change between a check and the use it guards. */
   const readOr = (f, why) => { try { return fs.readFileSync(f, 'utf8'); } catch (e) { if (e.code === 'ENOENT') { console.error(`${f}: ${why}`); process.exit(1); } throw e; } };
   let html = readOr(target, 'no build there — run npm run build first');
+  /* Older ACC questions, de-duplicated against what ACCSAP 12 asks: they
+     belong beside ACCSAP's bank, and are refused for any other. */
+  const { bankOfBuild, isAccsap, ACCSAP } = require('../scripts/which-bank.js');
+  const bank = bankOfBuild(html);
+  if (!isAccsap(bank)) { console.error(`${path.relative(process.cwd(), target)} is built from ${bank.name}, not ${ACCSAP.name}: the older ACC questions merge into the ACCSAP bank only. Nothing was changed.`); process.exit(1); }
   const staged = JSON.parse(readOr(qFile, 'nothing staged — run the import first'));
   const figData = {};
   for (const q of staged) figData[q.id] = (q.figs || []).map(n => 'data:image/jpeg;base64,' + fs.readFileSync(path.join(OUT, 'figures', n)).toString('base64'));
