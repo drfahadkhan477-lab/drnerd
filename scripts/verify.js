@@ -323,6 +323,10 @@ const SUITES = [
   ['bankstore', 'the code-only deploy in a browser: import screen with no bank and no request to content/, a refused package changes nothing, a good one launches the app, a replacement is atomic, a normal build unchanged'],
   ['devtools-pure', 'each build in its own workspace, suite tags read from the code, a JSON report with no output text, doctor, and a clean that cannot reach the export'],
   ['testpublic-pure', '`npm test` runs every suite CI runs, pure and browser, from the workflow\'s own list — a failure, a missing file or a missing browser fails it, and a pure-only run says what it left out'],
+  /* scripts/suite-cache.js and scripts/trace-inputs.js: npm test reuses a
+     browser suite's pass when everything the run read is identical, and never
+     otherwise. Held in bare node, on invented suites in a temporary folder. */
+  ['suitecache-pure', 'a browser suite\'s pass is reused only when nothing it depended on has changed — the suite, the files it and its children read, the build it was handed, the variables its source reads, the day, the tools — and a failure, or a run the tracer cannot vouch for, is never kept'],
   /* scripts/ci-changes.js: a pull request skips a browser job only when every
      changed file is known not to reach it, and anything doubtful runs both. */
   ['cichanges-pure', 'a pull request skips a browser job only when none of its files can reach it, and a failed decision runs both'],
@@ -381,6 +385,9 @@ const SUITES = [
   ['memorizer-studyimport',  'a saved HTML page read in the browser, and the Import Study dialog driven: right options and answers, a real modal, too large refused, no half-imported unit'],
   ['memorizer-data',         'your data and what the page may do: a backup holds units, packs and progress and restores into an empty browser, a bad file is refused, and the browser refuses any host but the app\u2019s'],
   ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
+  /* What the result cache learns of a page a browser loads from the repository,
+     held in the engine that runs it. CI runs it in all three. */
+  ['suitecache',             'the browser reports every file a page loads from disk, in the engines the result cache traces, and the cache stays off for an engine that reports none'],
   ['lab',                    'the Lab, built and driven: the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map'],
 ];
 
@@ -478,7 +485,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['bankbuild-pure', 'bankname', 'buildbank-pure', 'importbank-pure', 'mockexam-pure', 'mockscreen'];
+const PENDING_RECORD = ['bankbuild-pure', 'bankname', 'buildbank-pure', 'importbank-pure', 'mockexam-pure', 'mockscreen', 'suitecache', 'suitecache-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

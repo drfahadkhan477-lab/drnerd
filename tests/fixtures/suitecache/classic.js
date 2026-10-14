@@ -1,0 +1,1 @@
+window.__classic = true;

@@ -206,10 +206,27 @@ function webkitTransitionsOff(name = engineName()) {
   return name === 'webkit' && process.env.SYSTOLE_WEBKIT_TRANSITIONS !== '1';
 }
 
+/* ── what a page loads from disk, for the result cache ────────────────────────
+   scripts/trace-inputs.js sees what NODE reads. A browser opens file:// URLs by
+   itself, so a suite that loads a page from the repository depends on every
+   file the page asks for, and node never sees one of them. Where a run is being
+   traced (SYSTOLE_TRACE_FILE, set by scripts/suite-cache.js), each context
+   writes the file:// URL of each request it makes. Chromium and WebKit report
+   the document, stylesheets, scripts, images, frames and modules alike, which
+   verify-suitecache holds in whichever engine runs it. Nothing else changes:
+   a run that is not being traced does not touch the browser at all. */
+function traceFileRequests(browser) {
+  if (!process.env.SYSTOLE_TRACE_FILE) return;
+  const { noteBrowserRequest } = require('../scripts/trace-inputs.js');
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async (o) => { const ctx = await newContext(o); ctx.on('request', r => noteBrowserRequest(r.url())); return ctx; };
+}
+
 async function launch(opts = {}) {
   const name = engineName();
   const playwright = require('playwright');
   const browser = await playwright[name].launch(launchOptions(opts, name));
+  traceFileRequests(browser);
   if (!webkitTransitionsOff(name)) return browser;
   console.log('  note: view transitions are OFF in this WebKit run (Playwright WebKit 26.6 crashes on them); screens swap instantly. SYSTOLE_WEBKIT_TRANSITIONS=1 restores them.');
   /* browser.newPage() makes its own context through newContext(), so one

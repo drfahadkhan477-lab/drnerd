@@ -254,6 +254,7 @@ head('the public CLI refuses unexpected arguments and help starts no suite');
     ['-h', ['--pure', '-h'], 0, /Usage:/],
     ['an unknown option', ['--pure', '--typo'], 2, /Unexpected argument.*--typo/],
     ['an unexpected target', ['--pure', 'extra.html'], 2, /Unexpected argument.*extra.html/],
+    ['--plan with --pure, which has no browser suite to plan', ['--pure', '--plan'], 2, /--plan says what the browser suites would do/],
   ]) {
     fs.rmSync(marker, { force: true });
     const r = spawnSync(process.execPath, [path.join(TMP, 'scripts', 'test-public.js'), ...args],
@@ -262,6 +263,12 @@ head('the public CLI refuses unexpected arguments and help starts no suite');
        diagnostic.test((r.stdout || '') + (r.stderr || '')) && !fs.existsSync(marker),
        `exit ${r.status}; suite launched ${fs.existsSync(marker)}`);
   }
+  const cli = path.join(TMP, 'scripts', 'test-public.js');
+  fs.rmSync(marker, { force: true });
+  const fr = spawnSync(process.execPath, [cli, '--pure', '--fresh'], { cwd: TMP, encoding: 'utf8', timeout: 10000 });
+  ok('--fresh is accepted with --pure, which keeps no results to be fresh about: the pure suites run', fr.status === 0 && fs.existsSync(marker), `exit ${fr.status}; ${String(fr.stderr).slice(0, 120)}`);
+  const hp = spawnSync(process.execPath, [cli, '--help'], { cwd: TMP, encoding: 'utf8', timeout: 10000 });
+  ok('help names --fresh and --plan, and what turns the result cache off', /--fresh/.test(hp.stdout) && /--plan/.test(hp.stdout) && /\bCI\b/.test(hp.stdout) && /SYSTOLE_NO_CACHE/.test(hp.stdout), String(hp.stdout).split('\n').slice(0, 3).join(' | '));
 }
 fs.rmSync(TMP, { recursive: true, force: true });
 
@@ -269,6 +276,8 @@ head('the commands say what they run');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 ok('npm test is the no-export run', pkg.scripts.test === 'node scripts/test-public.js', pkg.scripts.test);
 ok('npm run test:pure is its browser-free half', pkg.scripts['test:pure'] === 'node scripts/test-public.js --pure', pkg.scripts['test:pure']);
+ok('npm run test:fresh measures every browser suite now', pkg.scripts['test:fresh'] === 'node scripts/test-public.js --fresh', pkg.scripts['test:fresh']);
+ok('npm run test:plan says what npm test would reuse and run, and runs no suite', pkg.scripts['test:plan'] === 'node scripts/test-public.js --plan', pkg.scripts['test:plan']);
 ok('npm run test:private is the whole registry against your build', pkg.scripts['test:private'] === 'node scripts/verify.js', pkg.scripts['test:private']);
 
 console.log(`\n${passed} passed, ${failed} failed`);

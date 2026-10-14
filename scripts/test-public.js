@@ -31,6 +31,16 @@
  * in CI" name the same set. tests/verify-testpublic-pure.js holds the split
  * to what the workflow says.
  *
+ * A RESULT REUSED IS NOT A RESULT MEASURED. A browser suite whose inputs are
+ * identical to those of an earlier pass is not run again: scripts/suite-cache.js
+ * keeps what each one read (scripts/trace-inputs.js watches it), the build it
+ * was handed and what the files do not say (node, Playwright, the day), and a
+ * pass is reused only if every one is unchanged. It is printed REUSED, never
+ * PASS, and the last line says how many suites were measured now and how many
+ * were reused. --fresh measures everything; --plan says what would happen and
+ * runs nothing; CI, and SYSTOLE_NO_CACHE, turn the cache off. The pure suites
+ * and the split build are always measured.
+ *
  * NOTHING SKIPPED IS COUNTED AS PASSED. A suite file that is missing is a
  * failure, not a skip. `--pure` says in its last line how many browser suites
  * it did not run, and never prints "all green". Without `--pure`, a browser
@@ -116,17 +126,48 @@ function run(opts) {
     }
   }
 
-  const list = (o.pure ? pure : pure.concat(browser)).map(name => ({ name, args: [] }));
-  const ran = [], failed = [];
-  const runOne = ({ name, args, refused }) => {
+  const list = (o.pure ? pure : pure.concat(browser)).map(name => ({ name, args: [], remember: !o.pure && browser.includes(name) }));
+  const ran = [], failed = [], reused = [];
+  let saved = 0;
+  /* The result cache (scripts/suite-cache.js), for the browser suites only:
+     asked for by the command line, never by this function, so a run made
+     with no `cache` option is the run it always was. */
+  const cache = (typeof o.cache === 'function' ? o.cache({ root, engine }) : o.cache) || null;
+  const planning = !!(cache && cache.plan);
+  if (cache && cache.off) log(`  result cache: off (${cache.off}); every browser suite is measured.`);
+  const when = e => String(e.result.at || '').slice(0, 16).replace('T', ' ') + 'Z';
+  /* A cache that fails must fail open, to measuring: nothing it does wrong may
+     stop a suite from running or a run from finishing. */
+  const asked = (name, args) => { try { return cache.decide(name, args); } catch (e) { return { reuse: false, why: `the cache could not be read (${e.code || e.message})` }; } };
+  const cannot = (name, what, e) => { if (cache.notRemembered) cache.notRemembered.push({ name, why: `the cache could not ${what} (${e.code || e.message})` }); };
+  const runOne = ({ name, args, refused, remember }) => {
     const file = path.join(root, 'tests', name + '.js');
+    const eligible = !!(cache && remember && !refused), keep = eligible && !cache.off;
+    if (planning) {
+      if (!eligible || !fs.existsSync(file)) return;
+      const d = keep ? asked(name, args) : { reuse: false, why: cache.off };
+      if (d.reuse) { reused.push(name); saved += d.entry.result.seconds || 0; }
+      log(`  ${d.reuse ? 'REUSE' : 'RUN  '}  ${name.padEnd(38)} ${d.reuse ? 'inputs identical to the pass of ' + when(d.entry) : d.why}`);
+      return;
+    }
+    if (keep && fs.existsSync(file)) {
+      const d = asked(name, args);
+      if (d.reuse) {
+        const secs = d.entry.result.seconds || 0;
+        reused.push(name); saved += secs;
+        log(`  REUSED  ${name.padEnd(38)} inputs identical to the pass of ${when(d.entry)}  (${secs.toFixed(1)}s not spent)`);
+        return;
+      }
+    }
     const t0 = Date.now();
-    let status;
+    let status, prep = null;
     if (refused) status = refused;
     else if (!fs.existsSync(file)) status = 'missing';
     else {
+      if (keep) { try { prep = cache.prepare(name); } catch (e) { prep = null; cannot(name, 'prepare a trace', e); } }
+      const base = childEnv({ SYSTOLE_ENGINE: engine });
       const r = spawnSync(process.execPath, [file].concat(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'],
-        env: childEnv({ SYSTOLE_ENGINE: engine }), maxBuffer: 64 * 1048576 });
+        env: prep ? cache.env(base, prep) : base, maxBuffer: 64 * 1048576 });
       status = r.status === 0 ? 'pass' : (r.status === null ? `killed (${r.signal})` : `exit ${r.status}`);
       if (status !== 'pass') {
         /* Diagnostics belong ahead of successful assertions that happen to
@@ -141,7 +182,14 @@ function run(opts) {
     }
     ran.push(name);
     if (status !== 'pass') failed.push(name);
-    log(`  ${status === 'pass' ? 'PASS' : 'FAIL'}  ${name.padEnd(40)} ${status === 'pass' ? '' : status + '  '}${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    const seconds = (Date.now() - t0) / 1000;
+    /* A pass is remembered if the cache can vouch for it; anything else is
+       forgotten, so a stale pass cannot outlive a failure. */
+    if (prep) {
+      try { cache.store(name, args, prep, { status, seconds, startedAt: t0 }); } catch (e) { cannot(name, 'keep it', e); }
+      cache.discard(prep);
+    }
+    log(`  ${status === 'pass' ? 'PASS' : 'FAIL'}  ${name.padEnd(40)} ${status === 'pass' ? '' : status + '  '}${seconds.toFixed(1)}s`);
   };
   list.forEach(runOne);
 
@@ -154,14 +202,15 @@ function run(opts) {
       const r = spawnSync(process.execPath, [path.join(root, script)].concat(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: childEnv(), maxBuffer: 64 * 1048576 });
       if (r.status !== 0) { broke = `synthetic build failed at ${script}`; log('      ' + String(r.stderr || r.stdout || '').trim().split('\n').slice(-3).join('\n      ')); break; }
     }
-    synthetic.suites.forEach(x => runOne({ name: x.name, args: [x.target], refused: broke }));
+    synthetic.suites.forEach(x => runOne({ name: x.name, args: [x.target], refused: broke, remember: true }));
   }
 
   /* Then the split build, made and checked by the split-build job's own
      commands, in order, in this run's engine. The first command that fails
      stops the rest and fails the run under the job's name, with its last
-     lines: a split build that was never made has nothing to check. */
-  if (!o.pure && split.length) {
+     lines: a split build that was never made has nothing to check. It is
+     always measured: it takes about a minute, and it rebuilds what it checks. */
+  if (!o.pure && split.length && !planning) {
     const t0 = Date.now();
     let status = 'pass';
     for (const [script, ...args] of split) {
@@ -179,14 +228,29 @@ function run(opts) {
     log(`  ${status === 'pass' ? 'PASS' : 'FAIL'}  ${'split-build'.padEnd(40)} ${status === 'pass' ? '' : status + '  '}${((Date.now() - t0) / 1000).toFixed(1)}s`);
   }
 
+  if (planning) {
+    const asked = browser.length + synNames.length;
+    log('');
+    log(`  plan: of ${asked} browser suites, ${reused.length} would be REUSED${reused.length ? ` (about ${(saved / 60).toFixed(1)} min of browser time not spent)` : ''} and ${asked - reused.length} would run. The ${pure.length} pure suites${split.length ? ' and the split build' : ''} always run.`);
+    log('  Nothing was run. npm test does this, then runs what it listed.');
+    return { code: 0, ran: [], failed: [], notRun: [], reused, planned: true };
+  }
+
   const notRun = o.pure ? browser.concat(synNames, splitNames) : [];
+  const measured = ran.length - splitNames.filter(n => ran.includes(n)).length;
   log('');
-  if (failed.length) log(`  ${failed.length} of ${ran.length} suites failed: ${failed.join(', ')}`);
+  const kept = cache && cache.notRemembered ? cache.notRemembered.filter(x => x.why !== 'it did not pass') : [];
+  if (failed.length) log(`  ${failed.length} of ${ran.length} suites failed: ${failed.join(', ')}` + (reused.length ? `  (${reused.length} others were REUSED, not measured now)` : ''));
   else if (notRun.length) log(`  ${ran.length} pure suites passed. ${notRun.length} browser suites NOT run: ${notRun.join(', ')}`);
+  else if (reused.length)
+    log(`  all ${measured + reused.length} no-export suites passed: ${measured} measured now, ${reused.length} REUSED from earlier passes whose inputs are identical` +
+        ` (${(saved / 60).toFixed(1)} min of browser time not spent; npm run test:fresh measures them all)` +
+        (splitNames.length ? ', and the split build made from it was measured now.' : '.'));
   else log(`  all ${ran.length - splitNames.length} no-export suites passed (${pure.length} pure, ${browser.length + synNames.length} in ${engine}, ${synNames.length} of them on a synthetic build)` +
            (splitNames.length ? ', and the split build made from it.' : '.'));
+  if (kept.length) log(`  not remembered, so measured every run: ${kept.map(x => `${x.name} (${x.why})`).join('; ')}`);
   log('  The suites that drive a real build need your export: npm run test:private');
-  return { code: failed.length ? 1 : 0, ran, failed, notRun };
+  return { code: failed.length ? 1 : 0, ran, failed, notRun, reused };
 }
 
 /* Every suite CI runs anywhere, by registry name ("keys", not "verify-keys").
@@ -203,20 +267,35 @@ module.exports = { suitesFromWorkflow, run, jobBody, ciSuites };
 if (require.main === module) {
   const args = process.argv.slice(2);
   if (args.includes('--help') || args.includes('-h')) {
-    console.log(`Usage: node scripts/test-public.js [--pure] [--help]
+    console.log(`Usage: node scripts/test-public.js [--pure] [--fresh] [--plan] [--help]
 
   --pure       Run only suites that need no browser or private export
+  --fresh      Measure every browser suite now, ignoring remembered passes
+               (they are remembered again afterwards; SYSTOLE_FRESH=1 is the same)
+  --plan       Say which browser suites would be reused and which would run,
+               and why. Runs no suite (it does make the synthetic build)
   --help, -h   Show help without starting tests
+
+A browser suite whose inputs are identical to an earlier pass is REUSED, not
+measured again, and the last line says how many. The cache is off when CI or
+SYSTOLE_NO_CACHE is set.
 
 Set SYSTOLE_ENGINE to chromium, webkit or firefox to choose the browser.
 `);
     process.exit(0);
   }
-  const unexpected = args.find(arg => arg !== '--pure');
+  const unexpected = args.find(arg => !['--pure', '--fresh', '--plan'].includes(arg));
   if (unexpected !== undefined) {
     console.error(`Unexpected argument: ${unexpected}\nUse --help to see public test options.`);
     process.exit(2);
   }
-  try { process.exit(run({ pure: args.includes('--pure') }).code); }
+  if (args.includes('--plan') && args.includes('--pure')) {
+    console.error('--plan says what the browser suites would do, and --pure runs none of them.');
+    process.exit(2);
+  }
+  const SC = () => require('./suite-cache.js');
+  const cache = args.includes('--pure') ? null
+    : ({ root, engine }) => SC().fromEnv({ root, engine, fresh: args.includes('--fresh'), plan: args.includes('--plan'), commit: require('./stamp.js').gitCommit(root) });
+  try { process.exit(run({ pure: args.includes('--pure'), cache }).code); }
   catch (e) { console.error('\n  ' + e.message + '\n'); process.exit(1); }
 }
