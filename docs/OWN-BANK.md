@@ -100,11 +100,14 @@ never a word of the question:
   used twice in a file, or an id two files give;
 - a question begun and not finished: a "### Question N" heading with no
   stem and options under it;
-- a missing `bank.json`, or one that gives ACCSAP 12's id;
+- a missing `bank.json`, one that is not an object, or one that gives ACCSAP 12's id;
 - a file not signed off, or changed since it was;
 - an `--out` folder that holds anything but a bank.
 
-Whatever it refuses, the last good bank in `build/bank/` stays as it was.
+Whatever it refuses, the last good bank in `build/bank/` stays as it was. So
+does it if writing the new bank fails part way (a full disk, a folder something
+holds open): the half-written bank is removed and the previous one put back,
+and if that cannot be done, the error says where the previous one is.
 
 ### Ids
 
@@ -191,7 +194,8 @@ question:
 - a file inside the folder the bank is written to, or an `--out` folder that
   holds anything but a bank.
 
-Whatever it refuses, the last bank in the output folder stays as it was.
+Whatever it refuses, or if writing fails part way, the last bank in the output
+folder stays as it was, as for a bank of your own.
 
 ### What the app shows
 

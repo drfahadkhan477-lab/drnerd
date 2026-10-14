@@ -222,6 +222,88 @@ head('a refused build leaves the last good bank as it was');
      fs.readdirSync(mine).join() === 'notes.txt' && fs.readFileSync(path.join(mine, 'notes.txt'), 'utf8') === 'kept', over.r ? 'it was replaced' : over.why.split('\n')[0]);
 }
 
+head('a failure while the bank is written or swapped in leaves the last good bank where it was');
+{
+  /* One step of the write made to fail, as a full disk or a lock on a folder
+     does it; the function is put back whatever happens. */
+  const failing = (fn, when, run) => {
+    const real = fs[fn];
+    fs[fn] = function (...a) { if (when(...a)) throw Object.assign(new Error('injected ' + fn), { code: 'EINJECTED' }); return real.apply(this, a); };
+    try { return run(); } finally { fs[fn] = real; }
+  };
+  /* A bank already built at out, and a next build with something else to say
+     (two questions, not one), so a swap that went through would show. */
+  const setup = withBank => {
+    const src = source({ 'f.md': studyFile([good(1)]) });
+    sign(src, 'f.md');
+    const out = path.join(dir, 'swap-' + (++n));
+    const first = withBank ? tryBuild(src, { out }) : null;
+    fs.writeFileSync(path.join(src, 'f.md'), studyFile([good(1), good(2)]));
+    sign(src, 'f.md');
+    const read = f => { try { return fs.readFileSync(path.join(out, f)); } catch (_) { return null; } };
+    return { src, out, read, before: first && first.r ? read('questions.json') : null,
+      aside: () => fs.readdirSync(dir).filter(f => f.startsWith(path.basename(out) + '.')) };
+  };
+  /* The rename that brings the new bank into place, and only it: the one that
+     puts the old bank back has the same target. */
+  const toOut = out => (from, to) => path.resolve(String(to)) === path.resolve(out) && String(from).includes('.tmp-');
+  const same = (a, b) => !!a && !!b && a.equals(b);
+
+  const s1 = setup(true);
+  const r1 = failing('renameSync', toOut(s1.out), () => tryBuild(s1.src, { out: s1.out }));
+  ok('the rename into place fails: the build fails with that error alone, and the bank written before is back, byte for byte, with nothing left beside it',
+     !r1.r && /injected renameSync/.test(r1.why) && !/put back/.test(r1.why) && same(s1.read('questions.json'), s1.before) && s1.aside().length === 0,
+     r1.r ? 'the build went through' : `${r1.why.split('\n')[0]}; bank ${s1.read('questions.json') ? 'there' : 'gone'}; beside it: ${s1.aside().join(' ') || 'nothing'}`);
+
+  const s2 = setup(true);
+  const r2 = failing('renameSync', (_from, to) => String(to).includes('.old-'), () => tryBuild(s2.src, { out: s2.out }));
+  ok('moving the old bank aside fails: the same, and no claim that a bank was put back that never moved', !r2.r && /injected renameSync/.test(r2.why) && !/put back/.test(r2.why) && same(s2.read('questions.json'), s2.before) && s2.aside().length === 0,
+     r2.r ? 'the build went through' : `${r2.why.split('\n')[0]}; beside it: ${s2.aside().join(' ') || 'nothing'}`);
+
+  const s3 = setup(true);
+  const r3 = failing('writeFileSync', f => String(f).includes('.tmp-') && String(f).endsWith('questions.json'), () => tryBuild(s3.src, { out: s3.out }));
+  ok('a file cannot be written into the new bank: the same', !r3.r && /injected writeFileSync/.test(r3.why) && !/put back/.test(r3.why) && same(s3.read('questions.json'), s3.before) && s3.aside().length === 0,
+     r3.r ? 'the build went through' : `${r3.why.split('\n')[0]}; beside it: ${s3.aside().join(' ') || 'nothing'}`);
+
+  const s4 = setup(false);
+  const r4 = failing('renameSync', toOut(s4.out), () => tryBuild(s4.src, { out: s4.out }));
+  ok('with no bank before, a failed swap leaves no bank and nothing beside it', !r4.r && !fs.existsSync(s4.out) && s4.aside().length === 0,
+     r4.r ? 'the build went through' : `${fs.existsSync(s4.out) ? 'a folder is there' : 'no folder'}; beside it: ${s4.aside().join(' ') || 'nothing'}`);
+
+  const s5 = setup(true);
+  const r5 = failing('rmSync', p => String(p).includes('.old-'), () => tryBuild(s5.src, { out: s5.out }));
+  const left5 = s5.aside();
+  ok('the swap went through but the old bank cannot be removed: it says so, and the new bank is the one in place',
+     !r5.r && /the new bank is in place, but the previous one could not be removed from .*\.old-\d+/.test(r5.why) &&
+     JSON.parse(s5.read('manifest.json') || '{}').questions === 2 && left5.length === 1 && /\.old-\d+$/.test(left5[0]),
+     r5.r ? 'it said nothing' : `${r5.why.split('\n')[0].slice(0, 110)}; beside it: ${left5.join(' ') || 'nothing'}`);
+  for (const f of left5) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+
+  const s6 = setup(true);
+  let k6 = 0;
+  const r6 = failing('renameSync', () => ++k6 >= 2, () => tryBuild(s6.src, { out: s6.out }));
+  const left6 = s6.aside();
+  const keptOld = left6.filter(f => /\.old-\d+$/.test(f)).map(f => { try { return fs.readFileSync(path.join(dir, f, 'questions.json')); } catch (_) { return null; } });
+  ok('and when the old bank cannot be put back either, it says where it is, and it is there, whole',
+     !r6.r && /could not be put back, it is at .*\.old-\d+/.test(r6.why) && keptOld.length === 1 && same(keptOld[0], s6.before) && !left6.some(f => /\.tmp-/.test(f)),
+     r6.r ? 'the build went through' : `${r6.why.split('\n')[0].slice(0, 120)}; beside it: ${left6.join(' ') || 'nothing'}`);
+  for (const f of left6) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+}
+
+head('a bank.json that is not an object is refused, not a crash');
+{
+  const kinds = [['null', 'null'], ['a list', '[]'], ['a number', '5'], ['a string', '"my-bank"'], ['true', 'true']];
+  const results = kinds.map(([label, text]) => {
+    const src = source({ 'f.md': studyFile([good(1)]) });
+    sign(src, 'f.md');
+    fs.writeFileSync(path.join(src, 'bank.json'), text);
+    return [label, tryBuild(src)];
+  });
+  const bad = results.filter(([, b]) => b.r || !/bank\.json: not an object\. It says which bank this is/.test(b.why) || /Cannot read|TypeError/.test(b.why));
+  ok('bank.json holding null, a list, a number, a string or true is refused as not an object, in the one sentence',
+     bad.length === 0, bad.map(([l, b]) => `${l}: ${b.r ? 'built' : b.why.split('\n')[0].slice(0, 90)}`).join(' | ') || `${results.length} kinds refused`);
+}
+
 head('writing the questions yourself: --init, --new, --check');
 /* The template --new writes, with the questions numbered in nums filled in
    as a fellow would: a stem, four options, the key, the explanation, and a
