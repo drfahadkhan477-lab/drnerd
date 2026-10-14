@@ -189,7 +189,7 @@ const SUITES = [
   /* The same build from a bank in the content schema (docs/CONTENT-SCHEMA.md)
      instead of the export: the first step of running on a bank that is not
      ACCSAP's. Pure Node, on the synthetic bank. */
-  ['bankbuild-pure', 'a bank folder or package builds the app its export builds, byte for byte, and a bank the iPad would refuse is refused, naming no question text'],
+  ['bankbuild-pure', 'a bank folder or package builds the app its export builds, byte for byte; ACCSAP\'s corrections touch its bank alone; and a bank the iPad would refuse is refused, naming no question text'],
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
   ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],

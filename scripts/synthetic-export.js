@@ -190,11 +190,14 @@ function syntheticRefs(perChapter = 10) {
   return { files, images };
 }
 
-/* writeBankFolder(dir, { bank, imgs }) — a bank and its data-URL figures as a
-   content-schema folder. Figures are named <id>_<n>.<ext>, extract-content's
-   names; each question keeps img and gains figs. */
+/* writeBankFolder(dir, { bank, imgs }, which) — a bank and its data-URL
+   figures as a content-schema folder. Figures are named <id>_<n>.<ext>,
+   extract-content's names; each question keeps img and gains figs. which, a
+   bank block for the manifest ({ id, name, by }), is left out by default: a
+   manifest without one is ACCSAP 12's (scripts/which-bank.js), as this bank's
+   shape is. */
 const EXT = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg' };
-function writeBankFolder(dir, { bank, imgs }) {
+function writeBankFolder(dir, { bank, imgs }, which) {
   fs.mkdirSync(path.join(dir, 'figures'), { recursive: true });
   let figures = 0;
   const questions = bank.map(q => {
@@ -209,7 +212,8 @@ function writeBankFolder(dir, { bank, imgs }) {
   });
   fs.writeFileSync(path.join(dir, 'questions.json'), JSON.stringify(questions));
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
-    schemaVersion: 1, questions: questions.length, figures, chapters: [...new Set(questions.map(q => q.ch))].sort(),
+    schemaVersion: 1, ...(which ? { bank: which } : {}),
+    questions: questions.length, figures, chapters: [...new Set(questions.map(q => q.ch))].sort(),
   }, null, 2));
   return { questions: questions.length, figures };
 }

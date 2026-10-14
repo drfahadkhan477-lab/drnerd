@@ -20,7 +20,16 @@
  *     never a word of a question, and a figure name that climbs out of
  *     figures/ is never opened;
  *   - a bank with some keys corrected and some not is refused;
+ *   - the ACCSAP corrections and flags touch ACCSAP 12's bank alone
+ *     (scripts/which-bank.js): a bank that names itself otherwise is built and
+ *     split as it is given, says which bank it is through extraction and the
+ *     split build, and the older ACC import refuses its build, while an
+ *     unnamed bank is taken for ACCSAP's and told how to name itself;
+ *   - the iPad's check refuses a bank block it could not show safely;
  *   - the command line takes a folder, and exits 2 on a refused one.
+ *
+ * The split build runs from a copy of scripts/ and src/ in this suite's own
+ * folder, so the repository's content/ and dist/ are never written.
  *
  * Every question here is invented placeholder text.
  */
@@ -42,7 +51,9 @@ const S = p => path.join(ROOT, 'scripts', p);
 const A = require(S('assemble-app.js'));
 const Syn = require(S('synthetic-export.js'));
 const { CORRECTIONS, ensureKeyCorrections } = require(S('answer-keys.js'));
+const { FLAGS } = require(S('content-flags.js'));
 const { pack } = require(path.join(ROOT, 'tools', 'pack-content.js'));
+const Accsap = require(S('which-bank.js'));
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bankbuild-'));
 const SHELL = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
@@ -168,6 +179,165 @@ const copyFolder = (to, edit) => {
     let why = '';
     try { ensureKeyCorrections(mixed); } catch (e) { why = e.message; }
     ok('a bank with one corrected and the rest not is refused', /now keys/.test(why), why.split('\n')[0] || 'accepted');
+  }
+
+  head('the ACCSAP corrections and flags touch the ACCSAP bank alone');
+  {
+    const OWN = { id: 'synthetic-own', name: 'Synthetic Own Bank' };
+    /* The synthetic bank keeps the ids the corrections and flags name, keyed
+       as the export keys them, so a correction that reached it would show. */
+    const own = path.join(dir, 'own');
+    Syn.writeBankFolder(own, syn, OWN);
+    let ownBank = null, fromOwn = null;
+    try { ownBank = await A.readBank(own); fromOwn = A.producers({ bank: ownBank, refsDir: refs, imagesDir: refImgs }); }
+    catch (e) { ok('a bank that names itself is read', false, e.message.split('\n')[0]); }
+    if (fromOwn) {
+      const qs = JSON.parse(fromOwn('payload', 'ALL_Q'));
+      const at = id => { const q = qs.find(x => x.id === id); return q ? 'ABCDEFGH'[q.ci] : 'absent'; };
+      ok(`another bank keeps every key its own: none of the ${CORRECTIONS.length} corrections moves one`,
+         CORRECTIONS.every(c => at(c.id) === c.was), CORRECTIONS.map(c => `${c.id} ${at(c.id)}`).join(', '));
+      ok('and no question gains a flag, a bad mark, or loses a word: it is the bank, in the export\'s shape',
+         JSON.stringify(qs) === JSON.stringify(A.singleFileBank(ownBank.questions)) && !qs.some(q => q.flag || q.bad));
+      ok('the build says which bank it carries', fromOwn('payload', 'BANK') === JSON.stringify({ id: OWN.id, name: OWN.name, by: '' }), fromOwn('payload', 'BANK'));
+    }
+    const fromExportBank = A.producers({ exportHtml: EXPORT, refsDir: refs, imagesDir: refImgs })('payload', 'BANK');
+    ok('and the export\'s build says ACCSAP 12', fromExportBank === JSON.stringify(Accsap.ACCSAP), fromExportBank);
+
+    /* Without the ids the corrections name: another bank builds; an unnamed
+       one is taken for ACCSAP's, is refused, and is told how to say. */
+    const figsOf = qs => new Set(qs.flatMap(q => q.figs || [])).size;
+    const strip = qs => { for (let i = qs.length - 1; i >= 0; i--) if (CORRECTIONS.some(c => c.id === qs[i].id)) qs.splice(i, 1); };
+    const ownNoIds = copyFolder(path.join(dir, 'own-no-ids'), (qs, to) => {
+      strip(qs);
+      const m = JSON.parse(fs.readFileSync(path.join(to, 'manifest.json'), 'utf8'));
+      fs.writeFileSync(path.join(to, 'manifest.json'), JSON.stringify({ ...m, bank: OWN, questions: qs.length, figures: figsOf(qs) }));
+    });
+    let built = '';
+    try { A.producers({ bank: await A.readBank(ownNoIds), refsDir: refs, imagesDir: refImgs })('payload', 'ALL_Q'); built = 'built'; } catch (e) { built = e.message.split('\n')[0]; }
+    ok('another bank without ACCSAP\'s ids builds', built === 'built', built);
+    const unnamed = copyFolder(path.join(dir, 'unnamed-no-ids'), (qs, to) => {
+      strip(qs);
+      const m = JSON.parse(fs.readFileSync(path.join(to, 'manifest.json'), 'utf8'));
+      fs.writeFileSync(path.join(to, 'manifest.json'), JSON.stringify({ ...m, questions: qs.length, figures: figsOf(qs) }));
+    });
+    let why = '';
+    try { A.producers({ bank: await A.readBank(unnamed), refsDir: refs, imagesDir: refImgs })('payload', 'ALL_Q'); } catch (e) { why = e.message; }
+    ok('one that names no bank is taken for ACCSAP 12\'s, refused, and told how to name itself',
+       /not in the bank/.test(why) && /names no bank/.test(why) && /"bank": \{ "id"/.test(why), why.split('\n').slice(-2).join(' ') || 'built');
+
+    /* The split build's step, which reads the bank from content/'s manifest. */
+    const raw = () => JSON.parse(JSON.stringify(syn.bank));
+    let shipped = '';
+    try { shipped = Accsap.shippedFixes(raw(), Accsap.ACCSAP).join(' | '); } catch (e) { shipped = e.message; }
+    ok('the split build refuses an ACCSAP bank its corrections did not reach', /did not reach the split build/.test(shipped), shipped.split('\n')[0]);
+    const corrected = raw(); ensureKeyCorrections(corrected);
+    let lines = [];
+    try { lines = Accsap.shippedFixes(corrected, Accsap.ACCSAP); } catch (e) { lines = [e.message]; }
+    ok('ships one they did reach, with its flags', /key corrections present/.test(lines[0]) && corrected.some(q => q.flag), lines[0]);
+    const other = raw(), before = JSON.stringify(other);
+    let said = [];
+    try { said = Accsap.shippedFixes(other, { id: OWN.id, name: OWN.name, by: '' }); } catch (e) { said = [e.message]; }
+    ok('and leaves another bank as it is, saying so', JSON.stringify(other) === before && /is not ACCSAP 12/.test(said.join()), said.join(' | '));
+  }
+
+  head('the split build asks the bank too');
+  {
+    /* scripts/build-pwa.js splits into the content/ and dist/ beside its own
+       folder and empties dist/ first, so it runs from a copy of scripts/ and
+       src/ under this suite's folder: the repository's content/ and dist/,
+       which may hold the owner's bank, are never touched. */
+    const split = async (name, html, beforeSplit) => {
+      const root = path.join(dir, 'split-' + name);
+      fs.cpSync(path.join(ROOT, 'scripts'), path.join(root, 'scripts'), { recursive: true });
+      fs.cpSync(path.join(ROOT, 'src'), path.join(root, 'src'), { recursive: true });
+      fs.mkdirSync(path.join(root, 'build'));
+      const file = path.join(root, 'build', 'systole.html');
+      fs.writeFileSync(file, html);
+      const x = spawnSync(process.execPath, [path.join(root, 'scripts', 'extract-content.js'), file], { encoding: 'utf8' });
+      if (x.status === 0 && beforeSplit) beforeSplit(path.join(root, 'content'));
+      const p = x.status === 0 ? spawnSync(process.execPath, [path.join(root, 'scripts', 'build-pwa.js'), file], { encoding: 'utf8' }) : x;
+      let shipped = [];
+      try { shipped = JSON.parse(fs.readFileSync(path.join(root, 'dist', 'content', 'questions.json'), 'utf8')); } catch (_) {}
+      return { status: p.status, out: (p.stdout || '') + (p.stderr || ''), shipped };
+    };
+    const keysOf = qs => CORRECTIONS.map(c => { const q = qs.find(y => y.id === c.id); return q ? 'ABCDEFGH'[q.ci] : '-'; }).join('');
+    let ownHtml = null;
+    try { ownHtml = await build(path.join(dir, 'own')); } catch (e) { ok('the named bank builds', false, e.message.split('\n')[0]); }
+    if (ownHtml) {
+      const s = await split('own', ownHtml);
+      ok('another bank splits, and the split build says no ACCSAP fix applies',
+         s.status === 0 && /Synthetic Own Bank is not ACCSAP 12/.test(s.out), `exit ${s.status}: ${s.out.trim().split('\n').filter(l => /✗|Error|ACCSAP/.test(l)).slice(0, 2).join(' | ')}`);
+      ok('and ships its keys as the bank gave them', keysOf(s.shipped) === CORRECTIONS.map(c => c.was).join(''), keysOf(s.shipped));
+    }
+    /* A flag extraction lost is put back by the split build: one is taken out
+       of content/ before it runs. */
+    const flagged = FLAGS.find(f => f.flag);
+    const a = await split('accsap', fromExport, content => {
+      const qs = JSON.parse(fs.readFileSync(path.join(content, 'questions.json'), 'utf8'));
+      delete qs.find(q => q.id === flagged.id).flag;
+      fs.writeFileSync(path.join(content, 'questions.json'), JSON.stringify(qs));
+    });
+    ok('ACCSAP\'s splits with its corrections proven present',
+       a.status === 0 && /6 key corrections present in the shipped bank/.test(a.out) && keysOf(a.shipped) === CORRECTIONS.map(c => c.now).join(''),
+       `exit ${a.status}, keys ${keysOf(a.shipped)}`);
+    const back = a.shipped.find(q => q.id === flagged.id);
+    ok('and a flag extraction lost is back in what it ships', !!back && back.flag === flagged.flag, back ? String(back.flag).slice(0, 40) : 'absent');
+  }
+
+  head('extraction and the iPad keep the name');
+  {
+    const ownBuilt = path.join(dir, 'own.html'), ownOut = path.join(dir, 'own-extracted');
+    let ok1 = false;
+    try { fs.writeFileSync(ownBuilt, await build(path.join(dir, 'own'))); ok1 = true; } catch (e) { ok('the named bank builds', false, e.message.split('\n')[0]); }
+    if (ok1) {
+      const x = spawnSync(process.execPath, [S('extract-content.js'), ownBuilt, ownOut], { encoding: 'utf8' });
+      let m = {};
+      try { m = JSON.parse(fs.readFileSync(path.join(ownOut, 'manifest.json'), 'utf8')); } catch (_) {}
+      ok('extract-content.js writes the bank the build carries into the manifest', x.status === 0 && m.bank && m.bank.id === 'synthetic-own', JSON.stringify(m.bank) || (x.stderr || '').trim().split('\n').pop());
+      let again = null;
+      try { again = await build(ownOut); } catch (e) { ok('and that folder builds', false, e.message.split('\n')[0]); }
+      if (again) ok('and that folder builds the same bytes: still that bank, still uncorrected', again.equals(fs.readFileSync(ownBuilt)));
+    }
+    let accsapM = {};
+    try { accsapM = JSON.parse(fs.readFileSync(path.join(dir, 'extracted', 'manifest.json'), 'utf8')); } catch (_) {}
+    ok('and from the export\'s build, ACCSAP 12', JSON.stringify(accsapM.bank) === JSON.stringify(Accsap.ACCSAP), JSON.stringify(accsapM.bank));
+    ok('a build older than the line is ACCSAP 12\'s', Accsap.bankOfBuild(EXPORT) === Accsap.ACCSAP);
+
+    /* The block is shown in the app, so the device and the build refuse one
+       that is not a short id and plain words. */
+    const BP = (() => { const sb = {}; new Function(fs.readFileSync(path.join(ROOT, 'src', 'core', 'bankpack.js'), 'utf8')).call(sb); return sb.BankPack; })();
+    const files = bankBlock => [
+      { name: 'manifest.json', bytes: new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, ...(bankBlock === undefined ? {} : { bank: bankBlock }) })) },
+      { name: 'questions.json', bytes: new TextEncoder().encode(JSON.stringify([{ id: 'Q_1', ch: 'One', o: ['a', 'b'], ci: 0 }])) }];
+    const says = bankBlock => { const v = BP.validate(files(bankBlock)); return v.ok ? 'ok' : v.problems.join('; '); };
+    ok('the iPad\'s check accepts a bank with no block, and a good one', says(undefined) === 'ok' && says({ id: 'my-bank-2', name: 'My bank', by: 'Dr K' }) === 'ok',
+       `${says(undefined)}; ${says({ id: 'my-bank-2', name: 'My bank', by: 'Dr K' })}`);
+    const bad = [['a block that is not an object', 'ACCSAP', /bank is not an object/], ['an id in capitals', { id: 'ACC', name: 'x' }, /bank\.id/],
+      ['no id', { name: 'x' }, /bank\.id/], ['an empty name', { id: 'x', name: '  ' }, /bank\.name/],
+      ['markup in the name', { id: 'x', name: '<img src=x onerror=alert(1)>' }, /bank\.name/], ['a name too long to show', { id: 'x', name: 'n'.repeat(61) }, /bank\.name/],
+      ['markup in by', { id: 'x', name: 'x', by: 'a"b' }, /bank\.by/]];
+    const missed = bad.filter(([, b, re]) => !re.test(says(b))).map(([w, b]) => `${w}: ${says(b)}`);
+    ok('and refuses a block that is not an object, an id that is not short lowercase, a name or by that is not short plain words',
+       missed.length === 0, missed.join('; ') || bad.length + ' refused');
+  }
+
+  head('the older ACC bank merges into ACCSAP\'s alone');
+  {
+    const stage = path.join(dir, 'older'), target = path.join(dir, 'merge-own.html');
+    fs.mkdirSync(path.join(stage, 'figures'), { recursive: true });
+    fs.writeFileSync(path.join(stage, 'questions.json'), '[]');
+    let built = null;
+    try { built = await build(path.join(dir, 'own')); } catch (e) { ok('the named bank builds', false, e.message.split('\n')[0]); }
+    if (built) {
+      fs.writeFileSync(target, built);
+      const r = spawnSync(process.execPath, [path.join(ROOT, 'tools', 'older-acc-import.js'), '--merge', target, '--out', stage], { encoding: 'utf8' });
+      ok('--merge into another bank\'s build is refused, and the build is left as it was',
+         r.status === 1 && /merge into the ACCSAP bank only/.test(r.stderr) && fs.readFileSync(target).equals(built), `exit ${r.status}: ${(r.stderr || r.stdout).trim().split('\n').pop()}`);
+      const accsapTarget = path.join(dir, 'merge-accsap.html');
+      fs.writeFileSync(accsapTarget, fromExport);
+      const r2 = spawnSync(process.execPath, [path.join(ROOT, 'tools', 'older-acc-import.js'), '--merge', accsapTarget, '--out', stage], { encoding: 'utf8' });
+      ok('and into ACCSAP\'s it goes ahead', r2.status === 0 && /merged into/.test(r2.stdout), `exit ${r2.status}: ${(r2.stderr || r2.stdout).trim().split('\n').pop()}`);
+    }
   }
 
   head('the command line');

@@ -66,6 +66,9 @@ const PAYLOADS = [
   { name: 'HEART_MESH', re: /(\nwindow\.HEART3D_MESH_B64=')([A-Za-z0-9+/=]*)';/, required: true },
   /* Optional, as REF_IMGS is: a build made before it existed still cuts. */
   { name: 'REF_PEARLS', re: /(\/\*REF_PEARLS_START\*\/)([\s\S]*?)\/\*REF_PEARLS_END\*\//, required: false },
+  /* Which bank the build carries (scripts/which-bank.js). One line of JSON; also
+     optional, for the same reason. */
+  { name: 'BANK', re: /(\nconst BANK_INFO=)(\{[^\n]*\});(?=\n)/, required: false },
 ];
 
 const count = (hay, needle) => (needle ? hay.split(needle).length - 1 : 0);

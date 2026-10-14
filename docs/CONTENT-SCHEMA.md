@@ -72,6 +72,25 @@ whose bytes begin with that format's own signature (RIFF…WEBP, `\x89PNG`,
 allowed — `refs-seed.json` and `refs-images/<unit>.json` (or `<unit>.N.json`
 for a unit split across files) — and each must be JSON.
 
+`bank` (optional) says which bank this is:
+
+```json
+"bank": { "id": "accsap-12", "name": "ACCSAP 12", "by": "ACC" }
+```
+
+`id` is a short lowercase name (`a-z`, `0-9` and `-`); `name` is what the
+app calls the bank; `by`, optional, is who wrote its commentary. The app
+shows `name` and `by`, so both are short plain text: no markup, quotes or
+control characters. `BankPack.validate()` refuses a block that breaks this.
+
+A manifest with no `bank` is ACCSAP 12's, since every bank made before the
+block existed is. `scripts/extract-content.js` writes the block from the build
+it reads. Only the bank whose `id` is `accsap-12` gets the ACCSAP answer-key
+corrections and content flags (`scripts/which-bank.js`). Any other bank is built
+and shipped as it is given. A bank of your own therefore needs a `bank` block,
+or the build takes it for ACCSAP's and refuses it when the corrections do not
+fit.
+
 ## Changing the schema
 
 Raise the version in `src/core/bankpack.js` and here together, teach

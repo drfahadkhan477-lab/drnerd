@@ -16,11 +16,13 @@
  * app/systole.html is the app with every payload replaced by a slot token
  * (scripts/app-slots.js). This fills each slot:
  *
- *   ALL_Q        the bank, with the answer-key corrections
- *                (scripts/answer-keys.js) then the content flags
- *                (scripts/content-flags.js) applied: JSON.stringify of the bank
+ *   ALL_Q        the bank: JSON.stringify of it, with the answer-key
+ *                corrections (scripts/answer-keys.js) then the content flags
+ *                (scripts/content-flags.js) applied if it is ACCSAP 12's
  *   IMGS         the figures: the export's line verbatim, or a bank's figure
  *                files as data URLs
+ *   BANK         which bank it is (scripts/which-bank.js): the manifest's bank
+ *                block, or ACCSAP 12 for the export and for a manifest with none
  *   REF_SEED     the reference notes, built from content/refs (scripts/ref-seed.js)
  *   REF_IMGS     their figures, from content/refs-images (scripts/ref-images.js)
  *   HEART_MESH   scripts/heart-bake.js over src/core/heart3d.js
@@ -44,6 +46,7 @@ const path = require('path');
 const Slots = require('./app-slots.js');
 const { applyKeyCorrections, ensureKeyCorrections, ALL_Q_RE } = require('./answer-keys.js');
 const { applyContentFlags } = require('./content-flags.js');
+const { ACCSAP, bankOf, isAccsap } = require('./which-bank.js');
 const { buildRefSeed, REFS_DIR } = require('./ref-seed.js');
 const { buildRefImages, IMAGES_DIR } = require('./ref-images.js');
 const { bake } = require('./heart-bake.js');
@@ -141,6 +144,8 @@ function singleFileBank(questions) {
 /* producers({ exportHtml | bank, refsDir, imagesDir, root }) → resolve(kind, name)
    Each value is computed once, on first use. bank is readBank()'s. */
 function producers({ exportHtml, bank, refsDir = REFS_DIR, imagesDir = IMAGES_DIR, root = ROOT }) {
+  /* The export is ACCSAP 12's by what it is; a bank says, or is ACCSAP 12's. */
+  const which = bank ? bankOf(bank.manifest) : ACCSAP;
   const repo = Slots.repoResolver(null, root);
   const made = new Map();
   const once = (key, fn) => { if (!made.has(key)) made.set(key, fn()); return made.get(key); };
@@ -151,8 +156,16 @@ function producers({ exportHtml, bank, refsDir = REFS_DIR, imagesDir = IMAGES_DI
          are not; the export never has, and its corrections are asserted. */
       if (bank) {
         const qs = singleFileBank(bank.questions);
-        ensureKeyCorrections(qs);
-        applyContentFlags(qs);
+        if (isAccsap(which)) try {
+          ensureKeyCorrections(qs);
+          applyContentFlags(qs);
+        } catch (e) {
+          /* The default is a guess about a bank that did not say. Say so,
+             and how to make it say. */
+          if (!bank.manifest.bank) e.message += `\n  This bank's manifest names no bank, so it was built as ${ACCSAP.name}'s, whose corrections do not fit it.` +
+            `\n  If it is another bank, name it in manifest.json: "bank": { "id": "your-bank", "name": "Your bank" } (docs/CONTENT-SCHEMA.md).`;
+          throw e;
+        }
         return JSON.stringify(qs);
       }
       const m = ALL_Q_RE.exec(exportHtml);
@@ -173,6 +186,7 @@ function producers({ exportHtml, bank, refsDir = REFS_DIR, imagesDir = IMAGES_DI
       if (!m) throw new Error('the export has no "const IMGS=" line');
       return m[1];
     },
+    BANK: () => JSON.stringify(which),
     REF_SEED: () => buildRefSeed(refsDir).seed,
     /* The seeded notes' pearls, found here rather than at launch (scripts/pearl-bake.js). */
     REF_PEARLS: () => bakePearls(once('REF_SEED', PAYLOAD.REF_SEED)),
@@ -249,7 +263,8 @@ if (require.main === module) (async () => {
        leave a broken app where the previous working one was. */
     replaceWhole(out, r.out);
     console.log(`assembled → ${path.relative(ROOT, out)}  (${(r.out.length / 1e6).toFixed(2)} MB, build ${r.digest})` +
-      (bank ? `\n  from the bank in ${path.relative(ROOT, source) || '.'}: ${bank.questions.length} questions, ${bank.figures.size} figures` : ''));
+      (bank ? `\n  from the bank in ${path.relative(ROOT, source) || '.'}: ${bankOf(bank.manifest).name}, ${bank.questions.length} questions, ${bank.figures.size} figures` +
+              (isAccsap(bankOf(bank.manifest)) ? '' : '; no ACCSAP correction or flag applies to it') : ''));
     const cmp = opt('--compare');
     if (cmp) {
       const c = compareToChain(fs.readFileSync(cmp), r.unstamped);

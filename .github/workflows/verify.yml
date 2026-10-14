@@ -258,7 +258,7 @@ jobs:
         run: node tests/verify-app-slots-pure.js
       - name: the app assembles from app/systole.html, the export and the repository (29 checks)
         run: node tests/verify-assemble-pure.js
-      - name: a bank folder or package builds the app its export builds, byte for byte, and a bank the iPad would refuse is refused, naming no question text (23 checks)
+      - name: a bank folder or package builds the app its export builds, byte for byte; ACCSAP's corrections touch its bank alone; and a bank the iPad would refuse is refused, naming no question text (44 checks)
         run: node tests/verify-bankbuild-pure.js
       - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (68 checks)
         run: node tests/verify-carve-pure.js

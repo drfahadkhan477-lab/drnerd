@@ -3,8 +3,9 @@
  * Six answer keys the export gets wrong.
  *
  * A library: scripts/assemble-app.js and build-pwa.js call
- * applyKeyCorrections() on the bank. (It was the keys-patch.js step of the
- * patch chain, now deleted.)
+ * applyKeyCorrections() on the bank, when it is ACCSAP 12's
+ * (scripts/which-bank.js). (It was the keys-patch.js step of the patch chain,
+ * now deleted.)
  *
  * HOW THEY GOT WRONG. In the export, `ci` — the index of the correct option —
  * is the most-chosen option in 638 of the 638 questions that carry a response

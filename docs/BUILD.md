@@ -107,7 +107,11 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   (`scripts/answer-keys.js`) and then the content flags
   (`scripts/content-flags.js`) applied. Each correction states the value it
   replaces, so an export that has changed underneath it stops the build with
-  the question's id instead of being "corrected" a second time;
+  the question's id instead of being "corrected" a second time. Both are
+  facts about ACCSAP 12's questions and apply to its bank alone
+  (`scripts/which-bank.js`);
+- **which bank it is**: ACCSAP 12 for the export, or a bank's own `bank`
+  block (`docs/CONTENT-SCHEMA.md`);
 - **the bank's figures**: the export's, verbatim;
 - **the reference notes and their figures**: built from `content/refs` and
   `content/refs-images` (`scripts/ref-seed.js`, `scripts/ref-images.js`);
@@ -154,6 +158,10 @@ as the export's do, an option written as a plain string becomes the
 of figures it names and its place in its chapter. A bank extracted from a
 built app already carries the answer-key corrections, so they are applied only
 to a bank that has none of them, and one with some but not all is refused.
+A bank whose manifest names another bank (`"bank": { "id": …, "name": … }`)
+gets none of the ACCSAP corrections or flags, and the split build
+(`scripts/build-pwa.js`) ships it as it is. The older ACC import
+(`tools/older-acc-import.js --merge`) refuses such a build.
 Built from the folder or the package `extract-content.js` writes from a
 build, the app is the same bytes as that build; `tests/verify-bankbuild-pure.js`
 holds that on the synthetic bank (`node scripts/synthetic-export.js out.html

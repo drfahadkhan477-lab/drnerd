@@ -998,35 +998,22 @@ step('copy only the content the app asks for', () => {
    and cannot be run twice into a contradiction. It also closes what the apply
    was covering by accident: the cross-check below proves the two builds AGREE,
    and two builds that both lost the corrections agree perfectly. This asserts
-   the corrections are actually present in what ships. */
-const { CORRECTIONS } = require('./answer-keys.js');
-const { applyContentFlags } = require('./content-flags.js');
-step('the bank corrections are present in what ships', () => {
+   the corrections are actually present in what ships.
+
+   The flags are applied rather than asserted because applyContentFlags is
+   already idempotent — it leaves a question the export flagged itself alone
+   and reports it as such — and it is the only thing that puts them in the
+   split build if extraction ever drops one.
+
+   BOTH BELONG TO ACCSAP 12 ALONE (scripts/which-bank.js). The bank's manifest says
+   which bank it is; for any other, shippedFixes() changes nothing and says so. */
+const { bankOf, shippedFixes } = require('./which-bank.js');
+step('the ACCSAP corrections are present in what ships, if it is the ACCSAP bank', () => {
   const p = path.join(DIST, 'content', 'questions.json');
   const bank = JSON.parse(fs.readFileSync(p, 'utf8'));
-  const byId = new Map(bank.map(q => [q.id, q]));
-  const wrong = CORRECTIONS.filter(c => {
-    const q = byId.get(c.id);
-    return !q || 'ABCDEFGH'[q.ci] !== c.now;
-  });
-  if (wrong.length) {
-    throw new Error(
-      `${wrong.length} correction(s) did not reach the split build: ` +
-      wrong.map(c => {
-        const q = byId.get(c.id);
-        return `${c.id} (ships ${q ? 'ABCDEFGH'[q.ci] : 'absent'}, should be ${c.now})`;
-      }).join(', ') +
-      `\n  The chain's keys step corrects ALL_Q before extract-content reads it.` +
-      `\n  If they are missing here, that step did not run or extraction lost them.`);
-  }
-  /* The flags are applied rather than asserted because applyContentFlags is
-     already idempotent — it leaves a question the export flagged itself alone
-     and reports it as such — and it is the only thing that puts them in the
-     split build if extraction ever drops one. */
-  const applied = applyContentFlags(bank);
+  const lines = shippedFixes(bank, bankOf(contentManifest));
   fs.writeFileSync(p, JSON.stringify(bank));
-  console.log(`      ✓ ${CORRECTIONS.length} key corrections present in the shipped bank`);
-  applied.forEach(a => console.log('      ✓ ' + a));
+  lines.forEach(a => console.log('      ✓ ' + a));
 });
 
 /* And the check that makes the class of bug impossible rather than this one
