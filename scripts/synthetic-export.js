@@ -2,12 +2,18 @@
 /*
  * A synthetic export: the shape of the ACCSAP 12 export, none of its content.
  *
- *   node scripts/synthetic-export.js [out.html] [--per-chapter N]
+ *   node scripts/synthetic-export.js [out.html] [--per-chapter N] [--bank <dir>]
  *   node scripts/assemble-app.js out.html --refs <dir>/refs --ref-images <dir>/refs-images \
  *                                --out build/systole.html
  *
  * Beside out.html it writes refs/ and refs-images/: a synthetic reference
  * library, in the shape content/refs and content/refs-images have.
+ *
+ * --bank <dir> also writes the same bank in the content schema
+ * (docs/CONTENT-SCHEMA.md): manifest.json, questions.json and figures/, the
+ * folder assemble-app.js builds from as it builds from the export. The
+ * questions are the export's, uncorrected as the export's are, each naming
+ * its figure files as extract-content.js names them.
  *
  * WHY. The real app could only be built on the owner's machine, where the
  * licensed export is, so every browser suite that needs a build ran there or
@@ -184,6 +190,30 @@ function syntheticRefs(perChapter = 10) {
   return { files, images };
 }
 
+/* writeBankFolder(dir, { bank, imgs }) — a bank and its data-URL figures as a
+   content-schema folder. Figures are named <id>_<n>.<ext>, extract-content's
+   names; each question keeps img and gains figs. */
+const EXT = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg' };
+function writeBankFolder(dir, { bank, imgs }) {
+  fs.mkdirSync(path.join(dir, 'figures'), { recursive: true });
+  let figures = 0;
+  const questions = bank.map(q => {
+    const figs = (imgs[q.id] || []).map((url, i) => {
+      const m = /^data:([^;]+);base64,(.*)$/s.exec(url);
+      const name = `${q.id}_${i + 1}.${EXT[m[1]]}`;
+      fs.writeFileSync(path.join(dir, 'figures', name), Buffer.from(m[2], 'base64'));
+      figures++;
+      return name;
+    });
+    return { ...q, figs };
+  });
+  fs.writeFileSync(path.join(dir, 'questions.json'), JSON.stringify(questions));
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
+    schemaVersion: 1, questions: questions.length, figures, chapters: [...new Set(questions.map(q => q.ch))].sort(),
+  }, null, 2));
+  return { questions: questions.length, figures };
+}
+
 function syntheticExport(perChapter) {
   const { bank, imgs } = syntheticBank(perChapter);
   return '<!doctype html><html><head><meta charset="utf-8"><title>synthetic export</title></head><body>\n' +
@@ -194,11 +224,17 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const i = args.indexOf('--per-chapter');
   const per = i >= 0 ? parseInt(args[i + 1], 10) : undefined;
-  const out = args.find((a, k) => !a.startsWith('--') && args[k - 1] !== '--per-chapter') || path.join(__dirname, '..', 'build', 'synthetic-export.html');
+  const b = args.indexOf('--bank');
+  const bankDir = b >= 0 ? args[b + 1] : undefined;
+  const out = args.find((a, k) => !a.startsWith('--') && !['--per-chapter', '--bank'].includes(args[k - 1])) || path.join(__dirname, '..', 'build', 'synthetic-export.html');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, syntheticExport(per));
   const { bank, imgs } = syntheticBank(per);
   console.log(`synthetic export → ${out}  (${bank.length} questions, ${Object.keys(imgs).length} with a figure, none real)`);
+  if (bankDir) {
+    const w = writeBankFolder(bankDir, { bank, imgs });
+    console.log(`synthetic bank   → ${bankDir}  (${w.questions} questions, ${w.figures} figures, the same bank)`);
+  }
   const dir = path.dirname(out), refs = syntheticRefs();
   fs.mkdirSync(path.join(dir, 'refs'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'refs-images'), { recursive: true });
@@ -207,4 +243,4 @@ if (require.main === module) {
   console.log(`synthetic refs   → ${path.join(dir, 'refs')}  (${refs.files.length} files, ${refs.images.length} figures)`);
 }
 
-module.exports = { syntheticBank, syntheticExport, syntheticRefs, figurePng, isSyntheticBuild, MARK, CHAPTERS };
+module.exports = { syntheticBank, syntheticExport, syntheticRefs, writeBankFolder, figurePng, isSyntheticBuild, MARK, CHAPTERS };

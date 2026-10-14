@@ -186,6 +186,10 @@ const SUITES = [
      repository, ALL_Q held field by field to answer-keys.js and
      content-flags.js applied as the assembler applies them. */
   ['assemble-pure', 'the app assembles from app/systole.html, the export and the repository, stamped once'],
+  /* The same build from a bank in the content schema (docs/CONTENT-SCHEMA.md)
+     instead of the export: the first step of running on a bank that is not
+     ACCSAP's. Pure Node, on the synthetic bank. */
+  ['bankbuild-pure', 'a bank folder or package builds the app its export builds, byte for byte, and a bank the iPad would refuse is refused, naming no question text'],
   /* Step 3: lines of the shell moved into files under app/. The committed
      app/ is audited here too, which needs no export. */
   ['carve-pure', 'a piece carved out of the shell loses nothing, and the committed app/ is whole'],
@@ -462,7 +466,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['bankbuild-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

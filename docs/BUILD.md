@@ -138,6 +138,27 @@ piece by path.
 whether two builds are the same bytes (stamps aside) and, if not, which part
 differs, by name, never the text.
 
+### Building from a bank instead of the export
+
+`npm run build -- <folder or .zip>` builds the same app from a bank in the
+content schema (`docs/CONTENT-SCHEMA.md`): a folder holding `manifest.json`,
+`questions.json` and `figures/`, such as the `content/` that
+`scripts/extract-content.js` writes, or the package `tools/pack-content.js`
+makes of it. The bank is checked first by `src/core/bankpack.js`, the check
+the iPad runs on an import, so a bank the device would refuse is refused here,
+naming ids and files and never a word of a question.
+
+The assembler gives the bank the shape the export has: the figures go inline
+as the export's do, an option written as a plain string becomes the
+`{l, t}` the app reads, and a question without `img` or `n` gets the number
+of figures it names and its place in its chapter. A bank extracted from a
+built app already carries the answer-key corrections, so they are applied only
+to a bank that has none of them, and one with some but not all is refused.
+Built from the folder or the package `extract-content.js` writes from a
+build, the app is the same bytes as that build; `tests/verify-bankbuild-pure.js`
+holds that on the synthetic bank (`node scripts/synthetic-export.js out.html
+--bank <dir>` writes it as a folder).
+
 ### How it got here
 
 Until October 2026 the app was built by a patch chain: `scripts/build.js` ran
@@ -728,7 +749,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        152 suites · 87 need no browser · + pwa
+tests/        152 suites · 88 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

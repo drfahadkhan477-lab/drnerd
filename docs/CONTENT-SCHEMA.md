@@ -1,14 +1,16 @@
 # The content schema
 
 What a Systole question bank looks like once it is out of the export, in one
-place. It is the contract between three pieces of code, and all three enforce
-the same rule — `BankPack.validate()` in `src/core/bankpack.js`:
+place. It is the contract between the pieces of code below, and each of them
+enforces the same rule — `BankPack.validate()` in `src/core/bankpack.js`:
 
 - `scripts/extract-content.js` writes `content/` and refuses to swap in a bank
   that fails it;
 - `tools/pack-content.js` (and `scripts/build-pwa.js --no-content`) refuse to
   write a package that fails it;
-- the iPad's importer in the code-only deploy refuses to store one.
+- the iPad's importer in the code-only deploy refuses to store one;
+- `scripts/assemble-app.js` (`npm run build -- <folder or .zip>`) refuses to
+  build the app from one.
 
 So a bank that would be refused on the device is refused on the laptop first.
 The build's own content rules (`scripts/content-checks.js`, run by the
@@ -48,6 +50,13 @@ extra/<name>          packages only: the reference notes' seed and figure files
 
 Other fields ride along untouched; the schema names what is checked, not all
 that may be there.
+
+The app reads more than the schema requires. Built from a bank, the app gets
+the export's shape: an option given as a string becomes `{l, t}` (letter and
+text), an option with no `l` gets the letter its place gives it, a question
+with no `img` gets the number of figures it names, and one with no `n` gets
+its place in its chapter. A field the bank gives is kept as it is. A question
+whose `img` disagrees with its `figs` is refused, as extraction refuses it.
 
 ## A figure
 

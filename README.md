@@ -47,7 +47,7 @@ record counts the split build only from a run on the real bank. On every push
 it also checks, with no source file: every script parses, the test-suite
 list still lists without crashing, `npm run build` still refuses to run and
 explains why when no source is present, and
-the 87 suites that need neither a browser nor a build all stay green. See
+the 88 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 225 checks can't run here.
 
