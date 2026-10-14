@@ -314,6 +314,24 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ok('nothing is left open: no block, nothing stored, no clock running', r.mock === null && r.key === null && r.ticker === null);
   }
 
+  head('a tick that lands while the screen is changing');
+  await startWith(ids10, 60);
+  {
+    const t0 = base();
+    await page.evaluate(() => { S.mock.elapsedMs = 12 * 60000 - 500; });
+    await clockAt(t0);
+    /* Leaving sets the screen at once and redraws a moment later (render() swaps inside a view transition), and the page's
+       timer can fire in between: that tick finds a block whose screen has gone. */
+    const r = await page.evaluate(t => {
+      S.screen = 'home';
+      mockTick(t);
+      const out = { open: !!S.mock, el: S.mock && S.mock.elapsedMs, held: S.mock && S.mock.last === null, report: S.mockLast !== null, screen: S.screen };
+      S.screen = 'mock';
+      return out;
+    }, t0 + 1000);
+    ok('a tick after the block\'s screen has been left counts nothing and hands nothing in, though it is a second past the end', r.open && r.el === 12 * 60000 - 500 && r.held && !r.report && r.screen === 'home', JSON.stringify(r));
+  }
+
   head('an untimed block counts up and never ends by itself');
   await startWith(ids10, 0);
   {
@@ -356,11 +374,14 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   {
     await page.click('.mock-opt[data-mi="2"]'); await page.click('#mockFlagBtn');
     await realClock(true);
-    await page.evaluate(() => { S.mock.elapsedMs = 7000; mockStartTicker(); });
+    /* The page's timer is started for real, then made to do nothing when it fires: the tick that would find the block left
+       and stop the clock a second late is out of the picture, so only leaving itself can stop it. */
+    await page.evaluate(() => { S.mock.elapsedMs = 7000; mockStartTicker(); window.__mockTick = mockTick; mockTick = () => {}; });
+    const running = await page.evaluate(() => _mockTimer !== null);
     await page.evaluate(() => goHome());
     await onScreen(page, 'home', { marker: '.hero-h1' });
-    const stopped = await page.waitForFunction(() => _mockTimer === null, null, { timeout: 5000 }).then(() => true, () => false);
-    ok('going Home stops the app\'s own clock', stopped);
+    const stopped = await page.evaluate(() => { const gone = _mockTimer === null; mockTick = window.__mockTick; mockStopTicker(); return gone; });
+    ok('going Home stops the app\'s own clock then and there, not at its next tick', running && stopped, JSON.stringify({ running, stopped }));
     await realClock(false);
     const s0 = await page.evaluate(() => ({ el: S.mock.elapsedMs, stored: JSON.parse(localStorage.getItem('accsap12.mock')), attr: document.documentElement.hasAttribute('data-mock'), fab: getComputedStyle(document.getElementById('aiFab')).display }));
     ok('going Home stops the clock, keeps the block, and gives the search and the tutor back', s0.attr === false && s0.fab !== 'none' && s0.stored.sel[0] === 2 && s0.stored.flag[0] === 1 && s0.stored.elapsedMs === s0.el && s0.el >= 7000, JSON.stringify([s0.el, s0.fab]));
