@@ -102,7 +102,8 @@ it reads. Only the bank whose `id` is `accsap-12` gets the ACCSAP answer-key
 corrections and content flags (`scripts/which-bank.js`). Any other bank is built
 and shipped as it is given. A bank of your own therefore needs a `bank` block,
 or the build takes it for ACCSAP's and refuses it when the corrections do not
-fit.
+fit. `scripts/build-bank.js` and `scripts/import-bank.js` write one
+(`docs/OWN-BANK.md`).
 
 ## Changing the schema
 

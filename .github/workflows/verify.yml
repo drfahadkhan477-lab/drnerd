@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 89 suites that are pure Node with no Playwright and no
+#   logic        the 90 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -258,10 +258,12 @@ jobs:
         run: node tests/verify-app-slots-pure.js
       - name: the app assembles from app/systole.html, the export and the repository (29 checks)
         run: node tests/verify-assemble-pure.js
-      - name: a bank folder or package builds the app its export builds, byte for byte; ACCSAP's corrections touch its bank alone; and a bank the iPad would refuse is refused, naming no question text (44 checks)
+      - name: a bank folder or package builds the app its export builds, byte for byte; ACCSAP's corrections touch its bank alone; and a bank the iPad would refuse is refused, naming no question text (53 checks)
         run: node tests/verify-bankbuild-pure.js
-      - name: a bank of your own is built from study files you have reviewed, and from nothing less (34 checks)
+      - name: a bank of your own is built from study files you have reviewed, and from nothing less (52 checks)
         run: node tests/verify-buildbank-pure.js
+      - name: a licensed bank's export becomes a bank the app runs on, and a file that cannot be read as one is refused without a word of it (75 checks)
+        run: node tests/verify-importbank-pure.js
       - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (68 checks)
         run: node tests/verify-carve-pure.js
       - name: the synthetic export builds the real app, and is marked so its run is never recorded (26 checks)
