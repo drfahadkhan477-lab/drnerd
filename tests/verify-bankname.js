@@ -53,6 +53,7 @@ const SSE = [
 ].join('\n\n');
 
 const OWN = { id: 'tested-bank', name: 'Tested Bank', by: '' };
+const OWN_QUESTION = require('../scripts/synthetic-export.js').syntheticBank().bank[0];
 /* A word of ACCSAP's or the ACC's as the app would write it; not the ACC/AHA
    of a guideline's name. */
 const ACC_WORDS = /ACCSAP|(?<![A-Za-z/])ACC(?![A-Za-z/])/;
@@ -141,7 +142,18 @@ async function screens(page) {
 
     /* This bank has no peer statistics: none of its options says how many
        candidates chose it. */
-    await s.page.evaluate(() => { for (const q of ALL_Q) for (const o of q.o) delete o.p; });
+    // Relabelling a private bank does not erase legitimate source citations
+    // inside its questions or notes. Give the personal-bank scenario public
+    // study content; keep the real app chrome and every branding assertion.
+    await s.page.evaluate(fixture => {
+      for (const q of ALL_Q) {
+        q.s = fixture.s; q.ex = fixture.ex; q.ci = fixture.ci;
+        q.o = fixture.o.map(o => { const copy = { ...o }; delete copy.p; return copy; });
+      }
+      REF = [{ id: 'tested-study-note', title: 'Reviewed study note',
+        source: 'Tested Bank', text: fixture.ex, tags: [] }];
+      pearlCurrent = null;
+    }, OWN_QUESTION);
     const sc = await screens(s.page);
     const all = [sc.home, sc.search, sc.refs, sc.quiz.text].join('\n');
     ok('the home, search, notes and answered-question screens name neither ACCSAP nor the ACC',
