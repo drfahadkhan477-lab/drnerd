@@ -23,8 +23,8 @@
  *    on the next reload, which is infuriating and looks like a bug. Bump the
  *    version in REF_SEED_KEY when the corpus changes enough to want re-seeding.
  *
- * 3. IT STAYS OUT OF THE PWA SHELL. The corpus is ~295 KB, and the split
- *    build's shell budget is 800 KB with ~708 KB already spent. So the seed is
+ * 3. IT STAYS OUT OF THE PWA SHELL. The corpus is more than the split build's
+ *    shell can spare under its size budget (tests/verify-pwa.js). So the seed is
  *    emitted between two marker comments that build-pwa.js can find, lift out
  *    to content/, and replace with a fetch — the same move extract-content.js
  *    already makes for the question bank. The single-file build keeps it

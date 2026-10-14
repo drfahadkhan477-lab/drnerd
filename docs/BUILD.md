@@ -682,11 +682,12 @@ node scripts/verify.js --pwa
 ```
 
 **Run it.** It is the only suite that sees the split build, and this is not
-theoretical: it asserts the shell stays under 800 KB and that the app boots with
-the network cut off. Both of those had silently broken — the shell had grown to
-1.7 MB with an inlined heart scan, and the service worker was failing to install
-because it precached an icon the build never generated. The checks existed the
-whole time; nothing ran them.
+theoretical: it holds the shell to a size budget, counted in gzipped bytes as
+they cross the network (`tests/verify-pwa.js` says why), and checks that the
+app boots with the network cut off. Both of those had silently broken — the
+shell had grown to 1.7 MB with an inlined heart scan, and the service worker
+was failing to install because it precached an icon the build never generated.
+The checks existed the whole time; nothing ran them.
 
 The steps by hand, if you need them:
 

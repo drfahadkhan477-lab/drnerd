@@ -651,8 +651,8 @@ step('pull the heart image out of the splash', () => {
 /* ── 3.6 the reference seed ───────────────────────────────────────────────
    The build bakes the reference notes in as a seed (the REF_SEED slot,
    scripts/ref-seed.js) so the app opens with
-   the library already populated. That is ~295 KB, which is nothing against a
-   27 MB single file and fatal against an 800 KB shell. Out it comes, and a
+   the library already populated. That is nothing against the single file and
+   too much for the shell's size budget (tests/verify-pwa.js). Out it comes, and a
    loader appended to app.js applies it once the code that owns REF exists.
    `let` at script top level lives in the global lexical scope, so the loader
    can see REF and refSeedApply directly without either being on window. */
@@ -706,9 +706,9 @@ var REF_SEED_READY = (function(){
 /* ── 3.7 the reference figures ────────────────────────────────────────────
    The build embeds every figure a reference note cites (the REF_IMGS slot,
    scripts/ref-images.js) — a few
-   megabytes raw, base64'd, which is nothing against 27 MB and fatal against
-   800 KB. Same move as the reference seed: pull it out, fetch it, apply it
-   once the binding it fills exists. */
+   megabytes raw, base64'd, which is nothing against the single file and fatal
+   to the shell's size budget. Same move as the reference seed: pull it out,
+   fetch it, apply it once the binding it fills exists. */
 /* ONE FILE PER UNIT, NOT ONE FOR THE SHELF. This used to write every figure
    into a single content/refs-images.json. That file grows with every unit
    added, and Cloudflare Pages will not take a file over 25,000,000 bytes: the
