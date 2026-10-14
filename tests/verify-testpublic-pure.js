@@ -28,7 +28,7 @@ const ROOT = path.join(__dirname, '..');
 
 head('the list is the workflow’s, split the way the suites actually are');
 const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
-const { pure, browser, synthetic } = suitesFromWorkflow(yml);
+const { pure, browser, synthetic, split } = suitesFromWorkflow(yml);
 const synNames = synthetic.suites.map(x => x.name);
 /* The same "uses a browser" rule verify-stats and verify-engine apply. */
 /* The rule verify.js tags suites with (tests/_targets.js tagsOf), not a copy
@@ -52,6 +52,21 @@ ok('and the last of them writes the target the suites read',
    synthetic.build.length > 0 && synthetic.suites.every(x => synthetic.build[synthetic.build.length - 1].includes(x.target)));
 ok('together they are every suite the workflow runs, each once',
    JSON.stringify(pure.concat(browser, synNames).sort()) === JSON.stringify(all.slice().sort()), `${pure.length + browser.length + synNames.length} of ${all.length}`);
+/* The split-build job names no suite, so the check above cannot see it: its
+   commands are held here, in the order npm test will run them. */
+ok('the split-build job’s commands are found, and each script exists',
+   split.length >= 3 && split.every(([s]) => fs.existsSync(path.join(ROOT, s))), split.map(c => c[0]).join(', ') || 'none');
+const splitLast = split[split.length - 1] || [];
+ok('and the last of them checks the split build alone, through verify.js --pwa',
+   splitLast[0] === 'scripts/verify.js' && splitLast.includes('--pwa') && / --only pwa( |$)/.test(splitLast.join(' ')), splitLast.join(' '));
+{
+  const target = splitLast[1];
+  const at = (script, has) => split.findIndex(c => c[0] === script && has(c));
+  const made = at('scripts/assemble-app.js', c => c[c.indexOf('--out') + 1] === target);
+  const taken = at('scripts/extract-content.js', c => c[1] === target);
+  ok('on a build an earlier command writes, whose content is taken out before the check',
+     made >= 0 && taken > made && taken < split.length - 1, `${target}: written at ${made}, extracted at ${taken}, checked at ${split.length - 1}`);
+}
 
 head('the workflow runs once per commit');
 {
@@ -69,13 +84,22 @@ head('the workflow runs once per commit');
 head('reading a workflow');
 const SYN = syn => !syn ? '' : `  synthetic-browser:\n    steps:\n      - name: build\n        run: |\n${syn.build.map(c => `          node ${c.join(' ')}\n`).join('')}` +
   syn.suites.map(n => `      - name: ${n} (1 checks)\n        run: node tests/${n}.js ${syn.target}\n`).join('');
-const Y = (logic, browserJob, after, syn) =>
+/* A split-build job the way the real one is written: its first commands in a
+   block, its last on a step of its own. */
+const SPLIT = cmds => !cmds ? '' : `  split-build:\n    steps:\n      - name: make it\n        run: |\n` +
+  cmds.slice(0, -1).map(c => `          node ${c.join(' ')}\n`).join('') +
+  `      - name: check it\n        run: node ${cmds[cmds.length - 1].join(' ')}\n`;
+const Y = (logic, browserJob, after, syn, split) =>
   `jobs:\n  logic:\n    steps:\n${logic.map(n => `      - name: ${n} (1 checks)\n        run: node tests/${n}.js\n`).join('')}` +
   `  memorizer-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n${browserJob.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('')}` +
-  SYN(syn) + (after ? `  build-guard:\n    steps:\n      - run: node tests/${after}.js\n` : '');
+  SYN(syn) + SPLIT(split) + (after ? `  build-guard:\n    steps:\n      - run: node tests/${after}.js\n` : '');
 {
   const s = suitesFromWorkflow(Y(['verify-a', 'verify-b'], ['verify-c'], 'verify-z'));
-  ok('a job’s suites end where the next job begins', JSON.stringify(s) === JSON.stringify({ pure: ['verify-a', 'verify-b'], browser: ['verify-c'], synthetic: { build: [], suites: [] } }), JSON.stringify(s));
+  ok('a job’s suites end where the next job begins', JSON.stringify(s) === JSON.stringify({ pure: ['verify-a', 'verify-b'], browser: ['verify-c'], synthetic: { build: [], suites: [] }, split: [] }), JSON.stringify(s));
+  const cmds = [['scripts/one.js', 'a.html'], ['scripts/two.js', 'a.html', '--out', 'b.html'], ['scripts/three.js', 'b.html', '--pwa']];
+  const p = suitesFromWorkflow(Y(['verify-a'], ['verify-c'], 'verify-z', null, cmds));
+  ok('a split-build job is read as its commands, in order, from a block and from a step of its own',
+     JSON.stringify(p.split) === JSON.stringify(cmds), JSON.stringify(p.split));
   let msg = '';
   try { suitesFromWorkflow('jobs:\n  logic:\n    steps: []\n'); } catch (e) { msg = e.message; }
   ok('a workflow without the browser job is refused, not read as zero browser suites', /no memorizer-browser job/.test(msg), msg || 'accepted');
@@ -92,9 +116,9 @@ suite('verify-quiet-failure', 'console.log("the dependency never answered"); pro
 suite('verify-mixed-failure', 'console.error("a dependency warning"); console.log("  FAIL  the note was not persisted"); process.exit(1)');
 suite('verify-c', 'process.exit(process.env.SYSTOLE_ENGINE === "webkit" ? 0 : 3)');
 suite('verify-g', 'process.exit(["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0"].some(k => k in process.env) ? 4 : 0)');
-const go = (logic, br, opts, syn) => {
+const go = (logic, br, opts, syn, split) => {
   const lines = [];
-  const r = run(Object.assign({ root: TMP, yml: Y(logic, br, null, syn), log: s => lines.push(s) }, opts));
+  const r = run(Object.assign({ root: TMP, yml: Y(logic, br, null, syn, split), log: s => lines.push(s) }, opts));
   return Object.assign(r, { text: lines.join('\n') });
 };
 {
@@ -187,6 +211,32 @@ head('the synthetic build, then its suites');
   fs.rmSync(T, { force: true });
   const p = go(['verify-a'], [], { pure: true }, { build: [['scripts/mk.js', T]], suites: ['verify-s'], target: T });
   ok('--pure names them among the suites it did not run', p.notRun.includes('verify-s') && !fs.existsSync(T), JSON.stringify(p.notRun));
+}
+head('the split build, after the synthetic suites');
+{
+  /* A command that records the engine it was handed, so the run's engine is
+     seen to reach the split build as it reaches a suite. */
+  fs.writeFileSync(path.join(TMP, 'scripts', 'eng.js'), 'require("fs").writeFileSync(process.argv.slice(2)[0], String(process.env.SYSTOLE_ENGINE))');
+  const T = path.join(TMP, 'syn2.html'), A = path.join(TMP, 'split-a'), E = path.join(TMP, 'split-engine');
+  const syn = { build: [['scripts/mk.js', T]], suites: ['verify-s'], target: T };
+  const good = go(['verify-a'], [], { executablePath: process.execPath, engine: 'webkit' }, syn,
+                  [['scripts/mk.js', A], ['scripts/eng.js', E]]);
+  ok('npm test runs the split-build job’s commands, in order, after the synthetic suites',
+     good.code === 0 && good.ran.includes('split-build') && fs.existsSync(A) &&
+     good.text.indexOf('split  node scripts/mk.js') > good.text.indexOf('verify-s'), good.failed.join(',') || JSON.stringify(good.ran));
+  ok('in the engine it was given', fs.existsSync(E) && fs.readFileSync(E, 'utf8') === 'webkit', fs.existsSync(E) ? fs.readFileSync(E, 'utf8') : 'not run');
+  ok('and says the split build passed with the rest', /and the split build made from it\./.test(good.text), good.text.trim().split('\n').slice(-2)[0]);
+  for (const f of [T, A, E]) fs.rmSync(f, { force: true });
+  const B = path.join(TMP, 'split-b');
+  const bad = go(['verify-a'], [], { executablePath: process.execPath, engine: 'chromium' }, null,
+                 [['scripts/broken.js'], ['scripts/mk.js', B]]);
+  ok('a command that fails fails the run, under the job’s name', bad.code === 1 && JSON.stringify(bad.failed) === '["split-build"]', JSON.stringify(bad.failed));
+  ok('and the commands after it do not run, and the run says which one failed',
+     !fs.existsSync(B) && /split-build\s+failed at scripts\/broken\.js/.test(bad.text), bad.text.split('\n').filter(l => /split/.test(l)).join(' | '));
+  const C = path.join(TMP, 'split-c');
+  const p = go(['verify-a'], [], { pure: true }, null, [['scripts/mk.js', C]]);
+  ok('--pure names the split build among what it did not run, and runs none of it',
+     p.notRun.includes('split-build') && !fs.existsSync(C), JSON.stringify(p.notRun));
 }
 head('the public CLI refuses unexpected arguments and help starts no suite');
 {

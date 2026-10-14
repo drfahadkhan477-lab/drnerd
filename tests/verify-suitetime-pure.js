@@ -67,6 +67,27 @@ for (const [label, args, diagnostic] of invalidArgs) {
      !/Suites, their tags|\bPASS\b|all green|No build/.test(out));
 }
 
+head('the split build alone');
+{
+  /* --pwa --only pwa, which CI's split-build job runs: it selects no registry
+     suite, and the run still starts. The build here is missing, which stops
+     it at the first thing it needs, so nothing is built or launched. */
+  const verify = (...args) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'),
+    path.join(ROOT, 'build', 'missing-pwa-fixture.html'), ...args], { cwd: ROOT, encoding: 'utf8', timeout: 20000 });
+  const first = r => ((r.stderr || '').trim().split('\n')[0] || '(nothing on stderr)').slice(0, 120);
+  const alone = verify('--pwa', '--only', 'pwa');
+  ok('--pwa --only pwa is a run of the split build, not an empty selection',
+     alone.status === 1 && /No build at/.test(alone.stderr || '') &&
+     !/No suites selected/.test((alone.stdout || '') + (alone.stderr || '')), first(alone));
+  const bare = verify('--only', 'pwa');
+  ok('--only pwa without --pwa is refused as a usage error, before any build is looked for',
+     bare.status === 2 && /runs only with --pwa/.test(bare.stderr || '') &&
+     !/No build|No suites selected/.test((bare.stdout || '') + (bare.stderr || '')), first(bare));
+  const nothing = verify('--pwa', '--only', 'no-such-suite');
+  ok('and --pwa with a selection that names nothing real is still refused',
+     nothing.status === 1 && /No suites selected/.test(nothing.stderr || ''), first(nothing));
+}
+
 (async () => {
   head('the ceiling');
   ok('a quick suite gets the 20-minute floor', limitFor(100) === FLOOR_MS && FLOOR_MS === 20 * MIN, String(limitFor(100)));

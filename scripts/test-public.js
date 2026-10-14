@@ -4,7 +4,8 @@
  *
  *   npm test                 the no-export suites: pure Node, then the browser
  *                            suites that build their own documents, then the
- *                            app's browser suites on a synthetic build
+ *                            app's browser suites on a synthetic build, then
+ *                            the split build made from it
  *   npm run test:pure        the pure-Node ones only, no browser needed
  *   npm run test:private     the whole registry against your own build
  *                            (scripts/verify.js; needs build/systole.html)
@@ -23,7 +24,9 @@
  * `logic` job (pure), the `memorizer-browser` job (browser), and the
  * `synthetic-browser` job, whose build commands (`node scripts/...` lines)
  * are run first and whose suites are each handed the target the step names.
- * A synthetic build that fails fails every suite waiting on it. So a suite
+ * A synthetic build that fails fails every suite waiting on it. Last come the
+ * `split-build` job's commands, in order: they make the split build from the
+ * synthetic one and check it through scripts/verify.js --pwa. So a suite
  * added to CI is in `npm test` the same day, and "passes locally" and "passes
  * in CI" name the same set. tests/verify-testpublic-pure.js holds the split
  * to what the workflow says.
@@ -66,11 +69,23 @@ function syntheticJob(body) {
   return { build, suites };
 }
 
+/* The split-build job: every `node scripts/...` command in it, in order,
+   whether a step runs one or a block runs several. It names no tests/ file:
+   its last command is scripts/verify.js --pwa --only pwa, which serves the
+   split build and runs the suites about it. A job that is absent gives no
+   commands; verify-testpublic-pure holds the real workflow to having them,
+   so a renamed job cannot drop out of `npm test` unseen. */
+function splitJob(body) {
+  return [...(body || '').matchAll(/^\s+(?:run:[ \t]+)?node\s+(scripts\/[a-z0-9-]+\.js)((?:[ \t]+\S+)*)[ \t]*$/gm)]
+    .map(m => [m[1]].concat(m[2].trim().split(/\s+/).filter(Boolean)));
+}
+
 function suitesFromWorkflow(yml) {
   const logic = jobBody(yml, 'logic'), browser = jobBody(yml, 'memorizer-browser');
   if (logic === null || browser === null)
     throw new Error(`the workflow has no ${logic === null ? 'logic' : 'memorizer-browser'} job — nothing to take the suite list from`);
-  return { pure: invoked(logic), browser: invoked(browser), synthetic: syntheticJob(jobBody(yml, 'synthetic-browser')) };
+  return { pure: invoked(logic), browser: invoked(browser), synthetic: syntheticJob(jobBody(yml, 'synthetic-browser')),
+           split: splitJob(jobBody(yml, 'split-build')) };
 }
 
 /* opts: { root, yml, pure, engine, executablePath, log } — the seams the
@@ -80,8 +95,10 @@ function run(opts) {
   const root = o.root || ROOT;
   const log = o.log || (s => console.log(s));
   const yml = o.yml != null ? o.yml : fs.readFileSync(path.join(root, '.github', 'workflows', 'verify.yml'), 'utf8');
-  const { pure, browser, synthetic } = suitesFromWorkflow(yml);
+  const { pure, browser, synthetic, split } = suitesFromWorkflow(yml);
   const synNames = synthetic.suites.map(x => x.name);
+  /* The split build is reported as one item, under its job's name. */
+  const splitNames = split.length ? ['split-build'] : [];
   if (!pure.length) throw new Error('the logic job invokes no suites — refusing to report a run of nothing');
 
   const { ENGINES, DEFAULT_ENGINE } = require(path.join(ROOT, 'tests', '_engine.js'));
@@ -95,7 +112,7 @@ function run(opts) {
       log(`\n  ${browser.length + synNames.length} browser suites need ${engine}, and playwright has no ${engine} installed.`);
       log(`  install    npm ci && npx playwright install ${engine}`);
       log(`  or run     npm run test:pure      (the ${pure.length} pure suites, and says what it left out)\n`);
-      return { code: 1, ran: [], failed: [], notRun: pure.concat(browser, synNames) };
+      return { code: 1, ran: [], failed: [], notRun: pure.concat(browser, synNames, splitNames) };
     }
   }
 
@@ -140,11 +157,34 @@ function run(opts) {
     synthetic.suites.forEach(x => runOne({ name: x.name, args: [x.target], refused: broke }));
   }
 
-  const notRun = o.pure ? browser.concat(synNames) : [];
+  /* Then the split build, made and checked by the split-build job's own
+     commands, in order, in this run's engine. The first command that fails
+     stops the rest and fails the run under the job's name, with its last
+     lines: a split build that was never made has nothing to check. */
+  if (!o.pure && split.length) {
+    const t0 = Date.now();
+    let status = 'pass';
+    for (const [script, ...args] of split) {
+      log(`  split  node ${script} ${args.join(' ')}`);
+      const r = spawnSync(process.execPath, [path.join(root, script)].concat(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'],
+        env: childEnv({ SYSTOLE_ENGINE: engine }), maxBuffer: 64 * 1048576 });
+      if (r.status !== 0) {
+        status = `failed at ${script}`;
+        log('      ' + String(r.stderr || '').concat(String(r.stdout || '')).trim().split('\n').slice(-8).join('\n      '));
+        break;
+      }
+    }
+    ran.push('split-build');
+    if (status !== 'pass') failed.push('split-build');
+    log(`  ${status === 'pass' ? 'PASS' : 'FAIL'}  ${'split-build'.padEnd(40)} ${status === 'pass' ? '' : status + '  '}${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  }
+
+  const notRun = o.pure ? browser.concat(synNames, splitNames) : [];
   log('');
   if (failed.length) log(`  ${failed.length} of ${ran.length} suites failed: ${failed.join(', ')}`);
   else if (notRun.length) log(`  ${ran.length} pure suites passed. ${notRun.length} browser suites NOT run: ${notRun.join(', ')}`);
-  else log(`  all ${ran.length} no-export suites passed (${pure.length} pure, ${browser.length + synNames.length} in ${engine}, ${synNames.length} of them on a synthetic build).`);
+  else log(`  all ${ran.length - splitNames.length} no-export suites passed (${pure.length} pure, ${browser.length + synNames.length} in ${engine}, ${synNames.length} of them on a synthetic build)` +
+           (splitNames.length ? ', and the split build made from it.' : '.'));
   log('  The suites that drive a real build need your export: npm run test:private');
   return { code: failed.length ? 1 : 0, ran, failed, notRun };
 }

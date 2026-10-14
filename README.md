@@ -40,7 +40,10 @@ CI cannot build the app from the real bank: that needs the licensed export,
 which is deliberately never committed here and never will be, on GitHub or
 anywhere else that isn't your own devices. So it builds the real app around
 an invented bank (`scripts/synthetic-export.js`) and runs the browser suites
-on that, except the few whose subject is the real bank itself. On every push
+on that, except the few whose subject is the real bank itself. It also splits
+that build the way a release does and checks the split build over HTTP, in
+Chromium and WebKit; those checks are not in the count above, because the
+record counts the split build only from a run on the real bank. On every push
 it also checks, with no source file: every script parses, the test-suite
 list still lists without crashing, `npm run build` still refuses to run and
 explains why when no source is present, and

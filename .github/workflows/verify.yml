@@ -24,16 +24,18 @@
 # READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 7145 checks in
 # `node scripts/verify.js` plus 142 more under `--pwa`, this workflow runs 7062.
 # The other 225 all drive something this workflow does not have: the real
-# bank, or the split build served to a browser. The app is built here, but
+# bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
 # the ACCSAP 12 export — the licensed question bank, deliberately never
 # committed to this repository or to any secret GitHub holds. What needs the
 # real bank itself (its corrected answer keys, its content flags, search
 # quality over its library, how long it takes to load) is measured only on a
-# machine with the export. Most of the split build's checks under --pwa can
-# run without it, since verify-pwa holds a synthetic split build to the
-# synthetic generator's own totals, but no job here builds and serves one.
-# Until one does, there is no way to run those 225 checks here.
+# machine with the export. The split build's checks under --pwa run here too,
+# in the split-build job, on a split build of the invented bank: verify-pwa
+# and verify-cachebuckets hold it to the synthetic generator's own totals.
+# They are not in these counts, because the record counts the split build only
+# from a run on the real bank, and on the real bank
+# there is no way to run those 225 checks here.
 # See docs/BUILD.md and the comment at the top of scripts/assemble-app.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
@@ -41,8 +43,9 @@
 # push. Most of it needs no browser either; the memorizer-browser job drives
 # the Memorizer — a second app that carries no licensed content — in Chromium,
 # WebKit and Firefox, the synthetic-browser job drives this app in Chromium,
-# and synthetic-webkit drives a chosen set of its suites in WebKit, the
-# iPad's engine:
+# synthetic-webkit drives a chosen set of its suites in WebKit, the iPad's
+# engine, and split-build serves the split build made from it to Chromium and
+# WebKit:
 #
 #   syntax       every .js and .py file in the repo parses, and the two
 #                listing commands (which patch chain steps exist, which test
@@ -83,7 +86,7 @@
 #                run adds, not only the tree checked out: a licensed file
 #                added and deleted again inside a pull request would still
 #                reach master's history if it were merged.
-#                Across every job, 7062 real checks, up
+#                Across every job but split-build, 7062 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -100,9 +103,14 @@
 #                around an invented bank; see the job for which suites and
 #                why the rest are left out.
 #
+#   split-build  the split build a release ships, made from that same
+#                invented bank, served over HTTP and checked by `verify.js
+#                --pwa` in Chromium and WebKit. Uncounted: see the job.
+#
 #   changes      on a pull request, which of the two browser jobs above it
 #                needs; scripts/ci-changes.js. A job it skips shows as
-#                skipped, not passed. Master and manual runs get both.
+#                skipped, not passed. split-build follows the synthetic
+#                answer. Master and manual runs get both.
 #
 # Adding the other 225 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
@@ -147,8 +155,8 @@ jobs:
     name: syntax — every file parses, both listings work
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
       - name: every .js file parses
@@ -174,12 +182,12 @@ jobs:
     name: logic — every suite that needs no browser and no build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Every commit, not only the last: the history step below reads
           # each commit this run adds. The whole history is about 15 MB.
           fetch-depth: 0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
       # NOT ONLY THE TREE THAT IS CHECKED OUT. verify-leakguard below reads
@@ -436,8 +444,8 @@ jobs:
       SYSTOLE_ENGINE: ${{ matrix.engine }}
       SYSTOLE_TEST_READERS_OFFLINE: '1'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
       - name: install the pinned test tools, and the browser
@@ -503,8 +511,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
       - name: install the pinned test tools, the browser, and what verify-figreview needs
@@ -746,9 +754,8 @@ jobs:
   #       NOT pull_request for what actually prevents that.
   #
   # The ones left out all run in Chromium in the job above. Not here either: update handling
-  # and offline loading of the split build, which are verify-pwa's. It now holds
-  # a synthetic build to the synthetic generator's own totals, but no job here
-  # builds and serves the split build for it yet.
+  # and offline loading of the split build, which are verify-pwa's. The
+  # split-build job below runs them, in WebKit as well as Chromium.
   #
   # Same build, same suites, same assertions as the job above; only
   # SYSTOLE_ENGINE differs (tests/_engine.js). Playwright's WebKit on Linux is
@@ -763,8 +770,8 @@ jobs:
     env:
       SYSTOLE_ENGINE: webkit
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
       - name: install the pinned test tools, WebKit, and what verify-figreview needs
@@ -927,12 +934,65 @@ jobs:
         name: a reply can be stopped, and the last chunk is painted however the stream ends (27 checks)
         run: node tests/verify-flushguard.js build/synthetic/systole.html
 
+  # ── the split build, made from the invented bank ───────────────────────────
+  # What a release puts on the iPad is not the single file the jobs above test
+  # but the split build: a small shell, the bank and its figures as separate
+  # files, and a service worker that keeps them for offline use. `verify.js
+  # --pwa` builds it from a standalone file, serves it, and runs the suites
+  # about it: verify-pwa (the shell's size, figures fetched only when wanted,
+  # the app booting with the network cut off, an update taking over),
+  # verify-pages (the Worker that serves it) and verify-cachebuckets (which
+  # cache each file is kept in). verify-pwa and verify-cachebuckets hold a
+  # synthetic build to the synthetic generator's own totals, so this job makes
+  # the split build from the same invented bank as the jobs above, extracting
+  # its content first as a release does, and `--only pwa` runs that phase
+  # alone. WebKit as well as Chromium: offline loading is the iPad's question.
+  #
+  # UNCOUNTED. The record holds the split build's count only from a run on the
+  # real bank, so nothing here is in the totals at the top of this file, and
+  # no step carries a "(N checks)" label; verify-stats refuses one on any step
+  # that runs no recorded suite. verify.js writes no record from a synthetic
+  # build either.
+  split-build:
+    name: split-build — the split build, made from an invented bank and served, in ${{ matrix.label }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.synthetic != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: chromium
+            label: Chromium
+          - engine: webkit
+            label: WebKit
+    env:
+      SYSTOLE_ENGINE: ${{ matrix.engine }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: install the pinned test tools, and the browser
+        run: |
+          npm ci
+          npx playwright install --with-deps ${{ matrix.engine }}
+      - name: build the app from app/systole.html around the synthetic export
+        run: |
+          node scripts/synthetic-export.js build/synthetic/export.html
+          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
+      - name: take its content out, as a release does before splitting it
+        run: node scripts/extract-content.js build/synthetic/systole.html
+      - name: build the split build, serve it, and check it over HTTP
+        run: node scripts/verify.js build/synthetic/systole.html --pwa --only pwa
+
   build-guard:
     name: build-guard — refuses to run without the licensed source
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
       - name: npm run build exits non-zero and explains why, with no source present
@@ -1054,7 +1114,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # SYSTOLE_SOURCE is set in the runner's own environment (its .env file or
       # the service definition), never here and never as a repository secret —
@@ -1162,10 +1222,10 @@ jobs:
       memorizer: ${{ steps.which.outputs.memorizer }}
       synthetic: ${{ steps.which.outputs.synthetic }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
       - id: which
