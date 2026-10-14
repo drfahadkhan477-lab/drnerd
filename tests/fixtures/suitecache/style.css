@@ -1,0 +1,2 @@
+@import url("imported.css");
+.bg { background: url("bg.txt") no-repeat; min-height: 8px; }
