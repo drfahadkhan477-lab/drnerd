@@ -58,7 +58,7 @@ const FRAMES = [
   ['iPhone portrait', 390, 844],
   ['desktop', 1440, 900],
 ];
-const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz', 'echo'];
+const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz', 'echo', 'mock', 'mockreport'];
 
 /* Enough of a reply to overflow any panel, so "does it scroll" is a real
    question rather than one the fixture answers for us. */
@@ -129,6 +129,11 @@ const sse = text => [
          Narrower than "the echo screen fits", and said here rather than
          implied by the screen's name appearing in the list. */
       echo: () => goEcho(),
+      /* The mock exam: a block open (the clock stopped, so the sweep is not counting seconds against it), and the
+         report of a block handed in. The report is built from a finished record rather than by handing one in,
+         so five frames do not each add a block to the history and a score to the progress. */
+      mock: () => { mockStopTicker(); S.mock = MockExam.start({ ids: POOL.slice(0, 12).map(q => q.id), secPerQ: 60, now: Date.now() }); S.mockView = 'q'; S.screen = 'mock'; render(); mockStopTicker(); },
+      mockreport: () => { S.mock = null; S.mockLast = MockExam.finish(MockExam.start({ ids: POOL.slice(0, 12).map(q => q.id), secPerQ: 60, now: Date.now() }), Date.now() + 1000, false); S.screen = 'mockreport'; render(); },
     };
     /* WHAT overflowed, not just by how much. "refs +9px" names a number and
        nothing else, and the only way to turn it into a cause was to open the
