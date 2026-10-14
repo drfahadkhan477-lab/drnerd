@@ -29,7 +29,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
 ## Prerequisites
 
-- **Node 18+** — no dependencies for the build itself. `npm run build` installs nothing.
+- **Node 22+** — no dependencies for the build itself. `npm run build` installs nothing.
 - **Playwright** — for the test suites only, and pinned:
 
   ```bash
