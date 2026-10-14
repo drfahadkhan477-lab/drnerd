@@ -15,7 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, resolved } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 const { systemText, turns, toolResults } = require('./_wire');
 
@@ -79,9 +79,15 @@ specific haemodynamic finding.
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
 
   const captured = [];
+  /* Answered 2.5 s late, on purpose. This suite once slept a fixed 1.8 s after
+     each question and then read what went out, and fire() sends nothing while
+     the last reply is still being handled (aiBusy): an exchange slower than the
+     sleep left the next question unsent. The late answer makes that the usual
+     case here, so a sleep in place of the wait in ask() fails every run. */
   await page.route('**/generativelanguage.googleapis.com/**', route => {
     try { captured.push(JSON.parse(route.request().postData() || '{}')); } catch (_) { captured.push(null); }
-    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
+    setTimeout(() => route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE })
+      .catch(() => {}), 2500);
   });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
@@ -95,12 +101,26 @@ specific haemodynamic finding.
      absolute counts, and they are about what the IMPORTER produced — not
      about what happened to be on the shelf when it ran. */
   await page.evaluate(() => { REF.length = 0; invalidateIndex(); });
+  /* Each picked file is read 750 ms late, on purpose: the two take 1.5 s, past
+     the 1 s this suite once slept before counting what the importer made, so a
+     sleep there fails every run. The toast is cleared so only this import's
+     can end the wait. */
+  await page.evaluate(() => {
+    const text = Blob.prototype.text;
+    File.prototype.text = function () { return new Promise(r => setTimeout(r, 750)).then(() => text.call(this)); };
+    const t = document.getElementById('toast'); if (t) t.textContent = '';
+  });
   const [chooser] = await Promise.all([
     page.waitForEvent('filechooser'),
     page.evaluate(() => refImportText()),
   ]);
   await chooser.setFiles([path.join(DIR, 'amyloid.md'), path.join(DIR, 'pericardial-disease.md')]);
-  await page.waitForTimeout(1000);
+  /* Until the importer says it is done: its closing toast is set after every
+     note is added and the library re-rendered, on this screen synchronously.
+     A precondition; the counts below are the claims. */
+  await resolved(page, () => /^Added \d+ notes?\b/.test((document.getElementById('toast') || {}).textContent || ''),
+                 null, { timeout: 30000 })
+    .catch(e => { throw new Error("the importer never said it was done (its 'Added N notes' toast): " + e.message); });
 
   const lib = await page.evaluate(() => ({
     count: REF.length,
@@ -147,7 +167,11 @@ specific haemodynamic finding.
       buildAI();
       fire('how do I tell AL from ATTR?');
     });
-    await page.waitForTimeout(1800);
+    /* Until the exchange is over, not for a fixed time: aiBusy is false again
+       only once the reply has been handled. If fire() sent nothing, aiBusy
+       never went true, the wait ends at once, and the checks below say so. */
+    await resolved(page, () => !aiBusy, null, { timeout: 30000 })
+      .catch(e => { throw new Error('the exchange never finished (aiBusy stayed true): ' + e.message); });
     return captured.find(Boolean);
   };
 
