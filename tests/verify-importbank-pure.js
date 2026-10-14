@@ -265,6 +265,12 @@ const refused = (label, file, re, o) => {
   refused('a file that is not JSON, without passing on what JSON.parse quotes of it', jsonBad, /^the file is not JSON(?: \(at character \d+\))?$/);
   refused('options that are not a list, in JSON', exportOf('bank.json', JSON.stringify([{ id: 'V-1', chapter: 'c', stem: 'Invented stem', options: 'Invented one', answer: 'A' }])),
           /item 1 \(id V-1\): its options are not a list/);
+  /* Items 1 to 3 are not objects; item 4 is a good one and is not mentioned. */
+  const odd = imp(exportOf('bank.json', JSON.stringify([null, 5, ['x'], { id: 'V-1', chapter: 'c', stem: 's', options: ['a', 'b'], answer: 'A' }])));
+  refusals.push(odd.why);
+  ok('a JSON item that is not an object (null, a number, a list) is refused by its number',
+     !odd.r && /item 1: not an object/.test(odd.why) && /item 2: not an object/.test(odd.why) && /item 3: not an object/.test(odd.why) && !/item 4/.test(odd.why),
+     odd.r ? 'imported' : odd.why.split('\n').slice(0, 4).join(' | '));
   ok('and no refusal carries a word of a question', refusals.length > 20 && refusals.every(w => w && !/Invented (stem|one|two|three|four|why|reason|commentary)|never (closed|quoted)/.test(w)),
      refusals.filter(w => /Invented (stem|one|two|three|four|why|reason|commentary)|never (closed|quoted)/.test(w)).map(w => w.slice(0, 80)).join(' | ') || `${refusals.length} refusals`);
 }

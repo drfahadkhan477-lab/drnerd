@@ -260,9 +260,9 @@ jobs:
         run: node tests/verify-assemble-pure.js
       - name: a bank folder or package builds the app its export builds, byte for byte; ACCSAP's corrections touch its bank alone; and a bank the iPad would refuse is refused, naming no question text (53 checks)
         run: node tests/verify-bankbuild-pure.js
-      - name: a bank of your own is built from study files you have reviewed, and from nothing less (52 checks)
+      - name: a bank of your own is built from study files you have reviewed, and from nothing less (59 checks)
         run: node tests/verify-buildbank-pure.js
-      - name: a licensed bank's export becomes a bank the app runs on, and a file that cannot be read as one is refused without a word of it (75 checks)
+      - name: a licensed bank's export becomes a bank the app runs on, and a file that cannot be read as one is refused without a word of it (76 checks)
         run: node tests/verify-importbank-pure.js
       - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (68 checks)
         run: node tests/verify-carve-pure.js

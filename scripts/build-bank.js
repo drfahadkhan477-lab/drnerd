@@ -161,9 +161,15 @@ const studyFilesIn = dir => fs.readdirSync(dir).filter(f => /\.(md|markdown)$/i.
    Throws, listing every problem, and leaves out as it was. */
 function buildBank({ src, out, draft = false }) {
   const problems = [], warnings = [];
-  let which = null;
-  try { which = JSON.parse(fs.readFileSync(path.join(src, 'bank.json'), 'utf8')); }
-  catch (e) { problems.push(`${path.join(path.basename(src), 'bank.json')}: ${e.code === 'ENOENT' ? 'missing' : 'not JSON'}. It says which bank this is: { "id": "my-bank", "name": "My bank" }`); }
+  let which = null, parsed = false;
+  const bankJson = path.join(path.basename(src), 'bank.json');
+  try { which = JSON.parse(fs.readFileSync(path.join(src, 'bank.json'), 'utf8')); parsed = true; }
+  catch (e) { problems.push(`${bankJson}: ${e.code === 'ENOENT' ? 'missing' : 'not JSON'}. It says which bank this is: { "id": "my-bank", "name": "My bank" }`); }
+  /* null, a list, a number or a string is JSON, and no bank block. */
+  if (parsed && (!which || typeof which !== 'object' || Array.isArray(which))) {
+    problems.push(`${bankJson}: not an object. It says which bank this is: { "id": "my-bank", "name": "My bank" }`);
+    which = null;
+  }
   if (which && which.id === ACCSAP.id) problems.push(`bank.json gives ACCSAP 12's id (${ACCSAP.id}); a bank of your own needs its own, or ACCSAP's corrections would be applied to it`);
   const files = fs.existsSync(src) ? studyFilesIn(src) : [];
   if (!files.length) problems.push(`${src}: no study files (.md) in it`);
