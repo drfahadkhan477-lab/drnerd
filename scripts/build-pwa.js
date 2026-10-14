@@ -362,8 +362,12 @@ const LOADER = `<script>
     /* Not the split build's downloader: every figure is already on the
        device, so its card has nothing to offer. */
     window.SPLIT_BUILD = false;
+    /* The package's bank block, which BankPack.validate checked on import,
+       names the bank in the app (BANK in app/systole.html). A package made
+       before the block existed has none, and the build's own is used. */
     window.SYSTOLE_BANK = { source: 'imported', questions: imported.questions.length, figures: imported.figures,
-                            extras: Object.keys(imported.extras || {}).length };
+                            extras: Object.keys(imported.extras || {}).length,
+                            bank: (imported.manifest && imported.manifest.bank) || null };
     /* THE NOTES CAME IN THE PACKAGE TOO. The app fetches its reference seed
        and each unit's figure file from content/ as it always has; in this
        build the host has none of them, so those two kinds of request are
@@ -998,35 +1002,22 @@ step('copy only the content the app asks for', () => {
    and cannot be run twice into a contradiction. It also closes what the apply
    was covering by accident: the cross-check below proves the two builds AGREE,
    and two builds that both lost the corrections agree perfectly. This asserts
-   the corrections are actually present in what ships. */
-const { CORRECTIONS } = require('./answer-keys.js');
-const { applyContentFlags } = require('./content-flags.js');
-step('the bank corrections are present in what ships', () => {
+   the corrections are actually present in what ships.
+
+   The flags are applied rather than asserted because applyContentFlags is
+   already idempotent — it leaves a question the export flagged itself alone
+   and reports it as such — and it is the only thing that puts them in the
+   split build if extraction ever drops one.
+
+   BOTH BELONG TO ACCSAP 12 ALONE (scripts/which-bank.js). The bank's manifest says
+   which bank it is; for any other, shippedFixes() changes nothing and says so. */
+const { bankOf, shippedFixes } = require('./which-bank.js');
+step('the ACCSAP corrections are present in what ships, if it is the ACCSAP bank', () => {
   const p = path.join(DIST, 'content', 'questions.json');
   const bank = JSON.parse(fs.readFileSync(p, 'utf8'));
-  const byId = new Map(bank.map(q => [q.id, q]));
-  const wrong = CORRECTIONS.filter(c => {
-    const q = byId.get(c.id);
-    return !q || 'ABCDEFGH'[q.ci] !== c.now;
-  });
-  if (wrong.length) {
-    throw new Error(
-      `${wrong.length} correction(s) did not reach the split build: ` +
-      wrong.map(c => {
-        const q = byId.get(c.id);
-        return `${c.id} (ships ${q ? 'ABCDEFGH'[q.ci] : 'absent'}, should be ${c.now})`;
-      }).join(', ') +
-      `\n  The chain's keys step corrects ALL_Q before extract-content reads it.` +
-      `\n  If they are missing here, that step did not run or extraction lost them.`);
-  }
-  /* The flags are applied rather than asserted because applyContentFlags is
-     already idempotent — it leaves a question the export flagged itself alone
-     and reports it as such — and it is the only thing that puts them in the
-     split build if extraction ever drops one. */
-  const applied = applyContentFlags(bank);
+  const lines = shippedFixes(bank, bankOf(contentManifest));
   fs.writeFileSync(p, JSON.stringify(bank));
-  console.log(`      ✓ ${CORRECTIONS.length} key corrections present in the shipped bank`);
-  applied.forEach(a => console.log('      ✓ ' + a));
+  lines.forEach(a => console.log('      ✓ ' + a));
 });
 
 /* And the check that makes the class of bug impossible rather than this one
@@ -1093,7 +1084,7 @@ if (refImgParts) {
 const manifest = {
   name: 'Systole — Cardiology Board Review',
   short_name: 'Systole',
-  description: 'Cardiology board review on the ACCSAP 12 bank: spaced repetition, a WebGL rhythm lab, and Apex, a grounded AI tutor.',
+  description: 'Cardiology board review: spaced repetition, a WebGL rhythm lab, and Apex, a grounded AI tutor.',
   start_url: '.',
   scope: '.',
   display: 'standalone',
@@ -1180,7 +1171,7 @@ function contentVersion(dir) {
    code change would throw away the 408 figures the fellow pressed a button to
    download — 19 MB re-fetched because a stylesheet moved. Figures change when
    the content changes; the shell changes when the shell changes. */
-const SW = `/* ACCSAP 12 service worker.
+const SW = `/* Systole service worker.
    Shell is precached so a cold launch is instant and works offline. Figures
    are cache-first at runtime rather than precached: there are 408 of them and
    18 MB, and precaching that on install would stall the first launch for the

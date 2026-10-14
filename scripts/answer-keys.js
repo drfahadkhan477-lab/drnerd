@@ -3,8 +3,9 @@
  * Six answer keys the export gets wrong.
  *
  * A library: scripts/assemble-app.js and build-pwa.js call
- * applyKeyCorrections() on the bank. (It was the keys-patch.js step of the
- * patch chain, now deleted.)
+ * applyKeyCorrections() on the bank, when it is ACCSAP 12's
+ * (scripts/which-bank.js). (It was the keys-patch.js step of the patch chain,
+ * now deleted.)
  *
  * HOW THEY GOT WRONG. In the export, `ci` — the index of the correct option —
  * is the most-chosen option in 638 of the 638 questions that carry a response
@@ -94,7 +95,19 @@ function applyKeyCorrections(bank) {
   return applied;
 }
 
+/* For a bank that may have been through a build already: one extracted from a
+   built app (scripts/extract-content.js) carries all six keys corrected, one
+   taken from the export carries none. All six at `now` is a bank that needs
+   nothing and gets nothing; anything else goes through applyKeyCorrections(),
+   whose `was` assertion refuses a bank with some corrected and some not, or a
+   key that is neither. Returns what it changed: [] for a corrected bank. */
+function ensureKeyCorrections(bank) {
+  const byId = new Map(bank.map(q => [q.id, q]));
+  const corrected = CORRECTIONS.every(c => { const q = byId.get(c.id); return !!q && 'ABCDEFGH'[q.ci] === c.now; });
+  return corrected ? [] : applyKeyCorrections(bank);
+}
+
 /* Same anchor the extractor uses, so the two agree about where the bank is. */
 const ALL_Q_RE = /\nconst ALL_Q=(\[[\s\S]*?\]);\n/;
 
-module.exports = { CORRECTIONS, applyKeyCorrections, ALL_Q_RE };
+module.exports = { CORRECTIONS, applyKeyCorrections, ensureKeyCorrections, ALL_Q_RE };

@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Systole">
 <meta name="theme-color" content="#0F1E3D">
-<meta name="description" content="Systole — cardiology board review on the ACCSAP 12 bank. A WebGL rhythm lab, a computed cardiac cycle, spaced repetition, and Apex, a grounded AI tutor.">
+<meta name="description" content="Systole — cardiology board review. A WebGL rhythm lab, a computed cardiac cycle, spaced repetition, and Apex, a grounded AI tutor.">
 <title>Systole · Cardiology Board Review</title>
 <!-- Typefaces are embedded in the stylesheet below (DM Sans, DM Serif Display,
      JetBrains Mono — SIL Open Font License). This file requests nothing from
@@ -177,6 +177,18 @@ try{var _t=(JSON.parse(localStorage.getItem('accsap12.v2')||'{}')||{}).theme||'a
 <script>
 const ALL_Q=@@SLOT[payload:ALL_Q]@@;
 const IMGS=@@SLOT[payload:IMGS]@@;
+const BANK_INFO=@@SLOT[payload:BANK]@@;
+/* Which bank this is (scripts/which-bank.js), and so what the app calls it:
+   every word the app says about the bank comes from here, never from a fixed
+   name. The code-only deploy names it from the package imported on this
+   device (scripts/build-pwa.js sets window.SYSTOLE_BANK); every other build
+   carries it. BANK_BY is who wrote the commentary as the word before
+   "commentary" ("ACC " for ACCSAP 12), or nothing. */
+const BANK=(window.SYSTOLE_BANK&&window.SYSTOLE_BANK.bank)||BANK_INFO;
+const BANK_BY=BANK.by?BANK.by+' ':'';
+/* Peer statistics are ACCSAP's: how many candidates chose each option. A bank
+   without them shows none, rather than "undefined%". */
+const hasPeers=q=>!!q&&Array.isArray(q.o)&&q.o.every(o=>o&&typeof o.p==='number');
 /* ═══════════ custom line-icon system — no CDN, no external assets ═══════════
    24x24 viewBox, 1.8px stroke, round caps/joins. Chapter icons render in
    currentColor so they inherit each chapter's accent instead of a fixed emoji hue. */
@@ -1005,7 +1017,7 @@ function toast(msg){
   clearTimeout(t.__h); t.__h=setTimeout(()=>{t.style.opacity='0';},3200);
 }
 
-/* ═══════ BM25 retrieval over the ACC commentary + the fellow's own reference ═══════ */
+/* ═══════ BM25 retrieval over the bank's commentary + the fellow's own reference ═══════ */
 'use strict';
 
 const REF_KEY='accsap12.ref';
@@ -1386,7 +1398,7 @@ function retrievedContext(userText,q){
         clip(r.body,1500));
     } else {
       const o=byId[h.meta.id]; if(!o) continue;
-      block=`--- RELATED ITEM ${o.ch}, question ${o.n}\nAsked: ${clip(o.s,320)}\nCorrect answer: ${o.o[o.ci].t}\nACC commentary: ${clip(o.ex,900)}`;
+      block=`--- RELATED ITEM ${o.ch}, question ${o.n}\nAsked: ${clip(o.s,320)}\nCorrect answer: ${o.o[o.ci].t}\n${BANK_BY?BANK_BY+'commentary':'Commentary'}: ${clip(o.ex,900)}`;
     }
     if(used+block.length>CTX_BUDGET) break;
     used+=block.length; parts.push(block); kept.push(h.meta);
@@ -2200,7 +2212,7 @@ const TOOLS=[
      read as each request is built, and in that mode says what comes back. */
   get description(){ return AI_GROUNDED
     ? "Search the fellow's personal reference notes. Grounded mode leaves the question bank out, so this returns matching notes only, never a bank item, its answer or its commentary. Use it when the fellow asks about something the notes in front of you do not cover, or to check what they have already written on a topic."
-    : "Search the fellow's own ACCSAP question bank and personal reference notes. Use this whenever a concept would be better taught across several cases, when the fellow asks about something not covered by the current item, or when you want to check what they have already written on a topic. Returns matching items with their commentary."; },
+    : "Search the fellow's own "+BANK.name+" question bank and personal reference notes. Use this whenever a concept would be better taught across several cases, when the fellow asks about something not covered by the current item, or when you want to check what they have already written on a topic. Returns matching items with their commentary."; },
   input_schema:{type:'object',properties:{
     query:{type:'string',description:'Clinical concept to search for, e.g. "cardiac amyloidosis apical sparing"'},
     limit:{type:'integer',description:'How many items to return (1-6, default 4)'}},required:['query']}},
@@ -2601,7 +2613,7 @@ function buildRefs(){
     <div class="hero" style="padding:26px 22px">
       <div class="hero-badge">${icon('folder','icon-sm')} Your reference library</div>
       <div class="hero-title" style="font-size:28px">Reference Notes</div>
-      <div class="hero-sub">Notes you write here are searched alongside the ACC commentary and handed to Apex as context — so the tutor teaches from your understanding, not just the question bank.</div>
+      <div class="hero-sub">Notes you write here are searched alongside the bank's commentary and handed to Apex as context — so the tutor teaches from your understanding, not just the question bank.</div>
     </div>
     <div class="ref-new"${viewed&&!refEditing?' hidden style="display:none"':''}>
       <input id="refT" placeholder="Title — e.g. Cardiac amyloidosis: red flags">
@@ -2781,7 +2793,7 @@ function buildSearch(){
       </div>
     </div>
     ${!SQ.q?`<div class="section-label">Try a topic</div><div class="chips sug">${chips}</div>
-       <div class="sb-hint">Searches every stem, answer option and the full ACC commentary across all ${TOTAL_Q} questions. Runs entirely offline — no API key needed.</div>`
+       <div class="sb-hint">Searches every stem, answer option and the full ${e(BANK_BY)}commentary across all ${TOTAL_Q} questions. Runs entirely offline — no API key needed.</div>`
       :`<div class="section-label">${total} match${total===1?'':'es'}${SQ.ch?' in '+e(SQ.ch):''}</div>`}
     ${SQ.q&&!total?`<div class="sb-none">Nothing matched <b>${e(SQ.q)}</b>.<br><span>Try a broader term, or a synonym — the index matches words, not meaning.</span></div>`:''}
     <div class="hits">${rows}</div>
@@ -3227,7 +3239,7 @@ you to answer from it and nothing else.
 · Never present your own knowledge as though it came from a note. That is the
   one failure mode this mode exists to prevent.
 
-The ACC commentary on the current question is deliberately withheld from you
+The ${BANK_BY}commentary on the current question is deliberately withheld from you
 in this mode. You can see the stem and the options, so you know what is being
 asked; you cannot read the answer key, because teaching from it is exactly the
 shortcut this mode exists to close.`;
@@ -3268,7 +3280,7 @@ function aiCtx(q){
   /* The mark on the keyed option IS the answer key, and how many candidates
      chose each option hints at it, so grounded mode, which tells the model the
      key is withheld, sends each option as its letter and text alone. */
-  const opts=q.o.map((o,i)=>`  ${o.l}. ${o.t}`+(AI_GROUNDED?'':`  [${o.p}% of candidates chose this]${i===q.ci?'  ← CORRECT':''}`)).join('\n');
+  const opts=q.o.map((o,i)=>`  ${o.l}. ${o.t}`+(AI_GROUNDED?'':(typeof o.p==='number'?`  [${o.p}% of candidates chose this]`:'')+(i===q.ci?'  ← CORRECT':''))).join('\n');
   const own=(typeof NOTES!=='undefined'&&NOTES[q.id]||[]).map(n=>n.text).filter(Boolean);
   const ownBlock=own.length?`\n\nTHE FELLOW'S OWN NOTE ON THIS ITEM (they wrote this while working through it — engage with it directly, and correct it if it is wrong):\n${own.map(t=>'• '+t).join('\n')}`:'';
   const profileBlock = (typeof Profile!=='undefined') ? Profile.build() : '';
@@ -3279,9 +3291,9 @@ function aiCtx(q){
      it decided to remember something. Same rule, same fence. */
   if(memoryBlock) memoryBlock=refBlock('MEMORY','what you have learned about this fellow:',memoryBlock);
   if(AI_GROUNDED){
-    return `CURRENT QUESTION — ACCSAP 12, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\n(The official ACC commentary for this item is withheld in grounded mode. You can see what is being asked; you may not read the answer key. Teach from the fellow's reference notes below, and if they do not cover it, say so.)\n\n${Vision.figureContextLine(q, AI.provider)}${ownBlock}${profileBlock}${memoryBlock}`;
+    return `CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\n(The official ${BANK_BY}commentary for this item is withheld in grounded mode. You can see what is being asked; you may not read the answer key. Teach from the fellow's reference notes below, and if they do not cover it, say so.)\n\n${Vision.figureContextLine(q, AI.provider)}${ownBlock}${profileBlock}${memoryBlock}`;
   }
-  return `CURRENT QUESTION — ACCSAP 12, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\nOFFICIAL ACC COMMENTARY\n${q.ex}\n\n${Vision.figureContextLine(q, AI.provider)}Use this as the ground truth for the item. You may go well beyond it.${ownBlock}${profileBlock}${memoryBlock}`;
+  return `CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\nOFFICIAL ${BANK_BY.toUpperCase()}COMMENTARY\n${q.ex}\n\n${Vision.figureContextLine(q, AI.provider)}Use this as the ground truth for the item. You may go well beyond it.${ownBlock}${profileBlock}${memoryBlock}`;
 }
 
 const CHIPS=[
@@ -5929,7 +5941,7 @@ function buildQuiz(){
       if(i===q.ci)cls+=' correct';
       else if(i===selected)cls+=' wrong';
       const col=i===q.ci?'var(--green)':(i===selected?'var(--red)':'var(--muted)');
-      pctEl=`<span class="opt-pct" style="color:${col}">${o.p}%</span>`;
+      if(typeof o.p==='number') pctEl=`<span class="opt-pct" style="color:${col}">${o.p}%</span>`;
     }
     return `<button class="${cls}" ${answered?'disabled':''} data-idx="${i}" type="button"
       aria-pressed="${answered&&i===selected}" style="--acc:${chColor}">
@@ -5953,13 +5965,13 @@ function buildQuiz(){
       <div class="reveal-header ${ok?'ok':'bad'}" tabindex="-1">
         <span class="reveal-icon">${ok?icon("check-circle"):icon("x-circle")}</span>
         <div><div class="reveal-verdict">${ok?'Correct!':'Incorrect — Answer: '+corr.l}</div>
-          <div class="reveal-sub">${ok?corr.p+'% of candidates answered correctly':'Correct: '+short}</div></div>
+          <div class="reveal-sub">${ok?(typeof corr.p==='number'?corr.p+'% of candidates answered correctly':''):'Correct: '+short}</div></div>
       </div>
       <div class="reveal-body">
         <div class="exp-text">${e(q.ex).replace(/\n+/g,'<br><br>')}</div>
-        ${q.tr?`<div class="exp-trunc">${icon("alert","icon-sm")} The ACCSAP text export truncated this commentary. Open the item in ACCSAP for the complete discussion.</div>`:''}
-        ${q.src?`<div class="exp-trunc" style="color:var(--green);font-style:normal">${icon('check','icon-sm')} Question, answer key, peer statistics and full commentary verified against the ACCSAP 12 source export.</div>`:''}
-        <div class="dist-title">Answer Distribution</div>${distRows}${missRowHtml(ok)}
+        ${q.tr?`<div class="exp-trunc">${icon("alert","icon-sm")} The ${e(BANK.name)} text export truncated this commentary. Open the item in ${e(BANK.name)} for the complete discussion.</div>`:''}
+        ${q.src?`<div class="exp-trunc" style="color:var(--green);font-style:normal">${icon('check','icon-sm')} Question, answer key, peer statistics and full commentary verified against the ${e(BANK.name)} source export.</div>`:''}
+        ${hasPeers(q)?`<div class="dist-title">Answer Distribution</div>${distRows}`:''}${missRowHtml(ok)}
       </div></div>`;
   }
 

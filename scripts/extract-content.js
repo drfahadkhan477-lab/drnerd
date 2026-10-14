@@ -35,6 +35,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const { bankOfBuild } = require('./which-bank.js');
 const SRC = process.argv[2];
 const OUT_DIR = process.argv[3] || path.join(__dirname, '..', 'content');
 if (!SRC) {
@@ -197,6 +198,9 @@ const manifest = {
   source: path.basename(SRC),
   sourceDigest,
   commit,
+  /* Which bank this is (scripts/which-bank.js): what the build says it carries,
+     or ACCSAP 12 for the export itself and for a build older than the line. */
+  bank: bankOfBuild(html),
   questions: out.length,
   questionsWithFigures: Object.keys(figuresByQ).filter(k => figuresByQ[k].length).length,
   figures: figCount,

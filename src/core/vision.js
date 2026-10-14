@@ -140,7 +140,7 @@ function figureContextLine(q, provider) {
   const n = q.img;
   const plural = n > 1 ? 's' : '';
   if (providerSeesFigures(provider)) {
-    return `\n(The ${n} clinical figure${plural} for this item ${n > 1 ? 'are' : 'is'} attached to this conversation — read ${n > 1 ? 'them' : 'it'} directly. Describe what you actually see before reasoning from it, so the fellow can catch you if you have misread it. These are compressed reproductions, and this is a study aid: where your read of the image and the official ACC commentary disagree, the commentary is the ground truth and you should say so plainly rather than defending your reading.)\n`;
+    return `\n(The ${n} clinical figure${plural} for this item ${n > 1 ? 'are' : 'is'} attached to this conversation — read ${n > 1 ? 'them' : 'it'} directly. Describe what you actually see before reasoning from it, so the fellow can catch you if you have misread it. These are compressed reproductions, and this is a study aid: where your read of the image and the official ${typeof BANK_BY === 'string' ? BANK_BY : ''}commentary disagree, the commentary is the ground truth and you should say so plainly rather than defending your reading.)\n`;
   }
   return `\n(The fellow is also looking at ${n} clinical figure${plural} for this item, which you cannot see — the current provider does not accept images. If the answer turns on a finding in the figure, ask them what they see rather than guessing.)\n`;
 }

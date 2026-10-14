@@ -21,6 +21,8 @@
        names that the zip does not carry, or bytes that are not the image
        their extension claims;
      · counts that disagree with the manifest the packer wrote;
+     · a bank block (which bank this is, docs/CONTENT-SCHEMA.md) that is not
+       a short lowercase id and a short plain name: the app shows the name;
      · an extra file (the reference notes' seed and figure files, under
        extra/) that the manifest lists and the zip lacks, whose name is not
        one this app asks for, or that is plainly not JSON.
@@ -38,6 +40,8 @@ const TYPE = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg' };
 /* The only extra files the app fetches: the reference seed and the notes'
    figure files, one per unit (unit.2.json … for a large unit). */
 const EXTRA = /^(refs-seed\.json|refs-images\/[A-Za-z0-9_-]+(\.[0-9]+)?\.json)$/;
+const BANK_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const plainText = (s, max, required) => typeof s === 'string' && s.length <= max && (!required || s.trim().length > 0) && !/[<>&"`\u0000-\u001f\u007f]/.test(s);
 const ascii = (b, from, to) => String.fromCharCode.apply(null, Array.prototype.slice.call(b, from, to));
 const MAGIC = {
   webp: b => b.length > 12 && ascii(b, 0, 4) === 'RIFF' && ascii(b, 8, 12) === 'WEBP',
@@ -63,6 +67,17 @@ function validate(files) {
   else if (m.bad) problems.push('manifest.json is not JSON');
   else if (!manifest || manifest.schemaVersion !== SCHEMA)
     problems.push(`manifest schemaVersion is ${manifest && manifest.schemaVersion}, this app reads ${SCHEMA}`);
+  /* Optional: a manifest without it is ACCSAP 12's (scripts/which-bank.js). The
+     words are shown in the app, so they are plain: no markup, no controls. */
+  const bank = manifest && typeof manifest === 'object' ? manifest.bank : undefined;
+  if (bank !== undefined) {
+    if (!bank || typeof bank !== 'object' || Array.isArray(bank)) problems.push('manifest bank is not an object');
+    else {
+      if (typeof bank.id !== 'string' || !BANK_ID.test(bank.id)) problems.push('manifest bank.id is not a short lowercase name (a-z, 0-9 and -)');
+      if (!plainText(bank.name, 60, true)) problems.push('manifest bank.name is not a short plain name');
+      if (bank.by !== undefined && !plainText(bank.by, 30, false)) problems.push('manifest bank.by is not a short plain name');
+    }
+  }
 
   const qj = readJSON(byName.get('questions.json'));
   const questions = qj.value;

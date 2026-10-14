@@ -7,8 +7,11 @@ must work with synthetic fixtures; the licensed question bank stays private.
 
 - `app/systole.html` and `app/css/`: the application shell and styles.
 - `src/`: shared logic, visualizations, and worker code.
-- `scripts/assemble-app.js`: fills the shell's payload, source, and asset slots.
-  The legacy patch chain has been retired; use the assembler.
+- `scripts/assemble-app.js`: fills the shell's payload, source, and asset slots,
+  from the export or a bank folder (`docs/CONTENT-SCHEMA.md`). The legacy patch
+  chain has been retired; use the assembler. `scripts/build-bank.js` makes a
+  bank of your own from reviewed study files (`docs/OWN-BANK.md`), and
+  `scripts/which-bank.js` keeps ACCSAP's corrections to ACCSAP's bank.
 - `memorizer/`: PDF and study-file learning app, with its own storage and backup.
 - `lab/` and `src/lab/`: interactive learning tools.
 - `tests/`: logic and browser suites. `scripts/verify.js` is the suite registry;

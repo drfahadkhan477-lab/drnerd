@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 87 suites that are pure Node with no Playwright and no
+#   logic        the 89 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -258,6 +258,10 @@ jobs:
         run: node tests/verify-app-slots-pure.js
       - name: the app assembles from app/systole.html, the export and the repository (29 checks)
         run: node tests/verify-assemble-pure.js
+      - name: a bank folder or package builds the app its export builds, byte for byte; ACCSAP's corrections touch its bank alone; and a bank the iPad would refuse is refused, naming no question text (44 checks)
+        run: node tests/verify-bankbuild-pure.js
+      - name: a bank of your own is built from study files you have reviewed, and from nothing less (34 checks)
+        run: node tests/verify-buildbank-pure.js
       - name: a piece carved out of the shell loses nothing, and the committed app/ is whole (68 checks)
         run: node tests/verify-carve-pure.js
       - name: the synthetic export builds the real app, and is marked so its run is never recorded (26 checks)
@@ -543,6 +547,9 @@ jobs:
         name: grounded mode answers only from your references (28 checks)
         run: node tests/verify-braunwald.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: the app calls the bank what the bank calls itself, and claims nothing a bank without ACCSAP's data cannot back (18 checks)
+        run: node tests/verify-bankname.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the 12-lead morphology falls out of one dipole (25 checks)
         run: node tests/verify-leads.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -798,6 +805,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: grounded mode answers only from your references (28 checks)
         run: node tests/verify-braunwald.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the app calls the bank what the bank calls itself, and claims nothing a bank without ACCSAP's data cannot back (18 checks)
+        run: node tests/verify-bankname.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the 12-lead morphology falls out of one dipole (25 checks)
         run: node tests/verify-leads.js build/synthetic/systole.html

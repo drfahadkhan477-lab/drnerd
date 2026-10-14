@@ -107,7 +107,11 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   (`scripts/answer-keys.js`) and then the content flags
   (`scripts/content-flags.js`) applied. Each correction states the value it
   replaces, so an export that has changed underneath it stops the build with
-  the question's id instead of being "corrected" a second time;
+  the question's id instead of being "corrected" a second time. Both are
+  facts about ACCSAP 12's questions and apply to its bank alone
+  (`scripts/which-bank.js`);
+- **which bank it is**: ACCSAP 12 for the export, or a bank's own `bank`
+  block (`docs/CONTENT-SCHEMA.md`);
 - **the bank's figures**: the export's, verbatim;
 - **the reference notes and their figures**: built from `content/refs` and
   `content/refs-images` (`scripts/ref-seed.js`, `scripts/ref-images.js`);
@@ -137,6 +141,38 @@ piece by path.
 `node scripts/assemble-app.js <export> --out a.html --compare b.html` says
 whether two builds are the same bytes (stamps aside) and, if not, which part
 differs, by name, never the text.
+
+### Building from a bank instead of the export
+
+`npm run build -- <folder or .zip>` builds the same app from a bank in the
+content schema (`docs/CONTENT-SCHEMA.md`): a folder holding `manifest.json`,
+`questions.json` and `figures/`, such as the `content/` that
+`scripts/extract-content.js` writes, or the package `tools/pack-content.js`
+makes of it. The bank is checked first by `src/core/bankpack.js`, the check
+the iPad runs on an import, so a bank the device would refuse is refused here,
+naming ids and files and never a word of a question.
+
+The assembler gives the bank the shape the export has: the figures go inline
+as the export's do, an option written as a plain string becomes the
+`{l, t}` the app reads, and a question without `img` or `n` gets the number
+of figures it names and its place in its chapter. A bank extracted from a
+built app already carries the answer-key corrections, so they are applied only
+to a bank that has none of them, and one with some but not all is refused.
+The app names its bank from that label (`BANK` in `app/systole.html`), and
+shows peer statistics only for a question whose options carry them, so a bank
+of your own reads as yours: `tests/verify-bankname.js` runs the synthetic
+build as another bank and reads what the tutor is sent and what the screens
+say. A bank whose manifest names another bank (`"bank": { "id": …, "name": … }`)
+gets none of the ACCSAP corrections or flags, and the split build
+(`scripts/build-pwa.js`) ships it as it is. The older ACC import
+(`tools/older-acc-import.js --merge`) refuses such a build.
+A bank of your own is made the same way from study files: drafted by Claude
+from your reading, reviewed and signed by you, and built by
+`scripts/build-bank.js` (`npm run bank`). `docs/OWN-BANK.md` has the steps.
+Built from the folder or the package `extract-content.js` writes from a
+build, the app is the same bytes as that build; `tests/verify-bankbuild-pure.js`
+holds that on the synthetic bank (`node scripts/synthetic-export.js out.html
+--bank <dir>` writes it as a folder).
 
 ### How it got here
 
@@ -728,7 +764,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        152 suites · 87 need no browser · + pwa
+tests/        152 suites · 89 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
