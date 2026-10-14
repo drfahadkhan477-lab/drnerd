@@ -4985,6 +4985,10 @@ function mockMount(){
   if(on){
     h.setAttribute('data-mock','1');
     const sh=document.getElementById('shell'); if(sh) sh.classList.remove('ai-open','ai-full');
+    /* The bar was just drawn, with its three ways to the answers. They are taken out of it rather than drawn conditionally in
+       buildNav, whose markup suites cut out of this file by its text (verify-notesearch, verify-echo). */
+    const bar=document.getElementById('navbar');
+    if(bar) bar.querySelectorAll('[onclick="openSearch()"],[onclick="goNoteSearch()"],[onclick="goEcho()"]').forEach(b=>b.remove());
     mockStartTicker();
   } else {
     h.removeAttribute('data-mock');
@@ -5474,14 +5478,14 @@ function buildNav(){
         <span style="opacity:.6">·</span>
         <span style="color:${col}">${p}%</span>
       </div>`:''}
-      ${S.screen==='mock'?'':`<button class="icon-btn" onclick="openSearch()" title="Search questions by topic" aria-label="Search by topic">${icon("search")}</button>`}
+      <button class="icon-btn" onclick="openSearch()" title="Search questions by topic" aria-label="Search by topic">${icon("search")}</button>
       ${S.screen==='quiz'?`<button class="icon-btn" onclick="toggleFocusMode()" title="Focus mode"
         aria-label="Focus mode — hide the top bar while answering"
         aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
-      ${S.screen==='mock'?'':`<button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
+      <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
         aria-label="Search your notes">${icon('book')}</button>
       <button class="icon-btn" onclick="goEcho()" title="Echo Studio"
-        aria-label="Echo Studio — views, findings and calculations">${icon('zap')}</button>`}
+        aria-label="Echo Studio — views, findings and calculations">${icon('zap')}</button>
       <div class="theme-wrap">
         <button class="icon-btn" onclick="toggleThemeMenu(event)" title="Theme" aria-label="Choose a theme"
           aria-haspopup="menu" id="themeBtn">${icon('palette')}</button>
