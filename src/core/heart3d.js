@@ -856,7 +856,7 @@ layout(location=4) in vec3 aExtra;    // ao, activation ms, groove
 
 uniform mat4 uProj, uView;
 uniform float uA, uV;                 // atrial / ventricular contraction 0-1
-uniform float uQuiver, uTime;
+uniform float uQuiver, uTime, uHalo;
 uniform vec3 uLvApex, uLvAxis, uRvApex, uRvAxis, uLaC, uRaC;
 
 out vec3 vN, vWorld, vColor, vExtra;
@@ -868,7 +868,8 @@ vec3 rotAxis(vec3 p, vec3 axis, float ang){
 }
 
 void main(){
-${BEAT_GLSL}  vN = n; vWorld = p; vColor = aColor; vExtra = aExtra; vW = aW;
+${BEAT_GLSL}  p += n * uHalo * 0.075;
+  vN = n; vWorld = p; vColor = aColor; vExtra = aExtra; vW = aW;
   gl_Position = uProj * uView * vec4(p, 1.0);
 }`;
 
@@ -987,7 +988,8 @@ uniform int  uKind;          // 0 muscle, 1 coronary, 2 conduction, 3 valve
 uniform float uClipX;
 uniform float uV;
 uniform float uDark;         // 1 when the page is in dark mode
-uniform float uStyle;        // 0 anatomic, 1 engraved ink, 2 crystal
+uniform float uStyle;        // 0 anatomic, 1 ink, 2 crystal, 3 specimen, 4 mechanistic
+uniform float uHalo;         // expanded conduction pass, driven by the same activation
 
 // A sin-based hash loses precision once coordinates get large, and degrades
 // into per-pixel white noise — which, fed into the normal, flattens all the
@@ -1192,7 +1194,11 @@ void main(){
   // key light — so the ambient term is nearly nothing and ao is raised to a
   // steeper power than the colour render would tolerate.
   if (uStyle > 2.5) {
-    vec3 slate = toLinear(mix(vec3(0.40,0.44,0.48), vec3(0.31,0.36,0.41), uDark));
+    // The mechanistic hero retains the anatomical mesh's tissue/vessel
+    // colours and perfusion variation, with the specimen's depth and live
+    // activation. Other styles keep their established material.
+    bool living = uStyle > 3.5;
+    vec3 slate = living ? base : toLinear(mix(vec3(0.40,0.44,0.48), vec3(0.31,0.36,0.41), uDark));
 
     /* MYOCARDIUM IS NOT A SMOOTH SURFACE. A distance field meshed by surface
        nets gives a clean shell, and a clean shell under one hard key reads as
@@ -1238,6 +1244,13 @@ void main(){
         + slate * kd2 * 0.20 * ao;
     col += vec3(0.78,0.86,0.96) * pow(max(dot(bump,H),0.0), 34.0) * 0.62 * ao;  // the hard half
     col += vec3(0.70,0.80,0.92) * pow(max(dot(bump,H),0.0), 8.0) * 0.10 * ao;   // and a broad one under it
+    if (living) {
+      // Warm light wrapping the fibres and a broad epicardial sheen give
+      // wet tissue depth without adding a texture download or extra mesh.
+      col += sss * 0.65 * ao;
+      col += vec3(1.00,0.88,0.80) * pow(max(dot(bump,H),0.0), 6.0) * 0.14 * ao;
+      col *= 1.0 + uV * 0.12 * (vW.x + vW.y);
+    }
 
     /* AN ENVIRONMENT, WHICH IS THE THING THAT WAS ACTUALLY MISSING. Three
        passes were spent moving exposure and contrast around and none of them
@@ -1262,6 +1275,7 @@ void main(){
     col += envR * (0.06 + fres * 0.80) * ao;         // reflection, Fresnel-weighted
 
     col += toLinear(vec3(0.36,0.50,0.70)) * fres * 0.30;                        // cool silhouette
+    if (living) col += toLinear(vec3(0.18,0.68,0.77)) * fres * 0.22;
     if (uKind == 1) {
       /* The single most recognisable thing about the reference photograph is
          that the coronary tree is not drawn ON the surface, it stands proud OF
@@ -1335,6 +1349,11 @@ void main(){
     }
   }
 
+  if (uHalo > 0.5 && uKind == 2) {
+    float dt = vExtra.y - uAct;
+    float pulse = uAct >= 0.0 ? exp(-dt*dt/600.0) : 0.0;
+    col = toLinear(vec3(1.0,0.66,0.12)) * (0.10 + pulse * 2.0);
+  }
   col *= mix(1.0, 0.88, uDark);
   col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));       // back to sRGB
   outColor = vec4(col, alpha);
@@ -1497,7 +1516,7 @@ function create(canvas, opts) {
 
   const prog = program(gl, VERT, FRAG);
   const U = n => gl.getUniformLocation(prog, n);
-  const UNIFORMS = ['proj','view','eye','a','v','quiver','time','act','mode','kind','clipX','dark','style',
+  const UNIFORMS = ['proj','view','eye','a','v','quiver','time','act','mode','kind','clipX','dark','style','halo',
                     'lvApex','lvAxis','rvApex','rvAxis','laC','raC'];
   const u = {};
   for (const n of UNIFORMS) u[n] = U('u' + n[0].toUpperCase() + n.slice(1));
@@ -1729,7 +1748,7 @@ void main(){
   }
 
   /* ── state ── */
-  const STYLES = { anatomic: 0, ink: 1, crystal: 2, specimen: 3 };
+  const STYLES = { anatomic: 0, ink: 1, crystal: 2, specimen: 3, mechanistic: 4 };
   const S = {
     rhythm: opts.rhythm || 'sinus',
     mode: opts.mode || 'whole',
@@ -1793,6 +1812,7 @@ void main(){
       gl.uniform1f(loc.act, c.act); gl.uniform1i(loc.mode, mode);
       gl.uniform1f(loc.clipX, S.clip); gl.uniform1f(loc.dark, S.dark);
       gl.uniform1f(loc.style, S.style);
+      gl.uniform1f(loc.halo, 0);
       gl.uniform3fv(loc.lvApex, new Float32Array(A.lv.apex));
       gl.uniform3fv(loc.lvAxis, new Float32Array(lvAxis));
       gl.uniform3fv(loc.rvApex, new Float32Array(A.rv.apex));
@@ -1864,7 +1884,7 @@ void main(){
       gl.disable(gl.CULL_FACE);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
-    } else if (S.style === 3) {
+    } else if (S.style === 3 || S.style === 4) {
       /* THE CONDUCTION SYSTEM IS DRAWN TWICE, AND THAT IS THE WHOLE STYLE.
          Once depth-tested, so where the tree emerges it sits correctly behind
          and in front of the muscle it threads through. Then again with the
@@ -1896,6 +1916,14 @@ void main(){
       gl.depthMask(false);
       gl.disable(gl.DEPTH_TEST);
       drawMesh(mCond, 2);
+      if (S.style === 4) {
+        // A compact halo follows the electrical front. This expands only the
+        // conduction tubes, never the anatomical surface or contraction.
+        gl.uniform1f(u.halo, 1);
+        gl.blendColor(0, 0, 0, 0.12);
+        drawMesh(mCond, 2);
+        gl.uniform1f(u.halo, 0);
+      }
       gl.enable(gl.DEPTH_TEST);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
@@ -1926,7 +1954,7 @@ void main(){
     stepBloodParticles(bloodState, dt, c);
     /* Glowing additive particles are a colour-render idea; in the engraved
        style they read as smudges on the paper, so the drawing leaves them out. */
-    if ((mode === 1 || mode === 2) && S.style === 0) {
+    if ((mode === 1 || mode === 2) && (S.style === 0 || S.style === 4)) {
       updateBloodBuffer(S.clip, true);   // both cutaway and conduction clip on the same uClipX plane
       gl.useProgram(bloodProg);
       gl.uniformMatrix4fv(bU.proj, false, proj);

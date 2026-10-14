@@ -174,8 +174,8 @@ function syntheticRefs(perChapter = 10) {
       const key = `synthetic-${p.toLowerCase()}-${k}.png`;
       md += `\n## Point ${k}\n\n`
          + `In ${TOPICS[k % TOPICS.length]}, invented agent ${p}${k} should be started within 24 hours of the invented finding, whereas invented agent ${p}${k + 1} should be avoided until the invented marker falls.`
-         + ` The invented marker is measured twice, and the second reading decides the invented course of action in this synthetic note.\n`
-         + `\n![Synthetic figure ${p}-${k}](refimg://${key})\n`
+         + ` The invented ${TOPICS[k % TOPICS.length]} marker is measured twice, and the second reading decides the invented course of action in this synthetic note.\n`
+         + `\n![Synthetic ${TOPICS[k % TOPICS.length]} comparison figure ${p}-${k}](refimg://${key})\n`
          + `\nThis paragraph is filler for the synthetic ${ch} library, written so the section clears the forty-word floor every seeded note is held to.\n`;
       images.push([key, figurePng(1000 + images.length)]);
     }

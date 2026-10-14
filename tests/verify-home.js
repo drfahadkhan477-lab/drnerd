@@ -462,7 +462,9 @@ onDeath(() => ({ section, checks: passed + failed, errors,
        .pearl-card contain:size) rather than growing the row. The height floor
        is the precondition: without it, a pearl that failed to get taller
        would pass this by being short, which is the check above's problem
-       again. Reading scrollHeight forces layout, so no wait is needed.
+       again. Measure the content's scrollHeight: the reading area is now
+       constrained so its topic and actions remain visible. Its viewport
+       height is deliberately fixed even when the content gets longer.
 
        REPEATED UNTIL, not a fixed count. It was `.repeat(8)`, and a pearl
        can be as short as 90 characters (src/core/pearl.js MIN): eight of
@@ -478,9 +480,9 @@ onDeath(() => ({ section, checks: passed + failed, errors,
       const one = pb.textContent.trim() + ' ';
       let n = 8;
       do { pb.textContent = one.repeat(n); n *= 2; }
-      while (pb.getBoundingClientRect().height <= 600 && n <= 256);
+      while (pb.scrollHeight <= 600 && n <= 256);
       return { over: document.documentElement.scrollHeight - innerHeight,
-               h: Math.round(pb.getBoundingClientRect().height), copies: n / 2 };
+               h: pb.scrollHeight, copies: n / 2 };
     });
     ok('a pearl made far taller than any in the library (precondition)',
        !!tall && tall.h > 600, tall ? `${tall.h}px from ${tall.copies} copies` : 'no pearl on screen');

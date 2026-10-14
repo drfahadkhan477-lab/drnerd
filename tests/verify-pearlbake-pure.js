@@ -95,7 +95,7 @@ head('it is consulted, and an entry that does not fit is refused');
 const kb = P.bodyKey(NOTES[1].body);
 const bParas = P.paragraphs(NOTES[1].body);
 const firstPara = P.sentences(bParas[0]);
-const altRun = firstPara.slice(0, 1).join(' ');
+const altRun = bParas[1];
 const altAt = NOTES[1].body.indexOf(altRun);
 const swapped = Object.assign({}, table, { [kb]: [altAt, altAt + altRun.length, P.score(altRun)] });
 const usesTable = P.harvest(NOTES, swapped).find(x => x.id === 'b');
@@ -165,11 +165,30 @@ ok('and no step of the lookup reads more than that span', longest > 0 && longest
    side by side in the raw note, and no stretch of the note reads as that run.
    bake() must leave the note out and let the app search it. */
 const split = { id: 's', title: 'Unit · Odd — A span across a blank line', source: 's',
-                body: 'A short opener with a stray `tick in it.\n\nAnd the other` tick sits here. ' + NOTES[3].body };
+                body: NOTES[3].body.split('. ')[0].replace('measured value', 'measured `a code span\n\nclosed here` value') + '.' };
 const splitT = P.bake([split]);
 ok('a note whose run is not a stretch of its text is left out of the table, and still gets its pearl',
    !Object.prototype.hasOwnProperty.call(splitT, P.bodyKey(split.body)) &&
    P.harvest([split]).length === 1 && J(P.harvest([split], splitT)) === J(P.harvest([split])), J(splitT));
+
+head('one concept, readable relationships, and relevant figures');
+const rule = '**Amber syndrome** requires a repeat scan within 24 hours when the initial scan is uncertain, rather than immediate treatment.';
+const unrelated = 'Blue syndrome must be treated with 40 mg before the evening meal and requires a separate monitoring protocol.';
+const exception = 'However, a repeat scan is not required when the original scan has already established the diagnosis.';
+ok('unrelated adjacent claims cannot become one pearl', !P.isPearl(rule + ' ' + unrelated));
+ok('a rule keeps its explicit exception', P.isPearl(rule + ' ' + exception) && P.harvest([{id:'exception',body:rule+' '+exception}])[0].text === P.clean(rule+' '+exception));
+ok('numeric above and below are not back references', P.isPearl(rule.replace('within 24 hours', 'when the value is below 40%')) && P.isPearl(rule.replace('within 24 hours', 'when the value is above 40%')));
+ok('a percentage carries the same threshold signal as a measurement', P.score('The value is 40%.') === P.score('The value is 40 mmHg.'));
+ok('contraindications carry an action signal', P.score('Agent X is contraindicated.') > P.score('Agent X is available.'));
+const figNote = {id:'fig-match',title:'Unit — Amber syndrome',body:'### Amber syndrome\n\n![Blue syndrome](refimg://blue.png)\n\n'+rule+' '+exception+'\n\n![Amber syndrome repeat scan](refimg://amber.png)\n\n### Another section\n\n![Amber syndrome repeat scan](refimg://wrong-section.png)'};
+const figurePearl = P.harvest([figNote])[0];
+ok('the matching second figure replaces the unrelated first one', figurePearl.figKey === 'amber.png' && figurePearl.concept === 'Amber syndrome');
+ok('an unrelated image is omitted', !P.harvest([{id:'no-match',body:rule+'\n\n![Blue syndrome](refimg://blue.png)'}])[0].figKey);
+ok('baked and live lessons have the same concept and figure', J(P.harvest([figNote],P.bake([figNote]))) === J(P.harvest([figNote])));
+const blocks=P.lesson(rule+' '+exception);
+ok('whole sentences separate the idea from its caveat', blocks.length === 2 && blocks[0].label === 'Core idea' && blocks[1].label === 'Caveat' && /not required/.test(blocks[1].text));
+const readout='Agent X should be continued within 24 hours, unlike placebo, after a trial reported HR 0.80 and P = .01 for superiority.';
+ok('a trial readout gives way to the teaching rule', P.harvest([{id:'trial',body:readout+'\n\n'+rule}])[0].text === P.clean(rule));
 
 head('the build bakes the seed it ships, and the app passes the table on');
 const seed = J(NOTES.map(n => ({ title: n.title, body: n.body, source: n.source })));

@@ -1,23 +1,22 @@
 #!/usr/bin/env node
 /*
- * The hero turns, in slate, with the conduction system running through it.
+ * The hero turns, in anatomical tissue, with live electrical activation.
  *
  *   NODE_PATH=$(npm root -g) node tests/verify-heroart.js <patched.html>
  *   NODE_PATH=$(npm root -g) node tests/verify-heroart.js http://localhost:8137
  *
  * WHAT THIS DEFENDS, AND WHY EACH CHECK IS SHAPED THE WAY IT IS.
  *
- * The hero mounts Heart3D in the `specimen` style: one desaturated slate
+ * The hero mounts Heart3D in the `mechanistic` style: anatomical tissue
  * material, coronaries as relief, and the conduction tree drawn as a source
  * with the depolarisation front travelling it. Four things can go wrong there
  * and only one of them looks broken:
  *
  *   1. THE STYLE SILENTLY FALLS BACK. Heart3D resolves its style through a
  *      lookup with `|| 0`, so a typo in the option name gives `anatomic` — a
- *      RED heart on the home screen. Wrong, and not obviously broken. Asserted
+ *      heart without the through-tissue activation. Asserted
  *      by measuring the rendered pixels rather than by reading the option
- *      back: the option being right is not the claim, the heart being slate
- *      is.
+ *      back: warm tissue and a visible conduction tree both have to render.
  *
  *   2. THE CURRENT STOPS BEING CURRENT. The yellow tree is the depolarisation
  *      wave the module already models, not an effect. If it ever becomes a
@@ -123,10 +122,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('whose mesh actually built triangles', geo.tris > 5000, `${geo.tris} triangles`);
   ok('and the fallback has been handed over to it', geo.active);
 
-  head('it is the specimen style, judged from the pixels');
-  /* The claim is not "the option said specimen". It is that the heart on
-     screen is slate with a yellow tree — which is what a silent fallback to
-     the red anatomic style would fail. */
+  head('anatomical tissue and electrical activation, judged from the pixels');
+  /* A slate specimen fails the warm-tissue check; an anatomic fallback loses
+     the through-tissue activation. The picture, not the option, is measured. */
   const px = await page.evaluate(async () => {
     const cv = document.getElementById('heroHeart3d');
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -134,24 +132,25 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     off.width = cv.width; off.height = cv.height;
     off.getContext('2d').drawImage(cv, 0, 0);
     const d = off.getContext('2d').getImageData(0, 0, off.width, off.height).data;
-    let lit = 0, reddish = 0, yellowish = 0, slate = 0;
+    let lit = 0, reddish = 0, yellowish = 0, shadow = 0, highlight = 0;
     for (let i = 0; i < d.length; i += 4) {
       const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
       if (a < 8 || (r + g + b) < 42) continue;          // background / deep shadow
       lit++;
       if (r > g + 26 && r > b + 26) reddish++;           // anatomic muscle
       if (r > 110 && g > 90 && b < g - 34) yellowish++;  // the conduction tree
-      if (Math.abs(r - g) < 26 && b >= g - 8) slate++;   // desaturated, cool
+      if (r + g + b < 210) shadow++;
+      if (r + g + b > 560) highlight++;
     }
-    return { lit, reddish, yellowish, slate };
+    return { lit, reddish, yellowish, shadow, highlight };
   });
   ok('the render has substance to judge', px.lit > 4000, `${px.lit} lit pixels`);
-  ok('the muscle is slate, not red — this is the check a silent style fallback fails',
-     px.lit > 0 && px.reddish / px.lit < 0.04,
+  ok('the surface carries warm anatomical tissue',
+     px.lit > 0 && px.reddish / px.lit > 0.30,
      `${(100 * px.reddish / Math.max(px.lit, 1)).toFixed(1)}% reddish`);
-  ok('most of the surface is desaturated and cool',
-     px.lit > 0 && px.slate / px.lit > 0.45,
-     `${(100 * px.slate / Math.max(px.lit, 1)).toFixed(1)}% slate`);
+  ok('tissue has both deep shadows and bright surface highlights',
+     px.lit > 0 && px.shadow / px.lit > 0.05 && px.highlight / px.lit > 0.01,
+     `${(100 * px.shadow / Math.max(px.lit, 1)).toFixed(1)}% shadow, ${(100 * px.highlight / Math.max(px.lit, 1)).toFixed(1)}% highlight`);
   ok('and a yellow conduction tree is visible through it',
      px.lit > 0 && px.yellowish / px.lit > 0.01,
      `${(100 * px.yellowish / Math.max(px.lit, 1)).toFixed(2)}% yellow`);
@@ -449,6 +448,26 @@ head('a destroyed heart gives its context back');
   await rm.waitForTimeout(140);
   const r2 = await rm.evaluate(() => getComputedStyle(document.querySelector('#heroHeart .h-beat')).transform);
   ok('the still does not pulse', r1 === r2, r1 === r2 ? 'held' : `${r1} → ${r2}`);
+
+  head('mechanics opens the live chambers without replacing the heart');
+  const mechanics=await rm.evaluate(()=>{
+    const heart=heroHeart3d,canvas=heroHeart3dCanvas;
+    if(!heart||!canvas)return null;
+    const capture=()=>{const c=document.createElement('canvas');c.width=canvas.width;c.height=canvas.height;
+      const ctx=c.getContext('2d');ctx.drawImage(canvas,0,0);return ctx.getImageData(0,0,c.width,c.height).data;};
+    heart.setMode('whole');const before=capture();
+    toggleHeroMechanics();const after=capture();
+    let changed=0,lit=0;
+    for(let i=0;i<before.length;i+=4){if(before[i+3]>8||after[i+3]>8)lit++;
+      if(Math.abs(before[i]-after[i])+Math.abs(before[i+1]-after[i+1])+Math.abs(before[i+2]-after[i+2])+Math.abs(before[i+3]-after[i+3])>24)changed++;}
+    const pressed=document.getElementById('heroMechanics').getAttribute('aria-pressed');
+    const same=heroHeart3d===heart&&heroHeart3dCanvas===canvas;
+    toggleHeroMechanics();
+    return {same,pressed,changed,lit,reset:document.getElementById('heroMechanics').getAttribute('aria-pressed')};
+  });
+  ok('mechanics shows a visibly different cutaway',!!mechanics&&mechanics.lit>0&&mechanics.changed/mechanics.lit>0.05,
+     mechanics?`${mechanics.changed} changed pixels`:'no live model');
+  ok('the toggle preserves the instance and returns to the surface',!!mechanics&&mechanics.same&&mechanics.pressed==='true'&&mechanics.reset==='false');
   await rm.close();
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));

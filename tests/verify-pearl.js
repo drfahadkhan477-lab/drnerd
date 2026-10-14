@@ -17,7 +17,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -396,6 +396,37 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the pearl changes', next.changed);
   ok('the figure follows the sentence it belongs to', next.figMatchesNote);
   ok('and the hero is not re-rendered underneath it', next.heroIntact);
+
+  head('a named concept, recall, and the selected source note');
+  const current = await page.evaluate(() => ({id:pearlCurrent.id,title:pearlCurrent.title,concept:pearlCurrent.concept,source:pearlCurrent.source}));
+  ok('the heading names the selected concept', await page.locator('#pearlConcept').textContent() === current.concept);
+  await page.locator('#pearlRecall').click();
+  const hidden = await page.evaluate(() => ({body:document.getElementById('pearlBody').hidden,
+    prompt:!document.getElementById('pearlPrompt').hidden,expanded:document.getElementById('pearlRecall').getAttribute('aria-expanded'),
+    figure:!document.getElementById('pearlFig')||document.getElementById('pearlFig').hidden}));
+  ok('recall hides text and image, and shows a recall prompt', hidden.body && hidden.figure && hidden.prompt && hidden.expanded === 'false');
+  await page.locator('#pearlRecall').click();
+  ok('reveal restores the pearl', await page.locator('#pearlBody').isVisible() && await page.locator('#pearlRecall').getAttribute('aria-expanded') === 'true');
+  await page.locator('#pearlRecall').click();
+  await page.locator('.pearl-next').click();
+  const moved=await page.evaluate(()=>({id:pearlCurrent.id,concept:pearlCurrent.concept,shown:document.getElementById('pearlConcept').textContent,
+    source:pearlCurrent.source,shownSource:document.getElementById('pearlSource').textContent,hidden:document.getElementById('pearlBody').hidden}));
+  ok('another pearl updates its concept and source and exits recall', moved.id !== current.id && moved.concept === moved.shown && moved.source === moved.shownSource && !moved.hidden);
+  // The new figure is inserted without a full render; keyboard zoom must work there too.
+  const figureAvailable=await page.locator('#pearlFig').count();
+  if(figureAvailable){
+    await page.locator('#pearlFig').focus();
+    await page.keyboard.press('Enter');
+    ok('the replacement figure opens from the keyboard', await page.locator('#peek .figv[role="dialog"]').count() === 1);
+    await page.evaluate(()=>closePeek());
+  }else ok('the replacement figure opens from the keyboard',false,'synthetic fixture supplied no matching figure');
+  const sourceTitle=await page.evaluate(()=>pearlCurrent.title);
+  await page.locator('.pearl-open').click();
+  await settled(page,()=>S.screen==='refs'&&!!document.querySelector('.hero-title'),{label:'reference screen'});
+  const opened=await page.evaluate(()=>({count:document.querySelectorAll('.ref-card').length,title:document.querySelector('.ref-title')?.textContent}));
+  ok('open note displays the selected source rather than the entire shelf',opened.count === 1 && opened.title === sourceTitle);
+  await page.evaluate(()=>goHome());
+  await settled(page,()=>S.screen==='home'&&!!document.querySelector('.hero-h1'),{label:'home screen'});
 
   head('an empty library is not an error');
   const empty = await page.evaluate(() => {

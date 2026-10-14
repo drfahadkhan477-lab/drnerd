@@ -112,7 +112,24 @@ function sentences(text) {
     .map(s => s.replace(/<abbr>/g, '.').trim());
 }
 
-const BACKREF = /\b(above|below|as discussed|see the|earlier|the previous)\b/i;
+const BACKREF = /\b(as discussed|see the|earlier|the previous|(?:shown|described|discussed|mentioned|listed) (?:above|below))\b/i;
+
+/* A shared number or generic clinical word does not join two concepts.
+   Distinctive terms or an explicit continuation do. This is deliberately
+   conservative: no medical claim is rewritten or inferred. */
+const COMMON = new Set(('the and with without from that this these those which their there when where should must only within before after patients patient treatment therapy disease syndrome syndromes clinical first second most some have will would could dose doses days hours weeks months years given started measured reading finding marker invented synthetic').split(' '));
+function terms(text) {
+  return Array.from(new Set((clean(String(text)).toLowerCase().match(/[a-z][a-z0-9-]{3,}/g) || [])
+    .filter(w => !COMMON.has(w) && !FINITE.test(w) && !ACT.test(w))));
+}
+function coherent(parts) {
+  for (let i = 1; i < parts.length; i++) {
+    if (/^(?:this|that|these|those|it|they|however|but|yet|therefore|thus|because|unless|instead|in contrast|for this reason)\b/i.test(parts[i])) continue;
+    const prior = terms(parts.slice(0, i).join(' '));
+    if (!terms(parts[i]).some(w => prior.includes(w))) return false;
+  }
+  return true;
+}
 
 /* A PEARL HAS TO BE A SENTENCE, NOT A LABEL. These notes use a bolded phrase
    followed by a qualifier as a pseudo-bullet written as a paragraph:
@@ -167,6 +184,7 @@ function isPearl(raw) {
   const parts = sentences(s);
   if (parts.length > MAX_RUN + 1) return false;      // +1: cleaning can split a lead-in
   if (!parts.every(usable)) return false;
+  if (!coherent(parts)) return false;
   /* A main clause has to arrive early, but not necessarily in the first
      sentence: "R1 — epicardial conduit arteries." is a label, and the statement
      it labels is the sentence after it. Requiring the verb in sentence one
@@ -197,9 +215,9 @@ function runs(sents) {
    threshold you act on, a rule with an exception, one thing told from another.
    That is what the weights below reward. */
 const ENUM = /\b(include|includes|including|such as|for example|comprise|consist)\b/i;
-const ACT  = /\b(should|must|never|always|only|first-line|contraindicat|indicated|requires?|avoid|before|within|at least|no longer|instead of|failure to)\b/i;
+const ACT  = /\b(should|must|never|always|only|first-line|contraindicat\w*|indicated|requires?|avoid|before|within|at least|no longer|instead of|failure to)\b/i;
 const DISC = /\b(distinguish\w*|differentiat\w*|unlike|whereas|rather than|versus|vs\.?|in contrast|but not|as opposed to|mistak\w+|misread)\b/i;
-const UNIT = /\d\s?(mg|mcg|g|mmhg|ml|l\/min|%|hours?|hrs?|days?|weeks?|months?|years?|beats|bpm|mm|cm|msec|ms|meq|mmol)\b/i;
+const UNIT = /\d\s?(?:%|(?:mg|mcg|g|mmhg|ml|l\/min|hours?|hrs?|days?|weeks?|months?|years?|beats|bpm|mm|cm|msec|ms|meq|mmol)\b)/i;
 const TRIAL = /\b[A-Z][A-Z0-9-]{3,}\b/;
 
 function score(raw) {
@@ -252,13 +270,23 @@ function bestRun(body) {
     for (let n = Math.min(MAX_RUN, sents.length); n >= 1; n--) {
       for (let i = 0; i + n <= sents.length; i++) {
         const run = sents.slice(i, i + n).join(' ');
-        if (!isPearl(run)) continue;
+        if (!isPearl(run) || !teaching(run)) continue;
         const sc = score(run);
         if (!best || sc > best.score) best = { p, i, n, score: sc, run };
       }
     }
   });
   return best;
+}
+
+/* Results belong in the source note; a pearl should teach its interpretation.
+   Keep this filter in Systole's harvest so shared sentence helpers retain
+   their meaning for the Memorizer. */
+function teaching(raw) {
+  const t = clean(raw);
+  const opening = t.split(',')[0].split(/\s+/).slice(0, 6).join(' ');
+  if (/\b(similarly|likewise|also|another|the latter|the former|utili[sz]ing|as with|as noted)\b/i.test(opening)) return false;
+  return !/\b(?:HR|OR|RR|CI)\s*[:=,]?\s*\(?\d|\b[Pp]\s*[=<>≤≥]\s*0?\.\d|\b(?:hazard|odds|risk) ratios?\b|\bconfidence intervals?\b|\bpatient-years?\b/.test(t);
 }
 
 /* The note's text, fingerprinted: FNV-1a, the hash the app already keys its
@@ -329,7 +357,7 @@ function fromTable(body, e) {
   body = String(body || '');
   if (!(e[0] >= 0 && e[0] < e[1] && e[1] <= body.length)) return undefined;
   const run = collapse(body.slice(e[0], e[1]));
-  if (!isPearl(run) || score(run) !== e[2]) return undefined;
+  if (!isPearl(run) || !teaching(run) || score(run) !== e[2]) return undefined;
   return { score: e[2], run };
 }
 
@@ -346,15 +374,71 @@ function harvest(notes, table) {
     }
     if (best === undefined) best = bestRun(r.body);
     if (best && best.score >= 5) {
-      /* The note's own first figure, so a pearl can be shown with the diagram
-         that explains it rather than as a line of text on its own. */
-      const fig = /!\[([^\]]*)\]\(refimg:\/\/([^)\s]+)\)/.exec(r.body || '');
+      const context = passageContext(r.body, best.run, r.title);
+      const fig = matchingFigure(r.body, best.run);
       out.push({ id: r.id, title: r.title || '', text: clean(best.run), score: best.score,
                  chapter: (r.title || '').split('—')[0].trim(), source: r.source || '',
-                 figKey: fig ? fig[2] : '', figCap: fig ? fig[1] : '' });
+                 concept: context.concept,
+                 figKey: fig ? fig.key : '', figCap: fig ? fig.caption : '' });
     }
   }
   return out;
+}
+
+/* Locate the exact passage in raw Markdown. A passage crossing stripped
+   markup may have no contiguous span; in that case no figure is guessed. */
+function passageSpan(body, run) {
+  return new RegExp(run.split(/\s+/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')).exec(String(body || ''));
+}
+function passageContext(body, run, title) {
+  body = String(body || '');
+  const span = passageSpan(body, run);
+  const headings = Array.from(body.matchAll(/^#{1,6}\s+(.+)$/gm));
+  const before = span && headings.filter(h => h.index < span.index);
+  const heading = before && before.length ? clean(before[before.length - 1][1]) : '';
+  const subject = /\*\*([^*]+)\*\*/.exec(run);
+  const bold = subject && clean(subject[1]);
+  const frame = /^(?:In|For|With)\s+([^,;:.]{3,90})[,;]/i.exec(clean(run));
+  const concept = (bold && /[a-z]/i.test(bold) && bold.length <= 90 ? bold : '')
+    || (frame && frame[1]) || heading || String(title || '').split('—').pop().trim() || 'From your notes';
+  return { concept, span, headings };
+}
+function matchingFigure(body, run) {
+  body = String(body || '');
+  const context = passageContext(body, run, '');
+  if (!context.span) return null;
+  const at = context.span.index;
+  const preceding = context.headings.filter(h => h.index < at);
+  const start = preceding.length ? preceding[preceding.length - 1].index : 0;
+  const following = context.headings.find(h => h.index > at);
+  const end = following ? following.index : body.length;
+  const words = terms(run);
+  let best = null;
+  for (const m of body.matchAll(/!\[([^\]]*)\]\(refimg:\/\/([^)\s]+)\)/g)) {
+    if (m.index < start || m.index >= end) continue;
+    const overlap = terms(m[1]).filter(w => words.includes(w));
+    // A long distinctive subject or two shared terms, never proximity alone.
+    if (overlap.length < 2 && !overlap.some(w => w.length >= 6)) continue;
+    const rank = overlap.length * 1000 - Math.min(Math.abs(m.index - at), 999);
+    if (!best || rank > best.rank) best = { key: m[2], caption: m[1], rank };
+  }
+  return best;
+}
+
+/* Whole sentences establish the main idea; clause joints make its supporting
+   detail scannable. Labels name the source relationship, not an inferred
+   diagnosis or treatment recommendation. */
+function lesson(text) {
+  const blocks = sentences(String(text || '')).filter(Boolean).flatMap(s => steps(s));
+  return blocks.map((s, i) => {
+    const t = (s.lead ? s.lead + ' ' : '') + s.text;
+    const label = i === 0 ? 'Core idea'
+      : /^(?:but|however|yet|unless|except|although|though|without)\b/i.test(t) ? 'Caveat'
+      : /^(?:whereas|unlike|in contrast|rather than|versus|or)\b/i.test(t) ? 'Contrast'
+      : /^(?:because|since|so|therefore|thus|resulting|leading|meaning)\b/i.test(t) ? 'Why it matters'
+      : /^(?:if|when|provided)\b/i.test(t) ? 'Condition' : 'Detail';
+    return { lead: s.lead, text: s.text, label };
+  });
 }
 
 /* Weak-chapter weighting, done on words rather than on an exact chapter match:
@@ -593,6 +677,6 @@ function steps(text) {
 function entryFits(body, e) { return fromTable(body, e) !== undefined; }
 
 root.Pearl = { harvest, bake, bodyKey, entryFits, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
-               weakWords, aimWords, steps, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
+               weakWords, aimWords, steps, lesson, matchingFigure, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
 
 })(typeof window !== 'undefined' ? window : this);

@@ -74,8 +74,8 @@
      was identical in every run; only the pearl moved.
 
      contain:size makes the card lay out as if empty for sizing purposes,
-     so it takes the area the rows give it and .pearl-main scrolls within
-     that, which is what the comment on .pearl-main always said happened.
+     so it takes the area the rows give it and .pearl-bodywrap scrolls within
+     that, keeping the topic and recall/source actions visible.
      Safari has had it since 15.4; an older one ignores the property and
      keeps the old behaviour, which is a long pearl scrolling the page. */
   #app[data-screen="home"] .pearl-card{
@@ -83,7 +83,7 @@
   #app[data-screen="home"] .door-row{grid-area:doors;margin-top:18px}
   /* The pearl's own column has to be able to shrink inside the grid row, or
      its content sets the row height and the footer is pushed off screen. */
-  #app[data-screen="home"] .pearl-main{min-height:0;overflow:auto}
+  #app[data-screen="home"] .pearl-main{min-height:0;overflow:hidden}
   /* Nothing else on the home screen belongs in a two-column arrangement — the
      story rail and the feed live on the Chapters page now, but a build that
      still renders them should stack them under the doors rather than land in

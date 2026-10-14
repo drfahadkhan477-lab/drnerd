@@ -208,7 +208,7 @@ function icon(name, cls){
 @@SLOT[src:src/ui/coronaryTree.js]@@
 
 /* the heart's surfaces, baked by scripts/heart-bake.js — build-pwa moves the base64 into content/ */
-window.HEART3D_MESH_KEY='6db48e68a30d011e';
+window.HEART3D_MESH_KEY='397e3004227c19eb';
 window.HEART3D_MESH_B64='@@SLOT[payload:HEART_MESH]@@';
 
 /* ═══════════ cardiac waveform engine — original, offline, no external assets ═══════════
@@ -2577,9 +2577,10 @@ function jumpTo(id){
 }
 
 /* ── the reference library screen ─────────────────────────────────────────── */
-let refEditing=null;
+let refEditing=null, refViewing=null;
 function buildRefs(){
-  const rows=REF.slice().sort((a,b)=>b.ts-a.ts).map(r=>`
+  const viewed=refViewing&&REF.find(r=>r.id===refViewing);
+  const rows=(viewed?[viewed]:REF.slice().sort((a,b)=>b.ts-a.ts)).map(r=>`
     <div class="ref-card">
       <div class="ref-top">
         <div class="ref-title">${e(r.title||'Untitled note')}</div>
@@ -2602,7 +2603,7 @@ function buildRefs(){
       <div class="hero-title" style="font-size:28px">Reference Notes</div>
       <div class="hero-sub">Notes you write here are searched alongside the ACC commentary and handed to Apex as context — so the tutor teaches from your understanding, not just the question bank.</div>
     </div>
-    <div class="ref-new">
+    <div class="ref-new"${viewed&&!refEditing?' hidden style="display:none"':''}>
       <input id="refT" placeholder="Title — e.g. Cardiac amyloidosis: red flags">
       <input id="refG" placeholder="Tags, comma separated — amyloid, restrictive, ATTR">
       <textarea id="refB" rows="6" placeholder="Write the concept in your own words. Summarising what you read is where the learning happens — and it gives the tutor your framing to build on."></textarea>
@@ -2615,7 +2616,8 @@ function buildRefs(){
       </div>
       <div class="ref-hint">Markdown files split on <code>#</code> headings — one note per section. Nothing you write leaves this device except as context on your own API calls.</div>
     </div>
-    <div class="section-label">${REF.length} note${REF.length===1?'':'s'} indexed</div>
+    <div class="section-label">${viewed?'Source note':`${REF.length} note${REF.length===1?'':'s'} indexed`}</div>
+    ${viewed?`<div class="ref-btns"><button class="chip" onclick="goHome()">Back to study</button><button class="chip" onclick="goRefs()">Show all notes</button></div>`:''}
     ${rows||'<div style="text-align:center;color:var(--muted);font-size:13px;padding:18px">No notes yet. Add one above, or import a markdown file.</div>'}
   </div>`;
 }
@@ -2626,6 +2628,7 @@ function refSave(){
   if(!b){ toast('Write something in the note body first.'); return; }
   if(refEditing){ refUpdate(refEditing,{title:t,tags:g,body:b}); refEditing=null; }
   else refAdd(t,b,g);
+  refViewing=null;
   render(); toast('Saved — this note is now searchable.');
 }
 function refEdit(id){
@@ -2648,7 +2651,7 @@ function refExport(){
   a.download='accsap12-reference-notes.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
-function goRefs(){ S.screen='refs'; refEditing=null; render(); toTop(); }
+function goRefs(id){ S.screen='refs'; refEditing=null; refViewing=typeof id==='string'?id:null; render(); toTop(); }
 function goMemory(){ S.screen='memory'; render(); toTop(); }
 function memForget(id){
   if(!confirm('Delete this memory? Apex will stop knowing it.'))return;
@@ -4979,12 +4982,37 @@ function renderNow(){
   if(typeof mountInk==='function') mountInk();
   if(typeof mountHomeProgress==='function') mountHomeProgress();
   if(typeof mountChapterBars==='function') mountChapterBars();
+  mountScrollReveal();
   if(typeof applyFocus==='function') applyFocus();
   if(typeof buildAI==='function' && document.getElementById('shell').classList.contains('ai-open')) buildAI();
   requestAnimationFrame(()=>{
     const pf=document.querySelector('.prog-fill');
     if(pf)pf.style.transition='width .4s cubic-bezier(.16,1,.3,1)';
   });
+}
+/* Reveal below-fold surfaces once, using the browser's actual scroll root.
+   No scroll handler or perpetual animation loop is needed. Every render
+   releases observations of the previous screen. */
+let surfaceRevealObserver=null;
+function mountScrollReveal(){
+  if(surfaceRevealObserver){surfaceRevealObserver.disconnect();surfaceRevealObserver=null;}
+  if(!window.IntersectionObserver||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const app=document.getElementById('app');
+  const scrolls=/auto|scroll/.test(getComputedStyle(app).overflowY);
+  const root=scrolls?app:null;
+  const bottom=root?root.getBoundingClientRect().bottom:window.innerHeight;
+  const cards=Array.from(app.querySelectorAll('.ch-tile,.feed-card,.ref-card,.door,.home-progress'))
+    .filter(el=>el.getBoundingClientRect().top>=bottom);
+  if(!cards.length)return;
+  surfaceRevealObserver=new IntersectionObserver(entries=>{
+    for(const entry of entries)if(entry.isIntersecting){
+      entry.target.classList.add('is-visible');surfaceRevealObserver?.unobserve(entry.target);
+    }
+  },{root,threshold:0.08});
+  for(const card of cards){
+    card.classList.add('scroll-reveal');surfaceRevealObserver.observe(card);
+    card.addEventListener('focusin',()=>card.classList.add('is-visible'),{once:true});
+  }
 }
 function buildScreen(){
   return S.screen==='home'?buildHome():S.screen==='quiz'?buildQuiz()
@@ -5035,7 +5063,14 @@ function buildNav(){
   </nav>`;
 }
 
-let heroMon=null, heroHeart3d=null, heroHeart3dCanvas=null, heroRotateTimer=null, heroCurrentKind=null;
+let heroMon=null, heroHeart3d=null, heroHeart3dCanvas=null, heroRotateTimer=null, heroCurrentKind=null, heroCutaway=false;
+function toggleHeroMechanics(){
+  if(!heroHeart3d)return;
+  heroCutaway=!heroCutaway;
+  heroHeart3d.setMode(heroCutaway?'cutaway':'whole');
+  const button=document.getElementById('heroMechanics');
+  if(button){button.setAttribute('aria-pressed',String(heroCutaway));button.classList.toggle('is-active',heroCutaway);}
+}
 /* THE APP'S OWN PHYSIOLOGY, DRAWN SMALL. Physio.lvPressure(t) and
    Physio.lvVolume(t) over one normalised cycle are the pressure–volume loop —
    the same pair of functions the cardiac-cycle screen plots, so the loop in
@@ -5218,6 +5253,7 @@ function mountHeroHeart3d(){
           && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     heroHeart3d.setDark(darkNow);
     heroHeart3d.setRhythm(heroCurrentKind||'sinus');
+    heroHeart3d.setMode(heroCutaway?'cutaway':'whole');
     heroHeart3d.start();
     document.getElementById('heroHeart')?.classList.add('heart-3d-active');
     return;
@@ -5235,12 +5271,12 @@ function mountHeroHeart3d(){
   const dark=document.documentElement.getAttribute('data-theme')==='dark'
     || (!document.documentElement.hasAttribute('data-theme')
         && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  heroHeart3d=Heart3D.create(cv,{rhythm:heroCurrentKind||'sinus',mode:'whole',dark,
-    /* specimen: slate material, coronaries as relief, and the conduction
+  heroHeart3d=Heart3D.create(cv,{rhythm:heroCurrentKind||'sinus',mode:heroCutaway?'cutaway':'whole',dark,
+    /* Mechanistic: anatomical tissue, coronaries as relief, and the conduction
        system drawn as a source with the depolarisation front travelling it.
        See the style's own comment in src/core/heart3d.js — the current is the
        module's existing wave, not an effect added for the look of it. */
-    style:'specimen',
+    style:'mechanistic',
     /* THE MESH IS NO LONGER THE COARSE ONE. [40,52,32] was chosen when this
        was a 92px mark in the corner, where nobody could see a facet. At the
        size it is drawn now the low mesh showed as flat planes across the
@@ -5263,6 +5299,7 @@ function mountHeroHeart3d(){
     onLost:function(){
       if(heroHeart3dCanvas&&heroHeart3dCanvas.parentNode) heroHeart3dCanvas.remove();
       heroHeart3d=null; heroHeart3dCanvas=null;
+      const mechanics=document.getElementById('heroMechanics'); if(mechanics)mechanics.disabled=true;
       document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
     },
     onRestored:function(){
@@ -5270,10 +5307,12 @@ function mountHeroHeart3d(){
     }});
   if(!heroHeart3d){
     cv.remove();
+    const mechanics=document.getElementById('heroMechanics'); if(mechanics)mechanics.disabled=true;
     document.getElementById('heroHeart')?.classList.remove('heart-3d-active');
     return;
   }
   heroHeart3dCanvas=cv;
+  const mechanics=document.getElementById('heroMechanics'); if(mechanics)mechanics.disabled=!heroHeart3d;
   cv.style.pointerEvents='none';           // decorative — never eats a home-screen scroll
   document.getElementById('heroHeart')?.classList.add('heart-3d-active');
 }
@@ -5341,13 +5380,14 @@ function pearlFigure(p){
   if(!src) return '';
   const cap=(p.figCap||'').trim();
   return `<figure class="pearl-fig" id="pearlFig" onclick="openFigureFrom(this)" role="button" tabindex="0"
-    title="${e(cap)}"><img src="${src}" alt="${e(cap||'Figure from this note')}" loading="lazy">
-    ${cap?`<figcaption>${e(cap.length>150?cap.slice(0,149)+'…':cap)}</figcaption>`:''}</figure>`;
+    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopImmediatePropagation();this.click()}"
+    title="Enlarge figure"><img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
+    ${cap?`<figcaption>${e(cap)}</figcaption>`:''}</figure>`;
 }
 /* The measurements are what the question turns on, so they are marked. Applied
    AFTER escaping, and matching only digits and a unit word, so it can never
    reach into an entity the escaper produced — &amp; has no digit in it. */
-const PEARL_NUM=/(\d[\d.,:]*(?:\s?[–—-]\s?\d[\d.,]*)?\s?(?:%|mg|mcg|kg|g\b|mmHg|mL|mm|cm|hours?|hrs?|days?|weeks?|months?|years?|minutes?|mins?|beats|bpm|mmol|mEq|msec|ms|mo)?)/g;
+const PEARL_NUM=/\b\d[\d.,]*(?:\s?[–—-]\s?\d[\d.,]*)?\s?(?:%|(?:mg|mcg|kg|g|mmHg|mL|mm|cm|hours?|hrs?|days?|weeks?|months?|years?|minutes?|mins?|beats|bpm|mmol|mEq|msec|ms|mo)\b)/g;
 function pearlMark(escaped){
   return escaped.replace(PEARL_NUM,(m)=>/\d/.test(m)?`<b class="pearl-num">${m}</b>`:m);
 }
@@ -5356,12 +5396,23 @@ function pearlMark(escaped){
    a ladder of one, which would be a numbered list with nothing to order. */
 function pearlLadder(p){
   let steps=[];
-  try{ steps=(typeof Pearl!=='undefined')?Pearl.steps(p.text):[]; }catch(_){ steps=[]; }
+  try{ steps=(typeof Pearl!=='undefined')?Pearl.lesson(p.text):[]; }catch(_){ steps=[]; }
   if(steps.length<2) return `<p class="pearl-body pearl-in">${pearlMark(e(p.text))}</p>`;
   return `<ol class="pearl-steps pearl-in">${steps.map((s,i)=>
     `<li class="pearl-step" style="--i:${i}"><span class="pearl-n">${i+1}</span>
       <span class="pearl-txt">${s.lead?`<em class="pearl-lead">${e(s.lead)}</em>`:''}${pearlMark(e(s.text))}</span></li>`).join('')}</ol>`;
 }
+function pearlRecall(){
+  const card=document.getElementById('pearlCard'); if(!card)return;
+  const hide=card.classList.toggle('is-recalling');
+  document.getElementById('pearlBody').hidden=hide;
+  const fig=document.getElementById('pearlFig'); if(fig)fig.hidden=hide;
+  document.getElementById('pearlPrompt').hidden=!hide;
+  const button=document.getElementById('pearlRecall');
+  button.textContent=hide?'Reveal':'Recall';
+  button.setAttribute('aria-expanded',String(!hide));
+}
+function pearlOpen(){ if(pearlCurrent)goRefs(pearlCurrent.id); }
 function pearlNext(){
   const all=pearlAll();
   if(all.length<2) return;
@@ -5373,6 +5424,14 @@ function pearlNext(){
      the ladder from scratch also restarts its own stagger, which is the point
      — the steps should arrive one at a time on every pearl, not just the first. */
   el.innerHTML=pearlLadder(pearlCurrent);
+  const announcement=document.getElementById('pearlAnnounce'); if(announcement)announcement.textContent='New pearl: '+(pearlCurrent.concept||pearlCurrent.title);
+  el.hidden=false;
+  document.getElementById('pearlConcept').textContent=pearlCurrent.concept||pearlCurrent.title;
+  document.getElementById('pearlSource').textContent=pearlCurrent.source||'Your reference notes';
+  const sourceButton=document.querySelector('.pearl-open'); if(sourceButton)sourceButton.title=pearlCurrent.source||'Your reference notes';
+  document.getElementById('pearlPrompt').hidden=true;
+  const recall=document.getElementById('pearlRecall');
+  recall.textContent='Recall'; recall.setAttribute('aria-expanded','true');
   const cap=document.getElementById('pearlCap');
   if(cap) cap.textContent=pearlCurrent.chapter||'From your notes';
   /* The figure belongs to the note, so it has to move with the sentence —
@@ -5382,6 +5441,7 @@ function pearlNext(){
   const html=pearlFigure(pearlCurrent);
   if(card&&html) card.insertAdjacentHTML('beforeend',html);
   if(card) card.classList.toggle('has-fig',!!html);
+  if(card)card.classList.remove('is-recalling');
 }
 /* ═══════════ Putting the whole bank on the device ═══════════
    Only meaningful in the split build — see the header of offline-patch.js. */
@@ -5575,10 +5635,12 @@ function buildHome(){
 
   return `<div class="home-wrap anim-fade" data-home="${S.homeLayout}">
     <div class="hero-live">
+      <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
       <div class="hero-inner">
         <div class="hero-greet">${greet()}</div>
         <h1 class="hero-h1">Systole</h1>
+        <p class="hero-description">Cardiology, in motion.</p>
         <div class="hero-line">
           <span class="hl-item"><b>${TOTAL_Q}</b> questions</span>
           <span class="hl-dot"></span>
@@ -5592,6 +5654,9 @@ function buildHome(){
         <div class="h-beat"><img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async"></div>
       </div>
       <div id="heroHeart3dSlot" class="hero-heart-3d" aria-hidden="true"></div>
+      <span class="hero-live-status"><i aria-hidden="true"></i> Live cardiac cycle</span>
+      <button class="hero-mechanics${heroCutaway?' is-active':''}" id="heroMechanics" onclick="toggleHeroMechanics()"
+        aria-label="Show heart chambers, valves, and blood flow" aria-pressed="${heroCutaway}" title="Show heart chambers, valves, and blood flow">${icon('layers','icon-sm')} Mechanics</button>
     </div>
 
     ${(()=>{ const p=pearlNow(); if(!p) return '';
@@ -5601,12 +5666,19 @@ function buildHome(){
         <div class="pearl-main">
           <div class="pearl-head">
             <span class="pearl-tag">${icon('zap','icon-sm')} Pearl</span>
-            <span class="pearl-cap" id="pearlCap">${e(p.chapter||'From your notes')}</span>
+            <span class="pearl-cap sr-only" id="pearlCap">${e(p.chapter||'From your notes')}</span>
             <button class="pearl-next" onclick="pearlNext()"
-              title="Another pearl" aria-label="Another pearl">${icon('rotate-ccw','icon-sm')}</button>
+              title="Another pearl" aria-label="Another pearl"${pearlAll().length<2?' disabled':''}>${icon('rotate-ccw','icon-sm')}</button>
           </div>
+          <h2 class="pearl-concept" id="pearlConcept">${e(p.concept||p.title)}</h2>
           <div class="pearl-bodywrap" id="pearlBody">${pearlLadder(p)}</div>
-          <button class="pearl-open" onclick="goRefs()">Open the note ${icon('arrow-right','icon-sm')}</button>
+          <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
+          <p class="pearl-prompt" id="pearlPrompt" hidden aria-label="Recall this concept">?</p>
+          <div class="pearl-actions">
+            <button class="pearl-recall" id="pearlRecall" onclick="pearlRecall()" aria-controls="pearlBody" aria-expanded="true">Recall</button>
+            <button class="pearl-open" onclick="pearlOpen()" title="${e(p.source||'Your reference notes')}">Source ${icon('arrow-right','icon-sm')}</button>
+          </div>
+          <div class="pearl-source sr-only" id="pearlSource">${e(p.source||'Your reference notes')}</div>
 
         </div>
         ${pearlFigure(p)}
