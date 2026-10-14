@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 90 suites that are pure Node with no Playwright and no
+#   logic        the 91 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -344,6 +344,8 @@ jobs:
         run: node tests/verify-bankpack-pure.js
       - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (51 checks)
         run: node tests/verify-testpublic-pure.js
+      - name: a browser suite's pass is reused only when nothing it depended on has changed, and a failure is never kept (139 checks)
+        run: node tests/verify-suitecache-pure.js
       - name: a pull request skips a browser job only when none of its files can reach it (60 checks)
         run: node tests/verify-cichanges-pure.js
       - name: the counts record in two halves — Systole's written from a run where every Systole suite passed, the Memorizer's likewise, the other half kept (31 checks)
@@ -481,6 +483,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the Lab, built and driven — the audio played is the heart sound asked, nothing names an answer early, progress is stored and survives a reload, and the heart map is drawn from the map (67 checks)
         run: node tests/verify-lab.js
+      - if: ${{ !cancelled() }}
+        name: the result cache's view of the browser — every file a page loads from disk is reported in the engines the cache traces, and the cache stays off for an engine that reports none (20 checks)
+        run: node tests/verify-suitecache.js
 
   # ── the app itself, built around an invented bank ───────────────────────────
   #

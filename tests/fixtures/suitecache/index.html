@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suitecache fixture</title>
+<!-- tests/verify-suitecache.js loads this page and holds the result cache to
+     knowing every file the browser asks the repository for. Each line below is
+     a different way a page reaches for one. unused.txt is in this directory and
+     nothing here mentions it. -->
+<link rel="stylesheet" href="style.css">
+<script src="classic.js"></script>
+<script type="module" src="module.mjs"></script>
+<div class="bg">background</div>
+<img id="pic" src="pic.txt" alt="">
+<iframe id="frame" src="frame.html"></iframe>

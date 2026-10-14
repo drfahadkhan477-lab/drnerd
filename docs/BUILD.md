@@ -281,6 +281,59 @@ sets the limit in minutes (`0` for none, `scripts/suitetime.js` has the default)
 Every run ends by naming its slowest sections, so a slow run says where its time
 went instead of leaving it to be guessed.
 
+### Reusing a pass
+
+`npm test` does not measure a browser suite again when nothing it depended on
+has changed. After a browser suite passes, `scripts/suite-cache.js` keeps what
+that run read: the suite's file; every file it, and each node process it
+started, opened, listed or asked about (found or not); every `file://` URL its
+pages requested; and the build it was handed, less the commit stamp, which no
+page reads. `scripts/trace-inputs.js` watches the run do these things, rather
+than guessing from the source. It also keeps what files do not say: node,
+Playwright and the browser's revision, the lockfile, the engine, the day and
+time zone, the code of the cache and the runner, and every environment
+variable the files the run read mention. The next run reuses the pass only if
+every one of those is identical. A suite that only a browser loaded the build
+for does not see the commit stamp in it, so the stamp is left out of its
+state; a suite that reads the build in node could have measured the stamp, so
+those few run again whenever it changes, which is every commit and every
+uncommitted change. It prints the suite `REUSED`, never `PASS`,
+with the date of the pass and the time not spent, and the last line says how
+many suites were measured now and how many were reused. The last few
+passes of each suite are kept, so an edit and its undo find the pass from
+before the edit.
+
+```bash
+npm run test:plan                 # what would be reused and what would run, and why; runs no suite
+npm run test:fresh                # measure every browser suite now, and remember the passes
+SYSTOLE_NO_CACHE=1 npm test       # no cache at all
+```
+
+What it never does. A failure is never kept, and it drops any kept pass that
+the failure contradicts. The pure suites, the split build and
+`scripts/verify.js` (`test:private`, and the record) are always measured. CI
+never reuses anything: with `CI` set the cache is off. A run the tracer cannot
+vouch for is measured every time, with the reason on the last lines: it
+starts a program other than node and the browser, uses `fs.glob` or
+`fs.watch`, or changes its own input while it runs.
+
+What it cannot know. Playwright reports no `file://` request in Firefox, so a
+Firefox page loaded from the repository depends on files nothing here would
+see, and for Firefox there is no cache (`tests/verify-suitecache.js` holds
+each engine to this on every run). Browser behaviour that depends on the
+machine, such as GPU, fonts and load, is not in the key; a file in
+`node_modules` edited by hand is not seen, only the lockfile and the versions;
+a module lookup that found nothing is not recorded; and a suite that passed by
+luck has its luck remembered. `npm run test:fresh` answers all of these, and is
+what a release or a doubt should use.
+
+The cache is `node_modules/.cache/systole-suite-results`. An `npm ci` empties
+it, as it does the reader assets', and a fresh clone or cloud session starts
+with none, so the first run there measures everything. Delete the folder to
+drop it. `tests/verify-suitecache-pure.js` holds it from both sides in bare
+node, on invented suites: a pass must not be reused when anything it depended
+on changed, and must be when only something irrelevant did.
+
 ### Which tests run where
 
 | Where | What | When |
@@ -773,7 +826,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        152 suites · 90 need no browser · + pwa
+tests/        152 suites · 91 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

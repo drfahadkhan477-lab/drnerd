@@ -1,0 +1,1 @@
+Not an image. This repository's leak guard refuses image files, and a browser asks for an <img> source before it knows what is in it.

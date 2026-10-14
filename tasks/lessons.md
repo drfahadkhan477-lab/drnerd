@@ -356,3 +356,25 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   Rule: before substantial work on a file, list the open PRs and the branches
   that moved since the base, and check whether any changes or deletes that
   file; if one does, ask before building on it.
+- **An instrument that changed what it measured.** The result cache's tracer
+  wrapped `fs.*` and `child_process.*` and dropped the properties node hangs on
+  them: `fs.realpathSync.native` became undefined, and `promisify(exec)`
+  resolved a string where it resolves `{ stdout, stderr }`. I found it by
+  reading node's function table, not from a failing run. → Rule: a wrapper
+  carries its target's name, length and own properties (`mimic()` in
+  scripts/trace-inputs.js), and a test compares the whole surface with and
+  without it.
+- **A hook assumed to work in every engine.** The cache learns what a page
+  loads from Playwright's request events. In Firefox they are not emitted for
+  file:// at all (Firefox 155, Playwright 1.63), so a cache that traced Firefox
+  would have missed every file a page loads and reused passes over edited
+  pages. → Rule: hold such a hook with a suite that runs in each engine
+  (tests/verify-suitecache.js), keep the cache off where an engine reports
+  nothing, and print the checks that cannot be made as not measurable.
+- **Negative checks that passed over an empty record.** The first run of the
+  browser suite recorded nothing (I had required the tracer before setting the
+  two variables it reads once, at load), and every "X is not recorded" check
+  passed. Two cache checks also ran nothing, because a pass kept by an earlier
+  section satisfied them. → Rule: a negative holds a positive from the same
+  run, and a check about what a run kept starts from an empty cache and shows
+  that the run measured first.
