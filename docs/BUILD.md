@@ -778,12 +778,14 @@ style; it is what makes the numeric verification above possible.
 
 ## Security scanning
 
-No static analysis runs on this repository. `.github/workflows/codeql.yml`
-ran GitHub's CodeQL over the JavaScript, Python and workflow files here until
+GitHub's CodeQL runs on pull requests and on pushes to master, through the
+repository's code-scanning default setup rather than a workflow file: the
+`Analyze (javascript-typescript)`, `Analyze (python)` and `Analyze (actions)`
+checks. A pull request's run reports scanning every JavaScript file and every
+HTML file in the tree. `.github/workflows/codeql.yml` ran the same scan until
 code scanning was turned off for the repository, after which every run failed
-uploading its results; the workflow was removed rather than left red. Turning
-code scanning back on in the repository settings and restoring that file from
-history brings it back.
+uploading its results; the workflow was removed rather than left red, and with
+the default setup on there is nothing to restore.
 
 **The `github-advanced-security` check is not a security review of this
 code.** It is a separate GitHub service whose file exclusions skip `*.js`,
