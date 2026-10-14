@@ -38,9 +38,10 @@
  *
  * It is worth the trouble, and this review proved why: the split shell had
  * silently grown from 566 KB to 1.7 MB because a megabyte of base64 heart scan
- * was being inlined into it. verify-pwa asserts the shell stays under 800 KB
- * and would have caught it the day it happened — but nothing ran it, so nobody
- * knew. A check that exists and is never run is not a check.
+ * was being inlined into it. verify-pwa holds the shell to a size budget (it
+ * says which, and why it is counted gzipped) and would have caught it the day
+ * it happened — but nothing ran it, so nobody knew. A check that exists and is
+ * never run is not a check.
  */
 'use strict';
 const fs = require('fs');
