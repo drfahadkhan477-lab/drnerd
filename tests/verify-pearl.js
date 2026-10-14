@@ -363,16 +363,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      numbered list of one, which reads as a formatting error. */
   const prose = await page.evaluate(() => {
     const all = pearlAll();
-    const p = all.find(x => Pearl.steps(x.text).length === 1);
-    if (!p) return null;
+    // The harvested lessons may all contain several whole sentences. Give
+    // this rendering check a jointless sentence, independent of the corpus.
+    if (!all.length) return null;
+    const p = { ...all[0], figKey: null, figCap: '',
+      text: 'STEMI has persistent ST elevation of 20 minutes or more in at least two contiguous leads.' };
     pearlCurrent = p; S.screen = 'home'; render();
     return new Promise(r => setTimeout(() => r({
       steps: document.querySelectorAll('.pearl-step').length,
       body: !!document.querySelector('.pearl-body'),
+      single: Pearl.lesson(p.text).length === 1,
     }), 700));
   });
   ok('a sentence with no joint is set as prose, not a list of one',
-     !prose || (prose.steps === 0 && prose.body), JSON.stringify(prose));
+     !!prose && prose.single && prose.steps === 0 && prose.body, JSON.stringify(prose));
 
   head('asking for another');
   const next = await page.evaluate(() => {
@@ -413,13 +417,23 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     source:pearlCurrent.source,shownSource:document.getElementById('pearlSource').textContent,hidden:document.getElementById('pearlBody').hidden}));
   ok('another pearl updates its concept and source and exits recall', moved.id !== current.id && moved.concept === moved.shown && moved.source === moved.shownSource && !moved.hidden);
   // The new figure is inserted without a full render; keyboard zoom must work there too.
+  // A randomly drawn pearl may legitimately have no relevant image. Choose
+  // a different, resolvable figured pearl for this interaction, through the
+  // real Next button, then restore the picker before exercising the figure.
+  await page.evaluate(() => {
+    const next = pearlAll().find(p => p.id !== pearlCurrent.id && p.figKey && refImgSrc(p.figKey));
+    window.__pearlKeyboardPick = Pearl.pick;
+    if (next) Pearl.pick = () => next;
+  });
+  try { await page.locator('.pearl-next').click(); }
+  finally { await page.evaluate(() => { Pearl.pick = window.__pearlKeyboardPick; delete window.__pearlKeyboardPick; }); }
   const figureAvailable=await page.locator('#pearlFig').count();
   if(figureAvailable){
     await page.locator('#pearlFig').focus();
     await page.keyboard.press('Enter');
     ok('the replacement figure opens from the keyboard', await page.locator('#peek .figv[role="dialog"]').count() === 1);
     await page.evaluate(()=>closePeek());
-  }else ok('the replacement figure opens from the keyboard',false,'synthetic fixture supplied no matching figure');
+  }else ok('the replacement figure opens from the keyboard',false,'fixture supplied no resolvable replacement figure');
   const sourceTitle=await page.evaluate(()=>pearlCurrent.title);
   await page.locator('.pearl-open').click();
   await settled(page,()=>S.screen==='refs'&&!!document.querySelector('.hero-title'),{label:'reference screen'});
