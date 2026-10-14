@@ -222,6 +222,63 @@ head('a refused build leaves the last good bank as it was');
      fs.readdirSync(mine).join() === 'notes.txt' && fs.readFileSync(path.join(mine, 'notes.txt'), 'utf8') === 'kept', over.r ? 'it was replaced' : over.why.split('\n')[0]);
 }
 
+head('a swap or a write that fails half-way leaves the last good bank where it was');
+{
+  /* scripts/bank-folder.js moves the old bank aside and the new one into place. The comment on it promises that a crash leaves the last good bank where it was;
+     a rename that fails in between is the crash it did not cover. Each failure is made by replacing fs.renameSync or fs.writeFileSync for one call. */
+  const { writeBankFolder } = require(path.join(ROOT, 'scripts', 'bank-folder.js'));
+  const files = n => [{ name: 'manifest.json', bytes: Buffer.from(JSON.stringify({ schemaVersion: 1, n })) }, { name: 'questions.json', bytes: Buffer.from('[]') }, { name: 'figures/a.png', bytes: Buffer.from('x' + n) }];
+  const out = path.join(dir, 'swap');
+  const state = () => { try { return fs.readFileSync(path.join(out, 'manifest.json'), 'utf8') + '|' + fs.readFileSync(path.join(out, 'figures', 'a.png'), 'utf8'); } catch (_) { return 'gone'; } };
+  const leftovers = () => fs.readdirSync(dir).filter(f => /^swap\.(tmp|old)-/.test(f));
+  const failing = (name, nth, fn) => {
+    const real = fs[name]; let calls = 0;
+    const nths = [].concat(nth);
+    fs[name] = function (...a) { if (nths.includes(++calls)) { const e = new Error('simulated ' + name + ' failure'); e.code = 'EIO'; throw e; } return real.apply(this, a); };
+    try { fn(); return null; } catch (e) { return e; } finally { fs[name] = real; }
+  };
+  /* each scenario starts from the same good bank, whatever the one before left */
+  const fresh = () => { for (const f of fs.readdirSync(dir)) if (/^swap/.test(f)) fs.rmSync(path.join(dir, f), { recursive: true, force: true }); writeBankFolder(out, files(1)); return state(); };
+  const good = fresh();
+  ok('a first bank is written', /schemaVersion":1,"n":1/.test(good) && leftovers().length === 0, good);
+
+  /* renameSync is called twice on a replacement: the old bank aside, then the new one in. */
+  fresh();
+  const second = failing('renameSync', 2, () => writeBankFolder(out, files(2)));
+  ok('when the new bank cannot be moved into place, the write still fails, and says why', !!second && /simulated renameSync failure/.test(second.message), second ? second.message : 'it went through');
+  ok('and the last good bank is back where it was, byte for byte', state() === good, state());
+  ok('and nothing is left beside it', leftovers().length === 0, leftovers().join(', ') || 'none');
+
+  fresh();
+  const first = failing('renameSync', 1, () => writeBankFolder(out, files(3)));
+  ok('when the old bank cannot be moved aside, the write fails, and the bank is as it was', !!first && state() === good && leftovers().length === 0, first ? leftovers().join(', ') || 'clean' : 'it went through');
+
+  /* ...and the put-back is a rename too, which can fail as well: then the bank is nowhere but beside, and the error has to say where. */
+  fresh();
+  const both = failing('renameSync', [2, 3], () => writeBankFolder(out, files(6)));
+  const aside = leftovers().find(f => /^swap\.old-/.test(f));
+  ok('when the put-back fails as well, the error says where the last good bank is, and it is there', !!both && !!aside && both.message.includes(path.join(dir, aside)) && fs.readFileSync(path.join(dir, aside, 'manifest.json'), 'utf8') === good.split('|')[0], both ? both.message.slice(0, 160) : 'it went through');
+
+  /* the first bank ever written: nothing to put back, and nothing should try to */
+  fs.rmSync(out, { recursive: true, force: true }); for (const f of leftovers()) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+  const firstEver = failing('renameSync', 1, () => writeBankFolder(out, files(7)));
+  ok('when the very first bank cannot be moved into place, the error is the rename\'s own, and nothing is left', !!firstEver && /simulated renameSync failure/.test(firstEver.message) && !fs.existsSync(out) && leftovers().length === 0, firstEver ? firstEver.message.slice(0, 120) + ' | ' + leftovers().join(', ') : 'it went through');
+
+  /* the swap done, the old copy that is left to remove cannot be: that is clutter, not a failed write */
+  fresh();
+  const rmFail = failing('rmSync', 2, () => writeBankFolder(out, files(8)));
+  ok('when only the removal of the old copy fails, the write has still gone through, and the new bank is in place', rmFail === null && /"n":8/.test(state()), rmFail ? rmFail.message : state());
+  for (const f of leftovers()) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+
+  /* a write that fails while the new bank is being made beside the old one */
+  fresh();
+  const wr = failing('writeFileSync', 2, () => writeBankFolder(out, files(4)));
+  ok('when writing the new bank fails part-way, the write fails, the bank is as it was, and the half-made one is removed', !!wr && state() === good && leftovers().length === 0, wr ? (leftovers().join(', ') || 'clean') : 'it went through');
+
+  fresh();
+  ok('and after any of that a write goes through', (() => { writeBankFolder(out, files(5)); return /"n":5/.test(state()) && leftovers().length === 0; })(), state());
+}
+
 head('writing the questions yourself: --init, --new, --check');
 /* The template --new writes, with the questions numbered in nums filled in
    as a fellow would: a stem, four options, the key, the explanation, and a

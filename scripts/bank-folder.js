@@ -28,12 +28,30 @@ function writeBankFolder(out, files) {
   const dir = out.replace(/[\\/]+$/, '');
   if (!replaceable(dir)) throw new Error(`${dir} is there and holds no bank: give --out a folder of its own (a bank there is replaced; nothing else is)`);
   const work = dir + '.tmp-' + process.pid, old = dir + '.old-' + process.pid;
-  fs.rmSync(work, { recursive: true, force: true });
-  fs.mkdirSync(path.join(work, 'figures'), { recursive: true });
-  for (const f of files) fs.writeFileSync(path.join(work, ...f.name.split('/')), f.bytes);
-  if (fs.existsSync(dir)) fs.renameSync(dir, old);
-  fs.renameSync(work, dir);
-  fs.rmSync(old, { recursive: true, force: true });
+  const clear = p => fs.rmSync(p, { recursive: true, force: true });
+  clear(work);
+  /* The new bank is made beside the old one; a write that fails leaves the old
+     bank alone and removes the half-made one. */
+  try {
+    fs.mkdirSync(path.join(work, 'figures'), { recursive: true });
+    for (const f of files) fs.writeFileSync(path.join(work, ...f.name.split('/')), f.bytes);
+  } catch (e) { clear(work); throw e; }
+  /* The swap is two renames, and the second can fail with the first done: the
+     old bank is aside and the new one is not in place. Put the old one back
+     and leave nothing beside it. If even that fails, the error says where the
+     last good bank is, because it is nowhere else. */
+  const had = fs.existsSync(dir);
+  try {
+    if (had) fs.renameSync(dir, old);
+    fs.renameSync(work, dir);
+  } catch (e) {
+    try { if (had && !fs.existsSync(dir)) fs.renameSync(old, dir); }
+    catch (_) { throw Object.assign(new Error(`${e.message} (and the last good bank could not be put back: it is at ${old})`), { code: e.code, cause: e }); }
+    clear(work);
+    throw e;
+  }
+  /* The swap is done; a leftover old copy is clutter, not a failure. */
+  try { clear(old); } catch (_) { /* left for the next clean-up */ }
 }
 
 module.exports = { writeBankFolder, replaceable };
