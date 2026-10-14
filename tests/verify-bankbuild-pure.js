@@ -374,6 +374,50 @@ const copyFolder = (to, edit) => {
        missing.length ? 'not built: ' + missing.join(', ') : inDist.join(', ') || 'none');
   }
 
+  head('a bank\'s text cannot end the element the page holds it in');
+  {
+    /* The questions are written into the page inside a <script> element, which
+       a page ends at the first "</script" and reads differently after "<!--".
+       Text a bank gives is not the app's own. */
+    const Slots = require(S('app-slots.js'));
+    const HOSTILE = ['x </script><script>window.__injected=1</script> y', 'a <!-- <script> b', 'c </SCRIPT >d', 'e </Script\n>f'];
+    const count = (text, re) => (text.match(re) || []).length;
+    const CLOSE = /<\/script/gi, OPEN_COMMENT = /<!--/g;
+    const mini = (payload, kind = 'payload') => Slots.assemble('<script>const A=@@SLOT[' + kind + ':A]@@;</script>', () => payload);
+
+    const raw = JSON.stringify({ s: HOSTILE });
+    const slot = mini(raw);
+    ok('a payload with "</script" or "<!--" in it is written without either, the page\'s own closer left as the one',
+       count(slot, CLOSE) === 1 && count(slot, OPEN_COMMENT) === 0, `${count(slot, CLOSE)} closers, ${count(slot, OPEN_COMMENT)} comment openers`);
+    let back = null;
+    try { back = new Function('return ' + slot.slice('<script>const A='.length, slot.lastIndexOf(';</script>')))(); } catch (e) { back = { error: e.message }; }
+    ok('and read as the page reads it, every word comes back as it went in', !!back && JSON.stringify(back.s) === JSON.stringify(HOSTILE),
+       back && back.error ? back.error : JSON.stringify(back && back.s).slice(0, 80));
+    const plain = JSON.stringify({ s: 'BP <90 and >60, <b>x</b>, a<b, <!x, </p>, a --> b' });
+    ok('a payload with neither is written byte for byte', mini(plain) === '<script>const A=' + plain + ';</script>', mini(plain).slice(0, 60));
+    const code = "var s='</script><!--';";
+    ok('code and assets are written as they are, whatever they hold',
+       mini(code, 'src') === '<script>const A=' + code + ';</script>' && mini(code, 'asset') === '<script>const A=' + code + ';</script>');
+
+    const hostile = copyFolder(path.join(dir, 'hostile'), qs => {
+      qs[0].s = HOSTILE[0]; qs[0].ex = HOSTILE[1] + ' ' + HOSTILE[2]; qs[0].o[0].t = HOSTILE[3]; qs[1].ch = 'Chapter ' + HOSTILE[1];
+    });
+    let page = null, why = '';
+    try { page = (await build(hostile)).toString('utf8'); } catch (e) { why = e.message.split('\n')[0]; }
+    const benign = fromFolder.toString('utf8');
+    ok('built into the whole app, the page has no more script closers or comment openers than without those words',
+       !!page && count(page, CLOSE) === count(benign, CLOSE) && count(page, OPEN_COMMENT) === count(benign, OPEN_COMMENT),
+       page ? `${count(page, CLOSE)} and ${count(page, OPEN_COMMENT)}, against ${count(benign, CLOSE)} and ${count(benign, OPEN_COMMENT)}` : why);
+    let held = null;
+    try {
+      const at = page.indexOf('const ALL_Q='), end = page.indexOf(';\nconst IMGS=', at);
+      held = JSON.parse(page.slice(at + 'const ALL_Q='.length, end));
+    } catch (e) { held = { error: e.message }; }
+    ok('and the app\'s questions hold those words exactly as the bank gave them',
+       Array.isArray(held) && held[0].s === HOSTILE[0] && held[0].ex === HOSTILE[1] + ' ' + HOSTILE[2] && held[0].o[0].t === HOSTILE[3] && held[1].ch === 'Chapter ' + HOSTILE[1],
+       held && held.error ? held.error : Array.isArray(held) ? JSON.stringify(held[0].s) : 'not read');
+  }
+
   head('the command line');
   {
     const out = path.join(dir, 'cli.html');

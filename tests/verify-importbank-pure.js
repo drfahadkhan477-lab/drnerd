@@ -19,9 +19,11 @@
  *     with no ACCSAP correction or flag, and it packs for the iPad;
  *   - a CSV as spreadsheets write it: quoted commas, quotes and line breaks, a
  *     byte-order mark, CRLF, semicolons, blank rows; a TSV, and UTF-16 as a
- *     spreadsheet's "Unicode text"; markup turned into the text it marks up,
- *     and a comparison left as it is; a file in an old code page, or with a
- *     quote never closed, refused;
+ *     spreadsheet's "Unicode text"; a field that holds HTML turned into the
+ *     text it marks up, every tag and comment gone, even one that only
+ *     appears when another is taken out, and the <img> tags counted; a field
+ *     that holds none left as it is, "<ULN" and a comparison with it; a file
+ *     in an old code page, or with a quote never closed, refused;
  *   - JSON with lists for options, peers and reasons imports as the CSV does,
  *     and a bank already in the schema's shape is read back unchanged;
  *   - every refusal names the row and the id, never a word of a question, nor
@@ -172,6 +174,35 @@ head('the CSV as spreadsheets write it');
   ok('markup becomes the text it marks up, entities their letters', p1.text === 'Invented reason ≥ 2 & ≥ 3\n- one\n- two\nBP <90 and >60' && p1.changed, JSON.stringify(p1));
   const p2 = I.plainOf('Invented: BP <90 and >60, AT&T; x < y');
   ok('and text with no markup is left as it is', p2.text === 'Invented: BP <90 and >60, AT&T; x < y' && !p2.changed, JSON.stringify(p2));
+  const p3 = I.plainOf('troponin <ULN and BNP >100');
+  ok('a letter after "<" in a field that holds no HTML is words, not a tag', p3.text === 'troponin <ULN and BNP >100' && !p3.changed, JSON.stringify(p3));
+  /* A tag made by taking another out: nothing of it may be left to read as one. */
+  const NESTED = ['Invented <<b>iframe src=x>after', 'Invented <<b>i>mg src=x onerror=y>after', 'Invented <<i><b>script>x</script>after'];
+  const p4 = NESTED.map(t => I.plainOf(t));
+  ok('in a field that holds HTML every tag goes, even one that only appears when another is taken out',
+     p4.every(p => !/<[A-Za-z\/!]/.test(p.text)) && p4[0].text === 'Invented after', p4.map(p => JSON.stringify(p.text)).join(' '));
+  /* No tag outside the comments, so only they can mark the field as HTML. */
+  const p5 = I.plainOf('a<!-- one -->b<!-- two --!>c');
+  ok('and every comment, whether it ends with --> or --!>, with no other tag in the field', p5.text === 'abc' && p5.changed, JSON.stringify(p5));
+  const p6 = I.plainOf('<p>Invented <abbr title="x">EF</abbr> and <x-widget a="1">y</x-widget></p>');
+  ok('a tag of a kind it has not heard of goes with the rest', p6.text === 'Invented EF and y', JSON.stringify(p6));
+  /* Each of these, alone in a field, is enough to make it HTML: no other tag
+     is there to do it. */
+  const MARKERS = 'p br b i u em strong ul ol li div span sup sub table thead tbody tr td th h1 h2 h3 h4 h5 h6 a font blockquote hr img figure figcaption pre code small s del ins mark dl dt dd'.split(' ');
+  const unmarked = MARKERS.filter(tag => { const r = I.plainOf(`x <${tag}>y</${tag}> z`); return !r.changed || /<\/?[A-Za-z]/.test(r.text); });
+  ok('any one of the common HTML tags is enough to make a field HTML', unmarked.length === 0, unmarked.join(' ') || `${MARKERS.length} tags`);
+  const p7 = I.plainOf('<p>See <img src="a.png"> and <IMG src=b.png></p>');
+  ok('<img> tags are counted as they go, in either case', p7.images === 2 && !/img/i.test(p7.text) && I.plainOf('no tags here').images === 0, JSON.stringify(p7));
+}
+
+head('an image in the text');
+{
+  const IMG_ROWS = [HEAD, ['I-1', 'Invented Imaging', 'Invented stem <p>with <img src="ecg-1.png"> inside</p>', 'one', 'two', '', '', 'A', 'Invented commentary', '', '', '', '', '', '', '', '', '', '']];
+  const withImg = imp(exportOf('bank.csv', csv(IMG_ROWS)));
+  const q = bankAt(withImg.r)[0] || {};
+  ok('an <img> in a stem is dropped from it, and the report counts it', !!withImg.r && withImg.r.images === 1 && q.s === 'Invented stem with  inside' && q.img === 0,
+     withImg.why.split('\n')[1] || JSON.stringify(q.s));
+  ok('and a file with none reports none', !!m.r && m.r.images === 0, m.r ? String(m.r.images) : m.why.split('\n')[1]);
 }
 
 head('JSON');
@@ -298,6 +329,12 @@ head('the command line');
      /^imported Invented Licensed Bank \(id invented-licensed-bank, by Invented Press\): 3 questions in 2 chapter\(s\), 2 figure\(s\), from CSV/.test(r1.stdout) &&
      /not read: "Notes"/.test(r1.stdout) && /1 question\(s\) have no commentary/.test(r1.stdout) && /next: npm run build -- /.test(r1.stdout) && fs.existsSync(path.join(out, 'figures', 'ecg-2.jpg')),
      `exit ${r1.status}: ${(r1.stdout + r1.stderr).trim().split('\n')[0]}`);
+  const withImg = path.join(dir, 'cli-img.csv');
+  fs.writeFileSync(withImg, csv([HEAD, ['I-1', 'Invented Imaging', 'Invented stem <p>with <img src="ecg-1.png"></p>', 'one', 'two', '', '', 'A', 'Invented commentary', '', '', '', '', '', '', '', '', '', '']]));
+  const r4 = cli('--name', 'Invented Licensed Bank', '--out', path.join(dir, 'cli-img-out'), withImg);
+  ok('it says how many <img> tags it dropped, and where an image belongs', r4.status === 0 && /^  1 <img> tag\(s\) in the text were dropped: an image comes through a figures column, not a stem$/m.test(r4.stdout),
+     `exit ${r4.status}: ${(r4.stdout + r4.stderr).trim().split('\n').slice(0, 3).join(' / ')}`);
+  ok('and says nothing of images when there were none', r1.status === 0 && !/<img>/.test(r1.stdout));
   const keyH = ROWS[0].slice();
   keyH[HEAD.indexOf('Correct Answer')] = 'H';
   const r2 = cli(exportOf('bank.csv', csv([HEAD, keyH])), '--name', 'X');

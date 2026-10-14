@@ -278,7 +278,8 @@ const attempt = fn => { try { return { r: fn(), why: '' }; } catch (e) { return 
      left.length === 1 && left[0] === 'valvular-disease.md, question 2: not finished (no stem with options under its heading)', left.join(' | ') || 'no problem found');
   const draftToo = tryBuild(own, { draft: true });
   ok('and even a draft build refuses it', !draftToo.r && /question 2: not finished/.test(draftToo.why), draftToo.r ? `built ${draftToo.r.questions} questions` : draftToo.why.split('\n')[1]);
-  fs.writeFileSync(file, fillIn(blank, [1, 3]).replace(/### Question 2:[\s\S]*?---\n/, m => '<!--\n' + m.replace(/-->/g, '') + '-->\n'));
+  /* Question 2's block, as the template wrote it, between a comment's two ends. */
+  fs.writeFileSync(file, fillIn(blank, [1, 3]).replace(/### Question 2:[\s\S]*?---\n/, m => '<!--\n' + m + '-->\n'));
   const commented = attempt(() => B.readStudyFile(file));
   ok('a question commented out is not one begun', !!commented.r && commented.r.problems.length === 0 && commented.r.questions.length === 2,
      commented.r ? commented.r.problems.join(' | ') : commented.why);

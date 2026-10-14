@@ -37,8 +37,11 @@
  *
  * Text is read as UTF-8 (or UTF-16 with its byte-order mark, which is what a
  * spreadsheet's "Unicode text" export is); a CSV's separator is a comma, a
- * semicolon or a tab, whichever its header row uses. Markup in a field
- * (<p>, <br>, <b>, &amp; …) is turned into the plain text the app shows.
+ * semicolon or a tab, whichever its header row uses. A field that holds HTML
+ * (<p>, <br>, <b> …) is turned into the plain text the app shows: every tag
+ * and comment goes, and &amp; and the like become their characters. The
+ * report counts any <img> that went. A field with no HTML tag in it is text
+ * and is left as it is, so "troponin <ULN" survives.
  *
  * WHAT IT REFUSES, naming the row and the id, never a word of a question:
  * a row with no id, an id used twice or one that cannot be a file name, no
@@ -203,18 +206,29 @@ const ENTITY = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', nd
   hellip: '…', deg: '°', plusmn: '±', micro: 'µ', times: '×', divide: '÷', le: '≤', ge: '≥', ne: '≠', asymp: '≈', middot: '·', bull: '•',
   alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', kappa: 'κ', lambda: 'λ', mu: 'μ', sigma: 'σ', sup2: '²', sup3: '³',
   frac12: '½', frac14: '¼', frac34: '¾', rarr: '→', larr: '←', uarr: '↑', darr: '↓' };
-/* The tags a bank's export puts in its text, and only those: "BP <90 and
-   >60" in the same field is text, not a tag. */
-const TAG = /<\/?(?:p|br|b|i|u|em|strong|ul|ol|li|div|span|sup|sub|table|thead|tbody|tr|td|th|h[1-6]|a|font|blockquote|hr)\b[^<>]*>/gi;
+/* A tag of the kind an export puts in its text marks a field as HTML. A field
+   with none is plain text and is left as it is: "troponin <ULN and BNP >100"
+   in it is words, not a tag. */
+const TAG = /<\/?(?:p|br|b|i|u|em|strong|ul|ol|li|div|span|sup|sub|table|thead|tbody|tr|td|th|h[1-6]|a|font|blockquote|hr|img|figure|figcaption|pre|code|small|s|del|ins|mark|dl|dt|dd)\b[^<>]*>/i;
+/* In a field that is HTML, "<" and a letter open a tag, as they do on the
+   publisher's own page (a "<" in its words is written &lt; there), so every
+   tag goes, known or not, and every comment, which ends at --> or --!>. */
+const ANY_TAG = /<!--[\s\S]*?--!?>|<\/?[A-Za-z][^<>]*>/g;
 const ENTITY_RE = /&(#\d{1,7}|#x[0-9a-f]{1,6}|[a-z][a-z0-9]{1,7});/gi;
 /* The app escapes what it shows, so a bank's markup would be shown as
-   markup: it is turned into the text it marks up. → { text, changed } */
+   markup: it is turned into the text it marks up. images counts the <img>
+   tags that went, since an image does not come through a stem.
+   → { text, changed, images } */
 function plainOf(value) {
-  let t = String(value).replace(/\r\n?/g, '\n'), changed = false;
-  if (t.search(TAG) >= 0) {
+  let t = String(value).replace(/\r\n?/g, '\n'), changed = false, images = 0;
+  if (TAG.test(t) || t.includes('<!--')) {
     changed = true;
-    t = t.replace(/<br\b[^<>]*>/gi, '\n').replace(/<\/(?:p|div|li|tr|h[1-6]|blockquote)>/gi, '\n').replace(/<li\b[^<>]*>/gi, '- ')
-      .replace(TAG, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+    images = (t.match(/<img\b/gi) || []).length;
+    t = t.replace(/<br\b[^<>]*>/gi, '\n').replace(/<\/(?:p|div|li|tr|h[1-6]|blockquote)>/gi, '\n').replace(/<li\b[^<>]*>/gi, '- ');
+    /* Taking one tag out can leave the ends of two side by side ("<<b>i>"),
+       so until nothing more comes out. */
+    for (let before = null; before !== t;) { before = t; t = t.replace(ANY_TAG, ''); }
+    t = t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
   }
   t = t.replace(ENTITY_RE, (m, e) => {
     let to = m;
@@ -223,11 +237,11 @@ function plainOf(value) {
     if (to !== m) changed = true;
     return to;
   });
-  return { text: t.trim(), changed };
+  return { text: t.trim(), changed, images };
 }
 
 /* importBank({ input, name, by, id, figures, chapter, out, root })
-   → { bank, questions, figures, chapters, unread, noCommentary, plained, out, format }
+   → { bank, questions, figures, chapters, unread, noCommentary, plained, images, out, format }
    Throws, listing every problem by row and id, and writes nothing. */
 function importBank(opts) {
   const root = opts.root || ROOT;
@@ -280,8 +294,8 @@ function importBank(opts) {
   if (problems.length) throw refusal(problems);
 
   const questions = [], seen = new Map(), figFiles = new Map();
-  let noCommentary = 0, plained = 0;
-  const clean = v => { const p = plainOf(v); if (p.changed) plained++; return p.text; };
+  let noCommentary = 0, plained = 0, images = 0;
+  const clean = v => { const p = plainOf(v); if (p.changed) plained++; images += p.images; return p.text; };
   /* A field's text, '' when the record has none, or { bad } when it is not
      text at all (a list or an object in JSON). */
   const text = (rec, f) => {
@@ -383,7 +397,7 @@ function importBank(opts) {
   const verdict = bankPack().validate(files.map(f => ({ name: f.name, bytes: new Uint8Array(f.bytes) })));
   if (!verdict.ok) throw new Error(`no bank was written: the iPad would refuse it (${verdict.problemCount} problem(s)):\n  ` + verdict.problems.slice(0, 20).join('\n  '));
   writeBankFolder(out, files);
-  return { bank, questions: questions.length, figures: figFiles.size, chapters: manifest.chapters.length, unread, noCommentary, plained, out, format };
+  return { bank, questions: questions.length, figures: figFiles.size, chapters: manifest.chapters.length, unread, noCommentary, plained, images, out, format };
 }
 
 const refusal = problems => new Error(`no bank was written (${problems.length} problem(s)):\n  ` + problems.slice(0, 30).join('\n  ') +
@@ -481,6 +495,7 @@ if (require.main === module) {
     if (r.unread.length) console.log(`  not read: ${r.unread.map(c => JSON.stringify(c)).join(', ')} (no field of the bank takes them)`);
     if (r.noCommentary) console.log(`  ${r.noCommentary} question(s) have no commentary`);
     if (r.plained) console.log(`  ${r.plained} field(s) held markup or entities, turned into plain text`);
+    if (r.images) console.log(`  ${r.images} <img> tag(s) in the text were dropped: an image comes through a figures column, not a stem`);
     console.log(`next: npm run build -- ${shown(r.out)}`);
   } catch (e) {
     console.error('import-bank: ' + e.message);

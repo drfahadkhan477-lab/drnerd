@@ -160,11 +160,18 @@ UTF-8" in a spreadsheet) or as UTF-16 ("Unicode text"); a `.tsv` or `.txt`
 file is split by tabs. JSON is a list of objects with those keys, or
 `{ "questions": [ … ] }`, and may give `options`, `percents` and `why` as
 lists. A bank already in the content schema's own shape (`id`, `ch`, `s`,
-`o`, `ci`, `ex`) is read as one. Markup in a field (`<p>`, `<br>`, `&amp;`)
-becomes the plain text the app shows.
+`o`, `ci`, `ex`) is read as one.
+
+A field that holds HTML (`<p>`, `<br>`, `<b>` …) becomes the plain text the
+app shows: every tag and comment goes, and `&amp;` and the like become their
+characters. A field with no HTML tag in it is text and is left as it is, so
+`troponin <ULN` survives. In a field that is HTML, a literal `<` is written
+`&lt;`, as on the publisher's own page, or what follows it is taken for a tag.
 
 The report names every column the importer did not read, so nothing is
-dropped unseen, and counts the questions with no commentary.
+dropped unseen, counts the questions with no commentary, and counts the
+`<img>` tags it dropped from the text: an image comes through a figures
+column, not a stem.
 
 ### What the importer refuses
 

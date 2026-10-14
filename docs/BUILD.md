@@ -152,6 +152,13 @@ makes of it. The bank is checked first by `src/core/bankpack.js`, the check
 the iPad runs on an import, so a bank the device would refuse is refused here,
 naming ids and files and never a word of a question.
 
+The questions are written into the page inside a `<script>` element, and a
+bank's text is not the app's own: a stem that quotes `</script>` would end the
+element and break the page. So every payload is written with `</script` and
+`<!--` escaped as `\u003c`, which the string reads back as the same `<`; a
+payload with neither is written byte for byte
+(`tests/verify-bankbuild-pure.js`).
+
 The assembler gives the bank the shape the export has: the figures go inline
 as the export's do, an option written as a plain string becomes the
 `{l, t}` the app reads, and a question without `img` or `n` gets the number
