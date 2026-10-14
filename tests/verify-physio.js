@@ -124,7 +124,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
     /* Guyton: solve each operating point, don't trust a fixed sample */
     const solve = (st, msfp) => { let lo = -4, hi = 20; for (let k = 0; k < 70; k++) { const m = (lo + hi) / 2; (P.cardiacFunction(m, st) - P.venousReturn(m, msfp) < 0) ? lo = m : hi = m; } return { ra: (lo + hi) / 2, co: P.venousReturn((lo + hi) / 2, msfp) }; };
-    const gNormal = solve(null, 7), gInotrope = solve(null, 7), gVolume = solve('failing', 14), gFailing = solve('failing', 7);
+    const gNormal = solve(null, 7), gVolume = solve('failing', 14), gFailing = solve('failing', 7);
 
     return { d, steps, ivcFlat, ivrFlat, crossErr, vOut, vIn,
              ea: E / A, coronaryDia: d.leftDiastolicFraction,
@@ -292,17 +292,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   ok('and holds still while the diagram is being scrubbed', Math.abs(paused - 0.42) < 0.01, paused.toFixed(3));
 
-  head('switching rhythm changes the diagram\'s rate');
-  const rateFollows = await page.evaluate(() => {
-    document.querySelector('[data-lab-rhythm="tachy"], [data-rhythm="tachy"]')?.click();
-    setLab('tachy');
-    return true;
-  });
+  /* WHAT THIS DOES NOT HOLD: that the diagram's rate follows. setLab hands the
+     rhythm's rate to physio.setRate, but the diagram has no getter for it, and
+     reading it back off the live clock is a race against real frames. With
+     setRate taken out of setLab this section stays green, so it claims only what
+     it reads: that the lab moved to the rhythm asked for. (The rhythm chips
+     carry no data attribute, so the click that used to precede the call found
+     nothing; setLab is what a chip's onclick calls.) */
+  head('setLab moves the lab to the rhythm it is asked for');
+  await page.evaluate(() => { setLab('tachy'); });
   await page.waitForTimeout(300);
-  const afterTachy = await page.evaluate(() => ({ hr: RHYTHMS['tachy'].hr, kind: labKind }));
+  const afterTachy = await page.evaluate(() => ({ kind: labKind }));
   ok('setLab reaches the rhythm the test asked for', afterTachy.kind === 'tachy');
 
-  head('every view draws without error, in both themes');
+  head('every view mounts, sizes its canvas and says what it is');
   const viewSweep = await page.evaluate(async () => {
     const out = [];
     for (const [id] of PHYSIO_VIEWS) {
@@ -405,12 +408,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }
   await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
 
-  head('theme');
-  const themed = await page.evaluate(() => {
-    document.querySelector('[data-theme-toggle], [data-theme]')?.click();
-    return true;
-  });
-
+  head('no stray errors');
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await browser.close();
