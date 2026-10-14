@@ -108,25 +108,31 @@ const ACCENT_BY_THEME = {
 
   head('real painted surfaces agree with the tokens, not just the custom properties');
   await page.evaluate(() => { setTheme('daylight'); });
+  /* A computed colour reads `rgb(r, g, b)`; the constants above are hex. These
+     checks used to ask only that a colour EXIST (`!!answer.correctBorder`,
+     "not transparent"), which every painted element satisfies: with the correct
+     option recoloured, all five stayed green. So each is held to the exact value
+     its token resolves to, the one the test already pins per theme. */
+  const rgb = hex => { const n = parseInt(String(hex).trim().slice(1), 16); return `rgb(${n >> 16}, ${(n >> 8) & 255}, ${n & 255})`; };
 
   const nav = await page.evaluate(() => {
     const el = document.querySelector('.nav-logo');
     return el ? getComputedStyle(el).backgroundImage : null;
   });
-  ok('.nav-logo\'s accent gradient is painted', !!nav && /gradient/.test(nav), nav || 'not found');
+  const [stop1, stop2] = [perTheme.daylight.accent, perTheme.daylight.accent2].map(rgb);
+  ok('.nav-logo\'s gradient runs from --accent to --accent-2', !!nav && nav.includes(stop1) && nav.indexOf(stop2) > nav.indexOf(stop1),
+     `${nav || 'not found'}; wants ${stop1} then ${stop2}`);
 
   const answer = await page.evaluate(() => {
     startQuiz(CHAPTERS[0], 'all');
     const q = S.questions[S.qIdx];
     selectOpt(q.ci);
     const correctEl = document.querySelector('.opt.correct');
-    const wrong = (q.ci + 1) % q.o.length === q.ci ? null : (q.ci + 1) % q.o.length;
-    const before = { correctBorder: correctEl ? getComputedStyle(correctEl).borderColor : null,
-                      correctLetterBg: correctEl ? getComputedStyle(correctEl.querySelector('.opt-letter')).backgroundColor : null };
-    return before;
+    return { correctBorder: correctEl ? getComputedStyle(correctEl).borderTopColor : null,
+             correctLetterBg: correctEl ? getComputedStyle(correctEl.querySelector('.opt-letter')).backgroundColor : null };
   });
-  ok('a correct answer option is painted with --success (border)', !!answer.correctBorder, answer.correctBorder || 'not found');
-  ok('its letter badge is painted with --success (background)', !!answer.correctLetterBg, answer.correctLetterBg || 'not found');
+  ok('a correct answer option is painted with --success (border)', answer.correctBorder === rgb(SUCCESS), `${answer.correctBorder || 'not found'} vs ${rgb(SUCCESS)}`);
+  ok('its letter badge is painted with --success (background)', answer.correctLetterBg === rgb(SUCCESS), `${answer.correctLetterBg || 'not found'} vs ${rgb(SUCCESS)}`);
 
   const wrongAnswer = await page.evaluate(() => {
     S.answered = false; S.selected = null;
@@ -134,9 +140,9 @@ const ACCENT_BY_THEME = {
     const wrongIdx = (q.ci + 1) % q.o.length;
     selectOpt(wrongIdx);
     const wrongEl = document.querySelectorAll('.opt.wrong')[0];
-    return { wrongBorder: wrongEl ? getComputedStyle(wrongEl).borderColor : null };
+    return { wrongBorder: wrongEl ? getComputedStyle(wrongEl).borderTopColor : null };
   });
-  ok('a wrong answer option is painted with --danger (border)', !!wrongAnswer.wrongBorder, wrongAnswer.wrongBorder || 'not found');
+  ok('a wrong answer option is painted with --danger (border)', wrongAnswer.wrongBorder === rgb(DANGER), `${wrongAnswer.wrongBorder || 'not found'} vs ${rgb(DANGER)}`);
 
   const warnProbe = await page.evaluate(() => {
     const el = document.createElement('div');
@@ -146,7 +152,7 @@ const ACCENT_BY_THEME = {
     el.remove();
     return c;
   });
-  ok('a --warning-painted element is actually amber-coloured', !!warnProbe && warnProbe !== 'rgba(0, 0, 0, 0)', warnProbe);
+  ok('a --warning-painted element is actually amber-coloured', warnProbe === rgb(WARNING), `${warnProbe} vs ${rgb(WARNING)}`);
 
   head('the pre-existing --warn token is a real alias now, not a coincidentally-matching literal');
   /* A snapshot comparison of --warn vs --warning cannot tell an alias from a
